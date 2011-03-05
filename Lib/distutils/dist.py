@@ -23,6 +23,9 @@ from distutils.util import check_environ, strtobool, rfc822_escape
 from distutils import log
 from distutils.debug import DEBUG
 
+# Encoding used for the PKG-INFO files
+PKG_INFO_ENCODING = 'utf-8'
+
 # Regex to define acceptable Distutils command names.  This is not *quite*
 # the same as a Python NAME -- I don't allow leading underscores.  The fact
 # that they're very similar is no coincidence; the default naming scheme is
@@ -232,14 +235,14 @@ Common commands: (see '--help-commands' for more)
             # command options will override any supplied redundantly
             # through the general options dictionary.
             options = attrs.get('options')
-            if options:
+            if options is not None:
                 del attrs['options']
                 for (command, cmd_options) in options.items():
                     opt_dict = self.get_option_dict(command)
                     for (opt, val) in cmd_options.items():
                         opt_dict[opt] = ("setup script", val)
 
-            if attrs.has_key('licence'):
+            if 'licence' in attrs:
                 attrs['license'] = attrs['licence']
                 del attrs['licence']
                 msg = "'licence' distribution option is deprecated; use 'license'"
@@ -343,10 +346,9 @@ Common commands: (see '--help-commands' for more)
             user_filename = "pydistutils.cfg"
 
         # And look for the user config file
-        if os.environ.has_key('HOME'):
-            user_file = os.path.join(os.environ.get('HOME'), user_filename)
-            if os.path.isfile(user_file):
-                files.append(user_file)
+        user_file = os.path.join(os.path.expanduser('~'), user_filename)
+        if os.path.isfile(user_file):
+            files.append(user_file)
 
         # All platforms support local setup.cfg
         local_file = "setup.cfg"
@@ -359,7 +361,6 @@ Common commands: (see '--help-commands' for more)
 
 
     def parse_config_files (self, filenames=None):
-
         from ConfigParser import ConfigParser
 
         if filenames is None:
@@ -388,7 +389,7 @@ Common commands: (see '--help-commands' for more)
         # If there was a "global" section in the config file, use it
         # to set Distribution options.
 
-        if self.command_options.has_key('global'):
+        if 'global' in self.command_options:
             for (opt, (src, val)) in self.command_options['global'].items():
                 alias = self.negative_opt.get(opt)
                 try:
@@ -907,7 +908,7 @@ Common commands: (see '--help-commands' for more)
 
             try:
                 is_string = type(value) is StringType
-                if neg_opt.has_key(option) and is_string:
+                if option in neg_opt and is_string:
                     setattr(command_obj, neg_opt[option], not strtobool(value))
                 elif option in bool_opts and is_string:
                     setattr(command_obj, option, strtobool(value))
@@ -1086,23 +1087,23 @@ class DistributionMetadata:
         if self.provides or self.requires or self.obsoletes:
             version = '1.1'
 
-        file.write('Metadata-Version: %s\n' % version)
-        file.write('Name: %s\n' % self.get_name() )
-        file.write('Version: %s\n' % self.get_version() )
-        file.write('Summary: %s\n' % self.get_description() )
-        file.write('Home-page: %s\n' % self.get_url() )
-        file.write('Author: %s\n' % self.get_contact() )
-        file.write('Author-email: %s\n' % self.get_contact_email() )
-        file.write('License: %s\n' % self.get_license() )
+        self._write_field(file, 'Metadata-Version', version)
+        self._write_field(file, 'Name', self.get_name())
+        self._write_field(file, 'Version', self.get_version())
+        self._write_field(file, 'Summary', self.get_description())
+        self._write_field(file, 'Home-page', self.get_url())
+        self._write_field(file, 'Author', self.get_contact())
+        self._write_field(file, 'Author-email', self.get_contact_email())
+        self._write_field(file, 'License', self.get_license())
         if self.download_url:
-            file.write('Download-URL: %s\n' % self.download_url)
+            self._write_field(file, 'Download-URL', self.download_url)
 
-        long_desc = rfc822_escape( self.get_long_description() )
-        file.write('Description: %s\n' % long_desc)
+        long_desc = rfc822_escape( self.get_long_description())
+        self._write_field(file, 'Description', long_desc)
 
         keywords = string.join( self.get_keywords(), ',')
         if keywords:
-            file.write('Keywords: %s\n' % keywords )
+            self._write_field(file, 'Keywords', keywords)
 
         self._write_list(file, 'Platform', self.get_platforms())
         self._write_list(file, 'Classifier', self.get_classifiers())
@@ -1112,9 +1113,20 @@ class DistributionMetadata:
         self._write_list(file, 'Provides', self.get_provides())
         self._write_list(file, 'Obsoletes', self.get_obsoletes())
 
+    def _write_field(self, file, name, value):
+        file.write('%s: %s\n' % (name, self._encode_field(value)))
+
     def _write_list (self, file, name, values):
+
         for value in values:
-            file.write('%s: %s\n' % (name, value))
+            self._write_field(file, name, value)
+
+    def _encode_field(self, value):
+        if value is None:
+            return None
+        if isinstance(value, unicode):
+            return value.encode(PKG_INFO_ENCODING)
+        return str(value)
 
     # -- Metadata query methods ----------------------------------------
 
@@ -1128,21 +1140,20 @@ class DistributionMetadata:
         return "%s-%s" % (self.get_name(), self.get_version())
 
     def get_author(self):
-        return self.author or "UNKNOWN"
+        return self._encode_field(self.author) or "UNKNOWN"
 
     def get_author_email(self):
         return self.author_email or "UNKNOWN"
 
     def get_maintainer(self):
-        return self.maintainer or "UNKNOWN"
+        return self._encode_field(self.maintainer) or "UNKNOWN"
 
     def get_maintainer_email(self):
         return self.maintainer_email or "UNKNOWN"
 
     def get_contact(self):
-        return (self.maintainer or
-                self.author or
-                "UNKNOWN")
+        return (self._encode_field(self.maintainer) or
+                self._encode_field(self.author) or "UNKNOWN")
 
     def get_contact_email(self):
         return (self.maintainer_email or
@@ -1157,10 +1168,10 @@ class DistributionMetadata:
     get_licence = get_license
 
     def get_description(self):
-        return self.description or "UNKNOWN"
+        return self._encode_field(self.description) or "UNKNOWN"
 
     def get_long_description(self):
-        return self.long_description or "UNKNOWN"
+        return self._encode_field(self.long_description) or "UNKNOWN"
 
     def get_keywords(self):
         return self.keywords or []

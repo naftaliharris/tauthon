@@ -21,14 +21,8 @@ class TestMacostools(unittest.TestCase):
         rfp.close()
 
     def tearDown(self):
-        try:
-            os.unlink(test_support.TESTFN)
-        except:
-            pass
-        try:
-            os.unlink(TESTFN2)
-        except:
-            pass
+        test_support.unlink(test_support.TESTFN)
+        test_support.unlink(TESTFN2)
 
     def compareData(self):
         fp = open(test_support.TESTFN, 'r')
@@ -51,42 +45,40 @@ class TestMacostools(unittest.TestCase):
 
     def test_touched(self):
         # This really only tests that nothing unforeseen happens.
-        macostools.touched(test_support.TESTFN)
+        with test_support.check_warnings(('macostools.touched*',
+                                          DeprecationWarning), quiet=True):
+            macostools.touched(test_support.TESTFN)
 
-    def test_copy(self):
-        try:
-            os.unlink(TESTFN2)
-        except:
-            pass
-        macostools.copy(test_support.TESTFN, TESTFN2)
-        self.assertEqual(self.compareData(), '')
+    if sys.maxint < 2**32:
+        def test_copy(self):
+            test_support.unlink(TESTFN2)
+            macostools.copy(test_support.TESTFN, TESTFN2)
+            self.assertEqual(self.compareData(), '')
 
-    def test_mkalias(self):
-        try:
-            os.unlink(TESTFN2)
-        except:
-            pass
-        macostools.mkalias(test_support.TESTFN, TESTFN2)
-        fss, _, _ = Carbon.File.ResolveAliasFile(TESTFN2, 0)
-        self.assertEqual(fss.as_pathname(), os.path.realpath(test_support.TESTFN))
+    if sys.maxint < 2**32:
+        def test_mkalias(self):
+            test_support.unlink(TESTFN2)
+            macostools.mkalias(test_support.TESTFN, TESTFN2)
+            fss, _, _ = Carbon.File.ResolveAliasFile(TESTFN2, 0)
+            self.assertEqual(fss.as_pathname(), os.path.realpath(test_support.TESTFN))
 
-    def test_mkalias_relative(self):
-        try:
-            os.unlink(TESTFN2)
-        except:
-            pass
-        # If the directory doesn't exist, then chances are this is a new
-        # install of Python so don't create it since the user might end up
-        # running ``sudo make install`` and creating the directory here won't
-        # leave it with the proper permissions.
-        if not os.path.exists(sys.prefix):
-            return
-        macostools.mkalias(test_support.TESTFN, TESTFN2, sys.prefix)
-        fss, _, _ = Carbon.File.ResolveAliasFile(TESTFN2, 0)
-        self.assertEqual(fss.as_pathname(), os.path.realpath(test_support.TESTFN))
+        def test_mkalias_relative(self):
+            test_support.unlink(TESTFN2)
+            # If the directory doesn't exist, then chances are this is a new
+            # install of Python so don't create it since the user might end up
+            # running ``sudo make install`` and creating the directory here won't
+            # leave it with the proper permissions.
+            if not os.path.exists(sys.prefix):
+                return
+            macostools.mkalias(test_support.TESTFN, TESTFN2, sys.prefix)
+            fss, _, _ = Carbon.File.ResolveAliasFile(TESTFN2, 0)
+            self.assertEqual(fss.as_pathname(), os.path.realpath(test_support.TESTFN))
 
 
 def test_main():
+    # Skip on wide unicode
+    if len(u'\0'.encode('unicode-internal')) == 4:
+        raise test_support.TestSkipped("test_macostools is broken in USC4")
     test_support.run_unittest(TestMacostools)
 
 

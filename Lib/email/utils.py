@@ -1,4 +1,4 @@
-# Copyright (C) 2001-2006 Python Software Foundation
+# Copyright (C) 2001-2010 Python Software Foundation
 # Author: Barry Warsaw
 # Contact: email-sig@python.org
 
@@ -13,6 +13,7 @@ __all__ = [
     'formatdate',
     'getaddresses',
     'make_msgid',
+    'mktime_tz',
     'parseaddr',
     'parsedate',
     'parsedate_tz',
@@ -27,7 +28,6 @@ import random
 import socket
 import urllib
 import warnings
-from cStringIO import StringIO
 
 from email._parseaddr import quote
 from email._parseaddr import AddressList as _AddressList

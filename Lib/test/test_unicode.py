@@ -6,7 +6,7 @@ Written by Marc-Andre Lemburg (mal@lemburg.com).
 (c) Copyright CNRI, All Rights Reserved. NO WARRANTY.
 
 """#"
-import unittest, sys, struct, codecs, new
+import sys, struct, codecs
 from test import test_support, string_tests
 
 # Error handling (bad decoder return)
@@ -55,9 +55,9 @@ class UnicodeTest(
     def test_literals(self):
         self.assertEqual(u'\xff', u'\u00ff')
         self.assertEqual(u'\uffff', u'\U0000ffff')
-        self.assertRaises(UnicodeError, eval, 'u\'\\Ufffffffe\'')
-        self.assertRaises(UnicodeError, eval, 'u\'\\Uffffffff\'')
-        self.assertRaises(UnicodeError, eval, 'u\'\\U%08x\'' % 0x110000)
+        self.assertRaises(SyntaxError, eval, 'u\'\\Ufffffffe\'')
+        self.assertRaises(SyntaxError, eval, 'u\'\\Uffffffff\'')
+        self.assertRaises(SyntaxError, eval, 'u\'\\U%08x\'' % 0x110000)
 
     def test_repr(self):
         if not sys.platform.startswith('java'):
@@ -392,6 +392,20 @@ class UnicodeTest(
 
         self.assertEqual(u'%c' % 0x1234, u'\u1234')
         self.assertRaises(OverflowError, u"%c".__mod__, (sys.maxunicode+1,))
+        self.assertRaises(ValueError, u"%.1\u1032f".__mod__, (1.0/3))
+
+        for num in range(0x00,0x80):
+            char = chr(num)
+            self.assertEqual(u"%c" % char, char)
+            self.assertEqual(u"%c" % num, char)
+        # Issue 7649
+        for num in range(0x80,0x100):
+            uchar = unichr(num)
+            self.assertEqual(uchar, u"%c" % num)   # works only with ints
+            self.assertEqual(uchar, u"%c" % uchar) # and unicode chars
+            # the implicit decoding should fail for non-ascii chars
+            self.assertRaises(UnicodeDecodeError, u"%c".__mod__, chr(num))
+            self.assertRaises(UnicodeDecodeError, u"%s".__mod__, chr(num))
 
         # formatting jobs delegated from the string implementation:
         self.assertEqual('...%(foo)s...' % {'foo':u"abc"}, u'...abc...')
@@ -497,9 +511,11 @@ class UnicodeTest(
         )
 
         if not sys.platform.startswith('java'):
+            with test_support._check_py3k_warnings():
+                buf = buffer('character buffers are decoded to unicode')
             self.assertEqual(
                 unicode(
-                    buffer('character buffers are decoded to unicode'),
+                    buf,
                     'utf-8',
                     'strict'
                 ),
@@ -573,6 +589,164 @@ class UnicodeTest(
         # Other possible utf-8 test cases:
         # * strict decoding testing for all of the
         #   UTF8_ERROR cases in PyUnicode_DecodeUTF8
+
+    def test_utf8_decode_valid_sequences(self):
+        sequences = [
+            # single byte
+            ('\x00', u'\x00'), ('a', u'a'), ('\x7f', u'\x7f'),
+            # 2 bytes
+            ('\xc2\x80', u'\x80'), ('\xdf\xbf', u'\u07ff'),
+            # 3 bytes
+            ('\xe0\xa0\x80', u'\u0800'), ('\xed\x9f\xbf', u'\ud7ff'),
+            ('\xee\x80\x80', u'\uE000'), ('\xef\xbf\xbf', u'\uffff'),
+            # 4 bytes
+            ('\xF0\x90\x80\x80', u'\U00010000'),
+            ('\xf4\x8f\xbf\xbf', u'\U0010FFFF')
+        ]
+        for seq, res in sequences:
+            self.assertEqual(seq.decode('utf-8'), res)
+
+        for ch in map(unichr, range(0, sys.maxunicode)):
+            self.assertEqual(ch, ch.encode('utf-8').decode('utf-8'))
+
+    def test_utf8_decode_invalid_sequences(self):
+        # continuation bytes in a sequence of 2, 3, or 4 bytes
+        continuation_bytes = map(chr, range(0x80, 0xC0))
+        # start bytes of a 2-byte sequence equivalent to codepoints < 0x7F
+        invalid_2B_seq_start_bytes = map(chr, range(0xC0, 0xC2))
+        # start bytes of a 4-byte sequence equivalent to codepoints > 0x10FFFF
+        invalid_4B_seq_start_bytes = map(chr, range(0xF5, 0xF8))
+        invalid_start_bytes = (
+            continuation_bytes + invalid_2B_seq_start_bytes +
+            invalid_4B_seq_start_bytes + map(chr, range(0xF7, 0x100))
+        )
+
+        for byte in invalid_start_bytes:
+            self.assertRaises(UnicodeDecodeError, byte.decode, 'utf-8')
+
+        for sb in invalid_2B_seq_start_bytes:
+            for cb in continuation_bytes:
+                self.assertRaises(UnicodeDecodeError, (sb+cb).decode, 'utf-8')
+
+        for sb in invalid_4B_seq_start_bytes:
+            for cb1 in continuation_bytes[:3]:
+                for cb3 in continuation_bytes[:3]:
+                    self.assertRaises(UnicodeDecodeError,
+                                      (sb+cb1+'\x80'+cb3).decode, 'utf-8')
+
+        for cb in map(chr, range(0x80, 0xA0)):
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xE0'+cb+'\x80').decode, 'utf-8')
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xE0'+cb+'\xBF').decode, 'utf-8')
+        # XXX: surrogates shouldn't be valid UTF-8!
+        # see http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf
+        # (table 3-7) and http://www.rfc-editor.org/rfc/rfc3629.txt
+        #for cb in map(chr, range(0xA0, 0xC0)):
+            #sys.__stdout__.write('\\xED\\x%02x\\x80\n' % ord(cb))
+            #self.assertRaises(UnicodeDecodeError,
+                              #('\xED'+cb+'\x80').decode, 'utf-8')
+            #self.assertRaises(UnicodeDecodeError,
+                              #('\xED'+cb+'\xBF').decode, 'utf-8')
+        for cb in map(chr, range(0x80, 0x90)):
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xF0'+cb+'\x80\x80').decode, 'utf-8')
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xF0'+cb+'\xBF\xBF').decode, 'utf-8')
+        for cb in map(chr, range(0x90, 0xC0)):
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xF4'+cb+'\x80\x80').decode, 'utf-8')
+            self.assertRaises(UnicodeDecodeError,
+                              ('\xF4'+cb+'\xBF\xBF').decode, 'utf-8')
+
+    def test_issue8271(self):
+        # Issue #8271: during the decoding of an invalid UTF-8 byte sequence,
+        # only the start byte and the continuation byte(s) are now considered
+        # invalid, instead of the number of bytes specified by the start byte.
+        # See http://www.unicode.org/versions/Unicode5.2.0/ch03.pdf (page 95,
+        # table 3-8, Row 2) for more information about the algorithm used.
+        FFFD = u'\ufffd'
+        sequences = [
+            # invalid start bytes
+            ('\x80', FFFD), # continuation byte
+            ('\x80\x80', FFFD*2), # 2 continuation bytes
+            ('\xc0', FFFD),
+            ('\xc0\xc0', FFFD*2),
+            ('\xc1', FFFD),
+            ('\xc1\xc0', FFFD*2),
+            ('\xc0\xc1', FFFD*2),
+            # with start byte of a 2-byte sequence
+            ('\xc2', FFFD), # only the start byte
+            ('\xc2\xc2', FFFD*2), # 2 start bytes
+            ('\xc2\xc2\xc2', FFFD*3), # 2 start bytes
+            ('\xc2\x41', FFFD+'A'), # invalid continuation byte
+            # with start byte of a 3-byte sequence
+            ('\xe1', FFFD), # only the start byte
+            ('\xe1\xe1', FFFD*2), # 2 start bytes
+            ('\xe1\xe1\xe1', FFFD*3), # 3 start bytes
+            ('\xe1\xe1\xe1\xe1', FFFD*4), # 4 start bytes
+            ('\xe1\x80', FFFD), # only 1 continuation byte
+            ('\xe1\x41', FFFD+'A'), # invalid continuation byte
+            ('\xe1\x41\x80', FFFD+'A'+FFFD), # invalid cb followed by valid cb
+            ('\xe1\x41\x41', FFFD+'AA'), # 2 invalid continuation bytes
+            ('\xe1\x80\x41', FFFD+'A'), # only 1 valid continuation byte
+            ('\xe1\x80\xe1\x41', FFFD*2+'A'), # 1 valid and the other invalid
+            ('\xe1\x41\xe1\x80', FFFD+'A'+FFFD), # 1 invalid and the other valid
+            # with start byte of a 4-byte sequence
+            ('\xf1', FFFD), # only the start byte
+            ('\xf1\xf1', FFFD*2), # 2 start bytes
+            ('\xf1\xf1\xf1', FFFD*3), # 3 start bytes
+            ('\xf1\xf1\xf1\xf1', FFFD*4), # 4 start bytes
+            ('\xf1\xf1\xf1\xf1\xf1', FFFD*5), # 5 start bytes
+            ('\xf1\x80', FFFD), # only 1 continuation bytes
+            ('\xf1\x80\x80', FFFD), # only 2 continuation bytes
+            ('\xf1\x80\x41', FFFD+'A'), # 1 valid cb and 1 invalid
+            ('\xf1\x80\x41\x41', FFFD+'AA'), # 1 valid cb and 1 invalid
+            ('\xf1\x80\x80\x41', FFFD+'A'), # 2 valid cb and 1 invalid
+            ('\xf1\x41\x80', FFFD+'A'+FFFD), # 1 invalid cv and 1 valid
+            ('\xf1\x41\x80\x80', FFFD+'A'+FFFD*2), # 1 invalid cb and 2 invalid
+            ('\xf1\x41\x80\x41', FFFD+'A'+FFFD+'A'), # 2 invalid cb and 1 invalid
+            ('\xf1\x41\x41\x80', FFFD+'AA'+FFFD), # 1 valid cb and 1 invalid
+            ('\xf1\x41\xf1\x80', FFFD+'A'+FFFD),
+            ('\xf1\x41\x80\xf1', FFFD+'A'+FFFD*2),
+            ('\xf1\xf1\x80\x41', FFFD*2+'A'),
+            ('\xf1\x41\xf1\xf1', FFFD+'A'+FFFD*2),
+            # with invalid start byte of a 4-byte sequence (rfc2279)
+            ('\xf5', FFFD), # only the start byte
+            ('\xf5\xf5', FFFD*2), # 2 start bytes
+            ('\xf5\x80', FFFD*2), # only 1 continuation byte
+            ('\xf5\x80\x80', FFFD*3), # only 2 continuation byte
+            ('\xf5\x80\x80\x80', FFFD*4), # 3 continuation bytes
+            ('\xf5\x80\x41', FFFD*2+'A'), #  1 valid cb and 1 invalid
+            ('\xf5\x80\x41\xf5', FFFD*2+'A'+FFFD),
+            ('\xf5\x41\x80\x80\x41', FFFD+'A'+FFFD*2+'A'),
+            # with invalid start byte of a 5-byte sequence (rfc2279)
+            ('\xf8', FFFD), # only the start byte
+            ('\xf8\xf8', FFFD*2), # 2 start bytes
+            ('\xf8\x80', FFFD*2), # only one continuation byte
+            ('\xf8\x80\x41', FFFD*2 + 'A'), # 1 valid cb and 1 invalid
+            ('\xf8\x80\x80\x80\x80', FFFD*5), # invalid 5 bytes seq with 5 bytes
+            # with invalid start byte of a 6-byte sequence (rfc2279)
+            ('\xfc', FFFD), # only the start byte
+            ('\xfc\xfc', FFFD*2), # 2 start bytes
+            ('\xfc\x80\x80', FFFD*3), # only 2 continuation bytes
+            ('\xfc\x80\x80\x80\x80\x80', FFFD*6), # 6 continuation bytes
+            # invalid start byte
+            ('\xfe', FFFD),
+            ('\xfe\x80\x80', FFFD*3),
+            # other sequences
+            ('\xf1\x80\x41\x42\x43', u'\ufffd\x41\x42\x43'),
+            ('\xf1\x80\xff\x42\x43', u'\ufffd\ufffd\x42\x43'),
+            ('\xf1\x80\xc2\x81\x43', u'\ufffd\x81\x43'),
+            ('\x61\xF1\x80\x80\xE1\x80\xC2\x62\x80\x63\x80\xBF\x64',
+             u'\x61\uFFFD\uFFFD\uFFFD\x62\uFFFD\x63\uFFFD\uFFFD\x64'),
+        ]
+        for n, (seq, res) in enumerate(sequences):
+            self.assertRaises(UnicodeDecodeError, seq.decode, 'utf-8', 'strict')
+            self.assertEqual(seq.decode('utf-8', 'replace'), res)
+            self.assertEqual((seq+'b').decode('utf-8', 'replace'), res+'b')
+            self.assertEqual(seq.decode('utf-8', 'ignore'),
+                             res.replace(u'\uFFFD', ''))
 
     def test_codecs_idna(self):
         # Test whether trailing dot is preserved
@@ -752,7 +926,7 @@ class UnicodeTest(
 
         try:
             '\U11111111'.decode("raw-unicode-escape")
-        except UnicodeDecodeError, e:
+        except UnicodeDecodeError as e:
             self.assertEqual(e.start, 0)
             self.assertEqual(e.end, 10)
         else:
@@ -841,9 +1015,308 @@ class UnicodeTest(
             return
         self.assertRaises(OverflowError, u't\tt\t'.expandtabs, sys.maxint)
 
+    def test__format__(self):
+        def test(value, format, expected):
+            # test both with and without the trailing 's'
+            self.assertEqual(value.__format__(format), expected)
+            self.assertEqual(value.__format__(format + u's'), expected)
+
+        test(u'', u'', u'')
+        test(u'abc', u'', u'abc')
+        test(u'abc', u'.3', u'abc')
+        test(u'ab', u'.3', u'ab')
+        test(u'abcdef', u'.3', u'abc')
+        test(u'abcdef', u'.0', u'')
+        test(u'abc', u'3.3', u'abc')
+        test(u'abc', u'2.3', u'abc')
+        test(u'abc', u'2.2', u'ab')
+        test(u'abc', u'3.2', u'ab ')
+        test(u'result', u'x<0', u'result')
+        test(u'result', u'x<5', u'result')
+        test(u'result', u'x<6', u'result')
+        test(u'result', u'x<7', u'resultx')
+        test(u'result', u'x<8', u'resultxx')
+        test(u'result', u' <7', u'result ')
+        test(u'result', u'<7', u'result ')
+        test(u'result', u'>7', u' result')
+        test(u'result', u'>8', u'  result')
+        test(u'result', u'^8', u' result ')
+        test(u'result', u'^9', u' result  ')
+        test(u'result', u'^10', u'  result  ')
+        test(u'a', u'10000', u'a' + u' ' * 9999)
+        test(u'', u'10000', u' ' * 10000)
+        test(u'', u'10000000', u' ' * 10000000)
+
+        # test mixing unicode and str
+        self.assertEqual(u'abc'.__format__('s'), u'abc')
+        self.assertEqual(u'abc'.__format__('->10s'), u'-------abc')
+
+    def test_format(self):
+        self.assertEqual(u''.format(), u'')
+        self.assertEqual(u'a'.format(), u'a')
+        self.assertEqual(u'ab'.format(), u'ab')
+        self.assertEqual(u'a{{'.format(), u'a{')
+        self.assertEqual(u'a}}'.format(), u'a}')
+        self.assertEqual(u'{{b'.format(), u'{b')
+        self.assertEqual(u'}}b'.format(), u'}b')
+        self.assertEqual(u'a{{b'.format(), u'a{b')
+
+        # examples from the PEP:
+        import datetime
+        self.assertEqual(u"My name is {0}".format(u'Fred'), u"My name is Fred")
+        self.assertEqual(u"My name is {0[name]}".format(dict(name=u'Fred')),
+                         u"My name is Fred")
+        self.assertEqual(u"My name is {0} :-{{}}".format(u'Fred'),
+                         u"My name is Fred :-{}")
+
+        # datetime.__format__ doesn't work with unicode
+        #d = datetime.date(2007, 8, 18)
+        #self.assertEqual("The year is {0.year}".format(d),
+        #                 "The year is 2007")
+
+        # classes we'll use for testing
+        class C:
+            def __init__(self, x=100):
+                self._x = x
+            def __format__(self, spec):
+                return spec
+
+        class D:
+            def __init__(self, x):
+                self.x = x
+            def __format__(self, spec):
+                return str(self.x)
+
+        # class with __str__, but no __format__
+        class E:
+            def __init__(self, x):
+                self.x = x
+            def __str__(self):
+                return u'E(' + self.x + u')'
+
+        # class with __repr__, but no __format__ or __str__
+        class F:
+            def __init__(self, x):
+                self.x = x
+            def __repr__(self):
+                return u'F(' + self.x + u')'
+
+        # class with __format__ that forwards to string, for some format_spec's
+        class G:
+            def __init__(self, x):
+                self.x = x
+            def __str__(self):
+                return u"string is " + self.x
+            def __format__(self, format_spec):
+                if format_spec == 'd':
+                    return u'G(' + self.x + u')'
+                return object.__format__(self, format_spec)
+
+        # class that returns a bad type from __format__
+        class H:
+            def __format__(self, format_spec):
+                return 1.0
+
+        class I(datetime.date):
+            def __format__(self, format_spec):
+                return self.strftime(format_spec)
+
+        class J(int):
+            def __format__(self, format_spec):
+                return int.__format__(self * 2, format_spec)
+
+
+        self.assertEqual(u''.format(), u'')
+        self.assertEqual(u'abc'.format(), u'abc')
+        self.assertEqual(u'{0}'.format(u'abc'), u'abc')
+        self.assertEqual(u'{0:}'.format(u'abc'), u'abc')
+        self.assertEqual(u'X{0}'.format(u'abc'), u'Xabc')
+        self.assertEqual(u'{0}X'.format(u'abc'), u'abcX')
+        self.assertEqual(u'X{0}Y'.format(u'abc'), u'XabcY')
+        self.assertEqual(u'{1}'.format(1, u'abc'), u'abc')
+        self.assertEqual(u'X{1}'.format(1, u'abc'), u'Xabc')
+        self.assertEqual(u'{1}X'.format(1, u'abc'), u'abcX')
+        self.assertEqual(u'X{1}Y'.format(1, u'abc'), u'XabcY')
+        self.assertEqual(u'{0}'.format(-15), u'-15')
+        self.assertEqual(u'{0}{1}'.format(-15, u'abc'), u'-15abc')
+        self.assertEqual(u'{0}X{1}'.format(-15, u'abc'), u'-15Xabc')
+        self.assertEqual(u'{{'.format(), u'{')
+        self.assertEqual(u'}}'.format(), u'}')
+        self.assertEqual(u'{{}}'.format(), u'{}')
+        self.assertEqual(u'{{x}}'.format(), u'{x}')
+        self.assertEqual(u'{{{0}}}'.format(123), u'{123}')
+        self.assertEqual(u'{{{{0}}}}'.format(), u'{{0}}')
+        self.assertEqual(u'}}{{'.format(), u'}{')
+        self.assertEqual(u'}}x{{'.format(), u'}x{')
+
+        # weird field names
+        self.assertEqual(u"{0[foo-bar]}".format({u'foo-bar':u'baz'}), u'baz')
+        self.assertEqual(u"{0[foo bar]}".format({u'foo bar':u'baz'}), u'baz')
+        self.assertEqual(u"{0[ ]}".format({u' ':3}), u'3')
+
+        self.assertEqual(u'{foo._x}'.format(foo=C(20)), u'20')
+        self.assertEqual(u'{1}{0}'.format(D(10), D(20)), u'2010')
+        self.assertEqual(u'{0._x.x}'.format(C(D(u'abc'))), u'abc')
+        self.assertEqual(u'{0[0]}'.format([u'abc', u'def']), u'abc')
+        self.assertEqual(u'{0[1]}'.format([u'abc', u'def']), u'def')
+        self.assertEqual(u'{0[1][0]}'.format([u'abc', [u'def']]), u'def')
+        self.assertEqual(u'{0[1][0].x}'.format(['abc', [D(u'def')]]), u'def')
+
+        # strings
+        self.assertEqual(u'{0:.3s}'.format(u'abc'), u'abc')
+        self.assertEqual(u'{0:.3s}'.format(u'ab'), u'ab')
+        self.assertEqual(u'{0:.3s}'.format(u'abcdef'), u'abc')
+        self.assertEqual(u'{0:.0s}'.format(u'abcdef'), u'')
+        self.assertEqual(u'{0:3.3s}'.format(u'abc'), u'abc')
+        self.assertEqual(u'{0:2.3s}'.format(u'abc'), u'abc')
+        self.assertEqual(u'{0:2.2s}'.format(u'abc'), u'ab')
+        self.assertEqual(u'{0:3.2s}'.format(u'abc'), u'ab ')
+        self.assertEqual(u'{0:x<0s}'.format(u'result'), u'result')
+        self.assertEqual(u'{0:x<5s}'.format(u'result'), u'result')
+        self.assertEqual(u'{0:x<6s}'.format(u'result'), u'result')
+        self.assertEqual(u'{0:x<7s}'.format(u'result'), u'resultx')
+        self.assertEqual(u'{0:x<8s}'.format(u'result'), u'resultxx')
+        self.assertEqual(u'{0: <7s}'.format(u'result'), u'result ')
+        self.assertEqual(u'{0:<7s}'.format(u'result'), u'result ')
+        self.assertEqual(u'{0:>7s}'.format(u'result'), u' result')
+        self.assertEqual(u'{0:>8s}'.format(u'result'), u'  result')
+        self.assertEqual(u'{0:^8s}'.format(u'result'), u' result ')
+        self.assertEqual(u'{0:^9s}'.format(u'result'), u' result  ')
+        self.assertEqual(u'{0:^10s}'.format(u'result'), u'  result  ')
+        self.assertEqual(u'{0:10000}'.format(u'a'), u'a' + u' ' * 9999)
+        self.assertEqual(u'{0:10000}'.format(u''), u' ' * 10000)
+        self.assertEqual(u'{0:10000000}'.format(u''), u' ' * 10000000)
+
+        # format specifiers for user defined type
+        self.assertEqual(u'{0:abc}'.format(C()), u'abc')
+
+        # !r and !s coersions
+        self.assertEqual(u'{0!s}'.format(u'Hello'), u'Hello')
+        self.assertEqual(u'{0!s:}'.format(u'Hello'), u'Hello')
+        self.assertEqual(u'{0!s:15}'.format(u'Hello'), u'Hello          ')
+        self.assertEqual(u'{0!s:15s}'.format(u'Hello'), u'Hello          ')
+        self.assertEqual(u'{0!r}'.format(u'Hello'), u"u'Hello'")
+        self.assertEqual(u'{0!r:}'.format(u'Hello'), u"u'Hello'")
+        self.assertEqual(u'{0!r}'.format(F(u'Hello')), u'F(Hello)')
+
+        # test fallback to object.__format__
+        self.assertEqual(u'{0}'.format({}), u'{}')
+        self.assertEqual(u'{0}'.format([]), u'[]')
+        self.assertEqual(u'{0}'.format([1]), u'[1]')
+        self.assertEqual(u'{0}'.format(E(u'data')), u'E(data)')
+        self.assertEqual(u'{0:^10}'.format(E(u'data')), u' E(data)  ')
+        self.assertEqual(u'{0:^10s}'.format(E(u'data')), u' E(data)  ')
+        self.assertEqual(u'{0:d}'.format(G(u'data')), u'G(data)')
+        self.assertEqual(u'{0:>15s}'.format(G(u'data')), u' string is data')
+        self.assertEqual(u'{0!s}'.format(G(u'data')), u'string is data')
+
+        self.assertEqual(u"{0:date: %Y-%m-%d}".format(I(year=2007,
+                                                        month=8,
+                                                        day=27)),
+                         u"date: 2007-08-27")
+
+        # test deriving from a builtin type and overriding __format__
+        self.assertEqual(u"{0}".format(J(10)), u"20")
+
+
+        # string format specifiers
+        self.assertEqual(u'{0:}'.format('a'), u'a')
+
+        # computed format specifiers
+        self.assertEqual(u"{0:.{1}}".format(u'hello world', 5), u'hello')
+        self.assertEqual(u"{0:.{1}s}".format(u'hello world', 5), u'hello')
+        self.assertEqual(u"{0:.{precision}s}".format('hello world', precision=5), u'hello')
+        self.assertEqual(u"{0:{width}.{precision}s}".format('hello world', width=10, precision=5), u'hello     ')
+        self.assertEqual(u"{0:{width}.{precision}s}".format('hello world', width='10', precision='5'), u'hello     ')
+
+        # test various errors
+        self.assertRaises(ValueError, u'{'.format)
+        self.assertRaises(ValueError, u'}'.format)
+        self.assertRaises(ValueError, u'a{'.format)
+        self.assertRaises(ValueError, u'a}'.format)
+        self.assertRaises(ValueError, u'{a'.format)
+        self.assertRaises(ValueError, u'}a'.format)
+        self.assertRaises(IndexError, u'{0}'.format)
+        self.assertRaises(IndexError, u'{1}'.format, u'abc')
+        self.assertRaises(KeyError,   u'{x}'.format)
+        self.assertRaises(ValueError, u"}{".format)
+        self.assertRaises(ValueError, u"{".format)
+        self.assertRaises(ValueError, u"}".format)
+        self.assertRaises(ValueError, u"abc{0:{}".format)
+        self.assertRaises(ValueError, u"{0".format)
+        self.assertRaises(IndexError, u"{0.}".format)
+        self.assertRaises(ValueError, u"{0.}".format, 0)
+        self.assertRaises(IndexError, u"{0[}".format)
+        self.assertRaises(ValueError, u"{0[}".format, [])
+        self.assertRaises(KeyError,   u"{0]}".format)
+        self.assertRaises(ValueError, u"{0.[]}".format, 0)
+        self.assertRaises(ValueError, u"{0..foo}".format, 0)
+        self.assertRaises(ValueError, u"{0[0}".format, 0)
+        self.assertRaises(ValueError, u"{0[0:foo}".format, 0)
+        self.assertRaises(KeyError,   u"{c]}".format)
+        self.assertRaises(ValueError, u"{{ {{{0}}".format, 0)
+        self.assertRaises(ValueError, u"{0}}".format, 0)
+        self.assertRaises(KeyError,   u"{foo}".format, bar=3)
+        self.assertRaises(ValueError, u"{0!x}".format, 3)
+        self.assertRaises(ValueError, u"{0!}".format, 0)
+        self.assertRaises(ValueError, u"{0!rs}".format, 0)
+        self.assertRaises(ValueError, u"{!}".format)
+        self.assertRaises(ValueError, u"{:}".format)
+        self.assertRaises(ValueError, u"{:s}".format)
+        self.assertRaises(ValueError, u"{}".format)
+        big = u"23098475029384702983476098230754973209482573"
+        self.assertRaises(ValueError, (u"{" + big + u"}").format)
+        self.assertRaises(ValueError, (u"{[" + big + u"]}").format, [0])
+
+        # issue 6089
+        self.assertRaises(ValueError, u"{0[0]x}".format, [None])
+        self.assertRaises(ValueError, u"{0[0](10)}".format, [None])
+
+        # can't have a replacement on the field name portion
+        self.assertRaises(TypeError, u'{0[{1}]}'.format, u'abcdefg', 4)
+
+        # exceed maximum recursion depth
+        self.assertRaises(ValueError, u"{0:{1:{2}}}".format, u'abc', u's', u'')
+        self.assertRaises(ValueError, u"{0:{1:{2:{3:{4:{5:{6}}}}}}}".format,
+                          0, 1, 2, 3, 4, 5, 6, 7)
+
+        # string format spec errors
+        self.assertRaises(ValueError, u"{0:-s}".format, u'')
+        self.assertRaises(ValueError, format, u"", u"-")
+        self.assertRaises(ValueError, u"{0:=s}".format, u'')
+
+        # test combining string and unicode
+        self.assertEqual(u"foo{0}".format('bar'), u'foobar')
+        # This will try to convert the argument from unicode to str, which
+        #  will succeed
+        self.assertEqual("foo{0}".format(u'bar'), 'foobar')
+        # This will try to convert the argument from unicode to str, which
+        #  will fail
+        self.assertRaises(UnicodeEncodeError, "foo{0}".format, u'\u1000bar')
+
+    def test_raiseMemError(self):
+        # Ensure that the freelist contains a consistent object, even
+        # when a string allocation fails with a MemoryError.
+        # This used to crash the interpreter,
+        # or leak references when the number was smaller.
+        charwidth = 4 if sys.maxunicode >= 0x10000 else 2
+        # Note: sys.maxsize is half of the actual max allocation because of
+        # the signedness of Py_ssize_t.
+        alloc = lambda: u"a" * (sys.maxsize // charwidth * 2)
+        self.assertRaises(MemoryError, alloc)
+        self.assertRaises(MemoryError, alloc)
+
+    def test_format_subclass(self):
+        class U(unicode):
+            def __unicode__(self):
+                return u'__unicode__ overridden'
+        u = U(u'xxx')
+        self.assertEquals("%s" % u, u'__unicode__ overridden')
+        self.assertEquals("{0}".format(u), u'__unicode__ overridden')
+
 
 def test_main():
-    test_support.run_unittest(UnicodeTest)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

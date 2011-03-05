@@ -34,16 +34,13 @@ __version__ = "$Revision$"
 
 import sys
 if sys.platform == "win32":
-    import FixTk # Attempt to configure Tcl/Tk without requiring PATH
+    # Attempt to configure Tcl/Tk without requiring PATH
+    import FixTk
 import _tkinter # If this fails your Python may not be configured for Tk
 tkinter = _tkinter # b/w compat for export
 TclError = _tkinter.TclError
 from types import *
 from Tkconstants import *
-try:
-    import MacOS; _MacOS = MacOS; del MacOS
-except ImportError:
-    _MacOS = None
 
 wantobjects = 1
 
@@ -188,7 +185,7 @@ class Variable:
         else:
             self._name = 'PY_VAR' + repr(_varnum)
             _varnum += 1
-        if value != None:
+        if value is not None:
             self.set(value)
         elif not self._tk.call("info", "exists", self._name):
             self.set(self._default)
@@ -590,9 +587,6 @@ class Misc:
         status = self.tk.call('grab', 'status', self._w)
         if status == 'none': status = None
         return status
-    def lower(self, belowThis=None):
-        """Lower this widget in the stacking order."""
-        self.tk.call('lower', self._w, belowThis)
     def option_add(self, pattern, value, priority = None):
         """Set a VALUE (second parameter) for an option
         PATTERN (first parameter).
@@ -1213,6 +1207,8 @@ class Misc:
     __getitem__ = cget
     def __setitem__(self, key, value):
         self.configure({key: value})
+    def __contains__(self, key):
+        raise TypeError("Tkinter objects don't support 'in' tests.")
     def keys(self):
         """Return a list of all resource names of this widget."""
         return map(lambda x: x[0][1:],
@@ -1581,7 +1577,7 @@ class Wm:
         """Bind function FUNC to command NAME for this widget.
         Return the function bound to NAME if None is given. NAME could be
         e.g. "WM_SAVE_YOURSELF" or "WM_DELETE_WINDOW"."""
-        if callable(func):
+        if hasattr(func, '__call__'):
             command = self._register(func)
         else:
             command = func
@@ -1655,12 +1651,6 @@ class Tk(Misc, Wm):
     def _loadtk(self):
         self._tkloaded = 1
         global _default_root
-        if _MacOS and hasattr(_MacOS, 'SchedParams'):
-            # Disable event scanning except for Command-Period
-            _MacOS.SchedParams(1, 0)
-            # Work around nasty MacTk bug
-            # XXX Is this one still needed?
-            self.update()
         # Version sanity checks
         tk_version = self.tk.getvar('tk_version')
         if tk_version != _tkinter.TK_VERSION:
@@ -2934,8 +2924,7 @@ class Text(Widget):
         and edit_undo
 
         """
-        return self._getints(
-            self.tk.call((self._w, 'edit') + args)) or ()
+        return self.tk.call(self._w, 'edit', *args)
 
     def edit_modified(self, arg=None):
         """Get or Set the modified flag
@@ -3041,21 +3030,23 @@ class Text(Widget):
         self.tk.call(self._w, 'scan', 'dragto', x, y)
     def search(self, pattern, index, stopindex=None,
            forwards=None, backwards=None, exact=None,
-           regexp=None, nocase=None, count=None):
+           regexp=None, nocase=None, count=None, elide=None):
         """Search PATTERN beginning from INDEX until STOPINDEX.
-        Return the index of the first character of a match or an empty string."""
+        Return the index of the first character of a match or an
+        empty string."""
         args = [self._w, 'search']
         if forwards: args.append('-forwards')
         if backwards: args.append('-backwards')
         if exact: args.append('-exact')
         if regexp: args.append('-regexp')
         if nocase: args.append('-nocase')
+        if elide: args.append('-elide')
         if count: args.append('-count'); args.append(count)
-        if pattern[0] == '-': args.append('--')
+        if pattern and pattern[0] == '-': args.append('--')
         args.append(pattern)
         args.append(index)
         if stopindex: args.append(stopindex)
-        return self.tk.call(tuple(args))
+        return str(self.tk.call(tuple(args)))
     def see(self, index):
         """Scroll such that the character at INDEX is visible."""
         self.tk.call(self._w, 'see', index)
@@ -3325,7 +3316,7 @@ class PhotoImage(Image):
         """Return the color (red, green, blue) of the pixel at X,Y."""
         return self.tk.call(self.name, 'get', x, y)
     def put(self, data, to=None):
-        """Put row formated colors to image starting from
+        """Put row formatted colors to image starting from
         position TO, e.g. image.put("{red green} {blue yellow}", to=(4,6))"""
         args = (self.name, 'put', data)
         if to:

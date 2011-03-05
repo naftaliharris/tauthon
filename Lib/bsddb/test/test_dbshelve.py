@@ -2,20 +2,15 @@
 TestCases for checking dbShelve objects.
 """
 
-import sys, os, string
-import tempfile, random
-from pprint import pprint
-from types import *
+import os, string
+import random
 import unittest
+import warnings
 
-try:
-    # For Pythons w/distutils pybsddb
-    from bsddb3 import db, dbshelve
-except ImportError:
-    # For Python 2.3
-    from bsddb import db, dbshelve
 
-from test_all import verbose
+from test_all import db, dbshelve, test_support, verbose, \
+        get_new_environment_path, get_new_database_path
+
 
 
 #----------------------------------------------------------------------
@@ -26,25 +21,38 @@ class DataClass:
     def __init__(self):
         self.value = random.random()
 
-    def __cmp__(self, other):
+    def __repr__(self) :  # For Python 3.0 comparison
+        return "DataClass %f" %self.value
+
+    def __cmp__(self, other):  # For Python 2.x comparison
         return cmp(self.value, other)
+
 
 class DBShelveTestCase(unittest.TestCase):
     def setUp(self):
-        self.filename = tempfile.mktemp()
+        import sys
+        if sys.version_info[0] >= 3 :
+            from test_all import do_proxy_db_py3k
+            self._flag_proxy_db_py3k = do_proxy_db_py3k(False)
+        self.filename = get_new_database_path()
         self.do_open()
 
     def tearDown(self):
+        import sys
+        if sys.version_info[0] >= 3 :
+            from test_all import do_proxy_db_py3k
+            do_proxy_db_py3k(self._flag_proxy_db_py3k)
         self.do_close()
-        try:
-            os.remove(self.filename)
-        except os.error:
-            pass
+        test_support.unlink(self.filename)
 
     def mk(self, key):
         """Turn key into an appropriate key type for this db"""
         # override in child class for RECNO
-        return key
+        import sys
+        if sys.version_info[0] < 3 :
+            return key
+        else :
+            return bytes(key, "iso8859-1")  # 8 bits
 
     def populateDB(self, d):
         for x in string.letters:
@@ -90,15 +98,15 @@ class DBShelveTestCase(unittest.TestCase):
             print "keys:", k
             print "stats:", s
 
-        assert 0 == d.has_key(self.mk('bad key'))
-        assert 1 == d.has_key(self.mk('IA'))
-        assert 1 == d.has_key(self.mk('OA'))
+        self.assertEqual(0, d.has_key(self.mk('bad key')))
+        self.assertEqual(1, d.has_key(self.mk('IA')))
+        self.assertEqual(1, d.has_key(self.mk('OA')))
 
         d.delete(self.mk('IA'))
         del d[self.mk('OA')]
-        assert 0 == d.has_key(self.mk('IA'))
-        assert 0 == d.has_key(self.mk('OA'))
-        assert len(d) == l-2
+        self.assertEqual(0, d.has_key(self.mk('IA')))
+        self.assertEqual(0, d.has_key(self.mk('OA')))
+        self.assertEqual(len(d), l-2)
 
         values = []
         for key in d.keys():
@@ -109,29 +117,31 @@ class DBShelveTestCase(unittest.TestCase):
             self.checkrec(key, value)
 
         dbvalues = d.values()
-        assert len(dbvalues) == len(d.keys())
-        values.sort()
-        dbvalues.sort()
-        assert values == dbvalues
+        self.assertEqual(len(dbvalues), len(d.keys()))
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore',
+                                    'comparing unequal types not supported',
+                                    DeprecationWarning)
+            self.assertEqual(sorted(values), sorted(dbvalues))
 
         items = d.items()
-        assert len(items) == len(values)
+        self.assertEqual(len(items), len(values))
 
         for key, value in items:
             self.checkrec(key, value)
 
-        assert d.get(self.mk('bad key')) == None
-        assert d.get(self.mk('bad key'), None) == None
-        assert d.get(self.mk('bad key'), 'a string') == 'a string'
-        assert d.get(self.mk('bad key'), [1, 2, 3]) == [1, 2, 3]
+        self.assertEqual(d.get(self.mk('bad key')), None)
+        self.assertEqual(d.get(self.mk('bad key'), None), None)
+        self.assertEqual(d.get(self.mk('bad key'), 'a string'), 'a string')
+        self.assertEqual(d.get(self.mk('bad key'), [1, 2, 3]), [1, 2, 3])
 
         d.set_get_returns_none(0)
         self.assertRaises(db.DBNotFoundError, d.get, self.mk('bad key'))
         d.set_get_returns_none(1)
 
         d.put(self.mk('new key'), 'new data')
-        assert d.get(self.mk('new key')) == 'new data'
-        assert d[self.mk('new key')] == 'new data'
+        self.assertEqual(d.get(self.mk('new key')), 'new data')
+        self.assertEqual(d[self.mk('new key')], 'new data')
 
 
 
@@ -152,10 +162,11 @@ class DBShelveTestCase(unittest.TestCase):
                 print rec
             key, value = rec
             self.checkrec(key, value)
-            rec = c.next()
+            # Hack to avoid conversion by 2to3 tool
+            rec = getattr(c, "next")()
         del c
 
-        assert count == len(d)
+        self.assertEqual(count, len(d))
 
         count = 0
         c = d.cursor()
@@ -168,7 +179,7 @@ class DBShelveTestCase(unittest.TestCase):
             self.checkrec(key, value)
             rec = c.prev()
 
-        assert count == len(d)
+        self.assertEqual(count, len(d))
 
         c.set(self.mk('SS'))
         key, value = c.current()
@@ -188,27 +199,39 @@ class DBShelveTestCase(unittest.TestCase):
 
     def checkrec(self, key, value):
         # override this in a subclass if the key type is different
+
+        import sys
+        if sys.version_info[0] >= 3 :
+            if isinstance(key, bytes) :
+                key = key.decode("iso8859-1")  # 8 bits
+
         x = key[1]
         if key[0] == 'S':
-            assert type(value) == StringType
-            assert value == 10 * x
+            self.assertEqual(type(value), str)
+            self.assertEqual(value, 10 * x)
 
         elif key[0] == 'I':
-            assert type(value) == IntType
-            assert value == ord(x)
+            self.assertEqual(type(value), int)
+            self.assertEqual(value, ord(x))
 
         elif key[0] == 'L':
-            assert type(value) == ListType
-            assert value == [x] * 10
+            self.assertEqual(type(value), list)
+            self.assertEqual(value, [x] * 10)
 
         elif key[0] == 'O':
-            assert type(value) == InstanceType
-            assert value.S == 10 * x
-            assert value.I == ord(x)
-            assert value.L == [x] * 10
+            import sys
+            if sys.version_info[0] < 3 :
+                from types import InstanceType
+                self.assertEqual(type(value), InstanceType)
+            else :
+                self.assertEqual(type(value), DataClass)
+
+            self.assertEqual(value.S, 10 * x)
+            self.assertEqual(value.I, ord(x))
+            self.assertEqual(value.L, [x] * 10)
 
         else:
-            raise AssertionError, 'Unknown key type, fix the test'
+            self.assert_(0, 'Unknown key type, fix the test')
 
 #----------------------------------------------------------------------
 
@@ -245,12 +268,9 @@ class ThreadHashShelveTestCase(BasicShelveTestCase):
 
 class BasicEnvShelveTestCase(DBShelveTestCase):
     def do_open(self):
-        self.homeDir = homeDir = os.path.join(
-            os.path.dirname(sys.argv[0]), 'db_home')
-        try: os.mkdir(homeDir)
-        except os.error: pass
         self.env = db.DBEnv()
-        self.env.open(homeDir, self.envflags | db.DB_INIT_MPOOL | db.DB_CREATE)
+        self.env.open(self.homeDir,
+                self.envflags | db.DB_INIT_MPOOL | db.DB_CREATE)
 
         self.filename = os.path.split(self.filename)[1]
         self.d = dbshelve.DBShelf(self.env)
@@ -262,13 +282,17 @@ class BasicEnvShelveTestCase(DBShelveTestCase):
         self.env.close()
 
 
-    def tearDown(self):
-        self.do_close()
-        import glob
-        files = glob.glob(os.path.join(self.homeDir, '*'))
-        for file in files:
-            os.remove(file)
+    def setUp(self) :
+        self.homeDir = get_new_environment_path()
+        DBShelveTestCase.setUp(self)
 
+    def tearDown(self):
+        import sys
+        if sys.version_info[0] >= 3 :
+            from test_all import do_proxy_db_py3k
+            do_proxy_db_py3k(self._flag_proxy_db_py3k)
+        self.do_close()
+        test_support.rmtree(self.homeDir)
 
 
 class EnvBTreeShelveTestCase(BasicEnvShelveTestCase):

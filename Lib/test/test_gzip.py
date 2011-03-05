@@ -4,7 +4,7 @@
 
 import unittest
 from test import test_support
-import sys, os
+import os
 import gzip
 
 
@@ -24,17 +24,14 @@ data2 = """/* zlibmodule.c -- gzip-compatible data compression */
 class TestGzip(unittest.TestCase):
     filename = test_support.TESTFN
 
-    def setUp (self):
-        pass
+    def setUp(self):
+        test_support.unlink(self.filename)
 
-    def tearDown (self):
-        try:
-            os.unlink(self.filename)
-        except os.error:
-            pass
+    def tearDown(self):
+        test_support.unlink(self.filename)
 
 
-    def test_write (self):
+    def test_write(self):
         f = gzip.GzipFile(self.filename, 'wb') ; f.write(data1 * 50)
 
         # Try flush and fileno.
@@ -42,6 +39,9 @@ class TestGzip(unittest.TestCase):
         f.fileno()
         if hasattr(os, 'fsync'):
             os.fsync(f.fileno())
+        f.close()
+
+        # Test multiple close() calls.
         f.close()
 
     def test_read(self):
@@ -128,6 +128,17 @@ class TestGzip(unittest.TestCase):
             f.seek(newpos)  # positive seek
         f.close()
 
+    def test_seek_whence(self):
+        self.test_write()
+        # Try seek(whence=1), read test
+
+        f = gzip.GzipFile(self.filename)
+        f.read(10)
+        f.seek(10, whence=1)
+        y = f.read(10)
+        f.close()
+        self.assertEquals(y, data1[20:30])
+
     def test_seek_write(self):
         # Try seek, write test
         f = gzip.GzipFile(self.filename, 'w')
@@ -141,6 +152,13 @@ class TestGzip(unittest.TestCase):
         f = gzip.GzipFile(self.filename, 'r')
         self.assertEqual(f.myfileobj.mode, 'rb')
         f.close()
+
+    def test_1647484(self):
+        for mode in ('wb', 'rb'):
+            f = gzip.GzipFile(self.filename, mode)
+            self.assert_(hasattr(f, "name"))
+            self.assertEqual(f.name, self.filename)
+            f.close()
 
 def test_main(verbose=None):
     test_support.run_unittest(TestGzip)

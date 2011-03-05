@@ -11,7 +11,6 @@ import time
 import threading
 import traceback
 import types
-import macosxSupport
 
 import linecache
 from code import InteractiveInterpreter
@@ -24,17 +23,17 @@ except ImportError:
     sys.exit(1)
 import tkMessageBox
 
-from EditorWindow import EditorWindow, fixwordbreaks
-from FileList import FileList
-from ColorDelegator import ColorDelegator
-from UndoDelegator import UndoDelegator
-from OutputWindow import OutputWindow
-from configHandler import idleConf
-import idlever
-
-import rpc
-import Debugger
-import RemoteDebugger
+from idlelib.EditorWindow import EditorWindow, fixwordbreaks
+from idlelib.FileList import FileList
+from idlelib.ColorDelegator import ColorDelegator
+from idlelib.UndoDelegator import UndoDelegator
+from idlelib.OutputWindow import OutputWindow
+from idlelib.configHandler import idleConf
+from idlelib import idlever
+from idlelib import rpc
+from idlelib import Debugger
+from idlelib import RemoteDebugger
+from idlelib import macosxSupport
 
 IDENTCHARS = string.ascii_letters + string.digits + "_"
 LOCALHOST = '127.0.0.1'
@@ -55,18 +54,22 @@ try:
 except ImportError:
     pass
 else:
-    def idle_showwarning(message, category, filename, lineno):
+    def idle_showwarning(message, category, filename, lineno,
+                         file=None, line=None):
         file = warning_stream
         try:
-            file.write(warnings.formatwarning(message, category, filename, lineno))
+            file.write(warnings.formatwarning(message, category, filename,\
+                                              lineno, file=file, line=line))
         except IOError:
             pass  ## file (probably __stderr__) is invalid, warning dropped.
     warnings.showwarning = idle_showwarning
-    def idle_formatwarning(message, category, filename, lineno):
+    def idle_formatwarning(message, category, filename, lineno,
+                           file=None, line=None):
         """Format warnings the IDLE way"""
         s = "\nWarning (from warnings module):\n"
         s += '  File \"%s\", line %s\n' % (filename, lineno)
-        line = linecache.getline(filename, lineno).strip()
+        line = linecache.getline(filename, lineno).strip() \
+            if line is None else line
         if line:
             s += "    %s\n" % line
         s += "%s: %s\n>>> " % (category.__name__, message)
@@ -299,7 +302,6 @@ class ModifiedColorDelegator(ColorDelegator):
             "stdout": idleConf.GetHighlight(theme, "stdout"),
             "stderr": idleConf.GetHighlight(theme, "stderr"),
             "console": idleConf.GetHighlight(theme, "console"),
-            None: idleConf.GetHighlight(theme, "normal"),
         })
 
 class ModifiedUndoDelegator(UndoDelegator):
@@ -536,7 +538,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
         This method is called from the subprocess, and by returning from this
         method we allow the subprocess to unblock.  After a bit the shell
         requests the subprocess to open the remote stack viewer which returns a
-        static object looking at the last exceptiopn.  It is queried through
+        static object looking at the last exception.  It is queried through
         the RPC mechanism.
 
         """
@@ -544,13 +546,13 @@ class ModifiedInterpreter(InteractiveInterpreter):
         return
 
     def remote_stack_viewer(self):
-        import RemoteObjectBrowser
+        from idlelib import RemoteObjectBrowser
         oid = self.rpcclt.remotequeue("exec", "stackviewer", ("flist",), {})
         if oid is None:
             self.tkconsole.root.bell()
             return
         item = RemoteObjectBrowser.StubObjectTreeItem(self.rpcclt, oid)
-        from TreeWidget import ScrolledCanvas, TreeNode
+        from idlelib.TreeWidget import ScrolledCanvas, TreeNode
         top = Toplevel(self.tkconsole.root)
         theme = idleConf.GetOption('main','Theme','name')
         background = idleConf.GetHighlight(theme, 'normal')['background']
@@ -590,7 +592,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
         self.save_warnings_filters = warnings.filters[:]
         warnings.filterwarnings(action="error", category=SyntaxWarning)
         if isinstance(source, types.UnicodeType):
-            import IOBinding
+            from idlelib import IOBinding
             try:
                 source = source.encode(IOBinding.encoding)
             except UnicodeError:
@@ -706,33 +708,37 @@ class ModifiedInterpreter(InteractiveInterpreter):
         debugger = self.debugger
         try:
             self.tkconsole.beginexecuting()
-            try:
-                if not debugger and self.rpcclt is not None:
-                    self.active_seq = self.rpcclt.asyncqueue("exec", "runcode",
-                                                            (code,), {})
-                elif debugger:
-                    debugger.run(code, self.locals)
-                else:
-                    exec code in self.locals
-            except SystemExit:
-                if not self.tkconsole.closing:
-                    if tkMessageBox.askyesno(
-                        "Exit?",
-                        "Do you want to exit altogether?",
-                        default="yes",
-                        master=self.tkconsole.text):
-                        raise
-                    else:
-                        self.showtraceback()
-                else:
+            if not debugger and self.rpcclt is not None:
+                self.active_seq = self.rpcclt.asyncqueue("exec", "runcode",
+                                                        (code,), {})
+            elif debugger:
+                debugger.run(code, self.locals)
+            else:
+                exec code in self.locals
+        except SystemExit:
+            if not self.tkconsole.closing:
+                if tkMessageBox.askyesno(
+                    "Exit?",
+                    "Do you want to exit altogether?",
+                    default="yes",
+                    master=self.tkconsole.text):
                     raise
-            except:
-                if use_subprocess:
-                    print >> self.tkconsole.stderr, \
-                             "IDLE internal error in runcode()"
+                else:
+                    self.showtraceback()
+            else:
+                raise
+        except:
+            if use_subprocess:
+                print >>self.tkconsole.stderr, \
+                         "IDLE internal error in runcode()"
                 self.showtraceback()
-                if use_subprocess:
-                    self.tkconsole.endexecuting()
+                self.tkconsole.endexecuting()
+            else:
+                if self.tkconsole.canceled:
+                    self.tkconsole.canceled = False
+                    print >>self.tkconsole.stderr, "KeyboardInterrupt"
+                else:
+                    self.showtraceback()
         finally:
             if not use_subprocess:
                 try:
@@ -796,7 +802,7 @@ class PyShell(OutputWindow):
 
 
     # New classes
-    from IdleHistory import History
+    from idlelib.IdleHistory import History
 
     def __init__(self, flist=None):
         if use_subprocess:
@@ -823,7 +829,6 @@ class PyShell(OutputWindow):
         text.bind("<<newline-and-indent>>", self.enter_callback)
         text.bind("<<plain-newline-and-indent>>", self.linefeed_callback)
         text.bind("<<interrupt-execution>>", self.cancel_callback)
-        text.bind("<<beginning-of-line>>", self.home_callback)
         text.bind("<<end-of-file>>", self.eof_callback)
         text.bind("<<open-stack-viewer>>", self.open_stack_viewer)
         text.bind("<<toggle-debugger>>", self.toggle_debugger)
@@ -835,7 +840,7 @@ class PyShell(OutputWindow):
         self.save_stdout = sys.stdout
         self.save_stderr = sys.stderr
         self.save_stdin = sys.stdin
-        import IOBinding
+        from idlelib import IOBinding
         self.stdout = PseudoFile(self, "stdout", IOBinding.encoding)
         self.stderr = PseudoFile(self, "stderr", IOBinding.encoding)
         self.console = PseudoFile(self, "console", IOBinding.encoding)
@@ -929,7 +934,7 @@ class PyShell(OutputWindow):
                 "The program is still running!\n Do you want to kill it?",
                 default="ok",
                 parent=self.text)
-            if response == False:
+            if response is False:
                 return "cancel"
         if self.reading:
             self.top.quit()
@@ -1005,7 +1010,7 @@ class PyShell(OutputWindow):
         if len(line) == 0:  # may be EOF if we quit our mainloop with Ctrl-C
             line = "\n"
         if isinstance(line, unicode):
-            import IOBinding
+            from idlelib import IOBinding
             try:
                 line = line.encode(IOBinding.encoding)
             except UnicodeError:
@@ -1059,16 +1064,6 @@ class PyShell(OutputWindow):
             self.endoffile = 1
             self.top.quit()
         return "break"
-
-    def home_callback(self, event):
-        if event.state != 0 and event.keysym == "Home":
-            return # <Modifier-Home>; fall back to class binding
-        if self.text.compare("iomark", "<=", "insert") and \
-           self.text.compare("insert linestart", "<=", "iomark"):
-            self.text.mark_set("insert", "iomark")
-            self.text.tag_remove("sel", "1.0", "end")
-            self.text.see("insert")
-            return "break"
 
     def linefeed_callback(self, event):
         # Insert a linefeed without entering anything (still autoindented)
@@ -1193,7 +1188,7 @@ class PyShell(OutputWindow):
                 "(sys.last_traceback is not defined)",
                 master=self.text)
             return
-        from StackViewer import StackBrowser
+        from idlelib.StackViewer import StackBrowser
         sv = StackBrowser(self.root, self.flist)
 
     def view_restart_mark(self, event=None):
@@ -1247,8 +1242,9 @@ class PseudoFile(object):
     def write(self, s):
         self.shell.write(s, self.tags)
 
-    def writelines(self, l):
-        map(self.write, l)
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
 
     def flush(self):
         pass
@@ -1375,7 +1371,7 @@ def main():
             pathx.append(os.path.dirname(filename))
         for dir in pathx:
             dir = os.path.abspath(dir)
-            if not dir in sys.path:
+            if dir not in sys.path:
                 sys.path.insert(0, dir)
     else:
         dir = os.getcwd()

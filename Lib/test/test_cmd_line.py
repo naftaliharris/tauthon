@@ -1,22 +1,33 @@
+# Tests invocation of the interpreter with various command line arguments
+# All tests are executed with environment variables ignored
+# See test_cmd_line_script.py for testing of script execution
 
 import test.test_support, unittest
 import sys
-import popen2
 import subprocess
 
+def _spawn_python(*args):
+    cmd_line = [sys.executable, '-E']
+    cmd_line.extend(args)
+    return subprocess.Popen(cmd_line, stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+def _kill_python(p):
+    p.stdin.close()
+    data = p.stdout.read()
+    p.stdout.close()
+    # try to cleanup the child so we don't appear to leak when running
+    # with regrtest -R.  This should be a no-op on Windows.
+    subprocess._cleanup()
+    return data
+
 class CmdLineTest(unittest.TestCase):
-    def start_python(self, cmd_line):
-        outfp, infp = popen2.popen4('"%s" %s' % (sys.executable, cmd_line))
-        infp.close()
-        data = outfp.read()
-        outfp.close()
-        # try to cleanup the child so we don't appear to leak when running
-        # with regrtest -R.  This should be a no-op on Windows.
-        popen2._cleanup()
-        return data
+    def start_python(self, *args):
+        p = _spawn_python(*args)
+        return _kill_python(p)
 
     def exit_code(self, *args):
-        cmd_line = [sys.executable]
+        cmd_line = [sys.executable, '-E']
         cmd_line.extend(args)
         return subprocess.call(cmd_line, stdout=subprocess.PIPE,
                                          stderr=subprocess.PIPE)
@@ -29,9 +40,6 @@ class CmdLineTest(unittest.TestCase):
         data = self.start_python(cmd_line)
         self.assertTrue(data == '' or data.endswith('\n'))
         self.assertTrue('Traceback' not in data)
-
-    def test_environment(self):
-        self.verify_valid_flag('-E')
 
     def test_optimize(self):
         self.verify_valid_flag('-O')
@@ -70,6 +78,17 @@ class CmdLineTest(unittest.TestCase):
         self.assertEqual(
             self.exit_code('-m', 'timeit', '-n', '1'),
             0)
+
+    def test_run_module_bug1764407(self):
+        # -m and -i need to play well together
+        # Runs the timeit module and checks the __main__
+        # namespace has been populated appropriately
+        p = _spawn_python('-i', '-m', 'timeit', '-n', '1')
+        p.stdin.write('Timer\n')
+        p.stdin.write('exit()\n')
+        data = _kill_python(p)
+        self.assertTrue(data.startswith('1 loop'))
+        self.assertTrue('__main__.Timer' in data)
 
     def test_run_code(self):
         # Test expected operation of the '-c' switch

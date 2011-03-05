@@ -17,12 +17,13 @@ except NameError:
             d[k] = v
         return d
 
-try:
-    True
-    False
-except NameError:
-    True = not None
-    False = not True
+# Uncomment for 2.2 compatibility.
+#try:
+#    True
+#    False
+#except NameError:
+#    True = not None
+#    False = not True
 
 
 # Weekday and month names for HTTP date/time formatting; always English!
@@ -467,6 +468,10 @@ class CGIHandler(BaseCGIHandler):
     """
 
     wsgi_run_once = True
+    # Do not allow os.environ to leak between requests in Google App Engine
+    # and other multi-run CGI use cases.  This is not easily testable.
+    # See http://bugs.python.org/issue7250
+    os_environ = {}
 
     def __init__(self):
         BaseCGIHandler.__init__(

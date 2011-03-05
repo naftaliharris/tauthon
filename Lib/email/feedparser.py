@@ -28,7 +28,7 @@ from email import message
 
 NLCRE = re.compile('\r\n|\r|\n')
 NLCRE_bol = re.compile('(\r\n|\r|\n)')
-NLCRE_eol = re.compile('(\r\n|\r|\n)$')
+NLCRE_eol = re.compile('(\r\n|\r|\n)\Z')
 NLCRE_crack = re.compile('(\r\n|\r|\n)')
 # RFC 2822 $3.6.8 Optional fields.  ftext is %d33-57 / %d59-126, Any character
 # except controls, SP, and ":".
@@ -104,6 +104,10 @@ class BufferedSubFile(object):
         # data after the final RE.  In the case of a NL/CR terminated string,
         # this is the empty string.
         self._partial = parts.pop()
+        #GAN 29Mar09  bugs 1555570, 1721862  Confusion at 8K boundary ending with \r:
+        # is there a \n to follow later?
+        if not self._partial and parts and parts[-1].endswith('\r'):
+            self._partial = parts.pop(-2)+parts.pop()
         # parts is a list of strings, alternating between the line contents
         # and the eol character(s).  Gather up a list of lines after
         # re-attaching the newlines.

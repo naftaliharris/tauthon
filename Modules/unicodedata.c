@@ -1,8 +1,8 @@
 /* ------------------------------------------------------------------------
 
-   unicodedata -- Provides access to the Unicode 4.1 data base.
+   unicodedata -- Provides access to the Unicode 5.1 data base.
 
-   Data was extracted from the Unicode 4.1 UnicodeData.txt file.
+   Data was extracted from the Unicode 5.1 UnicodeData.txt file.
 
    Written by Marc-Andre Lemburg (mal@lemburg.com).
    Modified for Python 2.0 by Fredrik Lundh (fredrik@pythonware.com)
@@ -19,14 +19,14 @@
 /* character properties */
 
 typedef struct {
-    const unsigned char category;	/* index into
-					   _PyUnicode_CategoryNames */
-    const unsigned char	combining; 	/* combining class value 0 - 255 */
-    const unsigned char	bidirectional; 	/* index into
-					   _PyUnicode_BidirectionalNames */
-    const unsigned char mirrored;	/* true if mirrored in bidir mode */
-    const unsigned char east_asian_width;	/* index into
-						   _PyUnicode_EastAsianWidth */
+    const unsigned char category;       /* index into
+                                           _PyUnicode_CategoryNames */
+    const unsigned char combining;      /* combining class value 0 - 255 */
+    const unsigned char bidirectional;  /* index into
+                                           _PyUnicode_BidirectionalNames */
+    const unsigned char mirrored;       /* true if mirrored in bidir mode */
+    const unsigned char east_asian_width;       /* index into
+                                                   _PyUnicode_EastAsianWidth */
 } _PyUnicode_DatabaseRecord;
 
 typedef struct change_record {
@@ -34,6 +34,7 @@ typedef struct change_record {
     const unsigned char bidir_changed;
     const unsigned char category_changed;
     const unsigned char decimal_changed;
+    const unsigned char mirrored_changed;
     const int numeric_changed;
 } change_record;
 
@@ -54,12 +55,6 @@ _getrecord_ex(Py_UCS4 code)
     return &_PyUnicode_Database_Records[index];
 }
 
-static const _PyUnicode_DatabaseRecord*
-_getrecord(PyUnicodeObject* v)
-{
-    return _getrecord_ex(*PyUnicode_AS_UNICODE(v));
-}
-
 /* ------------- Previous-version API ------------------------------------- */
 typedef struct previous_version {
     PyObject_HEAD
@@ -71,7 +66,7 @@ typedef struct previous_version {
 #define get_old_record(self, v)    ((((PreviousDBVersion*)self)->getrecord)(v))
 
 static PyMemberDef DB_members[] = {
-	{"unidata_version", T_STRING, offsetof(PreviousDBVersion, name), READONLY},
+        {"unidata_version", T_STRING, offsetof(PreviousDBVersion, name), READONLY},
         {NULL}
 };
 
@@ -82,14 +77,32 @@ static PyObject*
 new_previous_version(const char*name, const change_record* (*getrecord)(Py_UCS4),
                      Py_UCS4 (*normalization)(Py_UCS4))
 {
-	PreviousDBVersion *self;
-	self = PyObject_New(PreviousDBVersion, &UCD_Type);
-	if (self == NULL)
-		return NULL;
-	self->name = name;
-	self->getrecord = getrecord;
+        PreviousDBVersion *self;
+        self = PyObject_New(PreviousDBVersion, &UCD_Type);
+        if (self == NULL)
+                return NULL;
+        self->name = name;
+        self->getrecord = getrecord;
         self->normalization = normalization;
-	return (PyObject*)self;
+        return (PyObject*)self;
+}
+
+
+static Py_UCS4 getuchar(PyUnicodeObject *obj)
+{
+    Py_UNICODE *v = PyUnicode_AS_UNICODE(obj);
+
+    if (PyUnicode_GET_SIZE(obj) == 1)
+        return *v;
+#ifndef Py_UNICODE_WIDE
+    else if ((PyUnicode_GET_SIZE(obj) == 2) &&
+             (0xD800 <= v[0] && v[0] <= 0xDBFF) &&
+             (0xDC00 <= v[1] && v[1] <= 0xDFFF))
+        return (((v[0] & 0x3FF)<<10) | (v[1] & 0x3FF)) + 0x10000;
+#endif
+    PyErr_SetString(PyExc_TypeError,
+                    "need a single Unicode character as parameter");
+    return (Py_UCS4)-1;
 }
 
 /* --- Module API --------------------------------------------------------- */
@@ -108,22 +121,21 @@ unicodedata_decimal(PyObject *self, PyObject *args)
     PyObject *defobj = NULL;
     int have_old = 0;
     long rc;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!|O:decimal", &PyUnicode_Type, &v, &defobj))
         return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
         return NULL;
-    }
 
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0) {
             /* unassigned */
             have_old = 1;
             rc = -1;
-        } 
+        }
         else if (old->decimal_changed != 0xFF) {
             have_old = 1;
             rc = old->decimal_changed;
@@ -131,17 +143,17 @@ unicodedata_decimal(PyObject *self, PyObject *args)
     }
 
     if (!have_old)
-        rc = Py_UNICODE_TODECIMAL(*PyUnicode_AS_UNICODE(v));
+        rc = Py_UNICODE_TODECIMAL(c);
     if (rc < 0) {
-	if (defobj == NULL) {
-	    PyErr_SetString(PyExc_ValueError,
-			    "not a decimal");
+        if (defobj == NULL) {
+            PyErr_SetString(PyExc_ValueError,
+                            "not a decimal");
             return NULL;
-	}
-	else {
-	    Py_INCREF(defobj);
-	    return defobj;
-	}
+        }
+        else {
+            Py_INCREF(defobj);
+            return defobj;
+        }
     }
     return PyInt_FromLong(rc);
 }
@@ -159,24 +171,23 @@ unicodedata_digit(PyObject *self, PyObject *args)
     PyUnicodeObject *v;
     PyObject *defobj = NULL;
     long rc;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!|O:digit", &PyUnicode_Type, &v, &defobj))
         return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
         return NULL;
-    }
-    rc = Py_UNICODE_TODIGIT(*PyUnicode_AS_UNICODE(v));
+    rc = Py_UNICODE_TODIGIT(c);
     if (rc < 0) {
-	if (defobj == NULL) {
-	    PyErr_SetString(PyExc_ValueError, "not a digit");
+        if (defobj == NULL) {
+            PyErr_SetString(PyExc_ValueError, "not a digit");
             return NULL;
-	}
-	else {
-	    Py_INCREF(defobj);
-	    return defobj;
-	}
+        }
+        else {
+            Py_INCREF(defobj);
+            return defobj;
+        }
     }
     return PyInt_FromLong(rc);
 }
@@ -195,22 +206,21 @@ unicodedata_numeric(PyObject *self, PyObject *args)
     PyObject *defobj = NULL;
     int have_old = 0;
     double rc;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!|O:numeric", &PyUnicode_Type, &v, &defobj))
         return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
 
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0) {
             /* unassigned */
             have_old = 1;
             rc = -1.0;
-        } 
+        }
         else if (old->decimal_changed != 0xFF) {
             have_old = 1;
             rc = old->decimal_changed;
@@ -218,16 +228,16 @@ unicodedata_numeric(PyObject *self, PyObject *args)
     }
 
     if (!have_old)
-        rc = Py_UNICODE_TONUMERIC(*PyUnicode_AS_UNICODE(v));
+        rc = Py_UNICODE_TONUMERIC(c);
     if (rc == -1.0) {
-	if (defobj == NULL) {
-	    PyErr_SetString(PyExc_ValueError, "not a numeric character");
-	    return NULL;
-	}
-	else {
-	    Py_INCREF(defobj);
-	    return defobj;
-	}
+        if (defobj == NULL) {
+            PyErr_SetString(PyExc_ValueError, "not a numeric character");
+            return NULL;
+        }
+        else {
+            Py_INCREF(defobj);
+            return defobj;
+        }
     }
     return PyFloat_FromDouble(rc);
 }
@@ -243,18 +253,17 @@ unicodedata_category(PyObject *self, PyObject *args)
 {
     PyUnicodeObject *v;
     int index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:category",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
-    index = (int) _getrecord(v)->category;
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
+    index = (int) _getrecord_ex(c)->category;
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed != 0xFF)
             index = old->category_changed;
     }
@@ -273,18 +282,17 @@ unicodedata_bidirectional(PyObject *self, PyObject *args)
 {
     PyUnicodeObject *v;
     int index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:bidirectional",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
-    index = (int) _getrecord(v)->bidirectional;
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
+    index = (int) _getrecord_ex(c)->bidirectional;
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             index = 0; /* unassigned */
         else if (old->bidir_changed != 0xFF)
@@ -305,18 +313,17 @@ unicodedata_combining(PyObject *self, PyObject *args)
 {
     PyUnicodeObject *v;
     int index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:combining",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
-    index = (int) _getrecord(v)->combining;
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
+    index = (int) _getrecord_ex(c)->combining;
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             index = 0; /* unassigned */
     }
@@ -335,20 +342,21 @@ unicodedata_mirrored(PyObject *self, PyObject *args)
 {
     PyUnicodeObject *v;
     int index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:mirrored",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
-    index = (int) _getrecord(v)->mirrored;
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
+    index = (int) _getrecord_ex(c)->mirrored;
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             index = 0; /* unassigned */
+        else if (old->mirrored_changed != 0xFF)
+            index = old->mirrored_changed;
     }
     return PyInt_FromLong(index);
 }
@@ -364,18 +372,17 @@ unicodedata_east_asian_width(PyObject *self, PyObject *args)
 {
     PyUnicodeObject *v;
     int index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:east_asian_width",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
-    index = (int) _getrecord(v)->east_asian_width;
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
+    index = (int) _getrecord_ex(c)->east_asian_width;
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             index = 0; /* unassigned */
     }
@@ -396,20 +403,19 @@ unicodedata_decomposition(PyObject *self, PyObject *args)
     char decomp[256];
     int code, index, count, i;
     unsigned int prefix_index;
+    Py_UCS4 c;
 
     if (!PyArg_ParseTuple(args, "O!:decomposition",
-			  &PyUnicode_Type, &v))
-	return NULL;
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
+                          &PyUnicode_Type, &v))
+        return NULL;
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
 
-    code = (int) *PyUnicode_AS_UNICODE(v);
+    code = (int)c;
 
     if (self) {
-        const change_record *old = get_old_record(self, *PyUnicode_AS_UNICODE(v));
+        const change_record *old = get_old_record(self, c);
         if (old->category_changed == 0)
             return PyString_FromString(""); /* unassigned */
     }
@@ -447,7 +453,7 @@ unicodedata_decomposition(PyObject *self, PyObject *args)
                       decomp_data[++index]);
         i += strlen(decomp + i);
     }
-    
+
     decomp[i] = '\0';
 
     return PyString_FromString(decomp);
@@ -467,7 +473,7 @@ get_decomp_record(PyObject *self, Py_UCS4 code, int *index, int *prefix, int *co
         *index = decomp_index2[(*index<<DECOMP_SHIFT)+
                                (code&((1<<DECOMP_SHIFT)-1))];
     }
-	
+
     /* high byte is number of hex bytes (usually one or two), low byte
        is prefix code (from*/
     *count = decomp_data[*index] >> 8;
@@ -492,11 +498,11 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
     PyObject *result;
     Py_UNICODE *i, *end, *o;
     /* Longest decomposition in Unicode 3.2: U+FDFA */
-    Py_UNICODE stack[20]; 
+    Py_UNICODE stack[20];
     Py_ssize_t space, isize;
     int index, prefix, count, stackptr;
     unsigned char prev, cur;
-	
+
     stackptr = 0;
     isize = PyUnicode_GET_SIZE(input);
     /* Overallocate atmost 10 characters. */
@@ -633,12 +639,12 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
     i = PyUnicode_AS_UNICODE(result);
     end = i + PyUnicode_GET_SIZE(result);
     o = PyUnicode_AS_UNICODE(result);
-	
+
   again:
     while (i < end) {
       for (index = 0; index < cskipped; index++) {
           if (skipped[index] == i) {
-              /* *i character is skipped. 
+              /* *i character is skipped.
                  Remove from list. */
               skipped[index] = skipped[cskipped-1];
               cskipped--;
@@ -649,7 +655,7 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
       /* Hangul Composition. We don't need to check for <LV,T>
          pairs, since we always have decomposed data. */
       if (LBase <= *i && *i < (LBase+LCount) &&
-          i + 1 < end && 
+          i + 1 < end &&
           VBase <= i[1] && i[1] <= (VBase+VCount)) {
           int LIndex, VIndex;
           LIndex = i[0] - LBase;
@@ -675,10 +681,14 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
       comb = 0;
       while (i1 < end) {
           int comb1 = _getrecord_ex(*i1)->combining;
-          if (comb1 && comb == comb1) {
-              /* Character is blocked. */
-              i1++;
-              continue;
+          if (comb) {
+              if (comb1 == 0)
+                  break;
+              if (comb >= comb1) {
+                  /* Character is blocked. */
+                  i1++;
+                  continue;
+              }
           }
           l = find_nfc_index(self, nfc_last, *i1);
           /* *i1 cannot be combined with *i. If *i1
@@ -698,10 +708,11 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
                            (index&((1<<COMP_SHIFT)-1))];
           if (code == 0)
               goto not_combinable;
-			
+
           /* Replace the original character. */
           *i = code;
           /* Mark the second character unused. */
+          assert(cskipped < 20);
           skipped[cskipped++] = i1;
           i1++;
           f = find_nfc_index(self, nfc_first, *i);
@@ -714,7 +725,7 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
         PyUnicode_Resize(&result, o - PyUnicode_AS_UNICODE(result));
     return result;
 }
-		
+
 PyDoc_STRVAR(unicodedata_normalize__doc__,
 "normalize(form, unistr)\n\
 \n\
@@ -830,29 +841,29 @@ _getucname(PyObject *self, Py_UCS4 code, char* buffer, int buflen)
         if (old->category_changed == 0) {
             /* unassigned */
             return 0;
-        } 
+        }
     }
 
     if (SBase <= code && code < SBase+SCount) {
-	/* Hangul syllable. */
-	int SIndex = code - SBase;
-	int L = SIndex / NCount;
-	int V = (SIndex % NCount) / TCount;
-	int T = SIndex % TCount;
+        /* Hangul syllable. */
+        int SIndex = code - SBase;
+        int L = SIndex / NCount;
+        int V = (SIndex % NCount) / TCount;
+        int T = SIndex % TCount;
 
-	if (buflen < 27)
-	    /* Worst case: HANGUL SYLLABLE <10chars>. */
-	    return 0;
-	strcpy(buffer, "HANGUL SYLLABLE ");
-	buffer += 16;
-	strcpy(buffer, hangul_syllables[L][0]);
-	buffer += strlen(hangul_syllables[L][0]);
-	strcpy(buffer, hangul_syllables[V][1]);
-	buffer += strlen(hangul_syllables[V][1]);
-	strcpy(buffer, hangul_syllables[T][2]);
-	buffer += strlen(hangul_syllables[T][2]);
-	*buffer = '\0';
-	return 1;
+        if (buflen < 27)
+            /* Worst case: HANGUL SYLLABLE <10chars>. */
+            return 0;
+        strcpy(buffer, "HANGUL SYLLABLE ");
+        buffer += 16;
+        strcpy(buffer, hangul_syllables[L][0]);
+        buffer += strlen(hangul_syllables[L][0]);
+        strcpy(buffer, hangul_syllables[V][1]);
+        buffer += strlen(hangul_syllables[V][1]);
+        strcpy(buffer, hangul_syllables[T][2]);
+        buffer += strlen(hangul_syllables[T][2]);
+        *buffer = '\0';
+        return 1;
     }
 
     if (is_unified_ideograph(code)) {
@@ -919,23 +930,23 @@ _cmpname(PyObject *self, int code, const char* name, int namelen)
     return buffer[namelen] == '\0';
 }
 
-static void 
+static void
 find_syllable(const char *str, int *len, int *pos, int count, int column)
 {
     int i, len1;
     *len = -1;
     for (i = 0; i < count; i++) {
-	char *s = hangul_syllables[i][column];
-	len1 = strlen(s);
-	if (len1 <= *len)
-	    continue;
-	if (strncmp(str, s, len1) == 0) {
-	    *len = len1;
-	    *pos = i;
-	}
+        char *s = hangul_syllables[i][column];
+        len1 = strlen(s);
+        if (len1 <= *len)
+            continue;
+        if (strncmp(str, s, len1) == 0) {
+            *len = len1;
+            *pos = i;
+        }
     }
     if (*len == -1) {
-	*len = 0;
+        *len = 0;
     }
 }
 
@@ -948,18 +959,18 @@ _getcode(PyObject* self, const char* name, int namelen, Py_UCS4* code)
 
     /* Check for hangul syllables. */
     if (strncmp(name, "HANGUL SYLLABLE ", 16) == 0) {
-	int len, L = -1, V = -1, T = -1;
-	const char *pos = name + 16;
-	find_syllable(pos, &len, &L, LCount, 0);
-	pos += len;
-	find_syllable(pos, &len, &V, VCount, 1);
-	pos += len;
-	find_syllable(pos, &len, &T, TCount, 2);
-	pos += len;
-	if (L != -1 && V != -1 && T != -1 && pos-name == namelen) {
-	    *code = SBase + (L*VCount+V)*TCount + T;
-	    return 1;
-	}
+        int len, L = -1, V = -1, T = -1;
+        const char *pos = name + 16;
+        find_syllable(pos, &len, &L, LCount, 0);
+        pos += len;
+        find_syllable(pos, &len, &V, VCount, 1);
+        pos += len;
+        find_syllable(pos, &len, &T, TCount, 2);
+        pos += len;
+        if (L != -1 && V != -1 && T != -1 && pos-name == namelen) {
+            *code = SBase + (L*VCount+V)*TCount + T;
+            return 1;
+        }
         /* Otherwise, it's an illegal syllable name. */
         return 0;
     }
@@ -1019,7 +1030,7 @@ _getcode(PyObject* self, const char* name, int namelen, Py_UCS4* code)
     }
 }
 
-static const _PyUnicode_Name_CAPI hashAPI = 
+static const _PyUnicode_Name_CAPI hashAPI =
 {
     sizeof(_PyUnicode_Name_CAPI),
     _getucname,
@@ -1039,28 +1050,26 @@ static PyObject *
 unicodedata_name(PyObject* self, PyObject* args)
 {
     char name[NAME_MAXLEN];
+    Py_UCS4 c;
 
     PyUnicodeObject* v;
     PyObject* defobj = NULL;
     if (!PyArg_ParseTuple(args, "O!|O:name", &PyUnicode_Type, &v, &defobj))
         return NULL;
 
-    if (PyUnicode_GET_SIZE(v) != 1) {
-	PyErr_SetString(PyExc_TypeError,
-			"need a single Unicode character as parameter");
-	return NULL;
-    }
+    c = getuchar(v);
+    if (c == (Py_UCS4)-1)
+        return NULL;
 
-    if (!_getucname(self, (Py_UCS4) *PyUnicode_AS_UNICODE(v),
-                    name, sizeof(name))) {
-	if (defobj == NULL) {
-	    PyErr_SetString(PyExc_ValueError, "no such name");
+    if (!_getucname(self, c, name, sizeof(name))) {
+        if (defobj == NULL) {
+            PyErr_SetString(PyExc_ValueError, "no such name");
             return NULL;
-	}
-	else {
-	    Py_INCREF(defobj);
-	    return defobj;
-	}
+        }
+        else {
+            Py_INCREF(defobj);
+            return defobj;
+        }
     }
 
     return Py_BuildValue("s", name);
@@ -1077,8 +1086,7 @@ static PyObject *
 unicodedata_lookup(PyObject* self, PyObject* args)
 {
     Py_UCS4 code;
-    Py_UNICODE str[1];
-    char errbuf[256];
+    Py_UNICODE str[2];
 
     char* name;
     int namelen;
@@ -1086,34 +1094,20 @@ unicodedata_lookup(PyObject* self, PyObject* args)
         return NULL;
 
     if (!_getcode(self, name, namelen, &code)) {
-	/* XXX(nnorwitz): why are we allocating for the error msg?
-		Why not always use snprintf? */
-        char fmt[] = "undefined character name '%s'";
-        char *buf = PyMem_MALLOC(sizeof(fmt) + namelen);
-        if (buf)
-            sprintf(buf, fmt, name);
-        else {
-            buf = errbuf;
-            PyOS_snprintf(buf, sizeof(errbuf), fmt, name);
-        }
-        PyErr_SetString(PyExc_KeyError, buf);
-        if (buf != errbuf)
-        	PyMem_FREE(buf);
+        PyErr_Format(PyExc_KeyError, "undefined character name '%s'",
+                     name);
         return NULL;
     }
 
 #ifndef Py_UNICODE_WIDE
     if (code >= 0x10000) {
-        /* Raise KeyError for compatibility; the possibly more
-           correct ValueError was not documented as a possible
-           exception for 2.5.x and earlier. */
-        PyErr_Format(PyExc_KeyError, "result %d larger than sys.maxunicode",
-                     code);
-        return NULL;
+        str[0] = 0xd800 + ((code - 0x10000) >> 10);
+        str[1] = 0xdc00 + ((code - 0x10000) & 0x3ff);
+        return PyUnicode_FromUnicode(str, 2);
     }
 #endif
     str[0] = (Py_UNICODE) code;
-    return PyUnicode_FromUnicode(str, 1);    
+    return PyUnicode_FromUnicode(str, 1);
 }
 
 /* XXX Add doc strings. */
@@ -1138,28 +1132,27 @@ static PyMethodDef unicodedata_functions[] = {
     {"lookup", unicodedata_lookup, METH_VARARGS, unicodedata_lookup__doc__},
     {"normalize", unicodedata_normalize, METH_VARARGS,
                   unicodedata_normalize__doc__},
-    {NULL, NULL}		/* sentinel */
+    {NULL, NULL}                /* sentinel */
 };
 
 static PyTypeObject UCD_Type = {
-	/* The ob_type field must be initialized in the module init function
-	 * to be portable to Windows without using C++. */
-	PyObject_HEAD_INIT(NULL)
-	0,			/*ob_size*/
-	"unicodedata.UCD",		/*tp_name*/
-	sizeof(PreviousDBVersion),	/*tp_basicsize*/
-	0,			/*tp_itemsize*/
-	/* methods */
-	(destructor)PyObject_Del, /*tp_dealloc*/
-	0,			/*tp_print*/
-	0,                      /*tp_getattr*/
-	0,			/*tp_setattr*/
-	0,			/*tp_compare*/
-	0,			/*tp_repr*/
-	0,			/*tp_as_number*/
-	0,			/*tp_as_sequence*/
-	0,			/*tp_as_mapping*/
-	0,			/*tp_hash*/
+        /* The ob_type field must be initialized in the module init function
+         * to be portable to Windows without using C++. */
+        PyVarObject_HEAD_INIT(NULL, 0)
+        "unicodedata.UCD",              /*tp_name*/
+        sizeof(PreviousDBVersion),      /*tp_basicsize*/
+        0,                      /*tp_itemsize*/
+        /* methods */
+        (destructor)PyObject_Del, /*tp_dealloc*/
+        0,                      /*tp_print*/
+        0,                      /*tp_getattr*/
+        0,                      /*tp_setattr*/
+        0,                      /*tp_compare*/
+        0,                      /*tp_repr*/
+        0,                      /*tp_as_number*/
+        0,                      /*tp_as_sequence*/
+        0,                      /*tp_as_mapping*/
+        0,                      /*tp_hash*/
         0,                      /*tp_call*/
         0,                      /*tp_str*/
         PyObject_GenericGetAttr,/*tp_getattro*/
@@ -1192,18 +1185,18 @@ PyDoc_STRVAR(unicodedata_docstring,
 "This module provides access to the Unicode Character Database which\n\
 defines character properties for all Unicode characters. The data in\n\
 this database is based on the UnicodeData.txt file version\n\
-4.1.0 which is publically available from ftp://ftp.unicode.org/.\n\
+5.1.0 which is publically available from ftp://ftp.unicode.org/.\n\
 \n\
 The module uses the same names and symbols as defined by the\n\
-UnicodeData File Format 4.1.0 (see\n\
-http://www.unicode.org/Public/4.1.0/ucd/UCD.html).");
+UnicodeData File Format 5.1.0 (see\n\
+http://www.unicode.org/Public/5.1.0/ucd/UCD.html).");
 
 PyMODINIT_FUNC
 initunicodedata(void)
 {
     PyObject *m, *v;
 
-    UCD_Type.ob_type = &PyType_Type;
+    Py_TYPE(&UCD_Type) = &PyType_Type;
 
     m = Py_InitModule3(
         "unicodedata", unicodedata_functions, unicodedata_docstring);
@@ -1225,7 +1218,7 @@ initunicodedata(void)
         PyModule_AddObject(m, "ucnhash_CAPI", v);
 }
 
-/* 
+/*
 Local variables:
 c-basic-offset: 4
 indent-tabs-mode: nil

@@ -7,12 +7,10 @@ import test_all
 from cStringIO import StringIO
 
 import unittest
-try:
-    # For Pythons w/distutils pybsddb
-    from bsddb3 import db, dbshelve
-except ImportError:
-    # For Python 2.3
-    from bsddb import db, dbshelve
+
+from test_all import db, dbshelve, test_support, \
+        get_new_environment_path, get_new_database_path
+
 
 lexical_cmp = cmp
 
@@ -30,8 +28,26 @@ _expected_lowercase_test_data = ['', 'a', 'aaa', 'b', 'c', 'CC', 'cccce', 'ccccf
 class ComparatorTests (unittest.TestCase):
     def comparator_test_helper (self, comparator, expected_data):
         data = expected_data[:]
-        data.sort (comparator)
-        self.failUnless (data == expected_data,
+
+        import sys
+        if sys.version_info[:3] < (2, 6, 0):
+            if sys.version_info[:3] < (2, 4, 0):
+                data.sort(comparator)
+            else :
+                data.sort(cmp=comparator)
+        else :  # Insertion Sort. Please, improve
+            data2 = []
+            for i in data :
+                for j, k in enumerate(data2) :
+                    r = comparator(k, i)
+                    if r == 1 :
+                        data2.insert(j, i)
+                        break
+                else :
+                    data2.append(i)
+            data = data2
+
+        self.assertEqual (data, expected_data,
                          "comparator `%s' is not right: %s vs. %s"
                          % (comparator, expected_data, data))
     def test_lexical_comparator (self):
@@ -51,26 +67,19 @@ class AbstractBtreeKeyCompareTestCase (unittest.TestCase):
 
     def setUp (self):
         self.filename = self.__class__.__name__ + '.db'
-        homeDir = os.path.join (os.path.dirname (sys.argv[0]), 'db_home')
-        self.homeDir = homeDir
-        try:
-            os.mkdir (homeDir)
-        except os.error:
-            pass
-
-        env = db.DBEnv ()
-        env.open (homeDir,
+        self.homeDir = get_new_environment_path()
+        env = db.DBEnv()
+        env.open (self.homeDir,
                   db.DB_CREATE | db.DB_INIT_MPOOL
                   | db.DB_INIT_LOCK | db.DB_THREAD)
         self.env = env
 
     def tearDown (self):
-        self.closeDB ()
+        self.closeDB()
         if self.env is not None:
-            self.env.close ()
+            self.env.close()
             self.env = None
-        import glob
-        map (os.remove, glob.glob (os.path.join (self.homeDir, '*')))
+        test_support.rmtree(self.homeDir)
 
     def addDataToDB (self, data):
         i = 0
@@ -106,14 +115,14 @@ class AbstractBtreeKeyCompareTestCase (unittest.TestCase):
             rec = curs.first ()
             while rec:
                 key, ignore = rec
-                self.failUnless (index < len (expected),
+                self.assertTrue (index < len (expected),
                                  "to many values returned from cursor")
-                self.failUnless (expected[index] == key,
+                self.assertEqual (expected[index], key,
                                  "expected value `%s' at %d but got `%s'"
                                  % (expected[index], index, key))
                 index = index + 1
                 rec = curs.next ()
-            self.failUnless (index == len (expected),
+            self.assertEqual (index, len (expected),
                              "not enough values returned from cursor")
         finally:
             curs.close ()
@@ -184,6 +193,7 @@ class BtreeExceptionsTestCase (AbstractBtreeKeyCompareTestCase):
             errorOut = temp.getvalue()
             if not successRe.search(errorOut):
                 self.fail("unexpected stderr output:\n"+errorOut)
+        sys.exc_traceback = sys.last_traceback = None
 
     def _test_compare_function_exception (self):
         self.startTest ()
@@ -229,20 +239,14 @@ class BtreeExceptionsTestCase (AbstractBtreeKeyCompareTestCase):
 
         self.startTest ()
         self.createDB (my_compare)
-        try:
-            self.db.set_bt_compare (my_compare)
-            assert False, "this set should fail"
-
-        except RuntimeError, msg:
-            pass
+        self.assertRaises (RuntimeError, self.db.set_bt_compare, my_compare)
 
 def test_suite ():
     res = unittest.TestSuite ()
 
     res.addTest (unittest.makeSuite (ComparatorTests))
-    if db.version () >= (3, 3, 11):
-        res.addTest (unittest.makeSuite (BtreeExceptionsTestCase))
-        res.addTest (unittest.makeSuite (BtreeKeyCompareTestCase))
+    res.addTest (unittest.makeSuite (BtreeExceptionsTestCase))
+    res.addTest (unittest.makeSuite (BtreeKeyCompareTestCase))
     return res
 
 if __name__ == '__main__':

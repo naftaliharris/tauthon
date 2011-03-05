@@ -34,7 +34,7 @@ NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION
 WITH THE USE OR PERFORMANCE OF THIS SOFTWARE !
 """
 
-import sys, time, operator, string
+import sys, time, operator, string, platform
 from CommandLine import *
 
 try:
@@ -102,27 +102,27 @@ def get_timer(timertype):
 
 def get_machine_details():
 
-    import platform
     if _debug:
         print 'Getting machine details...'
     buildno, builddate = platform.python_build()
     python = platform.python_version()
-    if python > '2.0':
-        try:
-            unichr(100000)
-        except ValueError:
-            # UCS2 build (standard)
-            unicode = 'UCS2'
-        else:
-            # UCS4 build (most recent Linux distros)
-            unicode = 'UCS4'
-    else:
+    try:
+        unichr(100000)
+    except ValueError:
+        # UCS2 build (standard)
+        unicode = 'UCS2'
+    except NameError:
         unicode = None
+    else:
+        # UCS4 build (most recent Linux distros)
+        unicode = 'UCS4'
     bits, linkage = platform.architecture()
     return {
         'platform': platform.platform(),
         'processor': platform.processor(),
         'executable': sys.executable,
+        'implementation': getattr(platform, 'python_implementation',
+                                  lambda:'n/a')(),
         'python': platform.python_version(),
         'compiler': platform.python_compiler(),
         'buildno': buildno,
@@ -134,17 +134,18 @@ def get_machine_details():
 def print_machine_details(d, indent=''):
 
     l = ['Machine Details:',
-         '   Platform ID:  %s' % d.get('platform', 'n/a'),
-         '   Processor:    %s' % d.get('processor', 'n/a'),
+         '   Platform ID:    %s' % d.get('platform', 'n/a'),
+         '   Processor:      %s' % d.get('processor', 'n/a'),
          '',
          'Python:',
-         '   Executable:   %s' % d.get('executable', 'n/a'),
-         '   Version:      %s' % d.get('python', 'n/a'),
-         '   Compiler:     %s' % d.get('compiler', 'n/a'),
-         '   Bits:         %s' % d.get('bits', 'n/a'),
-         '   Build:        %s (#%s)' % (d.get('builddate', 'n/a'),
-                                        d.get('buildno', 'n/a')),
-         '   Unicode:      %s' % d.get('unicode', 'n/a'),
+         '   Implementation: %s' % d.get('implementation', 'n/a'),
+         '   Executable:     %s' % d.get('executable', 'n/a'),
+         '   Version:        %s' % d.get('python', 'n/a'),
+         '   Compiler:       %s' % d.get('compiler', 'n/a'),
+         '   Bits:           %s' % d.get('bits', 'n/a'),
+         '   Build:          %s (#%s)' % (d.get('builddate', 'n/a'),
+                                          d.get('buildno', 'n/a')),
+         '   Unicode:        %s' % d.get('unicode', 'n/a'),
          ]
     print indent + string.join(l, '\n' + indent) + '\n'
 
@@ -167,7 +168,7 @@ class Test:
         call of .run().
 
         If you change a test in some way, don't forget to increase
-        it's version number.
+        its version number.
 
     """
 
@@ -499,8 +500,10 @@ class Benchmark:
 
     def calibrate(self):
 
-        print 'Calibrating tests. Please wait...'
+        print 'Calibrating tests. Please wait...',
+        sys.stdout.flush()
         if self.verbose:
+            print
             print
             print 'Test                              min      max'
             print '-' * LINE
@@ -514,6 +517,11 @@ class Benchmark:
                       (name,
                        min(test.overhead_times) * MILLI_SECONDS,
                        max(test.overhead_times) * MILLI_SECONDS)
+        if self.verbose:
+            print
+            print 'Done with the calibration.'
+        else:
+            print 'done.'
         print
 
     def run(self):
@@ -830,7 +838,9 @@ python pybench.py -s p25.pybench -c p21.pybench
         print '-' * LINE
         print 'PYBENCH %s' % __version__
         print '-' * LINE
-        print '* using Python %s' % (string.split(sys.version)[0])
+        print '* using %s %s' % (
+            getattr(platform, 'python_implementation', lambda:'Python')(),
+            string.join(string.split(sys.version), ' '))
 
         # Switch off garbage collection
         if not withgc:
@@ -839,15 +849,23 @@ python pybench.py -s p25.pybench -c p21.pybench
             except ImportError:
                 print '* Python version doesn\'t support garbage collection'
             else:
-                gc.disable()
-                print '* disabled garbage collection'
+                try:
+                    gc.disable()
+                except NotImplementedError:
+                    print '* Python version doesn\'t support gc.disable'
+                else:
+                    print '* disabled garbage collection'
 
         # "Disable" sys check interval
         if not withsyscheck:
             # Too bad the check interval uses an int instead of a long...
             value = 2147483647
-            sys.setcheckinterval(value)
-            print '* system check interval set to maximum: %s' % value
+            try:
+                sys.setcheckinterval(value)
+            except (AttributeError, NotImplementedError):
+                print '* Python version doesn\'t support sys.setcheckinterval'
+            else:
+                print '* system check interval set to maximum: %s' % value
 
         if timer == TIMER_SYSTIMES_PROCESSTIME:
             import systimes

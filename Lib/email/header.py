@@ -62,7 +62,7 @@ def decode_header(header):
     header, otherwise a lower-case string containing the name of the character
     set specified in the encoded string.
 
-    An email.Errors.HeaderParseError may be raised when certain decoding error
+    An email.errors.HeaderParseError may be raised when certain decoding error
     occurs (e.g. a base64 decoding exception).
     """
     # If no encoding, just return the header
@@ -249,7 +249,7 @@ class Header:
         elif not isinstance(charset, Charset):
             charset = Charset(charset)
         # If the charset is our faux 8bit charset, leave the string unchanged
-        if charset <> '8bit':
+        if charset != '8bit':
             # We need to test that the string can be converted to unicode and
             # back to a byte string, given the input and output codecs of the
             # charset.
@@ -337,8 +337,8 @@ class Header:
         # different charsets and/or encodings, and the resulting header will
         # accurately reflect each setting.
         #
-        # Each encoding can be email.Utils.QP (quoted-printable, for
-        # ASCII-like character sets like iso-8859-1), email.Utils.BASE64
+        # Each encoding can be email.utils.QP (quoted-printable, for
+        # ASCII-like character sets like iso-8859-1), email.utils.BASE64
         # (Base64, for non-ASCII like character sets like KOI8-R and
         # iso-2022-jp), or None (no encoding).
         #
@@ -455,7 +455,7 @@ def _split_ascii(s, firstlen, restlen, continuation_ws, splitchars):
                 # If this part is longer than maxlen and we aren't already
                 # splitting on whitespace, try to recursively split this line
                 # on whitespace.
-                if partlen > maxlen and ch <> ' ':
+                if partlen > maxlen and ch != ' ':
                     subl = _split_ascii(part, maxlen, restlen,
                                         continuation_ws, ' ')
                     lines.extend(subl[:-1])

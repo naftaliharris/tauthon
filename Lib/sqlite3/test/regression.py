@@ -1,7 +1,7 @@
 #-*- coding: ISO-8859-1 -*-
 # pysqlite2/test/regression.py: pysqlite regression tests
 #
-# Copyright (C) 2006 Gerhard Häring <gh@ghaering.de>
+# Copyright (C) 2006-2007 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -21,6 +21,7 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 
+import datetime
 import unittest
 import sqlite3 as sqlite
 
@@ -68,6 +69,110 @@ class RegressionTests(unittest.TestCase):
 
         cur.execute('select 1 as "foo baz"')
         self.failUnlessEqual(cur.description[0][0], "foo baz")
+
+    def CheckStatementAvailable(self):
+        # pysqlite up to 2.3.2 crashed on this, because the active statement handle was not checked
+        # before trying to fetch data from it. close() destroys the active statement ...
+        con = sqlite.connect(":memory:", detect_types=sqlite.PARSE_DECLTYPES)
+        cur = con.cursor()
+        cur.execute("select 4 union select 5")
+        cur.close()
+        cur.fetchone()
+        cur.fetchone()
+
+    def CheckStatementFinalizationOnCloseDb(self):
+        # pysqlite versions <= 2.3.3 only finalized statements in the statement
+        # cache when closing the database. statements that were still
+        # referenced in cursors weren't closed an could provoke "
+        # "OperationalError: Unable to close due to unfinalised statements".
+        con = sqlite.connect(":memory:")
+        cursors = []
+        # default statement cache size is 100
+        for i in range(105):
+            cur = con.cursor()
+            cursors.append(cur)
+            cur.execute("select 1 x union select " + str(i))
+        con.close()
+
+    def CheckOnConflictRollback(self):
+        if sqlite.sqlite_version_info < (3, 2, 2):
+            return
+        con = sqlite.connect(":memory:")
+        con.execute("create table foo(x, unique(x) on conflict rollback)")
+        con.execute("insert into foo(x) values (1)")
+        try:
+            con.execute("insert into foo(x) values (1)")
+        except sqlite.DatabaseError:
+            pass
+        con.execute("insert into foo(x) values (2)")
+        try:
+            con.commit()
+        except sqlite.OperationalError:
+            self.fail("pysqlite knew nothing about the implicit ROLLBACK")
+
+    def CheckWorkaroundForBuggySqliteTransferBindings(self):
+        """
+        pysqlite would crash with older SQLite versions unless
+        a workaround is implemented.
+        """
+        self.con.execute("create table foo(bar)")
+        self.con.execute("drop table foo")
+        self.con.execute("create table foo(bar)")
+
+    def CheckEmptyStatement(self):
+        """
+        pysqlite used to segfault with SQLite versions 3.5.x. These return NULL
+        for "no-operation" statements
+        """
+        self.con.execute("")
+
+    def CheckUnicodeConnect(self):
+        """
+        With pysqlite 2.4.0 you needed to use a string or a APSW connection
+        object for opening database connections.
+
+        Formerly, both bytestrings and unicode strings used to work.
+
+        Let's make sure unicode strings work in the future.
+        """
+        con = sqlite.connect(u":memory:")
+        con.close()
+
+    def CheckTypeMapUsage(self):
+        """
+        pysqlite until 2.4.1 did not rebuild the row_cast_map when recompiling
+        a statement. This test exhibits the problem.
+        """
+        SELECT = "select * from foo"
+        con = sqlite.connect(":memory:",detect_types=sqlite.PARSE_DECLTYPES)
+        con.execute("create table foo(bar timestamp)")
+        con.execute("insert into foo(bar) values (?)", (datetime.datetime.now(),))
+        con.execute(SELECT)
+        con.execute("drop table foo")
+        con.execute("create table foo(bar integer)")
+        con.execute("insert into foo(bar) values (5)")
+        con.execute(SELECT)
+
+    def CheckRegisterAdapter(self):
+        """
+        See issue 3312.
+        """
+        self.assertRaises(TypeError, sqlite.register_adapter, {}, None)
+
+    def CheckSetIsolationLevel(self):
+        """
+        See issue 3312.
+        """
+        con = sqlite.connect(":memory:")
+        self.assertRaises(UnicodeEncodeError, setattr, con,
+                          "isolation_level", u"\xe9")
+
+    def CheckConnectionCall(self):
+        """
+        Call a connection with a non-string SQL request: check error handling
+        of the statement constructor.
+        """
+        self.assertRaises(sqlite.Warning, self.con, 1)
 
 def suite():
     regression_suite = unittest.makeSuite(RegressionTests, "Check")
