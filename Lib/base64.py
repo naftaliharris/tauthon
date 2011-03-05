@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 """RFC 3548: Base16, Base32, Base64 Data Encodings"""
 
@@ -65,16 +65,19 @@ def b64encode(s, altchars=None):
     return encoded
 
 
-def b64decode(s, altchars=None):
+def b64decode(s, altchars=None, validate=False):
     """Decode a Base64 encoded byte string.
 
     s is the byte string to decode.  Optional altchars must be a
     string of length 2 which specifies the alternative alphabet used
     instead of the '+' and '/' characters.
 
-    The decoded byte string is returned.  binascii.Error is raised if
-    s were incorrectly padded or if there are non-alphabet characters
-    present in the string.
+    The decoded string is returned.  A binascii.Error is raised if s is
+    incorrectly padded.
+
+    If validate is False (the default), non-base64-alphabet characters are
+    discarded prior to the padding check.  If validate is True,
+    non-base64-alphabet characters in the input result in a binascii.Error.
     """
     if not isinstance(s, bytes_types):
         raise TypeError("expected bytes, not %s" % s.__class__.__name__)
@@ -84,6 +87,8 @@ def b64decode(s, altchars=None):
                             % altchars.__class__.__name__)
         assert len(altchars) == 2, repr(altchars)
         s = _translate(s, {chr(altchars[0]): b'+', chr(altchars[1]): b'/'})
+    if validate and not re.match(b'^[A-Za-z0-9+/]*={0,2}$', s):
+        raise binascii.Error('Non-base64 digit found')
     return binascii.a2b_base64(s)
 
 
@@ -241,7 +246,7 @@ def b32decode(s, casefold=False, map01=None):
         acc += _b32rev[c] << shift
         shift -= 5
         if shift < 0:
-            parts.append(binascii.unhexlify('%010x' % acc))
+            parts.append(binascii.unhexlify(bytes('%010x' % acc, "ascii")))
             acc = 0
             shift = 35
     # Process the last, partial quanta

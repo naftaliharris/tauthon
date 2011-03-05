@@ -163,7 +163,7 @@ Positional and keyword arguments can be arbitrarily combined::
 
 An optional ``':'`` and format specifier can follow the field name. This allows
 greater control over how the value is formatted.  The following example
-truncates Pi to three places after the decimal.
+rounds Pi to three places after the decimal.
 
    >>> import math
    >>> print('The value of PI is approximately {0:.3f}.'.format(math.pi))
@@ -208,7 +208,7 @@ Old string formatting
 ---------------------
 
 The ``%`` operator can also be used for string formatting. It interprets the
-left argument much like a :cfunc:`sprintf`\ -style format string to be applied
+left argument much like a :c:func:`sprintf`\ -style format string to be applied
 to the right argument, and returns the string resulting from this formatting
 operation. For example::
 
