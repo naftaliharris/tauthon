@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import unittest
 from test import support
@@ -13,7 +13,7 @@ import time
 
 class URLTimeoutTest(unittest.TestCase):
 
-    TIMEOUT = 10.0
+    TIMEOUT = 30.0
 
     def setUp(self):
         socket.setdefaulttimeout(self.TIMEOUT)
@@ -62,10 +62,10 @@ class urlopenNetworkTests(unittest.TestCase):
         # Test both readline and readlines.
         open_url = self.urlopen("http://www.python.org/")
         try:
-            self.assertTrue(isinstance(open_url.readline(), bytes),
-                         "readline did not return bytes")
-            self.assertTrue(isinstance(open_url.readlines(), list),
-                         "readlines did not return a list")
+            self.assertIsInstance(open_url.readline(), bytes,
+                                  "readline did not return a string")
+            self.assertIsInstance(open_url.readlines(), list,
+                                  "readlines did not return a list")
         finally:
             open_url.close()
 
@@ -76,9 +76,9 @@ class urlopenNetworkTests(unittest.TestCase):
             info_obj = open_url.info()
         finally:
             open_url.close()
-            self.assertTrue(isinstance(info_obj, email.message.Message),
-                         "object returned by 'info' is not an instance of "
-                         "email.message.Message")
+            self.assertIsInstance(info_obj, email.message.Message,
+                                  "object returned by 'info' is not an "
+                                  "instance of email.message.Message")
             self.assertEqual(info_obj.get_content_subtype(), "html")
 
     def test_geturl(self):
@@ -168,8 +168,8 @@ class urlretrieveNetworkTests(unittest.TestCase):
         # Make sure header returned as 2nd value from urlretrieve is good.
         file_location, header = self.urlretrieve("http://www.python.org/")
         os.unlink(file_location)
-        self.assertTrue(isinstance(header, email.message.Message),
-                     "header is not an instance of email.message.Message")
+        self.assertIsInstance(header, email.message.Message,
+                              "header is not an instance of email.message.Message")
 
     def test_data_header(self):
         logo = "http://www.python.org/community/logos/python-logo-master-v3-TM.png"
