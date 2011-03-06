@@ -32,16 +32,37 @@ PyAPI_FUNC(PyObject *) PyLong_GetInfo(void);
    cleanup to keep the extra information. [CH] */
 #define PyLong_AS_LONG(op) PyLong_AsLong(op)
 
-/* For use by intobject.c only */
-PyAPI_DATA(unsigned char) _PyLong_DigitValue[256];
+/* Issue #1983: pid_t can be longer than a C long on some systems */
+#if !defined(SIZEOF_PID_T) || SIZEOF_PID_T == SIZEOF_INT
+#define _Py_PARSE_PID "i"
+#define PyLong_FromPid PyLong_FromLong
+#define PyLong_AsPid PyLong_AsLong
+#elif SIZEOF_PID_T == SIZEOF_LONG
+#define _Py_PARSE_PID "l"
+#define PyLong_FromPid PyLong_FromLong
+#define PyLong_AsPid PyLong_AsLong
+#elif defined(SIZEOF_LONG_LONG) && SIZEOF_PID_T == SIZEOF_LONG_LONG
+#define _Py_PARSE_PID "L"
+#define PyLong_FromPid PyLong_FromLongLong
+#define PyLong_AsPid PyLong_AsLongLong
+#else
+#error "sizeof(pid_t) is neither sizeof(int), sizeof(long) or sizeof(long long)"
+#endif /* SIZEOF_PID_T */
 
-/* _PyLong_AsScaledDouble returns a double x and an exponent e such that
-   the true value is approximately equal to x * 2**(SHIFT*e).  e is >= 0.
-   x is 0.0 if and only if the input is 0 (in which case, e and x are both
-   zeroes).  Overflow is impossible.  Note that the exponent returned must
-   be multiplied by SHIFT!  There may not be enough room in an int to store
-   e*SHIFT directly. */
-PyAPI_FUNC(double) _PyLong_AsScaledDouble(PyObject *vv, int *e);
+/* Used by Python/mystrtoul.c. */
+#ifndef Py_LIMITED_API
+PyAPI_DATA(unsigned char) _PyLong_DigitValue[256];
+#endif
+
+/* _PyLong_Frexp returns a double x and an exponent e such that the
+   true value is approximately equal to x * 2**e.  e is >= 0.  x is
+   0.0 if and only if the input is 0 (in which case, e and x are both
+   zeroes); otherwise, 0.5 <= abs(x) < 1.0.  On overflow, which is
+   possible if the number of bits doesn't fit into a Py_ssize_t, sets
+   OverflowError and returns -1.0 for x, 0 for e. */
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(double) _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e);
+#endif
 
 PyAPI_FUNC(double) PyLong_AsDouble(PyObject *);
 PyAPI_FUNC(PyObject *) PyLong_FromVoidPtr(void *);
@@ -53,11 +74,15 @@ PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG);
 PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLong(PyObject *);
 PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLong(PyObject *);
 PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLongMask(PyObject *);
+PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLongAndOverflow(PyObject *, int *);
 #endif /* HAVE_LONG_LONG */
 
 PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int);
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) PyLong_FromUnicode(Py_UNICODE*, Py_ssize_t, int);
+#endif
 
+#ifndef Py_LIMITED_API
 /* _PyLong_Sign.  Return 0 if v is 0, -1 if v < 0, +1 if v > 0.
    v must not be NULL, and must be a normalized long.
    There are no error cases.
@@ -73,6 +98,14 @@ PyAPI_FUNC(int) _PyLong_Sign(PyObject *v);
    fit in a size_t.
 */
 PyAPI_FUNC(size_t) _PyLong_NumBits(PyObject *v);
+
+/* _PyLong_DivmodNear.  Given integers a and b, compute the nearest
+   integer q to the exact quotient a / b, rounding to the nearest even integer
+   in the case of a tie.  Return (q, r), where r = a - q*b.  The remainder r
+   will satisfy abs(r) <= abs(b)/2, with equality possible only if q is
+   even.
+*/
+PyAPI_FUNC(PyObject *) _PyLong_DivmodNear(PyObject *, PyObject *);
 
 /* _PyLong_FromByteArray:  View the n unsigned bytes as a binary integer in
    base 256, and return a Python long with the same numeric value.
@@ -124,6 +157,7 @@ PyAPI_FUNC(PyObject *) _PyLong_Format(PyObject *aa, int base);
 PyAPI_FUNC(PyObject *) _PyLong_FormatAdvanced(PyObject *obj,
 					      Py_UNICODE *format_spec,
 					      Py_ssize_t format_spec_len);
+#endif /* Py_LIMITED_API */
 
 /* These aren't really part of the long object, but they're handy. The
    functions are in Python/mystrtoul.c.

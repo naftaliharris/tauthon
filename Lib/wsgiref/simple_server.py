@@ -1,4 +1,4 @@
-"""BaseHTTPServer that implements the Python WSGI protocol (PEP 333, rev 1.21)
+"""BaseHTTPServer that implements the Python WSGI protocol (PEP 3333)
 
 This is both an example of how WSGI can be implemented, and a basis for running
 simple web applications on a local machine, such as might be done when testing
@@ -15,7 +15,7 @@ import sys
 import urllib.parse
 from wsgiref.handlers import SimpleHandler
 
-__version__ = "0.1"
+__version__ = "0.2"
 __all__ = ['WSGIServer', 'WSGIRequestHandler', 'demo_app', 'make_server']
 
 
@@ -35,8 +35,6 @@ class ServerHandler(SimpleHandler):
             )
         finally:
             SimpleHandler.close(self)
-
-
 
 
 
@@ -69,18 +67,6 @@ class WSGIServer(HTTPServer):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class WSGIRequestHandler(BaseHTTPRequestHandler):
 
     server_version = "WSGIServer/" + __version__
@@ -88,13 +74,14 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
     def get_environ(self):
         env = self.server.base_environ.copy()
         env['SERVER_PROTOCOL'] = self.request_version
+        env['SERVER_SOFTWARE'] = self.server_version
         env['REQUEST_METHOD'] = self.command
         if '?' in self.path:
             path,query = self.path.split('?',1)
         else:
             path,query = self.path,''
 
-        env['PATH_INFO'] = urllib.parse.unquote(path)
+        env['PATH_INFO'] = urllib.parse.unquote_to_bytes(path).decode('iso-8859-1')
         env['QUERY_STRING'] = query
 
         host = self.address_string()
@@ -139,29 +126,6 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def demo_app(environ,start_response):
     from io import StringIO
     stdout = StringIO()
@@ -170,7 +134,7 @@ def demo_app(environ,start_response):
     h = sorted(environ.items())
     for k,v in h:
         print(k,'=',repr(v), file=stdout)
-    start_response(b"200 OK", [(b'Content-Type',b'text/plain; charset=utf-8')])
+    start_response("200 OK", [('Content-Type','text/plain; charset=utf-8')])
     return [stdout.getvalue().encode("utf-8")]
 
 
@@ -190,16 +154,3 @@ if __name__ == '__main__':
     import webbrowser
     webbrowser.open('http://localhost:8000/xyz?abc')
     httpd.handle_request()  # serve one request, then exit
-
-
-
-
-
-
-
-
-
-
-
-
-#

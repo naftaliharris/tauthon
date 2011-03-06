@@ -1,5 +1,7 @@
 import functools
+import importlib
 import importlib._bootstrap
+import unittest
 
 
 using___import__ = False
@@ -10,19 +12,12 @@ def import_(*args, **kwargs):
     if using___import__:
         return __import__(*args, **kwargs)
     else:
-        return importlib._bootstrap.__import__(*args, **kwargs)
+        return importlib.__import__(*args, **kwargs)
 
 
 def importlib_only(fxn):
-    """Decorator to mark which tests are not supported by the current
-    implementation of __import__()."""
-    def inner(*args, **kwargs):
-        if using___import__:
-            return
-        else:
-            return fxn(*args, **kwargs)
-    functools.update_wrapper(inner, fxn)
-    return inner
+    """Decorator to skip a test if using __builtins__.__import__."""
+    return unittest.skipIf(using___import__, "importlib-specific test")(fxn)
 
 
 def mock_path_hook(*entries, importer):
