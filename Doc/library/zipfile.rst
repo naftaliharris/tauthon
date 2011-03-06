@@ -6,6 +6,10 @@
 .. moduleauthor:: James C. Ahlstrom <jim@interet.com>
 .. sectionauthor:: James C. Ahlstrom <jim@interet.com>
 
+**Source code:** :source:`Lib/zipfile.py`
+
+--------------
+
 The ZIP file format is a common archive and compression standard. This module
 provides tools to create, read, write, append, and list a ZIP file.  Any
 advanced use of this module will require an understanding of the format, as
@@ -24,9 +28,17 @@ For other archive formats, see the :mod:`bz2`, :mod:`gzip`, and
 
 The module defines the following items:
 
-.. exception:: BadZipfile
+.. exception:: BadZipFile
 
    The error raised for bad ZIP files (old name: ``zipfile.error``).
+
+   .. versionadded:: 3.2
+
+
+.. exception:: BadZipfile
+
+   This is an alias for :exc:`BadZipFile` that exists for compatibility with
+   Python versions prior to 3.2.  Usage is deprecated.
 
 
 .. exception:: LargeZipFile
@@ -43,6 +55,7 @@ The module defines the following items:
 
 
 .. class:: PyZipFile
+   :noindex:
 
    Class for creating ZIP archives containing Python libraries.
 
@@ -101,29 +114,36 @@ ZipFile Objects
    Open a ZIP file, where *file* can be either a path to a file (a string) or a
    file-like object.  The *mode* parameter should be ``'r'`` to read an existing
    file, ``'w'`` to truncate and write a new file, or ``'a'`` to append to an
-   existing file.  If *mode* is ``'a'`` and *file* refers to an existing ZIP file,
-   then additional files are added to it.  If *file* does not refer to a ZIP file,
-   then a new ZIP archive is appended to the file.  This is meant for adding a ZIP
-   archive to another file, such as :file:`python.exe`.  Using ::
-
-      cat myzip.zip >> python.exe
-
-   also works, and at least :program:`WinZip` can read such files. If *mode* is
-   ``a`` and the file does not exist at all, it is created. *compression* is the
-   ZIP compression method to use when writing the archive, and should be
-   :const:`ZIP_STORED` or :const:`ZIP_DEFLATED`; unrecognized values will cause
-   :exc:`RuntimeError` to be raised.  If :const:`ZIP_DEFLATED` is specified but the
-   :mod:`zlib` module is not available, :exc:`RuntimeError` is also raised.  The
-   default is :const:`ZIP_STORED`.  If *allowZip64* is ``True`` zipfile will create
-   ZIP files that use the ZIP64 extensions when the zipfile is larger than 2 GB. If
-   it is  false (the default) :mod:`zipfile` will raise an exception when the ZIP
-   file would require ZIP64 extensions. ZIP64 extensions are disabled by default
-   because the default :program:`zip` and :program:`unzip` commands on Unix (the
-   InfoZIP utilities) don't support these extensions.
+   existing file.  If *mode* is ``'a'`` and *file* refers to an existing ZIP
+   file, then additional files are added to it.  If *file* does not refer to a
+   ZIP file, then a new ZIP archive is appended to the file.  This is meant for
+   adding a ZIP archive to another file (such as :file:`python.exe`).  If
+   *mode* is ``a`` and the file does not exist at all, it is created.
+   *compression* is the ZIP compression method to use when writing the archive,
+   and should be :const:`ZIP_STORED` or :const:`ZIP_DEFLATED`; unrecognized
+   values will cause :exc:`RuntimeError` to be raised.  If :const:`ZIP_DEFLATED`
+   is specified but the :mod:`zlib` module is not available, :exc:`RuntimeError`
+   is also raised. The default is :const:`ZIP_STORED`.  If *allowZip64* is
+   ``True`` zipfile will create ZIP files that use the ZIP64 extensions when
+   the zipfile is larger than 2 GB. If it is  false (the default) :mod:`zipfile`
+   will raise an exception when the ZIP file would require ZIP64 extensions.
+   ZIP64 extensions are disabled by default because the default :program:`zip`
+   and :program:`unzip` commands on Unix (the InfoZIP utilities) don't support
+   these extensions.
 
    If the file is created with mode ``'a'`` or ``'w'`` and then
    :meth:`close`\ d without adding any files to the archive, the appropriate
    ZIP structures for an empty archive will be written to the file.
+
+   ZipFile is also a context manager and therefore supports the
+   :keyword:`with` statement.  In the example, *myzip* is closed after the
+   :keyword:`with` statement's suite is finished---even if an exception occurs::
+
+      with ZipFile('spam.zip', 'w') as myzip:
+          myzip.write('eggs.txt')
+
+   .. versionadded:: 3.2
+      Added the ability to use :class:`ZipFile` as a context manager.
 
 
 .. method:: ZipFile.close()
@@ -263,7 +283,7 @@ ZipFile Objects
       byte, the name of the file in the archive will be truncated at the null byte.
 
 
-.. method:: ZipFile.writestr(zinfo_or_arcname, bytes)
+.. method:: ZipFile.writestr(zinfo_or_arcname, bytes[, compress_type])
 
    Write the string *bytes* to the archive; *zinfo_or_arcname* is either the file
    name it will be given in the archive, or a :class:`ZipInfo` instance.  If it's
@@ -273,12 +293,19 @@ ZipFile Objects
    created with mode ``'r'``  will raise a :exc:`RuntimeError`.  Calling
    :meth:`writestr` on a closed ZipFile will raise a :exc:`RuntimeError`.
 
+   If given, *compress_type* overrides the value given for the *compression*
+   parameter to the constructor for the new entry, or in the *zinfo_or_arcname*
+   (if that is a :class:`ZipInfo` instance).
+
    .. note::
 
       When passing a :class:`ZipInfo` instance as the *zinfo_or_arcname* parameter,
       the compression method used will be that specified in the *compress_type*
       member of the given :class:`ZipInfo` instance.  By default, the
       :class:`ZipInfo` constructor sets this member to :const:`ZIP_STORED`.
+
+   .. versionchanged:: 3.2
+      The *compression_type* argument.
 
 The following data attributes are also available:
 
@@ -296,37 +323,53 @@ The following data attributes are also available:
    string no longer than 65535 bytes.  Comments longer than this will be
    truncated in the written archive when :meth:`ZipFile.close` is called.
 
+
 .. _pyzipfile-objects:
 
 PyZipFile Objects
 -----------------
 
 The :class:`PyZipFile` constructor takes the same parameters as the
-:class:`ZipFile` constructor.  Instances have one method in addition to those of
-:class:`ZipFile` objects.
+:class:`ZipFile` constructor, and one additional parameter, *optimize*.
 
+.. class:: PyZipFile(file, mode='r', compression=ZIP_STORED, allowZip64=False, \
+                     optimize=-1)
 
-.. method:: PyZipFile.writepy(pathname, basename='')
+   .. versionadded:: 3.2
+      The *optimize* parameter.
 
-   Search for files :file:`\*.py` and add the corresponding file to the archive.
-   The corresponding file is a :file:`\*.pyo` file if available, else a
-   :file:`\*.pyc` file, compiling if necessary.  If the pathname is a file, the
-   filename must end with :file:`.py`, and just the (corresponding
-   :file:`\*.py[co]`) file is added at the top level (no path information).  If the
-   pathname is a file that does not end with :file:`.py`, a :exc:`RuntimeError`
-   will be raised.  If it is a directory, and the directory is not a package
-   directory, then all the files :file:`\*.py[co]` are added at the top level.  If
-   the directory is a package directory, then all :file:`\*.py[co]` are added under
-   the package name as a file path, and if any subdirectories are package
-   directories, all of these are added recursively.  *basename* is intended for
-   internal use only.  The :meth:`writepy` method makes archives with file names
-   like this::
+   Instances have one method in addition to those of :class:`ZipFile` objects:
 
-      string.pyc                                # Top level name
-      test/__init__.pyc                         # Package directory
-      test/testall.pyc                          # Module test.testall
-      test/bogus/__init__.pyc                   # Subpackage directory
-      test/bogus/myfile.pyc                     # Submodule test.bogus.myfile
+   .. method:: PyZipFile.writepy(pathname, basename='')
+
+      Search for files :file:`\*.py` and add the corresponding file to the
+      archive.
+
+      If the *optimize* parameter to :class:`PyZipFile` was not given or ``-1``,
+      the corresponding file is a :file:`\*.pyo` file if available, else a
+      :file:`\*.pyc` file, compiling if necessary.
+
+      If the *optimize* parameter to :class:`PyZipFile` was ``0``, ``1`` or
+      ``2``, only files with that optimization level (see :func:`compile`) are
+      added to the archive, compiling if necessary.
+
+      If the pathname is a file, the filename must end with :file:`.py`, and
+      just the (corresponding :file:`\*.py[co]`) file is added at the top level
+      (no path information).  If the pathname is a file that does not end with
+      :file:`.py`, a :exc:`RuntimeError` will be raised.  If it is a directory,
+      and the directory is not a package directory, then all the files
+      :file:`\*.py[co]` are added at the top level.  If the directory is a
+      package directory, then all :file:`\*.py[co]` are added under the package
+      name as a file path, and if any subdirectories are package directories,
+      all of these are added recursively.  *basename* is intended for internal
+      use only.  The :meth:`writepy` method makes archives with file names like
+      this::
+
+         string.pyc                   # Top level name
+         test/__init__.pyc            # Package directory
+         test/testall.pyc             # Module test.testall
+         test/bogus/__init__.pyc      # Subpackage directory
+         test/bogus/myfile.pyc        # Submodule test.bogus.myfile
 
 
 .. _zipinfo-objects:
