@@ -20,33 +20,46 @@
 #endif
 #endif
 
-/* on unix, SVNVERSION is passed on the command line.
- * on Windows, the string is interpolated using
- * subwcrev.exe
- */
-#ifndef SVNVERSION
-#define SVNVERSION "$WCRANGE$$WCMODS?M:$"
+/* XXX Only unix build process has been tested */
+#ifndef HGVERSION
+#define HGVERSION ""
+#endif
+#ifndef HGTAG
+#define HGTAG ""
+#endif
+#ifndef HGBRANCH
+#define HGBRANCH ""
 #endif
 
 const char *
 Py_GetBuildInfo(void)
 {
     static char buildinfo[50];
-    const char *revision = Py_SubversionRevision();
+    const char *revision = _Py_hgversion();
     const char *sep = *revision ? ":" : "";
-    const char *branch = Py_SubversionShortBranch();
+    const char *hgid = _Py_hgidentifier();
+    if (!(*hgid))
+        hgid = "default";
     PyOS_snprintf(buildinfo, sizeof(buildinfo),
-                  "%s%s%s, %.20s, %.9s", branch, sep, revision,
+                  "%s%s%s, %.20s, %.9s", hgid, sep, revision,
                   DATE, TIME);
     return buildinfo;
 }
 
 const char *
-_Py_svnversion(void)
+_Py_hgversion(void)
 {
-    /* the following string can be modified by subwcrev.exe */
-    static const char svnversion[] = SVNVERSION;
-    if (svnversion[0] != '$')
-        return svnversion; /* it was interpolated, or passed on command line */
-    return "Unversioned directory";
+    return HGVERSION;
+}
+
+const char *
+_Py_hgidentifier(void)
+{
+    const char *hgtag, *hgid;
+    hgtag = HGTAG;
+    if ((*hgtag) && strcmp(hgtag, "tip") != 0)
+        hgid = hgtag;
+    else
+        hgid = HGBRANCH;
+    return hgid;
 }

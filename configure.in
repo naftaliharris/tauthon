@@ -801,13 +801,19 @@ then
         ARFLAGS="rc"
 fi
 
-AC_SUBST(SVNVERSION)
-AC_CHECK_PROG(SVNVERSION, svnversion, found, not-found)
-if test $SVNVERSION = found
+AC_SUBST(HGVERSION)
+AC_SUBST(HGTAG)
+AC_SUBST(HGBRANCH)
+AC_CHECK_PROG(HAS_HG, hg, found, not-found)
+if test $HAS_HG = found
 then
-	SVNVERSION="svnversion \$(srcdir)"
+    HGVERSION="hg id -i \$(srcdir)"
+    HGTAG="hg id -t \$(srcdir)"
+    HGBRANCH="hg id -b \$(srcdir)"
 else
-	SVNVERSION="echo Unversioned directory"
+    HGVERSION=""
+    HGTAG=""
+    HGBRANCH=""
 fi
 
 case $MACHDEP in
