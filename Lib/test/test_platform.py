@@ -243,6 +243,34 @@ class PlatformTest(unittest.TestCase):
             ):
             self.assertEqual(platform._parse_release_file(input), output)
 
+    def test_popen(self):
+        mswindows = (sys.platform == "win32")
+
+        if mswindows:
+            command = '"{}" -c "print(\'Hello\')"'.format(sys.executable)
+        else:
+            command = "'{}' -c 'print(\"Hello\")'".format(sys.executable)
+        with platform.popen(command) as stdout:
+            hello = stdout.read().strip()
+            stdout.close()
+            self.assertEqual(hello, "Hello")
+
+        data = 'plop'
+        if mswindows:
+            command = '"{}" -c "import sys; data=sys.stdin.read(); exit(len(data))"'
+        else:
+            command = "'{}' -c 'import sys; data=sys.stdin.read(); exit(len(data))'"
+        command = command.format(sys.executable)
+        with platform.popen(command, 'w') as stdin:
+            stdout = stdin.write(data)
+            ret = stdin.close()
+            self.assertIsNotNone(ret)
+            if os.name == 'nt':
+                returncode = ret
+            else:
+                returncode = ret >> 8
+            self.assertEqual(returncode, len(data))
+
 
 def test_main():
     support.run_unittest(
