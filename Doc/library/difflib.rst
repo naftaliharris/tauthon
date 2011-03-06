@@ -17,6 +17,7 @@ can be used for example, for comparing files, and can produce difference
 information in various formats, including HTML and context and unified
 diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
 
+
 .. class:: SequenceMatcher
 
    This is a flexible class for comparing pairs of sequences of any type, so long
@@ -35,11 +36,17 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
    complicated way on how many elements the sequences have in common; best case
    time is linear.
 
-   **Heuristic:** To speed-up matching, items whose duplicates appear more than 1% of
-   the time in sequences of at least 200 items are treated as junk.  This has the
-   unfortunate side-effect of giving bad results for sequences constructed from
-   a small set of items.  An option to turn off the heuristic will be added to
-   Python 3.2.
+   **Automatic junk heuristic:** :class:`SequenceMatcher` supports a heuristic that
+   automatically treats certain sequence items as junk. The heuristic counts how many
+   times each individual item appears in the sequence. If an item's duplicates (after
+   the first one) account for more than 1% of the sequence and the sequence is at least
+   200 items long, this item is marked as "popular" and is treated as junk for
+   the purpose of sequence matching. This heuristic can be turned off by setting
+   the ``autojunk`` argument to ``False`` when creating the :class:`SequenceMatcher`.
+
+   .. versionadded:: 3.2
+      The *autojunk* parameter.
+
 
 .. class:: Differ
 
@@ -145,8 +152,8 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
 
    The context diff format normally has a header for filenames and modification
    times.  Any or all of these may be specified using strings for *fromfile*,
-   *tofile*, *fromfiledate*, and *tofiledate*. The modification times are normally
-   expressed in the format returned by :func:`time.ctime`.  If not specified, the
+   *tofile*, *fromfiledate*, and *tofiledate*.  The modification times are normally
+   expressed in the ISO 8601 format. If not specified, the
    strings default to blanks.
 
       >>> s1 = ['bacon\n', 'eggs\n', 'ham\n', 'guido\n']
@@ -277,8 +284,8 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
 
    The context diff format normally has a header for filenames and modification
    times.  Any or all of these may be specified using strings for *fromfile*,
-   *tofile*, *fromfiledate*, and *tofiledate*. The modification times are normally
-   expressed in the format returned by :func:`time.ctime`.  If not specified, the
+   *tofile*, *fromfiledate*, and *tofiledate*.  The modification times are normally
+   expressed in the ISO 8601 format. If not specified, the
    strings default to blanks.
 
 
@@ -329,7 +336,7 @@ SequenceMatcher Objects
 The :class:`SequenceMatcher` class has this constructor:
 
 
-.. class:: SequenceMatcher(isjunk=None, a='', b='')
+.. class:: SequenceMatcher(isjunk=None, a='', b='', autojunk=True)
 
    Optional argument *isjunk* must be ``None`` (the default) or a one-argument
    function that takes a sequence element and returns true if and only if the
@@ -344,6 +351,22 @@ The :class:`SequenceMatcher` class has this constructor:
 
    The optional arguments *a* and *b* are sequences to be compared; both default to
    empty strings.  The elements of both sequences must be :term:`hashable`.
+
+   The optional argument *autojunk* can be used to disable the automatic junk
+   heuristic.
+
+   .. versionadded:: 3.2
+      The *autojunk* parameter.
+
+   SequenceMatcher objects get three data attributes: *bjunk* is the
+   set of elements of *b* for which *isjunk* is True; *bpopular* is the set of
+   non-junk elements considered popular by the heuristic (if it is not
+   disabled); *b2j* is a dict mapping the remaining elements of *b* to a list
+   of positions where they occur. All three are reset whenever *b* is reset
+   with :meth:`set_seqs` or :meth:`set_seq2`.
+
+   .. versionadded:: 3.2
+      The *bjunk* and *bpopular* attributes.
 
    :class:`SequenceMatcher` objects have the following methods:
 
@@ -524,7 +547,7 @@ different results due to differing levels of approximation, although
 SequenceMatcher Examples
 ------------------------
 
-This example compares two strings, considering blanks to be "junk:"
+This example compares two strings, considering blanks to be "junk":
 
    >>> s = SequenceMatcher(lambda x: x == " ",
    ...                     "private Thread currentThread;",
