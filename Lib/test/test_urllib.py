@@ -9,7 +9,6 @@ import unittest
 from test import support
 import os
 import tempfile
-import warnings
 
 def hexescape(char):
     """Escape char as RFC 2396 specifies"""
@@ -86,8 +85,7 @@ class urlopen_FileTests(unittest.TestCase):
 
     def test_fileno(self):
         file_num = self.returned_obj.fileno()
-        self.assertTrue(isinstance(file_num, int),
-                     "fileno() did not return an int")
+        self.assertIsInstance(file_num, int, "fileno() did not return an int")
         self.assertEqual(os.read(file_num, len(self.text)), self.text,
                          "Reading on the file descriptor returned by fileno() "
                          "did not return the expected text")
@@ -98,7 +96,7 @@ class urlopen_FileTests(unittest.TestCase):
         self.returned_obj.close()
 
     def test_info(self):
-        self.assertTrue(isinstance(self.returned_obj.info(), email.message.Message))
+        self.assertIsInstance(self.returned_obj.info(), email.message.Message)
 
     def test_geturl(self):
         self.assertEqual(self.returned_obj.geturl(), self.pathname)
@@ -141,8 +139,10 @@ class urlopen_HttpTests(unittest.TestCase):
 
     def fakehttp(self, fakedata):
         class FakeSocket(io.BytesIO):
+            io_refs = 1
             def sendall(self, str): pass
             def makefile(self, *args, **kwds):
+                self.io_refs += 1
                 return self
             def read(self, amt=None):
                 if self.closed: return b""
@@ -150,6 +150,10 @@ class urlopen_HttpTests(unittest.TestCase):
             def readline(self, length=None):
                 if self.closed: return b""
                 return io.BytesIO.readline(self, length)
+            def close(self):
+                self.io_refs -= 1
+                if self.io_refs == 0:
+                    io.BytesIO.close(self)
         class FakeHTTPConnection(http.client.HTTPConnection):
             def connect(self):
                 self.sock = FakeSocket(fakedata)
@@ -159,8 +163,8 @@ class urlopen_HttpTests(unittest.TestCase):
     def unfakehttp(self):
         http.client.HTTPConnection = self._connection_class
 
-    def test_read(self):
-        self.fakehttp(b"Hello!")
+    def check_read(self, ver):
+        self.fakehttp(b"HTTP/" + ver + b" 200 OK\r\n\r\nHello!")
         try:
             fp = urlopen("http://python.org/")
             self.assertEqual(fp.readline(), b"Hello!")
@@ -169,6 +173,17 @@ class urlopen_HttpTests(unittest.TestCase):
             self.assertEqual(fp.getcode(), 200)
         finally:
             self.unfakehttp()
+
+    def test_read_0_9(self):
+        # "0.9" response accepted (but not "simple responses" without
+        # a status line)
+        self.check_read(b"0.9")
+
+    def test_read_1_0(self):
+        self.check_read(b"1.0")
+
+    def test_read_1_1(self):
+        self.check_read(b"1.1")
 
     def test_read_bogus(self):
         # urlopen() should raise IOError for many error codes.
@@ -193,7 +208,7 @@ Content-Type: text/html; charset=iso-8859-1
             self.unfakehttp()
 
     def test_userpass_inurl(self):
-        self.fakehttp(b"Hello!")
+        self.fakehttp(b"HTTP/1.0 200 OK\r\n\r\nHello!")
         try:
             fp = urlopen("http://user:pass@python.org/")
             self.assertEqual(fp.readline(), b"Hello!")
@@ -234,8 +249,12 @@ class urlretrieve_FileTests(unittest.TestCase):
             except: pass
 
     def constructLocalFileUrl(self, filePath):
-        return "file://%s" % urllib.request.pathname2url(
-            os.path.abspath(filePath))
+        filePath = os.path.abspath(filePath)
+        try:
+            filePath.encode("utf8")
+        except UnicodeEncodeError:
+            raise unittest.SkipTest("filePath is not encodable to utf8")
+        return "file://%s" % urllib.request.pathname2url(filePath)
 
     def createNewTempFile(self, data=b""):
         """Creates a new temporary file containing the specified data,
@@ -261,9 +280,9 @@ class urlretrieve_FileTests(unittest.TestCase):
         # a headers value is returned.
         result = urllib.request.urlretrieve("file:%s" % support.TESTFN)
         self.assertEqual(result[0], support.TESTFN)
-        self.assertTrue(isinstance(result[1], email.message.Message),
-                     "did not get a email.message.Message instance "
-                     "as second returned value")
+        self.assertIsInstance(result[1], email.message.Message,
+                              "did not get a email.message.Message instance "
+                              "as second returned value")
 
     def test_copy(self):
         # Test that setting the filename argument works.
@@ -286,9 +305,9 @@ class urlretrieve_FileTests(unittest.TestCase):
     def test_reporthook(self):
         # Make sure that the reporthook works.
         def hooktester(count, block_size, total_size, count_holder=[0]):
-            self.assertTrue(isinstance(count, int))
-            self.assertTrue(isinstance(block_size, int))
-            self.assertTrue(isinstance(total_size, int))
+            self.assertIsInstance(count, int)
+            self.assertIsInstance(block_size, int)
+            self.assertIsInstance(total_size, int)
             self.assertEqual(count, count_holder[0])
             count_holder[0] = count_holder[0] + 1
         second_temp = "%s.2" % support.TESTFN
@@ -570,8 +589,7 @@ class UnquotingTests(unittest.TestCase):
                          "%s" % result)
         self.assertRaises((TypeError, AttributeError), urllib.parse.unquote, None)
         self.assertRaises((TypeError, AttributeError), urllib.parse.unquote, ())
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', BytesWarning)
+        with support.check_warnings(('', BytesWarning), quiet=True):
             self.assertRaises((TypeError, AttributeError), urllib.parse.unquote, b'')
 
     def test_unquoting_badpercent(self):
