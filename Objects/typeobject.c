@@ -902,7 +902,7 @@ subtype_dealloc(PyObject *self)
 
     /* Find the nearest base with a different tp_dealloc */
     base = type;
-    while ((basedealloc = base->tp_dealloc) == subtype_dealloc) {
+    while ((/*basedealloc =*/ base->tp_dealloc) == subtype_dealloc) {
         base = base->tp_base;
         assert(base);
     }
@@ -4975,7 +4975,7 @@ slot_tp_str(PyObject *self)
         res = slot_tp_repr(self);
         if (!res)
             return NULL;
-        ress = _PyUnicode_AsDefaultEncodedString(res, NULL);
+        ress = _PyUnicode_AsDefaultEncodedString(res);
         Py_DECREF(res);
         return ress;
     }
