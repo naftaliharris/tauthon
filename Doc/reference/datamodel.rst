@@ -689,7 +689,7 @@ Callable types
       an object passed to the C function as an implicit extra argument.  An example of
       a built-in method is ``alist.append()``, assuming *alist* is a list object. In
       this case, the special read-only attribute :attr:`__self__` is set to the object
-      denoted by *list*.
+      denoted by *alist*.
 
    Class Types
       Class types, or "new-style classes," are callable.  These objects normally act
@@ -738,6 +738,13 @@ Modules
 
    Special read-only attribute: :attr:`__dict__` is the module's namespace as a
    dictionary object.
+
+   .. impl-detail::
+
+      Because of the way CPython clears module dictionaries, the module
+      dictionary will be cleared when the module falls out of scope even if the
+      dictionary still has live references.  To avoid this, copy the dictionary
+      or keep the module around while using its dictionary directly.
 
    .. index::
       single: __name__ (module attribute)
@@ -908,6 +915,22 @@ Internal types
       objects, code objects are immutable and contain no references (directly or
       indirectly) to mutable objects.
 
+      .. index::
+         single: co_argcount (code object attribute)
+         single: co_code (code object attribute)
+         single: co_consts (code object attribute)
+         single: co_filename (code object attribute)
+         single: co_firstlineno (code object attribute)
+         single: co_flags (code object attribute)
+         single: co_lnotab (code object attribute)
+         single: co_name (code object attribute)
+         single: co_names (code object attribute)
+         single: co_nlocals (code object attribute)
+         single: co_stacksize (code object attribute)
+         single: co_varnames (code object attribute)
+         single: co_cellvars (code object attribute)
+         single: co_freevars (code object attribute)
+
       Special read-only attributes: :attr:`co_name` gives the function name;
       :attr:`co_argcount` is the number of positional arguments (including arguments
       with default values); :attr:`co_nlocals` is the number of local variables used
@@ -924,22 +947,6 @@ Internal types
       line numbers (for details see the source code of the interpreter);
       :attr:`co_stacksize` is the required stack size (including local variables);
       :attr:`co_flags` is an integer encoding a number of flags for the interpreter.
-
-      .. index::
-         single: co_argcount (code object attribute)
-         single: co_code (code object attribute)
-         single: co_consts (code object attribute)
-         single: co_filename (code object attribute)
-         single: co_firstlineno (code object attribute)
-         single: co_flags (code object attribute)
-         single: co_lnotab (code object attribute)
-         single: co_name (code object attribute)
-         single: co_names (code object attribute)
-         single: co_nlocals (code object attribute)
-         single: co_stacksize (code object attribute)
-         single: co_varnames (code object attribute)
-         single: co_cellvars (code object attribute)
-         single: co_freevars (code object attribute)
 
       .. index:: object: generator
 
@@ -1353,8 +1360,7 @@ Basic customization
    Arguments to rich comparison methods are never coerced.
 
    To automatically generate ordering operations from a single root operation,
-   see the `Total Ordering recipe in the ASPN cookbook
-   <http://code.activestate.com/recipes/576529/>`_\.
+   see :func:`functools.total_ordering`.
 
 .. method:: object.__cmp__(self, other)
 
@@ -1773,7 +1779,7 @@ The following methods are used to override the default behavior of the
 
 In particular, the metaclass :class:`abc.ABCMeta` implements these methods in
 order to allow the addition of Abstract Base Classes (ABCs) as "virtual base
-classes" to any class or type (including built-in types), and including to other
+classes" to any class or type (including built-in types), including other
 ABCs.
 
 .. method:: class.__instancecheck__(self, instance)
@@ -1792,7 +1798,7 @@ ABCs.
 
 Note that these methods are looked up on the type (metaclass) of a class.  They
 cannot be defined as class methods in the actual class.  This is consistent with
-the lookup of special methods that are called on instances, only that in this
+the lookup of special methods that are called on instances, only in this
 case the instance is itself a class.
 
 .. seealso::
@@ -2313,12 +2319,14 @@ will not be supported.
 *
 
   In the current implementation, the built-in numeric types :class:`int`,
-  :class:`long` and :class:`float` do not use coercion; the type :class:`complex`
-  however does use coercion for binary operators and rich comparisons, despite
-  the above rules.  The difference can become apparent when subclassing these
-  types.  Over time, the type :class:`complex` may be fixed to avoid coercion.
+  :class:`long`, :class:`float`, and :class:`complex` do not use coercion.
   All these types implement a :meth:`__coerce__` method, for use by the built-in
   :func:`coerce` function.
+
+  .. versionchanged:: 2.7
+
+     The complex type no longer makes implicit calls to the :meth:`__coerce__`
+     method for mixed-type binary arithmetic operations.
 
 
 .. _context-managers:

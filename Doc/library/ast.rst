@@ -28,6 +28,11 @@ classes all inherit from :class:`ast.AST`.  An abstract syntax tree can be
 compiled into a Python code object using the built-in :func:`compile` function.
 
 
+.. seealso::
+
+   Latest version of the `ast module Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/ast.py?view=markup>`_
+
 Node classes
 ------------
 
@@ -122,9 +127,9 @@ The abstract grammar is currently defined as follows:
 Apart from the node classes, :mod:`ast` module defines these utility functions
 and classes for traversing abstract syntax trees:
 
-.. function:: parse(expr, filename='<unknown>', mode='exec')
+.. function:: parse(source, filename='<unknown>', mode='exec')
 
-   Parse an expression into an AST node.  Equivalent to ``compile(expr,
+   Parse the source into an AST node.  Equivalent to ``compile(source,
    filename, mode, ast.PyCF_ONLY_AST)``.
 
 
@@ -182,9 +187,9 @@ and classes for traversing abstract syntax trees:
 
 .. function:: walk(node)
 
-   Recursively yield all child nodes of *node*, in no specified order.  This is
-   useful if you only want to modify nodes in place and don't care about the
-   context.
+   Recursively yield all descendant nodes in the tree starting at *node*
+   (including *node* itself), in no specified order.  This is useful if you only
+   want to modify nodes in place and don't care about the context.
 
 
 .. class:: NodeVisitor()
