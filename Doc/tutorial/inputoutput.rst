@@ -19,15 +19,16 @@ the :keyword:`print` statement.  (A third way is using the :meth:`write` method
 of file objects; the standard output file can be referenced as ``sys.stdout``.
 See the Library Reference for more information on this.)
 
-.. index:: module: string
-
 Often you'll want more control over the formatting of your output than simply
 printing space-separated values.  There are two ways to format your output; the
 first way is to do all the string handling yourself; using string slicing and
 concatenation operations you can create any layout you can imagine.  The
-standard module :mod:`string` contains some useful operations for padding
+string types have some methods that perform useful operations for padding
 strings to a given column width; these will be discussed shortly.  The second
 way is to use the :meth:`str.format` method.
+
+The :mod:`string` module contains a :class:`~string.Template` class which offers
+yet another way to substitute values into strings.
 
 One question remains, of course: how do you convert values to strings? Luckily,
 Python has ways to convert any value to a string: pass it to the :func:`repr`
@@ -49,10 +50,10 @@ Some examples::
    'Hello, world.'
    >>> repr(s)
    "'Hello, world.'"
-   >>> str(0.1)
-   '0.1'
-   >>> repr(0.1)
-   '0.10000000000000001'
+   >>> str(1.0/7.0)
+   '0.142857142857'
+   >>> repr(1.0/7.0)
+   '0.14285714285714285'
    >>> x = 10 * 3.25
    >>> y = 200 * 200
    >>> s = 'The value of x is ' + repr(x) + ', and y is ' + repr(y) + '...'
@@ -123,7 +124,7 @@ with zeros.  It understands about plus and minus signs::
 
 Basic usage of the :meth:`str.format` method looks like this::
 
-   >>> print 'We are the {0} who say "{1}!"'.format('knights', 'Ni')
+   >>> print 'We are the {} who say "{}!"'.format('knights', 'Ni')
    We are the knights who say "Ni!"
 
 The brackets and characters within them (called format fields) are replaced with
@@ -153,14 +154,14 @@ Positional and keyword arguments can be arbitrarily combined::
 convert the value before it is formatted. ::
 
    >>> import math
-   >>> print 'The value of PI is approximately {0}.'.format(math.pi)
+   >>> print 'The value of PI is approximately {}.'.format(math.pi)
    The value of PI is approximately 3.14159265359.
-   >>> print 'The value of PI is approximately {0!r}.'.format(math.pi)
+   >>> print 'The value of PI is approximately {!r}.'.format(math.pi)
    The value of PI is approximately 3.141592653589793.
 
 An optional ``':'`` and format specifier can follow the field name. This allows
 greater control over how the value is formatted.  The following example
-truncates Pi to three places after the decimal.
+rounds Pi to three places after the decimal.
 
    >>> import math
    >>> print 'The value of PI is approximately {0:.3f}.'.format(math.pi)

@@ -184,6 +184,9 @@ Py_InitializeEx(int install_sigs)
     if (!_PyInt_Init())
         Py_FatalError("Py_Initialize: can't init ints");
 
+    if (!_PyLong_Init())
+        Py_FatalError("Py_Initialize: can't init longs");
+
     if (!PyByteArray_Init())
         Py_FatalError("Py_Initialize: can't init bytearray");
 
@@ -698,7 +701,7 @@ initmain(void)
         if (bimod == NULL ||
             PyDict_SetItemString(d, "__builtins__", bimod) != 0)
             Py_FatalError("can't add __builtins__ to __main__");
-        Py_DECREF(bimod);
+        Py_XDECREF(bimod);
     }
 }
 
@@ -707,20 +710,12 @@ initmain(void)
 static void
 initsite(void)
 {
-    PyObject *m, *f;
+    PyObject *m;
     m = PyImport_ImportModule("site");
     if (m == NULL) {
-        f = PySys_GetObject("stderr");
-        if (Py_VerboseFlag) {
-            PyFile_WriteString(
-                "'import site' failed; traceback:\n", f);
-            PyErr_Print();
-        }
-        else {
-            PyFile_WriteString(
-              "'import site' failed; use -v for traceback\n", f);
-            PyErr_Clear();
-        }
+        PyErr_Print();
+        Py_Finalize();
+        exit(1);
     }
     else {
         Py_DECREF(m);
@@ -1050,7 +1045,7 @@ print_error_text(PyObject *f, int offset, const char *text)
 {
     char *nl;
     if (offset >= 0) {
-        if (offset > 0 && offset == (int)strlen(text))
+        if (offset > 0 && offset == strlen(text) && text[offset - 1] == '\n')
             offset--;
         for (;;) {
             nl = strchr(text, '\n');
@@ -1154,7 +1149,7 @@ PyErr_PrintEx(int set_sys_last_vars)
         PySys_SetObject("last_traceback", tb);
     }
     hook = PySys_GetObject("excepthook");
-    if (hook) {
+    if (hook && hook != Py_None) {
         PyObject *args = PyTuple_Pack(3,
             exception, v, tb ? tb : Py_None);
         PyObject *result = PyEval_CallObject(hook, args);
@@ -1204,7 +1199,7 @@ PyErr_Display(PyObject *exception, PyObject *value, PyObject *tb)
     int err = 0;
     PyObject *f = PySys_GetObject("stderr");
     Py_INCREF(value);
-    if (f == NULL)
+    if (f == NULL || f == Py_None)
         fprintf(stderr, "lost sys.stderr\n");
     else {
         if (Py_FlushLine())

@@ -1855,12 +1855,10 @@ set_contains(PySetObject *so, PyObject *key)
         if (!PySet_Check(key) || !PyErr_ExceptionMatches(PyExc_TypeError))
             return -1;
         PyErr_Clear();
-        tmpkey = make_new_set(&PyFrozenSet_Type, NULL);
+        tmpkey = make_new_set(&PyFrozenSet_Type, key);
         if (tmpkey == NULL)
             return -1;
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         rv = set_contains(so, tmpkey);
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         Py_DECREF(tmpkey);
     }
     return rv;
@@ -1890,12 +1888,10 @@ set_remove(PySetObject *so, PyObject *key)
         if (!PySet_Check(key) || !PyErr_ExceptionMatches(PyExc_TypeError))
             return NULL;
         PyErr_Clear();
-        tmpkey = make_new_set(&PyFrozenSet_Type, NULL);
+        tmpkey = make_new_set(&PyFrozenSet_Type, key);
         if (tmpkey == NULL)
             return NULL;
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         rv = set_discard_key(so, tmpkey);
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         Py_DECREF(tmpkey);
         if (rv == -1)
             return NULL;
@@ -1924,12 +1920,10 @@ set_discard(PySetObject *so, PyObject *key)
         if (!PySet_Check(key) || !PyErr_ExceptionMatches(PyExc_TypeError))
             return NULL;
         PyErr_Clear();
-        tmpkey = make_new_set(&PyFrozenSet_Type, NULL);
+        tmpkey = make_new_set(&PyFrozenSet_Type, key);
         if (tmpkey == NULL)
             return NULL;
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         result = set_discard(so, tmpkey);
-        set_swap_bodies((PySetObject *)tmpkey, (PySetObject *)key);
         Py_DECREF(tmpkey);
         return result;
     }
@@ -2389,11 +2383,25 @@ test_c_api(PySetObject *so)
     Py_ssize_t i;
     PyObject *elem=NULL, *dup=NULL, *t, *f, *dup2, *x;
     PyObject *ob = (PyObject *)so;
+    PyObject *str;
 
-    /* Verify preconditions and exercise type/size checks */
+    /* Verify preconditions */
     assert(PyAnySet_Check(ob));
     assert(PyAnySet_CheckExact(ob));
     assert(!PyFrozenSet_CheckExact(ob));
+
+    /* so.clear(); so |= set("abc"); */
+    str = PyString_FromString("abc");
+    if (str == NULL)
+        return NULL;
+    set_clear_internal(so);
+    if (set_update_internal(so, str) == -1) {
+        Py_DECREF(str);
+        return NULL;
+    }
+    Py_DECREF(str);
+
+    /* Exercise type/size checks */
     assert(PySet_Size(ob) == 3);
     assert(PySet_GET_SIZE(ob) == 3);
 

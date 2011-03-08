@@ -263,7 +263,7 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
             dirs.remove('CVS')  # don't visit CVS directories
     """
 
-    from os.path import join, isdir, islink
+    islink, join, isdir = path.islink, path.join, path.isdir
 
     # We may not have read permission for top, in which case we can't
     # get a list of the files the directory contains.  os.path.walk
@@ -289,9 +289,9 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
     if topdown:
         yield top, dirs, nondirs
     for name in dirs:
-        path = join(top, name)
-        if followlinks or not islink(path):
-            for x in walk(path, topdown, onerror, followlinks):
+        new_path = join(top, name)
+        if followlinks or not islink(new_path):
+            for x in walk(new_path, topdown, onerror, followlinks):
                 yield x
     if not topdown:
         yield top, dirs, nondirs
@@ -514,11 +514,7 @@ def getenv(key, default=None):
 __all__.append("getenv")
 
 def _exists(name):
-    try:
-        eval(name)
-        return True
-    except NameError:
-        return False
+    return name in globals()
 
 # Supply spawn*() (probably only for Unix)
 if _exists("fork") and not _exists("spawnv") and _exists("execv"):
@@ -756,7 +752,7 @@ if not _exists("urandom"):
             raise NotImplementedError("/dev/urandom (or equivalent) not found")
         try:
             bs = b""
-            while n - len(bs) >= 1:
+            while n > len(bs):
                 bs += read(_urandomfd, n - len(bs))
         finally:
             close(_urandomfd)

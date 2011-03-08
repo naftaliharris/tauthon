@@ -458,7 +458,7 @@ To rename a file, use ``os.rename(old_path, new_path)``.
 
 To truncate a file, open it using ``f = open(filename, "r+")``, and use
 ``f.truncate(offset)``; offset defaults to the current seek position.  There's
-also ```os.ftruncate(fd, offset)`` for files opened with :func:`os.open`, where
+also ``os.ftruncate(fd, offset)`` for files opened with :func:`os.open`, where
 ``fd`` is the file descriptor (a small integer).
 
 The :mod:`shutil` module also contains a number of functions to work on files
@@ -672,9 +672,8 @@ Yes. Here's a simple example that uses httplib::
    if reply != 200:
        sys.stdout.write(httpobj.getfile().read())
 
-Note that in general for URL-encoded POST operations, query strings must be
-quoted by using :func:`urllib.quote`.  For example to send name="Guy Steele,
-Jr."::
+Note that in general for percent-encoded POST operations, query strings must be
+quoted using :func:`urllib.quote`.  For example to send name="Guy Steele, Jr."::
 
    >>> from urllib import quote
    >>> x = quote("Guy Steele, Jr.")

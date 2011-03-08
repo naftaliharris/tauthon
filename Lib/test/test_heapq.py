@@ -7,23 +7,8 @@ import sys
 
 # We do a bit of trickery here to be able to test both the C implementation
 # and the Python implementation of the module.
-
-# Make it impossible to import the C implementation anymore.
-sys.modules['_heapq'] = 0
-# We must also handle the case that heapq was imported before.
-if 'heapq' in sys.modules:
-    del sys.modules['heapq']
-
-# Now we can import the module and get the pure Python implementation.
-import heapq as py_heapq
-
-# Restore everything to normal.
-del sys.modules['_heapq']
-del sys.modules['heapq']
-
-# This is now the module with the C implementation.
 import heapq as c_heapq
-
+py_heapq = test_support.import_fresh_module('heapq', blocked=['_heapq'])
 
 class TestHeap(unittest.TestCase):
     module = None
@@ -61,7 +46,7 @@ class TestHeap(unittest.TestCase):
         for pos, item in enumerate(heap):
             if pos: # pos 0 has no parent
                 parentpos = (pos-1) >> 1
-                self.assert_(heap[parentpos] <= item)
+                self.assertTrue(heap[parentpos] <= item)
 
     def test_heapify(self):
         for size in range(30):
@@ -193,6 +178,13 @@ class TestHeap(unittest.TestCase):
 class TestHeapPython(TestHeap):
     module = py_heapq
 
+    # As an early adopter, we sanity check the
+    # test_support.import_fresh_module utility function
+    def test_pure_python(self):
+        self.assertFalse(sys.modules['heapq'] is self.module)
+        self.assertTrue(hasattr(self.module.heapify, 'func_code'))
+
+
 class TestHeapC(TestHeap):
     module = c_heapq
 
@@ -216,6 +208,12 @@ class TestHeapC(TestHeap):
         target = sorted(data, reverse=True)
         self.assertEqual(hsort(data, LT), target)
         self.assertEqual(hsort(data, LE), target)
+
+    # As an early adopter, we sanity check the
+    # test_support.import_fresh_module utility function
+    def test_accelerated(self):
+        self.assertTrue(sys.modules['heapq'] is self.module)
+        self.assertFalse(hasattr(self.module.heapify, 'func_code'))
 
 
 #==============================================================================
@@ -332,14 +330,6 @@ class TestErrorHandling(unittest.TestCase):
             self.assertRaises(TypeError, f, 2, LenOnly())
 
     def test_get_only(self):
-        for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, GetOnly())
-        for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, GetOnly(), 10)
-        for f in (self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 2, GetOnly())
-
-    def test_get_only(self):
         seq = [CmpErr(), CmpErr(), CmpErr()]
         for f in (self.module.heapify, self.module.heappop):
             self.assertRaises(ZeroDivisionError, f, seq)
@@ -358,7 +348,7 @@ class TestErrorHandling(unittest.TestCase):
         for f in (self.module.nlargest, self.module.nsmallest):
             for s in ("123", "", range(1000), ('do', 1.2), xrange(2000,2200,5)):
                 for g in (G, I, Ig, L, R):
-                    with test_support._check_py3k_warnings(
+                    with test_support.check_py3k_warnings(
                             ("comparing unequal types not supported",
                              DeprecationWarning), quiet=True):
                         self.assertEqual(f(2, g(s)), f(2,s))
@@ -372,8 +362,6 @@ class TestErrorHandling(unittest.TestCase):
 
 
 def test_main(verbose=None):
-    from types import BuiltinFunctionType
-
     test_classes = [TestHeapPython, TestHeapC, TestErrorHandling]
     test_support.run_unittest(*test_classes)
 

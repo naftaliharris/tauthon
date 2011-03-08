@@ -38,6 +38,7 @@
 # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
 #
 
 __version__ = '0.70a1'
@@ -116,7 +117,8 @@ def cpu_count():
             num = 0
     elif 'bsd' in sys.platform or sys.platform == 'darwin':
         try:
-            num = int(os.popen('sysctl -n hw.ncpu').read())
+            with os.popen('sysctl -n hw.ncpu') as p:
+                num = int(p.read())
         except ValueError:
             num = 0
     else:
@@ -219,12 +221,12 @@ def JoinableQueue(maxsize=0):
     from multiprocessing.queues import JoinableQueue
     return JoinableQueue(maxsize)
 
-def Pool(processes=None, initializer=None, initargs=()):
+def Pool(processes=None, initializer=None, initargs=(), maxtasksperchild=None):
     '''
     Returns a process pool object
     '''
     from multiprocessing.pool import Pool
-    return Pool(processes, initializer, initargs)
+    return Pool(processes, initializer, initargs, maxtasksperchild)
 
 def RawValue(typecode_or_type, *args):
     '''
