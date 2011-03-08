@@ -3,16 +3,14 @@
 import fnmatch
 import sys
 import os
-import types
 
-__all__ = ["BdbQuit","Bdb","Breakpoint"]
+__all__ = ["BdbQuit", "Bdb", "Breakpoint"]
 
 class BdbQuit(Exception):
-    """Exception to give up completely"""
+    """Exception to give up completely."""
 
 
 class Bdb:
-
     """Generic Python debugger base class.
 
     This class takes care of details of the trace facility;
@@ -120,14 +118,14 @@ class Bdb:
 
     def break_here(self, frame):
         filename = self.canonic(frame.f_code.co_filename)
-        if not filename in self.breaks:
+        if filename not in self.breaks:
             return False
         lineno = frame.f_lineno
-        if not lineno in self.breaks[filename]:
+        if lineno not in self.breaks[filename]:
             # The line itself has no breakpoint, but maybe the line is the
             # first line of a function with breakpoint set by function name.
             lineno = frame.f_code.co_firstlineno
-            if not lineno in self.breaks[filename]:
+            if lineno not in self.breaks[filename]:
                 return False
 
         # flag says ok to delete temp. bp
@@ -170,7 +168,7 @@ class Bdb:
     def _set_stopinfo(self, stopframe, returnframe, stoplineno=0):
         self.stopframe = stopframe
         self.returnframe = returnframe
-        self.quitting = 0
+        self.quitting = False
         # stoplineno >= 0 means: stop at line >= the stoplineno
         # stoplineno -1 means: don't stop at all
         self.stoplineno = stoplineno
@@ -178,10 +176,13 @@ class Bdb:
     # Derived classes and clients can call the following methods
     # to affect the stepping state.
 
-    def set_until(self, frame): #the name "until" is borrowed from gdb
+    def set_until(self, frame, lineno=None):
         """Stop when the line with the line no greater than the current one is
         reached or when returning from current frame"""
-        self._set_stopinfo(frame, frame, frame.f_lineno+1)
+        # the name "until" is borrowed from gdb
+        if lineno is None:
+            lineno = frame.f_lineno + 1
+        self._set_stopinfo(frame, frame, lineno)
 
     def set_step(self):
         """Stop after one line of code."""
@@ -224,7 +225,7 @@ class Bdb:
     def set_quit(self):
         self.stopframe = self.botframe
         self.returnframe = None
-        self.quitting = 1
+        self.quitting = True
         sys.settrace(None)
 
     # Derived classes and clients can call the following methods
@@ -234,18 +235,15 @@ class Bdb:
     # Call self.get_*break*() to see the breakpoints or better
     # for bp in Breakpoint.bpbynumber: if bp: bp.bpprint().
 
-    def set_break(self, filename, lineno, temporary=0, cond = None,
+    def set_break(self, filename, lineno, temporary=False, cond=None,
                   funcname=None):
         filename = self.canonic(filename)
         import linecache # Import as late as possible
         line = linecache.getline(filename, lineno)
         if not line:
-            return 'Line %s:%d does not exist' % (filename,
-                                   lineno)
-        if not filename in self.breaks:
-            self.breaks[filename] = []
-        list = self.breaks[filename]
-        if not lineno in list:
+            return 'Line %s:%d does not exist' % (filename, lineno)
+        list = self.breaks.setdefault(filename, [])
+        if lineno not in list:
             list.append(lineno)
         bp = Breakpoint(filename, lineno, temporary, cond, funcname)
 
@@ -257,11 +255,10 @@ class Bdb:
 
     def clear_break(self, filename, lineno):
         filename = self.canonic(filename)
-        if not filename in self.breaks:
+        if filename not in self.breaks:
             return 'There are no breakpoints in %s' % filename
         if lineno not in self.breaks[filename]:
-            return 'There is no breakpoint at %s:%d' % (filename,
-                                    lineno)
+            return 'There is no breakpoint at %s:%d' % (filename, lineno)
         # If there's only one bp in the list for that file,line
         # pair, then remove the breaks entry
         for bp in Breakpoint.bplist[filename, lineno][:]:
@@ -270,21 +267,15 @@ class Bdb:
 
     def clear_bpbynumber(self, arg):
         try:
-            number = int(arg)
-        except:
-            return 'Non-numeric breakpoint number (%s)' % arg
-        try:
-            bp = Breakpoint.bpbynumber[number]
-        except IndexError:
-            return 'Breakpoint number (%d) out of range' % number
-        if not bp:
-            return 'Breakpoint (%d) already deleted' % number
+            bp = self.get_bpbynumber(arg)
+        except ValueError as err:
+            return str(err)
         bp.deleteMe()
         self._prune_breaks(bp.file, bp.line)
 
     def clear_all_file_breaks(self, filename):
         filename = self.canonic(filename)
-        if not filename in self.breaks:
+        if filename not in self.breaks:
             return 'There are no breakpoints in %s' % filename
         for line in self.breaks[filename]:
             blist = Breakpoint.bplist[filename, line]
@@ -299,6 +290,21 @@ class Bdb:
             if bp:
                 bp.deleteMe()
         self.breaks = {}
+
+    def get_bpbynumber(self, arg):
+        if not arg:
+            raise ValueError('Breakpoint number expected')
+        try:
+            number = int(arg)
+        except ValueError:
+            raise ValueError('Non-numeric breakpoint number %s' % arg)
+        try:
+            bp = Breakpoint.bpbynumber[number]
+        except IndexError:
+            raise ValueError('Breakpoint number %d out of range' % number)
+        if bp is None:
+            raise ValueError('Breakpoint %d already deleted' % number)
+        return bp
 
     def get_break(self, filename, lineno):
         filename = self.canonic(filename)
@@ -342,35 +348,35 @@ class Bdb:
             i = max(0, len(stack) - 1)
         return stack, i
 
-    #
-
     def format_stack_entry(self, frame_lineno, lprefix=': '):
         import linecache, reprlib
         frame, lineno = frame_lineno
         filename = self.canonic(frame.f_code.co_filename)
         s = '%s(%r)' % (filename, lineno)
         if frame.f_code.co_name:
-            s = s + frame.f_code.co_name
+            s += frame.f_code.co_name
         else:
-            s = s + "<lambda>"
+            s += "<lambda>"
         if '__args__' in frame.f_locals:
             args = frame.f_locals['__args__']
         else:
             args = None
         if args:
-            s = s + reprlib.repr(args)
+            s += reprlib.repr(args)
         else:
-            s = s + '()'
+            s += '()'
         if '__return__' in frame.f_locals:
             rv = frame.f_locals['__return__']
-            s = s + '->'
-            s = s + reprlib.repr(rv)
+            s += '->'
+            s += reprlib.repr(rv)
         line = linecache.getline(filename, lineno, frame.f_globals)
-        if line: s = s + lprefix + line.strip()
+        if line:
+            s += lprefix + line.strip()
         return s
 
-    # The following two methods can be called by clients to use
-    # a debugger to debug a statement, given as a string.
+    # The following methods can be called by clients to use
+    # a debugger to debug a statement or an expression.
+    # Both can be given as a string, or a code object.
 
     def run(self, cmd, globals=None, locals=None):
         if globals is None:
@@ -379,15 +385,15 @@ class Bdb:
         if locals is None:
             locals = globals
         self.reset()
+        if isinstance(cmd, str):
+            cmd = compile(cmd, "<string>", "exec")
         sys.settrace(self.trace_dispatch)
-        if not isinstance(cmd, types.CodeType):
-            cmd = cmd+'\n'
         try:
             exec(cmd, globals, locals)
         except BdbQuit:
             pass
         finally:
-            self.quitting = 1
+            self.quitting = True
             sys.settrace(None)
 
     def runeval(self, expr, globals=None, locals=None):
@@ -398,14 +404,12 @@ class Bdb:
             locals = globals
         self.reset()
         sys.settrace(self.trace_dispatch)
-        if not isinstance(expr, types.CodeType):
-            expr = expr+'\n'
         try:
             return eval(expr, globals, locals)
         except BdbQuit:
             pass
         finally:
-            self.quitting = 1
+            self.quitting = True
             sys.settrace(None)
 
     def runctx(self, cmd, globals, locals):
@@ -423,7 +427,7 @@ class Bdb:
         except BdbQuit:
             pass
         finally:
-            self.quitting = 1
+            self.quitting = True
             sys.settrace(None)
         return res
 
@@ -433,8 +437,7 @@ def set_trace():
 
 
 class Breakpoint:
-
-    """Breakpoint class
+    """Breakpoint class.
 
     Implements temporary breakpoints, ignore counts, disabling and
     (re)-enabling, and conditionals.
@@ -456,7 +459,7 @@ class Breakpoint:
                 # index 0 is unused, except for marking an
                 # effective break .... see effective()
 
-    def __init__(self, file, line, temporary=0, cond=None, funcname=None):
+    def __init__(self, file, line, temporary=False, cond=None, funcname=None):
         self.funcname = funcname
         # Needed if funcname is not None.
         self.func_first_executable_line = None
@@ -464,18 +467,17 @@ class Breakpoint:
         self.line = line
         self.temporary = temporary
         self.cond = cond
-        self.enabled = 1
+        self.enabled = True
         self.ignore = 0
         self.hits = 0
         self.number = Breakpoint.next
-        Breakpoint.next = Breakpoint.next + 1
+        Breakpoint.next += 1
         # Build the two lists
         self.bpbynumber.append(self)
         if (file, line) in self.bplist:
             self.bplist[file, line].append(self)
         else:
             self.bplist[file, line] = [self]
-
 
     def deleteMe(self):
         index = (self.file, self.line)
@@ -486,14 +488,17 @@ class Breakpoint:
             del self.bplist[index]
 
     def enable(self):
-        self.enabled = 1
+        self.enabled = True
 
     def disable(self):
-        self.enabled = 0
+        self.enabled = False
 
     def bpprint(self, out=None):
         if out is None:
             out = sys.stdout
+        print(self.bpformat(), file=out)
+
+    def bpformat(self):
         if self.temporary:
             disp = 'del  '
         else:
@@ -502,17 +507,22 @@ class Breakpoint:
             disp = disp + 'yes  '
         else:
             disp = disp + 'no   '
-        print('%-4dbreakpoint   %s at %s:%d' % (self.number, disp,
-                                                       self.file, self.line), file=out)
+        ret = '%-4dbreakpoint   %s at %s:%d' % (self.number, disp,
+                                                self.file, self.line)
         if self.cond:
-            print('\tstop only if %s' % (self.cond,), file=out)
+            ret += '\n\tstop only if %s' % (self.cond,)
         if self.ignore:
-            print('\tignore next %d hits' % (self.ignore), file=out)
-        if (self.hits):
-            if (self.hits > 1): ss = 's'
-            else: ss = ''
-            print(('\tbreakpoint already hit %d time%s' %
-                          (self.hits, ss)), file=out)
+            ret += '\n\tignore next %d hits' % (self.ignore,)
+        if self.hits:
+            if self.hits > 1:
+                ss = 's'
+            else:
+                ss = ''
+            ret += '\n\tbreakpoint already hit %d time%s' % (self.hits, ss)
+        return ret
+
+    def __str__(self):
+        return 'breakpoint %s at %s:%s' % (self.number, self.file, self.line)
 
 # -----------end of Breakpoint class----------
 
@@ -552,48 +562,43 @@ def effective(file, line, frame):
     that indicates if it is ok to delete a temporary bp.
 
     """
-    possibles = Breakpoint.bplist[file,line]
-    for i in range(0, len(possibles)):
-        b = possibles[i]
-        if b.enabled == 0:
+    possibles = Breakpoint.bplist[file, line]
+    for b in possibles:
+        if not b.enabled:
             continue
         if not checkfuncname(b, frame):
             continue
         # Count every hit when bp is enabled
-        b.hits = b.hits + 1
+        b.hits += 1
         if not b.cond:
-            # If unconditional, and ignoring,
-            # go on to next, else break
+            # If unconditional, and ignoring go on to next, else break
             if b.ignore > 0:
-                b.ignore = b.ignore -1
+                b.ignore -= 1
                 continue
             else:
-                # breakpoint and marker that's ok
-                # to delete if temporary
-                return (b,1)
+                # breakpoint and marker that it's ok to delete if temporary
+                return (b, True)
         else:
             # Conditional bp.
             # Ignore count applies only to those bpt hits where the
             # condition evaluates to true.
             try:
-                val = eval(b.cond, frame.f_globals,
-                       frame.f_locals)
+                val = eval(b.cond, frame.f_globals, frame.f_locals)
                 if val:
                     if b.ignore > 0:
-                        b.ignore = b.ignore -1
+                        b.ignore -= 1
                         # continue
                     else:
-                        return (b,1)
+                        return (b, True)
                 # else:
                 #   continue
             except:
-                # if eval fails, most conservative
-                # thing is to stop on breakpoint
-                # regardless of ignore count.
-                # Don't delete temporary,
-                # as another hint to user.
-                return (b,0)
+                # if eval fails, most conservative thing is to stop on
+                # breakpoint regardless of ignore count.  Don't delete
+                # temporary, as another hint to user.
+                return (b, False)
     return (None, None)
+
 
 # -------------------- testing --------------------
 
@@ -627,5 +632,3 @@ def bar(a):
 def test():
     t = Tdb()
     t.run('import bdb; bdb.foo(10)')
-
-# end

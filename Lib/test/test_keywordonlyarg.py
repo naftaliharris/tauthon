@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Unit tests for the keyword only argument specified in PEP 3102."""
 
@@ -72,6 +72,14 @@ class KeywordOnlyArgTestCase(unittest.TestCase):
             fundef3 += "i%d, "%i
         fundef3 += "lastarg):\n  pass\n"
         compile(fundef3, "<test>", "single")
+
+    def testTooManyPositionalErrorMessage(self):
+        def f(a, b=None, *, c=None):
+            pass
+        with self.assertRaises(TypeError) as exc:
+            f(1, 2, 3)
+        expected = "f() takes at most 2 positional arguments (3 given)"
+        self.assertEqual(str(exc.exception), expected)
 
     def testSyntaxErrorForFunctionCall(self):
         self.assertRaisesSyntaxError("f(p, k=1, p2)")

@@ -6,7 +6,7 @@ from _testcapi import _test_structmembersType, \
     LLONG_MAX, LLONG_MIN, ULLONG_MAX, \
     PY_SSIZE_T_MAX, PY_SSIZE_T_MIN
 
-import warnings, unittest, sys
+import unittest
 from test import support
 
 ts=_test_structmembersType(False,  # T_BOOL
@@ -112,39 +112,30 @@ class ReadWriteTests(unittest.TestCase):
 
 
 class TestWarnings(unittest.TestCase):
-    def has_warned(self, w):
-        self.assertEqual(w.category, RuntimeWarning)
 
     def test_byte_max(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_BYTE = CHAR_MAX+1
-            self.has_warned(w)
 
     def test_byte_min(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_BYTE = CHAR_MIN-1
-            self.has_warned(w)
 
     def test_ubyte_max(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_UBYTE = UCHAR_MAX+1
-            self.has_warned(w)
 
     def test_short_max(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_SHORT = SHRT_MAX+1
-            self.has_warned(w)
 
     def test_short_min(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_SHORT = SHRT_MIN-1
-            self.has_warned(w)
 
     def test_ushort_max(self):
-        with support.check_warnings() as w:
+        with support.check_warnings(('', RuntimeWarning)):
             ts.T_USHORT = USHRT_MAX+1
-            self.has_warned(w)
-
 
 
 def test_main(verbose=None):
