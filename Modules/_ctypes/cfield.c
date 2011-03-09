@@ -9,6 +9,7 @@
 
 #define CTYPES_CFIELD_CAPSULE_NAME_PYMEM "_ctypes/cfield.c pymem"
 
+#if Py_UNICODE_SIZE != SIZEOF_WCHAR_T
 static void pymem_destructor(PyObject *ptr)
 {
     void *p = PyCapsule_GetPointer(ptr, CTYPES_CFIELD_CAPSULE_NAME_PYMEM);
@@ -16,6 +17,7 @@ static void pymem_destructor(PyObject *ptr)
         PyMem_Free(p);
     }
 }
+#endif
 
 
 /******************************************************************/
@@ -1168,20 +1170,6 @@ O_set(void *ptr, PyObject *value, Py_ssize_t size)
 static PyObject *
 c_set(void *ptr, PyObject *value, Py_ssize_t size)
 {
-    if (PyUnicode_Check(value)) {
-        value = PyUnicode_AsEncodedString(value,
-                                          _ctypes_conversion_encoding,
-                                          _ctypes_conversion_errors);
-        if (value == NULL)
-            return NULL;
-        if (PyBytes_GET_SIZE(value) != 1) {
-            Py_DECREF(value);
-            goto error;
-        }
-        *(char *)ptr = PyBytes_AS_STRING(value)[0];
-        Py_DECREF(value);
-        _RET(value);
-    }
     if (PyBytes_Check(value) && PyBytes_GET_SIZE(value) == 1) {
         *(char *)ptr = PyBytes_AS_STRING(value)[0];
         _RET(value);
@@ -1217,13 +1205,8 @@ static PyObject *
 u_set(void *ptr, PyObject *value, Py_ssize_t size)
 {
     Py_ssize_t len;
-    if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return NULL;
-    } else if (!PyUnicode_Check(value)) {
+    wchar_t chars[2];
+    if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
                         value->ob_type->tp_name);
@@ -1231,7 +1214,7 @@ u_set(void *ptr, PyObject *value, Py_ssize_t size)
     } else
         Py_INCREF(value);
 
-    len = PyUnicode_GET_SIZE(value);
+    len = PyUnicode_AsWideChar(value, chars, 2);
     if (len != 1) {
         Py_DECREF(value);
         PyErr_SetString(PyExc_TypeError,
@@ -1239,7 +1222,7 @@ u_set(void *ptr, PyObject *value, Py_ssize_t size)
         return NULL;
     }
 
-    *(wchar_t *)ptr = PyUnicode_AS_UNICODE(value)[0];
+    *(wchar_t *)ptr = chars[0];
     Py_DECREF(value);
 
     _RET(value);
@@ -1292,13 +1275,7 @@ U_set(void *ptr, PyObject *value, Py_ssize_t length)
     /* It's easier to calculate in characters than in bytes */
     length /= sizeof(wchar_t);
 
-    if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return NULL;
-    } else if (!PyUnicode_Check(value)) {
+    if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
                         value->ob_type->tp_name);
@@ -1315,7 +1292,7 @@ U_set(void *ptr, PyObject *value, Py_ssize_t length)
     } else if (size < length-1)
         /* copy terminating NUL character if there is space */
         size += 1;
-    PyUnicode_AsWideChar((PyUnicodeObject *)value, (wchar_t *)ptr, size);
+    PyUnicode_AsWideChar(value, (wchar_t *)ptr, size);
     return value;
 }
 
@@ -1333,7 +1310,7 @@ s_get(void *ptr, Py_ssize_t size)
             break;
     }
 
-    return PyUnicode_FromStringAndSize((char *)ptr, (Py_ssize_t)i);
+    return PyBytes_FromStringAndSize((char *)ptr, (Py_ssize_t)i);
 }
 
 static PyObject *
@@ -1342,14 +1319,7 @@ s_set(void *ptr, PyObject *value, Py_ssize_t length)
     char *data;
     Py_ssize_t size;
 
-    if (PyUnicode_Check(value)) {
-        value = PyUnicode_AsEncodedString(value,
-                                                                          _ctypes_conversion_encoding,
-                                                                          _ctypes_conversion_errors);
-        if (value == NULL)
-            return NULL;
-        assert(PyBytes_Check(value));
-    } else if(PyBytes_Check(value)) {
+    if(PyBytes_Check(value)) {
         Py_INCREF(value);
     } else {
         PyErr_Format(PyExc_TypeError,
@@ -1393,14 +1363,6 @@ z_set(void *ptr, PyObject *value, Py_ssize_t size)
         *(char **)ptr = PyBytes_AsString(value);
         Py_INCREF(value);
         return value;
-    } else if (PyUnicode_Check(value)) {
-        PyObject *str = PyUnicode_AsEncodedString(value,
-                                                  _ctypes_conversion_encoding,
-                                                  _ctypes_conversion_errors);
-        if (str == NULL)
-            return NULL;
-        *(char **)ptr = PyBytes_AS_STRING(str);
-        return str;
     } else if (PyLong_Check(value)) {
 #if SIZEOF_VOID_P == SIZEOF_LONG_LONG
         *(char **)ptr = (char *)PyLong_AsUnsignedLongLongMask(value);
@@ -1454,25 +1416,18 @@ Z_set(void *ptr, PyObject *value, Py_ssize_t size)
         Py_INCREF(Py_None);
         return Py_None;
     }
-    if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return NULL;
-    } else if (!PyUnicode_Check(value)) {
+    if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                      "unicode string or integer address expected instead of %s instance",
                      value->ob_type->tp_name);
         return NULL;
     } else
         Py_INCREF(value);
-#ifdef HAVE_USABLE_WCHAR_T
-    /* HAVE_USABLE_WCHAR_T means that Py_UNICODE and wchar_t is the same
-       type.  So we can copy directly.  Hm, are unicode objects always NUL
+#if Py_UNICODE_SIZE == SIZEOF_WCHAR_T
+    /* We can copy directly.  Hm, are unicode objects always NUL
        terminated in Python, internally?
      */
-    *(wchar_t **)ptr = PyUnicode_AS_UNICODE(value);
+    *(wchar_t **)ptr = (wchar_t *) PyUnicode_AS_UNICODE(value);
     return value;
 #else
     {
@@ -1481,15 +1436,11 @@ Z_set(void *ptr, PyObject *value, Py_ssize_t size)
         PyObject *keep;
         wchar_t *buffer;
 
-        int size = PyUnicode_GET_SIZE(value);
-        size += 1; /* terminating NUL */
-        size *= sizeof(wchar_t);
-        buffer = (wchar_t *)PyMem_Malloc(size);
+        buffer = PyUnicode_AsWideCharString(value, NULL);
         if (!buffer) {
             Py_DECREF(value);
-            return PyErr_NoMemory();
+            return NULL;
         }
-        memset(buffer, 0, size);
         keep = PyCapsule_New(buffer, CTYPES_CFIELD_CAPSULE_NAME_PYMEM, pymem_destructor);
         if (!keep) {
             Py_DECREF(value);
@@ -1497,12 +1448,6 @@ Z_set(void *ptr, PyObject *value, Py_ssize_t size)
             return NULL;
         }
         *(wchar_t **)ptr = (wchar_t *)buffer;
-        if (-1 == PyUnicode_AsWideChar((PyUnicodeObject *)value,
-                                       buffer, PyUnicode_GET_SIZE(value))) {
-            Py_DECREF(value);
-            Py_DECREF(keep);
-            return NULL;
-        }
         Py_DECREF(value);
         return keep;
     }
@@ -1540,12 +1485,6 @@ BSTR_set(void *ptr, PyObject *value, Py_ssize_t size)
     /* convert value into a PyUnicodeObject or NULL */
     if (Py_None == value) {
         value = NULL;
-    } else if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return NULL;
     } else if (PyUnicode_Check(value)) {
         Py_INCREF(value); /* for the descref below */
     } else {
