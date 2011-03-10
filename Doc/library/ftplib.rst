@@ -9,6 +9,10 @@
    pair: FTP; protocol
    single: FTP; ftplib (standard module)
 
+**Source code:** :source:`Lib/ftplib.py`
+
+--------------
+
 This module defines the class :class:`FTP` and a few related items. The
 :class:`FTP` class implements the client side of the FTP protocol.  You can use
 this to write Python programs that perform a variety of automated FTP jobs, such
@@ -33,8 +37,8 @@ Here's a sample session using the :mod:`ftplib` module::
    '226 Transfer complete.'
    >>> ftp.quit()
 
-The module defines the following items:
 
+The module defines the following items:
 
 .. class:: FTP(host='', user='', passwd='', acct=''[, timeout])
 
@@ -45,6 +49,61 @@ The module defines the following items:
    parameter specifies a timeout in seconds for blocking operations like the
    connection attempt (if is not specified, the global default timeout setting
    will be used).
+
+   :class:`FTP` class supports the :keyword:`with` statement. Here is a sample
+   on how using it:
+
+    >>> from ftplib import FTP
+    >>> with FTP("ftp1.at.proftpd.org") as ftp:
+    ...     ftp.login()
+    ...     ftp.dir()
+    ...
+    '230 Anonymous login ok, restrictions apply.'
+    dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 .
+    dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 ..
+    dr-xr-xr-x   5 ftp      ftp          4096 May  6 10:43 CentOS
+    dr-xr-xr-x   3 ftp      ftp            18 Jul 10  2008 Fedora
+    >>>
+
+   .. versionchanged:: 3.2
+      Support for the :keyword:`with` statement was added.
+
+
+.. class:: FTP_TLS(host='', user='', passwd='', acct='', [keyfile[, certfile[, context[, timeout]]]])
+
+   A :class:`FTP` subclass which adds TLS support to FTP as described in
+   :rfc:`4217`.
+   Connect as usual to port 21 implicitly securing the FTP control connection
+   before authenticating. Securing the data connection requires the user to
+   explicitly ask for it by calling the :meth:`prot_p` method.
+   *keyfile* and *certfile* are optional -- they can contain a PEM formatted
+   private key and certificate chain file name for the SSL connection.
+   *context* parameter is a :class:`ssl.SSLContext` object which allows
+   bundling SSL configuration options, certificates and private keys into a
+   single (potentially long-lived) structure.
+
+   .. versionadded:: 3.2
+
+   Here's a sample session using the :class:`FTP_TLS` class:
+
+   >>> from ftplib import FTP_TLS
+   >>> ftps = FTP_TLS('ftp.python.org')
+   >>> ftps.login()           # login anonymously before securing control channel
+   >>> ftps.prot_p()          # switch to secure data connection
+   >>> ftps.retrlines('LIST') # list directory content securely
+   total 9
+   drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 .
+   drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 ..
+   drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 bin
+   drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 etc
+   d-wxrwxr-x   2 ftp      wheel        1024 Sep  5 13:43 incoming
+   drwxr-xr-x   2 root     wheel        1024 Nov 17  1993 lib
+   drwxr-xr-x   6 1094     wheel        1024 Sep 13 19:07 pub
+   drwxr-xr-x   3 root     wheel        1024 Jan  3  1994 usr
+   -rw-r--r--   1 root     root          312 Aug  1  1994 welcome.msg
+   '226 Transfer complete.'
+   >>> ftps.quit()
+   >>>
 
 
 .. exception:: error_reply
@@ -197,14 +256,18 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    Passive mode is on by default.
 
 
-.. method:: FTP.storbinary(cmd, file, blocksize=8192, callback=None)
+.. method:: FTP.storbinary(cmd, file, blocksize=8192, callback=None, rest=None)
 
    Store a file in binary transfer mode.  *cmd* should be an appropriate
    ``STOR`` command: ``"STOR filename"``. *file* is an open :term:`file object`
    which is read until EOF using its :meth:`read` method in blocks of size
    *blocksize* to provide the data to be stored.  The *blocksize* argument
    defaults to 8192.  *callback* is an optional single parameter callable that
-   is called on each block of data after it is sent.
+   is called on each block of data after it is sent. *rest* means the same thing
+   as in the :meth:`transfercmd` method.
+
+   .. versionchanged:: 3.2
+      *rest* parameter added.
 
 
 .. method:: FTP.storlines(cmd, file, callback=None)
@@ -318,4 +381,27 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    call the :class:`FTP` instance should not be used any more (after a call to
    :meth:`close` or :meth:`quit` you cannot reopen the connection by issuing
    another :meth:`login` method).
+
+
+FTP_TLS Objects
+---------------
+
+:class:`FTP_TLS` class inherits from :class:`FTP`, defining these additional objects:
+
+.. attribute:: FTP_TLS.ssl_version
+
+   The SSL version to use (defaults to *TLSv1*).
+
+.. method:: FTP_TLS.auth()
+
+   Set up secure control connection by using TLS or SSL, depending on what specified in :meth:`ssl_version` attribute.
+
+.. method:: FTP_TLS.prot_p()
+
+   Set up secure data connection.
+
+.. method:: FTP_TLS.prot_c()
+
+   Set up clear text data connection.
+
 

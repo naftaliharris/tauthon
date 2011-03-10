@@ -658,31 +658,22 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
 
 #ifdef CTYPES_UNICODE
     if (PyUnicode_Check(obj)) {
-#ifdef HAVE_USABLE_WCHAR_T
+#if Py_UNICODE_SIZE == SIZEOF_WCHAR_T
         pa->ffi_type = &ffi_type_pointer;
         pa->value.p = PyUnicode_AS_UNICODE(obj);
         Py_INCREF(obj);
         pa->keep = obj;
         return 0;
 #else
-        int size = PyUnicode_GET_SIZE(obj);
         pa->ffi_type = &ffi_type_pointer;
-        size += 1; /* terminating NUL */
-        size *= sizeof(wchar_t);
-        pa->value.p = PyMem_Malloc(size);
-        if (!pa->value.p) {
-            PyErr_NoMemory();
+        pa->value.p = PyUnicode_AsWideCharString(obj, NULL);
+        if (pa->value.p == NULL)
             return -1;
-        }
-        memset(pa->value.p, 0, size);
         pa->keep = PyCapsule_New(pa->value.p, CTYPES_CAPSULE_NAME_PYMEM, pymem_destructor);
         if (!pa->keep) {
             PyMem_Free(pa->value.p);
             return -1;
         }
-        if (-1 == PyUnicode_AsWideChar((PyUnicodeObject *)obj,
-                                       pa->value.p, PyUnicode_GET_SIZE(obj)))
-            return -1;
         return 0;
 #endif
     }
@@ -814,7 +805,7 @@ static int _call_function_pointer(int flags,
 #endif
         delta =
 #endif
-            ffi_call(&cif, (void *)pProc, resmem, avalues);
+                ffi_call(&cif, (void *)pProc, resmem, avalues);
 #ifdef MS_WIN32
 #ifndef DONT_USE_SEH
     }
@@ -849,29 +840,29 @@ static int _call_function_pointer(int flags,
 #ifdef MS_WIN64
     if (delta != 0) {
         PyErr_Format(PyExc_RuntimeError,
-                     "ffi_call failed with code %d",
-                     delta);
+                 "ffi_call failed with code %d",
+                 delta);
         return -1;
     }
 #else
     if (delta < 0) {
         if (flags & FUNCFLAG_CDECL)
             PyErr_Format(PyExc_ValueError,
-                         "Procedure called with not enough "
-                         "arguments (%d bytes missing) "
-                         "or wrong calling convention",
-                         -delta);
+                     "Procedure called with not enough "
+                     "arguments (%d bytes missing) "
+                     "or wrong calling convention",
+                     -delta);
         else
             PyErr_Format(PyExc_ValueError,
-                         "Procedure probably called with not enough "
-                         "arguments (%d bytes missing)",
-                         -delta);
+                     "Procedure probably called with not enough "
+                     "arguments (%d bytes missing)",
+                     -delta);
         return -1;
     } else if (delta > 0) {
         PyErr_Format(PyExc_ValueError,
-                     "Procedure probably called with too many "
-                     "arguments (%d bytes in excess)",
-                     delta);
+                 "Procedure probably called with too many "
+                 "arguments (%d bytes in excess)",
+                 delta);
         return -1;
     }
 #endif
@@ -1641,37 +1632,6 @@ My_Py_DECREF(PyObject *self, PyObject *arg)
     return arg;
 }
 
-#ifdef CTYPES_UNICODE
-
-static char set_conversion_mode_doc[] =
-"set_conversion_mode(encoding, errors) -> (previous-encoding, previous-errors)\n\
-\n\
-Set the encoding and error handling ctypes uses when converting\n\
-between unicode and strings.  Returns the previous values.\n";
-
-static PyObject *
-set_conversion_mode(PyObject *self, PyObject *args)
-{
-    char *coding, *mode;
-    PyObject *result;
-
-    if (!PyArg_ParseTuple(args, "zs:set_conversion_mode", &coding, &mode))
-        return NULL;
-    result = Py_BuildValue("(zz)", _ctypes_conversion_encoding, _ctypes_conversion_errors);
-    if (coding) {
-        PyMem_Free(_ctypes_conversion_encoding);
-        _ctypes_conversion_encoding = PyMem_Malloc(strlen(coding) + 1);
-        strcpy(_ctypes_conversion_encoding, coding);
-    } else {
-        _ctypes_conversion_encoding = NULL;
-    }
-    PyMem_Free(_ctypes_conversion_errors);
-    _ctypes_conversion_errors = PyMem_Malloc(strlen(mode) + 1);
-    strcpy(_ctypes_conversion_errors, mode);
-    return result;
-}
-#endif
-
 static PyObject *
 resize(PyObject *self, PyObject *args)
 {
@@ -1852,9 +1812,6 @@ PyMethodDef _ctypes_module_methods[] = {
     {"_unpickle", unpickle, METH_VARARGS },
     {"buffer_info", buffer_info, METH_O, "Return buffer interface information"},
     {"resize", resize, METH_VARARGS, "Resize the memory buffer of a ctypes instance"},
-#ifdef CTYPES_UNICODE
-    {"set_conversion_mode", set_conversion_mode, METH_VARARGS, set_conversion_mode_doc},
-#endif
 #ifdef MS_WIN32
     {"get_last_error", get_last_error, METH_NOARGS},
     {"set_last_error", set_last_error, METH_VARARGS},

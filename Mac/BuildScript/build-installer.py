@@ -1,12 +1,14 @@
 #!/usr/bin/python
 """
-This script is used to build the "official unofficial" universal build on
-Mac OS X. It requires Mac OS X 10.4, Xcode 2.2 and the 10.4u SDK to do its
-work.  64-bit or four-way universal builds require at least OS X 10.5 and
-the 10.5 SDK.
+This script is used to build "official" universal installers on Mac OS X.
+It requires at least Mac OS X 10.4, Xcode 2.2 and the 10.4u SDK for
+32-bit builds.  64-bit or four-way universal builds require at least
+OS X 10.5 and the 10.5 SDK.
 
-Please ensure that this script keeps working with Python 2.3, to avoid
-bootstrap issues (/usr/bin/python is Python 2.3 on OSX 10.4)
+Please ensure that this script keeps working with Python 2.5, to avoid
+bootstrap issues (/usr/bin/python is Python 2.5 on OSX 10.5).  Sphinx,
+which is used to build the documentation, currently requires at least
+Python 2.4.
 
 Usage: see USAGE variable in the script.
 """
@@ -144,9 +146,9 @@ def library_recipes():
     if DEPTARGET < '10.5':
         result.extend([
           dict(
-              name="Bzip2 1.0.5",
-              url="http://www.bzip.org/1.0.5/bzip2-1.0.5.tar.gz",
-              checksum='3c15a0c8d1d3ee1c46a1634d00617b1a',
+              name="Bzip2 1.0.6",
+              url="http://bzip.org/1.0.6/bzip2-1.0.6.tar.gz",
+              checksum='00b516f4704d4a7cb50a1d97e6e8e15b',
               configure=None,
               install='make install CC=%s PREFIX=%s/usr/local/ CFLAGS="-arch %s -isysroot %s"'%(
                   CC,
@@ -169,29 +171,33 @@ def library_recipes():
           ),
           dict(
               # Note that GNU readline is GPL'd software
-              name="GNU Readline 5.1.4",
-              url="http://ftp.gnu.org/pub/gnu/readline/readline-5.1.tar.gz" ,
-              checksum='7ee5a692db88b30ca48927a13fd60e46',
+              name="GNU Readline 6.1.2",
+              url="http://ftp.gnu.org/pub/gnu/readline/readline-6.1.tar.gz" ,
+              checksum='fc2f7e714fe792db1ce6ddc4c9fb4ef3',
               patchlevel='0',
               patches=[
                   # The readline maintainers don't do actual micro releases, but
                   # just ship a set of patches.
-                  'http://ftp.gnu.org/pub/gnu/readline/readline-5.1-patches/readline51-001',
-                  'http://ftp.gnu.org/pub/gnu/readline/readline-5.1-patches/readline51-002',
-                  'http://ftp.gnu.org/pub/gnu/readline/readline-5.1-patches/readline51-003',
-                  'http://ftp.gnu.org/pub/gnu/readline/readline-5.1-patches/readline51-004',
+                  'http://ftp.gnu.org/pub/gnu/readline/readline-6.1-patches/readline61-001',
+                  'http://ftp.gnu.org/pub/gnu/readline/readline-6.1-patches/readline61-002',
               ]
           ),
           dict(
-              name="SQLite 3.6.11",
-              url="http://www.sqlite.org/sqlite-3.6.11.tar.gz",
-              checksum='7ebb099696ab76cc6ff65dd496d17858',
+              name="SQLite 3.7.4",
+              url="http://www.sqlite.org/sqlite-autoconf-3070400.tar.gz",
+              checksum='8f0c690bfb33c3cbbc2471c3d9ba0158',
+              configure_env=('CFLAGS="-Os'
+                                  ' -DSQLITE_ENABLE_FTS3'
+                                  ' -DSQLITE_ENABLE_FTS3_PARENTHESIS'
+                                  ' -DSQLITE_ENABLE_RTREE'
+                                  ' -DSQLITE_TCL=0'
+                                  '"'),
               configure_pre=[
                   '--enable-threadsafe',
-                  '--enable-tempstore',
                   '--enable-shared=no',
                   '--enable-static=yes',
-                  '--disable-tcl',
+                  '--disable-readline',
+                  '--disable-dependency-tracking',
               ]
           ),
           dict(
@@ -199,6 +205,7 @@ def library_recipes():
               url="http://ftp.gnu.org/pub/gnu/ncurses/ncurses-5.5.tar.gz",
               checksum='e73c1ac10b4bfc46db43b2ddfd6244ef',
               configure_pre=[
+                  "--enable-widec",
                   "--without-cxx",
                   "--without-ada",
                   "--without-progs",
@@ -225,18 +232,19 @@ def library_recipes():
           ),
         ])
 
-    result.extend([
-      dict(
-          name="Sleepycat DB 4.7.25",
-          url="http://download.oracle.com/berkeley-db/db-4.7.25.tar.gz",
-          checksum='ec2b87e833779681a0c3a814aa71359e',
-          buildDir="build_unix",
-          configure="../dist/configure",
-          configure_pre=[
-              '--includedir=/usr/local/include/db4',
-          ]
-      ),
-    ])
+    if not PYTHON_3:
+        result.extend([
+          dict(
+              name="Sleepycat DB 4.7.25",
+              url="http://download.oracle.com/berkeley-db/db-4.7.25.tar.gz",
+              checksum='ec2b87e833779681a0c3a814aa71359e',
+              buildDir="build_unix",
+              configure="../dist/configure",
+              configure_pre=[
+                  '--includedir=/usr/local/include/db4',
+              ]
+          ),
+        ])
 
     return result
 
@@ -399,6 +407,9 @@ def checkEnvironment():
     Check that we're running on a supported system.
     """
 
+    if sys.version_info[0:2] < (2, 4):
+        fatal("This script must be run with Python 2.4 or later")
+
     if platform.system() != 'Darwin':
         fatal("This script should be run on a Mac OS X 10.4 (or later) system")
 
@@ -418,15 +429,16 @@ def checkEnvironment():
     #       to install a newer patch level.
 
     for framework in ['Tcl', 'Tk']:
-        fw = dict(lower=framework.lower(),
-                    upper=framework.upper(),
-                    cap=framework.capitalize())
-        fwpth = "Library/Frameworks/%(cap)s.framework/%(lower)sConfig.sh" % fw
-        sysfw = os.path.join('/System', fwpth)
+        #fw = dict(lower=framework.lower(),
+        #            upper=framework.upper(),
+        #            cap=framework.capitalize())
+        #fwpth = "Library/Frameworks/%(cap)s.framework/%(lower)sConfig.sh" % fw
+        fwpth = 'Library/Frameworks/Tcl.framework/Versions/Current'
+        sysfw = os.path.join(SDKPATH, 'System', fwpth)
         libfw = os.path.join('/', fwpth)
         usrfw = os.path.join(os.getenv('HOME'), fwpth)
-        version = "%(upper)s_VERSION" % fw
-        if getTclTkVersion(libfw, version) != getTclTkVersion(sysfw, version):
+        #version = "%(upper)s_VERSION" % fw
+        if os.readlink(libfw) != os.readlink(sysfw):
             fatal("Version of %s must match %s" % (libfw, sysfw) )
         if os.path.exists(usrfw):
             fatal("Please rename %s to avoid possible dynamic load issues."
@@ -696,6 +708,9 @@ def buildRecipe(recipe, basedir, archList):
         configure_args.insert(0, configure)
         configure_args = [ shellQuote(a) for a in configure_args ]
 
+        if 'configure_env' in recipe:
+            configure_args.insert(0, recipe['configure_env'])
+
         print "Running configure for %s"%(name,)
         runCommand(' '.join(configure_args) + ' 2>&1')
 
@@ -751,9 +766,9 @@ def buildPython():
         shutil.rmtree(buildDir)
     if os.path.exists(rootDir):
         shutil.rmtree(rootDir)
-    os.mkdir(buildDir)
-    os.mkdir(rootDir)
-    os.mkdir(os.path.join(rootDir, 'empty-dir'))
+    os.makedirs(buildDir)
+    os.makedirs(rootDir)
+    os.makedirs(os.path.join(rootDir, 'empty-dir'))
     curdir = os.getcwd()
     os.chdir(buildDir)
 
@@ -825,12 +840,33 @@ def buildPython():
             os.chmod(p, stat.S_IMODE(st.st_mode) | stat.S_IWGRP)
             os.chown(p, -1, gid)
 
+    if PYTHON_3:
+        LDVERSION=None
+        VERSION=None
+        ABIFLAGS=None
+
+        fp = open(os.path.join(buildDir, 'Makefile'), 'r')
+        for ln in fp:
+            if ln.startswith('VERSION='):
+                VERSION=ln.split()[1]
+            if ln.startswith('ABIFLAGS='):
+                ABIFLAGS=ln.split()[1]
+            if ln.startswith('LDVERSION='):
+                LDVERSION=ln.split()[1]
+        fp.close()
+
+        LDVERSION = LDVERSION.replace('$(VERSION)', VERSION)
+        LDVERSION = LDVERSION.replace('$(ABIFLAGS)', ABIFLAGS)
+        config_suffix = '-' + LDVERSION
+    else:
+        config_suffix = ''      # Python 2.x
+
     # We added some directories to the search path during the configure
     # phase. Remove those because those directories won't be there on
     # the end-users system.
     path =os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework',
                 'Versions', version, 'lib', 'python%s'%(version,),
-                'config', 'Makefile')
+                'config' + config_suffix, 'Makefile')
     fp = open(path, 'r')
     data = fp.read()
     fp.close()
@@ -866,7 +902,7 @@ def patchFile(inPath, outPath):
     data = data.replace('$FULL_VERSION', getFullVersion())
     data = data.replace('$VERSION', getVersion())
     data = data.replace('$MACOSX_DEPLOYMENT_TARGET', ''.join((DEPTARGET, ' or later')))
-    data = data.replace('$ARCHITECTURES', "i386, ppc")
+    data = data.replace('$ARCHITECTURES', ", ".join(universal_opts_map[UNIVERSALARCHS]))
     data = data.replace('$INSTALL_SIZE', installSize())
 
     # This one is not handy as a template variable
