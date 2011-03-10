@@ -1,13 +1,21 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
+import os
 import email
-import threading
 import urllib.parse
 import urllib.request
 import http.server
 import unittest
 import hashlib
 from test import support
+threading = support.import_module('threading')
+
+
+here = os.path.dirname(__file__)
+# Self-signed cert file for 'localhost'
+CERT_localhost = os.path.join(here, 'keycert.pem')
+# Self-signed cert file for 'fakehostname'
+CERT_fakehostname = os.path.join(here, 'keycert2.pem')
 
 # Loopback http server infrastructure
 
@@ -23,7 +31,7 @@ class LoopbackHttpServer(http.server.HTTPServer):
 
         # Set the timeout of our listening socket really low so
         # that we can stop the server easily.
-        self.socket.settimeout(1.0)
+        self.socket.settimeout(0.1)
 
     def get_request(self):
         """HTTPServer method, overridden."""
@@ -58,6 +66,7 @@ class LoopbackHttpServerThread(threading.Thread):
         self._stop_server = True
 
         self.join()
+        self.httpd.server_close()
 
     def run(self):
         self.ready.set()
@@ -229,6 +238,7 @@ class ProxyAuthTests(unittest.TestCase):
     REALM = "TestRealm"
 
     def setUp(self):
+        super(ProxyAuthTests, self).setUp()
         self.digest_auth_handler = DigestAuthHandler()
         self.digest_auth_handler.set_users({self.USER: self.PASSWD})
         self.digest_auth_handler.set_realm(self.REALM)
@@ -246,6 +256,7 @@ class ProxyAuthTests(unittest.TestCase):
 
     def tearDown(self):
         self.server.stop()
+        super(ProxyAuthTests, self).tearDown()
 
     def test_proxy_with_bad_password_raises_httperror(self):
         self.proxy_digest_handler.add_password(self.REALM, self.URL,
@@ -340,15 +351,17 @@ class TestUrlopen(unittest.TestCase):
     """
 
     def setUp(self):
+        super(TestUrlopen, self).setUp()
         self.server = None
 
     def tearDown(self):
         if self.server is not None:
             self.server.stop()
+        super(TestUrlopen, self).tearDown()
 
-    def urlopen(self, url, data=None):
+    def urlopen(self, url, data=None, **kwargs):
         l = []
-        f = urllib.request.urlopen(url, data)
+        f = urllib.request.urlopen(url, data, **kwargs)
         try:
             # Exercise various methods
             l.extend(f.readlines(200))
@@ -369,6 +382,17 @@ class TestUrlopen(unittest.TestCase):
         self.server.ready.wait()
         port = self.server.port
         handler.port = port
+        return handler
+
+    def start_https_server(self, responses=None, certfile=CERT_localhost):
+        if not hasattr(urllib.request, 'HTTPSHandler'):
+            self.skipTest('ssl support required')
+        from test.ssl_servers import make_https_server
+        if responses is None:
+            responses = [(200, [], b"we care a bit")]
+        handler = GetRequestHandler(responses)
+        server = make_https_server(self, certfile=certfile, handler_class=handler)
+        handler.port = server.port
         return handler
 
     def test_redirection(self):
@@ -428,6 +452,28 @@ class TestUrlopen(unittest.TestCase):
         self.assertEqual(data, expected_response)
         self.assertEqual(handler.requests, ["/bizarre", b"get=with_feeling"])
 
+    def test_https(self):
+        handler = self.start_https_server()
+        data = self.urlopen("https://localhost:%s/bizarre" % handler.port)
+        self.assertEqual(data, b"we care a bit")
+
+    def test_https_with_cafile(self):
+        handler = self.start_https_server(certfile=CERT_localhost)
+        import ssl
+        # Good cert
+        data = self.urlopen("https://localhost:%s/bizarre" % handler.port,
+                            cafile=CERT_localhost)
+        self.assertEqual(data, b"we care a bit")
+        # Bad cert
+        with self.assertRaises(urllib.error.URLError) as cm:
+            self.urlopen("https://localhost:%s/bizarre" % handler.port,
+                         cafile=CERT_fakehostname)
+        # Good cert, but mismatching hostname
+        handler = self.start_https_server(certfile=CERT_fakehostname)
+        with self.assertRaises(ssl.CertificateError) as cm:
+            self.urlopen("https://localhost:%s/bizarre" % handler.port,
+                         cafile=CERT_fakehostname)
+
     def test_sending_headers(self):
         handler = self.start_server()
         req = urllib.request.Request("http://localhost:%s/" % handler.port,
@@ -452,9 +498,9 @@ class TestUrlopen(unittest.TestCase):
             open_url = urllib.request.urlopen(
                 "http://localhost:%s" % handler.port)
             info_obj = open_url.info()
-            self.assertTrue(isinstance(info_obj, email.message.Message),
-                         "object returned by 'info' is not an instance of "
-                         "email.message.Message")
+            self.assertIsInstance(info_obj, email.message.Message,
+                                  "object returned by 'info' is not an "
+                                  "instance of email.message.Message")
             self.assertEqual(info_obj.get_content_subtype(), "plain")
         finally:
             self.server.stop()
@@ -509,6 +555,8 @@ class TestUrlopen(unittest.TestCase):
                              (index, len(lines[index]), len(line)))
         self.assertEqual(index + 1, len(lines))
 
+
+@support.reap_threads
 def test_main():
     support.run_unittest(ProxyAuthTests, TestUrlopen)
 

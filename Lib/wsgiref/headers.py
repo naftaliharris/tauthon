@@ -1,6 +1,6 @@
 """Manage HTTP Response Headers
 
-Much of this module is red-handedly pilfered from email.Message in the stdlib,
+Much of this module is red-handedly pilfered from email.message in the stdlib,
 so portions are Copyright (C) 2001,2002 Python Software Foundation, and were
 written by Barry Warsaw.
 """
@@ -25,38 +25,25 @@ def _formatparam(param, value=None, quote=1):
         return param
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class Headers:
 
     """Manage a collection of HTTP response headers"""
 
     def __init__(self,headers):
-        if not isinstance(headers, list):
+        if type(headers) is not list:
             raise TypeError("Headers must be a list of name/value tuples")
-        self._headers = []
-        for k, v in headers:
-            k = self._convert_string_type(k)
-            v = self._convert_string_type(v)
-            self._headers.append((k, v))
+        self._headers = headers
+        if __debug__:
+            for k, v in headers:
+                self._convert_string_type(k)
+                self._convert_string_type(v)
 
     def _convert_string_type(self, value):
         """Convert/check value type."""
-        if isinstance(value, str):
+        if type(value) is str:
             return value
-        assert isinstance(value, bytes), ("Header names/values must be"
-            " a string or bytes object (not {0})".format(value))
-        return str(value, "iso-8859-1")
+        raise AssertionError("Header names/values must be"
+            " of type str (got {0})".format(repr(value)))
 
     def __len__(self):
         """Return the total number of headers, including duplicates."""
@@ -86,10 +73,6 @@ class Headers:
         the values matching a header field name.
         """
         return self.get(name)
-
-
-
-
 
     def __contains__(self, name):
         """Return true if the message contains the header."""
@@ -127,9 +110,6 @@ class Headers:
         """
         return [k for k, v in self._headers]
 
-
-
-
     def values(self):
         """Return a list of all header values.
 
@@ -158,6 +138,9 @@ class Headers:
         suitable for direct HTTP transmission."""
         return '\r\n'.join(["%s: %s" % kv for kv in self._headers]+['',''])
 
+    def __bytes__(self):
+        return str(self).encode('iso-8859-1')
+
     def setdefault(self,name,value):
         """Return first matching header value for 'name', or 'value'
 
@@ -171,7 +154,6 @@ class Headers:
         else:
             return result
 
-
     def add_header(self, _name, _value, **_params):
         """Extended header setting.
 
@@ -184,7 +166,7 @@ class Headers:
 
         h.add_header('content-disposition', 'attachment', filename='bud.gif')
 
-        Note that unlike the corresponding 'email.Message' method, this does
+        Note that unlike the corresponding 'email.message' method, this does
         *not* handle '(charset, language, value)' tuples: all values must be
         strings or None.
         """
@@ -200,19 +182,3 @@ class Headers:
                 v = self._convert_string_type(v)
                 parts.append(_formatparam(k.replace('_', '-'), v))
         self._headers.append((self._convert_string_type(_name), "; ".join(parts)))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#
