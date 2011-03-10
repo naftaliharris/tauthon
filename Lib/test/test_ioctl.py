@@ -30,10 +30,10 @@ class IoctlTests(unittest.TestCase):
         # If this process has been put into the background, TIOCGPGRP returns
         # the session ID instead of the process group id.
         ids = (os.getpgrp(), os.getsid(0))
-        tty = open("/dev/tty", "r")
-        r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
-        rpgrp = struct.unpack("i", r)[0]
-        self.assertTrue(rpgrp in ids, "%s not in %s" % (rpgrp, ids))
+        with open("/dev/tty", "r") as tty:
+            r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
+            rpgrp = struct.unpack("i", r)[0]
+            self.assertIn(rpgrp, ids)
 
     def _check_ioctl_mutate_len(self, nbytes=None):
         buf = array.array('i')
@@ -51,7 +51,7 @@ class IoctlTests(unittest.TestCase):
             r = fcntl.ioctl(tty, termios.TIOCGPGRP, buf, 1)
         rpgrp = buf[0]
         self.assertEqual(r, 0)
-        self.assertTrue(rpgrp in ids, "%s not in %s" % (rpgrp, ids))
+        self.assertIn(rpgrp, ids)
 
     def test_ioctl_mutate(self):
         self._check_ioctl_mutate_len()

@@ -1,17 +1,20 @@
-
 :mod:`random` --- Generate pseudo-random numbers
 ================================================
 
 .. module:: random
    :synopsis: Generate pseudo-random numbers with various common distributions.
 
+**Source code:** :source:`Lib/random.py`
+
+--------------
 
 This module implements pseudo-random number generators for various
 distributions.
 
-For integers, uniform selection from a range. For sequences, uniform selection
-of a random element, a function to generate a random permutation of a list
-in-place, and a function for random sampling without replacement.
+For integers, there is uniform selection from a range. For sequences, there is
+uniform selection of a random element, a function to generate a random
+permutation of a list in-place, and a function for random sampling without
+replacement.
 
 On the real line, there are functions to compute uniform, normal (Gaussian),
 lognormal, negative exponential, gamma, and beta distributions. For generating
@@ -36,22 +39,30 @@ basic generator of your own devising: in that case, override the :meth:`random`,
 Optionally, a new generator can supply a :meth:`getrandbits` method --- this
 allows :meth:`randrange` to produce selections over an arbitrarily large range.
 
+The :mod:`random` module also provides the :class:`SystemRandom` class which
+uses the system function :func:`os.urandom` to generate random numbers
+from sources provided by the operating system.
+
 
 Bookkeeping functions:
 
+.. function:: seed([x], version=2)
 
-.. function:: seed([x])
+   Initialize the random number generator.
 
-   Initialize the basic random number generator. Optional argument *x* can be any
-   :term:`hashable` object. If *x* is omitted or ``None``, current system time is used;
-   current system time is also used to initialize the generator when the module is
-   first imported.  If randomness sources are provided by the operating system,
-   they are used instead of the system time (see the :func:`os.urandom` function
-   for details on availability).
+   If *x* is omitted or ``None``, the current system time is used.  If
+   randomness sources are provided by the operating system, they are used
+   instead of the system time (see the :func:`os.urandom` function for details
+   on availability).
 
-   If *x* is not ``None`` or an int, ``hash(x)`` is used instead. If *x* is an
-   int, *x* is used directly.
+   If *x* is an int, it is used directly.
 
+   With version 2 (the default), a :class:`str`, :class:`bytes`, or :class:`bytearray`
+   object gets converted to an :class:`int` and all of its bits are used.  With version 1,
+   the :func:`hash` of *x* is used instead.
+
+   .. versionchanged:: 3.2
+      Moved to the version 2 scheme which uses all of the bits in a string seed.
 
 .. function:: getstate()
 
@@ -82,6 +93,13 @@ Functions for integers:
    equivalent to ``choice(range(start, stop, step))``, but doesn't actually build a
    range object.
 
+   The positional argument pattern matches that of :func:`range`.  Keyword arguments
+   should not be used because the function may use them in unexpected ways.
+
+   .. versionchanged:: 3.2
+      :meth:`randrange` is more sophisticated about producing equally distributed
+      values.  Formerly it used a style like ``int(random()*n)`` which could produce
+      slightly uneven distributions.
 
 .. function:: randint(a, b)
 
@@ -213,39 +231,16 @@ be found in any statistics text.
    parameter.
 
 
-Alternative Generators:
+Alternative Generator:
 
 .. class:: SystemRandom([seed])
 
    Class that uses the :func:`os.urandom` function for generating random numbers
    from sources provided by the operating system. Not available on all systems.
-   Does not rely on software state and sequences are not reproducible. Accordingly,
+   Does not rely on software state, and sequences are not reproducible. Accordingly,
    the :meth:`seed` method has no effect and is ignored.
    The :meth:`getstate` and :meth:`setstate` methods raise
    :exc:`NotImplementedError` if called.
-
-
-Examples of basic usage::
-
-   >>> random.random()        # Random float x, 0.0 <= x < 1.0
-   0.37444887175646646
-   >>> random.uniform(1, 10)  # Random float x, 1.0 <= x < 10.0
-   1.1800146073117523
-   >>> random.randint(1, 10)  # Integer from 1 to 10, endpoints included
-   7
-   >>> random.randrange(0, 101, 2)  # Even integer from 0 to 100
-   26
-   >>> random.choice('abcdefghij')  # Choose a random element
-   'c'
-
-   >>> items = [1, 2, 3, 4, 5, 6, 7]
-   >>> random.shuffle(items)
-   >>> items
-   [7, 3, 2, 5, 6, 4, 1]
-
-   >>> random.sample([1, 2, 3, 4, 5],  3)  # Choose 3 elements
-   [4, 1, 5]
-
 
 
 .. seealso::
@@ -259,3 +254,70 @@ Examples of basic usage::
    <http://code.activestate.com/recipes/576707/>`_ for a compatible alternative
    random number generator with a long period and comparatively simple update
    operations.
+
+
+Notes on Reproducibility
+------------------------
+
+Sometimes it is useful to be able to reproduce the sequences given by a pseudo
+random number generator.  By re-using a seed value, the same sequence should be
+reproducible from run to run as long as multiple threads are not running.
+
+Most of the random module's algorithms and seeding functions are subject to
+change across Python versions, but two aspects are guaranteed not to change:
+
+* If a new seeding method is added, then a backward compatible seeder will be
+  offered.
+
+* The generator's :meth:`random` method will continue to produce the same
+  sequence when the compatible seeder is given the same seed.
+
+.. _random-examples:
+
+Examples and Recipes
+--------------------
+
+Basic usage::
+
+   >>> random.random()                      # Random float x, 0.0 <= x < 1.0
+   0.37444887175646646
+
+   >>> random.uniform(1, 10)                # Random float x, 1.0 <= x < 10.0
+   1.1800146073117523
+
+   >>> random.randrange(10)                 # Integer from 0 to 9
+   7
+
+   >>> random.randrange(0, 101, 2)          # Even integer from 0 to 100
+   26
+
+   >>> random.choice('abcdefghij')          # Single random element
+   'c'
+
+   >>> items = [1, 2, 3, 4, 5, 6, 7]
+   >>> random.shuffle(items)
+   >>> items
+   [7, 3, 2, 5, 6, 4, 1]
+
+   >>> random.sample([1, 2, 3, 4, 5],  3)   # Three samples without replacement
+   [4, 1, 5]
+
+A common task is to make a :func:`random.choice` with weighted probababilites.
+
+If the weights are small integer ratios, a simple technique is to build a sample
+population with repeats::
+
+    >>> weighted_choices = [('Red', 3), ('Blue', 2), ('Yellow', 1), ('Green', 4)]
+    >>> population = [val for val, cnt in weighted_choices for i in range(cnt)]
+    >>> random.choice(population)
+    'Green'
+
+A more general approach is to arrange the weights in a cumulative distribution
+with :func:`itertools.accumulate`, and then locate the random value with
+:func:`bisect.bisect`::
+
+    >>> choices, weights = zip(*weighted_choices)
+    >>> cumdist = list(itertools.accumulate(weights))
+    >>> x = random.random() * cumdist[-1]
+    >>> choices[bisect.bisect(cumdist, x)]
+    'Blue'
