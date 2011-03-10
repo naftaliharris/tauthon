@@ -20,17 +20,6 @@ The :mod:`dummy_threading` module is provided for situations where
    methods and functions in this module in the Python 2.x series are still
    supported by this module.
 
-.. impl-detail::
-
-   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
-   can execute Python code at once (even though certain performance-oriented
-   libraries might overcome this limitation).
-   If you want your application to make better of use of the computational
-   resources of multi-core machines, you are advised to use
-   :mod:`multiprocessing` or :class:`concurrent.futures.ProcessPoolExecutor`.
-   However, threading is still an appropriate model if you want to run
-   multiple I/O-bound tasks simultaneously.
-
 
 This module defines the following functions and objects:
 
@@ -241,7 +230,7 @@ changed through the :attr:`name` attribute.
 A thread can be flagged as a "daemon thread".  The significance of this flag is
 that the entire Python program exits when only daemon threads are left.  The
 initial value is inherited from the creating thread.  The flag can be set
-through the :attr:`daemon` property.
+through the :attr:`daemon` property or the *daemon* constructor argument.
 
 There is a "main thread" object; this corresponds to the initial thread of
 control in the Python program.  It is not a daemon thread.
@@ -254,7 +243,8 @@ daemonic, and cannot be :meth:`join`\ ed.  They are never deleted, since it is
 impossible to detect the termination of alien threads.
 
 
-.. class:: Thread(group=None, target=None, name=None, args=(), kwargs={})
+.. class:: Thread(group=None, target=None, name=None, args=(), kwargs={},
+                  verbose=None, *, daemon=None)
 
    This constructor should always be called with keyword arguments.  Arguments
    are:
@@ -273,9 +263,18 @@ impossible to detect the termination of alien threads.
    *kwargs* is a dictionary of keyword arguments for the target invocation.
    Defaults to ``{}``.
 
+   *verbose* is a flag used for debugging messages.
+
+   If not ``None``, *daemon* explicitly sets whether the thread is daemonic.
+   If ``None`` (the default), the daemonic property is inherited from the
+   current thread.
+
    If the subclass overrides the constructor, it must make sure to invoke the
    base class constructor (``Thread.__init__()``) before doing anything else to
    the thread.
+
+   .. versionchanged:: 3.3
+      Added the *daemon* argument.
 
    .. method:: start()
 
@@ -362,6 +361,18 @@ impossible to detect the termination of alien threads.
 
       Old getter/setter API for :attr:`~Thread.daemon`; use it directly as a
       property instead.
+
+
+.. impl-detail::
+
+   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
+   can execute Python code at once (even though certain performance-oriented
+   libraries might overcome this limitation).
+   If you want your application to make better of use of the computational
+   resources of multi-core machines, you are advised to use
+   :mod:`multiprocessing` or :class:`concurrent.futures.ProcessPoolExecutor`.
+   However, threading is still an appropriate model if you want to run
+   multiple I/O-bound tasks simultaneously.
 
 
 .. _lock-objects:
