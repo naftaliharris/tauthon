@@ -12,10 +12,6 @@ trans_36 = bytes((x ^ 0x36) for x in range(256))
 # hashing module used.  Use digest_size from the instance of HMAC instead.
 digest_size = None
 
-# A unique object passed by HMAC.copy() to the HMAC constructor, in order
-# that the latter return very quickly.  HMAC("") in contrast is quite
-# expensive.
-_secret_backdoor_key = []
 
 class HMAC:
     """RFC 2104 HMAC class.  Also complies with RFC 4231.
@@ -36,9 +32,6 @@ class HMAC:
         Note: key and msg must be bytes objects.
         """
 
-        if key is _secret_backdoor_key: # cheap
-            return
-
         if not isinstance(key, bytes):
             raise TypeError("expected bytes, but got %r" % type(key).__name__)
 
@@ -58,8 +51,6 @@ class HMAC:
         if hasattr(self.inner, 'block_size'):
             blocksize = self.inner.block_size
             if blocksize < 16:
-                # Very low blocksize, most likely a legacy value like
-                # Lib/sha.py and Lib/md5.py have.
                 _warnings.warn('block_size of %d seems too small; using our '
                                'default of %d.' % (blocksize, self.blocksize),
                                RuntimeWarning, 2)
@@ -79,9 +70,6 @@ class HMAC:
         if msg is not None:
             self.update(msg)
 
-##    def clear(self):
-##        raise NotImplementedError, "clear() method not available in HMAC."
-
     def update(self, msg):
         """Update this hashing object with the string msg.
         """
@@ -94,7 +82,8 @@ class HMAC:
 
         An update to this copy won't affect the original object.
         """
-        other = self.__class__(_secret_backdoor_key)
+        # Call __new__ directly to avoid the expensive __init__.
+        other = self.__class__.__new__(self.__class__)
         other.digest_cons = self.digest_cons
         other.digest_size = self.digest_size
         other.inner = self.inner.copy()

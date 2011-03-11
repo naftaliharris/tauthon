@@ -7,7 +7,7 @@
 	>
 	<Tool
 		Name="VCCLCompilerTool"
-		AdditionalIncludeDirectories="..\..\..\sqlite-3.5.9"
+		AdditionalIncludeDirectories="..\..\..\sqlite-3.6.21"
 		PreprocessorDefinitions="SQLITE_API=__declspec(dllexport)"
 		WarningLevel="1"
 	/>
