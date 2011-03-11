@@ -37,7 +37,7 @@ NOTE:
    running a Python core buildbot test slave; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python31_d.dll, python_d.exe, parser_d.pyd, and so on. Both
+their name:  python32_d.dll, python_d.exe, parser_d.pyd, and so on. Both
 the build and rt batch files accept a -d option for debug builds.
 
 The 32bit builds end up in the solution folder PCbuild while the x64 builds
@@ -104,7 +104,7 @@ winsound
 
 Python-controlled subprojects that wrap external projects:
 _sqlite3
-    Wraps SQLite 3.5.9, which is currently built by sqlite3.vcproj (see below).
+    Wraps SQLite 3.7.4, which is currently built by sqlite3.vcproj (see below).
 _tkinter
     Wraps the Tk windowing system.  Unlike _sqlite3, there's no
     corresponding tcltk.vcproj-type project that builds Tcl/Tk from vcproj's
@@ -139,7 +139,7 @@ _ssl
 
     Get the source code through
 
-    svn export http://svn.python.org/projects/external/openssl-0.9.8l
+    svn export http://svn.python.org/projects/external/openssl-1.0.0a
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
