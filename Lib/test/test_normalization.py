@@ -1,6 +1,7 @@
 from test.support import run_unittest, open_urlresource
 import unittest
 
+from http.client import HTTPException
 import sys
 import os
 from unicodedata import normalize, unidata_version
@@ -8,12 +9,9 @@ from unicodedata import normalize, unidata_version
 TESTDATAFILE = "NormalizationTest.txt"
 TESTDATAURL = "http://www.unicode.org/Public/" + unidata_version + "/ucd/" + TESTDATAFILE
 
-if os.path.exists(TESTDATAFILE):
-    f = open(TESTDATAFILE, encoding='utf-8')
-    l = f.readline()
-    f.close()
-    if not unidata_version in l:
-        os.unlink(TESTDATAFILE)
+def check_version(testfile):
+    hdr = testfile.readline()
+    return unidata_version in hdr
 
 class RangeError(Exception):
     pass
@@ -39,13 +37,16 @@ def unistr(data):
 
 class NormalizationTest(unittest.TestCase):
     def test_main(self):
+        part = None
         part1_data = {}
         # Hit the exception early
         try:
-            open_urlresource(TESTDATAURL, encoding="utf-8")
-        except IOError:
+            testdata = open_urlresource(TESTDATAURL, encoding="utf-8",
+                                        check=check_version)
+        except (IOError, HTTPException):
             self.skipTest("Could not retrieve " + TESTDATAURL)
-        for line in open_urlresource(TESTDATAURL, encoding="utf-8"):
+        self.addCleanup(testdata.close)
+        for line in testdata:
             if '#' in line:
                 line = line.split('#')[0]
             line = line.strip()
