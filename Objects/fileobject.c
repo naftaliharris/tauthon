@@ -16,19 +16,13 @@
 #include <windows.h>
 #endif
 
-#ifdef _MSC_VER
-/* Need GetVersion to see if on NT so safe to use _wfopen */
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif /* _MSC_VER */
-
 #if defined(PYOS_OS2) && defined(PYCC_GCC)
 #include <io.h>
 #endif
 
 #define BUF(v) PyString_AS_STRING((PyStringObject *)v)
 
-#ifndef DONT_HAVE_ERRNO_H
+#ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
 
@@ -188,6 +182,87 @@ fill_file_fields(PyFileObject *f, FILE *fp, PyObject *name, char *mode,
     return (PyObject *) f;
 }
 
+#if defined _MSC_VER && _MSC_VER >= 1400 && defined(__STDC_SECURE_LIB__)
+#define Py_VERIFY_WINNT
+/* The CRT on windows compiled with Visual Studio 2005 and higher may
+ * assert if given invalid mode strings.  This is all fine and well
+ * in static languages like C where the mode string is typcially hard
+ * coded.  But in Python, were we pass in the mode string from the user,
+ * we need to verify it first manually
+ */
+static int _PyVerify_Mode_WINNT(const char *mode)
+{
+    /* See if mode string is valid on Windows to avoid hard assertions */
+    /* remove leading spacese */
+    int singles = 0;
+    int pairs = 0;
+    int encoding = 0;
+    const char *s, *c;
+
+    while(*mode == ' ') /* strip initial spaces */
+        ++mode;
+    if (!strchr("rwa", *mode)) /* must start with one of these */
+        return 0;
+    while (*++mode) {
+        if (*mode == ' ' || *mode == 'N') /* ignore spaces and N */
+            continue;
+        s = "+TD"; /* each of this can appear only once */
+        c = strchr(s, *mode);
+        if (c) {
+            ptrdiff_t idx = s-c;
+            if (singles & (1<<idx))
+                return 0;
+            singles |= (1<<idx);
+            continue;
+        }
+        s = "btcnSR"; /* only one of each letter in the pairs allowed */
+        c = strchr(s, *mode);
+        if (c) {
+            ptrdiff_t idx = (s-c)/2;
+            if (pairs & (1<<idx))
+                return 0;
+            pairs |= (1<<idx);
+            continue;
+        }
+        if (*mode == ',') {
+            encoding = 1;
+            break;
+        }
+        return 0; /* found an invalid char */
+    }
+
+    if (encoding) {
+        char *e[] = {"UTF-8", "UTF-16LE", "UNICODE"};
+        while (*mode == ' ')
+            ++mode;
+        /* find 'ccs =' */
+        if (strncmp(mode, "ccs", 3))
+            return 0;
+        mode += 3;
+        while (*mode == ' ')
+            ++mode;
+        if (*mode != '=')
+            return 0;
+        while (*mode == ' ')
+            ++mode;
+        for(encoding = 0; encoding<_countof(e); ++encoding) {
+            size_t l = strlen(e[encoding]);
+            if (!strncmp(mode, e[encoding], l)) {
+                mode += l; /* found a valid encoding */
+                break;
+            }
+        }
+        if (encoding == _countof(e))
+            return 0;
+    }
+    /* skip trailing spaces */
+    while (*mode == ' ')
+        ++mode;
+
+    return *mode == '\0'; /* must be at the end of the string */
+}
+#endif
+
 /* check for known incorrect mode strings - problem is, platforms are
    free to accept any mode characters they like and are supposed to
    ignore stuff they don't understand... write or append mode with
@@ -230,7 +305,13 @@ _PyFile_SanitizeMode(char *mode)
                     "one of 'r', 'w', 'a' or 'U', not '%.200s'", mode);
         return -1;
     }
-
+#ifdef Py_VERIFY_WINNT
+    /* additional checks on NT with visual studio 2005 and higher */
+    if (!_PyVerify_Mode_WINNT(mode)) {
+        PyErr_Format(PyExc_ValueError, "Invalid mode ('%.50s')", mode);
+        return -1;
+    }
+#endif
     return 0;
 }
 
@@ -342,6 +423,7 @@ close_the_file(PyFileObject *f)
     int sts = 0;
     int (*local_close)(FILE *);
     FILE *local_fp = f->f_fp;
+    char *local_setbuf = f->f_setbuf;
     if (local_fp != NULL) {
         local_close = f->f_close;
         if (local_close != NULL && f->unlocked_count > 0) {
@@ -365,10 +447,15 @@ close_the_file(PyFileObject *f)
          * called. */
         f->f_fp = NULL;
         if (local_close != NULL) {
+            /* Issue #9295: must temporarily reset f_setbuf so that another
+               thread doesn't free it when running file_close() concurrently.
+               Otherwise this close() will crash when flushing the buffer. */
+            f->f_setbuf = NULL;
             Py_BEGIN_ALLOW_THREADS
             errno = 0;
             sts = (*local_close)(local_fp);
             Py_END_ALLOW_THREADS
+            f->f_setbuf = local_setbuf;
             if (sts == EOF)
                 return PyErr_SetFromErrno(PyExc_IOError);
             if (sts != 0)
@@ -1023,8 +1110,8 @@ file_read(PyFileObject *f, PyObject *args)
             break;
         }
     }
-    if (bytesread != buffersize)
-        _PyString_Resize(&v, bytesread);
+    if (bytesread != buffersize && _PyString_Resize(&v, bytesread))
+        return NULL;
     return v;
 }
 
@@ -1277,8 +1364,8 @@ getline_via_fgets(PyFileObject *f, FILE *fp)
         /* overwrite the trailing null byte */
         pvfree = BUF(v) + (prev_v_size - 1);
     }
-    if (BUF(v) + total_v_size != p)
-        _PyString_Resize(&v, p - BUF(v));
+    if (BUF(v) + total_v_size != p && _PyString_Resize(&v, p - BUF(v)))
+        return NULL;
     return v;
 #undef INITBUFSIZE
 #undef MAXBUFSIZE
@@ -1390,8 +1477,8 @@ get_line(PyFileObject *f, int n)
     }
 
     used_v_size = buf - BUF(v);
-    if (used_v_size != total_v_size)
-        _PyString_Resize(&v, used_v_size);
+    if (used_v_size != total_v_size && _PyString_Resize(&v, used_v_size))
+        return NULL;
     return v;
 }
 
@@ -1457,8 +1544,10 @@ PyFile_GetLine(PyObject *f, int n)
                             "EOF when reading a line");
         }
         else if (s[len-1] == '\n') {
-            if (result->ob_refcnt == 1)
-                _PyString_Resize(&result, len-1);
+            if (result->ob_refcnt == 1) {
+                if (_PyString_Resize(&result, len-1))
+                    return NULL;
+            }
             else {
                 PyObject *v;
                 v = PyString_FromStringAndSize(s, len-1);
@@ -1652,8 +1741,10 @@ static PyObject *
 file_write(PyFileObject *f, PyObject *args)
 {
     Py_buffer pbuf;
-    char *s;
+    const char *s;
     Py_ssize_t n, n2;
+    PyObject *encoded = NULL;
+
     if (f->f_fp == NULL)
         return err_closed();
     if (!f->writable)
@@ -1663,14 +1754,41 @@ file_write(PyFileObject *f, PyObject *args)
             return NULL;
         s = pbuf.buf;
         n = pbuf.len;
-    } else
-        if (!PyArg_ParseTuple(args, "t#", &s, &n))
-        return NULL;
+    }
+    else {
+        const char *encoding, *errors;
+        PyObject *text;
+        if (!PyArg_ParseTuple(args, "O", &text))
+            return NULL;
+
+        if (PyString_Check(text)) {
+            s = PyString_AS_STRING(text);
+            n = PyString_GET_SIZE(text);
+        } else if (PyUnicode_Check(text)) {
+            if (f->f_encoding != Py_None)
+                encoding = PyString_AS_STRING(f->f_encoding);
+            else
+                encoding = PyUnicode_GetDefaultEncoding();
+            if (f->f_errors != Py_None)
+                errors = PyString_AS_STRING(f->f_errors);
+            else
+                errors = "strict";
+            encoded = PyUnicode_AsEncodedString(text, encoding, errors);
+            if (encoded == NULL)
+                return NULL;
+            s = PyString_AS_STRING(encoded);
+            n = PyString_GET_SIZE(encoded);
+        } else {
+            if (PyObject_AsCharBuffer(text, &s, &n))
+                return NULL;
+        }
+    }
     f->f_softspace = 0;
     FILE_BEGIN_ALLOW_THREADS(f)
     errno = 0;
     n2 = fwrite(s, 1, n, f->f_fp);
     FILE_END_ALLOW_THREADS(f)
+    Py_XDECREF(encoded);
     if (f->f_binary)
         PyBuffer_Release(&pbuf);
     if (n2 != n) {
@@ -1736,6 +1854,11 @@ file_writelines(PyFileObject *f, PyObject *seq)
                     break;
                 }
                 PyList_SetItem(list, j, line);
+            }
+            /* The iterator might have closed the file on us. */
+            if (f->f_fp == NULL) {
+                err_closed();
+                goto error;
             }
         }
         if (j == 0)
@@ -2191,6 +2314,9 @@ file_init(PyObject *self, PyObject *args, PyObject *kwds)
     char *mode = "r";
     int bufsize = -1;
     int wideargument = 0;
+#ifdef MS_WINDOWS
+    PyObject *po;
+#endif
 
     assert(PyFile_Check(self));
     if (foself->f_fp != NULL) {
@@ -2201,20 +2327,17 @@ file_init(PyObject *self, PyObject *args, PyObject *kwds)
         Py_DECREF(closeresult);
     }
 
-#ifdef Py_WIN_WIDE_FILENAMES
-    if (GetVersion() < 0x80000000) {    /* On NT, so wide API available */
-        PyObject *po;
-        if (PyArg_ParseTupleAndKeywords(args, kwds, "U|si:file",
-                                        kwlist, &po, &mode, &bufsize)) {
-            wideargument = 1;
-            if (fill_file_fields(foself, NULL, po, mode,
-                                 fclose) == NULL)
-                goto Error;
-        } else {
-            /* Drop the argument parsing error as narrow
-               strings are also valid. */
-            PyErr_Clear();
-        }
+#ifdef MS_WINDOWS
+    if (PyArg_ParseTupleAndKeywords(args, kwds, "U|si:file",
+                                    kwlist, &po, &mode, &bufsize)) {
+        wideargument = 1;
+        if (fill_file_fields(foself, NULL, po, mode,
+                             fclose) == NULL)
+            goto Error;
+    } else {
+        /* Drop the argument parsing error as narrow
+           strings are also valid. */
+        PyErr_Clear();
     }
 #endif
 

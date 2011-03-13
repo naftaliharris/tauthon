@@ -760,7 +760,7 @@ Encodings and Unicode
 
 Unicode strings are stored internally as sequences of codepoints (to be precise
 as :ctype:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
-via :option:`--enable-unicode=ucs2` or :option:`--enable-unicode=ucs4`, with the
+via ``--enable-unicode=ucs2`` or ``--enable-unicode=ucs4``, with the
 former being the default) :ctype:`Py_UNICODE` is either a 16-bit or 32-bit data
 type. Once a Unicode object is used outside of CPU and memory, CPU endianness
 and how these arrays are stored as bytes become an issue.  Transforming a
@@ -908,6 +908,8 @@ particular, the following variants typically exist:
 | cp500           | EBCDIC-CP-BE, EBCDIC-CP-CH,    | Western Europe                 |
 |                 | IBM500                         |                                |
 +-----------------+--------------------------------+--------------------------------+
+| cp720           |                                | Arabic                         |
++-----------------+--------------------------------+--------------------------------+
 | cp737           |                                | Greek                          |
 +-----------------+--------------------------------+--------------------------------+
 | cp775           | IBM775                         | Baltic languages               |
@@ -922,6 +924,8 @@ particular, the following variants typically exist:
 | cp856           |                                | Hebrew                         |
 +-----------------+--------------------------------+--------------------------------+
 | cp857           | 857, IBM857                    | Turkish                        |
++-----------------+--------------------------------+--------------------------------+
+| cp858           | 858, IBM858                    | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | cp860           | 860, IBM860                    | Portuguese                     |
 +-----------------+--------------------------------+--------------------------------+

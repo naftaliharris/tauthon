@@ -335,10 +335,10 @@ def __forwardmethods(fromClass, toClass, toPart, exclude = ()):
         if ex[:1] == '_' or ex[-1:] == '_':
             del _dict[ex]
     for ex in exclude:
-        if _dict.has_key(ex):
+        if ex in _dict:
             del _dict[ex]
     for ex in __methods(fromClass):
-        if _dict.has_key(ex):
+        if ex in _dict:
             del _dict[ex]
 
     for method, func in _dict.items():
@@ -1495,7 +1495,10 @@ class TNavigator(object):
         >>> turtle.left(90)
         >>> turtle.heading()
         90
-        >>> turtle.degrees(400.0)  # angle measurement in gon
+
+        Change angle measurement unit to grad (also known as gon,
+        grade, or gradian and equals 1/100-th of the right angle.)
+        >>> turtle.degrees(400.0)
         >>> turtle.heading()
         100
 

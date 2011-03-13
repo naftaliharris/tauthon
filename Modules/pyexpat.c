@@ -261,52 +261,11 @@ flag_error(xmlparseobject *self)
 static PyCodeObject*
 getcode(enum HandlerTypes slot, char* func_name, int lineno)
 {
-    PyObject *code = NULL;
-    PyObject *name = NULL;
-    PyObject *nulltuple = NULL;
-    PyObject *filename = NULL;
-
     if (handler_info[slot].tb_code == NULL) {
-        code = PyString_FromString("");
-        if (code == NULL)
-            goto failed;
-        name = PyString_FromString(func_name);
-        if (name == NULL)
-            goto failed;
-        nulltuple = PyTuple_New(0);
-        if (nulltuple == NULL)
-            goto failed;
-        filename = PyString_FromString(__FILE__);
         handler_info[slot].tb_code =
-            PyCode_New(0,               /* argcount */
-                       0,               /* nlocals */
-                       0,               /* stacksize */
-                       0,               /* flags */
-                       code,            /* code */
-                       nulltuple,       /* consts */
-                       nulltuple,       /* names */
-                       nulltuple,       /* varnames */
-#if PYTHON_API_VERSION >= 1010
-                       nulltuple,       /* freevars */
-                       nulltuple,       /* cellvars */
-#endif
-                       filename,        /* filename */
-                       name,            /* name */
-                       lineno,          /* firstlineno */
-                       code             /* lnotab */
-                       );
-        if (handler_info[slot].tb_code == NULL)
-            goto failed;
-        Py_DECREF(code);
-        Py_DECREF(nulltuple);
-        Py_DECREF(filename);
-        Py_DECREF(name);
+            PyCode_NewEmpty(__FILE__, func_name, lineno);
     }
     return handler_info[slot].tb_code;
- failed:
-    Py_XDECREF(code);
-    Py_XDECREF(name);
-    return NULL;
 }
 
 #ifdef FIX_TRACE
@@ -455,6 +414,9 @@ call_character_handler(xmlparseobject *self, const XML_Char *buffer, int len)
 {
     PyObject *args;
     PyObject *temp;
+
+    if (!have_handler(self, CharacterData))
+        return -1;
 
     args = PyTuple_New(1);
     if (args == NULL)
@@ -1034,7 +996,7 @@ xmlparse_ParseFile(xmlparseobject *self, PyObject *f)
         else {
             bytes_read = readinst(buf, BUF_SIZE, readmethod);
             if (bytes_read < 0) {
-                Py_DECREF(readmethod);
+                Py_XDECREF(readmethod);
                 return NULL;
             }
         }
@@ -2094,8 +2056,8 @@ MODULE_INITFUNC(void)
     capi.SetUnknownEncodingHandler = XML_SetUnknownEncodingHandler;
     capi.SetUserData = XML_SetUserData;
 
-    /* export as cobject */
-    capi_object = PyCObject_FromVoidPtr(&capi, NULL);
+    /* export using capsule */
+    capi_object = PyCapsule_New(&capi, PyExpat_CAPSULE_NAME, NULL);
     if (capi_object)
         PyModule_AddObject(m, "expat_CAPI", capi_object);
 }
