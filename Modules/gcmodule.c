@@ -1295,16 +1295,15 @@ static PyMethodDef GcMethods[] = {
 
 static struct PyModuleDef gcmodule = {
     PyModuleDef_HEAD_INIT,
-    "gc",
-    gc__doc__,
-    -1,
-    GcMethods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
+    "gc",              /* m_name */
+    gc__doc__,         /* m_doc */
+    -1,                /* m_size */
+    GcMethods,         /* m_methods */
+    NULL,              /* m_reload */
+    NULL,              /* m_traverse */
+    NULL,              /* m_clear */
+    NULL               /* m_free */
 };
-
 
 PyMODINIT_FUNC
 PyInit_gc(void)
@@ -1362,6 +1361,38 @@ PyGC_Collect(void)
     }
 
     return n;
+}
+
+void
+_PyGC_Fini(void)
+{
+    if (!(debug & DEBUG_SAVEALL)
+        && garbage != NULL && PyList_GET_SIZE(garbage) > 0) {
+        char *message;
+        if (debug & DEBUG_UNCOLLECTABLE)
+            message = "gc: %zd uncollectable objects at " \
+                "shutdown";
+        else
+            message = "gc: %zd uncollectable objects at " \
+                "shutdown; use gc.set_debug(gc.DEBUG_UNCOLLECTABLE) to list them";
+        if (PyErr_WarnFormat(PyExc_ResourceWarning, 0, message,
+                             PyList_GET_SIZE(garbage)) < 0)
+            PyErr_WriteUnraisable(NULL);
+        if (debug & DEBUG_UNCOLLECTABLE) {
+            PyObject *repr = NULL, *bytes = NULL;
+            repr = PyObject_Repr(garbage);
+            if (!repr || !(bytes = PyUnicode_EncodeFSDefault(repr)))
+                PyErr_WriteUnraisable(garbage);
+            else {
+                PySys_WriteStderr(
+                    "    %s\n",
+                    PyBytes_AS_STRING(bytes)
+                    );
+            }
+            Py_XDECREF(repr);
+            Py_XDECREF(bytes);
+        }
+    }
 }
 
 /* for debugging */
@@ -1479,12 +1510,4 @@ PyObject_GC_Del(void *op)
         generations[0].count--;
     }
     PyObject_FREE(g);
-}
-
-/* for binary compatibility with 2.2 */
-#undef _PyObject_GC_Del
-void
-_PyObject_GC_Del(PyObject *op)
-{
-    PyObject_GC_Del(op);
 }
