@@ -1060,6 +1060,11 @@ class POSIXProcessTestCase(BaseTestCase):
         exitcode = subprocess.call([abs_program, "-c", "pass"])
         self.assertEqual(exitcode, 0)
 
+        # absolute bytes path as a string
+        cmd = b"'" + abs_program + b"' -c pass"
+        exitcode = subprocess.call(cmd, shell=True)
+        self.assertEqual(exitcode, 0)
+
         # bytes program, unicode PATH
         env = os.environ.copy()
         env["PATH"] = path
@@ -1192,7 +1197,7 @@ class POSIXProcessTestCase(BaseTestCase):
         stdout, stderr = p.communicate()
         self.assertEqual(0, p.returncode, "sigchild_ignore.py exited"
                          " non-zero with this error:\n%s" %
-                         stderr.decode('utf8'))
+                         stderr.decode('utf-8'))
 
 
 @unittest.skipUnless(mswindows, "Windows specific tests")
