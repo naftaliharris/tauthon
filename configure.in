@@ -3,15 +3,8 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.2)
+m4_define(PYTHON_VERSION, 3.3)
 
-dnl Some m4 magic to ensure that the configure script is generated
-dnl by the correct autoconf version.
-m4_define([version_required],
-[m4_if(m4_version_compare(m4_defn([m4_PACKAGE_VERSION]), [$1]), 0,
-       [],
-       [m4_fatal([Autoconf version $1 is required for Python], 63)])
-])
 AC_PREREQ(2.65)
 
 AC_REVISION($Revision$)
@@ -808,15 +801,6 @@ then
         ARFLAGS="rc"
 fi
 
-AC_SUBST(SVNVERSION)
-AC_CHECK_PROG(SVNVERSION, svnversion, found, not-found)
-if test $SVNVERSION = found
-then
-	SVNVERSION="svnversion \$(srcdir)"
-else
-	SVNVERSION="echo Unversioned directory"
-fi
-
 AC_SUBST(HGVERSION)
 AC_SUBST(HGTAG)
 AC_SUBST(HGBRANCH)
@@ -1305,10 +1289,10 @@ shadow.h signal.h stdint.h stropts.h termios.h thread.h \
 unistd.h utime.h \
 sys/audioio.h sys/bsdtty.h sys/epoll.h sys/event.h sys/file.h sys/loadavg.h \
 sys/lock.h sys/mkdev.h sys/modem.h \
-sys/param.h sys/poll.h sys/select.h sys/socket.h sys/statvfs.h sys/stat.h \
-sys/termio.h sys/time.h \
-sys/times.h sys/types.h sys/un.h sys/utsname.h sys/wait.h pty.h libutil.h \
-sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
+sys/param.h sys/poll.h sys/select.h sys/sendfile.h sys/socket.h sys/statvfs.h \
+sys/stat.h sys/termio.h sys/time.h \
+sys/times.h sys/types.h sys/uio.h sys/un.h sys/utsname.h sys/wait.h pty.h \
+libutil.h sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
 bluetooth/bluetooth.h linux/tipc.h spawn.h util.h)
 AC_HEADER_DIRENT
 AC_HEADER_MAJOR
@@ -1913,6 +1897,7 @@ AC_MSG_RESULT($SHLIBS)
 
 
 # checks for libraries
+AC_CHECK_LIB(sendfile, sendfile)
 AC_CHECK_LIB(dl, dlopen)	# Dynamic linking for SunOS/Solaris and SYSV
 AC_CHECK_LIB(dld, shl_load)	# Dynamic linking for HP-UX
 
@@ -2555,18 +2540,19 @@ AC_MSG_RESULT(MACHDEP_OBJS)
 
 # checks for library functions
 AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
- clock confstr ctermid execv fchmod fchown fork fpathconf ftime ftruncate \
+ clock confstr ctermid execv faccessat fchmod fchmodat fchown fchownat \
+ fdopendir fork fpathconf fstatat ftime ftruncate futimesat \
  gai_strerror getgroups getlogin getloadavg getpeername getpgid getpid \
  getpriority getresuid getresgid getpwent getspnam getspent getsid getwd \
- initgroups kill killpg lchmod lchown lstat mbrtowc mkfifo mknod mktime \
- mremap nice pathconf pause plock poll pthread_init \
- putenv readlink realpath \
- select sem_open sem_timedwait sem_getvalue sem_unlink setegid seteuid \
- setgid \
- setlocale setregid setreuid setresuid setresgid setsid setpgid setpgrp setuid setvbuf \
- sigaction siginterrupt sigrelse snprintf strftime strlcpy \
+ initgroups kill killpg lchmod lchown linkat lstat mbrtowc mkdirat mkfifo \
+ mkfifoat mknod mknodat mktime mremap nice openat pathconf pause plock poll \
+ pthread_init putenv readlink readlinkat realpath renameat \
+ select sem_open sem_timedwait sem_getvalue sem_unlink sendfile setegid seteuid \
+ setgid sethostname \
+ setlocale setregid setreuid setresuid setresgid setsid setpgid setpgrp setpriority setuid setvbuf \
+ sigaction siginterrupt sigrelse snprintf strftime strlcpy symlinkat \
  sysconf tcgetpgrp tcsetpgrp tempnam timegm times tmpfile tmpnam tmpnam_r \
- truncate uname unsetenv utimes waitpid wait3 wait4 \
+ truncate uname unlinkat unsetenv utimensat utimes waitpid wait3 wait4 \
  wcscoll wcsftime wcsxfrm _getpty)
 
 # For some functions, having a definition is not sufficient, since
