@@ -15,7 +15,7 @@ import shutil
 import warnings
 import unittest
 import importlib
-import collections
+import collections.abc
 import re
 import subprocess
 import imp
@@ -33,7 +33,7 @@ __all__ = [
     "verbose", "use_resources", "max_memuse", "record_original_stdout",
     "get_original_stdout", "unload", "unlink", "rmtree", "forget",
     "is_resource_enabled", "requires", "find_unused_port", "bind_port",
-    "fcmp", "is_jython", "TESTFN", "HOST", "FUZZ", "SAVEDCWD", "temp_cwd",
+    "is_jython", "TESTFN", "HOST", "SAVEDCWD", "temp_cwd",
     "findfile", "sortdict", "check_syntax_error", "open_urlresource",
     "check_warnings", "CleanImport", "EnvironmentVarGuard",
     "TransientResource", "captured_output", "captured_stdout",
@@ -381,24 +381,6 @@ def bind_port(sock, host=HOST):
     port = sock.getsockname()[1]
     return port
 
-FUZZ = 1e-6
-
-def fcmp(x, y): # fuzzy comparison function
-    if isinstance(x, float) or isinstance(y, float):
-        try:
-            fuzz = (abs(x) + abs(y)) * FUZZ
-            if abs(x-y) <= fuzz:
-                return 0
-        except:
-            pass
-    elif type(x) == type(y) and isinstance(x, (tuple, list)):
-        for i in range(min(len(x), len(y))):
-            outcome = fcmp(x[i], y[i])
-            if outcome != 0:
-                return outcome
-        return (len(x) > len(y)) - (len(x) < len(y))
-    return (x > y) - (x < y)
-
 # decorator for skipping tests on non-IEEE 754 platforms
 requires_IEEE_754 = unittest.skipUnless(
     float.__getformat__("double").startswith("IEEE"),
@@ -714,7 +696,7 @@ class CleanImport(object):
         sys.modules.update(self.original_modules)
 
 
-class EnvironmentVarGuard(collections.MutableMapping):
+class EnvironmentVarGuard(collections.abc.MutableMapping):
 
     """Class to help protect the environment variable properly.  Can be used as
     a context manager."""
@@ -1141,6 +1123,32 @@ def check_impl_detail(**guards):
     guards, default = _parse_guards(guards)
     return guards.get(platform.python_implementation().lower(), default)
 
+
+def no_tracing(func):
+    """Decorator to temporarily turn off tracing for the duration of a test."""
+    if not hasattr(sys, 'gettrace'):
+        return func
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            original_trace = sys.gettrace()
+            try:
+                sys.settrace(None)
+                return func(*args, **kwargs)
+            finally:
+                sys.settrace(original_trace)
+        return wrapper
+
+
+def refcount_test(test):
+    """Decorator for tests which involve reference counting.
+
+    To start, the decorator does not run the test if is not run by CPython.
+    After that, any trace function is unset during the test to prevent
+    unexpected refcounts caused by the trace function.
+
+    """
+    return no_tracing(cpython_only(test))
 
 
 def _run_suite(suite):
