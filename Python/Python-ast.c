@@ -2,7 +2,7 @@
 
 
 /*
-   __version__ 67616.
+   __version__ 82163.
 
    This module must be committed separately after each AST grammar change;
    The __version__ number is set to the revision number of the commit
@@ -527,7 +527,7 @@ static PyTypeObject* make_type(char *type, PyTypeObject* base, char**fields, int
         }
         PyTuple_SET_ITEM(fnames, i, field);
     }
-    result = PyObject_CallFunction((PyObject*)&PyType_Type, "U(O){sOss}",
+    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){sOss}",
                     type, base, "_fields", fnames, "__module__", "_ast");
     Py_DECREF(fnames);
     return (PyTypeObject*)result;
@@ -537,8 +537,9 @@ static int add_attributes(PyTypeObject* type, char**attrs, int num_fields)
 {
     int i, result;
     PyObject *s, *l = PyTuple_New(num_fields);
-    if (!l) return 0;
-    for(i = 0; i < num_fields; i++) {
+    if (!l)
+        return 0;
+    for (i = 0; i < num_fields; i++) {
         s = PyUnicode_FromString(attrs[i]);
         if (!s) {
             Py_DECREF(l);
@@ -1332,11 +1333,6 @@ ImportFrom(identifier module, asdl_seq * names, int level, int lineno, int
            col_offset, PyArena *arena)
 {
         stmt_ty p;
-        if (!module) {
-                PyErr_SetString(PyExc_ValueError,
-                                "field module is required for ImportFrom");
-                return NULL;
-        }
         p = (stmt_ty)PyArena_Malloc(arena, sizeof(*p));
         if (!p)
                 return NULL;
@@ -3520,6 +3516,7 @@ obj2ast_mod(PyObject* obj, mod_ty* out, PyArena* arena)
 
         PyErr_Format(PyExc_TypeError, "expected some sort of mod, but got %R", obj);
         failed:
+        Py_XDECREF(tmp);
         return 1;
 }
 
@@ -4544,8 +4541,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
                         Py_XDECREF(tmp);
                         tmp = NULL;
                 } else {
-                        PyErr_SetString(PyExc_TypeError, "required field \"module\" missing from ImportFrom");
-                        return 1;
+                        module = NULL;
                 }
                 if (PyObject_HasAttrString(obj, "names")) {
                         int res;
@@ -4716,6 +4712,7 @@ obj2ast_stmt(PyObject* obj, stmt_ty* out, PyArena* arena)
 
         PyErr_Format(PyExc_TypeError, "expected some sort of stmt, but got %R", obj);
         failed:
+        Py_XDECREF(tmp);
         return 1;
 }
 
@@ -5831,6 +5828,7 @@ obj2ast_expr(PyObject* obj, expr_ty* out, PyArena* arena)
 
         PyErr_Format(PyExc_TypeError, "expected some sort of expr, but got %R", obj);
         failed:
+        Py_XDECREF(tmp);
         return 1;
 }
 
@@ -6011,6 +6009,7 @@ obj2ast_slice(PyObject* obj, slice_ty* out, PyArena* arena)
 
         PyErr_Format(PyExc_TypeError, "expected some sort of slice, but got %R", obj);
         failed:
+        Py_XDECREF(tmp);
         return 1;
 }
 
@@ -6443,6 +6442,7 @@ obj2ast_excepthandler(PyObject* obj, excepthandler_ty* out, PyArena* arena)
 
         PyErr_Format(PyExc_TypeError, "expected some sort of excepthandler, but got %R", obj);
         failed:
+        Py_XDECREF(tmp);
         return 1;
 }
 
@@ -6739,7 +6739,7 @@ PyInit__ast(void)
             NULL;
         if (PyModule_AddIntConstant(m, "PyCF_ONLY_AST", PyCF_ONLY_AST) < 0)
                 return NULL;
-        if (PyModule_AddStringConstant(m, "__version__", "67616") < 0)
+        if (PyModule_AddStringConstant(m, "__version__", "82163") < 0)
                 return NULL;
         if (PyDict_SetItemString(d, "mod", (PyObject*)mod_type) < 0) return
             NULL;

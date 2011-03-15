@@ -1,12 +1,14 @@
+import os
+import time
 import unittest
 from test import support
 
-import time
 
 class StructSeqTest(unittest.TestCase):
 
     def test_tuple(self):
         t = time.gmtime()
+        self.assertIsInstance(t, tuple)
         astuple = tuple(t)
         self.assertEqual(len(t), len(astuple))
         self.assertEqual(t, astuple)
@@ -33,6 +35,13 @@ class StructSeqTest(unittest.TestCase):
         self.assertEqual(repr(t),
             "time.struct_time(tm_year=1970, tm_mon=1, tm_mday=1, tm_hour=0, "
             "tm_min=0, tm_sec=0, tm_wday=3, tm_yday=1, tm_isdst=0)")
+        # os.stat() gives a complicated struct sequence.
+        st = os.stat(__file__)
+        rep = repr(st)
+        self.assertTrue(rep.startswith(os.name + ".stat_result"))
+        self.assertIn("st_mode=", rep)
+        self.assertIn("st_ino=", rep)
+        self.assertIn("st_dev=", rep)
 
     def test_concat(self):
         t1 = time.gmtime()
@@ -50,8 +59,8 @@ class StructSeqTest(unittest.TestCase):
     def test_contains(self):
         t1 = time.gmtime()
         for item in t1:
-            self.assertTrue(item in t1)
-        self.assertTrue(-42 not in t1)
+            self.assertIn(item, t1)
+        self.assertNotIn(-42, t1)
 
     def test_hash(self):
         t1 = time.gmtime()
