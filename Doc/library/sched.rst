@@ -7,9 +7,12 @@
 
 .. index:: single: event scheduling
 
+**Source code:** :source:`Lib/sched.py`
+
+--------------
+
 The :mod:`sched` module defines a class which implements a general purpose event
 scheduler:
-
 
 .. class:: scheduler(timefunc, delayfunc)
 

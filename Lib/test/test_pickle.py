@@ -31,10 +31,22 @@ class PyPicklerTests(AbstractPickleTests):
         f.seek(0)
         return bytes(f.read())
 
-    def loads(self, buf):
+    def loads(self, buf, **kwds):
         f = io.BytesIO(buf)
-        u = self.unpickler(f)
+        u = self.unpickler(f, **kwds)
         return u.load()
+
+
+class InMemoryPickleTests(AbstractPickleTests):
+
+    pickler = pickle._Pickler
+    unpickler = pickle._Unpickler
+
+    def dumps(self, arg, proto=None):
+        return pickle.dumps(arg, proto)
+
+    def loads(self, buf, **kwds):
+        return pickle.loads(buf, **kwds)
 
 
 class PyPersPicklerTests(AbstractPersistentPicklerTests):
@@ -52,12 +64,12 @@ class PyPersPicklerTests(AbstractPersistentPicklerTests):
         f.seek(0)
         return f.read()
 
-    def loads(self, buf):
+    def loads(self, buf, **kwds):
         class PersUnpickler(self.unpickler):
             def persistent_load(subself, obj):
                 return self.persistent_load(obj)
         f = io.BytesIO(buf)
-        u = PersUnpickler(f)
+        u = PersUnpickler(f, **kwds)
         return u.load()
 
 
@@ -95,7 +107,8 @@ def test_main():
         tests.extend([CPicklerTests, CPersPicklerTests,
                       CDumpPickle_LoadPickle, DumpPickle_CLoadPickle,
                       PyPicklerUnpicklerObjectTests,
-                      CPicklerUnpicklerObjectTests])
+                      CPicklerUnpicklerObjectTests,
+                      InMemoryPickleTests])
     support.run_unittest(*tests)
     support.run_doctest(pickle)
 
