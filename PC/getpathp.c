@@ -51,6 +51,9 @@
     exe, some very strange installation setup) you get a path with
     some default, but relative, paths.
 
+  * An embedding application can use Py_SetPath() to override all of
+    these authomatic path computations.
+
    ---------------------------------------------------------------- */
 
 
@@ -79,6 +82,9 @@
  * The approach is an adaptation for Windows of the strategy used in
  * ../Modules/getpath.c; it uses the Windows Registry as one of its
  * information sources.
+ *
+ * Py_SetPath() can be used to override this mechanism.  Call Py_SetPath
+ * with a semicolon separated path prior to calling Py_Initialize.
  */
 
 #ifndef LANDMARK
@@ -654,6 +660,24 @@ calculate_path(void)
 
 /* External interface */
 
+void
+Py_SetPath(const wchar_t *path)
+{
+    if (module_search_path != NULL) {
+        free(module_search_path);
+        module_search_path = NULL;
+    }
+    if (path != NULL) {
+        extern wchar_t *Py_GetProgramName(void);
+        wchar_t *prog = Py_GetProgramName();
+        wcsncpy(progpath, prog, MAXPATHLEN);
+        prefix[0] = L'\0';
+        module_search_path = malloc((wcslen(path) + 1) * sizeof(wchar_t));
+        if (module_search_path != NULL)
+            wcscpy(module_search_path, path);
+	}
+}
+
 wchar_t *
 Py_GetPath(void)
 {
@@ -682,4 +706,39 @@ Py_GetProgramFullPath(void)
     if (!module_search_path)
         calculate_path();
     return progpath;
+}
+
+/* Load python3.dll before loading any extension module that might refer 
+   to it. That way, we can be sure that always the python3.dll corresponding 
+   to this python DLL is loaded, not a python3.dll that might be on the path
+   by chance.
+   Return whether the DLL was found.
+*/
+static int python3_checked = 0;
+static HANDLE hPython3;
+int
+_Py_CheckPython3()
+{
+    wchar_t py3path[MAXPATHLEN+1];
+    wchar_t *s;
+    if (python3_checked)
+        return hPython3 != NULL;
+    python3_checked = 1;
+
+    /* If there is a python3.dll next to the python3y.dll,
+       assume this is a build tree; use that DLL */
+    wcscpy(py3path, dllpath);
+    s = wcsrchr(py3path, L'\\');
+    if (!s)
+        s = py3path;
+    wcscpy(s, L"\\python3.dll");
+    hPython3 = LoadLibraryExW(py3path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (hPython3 != NULL)
+        return 1;
+
+    /* Check sys.prefix\DLLs\python3.dll */
+    wcscpy(py3path, Py_GetPrefix());
+    wcscat(py3path, L"\\DLLs\\python3.dll");
+    hPython3 = LoadLibraryExW(py3path, NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    return hPython3 != NULL;
 }

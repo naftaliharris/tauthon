@@ -104,7 +104,8 @@ Here is the :class:`Header` class description:
       Optional *errors* is passed as the errors argument to the decode call
       if *s* is a byte string.
 
-   .. method:: encode(splitchars=';, \\t', maxlinelen=None)
+
+   .. method:: encode(splitchars=';, \\t', maxlinelen=None, linesep='\\n')
 
       Encode a message header into an RFC-compliant format, possibly wrapping
       long lines and encapsulating non-ASCII parts in base64 or quoted-printable
@@ -115,14 +116,28 @@ Here is the :class:`Header` class description:
       *maxlinelen*, if given, overrides the instance's value for the maximum
       line length.
 
+      *linesep* specifies the characters used to separate the lines of the
+      folded header.  It defaults to the most useful value for Python
+      application code (``\n``), but ``\r\n`` can be specified in order
+      to produce headers with RFC-compliant line separators.
+
+      .. versionchanged:: 3.2
+         Added the *linesep* argument.
+
 
    The :class:`Header` class also provides a number of methods to support
    standard operators and built-in functions.
 
    .. method:: __str__()
 
-      A helper for :class:`str`'s :func:`encode` method.  Returns the header as
-      a Unicode string.
+      Returns an approximation of the :class:`Header` as a string, using an
+      unlimited line length.  All pieces are converted to unicode using the
+      specified encoding and joined together appropriately.  Any pieces with a
+      charset of `unknown-8bit` are decoded as `ASCII` using the `replace`
+      error handler.
+
+      .. versionchanged:: 3.2
+         Added handling for the `unknown-8bit` charset.
 
 
    .. method:: __eq__(other)
