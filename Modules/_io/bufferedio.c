@@ -197,6 +197,7 @@ typedef struct {
     int detached;
     int readable;
     int writable;
+    int deallocating;
     
     /* True if this is a vanilla Buffered object (rather than a user derived
        class) *and* the raw stream is a vanilla FileIO object. */
@@ -260,6 +261,7 @@ typedef struct {
 /* These macros protect the buffered object against concurrent operations. */
 
 #ifdef WITH_THREAD
+
 static int
 _enter_buffered_busy(buffered *self)
 {
@@ -359,6 +361,7 @@ _enter_buffered_busy(buffered *self)
 static void
 buffered_dealloc(buffered *self)
 {
+    self->deallocating = 1;
     if (self->ok && _PyIOBase_finalize((PyObject *) self) < 0)
         return;
     _PyObject_GC_UNTRACK(self);
@@ -397,6 +400,23 @@ buffered_clear(buffered *self)
     Py_CLEAR(self->raw);
     Py_CLEAR(self->dict);
     return 0;
+}
+
+/* Because this can call arbitrary code, it shouldn't be called when
+   the refcount is 0 (that is, not directly from tp_dealloc unless
+   the refcount has been temporarily re-incremented). */
+static PyObject *
+buffered_dealloc_warn(buffered *self, PyObject *source)
+{
+    if (self->ok && self->raw) {
+        PyObject *r;
+        r = PyObject_CallMethod(self->raw, "_dealloc_warn", "O", source);
+        if (r)
+            Py_DECREF(r);
+        else
+            PyErr_Clear();
+    }
+    Py_RETURN_NONE;
 }
 
 /*
@@ -452,6 +472,14 @@ buffered_close(buffered *self, PyObject *args)
         res = Py_None;
         Py_INCREF(res);
         goto end;
+    }
+
+    if (self->deallocating) {
+        PyObject *r = buffered_dealloc_warn(self, (PyObject *) self);
+        if (r)
+            Py_DECREF(r);
+        else
+            PyErr_Clear();
     }
     /* flush() will most probably re-take the lock, so drop it first */
     LEAVE_BUFFERED(self)
@@ -541,6 +569,15 @@ buffered_isatty(buffered *self, PyObject *args)
     return PyObject_CallMethodObjArgs(self->raw, _PyIO_str_isatty, NULL);
 }
 
+/* Serialization */
+
+static PyObject *
+buffered_getstate(buffered *self, PyObject *args)
+{
+    PyErr_Format(PyExc_TypeError,
+                 "cannot serialize '%s' object", Py_TYPE(self)->tp_name);
+    return NULL;
+}
 
 /* Forward decls */
 static PyObject *
@@ -597,7 +634,8 @@ _buffered_raw_tell(buffered *self)
     if (n < 0) {
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_IOError,
-                         "Raw stream returned invalid position %zd", n);
+                         "Raw stream returned invalid position %" PY_PRIdOFF,
+			 (PY_OFF_T_COMPAT)n);
         return -1;
     }
     self->abs_pos = n;
@@ -629,7 +667,8 @@ _buffered_raw_seek(buffered *self, Py_off_t target, int whence)
     if (n < 0) {
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_IOError,
-                         "Raw stream returned invalid position %zd", n);
+                         "Raw stream returned invalid position %" PY_PRIdOFF,
+			 (PY_OFF_T_COMPAT)n);
         return -1;
     }
     self->abs_pos = n;
@@ -672,6 +711,39 @@ _buffered_init(buffered *self)
         self->buffer_mask = 0;
     if (_buffered_raw_tell(self) == -1)
         PyErr_Clear();
+    return 0;
+}
+
+/* Return 1 if an EnvironmentError with errno == EINTR is set (and then
+   clears the error indicator), 0 otherwise.
+   Should only be called when PyErr_Occurred() is true.
+*/
+static int
+_trap_eintr(void)
+{
+    static PyObject *eintr_int = NULL;
+    PyObject *typ, *val, *tb;
+    PyEnvironmentErrorObject *env_err;
+
+    if (eintr_int == NULL) {
+        eintr_int = PyLong_FromLong(EINTR);
+        assert(eintr_int != NULL);
+    }
+    if (!PyErr_ExceptionMatches(PyExc_EnvironmentError))
+        return 0;
+    PyErr_Fetch(&typ, &val, &tb);
+    PyErr_NormalizeException(&typ, &val, &tb);
+    env_err = (PyEnvironmentErrorObject *) val;
+    assert(env_err != NULL);
+    if (env_err->myerrno != NULL &&
+        PyObject_RichCompareBool(env_err->myerrno, eintr_int, Py_EQ) > 0) {
+        Py_DECREF(typ);
+        Py_DECREF(val);
+        Py_XDECREF(tb);
+        return 1;
+    }
+    /* This silences any error set by PyObject_RichCompareBool() */
+    PyErr_Restore(typ, val, tb);
     return 0;
 }
 
@@ -1230,7 +1302,14 @@ _bufferedreader_raw_read(buffered *self, char *start, Py_ssize_t len)
     memobj = PyMemoryView_FromBuffer(&buf);
     if (memobj == NULL)
         return -1;
-    res = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_readinto, memobj, NULL);
+    /* NOTE: PyErr_SetFromErrno() calls PyErr_CheckSignals() when EINTR
+       occurs so we needn't do it ourselves.
+       We then retry reading, ignoring the signal if no handler has
+       raised (see issue #10956).
+    */
+    do {
+        res = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_readinto, memobj, NULL);
+    } while (res == NULL && _trap_eintr());
     Py_DECREF(memobj);
     if (res == NULL)
         return -1;
@@ -1488,6 +1567,8 @@ static PyMethodDef bufferedreader_methods[] = {
     {"writable", (PyCFunction)buffered_writable, METH_NOARGS},
     {"fileno", (PyCFunction)buffered_fileno, METH_NOARGS},
     {"isatty", (PyCFunction)buffered_isatty, METH_NOARGS},
+    {"_dealloc_warn", (PyCFunction)buffered_dealloc_warn, METH_O},
+    {"__getstate__", (PyCFunction)buffered_getstate, METH_NOARGS},
 
     {"read", (PyCFunction)buffered_read, METH_VARARGS},
     {"peek", (PyCFunction)buffered_peek, METH_VARARGS},
@@ -1637,7 +1718,14 @@ _bufferedwriter_raw_write(buffered *self, char *start, Py_ssize_t len)
     memobj = PyMemoryView_FromBuffer(&buf);
     if (memobj == NULL)
         return -1;
-    res = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_write, memobj, NULL);
+    /* NOTE: PyErr_SetFromErrno() calls PyErr_CheckSignals() when EINTR
+       occurs so we needn't do it ourselves.
+       We then retry writing, ignoring the signal if no handler has
+       raised (see issue #10956).
+    */
+    do {
+        res = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_write, memobj, NULL);
+    } while (res == NULL && _trap_eintr());
     Py_DECREF(memobj);
     if (res == NULL)
         return -1;
@@ -1723,7 +1811,8 @@ bufferedwriter_write(buffered *self, PyObject *args)
 {
     PyObject *res = NULL;
     Py_buffer buf;
-    Py_ssize_t written, avail, remaining, n;
+    Py_ssize_t written, avail, remaining;
+    Py_off_t offset;
 
     CHECK_INITIALIZED(self)
     if (!PyArg_ParseTuple(args, "y*:write", &buf)) {
@@ -1801,18 +1890,18 @@ bufferedwriter_write(buffered *self, PyObject *args)
        the raw stream by itself).
        Fixes issue #6629.
     */
-    n = RAW_OFFSET(self);
-    if (n != 0) {
-        if (_buffered_raw_seek(self, -n, 1) < 0)
+    offset = RAW_OFFSET(self);
+    if (offset != 0) {
+        if (_buffered_raw_seek(self, -offset, 1) < 0)
             goto error;
-        self->raw_pos -= n;
+        self->raw_pos -= offset;
     }
 
     /* Then write buf itself. At this point the buffer has been emptied. */
     remaining = buf.len;
     written = 0;
     while (remaining > self->buffer_size) {
-        n = _bufferedwriter_raw_write(
+        Py_ssize_t n = _bufferedwriter_raw_write(
             self, (char *) buf.buf + written, buf.len - written);
         if (n == -1) {
             Py_ssize_t *w = _buffered_check_blocking_error();
@@ -1872,6 +1961,8 @@ static PyMethodDef bufferedwriter_methods[] = {
     {"writable", (PyCFunction)buffered_writable, METH_NOARGS},
     {"fileno", (PyCFunction)buffered_fileno, METH_NOARGS},
     {"isatty", (PyCFunction)buffered_isatty, METH_NOARGS},
+    {"_dealloc_warn", (PyCFunction)buffered_dealloc_warn, METH_O},
+    {"__getstate__", (PyCFunction)buffered_getstate, METH_NOARGS},
 
     {"write", (PyCFunction)bufferedwriter_write, METH_VARARGS},
     {"truncate", (PyCFunction)buffered_truncate, METH_VARARGS},
@@ -2137,6 +2228,8 @@ static PyMethodDef bufferedrwpair_methods[] = {
     {"close", (PyCFunction)bufferedrwpair_close, METH_NOARGS},
     {"isatty", (PyCFunction)bufferedrwpair_isatty, METH_NOARGS},
 
+    {"__getstate__", (PyCFunction)buffered_getstate, METH_NOARGS},
+
     {NULL, NULL}
 };
 
@@ -2256,6 +2349,8 @@ static PyMethodDef bufferedrandom_methods[] = {
     {"writable", (PyCFunction)buffered_writable, METH_NOARGS},
     {"fileno", (PyCFunction)buffered_fileno, METH_NOARGS},
     {"isatty", (PyCFunction)buffered_isatty, METH_NOARGS},
+    {"_dealloc_warn", (PyCFunction)buffered_dealloc_warn, METH_O},
+    {"__getstate__", (PyCFunction)buffered_getstate, METH_NOARGS},
 
     {"flush", (PyCFunction)buffered_flush, METH_NOARGS},
 
@@ -2325,4 +2420,3 @@ PyTypeObject PyBufferedRandom_Type = {
     0,                          /* tp_alloc */
     PyType_GenericNew,          /* tp_new */
 };
-
