@@ -385,17 +385,17 @@ namespace, depending on whether the name occurs in a :keyword:`global` statement
 in the same code block.  If the name is unbound, a :exc:`NameError` exception
 will be raised.
 
-.. index:: pair: free; variable
-
-It is illegal to delete a name from the local namespace if it occurs as a free
-variable in a nested block.
-
 .. index:: pair: attribute; deletion
 
 Deletion of attribute references, subscriptions and slicings is passed to the
 primary object involved; deletion of a slicing is in general equivalent to
 assignment of an empty slice of the right type (but even this is determined by
 the sliced object).
+
+.. versionchanged:: 3.2
+
+   Previously it was illegal to delete a name from the local namespace if it
+   occurs as a free variable in a nested block.
 
 
 .. _return:
@@ -674,7 +674,9 @@ Once the name of the module is known (unless otherwise specified, the term
 "module" will refer to both packages and modules), searching
 for the module or package can begin. The first place checked is
 :data:`sys.modules`, the cache of all modules that have been imported
-previously. If the module is found there then it is used in step (2) of import.
+previously. If the module is found there then it is used in step (2) of import
+unless ``None`` is found in :data:`sys.modules`, in which case
+:exc:`ImportError` is raised.
 
 .. index::
     single: sys.meta_path
@@ -691,7 +693,7 @@ within a package (as denoted by the existence of a dot in the name), then a
 second argument to :meth:`find_module` is given as the value of the
 :attr:`__path__` attribute from the parent package (everything up to the last
 dot in the name of the module being imported). If a finder can find the module
-it returns a :term:`loader` (discussed later) or returns :keyword:`None`.
+it returns a :term:`loader` (discussed later) or returns ``None``.
 
 .. index::
     single: sys.path_hooks
@@ -718,11 +720,11 @@ finder cached then :data:`sys.path_hooks` is searched by calling each object in
 the list with a single argument of the path, returning a finder or raises
 :exc:`ImportError`. If a finder is returned then it is cached in
 :data:`sys.path_importer_cache` and then used for that path entry. If no finder
-can be found but the path exists then a value of :keyword:`None` is
+can be found but the path exists then a value of ``None`` is
 stored in :data:`sys.path_importer_cache` to signify that an implicit,
 file-based finder that handles modules stored as individual files should be
 used for that path. If the path does not exist then a finder which always
-returns :keyword:`None` is placed in the cache for the path.
+returns ``None`` is placed in the cache for the path.
 
 .. index::
     single: loader
@@ -786,7 +788,7 @@ first form of :keyword:`import`, an alternate local name can be supplied by
 specifying ":keyword:`as` localname".  If a name is not found,
 :exc:`ImportError` is raised.  If the list of identifiers is replaced by a star
 (``'*'``), all public names defined in the module are bound in the local
-namespace of the :keyword:`import` statement..
+namespace of the :keyword:`import` statement.
 
 .. index:: single: __all__ (optional module attribute)
 
@@ -818,7 +820,7 @@ leading dot means the current package where the module making the import
 exists. Two dots means up one package level. Three dots is up two levels, etc.
 So if you execute ``from . import mod`` from a module in the ``pkg`` package
 then you will end up importing ``pkg.mod``. If you execute ``from ..subpkg2
-imprt mod`` from within ``pkg.subpkg1`` you will import ``pkg.subpkg2.mod``.
+import mod`` from within ``pkg.subpkg1`` you will import ``pkg.subpkg2.mod``.
 The specification for relative imports is contained within :pep:`328`.
 
 :func:`importlib.import_module` is provided to support applications that
@@ -944,7 +946,7 @@ definition, function definition, or :keyword:`import` statement.
 **Programmer's note:** the :keyword:`global` is a directive to the parser.  It
 applies only to code parsed at the same time as the :keyword:`global` statement.
 In particular, a :keyword:`global` statement contained in a string or code
-object supplied to the builtin :func:`exec` function does not affect the code
+object supplied to the built-in :func:`exec` function does not affect the code
 block *containing* the function call, and code contained in such a string is
 unaffected by :keyword:`global` statements in the code containing the function
 call.  The same applies to the :func:`eval` and :func:`compile` functions.

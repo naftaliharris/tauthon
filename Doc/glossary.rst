@@ -27,7 +27,7 @@ Glossary
       :ref:`2to3-reference`.
 
    abstract base class
-      Abstract Base Classes (abbreviated ABCs) complement :term:`duck-typing` by
+      :ref:`abstract-base-classes` complement :term:`duck-typing` by
       providing a way to define interfaces when other techniques like
       :func:`hasattr` would be clumsy. Python comes with many built-in ABCs for
       data structures (in the :mod:`collections` module), numbers (in the
@@ -57,11 +57,14 @@ Glossary
 
    bytecode
       Python source code is compiled into bytecode, the internal representation
-      of a Python program in the interpreter.  The bytecode is also cached in
-      ``.pyc`` and ``.pyo`` files so that executing the same file is faster the
-      second time (recompilation from source to bytecode can be avoided).  This
-      "intermediate language" is said to run on a :term:`virtual machine`
-      that executes the machine code corresponding to each bytecode.
+      of a Python program in the CPython interpreter.  The bytecode is also
+      cached in ``.pyc`` and ``.pyo`` files so that executing the same file is
+      faster the second time (recompilation from source to bytecode can be
+      avoided).  This "intermediate language" is said to run on a
+      :term:`virtual machine` that executes the machine code corresponding to
+      each bytecode. Do note that bytecodes are not expected to work between
+      different Python virtual machines, nor to be stable between Python
+      releases.
 
       A list of bytecode instructions can be found in the documentation for
       :ref:`the dis module <bytecodes>`.
@@ -234,6 +237,8 @@ Glossary
       performs garbage collection via reference counting and a cyclic garbage
       collector that is able to detect and break reference cycles.
 
+      .. index:: single: generator
+
    generator
       A function which returns an iterator.  It looks like a normal function
       except that it contains :keyword:`yield` statements for producing a series
@@ -247,7 +252,7 @@ Glossary
       .. index:: single: generator expression
 
    generator expression
-      An expression that returns a generator.  It looks like a normal expression
+      An expression that returns an iterator.  It looks like a normal expression
       followed by a :keyword:`for` expression defining a loop variable, range,
       and an optional :keyword:`if` expression.  The combined expression
       generates values for an enclosing function::
@@ -327,7 +332,7 @@ Glossary
       slowly.  See also :term:`interactive`.
 
    iterable
-      A container object capable of returning its members one at a
+      An object capable of returning its members one at a
       time. Examples of iterables include all sequence types (such as
       :class:`list`, :class:`str`, and :class:`tuple`) and some non-sequence
       types like :class:`dict` and :class:`file` and objects of any classes you
@@ -397,6 +402,12 @@ Glossary
       the :term:`EAFP` approach and is characterized by the presence of many
       :keyword:`if` statements.
 
+      In a multi-threaded environment, the LBYL approach can risk introducing a
+      race condition between "the looking" and "the leaping".  For example, the
+      code, ``if key in mapping: return mapping[key]`` can fail if another
+      thread removes *key* from *mapping* after the test, but before the lookup.
+      This issue can be solved with locks or by using the EAFP approach.
+
    list
       A built-in Python :term:`sequence`.  Despite its name it is more akin
       to an array in other languages than to a linked list since access to
@@ -417,9 +428,11 @@ Glossary
       :class:`importlib.abc.Loader` for an :term:`abstract base class`.
 
    mapping
-      A container object (such as :class:`dict`) which supports arbitrary key
-      lookups using the special method :meth:`__getitem__`.  Mappings also
-      support :meth:`__len__`, :meth:`__iter__`, and :meth:`__contains__`.
+      A container object that supports arbitrary key lookups and implements the
+      methods specified in the :class:`Mapping` or :class:`MutableMapping`
+      :ref:`abstract base classes <abstract-base-classes>`. Examples include
+      :class:`dict`, :class:`collections.defaultdict`,
+      :class:`collections.OrderedDict` and :class:`collections.Counter`.
 
    metaclass
       The class of a class.  Class definitions create a class name, a class
@@ -439,6 +452,14 @@ Glossary
       of an instance of that class, the method will get the instance object as
       its first :term:`argument` (which is usually called ``self``).
       See :term:`function` and :term:`nested scope`.
+
+   method resolution order
+      Method Resolution Order is the order in which base classes are searched
+      for a member during lookup. See `The Python 2.3 Method Resolution Order
+      <http://www.python.org/download/releases/2.3/mro/>`_.
+
+   MRO
+      See :term:`method resolution order`.
 
    mutable
       Mutable objects can change their value but keep their :func:`id`.  See

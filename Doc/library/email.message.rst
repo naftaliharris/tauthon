@@ -112,9 +112,18 @@ Here are the methods of the :class:`Message` class:
       be decoded if this header's value is ``quoted-printable`` or ``base64``.
       If some other encoding is used, or :mailheader:`Content-Transfer-Encoding`
       header is missing, or if the payload has bogus base64 data, the payload is
-      returned as-is (undecoded).  If the message is a multipart and the
-      *decode* flag is ``True``, then ``None`` is returned.  The default for
-      *decode* is ``False``.
+      returned as-is (undecoded).  In all cases the returned value is binary
+      data.  If the message is a multipart and the *decode* flag is ``True``,
+      then ``None`` is returned.
+
+      When *decode* is ``False`` (the default) the body is returned as a string
+      without decoding the :mailheader:`Content-Transfer-Encoding`.  However,
+      for a :mailheader:`Content-Transfer-Encoding` of 8bit, an attempt is made
+      to decode the original bytes using the ``charset`` specified by the
+      :mailheader:`Content-Type` header, using the ``replace`` error handler.
+      If no ``charset`` is specified, or if the ``charset`` given is not
+      recognized by the email package, the body is decoded using the default
+      ASCII charset.
 
 
    .. method:: set_payload(payload, charset=None)
@@ -167,6 +176,11 @@ Here are the methods of the :class:`Message` class:
 
    Note that in all cases, any envelope header present in the message is not
    included in the mapping interface.
+
+   In a model generated from bytes, any header values that (in contravention of
+   the RFCs) contain non-ASCII bytes will, when retrieved through this
+   interface, be represented as :class:`~email.header.Header` objects with
+   a charset of `unknown-8bit`.
 
 
    .. method:: __len__()
@@ -263,10 +277,10 @@ Here are the methods of the :class:`Message` class:
       it can be specified as a three tuple in the format
       ``(CHARSET, LANGUAGE, VALUE)``, where ``CHARSET`` is a string naming the
       charset to be used to encode the value, ``LANGUAGE`` can usually be set
-      to ``None`` or the empty string (see :RFC:`2231` for other possibilities),
+      to ``None`` or the empty string (see :rfc:`2231` for other possibilities),
       and ``VALUE`` is the string value containing non-ASCII code points.  If
       a three tuple is not passed and the value contains non-ASCII characters,
-      it is automatically encoded in :RFC`2231` format using a ``CHARSET``
+      it is automatically encoded in :rfc:`2231` format using a ``CHARSET``
       of ``utf-8`` and a ``LANGUAGE`` of ``None``.
 
       Here's an example::
