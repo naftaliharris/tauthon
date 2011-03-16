@@ -8,9 +8,9 @@ Symbols and macros to supply platform-independent interfaces to mathematical
 functions and constants
 **************************************************************************/
 
-/* Python provides implementations for copysign, acosh, asinh, atanh, 
- * log1p and hypot in Python/pymath.c just in case your math library doesn't
- * provide the functions.
+/* Python provides implementations for copysign, round and hypot in
+ * Python/pymath.c just in case your math library doesn't provide the
+ * functions.
  *
  *Note: PC/pyconfig.h defines copysign as _copysign
  */
@@ -20,22 +20,6 @@ extern double copysign(double, double);
 
 #ifndef HAVE_ROUND
 extern double round(double);
-#endif
-
-#ifndef HAVE_ACOSH
-extern double acosh(double);
-#endif
-
-#ifndef HAVE_ASINH
-extern double asinh(double);
-#endif
-
-#ifndef HAVE_ATANH
-extern double atanh(double);
-#endif
-
-#ifndef HAVE_LOG1P
-extern double log1p(double);
 #endif
 
 #ifndef HAVE_HYPOT
@@ -83,6 +67,7 @@ extern double copysign(double, double);
    nothing. */
 
 /* we take double rounding as evidence of x87 usage */
+#ifndef Py_LIMITED_API
 #ifndef Py_FORCE_DOUBLE
 #  ifdef X87_DOUBLE_ROUNDING
 PyAPI_FUNC(double) _Py_force_double(double);
@@ -91,10 +76,13 @@ PyAPI_FUNC(double) _Py_force_double(double);
 #    define Py_FORCE_DOUBLE(X) (X)
 #  endif
 #endif
+#endif
 
+#ifndef Py_LIMITED_API
 #ifdef HAVE_GCC_ASM_FOR_X87
 PyAPI_FUNC(unsigned short) _Py_get_387controlword(void);
 PyAPI_FUNC(void) _Py_set_387controlword(unsigned short);
+#endif
 #endif
 
 /* Py_IS_NAN(X)
