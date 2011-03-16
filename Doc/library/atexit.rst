@@ -98,3 +98,4 @@ Usage as a :term:`decorator`::
 
 This obviously only works with functions that don't take arguments.
 
+

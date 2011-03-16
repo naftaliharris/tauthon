@@ -33,10 +33,10 @@ class EncodingTest(unittest.TestCase):
 
     def run_test(self, source):
         with source_util.create_modules(self.module_name) as mapping:
-            with open(mapping[self.module_name], 'wb')as file:
+            with open(mapping[self.module_name], 'wb') as file:
                 file.write(source)
-            loader = _bootstrap._PyPycFileLoader(self.module_name,
-                                       mapping[self.module_name], False)
+            loader = _bootstrap._SourceFileLoader(self.module_name,
+                                       mapping[self.module_name])
             return loader.load_module(self.module_name)
 
     def create_source(self, encoding):
@@ -81,7 +81,8 @@ class EncodingTest(unittest.TestCase):
     # [BOM conflict]
     def test_bom_conflict(self):
         source = codecs.BOM_UTF8 + self.create_source('latin-1')
-        self.assertRaises(SyntaxError, self.run_test, source)
+        with self.assertRaises(SyntaxError):
+            self.run_test(source)
 
 
 class LineEndingTest(unittest.TestCase):
@@ -96,8 +97,8 @@ class LineEndingTest(unittest.TestCase):
         with source_util.create_modules(module_name) as mapping:
             with open(mapping[module_name], 'wb') as file:
                 file.write(source)
-            loader = _bootstrap._PyPycFileLoader(module_name,
-                                                 mapping[module_name], False)
+            loader = _bootstrap._SourceFileLoader(module_name,
+                                                 mapping[module_name])
             return loader.load_module(module_name)
 
     # [cr]

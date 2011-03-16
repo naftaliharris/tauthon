@@ -6,13 +6,16 @@ executing have not been removed.
 """
 import unittest
 from test.support import run_unittest, TESTFN, EnvironmentVarGuard
-from test.support import captured_output
+from test.support import captured_stderr
 import builtins
 import os
 import sys
 import re
 import encodings
 import subprocess
+import sysconfig
+from copy import copy
+
 # Need to make sure to not import 'site' if someone specified ``-S`` at the
 # command-line.  Detect this by just making sure 'site' has not been imported
 # already.
@@ -28,19 +31,23 @@ if not os.path.isdir(site.USER_SITE):
 
 class HelperFunctionsTests(unittest.TestCase):
     """Tests for helper functions.
-
-    The setting of the encoding (set using sys.setdefaultencoding) used by
-    the Unicode implementation is not tested.
-
     """
 
     def setUp(self):
         """Save a copy of sys.path"""
         self.sys_path = sys.path[:]
+        self.old_base = site.USER_BASE
+        self.old_site = site.USER_SITE
+        self.old_prefixes = site.PREFIXES
+        self.old_vars = copy(sysconfig._CONFIG_VARS)
 
     def tearDown(self):
         """Restore sys.path"""
-        sys.path = self.sys_path
+        sys.path[:] = self.sys_path
+        site.USER_BASE = self.old_base
+        site.USER_SITE = self.old_site
+        site.PREFIXES = self.old_prefixes
+        sysconfig._CONFIG_VARS = self.old_vars
 
     def test_makepath(self):
         # Test makepath() have an absolute path for its first return value
@@ -59,16 +66,16 @@ class HelperFunctionsTests(unittest.TestCase):
         dir_set = site._init_pathinfo()
         for entry in [site.makepath(path)[1] for path in sys.path
                         if path and os.path.isdir(path)]:
-            self.assertTrue(entry in dir_set,
-                            "%s from sys.path not found in set returned "
-                            "by _init_pathinfo(): %s" % (entry, dir_set))
+            self.assertIn(entry, dir_set,
+                          "%s from sys.path not found in set returned "
+                          "by _init_pathinfo(): %s" % (entry, dir_set))
 
     def pth_file_tests(self, pth_file):
         """Contain common code for testing results of reading a .pth file"""
-        self.assertTrue(pth_file.imported in sys.modules,
-                "%s not in sys.path" % pth_file.imported)
-        self.assertTrue(site.makepath(pth_file.good_dir_path)[0] in sys.path)
-        self.assertTrue(not os.path.exists(pth_file.bad_dir_path))
+        self.assertIn(pth_file.imported, sys.modules,
+                      "%s not in sys.modules" % pth_file.imported)
+        self.assertIn(site.makepath(pth_file.good_dir_path)[0], sys.path)
+        self.assertFalse(os.path.exists(pth_file.bad_dir_path))
 
     def test_addpackage(self):
         # Make sure addpackage() imports if the line starts with 'import',
@@ -99,43 +106,43 @@ class HelperFunctionsTests(unittest.TestCase):
     def test_addpackage_import_bad_syntax(self):
         # Issue 10642
         pth_dir, pth_fn = self.make_pth("import bad)syntax\n")
-        with captured_output("stderr") as err_out:
+        with captured_stderr() as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegexpMatches(err_out.getvalue(), "line 1")
-        self.assertRegexpMatches(err_out.getvalue(),
+        self.assertRegex(err_out.getvalue(), "line 1")
+        self.assertRegex(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: the previous two should be independent checks so that the
         # order doesn't matter.  The next three could be a single check
         # but my regex foo isn't good enough to write it.
-        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
-        self.assertRegexpMatches(err_out.getvalue(), r'import bad\)syntax')
-        self.assertRegexpMatches(err_out.getvalue(), 'SyntaxError')
+        self.assertRegex(err_out.getvalue(), 'Traceback')
+        self.assertRegex(err_out.getvalue(), r'import bad\)syntax')
+        self.assertRegex(err_out.getvalue(), 'SyntaxError')
 
     def test_addpackage_import_bad_exec(self):
         # Issue 10642
         pth_dir, pth_fn = self.make_pth("randompath\nimport nosuchmodule\n")
-        with captured_output("stderr") as err_out:
+        with captured_stderr() as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegexpMatches(err_out.getvalue(), "line 2")
-        self.assertRegexpMatches(err_out.getvalue(),
+        self.assertRegex(err_out.getvalue(), "line 2")
+        self.assertRegex(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: ditto previous XXX comment.
-        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
-        self.assertRegexpMatches(err_out.getvalue(), 'ImportError')
+        self.assertRegex(err_out.getvalue(), 'Traceback')
+        self.assertRegex(err_out.getvalue(), 'ImportError')
 
     @unittest.skipIf(sys.platform == "win32", "Windows does not raise an "
                       "error for file paths containing null characters")
     def test_addpackage_import_bad_pth_file(self):
         # Issue 5258
         pth_dir, pth_fn = self.make_pth("abc\x00def\n")
-        with captured_output("stderr") as err_out:
+        with captured_stderr() as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegexpMatches(err_out.getvalue(), "line 1")
-        self.assertRegexpMatches(err_out.getvalue(),
+        self.assertRegex(err_out.getvalue(), "line 1")
+        self.assertRegex(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: ditto previous XXX comment.
-        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
-        self.assertRegexpMatches(err_out.getvalue(), 'TypeError')
+        self.assertRegex(err_out.getvalue(), 'Traceback')
+        self.assertRegex(err_out.getvalue(), 'TypeError')
 
     def test_addsitedir(self):
         # Same tests for test_addpackage since addsitedir() essentially just
@@ -152,7 +159,7 @@ class HelperFunctionsTests(unittest.TestCase):
 
     def test_s_option(self):
         usersite = site.USER_SITE
-        self.assertTrue(usersite in sys.path)
+        self.assertIn(usersite, sys.path)
 
         env = os.environ.copy()
         rc = subprocess.call([sys.executable, '-c',
@@ -180,6 +187,62 @@ class HelperFunctionsTests(unittest.TestCase):
             env=env)
         self.assertEqual(rc, 1)
 
+    def test_getuserbase(self):
+        site.USER_BASE = None
+        user_base = site.getuserbase()
+
+        # the call sets site.USER_BASE
+        self.assertEqual(site.USER_BASE, user_base)
+
+        # let's set PYTHONUSERBASE and see if it uses it
+        site.USER_BASE = None
+        import sysconfig
+        sysconfig._CONFIG_VARS = None
+
+        with EnvironmentVarGuard() as environ:
+            environ['PYTHONUSERBASE'] = 'xoxo'
+            self.assertTrue(site.getuserbase().startswith('xoxo'),
+                            site.getuserbase())
+
+    def test_getusersitepackages(self):
+        site.USER_SITE = None
+        site.USER_BASE = None
+        user_site = site.getusersitepackages()
+
+        # the call sets USER_BASE *and* USER_SITE
+        self.assertEqual(site.USER_SITE, user_site)
+        self.assertTrue(user_site.startswith(site.USER_BASE), user_site)
+
+    def test_getsitepackages(self):
+        site.PREFIXES = ['xoxo']
+        dirs = site.getsitepackages()
+
+        if sys.platform in ('os2emx', 'riscos'):
+            self.assertEqual(len(dirs), 1)
+            wanted = os.path.join('xoxo', 'Lib', 'site-packages')
+            self.assertEqual(dirs[0], wanted)
+        elif os.sep == '/':
+            self.assertEqual(len(dirs), 2)
+            wanted = os.path.join('xoxo', 'lib', 'python' + sys.version[:3],
+                                  'site-packages')
+            self.assertEqual(dirs[0], wanted)
+            wanted = os.path.join('xoxo', 'lib', 'site-python')
+            self.assertEqual(dirs[1], wanted)
+        else:
+            self.assertEqual(len(dirs), 2)
+            self.assertEqual(dirs[0], 'xoxo')
+            wanted = os.path.join('xoxo', 'lib', 'site-packages')
+            self.assertEqual(dirs[1], wanted)
+
+        # let's try the specific Apple location
+        if (sys.platform == "darwin" and
+            sysconfig.get_config_var("PYTHONFRAMEWORK")):
+            site.PREFIXES = ['Python.framework']
+            dirs = site.getsitepackages()
+            self.assertEqual(len(dirs), 3)
+            wanted = os.path.join('/Library', 'Python', sys.version[:3],
+                                  'site-packages')
+            self.assertEqual(dirs[2], wanted)
 
 class PthFile(object):
     """Helper class for handling testing of .pth files"""
@@ -245,21 +308,45 @@ class ImportSideEffectTests(unittest.TestCase):
 
     def tearDown(self):
         """Restore sys.path"""
-        sys.path = self.sys_path
+        sys.path[:] = self.sys_path
 
-    def test_abs__file__(self):
-        # Make sure all imported modules have their __file__ attribute
-        # as an absolute path.
-        # Handled by abs__file__()
-        site.abs__file__()
-        for module in (sys, os, builtins):
-            try:
-                self.assertTrue(os.path.isabs(module.__file__), repr(module))
-            except AttributeError:
-                continue
-        # We could try everything in sys.modules; however, when regrtest.py
-        # runs something like test_frozen before test_site, then we will
-        # be testing things loaded *after* test_site did path normalization
+    def test_abs_paths(self):
+        # Make sure all imported modules have their __file__ and __cached__
+        # attributes as absolute paths.  Arranging to put the Lib directory on
+        # PYTHONPATH would cause the os module to have a relative path for
+        # __file__ if abs_paths() does not get run.  sys and builtins (the
+        # only other modules imported before site.py runs) do not have
+        # __file__ or __cached__ because they are built-in.
+        parent = os.path.relpath(os.path.dirname(os.__file__))
+        env = os.environ.copy()
+        env['PYTHONPATH'] = parent
+        code = ('import os, sys',
+            # use ASCII to avoid locale issues with non-ASCII directories
+            'os_file = os.__file__.encode("ascii", "backslashreplace")',
+            r'sys.stdout.buffer.write(os_file + b"\n")',
+            'os_cached = os.__cached__.encode("ascii", "backslashreplace")',
+            r'sys.stdout.buffer.write(os_cached + b"\n")')
+        command = '\n'.join(code)
+        # First, prove that with -S (no 'import site'), the paths are
+        # relative.
+        proc = subprocess.Popen([sys.executable, '-S', '-c', command],
+                                env=env,
+                                stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+
+        self.assertEqual(proc.returncode, 0)
+        os__file__, os__cached__ = stdout.splitlines()[:2]
+        self.assertFalse(os.path.isabs(os__file__))
+        self.assertFalse(os.path.isabs(os__cached__))
+        # Now, with 'import site', it works.
+        proc = subprocess.Popen([sys.executable, '-c', command],
+                                env=env,
+                                stdout=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
+        self.assertEqual(proc.returncode, 0)
+        os__file__, os__cached__ = stdout.splitlines()[:2]
+        self.assertTrue(os.path.isabs(os__file__))
+        self.assertTrue(os.path.isabs(os__cached__))
 
     def test_no_duplicate_paths(self):
         # No duplicate paths should exist in sys.path
@@ -267,7 +354,7 @@ class ImportSideEffectTests(unittest.TestCase):
         site.removeduppaths()
         seen_paths = set()
         for path in sys.path:
-            self.assertTrue(path not in seen_paths)
+            self.assertNotIn(path, seen_paths)
             seen_paths.add(path)
 
     def test_add_build_dir(self):
@@ -299,10 +386,6 @@ class ImportSideEffectTests(unittest.TestCase):
                         break
                 else:
                     self.fail("did not alias mbcs")
-
-    def test_setdefaultencoding_removed(self):
-        # Make sure sys.setdefaultencoding is gone
-        self.assertTrue(not hasattr(sys, "setdefaultencoding"))
 
     def test_sitecustomize_executed(self):
         # If sitecustomize is available, it should have been imported.
