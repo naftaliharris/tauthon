@@ -3,7 +3,7 @@ import unittest, sys
 
 def callback_func(arg):
     42 / arg
-    raise ValueError, arg
+    raise ValueError(arg)
 
 if sys.platform == "win32":
 
@@ -13,6 +13,10 @@ if sys.platform == "win32":
 
         def test(self):
             from _ctypes import call_function
+            windll.kernel32.LoadLibraryA.restype = c_void_p
+            windll.kernel32.GetProcAddress.argtypes = c_void_p, c_char_p
+            windll.kernel32.GetProcAddress.restype = c_void_p
+
             hdll = windll.kernel32.LoadLibraryA("kernel32")
             funcaddr = windll.kernel32.GetProcAddress(hdll, "GetModuleHandleA")
 

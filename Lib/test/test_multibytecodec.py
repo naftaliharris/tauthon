@@ -8,6 +8,7 @@ from test import test_support
 from test import test_multibytecodec_support
 from test.test_support import TESTFN
 import unittest, StringIO, codecs, sys, os
+import _multibytecodec
 
 ALL_CJKENCODINGS = [
 # _codecs_cn
@@ -52,6 +53,14 @@ class Test_MultibyteCodec(unittest.TestCase):
                 exec open(TESTFN)
         finally:
             os.unlink(TESTFN)
+
+    def test_init_segfault(self):
+        # bug #3305: this used to segfault
+        self.assertRaises(AttributeError,
+                          _multibytecodec.MultibyteStreamReader, None)
+        self.assertRaises(AttributeError,
+                          _multibytecodec.MultibyteStreamWriter, None)
+
 
 class Test_IncrementalEncoder(unittest.TestCase):
 
@@ -99,6 +108,10 @@ class Test_IncrementalEncoder(unittest.TestCase):
         self.assertRaises(UnicodeEncodeError, encoder.encode, u'\u0123')
         self.assertEqual(encoder.encode(u'', True), '\xa9\xdc')
 
+    def test_issue5640(self):
+        encoder = codecs.getincrementalencoder('shift-jis')('backslashreplace')
+        self.assertEqual(encoder.encode(u'\xff'), b'\\xff')
+        self.assertEqual(encoder.encode(u'\n'), b'\n')
 
 class Test_IncrementalDecoder(unittest.TestCase):
 
@@ -150,7 +163,7 @@ class Test_StreamReader(unittest.TestCase):
 class Test_StreamWriter(unittest.TestCase):
     if len(u'\U00012345') == 2: # UCS2
         def test_gb18030(self):
-            s= StringIO.StringIO()
+            s = StringIO.StringIO()
             c = codecs.getwriter('gb18030')(s)
             c.write(u'123')
             self.assertEqual(s.getvalue(), '123')
@@ -229,14 +242,7 @@ class Test_ISO2022(unittest.TestCase):
             myunichr(x).encode('iso_2022_jp', 'ignore')
 
 def test_main():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(Test_MultibyteCodec))
-    suite.addTest(unittest.makeSuite(Test_IncrementalEncoder))
-    suite.addTest(unittest.makeSuite(Test_IncrementalDecoder))
-    suite.addTest(unittest.makeSuite(Test_StreamReader))
-    suite.addTest(unittest.makeSuite(Test_StreamWriter))
-    suite.addTest(unittest.makeSuite(Test_ISO2022))
-    test_support.run_suite(suite)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

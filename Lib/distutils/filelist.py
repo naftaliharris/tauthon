@@ -11,7 +11,6 @@ __revision__ = "$Id$"
 import os, string, re
 import fnmatch
 from types import *
-from glob import glob
 from distutils.util import convert_path
 from distutils.errors import DistutilsTemplateError, DistutilsInternalError
 from distutils import log
@@ -69,7 +68,7 @@ class FileList:
         sortable_files.sort()
         self.files = []
         for sort_tuple in sortable_files:
-            self.files.append(apply(os.path.join, sort_tuple))
+            self.files.append(os.path.join(*sort_tuple))
 
 
     # -- Other miscellaneous utility methods ---------------------------
@@ -305,7 +304,7 @@ def findall (dir = os.curdir):
     return list
 
 
-def glob_to_re (pattern):
+def glob_to_re(pattern):
     """Translate a shell-like glob pattern to a regular expression; return
     a string containing the regex.  Differs from 'fnmatch.translate()' in
     that '*' does not match "special characters" (which are
@@ -320,7 +319,8 @@ def glob_to_re (pattern):
     # character except the special characters.
     # XXX currently the "special characters" are just slash -- i.e. this is
     # Unix-only.
-    pattern_re = re.sub(r'(^|[^\\])\.', r'\1[^/]', pattern_re)
+    pattern_re = re.sub(r'((?<!\\)(\\\\)*)\.', r'\1[^/]', pattern_re)
+
     return pattern_re
 
 # glob_to_re ()
@@ -344,7 +344,9 @@ def translate_pattern (pattern, anchor=1, prefix=None, is_regex=0):
         pattern_re = ''
 
     if prefix is not None:
-        prefix_re = (glob_to_re(prefix))[0:-1] # ditch trailing $
+        # ditch end of pattern character
+        empty_pattern = glob_to_re('')
+        prefix_re = (glob_to_re(prefix))[:-len(empty_pattern)]
         pattern_re = "^" + os.path.join(prefix_re, ".*" + pattern_re)
     else:                               # no prefix -- respect anchor flag
         if anchor:

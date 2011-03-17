@@ -408,6 +408,9 @@ class Morsel(dict):
     # For historical reasons, these attributes are also reserved:
     #   expires
     #
+    # This is an extension from Microsoft:
+    #   httponly
+    #
     # This dictionary provides a mapping from the lowercase
     # variant on the left to the appropriate traditional
     # formatting on the right.
@@ -417,6 +420,7 @@ class Morsel(dict):
                    "domain"      : "Domain",
                    "max-age" : "Max-Age",
                    "secure"      : "secure",
+                   "httponly"  : "httponly",
                    "version" : "Version",
                    }
 
@@ -499,6 +503,8 @@ class Morsel(dict):
                 RA("%s=%d" % (self._reserved[K], V))
             elif K == "secure":
                 RA(str(self._reserved[K]))
+            elif K == "httponly":
+                RA(str(self._reserved[K]))
             else:
                 RA("%s=%s" % (self._reserved[K], V))
 
@@ -527,6 +533,8 @@ _CookiePattern = re.compile(
     r"\s*=\s*"                    # Equal Sign
     r"(?P<val>"                   # Start of group 'val'
     r'"(?:[^\\"]|\\.)*"'            # Any doublequoted string
+    r"|"                            # or
+    r"\w{3},\s[\w\d-]{9,11}\s[\d:]{8}\sGMT" # Special case for "expires" attr
     r"|"                            # or
     ""+ _LegalCharsPatt +"*"        # Any word or empty string
     r")"                          # End of group 'val'
@@ -618,7 +626,9 @@ class BaseCookie(dict):
         if type(rawdata) == type(""):
             self.__ParseString(rawdata)
         else:
-            self.update(rawdata)
+            # self.update() wouldn't call our custom __setitem__
+            for k, v in rawdata.items():
+                self[k] = v
         return
     # end load()
 

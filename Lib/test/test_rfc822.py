@@ -1,7 +1,7 @@
-import rfc822
-import sys
 import unittest
 from test import test_support
+
+rfc822 = test_support.import_module("rfc822", deprecated=True)
 
 try:
     from cStringIO import StringIO
@@ -46,9 +46,9 @@ class MessageTestCase(unittest.TestCase):
                 continue
             i = i + 1
             self.assertEqual(mn, n,
-                             "Un-expected name: %s != %s" % (`mn`, `n`))
+                             "Un-expected name: %r != %r" % (mn, n))
             self.assertEqual(ma, a,
-                             "Un-expected address: %s != %s" % (`ma`, `a`))
+                             "Un-expected address: %r != %r" % (ma, a))
             if mn == n and ma == a:
                 pass
             else:

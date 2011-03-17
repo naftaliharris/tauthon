@@ -1,6 +1,6 @@
 from ctypes import *
 import unittest
-import sys, struct
+import struct
 
 def valid_ranges(*types):
     # given a sequence of numeric types, collect their _type_
@@ -24,6 +24,8 @@ ArgType = type(byref(c_int(0)))
 unsigned_types = [c_ubyte, c_ushort, c_uint, c_ulong]
 signed_types = [c_byte, c_short, c_int, c_long, c_longlong]
 
+bool_types = []
+
 float_types = [c_double, c_float]
 
 try:
@@ -35,8 +37,16 @@ else:
     unsigned_types.append(c_ulonglong)
     signed_types.append(c_longlong)
 
+try:
+    c_bool
+except NameError:
+    pass
+else:
+    bool_types.append(c_bool)
+
 unsigned_ranges = valid_ranges(*unsigned_types)
 signed_ranges = valid_ranges(*signed_types)
+bool_values = [True, False, 0, 1, -1, 5000, 'test', [], [1]]
 
 ################################################################
 
@@ -60,6 +70,11 @@ class NumberTestCase(unittest.TestCase):
             self.failUnlessEqual(t(l).value, l)
             self.failUnlessEqual(t(h).value, h)
 
+    def test_bool_values(self):
+        from operator import truth
+        for t, v in zip(bool_types, bool_values):
+            self.failUnlessEqual(t(v).value, truth(v))
+
     def test_typeerror(self):
         # Only numbers are allowed in the contructor,
         # otherwise TypeError is raised
@@ -82,7 +97,7 @@ class NumberTestCase(unittest.TestCase):
 
     def test_byref(self):
         # calling byref returns also a PyCArgObject instance
-        for t in signed_types + unsigned_types + float_types:
+        for t in signed_types + unsigned_types + float_types + bool_types:
             parm = byref(t())
             self.failUnlessEqual(ArgType, type(parm))
 
@@ -117,8 +132,11 @@ class NumberTestCase(unittest.TestCase):
             self.failUnlessEqual(t(i).value, 2)
 
     def test_sizes(self):
-        for t in signed_types + unsigned_types + float_types:
-            size = struct.calcsize(t._type_)
+        for t in signed_types + unsigned_types + float_types + bool_types:
+            try:
+                size = struct.calcsize(t._type_)
+            except struct.error:
+                continue
             # sizeof of the type...
             self.failUnlessEqual(sizeof(t), size)
             # and sizeof of an instance
@@ -179,6 +197,18 @@ class NumberTestCase(unittest.TestCase):
 
         a[0] = '?'
         self.failUnlessEqual(v.value, a[0])
+
+    # array does not support c_bool / 't'
+    # def test_bool_from_address(self):
+    #     from ctypes import c_bool
+    #     from array import array
+    #     a = array(c_bool._type_, [True])
+    #     v = t.from_address(a.buffer_info()[0])
+    #     self.failUnlessEqual(v.value, a[0])
+    #     self.failUnlessEqual(type(v) is t)
+    #     a[0] = False
+    #     self.failUnlessEqual(v.value, a[0])
+    #     self.failUnlessEqual(type(v) is t)
 
     def test_init(self):
         # c_int() can be initialized from Python's int, and c_int.

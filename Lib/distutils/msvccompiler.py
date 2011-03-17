@@ -252,7 +252,7 @@ class MSVCCompiler (CCompiler) :
 
     def initialize(self):
         self.__paths = []
-        if os.environ.has_key("DISTUTILS_USE_SDK") and os.environ.has_key("MSSdk") and self.find_exe("cl.exe"):
+        if "DISTUTILS_USE_SDK" in os.environ and "MSSdk" in os.environ and self.find_exe("cl.exe"):
             # Assume that the SDK set up everything alright; don't try to be
             # smarter
             self.cc = "cl.exe"
@@ -650,3 +650,11 @@ class MSVCCompiler (CCompiler) :
             p = self.get_msvc_paths(name)
         if p:
             os.environ[name] = string.join(p, ';')
+
+
+if get_build_version() >= 8.0:
+    log.debug("Importing new compiler from distutils.msvc9compiler")
+    OldMSVCCompiler = MSVCCompiler
+    from distutils.msvc9compiler import MSVCCompiler
+    # get_build_architecture not really relevant now we support cross-compile
+    from distutils.msvc9compiler import MacroExpander

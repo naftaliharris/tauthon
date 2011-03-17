@@ -1,5 +1,4 @@
 import unittest
-import sys
 
 from ctypes import *
 
@@ -34,7 +33,7 @@ class Test(unittest.TestCase):
         def test_oledll(self):
             self.failUnlessRaises(WindowsError,
                                   oledll.oleaut32.CreateTypeLib2,
-                                  0, 0, 0)
+                                  0, None, None)
 
 if __name__ == "__main__":
     unittest.main()

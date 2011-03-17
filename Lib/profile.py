@@ -318,7 +318,7 @@ class Profile:
         fn = ("", 0, self.c_func_name)
         self.cur = (t, 0, 0, fn, frame, self.cur)
         timings = self.timings
-        if timings.has_key(fn):
+        if fn in timings:
             cc, ns, tt, ct, callers = timings[fn]
             timings[fn] = cc, ns+1, tt, ct, callers
         else:
@@ -605,9 +605,9 @@ def main():
         sys.exit(2)
 
     (options, args) = parser.parse_args()
-    sys.argv[:] = args
 
-    if (len(sys.argv) > 0):
+    if (len(args) > 0):
+        sys.argv[:] = args
         sys.path.insert(0, os.path.dirname(sys.argv[0]))
         run('execfile(%r)' % (sys.argv[0],), options.outfile, options.sort)
     else:

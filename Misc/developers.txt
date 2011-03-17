@@ -17,6 +17,164 @@ the format to accommodate documentation needs as they arise.
 Permissions History
 -------------------
 
+- Brian Quinlan was given commit access on Jul 26 2010 by GFB,
+  for work related to PEP 3148.
+
+- Reid Kleckner was given commit access on Jul 11 2010 by GFB,
+  for work on the py3k-jit branch, at suggestion of the Unladen
+  Swallow team.
+
+- Alexander Belopolsky was given commit access on May 25 2010
+  by MvL at suggestion of Mark Dickinson.
+
+- Tim Golden was given commit access on April 21 2010 by MvL,
+  at suggestion of Michael Foord.
+
+- Giampaolo Rodolà was given commit access on April 17 2010 by
+  MvL, at suggestion of R. David Murray.
+
+- Jean-Paul Calderone was given commit access on April 6 2010 by
+  GFB, at suggestion of Michael Foord and others.
+
+- Brian Curtin was given commit access on March 24 2010 by MvL.
+
+- Florent Xicluna was given commit access on February 25 2010 by
+  MvL, based on Antoine Pitrou's recommendation.
+
+- Dino Viehland was given SVN access on February 23 2010 by Brett
+  Cannon, for backporting tests from IronPython.
+
+- Larry Hastings was given SVN access on February 22 2010 by
+  Andrew Kuchling, based on Brett Cannon's recommendation.
+
+- Victor Stinner was given SVN access on January 30 2010 by MvL,
+  at recommendation by Mark Dickinson and Amaury Forgeot d'Arc.
+
+- Stefan Krah was given SVN access on January 5 2010 by GFB, at
+  suggestion of Mark Dickinson, for work on the decimal module.
+
+- Doug Hellmann was given SVN access on September 19 2009 by GFB, at
+  suggestion of Jesse Noller, for documentation work.
+
+- Ezio Melotti was given SVN access on June 7 2009 by GFB, for work on and
+  fixes to the documentation.
+
+- Paul Kippes was given commit privileges at PyCon 2009 by BAC to work on 3to2.
+
+- Ron DuPlain was given commit privileges at PyCon 2009 by BAC to work on 3to2.
+
+- Several developers of alternative Python implementations where
+  given access for test suite and library adaptions by MvL:
+  Allison Randal (Parrot), Michael Foord (IronPython),
+  Jim Baker, Philip Jenvey, and Frank Wierzbicki (all Jython).
+
+- R. David Murray was given SVN access on March 30 2009 by MvL, after
+  recommendation by BAC.
+
+- Chris Withers was given SVN access on March 8 2009 by MvL,
+  after recommendation by GvR.
+
+- Tarek Ziadé was given SVN access on December 21 2008 by NCN,
+  for maintenance of distutils.
+
+- Hirokazu Yamamoto was given SVN access on August 12 2008 by MvL,
+  for contributions to the Windows build.
+
+- Antoine Pitrou was given SVN access on July 16 2008, by recommendation
+  from GvR, for general contributions to Python.
+
+- Jesse Noller was given SVN access on 16 June 2008 by GFB,
+  for work on the multiprocessing module.
+
+- Gregor Lingl was given SVN access on 10 June 2008 by MvL,
+  for work on the turtle module.
+
+- Robert Schuppenies was given SVN access on 21 May 2008 by MvL,
+  for GSoC contributions.
+
+- Rodrigo Bernardo Pimentel was given SVN access on 29 April 2008 by MvL,
+  for GSoC contributions.
+
+- Heiko Weinen was given SVN access on 29 April 2008 by MvL,
+  for GSoC contributions.
+
+- Jesus Cea was given SVN access on 24 April 2008 by MvL,
+  for maintenance of bsddb.
+
+- Guilherme Polo was given SVN access on 24 April 2008 by MvL,
+  for GSoC contributions.
+
+- Thomas Lee was given SVN access on 21 April 2008 by NCN,
+  for work on branches (ast/optimizer related).
+
+- Jeroen Ruigrok van der Werven was given SVN access on 12 April 2008
+  by GFB, for documentation work.
+
+- Josiah Carlson was given SVN access on 26 March 2008 by GFB,
+  for work on asyncore/asynchat.
+
+- Benjamin Peterson was given SVN access on 25 March 2008 by GFB,
+  for bug triage work.
+
+- Jerry Seutter was given SVN access on 20 March 2008 by BAC, for
+  general contributions to Python.
+
+- Jeff Rush was given SVN access on 18 March 2008 by AMK, for Distutils work.
+
+- David Wolever was given SVN access on 17 March 2008 by MvL,
+  for 2to3 work.
+
+- Trent Nelson was given SVN access on 17 March 2008 by MvL,
+  for general contributions to Python.
+
+- Mark Dickinson was given SVN access on 6 January 2008 by Facundo
+  Batista for his work on mathemathics and number related issues.
+
+- Amaury Forgeot d'Arc was given SVN access on 9 November 2007 by MvL,
+  for general contributions to Python.
+
+- Christian Heimes was given SVN access on 31 October 2007 by MvL,
+  for general contributions to Python.
+
+- Chris Monson was given SVN access on 20 October 2007 by NCN,
+  for his work on editing PEPs.
+
+- Bill Janssen was given SVN access on 28 August 2007 by NCN,
+  for his work on the SSL module and other things related to (SSL) sockets.
+
+- Jeffrey Yasskin was given SVN access on 9 August 2007 by NCN,
+  for his work on PEPs and other general patches. 
+
+- Senthil Kumaran was given SVN access on 16 June 2007 by MvL,
+  for his Summer-of-Code project, mentored by Skip Montanaro.
+
+- Alexandre Vassalotti was given SVN access on 21 May 2007 by MvL,
+  for his Summer-of-Code project, mentored by Brett Cannon.
+
+- Travis Oliphant was given SVN access on 17 Apr 2007 by MvL,
+  for implementing the extended buffer protocol.
+
+- Ziga Seilnacht was given SVN access on 09 Mar 2007 by MvL,
+  for general maintenance.
+
+- Pete Shinners was given SVN access on 04 Mar 2007 by NCN,
+  for PEP 3101 work in the sandbox.
+
+- Pat Maupin and Eric V. Smith were given SVN access on 28 Feb 2007 by NCN,
+  for PEP 3101 work in the sandbox.
+
+- Steven Bethard (SF name "bediviere") added to the SourceForge Python
+  project 26 Feb 2007, by NCN, as a tracker tech.
+
+- Josiah Carlson (SF name "josiahcarlson") added to the SourceForge Python
+  project 06 Jan 2007, by NCN, as a tracker tech.  He will maintain asyncore.
+
+- Collin Winter was given SVN access on 05 Jan 2007 by NCN, for PEP
+  update access.
+
+- Lars Gustaebel was given SVN access on 20 Dec 2006 by NCN, for tarfile.py
+  related work.
+
 - 2006 Summer of Code entries: SoC developers are expected to work
   primarily in nondist/sandbox or on a branch of their own, and will
   have their work reviewed before changes are accepted into the trunk.
@@ -101,6 +259,12 @@ Permissions History
 Permissions Dropped on Request
 ------------------------------
 
+- Roy Smith, Matt Fleming and Richard Emslie sent drop requests.
+  4 Aug 2008 GFB
+
+- Per note from Andrew Kuchling, the permissions for Gregory K Johnson
+  and the Summer Of Code project are no longer needed.  4 Aug 2008 GFB
+
 - Per note from Andrew Kuchling, the permissions for Gregory K Johnson
   and the Summer Of Code project are no longer needed.  AMK will make
   any future checkins directly.  16 Oct 2005 RDH
@@ -134,8 +298,11 @@ Permissions Dropped after Loss of Contact
 Initials of Project Admins
 --------------------------
 
-GvR:  Guido van Rossum
-NCN:  Neal Norwitz
-RDH:  Raymond Hettinger
 TGP:  Tim Peters
+GFB:  Georg Brandl
+BAC:  Brett Cannon
+NCN:  Neal Norwitz
 DJG:  David Goodger
+MvL:  Martin v. Loewis
+GvR:  Guido van Rossum
+RDH:  Raymond Hettinger

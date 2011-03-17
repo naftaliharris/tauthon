@@ -1,13 +1,8 @@
 import unittest
-import sys, os, glob
+import os, glob
 
-try:
-    # For Pythons w/distutils pybsddb
-    from bsddb3 import db
-except ImportError:
-    # For Python 2.3
-    from bsddb import db
-
+from test_all import db, test_support, get_new_environment_path, \
+        get_new_database_path
 
 #----------------------------------------------------------------------
 
@@ -16,11 +11,7 @@ class pget_bugTestCase(unittest.TestCase):
     db_name = 'test-cursor_pget.db'
 
     def setUp(self):
-        self.homeDir = os.path.join(os.path.dirname(sys.argv[0]), 'db_home')
-        try:
-            os.mkdir(self.homeDir)
-        except os.error:
-            pass
+        self.homeDir = get_new_environment_path()
         self.env = db.DBEnv()
         self.env.open(self.homeDir, db.DB_CREATE | db.DB_INIT_MPOOL)
         self.primary_db = db.DB(self.env)
@@ -41,9 +32,7 @@ class pget_bugTestCase(unittest.TestCase):
         del self.secondary_db
         del self.primary_db
         del self.env
-        for file in glob.glob(os.path.join(self.homeDir, '*')):
-            os.remove(file)
-        os.removedirs(self.homeDir)
+        test_support.rmtree(self.homeDir)
 
     def test_pget(self):
         cursor = self.secondary_db.cursor()

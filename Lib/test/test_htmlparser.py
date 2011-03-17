@@ -2,7 +2,6 @@
 
 import HTMLParser
 import pprint
-import sys
 import unittest
 from test import test_support
 
@@ -308,6 +307,18 @@ DOCTYPE html [
             ("data", " <not a='start tag'> "),
             ("endtag", "script"),
             ])
+
+    def test_entityrefs_in_attributes(self):
+        self._run_check("<html foo='&euro;&amp;&#97;&#x61;&unsupported;'>", [
+                ("starttag", "html", [("foo", u"\u20AC&aa&unsupported;")])
+                ])
+
+    def test_malformatted_charref(self):
+        self._run_check("<p>&#bad;</p>", [
+            ("starttag", "p", []),
+            ("data", "&#bad;"),
+            ("endtag", "p"),
+        ])
 
 
 def test_main():

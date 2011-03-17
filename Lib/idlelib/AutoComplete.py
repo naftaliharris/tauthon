@@ -7,12 +7,7 @@ import os
 import sys
 import string
 
-from configHandler import idleConf
-
-import AutoCompleteWindow
-from HyperParser import HyperParser
-
-import __main__
+from idlelib.configHandler import idleConf
 
 # This string includes all chars that may be in a file name (without a path
 # separator)
@@ -22,6 +17,15 @@ ID_CHARS = string.ascii_letters + string.digits + "_"
 
 # These constants represent the two different types of completions
 COMPLETE_ATTRIBUTES, COMPLETE_FILES = range(1, 2+1)
+
+from idlelib import AutoCompleteWindow
+from idlelib.HyperParser import HyperParser
+
+import __main__
+
+SEPS = os.sep
+if os.altsep:  # e.g. '/' on Windows...
+    SEPS += os.altsep
 
 class AutoComplete:
 
@@ -35,10 +39,9 @@ class AutoComplete:
                                    "popupwait", type="int", default=0)
 
     def __init__(self, editwin=None):
-        if editwin == None:  # subprocess and test
-            self.editwin = None
-            return
         self.editwin = editwin
+        if editwin is None:  # subprocess and test
+            return
         self.text = editwin.text
         self.autocompletewindow = None
 
@@ -64,19 +67,19 @@ class AutoComplete:
 
     def try_open_completions_event(self, event):
         """Happens when it would be nice to open a completion list, but not
-        really neccesary, for example after an dot, so function
+        really necessary, for example after an dot, so function
         calls won't be made.
         """
         lastchar = self.text.get("insert-1c")
         if lastchar == ".":
             self._open_completions_later(False, False, False,
                                          COMPLETE_ATTRIBUTES)
-        elif lastchar == os.sep:
+        elif lastchar in SEPS:
             self._open_completions_later(False, False, False,
                                          COMPLETE_FILES)
 
     def autocomplete_event(self, event):
-        """Happens when the user wants to complete his word, and if neccesary,
+        """Happens when the user wants to complete his word, and if necessary,
         open a completion list after that (if there is more than one
         completion)
         """
@@ -127,7 +130,7 @@ class AutoComplete:
                 i -= 1
             comp_start = curline[i:j]
             j = i
-            while i and curline[i-1] in FILENAME_CHARS+os.sep:
+            while i and curline[i-1] in FILENAME_CHARS + SEPS:
                 i -= 1
             comp_what = curline[i:j]
         elif hp.is_in_code() and (not mode or mode==COMPLETE_ATTRIBUTES):
@@ -190,7 +193,7 @@ class AutoComplete:
                         smalll = eval("__all__", namespace)
                         smalll.sort()
                     else:
-                        smalll = filter(lambda s: s[:1] != '_', bigl)
+                        smalll = [s for s in bigl if s[:1] != '_']
                 else:
                     try:
                         entity = self.get_entity(what)
@@ -200,7 +203,7 @@ class AutoComplete:
                             smalll = entity.__all__
                             smalll.sort()
                         else:
-                            smalll = filter(lambda s: s[:1] != '_', bigl)
+                            smalll = [s for s in bigl if s[:1] != '_']
                     except:
                         return [], []
 
@@ -211,7 +214,7 @@ class AutoComplete:
                     expandedpath = os.path.expanduser(what)
                     bigl = os.listdir(expandedpath)
                     bigl.sort()
-                    smalll = filter(lambda s: s[:1] != '.', bigl)
+                    smalll = [s for s in bigl if s[:1] != '.']
                 except OSError:
                     return [], []
 

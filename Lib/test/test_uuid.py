@@ -281,15 +281,9 @@ class TestUUID(TestCase):
         badtype(lambda: setattr(u, 'node', 0))
 
     def check_node(self, node, source):
-        individual_group_bit = (node >> 40L) & 1
-        universal_local_bit = (node >> 40L) & 2
-        message = "%012x doesn't look like a real MAC address" % node
-        self.assertEqual(individual_group_bit, 0, message)
-        self.assertEqual(universal_local_bit, 0, message)
-        self.assertNotEqual(node, 0, message)
-        self.assertNotEqual(node, 0xffffffffffffL, message)
-        self.assert_(0 <= node, message)
-        self.assert_(node < (1L << 48), message)
+        message = "%012x is not an RFC 4122 node ID" % node
+        self.assertTrue(0 < node, message)
+        self.assertTrue(node < (1L << 48), message)
 
         TestUUID.source2node[source] = node
         if TestUUID.last_node:
@@ -307,11 +301,6 @@ class TestUUID(TestCase):
 
     def test_ifconfig_getnode(self):
         import sys
-        print >>sys.__stdout__, \
-"""    WARNING: uuid._ifconfig_getnode is unreliable on many platforms.
-        It is disabled until the code and/or test can be fixed properly."""
-        return
-
         import os
         if os.name == 'posix':
             node = uuid._ifconfig_getnode()
@@ -331,19 +320,18 @@ class TestUUID(TestCase):
 
     def test_random_getnode(self):
         node = uuid._random_getnode()
-        self.assert_(0 <= node)
-        self.assert_(node < (1L <<48))
+        # Least significant bit of first octet must be set.
+        self.assertTrue(node & 0x010000000000)
+        self.assertTrue(node < (1L << 48))
 
     def test_unixdll_getnode(self):
         import sys
-        print >>sys.__stdout__, \
-"""    WARNING: uuid._unixdll_getnode is unreliable on many platforms.
-        It is disabled until the code and/or test can be fixed properly."""
-        return
-
         import os
         if importable('ctypes') and os.name == 'posix':
-            self.check_node(uuid._unixdll_getnode(), 'unixdll')
+            try: # Issues 1481, 3581: _uuid_generate_time() might be None.
+                self.check_node(uuid._unixdll_getnode(), 'unixdll')
+            except TypeError:
+                pass
 
     def test_windll_getnode(self):
         import os
@@ -352,11 +340,6 @@ class TestUUID(TestCase):
 
     def test_getnode(self):
         import sys
-        print >>sys.__stdout__, \
-"""    WARNING: uuid.getnode is unreliable on many platforms.
-        It is disabled until the code and/or test can be fixed properly."""
-        return
-
         node1 = uuid.getnode()
         self.check_node(node1, "getnode1")
 
@@ -367,6 +350,12 @@ class TestUUID(TestCase):
         self.assertEqual(node1, node2)
 
     def test_uuid1(self):
+        # uuid1 requires ctypes.
+        try:
+            import ctypes
+        except ImportError:
+            return
+
         equal = self.assertEqual
 
         # Make sure uuid1() generates UUIDs that are actually version 1.
@@ -420,6 +409,12 @@ class TestUUID(TestCase):
             equal(str(u), v)
 
     def test_uuid4(self):
+        # uuid4 requires ctypes.
+        try:
+            import ctypes
+        except ImportError:
+            return
+
         equal = self.assertEqual
 
         # Make sure uuid4() generates UUIDs that are actually version 4.
@@ -450,6 +445,34 @@ class TestUUID(TestCase):
             equal(u.version, 5)
             equal(u, uuid.UUID(v))
             equal(str(u), v)
+
+    def testIssue8621(self):
+        import os
+        import sys
+        if os.name != 'posix':
+            return
+
+        # On at least some versions of OSX uuid.uuid4 generates
+        # the same sequence of UUIDs in the parent and any
+        # children started using fork.
+        fds = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(fds[0])
+            value = uuid.uuid4()
+            os.write(fds[1], value.hex)
+            os._exit(0)
+
+        else:
+            os.close(fds[1])
+            parent_value = uuid.uuid4().hex
+            os.waitpid(pid, 0)
+            child_value = os.read(fds[0], 100)
+
+            self.assertNotEqual(parent_value, child_value)
+
+
+
 
 
 def test_main():

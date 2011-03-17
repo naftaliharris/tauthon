@@ -1,7 +1,7 @@
 #-*- coding: ISO-8859-1 -*-
 # pysqlite2/test/types.py: tests for type conversion and detection
 #
-# Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
+# Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -21,7 +21,7 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 
-import bz2, datetime
+import zlib, datetime
 import unittest
 import sqlite3 as sqlite
 
@@ -98,7 +98,7 @@ class DeclTypesTests(unittest.TestCase):
     def setUp(self):
         self.con = sqlite.connect(":memory:", detect_types=sqlite.PARSE_DECLTYPES)
         self.cur = self.con.cursor()
-        self.cur.execute("create table test(i int, s str, f float, b bool, u unicode, foo foo, bin blob)")
+        self.cur.execute("create table test(i int, s str, f float, b bool, u unicode, foo foo, bin blob, n1 number, n2 number(5))")
 
         # override float, make them always return the same number
         sqlite.converters["FLOAT"] = lambda x: 47.2
@@ -106,18 +106,21 @@ class DeclTypesTests(unittest.TestCase):
         # and implement two custom ones
         sqlite.converters["BOOL"] = lambda x: bool(int(x))
         sqlite.converters["FOO"] = DeclTypesTests.Foo
+        sqlite.converters["WRONG"] = lambda x: "WRONG"
+        sqlite.converters["NUMBER"] = float
 
     def tearDown(self):
         del sqlite.converters["FLOAT"]
         del sqlite.converters["BOOL"]
         del sqlite.converters["FOO"]
+        del sqlite.converters["NUMBER"]
         self.cur.close()
         self.con.close()
 
     def CheckString(self):
         # default
         self.cur.execute("insert into test(s) values (?)", ("foo",))
-        self.cur.execute("select s from test")
+        self.cur.execute('select s as "s [WRONG]" from test')
         row = self.cur.fetchone()
         self.failUnlessEqual(row[0], "foo")
 
@@ -202,28 +205,47 @@ class DeclTypesTests(unittest.TestCase):
         row = self.cur.fetchone()
         self.failUnlessEqual(row[0], val)
 
+    def CheckNumber1(self):
+        self.cur.execute("insert into test(n1) values (5)")
+        value = self.cur.execute("select n1 from test").fetchone()[0]
+        # if the converter is not used, it's an int instead of a float
+        self.failUnlessEqual(type(value), float)
+
+    def CheckNumber2(self):
+        """Checks wether converter names are cut off at '(' characters"""
+        self.cur.execute("insert into test(n2) values (5)")
+        value = self.cur.execute("select n2 from test").fetchone()[0]
+        # if the converter is not used, it's an int instead of a float
+        self.failUnlessEqual(type(value), float)
+
 class ColNamesTests(unittest.TestCase):
     def setUp(self):
-        self.con = sqlite.connect(":memory:", detect_types=sqlite.PARSE_COLNAMES|sqlite.PARSE_DECLTYPES)
+        self.con = sqlite.connect(":memory:", detect_types=sqlite.PARSE_COLNAMES)
         self.cur = self.con.cursor()
         self.cur.execute("create table test(x foo)")
 
         sqlite.converters["FOO"] = lambda x: "[%s]" % x
         sqlite.converters["BAR"] = lambda x: "<%s>" % x
-        sqlite.converters["EXC"] = lambda x: 5/0
+        sqlite.converters["EXC"] = lambda x: 5 // 0
+        sqlite.converters["B1B1"] = lambda x: "MARKER"
 
     def tearDown(self):
         del sqlite.converters["FOO"]
         del sqlite.converters["BAR"]
         del sqlite.converters["EXC"]
+        del sqlite.converters["B1B1"]
         self.cur.close()
         self.con.close()
 
-    def CheckDeclType(self):
+    def CheckDeclTypeNotUsed(self):
+        """
+        Assures that the declared type is not used when PARSE_DECLTYPES
+        is not set.
+        """
         self.cur.execute("insert into test(x) values (?)", ("xxx",))
         self.cur.execute("select x from test")
         val = self.cur.fetchone()[0]
-        self.failUnlessEqual(val, "[xxx]")
+        self.failUnlessEqual(val, "xxx")
 
     def CheckNone(self):
         self.cur.execute("insert into test(x) values (?)", (None,))
@@ -240,6 +262,11 @@ class ColNamesTests(unittest.TestCase):
         # Check if the stripping of colnames works. Everything after the first
         # whitespace should be stripped.
         self.failUnlessEqual(self.cur.description[0][0], "x")
+
+    def CheckCaseInConverterName(self):
+        self.cur.execute("""select 'other' as "x [b1b1]\"""")
+        val = self.cur.fetchone()[0]
+        self.failUnlessEqual(val, "MARKER")
 
     def CheckCursorDescriptionNoRow(self):
         """
@@ -275,7 +302,7 @@ class ObjectAdaptationTests(unittest.TestCase):
 
 class BinaryConverterTests(unittest.TestCase):
     def convert(s):
-        return bz2.decompress(s)
+        return zlib.decompress(s)
     convert = staticmethod(convert)
 
     def setUp(self):
@@ -287,7 +314,7 @@ class BinaryConverterTests(unittest.TestCase):
 
     def CheckBinaryInputForConverter(self):
         testdata = "abcdefg" * 10
-        result = self.con.execute('select ? as "x [bin]"', (buffer(bz2.compress(testdata)),)).fetchone()[0]
+        result = self.con.execute('select ? as "x [bin]"', (buffer(zlib.compress(testdata)),)).fetchone()[0]
         self.failUnlessEqual(testdata, result)
 
 class DateTimeTests(unittest.TestCase):
@@ -329,6 +356,13 @@ class DateTimeTests(unittest.TestCase):
 
     def CheckDateTimeSubSeconds(self):
         ts = sqlite.Timestamp(2004, 2, 14, 7, 15, 0, 500000)
+        self.cur.execute("insert into test(ts) values (?)", (ts,))
+        self.cur.execute("select ts from test")
+        ts2 = self.cur.fetchone()[0]
+        self.failUnlessEqual(ts, ts2)
+
+    def CheckDateTimeSubSecondsFloatingPoint(self):
+        ts = sqlite.Timestamp(2004, 2, 14, 7, 15, 0, 510241)
         self.cur.execute("insert into test(ts) values (?)", (ts,))
         self.cur.execute("select ts from test")
         ts2 = self.cur.fetchone()[0]

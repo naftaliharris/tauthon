@@ -1,5 +1,5 @@
 /* -----------------------------------------------------------------------
-   sysv.S - Copyright (c) 1998 Red Hat, Inc.
+   sysv.S - Copyright (c) 1998, 2008 Red Hat, Inc.
    
    ARM Foreign Function Interface 
 
@@ -14,13 +14,14 @@
    The above copyright notice and this permission notice shall be included
    in all copies or substantial portions of the Software.
 
-   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND, EXPRESS
-   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-   IN NO EVENT SHALL CYGNUS SOLUTIONS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-   OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-   OTHER DEALINGS IN THE SOFTWARE.
+   THE SOFTWARE IS PROVIDED ``AS IS'', WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+   HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+   DEALINGS IN THE SOFTWARE.
    ----------------------------------------------------------------------- */
 
 #define LIBFFI_ASM	
@@ -66,9 +67,16 @@
 
 #if defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_6J__) \
         || defined(__ARM_ARCH_6K__) || defined(__ARM_ARCH_6Z__) \
-        || defined(__ARM_ARCH_6ZK__)
+        || defined(__ARM_ARCH_6ZK__) || defined(__ARM_ARCH_6T2__) \
+	|| defined(__ARM_ARCH_6M__)
 # undef __ARM_ARCH__
 # define __ARM_ARCH__ 6
+#endif
+
+#if defined(__ARM_ARCH_7__) || defined(__ARM_ARCH_7A__) \
+        || defined(__ARM_ARCH_7R__) || defined(__ARM_ARCH_7M__)
+# undef __ARM_ARCH__
+# define __ARM_ARCH__ 7
 #endif
 
 #if __ARM_ARCH__ >= 5
@@ -82,6 +90,14 @@
 # define call_reg(x)	mov	lr, pc ; mov	pc, x
 #endif
 
+/* Conditionally compile unwinder directives.  */
+#ifdef __ARM_EABI__
+#define UNWIND
+#else
+#define UNWIND @
+#endif	
+
+	
 #if defined(__thumb__) && !defined(__THUMB_INTERWORK__)
 .macro	ARM_FUNC_START name
 	.text
@@ -92,6 +108,7 @@
 	bx	pc
 	nop
 	.arm
+	UNWIND .fnstart
 /* A hook to tell gdb that we've switched to ARM mode.  Also used to call
    directly from other local arm routines.  */
 _L__\name:		
@@ -102,6 +119,7 @@ _L__\name:
 	.align 0
 	.arm
 	ENTRY(\name)
+	UNWIND .fnstart
 .endm
 #endif
 
@@ -134,7 +152,10 @@ _L__\name:
 ARM_FUNC_START ffi_call_SYSV
 	@ Save registers
         stmfd	sp!, {r0-r3, fp, lr}
+	UNWIND .save	{r0-r3, fp, lr}
 	mov	fp, sp
+
+	UNWIND .setfp	fp, sp
 
 	@ Make room for all of the new args.
 	sub	sp, fp, r2
@@ -175,7 +196,7 @@ ARM_FUNC_START ffi_call_SYSV
 
 @ return INT
 	cmp	r3, #FFI_TYPE_INT
-#ifdef __SOFTFP__
+#if defined(__SOFTFP__) || defined(__ARM_EABI__)
 	cmpne	r3, #FFI_TYPE_FLOAT
 #endif
 	streq	r0, [r2]
@@ -183,12 +204,12 @@ ARM_FUNC_START ffi_call_SYSV
 
 	@ return INT64
 	cmp	r3, #FFI_TYPE_SINT64
-#ifdef __SOFTFP__
+#if defined(__SOFTFP__) || defined(__ARM_EABI__)
 	cmpne	r3, #FFI_TYPE_DOUBLE
 #endif
 	stmeqia	r2, {r0, r1}
 
-#ifndef __SOFTFP__
+#if !defined(__SOFTFP__) && !defined(__ARM_EABI__)
 	beq	LSYM(Lepilogue)
 
 @ return FLOAT
@@ -205,5 +226,81 @@ LSYM(Lepilogue):
 	RETLDM	"r0-r3,fp"
 
 .ffi_call_SYSV_end:
+	UNWIND .fnend
         .size    CNAME(ffi_call_SYSV),.ffi_call_SYSV_end-CNAME(ffi_call_SYSV)
 
+/*
+	unsigned int FFI_HIDDEN
+	ffi_closure_SYSV_inner (closure, respp, args)
+	     ffi_closure *closure;
+	     void **respp;
+  	     void *args;
+*/
+
+ARM_FUNC_START ffi_closure_SYSV
+	UNWIND .pad #16
+	add	ip, sp, #16
+	stmfd	sp!, {ip, lr}
+	UNWIND .save	{r0, lr}
+	add	r2, sp, #8
+	.pad #16
+	sub	sp, sp, #16
+	str	sp, [sp, #8]
+	add	r1, sp, #8
+	bl	ffi_closure_SYSV_inner
+	cmp	r0, #FFI_TYPE_INT
+	beq	.Lretint
+
+	cmp	r0, #FFI_TYPE_FLOAT
+#if defined(__SOFTFP__) || defined(__ARM_EABI__)
+	beq	.Lretint
+#else
+	beq	.Lretfloat
+#endif
+
+	cmp	r0, #FFI_TYPE_DOUBLE
+#if defined(__SOFTFP__) || defined(__ARM_EABI__)
+	beq	.Lretlonglong
+#else
+	beq	.Lretdouble
+#endif
+
+	cmp	r0, #FFI_TYPE_LONGDOUBLE
+#if defined(__SOFTFP__) || defined(__ARM_EABI__)
+	beq	.Lretlonglong
+#else
+	beq	.Lretlongdouble
+#endif
+
+	cmp	r0, #FFI_TYPE_SINT64
+	beq	.Lretlonglong
+.Lclosure_epilogue:
+	add	sp, sp, #16
+	ldmfd	sp, {sp, pc}
+.Lretint:
+	ldr	r0, [sp]
+	b	.Lclosure_epilogue
+.Lretlonglong:
+	ldr	r0, [sp]
+	ldr	r1, [sp, #4]
+	b	.Lclosure_epilogue
+
+#if !defined(__SOFTFP__) && !defined(__ARM_EABI__)
+.Lretfloat:
+	ldfs	f0, [sp]
+	b	.Lclosure_epilogue
+.Lretdouble:
+	ldfd	f0, [sp]
+	b	.Lclosure_epilogue
+.Lretlongdouble:
+	ldfd	f0, [sp]
+	b	.Lclosure_epilogue
+#endif
+
+.ffi_closure_SYSV_end:
+	UNWIND .fnend
+        .size    CNAME(ffi_closure_SYSV),.ffi_closure_SYSV_end-CNAME(ffi_closure_SYSV)
+
+#if defined __ELF__ && defined __linux__
+	.section	.note.GNU-stack,"",%progbits
+#endif

@@ -1,7 +1,6 @@
 import unittest
 from test import test_support
 import operator
-import sys
 from sys import maxint
 maxsize = test_support.MAX_Py_ssize_t
 minsize = -maxsize-1
@@ -196,8 +195,9 @@ class OverflowTestCase(unittest.TestCase):
         x = GetItem()
         self.assertEqual(x[self.pos], self.pos)
         self.assertEqual(x[self.neg], self.neg)
-        self.assertEqual(x[self.neg:self.pos], (maxint+minsize, maxsize))
-        self.assertEqual(x[self.neg:self.pos:1].indices(maxsize), (0, maxsize, 1))
+        with test_support._check_py3k_warnings():
+            self.assertEqual(x[self.neg:self.pos], (maxint+minsize, maxsize))
+            self.assertEqual(x[self.neg:self.pos:1].indices(maxsize), (0, maxsize, 1))
 
     def test_getitem(self):
         self._getitem_helper(object)

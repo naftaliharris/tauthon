@@ -382,7 +382,7 @@ From the Iterators list, about the types of these things.
 >>> type(i)
 <type 'generator'>
 >>> [s for s in dir(i) if not s.startswith('_')]
-['close', 'gi_frame', 'gi_running', 'next', 'send', 'throw']
+['close', 'gi_code', 'gi_frame', 'gi_running', 'next', 'send', 'throw']
 >>> print i.next.__doc__
 x.next() -> the next value, or raise StopIteration
 >>> iter(i) is i
@@ -899,6 +899,35 @@ This one caused a crash (see SF bug 567538):
 >>> print g.next()
 Traceback (most recent call last):
 StopIteration
+
+
+Test the gi_code attribute
+
+>>> def f():
+...     yield 5
+...
+>>> g = f()
+>>> g.gi_code is f.func_code
+True
+>>> g.next()
+5
+>>> g.next()
+Traceback (most recent call last):
+StopIteration
+>>> g.gi_code is f.func_code
+True
+
+
+Test the __name__ attribute and the repr()
+
+>>> def f():
+...    yield 5
+...
+>>> g = f()
+>>> g.__name__
+'f'
+>>> repr(g)  # doctest: +ELLIPSIS
+'<generator object f at ...>'
 """
 
 # conjoin is a simple backtracking generator, named in honor of Icon's
@@ -1622,7 +1651,7 @@ ValueError: 7
 >>> f().throw("abc")     # throw on just-opened generator
 Traceback (most recent call last):
   ...
-abc
+TypeError: exceptions must be classes, or instances, not str
 
 Now let's try closing a generator:
 
@@ -1658,6 +1687,19 @@ And finalization:
 exiting
 
 
+GeneratorExit is not caught by except Exception:
+
+>>> def f():
+...     try: yield
+...     except Exception: print 'except'
+...     finally: print 'finally'
+
+>>> g = f()
+>>> g.next()
+>>> del g
+finally
+
+
 Now let's try some ill-behaved generators:
 
 >>> def f():
@@ -1681,7 +1723,7 @@ Our ill-behaved code should be invoked during GC:
 >>> g.next()
 >>> del g
 >>> sys.stderr.getvalue().startswith(
-...     "Exception exceptions.RuntimeError: 'generator ignored GeneratorExit' in "
+...     "Exception RuntimeError: 'generator ignored GeneratorExit' in "
 ... )
 True
 >>> sys.stderr = old
@@ -1798,7 +1840,7 @@ to test.
 ...     del l
 ...     err = sys.stderr.getvalue().strip()
 ...     err.startswith(
-...         "Exception exceptions.RuntimeError: RuntimeError() in <"
+...         "Exception RuntimeError: RuntimeError() in <"
 ...     )
 ...     err.endswith("> ignored")
 ...     len(err.splitlines())

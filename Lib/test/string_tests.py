@@ -167,6 +167,13 @@ class CommonTest(unittest.TestCase):
         self.checkequal(3, 'abc', 'find', '', 3)
         self.checkequal(-1, 'abc', 'find', '', 4)
 
+        # to check the ability to pass None as defaults
+        self.checkequal( 2, 'rrarrrrrrrrra', 'find', 'a')
+        self.checkequal(12, 'rrarrrrrrrrra', 'find', 'a', 4)
+        self.checkequal(-1, 'rrarrrrrrrrra', 'find', 'a', 4, 6)
+        self.checkequal(12, 'rrarrrrrrrrra', 'find', 'a', 4, None)
+        self.checkequal( 2, 'rrarrrrrrrrra', 'find', 'a', None, 6)
+
         self.checkraises(TypeError, 'hello', 'find')
         self.checkraises(TypeError, 'hello', 'find', 42)
 
@@ -213,6 +220,13 @@ class CommonTest(unittest.TestCase):
         self.checkequal(3, 'abc', 'rfind', '', 3)
         self.checkequal(-1, 'abc', 'rfind', '', 4)
 
+        # to check the ability to pass None as defaults
+        self.checkequal(12, 'rrarrrrrrrrra', 'rfind', 'a')
+        self.checkequal(12, 'rrarrrrrrrrra', 'rfind', 'a', 4)
+        self.checkequal(-1, 'rrarrrrrrrrra', 'rfind', 'a', 4, 6)
+        self.checkequal(12, 'rrarrrrrrrrra', 'rfind', 'a', 4, None)
+        self.checkequal( 2, 'rrarrrrrrrrra', 'rfind', 'a', None, 6)
+
         self.checkraises(TypeError, 'hello', 'rfind')
         self.checkraises(TypeError, 'hello', 'rfind', 42)
 
@@ -226,6 +240,13 @@ class CommonTest(unittest.TestCase):
         self.checkraises(ValueError, 'abcdefghiab', 'index', 'abc', 1)
         self.checkraises(ValueError, 'abcdefghi', 'index', 'ghi', 8)
         self.checkraises(ValueError, 'abcdefghi', 'index', 'ghi', -1)
+
+        # to check the ability to pass None as defaults
+        self.checkequal( 2, 'rrarrrrrrrrra', 'index', 'a')
+        self.checkequal(12, 'rrarrrrrrrrra', 'index', 'a', 4)
+        self.checkraises(ValueError, 'rrarrrrrrrrra', 'index', 'a', 4, 6)
+        self.checkequal(12, 'rrarrrrrrrrra', 'index', 'a', 4, None)
+        self.checkequal( 2, 'rrarrrrrrrrra', 'index', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'index')
         self.checkraises(TypeError, 'hello', 'index', 42)
@@ -241,6 +262,13 @@ class CommonTest(unittest.TestCase):
         self.checkraises(ValueError, 'defghiabc', 'rindex', 'abc', 0, -1)
         self.checkraises(ValueError, 'abcdefghi', 'rindex', 'ghi', 0, 8)
         self.checkraises(ValueError, 'abcdefghi', 'rindex', 'ghi', 0, -1)
+
+        # to check the ability to pass None as defaults
+        self.checkequal(12, 'rrarrrrrrrrra', 'rindex', 'a')
+        self.checkequal(12, 'rrarrrrrrrrra', 'rindex', 'a', 4)
+        self.checkraises(ValueError, 'rrarrrrrrrrra', 'rindex', 'a', 4, 6)
+        self.checkequal(12, 'rrarrrrrrrrra', 'rindex', 'a', 4, None)
+        self.checkequal( 2, 'rrarrrrrrrrra', 'rindex', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'rindex')
         self.checkraises(TypeError, 'hello', 'rindex', 42)
@@ -474,8 +502,9 @@ class CommonTest(unittest.TestCase):
                  'lstrip', unicode('xyz', 'ascii'))
             self.checkequal(unicode('xyzzyhello', 'ascii'), 'xyzzyhelloxyzzy',
                  'rstrip', unicode('xyz', 'ascii'))
-            self.checkequal(unicode('hello', 'ascii'), 'hello',
-                 'strip', unicode('xyz', 'ascii'))
+            # XXX
+            #self.checkequal(unicode('hello', 'ascii'), 'hello',
+            #     'strip', unicode('xyz', 'ascii'))
 
         self.checkraises(TypeError, 'hello', 'strip', 42, 42)
         self.checkraises(TypeError, 'hello', 'lstrip', 42, 42)
@@ -657,8 +686,9 @@ class CommonTest(unittest.TestCase):
         EQ("bobobXbobob", "bobobobXbobobob", "replace", "bobob", "bob")
         EQ("BOBOBOB", "BOBOBOB", "replace", "bob", "bobby")
 
-        ba = buffer('a')
-        bb = buffer('b')
+        with test_support._check_py3k_warnings():
+            ba = buffer('a')
+            bb = buffer('b')
         EQ("bbc", "abc", "replace", ba, bb)
         EQ("aac", "abc", "replace", bb, ba)
 
@@ -714,6 +744,9 @@ class CommonTest(unittest.TestCase):
         self.checkequal('0034', '34', 'zfill', 4)
 
         self.checkraises(TypeError, '123', 'zfill')
+
+# XXX alias for py3k forward compatibility
+BaseTest = CommonTest
 
 class MixinStrUnicodeUserStringTest:
     # additional tests that only work for
@@ -910,15 +943,15 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(TypeError, 'hello', 'endswith', (42,))
 
     def test___contains__(self):
-        self.checkequal(True, '', '__contains__', '')         # vereq('' in '', True)
-        self.checkequal(True, 'abc', '__contains__', '')      # vereq('' in 'abc', True)
-        self.checkequal(False, 'abc', '__contains__', '\0')   # vereq('\0' in 'abc', False)
-        self.checkequal(True, '\0abc', '__contains__', '\0')  # vereq('\0' in '\0abc', True)
-        self.checkequal(True, 'abc\0', '__contains__', '\0')  # vereq('\0' in 'abc\0', True)
-        self.checkequal(True, '\0abc', '__contains__', 'a')   # vereq('a' in '\0abc', True)
-        self.checkequal(True, 'asdf', '__contains__', 'asdf') # vereq('asdf' in 'asdf', True)
-        self.checkequal(False, 'asd', '__contains__', 'asdf') # vereq('asdf' in 'asd', False)
-        self.checkequal(False, '', '__contains__', 'asdf')    # vereq('asdf' in '', False)
+        self.checkequal(True, '', '__contains__', '')
+        self.checkequal(True, 'abc', '__contains__', '')
+        self.checkequal(False, 'abc', '__contains__', '\0')
+        self.checkequal(True, '\0abc', '__contains__', '\0')
+        self.checkequal(True, 'abc\0', '__contains__', '\0')
+        self.checkequal(True, '\0abc', '__contains__', 'a')
+        self.checkequal(True, 'asdf', '__contains__', 'asdf')
+        self.checkequal(False, 'asd', '__contains__', 'asdf')
+        self.checkequal(False, '', '__contains__', 'asdf')
 
     def test_subscript(self):
         self.checkequal(u'a', 'abc', '__getitem__', 0)
@@ -928,7 +961,6 @@ class MixinStrUnicodeUserStringTest:
         self.checkequal(u'abc', 'abc', '__getitem__', slice(0, 1000))
         self.checkequal(u'a', 'abc', '__getitem__', slice(0, 1))
         self.checkequal(u'', 'abc', '__getitem__', slice(0, 0))
-        # FIXME What about negative indices? This is handled differently by [] and __getitem__(slice)
 
         self.checkraises(TypeError, 'abc', '__getitem__', 'def')
 
@@ -942,9 +974,20 @@ class MixinStrUnicodeUserStringTest:
         self.checkequal('', 'abc', '__getslice__', 1000, 1000)
         self.checkequal('', 'abc', '__getslice__', 2000, 1000)
         self.checkequal('', 'abc', '__getslice__', 2, 1)
-        # FIXME What about negative indizes? This is handled differently by [] and __getslice__
 
         self.checkraises(TypeError, 'abc', '__getslice__', 'def')
+
+    def test_extended_getslice(self):
+        # Test extended slicing by comparing with list slicing.
+        s = string.ascii_letters + string.digits
+        indices = (0, None, 1, 3, 41, -1, -2, -37)
+        for start in indices:
+            for stop in indices:
+                # Skip step 0 (invalid)
+                for step in indices[1:]:
+                    L = list(s)[start:stop:step]
+                    self.checkequal(u"".join(L), s, '__getitem__',
+                                    slice(start, stop, step))
 
     def test_mul(self):
         self.checkequal('', 'abc', '__mul__', -1)
@@ -1011,7 +1054,14 @@ class MixinStrUnicodeUserStringTest:
             # unicode raises ValueError, str raises OverflowError
             self.checkraises((ValueError, OverflowError), '%c', '__mod__', ordinal)
 
+        longvalue = sys.maxint + 10L
+        slongvalue = str(longvalue)
+        if slongvalue[-1] in ("L","l"): slongvalue = slongvalue[:-1]
         self.checkequal(' 42', '%3ld', '__mod__', 42)
+        self.checkequal('42', '%d', '__mod__', 42L)
+        self.checkequal('42', '%d', '__mod__', 42.0)
+        self.checkequal(slongvalue, '%d', '__mod__', longvalue)
+        self.checkcall('%d', '__mod__', float(longvalue))
         self.checkequal('0042.00', '%07.2f', '__mod__', 42)
         self.checkequal('0042.00', '%07.2F', '__mod__', 42)
 
@@ -1021,6 +1071,8 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(TypeError, '%c', '__mod__', (None,))
         self.checkraises(ValueError, '%(foo', '__mod__', {})
         self.checkraises(TypeError, '%(foo)s %(bar)s', '__mod__', ('foo', 42))
+        self.checkraises(TypeError, '%d', '__mod__', "42") # not numeric
+        self.checkraises(TypeError, '%d', '__mod__', (42+0j)) # no int/long conversion provided
 
         # argument names with properly nested brackets are supported
         self.checkequal('bar', '%((foo))s', '__mod__', {'(foo)': 'bar'})
@@ -1122,6 +1174,9 @@ class MixinStrStringUserStringTest:
         self.checkequal('Abc', 'abc', 'translate', table)
         self.checkequal('xyz', 'xyz', 'translate', table)
         self.checkequal('yz', 'xyz', 'translate', table, 'x')
+        self.checkequal('yx', 'zyzzx', 'translate', None, 'z')
+        self.checkequal('zyzzx', 'zyzzx', 'translate', None, '')
+        self.checkequal('zyzzx', 'zyzzx', 'translate', None)
         self.checkraises(ValueError, 'xyz', 'translate', 'too short', 'strip')
         self.checkraises(ValueError, 'xyz', 'translate', 'too short')
 

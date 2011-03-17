@@ -1,7 +1,6 @@
 # Check every path through every method of UserList
 
 from UserList import UserList
-import unittest
 from test import test_support, list_tests
 
 class UserListTest(list_tests.CommonTest):
@@ -54,7 +53,9 @@ class UserListTest(list_tests.CommonTest):
         self.assertEqual(iter(T((1,2))).next(), "0!!!")
 
 def test_main():
-    test_support.run_unittest(UserListTest)
+    with test_support._check_py3k_warnings(
+            (".+__(get|set|del)slice__ has been removed", DeprecationWarning)):
+        test_support.run_unittest(UserListTest)
 
 if __name__ == "__main__":
     test_main()

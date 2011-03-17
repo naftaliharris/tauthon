@@ -2,7 +2,6 @@ import _hotshot
 import os.path
 import parser
 import symbol
-import sys
 
 from _hotshot import \
      WHAT_ENTER, \
@@ -31,7 +30,7 @@ class LogReader:
         self._reader = _hotshot.logreader(logfn)
         self._nextitem = self._reader.next
         self._info = self._reader.info
-        if self._info.has_key('current-directory'):
+        if 'current-directory' in self._info:
             self.cwd = self._info['current-directory']
         else:
             self.cwd = None
@@ -107,7 +106,10 @@ class LogReader:
                 return what, t, tdelta
 
             if what == WHAT_EXIT:
-                return what, self._pop(), tdelta
+                try:
+                    return what, self._pop(), tdelta
+                except IndexError:
+                    raise StopIteration
 
             if what == WHAT_LINENO:
                 filename, firstlineno, funcname = self._stack[-1]

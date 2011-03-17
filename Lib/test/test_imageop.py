@@ -5,15 +5,11 @@
    Roger E. Masse
 """
 
-from test.test_support import verbose, unlink, run_unittest
+from test.test_support import verbose, unlink, import_module, run_unittest
 
-import imageop, uu, os, unittest
+imageop = import_module('imageop', deprecated=True)
+import uu, os, unittest
 
-import warnings
-warnings.filterwarnings("ignore",
-                        "the rgbimg module is deprecated",
-                        DeprecationWarning,
-                        ".*test_imageop")
 
 SIZES = (1, 2, 3, 4)
 _VALUES = (1, 2, 2**10, 2**15-1, 2**15, 2**15+1, 2**31-2, 2**31-1)
@@ -69,7 +65,8 @@ class InputValidationTests(unittest.TestCase):
         self.check("grey2rgb")
 
 
-def test_main(use_rgbimg=True):
+def test_main():
+
     run_unittest(InputValidationTests)
 
     try:
@@ -80,10 +77,7 @@ def test_main(use_rgbimg=True):
     # Create binary test files
     uu.decode(get_qualified_path('testrgb'+os.extsep+'uue'), 'test'+os.extsep+'rgb')
 
-    if use_rgbimg:
-        image, width, height = getrgbimage('test'+os.extsep+'rgb')
-    else:
-        image, width, height = getimage('test'+os.extsep+'rgb')
+    image, width, height = getimage('test'+os.extsep+'rgb')
 
     # Return the selected part of image, which should by width by height
     # in size and consist of pixels of psize bytes.
@@ -182,30 +176,10 @@ def test_main(use_rgbimg=True):
     # Cleanup
     unlink('test'+os.extsep+'rgb')
 
-def getrgbimage(name):
-    """return a tuple consisting of image (in 'imgfile' format but
-    using rgbimg instead) width and height"""
-
-    import rgbimg
-
-    try:
-        sizes = rgbimg.sizeofimage(name)
-    except rgbimg.error:
-        name = get_qualified_path(name)
-        sizes = rgbimg.sizeofimage(name)
-    if verbose:
-        print 'rgbimg opening test image: %s, sizes: %s' % (name, str(sizes))
-
-    image = rgbimg.longimagedata(name)
-    return (image, sizes[0], sizes[1])
-
 def getimage(name):
     """return a tuple consisting of
        image (in 'imgfile' format) width and height
     """
-
-    import imgfile
-
     try:
         sizes = imgfile.getsizes(name)
     except imgfile.error:
@@ -231,3 +205,6 @@ def get_qualified_path(name):
         if os.path.exists(fullname):
             return fullname
     return name
+
+if __name__ == '__main__':
+    test_main()

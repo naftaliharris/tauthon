@@ -1,6 +1,7 @@
 # tests common to dict and UserDict
 import unittest
 import UserDict
+import test_support
 
 
 class BasicTestMappingProtocol(unittest.TestCase):
@@ -54,13 +55,17 @@ class BasicTestMappingProtocol(unittest.TestCase):
         #len
         self.assertEqual(len(p), 0)
         self.assertEqual(len(d), len(self.reference))
-        #has_key
+        #in
         for k in self.reference:
-            self.assert_(d.has_key(k))
-            self.assert_(k in d)
+            self.assertTrue(k in d)
         for k in self.other:
-            self.failIf(d.has_key(k))
-            self.failIf(k in d)
+            self.assertTrue(k not in d)
+        #has_key
+        with test_support._check_py3k_warnings(quiet=True):
+            for k in self.reference:
+                self.assertTrue(d.has_key(k))
+            for k in self.other:
+                self.assertFalse(d.has_key(k))
         #cmp
         self.assertEqual(cmp(p,p), 0)
         self.assertEqual(cmp(d,d), 0)
@@ -557,6 +562,8 @@ class TestHashMappingProtocol(TestMappingProtocol):
         class BadEq(object):
             def __eq__(self, other):
                 raise Exc()
+            def __hash__(self):
+                return 24
 
         d = self._empty_mapping()
         d[BadEq()] = 42
@@ -642,6 +649,8 @@ class TestHashMappingProtocol(TestMappingProtocol):
         class BadCmp(object):
             def __eq__(self, other):
                 raise Exc()
+            def __hash__(self):
+                return 42
 
         d1 = self._full_mapping({BadCmp(): 1})
         d2 = self._full_mapping({1: 1})

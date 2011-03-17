@@ -60,7 +60,6 @@ For an example, see the function test() at the end of the file.
 
 
 import re
-
 import os
 import tempfile
 import string
@@ -264,35 +263,18 @@ def makepipeline(infile, steps, outfile):
 
 # Reliably quote a string as a single argument for /bin/sh
 
-_safechars = string.ascii_letters + string.digits + '!@%_-+=:,./' # Safe unquoted
-_funnychars = '"`$\\'                           # Unsafe inside "double quotes"
+# Safe unquoted
+_safechars = frozenset(string.ascii_letters + string.digits + '@%_-+=:,./')
 
 def quote(file):
+    """Return a shell-escaped version of the file string."""
     for c in file:
         if c not in _safechars:
             break
     else:
+        if not file:
+            return "''"
         return file
-    if '\'' not in file:
-        return '\'' + file + '\''
-    res = ''
-    for c in file:
-        if c in _funnychars:
-            c = '\\' + c
-        res = res + c
-    return '"' + res + '"'
-
-
-# Small test program and example
-
-def test():
-    print 'Testing...'
-    t = Template()
-    t.append('togif $IN $OUT', 'ff')
-    t.append('giftoppm', '--')
-    t.append('ppmtogif >$OUT', '-f')
-    t.append('fromgif $IN $OUT', 'ff')
-    t.debug(1)
-    FILE = '/usr/local/images/rgb/rogues/guido.rgb'
-    t.copy(FILE, '@temp')
-    print 'Done.'
+    # use single quotes, and put single quotes into double quotes
+    # the string $'b is then quoted as '$'"'"'b'
+    return "'" + file.replace("'", "'\"'\"'") + "'"

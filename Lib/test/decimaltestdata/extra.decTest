@@ -171,6 +171,63 @@ extr1421 max_mag NaN999999999 0.001234567 -> 0.00123457 Inexact Rounded
 extr1430 min_mag 9181716151 -NaN -> 9.18172E+9 Inexact Rounded
 extr1431 min_mag NaN4 1.818180E100 -> 1.81818E+100 Rounded
 
+-- Issue #6794: when comparing NaNs using compare_total, payloads
+-- should be compared as though positive integers; not
+-- lexicographically as strings.
+extr1500 comparetotal NaN123 NaN45 -> 1
+extr1501 comparetotal sNaN123 sNaN45 -> 1
+extr1502 comparetotal -NaN123 -NaN45 -> -1
+extr1503 comparetotal -sNaN123 -sNaN45 -> -1
+extr1504 comparetotal NaN45 NaN123 -> -1
+extr1505 comparetotal sNaN45 sNaN123 -> -1
+extr1506 comparetotal -NaN45 -NaN123 -> 1
+extr1507 comparetotal -sNaN45 -sNaN123 -> 1
+
+extr1510 comparetotal -sNaN63450748854172416 -sNaN911993 -> -1
+extr1511 comparetotmag NaN1222222222222 -NaN999999 -> 1
+
+-- Issue #7233: rotate and scale should truncate an argument
+-- of length greater than the current precision.
+precision: 4
+extr1600 rotate 1234567 -5 -> NaN Invalid_operation
+extr1601 rotate 1234567 -4 -> 4567
+extr1602 rotate 1234567 -3 -> 5674
+extr1603 rotate 1234567 -2 -> 6745
+extr1604 rotate 1234567 -1 -> 7456
+extr1605 rotate 1234567 0 -> 4567
+extr1606 rotate 1234567 1 -> 5674
+extr1607 rotate 1234567 2 -> 6745
+extr1608 rotate 1234567 3 -> 7456
+extr1609 rotate 1234567 4 -> 4567
+extr1610 rotate 1234567 5 -> NaN Invalid_operation
+
+extr1650 shift 1234567 -5 -> NaN Invalid_operation
+extr1651 shift 1234567 -4 -> 0
+extr1652 shift 1234567 -3 -> 4
+extr1653 shift 1234567 -2 -> 45
+extr1654 shift 1234567 -1 -> 456
+extr1655 shift 1234567 0 -> 4567
+extr1656 shift 1234567 1 -> 5670
+extr1657 shift 1234567 2 -> 6700
+extr1658 shift 1234567 3 -> 7000
+extr1659 shift 1234567 4 -> 0
+extr1660 shift 1234567 5 -> NaN Invalid_operation
+
+-- Cases where the power function was impossibly slow to determine that the
+-- result is inexact.  Thanks Stefan Krah for identifying this problem.
+precision: 16
+maxExponent: 999999999
+minExponent: -999999999
+extr1700 power 10 1e-999999999 -> 1.000000000000000 Inexact Rounded
+extr1701 power 100.0 -557.71e-742888888 -> 1.000000000000000 Inexact Rounded
+extr1702 power 10 1e-100 -> 1.000000000000000 Inexact Rounded
+
+-- A couple of interesting exact cases for power.  Note that the specification
+-- requires these to be reported as Inexact.
+extr1710 power 1e375 56e-3 -> 1.000000000000000E+21 Inexact Rounded
+extr1711 power 10000 0.75 -> 1000.000000000000 Inexact Rounded
+extr1712 power 1e-24 0.875 -> 1.000000000000000E-21 Inexact Rounded
+
 -- Tests for the is_* boolean operations
 precision: 9
 maxExponent: 999
@@ -1112,10 +1169,10 @@ bool0932 isnormal 1E+998 -> 1
 bool0933 isnormal -1E+998 -> 1
 bool0934 isnormal 1E+999 -> 1
 bool0935 isnormal -1E+999 -> 1
-bool0936 isnormal 1E+1000 -> 0
-bool0937 isnormal -1E+1000 -> 0
-bool0938 isnormal 1E+2000 -> 0
-bool0939 isnormal -1E+2000 -> 0
+bool0936 isnormal 1E+1000 -> 1
+bool0937 isnormal -1E+1000 -> 1
+bool0938 isnormal 1E+2000 -> 1
+bool0939 isnormal -1E+2000 -> 1
 bool0940 isnormal 9E-2000 -> 0
 bool0941 isnormal -9E-2000 -> 0
 bool0942 isnormal 9E-1008 -> 0
@@ -1162,10 +1219,10 @@ bool0982 isnormal 9E+998 -> 1
 bool0983 isnormal -9E+998 -> 1
 bool0984 isnormal 9E+999 -> 1
 bool0985 isnormal -9E+999 -> 1
-bool0986 isnormal 9E+1000 -> 0
-bool0987 isnormal -9E+1000 -> 0
-bool0988 isnormal 9E+2000 -> 0
-bool0989 isnormal -9E+2000 -> 0
+bool0986 isnormal 9E+1000 -> 1
+bool0987 isnormal -9E+1000 -> 1
+bool0988 isnormal 9E+2000 -> 1
+bool0989 isnormal -9E+2000 -> 1
 bool0990 isnormal 9.99999999E-2000 -> 0
 bool0991 isnormal -9.99999999E-2000 -> 0
 bool0992 isnormal 9.99999999E-1008 -> 0
@@ -1212,10 +1269,10 @@ bool1032 isnormal 9.99999999E+998 -> 1
 bool1033 isnormal -9.99999999E+998 -> 1
 bool1034 isnormal 9.99999999E+999 -> 1
 bool1035 isnormal -9.99999999E+999 -> 1
-bool1036 isnormal 9.99999999E+1000 -> 0
-bool1037 isnormal -9.99999999E+1000 -> 0
-bool1038 isnormal 9.99999999E+2000 -> 0
-bool1039 isnormal -9.99999999E+2000 -> 0
+bool1036 isnormal 9.99999999E+1000 -> 1
+bool1037 isnormal -9.99999999E+1000 -> 1
+bool1038 isnormal 9.99999999E+2000 -> 1
+bool1039 isnormal -9.99999999E+2000 -> 1
 bool1040 isnormal Infinity -> 0
 bool1041 isnormal -Infinity -> 0
 bool1042 isnormal NaN -> 0

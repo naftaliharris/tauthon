@@ -54,7 +54,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /dll /machine:I386
-# ADD LINK32 largeint.lib kernel32.lib user32.lib advapi32.lib shell32.lib /nologo /base:"0x1e000000" /subsystem:windows /dll /debug /machine:I386 /nodefaultlib:"libc" /out:"./python25.dll"
+# ADD LINK32 largeint.lib kernel32.lib user32.lib advapi32.lib shell32.lib /nologo /base:"0x1e000000" /subsystem:windows /dll /debug /machine:I386 /nodefaultlib:"libc" /out:"./python26.dll"
 # SUBTRACT LINK32 /pdb:none
 
 !ELSEIF  "$(CFG)" == "pythoncore - Win32 Debug"
@@ -82,7 +82,7 @@ BSC32=bscmake.exe
 # ADD BSC32 /nologo
 LINK32=link.exe
 # ADD BASE LINK32 kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /nologo /subsystem:windows /dll /debug /machine:I386 /pdbtype:sept
-# ADD LINK32 largeint.lib kernel32.lib user32.lib advapi32.lib shell32.lib /nologo /base:"0x1e000000" /subsystem:windows /dll /debug /machine:I386 /nodefaultlib:"libc" /out:"./python25_d.dll" /pdbtype:sept
+# ADD LINK32 largeint.lib kernel32.lib user32.lib advapi32.lib shell32.lib /nologo /base:"0x1e000000" /subsystem:windows /dll /debug /machine:I386 /nodefaultlib:"libc" /out:"./python26_d.dll" /pdbtype:sept
 # SUBTRACT LINK32 /pdb:none
 
 !ENDIF 
@@ -94,6 +94,10 @@ LINK32=link.exe
 # Begin Source File
 
 SOURCE=..\..\Modules\_bisectmodule.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\_bytesio.c
 # End Source File
 # Begin Source File
 
@@ -125,7 +129,15 @@ SOURCE=..\..\Modules\_codecsmodule.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Modules\_collectionsmodule.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Modules\_csv.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\_fileio.c
 # End Source File
 # Begin Source File
 
@@ -138,6 +150,10 @@ SOURCE=..\..\Modules\_heapqmodule.c
 # Begin Source File
 
 SOURCE=..\..\Modules\_hotshot.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\_json.c
 # End Source File
 # Begin Source File
 
@@ -165,7 +181,7 @@ SOURCE=..\..\PC\_subprocess.c
 # End Source File
 # Begin Source File
 
-SOURCE=..\..\Modules\_typesmodule.c
+SOURCE=..\..\Python\_warnings.c
 # End Source File
 # Begin Source File
 
@@ -225,6 +241,14 @@ SOURCE=..\..\Objects\bufferobject.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Objects\bytearrayobject.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Objects\bytes_methods.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Objects\cellobject.c
 # End Source File
 # Begin Source File
@@ -250,10 +274,6 @@ SOURCE=..\..\Python\codecs.c
 # Begin Source File
 
 SOURCE=..\..\Objects\codeobject.c
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Modules\collectionsmodule.c
 # End Source File
 # Begin Source File
 
@@ -329,7 +349,19 @@ SOURCE=..\..\Objects\fileobject.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Parser\firstsets.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Objects\floatobject.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Python\formatter_string.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Python\formatter_unicode.c
 # End Source File
 # Begin Source File
 
@@ -346,6 +378,10 @@ SOURCE=..\..\Objects\funcobject.c
 # Begin Source File
 
 SOURCE=..\..\Python\future.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\future_builtins.c
 # End Source File
 # Begin Source File
 
@@ -398,7 +434,15 @@ SOURCE=..\..\Python\graminit.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Parser\grammar.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Parser\grammar1.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\zlib\gzio.c
 # End Source File
 # Begin Source File
 
@@ -416,6 +460,10 @@ SOURCE=..\import_nt.c
 # Begin Source File
 
 SOURCE=..\..\Python\importdl.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\zlib\infback.c
 # End Source File
 # Begin Source File
 
@@ -543,6 +591,10 @@ SOURCE=..\..\Parser\parsetok.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Python\peephole.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Modules\posixmodule.c
 # End Source File
 # Begin Source File
@@ -555,7 +607,15 @@ SOURCE=..\..\Python\pyfpe.c
 # End Source File
 # Begin Source File
 
+SOURCE=..\..\Python\pymath.c
+# End Source File
+# Begin Source File
+
 SOURCE=..\..\Python\pystate.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Python\pystrcmp.c
 # End Source File
 # Begin Source File
 
@@ -576,10 +636,6 @@ SOURCE=..\..\Python\pythonrun.c
 # Begin Source File
 
 SOURCE=..\..\Objects\rangeobject.c
-# End Source File
-# Begin Source File
-
-SOURCE=..\..\Modules\rgbimgmodule.c
 # End Source File
 # Begin Source File
 
@@ -668,6 +724,10 @@ SOURCE=..\..\Objects\tupleobject.c
 # Begin Source File
 
 SOURCE=..\..\Objects\typeobject.c
+# End Source File
+# Begin Source File
+
+SOURCE=..\..\Modules\zlib\uncompr.c
 # End Source File
 # Begin Source File
 

@@ -48,17 +48,21 @@ typedef struct {
 #define CO_FUTURE_DIVISION    	0x2000
 #define CO_FUTURE_ABSOLUTE_IMPORT 0x4000 /* do absolute imports by default */
 #define CO_FUTURE_WITH_STATEMENT  0x8000
+#define CO_FUTURE_PRINT_FUNCTION  0x10000
+#define CO_FUTURE_UNICODE_LITERALS 0x20000
 
 /* This should be defined if a future statement modifies the syntax.
    For example, when a keyword is added.
 */
+#if 1
 #define PY_PARSER_REQUIRES_FUTURE_KEYWORD
+#endif
 
 #define CO_MAXBLOCKS 20 /* Max static block nesting within a function */
 
 PyAPI_DATA(PyTypeObject) PyCode_Type;
 
-#define PyCode_Check(op) ((op)->ob_type == &PyCode_Type)
+#define PyCode_Check(op) (Py_TYPE(op) == &PyCode_Type)
 #define PyCode_GetNumFree(op) (PyTuple_GET_SIZE((op)->co_freevars))
 
 /* Public interface */
@@ -70,7 +74,7 @@ PyAPI_FUNC(int) PyCode_Addr2Line(PyCodeObject *, int);
 
 /* for internal use only */
 #define _PyCode_GETCODEPTR(co, pp) \
-	((*(co)->co_code->ob_type->tp_as_buffer->bf_getreadbuffer) \
+	((*Py_TYPE((co)->co_code)->tp_as_buffer->bf_getreadbuffer) \
 	 ((co)->co_code, 0, (void **)(pp)))
 
 typedef struct _addr_pair {
@@ -87,6 +91,9 @@ typedef struct _addr_pair {
 
 PyAPI_FUNC(int) PyCode_CheckLineNumber(PyCodeObject* co,
                                        int lasti, PyAddrPair *bounds);
+
+PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
+                                      PyObject *names, PyObject *lineno_obj);
 
 #ifdef __cplusplus
 }

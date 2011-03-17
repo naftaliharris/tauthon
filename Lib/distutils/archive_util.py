@@ -95,18 +95,16 @@ def make_zipfile (base_name, base_dir, verbose=0, dry_run=0):
         log.info("creating '%s' and adding '%s' to it",
                  zip_filename, base_dir)
 
-        def visit (z, dirname, names):
-            for name in names:
-                path = os.path.normpath(os.path.join(dirname, name))
-                if os.path.isfile(path):
-                    z.write(path, path)
-                    log.info("adding '%s'" % path)
-
         if not dry_run:
             z = zipfile.ZipFile(zip_filename, "w",
                                 compression=zipfile.ZIP_DEFLATED)
 
-            os.path.walk(base_dir, visit, z)
+            for dirpath, dirnames, filenames in os.walk(base_dir):
+                for name in filenames:
+                    path = os.path.normpath(os.path.join(dirpath, name))
+                    if os.path.isfile(path):
+                        z.write(path, path)
+                        log.info("adding '%s'" % path)
             z.close()
 
     return zip_filename
@@ -124,7 +122,7 @@ ARCHIVE_FORMATS = {
 
 def check_archive_formats (formats):
     for format in formats:
-        if not ARCHIVE_FORMATS.has_key(format):
+        if format not in ARCHIVE_FORMATS:
             return format
     else:
         return None
@@ -162,11 +160,14 @@ def make_archive (base_name, format,
     func = format_info[0]
     for (arg,val) in format_info[1]:
         kwargs[arg] = val
-    filename = apply(func, (base_name, base_dir), kwargs)
+    filename = func(base_name, base_dir, **kwargs)
 
-    if root_dir is not None:
-        log.debug("changing back to '%s'", save_cwd)
-        os.chdir(save_cwd)
+    try:
+        filename = func(base_name, base_dir, **kwargs)
+    finally:
+        if root_dir is not None:
+            log.debug("changing back to '%s'", save_cwd)
+            os.chdir(save_cwd)
 
     return filename
 

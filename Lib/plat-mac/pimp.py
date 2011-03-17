@@ -12,9 +12,13 @@ dependencies and installing packages.
 There is a minimal main program that works as a command line tool, but the
 intention is that the end user will use this through a GUI.
 """
+
+from warnings import warnpy3k
+warnpy3k("In 3.x, the pimp module is removed.", stacklevel=2)
+
 import sys
 import os
-import popen2
+import subprocess
 import urllib
 import urllib2
 import urlparse
@@ -101,10 +105,11 @@ def _cmd(output, dir, *cmditems):
         output.write("+ %s\n" % cmd)
     if NO_EXECUTE:
         return 0
-    child = popen2.Popen4(cmd)
-    child.tochild.close()
+    child = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    child.stdin.close()
     while 1:
-        line = child.fromchild.readline()
+        line = child.stdout.readline()
         if not line:
             break
         if output:

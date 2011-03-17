@@ -28,6 +28,8 @@ class TestGenericStringIO(unittest.TestCase):
         eq(self._fp.read(10), self._line[:10])
         eq(self._fp.readline(), self._line[10:] + '\n')
         eq(len(self._fp.readlines(60)), 2)
+        self._fp.seek(0)
+        eq(self._fp.readline(-1), self._line + '\n')
 
     def test_writes(self):
         f = self.MODULE.StringIO()
@@ -62,6 +64,7 @@ class TestGenericStringIO(unittest.TestCase):
         eq(f.getvalue(), 'abcde')
         f.write('xyz')
         eq(f.getvalue(), 'abcdexyz')
+        self.assertRaises(IOError, f.truncate, -1)
         f.close()
         self.assertRaises(ValueError, f.write, 'frobnitz')
 
@@ -134,12 +137,10 @@ class TestBuffercStringIO(TestcStringIO):
 
 
 def test_main():
-    test_support.run_unittest(
-        TestStringIO,
-        TestcStringIO,
-        TestBufferStringIO,
-        TestBuffercStringIO
-    )
+    test_support.run_unittest(TestStringIO, TestcStringIO)
+    with test_support._check_py3k_warnings(("buffer.. not supported",
+                                             DeprecationWarning)):
+        test_support.run_unittest(TestBufferStringIO, TestBuffercStringIO)
 
 if __name__ == '__main__':
     test_main()

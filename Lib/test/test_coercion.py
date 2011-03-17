@@ -1,8 +1,7 @@
 import copy
-import sys
-import warnings
 import unittest
-from test.test_support import run_unittest, TestFailed
+from test.test_support import run_unittest, TestFailed, check_warnings
+
 
 # Fake a number that implements numeric methods through __coerce__
 class CoerceNumber:
@@ -224,9 +223,10 @@ def process_infix_results():
             infix_results[key] = res
 
 
-
-process_infix_results()
-# now infix_results has two lists of results for every pairing.
+with check_warnings(("classic (int|long) division", DeprecationWarning),
+                    quiet=True):
+    process_infix_results()
+    # now infix_results has two lists of results for every pairing.
 
 prefix_binops = [ 'divmod' ]
 prefix_results = [
@@ -310,6 +310,7 @@ class CoercionTest(unittest.TestCase):
             def __cmp__(slf, other):
                 self.assert_(other == 42, 'expected evil_coercer, got %r' % other)
                 return 0
+            __hash__ = None # Invalid cmp makes this unhashable
         self.assertEquals(cmp(WackyComparer(), evil_coercer), 0)
         # ...and classic classes too, since that code path is a little different
         class ClassicWackyComparer:
@@ -337,11 +338,11 @@ class CoercionTest(unittest.TestCase):
             raise exc
 
 def test_main():
-    warnings.filterwarnings("ignore",
-                            r'complex divmod\(\), // and % are deprecated',
-                            DeprecationWarning,
-                            r'test.test_coercion$')
-    run_unittest(CoercionTest)
+    with check_warnings(("complex divmod.., // and % are deprecated",
+                         DeprecationWarning),
+                        ("classic (int|long) division", DeprecationWarning),
+                        quiet=True):
+        run_unittest(CoercionTest)
 
 if __name__ == "__main__":
     test_main()

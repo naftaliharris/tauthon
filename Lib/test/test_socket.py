@@ -3,27 +3,27 @@
 import unittest
 from test import test_support
 
+import errno
 import socket
 import select
-import time
 import thread, threading
+import time
+import traceback
 import Queue
 import sys
+import os
 import array
 from weakref import proxy
 import signal
 
-PORT = 50007
-HOST = 'localhost'
+HOST = test_support.HOST
 MSG = 'Michael Gilfix was here\n'
 
 class SocketTCPTest(unittest.TestCase):
 
     def setUp(self):
         self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.serv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        global PORT
-        PORT = test_support.bind_port(self.serv, HOST, PORT)
+        self.port = test_support.bind_port(self.serv)
         self.serv.listen(1)
 
     def tearDown(self):
@@ -34,9 +34,7 @@ class SocketUDPTest(unittest.TestCase):
 
     def setUp(self):
         self.serv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.serv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        global PORT
-        PORT = test_support.bind_port(self.serv, HOST, PORT)
+        self.port = test_support.bind_port(self.serv)
 
     def tearDown(self):
         self.serv.close()
@@ -75,7 +73,7 @@ class ThreadableTest:
 
     Note, the server setup function cannot call any blocking
     functions that rely on the client thread during setup,
-    unless serverExplicityReady() is called just before
+    unless serverExplicitReady() is called just before
     the blocking call (such as in setting up a client/server
     connection and performing the accept() in setUp().
     """
@@ -109,7 +107,7 @@ class ThreadableTest:
             self.clientRun, (test_method,))
 
         self.__setUp()
-        if not self.server_ready.isSet():
+        if not self.server_ready.is_set():
             self.server_ready.set()
         self.client_ready.wait()
 
@@ -125,8 +123,9 @@ class ThreadableTest:
         self.server_ready.wait()
         self.client_ready.set()
         self.clientSetUp()
-        if not callable(test_func):
-            raise TypeError, "test_func must be a callable function"
+        with test_support._check_py3k_warnings():
+            if not callable(test_func):
+                raise TypeError("test_func must be a callable function.")
         try:
             test_func()
         except Exception, strerror:
@@ -134,7 +133,7 @@ class ThreadableTest:
         self.clientTearDown()
 
     def clientSetUp(self):
-        raise NotImplementedError, "clientSetUp must be implemented."
+        raise NotImplementedError("clientSetUp must be implemented.")
 
     def clientTearDown(self):
         self.done.set()
@@ -183,7 +182,7 @@ class SocketConnectedTest(ThreadedTCPSocketTest):
 
     def clientSetUp(self):
         ThreadedTCPSocketTest.clientSetUp(self)
-        self.cli.connect((HOST, PORT))
+        self.cli.connect((HOST, self.port))
         self.serv_conn = self.cli
 
     def clientTearDown(self):
@@ -278,15 +277,14 @@ class GeneralModuleTests(unittest.TestCase):
 
     def testRefCountGetNameInfo(self):
         # Testing reference count for getnameinfo
-        import sys
         if hasattr(sys, "getrefcount"):
             try:
                 # On some versions, this loses a reference
                 orig = sys.getrefcount(__name__)
                 socket.getnameinfo(__name__,0)
-            except SystemError:
-                if sys.getrefcount(__name__) <> orig:
-                    self.fail("socket.getnameinfo loses a reference")
+            except TypeError:
+                self.assertEqual(sys.getrefcount(__name__), orig,
+                                 "socket.getnameinfo loses a reference")
 
     def testInterpreterCrash(self):
         # Making sure getnameinfo doesn't crash the interpreter
@@ -310,13 +308,27 @@ class GeneralModuleTests(unittest.TestCase):
             self.assertEqual(swapped & mask, mask)
             self.assertRaises(OverflowError, func, 1L<<34)
 
+    def testNtoHErrors(self):
+        good_values = [ 1, 2, 3, 1L, 2L, 3L ]
+        bad_values = [ -1, -2, -3, -1L, -2L, -3L ]
+        for k in good_values:
+            socket.ntohl(k)
+            socket.ntohs(k)
+            socket.htonl(k)
+            socket.htons(k)
+        for k in bad_values:
+            self.assertRaises(OverflowError, socket.ntohl, k)
+            self.assertRaises(OverflowError, socket.ntohs, k)
+            self.assertRaises(OverflowError, socket.htonl, k)
+            self.assertRaises(OverflowError, socket.htons, k)
+
     def testGetServBy(self):
         eq = self.assertEqual
         # Find one service that exists, then check all the related interfaces.
         # I've ordered this by protocols that have both a tcp and udp
         # protocol, at least for modern Linuxes.
         if sys.platform in ('linux2', 'freebsd4', 'freebsd5', 'freebsd6',
-                            'freebsd7', 'darwin'):
+                            'freebsd7', 'freebsd8', 'darwin'):
             # avoid the 'echo' service on this platform, as there is an
             # assumption breaking non-standard port/protocol entry
             services = ('daytime', 'qotd', 'domain')
@@ -373,6 +385,14 @@ class GeneralModuleTests(unittest.TestCase):
 
         # Check that setting it to an invalid type raises TypeError
         self.assertRaises(TypeError, socket.setdefaulttimeout, "spam")
+
+    def testIPv4_inet_aton_fourbytes(self):
+        if not hasattr(socket, 'inet_aton'):
+            return  # No inet_aton, nothing to check
+        # Test that issue1008086 and issue767150 are fixed.
+        # It must return 4 bytes.
+        self.assertEquals('\x00'*4, socket.inet_aton('0.0.0.0'))
+        self.assertEquals('\xff'*4, socket.inet_aton('255.255.255.255'))
 
     def testIPv4toString(self):
         if not hasattr(socket, 'inet_pton'):
@@ -446,16 +466,23 @@ class GeneralModuleTests(unittest.TestCase):
     # XXX The following don't test module-level functionality...
 
     def testSockName(self):
-        # Testing getsockname()
+        # Testing getsockname().  Use a temporary socket to elicit an unused
+        # ephemeral port that we can use later in the test.
+        tempsock = socket.socket()
+        tempsock.bind(("0.0.0.0", 0))
+        (host, port) = tempsock.getsockname()
+        tempsock.close()
+        del tempsock
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(("0.0.0.0", PORT+1))
+        sock.bind(("0.0.0.0", port))
         name = sock.getsockname()
         # XXX(nnorwitz): http://tinyurl.com/os5jz seems to indicate
         # it reasonable to get the host's addr in addition to 0.0.0.0.
         # At least for eCos.  This is required for the S/390 to pass.
         my_ip_addr = socket.gethostbyname(socket.gethostname())
         self.assert_(name[0] in ("0.0.0.0", my_ip_addr), '%s invalid' % name[0])
-        self.assertEqual(name[1], PORT+1)
+        self.assertEqual(name[1], port)
 
     def testGetSockOpt(self):
         # Testing getsockopt()
@@ -485,6 +512,15 @@ class GeneralModuleTests(unittest.TestCase):
         self.assertEqual(sock.type, socket.SOCK_STREAM)
         self.assertEqual(sock.proto, 0)
         sock.close()
+
+    def test_sock_ioctl(self):
+        if os.name != "nt":
+            return
+        self.assert_(hasattr(socket.socket, 'ioctl'))
+        self.assert_(hasattr(socket, 'SIO_RCVALL'))
+        self.assert_(hasattr(socket, 'RCVALL_ON'))
+        self.assert_(hasattr(socket, 'RCVALL_OFF'))
+
 
 class BasicTCPTest(SocketConnectedTest):
 
@@ -557,6 +593,10 @@ class BasicTCPTest(SocketConnectedTest):
         # Testing shutdown()
         msg = self.cli_conn.recv(1024)
         self.assertEqual(msg, MSG)
+        # wait for _testShutdown to finish: on OS X, when the server
+        # closes the connection the client also becomes disconnected,
+        # and the client's shutdown call will fail. (Issue #4397.)
+        self.done.wait()
 
     def _testShutdown(self):
         self.serv_conn.send(MSG)
@@ -573,7 +613,7 @@ class BasicUDPTest(ThreadedUDPSocketTest):
         self.assertEqual(msg, MSG)
 
     def _testSendtoAndRecv(self):
-        self.cli.sendto(MSG, 0, (HOST, PORT))
+        self.cli.sendto(MSG, 0, (HOST, self.port))
 
     def testRecvFrom(self):
         # Testing recvfrom() over UDP
@@ -581,14 +621,14 @@ class BasicUDPTest(ThreadedUDPSocketTest):
         self.assertEqual(msg, MSG)
 
     def _testRecvFrom(self):
-        self.cli.sendto(MSG, 0, (HOST, PORT))
+        self.cli.sendto(MSG, 0, (HOST, self.port))
 
     def testRecvFromNegative(self):
         # Negative lengths passed to recvfrom should give ValueError.
         self.assertRaises(ValueError, self.serv.recvfrom, -1)
 
     def _testRecvFromNegative(self):
-        self.cli.sendto(MSG, 0, (HOST, PORT))
+        self.cli.sendto(MSG, 0, (HOST, self.port))
 
 class TCPCloserTest(ThreadedTCPSocketTest):
 
@@ -602,7 +642,7 @@ class TCPCloserTest(ThreadedTCPSocketTest):
         self.assertEqual(sd.recv(1), '')
 
     def _testClose(self):
-        self.cli.connect((HOST, PORT))
+        self.cli.connect((HOST, self.port))
         time.sleep(1.0)
 
 class BasicSocketPairTest(SocketPairTest):
@@ -660,7 +700,7 @@ class NonBlockingTCPTests(ThreadedTCPSocketTest):
 
     def _testAccept(self):
         time.sleep(0.1)
-        self.cli.connect((HOST, PORT))
+        self.cli.connect((HOST, self.port))
 
     def testConnect(self):
         # Testing non-blocking connect
@@ -668,7 +708,7 @@ class NonBlockingTCPTests(ThreadedTCPSocketTest):
 
     def _testConnect(self):
         self.cli.settimeout(10)
-        self.cli.connect((HOST, PORT))
+        self.cli.connect((HOST, self.port))
 
     def testRecv(self):
         # Testing non-blocking recv
@@ -688,7 +728,7 @@ class NonBlockingTCPTests(ThreadedTCPSocketTest):
             self.fail("Error during select call to non-blocking socket.")
 
     def _testRecv(self):
-        self.cli.connect((HOST, PORT))
+        self.cli.connect((HOST, self.port))
         time.sleep(0.1)
         self.cli.send(MSG)
 
@@ -795,6 +835,77 @@ class FileObjectClassTestCase(SocketConnectedTest):
     def _testClosedAttr(self):
         self.assert_(not self.cli_file.closed)
 
+
+class FileObjectInterruptedTestCase(unittest.TestCase):
+    """Test that the file object correctly handles EINTR internally."""
+
+    class MockSocket(object):
+        def __init__(self, recv_funcs=()):
+            # A generator that returns callables that we'll call for each
+            # call to recv().
+            self._recv_step = iter(recv_funcs)
+
+        def recv(self, size):
+            return self._recv_step.next()()
+
+    @staticmethod
+    def _raise_eintr():
+        raise socket.error(errno.EINTR)
+
+    def _test_readline(self, size=-1, **kwargs):
+        mock_sock = self.MockSocket(recv_funcs=[
+                lambda : "This is the first line\nAnd the sec",
+                self._raise_eintr,
+                lambda : "ond line is here\n",
+                lambda : "",
+            ])
+        fo = socket._fileobject(mock_sock, **kwargs)
+        self.assertEquals(fo.readline(size), "This is the first line\n")
+        self.assertEquals(fo.readline(size), "And the second line is here\n")
+
+    def _test_read(self, size=-1, **kwargs):
+        mock_sock = self.MockSocket(recv_funcs=[
+                lambda : "This is the first line\nAnd the sec",
+                self._raise_eintr,
+                lambda : "ond line is here\n",
+                lambda : "",
+            ])
+        fo = socket._fileobject(mock_sock, **kwargs)
+        self.assertEquals(fo.read(size), "This is the first line\n"
+                          "And the second line is here\n")
+
+    def test_default(self):
+        self._test_readline()
+        self._test_readline(size=100)
+        self._test_read()
+        self._test_read(size=100)
+
+    def test_with_1k_buffer(self):
+        self._test_readline(bufsize=1024)
+        self._test_readline(size=100, bufsize=1024)
+        self._test_read(bufsize=1024)
+        self._test_read(size=100, bufsize=1024)
+
+    def _test_readline_no_buffer(self, size=-1):
+        mock_sock = self.MockSocket(recv_funcs=[
+                lambda : "aa",
+                lambda : "\n",
+                lambda : "BB",
+                self._raise_eintr,
+                lambda : "bb",
+                lambda : "",
+            ])
+        fo = socket._fileobject(mock_sock, bufsize=0)
+        self.assertEquals(fo.readline(size), "aa\n")
+        self.assertEquals(fo.readline(size), "BBbb")
+
+    def test_no_buffer(self):
+        self._test_readline_no_buffer()
+        self._test_readline_no_buffer(size=4)
+        self._test_read(bufsize=0)
+        self._test_read(size=100, bufsize=0)
+
+
 class UnbufferedFileObjectClassTestCase(FileObjectClassTestCase):
 
     """Repeat the tests from FileObjectClassTestCase with bufsize==0.
@@ -828,6 +939,134 @@ class LineBufferedFileObjectClassTestCase(FileObjectClassTestCase):
 class SmallBufferedFileObjectClassTestCase(FileObjectClassTestCase):
 
     bufsize = 2 # Exercise the buffering code
+
+
+class NetworkConnectionTest(object):
+    """Prove network connection."""
+    def clientSetUp(self):
+        # We're inherited below by BasicTCPTest2, which also inherits
+        # BasicTCPTest, which defines self.port referenced below.
+        self.cli = socket.create_connection((HOST, self.port))
+        self.serv_conn = self.cli
+
+class BasicTCPTest2(NetworkConnectionTest, BasicTCPTest):
+    """Tests that NetworkConnection does not break existing TCP functionality.
+    """
+
+class NetworkConnectionNoServer(unittest.TestCase):
+    def testWithoutServer(self):
+        port = test_support.find_unused_port()
+        self.failUnlessRaises(
+            socket.error,
+            lambda: socket.create_connection((HOST, port))
+        )
+
+class NetworkConnectionAttributesTest(SocketTCPTest, ThreadableTest):
+
+    def __init__(self, methodName='runTest'):
+        SocketTCPTest.__init__(self, methodName=methodName)
+        ThreadableTest.__init__(self)
+
+    def clientSetUp(self):
+        pass
+
+    def clientTearDown(self):
+        self.cli.close()
+        self.cli = None
+        ThreadableTest.clientTearDown(self)
+
+    def _justAccept(self):
+        conn, addr = self.serv.accept()
+
+    testFamily = _justAccept
+    def _testFamily(self):
+        self.cli = socket.create_connection((HOST, self.port), timeout=30)
+        self.assertEqual(self.cli.family, 2)
+
+    testTimeoutDefault = _justAccept
+    def _testTimeoutDefault(self):
+        # passing no explicit timeout uses socket's global default
+        self.assert_(socket.getdefaulttimeout() is None)
+        socket.setdefaulttimeout(42)
+        try:
+            self.cli = socket.create_connection((HOST, self.port))
+        finally:
+            socket.setdefaulttimeout(None)
+        self.assertEquals(self.cli.gettimeout(), 42)
+
+    testTimeoutNone = _justAccept
+    def _testTimeoutNone(self):
+        # None timeout means the same as sock.settimeout(None)
+        self.assert_(socket.getdefaulttimeout() is None)
+        socket.setdefaulttimeout(30)
+        try:
+            self.cli = socket.create_connection((HOST, self.port), timeout=None)
+        finally:
+            socket.setdefaulttimeout(None)
+        self.assertEqual(self.cli.gettimeout(), None)
+
+    testTimeoutValueNamed = _justAccept
+    def _testTimeoutValueNamed(self):
+        self.cli = socket.create_connection((HOST, self.port), timeout=30)
+        self.assertEqual(self.cli.gettimeout(), 30)
+
+    testTimeoutValueNonamed = _justAccept
+    def _testTimeoutValueNonamed(self):
+        self.cli = socket.create_connection((HOST, self.port), 30)
+        self.assertEqual(self.cli.gettimeout(), 30)
+
+class NetworkConnectionBehaviourTest(SocketTCPTest, ThreadableTest):
+
+    def __init__(self, methodName='runTest'):
+        SocketTCPTest.__init__(self, methodName=methodName)
+        ThreadableTest.__init__(self)
+
+    def clientSetUp(self):
+        pass
+
+    def clientTearDown(self):
+        self.cli.close()
+        self.cli = None
+        ThreadableTest.clientTearDown(self)
+
+    def testInsideTimeout(self):
+        conn, addr = self.serv.accept()
+        time.sleep(3)
+        conn.send("done!")
+    testOutsideTimeout = testInsideTimeout
+
+    def _testInsideTimeout(self):
+        self.cli = sock = socket.create_connection((HOST, self.port))
+        data = sock.recv(5)
+        self.assertEqual(data, "done!")
+
+    def _testOutsideTimeout(self):
+        self.cli = sock = socket.create_connection((HOST, self.port), timeout=1)
+        self.failUnlessRaises(socket.timeout, lambda: sock.recv(5))
+
+class TestIssue9543(SocketTCPTest, NetworkConnectionTest):
+    """
+    This test exercises the code in the _fileobject.flush() method when the
+    whole write buffer hasn't been flushed.
+    See http://bugs.python.org/issue9543
+    """
+    # XXX: this is just a sanity check, proper tests for flush() should still
+    #      be added
+    def setUp(self):
+        SocketTCPTest.setUp(self)
+        NetworkConnectionTest.clientSetUp(self)
+
+    def test_issue9543(self):
+        self.cli.close()
+        file_a = self.serv.makefile('w')
+        file_a.write('x')
+        # flush() will try to send data to self.cli and raise an error because
+        # it's closed
+        self.assertRaises(socket.error, file_a.flush)
+        # close() will raise an error too, because it calls flush() before
+        # closing the file
+        self.assertRaises(socket.error, file_a.close)
+        self.assertTrue(file_a.closed)
 
 
 class Urllib2FileobjectTest(unittest.TestCase):
@@ -898,10 +1137,13 @@ class TCPTimeoutTest(SocketTCPTest):
             except Alarm:
                 pass
             except:
-                self.fail("caught other exception instead of Alarm")
+                self.fail("caught other exception instead of Alarm:"
+                          " %s(%s):\n%s" %
+                          (sys.exc_info()[:2] + (traceback.format_exc(),)))
             else:
                 self.fail("nothing caught")
-            signal.alarm(0)         # shut off alarm
+            finally:
+                signal.alarm(0)         # shut off alarm
         except Alarm:
             self.fail("got Alarm in wrong place")
         finally:
@@ -981,7 +1223,8 @@ class BufferIOTest(SocketConnectedTest):
         self.assertEqual(msg, MSG)
 
     def _testRecvInto(self):
-        buf = buffer(MSG)
+        with test_support._check_py3k_warnings():
+            buf = buffer(MSG)
         self.serv_conn.send(buf)
 
     def testRecvFromInto(self):
@@ -992,27 +1235,115 @@ class BufferIOTest(SocketConnectedTest):
         self.assertEqual(msg, MSG)
 
     def _testRecvFromInto(self):
-        buf = buffer(MSG)
+        with test_support._check_py3k_warnings():
+            buf = buffer(MSG)
         self.serv_conn.send(buf)
+
+
+TIPC_STYPE = 2000
+TIPC_LOWER = 200
+TIPC_UPPER = 210
+
+def isTipcAvailable():
+    """Check if the TIPC module is loaded
+
+    The TIPC module is not loaded automatically on Ubuntu and probably
+    other Linux distros.
+    """
+    if not hasattr(socket, "AF_TIPC"):
+        return False
+    if not os.path.isfile("/proc/modules"):
+        return False
+    with open("/proc/modules") as f:
+        for line in f:
+            if line.startswith("tipc "):
+                return True
+    if test_support.verbose:
+        print "TIPC module is not loaded, please 'sudo modprobe tipc'"
+    return False
+
+class TIPCTest (unittest.TestCase):
+    def testRDM(self):
+        srv = socket.socket(socket.AF_TIPC, socket.SOCK_RDM)
+        cli = socket.socket(socket.AF_TIPC, socket.SOCK_RDM)
+
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srvaddr = (socket.TIPC_ADDR_NAMESEQ, TIPC_STYPE,
+                TIPC_LOWER, TIPC_UPPER)
+        srv.bind(srvaddr)
+
+        sendaddr = (socket.TIPC_ADDR_NAME, TIPC_STYPE,
+                TIPC_LOWER + (TIPC_UPPER - TIPC_LOWER) / 2, 0)
+        cli.sendto(MSG, sendaddr)
+
+        msg, recvaddr = srv.recvfrom(1024)
+
+        self.assertEqual(cli.getsockname(), recvaddr)
+        self.assertEqual(msg, MSG)
+
+
+class TIPCThreadableTest (unittest.TestCase, ThreadableTest):
+    def __init__(self, methodName = 'runTest'):
+        unittest.TestCase.__init__(self, methodName = methodName)
+        ThreadableTest.__init__(self)
+
+    def setUp(self):
+        self.srv = socket.socket(socket.AF_TIPC, socket.SOCK_STREAM)
+        self.srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srvaddr = (socket.TIPC_ADDR_NAMESEQ, TIPC_STYPE,
+                TIPC_LOWER, TIPC_UPPER)
+        self.srv.bind(srvaddr)
+        self.srv.listen(5)
+        self.serverExplicitReady()
+        self.conn, self.connaddr = self.srv.accept()
+
+    def clientSetUp(self):
+        # The is a hittable race between serverExplicitReady() and the
+        # accept() call; sleep a little while to avoid it, otherwise
+        # we could get an exception
+        time.sleep(0.1)
+        self.cli = socket.socket(socket.AF_TIPC, socket.SOCK_STREAM)
+        addr = (socket.TIPC_ADDR_NAME, TIPC_STYPE,
+                TIPC_LOWER + (TIPC_UPPER - TIPC_LOWER) / 2, 0)
+        self.cli.connect(addr)
+        self.cliaddr = self.cli.getsockname()
+
+    def testStream(self):
+        msg = self.conn.recv(1024)
+        self.assertEqual(msg, MSG)
+        self.assertEqual(self.cliaddr, self.connaddr)
+
+    def _testStream(self):
+        self.cli.send(MSG)
+        self.cli.close()
+
 
 def test_main():
     tests = [GeneralModuleTests, BasicTCPTest, TCPCloserTest, TCPTimeoutTest,
-             TestExceptions, BufferIOTest]
+             TestExceptions, BufferIOTest, BasicTCPTest2]
     if sys.platform != 'mac':
         tests.extend([ BasicUDPTest, UDPTimeoutTest ])
 
     tests.extend([
         NonBlockingTCPTests,
         FileObjectClassTestCase,
+        FileObjectInterruptedTestCase,
         UnbufferedFileObjectClassTestCase,
         LineBufferedFileObjectClassTestCase,
         SmallBufferedFileObjectClassTestCase,
         Urllib2FileobjectTest,
+        NetworkConnectionNoServer,
+        NetworkConnectionAttributesTest,
+        NetworkConnectionBehaviourTest,
+        TestIssue9543,
     ])
     if hasattr(socket, "socketpair"):
         tests.append(BasicSocketPairTest)
     if sys.platform == 'linux2':
         tests.append(TestLinuxAbstractNamespace)
+    if isTipcAvailable():
+        tests.append(TIPCTest)
+        tests.append(TIPCThreadableTest)
 
     thread_info = test_support.threading_setup()
     test_support.run_unittest(*tests)
