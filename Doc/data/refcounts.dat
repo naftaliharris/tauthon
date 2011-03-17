@@ -55,6 +55,45 @@ PyBuffer_FromReadWriteMemory:int:size::
 PyBuffer_New:PyObject*::+1:
 PyBuffer_New:int:size::
 
+PyCapsule_GetContext:void *:::
+PyCapsule_GetContext:PyObject*:self:0:
+
+PyCapsule_GetDestructor:void (*)(PyObject *):::
+PyCapsule_GetDestructor:PyObject*:self:0:
+
+PyCapsule_GetName:const char *:::
+PyCapsule_GetName:PyObject*:self:0:
+
+PyCapsule_GetPointer:void*:::
+PyCapsule_GetPointer:PyObject*:self:0:
+PyCapsule_GetPointer:const char *:name::
+
+PyCapsule_Import:void *:::
+PyCapsule_Import:const char *:name::
+PyCapsule_Import:int:no_block::
+
+PyCapsule_New:PyObject*::+1:
+PyCapsule_New:void*:pointer::
+PyCapsule_New:const char *:name::
+PyCapsule_New::void (* destructor)(PyObject* )::
+
+PyCapsule_SetContext:int:::
+PyCapsule_SetContext:PyObject*:self:0:
+PyCapsule_SetContext:void *:context::
+
+PyCapsule_SetDestructor:int:::
+PyCapsule_SetDestructor:PyObject*:self:0:
+PyCapsule_SetDestructor:void (*)(PyObject *):destructor::
+
+PyCapsule_SetName:int:::
+PyCapsule_SetName:PyObject*:self:0:
+PyCapsule_SetName:const char *:name::
+
+PyCapsule_SetPointer:int:::
+PyCapsule_SetPointer:PyObject*:self:0:
+PyCapsule_SetPointer:void*:pointer::
+
+
 PyCObject_AsVoidPtr:void*:::
 PyCObject_AsVoidPtr:PyObject*:self:0:
 
@@ -241,6 +280,12 @@ PyErr_NewException:PyObject*::+1:
 PyErr_NewException:char*:name::
 PyErr_NewException:PyObject*:base:0:
 PyErr_NewException:PyObject*:dict:0:
+
+PyErr_NewExceptionWithDoc:PyObject*::+1:
+PyErr_NewExceptionWithDoc:char*:name::
+PyErr_NewExceptionWithDoc:char*:doc::
+PyErr_NewExceptionWithDoc:PyObject*:base:0:
+PyErr_NewExceptionWithDoc:PyObject*:dict:0:
 
 PyErr_NoMemory:PyObject*::null:
 
@@ -593,6 +638,9 @@ PyLong_AsDouble:PyObject*:pylong:0:
 PyLong_AsLong:long:::
 PyLong_AsLong:PyObject*:pylong:0:
 
+PyLong_AsSsize_t:ssize_t:::
+PyLong_AsSsize_t:PyObject*:pylong:0:
+
 PyLong_AsUnsignedLong:unsigned long:::
 PyLong_AsUnsignedLong:PyObject*:pylong:0:
 
@@ -610,6 +658,12 @@ PyLong_FromLongLong:long long:v::
 
 PyLong_FromUnsignedLongLong:PyObject*::+1:
 PyLong_FromUnsignedLongLong:unsigned long long:v::
+
+PyLong_FromSize_t:PyObject*::+1:
+PyLong_FromSize_t:size_t:v::
+
+PyLong_FromSsize_t:PyObject*::+1:
+PyLong_FromSsize_t:ssize_t:v::
 
 PyLong_FromString:PyObject*::+1:
 PyLong_FromString:char*:str::
@@ -852,9 +906,6 @@ PyNumber_TrueDivide:PyObject*:w:0:
 PyNumber_Xor:PyObject*::+1:
 PyNumber_Xor:PyObject*:o1:0:
 PyNumber_Xor:PyObject*:o2:0:
-
-PyOS_GetLastModificationTime:long:::
-PyOS_GetLastModificationTime:char*:filename::
 
 PyObject_AsFileDescriptor:int::: 
 PyObject_AsFileDescriptor:PyObject*:o:0:
@@ -1430,6 +1481,21 @@ PyUnicode_FromEncodedObject:PyObject*::+1:
 PyUnicode_FromEncodedObject:PyObject*:*obj:0:
 PyUnicode_FromEncodedObject:const char*:encoding::
 PyUnicode_FromEncodedObject:const char*:errors::
+
+PyUnicode_FromFormat:PyObject*::+1:
+PyUnicode_FromFormat:const char*:format::
+PyUnicode_FromFormat::...::
+
+PyUnicode_FromFormatV:PyObject*::+1:
+PyUnicode_FromFormatV:const char*:format::
+PyUnicode_FromFormatV:va_list:vargs::
+
+PyUnicode_FromString:PyObject*::+1:
+PyUnicode_FromString:const char*:u::
+
+PyUnicode_FromStringAndSize:PyObject*::+1:
+PyUnicode_FromStringAndSize:const char*:u::
+PyUnicode_FromStringAndSize:ssize_t:size::
 
 PyUnicode_FromWideChar:PyObject*::+1:
 PyUnicode_FromWideChar:const wchar_t*:w::

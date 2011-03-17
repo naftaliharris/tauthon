@@ -216,7 +216,8 @@ def _load_testfile(filename, package, module_relative):
                 # get_data() opens files as 'rb', so one must do the equivalent
                 # conversion as universal newlines would do.
                 return file_contents.replace(os.linesep, '\n'), filename
-    return open(filename).read(), filename
+    with open(filename) as f:
+        return f.read(), filename
 
 # Use sys.stdout encoding for ouput.
 _encoding = getattr(sys.__stdout__, 'encoding', None) or 'utf-8'
@@ -1216,7 +1217,7 @@ class DocTestRunner:
         # Process each example.
         for examplenum, example in enumerate(test.examples):
 
-            # If REPORT_ONLY_FIRST_FAILURE is set, then supress
+            # If REPORT_ONLY_FIRST_FAILURE is set, then suppress
             # reporting after the first failure.
             quiet = (self.optionflags & REPORT_ONLY_FIRST_FAILURE and
                      failures > 0)
@@ -1287,9 +1288,9 @@ class DocTestRunner:
 
                 # Another chance if they didn't care about the detail.
                 elif self.optionflags & IGNORE_EXCEPTION_DETAIL:
-                    m1 = re.match(r'[^:]*:', example.exc_msg)
-                    m2 = re.match(r'[^:]*:', exc_msg)
-                    if m1 and m2 and check(m1.group(0), m2.group(0),
+                    m1 = re.match(r'(?:[^:]*\.)?([^:]*:)', example.exc_msg)
+                    m2 = re.match(r'(?:[^:]*\.)?([^:]*:)', exc_msg)
+                    if m1 and m2 and check(m1.group(1), m2.group(1),
                                            self.optionflags):
                         outcome = SUCCESS
 
@@ -1327,13 +1328,15 @@ class DocTestRunner:
         self.tries += t
 
     __LINECACHE_FILENAME_RE = re.compile(r'<doctest '
-                                         r'(?P<name>[\w\.]+)'
+                                         r'(?P<name>.+)'
                                          r'\[(?P<examplenum>\d+)\]>$')
     def __patched_linecache_getlines(self, filename, module_globals=None):
         m = self.__LINECACHE_FILENAME_RE.match(filename)
         if m and m.group('name') == self.test.name:
             example = self.test.examples[int(m.group('examplenum'))]
-            source = example.source.encode('ascii', 'backslashreplace')
+            source = example.source
+            if isinstance(source, unicode):
+                source = source.encode('ascii', 'backslashreplace')
             return source.splitlines(True)
         else:
             return self.save_linecache_getlines(filename, module_globals)
@@ -1771,7 +1774,7 @@ def testmod(m=None, name=None, globs=None, verbose=None,
 
     Return (#failures, #tests).
 
-    See doctest.__doc__ for an overview.
+    See help(doctest) for an overview.
 
     Optional keyword arg "name" gives the name of the module; by default
     use m.__name__.
@@ -2183,7 +2186,7 @@ class DocTestCase(unittest.TestCase):
            caller can catch the errors and initiate post-mortem debugging.
 
            The DocTestCase provides a debug method that raises
-           UnexpectedException errors if there is an unexepcted
+           UnexpectedException errors if there is an unexpected
            exception:
 
              >>> test = DocTestParser().get_doctest('>>> raise KeyError\n42',
@@ -2258,6 +2261,19 @@ class DocTestCase(unittest.TestCase):
     def shortDescription(self):
         return "Doctest: " + self._dt_test.name
 
+class SkipDocTestCase(DocTestCase):
+    def __init__(self):
+        DocTestCase.__init__(self, None)
+
+    def setUp(self):
+        self.skipTest("DocTestSuite will not work with -O2 and above")
+
+    def test_skip(self):
+        pass
+
+    def shortDescription(self):
+        return "Skipping tests from %s" % module.__name__
+
 def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
                  **options):
     """
@@ -2300,13 +2316,20 @@ def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
 
     module = _normalize_module(module)
     tests = test_finder.find(module, globs=globs, extraglobs=extraglobs)
-    if not tests:
+
+    if not tests and sys.flags.optimize >=2:
+        # Skip doctests when running with -O2
+        suite = unittest.TestSuite()
+        suite.addTest(SkipDocTestCase())
+        return suite
+    elif not tests:
         # Why do we want to do this? Because it reveals a bug that might
         # otherwise be hidden.
         raise ValueError(module, "has no tests")
 
     tests.sort()
     suite = unittest.TestSuite()
+
     for test in tests:
         if len(test.examples) == 0:
             continue
@@ -2678,27 +2701,31 @@ __test__ = {"_TestClass": _TestClass,
             """,
            }
 
+
 def _test():
     testfiles = [arg for arg in sys.argv[1:] if arg and arg[0] != '-']
-    if testfiles:
-        for filename in testfiles:
-            if filename.endswith(".py"):
-                # It is a module -- insert its dir into sys.path and try to
-                # import it. If it is part of a package, that possibly won't work
-                # because of package imports.
-                dirname, filename = os.path.split(filename)
-                sys.path.insert(0, dirname)
-                m = __import__(filename[:-3])
-                del sys.path[0]
-                failures, _ = testmod(m)
-            else:
-                failures, _ = testfile(filename, module_relative=False)
-            if failures:
-                return 1
-    else:
-        r = unittest.TextTestRunner()
-        r.run(DocTestSuite())
+    if not testfiles:
+        name = os.path.basename(sys.argv[0])
+        if '__loader__' in globals():          # python -m
+            name, _ = os.path.splitext(name)
+        print("usage: {0} [-v] file ...".format(name))
+        return 2
+    for filename in testfiles:
+        if filename.endswith(".py"):
+            # It is a module -- insert its dir into sys.path and try to
+            # import it. If it is part of a package, that possibly
+            # won't work because of package imports.
+            dirname, filename = os.path.split(filename)
+            sys.path.insert(0, dirname)
+            m = __import__(filename[:-3])
+            del sys.path[0]
+            failures, _ = testmod(m)
+        else:
+            failures, _ = testfile(filename, module_relative=False)
+        if failures:
+            return 1
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(_test())

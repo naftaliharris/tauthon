@@ -52,17 +52,16 @@ FAILURE_MAILTO="python-checkins@python.org"
 #FAILURE_CC="optional--uncomment and set to desired address"
 
 REMOTE_SYSTEM="neal@dinsdale.python.org"
-REMOTE_DIR="/data/ftp.python.org/pub/www.python.org/doc/current"
-REMOTE_DIR_DIST="/data/ftp.python.org/pub/python/doc/current"
+REMOTE_DIR="/data/ftp.python.org/pub/docs.python.org/dev/"
 RESULT_FILE="$DIR/build/index.html"
-INSTALL_DIR="/tmp/python-test-2.6/local"
+INSTALL_DIR="/tmp/python-test/local"
 RSYNC_OPTS="-C -e ssh -rlogD"
 
 # Always run the installed version of Python.
 PYTHON=$INSTALL_DIR/bin/python
 
 # Python options and regression test program that should always be run.
-REGRTEST_ARGS="-E -tt $INSTALL_DIR/lib/python2.6/test/regrtest.py"
+REGRTEST_ARGS="-E -tt $INSTALL_DIR/lib/python2.7/test/regrtest.py"
 
 REFLOG="build/reflog.txt.out"
 # These tests are not stable and falsely report leaks sometimes.
@@ -70,7 +69,7 @@ REFLOG="build/reflog.txt.out"
 # Note: test_XXX (none currently) really leak, but are disabled
 # so we don't send spam.  Any test which really leaks should only 
 # be listed here if there are also test cases under Lib/test/leakers.
-LEAKY_TESTS="test_(asynchat|cmd_line|docxmlrpc|dumbdbm|file|ftplib|httpservers|imaplib|popen2|socket|smtplib|sys|telnetlib|threadedtempfile|threading|threadsignals|urllib2_localnet|xmlrpc)"
+LEAKY_TESTS="test_(asynchat|cmd_line|docxmlrpc|dumbdbm|file|ftplib|httpservers|imaplib|popen2|socket|smtplib|sys|telnetlib|threadedtempfile|threading|threadsignals|xmlrpc)"
 
 # Skip these tests altogether when looking for leaks.  These tests
 # do not need to be stored above in LEAKY_TESTS too.
@@ -81,7 +80,7 @@ LEAKY_TESTS="test_(asynchat|cmd_line|docxmlrpc|dumbdbm|file|ftplib|httpservers|i
 LEAKY_SKIPS="-x test_compiler test_logging test_httpservers"
 
 # Change this flag to "yes" for old releases to only update/build the docs.
-BUILD_DISABLED="yes"
+BUILD_DISABLED="no"
 
 ## utility functions
 current_time() {
@@ -213,7 +212,7 @@ if [ $err = 0 -a "$BUILD_DISABLED" != "yes" ]; then
             ## make and run basic tests
             F=make-test.out
             start=`current_time`
-            $PYTHON $REGRTEST_ARGS -u urlfetch >& build/$F
+            $PYTHON $REGRTEST_ARGS -W -u urlfetch >& build/$F
             NUM_FAILURES=`count_failures build/$F`
             place_summary_first build/$F
             update_status "Testing basics ($NUM_FAILURES failures)" "$F" $start
@@ -221,7 +220,7 @@ if [ $err = 0 -a "$BUILD_DISABLED" != "yes" ]; then
 
             F=make-test-opt.out
             start=`current_time`
-            $PYTHON -O $REGRTEST_ARGS -u urlfetch >& build/$F
+            $PYTHON -O $REGRTEST_ARGS -W -u urlfetch >& build/$F
             NUM_FAILURES=`count_failures build/$F`
             place_summary_first build/$F
             update_status "Testing opt ($NUM_FAILURES failures)" "$F" $start
@@ -244,7 +243,7 @@ if [ $err = 0 -a "$BUILD_DISABLED" != "yes" ]; then
             start=`current_time`
             ## skip curses when running from cron since there's no terminal
             ## skip sound since it's not setup on the PSF box (/dev/dsp)
-            $PYTHON $REGRTEST_ARGS -uall -x test_curses test_linuxaudiodev test_ossaudiodev >& build/$F
+            $PYTHON $REGRTEST_ARGS -W -uall -x test_curses test_linuxaudiodev test_ossaudiodev >& build/$F
             NUM_FAILURES=`count_failures build/$F`
             place_summary_first build/$F
             update_status "Testing all except curses and sound ($NUM_FAILURES failures)" "$F" $start
@@ -267,18 +266,6 @@ if [ $err != 0 ]; then
     mail_on_failure "doc" ../build/$F
 fi
 
-F="make-doc-dist.out"
-start=`current_time`
-if [ $conflict_count == 0 ]; then
-    make dist >& ../build/$F
-    err=$?
-fi
-update_status "Making downloadable doc" "$F" $start
-if [ $err != 0 ]; then
-    NUM_FAILURES=1
-    mail_on_failure "doc dist" ../build/$F
-fi
-
 echo "</ul>" >> $RESULT_FILE
 echo "</body>" >> $RESULT_FILE
 echo "</html>" >> $RESULT_FILE
@@ -288,6 +275,5 @@ echo "</html>" >> $RESULT_FILE
 #chgrp -R webmaster build/html
 #chmod -R g+w build/html
 #rsync $RSYNC_OPTS build/html/* $REMOTE_SYSTEM:$REMOTE_DIR
-#rsync $RSYNC_OPTS dist/* $REMOTE_SYSTEM:$REMOTE_DIR_DIST
 #cd ../build
 #rsync $RSYNC_OPTS index.html *.out $REMOTE_SYSTEM:$REMOTE_DIR/results/

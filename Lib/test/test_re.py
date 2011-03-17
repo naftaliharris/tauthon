@@ -1,13 +1,13 @@
 from test.test_support import verbose, run_unittest, import_module
 import re
 from re import Scanner
-import sys, os, traceback
+import sys, traceback
 from weakref import proxy
 
 # Misc tests from Tim Peters' re.doc
 
 # WARNING: Don't change details in these tests if you don't know
-# what you're doing. Some of these tests were carefuly modeled to
+# what you're doing. Some of these tests were carefully modeled to
 # cover most of the code.
 
 import unittest
@@ -603,7 +603,7 @@ class ReTests(unittest.TestCase):
             unicode
         except NameError:
             return # no problem if we have no unicode
-        self.assert_(re.compile('bug_926075') is not
+        self.assertTrue(re.compile('bug_926075') is not
                      re.compile(eval("u'bug_926075'")))
 
     def test_bug_931848(self):
@@ -629,6 +629,27 @@ class ReTests(unittest.TestCase):
         self.assertEqual(iter.next().span(), (0, 4))
         self.assertEqual(iter.next().span(), (4, 4))
         self.assertRaises(StopIteration, iter.next)
+
+    def test_bug_6561(self):
+        # '\d' should match characters in Unicode category 'Nd'
+        # (Number, Decimal Digit), but not those in 'Nl' (Number,
+        # Letter) or 'No' (Number, Other).
+        decimal_digits = [
+            u'\u0037', # '\N{DIGIT SEVEN}', category 'Nd'
+            u'\u0e58', # '\N{THAI DIGIT SIX}', category 'Nd'
+            u'\uff10', # '\N{FULLWIDTH DIGIT ZERO}', category 'Nd'
+            ]
+        for x in decimal_digits:
+            self.assertEqual(re.match('^\d$', x, re.UNICODE).group(0), x)
+
+        not_decimal_digits = [
+            u'\u2165', # '\N{ROMAN NUMERAL SIX}', category 'Nl'
+            u'\u3039', # '\N{HANGZHOU NUMERAL TWENTY}', category 'Nl'
+            u'\u2082', # '\N{SUBSCRIPT TWO}', category 'No'
+            u'\u32b4', # '\N{CIRCLED NUMBER THIRTY NINE}', category 'No'
+            ]
+        for x in not_decimal_digits:
+            self.assertIsNone(re.match('^\d$', x, re.UNICODE))
 
     def test_empty_array(self):
         # SF buf 1647541
@@ -691,7 +712,7 @@ class ReTests(unittest.TestCase):
         self.assertRaises(OverflowError, _sre.compile, "abc", 0, [long_overflow])
 
 def run_re_tests():
-    from test.re_tests import benchmarks, tests, SUCCEED, FAIL, SYNTAX_ERROR
+    from test.re_tests import tests, SUCCEED, FAIL, SYNTAX_ERROR
     if verbose:
         print 'Running re_tests test suite'
     else:

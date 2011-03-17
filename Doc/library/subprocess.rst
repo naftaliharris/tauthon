@@ -81,6 +81,24 @@ This module defines one class called :class:`Popen`:
 
       Popen(['/bin/sh', '-c', args[0], args[1], ...])
 
+   .. warning::
+
+      Executing shell commands that incorporate unsanitized input from an
+      untrusted source makes a program vulnerable to `shell injection
+      <http://en.wikipedia.org/wiki/Shell_injection#Shell_injection>`_,
+      a serious security flaw which can result in arbitrary command execution.
+      For this reason, the use of *shell=True* is **strongly discouraged** in cases
+      where the command string is constructed from external input::
+
+         >>> from subprocess import call
+         >>> filename = input("What file would you like to display?\n")
+         What file would you like to display?
+         non_existent; rm -rf / #
+         >>> call("cat " + filename, shell=True) # Uh-oh. This will end badly...
+
+      *shell=False* does not suffer from this vulnerability; the above Note may be
+      helpful in getting code using *shell=False* to work.
+
    On Windows: the :class:`Popen` class uses CreateProcess() to execute the child
    program, which operates on strings.  If *args* is a sequence, it will be
    converted to a string using the :meth:`list2cmdline` method.  Please note that
@@ -196,6 +214,13 @@ This module also defines two shortcut functions:
 
       >>> retcode = subprocess.call(["ls", "-l"])
 
+   .. warning::
+
+      Like :meth:`Popen.wait`, this will deadlock when using
+      ``stdout=PIPE`` and/or ``stderr=PIPE`` and the child process
+      generates enough output to a pipe such that it blocks waiting
+      for the OS pipe buffer to accept more data.
+
 
 .. function:: check_call(*popenargs, **kwargs)
 
@@ -211,6 +236,35 @@ This module also defines two shortcut functions:
 
    .. versionadded:: 2.5
 
+   .. warning::
+
+      See the warning for :func:`call`.
+
+
+.. function:: check_output(*popenargs, **kwargs)
+
+   Run command with arguments and return its output as a byte string.
+
+   If the exit code was non-zero it raises a :exc:`CalledProcessError`.  The
+   :exc:`CalledProcessError` object will have the return code in the
+   :attr:`returncode`
+   attribute and output in the :attr:`output` attribute.
+
+   The arguments are the same as for the :class:`Popen` constructor.  Example::
+
+      >>> subprocess.check_output(["ls", "-l", "/dev/null"])
+      'crw-rw-rw- 1 root root 1, 3 Oct 18  2007 /dev/null\n'
+
+   The stdout argument is not allowed as it is used internally.
+   To capture standard error in the result, use ``stderr=subprocess.STDOUT``::
+
+      >>> subprocess.check_output(
+      ...     ["/bin/sh", "-c", "ls non_existent_file; exit 0"],
+      ...     stderr=subprocess.STDOUT)
+      'ls: non_existent_file: No such file or directory\n'
+
+   .. versionadded:: 2.7
+
 
 Exceptions
 ^^^^^^^^^^
@@ -218,7 +272,7 @@ Exceptions
 Exceptions raised in the child process, before the new program has started to
 execute, will be re-raised in the parent.  Additionally, the exception object
 will have one extra attribute called :attr:`child_traceback`, which is a string
-containing traceback information from the childs point of view.
+containing traceback information from the child's point of view.
 
 The most common exception raised is :exc:`OSError`.  This occurs, for example,
 when trying to execute a non-existent file.  Applications should prepare for
@@ -258,9 +312,10 @@ Instances of the :class:`Popen` class have the following methods:
 
    .. warning::
 
-      This will deadlock if the child process generates enough output to a
-      stdout or stderr pipe such that it blocks waiting for the OS pipe buffer
-      to accept more data.  Use :meth:`communicate` to avoid that.
+      This will deadlock when using ``stdout=PIPE`` and/or
+      ``stderr=PIPE`` and the child process generates enough output to
+      a pipe such that it blocks waiting for the OS pipe buffer to
+      accept more data.  Use :meth:`communicate` to avoid that.
 
 
 .. method:: Popen.communicate(input=None)
@@ -289,8 +344,9 @@ Instances of the :class:`Popen` class have the following methods:
 
    .. note::
 
-      On Windows only SIGTERM is supported so far. It's an alias for
-      :meth:`terminate`.
+      On Windows, SIGTERM is an alias for :meth:`terminate`. CTRL_C_EVENT and
+      CTRL_BREAK_EVENT can be sent to processes started with a *creationflags*
+      parameter which includes `CREATE_NEW_PROCESS_GROUP`.
 
    .. versionadded:: 2.6
 
@@ -394,8 +450,11 @@ Replacing shell pipeline
    ==>
    p1 = Popen(["dmesg"], stdout=PIPE)
    p2 = Popen(["grep", "hda"], stdin=p1.stdout, stdout=PIPE)
+   p1.stdout.close()  # Allow p1 to receive a SIGPIPE if p2 exits.
    output = p2.communicate()[0]
 
+The p1.stdout.close() call after starting the p2 is important in order for p1
+to receive a SIGPIPE if p2 exits before p1.
 
 Replacing :func:`os.system`
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

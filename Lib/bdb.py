@@ -1,5 +1,6 @@
 """Debugger basics"""
 
+import fnmatch
 import sys
 import os
 import types
@@ -19,7 +20,8 @@ class Bdb:
     The standard debugger class (pdb.Pdb) is an example.
     """
 
-    def __init__(self):
+    def __init__(self, skip=None):
+        self.skip = set(skip) if skip else None
         self.breaks = {}
         self.fncache = {}
 
@@ -94,9 +96,18 @@ class Bdb:
     # methods, but they may if they want to redefine the
     # definition of stopping and breakpoints.
 
+    def is_skipped_module(self, module_name):
+        for pattern in self.skip:
+            if fnmatch.fnmatch(module_name, pattern):
+                return True
+        return False
+
     def stop_here(self, frame):
         # (CT) stopframe may now also be None, see dispatch_call.
         # (CT) the former test for None is therefore removed from here.
+        if self.skip and \
+               self.is_skipped_module(frame.f_globals.get('__name__')):
+            return False
         if frame is self.stopframe:
             if self.stoplineno == -1:
                 return False
@@ -239,6 +250,12 @@ class Bdb:
             list.append(lineno)
         bp = Breakpoint(filename, lineno, temporary, cond, funcname)
 
+    def _prune_breaks(self, filename, lineno):
+        if (filename, lineno) not in Breakpoint.bplist:
+            self.breaks[filename].remove(lineno)
+        if not self.breaks[filename]:
+            del self.breaks[filename]
+
     def clear_break(self, filename, lineno):
         filename = self.canonic(filename)
         if not filename in self.breaks:
@@ -250,10 +267,7 @@ class Bdb:
         # pair, then remove the breaks entry
         for bp in Breakpoint.bplist[filename, lineno][:]:
             bp.deleteMe()
-        if not Breakpoint.bplist.has_key((filename, lineno)):
-            self.breaks[filename].remove(lineno)
-        if not self.breaks[filename]:
-            del self.breaks[filename]
+        self._prune_breaks(filename, lineno)
 
     def clear_bpbynumber(self, arg):
         try:
@@ -266,7 +280,8 @@ class Bdb:
             return 'Breakpoint number (%d) out of range' % number
         if not bp:
             return 'Breakpoint (%d) already deleted' % number
-        self.clear_break(bp.file, bp.line)
+        bp.deleteMe()
+        self._prune_breaks(bp.file, bp.line)
 
     def clear_all_file_breaks(self, filename):
         filename = self.canonic(filename)
@@ -457,7 +472,7 @@ class Breakpoint:
         Breakpoint.next = Breakpoint.next + 1
         # Build the two lists
         self.bpbynumber.append(self)
-        if self.bplist.has_key((file, line)):
+        if (file, line) in self.bplist:
             self.bplist[file, line].append(self)
         else:
             self.bplist[file, line] = [self]

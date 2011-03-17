@@ -11,6 +11,11 @@ disassembling it. The CPython bytecode which this module takes as an
 input is defined in the file :file:`Include/opcode.h` and used by the compiler
 and the interpreter.
 
+.. seealso::
+
+   Latest version of the `dis module Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/dis.py?view=markup>`_
+
 .. impl-detail::
 
    Bytecode is an implementation detail of the CPython interpreter!  No
@@ -70,8 +75,21 @@ The :mod:`dis` module defines the following functions and constants:
 
 .. function:: disco(code[, lasti])
 
-   A synonym for disassemble.  It is more convenient to type, and kept for
-   compatibility with earlier Python releases.
+   A synonym for :func:`disassemble`.  It is more convenient to type, and kept
+   for compatibility with earlier Python releases.
+
+
+.. function:: findlinestarts(code)
+
+   This generator function uses the ``co_firstlineno`` and ``co_lnotab``
+   attributes of the code object *code* to find the offsets which are starts of
+   lines in the source code.  They are generated as ``(offset, lineno)`` pairs.
+
+
+.. function:: findlabels(code)
+
+   Detect all offsets in the code object *code* which are jump targets, and
+   return a list of these offsets.
 
 
 .. data:: opname
@@ -81,7 +99,7 @@ The :mod:`dis` module defines the following functions and constants:
 
 .. data:: opmap
 
-   Dictionary mapping bytecodes to operation names.
+   Dictionary mapping operation names to bytecodes.
 
 
 .. data:: cmp_op
@@ -469,9 +487,11 @@ Miscellaneous opcodes.
    address to jump to (which should be a ``FOR_ITER`` instruction).
 
 
-.. opcode:: LIST_APPEND ()
+.. opcode:: LIST_APPEND (i)
 
-   Calls ``list.append(TOS1, TOS)``.  Used to implement list comprehensions.
+   Calls ``list.append(TOS[-i], TOS)``.  Used to implement list comprehensions.
+   While the appended value is popped off, the list object remains on the
+   stack so that it is available for further iterations of the loop.
 
 
 .. opcode:: LOAD_LOCALS ()
@@ -521,6 +541,18 @@ Miscellaneous opcodes.
 
    Creates a new class object.  TOS is the methods dictionary, TOS1 the tuple of
    the names of the base classes, and TOS2 the class name.
+
+
+.. opcode:: SETUP_WITH (delta)
+
+   This opcode performs several operations before a with block starts.  First,
+   it loads :meth:`~object.__exit__` from the context manager and pushes it onto
+   the stack for later use by :opcode:`WITH_CLEANUP`.  Then,
+   :meth:`~object.__enter__` is called, and a finally block pointing to *delta*
+   is pushed.  Finally, the result of calling the enter method is pushed onto
+   the stack.  The next opcode will either ignore it (:opcode:`POP_TOP`), or
+   store it in (a) variable(s) (:opcode:`STORE_FAST`, :opcode:`STORE_NAME`, or
+   :opcode:`UNPACK_SEQUENCE`).
 
 
 .. opcode:: WITH_CLEANUP ()
@@ -655,16 +687,26 @@ the more significant byte last.
    Increments bytecode counter by *delta*.
 
 
-.. opcode:: JUMP_IF_TRUE (delta)
+.. opcode:: POP_JUMP_IF_TRUE (target)
 
-   If TOS is true, increment the bytecode counter by *delta*.  TOS is left on the
-   stack.
+   If TOS is true, sets the bytecode counter to *target*.  TOS is popped.
 
 
-.. opcode:: JUMP_IF_FALSE (delta)
+.. opcode:: POP_JUMP_IF_FALSE (target)
 
-   If TOS is false, increment the bytecode counter by *delta*.  TOS is not
-   changed.
+   If TOS is false, sets the bytecode counter to *target*.  TOS is popped.
+
+
+.. opcode:: JUMP_IF_TRUE_OR_POP (target)
+
+   If TOS is true, sets the bytecode counter to *target* and leaves TOS
+   on the stack.  Otherwise (TOS is false), TOS is popped.
+
+
+.. opcode:: JUMP_IF_FALSE_OR_POP (target)
+
+   If TOS is false, sets the bytecode counter to *target* and leaves
+   TOS on the stack.  Otherwise (TOS is true), TOS is popped.
 
 
 .. opcode:: JUMP_ABSOLUTE (target)
