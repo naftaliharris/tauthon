@@ -18,13 +18,19 @@ types_map -- dictionary mapping suffixes to types
 
 Functions:
 
-init([files]) -- parse a list of files, default knownfiles
+init([files]) -- parse a list of files, default knownfiles (on Windows, the
+  default values are taken from the registry)
 read_mime_types(file) -- parse one file, return a dictionary or None
 """
 
 import os
+import sys
 import posixpath
 import urllib
+try:
+    import _winreg
+except ImportError:
+    _winreg = None
 
 __all__ = [
     "guess_type","guess_extension","guess_all_extensions",
@@ -193,9 +199,8 @@ class MimeTypes:
         list of standard types, else to the list of non-standard
         types.
         """
-        fp = open(filename)
-        self.readfp(fp, strict)
-        fp.close()
+        with open(filename) as fp:
+            self.readfp(fp, strict)
 
     def readfp(self, fp, strict=True):
         """
@@ -219,6 +224,53 @@ class MimeTypes:
             type, suffixes = words[0], words[1:]
             for suff in suffixes:
                 self.add_type(type, '.' + suff, strict)
+
+    def read_windows_registry(self, strict=True):
+        """
+        Load the MIME types database from Windows registry.
+
+        If strict is true, information will be added to
+        list of standard types, else to the list of non-standard
+        types.
+        """
+
+        # Windows only
+        if not _winreg:
+            return
+
+        def enum_types(mimedb):
+            i = 0
+            while True:
+                try:
+                    ctype = _winreg.EnumKey(mimedb, i)
+                except EnvironmentError:
+                    break
+                try:
+                    ctype = ctype.encode(default_encoding) # omit in 3.x!
+                except UnicodeEncodeError:
+                    pass
+                else:
+                    yield ctype
+                i += 1
+
+        default_encoding = sys.getdefaultencoding()
+        with _winreg.OpenKey(_winreg.HKEY_CLASSES_ROOT,
+                             r'MIME\Database\Content Type') as mimedb:
+            for ctype in enum_types(mimedb):
+                try:
+                    with _winreg.OpenKey(mimedb, ctype) as key:
+                        suffix, datatype = _winreg.QueryValueEx(key,
+                                                                'Extension')
+                except EnvironmentError:
+                    continue
+                if datatype != _winreg.REG_SZ:
+                    continue
+                try:
+                    suffix = suffix.encode(default_encoding) # omit in 3.x!
+                except UnicodeEncodeError:
+                    continue
+                self.add_type(ctype, suffix, strict)
+
 
 def guess_type(url, strict=True):
     """Guess the type of a file based on its URL.
@@ -299,10 +351,12 @@ def init(files=None):
     inited = True    # so that MimeTypes.__init__() doesn't call us again
     db = MimeTypes()
     if files is None:
+        if _winreg:
+            db.read_windows_registry()
         files = knownfiles
     for file in files:
         if os.path.isfile(file):
-            db.readfp(open(file))
+            db.read(file)
     encodings_map = db.encodings_map
     suffix_map = db.suffix_map
     types_map = db.types_map[True]
@@ -492,7 +546,6 @@ _default_mime_types()
 
 
 if __name__ == '__main__':
-    import sys
     import getopt
 
     USAGE = """\

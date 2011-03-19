@@ -132,6 +132,10 @@ class DictWriter:
         self.extrasaction = extrasaction
         self.writer = writer(f, dialect, *args, **kwds)
 
+    def writeheader(self):
+        header = dict(zip(self.fieldnames, self.fieldnames))
+        self.writerow(header)
+
     def _dict_to_list(self, rowdict):
         if self.extrasaction == "raise":
             wrong_fields = [k for k in rowdict if k not in self.fieldnames]
@@ -170,7 +174,7 @@ class Sniffer:
         Returns a dialect (or None) corresponding to the sample
         """
 
-        quotechar, delimiter, skipinitialspace = \
+        quotechar, doublequote, delimiter, skipinitialspace = \
                    self._guess_quote_and_delimiter(sample, delimiters)
         if not delimiter:
             delimiter, skipinitialspace = self._guess_delimiter(sample,
@@ -184,8 +188,8 @@ class Sniffer:
             lineterminator = '\r\n'
             quoting = QUOTE_MINIMAL
             # escapechar = ''
-            doublequote = False
 
+        dialect.doublequote = doublequote
         dialect.delimiter = delimiter
         # _csv.reader won't accept a quotechar of ''
         dialect.quotechar = quotechar or '"'
@@ -217,8 +221,8 @@ class Sniffer:
                 break
 
         if not matches:
-            return ('', None, 0) # (quotechar, delimiter, skipinitialspace)
-
+            # (quotechar, doublequote, delimiter, skipinitialspace)
+            return ('', False, None, 0)
         quotes = {}
         delims = {}
         spaces = 0
@@ -255,7 +259,19 @@ class Sniffer:
             delim = ''
             skipinitialspace = 0
 
-        return (quotechar, delim, skipinitialspace)
+        # if we see an extra quote between delimiters, we've got a
+        # double quoted format
+        dq_regexp = re.compile(r"((%(delim)s)|^)\W*%(quote)s[^%(delim)s\n]*%(quote)s[^%(delim)s\n]*%(quote)s\W*((%(delim)s)|$)" % \
+                               {'delim':delim, 'quote':quotechar}, re.MULTILINE)
+
+
+
+        if dq_regexp.search(data):
+            doublequote = True
+        else:
+            doublequote = False
+
+        return (quotechar, doublequote, delim, skipinitialspace)
 
 
     def _guess_delimiter(self, data, delimiters):
@@ -265,7 +281,7 @@ class Sniffer:
         an all or nothing approach, so we allow for small variations in this
         number.
           1) build a table of the frequency of each character on every line.
-          2) build a table of freqencies of this frequency (meta-frequency?),
+          2) build a table of frequencies of this frequency (meta-frequency?),
              e.g.  'x occurred 5 times in 10 rows, 6 times in 1000 rows,
              7 times in 2 rows'
           3) use the mode of the meta-frequency to determine the /expected/

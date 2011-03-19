@@ -157,6 +157,13 @@ XMLParser Objects
    :attr:`ordered_attributes`, :attr:`returns_unicode` and
    :attr:`specified_attributes` set to the values of this parser.
 
+.. method:: xmlparser.SetParamEntityParsing(flag)
+
+   Control parsing of parameter entities (including the external DTD subset).
+   Possible *flag* values are :const:`XML_PARAM_ENTITY_PARSING_NEVER`,
+   :const:`XML_PARAM_ENTITY_PARSING_UNLESS_STANDALONE` and
+   :const:`XML_PARAM_ENTITY_PARSING_ALWAYS`.  Return true if setting the flag
+   was successful.
 
 .. method:: xmlparser.UseForeignDTD([flag])
 
@@ -464,7 +471,7 @@ otherwise stated.
    Called if the XML document hasn't been declared as being a standalone document.
    This happens when there is an external subset or a reference to a parameter
    entity, but the XML declaration does not set standalone to ``yes`` in an XML
-   declaration.  If this handler returns ``0``, then the parser will throw an
+   declaration.  If this handler returns ``0``, then the parser will raise an
    :const:`XML_ERROR_NOT_STANDALONE` error.  If this handler is not set, no
    exception is raised by the parser for this condition.
 
@@ -481,7 +488,7 @@ otherwise stated.
    responsible for creating the sub-parser using
    ``ExternalEntityParserCreate(context)``, initializing it with the appropriate
    callbacks, and parsing the entity.  This handler should return an integer; if it
-   returns ``0``, the parser will throw an
+   returns ``0``, the parser will raise an
    :const:`XML_ERROR_EXTERNAL_ENTITY_HANDLING` error, otherwise parsing will
    continue.
 

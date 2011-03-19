@@ -87,7 +87,7 @@ Number-theoretic and representation functions
    loss of precision by tracking multiple intermediate partial sums::
 
         >>> sum([.1, .1, .1, .1, .1, .1, .1, .1, .1, .1])
-        0.99999999999999989
+        0.9999999999999999
         >>> fsum([.1, .1, .1, .1, .1, .1, .1, .1, .1, .1])
         1.0
 
@@ -157,6 +157,22 @@ Power and logarithmic functions
 .. function:: exp(x)
 
    Return ``e**x``.
+
+
+.. function:: expm1(x)
+
+   Return ``e**x - 1``.  For small floats *x*, the subtraction in
+   ``exp(x) - 1`` can result in a significant loss of precision; the
+   :func:`expm1` function provides a way to compute this quantity to
+   full precision::
+
+      >>> from math import exp, expm1
+      >>> exp(1e-5) - 1  # gives result accurate to 11 places
+      1.0000050000069649e-05
+      >>> expm1(1e-5)    # result accurate to full precision
+      1.0000050000166668e-05
+
+   .. versionadded:: 2.7
 
 
 .. function:: log(x[, base])
@@ -301,6 +317,38 @@ Hyperbolic functions
 .. function:: tanh(x)
 
    Return the hyperbolic tangent of *x*.
+
+
+Special functions
+-----------------
+
+.. function:: erf(x)
+
+   Return the error function at *x*.
+
+   .. versionadded:: 2.7
+
+
+.. function:: erfc(x)
+
+   Return the complementary error function at *x*.
+
+   .. versionadded:: 2.7
+
+
+.. function:: gamma(x)
+
+   Return the Gamma function at *x*.
+
+   .. versionadded:: 2.7
+
+
+.. function:: lgamma(x)
+
+   Return the natural logarithm of the absolute value of the Gamma
+   function at *x*.
+
+   .. versionadded:: 2.7
 
 
 Constants

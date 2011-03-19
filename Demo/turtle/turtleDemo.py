@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import sys
 import os
 
@@ -212,7 +212,7 @@ class DemoWindow(object):
             self.text.delete("1.0", "end")
             self.text.insert("1.0",chars)
             direc, fname = os.path.split(filename)
-            self.root.title(fname[6:-3]+" - an xturtle example")
+            self.root.title(fname[6:-3]+" - a Python turtle graphics example")
             self.module = __import__(fname[:-3])
             reload(self.module)
             self.configGUI(NORMAL, NORMAL, DISABLED, DISABLED,
