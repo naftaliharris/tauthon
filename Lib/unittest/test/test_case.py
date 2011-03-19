@@ -386,26 +386,61 @@ class Test_TestCase(unittest.TestCase, TestEquality, TestHashing):
         self.assertIsInstance(Foo().id(), str)
 
 
-    # "If result is omitted or None, a temporary result object is created
-    # and used, but is not made available to the caller. As TestCase owns the
+    # "If result is omitted or None, a temporary result object is created,
+    # used, and is made available to the caller. As TestCase owns the
     # temporary result startTestRun and stopTestRun are called.
 
     def test_run__uses_defaultTestResult(self):
         events = []
+        defaultResult = LoggingResult(events)
 
         class Foo(unittest.TestCase):
             def test(self):
                 events.append('test')
 
             def defaultTestResult(self):
-                return LoggingResult(events)
+                return defaultResult
 
         # Make run() find a result object on its own
-        Foo('test').run()
+        result = Foo('test').run()
 
+        self.assertIs(result, defaultResult)
         expected = ['startTestRun', 'startTest', 'test', 'addSuccess',
             'stopTest', 'stopTestRun']
         self.assertEqual(events, expected)
+
+
+    # "The result object is returned to run's caller"
+    def test_run__returns_given_result(self):
+
+        class Foo(unittest.TestCase):
+            def test(self):
+                pass
+
+        result = unittest.TestResult()
+
+        retval = Foo('test').run(result)
+        self.assertIs(retval, result)
+
+
+    # "The same effect [as method run] may be had by simply calling the
+    # TestCase instance."
+    def test_call__invoking_an_instance_delegates_to_run(self):
+        resultIn = unittest.TestResult()
+        resultOut = unittest.TestResult()
+
+        class Foo(unittest.TestCase):
+            def test(self):
+                pass
+
+            def run(self, result):
+                self.assertIs(result, resultIn)
+                return resultOut
+
+        retval = Foo('test')(resultIn)
+
+        self.assertIs(retval, resultOut)
+
 
     def testShortDescriptionWithoutDocstring(self):
         self.assertIsNone(self.shortDescription())
@@ -487,36 +522,6 @@ class Test_TestCase(unittest.TestCase, TestEquality, TestHashing):
         self.assertRaises(self.failureException, self.assertNotIn, 1, [1, 2, 3])
         self.assertRaises(self.failureException, self.assertNotIn, 'cow',
                           animals)
-
-    def testAssertDictContainsSubset(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", DeprecationWarning)
-
-            self.assertDictContainsSubset({}, {})
-            self.assertDictContainsSubset({}, {'a': 1})
-            self.assertDictContainsSubset({'a': 1}, {'a': 1})
-            self.assertDictContainsSubset({'a': 1}, {'a': 1, 'b': 2})
-            self.assertDictContainsSubset({'a': 1, 'b': 2}, {'a': 1, 'b': 2})
-
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({1: "one"}, {})
-
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({'a': 2}, {'a': 1})
-
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({'c': 1}, {'a': 1})
-
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({'a': 1, 'c': 1}, {'a': 1})
-
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({'a': 1, 'c': 1}, {'a': 1})
-
-            one = ''.join(chr(i) for i in range(255))
-            # this used to cause a UnicodeDecodeError constructing the failure msg
-            with self.assertRaises(self.failureException):
-                self.assertDictContainsSubset({'foo': one}, {'foo': '\uFFFD'})
 
     def testAssertEqual(self):
         equal_pairs = [
@@ -1094,39 +1099,17 @@ test case
         have to stay around for a few more versions.  See #9424.
         """
         old = (
-            (self.failIfEqual, (3, 5)),
             (self.assertNotEquals, (3, 5)),
-            (self.failUnlessEqual, (3, 3)),
             (self.assertEquals, (3, 3)),
-            (self.failUnlessAlmostEqual, (2.0, 2.0)),
             (self.assertAlmostEquals, (2.0, 2.0)),
-            (self.failIfAlmostEqual, (3.0, 5.0)),
             (self.assertNotAlmostEquals, (3.0, 5.0)),
-            (self.failUnless, (True,)),
             (self.assert_, (True,)),
-            (self.failUnlessRaises, (TypeError, lambda _: 3.14 + 'spam')),
-            (self.failIf, (False,)),
-            (self.assertSameElements, ([1, 1, 2, 3], [1, 2, 3])),
-            (self.assertDictContainsSubset, (dict(a=1, b=2), dict(a=1, b=2, c=3))),
             (self.assertRaisesRegexp, (KeyError, 'foo', lambda: {}['foo'])),
             (self.assertRegexpMatches, ('bar', 'bar')),
         )
         for meth, args in old:
             with self.assertWarns(DeprecationWarning):
                 meth(*args)
-
-    def testDeprecatedFailMethods(self):
-        """Test that the deprecated fail* methods get removed in 3.3"""
-        if sys.version_info[:2] < (3, 3):
-            return
-        deprecated_names = [
-            'failIfEqual', 'failUnlessEqual', 'failUnlessAlmostEqual',
-            'failIfAlmostEqual', 'failUnless', 'failUnlessRaises', 'failIf',
-            'assertSameElements', 'assertDictContainsSubset',
-        ]
-        for deprecated_name in deprecated_names:
-            with self.assertRaises(AttributeError):
-                getattr(self, deprecated_name)  # remove these in 3.3
 
     def testDeepcopy(self):
         # Issue: 5660
