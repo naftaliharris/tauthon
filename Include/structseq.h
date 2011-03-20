@@ -1,5 +1,5 @@
 
-/* Tuple object interface */
+/* Named tuple object interface */
 
 #ifndef Py_STRUCTSEQ_H
 #define Py_STRUCTSEQ_H
@@ -21,23 +21,25 @@ typedef struct PyStructSequence_Desc {
 
 extern char* PyStructSequence_UnnamedField;
 
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(void) PyStructSequence_InitType(PyTypeObject *type,
                                            PyStructSequence_Desc *desc);
+#endif
+PyAPI_FUNC(PyTypeObject*) PyStructSequence_NewType(PyStructSequence_Desc *desc);
 
 PyAPI_FUNC(PyObject *) PyStructSequence_New(PyTypeObject* type);
 
-typedef struct {
-    PyObject_VAR_HEAD
-    PyObject *ob_item[1];
-} PyStructSequence;
+#ifndef Py_LIMITED_API
+typedef PyTupleObject PyStructSequence;
 
 /* Macro, *only* to be used to fill in brand new objects */
-#define PyStructSequence_SET_ITEM(op, i, v) \
-    (((PyStructSequence *)(op))->ob_item[i] = v)
+#define PyStructSequence_SET_ITEM(op, i, v) PyTuple_SET_ITEM(op, i, v)
 
-#define PyStructSequence_GET_ITEM(op, i) \
-    (((PyStructSequence *)(op))->ob_item[i])
+#define PyStructSequence_GET_ITEM(op, i) PyTuple_GET_ITEM(op, i)
+#endif
 
+PyAPI_FUNC(void) PyStructSequence_SetItem(PyObject*, Py_ssize_t, PyObject*);
+PyAPI_FUNC(PyObject*) PyStructSequence_GetItem(PyObject*, Py_ssize_t);
 
 #ifdef __cplusplus
 }
