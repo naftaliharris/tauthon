@@ -30,12 +30,40 @@ storage.
 #------------------------------------------------------------------------
 
 import cPickle
+import sys
+
+import sys
+absolute_import = (sys.version_info[0] >= 3)
+if absolute_import :
+    # Because this syntaxis is not valid before Python 2.5
+    exec("from . import db")
+else :
+    import db
+
+#At version 2.3 cPickle switched to using protocol instead of bin
+if sys.version_info[:3] >= (2, 3, 0):
+    HIGHEST_PROTOCOL = cPickle.HIGHEST_PROTOCOL
+# In python 2.3.*, "cPickle.dumps" accepts no
+# named parameters. "pickle.dumps" accepts them,
+# so this seems a bug.
+    if sys.version_info[:3] < (2, 4, 0):
+        def _dumps(object, protocol):
+            return cPickle.dumps(object, protocol)
+    else :
+        def _dumps(object, protocol):
+            return cPickle.dumps(object, protocol=protocol)
+
+else:
+    HIGHEST_PROTOCOL = None
+    def _dumps(object, protocol):
+        return cPickle.dumps(object, bin=protocol)
+
+
 try:
     from UserDict import DictMixin
 except ImportError:
     # DictMixin is new in Python 2.3
     class DictMixin: pass
-import db
 
 #------------------------------------------------------------------------
 
@@ -84,7 +112,11 @@ class DBShelf(DictMixin):
     """
     def __init__(self, dbenv=None):
         self.db = db.DB(dbenv)
-        self.binary = 1
+        self._closed = True
+        if HIGHEST_PROTOCOL:
+            self.protocol = HIGHEST_PROTOCOL
+        else:
+            self.protocol = 1
 
 
     def __del__(self):
@@ -111,7 +143,7 @@ class DBShelf(DictMixin):
 
 
     def __setitem__(self, key, value):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         self.db[key] = data
 
 
@@ -120,14 +152,31 @@ class DBShelf(DictMixin):
 
 
     def keys(self, txn=None):
-        if txn != None:
+        if txn is not None:
             return self.db.keys(txn)
         else:
             return self.db.keys()
 
 
+    def open(self, *args, **kwargs):
+        self.db.open(*args, **kwargs)
+        self._closed = False
+
+
+    def close(self, *args, **kwargs):
+        self.db.close(*args, **kwargs)
+        self._closed = True
+
+
+    def __repr__(self):
+        if self._closed:
+            return '<DBShelf @ 0x%x - closed>' % (id(self))
+        else:
+            return repr(dict(self.iteritems()))
+
+
     def items(self, txn=None):
-        if txn != None:
+        if txn is not None:
             items = self.db.items(txn)
         else:
             items = self.db.items()
@@ -138,7 +187,7 @@ class DBShelf(DictMixin):
         return newitems
 
     def values(self, txn=None):
-        if txn != None:
+        if txn is not None:
             values = self.db.values(txn)
         else:
             values = self.db.values()
@@ -149,7 +198,7 @@ class DBShelf(DictMixin):
     # Other methods
 
     def __append(self, value, txn=None):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         return self.db.append(data, txn)
 
     def append(self, value, txn=None):
@@ -160,8 +209,13 @@ class DBShelf(DictMixin):
 
     def associate(self, secondaryDB, callback, flags=0):
         def _shelf_callback(priKey, priData, realCallback=callback):
-            data = cPickle.loads(priData)
+            # Safe in Python 2.x because expresion short circuit
+            if sys.version_info[0] < 3 or isinstance(priData, bytes) :
+                data = cPickle.loads(priData)
+            else :
+                data = cPickle.loads(bytes(priData, "iso8859-1"))  # 8 bits
             return realCallback(priKey, data)
+
         return self.db.associate(secondaryDB, _shelf_callback, flags)
 
 
@@ -171,27 +225,27 @@ class DBShelf(DictMixin):
         # given nothing is passed to the extension module.  That way
         # an exception can be raised if set_get_returns_none is turned
         # off.
-        data = apply(self.db.get, args, kw)
+        data = self.db.get(*args, **kw)
         try:
             return cPickle.loads(data)
-        except (TypeError, cPickle.UnpicklingError):
+        except (EOFError, TypeError, cPickle.UnpicklingError):
             return data  # we may be getting the default value, or None,
                          # so it doesn't need unpickled.
 
     def get_both(self, key, value, txn=None, flags=0):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         data = self.db.get(key, data, txn, flags)
         return cPickle.loads(data)
 
 
     def cursor(self, txn=None, flags=0):
         c = DBShelfCursor(self.db.cursor(txn, flags))
-        c.binary = self.binary
+        c.protocol = self.protocol
         return c
 
 
     def put(self, key, value, txn=None, flags=0):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         return self.db.put(key, data, txn, flags)
 
 
@@ -227,18 +281,20 @@ class DBShelfCursor:
     #----------------------------------------------
 
     def dup(self, flags=0):
-        return DBShelfCursor(self.dbc.dup(flags))
+        c = DBShelfCursor(self.dbc.dup(flags))
+        c.protocol = self.protocol
+        return c
 
 
     def put(self, key, value, flags=0):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         return self.dbc.put(key, data, flags)
 
 
     def get(self, *args):
         count = len(args)  # a method overloading hack
         method = getattr(self, 'get_%d' % count)
-        apply(method, args)
+        method(*args)
 
     def get_1(self, flags):
         rec = self.dbc.get(flags)
@@ -249,7 +305,7 @@ class DBShelfCursor:
         return self._extract(rec)
 
     def get_3(self, key, value, flags):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         rec = self.dbc.get(key, flags)
         return self._extract(rec)
 
@@ -266,7 +322,7 @@ class DBShelfCursor:
 
 
     def get_both(self, key, value, flags=0):
-        data = cPickle.dumps(value, self.binary)
+        data = _dumps(value, self.protocol)
         rec = self.dbc.get_both(key, flags)
         return self._extract(rec)
 
@@ -290,7 +346,11 @@ class DBShelfCursor:
             return None
         else:
             key, data = rec
-            return key, cPickle.loads(data)
+            # Safe in Python 2.x because expresion short circuit
+            if sys.version_info[0] < 3 or isinstance(data, bytes) :
+                return key, cPickle.loads(data)
+            else :
+                return key, cPickle.loads(bytes(data, "iso8859-1"))  # 8 bits
 
     #----------------------------------------------
     # Methods allowed to pass-through to self.dbc

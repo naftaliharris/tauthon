@@ -4,9 +4,26 @@ import shelve
 import glob
 from test import test_support
 
+test_support.import_module('anydbm', deprecated=True)
+
 class TestCase(unittest.TestCase):
 
     fn = "shelftemp" + os.extsep + "db"
+
+    def test_close(self):
+        d1 = {}
+        s = shelve.Shelf(d1, protocol=2, writeback=False)
+        s['key1'] = [1,2,3,4]
+        self.assertEqual(s['key1'], [1,2,3,4])
+        self.assertEqual(len(s), 1)
+        s.close()
+        self.assertRaises(ValueError, len, s)
+        try:
+            s['key1']
+        except ValueError:
+            pass
+        else:
+            self.fail('Closed shelf should not find a key')
 
     def test_ascii_file_shelf(self):
         try:
@@ -73,6 +90,17 @@ class TestCase(unittest.TestCase):
         self.assertEqual(len(d1), 1)
         self.assertEqual(len(d2), 1)
 
+    def test_writeback_also_writes_immediately(self):
+        # Issue 5754
+        d = {}
+        s = shelve.Shelf(d, writeback=True)
+        s['key'] = [1]
+        p1 = d['key']  # Will give a KeyError if backing store not updated
+        s['key'].append(2)
+        s.close()
+        p2 = d['key']
+        self.assertNotEqual(p1, p2)  # Write creates new object in store
+
 
 from test import mapping_tests
 
@@ -99,7 +127,7 @@ class TestShelveBase(mapping_tests.BasicTestMappingProtocol):
         self._db = []
         if not self._in_mem:
             for f in glob.glob(self.fn+"*"):
-                os.unlink(f)
+                test_support.unlink(f)
 
 class TestAsciiFileShelve(TestShelveBase):
     _args={'protocol':0}

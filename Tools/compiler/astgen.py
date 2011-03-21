@@ -8,7 +8,6 @@ the Node interface has changed more often than the grammar.
 """
 
 import fileinput
-import getopt
 import re
 import sys
 from StringIO import StringIO
@@ -106,12 +105,18 @@ class NodeInfo:
 
     def _gen_init(self, buf):
         if self.args:
-            print >> buf, "    def __init__(self, %s, lineno=None):" % self.args
+            argtuple = '(' in self.args
+            args = self.args if not argtuple else ''.join(self.argnames)
+            print >> buf, "    def __init__(self, %s, lineno=None):" % args
         else:
             print >> buf, "    def __init__(self, lineno=None):"
         if self.argnames:
-            for name in self.argnames:
-                print >> buf, "        self.%s = %s" % (name, name)
+            if argtuple:
+                for idx, name in enumerate(self.argnames):
+                    print >> buf, "        self.%s = %s[%s]" % (name, args, idx)
+            else:
+                for name in self.argnames:
+                    print >> buf, "        self.%s = %s" % (name, name)
         print >> buf, "        self.lineno = lineno"
         # Copy the lines in self.init, indented four spaces.  The rstrip()
         # business is to get rid of the four spaces if line happens to be

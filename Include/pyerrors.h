@@ -34,8 +34,8 @@ typedef struct {
     PyObject *message;
     PyObject *encoding;
     PyObject *object;
-    PyObject *start;
-    PyObject *end;
+    Py_ssize_t start;
+    Py_ssize_t end;
     PyObject *reason;
 } PyUnicodeErrorObject;
 #endif
@@ -94,27 +94,25 @@ PyAPI_FUNC(void) PyErr_NormalizeException(PyObject**, PyObject**, PyObject**);
 
 /* */
 
-#define PyExceptionClass_Check(x)					\
-	(PyClass_Check((x))						\
-	 || (PyType_Check((x)) && PyType_IsSubtype(			\
-		     (PyTypeObject*)(x), (PyTypeObject*)PyExc_BaseException)))
+#define PyExceptionClass_Check(x)                                       \
+    (PyClass_Check((x)) || (PyType_Check((x)) &&                        \
+      PyType_FastSubclass((PyTypeObject*)(x), Py_TPFLAGS_BASE_EXC_SUBCLASS)))
+
+#define PyExceptionInstance_Check(x)                    \
+    (PyInstance_Check((x)) ||                           \
+     PyType_FastSubclass((x)->ob_type, Py_TPFLAGS_BASE_EXC_SUBCLASS))
+
+#define PyExceptionClass_Name(x)                                   \
+    (PyClass_Check((x))                                            \
+     ? PyString_AS_STRING(((PyClassObject*)(x))->cl_name)          \
+     : (char *)(((PyTypeObject*)(x))->tp_name))
+
+#define PyExceptionInstance_Class(x)                                    \
+    ((PyInstance_Check((x))                                             \
+      ? (PyObject*)((PyInstanceObject*)(x))->in_class                   \
+      : (PyObject*)((x)->ob_type)))
 
 
-#define PyExceptionInstance_Check(x)			\
-	(PyInstance_Check((x)) ||			\
-	 (PyType_IsSubtype((x)->ob_type, (PyTypeObject*)PyExc_BaseException)))
-
-#define PyExceptionClass_Name(x)				   \
-	(PyClass_Check((x))					   \
-	 ? PyString_AS_STRING(((PyClassObject*)(x))->cl_name)	   \
-	 : (char *)(((PyTypeObject*)(x))->tp_name))
-
-#define PyExceptionInstance_Class(x)					\
-	((PyInstance_Check((x))						\
-	  ? (PyObject*)((PyInstanceObject*)(x))->in_class		\
-	  : (PyObject*)((x)->ob_type)))
-
-	
 /* Predefined exceptions */
 
 PyAPI_DATA(PyObject *) PyExc_BaseException;
@@ -162,7 +160,10 @@ PyAPI_DATA(PyObject *) PyExc_WindowsError;
 PyAPI_DATA(PyObject *) PyExc_VMSError;
 #endif
 
+PyAPI_DATA(PyObject *) PyExc_BufferError;
+
 PyAPI_DATA(PyObject *) PyExc_MemoryErrorInst;
+PyAPI_DATA(PyObject *) PyExc_RecursionErrorInst;
 
 /* Predefined warning categories */
 PyAPI_DATA(PyObject *) PyExc_Warning;
@@ -174,6 +175,7 @@ PyAPI_DATA(PyObject *) PyExc_RuntimeWarning;
 PyAPI_DATA(PyObject *) PyExc_FutureWarning;
 PyAPI_DATA(PyObject *) PyExc_ImportWarning;
 PyAPI_DATA(PyObject *) PyExc_UnicodeWarning;
+PyAPI_DATA(PyObject *) PyExc_BytesWarning;
 
 
 /* Convenience functions */
@@ -182,33 +184,33 @@ PyAPI_FUNC(int) PyErr_BadArgument(void);
 PyAPI_FUNC(PyObject *) PyErr_NoMemory(void);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrno(PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilenameObject(
-	PyObject *, PyObject *);
+    PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilename(PyObject *, char *);
 #ifdef Py_WIN_WIDE_FILENAMES
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithUnicodeFilename(
-	PyObject *, Py_UNICODE *);
+    PyObject *, Py_UNICODE *);
 #endif /* Py_WIN_WIDE_FILENAMES */
 
 PyAPI_FUNC(PyObject *) PyErr_Format(PyObject *, const char *, ...)
-			Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
+                        Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
 
 #ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilenameObject(
-	int, const char *);
+    int, const char *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilename(
-	int, const char *);
+    int, const char *);
 #ifdef Py_WIN_WIDE_FILENAMES
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithUnicodeFilename(
-	int, const Py_UNICODE *);
+    int, const Py_UNICODE *);
 #endif /* Py_WIN_WIDE_FILENAMES */
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErr(int);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilenameObject(
-	PyObject *,int, PyObject *);
+    PyObject *,int, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilename(
-	PyObject *,int, const char *);
+    PyObject *,int, const char *);
 #ifdef Py_WIN_WIDE_FILENAMES
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithUnicodeFilename(
-	PyObject *,int, const Py_UNICODE *);
+    PyObject *,int, const Py_UNICODE *);
 #endif /* Py_WIN_WIDE_FILENAMES */
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErr(PyObject *, int);
 #endif /* MS_WINDOWS */
@@ -225,19 +227,12 @@ PyAPI_FUNC(PyObject *) PyErr_NewException(char *name, PyObject *base,
                                          PyObject *dict);
 PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *);
 
-/* Issue a warning or exception */
-PyAPI_FUNC(int) PyErr_WarnEx(PyObject *category, const char *msg,
-			     Py_ssize_t stack_level);
-PyAPI_FUNC(int) PyErr_WarnExplicit(PyObject *, const char *,
-				   const char *, int, 
-				   const char *, PyObject *);
-/* PyErr_Warn is only for backwards compatability and will be removed.
-   Use PyErr_WarnEx instead. */
-#define PyErr_Warn(category, msg) PyErr_WarnEx(category, msg, 1)
-
 /* In sigcheck.c or signalmodule.c */
 PyAPI_FUNC(int) PyErr_CheckSignals(void);
 PyAPI_FUNC(void) PyErr_SetInterrupt(void);
+
+/* In signalmodule.c */
+int PySignal_SetWakeupFd(int fd);
 
 /* Support for adding program text to SyntaxErrors */
 PyAPI_FUNC(void) PyErr_SyntaxLocation(const char *, int);
@@ -249,15 +244,15 @@ PyAPI_FUNC(PyObject *) PyErr_ProgramText(const char *, int);
 
 /* create a UnicodeDecodeError object */
 PyAPI_FUNC(PyObject *) PyUnicodeDecodeError_Create(
-	const char *, const char *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const char *, const char *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
 
 /* create a UnicodeEncodeError object */
 PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_Create(
-	const char *, const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const char *, const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
 
 /* create a UnicodeTranslateError object */
 PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_Create(
-	const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
+    const Py_UNICODE *, Py_ssize_t, Py_ssize_t, Py_ssize_t, const char *);
 
 /* get the encoding attribute */
 PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_GetEncoding(PyObject *);
@@ -300,11 +295,11 @@ PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_GetReason(PyObject *);
 /* assign a new value to the reason attribute
    return 0 on success, -1 on failure */
 PyAPI_FUNC(int) PyUnicodeEncodeError_SetReason(
-	PyObject *, const char *);
+    PyObject *, const char *);
 PyAPI_FUNC(int) PyUnicodeDecodeError_SetReason(
-	PyObject *, const char *);
+    PyObject *, const char *);
 PyAPI_FUNC(int) PyUnicodeTranslateError_SetReason(
-	PyObject *, const char *);
+    PyObject *, const char *);
 #endif
 
 
@@ -324,9 +319,9 @@ PyAPI_FUNC(int) PyUnicodeTranslateError_SetReason(
 
 #include <stdarg.h>
 PyAPI_FUNC(int) PyOS_snprintf(char *str, size_t size, const char  *format, ...)
-			Py_GCC_ATTRIBUTE((format(printf, 3, 4)));
+                        Py_GCC_ATTRIBUTE((format(printf, 3, 4)));
 PyAPI_FUNC(int) PyOS_vsnprintf(char *str, size_t size, const char  *format, va_list va)
-			Py_GCC_ATTRIBUTE((format(printf, 3, 0)));
+                        Py_GCC_ATTRIBUTE((format(printf, 3, 0)));
 
 #ifdef __cplusplus
 }

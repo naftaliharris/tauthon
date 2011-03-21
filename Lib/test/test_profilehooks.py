@@ -4,6 +4,22 @@ import unittest
 
 from test import test_support
 
+class TestGetProfile(unittest.TestCase):
+    def setUp(self):
+        sys.setprofile(None)
+
+    def tearDown(self):
+        sys.setprofile(None)
+
+    def test_empty(self):
+        assert sys.getprofile() == None
+
+    def test_setget(self):
+        def fn(*args):
+            pass
+
+        sys.setprofile(fn)
+        assert sys.getprofile() == fn
 
 class HookWatcher:
     def __init__(self):
@@ -94,7 +110,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_exception(self):
         def f(p):
-            1/0
+            1./0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -102,7 +118,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_caught_exception(self):
         def f(p):
-            try: 1/0
+            try: 1./0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -111,7 +127,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_caught_nested_exception(self):
         def f(p):
-            try: 1/0
+            try: 1./0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -120,7 +136,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_nested_exception(self):
         def f(p):
-            1/0
+            1./0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               # This isn't what I expected:
@@ -131,7 +147,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_exception_in_except_clause(self):
         def f(p):
-            1/0
+            1./0
         def g(p):
             try:
                 f(p)
@@ -150,7 +166,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_exception_propogation(self):
         def f(p):
-            1/0
+            1./0
         def g(p):
             try: f(p)
             finally: p.add_event("falling through")
@@ -165,8 +181,8 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_raise_twice(self):
         def f(p):
-            try: 1/0
-            except: 1/0
+            try: 1./0
+            except: 1./0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -174,7 +190,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_raise_reraise(self):
         def f(p):
-            try: 1/0
+            try: 1./0
             except: raise
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -191,7 +207,7 @@ class ProfileHookTestCase(TestCaseBase):
 
     def test_distant_exception(self):
         def f():
-            1/0
+            1./0
         def g():
             f()
         def h():
@@ -276,7 +292,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_basic_exception(self):
         def f(p):
-            1/0
+            1./0
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
                               (1, 'return', f_ident),
@@ -284,7 +300,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_caught_exception(self):
         def f(p):
-            try: 1/0
+            try: 1./0
             except: pass
         f_ident = ident(f)
         self.check_events(f, [(1, 'call', f_ident),
@@ -293,7 +309,7 @@ class ProfileSimulatorTestCase(TestCaseBase):
 
     def test_distant_exception(self):
         def f():
-            1/0
+            1./0
         def g():
             f()
         def h():
@@ -359,6 +375,7 @@ def show_events(callable):
 
 def test_main():
     test_support.run_unittest(
+        TestGetProfile,
         ProfileHookTestCase,
         ProfileSimulatorTestCase
     )

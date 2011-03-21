@@ -27,11 +27,7 @@ class TestGB18030Map(test_multibytecodec_support.TestBase_Mapping,
 
 
 def test_main():
-    suite = unittest.TestSuite()
-    suite.addTest(unittest.makeSuite(TestGB2312Map))
-    suite.addTest(unittest.makeSuite(TestGBKMap))
-    suite.addTest(unittest.makeSuite(TestGB18030Map))
-    test_support.run_suite(suite)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

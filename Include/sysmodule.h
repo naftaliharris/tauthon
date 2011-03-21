@@ -11,6 +11,7 @@ PyAPI_FUNC(PyObject *) PySys_GetObject(char *);
 PyAPI_FUNC(int) PySys_SetObject(char *, PyObject *);
 PyAPI_FUNC(FILE *) PySys_GetFile(char *, FILE *);
 PyAPI_FUNC(void) PySys_SetArgv(int, char **);
+PyAPI_FUNC(void) PySys_SetArgvEx(int, char **, int);
 PyAPI_FUNC(void) PySys_SetPath(char *);
 
 PyAPI_FUNC(void) PySys_WriteStdout(const char *format, ...)
@@ -23,6 +24,7 @@ PyAPI_DATA(int) _PySys_CheckInterval;
 
 PyAPI_FUNC(void) PySys_ResetWarnOptions(void);
 PyAPI_FUNC(void) PySys_AddWarnOption(char *);
+PyAPI_FUNC(int) PySys_HasWarnOptions(void);
 
 #ifdef __cplusplus
 }

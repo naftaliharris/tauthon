@@ -145,7 +145,8 @@ def sub(pattern, repl, string, count=0):
     """Return the string obtained by replacing the leftmost
     non-overlapping occurrences of the pattern in string by the
     replacement repl.  repl can be either a string or a callable;
-    if a callable, it's passed the match object and must return
+    if a string, backslash escapes in it are processed.  If it is
+    a callable, it's passed the match object and must return
     a replacement string to be used."""
     return _compile(pattern, 0).sub(repl, string, count)
 
@@ -155,7 +156,8 @@ def subn(pattern, repl, string, count=0):
     non-overlapping occurrences of the pattern in the source
     string by the replacement repl.  number is the number of
     substitutions that were made. repl can be either a string or a
-    callable; if a callable, it's passed the match object and must
+    callable; if a string, backslash escapes in it are processed.
+    If it is a callable, it's passed the match object and must
     return a replacement string to be used."""
     return _compile(pattern, 0).subn(repl, string, count)
 
@@ -232,6 +234,8 @@ def _compile(*key):
         return p
     pattern, flags = key
     if isinstance(pattern, _pattern_type):
+        if flags:
+            raise ValueError('Cannot process flags argument with a compiled pattern')
         return pattern
     if not sre_compile.isstring(pattern):
         raise TypeError, "first argument must be string or compiled pattern"
@@ -314,7 +318,7 @@ class Scanner:
             if i == j:
                 break
             action = self.lexicon[m.lastindex-1][1]
-            if callable(action):
+            if hasattr(action, '__call__'):
                 self.match = m
                 action = action(self, m.group())
             if action is not None:

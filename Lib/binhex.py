@@ -170,7 +170,8 @@ class _Rlecoderengine:
         del self.ofp
 
 class BinHex:
-    def __init__(self, (name, finfo, dlen, rlen), ofp):
+    def __init__(self, name_finfo_dlen_rlen, ofp):
+        name, finfo, dlen, rlen = name_finfo_dlen_rlen
         if type(ofp) == type(''):
             ofname = ofp
             ofp = open(ofname, 'w')
@@ -510,14 +511,7 @@ def hexbin(inp, out):
     ifp.close()
 
 def _test():
-    if os.name == 'mac':
-        import macfs
-        fss, ok = macfs.PromptGetFile('File to convert:')
-        if not ok:
-            sys.exit(0)
-        fname = fss.as_pathname()
-    else:
-        fname = sys.argv[1]
+    fname = sys.argv[1]
     binhex(fname, fname+'.hqx')
     hexbin(fname+'.hqx', fname+'.viahqx')
     #hexbin(fname, fname+'.unpacked')

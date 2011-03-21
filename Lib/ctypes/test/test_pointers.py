@@ -1,4 +1,4 @@
-import unittest
+import unittest, sys
 
 from ctypes import *
 import _ctypes_test
@@ -174,6 +174,19 @@ class PointersTestCase(unittest.TestCase):
 
         self.assertRaises(TypeError, c_void_p, 3.14) # make sure floats are NOT accepted
         self.assertRaises(TypeError, c_void_p, object()) # nor other objects
+
+    def test_pointers_bool(self):
+        # NULL pointers have a boolean False value, non-NULL pointers True.
+        self.failUnlessEqual(bool(POINTER(c_int)()), False)
+        self.failUnlessEqual(bool(pointer(c_int())), True)
+
+        self.failUnlessEqual(bool(CFUNCTYPE(None)(0)), False)
+        self.failUnlessEqual(bool(CFUNCTYPE(None)(42)), True)
+
+        # COM methods are boolean True:
+        if sys.platform == "win32":
+            mth = WINFUNCTYPE(None)(42, "name", (), None)
+            self.failUnlessEqual(bool(mth), True)
 
 if __name__ == '__main__':
     unittest.main()

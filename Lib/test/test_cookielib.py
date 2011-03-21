@@ -1,10 +1,15 @@
 # -*- coding: latin-1 -*-
 """Tests for cookielib.py."""
 
-import re, os, time
+import cookielib
+import os
+import re
+import time
+
 from unittest import TestCase
 
 from test import test_support
+
 
 class DateTimeTests(TestCase):
 
@@ -99,7 +104,8 @@ class DateTimeTests(TestCase):
 
 
 class HeaderTests(TestCase):
-    def test_parse_ns_headers(self):
+
+    def test_parse_ns_headers_expires(self):
         from cookielib import parse_ns_headers
 
         # quotes should be stripped
@@ -107,6 +113,17 @@ class HeaderTests(TestCase):
         for hdr in [
             'foo=bar; expires=01 Jan 2040 22:23:32 GMT',
             'foo=bar; expires="01 Jan 2040 22:23:32 GMT"',
+            ]:
+            self.assertEquals(parse_ns_headers([hdr]), expected)
+
+    def test_parse_ns_headers_version(self):
+        from cookielib import parse_ns_headers
+
+        # quotes should be stripped
+        expected = [[('foo', 'bar'), ('version', '1')]]
+        for hdr in [
+            'foo=bar; version="1"',
+            'foo=bar; Version="1"',
             ]:
             self.assertEquals(parse_ns_headers([hdr]), expected)
 
@@ -551,6 +568,16 @@ class CookieTests(TestCase):
         interact_netscape(c, "http://www.acme.com/blah/rhubarb/", 'eggs="bar"')
         self.assert_("/blah/rhubarb" in c._cookies["www.acme.com"])
 
+    def test_default_path_with_query(self):
+        cj = cookielib.CookieJar()
+        uri = "http://example.com/?spam/eggs"
+        value = 'eggs="bar"'
+        interact_netscape(cj, uri, value)
+        # default path does not include query, so is "/", not "/?spam"
+        self.assert_("/" in cj._cookies["example.com"])
+        # cookie is sent back to the same URI
+        self.assertEquals(interact_netscape(cj, uri), value)
+
     def test_escape_path(self):
         from cookielib import escape_path
         cases = [
@@ -579,15 +606,14 @@ class CookieTests(TestCase):
         from urllib2 import Request
         from cookielib import request_path
         # with parameters
-        req = Request("http://www.example.com/rheum/rhaponicum;"
+        req = Request("http://www.example.com/rheum/rhaponticum;"
                       "foo=bar;sing=song?apples=pears&spam=eggs#ni")
-        self.assertEquals(request_path(req), "/rheum/rhaponicum;"
-                     "foo=bar;sing=song?apples=pears&spam=eggs#ni")
+        self.assertEquals(request_path(req),
+                          "/rheum/rhaponticum;foo=bar;sing=song")
         # without parameters
-        req = Request("http://www.example.com/rheum/rhaponicum?"
+        req = Request("http://www.example.com/rheum/rhaponticum?"
                       "apples=pears&spam=eggs#ni")
-        self.assertEquals(request_path(req), "/rheum/rhaponicum?"
-                     "apples=pears&spam=eggs#ni")
+        self.assertEquals(request_path(req), "/rheum/rhaponticum")
         # missing final slash
         req = Request("http://www.example.com")
         self.assertEquals(request_path(req), "/")
@@ -1093,6 +1119,8 @@ class CookieTests(TestCase):
             ["Set-Cookie2: a=foo; path=/; Version=1; domain"],
             # bad max-age
             ["Set-Cookie: b=foo; max-age=oops"],
+            # bad version
+            ["Set-Cookie: b=foo; version=spam"],
             ]:
             c = cookiejar_from_cookie_headers(headers)
             # these bad cookies shouldn't be set
@@ -1714,7 +1742,7 @@ class LWPCookieTests(TestCase):
             counter[key] = counter[key] + 1
 
         self.assert_(not (
-            # a permanent cookie got lost accidently
+            # a permanent cookie got lost accidentally
             counter["perm_after"] != counter["perm_before"] or
             # a session cookie hasn't been cleared
             counter["session_after"] != 0 or

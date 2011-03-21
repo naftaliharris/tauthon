@@ -181,7 +181,7 @@ def format_exception_only(etype, value):
     # It was a syntax error; show exactly where the problem was found.
     lines = []
     try:
-        msg, (filename, lineno, offset, badline) = value
+        msg, (filename, lineno, offset, badline) = value.args
     except Exception:
         pass
     else:
@@ -190,7 +190,7 @@ def format_exception_only(etype, value):
         if badline is not None:
             lines.append('    %s\n' % badline.strip())
             if offset is not None:
-                caretspace = badline[:offset].lstrip()
+                caretspace = badline.rstrip('\n')[:offset].lstrip()
                 # non-space whitespace (likes tabs) must be kept for alignment
                 caretspace = ((c.isspace() and c or ' ') for c in caretspace)
                 # only three spaces to account for offset1 == pos 0
@@ -212,8 +212,14 @@ def _format_final_exc_line(etype, value):
 def _some_str(value):
     try:
         return str(value)
-    except:
-        return '<unprintable %s object>' % type(value).__name__
+    except Exception:
+        pass
+    try:
+        value = unicode(value)
+        return value.encode("ascii", "backslashreplace")
+    except Exception:
+        pass
+    return '<unprintable %s object>' % type(value).__name__
 
 
 def print_exc(limit=None, file=None):

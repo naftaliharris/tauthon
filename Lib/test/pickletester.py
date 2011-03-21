@@ -1,6 +1,7 @@
 import unittest
 import pickle
 import cPickle
+import StringIO
 import pickletools
 import copy_reg
 
@@ -428,6 +429,16 @@ class AbstractPickleTests(unittest.TestCase):
             self.assertEqual(len(x), 1)
             self.assert_(x is x[0])
 
+    def test_recursive_tuple(self):
+        t = ([],)
+        t[0].append(t)
+        for proto in protocols:
+            s = self.dumps(t, proto)
+            x = self.loads(s)
+            self.assertEqual(len(x), 1)
+            self.assertEqual(len(x[0]), 1)
+            self.assert_(x is x[0][0])
+
     def test_recursive_dict(self):
         d = {}
         d[1] = d
@@ -480,13 +491,20 @@ class AbstractPickleTests(unittest.TestCase):
 
     if have_unicode:
         def test_unicode(self):
-            endcases = [unicode(''), unicode('<\\u>'), unicode('<\\\u1234>'),
-                        unicode('<\n>'),  unicode('<\\>')]
+            endcases = [u'', u'<\\u>', u'<\\\u1234>', u'<\n>',
+                        u'<\\>', u'<\\\U00012345>']
             for proto in protocols:
                 for u in endcases:
                     p = self.dumps(u, proto)
                     u2 = self.loads(p)
                     self.assertEqual(u2, u)
+
+        def test_unicode_high_plane(self):
+            t = u'\U00012345'
+            for proto in protocols:
+                p = self.dumps(t, proto)
+                t2 = self.loads(p)
+                self.assertEqual(t2, t)
 
     def test_ints(self):
         import sys
@@ -527,6 +545,16 @@ class AbstractPickleTests(unittest.TestCase):
             p = self.dumps(n, 2)
             got = self.loads(p)
             self.assertEqual(n, got)
+
+    def test_float(self):
+        test_values = [0.0, 4.94e-324, 1e-310, 7e-308, 6.626e-34, 0.1, 0.5,
+                       3.14, 263.44582062374053, 6.022e23, 1e30]
+        test_values = test_values + [-x for x in test_values]
+        for proto in protocols:
+            for value in test_values:
+                pickle = self.dumps(value, proto)
+                got = self.loads(pickle)
+                self.assertEqual(value, got)
 
     @run_with_locale('LC_ALL', 'de_DE', 'fr_FR')
     def test_float_format(self):
@@ -987,6 +1015,29 @@ class AbstractPickleModuleTests(unittest.TestCase):
         self.module.dumps(123, protocol=-1)
         self.module.Pickler(f, -1)
         self.module.Pickler(f, protocol=-1)
+
+    def test_incomplete_input(self):
+        s = StringIO.StringIO("X''.")
+        self.assertRaises(EOFError, self.module.load, s)
+
+    def test_restricted(self):
+        # issue7128: cPickle failed in restricted mode
+        builtins = {self.module.__name__: self.module,
+                    '__import__': __import__}
+        d = {}
+        teststr = "def f(): {0}.dumps(0)".format(self.module.__name__)
+        exec teststr in {'__builtins__': builtins}, d
+        d['f']()
+
+    def test_bad_input(self):
+        # Test issue4298
+        s = '\x58\0\0\0\x54'
+        self.assertRaises(EOFError, self.module.loads, s)
+        # Test issue7455
+        s = '0'
+        # XXX Why doesn't pickle raise UnpicklingError?
+        self.assertRaises((IndexError, cPickle.UnpicklingError),
+                          self.module.loads, s)
 
 class AbstractPersistentPicklerTests(unittest.TestCase):
 

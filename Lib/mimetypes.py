@@ -44,6 +44,7 @@ knownfiles = [
     ]
 
 inited = False
+_db = None
 
 
 class MimeTypes:
@@ -237,8 +238,9 @@ def guess_type(url, strict=True):
     Optional `strict' argument when false adds a bunch of commonly found, but
     non-standard types.
     """
-    init()
-    return guess_type(url, strict)
+    if _db is None:
+        init()
+    return _db.guess_type(url, strict)
 
 
 def guess_all_extensions(type, strict=True):
@@ -254,8 +256,9 @@ def guess_all_extensions(type, strict=True):
     Optional `strict' argument when false adds a bunch of commonly found,
     but non-standard types.
     """
-    init()
-    return guess_all_extensions(type, strict)
+    if _db is None:
+        init()
+    return _db.guess_all_extensions(type, strict)
 
 def guess_extension(type, strict=True):
     """Guess the extension for a file based on its MIME type.
@@ -269,8 +272,9 @@ def guess_extension(type, strict=True):
     Optional `strict' argument when false adds a bunch of commonly found,
     but non-standard types.
     """
-    init()
-    return guess_extension(type, strict)
+    if _db is None:
+        init()
+    return _db.guess_extension(type, strict)
 
 def add_type(type, ext, strict=True):
     """Add a mapping between a type and an extension.
@@ -284,15 +288,15 @@ def add_type(type, ext, strict=True):
     list of standard types, else to the list of non-standard
     types.
     """
-    init()
-    return add_type(type, ext, strict)
+    if _db is None:
+        init()
+    return _db.add_type(type, ext, strict)
 
 
 def init(files=None):
-    global guess_all_extensions, guess_extension, guess_type
     global suffix_map, types_map, encodings_map, common_types
-    global add_type, inited
-    inited = True
+    global inited, _db
+    inited = True    # so that MimeTypes.__init__() doesn't call us again
     db = MimeTypes()
     if files is None:
         files = knownfiles
@@ -302,11 +306,9 @@ def init(files=None):
     encodings_map = db.encodings_map
     suffix_map = db.suffix_map
     types_map = db.types_map[True]
-    guess_all_extensions = db.guess_all_extensions
-    guess_extension = db.guess_extension
-    guess_type = db.guess_type
-    add_type = db.add_type
     common_types = db.types_map[False]
+    # Make the DB a global variable now that it is fully initialized
+    _db = db
 
 
 def read_mime_types(file):
@@ -329,11 +331,13 @@ def _default_mime_types():
         '.tgz': '.tar.gz',
         '.taz': '.tar.gz',
         '.tz': '.tar.gz',
+        '.tbz2': '.tar.bz2',
         }
 
     encodings_map = {
         '.gz': 'gzip',
         '.Z': 'compress',
+        '.bz2': 'bzip2',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
@@ -391,6 +395,7 @@ def _default_mime_types():
         '.movie'  : 'video/x-sgi-movie',
         '.mp2'    : 'audio/mpeg',
         '.mp3'    : 'audio/mpeg',
+        '.mp4'    : 'video/mp4',
         '.mpa'    : 'video/mpeg',
         '.mpe'    : 'video/mpeg',
         '.mpeg'   : 'video/mpeg',

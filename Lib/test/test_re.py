@@ -1,7 +1,4 @@
-import sys
-sys.path = ['.'] + sys.path
-
-from test.test_support import verbose, run_unittest
+from test.test_support import verbose, run_unittest, import_module
 import re
 from re import Scanner
 import sys, os, traceback
@@ -107,6 +104,18 @@ class ReTests(unittest.TestCase):
                 z = re.sub(x, y, str(x))
                 self.assertEqual(z, y)
                 self.assertEqual(type(z), type(y))
+
+    def test_bug_1661(self):
+        # Verify that flags do not get silently ignored with compiled patterns
+        pattern = re.compile('.')
+        self.assertRaises(ValueError, re.match, pattern, 'A', re.I)
+        self.assertRaises(ValueError, re.search, pattern, 'A', re.I)
+        self.assertRaises(ValueError, re.findall, pattern, 'A', re.I)
+        self.assertRaises(ValueError, re.compile, pattern, re.I)
+
+    def test_bug_3629(self):
+        # A regex that triggered a bug in the sre-code validator
+        re.compile("(?P<quote>)(?(quote))")
 
     def test_sub_template_numeric_escape(self):
         # bug 776311 and friends
@@ -362,10 +371,6 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.search(r"\d\D\w\W\s\S",
                                    "1aa! a", re.UNICODE).group(0), "1aa! a")
 
-    def test_ignore_case(self):
-        self.assertEqual(re.match("abc", "ABC", re.I).group(0), "ABC")
-        self.assertEqual(re.match("abc", u"ABC", re.I).group(0), "ABC")
-
     def test_bigcharset(self):
         self.assertEqual(re.match(u"([\u2222\u2223])",
                                   u"\u2222").group(1), u"\u2222")
@@ -393,6 +398,8 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.match(r"(a)(?!\s(abc|a))", "a b").group(1), "a")
 
     def test_ignore_case(self):
+        self.assertEqual(re.match("abc", "ABC", re.I).group(0), "ABC")
+        self.assertEqual(re.match("abc", u"ABC", re.I).group(0), "ABC")
         self.assertEqual(re.match(r"(a\s[^a])", "a b", re.I).group(1), "a b")
         self.assertEqual(re.match(r"(a\s[^a]*)", "a bb", re.I).group(1), "a bb")
         self.assertEqual(re.match(r"(a\s[abc])", "a b", re.I).group(1), "a b")
@@ -440,14 +447,8 @@ class ReTests(unittest.TestCase):
         import cPickle
         self.pickle_test(cPickle)
         # old pickles expect the _compile() reconstructor in sre module
-        import warnings
-        original_filters = warnings.filters[:]
-        try:
-            warnings.filterwarnings("ignore", "The sre module is deprecated",
-                                    DeprecationWarning)
-            from sre import _compile
-        finally:
-            warnings.filters = original_filters
+        import_module("sre", deprecated=True)
+        from sre import _compile
 
     def pickle_test(self, pickle):
         oldpat = re.compile('a(?:b|(c|e){1,2}?|d)+?(.)')
@@ -666,6 +667,28 @@ class ReTests(unittest.TestCase):
         q = p.match(upper_char)
         self.assertNotEqual(q, None)
 
+    def test_dollar_matches_twice(self):
+        "$ matches the end of string, and just before the terminating \n"
+        pattern = re.compile('$')
+        self.assertEqual(pattern.sub('#', 'a\nb\n'), 'a\nb#\n#')
+        self.assertEqual(pattern.sub('#', 'a\nb\nc'), 'a\nb\nc#')
+        self.assertEqual(pattern.sub('#', '\n'), '#\n#')
+
+        pattern = re.compile('$', re.MULTILINE)
+        self.assertEqual(pattern.sub('#', 'a\nb\n' ), 'a#\nb#\n#' )
+        self.assertEqual(pattern.sub('#', 'a\nb\nc'), 'a#\nb#\nc#')
+        self.assertEqual(pattern.sub('#', '\n'), '#\n#')
+
+    def test_dealloc(self):
+        # issue 3299: check for segfault in debug build
+        import _sre
+        # the overflow limit is different on wide and narrow builds and it
+        # depends on the definition of SRE_CODE (see sre.h).
+        # 2**128 should be big enough to overflow on both. For smaller values
+        # a RuntimeError is raised instead of OverflowError.
+        long_overflow = 2**128
+        self.assertRaises(TypeError, re.finditer, "a", {})
+        self.assertRaises(OverflowError, _sre.compile, "abc", 0, [long_overflow])
 
 def run_re_tests():
     from test.re_tests import benchmarks, tests, SUCCEED, FAIL, SYNTAX_ERROR

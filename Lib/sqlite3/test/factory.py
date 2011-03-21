@@ -1,7 +1,7 @@
 #-*- coding: ISO-8859-1 -*-
 # pysqlite2/test/factory.py: tests for the various factories in pysqlite
 #
-# Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
+# Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -91,7 +91,7 @@ class RowFactoryTests(unittest.TestCase):
                                    list),
                         "row is not instance of list")
 
-    def CheckSqliteRow(self):
+    def CheckSqliteRowIndex(self):
         self.con.row_factory = sqlite.Row
         row = self.con.execute("select 1 as a, 2 as b").fetchone()
         self.failUnless(isinstance(row,
@@ -109,6 +109,47 @@ class RowFactoryTests(unittest.TestCase):
         col1, col2 = row[0], row[1]
         self.failUnless(col1 == 1, "by index: wrong result for column 0")
         self.failUnless(col2 == 2, "by index: wrong result for column 1")
+
+    def CheckSqliteRowIter(self):
+        """Checks if the row object is iterable"""
+        self.con.row_factory = sqlite.Row
+        row = self.con.execute("select 1 as a, 2 as b").fetchone()
+        for col in row:
+            pass
+
+    def CheckSqliteRowAsTuple(self):
+        """Checks if the row object can be converted to a tuple"""
+        self.con.row_factory = sqlite.Row
+        row = self.con.execute("select 1 as a, 2 as b").fetchone()
+        t = tuple(row)
+
+    def CheckSqliteRowAsDict(self):
+        """Checks if the row object can be correctly converted to a dictionary"""
+        self.con.row_factory = sqlite.Row
+        row = self.con.execute("select 1 as a, 2 as b").fetchone()
+        d = dict(row)
+        self.failUnlessEqual(d["a"], row["a"])
+        self.failUnlessEqual(d["b"], row["b"])
+
+    def CheckSqliteRowHashCmp(self):
+        """Checks if the row object compares and hashes correctly"""
+        self.con.row_factory = sqlite.Row
+        row_1 = self.con.execute("select 1 as a, 2 as b").fetchone()
+        row_2 = self.con.execute("select 1 as a, 2 as b").fetchone()
+        row_3 = self.con.execute("select 1 as a, 3 as b").fetchone()
+
+        self.failUnless(row_1 == row_1)
+        self.failUnless(row_1 == row_2)
+        self.failUnless(row_2 != row_3)
+
+        self.failIf(row_1 != row_1)
+        self.failIf(row_1 != row_2)
+        self.failIf(row_2 == row_3)
+
+        self.failUnlessEqual(row_1, row_2)
+        self.failUnlessEqual(hash(row_1), hash(row_2))
+        self.failIfEqual(row_1, row_3)
+        self.failIfEqual(hash(row_1), hash(row_3))
 
     def tearDown(self):
         self.con.close()

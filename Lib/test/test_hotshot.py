@@ -1,12 +1,16 @@
-import hotshot
-import hotshot.log
 import os
 import pprint
 import unittest
+import tempfile
+import _hotshot
+import gc
 
 from test import test_support
 
+# Silence Py3k warning
+hotshot = test_support.import_module('hotshot', deprecated=True)
 from hotshot.log import ENTER, EXIT, LINE
+from hotshot import stats
 
 
 def shortfilename(fn):
@@ -123,6 +127,28 @@ class HotShotTestCase(unittest.TestCase):
             sys.path = orig_path
             if os.path.exists(test_support.TESTFN):
                 os.remove(test_support.TESTFN)
+
+    def test_logreader_eof_error(self):
+        emptyfile = tempfile.NamedTemporaryFile()
+        try:
+            self.assertRaises((IOError, EOFError), _hotshot.logreader,
+                              emptyfile.name)
+        finally:
+            emptyfile.close()
+        gc.collect()
+
+    def test_load_stats(self):
+        def start(prof):
+            prof.start()
+        # Make sure stats can be loaded when start and stop of profiler
+        # are not executed in the same stack frame.
+        profiler = self.new_profiler()
+        start(profiler)
+        profiler.stop()
+        profiler.close()
+        stats.load(self.logfn)
+        os.unlink(self.logfn)
+
 
 def test_main():
     test_support.run_unittest(HotShotTestCase)

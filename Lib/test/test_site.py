@@ -5,12 +5,12 @@ executing have not been removed.
 
 """
 import unittest
-from test.test_support import TestSkipped, TestFailed, run_unittest, TESTFN
+from test.test_support import TestSkipped, run_unittest, TESTFN, EnvironmentVarGuard
 import __builtin__
 import os
 import sys
 import encodings
-import tempfile
+import subprocess
 # Need to make sure to not import 'site' if someone specified ``-S`` at the
 # command-line.  Detect this by just making sure 'site' has not been imported
 # already.
@@ -18,6 +18,11 @@ if "site" in sys.modules:
     import site
 else:
     raise TestSkipped("importation of site.py suppressed")
+
+if not os.path.isdir(site.USER_SITE):
+    # need to add user site directory for tests
+    os.makedirs(site.USER_SITE)
+    site.addsitedir(site.USER_SITE)
 
 class HelperFunctionsTests(unittest.TestCase):
     """Tests for helper functions.
@@ -90,6 +95,33 @@ class HelperFunctionsTests(unittest.TestCase):
             self.pth_file_tests(pth_file)
         finally:
             pth_file.cleanup()
+
+    def test_s_option(self):
+        usersite = site.USER_SITE
+        self.assert_(usersite in sys.path)
+
+        rc = subprocess.call([sys.executable, '-c',
+            'import sys; sys.exit(%r in sys.path)' % usersite])
+        self.assertEqual(rc, 1)
+
+        rc = subprocess.call([sys.executable, '-s', '-c',
+            'import sys; sys.exit(%r in sys.path)' % usersite])
+        self.assertEqual(rc, 0)
+
+        env = os.environ.copy()
+        env["PYTHONNOUSERSITE"] = "1"
+        rc = subprocess.call([sys.executable, '-c',
+            'import sys; sys.exit(%r in sys.path)' % usersite],
+            env=env)
+        self.assertEqual(rc, 0)
+
+        env = os.environ.copy()
+        env["PYTHONUSERBASE"] = "/tmp"
+        rc = subprocess.call([sys.executable, '-c',
+            'import sys, site; sys.exit(site.USER_BASE.startswith("/tmp"))'],
+            env=env)
+        self.assertEqual(rc, 1)
+
 
 class PthFile(object):
     """Helper class for handling testing of .pth files"""
@@ -164,7 +196,7 @@ class ImportSideEffectTests(unittest.TestCase):
         site.abs__file__()
         for module in (sys, os, __builtin__):
             try:
-                self.failUnless(os.path.isabs(module.__file__), `module`)
+                self.assertTrue(os.path.isabs(module.__file__), repr(module))
             except AttributeError:
                 continue
         # We could try everything in sys.modules; however, when regrtest.py
@@ -216,7 +248,7 @@ class ImportSideEffectTests(unittest.TestCase):
 
     def test_sitecustomize_executed(self):
         # If sitecustomize is available, it should have been imported.
-        if not sys.modules.has_key("sitecustomize"):
+        if "sitecustomize" not in sys.modules:
             try:
                 import sitecustomize
             except ImportError:
@@ -224,13 +256,8 @@ class ImportSideEffectTests(unittest.TestCase):
             else:
                 self.fail("sitecustomize not imported automatically")
 
-
-
-
 def test_main():
     run_unittest(HelperFunctionsTests, ImportSideEffectTests)
-
-
 
 if __name__ == "__main__":
     test_main()

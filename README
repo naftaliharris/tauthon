@@ -1,4 +1,4 @@
-This is Python version 2.5.5
+This is Python version 2.6.6
 ============================
 
 Copyright (c) 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011
@@ -82,17 +82,12 @@ Python's power is described there, including the built-in data types
 and functions!
 
 All documentation is also available online at the Python web site
-(http://docs.python.org/, see below).  It is available online for
-occasional reference, or can be downloaded in many formats for faster
-access.  The documentation is available in HTML, PostScript, PDF, and
-LaTeX formats; the LaTeX version is primarily for documentation
-authors, translators, and people with special formatting requirements.
-
-Unfortunately, new-style classes (new in Python 2.2) have not yet been
-integrated into Python's standard documentation.  A collection of
-pointers to what has been written is at:
-
-    http://www.python.org/doc/newstyle.html
+(http://docs.python.org/, see below).  It is available online for occasional
+reference, or can be downloaded in many formats for faster access.  The
+documentation is downloadable in HTML, PostScript, PDF, LaTeX, and
+reStructuredText (2.6+) formats; the LaTeX and reStructuredText versions are
+primarily for documentation authors, translators, and people with special
+formatting requirements.
 
 
 Web sites
@@ -101,9 +96,6 @@ Web sites
 New Python releases and related technologies are published at
 http://www.python.org/.  Come visit us!
 
-There's also a Python community web site at
-http://starship.python.net/.
-
 
 Newsgroups and Mailing Lists
 ----------------------------
@@ -111,31 +103,32 @@ Newsgroups and Mailing Lists
 Read comp.lang.python, a high-volume discussion newsgroup about
 Python, or comp.lang.python.announce, a low-volume moderated newsgroup
 for Python-related announcements.  These are also accessible as
-mailing lists: see http://www.python.org/community/lists.html for an
+mailing lists: see http://www.python.org/community/lists/ for an
 overview of these and many other Python-related mailing lists.
 
 Archives are accessible via the Google Groups Usenet archive; see
 http://groups.google.com/.  The mailing lists are also archived, see
-http://www.python.org/community/lists.html for details.
+http://www.python.org/community/lists/ for details.
 
 
 Bug reports
 -----------
 
 To report or search for bugs, please use the Python Bug
-Tracker at http://bugs.python.org.
+Tracker at http://bugs.python.org/.
 
 
 Patches and contributions
 -------------------------
 
 To submit a patch or other contribution, please use the Python Patch
-Manager at http://bugs.python.org.  Guidelines
+Manager at http://bugs.python.org/.  Guidelines
 for patch submission may be found at http://www.python.org/dev/patches/.
 
-If you have a proposal to change Python, it's best to submit a Python
-Enhancement Proposal (PEP) first.  All current PEPs, as well as
-guidelines for submitting a new PEP, are listed at
+If you have a proposal to change Python, you may want to send an email to the
+comp.lang.python or python-ideas mailing lists for inital feedback. A Python
+Enhancement Proposal (PEP) may be submitted if your idea gains ground. All
+current PEPs, as well as guidelines for submitting a new PEP, are listed at
 http://www.python.org/dev/peps/.
 
 
@@ -169,7 +162,7 @@ variables.  When it's done, you are ready to run make.
 
 To build Python, you normally type "make" in the toplevel directory.
 If you have changed the configuration, the Makefile may have to be
-rebuilt.  In this case you may have to run make again to correctly
+rebuilt.  In this case, you may have to run make again to correctly
 build your desired target.  The interpreter executable is built in the
 top level directory.
 
@@ -191,7 +184,7 @@ Troubleshooting
 See also the platform specific notes in the next section.
 
 If you run into other trouble, see the FAQ
-(http://www.python.org/doc/faq) for hints on what can go wrong, and
+(http://www.python.org/doc/faq/) for hints on what can go wrong, and
 how to fix it.
 
 If you rerun the configure script with different options, remove all
@@ -231,8 +224,8 @@ executable which is compiling the library.
 Unsupported systems
 -------------------
 
-A number of features are not supported in Python 2.5 anymore. Some
-support code is still present, but will be removed in Python 2.6. 
+A number of systems is not supported in Python 2.6 anymore. Some
+support code is still present, but will be removed in later versions.
 If you still need to use current Python versions on these systems,
 please send a message to python-dev@python.org indicating that you
 volunteer to support this system. For a more detailed discussion 
@@ -293,7 +286,7 @@ Unix platforms: If your vendor still ships (and you still use) Berkeley DB
 
 XXX I think this next bit is out of date:
 
-64-bit platforms: The modules audioop, imageop and rgbimg don't work.
+64-bit platforms: The modules audioop, and imageop don't work.
         The setup.py script disables them on 64-bit installations.
         Don't try to enable them in the Modules/Setup file.  They
         contain code that is quite wordsize sensitive.  (If you have a
@@ -407,7 +400,7 @@ HP-UX:  When using threading, you may have to add -D_REENTRANT to the
 HP-UX ia64: When building on the ia64 (Itanium) platform using HP's
         compiler, some experience has shown that the compiler's
         optimiser produces a completely broken version of python
-        (see http://www.python.org/sf/814976). To work around this,
+        (see http://bugs.python.org/814976). To work around this,
         edit the Makefile and remove -O from the OPT line.
 
         To build a 64-bit executable on an Itanium 2 system using HP's
@@ -427,7 +420,7 @@ HP-UX ia64: When building on the ia64 (Itanium) platform using HP's
         if it remains set.)  You still have to edit the Makefile and
         remove -O from the OPT line.
 
-HP PA-RISC 2.0: A recent bug report (http://www.python.org/sf/546117)
+HP PA-RISC 2.0: A recent bug report (http://bugs.python.org/546117)
         suggests that the C compiler in this 64-bit system has bugs
         in the optimizer that break Python.  Compiling without
         optimization solves the problems.
@@ -465,9 +458,9 @@ QNX:    Chris Herborth (chrish@qnx.com) writes:
                 array, audioop, binascii, cPickle, cStringIO, cmath,
                 crypt, curses, errno, fcntl, gdbm, grp, imageop,
                 _locale, math, md5, new, operator, parser, pcre,
-                posix, pwd, readline, regex, reop, rgbimg, rotor,
+                posix, pwd, readline, regex, reop,
                 select, signal, socket, soundex, strop, struct,
-                syslog, termios, time, timing, zlib, audioop, imageop, rgbimg
+                syslog, termios, time, timing, zlib, audioop, imageop
 
         3) make SHELL=/usr/local/bin/bash
 
@@ -596,12 +589,12 @@ MacOSX: The tests will crash on both 10.1 and 10.2 with SEGV in
         want to use any Aqua-based GUI toolkit (whether Tkinter, wxPython,
         Carbon, Cocoa or anything else).
 
-	You may also want to try the configure option "--enable-universalsdk"
-	which builds Python as a universal binary with support for the 
-	i386 and PPC architectures. This requires Xcode 2.1 or later to build.
+        You may also want to try the configure option "--enable-universalsdk"
+        which builds Python as a universal binary with support for the 
+        i386 and PPC architetures. This requires Xcode 2.1 or later to build.
 
-        See Mac/OSX/README for more information on framework and 
-	universal builds.
+        See Mac/README for more information on framework and 
+        universal builds.
 
 Cygwin: With recent (relative to the time of writing, 2001-12-19)
         Cygwin installations, there are problems with the interaction
@@ -668,71 +661,10 @@ Cygwin: With recent (relative to the time of writing, 2001-12-19)
         News regarding these platforms with more recent Cygwin
         versions would be appreciated!
 
-AtheOS: From Octavian Cerna <tavy at ylabs.com>:
-
-        Before building:
-
-            Make sure you have shared versions of the libraries you
-            want to use with Python. You will have to compile them
-            yourself, or download precompiled packages.
-
-            Recommended libraries:
-
-                ncurses-4.2
-                readline-4.2a
-                zlib-1.1.4
-
-        Build:
-
-            $ ./configure --prefix=/usr/python
-            $ make
-
-            Python is always built as a shared library, otherwise
-            dynamic loading would not work.
-
-        Testing:
-
-            $ make test
-
-        Install:
-
-            # make install
-            # pkgmanager -a /usr/python
-
-
-        AtheOS issues:
-
-            - large file support: due to a stdio bug in glibc/libio,
-              access to large files may not work correctly.  fseeko()
-              tries to seek to a negative offset.  ftello() returns a
-              negative offset, it looks like a 32->64bit
-              sign-extension issue.  The lowlevel functions (open,
-              lseek, etc) are OK.
-            - sockets: AF_UNIX is defined in the C library and in
-              Python, but not implemented in the system.
-            - select: poll is available in the C library, but does not
-              work (It does not return POLLNVAL for bad fds and
-              hangs).
-            - posix: statvfs and fstatvfs always return ENOSYS.
-            - disabled modules:
-                - mmap: not yet implemented in AtheOS
-                - nis: broken (on an unconfigured system
-                  yp_get_default_domain() returns junk instead of
-                  error)
-                - dl: dynamic loading doesn't work via dlopen()
-                - resource: getrimit and setrlimit are not yet
-                  implemented
-
-            - if you are getting segmentation faults, you probably are
-              low on memory.  AtheOS doesn't handle very well an
-              out-of-memory condition and simply SEGVs the process.
-
-        Tested on:
-
-            AtheOS-0.3.7
-            gcc-2.95
-            binutils-2.10
-            make-3.78
+Windows: When executing Python scripts on the command line using file type
+        associations (i.e. starting "script.py" instead of "python script.py"),
+        redirects may not work unless you set a specific registry key.  See
+        the Knowledge Base article <http://support.microsoft.com/kb/321788>.
 
 
 Configuring the bsddb and dbm modules
@@ -910,6 +842,26 @@ libraries.  The Makefile/Setup mechanism can be used to compile and
 link most extension modules statically.
 
 
+Coverage checking
+-----------------
+
+For C coverage checking using gcov, run "make coverage".  This will
+build a Python binary with profiling activated, and a ".gcno" and
+".gcda" file for every source file compiled with that option.  With
+the built binary, now run the code whose coverage you want to check.
+Then, you can see coverage statistics for each individual source file
+by running gcov, e.g.
+
+    gcov -o Modules zlibmodule
+
+This will create a "zlibmodule.c.gcov" file in the current directory
+containing coverage info for that source file.
+
+This works only for source files statically compiled into the
+executable; use the Makefile/Setup mechanism to compile and link
+extension modules you want to coverage-check statically.
+
+
 Testing
 -------
 
@@ -924,11 +876,14 @@ that are not yet using glibc 6), test_strftime fails due to a
 non-standard implementation of strftime() in the C library. Please
 ignore this, or upgrade to glibc version 6.
 
+By default, tests are prevented from overusing resources like disk space and
+memory.  To enable these tests, run "make testall".
+
 IMPORTANT: If the tests fail and you decide to mail a bug report,
 *don't* include the output of "make test".  It is useless.  Run the
 failing test manually, as follows:
 
-        ./python ./Lib/test/test_whatever.py
+        ./python Lib/test/regrtest.py -v test_whatever
 
 (substituting the top of the source tree for '.' if you built in a
 different directory).  This runs the test in verbose mode.
@@ -963,14 +918,8 @@ created.  The only file not installed with a version number in its
 name is the manual page, installed as "/usr/local/man/man1/python.1"
 by default.
 
-If you have a previous installation of Python that you don't
-want to replace yet, use
-
-        make altinstall
-
-This installs the same set of files as "make install" except it
-doesn't create the hard link to "python<version>" named "python" and
-it doesn't install the manual page at all.
+If you want to install multiple versions of Python see the section below
+entitled "Installing multiple versions".
 
 The only thing you may have to install manually is the Python mode for
 Emacs found in Misc/python-mode.el.  (But then again, more recent
@@ -981,6 +930,25 @@ On Mac OS X, if you have configured Python with --enable-framework, you
 should use "make frameworkinstall" to do the installation. Note that this
 installs the Python executable in a place that is not normally on your
 PATH, you may want to set up a symlink in /usr/local/bin.
+
+
+Installing multiple versions
+----------------------------
+
+On Unix and Mac systems if you intend to install multiple versions of Python
+using the same installation prefix (--prefix argument to the configure
+script) you must take care that your primary python executable is not
+overwritten by the installation of a different version.  All files and
+directories installed using "make altinstall" contain the major and minor
+version and can thus live side-by-side.  "make install" also creates
+${prefix}/bin/python which refers to ${prefix}/bin/pythonX.Y.  If you intend
+to install multiple versions using the same prefix you must decide which
+version (if any) is your "primary" version.  Install that version using
+"make install".  Install all other versions using "make altinstall".
+
+For example, if you want to install Python 2.5, 2.6 and 3.0 with 2.6 being
+the primary version, you would execute "make install" in your 2.6 build
+directory and "make altinstall" in the others.
 
 
 Configuration options and variables
@@ -1112,7 +1080,7 @@ Modules/getpath.o.
 --with-tsc: Profile using the Pentium timestamping counter (TSC).
 
 --with-system-ffi:  Build the _ctypes extension module using an ffi
-	library installed on the system.
+        library installed on the system.
 
 
 Building for multiple architectures (using the VPATH feature)
@@ -1151,6 +1119,9 @@ makesetup script supports multiple input files, so if you want to be
 fancy you can change the rules to create an empty Setup.local if it
 doesn't exist and run it with arguments $(srcdir)/Setup Setup.local;
 however this assumes that you only need to add modules.)
+
+Also note that you can't use a workspace for VPATH and non VPATH builds. The
+object files left behind by one version confuses the other.
 
 
 Building on non-UNIX systems
@@ -1199,9 +1170,9 @@ Misc/python-mode.el.  Originally written by the famous Tim Peters, it
 is now maintained by the equally famous Barry Warsaw (it's no
 coincidence that they now both work on the same team).  The latest
 version, along with various other contributed Python-related Emacs
-goodies, is online at http://www.python.org/emacs/python-mode.  And
+goodies, is online at http://www.python.org/emacs/python-mode/.  And
 if you are planning to edit the Python C code, please pick up the
-latest version of CC Mode http://www.python.org/emacs/cc-mode; it
+latest version of CC Mode http://www.python.org/emacs/cc-mode/; it
 contains a "python" style used throughout most of the Python C source
 files.  (Newer versions of Emacs or XEmacs may already come with the
 latest version of python-mode.)
@@ -1236,9 +1207,8 @@ Distribution structure
 Most subdirectories have their own README files.  Most files have
 comments.
 
-BeOS/           Files specific to the BeOS port
 Demo/           Demonstration scripts, modules and programs
-Doc/            Documentation sources (LaTeX)
+Doc/            Documentation sources (reStructuredText)
 Grammar/        Input for the parser generator
 Include/        Public header files
 LICENSE         Licensing information
@@ -1253,6 +1223,7 @@ PCbuild/        Build directory for Microsoft Visual C++
 Parser/         The parser and tokenizer and their input handling
 Python/         The byte-compiler and interpreter
 README          The file you're reading now
+RISCOS/         Files specific to RISC OS port
 Tools/          Some useful programs written in Python
 pyconfig.h.in   Source from which pyconfig.h is created (GNU autoheader output)
 configure       Configuration shell script (GNU autoconf output)
@@ -1273,6 +1244,7 @@ config.status   Status from last run of the configure script
 getbuildinfo.o  Object file from Modules/getbuildinfo.c
 libpython<version>.a    The library archive
 python          The executable interpreter
+reflog.txt      Output from running the regression suite with the -R flag 
 tags, TAGS      Tags files for vi and Emacs
 
 

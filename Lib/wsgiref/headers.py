@@ -1,6 +1,6 @@
 """Manage HTTP Response Headers
 
-Much of this module is red-handedly pilfered from email.Message in the stdlib,
+Much of this module is red-handedly pilfered from email.message in the stdlib,
 so portions are Copyright (C) 2001,2002 Python Software Foundation, and were
 written by Barry Warsaw.
 """
@@ -8,7 +8,7 @@ written by Barry Warsaw.
 from types import ListType, TupleType
 
 # Regular expression that matches `special' characters in parameters, the
-# existance of which force quoting of the parameter value.
+# existence of which force quoting of the parameter value.
 import re
 tspecials = re.compile(r'[ \(\)<>@,;:\\"/\[\]\?=]')
 
@@ -63,7 +63,7 @@ class Headers:
         Does *not* raise an exception if the header is missing.
         """
         name = name.lower()
-        self._headers[:] = [kv for kv in self._headers if kv[0].lower()<>name]
+        self._headers[:] = [kv for kv in self._headers if kv[0].lower() != name]
 
     def __getitem__(self,name):
         """Get the first header value for 'name'
@@ -142,7 +142,7 @@ class Headers:
         return self._headers[:]
 
     def __repr__(self):
-        return "Headers(%s)" % `self._headers`
+        return "Headers(%r)" % self._headers
 
     def __str__(self):
         """str() returns the formatted headers, complete with end line,
@@ -174,7 +174,7 @@ class Headers:
 
         h.add_header('content-disposition', 'attachment', filename='bud.gif')
 
-        Note that unlike the corresponding 'email.Message' method, this does
+        Note that unlike the corresponding 'email.message' method, this does
         *not* handle '(charset, language, value)' tuples: all values must be
         strings or None.
         """

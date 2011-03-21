@@ -1,7 +1,7 @@
 Building Python using VC++ 6.0 or 5.0
 -------------------------------------
 This directory is used to build Python for Win32 platforms, e.g. Windows
-95, 98 and NT.  It requires Microsoft Visual C++ 6.x or 5.x.
+2000 and XP.  It requires Microsoft Visual C++ 6.x or 5.x.
 (For other Windows platforms and compilers, see ../readme.txt.)
 
 All you need to do is open the workspace "pcbuild.dsw" in MSVC++, select
@@ -11,7 +11,7 @@ and build the projects.
 The proper order to build subprojects:
 
 1) pythoncore (this builds the main Python DLL and library files,
-               python25.{dll, lib} in Release mode)
+               python26.{dll, lib} in Release mode)
 
 2) python (this builds the main Python executable,
            python.exe in Release mode)
@@ -22,7 +22,7 @@ The proper order to build subprojects:
    to the subsystems they implement; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python25_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
+their name:  python26_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
 
 SUBPROJECTS
 -----------
@@ -39,6 +39,7 @@ pythonw
     pythonw.exe, a variant of python.exe that doesn't pop up a DOS box
 _msi
     _msi.c. You need to install Windows Installer SDK to build this module.
+    http://www.microsoft.com/msdownload/platformsdk/sdkupdate/psdk-full.htm
 _socket
     socketmodule.c
 _testcapi
@@ -62,18 +63,25 @@ unpack into new subdirectories of dist\.
 
 _tkinter
     Python wrapper for the Tk windowing system.  Requires building
-    Tcl/Tk first.  Following are instructions for Tcl/Tk 8.4.12.
+    Tcl/Tk first.  Following are instructions for Tcl/Tk 8.5.2.
 
     Get source
     ----------
     In the dist directory, run
-    svn export http://svn.python.org/projects/external/tcl8.4.12
-    svn export http://svn.python.org/projects/external/tk8.4.12
-    svn export http://svn.python.org/projects/external/tix-8.4.0
+    svn export http://svn.python.org/projects/external/tcl-8.5.2.1 tcl8.5.2
+    svn export http://svn.python.org/projects/external/tk-8.5.2.0 tk8.5.2
+    svn export http://svn.python.org/projects/external/tix-8.4.3.1 tix8.4.3
+
+    Debug Build
+    -----------
+    To build debug version, add DEBUG=1 to all nmake call bellow.
 
     Build Tcl first (done here w/ MSVC 6 on Win2K)
     ---------------
-    cd dist\tcl8.4.12\win
+    If your environment doesn't have struct _stat64, you need to apply
+    tcl852.patch in this directory to dist\tcl8.5.2\generic\tcl.h.
+
+    cd dist\tcl8.5.2\win
     run vcvars32.bat
     nmake -f makefile.vc
     nmake -f makefile.vc INSTALLDIR=..\..\tcltk install
@@ -83,16 +91,16 @@ _tkinter
     Optional:  run tests, via
         nmake -f makefile.vc test
 
-        all.tcl:        Total   10835   Passed  10096   Skipped 732     Failed  7
-        Sourced 129 Test Files.
-        Files with failing tests: exec.test expr.test io.test main.test string.test stri
+        all.tcl:        Total   24242   Passed  23358   Skipped 877     Failed  7
+        Sourced 137 Test Files.
+        Files with failing tests: exec.test http.test io.test main.test string.test stri
         ngObj.test
 
     Build Tk
     --------
-    cd dist\tk8.4.12\win
-    nmake -f makefile.vc TCLDIR=..\..\tcl8.4.12
-    nmake -f makefile.vc TCLDIR=..\..\tcl8.4.12 INSTALLDIR=..\..\tcltk install
+    cd dist\tk8.5.2\win
+    nmake -f makefile.vc TCLDIR=..\..\tcl8.5.2
+    nmake -f makefile.vc TCLDIR=..\..\tcl8.5.2 INSTALLDIR=..\..\tcltk install
 
     XXX Should we compile with OPTS=threads?
 
@@ -100,26 +108,26 @@ _tkinter
     XXX failed.  It popped up tons of little windows, and did lots of
     XXX stuff, and nothing blew up.
 
-   Built Tix
-   ---------
-   cd dist\tix-8.4.0\win
-   nmake -f python.mak
-   nmake -f python.mak install
+    Build Tix
+    ---------
+    cd dist\tix8.4.3\win
+    nmake -f python.mak TCL_MAJOR=8 TCL_MINOR=5 TCL_PATCH=2 MACHINE=IX86 DEBUG=0
+    nmake -f python.mak TCL_MAJOR=8 TCL_MINOR=5 TCL_PATCH=2 MACHINE=IX86 DEBUG=0 INSTALL_DIR=..\..\tcltk install
 
 bz2
     Python wrapper for the libbz2 compression library.  Homepage
-        http://sources.redhat.com/bzip2/
+        http://www.bzip.org/
     Download the source from the python.org copy into the dist
     directory:
 
-    svn export http://svn.python.org/projects/external/bzip2-1.0.3
+    svn export http://svn.python.org/projects/external/bzip2-1.0.5
 
     And requires building bz2 first.
 
-    cd dist\bzip2-1.0.3
+    cd dist\bzip2-1.0.5
     nmake -f makefile.msc
 
-    All of this managed to build bzip2-1.0.3\libbz2.lib, which the Python
+    All of this managed to build bzip2-1.0.5\libbz2.lib, which the Python
     project links in.
 
 
@@ -127,23 +135,23 @@ _bsddb
     To use the version of bsddb that Python is built with by default, invoke
     (in the dist directory)
 
-     svn export http://svn.python.org/projects/external/db-4.4.20
+     svn export http://svn.python.org/projects/external/db-4.7.25.0 db-4.7.25
 
-    Then open db-4.4.20\build_win32\Berkeley_DB.dsw and build the "db_static"
-    project for "Release" mode.
+    Then open db-4.7.25\build_windows\Berkeley_DB.dsw and build the
+    "db_static" project for "Release" mode.
 
     Alternatively, if you want to start with the original sources,
-    go to Sleepycat's download page:
-        http://www.sleepycat.com/downloads/releasehistorybdb.html
+    go to Oracle's download page:
+        http://www.oracle.com/technology/software/products/berkeley-db/db/
 
-    and download version 4.4.20.
+    and download version 4.7.25.
 
     With or without strong cryptography? You can choose either with or
     without strong cryptography, as per the instructions below.  By
     default, Python is built and distributed WITHOUT strong crypto.
 
     Unpack the sources; if you downloaded the non-crypto version, rename
-    the directory from db-4.4.20.NC to db-4.4.20.
+    the directory from db-4.7.25.NC to db-4.7.25.
 
     Now apply any patches that apply to your version.
 
@@ -195,13 +203,13 @@ _ssl
         http://www.openssl.org
 
     You (probably) don't want the "engine" code.  For example, get
-        openssl-0.9.6g.tar.gz
+        openssl-0.9.8g.tar.gz
     not
-        openssl-engine-0.9.6g.tar.gz
+        openssl-engine-0.9.8g.tar.gz
 
     Unpack into the "dist" directory, retaining the folder name from
     the archive - for example, the latest stable OpenSSL will install as
-        dist/openssl-0.9.6g
+        dist/openssl-0.9.8g
 
     You can (theoretically) use any version of OpenSSL you like - the
     build process will automatically select the latest version.
@@ -210,11 +218,9 @@ _ssl
         http://www.activestate.com/Products/ActivePerl/
     as this is used by the OpenSSL build process.  Complain to them <wink>.
 
-    The MSVC project simply invokes PCBuild/build_ssl.py to perform
+    The MSVC project simply invokes PC/VC6/build_ssl.py to perform
     the build.  This Python script locates and builds your OpenSSL
     installation, then invokes a simple makefile to build the final .pyd.
-
-    Win9x users:  see "Win9x note" below.
 
     build_ssl.py attempts to catch the most common errors (such as not
     being able to find OpenSSL sources, or not being able to find a Perl
@@ -226,30 +232,6 @@ _ssl
 
     build_ssl.py/MSVC isn't clever enough to clean OpenSSL - you must do
     this by hand.
-
-    Win9x note:  If, near the start of the build process, you see
-    something like
-
-        C:\Code\openssl-0.9.6g>set OPTS=no-asm
-        Out of environment space
-
-    then you're in trouble, and will probably also see these errors near
-    the end of the process:
-
-        NMAKE : fatal error U1073: don't know how to make
-            'crypto\md5\asm\m5_win32.asm'
-        Stop.
-        NMAKE : fatal error U1073: don't know how to make
-            'C:\Code\openssl-0.9.6g/out32/libeay32.lib'
-        Stop.
-
-    You need more environment space.  Win9x only has room for 256 bytes
-    by default, and especially after installing ActivePerl (which fiddles
-    the PATH envar), you're likely to run out.  KB Q230205
-
-        http://support.microsoft.com/default.aspx?scid=KB;en-us;q230205
-
-    explains how to edit CONFIG.SYS to cure this.
 
 
 YOUR OWN EXTENSION DLLs

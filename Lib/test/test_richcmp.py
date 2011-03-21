@@ -48,8 +48,7 @@ class Vector:
     def __setitem__(self, i, v):
         self.data[i] = v
 
-    def __hash__(self):
-        raise TypeError, "Vectors cannot be hashed"
+    __hash__ = None # Vectors cannot be hashed
 
     def __nonzero__(self):
         raise TypeError, "Vectors cannot be used in Boolean contexts"
@@ -196,9 +195,9 @@ class MiscTest(unittest.TestCase):
             def __lt__(self, other): return 0
             def __gt__(self, other): return 0
             def __eq__(self, other): return 0
-            def __le__(self, other): raise TestFailed, "This shouldn't happen"
-            def __ge__(self, other): raise TestFailed, "This shouldn't happen"
-            def __ne__(self, other): raise TestFailed, "This shouldn't happen"
+            def __le__(self, other): raise test_support.TestFailed, "This shouldn't happen"
+            def __ge__(self, other): raise test_support.TestFailed, "This shouldn't happen"
+            def __ne__(self, other): raise test_support.TestFailed, "This shouldn't happen"
             def __cmp__(self, other): raise RuntimeError, "expected"
         a = Misb()
         b = Misb()
@@ -331,7 +330,12 @@ class ListTest(unittest.TestCase):
             self.assertIs(op(x, y), True)
 
 def test_main():
-    test_support.run_unittest(VectorTest, NumberTest, MiscTest, DictTest, ListTest)
+    test_support.run_unittest(VectorTest, NumberTest, MiscTest, ListTest)
+    with test_support._check_py3k_warnings(("dict inequality comparisons "
+                                             "not supported in 3.x",
+                                             DeprecationWarning)):
+        test_support.run_unittest(DictTest)
+
 
 if __name__ == "__main__":
     test_main()

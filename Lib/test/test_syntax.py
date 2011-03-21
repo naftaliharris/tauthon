@@ -5,7 +5,7 @@ Here's an example of the sort of thing that is tested.
 >>> def f(x):
 ...     global x
 Traceback (most recent call last):
-SyntaxError: name 'x' is local and global
+SyntaxError: name 'x' is local and global (<doctest test.test_syntax[0]>, line 1)
 
 The tests are all raise SyntaxErrors.  They were created by checking
 each C call that raises SyntaxError.  There are several modules that
@@ -259,7 +259,6 @@ Start simple, a continue in a finally should not be allowed.
     ...            pass
     ...        finally:
     ...            continue
-    ...
     Traceback (most recent call last):
       ...
     SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[36]>, line 6)
@@ -280,32 +279,36 @@ This is essentially a continue in a finally which should not be allowed.
     SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[37]>, line 7)
 
     >>> def foo():
-    ...   try:
-    ...     pass
-    ...   finally:
-    ...     continue
+    ...     try:
+    ...         pass
+    ...     finally:
+    ...         continue
     Traceback (most recent call last):
       ...
     SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[38]>, line 5)
 
     >>> def foo():
-    ...   for a in ():
-    ...     try: pass
-    ...     finally: continue
+    ...     for a in ():
+    ...       try:
+    ...           pass
+    ...       finally:
+    ...           continue
     Traceback (most recent call last):
       ...
-    SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[39]>, line 4)
+    SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[39]>, line 6)
 
     >>> def foo():
-    ...  for a in ():
-    ...   try: pass
-    ...   finally:
-    ...    try:
-    ...     continue
-    ...    finally: pass
+    ...     for a in ():
+    ...         try:
+    ...             pass
+    ...         finally:
+    ...             try:
+    ...                 continue
+    ...             finally:
+    ...                 pass
     Traceback (most recent call last):
       ...
-    SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[40]>, line 6)
+    SyntaxError: 'continue' not supported inside 'finally' clause (<doctest test.test_syntax[40]>, line 7)
 
     >>> def foo():
     ...  for a in ():
@@ -414,6 +417,11 @@ leading to spurious errors.
      ...
    SyntaxError: can't assign to function call (<doctest test.test_syntax[48]>, line 6)
 
+>>> f(a=23, a=234)
+Traceback (most recent call last):
+   ...
+SyntaxError: keyword argument repeated (<doctest test.test_syntax[49]>, line 1)
+
 """
 
 import re
@@ -439,9 +447,13 @@ class SyntaxTestCase(unittest.TestCase):
                 self.fail("SyntaxError is not a %s" % subclass.__name__)
             mo = re.search(errtext, str(err))
             if mo is None:
-                self.fail("SyntaxError did not contain '%r'" % (errtext,))
+                self.fail("%s did not contain '%r'" % (err, errtext,))
         else:
             self.fail("compile() did not raise SyntaxError")
+
+    def test_paren_arg_with_default(self):
+        self._check_error("def f((x)=23): pass",
+                          "parenthesized arg with default")
 
     def test_assign_call(self):
         self._check_error("f() = 1", "assign")
@@ -494,7 +506,9 @@ class SyntaxTestCase(unittest.TestCase):
 def test_main():
     test_support.run_unittest(SyntaxTestCase)
     from test import test_syntax
-    test_support.run_doctest(test_syntax, verbosity=True)
+    with test_support._check_py3k_warnings(("backquote not supported",
+                                             SyntaxWarning)):
+        test_support.run_doctest(test_syntax, verbosity=True)
 
 if __name__ == "__main__":
     test_main()

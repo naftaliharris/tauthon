@@ -166,6 +166,8 @@ class Test_Csv(unittest.TestCase):
                          quoting = csv.QUOTE_NONNUMERIC)
         self._write_test(['a',1,'p,q'], '"a","1","p,q"',
                          quoting = csv.QUOTE_ALL)
+        self._write_test(['a\nb',1], '"a\nb","1"',
+                         quoting = csv.QUOTE_ALL)
 
     def test_write_escape(self):
         self._write_test(['a',1,'p,q'], 'a,1,"p,q"',
@@ -245,6 +247,7 @@ class Test_Csv(unittest.TestCase):
         # will this fail where locale uses comma for decimals?
         self._read_test([',3,"5",7.3, 9'], [['', 3, '5', 7.3, 9]],
                         quoting=csv.QUOTE_NONNUMERIC)
+        self._read_test(['"a\nb", 7'], [['a\nb', ' 7']])
         self.assertRaises(ValueError, self._read_test,
                           ['abc,3'], [[]],
                           quoting=csv.QUOTE_NONNUMERIC)
@@ -281,6 +284,21 @@ class Test_Csv(unittest.TestCase):
             self.assertEqual(r.line_num, 3)
             self.assertRaises(StopIteration, r.next)
             self.assertEqual(r.line_num, 3)
+
+    def test_roundtrip_quoteed_newlines(self):
+        fd, name = tempfile.mkstemp()
+        fileobj = os.fdopen(fd, "w+b")
+        try:
+            writer = csv.writer(fileobj)
+            self.assertRaises(TypeError, writer.writerows, None)
+            rows = [['a\nb','b'],['c','x\r\nd']]
+            writer.writerows(rows)
+            fileobj.seek(0)
+            for i, row in enumerate(csv.reader(fileobj)):
+                self.assertEqual(row, rows[i])
+        finally:
+            fileobj.close()
+            os.unlink(name)
 
 class TestDialectRegistry(unittest.TestCase):
     def test_registry_badargs(self):
@@ -486,12 +504,16 @@ class TestDialectExcel(TestCsvBase):
         self.readerAssertEqual('a"b"c', [['a"b"c']])
 
     def test_quotes_and_more(self):
+        # Excel would never write a field containing '"a"b', but when
+        # reading one, it will return 'ab'.
         self.readerAssertEqual('"a"b', [['ab']])
 
     def test_lone_quote(self):
         self.readerAssertEqual('a"b', [['a"b']])
 
     def test_quote_and_quote(self):
+        # Excel would never write a field containing '"a" "b"', but when
+        # reading one, it will return 'a "b"'.
         self.readerAssertEqual('"a" "b"', [['a "b"']])
 
     def test_space_and_quote(self):
@@ -527,10 +549,10 @@ hammer and saw"
     def test_null(self):
         self.writerAssertEqual([], '')
 
-    def test_single(self):
+    def test_single_writer(self):
         self.writerAssertEqual([['abc']], 'abc\r\n')
 
-    def test_simple(self):
+    def test_simple_writer(self):
         self.writerAssertEqual([[1, 2, 'abc', 3, 4]], '1,2,abc,3,4\r\n')
 
     def test_quotes(self):
@@ -607,9 +629,41 @@ class TestDictFields(unittest.TestCase):
             fileobj.write("f1,f2,f3\r\n1,2,abc\r\n")
             fileobj.seek(0)
             reader = csv.DictReader(fileobj)
+            self.assertEqual(reader.fieldnames, ["f1", "f2", "f3"])
             self.assertEqual(reader.next(), {"f1": '1', "f2": '2', "f3": 'abc'})
         finally:
             fileobj.close()
+            os.unlink(name)
+
+    # Two test cases to make sure existing ways of implicitly setting
+    # fieldnames continue to work.  Both arise from discussion in issue3436.
+    def test_read_dict_fieldnames_from_file(self):
+        fd, name = tempfile.mkstemp()
+        f = os.fdopen(fd, "w+b")
+        try:
+            f.write("f1,f2,f3\r\n1,2,abc\r\n")
+            f.seek(0)
+            reader = csv.DictReader(f, fieldnames=csv.reader(f).next())
+            self.assertEqual(reader.fieldnames, ["f1", "f2", "f3"])
+            self.assertEqual(reader.next(), {"f1": '1', "f2": '2', "f3": 'abc'})
+        finally:
+            f.close()
+            os.unlink(name)
+
+    def test_read_dict_fieldnames_chain(self):
+        import itertools
+        fd, name = tempfile.mkstemp()
+        f = os.fdopen(fd, "w+b")
+        try:
+            f.write("f1,f2,f3\r\n1,2,abc\r\n")
+            f.seek(0)
+            reader = csv.DictReader(f)
+            first = next(reader)
+            for row in itertools.chain([first], reader):
+                self.assertEqual(reader.fieldnames, ["f1", "f2", "f3"])
+                self.assertEqual(row, {"f1": '1', "f2": '2', "f3": 'abc'})
+        finally:
+            f.close()
             os.unlink(name)
 
     def test_read_long(self):
@@ -647,6 +701,7 @@ class TestDictFields(unittest.TestCase):
             fileobj.write("f1,f2\r\n1,2,abc,4,5,6\r\n")
             fileobj.seek(0)
             reader = csv.DictReader(fileobj, restkey="_rest")
+            self.assertEqual(reader.fieldnames, ["f1", "f2"])
             self.assertEqual(reader.next(), {"f1": '1', "f2": '2',
                                              "_rest": ["abc", "4", "5", "6"]})
         finally:

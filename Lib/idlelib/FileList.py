@@ -5,8 +5,8 @@ import tkMessageBox
 
 class FileList:
 
-    from EditorWindow import EditorWindow  # class variable, may be overridden
-                                           # e.g. by PyShellFileList
+    # N.B. this import overridden in PyShellFileList.
+    from idlelib.EditorWindow import EditorWindow
 
     def __init__(self, root):
         self.root = root
@@ -50,7 +50,7 @@ class FileList:
                 break
         return "break"
 
-    def close_edit(self, edit):
+    def unregister_maybe_terminate(self, edit):
         try:
             key = self.inversedict[edit]
         except KeyError:
@@ -106,7 +106,7 @@ class FileList:
 
 
 def _test():
-    from EditorWindow import fixwordbreaks
+    from idlelib.EditorWindow import fixwordbreaks
     import sys
     root = Tk()
     fixwordbreaks(root)

@@ -134,6 +134,89 @@ bad = [] # Bug report says "/" should be denied, but that is not in the RFC
 
 RobotTest(7, doc, good, bad)
 
+# From Google: http://www.google.com/support/webmasters/bin/answer.py?hl=en&answer=40364
+
+# 8.
+doc = """
+User-agent: Googlebot
+Allow: /folder1/myfile.html
+Disallow: /folder1/
+"""
+
+good = ['/folder1/myfile.html']
+bad = ['/folder1/anotherfile.html']
+
+RobotTest(8, doc, good, bad, agent="Googlebot")
+
+# 9.  This file is incorrect because "Googlebot" is a substring of
+#     "Googlebot-Mobile", so test 10 works just like test 9.
+doc = """
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Googlebot-Mobile
+Allow: /
+"""
+
+good = []
+bad = ['/something.jpg']
+
+RobotTest(9, doc, good, bad, agent="Googlebot")
+
+good = []
+bad = ['/something.jpg']
+
+RobotTest(10, doc, good, bad, agent="Googlebot-Mobile")
+
+# 11.  Get the order correct.
+doc = """
+User-agent: Googlebot-Mobile
+Allow: /
+
+User-agent: Googlebot
+Disallow: /
+"""
+
+good = []
+bad = ['/something.jpg']
+
+RobotTest(11, doc, good, bad, agent="Googlebot")
+
+good = ['/something.jpg']
+bad = []
+
+RobotTest(12, doc, good, bad, agent="Googlebot-Mobile")
+
+
+# 13.  Google also got the order wrong in #8.  You need to specify the
+#      URLs from more specific to more general.
+doc = """
+User-agent: Googlebot
+Allow: /folder1/myfile.html
+Disallow: /folder1/
+"""
+
+good = ['/folder1/myfile.html']
+bad = ['/folder1/anotherfile.html']
+
+RobotTest(13, doc, good, bad, agent="googlebot")
+
+
+# 14. For issue #4108 (obey first * entry)
+doc = """
+User-agent: *
+Disallow: /some/path
+
+User-agent: *
+Disallow: /another/path
+"""
+
+good = ['/another/path']
+bad = ['/some/path']
+
+RobotTest(14, doc, good, bad)
+
+
 class TestCase(unittest.TestCase):
     def runTest(self):
         test_support.requires('network')
@@ -145,9 +228,9 @@ class TestCase(unittest.TestCase):
         self.assertEqual(parser.can_fetch("*", url+"/robots.txt"), False)
 
 def test_main():
-    test_support.run_suite(tests)
+    test_support.run_unittest(tests)
     TestCase().run()
 
 if __name__=='__main__':
-    test_support.Verbose = 1
-    test_support.run_suite(tests)
+    test_support.verbose = 1
+    test_main()
