@@ -274,7 +274,7 @@ def test_main(verbose=None):
         TestBugs,
     )
 
-    with test_support._check_py3k_warnings(
+    with test_support.check_py3k_warnings(
             ("the cmp argument is not supported", DeprecationWarning)):
         test_support.run_unittest(*test_classes)
 
