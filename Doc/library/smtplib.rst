@@ -1,4 +1,3 @@
-
 :mod:`smtplib` --- SMTP protocol client
 =======================================
 
@@ -11,13 +10,17 @@
    pair: SMTP; protocol
    single: Simple Mail Transfer Protocol
 
+**Source code:** :source:`Lib/smtplib.py`
+
+--------------
+
 The :mod:`smtplib` module defines an SMTP client session object that can be used
 to send mail to any Internet machine with an SMTP or ESMTP listener daemon.  For
 details of SMTP and ESMTP operation, consult :rfc:`821` (Simple Mail Transfer
 Protocol) and :rfc:`1869` (SMTP Service Extensions).
 
 
-.. class:: SMTP([host[, port[, local_hostname[, timeout]]]])
+.. class:: SMTP(host='', port=0, local_hostname=None[, timeout])
 
    A :class:`SMTP` instance encapsulates an SMTP connection.  It has methods
    that support a full repertoire of SMTP and ESMTP operations. If the optional
@@ -32,13 +35,13 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    :meth:`sendmail`, and :meth:`quit` methods.  An example is included below.
 
 
-.. class:: SMTP_SSL([host[, port[, local_hostname[, keyfile[, certfile[, timeout]]]]]])
+.. class:: SMTP_SSL(host='', port=0, local_hostname=None, keyfile=None, certfile=None[, timeout])
 
    A :class:`SMTP_SSL` instance behaves exactly the same as instances of
    :class:`SMTP`. :class:`SMTP_SSL` should be used for situations where SSL is
    required from the beginning of the connection and using :meth:`starttls` is
    not appropriate. If *host* is not specified, the local host is used. If
-   *port* is omitted, the standard SMTP-over-SSL port (465) is used. *keyfile*
+   *port* is zero, the standard SMTP-over-SSL port (465) is used. *keyfile*
    and *certfile* are also optional, and can contain a PEM formatted private key
    and certificate chain file for the SSL connection. The optional *timeout*
    parameter specifies a timeout in seconds for blocking operations like the
@@ -46,7 +49,7 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    will be used).
 
 
-.. class:: LMTP([host[, port[, local_hostname]]])
+.. class:: LMTP(host='', port=LMTP_PORT, local_hostname=None)
 
    The LMTP protocol, which is very similar to ESMTP, is heavily based on the
    standard SMTP client. It's common to use Unix sockets for LMTP, so our :meth:`connect`
@@ -142,7 +145,7 @@ An :class:`SMTP` instance has the following methods:
    for connection and for all messages sent to and received from the server.
 
 
-.. method:: SMTP.connect([host[, port]])
+.. method:: SMTP.connect(host='localhost', port=0)
 
    Connect to a host on a given port.  The defaults are to connect to the local
    host at the standard SMTP port (25). If the hostname ends with a colon (``':'``)
@@ -151,9 +154,9 @@ An :class:`SMTP` instance has the following methods:
    the constructor if a host is specified during instantiation.
 
 
-.. method:: SMTP.docmd(cmd, [, argstring])
+.. method:: SMTP.docmd(cmd, args='')
 
-   Send a command *cmd* to the server.  The optional argument *argstring* is simply
+   Send a command *cmd* to the server.  The optional argument *args* is simply
    concatenated to the command, separated by a space.
 
    This returns a 2-tuple composed of a numeric response code and the actual
@@ -167,7 +170,7 @@ An :class:`SMTP` instance has the following methods:
    :exc:`SMTPServerDisconnected` will be raised.
 
 
-.. method:: SMTP.helo([hostname])
+.. method:: SMTP.helo(name='')
 
    Identify yourself to the SMTP server using ``HELO``.  The hostname argument
    defaults to the fully qualified domain name of the local host.
@@ -178,7 +181,7 @@ An :class:`SMTP` instance has the following methods:
    It will be implicitly called by the :meth:`sendmail` when necessary.
 
 
-.. method:: SMTP.ehlo([hostname])
+.. method:: SMTP.ehlo(name='')
 
    Identify yourself to an ESMTP server using ``EHLO``.  The hostname argument
    defaults to the fully qualified domain name of the local host.  Examine the
@@ -239,7 +242,7 @@ An :class:`SMTP` instance has the following methods:
       No suitable authentication method was found.
 
 
-.. method:: SMTP.starttls([keyfile[, certfile]])
+.. method:: SMTP.starttls(keyfile=None, certfile=None)
 
    Put the SMTP connection in TLS (Transport Layer Security) mode.  All SMTP
    commands that follow will be encrypted.  You should then call :meth:`ehlo`
@@ -261,7 +264,7 @@ An :class:`SMTP` instance has the following methods:
      SSL/TLS support is not available to your Python interpreter.
 
 
-.. method:: SMTP.sendmail(from_addr, to_addrs, msg[, mail_options, rcpt_options])
+.. method:: SMTP.sendmail(from_addr, to_addrs, msg, mail_options=[], rcpt_options=[])
 
    Send mail.  The required arguments are an :rfc:`822` from-address string, a list
    of :rfc:`822` to-address strings (a bare string will be treated as a list with 1
@@ -275,8 +278,13 @@ An :class:`SMTP` instance has the following methods:
    .. note::
 
       The *from_addr* and *to_addrs* parameters are used to construct the message
-      envelope used by the transport agents. The :class:`SMTP` does not modify the
+      envelope used by the transport agents.  ``sendmail`` does not modify the
       message headers in any way.
+
+   msg may be a string containing characters in the ASCII range, or a byte
+   string.  A string is encoded to bytes using the ascii codec, and lone ``\r``
+   and ``\n`` characters are converted to ``\r\n`` characters.  A byte string
+   is not modified.
 
    If there has been no previous ``EHLO`` or ``HELO`` command this session, this
    method tries ESMTP ``EHLO`` first. If the server does ESMTP, message size and
@@ -311,6 +319,27 @@ An :class:`SMTP` instance has the following methods:
 
    Unless otherwise noted, the connection will be open even after an exception is
    raised.
+
+   .. versionchanged:: 3.2 *msg* may be a byte string.
+
+
+.. method:: SMTP.send_message(msg, from_addr=None, to_addrs=None, mail_options=[], rcpt_options=[])
+
+   This is a convenience method for calling :meth:`sendmail` with the message
+   represented by an :class:`email.message.Message` object.  The arguments have
+   the same meaning as for :meth:`sendmail`, except that *msg* is a ``Message``
+   object.
+
+   If *from_addr* is ``None``, ``send_message`` sets its value to the value of
+   the :mailheader:`From` header from *msg*.  If *to_addrs* is ``None``,
+   ``send_message`` combines the values (if any) of the :mailheader:`To`,
+   :mailheader:`CC`, and :mailheader:`Bcc` fields from *msg*.  Regardless of
+   the values of *from_addr* and *to_addrs*, ``send_message`` deletes any  Bcc
+   field from *msg*.  It then serializes *msg* using
+   :class:`~email.generator.BytesGenerator` with ``\r\n`` as the *linesep*, and
+   calls :meth:`sendmail` to transmit the resulting message.
+
+   .. versionadded:: 3.2
 
 
 .. method:: SMTP.quit()
@@ -367,5 +396,5 @@ example doesn't do any processing of the :rfc:`822` headers.  In particular, the
 .. note::
 
    In general, you will want to use the :mod:`email` package's features to
-   construct an email message, which you can then convert to a string and send
-   via :meth:`sendmail`; see :ref:`email-examples`.
+   construct an email message, which you can then send
+   via :meth:`~smtplib.SMTP.send_message`; see :ref:`email-examples`.

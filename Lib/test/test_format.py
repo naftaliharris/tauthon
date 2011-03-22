@@ -10,10 +10,7 @@ maxsize = support.MAX_Py_ssize_t
 # they crash python)
 # test on unicode strings as well
 
-overflowok = 1
-overflowrequired = 0
-
-def testformat(formatstr, args, output=None, limit=None):
+def testformat(formatstr, args, output=None, limit=None, overflowok=False):
     if verbose:
         if output:
             print("%r %% %r =? %r ..." %\
@@ -28,15 +25,9 @@ def testformat(formatstr, args, output=None, limit=None):
         if verbose:
             print('overflow (this is fine)')
     else:
-        if overflowrequired:
+        if output and limit is None and result != output:
             if verbose:
                 print('no')
-            print("overflow expected on %r %% %r" % (formatstr, args))
-        elif output and limit is None and result != output:
-            if verbose:
-                print('no')
-            #print("%r %% %r == %r != %r" %\
-            #    (formatstr, args, result, output))
             raise AssertionError("%r %% %r == %r != %r" %
                                 (formatstr, args, result, output))
         # when 'limit' is specified, it determines how many characters
@@ -58,10 +49,18 @@ def testformat(formatstr, args, output=None, limit=None):
 class FormatTest(unittest.TestCase):
     def test_format(self):
         testformat("%.1d", (1,), "1")
-        testformat("%.*d", (sys.maxsize,1))  # expect overflow
-        testformat("%.100d", (1,), '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001')
-        testformat("%#.117x", (1,), '0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001')
-        testformat("%#.118x", (1,), '0x0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001')
+        testformat("%.*d", (sys.maxsize,1), overflowok=True)  # expect overflow
+        testformat("%.100d", (1,), '00000000000000000000000000000000000000'
+                 '000000000000000000000000000000000000000000000000000000'
+                 '00000001', overflowok=True)
+        testformat("%#.117x", (1,), '0x00000000000000000000000000000000000'
+                 '000000000000000000000000000000000000000000000000000000'
+                 '0000000000000000000000000001',
+                 overflowok=True)
+        testformat("%#.118x", (1,), '0x00000000000000000000000000000000000'
+                 '000000000000000000000000000000000000000000000000000000'
+                 '00000000000000000000000000001',
+                 overflowok=True)
 
         testformat("%f", (1.0,), "1.000000")
         # these are trying to test the limits of the internal magic-number-length
@@ -72,15 +71,15 @@ class FormatTest(unittest.TestCase):
         testformat("%#.*g", (110, -1.e+100/3.))
         # test some ridiculously large precision, expect overflow
         testformat('%12.*f', (123456, 1.0))
+
         # check for internal overflow validation on length of precision
-        overflowrequired = 1
+        # these tests should no longer cause overflow in Python
+        # 2.7/3.1 and later.
         testformat("%#.*g", (110, -1.e+100/3.))
         testformat("%#.*G", (110, -1.e+100/3.))
         testformat("%#.*f", (110, -1.e+100/3.))
         testformat("%#.*F", (110, -1.e+100/3.))
-        overflowrequired = 0
         # Formatting of integers. Overflow is not ok
-        overflowok = 0
         testformat("%x", 10, "a")
         testformat("%x", 100000000000, "174876e800")
         testformat("%o", 10, "12")

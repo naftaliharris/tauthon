@@ -959,20 +959,27 @@ SyntaxError_traverse(PySyntaxErrorObject *self, visitproc visit, void *arg)
 /* This is called "my_basename" instead of just "basename" to avoid name
    conflicts with glibc; basename is already prototyped if _GNU_SOURCE is
    defined, and Python does define that. */
-static char *
-my_basename(char *name)
+static PyObject*
+my_basename(PyObject *name)
 {
-    char *cp = name;
-    char *result = name;
+    Py_UNICODE *unicode;
+    Py_ssize_t i, size, offset;
 
-    if (name == NULL)
-        return "???";
-    while (*cp != '\0') {
-        if (*cp == SEP)
-            result = cp + 1;
-        ++cp;
+    unicode = PyUnicode_AS_UNICODE(name);
+    size = PyUnicode_GET_SIZE(name);
+    offset = 0;
+    for(i=0; i < size; i++) {
+        if (unicode[i] == SEP)
+            offset = i + 1;
     }
-    return result;
+    if (offset != 0) {
+        return PyUnicode_FromUnicode(
+            PyUnicode_AS_UNICODE(name) + offset,
+            size - offset);
+    } else {
+        Py_INCREF(name);
+        return name;
+    }
 }
 
 
@@ -980,7 +987,8 @@ static PyObject *
 SyntaxError_str(PySyntaxErrorObject *self)
 {
     int have_lineno = 0;
-    char *filename = 0;
+    PyObject *filename;
+    PyObject *result;
     /* Below, we always ignore overflow errors, just printing -1.
        Still, we cannot allow an OverflowError to be raised, so
        we need to call PyLong_AsLongAndOverflow. */
@@ -990,7 +998,11 @@ SyntaxError_str(PySyntaxErrorObject *self)
        lineno here */
 
     if (self->filename && PyUnicode_Check(self->filename)) {
-            filename = _PyUnicode_AsString(self->filename);
+        filename = my_basename(self->filename);
+        if (filename == NULL)
+            return NULL;
+    } else {
+        filename = NULL;
     }
     have_lineno = (self->lineno != NULL) && PyLong_CheckExact(self->lineno);
 
@@ -998,18 +1010,20 @@ SyntaxError_str(PySyntaxErrorObject *self)
         return PyObject_Str(self->msg ? self->msg : Py_None);
 
     if (filename && have_lineno)
-        return PyUnicode_FromFormat("%S (%s, line %ld)",
+        result = PyUnicode_FromFormat("%S (%U, line %ld)",
                    self->msg ? self->msg : Py_None,
-                   my_basename(filename),
+                   filename,
                    PyLong_AsLongAndOverflow(self->lineno, &overflow));
     else if (filename)
-        return PyUnicode_FromFormat("%S (%s)",
+        result = PyUnicode_FromFormat("%S (%U)",
                    self->msg ? self->msg : Py_None,
-                   my_basename(filename));
+                   filename);
     else /* only have_lineno */
-        return PyUnicode_FromFormat("%S (line %ld)",
+        result = PyUnicode_FromFormat("%S (line %ld)",
                    self->msg ? self->msg : Py_None,
                    PyLong_AsLongAndOverflow(self->lineno, &overflow));
+    Py_XDECREF(filename);
+    return result;
 }
 
 static PyMemberDef SyntaxError_members[] = {
@@ -1496,7 +1510,7 @@ PyUnicodeEncodeError_Create(
     const char *encoding, const Py_UNICODE *object, Py_ssize_t length,
     Py_ssize_t start, Py_ssize_t end, const char *reason)
 {
-    return PyObject_CallFunction(PyExc_UnicodeEncodeError, "Uu#nnU",
+    return PyObject_CallFunction(PyExc_UnicodeEncodeError, "su#nns",
                                  encoding, object, length, start, end, reason);
 }
 
@@ -1608,7 +1622,7 @@ PyUnicodeDecodeError_Create(
     const char *encoding, const char *object, Py_ssize_t length,
     Py_ssize_t start, Py_ssize_t end, const char *reason)
 {
-    return PyObject_CallFunction(PyExc_UnicodeDecodeError, "Uy#nnU",
+    return PyObject_CallFunction(PyExc_UnicodeDecodeError, "sy#nns",
                                  encoding, object, length, start, end, reason);
 }
 
@@ -1922,12 +1936,20 @@ SimpleExtendsException(PyExc_Warning, UnicodeWarning,
     "Base class for warnings about Unicode related problems, mostly\n"
     "related to conversion problems.");
 
+
 /*
  *    BytesWarning extends Warning
  */
 SimpleExtendsException(PyExc_Warning, BytesWarning,
     "Base class for warnings about bytes and buffer related problems, mostly\n"
     "related to conversion from str or comparing to str.");
+
+
+/*
+ *    ResourceWarning extends Warning
+ */
+SimpleExtendsException(PyExc_Warning, ResourceWarning,
+    "Base class for warnings about resource usage.");
 
 
 
@@ -2004,6 +2026,7 @@ _PyExc_Init(void)
     PRE_INIT(ImportWarning)
     PRE_INIT(UnicodeWarning)
     PRE_INIT(BytesWarning)
+    PRE_INIT(ResourceWarning)
 
     bltinmod = PyImport_ImportModule("builtins");
     if (bltinmod == NULL)
@@ -2066,6 +2089,7 @@ _PyExc_Init(void)
     POST_INIT(ImportWarning)
     POST_INIT(UnicodeWarning)
     POST_INIT(BytesWarning)
+    POST_INIT(ResourceWarning)
 
     preallocate_memerrors();
 

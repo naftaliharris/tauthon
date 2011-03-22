@@ -1,18 +1,12 @@
 # Python test set -- part 1, grammar.
 # This just tests whether the parser accepts them all.
 
-# NOTE: When you run this test as a script from the command line, you
-# get warnings about certain hex/oct constants.  Since those are
-# issued by the parser, you can't suppress them by adding a
-# filterwarnings() call to this module.  Therefore, to shut up the
-# regression test, the filterwarnings() call has been added to
-# regrtest.py.
-
 from test.support import run_unittest, check_syntax_error
 import unittest
 import sys
 # testing import *
 from sys import *
+
 
 class TokenTests(unittest.TestCase):
 
@@ -307,12 +301,12 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual(f.__annotations__, {'b': 1, 'c': 2})
         def f(a, b:1, c:2, d, e:3=4, f=5, *g:6): pass
         self.assertEqual(f.__annotations__,
-                         {'b': 1, 'c': 2, 'e': 3, 'g': 6})
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6})
         def f(a, b:1, c:2, d, e:3=4, f=5, *g:6, h:7, i=8, j:9=10,
               **k:11) -> 12: pass
         self.assertEqual(f.__annotations__,
-                         {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
-                          'k': 11, 'return': 12})
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
+                           'k': 11, 'return': 12})
         # Check for SF Bug #1697248 - mixing decorators and a return annotation
         def null(x): return x
         @null
@@ -914,6 +908,14 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual((6 * 2 if 1 else 4), 12)
         self.assertEqual((6 / 2 if 1 else 3), 3)
         self.assertEqual((6 < 4 if 0 else 2), 2)
+
+    def test_paren_evaluation(self):
+        self.assertEqual(16 // (4 // 2), 8)
+        self.assertEqual((16 // 4) // 2, 2)
+        self.assertEqual(16 // 4 // 2, 2)
+        self.assertTrue(False is (2 is 3))
+        self.assertFalse((False is 2) is 3)
+        self.assertFalse(False is 2 is 3)
 
 
 def test_main():
