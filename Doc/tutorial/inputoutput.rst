@@ -40,8 +40,8 @@ which can be read by the interpreter (or will force a :exc:`SyntaxError` if
 there is not equivalent syntax).  For objects which don't have a particular
 representation for human consumption, :func:`str` will return the same value as
 :func:`repr`.  Many values, such as numbers or structures like lists and
-dictionaries, have the same representation using either function.  Strings and
-floating point numbers, in particular, have two distinct representations.
+dictionaries, have the same representation using either function.  Strings, in
+particular, have two distinct representations.
 
 Some examples::
 
@@ -50,9 +50,7 @@ Some examples::
    'Hello, world.'
    >>> repr(s)
    "'Hello, world.'"
-   >>> str(1.0/7.0)
-   '0.142857142857'
-   >>> repr(1.0/7.0)
+   >>> str(1/7)
    '0.14285714285714285'
    >>> x = 10 * 3.25
    >>> y = 200 * 200
@@ -162,7 +160,7 @@ Positional and keyword arguments can be arbitrarily combined::
 
 An optional ``':'`` and format specifier can follow the field name. This allows
 greater control over how the value is formatted.  The following example
-truncates Pi to three places after the decimal.
+rounds Pi to three places after the decimal.
 
    >>> import math
    >>> print('The value of PI is approximately {0:.3f}.'.format(math.pi))
@@ -207,7 +205,7 @@ Old string formatting
 ---------------------
 
 The ``%`` operator can also be used for string formatting. It interprets the
-left argument much like a :cfunc:`sprintf`\ -style format string to be applied
+left argument much like a :c:func:`sprintf`\ -style format string to be applied
 to the right argument, and returns the string resulting from this formatting
 operation. For example::
 
