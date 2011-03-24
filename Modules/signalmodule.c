@@ -4,7 +4,6 @@
 /* XXX Signals should be recorded per thread, now we have thread state. */
 
 #include "Python.h"
-#include "intrcheck.h"
 
 #ifdef MS_WINDOWS
 #include <Windows.h>
@@ -13,9 +12,12 @@
 #endif
 #endif
 
+#ifdef HAVE_SIGNAL_H
 #include <signal.h>
-
+#endif
+#ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
+#endif
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
@@ -833,6 +835,18 @@ PyInit_signal(void)
     PyDict_SetItemString(d, "ItimerError", ItimerError);
 #endif
 
+#ifdef CTRL_C_EVENT
+    x = PyLong_FromLong(CTRL_C_EVENT);
+    PyDict_SetItemString(d, "CTRL_C_EVENT", x);
+    Py_DECREF(x);
+#endif
+
+#ifdef CTRL_BREAK_EVENT
+    x = PyLong_FromLong(CTRL_BREAK_EVENT);
+    PyDict_SetItemString(d, "CTRL_BREAK_EVENT", x);
+    Py_DECREF(x);
+#endif
+
     if (PyErr_Occurred()) {
         Py_DECREF(m);
         m = NULL;
@@ -942,7 +956,7 @@ PyOS_InitInterrupts(void)
 {
     PyObject *m = PyInit_signal();
     if (m) {
-        _PyImport_FixupExtension(m, "signal", "signal");
+        _PyImport_FixupBuiltin(m, "signal");
         Py_DECREF(m);
     }
 }
