@@ -23,6 +23,16 @@ command ``turtle.forward(15)``, and it moves (on-screen!) 15 pixels in the
 direction it is facing, drawing a line as it moves.  Give it the command
 ``turtle.left(25)``, and it rotates in-place 25 degrees clockwise.
 
+.. sidebar:: Turtle star
+
+   Turtle can draw intricate shapes using programs that repeat simple
+   moves.
+
+   .. image:: turtle-star.*
+      :align: center
+
+   .. literalinclude:: ../includes/turtle-star.py
+
 By combining together these and similar commands, intricate shapes and pictures
 can easily be drawn.
 
@@ -1868,7 +1878,7 @@ Settings and special methods
 
       >>> cv = screen.getcanvas()
       >>> cv
-      <turtle.ScrolledCanvas instance at 0x...>
+      <turtle.ScrolledCanvas object at ...>
 
 
 .. function:: getshapes()
@@ -2258,7 +2268,7 @@ There can be a :file:`turtle.cfg` file in the directory where :mod:`turtle` is
 stored and an additional one in the current working directory.  The latter will
 override the settings of the first one.
 
-The :file:`Demo/turtle` directory contains a :file:`turtle.cfg` file.  You can
+The :file:`Lib/turtledemo` directory contains a :file:`turtle.cfg` file.  You can
 study it as an example and see its effects when running the demos (preferably
 not from within the demo-viewer).
 
@@ -2266,29 +2276,35 @@ not from within the demo-viewer).
 Demo scripts
 ============
 
-There is a set of demo scripts in the turtledemo directory located in the
-:file:`Demo/turtle` directory in the source distribution.
+There is a set of demo scripts in the :mod:`turtledemo` package.  These
+scripts can be run and viewed using the supplied demo viewer as follows::
 
-It contains:
+   python -m turtledemo
+
+Alternatively, you can run the demo scripts individually.  For example, ::
+
+   python -m turtledemo.bytedesign
+
+The :mod:`turtledemo` package directory contains:
 
 - a set of 15 demo scripts demonstrating different features of the new module
-  :mod:`turtle`
-- a demo viewer :file:`turtleDemo.py` which can be used to view the sourcecode
+  :mod:`turtle`;
+- a demo viewer :file:`__main__.py` which can be used to view the sourcecode
   of the scripts and run them at the same time. 14 of the examples can be
   accessed via the Examples menu; all of them can also be run standalone.
-- The example :file:`turtledemo_two_canvases.py` demonstrates the simultaneous
+- The example :mod:`turtledemo.two_canvases` demonstrates the simultaneous
   use of two canvases with the turtle module.  Therefore it only can be run
   standalone.
-- There is a :file:`turtle.cfg` file in this directory, which also serves as an
+- There is a :file:`turtle.cfg` file in this directory, which serves as an
   example for how to write and use such files.
 
-The demoscripts are:
+The demo scripts are:
 
 +----------------+------------------------------+-----------------------+
 | Name           | Description                  | Features              |
 +----------------+------------------------------+-----------------------+
 | bytedesign     | complex classical            | :func:`tracer`, delay,|
-|                | turtlegraphics pattern       | :func:`update`        |
+|                | turtle graphics pattern      | :func:`update`        |
 +----------------+------------------------------+-----------------------+
 | chaos          | graphs Verhulst dynamics,    | world coordinates     |
 |                | shows that computer's        |                       |
@@ -2386,8 +2402,7 @@ Changes since Python 3.0
   strings and numbers respectively.
 
 - Two example scripts :file:`tdemo_nim.py` and :file:`tdemo_round_dance.py`
-  have been added to the Demo directory (source distribution only). As usual
-  they can be viewed and executed within the demo viewer :file:`turtleDemo.py`.
+  have been added to the :file:`Lib/turtledemo` directory.
 
 
 .. doctest::
