@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """A module to test whether doctest recognizes some 2.2 features,
 like static and class methods.
 
@@ -12,7 +11,11 @@ the example.  It should be ignored:
 
 """
 
+import sys
+import unittest
 from test import support
+if sys.flags.optimize >= 2:
+    raise unittest.SkipTest("Cannot test docstrings with -O2")
 
 class C(object):
     """Class C.

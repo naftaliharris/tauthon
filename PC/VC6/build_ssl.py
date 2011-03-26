@@ -95,13 +95,9 @@ def fix_makefile(makefile):
     """
     if not os.path.isfile(makefile):
         return
-    # 2.4 compatibility
-    fin = open(makefile)
-    if 1: # with open(makefile) as fin:
+    with open(makefile) as fin:
         lines = fin.readlines()
-        fin.close()
-    fout = open(makefile, 'w')
-    if 1: # with open(makefile, 'w') as fout:
+    with open(makefile, 'w') as fout:
         for line in lines:
             if line.startswith("PERL="):
                 continue
@@ -117,7 +113,6 @@ def fix_makefile(makefile):
                         line = line + noalgo
                 line = line + '\n'
             fout.write(line)
-    fout.close()
 
 def run_configure(configure, do_script):
     print("perl Configure "+configure)
@@ -199,7 +194,7 @@ def main():
             copy(r"crypto\opensslconf.h", r"crypto\opensslconf_%s.h" % arch)
 
         # If the assembler files don't exist in tmpXX, copy them there
-        if perl is None:
+        if perl is None and os.path.exists("asm"+dirsuffix):
             if not os.path.exists("tmp"+dirsuffix):
                 os.mkdir("tmp"+dirsuffix)
             for f in os.listdir("asm"+dirsuffix):
