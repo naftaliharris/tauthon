@@ -240,7 +240,7 @@ class BuiltinImporter:
     @classmethod
     @_requires_builtin
     def is_package(cls, fullname):
-        """Return None as built-in module are never packages."""
+        """Return None as built-in modules are never packages."""
         return False
 
 
@@ -404,6 +404,7 @@ class SourceLoader(_LoaderBasics):
                     else:
                         found = marshal.loads(bytes_data)
                         if isinstance(found, code_type):
+                            imp._fix_co_filename(found, source_path)
                             return found
                         else:
                             msg = "Non-code object in {}"
@@ -758,14 +759,14 @@ class _ImportLockContext:
 
 _IMPLICIT_META_PATH = [BuiltinImporter, FrozenImporter, _DefaultPathFinder]
 
-_ERR_MSG = 'No module named {}'
+_ERR_MSG = 'No module named {!r}'
 
 def _gcd_import(name, package=None, level=0):
     """Import and return the module based on its name, the package the call is
     being made from, and the level adjustment.
 
     This function represents the greatest common denominator of functionality
-    between import_module and __import__. This includes settting __package__ if
+    between import_module and __import__. This includes setting __package__ if
     the loader did not.
 
     """
@@ -855,7 +856,7 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
         module = _gcd_import(name)
     else:
         # __package__ is not guaranteed to be defined or could be set to None
-        # to represent that it's proper value is unknown
+        # to represent that its proper value is unknown
         package = globals.get('__package__')
         if package is None:
             package = globals['__name__']
