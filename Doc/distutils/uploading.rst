@@ -67,9 +67,10 @@ In that case, :file:`README.txt` is a regular reStructuredText text file located
 in the root of the package besides :file:`setup.py`.
 
 To prevent registering broken reStructuredText content, you can use the
-:program:`rst2html` program that is provided by the :mod:`docutils` package
-and check the ``long_description`` from the command line::
+:program:`rst2html` program that is provided by the :mod:`docutils` package and
+check the ``long_description`` from the command line::
 
     $ python setup.py --long-description | rst2html.py > output.html
 
-:mod:`docutils` will display a warning if there's something wrong with your syntax.
+:mod:`docutils` will display a warning if there's something wrong with your
+syntax.
