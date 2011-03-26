@@ -43,7 +43,7 @@ The :mod:`gc` module provides the following functions:
    :exc:`ValueError` is raised if the generation number  is invalid. The number of
    unreachable objects found is returned.
 
-   The free lists maintained for a number of builtin types are cleared
+   The free lists maintained for a number of built-in types are cleared
    whenever a full collection or collection of the highest generation (2)
    is run.  Not all items in some free lists may be freed due to the
    particular implementation, in particular :class:`float`.
@@ -174,8 +174,15 @@ value but should not rebind it):
    with :meth:`__del__` methods, and *garbage* can be examined in that case to
    verify that no such cycles are being created.
 
-   If :const:`DEBUG_SAVEALL` is set, then all unreachable objects will be added to
-   this list rather than freed.
+   If :const:`DEBUG_SAVEALL` is set, then all unreachable objects will be added
+   to this list rather than freed.
+
+   .. versionchanged:: 3.2
+      If this list is non-empty at interpreter shutdown, a
+      :exc:`ResourceWarning` is emitted, which is silent by default.  If
+      :const:`DEBUG_UNCOLLECTABLE` is set, in addition all uncollectable objects
+      are printed.
+
 
 The following constants are provided for use with :func:`set_debug`:
 
@@ -194,9 +201,12 @@ The following constants are provided for use with :func:`set_debug`:
 .. data:: DEBUG_UNCOLLECTABLE
 
    Print information of uncollectable objects found (objects which are not
-   reachable but cannot be freed by the collector).  These objects will be added to
-   the ``garbage`` list.
+   reachable but cannot be freed by the collector).  These objects will be added
+   to the ``garbage`` list.
 
+   .. versionchanged:: 3.2
+      Also print the contents of the :data:`garbage` list at interpreter
+      shutdown, if it isn't empty.
 
 .. data:: DEBUG_SAVEALL
 

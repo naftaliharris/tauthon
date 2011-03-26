@@ -2,8 +2,8 @@ import calendar
 import unittest
 
 from test import support
+import time
 import locale
-
 
 result_2004_text = """
                                   2004
@@ -262,7 +262,7 @@ class CalendarTestCase(unittest.TestCase):
             return
         calendar.LocaleHTMLCalendar(locale='').formatmonthname(2010, 10)
         new_october = calendar.TextCalendar().formatmonthname(2010, 10, 10)
-        self.assertEquals(old_october, new_october)
+        self.assertEqual(old_october, new_october)
 
 
 class MonthCalendarTestCase(unittest.TestCase):
@@ -395,6 +395,13 @@ class SundayTestCase(MonthCalendarTestCase):
         # A 31-day december starting on friday (2+7+7+7+7+1 days)
         self.check_weeks(1995, 12, (2, 7, 7, 7, 7, 1))
 
+class TimegmTestCase(unittest.TestCase):
+    TIMESTAMPS = [0, 10, 100, 1000, 10000, 100000, 1000000,
+                  1234567890, 1262304000, 1275785153,]
+    def test_timegm(self):
+        for secs in self.TIMESTAMPS:
+            tuple = time.gmtime(secs)
+            self.assertEqual(secs, calendar.timegm(tuple))
 
 class MonthRangeTestCase(unittest.TestCase):
     def test_january(self):
@@ -450,6 +457,7 @@ def test_main():
         CalendarTestCase,
         MondayTestCase,
         SundayTestCase,
+        TimegmTestCase,
         MonthRangeTestCase,
         LeapdaysTestCase,
     )

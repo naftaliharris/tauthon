@@ -1,12 +1,12 @@
 """Tokenization help for Python programs.
 
-tokenize(readline) is a generator that breaks a stream of
-bytes into Python tokens. It decodes the bytes according to
-PEP-0263 for determining source file encoding.
+tokenize(readline) is a generator that breaks a stream of bytes into
+Python tokens.  It decodes the bytes according to PEP-0263 for
+determining source file encoding.
 
-It accepts a readline-like method which is called
-repeatedly to get the next line of input (or b"" for EOF).  It generates
-5-tuples with these members:
+It accepts a readline-like method which is called repeatedly to get the
+next line of input (or b"" for EOF).  It generates 5-tuples with these
+members:
 
     the token type (see token.py)
     the token (a string)
@@ -16,22 +16,26 @@ repeatedly to get the next line of input (or b"" for EOF).  It generates
 
 It is designed to match the working of the Python tokenizer exactly, except
 that it produces COMMENT tokens for comments and gives type OP for all
-operators. Aditionally, all token lists start with an ENCODING token
-which tells you which encoding was used to decode the bytes stream."""
+operators.  Additionally, all token lists start with an ENCODING token
+which tells you which encoding was used to decode the bytes stream.
+"""
 
 __author__ = 'Ka-Ping Yee <ping@lfw.org>'
 __credits__ = ('GvR, ESR, Tim Peters, Thomas Wouters, Fred Drake, '
                'Skip Montanaro, Raymond Hettinger, Trent Nelson, '
                'Michael Foord')
-import re, string, sys
+import builtins
+import re
+import sys
 from token import *
 from codecs import lookup, BOM_UTF8
+import collections
+from io import TextIOWrapper
 cookie_re = re.compile("coding[:=]\s*([-\w.]+)")
 
 import token
-__all__ = [x for x in dir(token) if not x.startswith("_")]
-__all__.extend(["COMMENT", "tokenize", "detect_encoding", "NL", "untokenize",
-                "ENCODING", "TokenInfo"])
+__all__ = token.__all__ + ["COMMENT", "tokenize", "detect_encoding",
+                           "NL", "untokenize", "ENCODING", "TokenInfo"]
 del token
 
 COMMENT = N_TOKENS
@@ -42,46 +46,11 @@ ENCODING = N_TOKENS + 2
 tok_name[ENCODING] = 'ENCODING'
 N_TOKENS += 3
 
-class TokenInfo(tuple):
-    'TokenInfo(type, string, start, end, line)'
-
-    __slots__ = ()
-
-    _fields = ('type', 'string', 'start', 'end', 'line')
-
-    def __new__(cls, type, string, start, end, line):
-        return tuple.__new__(cls, (type, string, start, end, line))
-
-    @classmethod
-    def _make(cls, iterable, new=tuple.__new__, len=len):
-        'Make a new TokenInfo object from a sequence or iterable'
-        result = new(cls, iterable)
-        if len(result) != 5:
-            raise TypeError('Expected 5 arguments, got %d' % len(result))
-        return result
-
+class TokenInfo(collections.namedtuple('TokenInfo', 'type string start end line')):
     def __repr__(self):
-        return 'TokenInfo(type=%r, string=%r, start=%r, end=%r, line=%r)' % self
-
-    def _asdict(self):
-        'Return a new dict which maps field names to their values'
-        return dict(zip(self._fields, self))
-
-    def _replace(self, **kwds):
-        'Return a new TokenInfo object replacing specified fields with new values'
-        result = self._make(map(kwds.pop, ('type', 'string', 'start', 'end', 'line'), self))
-        if kwds:
-            raise ValueError('Got unexpected field names: %r' % kwds.keys())
-        return result
-
-    def __getnewargs__(self):
-        return tuple(self)
-
-    type = property(lambda t: t[0])
-    string = property(lambda t: t[1])
-    start = property(lambda t: t[2])
-    end = property(lambda t: t[3])
-    line = property(lambda t: t[4])
+        annotated_type = '%d (%s)' % (self.type, tok_name[self.type])
+        return ('TokenInfo(type=%s, string=%r, start=%r, end=%r, line=%r)' %
+                self._replace(type=annotated_type))
 
 def group(*choices): return '(' + '|'.join(choices) + ')'
 def any(*choices): return group(*choices) + '*'
@@ -298,22 +267,23 @@ def _get_normal_name(orig_enc):
 def detect_encoding(readline):
     """
     The detect_encoding() function is used to detect the encoding that should
-    be used to decode a Python source file. It requires one argment, readline,
+    be used to decode a Python source file.  It requires one argment, readline,
     in the same way as the tokenize() generator.
 
     It will call readline a maximum of twice, and return the encoding used
-    (as a string) and a list of any lines (left as bytes) it has read
-    in.
+    (as a string) and a list of any lines (left as bytes) it has read in.
 
     It detects the encoding from the presence of a utf-8 bom or an encoding
-    cookie as specified in pep-0263. If both a bom and a cookie are present,
-    but disagree, a SyntaxError will be raised. If the encoding cookie is an
-    invalid charset, raise a SyntaxError.
+    cookie as specified in pep-0263.  If both a bom and a cookie are present,
+    but disagree, a SyntaxError will be raised.  If the encoding cookie is an
+    invalid charset, raise a SyntaxError.  Note that if a utf-8 bom is found,
+    'utf-8-sig' is returned.
 
     If no encoding is specified, then the default of 'utf-8' will be returned.
     """
     bom_found = False
     encoding = None
+    default = 'utf-8'
     def read_or_stop():
         try:
             return readline()
@@ -336,17 +306,20 @@ def detect_encoding(readline):
             # This behaviour mimics the Python interpreter
             raise SyntaxError("unknown encoding: " + encoding)
 
-        if bom_found and codec.name != 'utf-8':
-            # This behaviour mimics the Python interpreter
-            raise SyntaxError('encoding problem: utf-8')
+        if bom_found:
+            if codec.name != 'utf-8':
+                # This behaviour mimics the Python interpreter
+                raise SyntaxError('encoding problem: utf-8')
+            encoding += '-sig'
         return encoding
 
     first = read_or_stop()
     if first.startswith(BOM_UTF8):
         bom_found = True
         first = first[3:]
+        default = 'utf-8-sig'
     if not first:
-        return 'utf-8', []
+        return default, []
 
     encoding = find_cookie(first)
     if encoding:
@@ -354,20 +327,32 @@ def detect_encoding(readline):
 
     second = read_or_stop()
     if not second:
-        return 'utf-8', [first]
+        return default, [first]
 
     encoding = find_cookie(second)
     if encoding:
         return encoding, [first, second]
 
-    return 'utf-8', [first, second]
+    return default, [first, second]
+
+
+def open(filename):
+    """Open a file in read only mode using the encoding detected by
+    detect_encoding().
+    """
+    buffer = builtins.open(filename, 'rb')
+    encoding, lines = detect_encoding(buffer.readline)
+    buffer.seek(0)
+    text = TextIOWrapper(buffer, encoding, line_buffering=True)
+    text.mode = 'r'
+    return text
 
 
 def tokenize(readline):
     """
     The tokenize() generator requires one argment, readline, which
     must be a callable object which provides the same interface as the
-    readline() method of built-in file objects. Each call to the function
+    readline() method of built-in file objects.  Each call to the function
     should return one line of input as bytes.  Alternately, readline
     can be a callable function terminating with StopIteration:
         readline = open(myfile, 'rb').__next__  # Example of alternate readline
@@ -376,23 +361,19 @@ def tokenize(readline):
     token string; a 2-tuple (srow, scol) of ints specifying the row and
     column where the token begins in the source; a 2-tuple (erow, ecol) of
     ints specifying the row and column where the token ends in the source;
-    and the line on which the token was found. The line passed is the
+    and the line on which the token was found.  The line passed is the
     logical line; continuation lines are included.
 
     The first token sequence will always be an ENCODING token
     which tells you which encoding was used to decode the bytes stream.
     """
+    # This import is here to avoid problems when the itertools module is not
+    # built yet and tokenize is imported.
+    from itertools import chain, repeat
     encoding, consumed = detect_encoding(readline)
-    def readline_generator(consumed):
-        for line in consumed:
-            yield line
-        while True:
-            try:
-                yield readline()
-            except StopIteration:
-                return
-    chained = readline_generator(consumed)
-    return _tokenize(chained.__next__, encoding)
+    rl_gen = iter(readline, b"")
+    empty = repeat(b"")
+    return _tokenize(chain(consumed, rl_gen, empty).__next__, encoding)
 
 
 def _tokenize(readline, encoding):
@@ -403,6 +384,9 @@ def _tokenize(readline, encoding):
     indents = [0]
 
     if encoding is not None:
+        if encoding == "utf-8-sig":
+            # BOM will already have been stripped.
+            encoding = "utf-8"
         yield TokenInfo(ENCODING, encoding, (0, 0), (0, 0), '')
     while True:             # loop over lines in stream
         try:
@@ -545,3 +529,28 @@ def _tokenize(readline, encoding):
 # library that expect to be able to use tokenize with strings
 def generate_tokens(readline):
     return _tokenize(readline, None)
+
+if __name__ == "__main__":
+    # Quick sanity check
+    s = b'''def parseline(self, line):
+            """Parse the line into a command name and a string containing
+            the arguments.  Returns a tuple containing (command, args, line).
+            'command' and 'args' may be None if the line couldn't be parsed.
+            """
+            line = line.strip()
+            if not line:
+                return None, None, line
+            elif line[0] == '?':
+                line = 'help ' + line[1:]
+            elif line[0] == '!':
+                if hasattr(self, 'do_shell'):
+                    line = 'shell ' + line[1:]
+                else:
+                    return None, None, line
+            i, n = 0, len(line)
+            while i < n and line[i] in self.identchars: i = i+1
+            cmd, arg = line[:i], line[i:].strip()
+            return cmd, arg, line
+    '''
+    for tok in tokenize(iter(s.splitlines()).__next__):
+        print(tok)
