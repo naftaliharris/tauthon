@@ -34,6 +34,10 @@ module.  See module :mod:`glob` for pathname expansion (:mod:`glob` uses
 a period are not special for this module, and are matched by the ``*`` and ``?``
 patterns.
 
+.. seealso::
+
+   Latest version of the `fnmatch Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/fnmatch.py?view=markup>`_
 
 .. function:: fnmatch(filename, pattern)
 
@@ -72,6 +76,8 @@ patterns.
 .. function:: translate(pattern)
 
    Return the shell-style *pattern* converted to a regular expression.
+
+   Be aware there is no way to quote meta-characters.
 
    Example:
 

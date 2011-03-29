@@ -1,16 +1,17 @@
 import unittest
 from test import test_support
-import zlib
 import binascii
 import random
 from test.test_support import precisionbigmemtest, _1G
+
+zlib = test_support.import_module('zlib')
 
 
 class ChecksumTestCase(unittest.TestCase):
     # checksum test cases
     def test_crc32start(self):
         self.assertEqual(zlib.crc32(""), zlib.crc32("", 0))
-        self.assert_(zlib.crc32("abc", 0xffffffff))
+        self.assertTrue(zlib.crc32("abc", 0xffffffff))
 
     def test_crc32empty(self):
         self.assertEqual(zlib.crc32("", 0), 0)
@@ -19,7 +20,7 @@ class ChecksumTestCase(unittest.TestCase):
 
     def test_adler32start(self):
         self.assertEqual(zlib.adler32(""), zlib.adler32("", 1))
-        self.assert_(zlib.adler32("abc", 0xffffffff))
+        self.assertTrue(zlib.adler32("abc", 0xffffffff))
 
     def test_adler32empty(self):
         self.assertEqual(zlib.adler32("", 0), 0)
@@ -137,14 +138,9 @@ class CompressTestCase(BaseCompressTestCase, unittest.TestCase):
     def test_incomplete_stream(self):
         # An useful error message is given
         x = zlib.compress(HAMLET_SCENE)
-        try:
-            zlib.decompress(x[:-1])
-        except zlib.error as e:
-            self.assertTrue(
-                "Error -5 while decompressing data: incomplete or truncated stream"
-                in str(e), str(e))
-        else:
-            self.fail("zlib.error not raised")
+        self.assertRaisesRegexp(zlib.error,
+            "Error -5 while decompressing data: incomplete or truncated stream",
+            zlib.decompress, x[:-1])
 
     # Memory use of the following functions takes into account overallocation
 
@@ -260,7 +256,7 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         while cb:
             #max_length = 1 + len(cb)//10
             chunk = dco.decompress(cb, dcx)
-            self.failIf(len(chunk) > dcx,
+            self.assertFalse(len(chunk) > dcx,
                     'chunk too big (%d>%d)' % (len(chunk), dcx))
             bufs.append(chunk)
             cb = dco.unconsumed_tail
@@ -285,7 +281,7 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         while cb:
             max_length = 1 + len(cb)//10
             chunk = dco.decompress(cb, max_length)
-            self.failIf(len(chunk) > max_length,
+            self.assertFalse(len(chunk) > max_length,
                         'chunk too big (%d>%d)' % (len(chunk),max_length))
             bufs.append(chunk)
             cb = dco.unconsumed_tail
@@ -294,7 +290,7 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         else:
             while chunk:
                 chunk = dco.decompress('', max_length)
-                self.failIf(len(chunk) > max_length,
+                self.assertFalse(len(chunk) > max_length,
                             'chunk too big (%d>%d)' % (len(chunk),max_length))
                 bufs.append(chunk)
         self.assertEqual(data, ''.join(bufs), 'Wrong data retrieved')
@@ -368,7 +364,7 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         # caused a core dump.)
 
         co = zlib.compressobj(zlib.Z_BEST_COMPRESSION)
-        self.failUnless(co.flush())  # Returns a zlib header
+        self.assertTrue(co.flush())  # Returns a zlib header
         dco = zlib.decompressobj()
         self.assertEqual(dco.flush(), "") # Returns nothing
 

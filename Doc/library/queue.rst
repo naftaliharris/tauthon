@@ -24,6 +24,11 @@ the first retrieved (operating like a stack).  With a priority queue,
 the entries are kept sorted (using the :mod:`heapq` module) and the
 lowest valued entry is retrieved first.
 
+.. seealso::
+
+   Latest version of the `queue module Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/Queue.py?view=markup>`_.
+
 The :mod:`Queue` module defines the following classes and exceptions:
 
 .. class:: Queue(maxsize=0)
@@ -183,7 +188,7 @@ Example of how to wait for enqueued tasks to be completed::
    q = Queue()
    for i in range(num_worker_threads):
         t = Thread(target=worker)
-        t.setDaemon(True)
+        t.daemon = True
         t.start()
 
    for item in source():

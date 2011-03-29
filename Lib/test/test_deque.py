@@ -6,7 +6,6 @@ import weakref
 import copy
 import cPickle as pickle
 import random
-import os
 
 BIG = 100000
 
@@ -50,7 +49,9 @@ class TestBasic(unittest.TestCase):
     def test_maxlen(self):
         self.assertRaises(ValueError, deque, 'abc', -1)
         self.assertRaises(ValueError, deque, 'abc', -2)
-        d = deque(range(10), maxlen=3)
+        it = iter(range(10))
+        d = deque(it, maxlen=3)
+        self.assertEqual(list(it), [])
         self.assertEqual(repr(d), 'deque([7, 8, 9], maxlen=3)')
         self.assertEqual(list(d), range(7, 10))
         self.assertEqual(d, deque(range(10), 3))
@@ -86,6 +87,64 @@ class TestBasic(unittest.TestCase):
         finally:
             fo.close()
             test_support.unlink(test_support.TESTFN)
+
+    def test_maxlen_zero(self):
+        it = iter(range(100))
+        deque(it, maxlen=0)
+        self.assertEqual(list(it), [])
+
+        it = iter(range(100))
+        d = deque(maxlen=0)
+        d.extend(it)
+        self.assertEqual(list(it), [])
+
+        it = iter(range(100))
+        d = deque(maxlen=0)
+        d.extendleft(it)
+        self.assertEqual(list(it), [])
+
+    def test_maxlen_attribute(self):
+        self.assertEqual(deque().maxlen, None)
+        self.assertEqual(deque('abc').maxlen, None)
+        self.assertEqual(deque('abc', maxlen=4).maxlen, 4)
+        self.assertEqual(deque('abc', maxlen=2).maxlen, 2)
+        self.assertEqual(deque('abc', maxlen=0).maxlen, 0)
+        with self.assertRaises(AttributeError):
+            d = deque('abc')
+            d.maxlen = 10
+
+    def test_count(self):
+        for s in ('', 'abracadabra', 'simsalabim'*500+'abc'):
+            s = list(s)
+            d = deque(s)
+            for letter in 'abcdefghijklmnopqrstuvwxyz':
+                self.assertEqual(s.count(letter), d.count(letter), (s, d, letter))
+        self.assertRaises(TypeError, d.count)       # too few args
+        self.assertRaises(TypeError, d.count, 1, 2) # too many args
+        class BadCompare:
+            def __eq__(self, other):
+                raise ArithmeticError
+        d = deque([1, 2, BadCompare(), 3])
+        self.assertRaises(ArithmeticError, d.count, 2)
+        d = deque([1, 2, 3])
+        self.assertRaises(ArithmeticError, d.count, BadCompare())
+        class MutatingCompare:
+            def __eq__(self, other):
+                self.d.pop()
+                return True
+        m = MutatingCompare()
+        d = deque([1, 2, 3, m, 4, 5])
+        m.d = d
+        self.assertRaises(RuntimeError, d.count, 3)
+
+        # test issue11004
+        # block advance failed after rotation aligned elements on right side of block
+        d = deque([None]*16)
+        for i in range(len(d)):
+            d.rotate(-1)
+        d.rotate(1)
+        self.assertEqual(d.count(1), 0)
+        self.assertEqual(d.count(None), 16)
 
     def test_comparisons(self):
         d = deque('xabc'); d.popleft()
@@ -172,10 +231,22 @@ class TestBasic(unittest.TestCase):
             self.assertEqual(len(d), n-i)
             j = random.randrange(-len(d), len(d))
             val = d[j]
-            self.assert_(val in d)
+            self.assertIn(val, d)
             del d[j]
-            self.assert_(val not in d)
+            self.assertNotIn(val, d)
         self.assertEqual(len(d), 0)
+
+    def test_reverse(self):
+        n = 500         # O(n**2) test, don't make this too big
+        data = [random.random() for i in range(n)]
+        for i in range(n):
+            d = deque(data[:i])
+            r = d.reverse()
+            self.assertEqual(list(d), list(reversed(data[:i])))
+            self.assertIs(r, None)
+            d.reverse()
+            self.assertEqual(list(d), data[:i])
+        self.assertRaises(TypeError, d.reverse, 1)          # Arity is zero
 
     def test_rotate(self):
         s = tuple('abcde')
@@ -275,7 +346,7 @@ class TestBasic(unittest.TestCase):
         self.assertRaises(RuntimeError, d.remove, 'c')
         for x, y in zip(d, e):
             # verify that original order and values are retained.
-            self.assert_(x is y)
+            self.assertTrue(x is y)
 
         # Handle evil mutator
         for match in (True, False):
@@ -289,7 +360,7 @@ class TestBasic(unittest.TestCase):
         e = eval(repr(d))
         self.assertEqual(list(d), list(e))
         d.append(d)
-        self.assert_('...' in repr(d))
+        self.assertIn('...', repr(d))
 
     def test_print(self):
         d = deque(xrange(200))
@@ -444,7 +515,7 @@ class TestBasic(unittest.TestCase):
             obj.x = iter(container)
             del obj, container
             gc.collect()
-            self.assert_(ref() is None, "Cycle was not collected")
+            self.assertTrue(ref() is None, "Cycle was not collected")
 
 class TestVariousIteratorArgs(unittest.TestCase):
 

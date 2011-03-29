@@ -4,7 +4,12 @@ import unittest
 from test import test_support as support
 import os
 import sys
-import warnings
+
+# Setup bsddb warnings
+try:
+    bsddb = support.import_module('bsddb', deprecated=True)
+except unittest.SkipTest:
+    pass
 
 
 class NoAll(RuntimeError):
@@ -18,9 +23,8 @@ class AllTest(unittest.TestCase):
 
     def check_all(self, modname):
         names = {}
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", ".* (module|package)",
-                                    DeprecationWarning)
+        with support.check_warnings((".* (module|package)",
+                                     DeprecationWarning), quiet=True):
             try:
                 exec "import %s" % modname in names
             except:
@@ -35,7 +39,7 @@ class AllTest(unittest.TestCase):
             exec "from %s import *" % modname in names
         except Exception as e:
             # Include the module name in the exception string
-            self.fail("__all__ failure in {0}: {1}: {2}".format(
+            self.fail("__all__ failure in {}: {}: {}".format(
                       modname, e.__class__.__name__, e))
         if "__builtins__" in names:
             del names["__builtins__"]

@@ -12,6 +12,7 @@ class XDRTest(unittest.TestCase):
         a = ['what', 'is', 'hapnin', 'doctor']
 
         p.pack_int(42)
+        p.pack_int(-17)
         p.pack_uint(9)
         p.pack_bool(True)
         p.pack_bool(False)
@@ -29,16 +30,17 @@ class XDRTest(unittest.TestCase):
         self.assertEqual(up.get_position(), 0)
 
         self.assertEqual(up.unpack_int(), 42)
+        self.assertEqual(up.unpack_int(), -17)
         self.assertEqual(up.unpack_uint(), 9)
-        self.assert_(up.unpack_bool() is True)
+        self.assertTrue(up.unpack_bool() is True)
 
         # remember position
         pos = up.get_position()
-        self.assert_(up.unpack_bool() is False)
+        self.assertTrue(up.unpack_bool() is False)
 
         # rewind and unpack again
         up.set_position(pos)
-        self.assert_(up.unpack_bool() is False)
+        self.assertTrue(up.unpack_bool() is False)
 
         self.assertEqual(up.unpack_uhyper(), 45L)
         self.assertAlmostEqual(up.unpack_float(), 1.9)

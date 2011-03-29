@@ -321,28 +321,46 @@ order::
 
     "%(asctime)s - %(levelname)s - %(message)s"
 
+Formatters use a user-configurable function to convert the creation time of a
+record to a tuple. By default, :func:`time.localtime` is used; to change this
+for a particular formatter instance, set the ``converter`` attribute of the
+instance to a function with the same signature as :func:`time.localtime` or
+:func:`time.gmtime`. To change it for all formatters, for example if you want
+all logging times to be shown in GMT, set the ``converter`` attribute in the
+Formatter class (to ``time.gmtime`` for GMT display).
+
 
 Configuring Logging
 ^^^^^^^^^^^^^^^^^^^
 
-Programmers can configure logging either by creating loggers, handlers, and
-formatters explicitly in a main module with the configuration methods listed
-above (using Python code), or by creating a logging config file.  The following
-code is an example of configuring a very simple logger, a console handler, and a
-simple formatter in a Python module::
+Programmers can configure logging in three ways:
+
+1. Creating loggers, handlers, and formatters explicitly using Python
+   code that calls the configuration methods listed above.
+2. Creating a logging config file and reading it using the :func:`fileConfig`
+   function.
+3. Creating a dictionary of configuration information and passing it
+   to the :func:`dictConfig` function.
+
+The following example configures a very simple logger, a console
+handler, and a simple formatter using Python code::
 
     import logging
 
     # create logger
     logger = logging.getLogger("simple_example")
     logger.setLevel(logging.DEBUG)
+
     # create console handler and set level to debug
     ch = logging.StreamHandler()
     ch.setLevel(logging.DEBUG)
+
     # create formatter
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
     # add formatter to ch
     ch.setFormatter(formatter)
+
     # add ch to logger
     logger.addHandler(ch)
 
@@ -425,6 +443,52 @@ You can see that the config file approach has a few advantages over the Python
 code approach, mainly separation of configuration and code and the ability of
 noncoders to easily modify the logging properties.
 
+Note that the class names referenced in config files need to be either relative
+to the logging module, or absolute values which can be resolved using normal
+import mechanisms. Thus, you could use either :class:`handlers.WatchedFileHandler`
+(relative to the logging module) or :class:`mypackage.mymodule.MyHandler` (for a
+class defined in package :mod:`mypackage` and module :mod:`mymodule`, where
+:mod:`mypackage` is available on the Python import path).
+
+.. versionchanged:: 2.7
+
+In Python 2.7, a new means of configuring logging has been introduced, using
+dictionaries to hold configuration information. This provides a superset of the
+functionality of the config-file-based approach outlined above, and is the
+recommended configuration method for new applications and deployments. Because
+a Python dictionary is used to hold configuration information, and since you
+can populate that dictionary using different means, you have more options for
+configuration. For example, you can use a configuration file in JSON format,
+or, if you have access to YAML processing functionality, a file in YAML
+format, to populate the configuration dictionary. Or, of course, you can
+construct the dictionary in Python code, receive it in pickled form over a
+socket, or use whatever approach makes sense for your application.
+
+Here's an example of the same configuration as above, in YAML format for
+the new dictionary-based approach::
+
+    version: 1
+    formatters:
+      simple:
+        format: format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+    handlers:
+      console:
+        class: logging.StreamHandler
+        level: DEBUG
+        formatter: simple
+        stream: ext://sys.stdout
+    loggers:
+      simpleExample:
+        level: DEBUG
+        handlers: [console]
+        propagate: no
+    root:
+        level: DEBUG
+        handlers: [console]
+
+For more information about logging using a dictionary, see
+:ref:`logging-config-api`.
+
 .. _library-config:
 
 Configuring Logging for a Library
@@ -465,6 +529,17 @@ done using loggers with names matching "foo.x.y", then the code::
 should have the desired effect. If an organisation produces a number of
 libraries, then the logger name specified can be "orgname.foo" rather than
 just "foo".
+
+**PLEASE NOTE:** It is strongly advised that you *do not add any handlers other
+than* :class:`NullHandler` *to your library's loggers*. This is because the
+configuration of handlers is the prerogative of the application developer who
+uses your library. The application developer knows their target audience and
+what handlers are most appropriate for their application: if you add handlers
+"under the hood", you might well interfere with their ability to carry out
+unit tests and deliver logs which suit their requirements.
+
+.. versionadded:: 2.7
+   The :class:`NullHandler` class.
 
 
 Logging Levels
@@ -523,6 +598,22 @@ decides to actually dispatch an event, the :meth:`emit` method is used to send
 the message to its destination. Most user-defined subclasses of :class:`Handler`
 will need to override this :meth:`emit`.
 
+.. _custom-levels:
+
+Custom Levels
+^^^^^^^^^^^^^
+
+Defining your own levels is possible, but should not be necessary, as the
+existing levels have been chosen on the basis of practical experience.
+However, if you are convinced that you need custom levels, great care should
+be exercised when doing this, and it is possibly *a very bad idea to define
+custom levels if you are developing a library*. That's because if multiple
+library authors all define their own custom levels, there is a chance that
+the logging output from such multiple libraries used together will be
+difficult for the using developer to control and/or interpret, because a
+given numeric value might mean different things for different libraries.
+
+
 Useful Handlers
 ---------------
 
@@ -571,7 +662,16 @@ provided:
    name. This handler is only useful on Unix-like systems; Windows does not
    support the underlying mechanism used.
 
-The :class:`StreamHandler` and :class:`FileHandler`
+#. :ref:`null-handler` instances do nothing with error messages. They are used
+   by library developers who want to use logging, but want to avoid the "No
+   handlers could be found for logger XXX" message which can be displayed if
+   the library user has not configured logging. See :ref:`library-config` for
+   more information.
+
+.. versionadded:: 2.7
+   The :class:`NullHandler` class.
+
+The :class:`NullHandler`, :class:`StreamHandler` and :class:`FileHandler`
 classes are defined in the core logging package. The other handlers are
 defined in a sub- module, :mod:`logging.handlers`. (There is also another
 sub-module, :mod:`logging.config`, for configuration functionality.)
@@ -650,7 +750,7 @@ functions.
       d = {'clientip': '192.168.0.1', 'user': 'fbloggs'}
       logging.warning("Protocol problem: %s", "connection reset", extra=d)
 
-   would print something like  ::
+   would print something like::
 
       2006-02-08 22:20:02,165 192.168.0.1 fbloggs  Protocol problem: connection reset
 
@@ -712,6 +812,14 @@ functions.
    Logs a message with level *level* on the root logger. The other arguments are
    interpreted as for :func:`debug`.
 
+   PLEASE NOTE: The above module-level functions which delegate to the root
+   logger should *not* be used in threads, in versions of Python earlier than
+   2.7.1 and 3.2, unless at least one handler has been added to the root
+   logger *before* the threads are started. These convenience functions call
+   :func:`basicConfig` to ensure that at least one handler is available; in
+   earlier versions of Python, this can (under rare circumstances) lead to
+   handlers being added multiple times to the root logger, which can in turn
+   lead to multiple messages for the same event.
 
 .. function:: disable(lvl)
 
@@ -733,6 +841,8 @@ functions.
    registered using this function, levels should be positive integers and they
    should increase in increasing order of severity.
 
+   NOTE: If you are thinking of defining your own levels, please see the section
+   on :ref:`custom-levels`.
 
 .. function:: getLevelName(lvl)
 
@@ -766,6 +876,13 @@ functions.
 
    .. versionchanged:: 2.4
       Formerly, :func:`basicConfig` did not take any keyword arguments.
+
+   PLEASE NOTE: This function should be called from the main thread
+   before other threads are started. In versions of Python prior to
+   2.7.1 and 3.2, if this function is called from multiple threads,
+   it is possible (in rare circumstances) that a handler will be added
+   to the root logger more than once, leading to unexpected results
+   such as messages being duplicated in the log.
 
    The following keyword arguments are supported.
 
@@ -809,6 +926,7 @@ functions.
    required, and the :meth:`__init__` should call :meth:`Logger.__init__`. This
    function is typically called before any loggers are instantiated by applications
    which need to use custom logger behavior.
+
 
 
 .. seealso::
@@ -875,6 +993,16 @@ instantiated directly, but always through the module-level function
    the hierarchy is traversed towards the root until a value other than
    :const:`NOTSET` is found, and that value is returned.
 
+
+.. method:: Logger.getChild(suffix)
+
+   Returns a logger which is a descendant to this logger, as determined by the suffix.
+   Thus, ``logging.getLogger('abc').getChild('def.ghi')`` would return the same
+   logger as would be returned by ``logging.getLogger('abc.def.ghi')``. This is a
+   convenience method, useful when the parent logger is named using e.g. ``__name__``
+   rather than a literal string.
+
+   .. versionadded:: 2.7
 
 .. method:: Logger.debug(msg[, *args[, **kwargs]])
 
@@ -1245,6 +1373,10 @@ level of granularity you want to use in logging an application, it could
 be hard to manage if the number of :class:`Logger` instances becomes
 effectively unbounded.
 
+
+Using LoggerAdapters to impart contextual information
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 An easy way in which you can pass contextual information to be output along
 with logging event information is to use the :class:`LoggerAdapter` class.
 This class is designed to look like a :class:`Logger`, so that you can call
@@ -1351,6 +1483,80 @@ When this script is run, the output should look something like this::
 .. versionadded:: 2.6
 
 The :class:`LoggerAdapter` class was not present in previous versions.
+
+.. _filters-contextual:
+
+Using Filters to impart contextual information
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+You can also add contextual information to log output using a user-defined
+:class:`Filter`. ``Filter`` instances are allowed to modify the ``LogRecords``
+passed to them, including adding additional attributes which can then be output
+using a suitable format string, or if needed a custom :class:`Formatter`.
+
+For example in a web application, the request being processed (or at least,
+the interesting parts of it) can be stored in a threadlocal
+(:class:`threading.local`) variable, and then accessed from a ``Filter`` to
+add, say, information from the request - say, the remote IP address and remote
+user's username - to the ``LogRecord``, using the attribute names 'ip' and
+'user' as in the ``LoggerAdapter`` example above. In that case, the same format
+string can be used to get similar output to that shown above. Here's an example
+script::
+
+    import logging
+    from random import choice
+
+    class ContextFilter(logging.Filter):
+        """
+        This is a filter which injects contextual information into the log.
+
+        Rather than use actual contextual information, we just use random
+        data in this demo.
+        """
+
+        USERS = ['jim', 'fred', 'sheila']
+        IPS = ['123.231.231.123', '127.0.0.1', '192.168.0.1']
+
+        def filter(self, record):
+
+            record.ip = choice(ContextFilter.IPS)
+            record.user = choice(ContextFilter.USERS)
+            return True
+
+    if __name__ == "__main__":
+       levels = (logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL)
+       a1 = logging.LoggerAdapter(logging.getLogger("a.b.c"),
+                                  { "ip" : "123.231.231.123", "user" : "sheila" })
+       logging.basicConfig(level=logging.DEBUG,
+                           format="%(asctime)-15s %(name)-5s %(levelname)-8s IP: %(ip)-15s User: %(user)-8s %(message)s")
+       a1 = logging.getLogger("a.b.c")
+       a2 = logging.getLogger("d.e.f")
+
+       f = ContextFilter()
+       a1.addFilter(f)
+       a2.addFilter(f)
+       a1.debug("A debug message")
+       a1.info("An info message with %s", "some parameters")
+       for x in range(10):
+           lvl = choice(levels)
+           lvlname = logging.getLevelName(lvl)
+           a2.log(lvl, "A message at %s level with %d %s", lvlname, 2, "parameters")
+
+which, when run, produces something like::
+
+    2010-09-06 22:38:15,292 a.b.c DEBUG    IP: 123.231.231.123 User: fred     A debug message
+    2010-09-06 22:38:15,300 a.b.c INFO     IP: 192.168.0.1     User: sheila   An info message with some parameters
+    2010-09-06 22:38:15,300 d.e.f CRITICAL IP: 127.0.0.1       User: sheila   A message at CRITICAL level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f ERROR    IP: 127.0.0.1       User: jim      A message at ERROR level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f DEBUG    IP: 127.0.0.1       User: sheila   A message at DEBUG level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f ERROR    IP: 123.231.231.123 User: fred     A message at ERROR level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f CRITICAL IP: 192.168.0.1     User: jim      A message at CRITICAL level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f CRITICAL IP: 127.0.0.1       User: sheila   A message at CRITICAL level with 2 parameters
+    2010-09-06 22:38:15,300 d.e.f DEBUG    IP: 192.168.0.1     User: jim      A message at DEBUG level with 2 parameters
+    2010-09-06 22:38:15,301 d.e.f ERROR    IP: 127.0.0.1       User: sheila   A message at ERROR level with 2 parameters
+    2010-09-06 22:38:15,301 d.e.f DEBUG    IP: 123.231.231.123 User: fred     A message at DEBUG level with 2 parameters
+    2010-09-06 22:38:15,301 d.e.f INFO     IP: 123.231.231.123 User: fred     A message at INFO level with 2 parameters
+
 
 .. _multiple-processes:
 
@@ -1512,6 +1718,8 @@ Note that there are some security issues with pickle in some scenarios. If
 these affect you, you can use an alternative serialization scheme by overriding
 the :meth:`makePickle` method and implementing your alternative there, as
 well as adapting the above script to use your alternative serialization.
+
+.. _arbitrary-object-messages:
 
 Using arbitrary objects as messages
 -----------------------------------
@@ -1681,12 +1889,14 @@ and :meth:`flush` methods).
 
 .. currentmodule:: logging
 
-.. class:: StreamHandler([strm])
+.. class:: StreamHandler([stream])
 
-   Returns a new instance of the :class:`StreamHandler` class. If *strm* is
+   Returns a new instance of the :class:`StreamHandler` class. If *stream* is
    specified, the instance will use it for logging output; otherwise, *sys.stderr*
    will be used.
 
+   .. versionchanged:: 2.7
+      The ``stream`` parameter was called ``strm`` in earlier versions.
 
    .. method:: emit(record)
 
@@ -1733,7 +1943,35 @@ sends logging output to a disk file.  It inherits the output functionality from
 
       Outputs the record to the file.
 
+
 .. _null-handler:
+
+NullHandler
+^^^^^^^^^^^
+
+.. versionadded:: 2.7
+
+The :class:`NullHandler` class, located in the core :mod:`logging` package,
+does not do any formatting or output. It is essentially a "no-op" handler
+for use by library developers.
+
+.. class:: NullHandler()
+
+   Returns a new instance of the :class:`NullHandler` class.
+
+   .. method:: emit(record)
+
+      This method does nothing.
+
+   .. method:: handle(record)
+
+      This method does nothing.
+
+   .. method:: createLock()
+
+      This method returns `None` for the lock, since there is no
+      underlying I/O to which access needs to be serialized.
+
 
 See :ref:`library-config` for more information on how to use
 :class:`NullHandler`.
@@ -1744,6 +1982,8 @@ WatchedFileHandler
 ^^^^^^^^^^^^^^^^^^
 
 .. versionadded:: 2.6
+
+.. currentmodule:: logging.handlers
 
 The :class:`WatchedFileHandler` class, located in the :mod:`logging.handlers`
 module, is a :class:`FileHandler` which watches the file it is logging to. If
@@ -1997,16 +2237,22 @@ The :class:`SysLogHandler` class, located in the :mod:`logging.handlers` module,
 supports sending logging messages to a remote or local Unix syslog.
 
 
-.. class:: SysLogHandler([address[, facility]])
+.. class:: SysLogHandler([address[, facility[, socktype]]])
 
    Returns a new instance of the :class:`SysLogHandler` class intended to
    communicate with a remote Unix machine whose address is given by *address* in
    the form of a ``(host, port)`` tuple.  If *address* is not specified,
-   ``('localhost', 514)`` is used.  The address is used to open a UDP socket.  An
+   ``('localhost', 514)`` is used.  The address is used to open a socket.  An
    alternative to providing a ``(host, port)`` tuple is providing an address as a
    string, for example "/dev/log". In this case, a Unix domain socket is used to
    send the message to the syslog. If *facility* is not specified,
-   :const:`LOG_USER` is used.
+   :const:`LOG_USER` is used. The type of socket opened depends on the
+   *socktype* argument, which defaults to :const:`socket.SOCK_DGRAM` and thus
+   opens a UDP socket. To open a TCP socket (for use with the newer syslog
+   daemons such as rsyslog), specify a value of :const:`socket.SOCK_STREAM`.
+
+   .. versionchanged:: 2.7
+      *socktype* was added.
 
 
    .. method:: close()
@@ -2296,7 +2542,7 @@ supports sending logging messages to a Web server, using either ``GET`` or
 
    .. method:: emit(record)
 
-      Sends the record to the Web server as an URL-encoded dictionary.
+      Sends the record to the Web server as a percent-encoded dictionary.
 
 
 .. _formatter:
@@ -2369,6 +2615,8 @@ Currently, the useful mapping keys in a :class:`LogRecord` are:
 +-------------------------+-----------------------------------------------+
 | ``%(process)d``         | Process ID (if available).                    |
 +-------------------------+-----------------------------------------------+
+| ``%(processName)s``     | Process name (if available).                  |
++-------------------------+-----------------------------------------------+
 | ``%(message)s``         | The logged message, computed as ``msg %       |
 |                         | args``.                                       |
 +-------------------------+-----------------------------------------------+
@@ -2376,15 +2624,17 @@ Currently, the useful mapping keys in a :class:`LogRecord` are:
 .. versionchanged:: 2.5
    *funcName* was added.
 
+.. versionchanged:: 2.6
+   *processName* was added.
+
 
 .. class:: Formatter([fmt[, datefmt]])
 
    Returns a new instance of the :class:`Formatter` class. The instance is
-   initialized with a format string for the message as a whole, as well as a format
-   string for the date/time portion of a message. If no *fmt* is specified,
-   ``'%(message)s'`` is used. If no *datefmt* is specified, the ISO8601 date format
-   is used.
-
+   initialized with a format string for the message as a whole, as well as a
+   format string for the date/time portion of a message. If no *fmt* is
+   specified, ``'%(message)s'`` is used. If no *datefmt* is specified, the
+   ISO8601 date format is used.
 
    .. method:: format(record)
 
@@ -2428,7 +2678,7 @@ Currently, the useful mapping keys in a :class:`LogRecord` are:
 Filter Objects
 --------------
 
-Filters can be used by :class:`Handler`\ s and :class:`Logger`\ s for
+:class:`Filter`\ s can be used by :class:`Handler`\ s and :class:`Logger`\ s for
 more sophisticated filtering than is provided by levels. The base filter class
 only allows events which are below a certain point in the logger hierarchy. For
 example, a filter initialized with "A.B" will allow events logged by loggers
@@ -2440,7 +2690,7 @@ initialized with the empty string, all events are passed.
 
    Returns an instance of the :class:`Filter` class. If *name* is specified, it
    names a logger which, together with its children, will have its events allowed
-   through the filter. If no name is specified, allows every event.
+   through the filter. If *name* is the empty string, allows every event.
 
 
    .. method:: filter(record)
@@ -2449,40 +2699,99 @@ initialized with the empty string, all events are passed.
       yes. If deemed appropriate, the record may be modified in-place by this
       method.
 
+Note that filters attached to handlers are consulted whenever an event is
+emitted by the handler, whereas filters attached to loggers are consulted
+whenever an event is logged to the handler (using :meth:`debug`, :meth:`info`,
+etc.) This means that events which have been generated by descendant loggers
+will not be filtered by a logger's filter setting, unless the filter has also
+been applied to those descendant loggers.
+
+You don't actually need to subclass ``Filter``: you can pass any instance
+which has a ``filter`` method with the same semantics.
+
+Other uses for filters
+^^^^^^^^^^^^^^^^^^^^^^
+
+Although filters are used primarily to filter records based on more
+sophisticated criteria than levels, they get to see every record which is
+processed by the handler or logger they're attached to: this can be useful if
+you want to do things like counting how many records were processed by a
+particular logger or handler, or adding, changing or removing attributes in
+the LogRecord being processed. Obviously changing the LogRecord needs to be
+done with some care, but it does allow the injection of contextual information
+into logs (see :ref:`filters-contextual`).
+
 .. _log-record:
 
 LogRecord Objects
 -----------------
 
-:class:`LogRecord` instances are created every time something is logged. They
-contain all the information pertinent to the event being logged. The main
-information passed in is in msg and args, which are combined using msg % args to
-create the message field of the record. The record also includes information
-such as when the record was created, the source line where the logging call was
-made, and any exception information to be logged.
+:class:`LogRecord` instances are created automatically by the :class:`Logger`
+every time something is logged, and can be created manually via
+:func:`makeLogRecord` (for example, from a pickled event received over the
+wire).
 
 
-.. class:: LogRecord(name, lvl, pathname, lineno, msg, args, exc_info [, func])
+.. class::
+   LogRecord(name, lvl, pathname, lineno, msg, args, exc_info [, func=None])
 
-   Returns an instance of :class:`LogRecord` initialized with interesting
-   information. The *name* is the logger name; *lvl* is the numeric level;
-   *pathname* is the absolute pathname of the source file in which the logging
-   call was made; *lineno* is the line number in that file where the logging
-   call is found; *msg* is the user-supplied message (a format string); *args*
-   is the tuple which, together with *msg*, makes up the user message; and
-   *exc_info* is the exception tuple obtained by calling :func:`sys.exc_info`
-   (or :const:`None`, if no exception information is available). The *func* is
-   the name of the function from which the logging call was made. If not
-   specified, it defaults to ``None``.
+   Contains all the information pertinent to the event being logged.
 
-   .. versionchanged:: 2.5
-      *func* was added.
+   The primary information is passed in :attr:`msg` and :attr:`args`, which
+   are combined using ``msg % args`` to create the :attr:`message` field of the
+   record.
 
+   .. attribute:: args
+
+      Tuple of arguments to be used in formatting :attr:`msg`.
+
+   .. attribute:: exc_info
+
+      Exception tuple (à la `sys.exc_info`) or `None` if no exception
+      information is available.
+
+   .. attribute:: func
+
+      Name of the function of origin (i.e. in which the logging call was made).
+
+   .. attribute:: lineno
+
+      Line number in the source file of origin.
+
+   .. attribute:: lvl
+
+      Numeric logging level.
+
+   .. attribute:: message
+
+      Bound to the result of :meth:`getMessage` when
+      :meth:`Formatter.format(record)<Formatter.format>` is invoked.
+
+   .. attribute:: msg
+
+      User-supplied :ref:`format string<string-formatting>` or arbitrary object
+      (see :ref:`arbitrary-object-messages`) used in :meth:`getMessage`.
+
+   .. attribute:: name
+
+      Name of the logger that emitted the record.
+
+   .. attribute:: pathname
+
+      Absolute pathname of the source file of origin.
 
    .. method:: getMessage()
 
       Returns the message for this :class:`LogRecord` instance after merging any
-      user-supplied arguments with the message.
+      user-supplied arguments with the message. If the user-supplied message
+      argument to the logging call is not a string, :func:`str` is called on it to
+      convert it to a string. This allows use of user-defined classes as
+      messages, whose ``__str__`` method can return the actual format string to
+      be used.
+
+   .. versionchanged:: 2.5
+      *func* was added.
+
 
 .. _logger-adapter:
 
@@ -2493,28 +2802,32 @@ LoggerAdapter Objects
 
 :class:`LoggerAdapter` instances are used to conveniently pass contextual
 information into logging calls. For a usage example , see the section on
-`adding contextual information to your logging output`__.
+:ref:`adding contextual information to your logging output <context-info>`.
 
-__ context-info_
 
 .. class:: LoggerAdapter(logger, extra)
 
-  Returns an instance of :class:`LoggerAdapter` initialized with an
-  underlying :class:`Logger` instance and a dict-like object.
+   Returns an instance of :class:`LoggerAdapter` initialized with an
+   underlying :class:`Logger` instance and a dict-like object.
 
-  .. method:: process(msg, kwargs)
+   .. method:: process(msg, kwargs)
 
-    Modifies the message and/or keyword arguments passed to a logging call in
-    order to insert contextual information. This implementation takes the object
-    passed as *extra* to the constructor and adds it to *kwargs* using key
-    'extra'. The return value is a (*msg*, *kwargs*) tuple which has the
-    (possibly modified) versions of the arguments passed in.
+      Modifies the message and/or keyword arguments passed to a logging call in
+      order to insert contextual information. This implementation takes the object
+      passed as *extra* to the constructor and adds it to *kwargs* using key
+      'extra'. The return value is a (*msg*, *kwargs*) tuple which has the
+      (possibly modified) versions of the arguments passed in.
 
 In addition to the above, :class:`LoggerAdapter` supports all the logging
 methods of :class:`Logger`, i.e. :meth:`debug`, :meth:`info`, :meth:`warning`,
 :meth:`error`, :meth:`exception`, :meth:`critical` and :meth:`log`. These
 methods have the same signatures as their counterparts in :class:`Logger`, so
 you can use the two types of instances interchangeably.
+
+.. versionchanged:: 2.7
+
+The :meth:`isEnabledFor` method was added to :class:`LoggerAdapter`. This method
+delegates to the underlying logger.
 
 
 Thread Safety
@@ -2529,6 +2842,28 @@ If you are implementing asynchronous signal handlers using the :mod:`signal`
 module, you may not be able to use logging from within such handlers. This is
 because lock implementations in the :mod:`threading` module are not always
 re-entrant, and so cannot be invoked from such signal handlers.
+
+
+Integration with the warnings module
+------------------------------------
+
+The :func:`captureWarnings` function can be used to integrate :mod:`logging`
+with the :mod:`warnings` module.
+
+.. function:: captureWarnings(capture)
+
+   This function is used to turn the capture of warnings by logging on and
+   off.
+
+   If *capture* is ``True``, warnings issued by the :mod:`warnings` module
+   will be redirected to the logging system. Specifically, a warning will be
+   formatted using :func:`warnings.formatwarning` and the resulting string
+   logged to a logger named "py.warnings" with a severity of ``WARNING``.
+
+   If *capture* is ``False``, the redirection of warnings to the logging system
+   will stop, and warnings will be redirected to their original destinations
+   (i.e. those in effect before ``captureWarnings(True)`` was called).
+
 
 Configuration
 -------------
@@ -2547,16 +2882,58 @@ in :mod:`logging` itself) and defining handlers which are declared either in
 
 .. currentmodule:: logging.config
 
+.. function:: dictConfig(config)
+
+    Takes the logging configuration from a dictionary.  The contents of
+    this dictionary are described in :ref:`logging-config-dictschema`
+    below.
+
+    If an error is encountered during configuration, this function will
+    raise a :exc:`ValueError`, :exc:`TypeError`, :exc:`AttributeError`
+    or :exc:`ImportError` with a suitably descriptive message.  The
+    following is a (possibly incomplete) list of conditions which will
+    raise an error:
+
+    * A ``level`` which is not a string or which is a string not
+      corresponding to an actual logging level.
+    * A ``propagate`` value which is not a boolean.
+    * An id which does not have a corresponding destination.
+    * A non-existent handler id found during an incremental call.
+    * An invalid logger name.
+    * Inability to resolve to an internal or external object.
+
+    Parsing is performed by the :class:`DictConfigurator` class, whose
+    constructor is passed the dictionary used for configuration, and
+    has a :meth:`configure` method.  The :mod:`logging.config` module
+    has a callable attribute :attr:`dictConfigClass`
+    which is initially set to :class:`DictConfigurator`.
+    You can replace the value of :attr:`dictConfigClass` with a
+    suitable implementation of your own.
+
+    :func:`dictConfig` calls :attr:`dictConfigClass` passing
+    the specified dictionary, and then calls the :meth:`configure` method on
+    the returned object to put the configuration into effect::
+
+          def dictConfig(config):
+              dictConfigClass(config).configure()
+
+    For example, a subclass of :class:`DictConfigurator` could call
+    ``DictConfigurator.__init__()`` in its own :meth:`__init__()`, then
+    set up custom prefixes which would be usable in the subsequent
+    :meth:`configure` call. :attr:`dictConfigClass` would be bound to
+    this new subclass, and then :func:`dictConfig` could be called exactly as
+    in the default, uncustomized state.
+
+   .. versionadded:: 2.7
 
 .. function:: fileConfig(fname[, defaults])
 
-   Reads the logging configuration from a ConfigParser-format file named *fname*.
-   This function can be called several times from an application, allowing an end
-   user the ability to select from various pre-canned configurations (if the
-   developer provides a mechanism to present the choices and load the chosen
-   configuration). Defaults to be passed to ConfigParser can be specified in the
-   *defaults* argument.
-
+   Reads the logging configuration from a :mod:`ConfigParser`\-format file named
+   *fname*. This function can be called several times from an application,
+   allowing an end user to select from various pre-canned
+   configurations (if the developer provides a mechanism to present the choices
+   and load the chosen configuration). Defaults to be passed to the ConfigParser
+   can be specified in the *defaults* argument.
 
 .. function:: listen([port])
 
@@ -2579,8 +2956,403 @@ in :mod:`logging` itself) and defining handlers which are declared either in
    This is typically called before calling :meth:`join` on the return value from
    :func:`listen`.
 
-
 .. currentmodule:: logging
+
+.. _logging-config-dictschema:
+
+Configuration dictionary schema
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Describing a logging configuration requires listing the various
+objects to create and the connections between them; for example, you
+may create a handler named "console" and then say that the logger
+named "startup" will send its messages to the "console" handler.
+These objects aren't limited to those provided by the :mod:`logging`
+module because you might write your own formatter or handler class.
+The parameters to these classes may also need to include external
+objects such as ``sys.stderr``.  The syntax for describing these
+objects and connections is defined in :ref:`logging-config-dict-connections`
+below.
+
+Dictionary Schema Details
+"""""""""""""""""""""""""
+
+The dictionary passed to :func:`dictConfig` must contain the following
+keys:
+
+* `version` - to be set to an integer value representing the schema
+  version.  The only valid value at present is 1, but having this key
+  allows the schema to evolve while still preserving backwards
+  compatibility.
+
+All other keys are optional, but if present they will be interpreted
+as described below.  In all cases below where a 'configuring dict' is
+mentioned, it will be checked for the special ``'()'`` key to see if a
+custom instantiation is required.  If so, the mechanism described in
+:ref:`logging-config-dict-userdef` below is used to create an instance;
+otherwise, the context is used to determine what to instantiate.
+
+* `formatters` - the corresponding value will be a dict in which each
+  key is a formatter id and each value is a dict describing how to
+  configure the corresponding Formatter instance.
+
+  The configuring dict is searched for keys ``format`` and ``datefmt``
+  (with defaults of ``None``) and these are used to construct a
+  :class:`logging.Formatter` instance.
+
+* `filters` - the corresponding value will be a dict in which each key
+  is a filter id and each value is a dict describing how to configure
+  the corresponding Filter instance.
+
+  The configuring dict is searched for the key ``name`` (defaulting to the
+  empty string) and this is used to construct a :class:`logging.Filter`
+  instance.
+
+* `handlers` - the corresponding value will be a dict in which each
+  key is a handler id and each value is a dict describing how to
+  configure the corresponding Handler instance.
+
+  The configuring dict is searched for the following keys:
+
+  * ``class`` (mandatory).  This is the fully qualified name of the
+    handler class.
+
+  * ``level`` (optional).  The level of the handler.
+
+  * ``formatter`` (optional).  The id of the formatter for this
+    handler.
+
+  * ``filters`` (optional).  A list of ids of the filters for this
+    handler.
+
+  All *other* keys are passed through as keyword arguments to the
+  handler's constructor.  For example, given the snippet::
+
+      handlers:
+        console:
+          class : logging.StreamHandler
+          formatter: brief
+          level   : INFO
+          filters: [allow_foo]
+          stream  : ext://sys.stdout
+        file:
+          class : logging.handlers.RotatingFileHandler
+          formatter: precise
+          filename: logconfig.log
+          maxBytes: 1024
+          backupCount: 3
+
+  the handler with id ``console`` is instantiated as a
+  :class:`logging.StreamHandler`, using ``sys.stdout`` as the underlying
+  stream.  The handler with id ``file`` is instantiated as a
+  :class:`logging.handlers.RotatingFileHandler` with the keyword arguments
+  ``filename='logconfig.log', maxBytes=1024, backupCount=3``.
+
+* `loggers` - the corresponding value will be a dict in which each key
+  is a logger name and each value is a dict describing how to
+  configure the corresponding Logger instance.
+
+  The configuring dict is searched for the following keys:
+
+  * ``level`` (optional).  The level of the logger.
+
+  * ``propagate`` (optional).  The propagation setting of the logger.
+
+  * ``filters`` (optional).  A list of ids of the filters for this
+    logger.
+
+  * ``handlers`` (optional).  A list of ids of the handlers for this
+    logger.
+
+  The specified loggers will be configured according to the level,
+  propagation, filters and handlers specified.
+
+* `root` - this will be the configuration for the root logger.
+  Processing of the configuration will be as for any logger, except
+  that the ``propagate`` setting will not be applicable.
+
+* `incremental` - whether the configuration is to be interpreted as
+  incremental to the existing configuration.  This value defaults to
+  ``False``, which means that the specified configuration replaces the
+  existing configuration with the same semantics as used by the
+  existing :func:`fileConfig` API.
+
+  If the specified value is ``True``, the configuration is processed
+  as described in the section on :ref:`logging-config-dict-incremental`.
+
+* `disable_existing_loggers` - whether any existing loggers are to be
+  disabled. This setting mirrors the parameter of the same name in
+  :func:`fileConfig`. If absent, this parameter defaults to ``True``.
+  This value is ignored if `incremental` is ``True``.
+
+.. _logging-config-dict-incremental:
+
+Incremental Configuration
+"""""""""""""""""""""""""
+
+It is difficult to provide complete flexibility for incremental
+configuration.  For example, because objects such as filters
+and formatters are anonymous, once a configuration is set up, it is
+not possible to refer to such anonymous objects when augmenting a
+configuration.
+
+Furthermore, there is not a compelling case for arbitrarily altering
+the object graph of loggers, handlers, filters, formatters at
+run-time, once a configuration is set up; the verbosity of loggers and
+handlers can be controlled just by setting levels (and, in the case of
+loggers, propagation flags).  Changing the object graph arbitrarily in
+a safe way is problematic in a multi-threaded environment; while not
+impossible, the benefits are not worth the complexity it adds to the
+implementation.
+
+Thus, when the ``incremental`` key of a configuration dict is present
+and is ``True``, the system will completely ignore any ``formatters`` and
+``filters`` entries, and process only the ``level``
+settings in the ``handlers`` entries, and the ``level`` and
+``propagate`` settings in the ``loggers`` and ``root`` entries.
+
+Using a value in the configuration dict lets configurations to be sent
+over the wire as pickled dicts to a socket listener. Thus, the logging
+verbosity of a long-running application can be altered over time with
+no need to stop and restart the application.
+
+.. _logging-config-dict-connections:
+
+Object connections
+""""""""""""""""""
+
+The schema describes a set of logging objects - loggers,
+handlers, formatters, filters - which are connected to each other in
+an object graph.  Thus, the schema needs to represent connections
+between the objects.  For example, say that, once configured, a
+particular logger has attached to it a particular handler.  For the
+purposes of this discussion, we can say that the logger represents the
+source, and the handler the destination, of a connection between the
+two.  Of course in the configured objects this is represented by the
+logger holding a reference to the handler.  In the configuration dict,
+this is done by giving each destination object an id which identifies
+it unambiguously, and then using the id in the source object's
+configuration to indicate that a connection exists between the source
+and the destination object with that id.
+
+So, for example, consider the following YAML snippet::
+
+    formatters:
+      brief:
+        # configuration for formatter with id 'brief' goes here
+      precise:
+        # configuration for formatter with id 'precise' goes here
+    handlers:
+      h1: #This is an id
+       # configuration of handler with id 'h1' goes here
+       formatter: brief
+      h2: #This is another id
+       # configuration of handler with id 'h2' goes here
+       formatter: precise
+    loggers:
+      foo.bar.baz:
+        # other configuration for logger 'foo.bar.baz'
+        handlers: [h1, h2]
+
+(Note: YAML used here because it's a little more readable than the
+equivalent Python source form for the dictionary.)
+
+The ids for loggers are the logger names which would be used
+programmatically to obtain a reference to those loggers, e.g.
+``foo.bar.baz``.  The ids for Formatters and Filters can be any string
+value (such as ``brief``, ``precise`` above) and they are transient,
+in that they are only meaningful for processing the configuration
+dictionary and used to determine connections between objects, and are
+not persisted anywhere when the configuration call is complete.
+
+The above snippet indicates that logger named ``foo.bar.baz`` should
+have two handlers attached to it, which are described by the handler
+ids ``h1`` and ``h2``. The formatter for ``h1`` is that described by id
+``brief``, and the formatter for ``h2`` is that described by id
+``precise``.
+
+
+.. _logging-config-dict-userdef:
+
+User-defined objects
+""""""""""""""""""""
+
+The schema supports user-defined objects for handlers, filters and
+formatters.  (Loggers do not need to have different types for
+different instances, so there is no support in this configuration
+schema for user-defined logger classes.)
+
+Objects to be configured are described by dictionaries
+which detail their configuration.  In some places, the logging system
+will be able to infer from the context how an object is to be
+instantiated, but when a user-defined object is to be instantiated,
+the system will not know how to do this.  In order to provide complete
+flexibility for user-defined object instantiation, the user needs
+to provide a 'factory' - a callable which is called with a
+configuration dictionary and which returns the instantiated object.
+This is signalled by an absolute import path to the factory being
+made available under the special key ``'()'``.  Here's a concrete
+example::
+
+    formatters:
+      brief:
+        format: '%(message)s'
+      default:
+        format: '%(asctime)s %(levelname)-8s %(name)-15s %(message)s'
+        datefmt: '%Y-%m-%d %H:%M:%S'
+      custom:
+          (): my.package.customFormatterFactory
+          bar: baz
+          spam: 99.9
+          answer: 42
+
+The above YAML snippet defines three formatters.  The first, with id
+``brief``, is a standard :class:`logging.Formatter` instance with the
+specified format string.  The second, with id ``default``, has a
+longer format and also defines the time format explicitly, and will
+result in a :class:`logging.Formatter` initialized with those two format
+strings.  Shown in Python source form, the ``brief`` and ``default``
+formatters have configuration sub-dictionaries::
+
+    {
+      'format' : '%(message)s'
+    }
+
+and::
+
+    {
+      'format' : '%(asctime)s %(levelname)-8s %(name)-15s %(message)s',
+      'datefmt' : '%Y-%m-%d %H:%M:%S'
+    }
+
+respectively, and as these dictionaries do not contain the special key
+``'()'``, the instantiation is inferred from the context: as a result,
+standard :class:`logging.Formatter` instances are created.  The
+configuration sub-dictionary for the third formatter, with id
+``custom``, is::
+
+  {
+    '()' : 'my.package.customFormatterFactory',
+    'bar' : 'baz',
+    'spam' : 99.9,
+    'answer' : 42
+  }
+
+and this contains the special key ``'()'``, which means that
+user-defined instantiation is wanted.  In this case, the specified
+factory callable will be used. If it is an actual callable it will be
+used directly - otherwise, if you specify a string (as in the example)
+the actual callable will be located using normal import mechanisms.
+The callable will be called with the **remaining** items in the
+configuration sub-dictionary as keyword arguments.  In the above
+example, the formatter with id ``custom`` will be assumed to be
+returned by the call::
+
+    my.package.customFormatterFactory(bar='baz', spam=99.9, answer=42)
+
+The key ``'()'`` has been used as the special key because it is not a
+valid keyword parameter name, and so will not clash with the names of
+the keyword arguments used in the call.  The ``'()'`` also serves as a
+mnemonic that the corresponding value is a callable.
+
+
+.. _logging-config-dict-externalobj:
+
+Access to external objects
+""""""""""""""""""""""""""
+
+There are times where a configuration needs to refer to objects
+external to the configuration, for example ``sys.stderr``.  If the
+configuration dict is constructed using Python code, this is
+straightforward, but a problem arises when the configuration is
+provided via a text file (e.g. JSON, YAML).  In a text file, there is
+no standard way to distinguish ``sys.stderr`` from the literal string
+``'sys.stderr'``.  To facilitate this distinction, the configuration
+system looks for certain special prefixes in string values and
+treat them specially.  For example, if the literal string
+``'ext://sys.stderr'`` is provided as a value in the configuration,
+then the ``ext://`` will be stripped off and the remainder of the
+value processed using normal import mechanisms.
+
+The handling of such prefixes is done in a way analogous to protocol
+handling: there is a generic mechanism to look for prefixes which
+match the regular expression ``^(?P<prefix>[a-z]+)://(?P<suffix>.*)$``
+whereby, if the ``prefix`` is recognised, the ``suffix`` is processed
+in a prefix-dependent manner and the result of the processing replaces
+the string value.  If the prefix is not recognised, then the string
+value will be left as-is.
+
+
+.. _logging-config-dict-internalobj:
+
+Access to internal objects
+""""""""""""""""""""""""""
+
+As well as external objects, there is sometimes also a need to refer
+to objects in the configuration.  This will be done implicitly by the
+configuration system for things that it knows about.  For example, the
+string value ``'DEBUG'`` for a ``level`` in a logger or handler will
+automatically be converted to the value ``logging.DEBUG``, and the
+``handlers``, ``filters`` and ``formatter`` entries will take an
+object id and resolve to the appropriate destination object.
+
+However, a more generic mechanism is needed for user-defined
+objects which are not known to the :mod:`logging` module.  For
+example, consider :class:`logging.handlers.MemoryHandler`, which takes
+a ``target`` argument which is another handler to delegate to. Since
+the system already knows about this class, then in the configuration,
+the given ``target`` just needs to be the object id of the relevant
+target handler, and the system will resolve to the handler from the
+id.  If, however, a user defines a ``my.package.MyHandler`` which has
+an ``alternate`` handler, the configuration system would not know that
+the ``alternate`` referred to a handler.  To cater for this, a generic
+resolution system allows the user to specify::
+
+    handlers:
+      file:
+        # configuration of file handler goes here
+
+      custom:
+        (): my.package.MyHandler
+        alternate: cfg://handlers.file
+
+The literal string ``'cfg://handlers.file'`` will be resolved in an
+analogous way to strings with the ``ext://`` prefix, but looking
+in the configuration itself rather than the import namespace.  The
+mechanism allows access by dot or by index, in a similar way to
+that provided by ``str.format``.  Thus, given the following snippet::
+
+    handlers:
+      email:
+        class: logging.handlers.SMTPHandler
+        mailhost: localhost
+        fromaddr: my_app@domain.tld
+        toaddrs:
+          - support_team@domain.tld
+          - dev_team@domain.tld
+        subject: Houston, we have a problem.
+
+in the configuration, the string ``'cfg://handlers'`` would resolve to
+the dict with key ``handlers``, the string ``'cfg://handlers.email``
+would resolve to the dict with key ``email`` in the ``handlers`` dict,
+and so on.  The string ``'cfg://handlers.email.toaddrs[1]`` would
+resolve to ``'dev_team.domain.tld'`` and the string
+``'cfg://handlers.email.toaddrs[0]'`` would resolve to the value
+``'support_team@domain.tld'``. The ``subject`` value could be accessed
+using either ``'cfg://handlers.email.subject'`` or, equivalently,
+``'cfg://handlers.email[subject]'``.  The latter form only needs to be
+used if the key contains spaces or non-alphanumeric characters.  If an
+index value consists only of decimal digits, access will be attempted
+using the corresponding integer value, falling back to the string
+value if needed.
+
+Given a string ``cfg://handlers.myhandler.mykey.123``, this will
+resolve to ``config_dict['handlers']['myhandler']['mykey']['123']``.
+If the string is specified as ``cfg://handlers.myhandler.mykey[123]``,
+the system will attempt to retrieve the value from
+``config_dict['handlers']['myhandler']['mykey'][123]``, and fall back
+to ``config_dict['handlers']['myhandler']['mykey']['123']`` if that
+fails.
 
 .. _logging-config-fileformat:
 

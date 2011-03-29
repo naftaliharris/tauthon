@@ -32,10 +32,6 @@ This software comes with no warranty. Use at your own risk.
 #include <wchar.h>
 #endif
 
-#if defined(__APPLE__)
-#include <CoreFoundation/CoreFoundation.h>
-#endif
-
 #if defined(MS_WINDOWS)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -62,8 +58,8 @@ copy_grouping(char* s)
     PyObject *result, *val = NULL;
 
     if (s[0] == '\0')
-        /* empty string: no grouping at all */
-        return PyList_New(0);
+    /* empty string: no grouping at all */
+    return PyList_New(0);
 
     for (i = 0; s[i] != '\0' && s[i] != CHAR_MAX; i++)
         ; /* nothing */
@@ -165,26 +161,34 @@ PyLocale_setlocale(PyObject* self, PyObject* args)
     PyObject *result_object;
 
     if (!PyArg_ParseTuple(args, "i|z:setlocale", &category, &locale))
-    return NULL;
+        return NULL;
+
+#if defined(MS_WINDOWS)
+    if (category < LC_MIN || category > LC_MAX)
+    {
+        PyErr_SetString(Error, "invalid locale category");
+        return NULL;
+    }
+#endif
 
     if (locale) {
-        /* set locale */
-        result = setlocale(category, locale);
-        if (!result) {
-            /* operation failed, no setting was changed */
-            PyErr_SetString(Error, "unsupported locale setting");
-            return NULL;
-        }
-        result_object = PyString_FromString(result);
-        if (!result_object)
-            return NULL;
-        /* record changes to LC_CTYPE */
-        if (category == LC_CTYPE || category == LC_ALL)
-            fixup_ulcase();
+    /* set locale */
+    result = setlocale(category, locale);
+    if (!result) {
+        /* operation failed, no setting was changed */
+        PyErr_SetString(Error, "unsupported locale setting");
+        return NULL;
+    }
+    result_object = PyString_FromString(result);
+    if (!result_object)
+        return NULL;
+    /* record changes to LC_CTYPE */
+    if (category == LC_CTYPE || category == LC_ALL)
+        fixup_ulcase();
         /* things that got wrong up to here are ignored */
         PyErr_Clear();
     } else {
-        /* get locale */
+    /* get locale */
         result = setlocale(category, NULL);
         if (!result) {
             PyErr_SetString(Error, "locale query failed");
@@ -293,9 +297,9 @@ PyLocale_strcoll(PyObject* self, PyObject* args)
     }
     /* Convert the non-unicode argument to unicode. */
     if (!PyUnicode_Check(os1)) {
-        os1 = PyUnicode_FromObject(os1);
-        if (!os1)
-            return NULL;
+    os1 = PyUnicode_FromObject(os1);
+    if (!os1)
+        return NULL;
         rel1 = 1;
     }
     if (!PyUnicode_Check(os2)) {
@@ -409,38 +413,6 @@ PyLocale_getdefaultlocale(PyObject* self)
     /* cannot determine the language code (very unlikely) */
     Py_INCREF(Py_None);
     return Py_BuildValue("Os", Py_None, encoding);
-}
-#endif
-
-#if defined(__APPLE__)
-/*
-** Find out what the current script is.
-** Donated by Fredrik Lundh.
-*/
-static char *mac_getscript(void)
-{
-    CFStringEncoding enc = CFStringGetSystemEncoding();
-    static CFStringRef name = NULL;
-    /* Return the code name for the encodings for which we have codecs. */
-    switch(enc) {
-    case kCFStringEncodingMacRoman: return "mac-roman";
-    case kCFStringEncodingMacGreek: return "mac-greek";
-    case kCFStringEncodingMacCyrillic: return "mac-cyrillic";
-    case kCFStringEncodingMacTurkish: return "mac-turkish";
-    case kCFStringEncodingMacIcelandic: return "mac-icelandic";
-    /* XXX which one is mac-latin2? */
-    }
-    if (!name) {
-        /* This leaks an object. */
-        name = CFStringConvertEncodingToIANACharSetName(enc);
-    }
-    return (char *)CFStringGetCStringPtr(name, 0);
-}
-
-static PyObject*
-PyLocale_getdefaultlocale(PyObject* self)
-{
-    return Py_BuildValue("Os", Py_None, mac_getscript());
 }
 #endif
 
@@ -562,17 +534,17 @@ PyLocale_nl_langinfo(PyObject* self, PyObject* args)
 {
     int item, i;
     if (!PyArg_ParseTuple(args, "i:nl_langinfo", &item))
-        return NULL;
+    return NULL;
     /* Check whether this is a supported constant. GNU libc sometimes
        returns numeric values in the char* return value, which would
        crash PyString_FromString.  */
     for (i = 0; langinfo_constants[i].name; i++)
-    if (langinfo_constants[i].value == item) {
-        /* Check NULL as a workaround for GNU libc's returning NULL
-           instead of an empty string for nl_langinfo(ERA).  */
-        const char *result = nl_langinfo(item);
-        return PyString_FromString(result != NULL ? result : "");
-    }
+        if (langinfo_constants[i].value == item) {
+            /* Check NULL as a workaround for GNU libc's returning NULL
+               instead of an empty string for nl_langinfo(ERA).  */
+            const char *result = nl_langinfo(item);
+            return PyString_FromString(result != NULL ? result : "");
+        }
     PyErr_SetString(PyExc_ValueError, "unsupported langinfo constant");
     return NULL;
 }
@@ -689,7 +661,7 @@ static struct PyMethodDef PyLocale_Methods[] = {
    METH_VARARGS, strcoll__doc__},
   {"strxfrm", (PyCFunction) PyLocale_strxfrm,
    METH_VARARGS, strxfrm__doc__},
-#if defined(MS_WINDOWS) || defined(__APPLE__)
+#if defined(MS_WINDOWS)
   {"_getdefaultlocale", (PyCFunction) PyLocale_getdefaultlocale, METH_NOARGS},
 #endif
 #ifdef HAVE_LANGINFO_H
