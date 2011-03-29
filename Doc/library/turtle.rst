@@ -708,7 +708,10 @@ Settings for measurement
       >>> turtle.left(90)
       >>> turtle.heading()
       90.0
-      >>> turtle.degrees(400.0)  # angle measurement in gon
+
+      Change angle measurement unit to grad (also known as gon,
+      grade, or gradian and equals 1/100-th of the right angle.)
+      >>> turtle.degrees(400.0)
       >>> turtle.heading()
       100.0
       >>> turtle.degrees(360)
@@ -875,7 +878,7 @@ Color control
        >>> tup = (0.2, 0.8, 0.55)
        >>> turtle.pencolor(tup)
        >>> turtle.pencolor()
-       (0.20000000000000001, 0.80000000000000004, 0.5490196078431373)
+       (0.2, 0.8, 0.5490196078431373)
        >>> colormode(255)
        >>> turtle.pencolor()
        (51, 204, 140)
@@ -1455,6 +1458,7 @@ Window control
    :param args: a color string or three numbers in the range 0..colormode or a
                 3-tuple of such numbers
 
+
    Set or return background color of the TurtleScreen.
 
    .. doctest::
@@ -1835,7 +1839,7 @@ Methods specific to Screen, not inherited from TurtleScreen
 .. function:: setup(width=_CFG["width"], height=_CFG["height"], startx=_CFG["leftright"], starty=_CFG["topbottom"])
 
    Set the size and position of the main window.  Default values of arguments
-   are stored in the configuration dicionary and can be changed via a
+   are stored in the configuration dictionary and can be changed via a
    :file:`turtle.cfg` file.
 
    :param width: if an integer, a size in pixels, if a float, a fraction of the
@@ -2165,9 +2169,11 @@ The demoscripts are:
 | bytedesign     | complex classical            | :func:`tracer`, delay,|
 |                | turtlegraphics pattern       | :func:`update`        |
 +----------------+------------------------------+-----------------------+
-| chaos          | graphs verhust dynamics,     | world coordinates     |
-|                | proves that you must not     |                       |
-|                | trust computers' computations|                       |
+| chaos          | graphs Verhulst dynamics,    | world coordinates     |
+|                | shows that computer's        |                       |
+|                | computations can generate    |                       |
+|                | results sometimes against the|                       |
+|                | common sense expectations    |                       |
 +----------------+------------------------------+-----------------------+
 | clock          | analog clock showing time    | turtles as clock's    |
 |                | of your computer             | hands, ontimer        |

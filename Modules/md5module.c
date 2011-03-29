@@ -50,16 +50,16 @@ md5_dealloc(md5object *md5p)
 static PyObject *
 md5_update(md5object *self, PyObject *args)
 {
-    unsigned char *cp;
-    int len;
+    Py_buffer view;
 
-    if (!PyArg_ParseTuple(args, "s#:update", &cp, &len))
+    if (!PyArg_ParseTuple(args, "s*:update", &view))
         return NULL;
 
-    md5_append(&self->md5, cp, len);
+    md5_append(&self->md5, (unsigned char*)view.buf,
+               Py_SAFE_DOWNCAST(view.len, Py_ssize_t, unsigned int));
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    PyBuffer_Release(&view);
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(update_doc,
@@ -261,17 +261,21 @@ static PyObject *
 MD5_new(PyObject *self, PyObject *args)
 {
     md5object *md5p;
-    unsigned char *cp = NULL;
-    int len = 0;
+    Py_buffer view = { 0 };
 
-    if (!PyArg_ParseTuple(args, "|s#:new", &cp, &len))
+    if (!PyArg_ParseTuple(args, "|s*:new", &view))
         return NULL;
 
-    if ((md5p = newmd5object()) == NULL)
+    if ((md5p = newmd5object()) == NULL) {
+        PyBuffer_Release(&view);
         return NULL;
+    }
 
-    if (cp)
-        md5_append(&md5p->md5, cp, len);
+    if (view.len > 0) {
+        md5_append(&md5p->md5, (unsigned char*)view.buf,
+               Py_SAFE_DOWNCAST(view.len, Py_ssize_t, unsigned int));
+    }
+    PyBuffer_Release(&view);
 
     return (PyObject *)md5p;
 }

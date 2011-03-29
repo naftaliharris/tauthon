@@ -1,3 +1,4 @@
+from __future__ import with_statement, print_function
 # Script for building the _ssl and _hashlib modules for Windows.
 # Uses Perl to setup the OpenSSL environment correctly
 # and build OpenSSL, then invokes a simple nmake session
@@ -46,7 +47,7 @@ def find_all_on_path(filename, extras = None):
 # is available.
 def find_working_perl(perls):
     for perl in perls:
-        fh = os.popen(perl + ' -e "use Win32;"')
+        fh = os.popen('"%s" -e "use Win32;"' % perl)
         fh.read()
         rc = fh.close()
         if rc:
@@ -102,11 +103,8 @@ def create_makefile64(makefile, m32):
     """
     if not os.path.isfile(m32):
         return
-    # 2.4 compatibility
-    fin = open(m32)
-    if 1: # with open(m32) as fin:
-        fout = open(makefile, 'w')
-        if 1: # with open(makefile, 'w') as fout:
+    with open(m32) as fin:
+        with open(makefile, 'w') as fout:
             for line in fin:
                 line = line.replace("=tmp32", "=tmp64")
                 line = line.replace("=out32", "=out64")
@@ -186,10 +184,10 @@ def main():
     # as "well known" locations
     perls = find_all_on_path("perl.exe", ["\\perl\\bin", "C:\\perl\\bin"])
     perl = find_working_perl(perls)
-    if perl is None:
+    if perl:
+        print("Found a working perl at '%s'" % (perl,))
+    else:
         print("No Perl installation was found. Existing Makefiles are used.")
-
-    print("Found a working perl at '%s'" % (perl,))
     sys.stdout.flush()
     # Look for SSL 2 levels up from pcbuild - ie, same place zlib etc all live.
     ssl_dir = find_best_ssl_dir(("..\\..",))

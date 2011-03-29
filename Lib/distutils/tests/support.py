@@ -2,11 +2,19 @@
 import os
 import shutil
 import tempfile
+from copy import deepcopy
+import warnings
 
-from distutils.log import DEBUG, INFO, WARN, ERROR, FATAL
 from distutils import log
-from distutils.dist import Distribution
-from distutils.cmd import Command
+from distutils.log import DEBUG, INFO, WARN, ERROR, FATAL
+from distutils.core import Distribution
+
+def capture_warnings(func):
+    def _capture_warnings(*args, **kw):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return func(*args, **kw)
+    return _capture_warnings
 
 class LoggingSilencer(object):
 
@@ -19,17 +27,11 @@ class LoggingSilencer(object):
         self._old_log = log.Log._log
         log.Log._log = self._log
         self.logs = []
-        self._old_warn = Command.warn
-        Command.warn = self._warn
 
     def tearDown(self):
         log.set_threshold(self.threshold)
         log.Log._log = self._old_log
-        Command.warn = self._old_warn
         super(LoggingSilencer, self).tearDown()
-
-    def _warn(self, msg):
-        self.logs.append(('', msg, ''))
 
     def _log(self, level, msg, args):
         if level not in (DEBUG, INFO, WARN, ERROR, FATAL):
@@ -47,7 +49,6 @@ class LoggingSilencer(object):
     def clear_logs(self):
         self.logs = []
 
-
 class TempdirManager(object):
     """Mix-in class that handles temporary directories for test cases.
 
@@ -62,7 +63,7 @@ class TempdirManager(object):
         super(TempdirManager, self).tearDown()
         while self.tempdirs:
             d = self.tempdirs.pop()
-            shutil.rmtree(d)
+            shutil.rmtree(d, os.name in ('nt', 'cygwin'))
 
     def mkdtemp(self):
         """Create a temporary directory that will be cleaned up.
@@ -75,6 +76,7 @@ class TempdirManager(object):
 
     def write_file(self, path, content='xxx'):
         """Writes a file in the given path.
+
 
         path can be a string or a sequence.
         """
@@ -112,3 +114,20 @@ class DummyCommand:
 
     def ensure_finalized(self):
         pass
+
+class EnvironGuard(object):
+
+    def setUp(self):
+        super(EnvironGuard, self).setUp()
+        self.old_environ = deepcopy(os.environ)
+
+    def tearDown(self):
+        for key, value in self.old_environ.items():
+            if os.environ.get(key) != value:
+                os.environ[key] = value
+
+        for key in os.environ.keys():
+            if key not in self.old_environ:
+                del os.environ[key]
+
+        super(EnvironGuard, self).tearDown()

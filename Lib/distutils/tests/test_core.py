@@ -6,8 +6,9 @@ import os
 import shutil
 import sys
 import test.test_support
+from test.test_support import captured_stdout, run_unittest
 import unittest
-
+from distutils.tests import support
 
 # setup script that uses __file__
 setup_using___file__ = """\
@@ -28,15 +29,20 @@ setup()
 """
 
 
-class CoreTestCase(unittest.TestCase):
+class CoreTestCase(support.EnvironGuard, unittest.TestCase):
 
     def setUp(self):
+        super(CoreTestCase, self).setUp()
         self.old_stdout = sys.stdout
         self.cleanup_testfn()
+        self.old_argv = sys.argv, sys.argv[:]
 
     def tearDown(self):
         sys.stdout = self.old_stdout
         self.cleanup_testfn()
+        sys.argv = self.old_argv[0]
+        sys.argv[:] = self.old_argv[1]
+        super(CoreTestCase, self).tearDown()
 
     def cleanup_testfn(self):
         path = test.test_support.TESTFN
@@ -46,7 +52,11 @@ class CoreTestCase(unittest.TestCase):
             shutil.rmtree(path)
 
     def write_setup(self, text, path=test.test_support.TESTFN):
-        open(path, "w").write(text)
+        f = open(path, "w")
+        try:
+            f.write(text)
+        finally:
+            f.close()
         return path
 
     def test_run_setup_provides_file(self):
@@ -73,9 +83,26 @@ class CoreTestCase(unittest.TestCase):
             output = output[:-1]
         self.assertEqual(cwd, output)
 
+    def test_debug_mode(self):
+        # this covers the code called when DEBUG is set
+        sys.argv = ['setup.py', '--name']
+        with captured_stdout() as stdout:
+            distutils.core.setup(name='bar')
+        stdout.seek(0)
+        self.assertEqual(stdout.read(), 'bar\n')
+
+        distutils.core.DEBUG = True
+        try:
+            with captured_stdout() as stdout:
+                distutils.core.setup(name='bar')
+        finally:
+            distutils.core.DEBUG = False
+        stdout.seek(0)
+        wanted = "options (after parsing config files):\n"
+        self.assertEqual(stdout.readlines()[0], wanted)
 
 def test_suite():
     return unittest.makeSuite(CoreTestCase)
 
 if __name__ == "__main__":
-    unittest.main(defaultTest="test_suite")
+    run_unittest(test_suite())

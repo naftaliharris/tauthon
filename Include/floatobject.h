@@ -21,6 +21,12 @@ PyAPI_DATA(PyTypeObject) PyFloat_Type;
 #define PyFloat_Check(op) PyObject_TypeCheck(op, &PyFloat_Type)
 #define PyFloat_CheckExact(op) (Py_TYPE(op) == &PyFloat_Type)
 
+/* The str() precision PyFloat_STR_PRECISION is chosen so that in most cases,
+   the rounding noise created by various operations is suppressed, while
+   giving plenty of precision for practical use. */
+
+#define PyFloat_STR_PRECISION 12
+
 #ifdef Py_NAN
 #define Py_RETURN_NAN return PyFloat_FromDouble(Py_NAN)
 #endif
@@ -120,6 +126,13 @@ PyAPI_FUNC(int) PyFloat_ClearFreeList(void);
 PyAPI_FUNC(PyObject *) _PyFloat_FormatAdvanced(PyObject *obj,
 					       char *format_spec,
 					       Py_ssize_t format_spec_len);
+
+/* Round a C double x to the closest multiple of 10**-ndigits.  Returns a
+   Python float on success, or NULL (with an appropriate exception set) on
+   failure.  Used in builtin_round in bltinmodule.c. */
+PyAPI_FUNC(PyObject *) _Py_double_round(double x, int ndigits);
+
+
 
 #ifdef __cplusplus
 }

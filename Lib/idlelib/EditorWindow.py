@@ -2,7 +2,6 @@ import sys
 import os
 import re
 import imp
-from itertools import count
 from Tkinter import *
 import tkSimpleDialog
 import tkMessageBox
@@ -27,8 +26,10 @@ def _sphinx_version():
     major, minor, micro, level, serial = sys.version_info
     release = '%s%s' % (major, minor)
     if micro:
-        release += '%s' % micro
-    if level != 'final':
+        release += '%s' % (micro,)
+    if level == 'candidate':
+        release += 'rc%s' % (serial,)
+    elif level != 'final':
         release += '%s%s' % (level[0], serial)
     return release
 
@@ -101,8 +102,8 @@ class EditorWindow(object):
         self.top = top = WindowList.ListedToplevel(root, menu=self.menubar)
         if flist:
             self.tkinter_vars = flist.vars
-            #self.top.instance_dict makes flist.inversedict avalable to
-            #configDialog.py so it can access all EditorWindow instaces
+            #self.top.instance_dict makes flist.inversedict available to
+            #configDialog.py so it can access all EditorWindow instances
             self.top.instance_dict = flist.inversedict
         else:
             self.tkinter_vars = {}  # keys: Tkinter event names
@@ -135,6 +136,14 @@ class EditorWindow(object):
         if macosxSupport.runningAsOSXApp():
             # Command-W on editorwindows doesn't work without this.
             text.bind('<<close-window>>', self.close_event)
+            # Some OS X systems have only one mouse button,
+            # so use control-click for pulldown menus there.
+            #  (Note, AquaTk defines <2> as the right button if
+            #   present and the Tk Text widget already binds <2>.)
+            text.bind("<Control-Button-1>",self.right_menu_event)
+        else:
+            # Elsewhere, use right-click for pulldown menus.
+            text.bind("<3>",self.right_menu_event)
         text.bind("<<cut>>", self.cut)
         text.bind("<<copy>>", self.copy)
         text.bind("<<paste>>", self.paste)
@@ -153,7 +162,6 @@ class EditorWindow(object):
         text.bind("<<find-selection>>", self.find_selection_event)
         text.bind("<<replace>>", self.replace_event)
         text.bind("<<goto-line>>", self.goto_line_event)
-        text.bind("<3>", self.right_menu_event)
         text.bind("<<smart-backspace>>",self.smart_backspace_event)
         text.bind("<<newline-and-indent>>",self.newline_and_indent_event)
         text.bind("<<smart-indent>>",self.smart_indent_event)
@@ -299,9 +307,9 @@ class EditorWindow(object):
         return "break"
 
     def home_callback(self, event):
-        if (event.state & 12) != 0 and event.keysym == "Home":
-            # state&1==shift, state&4==control, state&8==alt
-            return # <Modifier-Home>; fall back to class binding
+        if (event.state & 4) != 0 and event.keysym == "Home":
+            # state&4==Control. If <Control-Home>, use the Tk binding.
+            return
 
         if self.text.index("iomark") and \
            self.text.compare("iomark", "<=", "insert lineend") and \
@@ -384,7 +392,7 @@ class EditorWindow(object):
             menudict[name] = menu = Menu(mbar, name=name)
             mbar.add_cascade(label=label, menu=menu, underline=underline)
 
-        if macosxSupport.runningAsOSXApp():
+        if macosxSupport.isCarbonAquaTk(self.root):
             # Insert the application menu
             menudict['application'] = menu = Menu(mbar, name='apple')
             mbar.add_cascade(label='IDLE', menu=menu)
@@ -444,7 +452,11 @@ class EditorWindow(object):
 
     def python_docs(self, event=None):
         if sys.platform[:3] == 'win':
-            os.startfile(self.help_url)
+            try:
+                os.startfile(self.help_url)
+            except WindowsError as why:
+                tkMessageBox.showerror(title='Document Start Failure',
+                    message=str(why), parent=self.text)
         else:
             webbrowser.open(self.help_url)
         return "break"
@@ -704,8 +716,8 @@ class EditorWindow(object):
                     if accel:
                         itemName = menu.entrycget(index, 'label')
                         event = ''
-                        if menuEventDict.has_key(menubarItem):
-                            if menuEventDict[menubarItem].has_key(itemName):
+                        if menubarItem in menuEventDict:
+                            if itemName in menuEventDict[menubarItem]:
                                 event = menuEventDict[menubarItem][itemName]
                         if event:
                             accel = get_accelerator(keydefs, event)
@@ -739,9 +751,13 @@ class EditorWindow(object):
         "Create a callback with the helpfile value frozen at definition time"
         def display_extra_help(helpfile=helpfile):
             if not helpfile.startswith(('www', 'http')):
-                url = os.path.normpath(helpfile)
+                helpfile = os.path.normpath(helpfile)
             if sys.platform[:3] == 'win':
-                os.startfile(helpfile)
+                try:
+                    os.startfile(helpfile)
+                except WindowsError as why:
+                    tkMessageBox.showerror(title='Document Start Failure',
+                        message=str(why), parent=self.text)
             else:
                 webbrowser.open(helpfile)
         return display_extra_help
@@ -777,8 +793,8 @@ class EditorWindow(object):
         for instance in self.top.instance_dict.keys():
             menu = instance.recent_files_menu
             menu.delete(1, END)  # clear, and rebuild:
-            for i, file in zip(count(), rf_list):
-                file_name = file[0:-1]  # zap \n
+            for i, file_name in enumerate(rf_list):
+                file_name = file_name.rstrip()  # zap \n
                 # make unicode string to display non-ASCII chars correctly
                 ufile_name = self._filename_to_unicode(file_name)
                 callback = instance.__recent_file_callback(file_name)
@@ -1525,7 +1541,12 @@ keynames = {
 
 def get_accelerator(keydefs, eventname):
     keylist = keydefs.get(eventname)
-    if not keylist:
+    # issue10940: temporary workaround to prevent hang with OS X Cocoa Tk 8.5
+    # if not keylist:
+    if (not keylist) or (macosxSupport.runningAsOSXApp() and eventname in {
+                            "<<open-module>>",
+                            "<<goto-line>>",
+                            "<<change-indentwidth>>"}):
         return ""
     s = keylist[0]
     s = re.sub(r"-[a-z]\b", lambda m: m.group().upper(), s)

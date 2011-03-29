@@ -23,6 +23,10 @@ built-in function :func:`open`, but accepts Universal Resource Locators (URLs)
 instead of filenames.  Some restrictions apply --- it can only open URLs for
 reading, and no seek operations are available.
 
+.. warning:: When opening HTTPS URLs, it is not attempted to validate the
+   server certificate.  Use at your own risk!
+
+
 High-level interface
 --------------------
 
@@ -236,8 +240,8 @@ Utility functions
 
 .. function:: urlencode(query[, doseq])
 
-   Convert a mapping object or a sequence of two-element tuples  to a
-   "url-encoded" string, suitable to pass to :func:`urlopen` above as the
+   Convert a mapping object or a sequence of two-element tuples to a
+   "percent-encoded" string, suitable to pass to :func:`urlopen` above as the
    optional *data* argument.  This is useful to pass a dictionary of form
    fields to a ``POST`` request.  The resulting string is a series of
    ``key=value`` pairs separated by ``'&'`` characters, where both *key* and
@@ -262,7 +266,7 @@ Utility functions
 
 .. function:: url2pathname(path)
 
-   Convert the path component *path* from an encoded URL to the local syntax for a
+   Convert the path component *path* from an percent-encoded URL to the local syntax for a
    path.  This does not accept a complete URL.  This function uses :func:`unquote`
    to decode *path*.
 
@@ -447,7 +451,7 @@ URL Opener objects
   you try to fetch a file whose read permissions make it inaccessible; the FTP
   code will try to read it, fail with a 550 error, and then perform a directory
   listing for the unreadable file. If fine-grained control is needed, consider
-  using the :mod:`ftplib` module, subclassing :class:`FancyURLOpener`, or changing
+  using the :mod:`ftplib` module, subclassing :class:`FancyURLopener`, or changing
   *_urlopener* to meet your needs.
 
 * This module does not support the use of proxies which require authentication.

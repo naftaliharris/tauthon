@@ -16,6 +16,10 @@ and a utility function  :func:`dedent`.  If you're just wrapping or filling one
 or two  text strings, the convenience functions should be good enough;
 otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
 
+.. seealso::
+
+   Latest version of the `textwrap module Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/textwrap.py?view=markup>`_
 
 .. function:: wrap(text[, width[, ...]])
 
@@ -120,6 +124,13 @@ indentation from strings that have unwanted whitespace to the left of the text.
          If :attr:`expand_tabs` is false and :attr:`replace_whitespace` is true,
          each tab character will be replaced by a single space, which is *not*
          the same as tab expansion.
+
+      .. note::
+
+         If :attr:`replace_whitespace` is false, newlines may appear in the
+         middle of a line and cause strange output. For this reason, text should
+         be split into paragraphs (using :meth:`str.splitlines` or similar)
+         which are wrapped separately.
 
 
    .. attribute:: drop_whitespace
