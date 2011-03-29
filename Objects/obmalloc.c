@@ -2,6 +2,21 @@
 
 #ifdef WITH_PYMALLOC
 
+#ifdef WITH_VALGRIND
+#include <valgrind/valgrind.h>
+
+/* If we're using GCC, use __builtin_expect() to reduce overhead of
+   the valgrind checks */
+#if defined(__GNUC__) && (__GNUC__ > 2) && defined(__OPTIMIZE__)
+#  define UNLIKELY(value) __builtin_expect((value), 0)
+#else
+#  define UNLIKELY(value) (value)
+#endif
+
+/* -1 indicates that we haven't checked that we're running on valgrind yet. */
+static int running_on_valgrind = -1;
+#endif
+
 /* An object allocator for Python.
 
    Here is an introduction to the layers of the Python memory architecture,
@@ -234,7 +249,7 @@ typedef uchar block;
 /* Pool for small blocks. */
 struct pool_header {
     union { block *_padding;
-        uint count; } ref;              /* number of allocated blocks    */
+            uint count; } ref;          /* number of allocated blocks    */
     block *freeblock;                   /* pool's free list head         */
     struct pool_header *nextpool;       /* next pool of this size class  */
     struct pool_header *prevpool;       /* previous pool       ""        */
@@ -389,7 +404,7 @@ compensating for that a pool_header's nextpool and prevpool members
 immediately follow a pool_header's first two members:
 
     union { block *_padding;
-        uint count; } ref;
+            uint count; } ref;
     block *freeblock;
 
 each of which consume sizeof(block *) bytes.  So what usedpools[i+i] really
@@ -667,11 +682,19 @@ that this test determines whether an arbitrary address is controlled by
 obmalloc in a small constant time, independent of the number of arenas
 obmalloc controls.  Since this test is needed at every entry point, it's
 extremely desirable that it be this fast.
+
+Since Py_ADDRESS_IN_RANGE may be reading from memory which was not allocated
+by Python, it is important that (POOL)->arenaindex is read only once, as
+another thread may be concurrently modifying the value without holding the
+GIL.  To accomplish this, the arenaindex_temp variable is used to store
+(POOL)->arenaindex for the duration of the Py_ADDRESS_IN_RANGE macro's
+execution.  The caller of the macro is responsible for declaring this
+variable.
 */
 #define Py_ADDRESS_IN_RANGE(P, POOL)                    \
-    ((POOL)->arenaindex < maxarenas &&                  \
-     (uptr)(P) - arenas[(POOL)->arenaindex].address < (uptr)ARENA_SIZE && \
-     arenas[(POOL)->arenaindex].address != 0)
+    ((arenaindex_temp = (POOL)->arenaindex) < maxarenas &&              \
+     (uptr)(P) - arenas[arenaindex_temp].address < (uptr)ARENA_SIZE && \
+     arenas[arenaindex_temp].address != 0)
 
 
 /* This is only useful when running memory debuggers such as
@@ -694,7 +717,7 @@ extremely desirable that it be this fast.
 #undef Py_ADDRESS_IN_RANGE
 
 #if defined(__GNUC__) && ((__GNUC__ == 3) && (__GNUC_MINOR__ >= 1) || \
-              (__GNUC__ >= 4))
+                          (__GNUC__ >= 4))
 #define Py_NO_INLINE __attribute__((__noinline__))
 #else
 #define Py_NO_INLINE
@@ -727,6 +750,13 @@ PyObject_Malloc(size_t nbytes)
     poolp pool;
     poolp next;
     uint size;
+
+#ifdef WITH_VALGRIND
+    if (UNLIKELY(running_on_valgrind == -1))
+        running_on_valgrind = RUNNING_ON_VALGRIND;
+    if (UNLIKELY(running_on_valgrind))
+        goto redirect;
+#endif
 
     /*
      * Limit ourselves to PY_SSIZE_T_MAX bytes to prevent security holes.
@@ -923,9 +953,17 @@ PyObject_Free(void *p)
     block *lastfree;
     poolp next, prev;
     uint size;
+#ifndef Py_USING_MEMORY_DEBUGGER
+    uint arenaindex_temp;
+#endif
 
     if (p == NULL)      /* free(NULL) has no effect */
         return;
+
+#ifdef WITH_VALGRIND
+    if (UNLIKELY(running_on_valgrind > 0))
+        goto redirect;
+#endif
 
     pool = POOL_ADDR(p);
     if (Py_ADDRESS_IN_RANGE(p, pool)) {
@@ -1121,6 +1159,9 @@ PyObject_Free(void *p)
         return;
     }
 
+#ifdef WITH_VALGRIND
+redirect:
+#endif
     /* We didn't allocate this address. */
     free(p);
 }
@@ -1137,6 +1178,9 @@ PyObject_Realloc(void *p, size_t nbytes)
     void *bp;
     poolp pool;
     size_t size;
+#ifndef Py_USING_MEMORY_DEBUGGER
+    uint arenaindex_temp;
+#endif
 
     if (p == NULL)
         return PyObject_Malloc(nbytes);
@@ -1149,6 +1193,12 @@ PyObject_Realloc(void *p, size_t nbytes)
      */
     if (nbytes > PY_SSIZE_T_MAX)
         return NULL;
+
+#ifdef WITH_VALGRIND
+    /* Treat running_on_valgrind == -1 the same as 0 */
+    if (UNLIKELY(running_on_valgrind > 0))
+        goto redirect;
+#endif
 
     pool = POOL_ADDR(p);
     if (Py_ADDRESS_IN_RANGE(p, pool)) {
@@ -1177,6 +1227,9 @@ PyObject_Realloc(void *p, size_t nbytes)
         }
         return bp;
     }
+#ifdef WITH_VALGRIND
+ redirect:
+#endif
     /* We're not managing this block.  If nbytes <=
      * SMALL_REQUEST_THRESHOLD, it's tempting to try to take over this
      * block.  However, if we do, we need to copy the valid data from
@@ -1240,6 +1293,10 @@ PyObject_Free(void *p)
 #define CLEANBYTE      0xCB    /* clean (newly allocated) memory */
 #define DEADBYTE       0xDB    /* dead (newly freed) memory */
 #define FORBIDDENBYTE  0xFB    /* untouchable bytes at each end of a block */
+
+/* We tag each block with an API ID in order to tag API violations */
+#define _PYMALLOC_MEM_ID 'm'   /* the PyMem_Malloc() API */
+#define _PYMALLOC_OBJ_ID 'o'   /* The PyObject_Malloc() API */
 
 static size_t serialno = 0;     /* incremented on each debug {m,re}alloc */
 
@@ -1331,8 +1388,49 @@ p[2*S+n+S: 2*S+n+2*S]
     instant at which this block was passed out.
 */
 
+/* debug replacements for the PyMem_* memory API */
+void *
+_PyMem_DebugMalloc(size_t nbytes)
+{
+    return _PyObject_DebugMallocApi(_PYMALLOC_MEM_ID, nbytes);
+}
+void *
+_PyMem_DebugRealloc(void *p, size_t nbytes)
+{
+    return _PyObject_DebugReallocApi(_PYMALLOC_MEM_ID, p, nbytes);
+}
+void
+_PyMem_DebugFree(void *p)
+{
+    _PyObject_DebugFreeApi(_PYMALLOC_MEM_ID, p);
+}
+
+/* debug replacements for the PyObject_* memory API */
 void *
 _PyObject_DebugMalloc(size_t nbytes)
+{
+    return _PyObject_DebugMallocApi(_PYMALLOC_OBJ_ID, nbytes);
+}
+void *
+_PyObject_DebugRealloc(void *p, size_t nbytes)
+{
+    return _PyObject_DebugReallocApi(_PYMALLOC_OBJ_ID, p, nbytes);
+}
+void
+_PyObject_DebugFree(void *p)
+{
+    _PyObject_DebugFreeApi(_PYMALLOC_OBJ_ID, p);
+}
+void
+_PyObject_DebugCheckAddress(const void *p)
+{
+    _PyObject_DebugCheckAddressApi(_PYMALLOC_OBJ_ID, p);
+}
+
+
+/* generic debug memory api, with an "id" to identify the API in use */
+void *
+_PyObject_DebugMallocApi(char id, size_t nbytes)
 {
     uchar *p;           /* base address of malloc'ed block */
     uchar *tail;        /* p + 2*SST + nbytes == pointer to tail pad bytes */
@@ -1348,12 +1446,15 @@ _PyObject_DebugMalloc(size_t nbytes)
     if (p == NULL)
         return NULL;
 
+    /* at p, write size (SST bytes), id (1 byte), pad (SST-1 bytes) */
     write_size_t(p, nbytes);
-    memset(p + SST, FORBIDDENBYTE, SST);
+    p[SST] = (uchar)id;
+    memset(p + SST + 1 , FORBIDDENBYTE, SST-1);
 
     if (nbytes > 0)
         memset(p + 2*SST, CLEANBYTE, nbytes);
 
+    /* at tail, write pad (SST bytes) and serialno (SST bytes) */
     tail = p + 2*SST + nbytes;
     memset(tail, FORBIDDENBYTE, SST);
     write_size_t(tail + SST, serialno);
@@ -1362,27 +1463,28 @@ _PyObject_DebugMalloc(size_t nbytes)
 }
 
 /* The debug free first checks the 2*SST bytes on each end for sanity (in
-   particular, that the FORBIDDENBYTEs are still intact).
+   particular, that the FORBIDDENBYTEs with the api ID are still intact).
    Then fills the original bytes with DEADBYTE.
    Then calls the underlying free.
 */
 void
-_PyObject_DebugFree(void *p)
+_PyObject_DebugFreeApi(char api, void *p)
 {
     uchar *q = (uchar *)p - 2*SST;  /* address returned from malloc */
     size_t nbytes;
 
     if (p == NULL)
         return;
-    _PyObject_DebugCheckAddress(p);
+    _PyObject_DebugCheckAddressApi(api, p);
     nbytes = read_size_t(q);
+    nbytes += 4*SST;
     if (nbytes > 0)
         memset(q, DEADBYTE, nbytes);
     PyObject_Free(q);
 }
 
 void *
-_PyObject_DebugRealloc(void *p, size_t nbytes)
+_PyObject_DebugReallocApi(char api, void *p, size_t nbytes)
 {
     uchar *q = (uchar *)p;
     uchar *tail;
@@ -1391,9 +1493,9 @@ _PyObject_DebugRealloc(void *p, size_t nbytes)
     int i;
 
     if (p == NULL)
-        return _PyObject_DebugMalloc(nbytes);
+        return _PyObject_DebugMallocApi(api, nbytes);
 
-    _PyObject_DebugCheckAddress(p);
+    _PyObject_DebugCheckAddressApi(api, p);
     bumpserialno();
     original_nbytes = read_size_t(q - 2*SST);
     total = nbytes + 4*SST;
@@ -1403,16 +1505,20 @@ _PyObject_DebugRealloc(void *p, size_t nbytes)
 
     if (nbytes < original_nbytes) {
         /* shrinking:  mark old extra memory dead */
-        memset(q + nbytes, DEADBYTE, original_nbytes - nbytes);
+        memset(q + nbytes, DEADBYTE, original_nbytes - nbytes + 2*SST);
     }
 
-    /* Resize and add decorations. */
+    /* Resize and add decorations. We may get a new pointer here, in which
+     * case we didn't get the chance to mark the old memory with DEADBYTE,
+     * but we live with that.
+     */
     q = (uchar *)PyObject_Realloc(q - 2*SST, total);
     if (q == NULL)
         return NULL;
 
     write_size_t(q, nbytes);
-    for (i = 0; i < SST; ++i)
+    assert(q[SST] == (uchar)api);
+    for (i = 1; i < SST; ++i)
         assert(q[SST + i] == FORBIDDENBYTE);
     q += 2*SST;
     tail = q + nbytes;
@@ -1422,7 +1528,7 @@ _PyObject_DebugRealloc(void *p, size_t nbytes)
     if (nbytes > original_nbytes) {
         /* growing:  mark new extra memory clean */
         memset(q + original_nbytes, CLEANBYTE,
-            nbytes - original_nbytes);
+               nbytes - original_nbytes);
     }
 
     return q;
@@ -1431,18 +1537,30 @@ _PyObject_DebugRealloc(void *p, size_t nbytes)
 /* Check the forbidden bytes on both ends of the memory allocated for p.
  * If anything is wrong, print info to stderr via _PyObject_DebugDumpAddress,
  * and call Py_FatalError to kill the program.
+ * The API id, is also checked.
  */
  void
-_PyObject_DebugCheckAddress(const void *p)
+_PyObject_DebugCheckAddressApi(char api, const void *p)
 {
     const uchar *q = (const uchar *)p;
+    char msgbuf[64];
     char *msg;
     size_t nbytes;
     const uchar *tail;
     int i;
+    char id;
 
     if (p == NULL) {
         msg = "didn't expect a NULL pointer";
+        goto error;
+    }
+
+    /* Check the API id */
+    id = (char)q[-SST];
+    if (id != api) {
+        msg = msgbuf;
+        snprintf(msg, sizeof(msgbuf), "bad ID: Allocated using API '%c', verified using API '%c'", id, api);
+        msgbuf[sizeof(msgbuf)-1] = 0;
         goto error;
     }
 
@@ -1450,7 +1568,7 @@ _PyObject_DebugCheckAddress(const void *p)
      * corruption, the number-of-bytes field may be nuts, and checking
      * the tail could lead to a segfault then.
      */
-    for (i = SST; i >= 1; --i) {
+    for (i = SST-1; i >= 1; --i) {
         if (*(q-i) != FORBIDDENBYTE) {
             msg = "bad leading pad byte";
             goto error;
@@ -1482,19 +1600,24 @@ _PyObject_DebugDumpAddress(const void *p)
     size_t nbytes, serial;
     int i;
     int ok;
+    char id;
 
-    fprintf(stderr, "Debug memory block at address p=%p:\n", p);
-    if (p == NULL)
+    fprintf(stderr, "Debug memory block at address p=%p:", p);
+    if (p == NULL) {
+        fprintf(stderr, "\n");
         return;
+    }
+    id = (char)q[-SST];
+    fprintf(stderr, " API '%c'\n", id);
 
     nbytes = read_size_t(q - 2*SST);
     fprintf(stderr, "    %" PY_FORMAT_SIZE_T "u bytes originally "
                     "requested\n", nbytes);
 
     /* In case this is nuts, check the leading pad bytes first. */
-    fprintf(stderr, "    The %d pad bytes at p-%d are ", SST, SST);
+    fprintf(stderr, "    The %d pad bytes at p-%d are ", SST-1, SST-1);
     ok = 1;
-    for (i = 1; i <= SST; ++i) {
+    for (i = 1; i <= SST-1; ++i) {
         if (*(q-i) != FORBIDDENBYTE) {
             ok = 0;
             break;
@@ -1505,7 +1628,7 @@ _PyObject_DebugDumpAddress(const void *p)
     else {
         fprintf(stderr, "not all FORBIDDENBYTE (0x%02x):\n",
             FORBIDDENBYTE);
-        for (i = SST; i >= 1; --i) {
+        for (i = SST-1; i >= 1; --i) {
             const uchar byte = *(q-i);
             fprintf(stderr, "        at p-%d: 0x%02x", i, byte);
             if (byte != FORBIDDENBYTE)
@@ -1532,11 +1655,11 @@ _PyObject_DebugDumpAddress(const void *p)
         fputs("FORBIDDENBYTE, as expected.\n", stderr);
     else {
         fprintf(stderr, "not all FORBIDDENBYTE (0x%02x):\n",
-            FORBIDDENBYTE);
+                FORBIDDENBYTE);
         for (i = 0; i < SST; ++i) {
             const uchar byte = tail[i];
             fprintf(stderr, "        at tail+%d: 0x%02x",
-                i, byte);
+                    i, byte);
             if (byte != FORBIDDENBYTE)
                 fputs(" *** OUCH", stderr);
             fputc('\n', stderr);
@@ -1642,7 +1765,7 @@ _PyObject_DebugMallocStats(void)
     char buf[128];
 
     fprintf(stderr, "Small block threshold = %d, in %u size classes.\n",
-        SMALL_REQUEST_THRESHOLD, numclasses);
+            SMALL_REQUEST_THRESHOLD, numclasses);
 
     for (i = 0; i < numclasses; ++i)
         numpools[i] = numblocks[i] = numfreeblocks[i] = 0;
@@ -1652,7 +1775,6 @@ _PyObject_DebugMallocStats(void)
      * will be living in full pools -- would be a shame to miss them.
      */
     for (i = 0; i < maxarenas; ++i) {
-        uint poolsinarena;
         uint j;
         uptr base = arenas[i].address;
 
@@ -1661,7 +1783,6 @@ _PyObject_DebugMallocStats(void)
             continue;
         narenas += 1;
 
-        poolsinarena = arenas[i].ntotalpools;
         numfreepools += arenas[i].nfreepools;
 
         /* round up to pool alignment */
@@ -1700,7 +1821,7 @@ _PyObject_DebugMallocStats(void)
     fputc('\n', stderr);
     fputs("class   size   num pools   blocks in use  avail blocks\n"
           "-----   ----   ---------   -------------  ------------\n",
-        stderr);
+          stderr);
 
     for (i = 0; i < numclasses; ++i) {
         size_t p = numpools[i];
@@ -1715,7 +1836,7 @@ _PyObject_DebugMallocStats(void)
                         "%11" PY_FORMAT_SIZE_T "u "
                         "%15" PY_FORMAT_SIZE_T "u "
                         "%13" PY_FORMAT_SIZE_T "u\n",
-            i, size, p, b, f);
+                i, size, p, b, f);
         allocated_bytes += b * size;
         available_bytes += f * size;
         pool_header_bytes += p * POOL_OVERHEAD;
@@ -1758,8 +1879,10 @@ _PyObject_DebugMallocStats(void)
 int
 Py_ADDRESS_IN_RANGE(void *P, poolp pool)
 {
-    return pool->arenaindex < maxarenas &&
-           (uptr)P - arenas[pool->arenaindex].address < (uptr)ARENA_SIZE &&
-           arenas[pool->arenaindex].address != 0;
+    uint arenaindex_temp = pool->arenaindex;
+
+    return arenaindex_temp < maxarenas &&
+           (uptr)P - arenas[arenaindex_temp].address < (uptr)ARENA_SIZE &&
+           arenas[arenaindex_temp].address != 0;
 }
 #endif
