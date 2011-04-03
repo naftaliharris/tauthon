@@ -18,6 +18,7 @@ import contextlib
 from weakref import proxy
 import signal
 import math
+import pickle
 try:
     import fcntl
 except ImportError:
@@ -44,7 +45,7 @@ def linux_version():
         return 0, 0, 0
 
 HOST = support.HOST
-MSG = 'Michael Gilfix was here\u1234\r\n'.encode('utf8') ## test unicode string and carriage return
+MSG = 'Michael Gilfix was here\u1234\r\n'.encode('utf-8') ## test unicode string and carriage return
 SUPPORTS_IPV6 = socket.has_ipv6 and try_address('::1', family=socket.AF_INET6)
 
 try:
@@ -324,6 +325,26 @@ class GeneralModuleTests(unittest.TestCase):
         fqhn = socket.getfqdn(ip)
         if not fqhn in all_host_names:
             self.fail("Error testing host resolution mechanisms. (fqdn: %s, all: %s)" % (fqhn, repr(all_host_names)))
+
+    @unittest.skipUnless(hasattr(socket, 'sethostname'), "test needs socket.sethostname()")
+    @unittest.skipUnless(hasattr(socket, 'gethostname'), "test needs socket.gethostname()")
+    def test_sethostname(self):
+        oldhn = socket.gethostname()
+        try:
+            socket.sethostname('new')
+        except socket.error as e:
+            if e.errno == errno.EPERM:
+                self.skipTest("test should be run as root")
+            else:
+                raise
+        try:
+            # running test as root!
+            self.assertEqual(socket.gethostname(), 'new')
+            # Should work with bytes objects too
+            socket.sethostname(b'bar')
+            self.assertEqual(socket.gethostname(), 'bar')
+        finally:
+            socket.sethostname(oldhn)
 
     def testRefCountGetNameInfo(self):
         # Testing reference count for getnameinfo
@@ -744,6 +765,12 @@ class GeneralModuleTests(unittest.TestCase):
             fp.close()
             self.assertEqual(repr(fp), "<_io.BufferedReader name=-1>")
 
+    def test_pickle(self):
+        sock = socket.socket()
+        with sock:
+            for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+                self.assertRaises(TypeError, pickle.dumps, sock, protocol)
+
 
 @unittest.skipUnless(thread, 'Threading required for this test.')
 class BasicTCPTest(SocketConnectedTest):
@@ -1065,7 +1092,7 @@ class FileObjectClassTestCase(SocketConnectedTest):
     """
 
     bufsize = -1 # Use default buffer size
-    encoding = 'utf8'
+    encoding = 'utf-8'
     errors = 'strict'
     newline = None
 
@@ -1286,7 +1313,7 @@ class FileObjectInterruptedTestCase(unittest.TestCase):
             data = b''
         else:
             data = ''
-            expecting = expecting.decode('utf8')
+            expecting = expecting.decode('utf-8')
         while len(data) != len(expecting):
             part = fo.read(size)
             if not part:
@@ -1448,7 +1475,7 @@ class UnicodeReadFileObjectClassTestCase(FileObjectClassTestCase):
     """Tests for socket.makefile() in text mode (rather than binary)"""
 
     read_mode = 'r'
-    read_msg = MSG.decode('utf8')
+    read_msg = MSG.decode('utf-8')
     write_mode = 'wb'
     write_msg = MSG
     newline = ''
@@ -1460,7 +1487,7 @@ class UnicodeWriteFileObjectClassTestCase(FileObjectClassTestCase):
     read_mode = 'rb'
     read_msg = MSG
     write_mode = 'w'
-    write_msg = MSG.decode('utf8')
+    write_msg = MSG.decode('utf-8')
     newline = ''
 
 
@@ -1468,9 +1495,9 @@ class UnicodeReadWriteFileObjectClassTestCase(FileObjectClassTestCase):
     """Tests for socket.makefile() in text mode (rather than binary)"""
 
     read_mode = 'r'
-    read_msg = MSG.decode('utf8')
+    read_msg = MSG.decode('utf-8')
     write_mode = 'w'
-    write_msg = MSG.decode('utf8')
+    write_msg = MSG.decode('utf-8')
     newline = ''
 
 
