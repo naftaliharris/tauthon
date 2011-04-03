@@ -651,7 +651,7 @@ the call.
    An implementation may provide built-in functions whose positional parameters
    do not have names, even if they are 'named' for the purpose of documentation,
    and which therefore cannot be supplied by keyword.  In CPython, this is the
-   case for functions implemented in C that use :cfunc:`PyArg_ParseTuple` to
+   case for functions implemented in C that use :c:func:`PyArg_ParseTuple` to
    parse their arguments.
 
 If there are more positional arguments than there are formal parameter slots, a
@@ -921,6 +921,11 @@ the left or right by the number of bits given by the second argument.
 A right shift by *n* bits is defined as division by ``pow(2,n)``.  A left shift
 by *n* bits is defined as multiplication with ``pow(2,n)``.
 
+.. note::
+
+   In the current implementation, the right-hand operand is required
+   to be at most :attr:`sys.maxsize`.  If the right-hand operand is larger than
+   :attr:`sys.maxsize` an :exc:`OverflowError` exception is raised.
 
 .. _bitwise:
 
@@ -958,9 +963,9 @@ must be integers.
 
 .. _comparisons:
 .. _is:
-.. _isnot:
+.. _is not:
 .. _in:
-.. _notin:
+.. _not in:
 
 Comparisons
 ===========
@@ -1156,10 +1161,8 @@ not bother to return a value of the same type as its argument, so e.g., ``not
 'foo'`` yields ``False``, not ``''``.)
 
 
-Conditional Expressions
+Conditional expressions
 =======================
-
-.. versionadded:: 2.5
 
 .. index::
    pair: conditional; expression
@@ -1309,6 +1312,7 @@ groups from right to left).
 | ``(expressions...)``,                         | Binding or tuple display,           |
 | ``[expressions...]``,                         | list display,                       |
 | ``{key:datum...}``,                           | dictionary display,                 |
+| ``{expressions...}``                          | set display                         |
 +-----------------------------------------------+-------------------------------------+
 
 
