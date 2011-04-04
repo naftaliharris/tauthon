@@ -141,7 +141,7 @@ def lru_cache(maxsize=100):
                 tuple=tuple, sorted=sorted, len=len, KeyError=KeyError):
 
         hits = misses = 0
-        kwd_mark = object()             # separates positional and keyword args
+        kwd_mark = (object(),)          # separates positional and keyword args
         lock = Lock()                   # needed because ordereddicts aren't threadsafe
 
         if maxsize is None:
@@ -152,7 +152,7 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += (kwd_mark,) + tuple(sorted(kwds.items()))
+                    key += kwd_mark + tuple(sorted(kwds.items()))
                 try:
                     result = cache[key]
                     hits += 1
@@ -171,7 +171,7 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += (kwd_mark,) + tuple(sorted(kwds.items()))
+                    key += kwd_mark + tuple(sorted(kwds.items()))
                 try:
                     with lock:
                         result = cache[key]
