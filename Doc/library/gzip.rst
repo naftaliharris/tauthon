@@ -72,7 +72,7 @@ The module defines the following items:
 
    :class:`GzipFile` supports the :class:`io.BufferedIOBase` interface,
    including iteration and the :keyword:`with` statement.  Only the
-   :meth:`read1` and :meth:`truncate` methods aren't implemented.
+   :meth:`truncate` method isn't implemented.
 
    :class:`GzipFile` also provides the following method:
 
@@ -93,6 +93,9 @@ The module defines the following items:
 
    .. versionchanged:: 3.2
       Support for unseekable files was added.
+
+   .. versionchanged:: 3.3
+      The :meth:`io.BufferedIOBase.read1` method is now implemented.
 
 
 .. function:: open(filename, mode='rb', compresslevel=9)
