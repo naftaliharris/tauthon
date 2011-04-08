@@ -141,7 +141,9 @@ standard size and in little-endian byte order::
 
    import struct
 
-   data = open('myfile.zip', 'rb').read()
+   with open('myfile.zip', 'rb') as f:
+       data = f.read()
+
    start = 0
    for i in range(3):                      # show the first 3 file headers
        start += 14
@@ -271,7 +273,7 @@ applications include caching objects that are expensive to create::
    Traceback (most recent call last):
      File "<stdin>", line 1, in <module>
        d['primary']                # entry was automatically removed
-     File "C:/python31/lib/weakref.py", line 46, in __getitem__
+     File "C:/python33/lib/weakref.py", line 46, in __getitem__
        o = self.data[key]()
    KeyError: 'primary'
 
