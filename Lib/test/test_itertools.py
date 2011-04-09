@@ -56,6 +56,24 @@ def fact(n):
     return prod(range(1, n+1))
 
 class TestBasicOps(unittest.TestCase):
+
+    def test_accumulate(self):
+        self.assertEqual(list(accumulate(range(10))),               # one positional arg
+                          [0, 1, 3, 6, 10, 15, 21, 28, 36, 45])
+        self.assertEqual(list(accumulate(iterable=range(10))),      # kw arg
+                          [0, 1, 3, 6, 10, 15, 21, 28, 36, 45])
+        for typ in int, complex, Decimal, Fraction:                 # multiple types
+            self.assertEqual(
+                list(accumulate(map(typ, range(10)))),
+                list(map(typ, [0, 1, 3, 6, 10, 15, 21, 28, 36, 45])))
+        self.assertEqual(list(accumulate('abc')), ['a', 'ab', 'abc'])   # works with non-numeric
+        self.assertEqual(list(accumulate([])), [])                  # empty iterable
+        self.assertEqual(list(accumulate([7])), [7])                # iterable of length one
+        self.assertRaises(TypeError, accumulate, range(10), 5)      # too many args
+        self.assertRaises(TypeError, accumulate)                    # too few args
+        self.assertRaises(TypeError, accumulate, x=range(10))       # unexpected kwd arg
+        self.assertRaises(TypeError, list, accumulate([1, []]))     # args that don't add
+
     def test_chain(self):
 
         def chain2(*iterables):
@@ -937,6 +955,9 @@ class TestBasicOps(unittest.TestCase):
 
 class TestExamples(unittest.TestCase):
 
+    def test_accumlate(self):
+        self.assertEqual(list(accumulate([1,2,3,4,5])), [1, 3, 6, 10, 15])
+
     def test_chain(self):
         self.assertEqual(''.join(chain('ABC', 'DEF')), 'ABCDEF')
 
@@ -1023,6 +1044,10 @@ class TestGC(unittest.TestCase):
         container.append(iterator)
         next(iterator)
         del container, iterator
+
+    def test_accumulate(self):
+        a = []
+        self.makecycle(accumulate([1,2,a,3]), a)
 
     def test_chain(self):
         a = []
@@ -1192,6 +1217,17 @@ def L(seqn):
 
 
 class TestVariousIteratorArgs(unittest.TestCase):
+
+    def test_accumulate(self):
+        s = [1,2,3,4,5]
+        r = [1,3,6,10,15]
+        n = len(s)
+        for g in (G, I, Ig, L, R):
+            self.assertEqual(list(accumulate(g(s))), r)
+        self.assertEqual(list(accumulate(S(s))), [])
+        self.assertRaises(TypeError, accumulate, X(s))
+        self.assertRaises(TypeError, accumulate, N(s))
+        self.assertRaises(ZeroDivisionError, list, accumulate(E(s)))
 
     def test_chain(self):
         for s in ("123", "", range(1000), ('do', 1.2), range(2000,2200,5)):
@@ -1415,7 +1451,7 @@ class SubclassWithKwargsTest(unittest.TestCase):
                 Subclass(newarg=1)
             except TypeError as err:
                 # we expect type errors because of wrong argument count
-                self.assertFalse("does not take keyword arguments" in err.args[0])
+                self.assertNotIn("does not take keyword arguments", err.args[0])
 
 
 libreftest = """ Doctest for examples in the library reference: libitertools.tex

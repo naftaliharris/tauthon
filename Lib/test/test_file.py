@@ -7,7 +7,7 @@ from weakref import proxy
 import io
 import _pyio as pyio
 
-from test.support import TESTFN, findfile, run_unittest
+from test.support import TESTFN, run_unittest
 from collections import UserList
 
 class AutoFileTests(unittest.TestCase):
@@ -44,7 +44,7 @@ class AutoFileTests(unittest.TestCase):
         a = array('b', b'x'*10)
         self.f = self.open(TESTFN, 'rb')
         n = self.f.readinto(a)
-        self.assertEqual(b'12', a.tostring()[:n])
+        self.assertEqual(b'12', a.tobytes()[:n])
 
     def testReadinto_text(self):
         # verify readinto refuses text files
@@ -106,8 +106,7 @@ class AutoFileTests(unittest.TestCase):
                    ('writelines', ([],)),
                    ('__iter__', ()),
                    ]
-        if not sys.platform.startswith('atheos'):
-            methods.append(('truncate', ()))
+        methods.append(('truncate', ()))
 
         # __exit__ should close the file
         self.f.__exit__(None, None, None)
@@ -167,7 +166,7 @@ class OtherFileTests(unittest.TestCase):
         except ValueError as msg:
             if msg.args[0] != 0:
                 s = str(msg)
-                if s.find(TESTFN) != -1 or s.find(bad_mode) == -1:
+                if TESTFN in s or bad_mode not in s:
                     self.fail("bad error message for invalid mode: %s" % s)
             # if msg.args[0] == 0, we're probably on Windows where there may be
             # no obvious way to discover why open() failed.
@@ -282,7 +281,7 @@ class OtherFileTests(unittest.TestCase):
             except ValueError:
                 self.fail("readinto() after next() with supposedly empty "
                           "iteration-buffer failed anyway")
-            line = buf.tostring()
+            line = buf.tobytes()
             if line != testline:
                 self.fail("readinto() after next() with empty buffer "
                           "failed. Got %r, expected %r" % (line, testline))
@@ -304,6 +303,8 @@ class OtherFileTests(unittest.TestCase):
             if lines != testlines:
                 self.fail("readlines() after next() with empty buffer "
                           "failed. Got %r, expected %r" % (line, testline))
+            f.close()
+
             # Reading after iteration hit EOF shouldn't hurt either
             f = self.open(TESTFN, 'rb')
             try:

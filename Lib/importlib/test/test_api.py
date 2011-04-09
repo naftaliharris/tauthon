@@ -27,7 +27,7 @@ class ImportModuleTests(unittest.TestCase):
                 self.assertEqual(module.__name__, name)
 
     def test_shallow_relative_package_import(self):
-        # Test importing a module from a package through a relatve import.
+        # Test importing a module from a package through a relative import.
         pkg_name = 'pkg'
         pkg_long_name = '{0}.__init__'.format(pkg_name)
         module_name = 'mod'
@@ -63,7 +63,8 @@ class ImportModuleTests(unittest.TestCase):
     def test_relative_import_wo_package(self):
         # Relative imports cannot happen without the 'package' argument being
         # set.
-        self.assertRaises(TypeError, importlib.import_module, '.support')
+        with self.assertRaises(TypeError):
+            importlib.import_module('.support')
 
 
 def test_main():
