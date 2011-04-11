@@ -1206,10 +1206,7 @@ BZ2File_init(BZ2FileObject *self, PyObject *args, PyObject *kwargs)
                                      &compresslevel))
         return -1;
 
-    if (PyBytes_Check(name_obj))
-        name = PyBytes_AsString(name_obj);
-    else
-        name = PyByteArray_AsString(name_obj);
+    name = PyBytes_AsString(name_obj);
     if (compresslevel < 1 || compresslevel > 9) {
         PyErr_SetString(PyExc_ValueError,
                         "compresslevel must be between 1 and 9");

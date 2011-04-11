@@ -1,5 +1,8 @@
 .. highlightlang:: none
 
+.. ATTENTION: You probably should update Misc/python.man, too, if you modify
+.. this file.
+
 .. _using-on-general:
 
 Command line and environment
@@ -92,8 +95,9 @@ source.
       file is not available.
 
    If this option is given, the first element of :data:`sys.argv` will be the
-   full path to the module file. As with the :option:`-c` option, the current
-   directory will be added to the start of :data:`sys.path`.
+   full path to the module file (while the module file is being located, the
+   first element will be set to ``"-m"``). As with the :option:`-c` option,
+   the current directory will be added to the start of :data:`sys.path`.
 
    Many standard library modules contain code that is invoked on their execution
    as a script.  An example is the :mod:`timeit` module::
@@ -110,6 +114,7 @@ source.
 
    .. versionchanged:: 3.1
       Supply the package name to run a ``__main__`` submodule.
+
 
 .. describe:: -
 
@@ -215,6 +220,13 @@ Miscellaneous options
    Discard docstrings in addition to the :option:`-O` optimizations.
 
 
+.. cmdoption:: -q
+
+   Don't display the copyright and version messages even in interactive mode.
+
+   .. versionadded:: 3.2
+
+
 .. cmdoption:: -s
 
    Don't add user site directory to sys.path
@@ -294,7 +306,7 @@ Miscellaneous options
    the remaining fields.  Empty fields match all values; trailing empty fields
    may be omitted.  The *message* field matches the start of the warning message
    printed; this match is case-insensitive.  The *category* field matches the
-   warning category.  This must be a class name; the match test whether the
+   warning category.  This must be a class name; the match tests whether the
    actual warning category of the message is a subclass of the specified warning
    category.  The full class name must be given.  The *module* field matches the
    (fully-qualified) module name; this match is case-sensitive.  The *line*
@@ -306,6 +318,8 @@ Miscellaneous options
 
       :pep:`230` -- Warning framework
 
+      :envvar:`PYTHONWARNINGS`
+
 
 .. cmdoption:: -x
 
@@ -313,6 +327,17 @@ Miscellaneous options
    ``#!cmd``.  This is intended for a DOS specific hack only.
 
    .. note:: The line numbers in error messages will be off by one.
+
+
+.. cmdoption:: -X
+
+   Reserved for various implementation-specific options.  CPython currently
+   defines none of them, but allows to pass arbitrary values and retrieve
+   them through the :data:`sys._xoptions` dictionary.
+
+   .. versionchanged:: 3.2
+      It is now allowed to pass :option:`-X` with CPython.
+
 
 Options you shouldn't use
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -322,11 +347,6 @@ Options you shouldn't use
    Reserved for use by Jython_.
 
 .. _Jython: http://jython.org
-
-.. cmdoption:: -X
-
-    Reserved for alternative implementations of Python to use for their own
-    purposes.
 
 .. _using-on-envvars:
 
@@ -437,9 +457,10 @@ These environment variables influence Python's behavior.
 
 .. envvar:: PYTHONIOENCODING
 
-   Overrides the encoding used for stdin/stdout/stderr, in the syntax
-   ``encodingname:errorhandler``.  The ``:errorhandler`` part is optional and
-   has the same meaning as in :func:`str.encode`.
+   If this is set before running the interpreter, it overrides the encoding used
+   for stdin/stdout/stderr, in the syntax ``encodingname:errorhandler``. The
+   ``:errorhandler`` part is optional and has the same meaning as in
+   :func:`str.encode`.
 
    For stderr, the ``:errorhandler`` part is ignored; the handler will always be
    ``'backslashreplace'``.
@@ -468,6 +489,12 @@ These environment variables influence Python's behavior.
    If this environment variable is set, ``sys.argv[0]`` will be set to its
    value instead of the value got through the C runtime.  Only works on
    Mac OS X.
+
+.. envvar:: PYTHONWARNINGS
+
+   This is equivalent to the :option:`-W` option. If set to a comma
+   separated string, it is equivalent to specifying :option:`-W` multiple
+   times.
 
 
 Debug-mode variables

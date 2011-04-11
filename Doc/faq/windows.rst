@@ -445,7 +445,7 @@ present, and ``getch()`` which gets one character without echoing it.
 How do I emulate os.kill() in Windows?
 --------------------------------------
 
-To terminate a process, you can use ctypes::
+Prior to Python 2.7 and 3.2, to terminate a process, you can use :mod:`ctypes`::
 
    import ctypes
 
@@ -454,6 +454,11 @@ To terminate a process, you can use ctypes::
        kernel32 = ctypes.windll.kernel32
        handle = kernel32.OpenProcess(1, 0, pid)
        return (0 != kernel32.TerminateProcess(handle, 0))
+
+In 2.7 and 3.2, :func:`os.kill` is implemented similar to the above function,
+with the additional feature of being able to send CTRL+C and CTRL+BREAK
+to console subprocesses which are designed to handle those signals. See
+:func:`os.kill` for further details.
 
 
 Why does os.path.isdir() fail on NT shared directories?
@@ -536,7 +541,7 @@ assumed by the Python interpreter it won't work.
 The Python 1.5.* DLLs (``python15.dll``) are all compiled with MS VC++ 5.0 and
 with multithreading-DLL options (``/MD``).
 
-If you can't change compilers or flags, try using :cfunc:`Py_RunSimpleString`.
+If you can't change compilers or flags, try using :c:func:`Py_RunSimpleString`.
 A trick to get it to run an arbitrary file is to construct a call to
 :func:`execfile` with the name of your file as argument.
 
