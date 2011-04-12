@@ -1,12 +1,22 @@
 import errno
 from http import client
 import io
+import os
 import array
 import socket
 
-from unittest import TestCase
+import unittest
+TestCase = unittest.TestCase
 
 from test import support
+
+here = os.path.dirname(__file__)
+# Self-signed cert file for 'localhost'
+CERT_localhost = os.path.join(here, 'keycert.pem')
+# Self-signed cert file for 'fakehostname'
+CERT_fakehostname = os.path.join(here, 'keycert2.pem')
+# Root cert file (CA) for svn.python.org's cert
+CACERT_svn_python_org = os.path.join(here, 'https_svn_python_org_root.pem')
 
 HOST = support.HOST
 
@@ -132,6 +142,10 @@ class BasicTest(TestCase):
         resp = client.HTTPResponse(sock)
         self.assertRaises(client.BadStatusLine, resp.begin)
 
+    def test_bad_status_repr(self):
+        exc = client.BadStatusLine('')
+        self.assertEqual(repr(exc), '''BadStatusLine("\'\'",)''')
+
     def test_partial_reads(self):
         # if we have a lenght, the system knows when to close itself
         # same behaviour than when we read the whole thing with read()
@@ -194,13 +208,13 @@ class BasicTest(TestCase):
         expected = (b'GET /foo HTTP/1.1\r\nHost: example.com\r\n'
                     b'Accept-Encoding: identity\r\nContent-Length:')
 
-        body = open(__file__, 'rb')
-        conn = client.HTTPConnection('example.com')
-        sock = FakeSocket(body)
-        conn.sock = sock
-        conn.request('GET', '/foo', body)
-        self.assertTrue(sock.data.startswith(expected), '%r != %r' %
-                (sock.data[:len(expected)], expected))
+        with open(__file__, 'rb') as body:
+            conn = client.HTTPConnection('example.com')
+            sock = FakeSocket(body)
+            conn.sock = sock
+            conn.request('GET', '/foo', body)
+            self.assertTrue(sock.data.startswith(expected), '%r != %r' %
+                    (sock.data[:len(expected)], expected))
 
     def test_send(self):
         expected = b'this is a test this is only a test'
@@ -215,6 +229,22 @@ class BasicTest(TestCase):
         sock.data = b''
         conn.send(io.BytesIO(expected))
         self.assertEqual(expected, sock.data)
+
+    def test_send_iter(self):
+        expected = b'GET /foo HTTP/1.1\r\nHost: example.com\r\n' \
+                   b'Accept-Encoding: identity\r\nContent-Length: 11\r\n' \
+                   b'\r\nonetwothree'
+
+        def body():
+            yield b"one"
+            yield b"two"
+            yield b"three"
+
+        conn = client.HTTPConnection('example.com')
+        sock = FakeSocket("")
+        conn.sock = sock
+        conn.request('GET', '/foo', body(), {'Content-Length': '11'})
+        self.assertEqual(sock.data, expected)
 
     def test_chunked(self):
         chunked_start = (
@@ -306,7 +336,6 @@ class BasicTest(TestCase):
     # Test lines overflowing the max line size (_MAXLINE in http.client)
 
     def test_overflowing_status_line(self):
-        self.skipTest("disabled for HTTP 0.9 support")
         body = "HTTP/1.1 200 Ok" + "k" * 65536 + "\r\n"
         resp = client.HTTPResponse(FakeSocket(body))
         self.assertRaises((client.LineTooLong, client.BadStatusLine), resp.begin)
@@ -334,6 +363,38 @@ class BasicTest(TestCase):
 class OfflineTest(TestCase):
     def test_responses(self):
         self.assertEqual(client.responses[client.NOT_FOUND], "Not Found")
+
+
+class SourceAddressTest(TestCase):
+    def setUp(self):
+        self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.port = support.bind_port(self.serv)
+        self.source_port = support.find_unused_port()
+        self.serv.listen(5)
+        self.conn = None
+
+    def tearDown(self):
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+        self.serv.close()
+        self.serv = None
+
+    def testHTTPConnectionSourceAddress(self):
+        self.conn = client.HTTPConnection(HOST, self.port,
+                source_address=('', self.source_port))
+        self.conn.connect()
+        self.assertEqual(self.conn.sock.getsockname()[1], self.source_port)
+
+    @unittest.skipIf(not hasattr(client, 'HTTPSConnection'),
+                     'http.client.HTTPSConnection not defined')
+    def testHTTPSConnectionSourceAddress(self):
+        self.conn = client.HTTPSConnection(HOST, self.port,
+                source_address=('', self.source_port))
+        # We don't test anything here other the constructor not barfing as
+        # this code doesn't deal with setting up an active running SSL server
+        # for an ssl_wrapped connect() to actually return from.
+
 
 class TimeoutTest(TestCase):
     PORT = None
@@ -380,14 +441,97 @@ class TimeoutTest(TestCase):
         self.assertEqual(httpConn.sock.gettimeout(), 30)
         httpConn.close()
 
-class HTTPSTimeoutTest(TestCase):
-# XXX Here should be tests for HTTPS, there isn't any right now!
+
+class HTTPSTest(TestCase):
+
+    def setUp(self):
+        if not hasattr(client, 'HTTPSConnection'):
+            self.skipTest('ssl support required')
+
+    def make_server(self, certfile):
+        from test.ssl_servers import make_https_server
+        return make_https_server(self, certfile)
 
     def test_attributes(self):
-        # simple test to check it's storing it
-        if hasattr(client, 'HTTPSConnection'):
-            h = client.HTTPSConnection(HOST, TimeoutTest.PORT, timeout=30)
-            self.assertEqual(h.timeout, 30)
+        # simple test to check it's storing the timeout
+        h = client.HTTPSConnection(HOST, TimeoutTest.PORT, timeout=30)
+        self.assertEqual(h.timeout, 30)
+
+    def _check_svn_python_org(self, resp):
+        # Just a simple check that everything went fine
+        server_string = resp.getheader('server')
+        self.assertIn('Apache', server_string)
+
+    def test_networked(self):
+        # Default settings: no cert verification is done
+        support.requires('network')
+        with support.transient_internet('svn.python.org'):
+            h = client.HTTPSConnection('svn.python.org', 443)
+            h.request('GET', '/')
+            resp = h.getresponse()
+            self._check_svn_python_org(resp)
+
+    def test_networked_good_cert(self):
+        # We feed a CA cert that validates the server's cert
+        import ssl
+        support.requires('network')
+        with support.transient_internet('svn.python.org'):
+            context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_verify_locations(CACERT_svn_python_org)
+            h = client.HTTPSConnection('svn.python.org', 443, context=context)
+            h.request('GET', '/')
+            resp = h.getresponse()
+            self._check_svn_python_org(resp)
+
+    def test_networked_bad_cert(self):
+        # We feed a "CA" cert that is unrelated to the server's cert
+        import ssl
+        support.requires('network')
+        with support.transient_internet('svn.python.org'):
+            context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_verify_locations(CERT_localhost)
+            h = client.HTTPSConnection('svn.python.org', 443, context=context)
+            with self.assertRaises(ssl.SSLError):
+                h.request('GET', '/')
+
+    def test_local_good_hostname(self):
+        # The (valid) cert validates the HTTP hostname
+        import ssl
+        from test.ssl_servers import make_https_server
+        server = make_https_server(self, CERT_localhost)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.load_verify_locations(CERT_localhost)
+        h = client.HTTPSConnection('localhost', server.port, context=context)
+        h.request('GET', '/nonexistent')
+        resp = h.getresponse()
+        self.assertEqual(resp.status, 404)
+
+    def test_local_bad_hostname(self):
+        # The (valid) cert doesn't validate the HTTP hostname
+        import ssl
+        from test.ssl_servers import make_https_server
+        server = make_https_server(self, CERT_fakehostname)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.load_verify_locations(CERT_fakehostname)
+        h = client.HTTPSConnection('localhost', server.port, context=context)
+        with self.assertRaises(ssl.CertificateError):
+            h.request('GET', '/')
+        # Same with explicit check_hostname=True
+        h = client.HTTPSConnection('localhost', server.port, context=context,
+                                   check_hostname=True)
+        with self.assertRaises(ssl.CertificateError):
+            h.request('GET', '/')
+        # With check_hostname=False, the mismatching is ignored
+        h = client.HTTPSConnection('localhost', server.port, context=context,
+                                   check_hostname=False)
+        h.request('GET', '/nonexistent')
+        resp = h.getresponse()
+        self.assertEqual(resp.status, 404)
+
 
 class RequestBodyTest(TestCase):
     """Test cases where a request includes a message body."""
@@ -416,7 +560,7 @@ class RequestBodyTest(TestCase):
         self.conn.request("PUT", "/url", "body")
         message, f = self.get_headers_and_fp()
         self.assertEqual("text/plain", message.get_content_type())
-        self.assertEqual(None, message.get_charset())
+        self.assertIsNone(message.get_charset())
         self.assertEqual("4", message.get("content-length"))
         self.assertEqual(b'body', f.read())
 
@@ -424,7 +568,7 @@ class RequestBodyTest(TestCase):
         self.conn.request("PUT", "/url", "body\xc1")
         message, f = self.get_headers_and_fp()
         self.assertEqual("text/plain", message.get_content_type())
-        self.assertEqual(None, message.get_charset())
+        self.assertIsNone(message.get_charset())
         self.assertEqual("5", message.get("content-length"))
         self.assertEqual(b'body\xc1', f.read())
 
@@ -432,33 +576,31 @@ class RequestBodyTest(TestCase):
         self.conn.request("PUT", "/url", b"body\xc1")
         message, f = self.get_headers_and_fp()
         self.assertEqual("text/plain", message.get_content_type())
-        self.assertEqual(None, message.get_charset())
+        self.assertIsNone(message.get_charset())
         self.assertEqual("5", message.get("content-length"))
         self.assertEqual(b'body\xc1', f.read())
 
     def test_file_body(self):
-        f = open(support.TESTFN, "w")
-        f.write("body")
-        f.close()
-        f = open(support.TESTFN)
-        self.conn.request("PUT", "/url", f)
-        message, f = self.get_headers_and_fp()
-        self.assertEqual("text/plain", message.get_content_type())
-        self.assertEqual(None, message.get_charset())
-        self.assertEqual("4", message.get("content-length"))
-        self.assertEqual(b'body', f.read())
+        with open(support.TESTFN, "w") as f:
+            f.write("body")
+        with open(support.TESTFN) as f:
+            self.conn.request("PUT", "/url", f)
+            message, f = self.get_headers_and_fp()
+            self.assertEqual("text/plain", message.get_content_type())
+            self.assertIsNone(message.get_charset())
+            self.assertEqual("4", message.get("content-length"))
+            self.assertEqual(b'body', f.read())
 
     def test_binary_file_body(self):
-        f = open(support.TESTFN, "wb")
-        f.write(b"body\xc1")
-        f.close()
-        f = open(support.TESTFN, "rb")
-        self.conn.request("PUT", "/url", f)
-        message, f = self.get_headers_and_fp()
-        self.assertEqual("text/plain", message.get_content_type())
-        self.assertEqual(None, message.get_charset())
-        self.assertEqual("5", message.get("content-length"))
-        self.assertEqual(b'body\xc1', f.read())
+        with open(support.TESTFN, "wb") as f:
+            f.write(b"body\xc1")
+        with open(support.TESTFN, "rb") as f:
+            self.conn.request("PUT", "/url", f)
+            message, f = self.get_headers_and_fp()
+            self.assertEqual("text/plain", message.get_content_type())
+            self.assertIsNone(message.get_charset())
+            self.assertEqual("5", message.get("content-length"))
+            self.assertEqual(b'body\xc1', f.read())
 
 
 class HTTPResponseTest(TestCase):
@@ -498,7 +640,8 @@ class HTTPResponseTest(TestCase):
 
 def test_main(verbose=None):
     support.run_unittest(HeaderTests, OfflineTest, BasicTest, TimeoutTest,
-                         HTTPSTimeoutTest, RequestBodyTest, HTTPResponseTest)
+                         HTTPSTest, RequestBodyTest, SourceAddressTest,
+                         HTTPResponseTest)
 
 if __name__ == '__main__':
     test_main()

@@ -10,20 +10,26 @@ class PlatformTest(unittest.TestCase):
     def test_architecture(self):
         res = platform.architecture()
 
-    if hasattr(os, "symlink"):
-        def test_architecture_via_symlink(self): # issue3762
-            def get(python):
-                cmd = [python, '-c',
-                    'import platform; print(platform.architecture())']
-                p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-                return p.communicate()
-            real = os.path.realpath(sys.executable)
-            link = os.path.abspath(support.TESTFN)
-            os.symlink(real, link)
-            try:
-                self.assertEqual(get(real), get(link))
-            finally:
-                os.remove(link)
+    @support.skip_unless_symlink
+    def test_architecture_via_symlink(self): # issue3762
+        # On Windows, the EXE needs to know where pythonXY.dll is at so we have
+        # to add the directory to the path.
+        if sys.platform == "win32":
+            os.environ["Path"] = "{};{}".format(
+                os.path.dirname(sys.executable), os.environ["Path"])
+
+        def get(python):
+            cmd = [python, '-c',
+                'import platform; print(platform.architecture())']
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            return p.communicate()
+        real = os.path.realpath(sys.executable)
+        link = os.path.abspath(support.TESTFN)
+        os.symlink(real, link)
+        try:
+            self.assertEqual(get(real), get(link))
+        finally:
+            os.remove(link)
 
     def test_platform(self):
         for aliased in (False, True):
@@ -131,6 +137,27 @@ class PlatformTest(unittest.TestCase):
         res = platform.uname()
         self.assertTrue(any(res))
 
+    @unittest.skipUnless(sys.platform.startswith('win'), "windows only test")
+    def test_uname_win32_ARCHITEW6432(self):
+        # Issue 7860: make sure we get architecture from the correct variable
+        # on 64 bit Windows: if PROCESSOR_ARCHITEW6432 exists we should be
+        # using it, per
+        # http://blogs.msdn.com/david.wang/archive/2006/03/26/HOWTO-Detect-Process-Bitness.aspx
+        try:
+            with support.EnvironmentVarGuard() as environ:
+                if 'PROCESSOR_ARCHITEW6432' in environ:
+                    del environ['PROCESSOR_ARCHITEW6432']
+                environ['PROCESSOR_ARCHITECTURE'] = 'foo'
+                platform._uname_cache = None
+                system, node, release, version, machine, processor = platform.uname()
+                self.assertEqual(machine, 'foo')
+                environ['PROCESSOR_ARCHITEW6432'] = 'bar'
+                platform._uname_cache = None
+                system, node, release, version, machine, processor = platform.uname()
+                self.assertEqual(machine, 'bar')
+        finally:
+            platform._uname_cache = None
+
     def test_java_ver(self):
         res = platform.java_ver()
         if sys.platform == 'java':
@@ -198,8 +225,10 @@ class PlatformTest(unittest.TestCase):
         if os.path.isdir(sys.executable) and \
            os.path.exists(sys.executable+'.exe'):
             # Cygwin horror
-            executable = executable + '.exe'
-        res = platform.libc_ver(sys.executable)
+            executable = sys.executable + '.exe'
+        else:
+            executable = sys.executable
+        res = platform.libc_ver(executable)
 
     def test_parse_release_file(self):
 

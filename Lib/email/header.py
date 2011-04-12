@@ -17,7 +17,8 @@ import email.quoprimime
 import email.base64mime
 
 from email.errors import HeaderParseError
-from email.charset import Charset
+from email import charset as _charset
+Charset = _charset.Charset
 
 NL = '\n'
 SPACE = ' '
@@ -65,9 +66,15 @@ def decode_header(header):
     otherwise a lower-case string containing the name of the character set
     specified in the encoded string.
 
-    An email.Errors.HeaderParseError may be raised when certain decoding error
+    header may be a string that may or may not contain RFC2047 encoded words,
+    or it may be a Header object.
+
+    An email.errors.HeaderParseError may be raised when certain decoding error
     occurs (e.g. a base64 decoding exception).
     """
+    # If it is a Header object, we can just return the chunks.
+    if hasattr(header, '_chunks'):
+        return list(header._chunks)
     # If no encoding, just return the header with no charset.
     if not ecre.search(header):
         return [(header, None)]
@@ -214,6 +221,9 @@ class Header:
             # from a charset to None/us-ascii, or from None/us-ascii to a
             # charset.  Only do this for the second and subsequent chunks.
             nextcs = charset
+            if nextcs == _charset.UNKNOWN8BIT:
+                original_bytes = string.encode('ascii', 'surrogateescape')
+                string = original_bytes.decode('ascii', 'replace')
             if uchunks:
                 if lastcs not in (None, 'us-ascii'):
                     if nextcs in (None, 'us-ascii'):
@@ -267,11 +277,12 @@ class Header:
         # Ensure that the bytes we're storing can be decoded to the output
         # character set, otherwise an early error is thrown.
         output_charset = charset.output_codec or 'us-ascii'
-        s.encode(output_charset, errors)
+        if output_charset != _charset.UNKNOWN8BIT:
+            s.encode(output_charset, errors)
         self._chunks.append((s, charset))
 
-    def encode(self, splitchars=';, \t', maxlinelen=None):
-        """Encode a message header into an RFC-compliant format.
+    def encode(self, splitchars=';, \t', maxlinelen=None, linesep='\n'):
+        r"""Encode a message header into an RFC-compliant format.
 
         There are many issues involved in converting a given string for use in
         an email header.  Only certain character sets are readable in most
@@ -291,6 +302,11 @@ class Header:
         Optional splitchars is a string containing characters to split long
         ASCII lines on, in rough support of RFC 2822's `highest level
         syntactic breaks'.  This doesn't affect RFC 2047 encoded lines.
+
+        Optional linesep is a string to be used to separate the lines of
+        the value.  The default value is the most useful for typical
+        Python applications, but it can be set to \r\n to produce RFC-compliant
+        line separators when needed.
         """
         self._normalize()
         if maxlinelen is None:
@@ -314,7 +330,7 @@ class Header:
             if len(lines) > 1:
                 formatter.newline()
             formatter.add_transition()
-        value = str(formatter)
+        value = formatter._str(linesep)
         if _embeded_header.search(value):
             raise HeaderParseError("header value appears to contain "
                 "an embedded header: {!r}".format(value))
@@ -349,9 +365,12 @@ class _ValueFormatter:
         self._lines = []
         self._current_line = _Accumulator(headerlen)
 
-    def __str__(self):
+    def _str(self, linesep):
         self.newline()
-        return NL.join(self._lines)
+        return linesep.join(self._lines)
+
+    def __str__(self):
+        return self._str(NL)
 
     def newline(self):
         end_of_line = self._current_line.pop()

@@ -376,6 +376,7 @@ class Obj2ModVisitor(PickleVisitor):
         self.emit(format % error, 1, reflow=False)
         if add_label:
             self.emit("failed:", 1)
+            self.emit("Py_XDECREF(tmp);", 1)
         self.emit("return 1;", 1)
         self.emit("}", 0)
         self.emit("", 0)
@@ -720,7 +721,7 @@ static PyTypeObject* make_type(char *type, PyTypeObject* base, char**fields, int
         }
         PyTuple_SET_ITEM(fnames, i, field);
     }
-    result = PyObject_CallFunction((PyObject*)&PyType_Type, "U(O){sOss}",
+    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){sOss}",
                     type, base, "_fields", fnames, "__module__", "_ast");
     Py_DECREF(fnames);
     return (PyTypeObject*)result;
@@ -730,8 +731,9 @@ static int add_attributes(PyTypeObject* type, char**attrs, int num_fields)
 {
     int i, result;
     PyObject *s, *l = PyTuple_New(num_fields);
-    if (!l) return 0;
-    for(i = 0; i < num_fields; i++) {
+    if (!l)
+        return 0;
+    for (i = 0; i < num_fields; i++) {
         s = PyUnicode_FromString(attrs[i]);
         if (!s) {
             Py_DECREF(l);
