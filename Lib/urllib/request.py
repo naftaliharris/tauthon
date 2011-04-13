@@ -94,6 +94,7 @@ import re
 import socket
 import sys
 import time
+import collections
 
 from urllib.error import URLError, HTTPError, ContentTooShortError
 from urllib.parse import (
@@ -114,11 +115,27 @@ else:
 __version__ = sys.version[:3]
 
 _opener = None
-def urlopen(url, data=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
+def urlopen(url, data=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+            *, cafile=None, capath=None):
     global _opener
-    if _opener is None:
-        _opener = build_opener()
-    return _opener.open(url, data, timeout)
+    if cafile or capath:
+        if not _have_ssl:
+            raise ValueError('SSL support not available')
+        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        context.options |= ssl.OP_NO_SSLv2
+        if cafile or capath:
+            context.verify_mode = ssl.CERT_REQUIRED
+            context.load_verify_locations(cafile, capath)
+            check_hostname = True
+        else:
+            check_hostname = False
+        https_handler = HTTPSHandler(context=context, check_hostname=check_hostname)
+        opener = build_opener(https_handler)
+    elif _opener is None:
+        _opener = opener = build_opener()
+    else:
+        opener = _opener
+    return opener.open(url, data, timeout)
 
 def install_opener(opener):
     global _opener
@@ -1045,13 +1062,24 @@ class AbstractHTTPHandler(BaseHandler):
 
         if request.data is not None:  # POST
             data = request.data
+            if isinstance(data, str):
+                raise TypeError("POST data should be bytes"
+                        " or an iterable of bytes. It cannot be str.")
             if not request.has_header('Content-type'):
                 request.add_unredirected_header(
                     'Content-type',
                     'application/x-www-form-urlencoded')
             if not request.has_header('Content-length'):
-                request.add_unredirected_header(
-                    'Content-length', '%d' % len(data))
+                try:
+                    mv = memoryview(data)
+                except TypeError:
+                    if isinstance(data, collections.Iterable):
+                        raise ValueError("Content-Length should be specified "
+                                "for iterable data of type %r %r" % (type(data),
+                                data))
+                else:
+                    request.add_unredirected_header(
+                            'Content-length', '%d' % (len(mv) * mv.itemsize))
 
         sel_host = host
         if request.has_proxy():
@@ -1066,7 +1094,7 @@ class AbstractHTTPHandler(BaseHandler):
 
         return request
 
-    def do_open(self, http_class, req):
+    def do_open(self, http_class, req, **http_conn_args):
         """Return an HTTPResponse object for the request, using http_class.
 
         http_class must implement the HTTPConnection API from http.client.
@@ -1075,7 +1103,8 @@ class AbstractHTTPHandler(BaseHandler):
         if not host:
             raise URLError('no host given')
 
-        h = http_class(host, timeout=req.timeout) # will parse host:port
+        # will parse host:port
+        h = http_class(host, timeout=req.timeout, **http_conn_args)
 
         headers = dict(req.unredirected_hdrs)
         headers.update(dict((k, v) for k, v in req.headers.items()
@@ -1101,7 +1130,7 @@ class AbstractHTTPHandler(BaseHandler):
                 # Proxy-Authorization should not be sent to origin
                 # server.
                 del headers[proxy_auth_hdr]
-            h._set_tunnel(req._tunnel_host, headers=tunnel_headers)
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
 
         try:
             h.request(req.get_method(), req.selector, req.data, headers)
@@ -1127,10 +1156,18 @@ class HTTPHandler(AbstractHTTPHandler):
     http_request = AbstractHTTPHandler.do_request_
 
 if hasattr(http.client, 'HTTPSConnection'):
+    import ssl
+
     class HTTPSHandler(AbstractHTTPHandler):
 
+        def __init__(self, debuglevel=0, context=None, check_hostname=None):
+            AbstractHTTPHandler.__init__(self, debuglevel)
+            self._context = context
+            self._check_hostname = check_hostname
+
         def https_open(self, req):
-            return self.do_open(http.client.HTTPSConnection, req)
+            return self.do_open(http.client.HTTPSConnection, req,
+                context=self._context, check_hostname=self._check_hostname)
 
         https_request = AbstractHTTPHandler.do_request_
 
@@ -1216,8 +1253,8 @@ class FileHandler(BaseHandler):
         url = req.selector
         if url[:2] == '//' and url[2:3] != '/' and (req.host and
                 req.host != 'localhost'):
-            req.type = 'ftp'
-            return self.parent.open(req)
+            if not req.host is self.get_names():
+                raise URLError("file:// scheme is supported only on localhost")
         else:
             return self.open_local_file(req)
 
@@ -1378,9 +1415,7 @@ class CacheFTPHandler(FTPHandler):
 MAXFTPCACHE = 10        # Trim the ftp cache beyond this size
 
 # Helper for non-unix systems
-if os.name == 'mac':
-    from macurl2path import url2pathname, pathname2url
-elif os.name == 'nt':
+if os.name == 'nt':
     from nturl2path import url2pathname, pathname2url
 else:
     def url2pathname(pathname):
@@ -1519,7 +1554,7 @@ class URLopener:
             try:
                 fp = self.open_local_file(url1)
                 hdrs = fp.info()
-                del fp
+                fp.close()
                 return url2pathname(splithost(url1)[1]), hdrs
             except IOError as msg:
                 pass
@@ -1563,8 +1598,6 @@ class URLopener:
                 tfp.close()
         finally:
             fp.close()
-        del fp
-        del tfp
 
         # raise exception if actual size does not match content-length header
         if size >= 0 and read < size:
@@ -1638,6 +1671,12 @@ class URLopener:
             headers["Authorization"] =  "Basic %s" % auth
         if realhost:
             headers["Host"] = realhost
+
+        # Add Connection:close as we don't support persistent connections yet.
+        # This helps in closing the socket and avoiding ResourceWarning
+
+        headers["Connection"] = "close"
+
         for header, value in self.addheaders:
             headers[header] = value
 
@@ -1704,7 +1743,7 @@ class URLopener:
         if not isinstance(url, str):
             raise URLError('file error', 'proxy support for file protocol currently not implemented')
         if url[:2] == '//' and url[2:3] != '/' and url[2:12].lower() != 'localhost/':
-            return self.open_ftp(url)
+            raise ValueError("file:// scheme is supported only on localhost")
         else:
             return self.open_local_file(url)
 
@@ -2127,7 +2166,7 @@ class ftpwrapper:
             # Try to retrieve as a file
             try:
                 cmd = 'RETR ' + file
-                conn = self.ftp.ntransfercmd(cmd)
+                conn, retrlen = self.ftp.ntransfercmd(cmd)
             except ftplib.error_perm as reason:
                 if str(reason)[:3] != '550':
                     raise URLError('ftp error', reason).with_traceback(
@@ -2148,10 +2187,14 @@ class ftpwrapper:
                 cmd = 'LIST ' + file
             else:
                 cmd = 'LIST'
-            conn = self.ftp.ntransfercmd(cmd)
+            conn, retrlen = self.ftp.ntransfercmd(cmd)
         self.busy = 1
+
+        ftpobj = addclosehook(conn.makefile('rb'), self.endtransfer)
+        conn.close()
         # Pass back both a suitably decorated object and a retrieval length
-        return (addclosehook(conn[0].makefile('rb'), self.endtransfer), conn[1])
+        return (ftpobj, retrlen)
+
     def endtransfer(self):
         if not self.busy:
             return

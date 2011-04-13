@@ -24,9 +24,9 @@ An explanation of some terminology and conventions is in order.
 
 .. index:: single: Year 2038
 
-* The functions in this module do not handle dates and times before the epoch or
+* The functions in this module may not handle dates and times before the epoch or
   far in the future.  The cut-off point in the future is determined by the C
-  library; for Unix, it is typically in 2038.
+  library; for 32-bit systems, it is typically in 2038.
 
 .. index::
    single: Year 2000
@@ -34,20 +34,31 @@ An explanation of some terminology and conventions is in order.
 
 .. _time-y2kissues:
 
-* **Year 2000 (Y2K) issues**:  Python depends on the platform's C library, which
+* **Year 2000 (Y2K) issues**: Python depends on the platform's C library, which
   generally doesn't have year 2000 issues, since all dates and times are
-  represented internally as seconds since the epoch.  Functions accepting a
-  :class:`struct_time` (see below) generally require a 4-digit year.  For backward
-  compatibility, 2-digit years are supported if the module variable
-  ``accept2dyear`` is a non-zero integer; this variable is initialized to ``1``
-  unless the environment variable :envvar:`PYTHONY2K` is set to a non-empty
-  string, in which case it is initialized to ``0``.  Thus, you can set
-  :envvar:`PYTHONY2K` to a non-empty string in the environment to require 4-digit
-  years for all year input.  When 2-digit years are accepted, they are converted
-  according to the POSIX or X/Open standard: values 69-99 are mapped to 1969-1999,
-  and values 0--68 are mapped to 2000--2068. Values 100--1899 are always illegal.
-  Note that this is new as of Python 1.5.2(a2); earlier versions, up to Python
-  1.5.1 and 1.5.2a1, would add 1900 to year values below 1900.
+  represented internally as seconds since the epoch.  Function :func:`strptime`
+  can parse 2-digit years when given ``%y`` format code.  When 2-digit years are
+  parsed, they are converted according to the POSIX and ISO C standards: values
+  69--99 are mapped to 1969--1999, and values 0--68 are mapped to 2000--2068.
+
+  For backward compatibility, years with less than 4 digits are treated
+  specially by :func:`asctime`, :func:`mktime`, and :func:`strftime` functions
+  that operate on a 9-tuple or :class:`struct_time` values. If year (the first
+  value in the 9-tuple) is specified with less than 4 digits, its interpretation
+  depends on the value of ``accept2dyear`` variable.
+
+  If ``accept2dyear`` is true (default), a backward compatibility behavior is
+  invoked as follows:
+
+    - for 2-digit year, century is guessed according to POSIX rules for
+      ``%y`` strptime format.  A deprecation warning is issued when century
+      information is guessed in this way.
+
+    - for 3-digit or negative year, a :exc:`ValueError` exception is raised.
+
+  If ``accept2dyear`` is false (set by the program or as a result of a
+  non-empty value assigned to ``PYTHONY2K`` environment variable) all year
+  values are interpreted as given.
 
 .. index::
    single: UTC
@@ -73,8 +84,8 @@ An explanation of some terminology and conventions is in order.
 * On the other hand, the precision of :func:`time` and :func:`sleep` is better
   than their Unix equivalents: times are expressed as floating point numbers,
   :func:`time` returns the most accurate time available (using Unix
-  :cfunc:`gettimeofday` where available), and :func:`sleep` will accept a time
-  with a nonzero fraction (Unix :cfunc:`select` is used to implement this, where
+  :c:func:`gettimeofday` where available), and :func:`sleep` will accept a time
+  with a nonzero fraction (Unix :c:func:`select` is used to implement this, where
   available).
 
 * The time value as returned by :func:`gmtime`, :func:`localtime`, and
@@ -109,10 +120,19 @@ The module defines the following functions and data items:
 
 .. data:: accept2dyear
 
-   Boolean value indicating whether two-digit year values will be accepted.  This
-   is true by default, but will be set to false if the environment variable
-   :envvar:`PYTHONY2K` has been set to a non-empty string.  It may also be modified
-   at run time.
+   Boolean value indicating whether two-digit year values will be
+   mapped to 1969--2068 range by :func:`asctime`, :func:`mktime`, and
+   :func:`strftime` functions.  This is true by default, but will be
+   set to false if the environment variable :envvar:`PYTHONY2K` has
+   been set to a non-empty string.  It may also be modified at run
+   time.
+
+   .. deprecated:: 3.2
+      Mapping of 2-digit year values by :func:`asctime`,
+      :func:`mktime`, and :func:`strftime` functions to 1969--2068
+      range is deprecated.  Programs that need to process 2-digit
+      years should use ``%y`` code available in :func:`strptime`
+      function or convert 2-digit year values to 4-digit themselves.
 
 
 .. data:: altzone
@@ -125,7 +145,7 @@ The module defines the following functions and data items:
 .. function:: asctime([t])
 
    Convert a tuple or :class:`struct_time` representing a time as returned by
-   :func:`gmtime` or :func:`localtime` to a 24-character string of the following
+   :func:`gmtime` or :func:`localtime` to a string of the following
    form: ``'Sun Jun 20 23:21:05 1993'``.  If *t* is not provided, the current time
    as returned by :func:`localtime` is used. Locale information is not used by
    :func:`asctime`.
@@ -149,7 +169,7 @@ The module defines the following functions and data items:
 
    On Windows, this function returns wall-clock seconds elapsed since the first
    call to this function, as a floating point number, based on the Win32 function
-   :cfunc:`QueryPerformanceCounter`. The resolution is typically better than one
+   :c:func:`QueryPerformanceCounter`. The resolution is typically better than one
    microsecond.
 
 
@@ -288,7 +308,7 @@ The module defines the following functions and data items:
    | ``%y``    | Year without century as a decimal number       |       |
    |           | [00,99].                                       |       |
    +-----------+------------------------------------------------+-------+
-   | ``%Y``    | Year with century as a decimal number.         |       |
+   | ``%Y``    | Year with century as a decimal number.         | \(4)  |
    |           |                                                |       |
    +-----------+------------------------------------------------+-------+
    | ``%Z``    | Time zone name (no characters if no time zone  |       |
@@ -304,12 +324,19 @@ The module defines the following functions and data items:
       the output hour field if the ``%I`` directive is used to parse the hour.
 
    (2)
-      The range really is ``0`` to ``61``; this accounts for leap seconds and the
-      (very rare) double leap seconds.
+      The range really is ``0`` to ``61``; value ``60`` is valid in
+      timestamps representing leap seconds and value ``61`` is supported
+      for historical reasons.
 
    (3)
       When used with the :func:`strptime` function, ``%U`` and ``%W`` are only used in
       calculations when the day of the week and the year are specified.
+
+   (4)
+      Produces different results depending on the value of
+      ``time.accept2dyear`` variable.  See :ref:`Year 2000 (Y2K)
+      issues <time-y2kissues>` for details.
+
 
    Here is an example, a format for dates compatible with that specified  in the
    :rfc:`2822` Internet email standard.  [#]_ ::
@@ -380,7 +407,7 @@ The module defines the following functions and data items:
    +-------+-------------------+---------------------------------+
    | 4     | :attr:`tm_min`    | range [0, 59]                   |
    +-------+-------------------+---------------------------------+
-   | 5     | :attr:`tm_sec`    | range [0, 61]; see **(1)** in   |
+   | 5     | :attr:`tm_sec`    | range [0, 61]; see **(2)** in   |
    |       |                   | :func:`strftime` description    |
    +-------+-------------------+---------------------------------+
    | 6     | :attr:`tm_wday`   | range [0, 6], Monday is 0       |
