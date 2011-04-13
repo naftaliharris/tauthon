@@ -659,7 +659,7 @@ class PyBuildExt(build_ext):
             libs = ['crypt']
         else:
             libs = []
-        exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
+        exts.append( Extension('_crypt', ['_cryptmodule.c'], libraries=libs) )
 
         # CSV files
         exts.append( Extension('_csv', ['_csv.c']) )
@@ -1256,11 +1256,11 @@ class PyBuildExt(build_ext):
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', ['bz2module.c'],
+            exts.append( Extension('_bz2', ['_bz2module.c'],
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
-            missing.append('bz2')
+            missing.append('_bz2')
 
         # Interface to the Expat XML parser
         #
