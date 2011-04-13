@@ -469,7 +469,7 @@ class TestCase(object):
                         warnings.warn("TestResult has no addExpectedFailure method, reporting as passes",
                                       RuntimeWarning)
                         result.addSuccess(self)
-
+            return result
         finally:
             result.stopTest(self)
             if orig_result is None:
@@ -965,48 +965,6 @@ class TestCase(object):
             standardMsg += 'Mismatched values: %s' % ','.join(mismatched)
 
         self.fail(self._formatMessage(msg, standardMsg))
-
-    def assertSameElements(self, expected_seq, actual_seq, msg=None):
-        """An unordered sequence specific comparison.
-
-        Raises with an error message listing which elements of expected_seq
-        are missing from actual_seq and vice versa if any.
-
-        Duplicate elements are ignored when comparing *expected_seq* and
-        *actual_seq*. It is the equivalent of ``assertEqual(set(expected),
-        set(actual))`` but it works with sequences of unhashable objects as
-        well.
-        """
-        warnings.warn('assertSameElements is deprecated',
-                      DeprecationWarning)
-        try:
-            expected = set(expected_seq)
-            actual = set(actual_seq)
-            missing = sorted(expected.difference(actual))
-            unexpected = sorted(actual.difference(expected))
-        except TypeError:
-            # Fall back to slower list-compare if any of the objects are
-            # not hashable.
-            expected = list(expected_seq)
-            actual = list(actual_seq)
-            try:
-                expected.sort()
-                actual.sort()
-            except TypeError:
-                missing, unexpected = unorderable_list_difference(expected,
-                                                                  actual)
-            else:
-                missing, unexpected = sorted_list_difference(expected, actual)
-        errors = []
-        if missing:
-            errors.append('Expected, but missing:\n    %s' %
-                          safe_repr(missing))
-        if unexpected:
-            errors.append('Unexpected, but present:\n    %s' %
-                          safe_repr(unexpected))
-        if errors:
-            standardMsg = '\n'.join(errors)
-            self.fail(self._formatMessage(msg, standardMsg))
 
 
     def assertCountEqual(self, first, second, msg=None):
