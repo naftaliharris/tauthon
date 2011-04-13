@@ -387,7 +387,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      PyAPI_FUNC(Py_ssize_t) PyObject_Length(PyObject *o);
 #define PyObject_Length PyObject_Size
 
+#ifndef Py_LIMITED_API
      PyAPI_FUNC(Py_ssize_t) _PyObject_LengthHint(PyObject *o, Py_ssize_t);
+#endif
 
        /*
      Guess the size of object o using len(o) or o.__length_hint__().
@@ -486,6 +488,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
     /* new buffer API */
 
+#ifndef Py_LIMITED_API
 #define PyObject_CheckBuffer(obj) \
     (((obj)->ob_type->tp_as_buffer != NULL) &&  \
      ((obj)->ob_type->tp_as_buffer->bf_getbuffer != NULL))
@@ -573,6 +576,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
        /* Releases a Py_buffer obtained from getbuffer ParseTuple's s*.
     */
+#endif /* Py_LIMITED_API */
 
      PyAPI_FUNC(PyObject *) PyObject_Format(PyObject* obj,
                                             PyObject *format_spec);
@@ -765,9 +769,11 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      that can accept a char* naming integral's type.
        */
 
+#ifndef Py_LIMITED_API
      PyAPI_FUNC(PyObject *) _PyNumber_ConvertIntegralToInt(
          PyObject *integral,
          const char* error_format);
+#endif
 
        /*
     Returns the object converted to Py_ssize_t by going through
@@ -1057,11 +1063,13 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      Use __contains__ if possible, else _PySequence_IterSearch().
        */
 
+#ifndef Py_LIMITED_API
 #define PY_ITERSEARCH_COUNT    1
 #define PY_ITERSEARCH_INDEX    2
 #define PY_ITERSEARCH_CONTAINS 3
      PyAPI_FUNC(Py_ssize_t) _PySequence_IterSearch(PyObject *seq,
                                         PyObject *obj, int operation);
+#endif
     /*
       Iterate over seq.  Result depends on the operation:
       PY_ITERSEARCH_COUNT:  return # of times obj appears in seq; -1 if
@@ -1228,10 +1236,15 @@ PyAPI_FUNC(int) PyObject_IsSubclass(PyObject *object, PyObject *typeorclass);
       /* issubclass(object, typeorclass) */
 
 
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(int) _PyObject_RealIsInstance(PyObject *inst, PyObject *cls);
 
 PyAPI_FUNC(int) _PyObject_RealIsSubclass(PyObject *derived, PyObject *cls);
 
+PyAPI_FUNC(char *const *) _PySequence_BytesToCharpArray(PyObject* self);
+
+PyAPI_FUNC(void) _Py_FreeCharPArray(char *const array[]);
+#endif
 
 /* For internal use by buffer API functions */
 PyAPI_FUNC(void) _Py_add_one_to_index_F(int nd, Py_ssize_t *index,
