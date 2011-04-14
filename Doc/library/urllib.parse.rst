@@ -24,7 +24,15 @@ following URL schemes: ``file``, ``ftp``, ``gopher``, ``hdl``, ``http``,
 ``rsync``, ``rtsp``, ``rtspu``, ``sftp``, ``shttp``, ``sip``, ``sips``,
 ``snews``, ``svn``, ``svn+ssh``, ``telnet``, ``wais``.
 
-The :mod:`urllib.parse` module defines the following functions:
+The :mod:`urllib.parse` module defines functions that fall into two broad
+categories: URL parsing and URL quoting. These are covered in detail in
+the following sections.
+
+URL Parsing
+-----------
+
+The URL parsing functions focus on splitting a URL string into its components,
+or on combining URL components into a URL string.
 
 .. function:: urlparse(urlstring, scheme='', allow_fragments=True)
 
@@ -104,8 +112,11 @@ The :mod:`urllib.parse` module defines the following functions:
    See section :ref:`urlparse-result-object` for more information on the result
    object.
 
+   .. versionchanged:: 3.2
+      Added IPv6 URL parsing capabilities.
 
-.. function:: parse_qs(qs, keep_blank_values=False, strict_parsing=False)
+
+.. function:: parse_qs(qs, keep_blank_values=False, strict_parsing=False, encoding='utf-8', errors='replace')
 
    Parse a query string given as a string argument (data of type
    :mimetype:`application/x-www-form-urlencoded`).  Data are returned as a
@@ -122,11 +133,19 @@ The :mod:`urllib.parse` module defines the following functions:
    parsing errors.  If false (the default), errors are silently ignored.  If true,
    errors raise a :exc:`ValueError` exception.
 
+   The optional *encoding* and *errors* parameters specify how to decode
+   percent-encoded sequences into Unicode characters, as accepted by the
+   :meth:`bytes.decode` method.
+
    Use the :func:`urllib.parse.urlencode` function to convert such
    dictionaries into query strings.
 
 
-.. function:: parse_qsl(qs, keep_blank_values=False, strict_parsing=False)
+   .. versionchanged:: 3.2
+      Add *encoding* and *errors* parameters.
+
+
+.. function:: parse_qsl(qs, keep_blank_values=False, strict_parsing=False, encoding='utf-8', errors='replace')
 
    Parse a query string given as a string argument (data of type
    :mimetype:`application/x-www-form-urlencoded`).  Data are returned as a list of
@@ -142,8 +161,15 @@ The :mod:`urllib.parse` module defines the following functions:
    parsing errors.  If false (the default), errors are silently ignored.  If true,
    errors raise a :exc:`ValueError` exception.
 
+   The optional *encoding* and *errors* parameters specify how to decode
+   percent-encoded sequences into Unicode characters, as accepted by the
+   :meth:`bytes.decode` method.
+
    Use the :func:`urllib.parse.urlencode` function to convert such lists of pairs into
    query strings.
+
+   .. versionchanged:: 3.2
+      Add *encoding* and *errors* parameters.
 
 
 .. function:: urlunparse(parts)
@@ -239,6 +265,162 @@ The :mod:`urllib.parse` module defines the following functions:
    string.  If there is no fragment identifier in *url*, return *url* unmodified
    and an empty string.
 
+   The return value is actually an instance of a subclass of :class:`tuple`.  This
+   class has the following additional read-only convenience attributes:
+
+   +------------------+-------+-------------------------+----------------------+
+   | Attribute        | Index | Value                   | Value if not present |
+   +==================+=======+=========================+======================+
+   | :attr:`url`      | 0     | URL with no fragment    | empty string         |
+   +------------------+-------+-------------------------+----------------------+
+   | :attr:`fragment` | 1     | Fragment identifier     | empty string         |
+   +------------------+-------+-------------------------+----------------------+
+
+   See section :ref:`urlparse-result-object` for more information on the result
+   object.
+
+   .. versionchanged:: 3.2
+      Result is a structured object rather than a simple 2-tuple.
+
+.. _parsing-ascii-encoded-bytes:
+
+Parsing ASCII Encoded Bytes
+---------------------------
+
+The URL parsing functions were originally designed to operate on character
+strings only. In practice, it is useful to be able to manipulate properly
+quoted and encoded URLs as sequences of ASCII bytes. Accordingly, the
+URL parsing functions in this module all operate on :class:`bytes` and
+:class:`bytearray` objects in addition to :class:`str` objects.
+
+If :class:`str` data is passed in, the result will also contain only
+:class:`str` data. If :class:`bytes` or :class:`bytearray` data is
+passed in, the result will contain only :class:`bytes` data.
+
+Attempting to mix :class:`str` data with :class:`bytes` or
+:class:`bytearray` in a single function call will result in a
+:exc:`TypeError` being raised, while attempting to pass in non-ASCII
+byte values will trigger :exc:`UnicodeDecodeError`.
+
+To support easier conversion of result objects between :class:`str` and
+:class:`bytes`, all return values from URL parsing functions provide
+either an :meth:`encode` method (when the result contains :class:`str`
+data) or a :meth:`decode` method (when the result contains :class:`bytes`
+data). The signatures of these methods match those of the corresponding
+:class:`str` and :class:`bytes` methods (except that the default encoding
+is ``'ascii'`` rather than ``'utf-8'``). Each produces a value of a
+corresponding type that contains either :class:`bytes` data (for
+:meth:`encode` methods) or :class:`str` data (for
+:meth:`decode` methods).
+
+Applications that need to operate on potentially improperly quoted URLs
+that may contain non-ASCII data will need to do their own decoding from
+bytes to characters before invoking the URL parsing methods.
+
+The behaviour described in this section applies only to the URL parsing
+functions. The URL quoting functions use their own rules when producing
+or consuming byte sequences as detailed in the documentation of the
+individual URL quoting functions.
+
+.. versionchanged:: 3.2
+   URL parsing functions now accept ASCII encoded byte sequences
+
+
+.. _urlparse-result-object:
+
+Structured Parse Results
+------------------------
+
+The result objects from the :func:`urlparse`, :func:`urlsplit`  and
+:func:`urldefrag` functions are subclasses of the :class:`tuple` type.
+These subclasses add the attributes listed in the documentation for
+those functions, the encoding and decoding support described in the
+previous section, as well as an additional method:
+
+.. method:: urllib.parse.SplitResult.geturl()
+
+   Return the re-combined version of the original URL as a string. This may
+   differ from the original URL in that the scheme may be normalized to lower
+   case and empty components may be dropped. Specifically, empty parameters,
+   queries, and fragment identifiers will be removed.
+
+   For :func:`urldefrag` results, only empty fragment identifiers will be removed.
+   For :func:`urlsplit` and :func:`urlparse` results, all noted changes will be
+   made to the URL returned by this method.
+
+   The result of this method remains unchanged if passed back through the original
+   parsing function:
+
+      >>> from urllib.parse import urlsplit
+      >>> url = 'HTTP://www.Python.org/doc/#'
+      >>> r1 = urlsplit(url)
+      >>> r1.geturl()
+      'http://www.Python.org/doc/'
+      >>> r2 = urlsplit(r1.geturl())
+      >>> r2.geturl()
+      'http://www.Python.org/doc/'
+
+
+The following classes provide the implementations of the structured parse
+results when operating on :class:`str` objects:
+
+.. class:: DefragResult(url, fragment)
+
+   Concrete class for :func:`urldefrag` results containing :class:`str`
+   data. The :meth:`encode` method returns a :class:`DefragResultBytes`
+   instance.
+
+   .. versionadded:: 3.2
+
+.. class:: ParseResult(scheme, netloc, path, params, query, fragment)
+
+   Concrete class for :func:`urlparse` results containing :class:`str`
+   data. The :meth:`encode` method returns a :class:`ParseResultBytes`
+   instance.
+
+.. class:: SplitResult(scheme, netloc, path, query, fragment)
+
+   Concrete class for :func:`urlsplit` results containing :class:`str`
+   data. The :meth:`encode` method returns a :class:`SplitResultBytes`
+   instance.
+
+
+The following classes provide the implementations of the parse results when
+operating on :class:`bytes` or :class:`bytearray` objects:
+
+.. class:: DefragResultBytes(url, fragment)
+
+   Concrete class for :func:`urldefrag` results containing :class:`bytes`
+   data. The :meth:`decode` method returns a :class:`DefragResult`
+   instance.
+
+   .. versionadded:: 3.2
+
+.. class:: ParseResultBytes(scheme, netloc, path, params, query, fragment)
+
+   Concrete class for :func:`urlparse` results containing :class:`bytes`
+   data. The :meth:`decode` method returns a :class:`ParseResult`
+   instance.
+
+   .. versionadded:: 3.2
+
+.. class:: SplitResultBytes(scheme, netloc, path, query, fragment)
+
+   Concrete class for :func:`urlsplit` results containing :class:`bytes`
+   data. The :meth:`decode` method returns a :class:`SplitResult`
+   instance.
+
+   .. versionadded:: 3.2
+
+
+URL Quoting
+-----------
+
+The URL quoting functions focus on taking program data and making it safe
+for use as URL components by quoting special characters and appropriately
+encoding non-ASCII text. They also support reversing these operations to
+recreate the original data from the contents of a URL component if that
+task isn't already covered by the URL parsing functions above.
 
 .. function:: quote(string, safe='/', encoding=None, errors=None)
 
@@ -319,16 +501,16 @@ The :mod:`urllib.parse` module defines the following functions:
    If it is a :class:`str`, unescaped non-ASCII characters in *string*
    are encoded into UTF-8 bytes.
 
-   Example: ``unquote_to_bytes('a%26%EF')`` yields
-   ``b'a&\xef'``.
+   Example: ``unquote_to_bytes('a%26%EF')`` yields ``b'a&\xef'``.
 
 
 .. function:: urlencode(query, doseq=False, safe='', encoding=None, errors=None)
 
    Convert a mapping object or a sequence of two-element tuples, which may
-   either be a :class:`str` or a :class:`bytes`,  to a "percent-encoded" string,
-   suitable to pass to :func:`urlopen` above as the optional *data* argument.
-   This is useful to pass a dictionary of form fields to a ``POST`` request.
+   either be a :class:`str` or a :class:`bytes`,  to a "percent-encoded"
+   string.  The resultant string must be converted to bytes using the
+   user-specified encoding before it is sent to :func:`urlopen` as the optional
+   *data* argument.
    The resulting string is a series of ``key=value`` pairs separated by ``'&'``
    characters, where both *key* and *value* are quoted using :func:`quote_plus`
    above. When a sequence of two-element tuples is used as the *query*
@@ -337,12 +519,16 @@ The :mod:`urllib.parse` module defines the following functions:
    the optional parameter *doseq* is evaluates to *True*, individual
    ``key=value`` pairs separated by ``'&'`` are generated for each element of
    the value sequence for the key.  The order of parameters in the encoded
-   string will match the order of parameter tuples in the sequence. This module
-   provides the functions :func:`parse_qs` and :func:`parse_qsl` which are used
-   to parse query strings into Python data structures.
+   string will match the order of parameter tuples in the sequence.
 
    When *query* parameter is a :class:`str`, the *safe*, *encoding* and *error*
-   parameters are sent the :func:`quote_plus` for encoding.
+   parameters are passed down to :func:`quote_plus` for encoding.
+
+   To reverse this encoding process, :func:`parse_qs` and :func:`parse_qsl` are
+   provided in this module to parse query strings into Python data structures.
+
+   Refer to :ref:`urllib examples <urllib-examples>` to find out how urlencode
+   method can be used for generating query string for a URL or data for POST.
 
    .. versionchanged:: 3.2
       Query parameter supports bytes and string objects.
@@ -355,6 +541,9 @@ The :mod:`urllib.parse` module defines the following functions:
       should conform to this. Certain deviations could be observed, which are
       mostly for backward compatibility purposes and for certain de-facto
       parsing requirements as commonly observed in major browsers.
+
+   :rfc:`2732` - Format for Literal IPv6 Addresses in URL's.
+      This specifies the parsing requirements of IPv6 URLs.
 
    :rfc:`2396` - Uniform Resource Identifiers (URI): Generic Syntax
       Document describing the generic syntactic requirements for both Uniform Resource
@@ -370,57 +559,3 @@ The :mod:`urllib.parse` module defines the following functions:
 
    :rfc:`1738` - Uniform Resource Locators (URL)
       This specifies the formal syntax and semantics of absolute URLs.
-
-
-.. _urlparse-result-object:
-
-Results of :func:`urlparse` and :func:`urlsplit`
-------------------------------------------------
-
-The result objects from the :func:`urlparse` and :func:`urlsplit` functions are
-subclasses of the :class:`tuple` type.  These subclasses add the attributes
-described in those functions, as well as provide an additional method:
-
-.. method:: ParseResult.geturl()
-
-   Return the re-combined version of the original URL as a string. This may differ
-   from the original URL in that the scheme will always be normalized to lower case
-   and empty components may be dropped. Specifically, empty parameters, queries,
-   and fragment identifiers will be removed.
-
-   The result of this method is a fixpoint if passed back through the original
-   parsing function:
-
-      >>> import urllib.parse
-      >>> url = 'HTTP://www.Python.org/doc/#'
-
-      >>> r1 = urllib.parse.urlsplit(url)
-      >>> r1.geturl()
-      'http://www.Python.org/doc/'
-
-      >>> r2 = urllib.parse.urlsplit(r1.geturl())
-      >>> r2.geturl()
-      'http://www.Python.org/doc/'
-
-
-The following classes provide the implementations of the parse results:
-
-.. class:: BaseResult
-
-   Base class for the concrete result classes.  This provides most of the
-   attribute definitions.  It does not provide a :meth:`geturl` method.  It is
-   derived from :class:`tuple`, but does not override the :meth:`__init__` or
-   :meth:`__new__` methods.
-
-
-.. class:: ParseResult(scheme, netloc, path, params, query, fragment)
-
-   Concrete class for :func:`urlparse` results.  The :meth:`__new__` method is
-   overridden to support checking that the right number of arguments are passed.
-
-
-.. class:: SplitResult(scheme, netloc, path, query, fragment)
-
-   Concrete class for :func:`urlsplit` results.  The :meth:`__new__` method is
-   overridden to support checking that the right number of arguments are passed.
-

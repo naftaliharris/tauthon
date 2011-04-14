@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 #
 # Class for profiling python code. rev 1.0  6/2/94
 #
@@ -39,7 +39,7 @@ import time
 import marshal
 from optparse import OptionParser
 
-__all__ = ["run", "runctx", "help", "Profile"]
+__all__ = ["run", "runctx", "Profile"]
 
 # Sample timer for use with
 #i_count = 0
@@ -91,16 +91,6 @@ def runctx(statement, globals, locals, filename=None, sort=-1):
         prof.dump_stats(filename)
     else:
         return prof.print_stats(sort)
-
-# Backwards compatibility.
-def help():
-    print("Documentation for the profile module can be found ")
-    print("in the Python Library Reference, section 'The Python Profiler'.")
-
-if os.name == "mac":
-    import MacOS
-    def _get_time_mac(timer=MacOS.GetTicks):
-        return timer() / 60.0
 
 if hasattr(os, "times"):
     def _get_time_times(timer=os.times):
@@ -178,10 +168,6 @@ class Profile:
                 self.timer = resgetrusage
                 self.dispatcher = self.trace_dispatch
                 self.get_time = _get_time_resource
-            elif os.name == 'mac':
-                self.timer = MacOS.GetTicks
-                self.dispatcher = self.trace_dispatch_mac
-                self.get_time = _get_time_mac
             elif hasattr(time, 'clock'):
                 self.timer = self.get_time = time.clock
                 self.dispatcher = self.trace_dispatch_i
@@ -588,8 +574,6 @@ class Profile:
         return mean
 
 #****************************************************************************
-def Stats(*args):
-    print('Report generating functions are in the "pstats" module\a')
 
 def main():
     usage = "profile.py [-o output_file_path] [-s sort] scriptfile [arg] ..."
