@@ -13,7 +13,7 @@
 
 /* Forward */
 static node *parsetok(struct tok_state *, grammar *, int, perrdetail *, int *);
-static void initerr(perrdetail *err_ret, const char* filename);
+static int initerr(perrdetail *err_ret, const char* filename);
 
 /* Parse input coming from a string.  Return error code, print some errors. */
 node *
@@ -48,7 +48,8 @@ PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename,
     struct tok_state *tok;
     int exec_input = start == file_input;
 
-    initerr(err_ret, filename);
+    if (initerr(err_ret, filename) < 0)
+        return NULL;
 
     if (*flags & PyPARSE_IGNORE_COOKIE)
         tok = PyTokenizer_FromUTF8(s, exec_input);
@@ -59,7 +60,10 @@ PyParser_ParseStringFlagsFilenameEx(const char *s, const char *filename,
         return NULL;
     }
 
-    tok->filename = filename ? filename : "<string>";
+#ifndef PGEN
+    Py_INCREF(err_ret->filename);
+    tok->filename = err_ret->filename;
+#endif
     return parsetok(tok, g, start, err_ret, flags);
 }
 
@@ -90,13 +94,17 @@ PyParser_ParseFileFlagsEx(FILE *fp, const char *filename,
 {
     struct tok_state *tok;
 
-    initerr(err_ret, filename);
+    if (initerr(err_ret, filename) < 0)
+        return NULL;
 
     if ((tok = PyTokenizer_FromFile(fp, (char *)enc, ps1, ps2)) == NULL) {
         err_ret->error = E_NOMEM;
         return NULL;
     }
-    tok->filename = filename;
+#ifndef PGEN
+    Py_INCREF(err_ret->filename);
+    tok->filename = err_ret->filename;
+#endif
     return parsetok(tok, g, start, err_ret, flags);
 }
 
@@ -127,7 +135,7 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
 {
     parser_state *ps;
     node *n;
-    int started = 0, handling_import = 0, handling_with = 0;
+    int started = 0;
 
     if ((ps = PyParser_New(g, start)) == NULL) {
         fprintf(stderr, "no mem for new parser\n");
@@ -154,7 +162,6 @@ parsetok(struct tok_state *tok, grammar *g, int start, perrdetail *err_ret,
         }
         if (type == ENDMARKER && started) {
             type = NEWLINE; /* Add an extra newline */
-            handling_with = handling_import = 0;
             started = 0;
             /* Add the right number of dedent tokens,
                except if a certain flag is given --
@@ -268,14 +275,24 @@ done:
     return n;
 }
 
-static void
+static int
 initerr(perrdetail *err_ret, const char *filename)
 {
     err_ret->error = E_OK;
-    err_ret->filename = filename;
     err_ret->lineno = 0;
     err_ret->offset = 0;
     err_ret->text = NULL;
     err_ret->token = -1;
     err_ret->expected = -1;
+#ifndef PGEN
+    if (filename)
+        err_ret->filename = PyUnicode_DecodeFSDefault(filename);
+    else
+        err_ret->filename = PyUnicode_FromString("<string>");
+    if (err_ret->filename == NULL) {
+        err_ret->error = E_ERROR;
+        return -1;
+    }
+#endif
+    return 0;
 }
