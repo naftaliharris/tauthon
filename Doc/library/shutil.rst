@@ -1,4 +1,3 @@
-
 :mod:`shutil` --- High-level file operations
 ============================================
 
@@ -11,6 +10,10 @@
    single: file; copying
    single: copying files
 
+**Source code:** :source:`Lib/shutil.py`
+
+--------------
+
 The :mod:`shutil` module offers a number of high-level operations on files and
 collections of files.  In particular, functions are provided  which support file
 copying and removal. For operations on individual files, see also the
@@ -19,7 +22,7 @@ copying and removal. For operations on individual files, see also the
 .. warning::
 
    Even the higher-level file copying functions (:func:`copy`, :func:`copy2`)
-   can't copy all file metadata.
+   cannot copy all file metadata.
 
    On POSIX platforms, this means that file owner and group are lost as well
    as ACLs.  On Mac OS, the resource fork and other metadata are not used.
@@ -27,6 +30,9 @@ copying and removal. For operations on individual files, see also the
    not be correct. On Windows, file owners, ACLs and alternate data streams
    are not copied.
 
+
+Directory and files operations
+------------------------------
 
 .. function:: copyfileobj(fsrc, fdst[, length])
 
@@ -86,7 +92,7 @@ copying and removal. For operations on individual files, see also the
    match one of the glob-style *patterns* provided.  See the example below.
 
 
-.. function:: copytree(src, dst[, symlinks=False[, ignore=None]])
+.. function:: copytree(src, dst, symlinks=False, ignore=None, copy_function=copy2, ignore_dangling_symlinks=False)
 
    Recursively copy an entire directory tree rooted at *src*.  The destination
    directory, named by *dst*, must not already exist; it will be created as well
@@ -97,6 +103,13 @@ copying and removal. For operations on individual files, see also the
    If *symlinks* is true, symbolic links in the source tree are represented as
    symbolic links in the new tree; if false or omitted, the contents of the
    linked files are copied to the new tree.
+
+   When *symlinks* is false, if the file pointed by the symlink doesn't
+   exist, a exception will be added in the list of errors raised in
+   a :exc:`Error` exception at the end of the copy process.
+   You can set the optional *ignore_dangling_symlinks* flag to true if you
+   want to silence this exception. Notice that this option has no effect
+   on platforms that don't support :func:`os.symlink`.
 
    If *ignore* is given, it must be a callable that will receive as its
    arguments the directory being visited by :func:`copytree`, and a list of its
@@ -110,11 +123,21 @@ copying and removal. For operations on individual files, see also the
 
    If exception(s) occur, an :exc:`Error` is raised with a list of reasons.
 
-   The source code for this should be considered an example rather than the
-   ultimate tool.
+   If *copy_function* is given, it must be a callable that will be used
+   to copy each file. It will be called with the source path and the
+   destination path as arguments. By default, :func:`copy2` is used, but any
+   function that supports the same signature (like :func:`copy`) can be used.
+
+   .. versionchanged:: 3.2
+      Added the *copy_function* argument to be able to provide a custom copy
+      function.
+
+   .. versionchanged:: 3.2
+      Added the *ignore_dangling_symlinks* argument to silent dangling symlinks
+      errors when *symlinks* is false.
 
 
-.. function:: rmtree(path[, ignore_errors[, onerror]])
+.. function:: rmtree(path, ignore_errors=False, onerror=None)
 
    .. index:: single: directory; deleting
 
@@ -151,8 +174,8 @@ copying and removal. For operations on individual files, see also the
 
 .. _shutil-example:
 
-Example
--------
+copytree example
+::::::::::::::::
 
 This example is the implementation of the :func:`copytree` function, described
 above, with the docstring omitted.  It demonstrates many of the other functions
@@ -189,4 +212,183 @@ provided by this module. ::
            errors.extend((src, dst, str(why)))
        if errors:
            raise Error(errors)
+
+Another example that uses the :func:`ignore_patterns` helper::
+
+   from shutil import copytree, ignore_patterns
+
+   copytree(source, destination, ignore=ignore_patterns('*.pyc', 'tmp*'))
+
+This will copy everything except ``.pyc`` files and files or directories whose
+name starts with ``tmp``.
+
+Another example that uses the *ignore* argument to add a logging call::
+
+   from shutil import copytree
+   import logging
+
+   def _logpath(path, names):
+       logging.info('Working in %s' % path)
+       return []   # nothing will be ignored
+
+   copytree(source, destination, ignore=_logpath)
+
+
+.. _archiving-operations:
+
+Archiving operations
+--------------------
+
+.. function:: make_archive(base_name, format, [root_dir, [base_dir, [verbose, [dry_run, [owner, [group, [logger]]]]]]])
+
+   Create an archive file (such as zip or tar) and return its name.
+
+   *base_name* is the name of the file to create, including the path, minus
+   any format-specific extension. *format* is the archive format: one of
+   "zip", "tar", "bztar" (if the :mod:`bz2` module is available) or "gztar".
+
+   *root_dir* is a directory that will be the root directory of the
+   archive; for example, we typically chdir into *root_dir* before creating the
+   archive.
+
+   *base_dir* is the directory where we start archiving from;
+   i.e. *base_dir* will be the common prefix of all files and
+   directories in the archive.
+
+   *root_dir* and *base_dir* both default to the current directory.
+
+   *owner* and *group* are used when creating a tar archive. By default,
+   uses the current owner and group.
+
+   *logger* is an instance of :class:`logging.Logger`.
+
+   .. versionadded:: 3.2
+
+
+.. function:: get_archive_formats()
+
+   Returns a list of supported formats for archiving.
+   Each element of the returned sequence is a tuple ``(name, description)``
+
+   By default :mod:`shutil` provides these formats:
+
+   - *gztar*: gzip'ed tar-file
+   - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available.)
+   - *tar*: uncompressed tar file
+   - *zip*: ZIP file
+
+   You can register new formats or provide your own archiver for any existing
+   formats, by using :func:`register_archive_format`.
+
+   .. versionadded:: 3.2
+
+
+.. function:: register_archive_format(name, function, [extra_args, [description]])
+
+   Registers an archiver for the format *name*. *function* is a callable that
+   will be used to invoke the archiver.
+
+   If given, *extra_args* is a sequence of ``(name, value)`` pairs that will be
+   used as extra keywords arguments when the archiver callable is used.
+
+   *description* is used by :func:`get_archive_formats` which returns the
+   list of archivers. Defaults to an empty list.
+
+   .. versionadded:: 3.2
+
+
+.. function:: unregister_archive_format(name)
+
+   Remove the archive format *name* from the list of supported formats.
+
+   .. versionadded:: 3.2
+
+
+.. function:: unpack_archive(filename[, extract_dir[, format]])
+
+   Unpack an archive. *filename* is the full path of the archive.
+
+   *extract_dir* is the name of the target directory where the archive is
+   unpacked. If not provided, the current working directory is used.
+
+   *format* is the archive format: one of "zip", "tar", or "gztar". Or any
+   other format registered with :func:`register_unpack_format`. If not
+   provided, :func:`unpack_archive` will use the archive file name extension
+   and see if an unpacker was registered for that extension. In case none is
+   found, a :exc:`ValueError` is raised.
+
+   .. versionadded:: 3.2
+
+
+.. function:: register_unpack_format(name, extensions, function[, extra_args[, description]])
+
+   Registers an unpack format. *name* is the name of the format and
+   *extensions* is a list of extensions corresponding to the format, like
+   ``.zip`` for Zip files.
+
+   *function* is the callable that will be used to unpack archives. The
+   callable will receive the path of the archive, followed by the directory
+   the archive must be extracted to.
+
+   When provided, *extra_args* is a sequence of ``(name, value)`` tuples that
+   will be passed as keywords arguments to the callable.
+
+   *description* can be provided to describe the format, and will be returned
+   by the :func:`get_unpack_formats` function.
+
+   .. versionadded:: 3.2
+
+
+.. function:: unregister_unpack_format(name)
+
+   Unregister an unpack format. *name* is the name of the format.
+
+   .. versionadded:: 3.2
+
+
+.. function:: get_unpack_formats()
+
+   Return a list of all registered formats for unpacking.
+   Each element of the returned sequence is a tuple
+   ``(name, extensions, description)``.
+
+   By default :mod:`shutil` provides these formats:
+
+   - *gztar*: gzip'ed tar-file
+   - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available.)
+   - *tar*: uncompressed tar file
+   - *zip*: ZIP file
+
+   You can register new formats or provide your own unpacker for any existing
+   formats, by using :func:`register_unpack_format`.
+
+   .. versionadded:: 3.2
+
+
+
+Archiving example
+:::::::::::::::::
+
+In this example, we create a gzip'ed tar-file archive containing all files
+found in the :file:`.ssh` directory of the user::
+
+    >>> from shutil import make_archive
+    >>> import os
+    >>> archive_name = os.path.expanduser(os.path.join('~', 'myarchive'))
+    >>> root_dir = os.path.expanduser(os.path.join('~', '.ssh'))
+    >>> make_archive(archive_name, 'gztar', root_dir)
+    '/Users/tarek/myarchive.tar.gz'
+
+The resulting archive contains::
+
+    $ tar -tzvf /Users/tarek/myarchive.tar.gz
+    drwx------ tarek/staff       0 2010-02-01 16:23:40 ./
+    -rw-r--r-- tarek/staff     609 2008-06-09 13:26:54 ./authorized_keys
+    -rwxr-xr-x tarek/staff      65 2008-06-09 13:26:54 ./config
+    -rwx------ tarek/staff     668 2008-06-09 13:26:54 ./id_dsa
+    -rwxr-xr-x tarek/staff     609 2008-06-09 13:26:54 ./id_dsa.pub
+    -rw------- tarek/staff    1675 2008-06-09 13:26:54 ./id_rsa
+    -rw-r--r-- tarek/staff     397 2008-06-09 13:26:54 ./id_rsa.pub
+    -rw-r--r-- tarek/staff   37192 2010-02-06 18:23:10 ./known_hosts
+
 
