@@ -94,15 +94,17 @@ Parser class API
 The :class:`Parser` class, imported from the :mod:`email.parser` module,
 provides an API that can be used to parse a message when the complete contents
 of the message are available in a string or file.  The :mod:`email.parser`
-module also provides a second class, called :class:`HeaderParser` which can be
-used if you're only interested in the headers of the message.
-:class:`HeaderParser` can be much faster in these situations, since it does not
-attempt to parse the message body, instead setting the payload to the raw body
-as a string. :class:`HeaderParser` has the same API as the :class:`Parser`
-class.
+module also provides header-only parsers, called :class:`HeaderParser` and
+:class:`BytesHeaderParser`, which can be used if you're only interested in the
+headers of the message.  :class:`HeaderParser` and :class:`BytesHeaderParser`
+can be much faster in these situations, since they do not attempt to parse the
+message body, instead setting the payload to the raw body as a string.  They
+have the same API as the :class:`Parser` and :class:`BytesParser` classes.
+
+.. versionadded:: 3.3 BytesHeaderParser
 
 
-.. class:: Parser(_class=email.message.Message, strict=None)
+.. class:: Parser(_class=email.message.Message)
 
    The constructor for the :class:`Parser` class takes an optional argument
    *_class*.  This must be a callable factory (such as a function or a class), and
@@ -110,13 +112,8 @@ class.
    :class:`~email.message.Message` (see :mod:`email.message`).  The factory will
    be called without arguments.
 
-   The optional *strict* flag is ignored.
-
-   .. deprecated:: 2.4
-      Because the :class:`Parser` class is a backward compatible API wrapper
-      around the new-in-Python 2.4 :class:`FeedParser`, *all* parsing is
-      effectively non-strict.  You should simply stop passing a *strict* flag to
-      the :class:`Parser` constructor.
+   .. versionchanged:: 3.2
+      Removed the *strict* argument that was deprecated in 2.4.
 
    The other public :class:`Parser` methods are:
 
