@@ -2,7 +2,6 @@
 /* UNIX group file access module */
 
 #include "Python.h"
-#include "structseq.h"
 
 #include <sys/types.h>
 #include <grp.h>
@@ -46,11 +45,8 @@ mkgrent(struct group *p)
         Py_DECREF(v);
         return NULL;
     }
-#define FSDECODE(val) PyUnicode_Decode(val, strlen(val),\
-                                       Py_FileSystemDefaultEncoding,\
-                                       "surrogateescape")
     for (member = p->gr_mem; *member != NULL; member++) {
-        PyObject *x = FSDECODE(*member);
+        PyObject *x = PyUnicode_DecodeFSDefault(*member);
         if (x == NULL || PyList_Append(w, x) != 0) {
             Py_XDECREF(x);
             Py_DECREF(w);
@@ -61,13 +57,13 @@ mkgrent(struct group *p)
     }
 
 #define SET(i,val) PyStructSequence_SET_ITEM(v, i, val)
-    SET(setIndex++, FSDECODE(p->gr_name));
+    SET(setIndex++, PyUnicode_DecodeFSDefault(p->gr_name));
 #ifdef __VMS
     SET(setIndex++, Py_None);
     Py_INCREF(Py_None);
 #else
     if (p->gr_passwd)
-            SET(setIndex++, FSDECODE(p->gr_passwd));
+            SET(setIndex++, PyUnicode_DecodeFSDefault(p->gr_passwd));
     else {
             SET(setIndex++, Py_None);
             Py_INCREF(Py_None);
@@ -114,8 +110,7 @@ grp_getgrnam(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "U:getgrnam", &arg))
         return NULL;
-    if ((bytes = PyUnicode_AsEncodedString(arg, Py_FileSystemDefaultEncoding,
-                                           "surrogateescape")) == NULL)
+    if ((bytes = PyUnicode_EncodeFSDefault(arg)) == NULL)
         return NULL;
     if (PyBytes_AsStringAndSize(bytes, &name, NULL) == -1)
         goto out;

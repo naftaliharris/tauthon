@@ -21,11 +21,11 @@ errors = 'surrogatepass'
 class UnicodeMethodsTest(unittest.TestCase):
 
     # update this, if the database changes
-    expectedchecksum = '6ec65b65835614ec00634c674bba0e50cd32c189'
+    expectedchecksum = '21b90f1aed00081b81ca7942b22196af090015a0'
 
     def test_method_checksum(self):
         h = hashlib.sha1()
-        for i in range(65536):
+        for i in range(0x10000):
             char = chr(i)
             data = [
                 # Predicates (single char)
@@ -80,8 +80,7 @@ class UnicodeDatabaseTest(unittest.TestCase):
 class UnicodeFunctionsTest(UnicodeDatabaseTest):
 
     # update this, if the database changes
-    expectedchecksum = '3136d5afd787dc2bcb1bdcac95e385349fbebbca'
-
+    expectedchecksum = 'c23dfc0b5eaf3ca2aad32d733de96bb182ccda50'
     def test_function_checksum(self):
         data = []
         h = hashlib.sha1()
@@ -90,9 +89,9 @@ class UnicodeFunctionsTest(UnicodeDatabaseTest):
             char = chr(i)
             data = [
                 # Properties
-                str(self.db.digit(char, -1)),
-                str(self.db.numeric(char, -1)),
-                str(self.db.decimal(char, -1)),
+                format(self.db.digit(char, -1), '.12g'),
+                format(self.db.numeric(char, -1), '.12g'),
+                format(self.db.decimal(char, -1), '.12g'),
                 self.db.category(char),
                 self.db.bidirectional(char),
                 self.db.decomposition(char),
@@ -119,6 +118,7 @@ class UnicodeFunctionsTest(UnicodeDatabaseTest):
         self.assertEqual(self.db.numeric('9'), 9)
         self.assertEqual(self.db.numeric('\u215b'), 0.125)
         self.assertEqual(self.db.numeric('\u2468'), 9.0)
+        self.assertEqual(self.db.numeric('\ua627'), 7.0)
         self.assertEqual(self.db.numeric('\U00020000', None), None)
 
         self.assertRaises(TypeError, self.db.numeric)
@@ -237,7 +237,8 @@ class UnicodeMiscTest(UnicodeDatabaseTest):
         self.assertEqual(popen.returncode, 1)
         error = "SyntaxError: (unicode error) \\N escapes not supported " \
             "(can't load unicodedata module)"
-        self.assertTrue(error in popen.stderr.read().decode("ascii"))
+        self.assertIn(error, popen.stderr.read().decode("ascii"))
+        popen.stderr.close()
 
     def test_decimal_numeric_consistent(self):
         # Test that decimal and numeric are consistent,
@@ -295,6 +296,25 @@ class UnicodeMiscTest(UnicodeDatabaseTest):
         self.assertEqual("\u01c4".title(), "\u01c5")
         self.assertEqual("\u01c5".title(), "\u01c5")
         self.assertEqual("\u01c6".title(), "\u01c5")
+
+    def test_linebreak_7643(self):
+        for i in range(0x10000):
+            lines = (chr(i) + 'A').splitlines()
+            if i in (0x0a, 0x0b, 0x0c, 0x0d, 0x85,
+                     0x1c, 0x1d, 0x1e, 0x2028, 0x2029):
+                self.assertEqual(len(lines), 2,
+                                 r"\u%.4x should be a linebreak" % i)
+            else:
+                self.assertEqual(len(lines), 1,
+                                 r"\u%.4x should not be a linebreak" % i)
+
+    def test_UCS4(self):
+        # unicodedata should work with code points outside the BMP
+        # even on a narrow Unicode build
+        self.assertEqual(self.db.category("\U0001012A"), "No")
+        self.assertEqual(self.db.numeric("\U0001012A"), 9000)
+        self.assertEqual(self.db.decimal("\U0001D7FD"), 7)
+        self.assertEqual(self.db.digit("\U0001D7FD"), 7)
 
 def test_main():
     test.support.run_unittest(
