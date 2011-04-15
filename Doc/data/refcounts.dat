@@ -281,6 +281,12 @@ PyErr_NewException:char*:name::
 PyErr_NewException:PyObject*:base:0:
 PyErr_NewException:PyObject*:dict:0:
 
+PyErr_NewExceptionWithDoc:PyObject*::+1:
+PyErr_NewExceptionWithDoc:char*:name::
+PyErr_NewExceptionWithDoc:char*:doc::
+PyErr_NewExceptionWithDoc:PyObject*:base:0:
+PyErr_NewExceptionWithDoc:PyObject*:dict:0:
+
 PyErr_NoMemory:PyObject*::null:
 
 PyErr_NormalizeException:void:::
@@ -493,6 +499,11 @@ PyImport_ExecCodeModule:PyObject*::+1:
 PyImport_ExecCodeModule:char*:name::
 PyImport_ExecCodeModule:PyObject*:co:0:
 
+PyImport_ExecCodeModuleEx:PyObject*::+1:
+PyImport_ExecCodeModuleEx:char*:name::
+PyImport_ExecCodeModuleEx:PyObject*:co:0:
+PyImport_ExecCodeModuleEx:char*:pathname::
+
 PyImport_GetMagicNumber:long:::
 
 PyImport_GetModuleDict:PyObject*::0:
@@ -511,6 +522,13 @@ PyImport_ImportModuleEx:char*:name::
 PyImport_ImportModuleEx:PyObject*:globals:0:???
 PyImport_ImportModuleEx:PyObject*:locals:0:???
 PyImport_ImportModuleEx:PyObject*:fromlist:0:???
+
+PyImport_ImportModuleLevel:PyObject*::+1:
+PyImport_ImportModuleLevel:char*:name::
+PyImport_ImportModuleLevel:PyObject*:globals:0:???
+PyImport_ImportModuleLevel:PyObject*:locals:0:???
+PyImport_ImportModuleLevel:PyObject*:fromlist:0:???
+PyImport_ImportModuleLevel:int:level::
 
 PyImport_ReloadModule:PyObject*::+1:
 PyImport_ReloadModule:PyObject*:m:0:
@@ -827,9 +845,6 @@ PyNumber_InPlaceTrueDivide:PyObject*:w:0:
 PyNumber_InPlaceXor:PyObject*::+1:
 PyNumber_InPlaceXor:PyObject*:v:0:
 PyNumber_InPlaceXor:PyObject*:w:0:
-
-PyNumber_Int:PyObject*::+1:
-PyNumber_Int:PyObject*:o:0:
 
 PyNumber_Invert:PyObject*::+1:
 PyNumber_Invert:PyObject*:o:0:
@@ -1290,12 +1305,17 @@ PyString_AsEncodedString:const char*:errors::
 PySys_AddWarnOption:void:::
 PySys_AddWarnOption:char*:s::
 
+PySys_AddXOption:void:::
+PySys_AddXOption:const wchar_t*:s::
+
 PySys_GetFile:FILE*:::
 PySys_GetFile:char*:name::
 PySys_GetFile:FILE*:def::
 
 PySys_GetObject:PyObject*::0:
 PySys_GetObject:char*:name::
+
+PySys_GetXOptions:PyObject*::0:
 
 PySys_SetArgv:int:::
 PySys_SetArgv:int:argc::

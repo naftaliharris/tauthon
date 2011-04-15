@@ -54,6 +54,9 @@ Available make targets are:
 
  * "text", which builds a plain text file for each source file.
 
+ * "epub", which builds an EPUB document, suitable to be viewed on e-book
+   readers.
+
  * "linkcheck", which checks all external references to see whether they are
    broken, redirected or malformed, and outputs this information to stdout as
    well as a plain-text (.txt) file.
@@ -78,7 +81,7 @@ Without make
 
 You'll need to install the Sphinx package, either by checking it out via ::
 
-   svn co http://svn.python.org/projects/external/Sphinx-0.6.5/sphinx tools/sphinx
+   svn co http://svn.python.org/projects/external/Sphinx-1.0.7/sphinx tools/sphinx
 
 or by installing it from PyPI.
 
@@ -132,7 +135,7 @@ The Python source is copyrighted, but you can freely use and copy it
 as long as you don't change or remove the copyright notice:
 
 ----------------------------------------------------------------------
-Copyright (c) 2000-2008 Python Software Foundation.
+Copyright (c) 2000-2011 Python Software Foundation.
 All rights reserved.
 
 Copyright (c) 2000 BeOpen.com.

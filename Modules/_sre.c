@@ -67,9 +67,6 @@ static char copyright[] =
 /* enables fast searching */
 #define USE_FAST_SEARCH
 
-/* enables aggressive inlining (always on for Visual C) */
-#undef USE_INLINE
-
 /* enables copy/deepcopy handling (work in progress) */
 #undef USE_BUILTIN_COPY
 
@@ -168,7 +165,7 @@ static unsigned int sre_lower_locale(unsigned int ch)
 
 #if defined(HAVE_UNICODE)
 
-#define SRE_UNI_IS_DIGIT(ch) Py_UNICODE_ISDIGIT((Py_UNICODE)(ch))
+#define SRE_UNI_IS_DIGIT(ch) Py_UNICODE_ISDECIMAL((Py_UNICODE)(ch))
 #define SRE_UNI_IS_SPACE(ch) Py_UNICODE_ISSPACE((Py_UNICODE)(ch))
 #define SRE_UNI_IS_LINEBREAK(ch) Py_UNICODE_ISLINEBREAK((Py_UNICODE)(ch))
 #define SRE_UNI_IS_ALNUM(ch) Py_UNICODE_ISALNUM((Py_UNICODE)(ch))
@@ -3903,12 +3900,9 @@ PyMODINIT_FUNC PyInit__sre(void)
     PyObject* d;
     PyObject* x;
 
-    /* Initialize object types */
-    if (PyType_Ready(&Pattern_Type) < 0)
-        return NULL;
-    if (PyType_Ready(&Match_Type) < 0)
-        return NULL;
-    if (PyType_Ready(&Scanner_Type) < 0)
+    /* Patch object types */
+    if (PyType_Ready(&Pattern_Type) || PyType_Ready(&Match_Type) ||
+        PyType_Ready(&Scanner_Type))
         return NULL;
 
     m = PyModule_Create(&sremodule);
