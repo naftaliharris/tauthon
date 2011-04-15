@@ -16,6 +16,10 @@
    pair: IMAP4_SSL; protocol
    pair: IMAP4_stream; protocol
 
+**Source code:** :source:`Lib/imaplib.py`
+
+--------------
+
 This module defines three classes, :class:`IMAP4`, :class:`IMAP4_SSL` and
 :class:`IMAP4_stream`, which encapsulate a connection to an IMAP4 server and
 implement a large subset of the IMAP4rev1 client protocol as defined in
@@ -56,6 +60,7 @@ Three exceptions are defined as attributes of the :class:`IMAP4` class:
    write permission, and the mailbox will need to be re-opened to re-obtain write
    permission.
 
+
 There's also a subclass for secure connections:
 
 
@@ -67,6 +72,7 @@ There's also a subclass for secure connections:
    If *port* is omitted, the standard IMAP4-over-SSL port (993) is used.  *keyfile*
    and *certfile* are also optional - they can contain a PEM formatted private key
    and certificate chain file for the SSL connection.
+
 
 The second subclass allows for connections created by a child process:
 
@@ -83,9 +89,9 @@ The following utility functions are defined:
 
 .. function:: Internaldate2tuple(datestr)
 
-   Converts an IMAP4 INTERNALDATE string to Coordinated Universal Time. Returns a
-   :mod:`time` module tuple.
-
+   Parse an IMAP4 ``INTERNALDATE`` string and return corresponding local
+   time.  The return value is a :class:`time.struct_time` tuple or
+   None if the string has wrong format.
 
 .. function:: Int2AP(num)
 
@@ -100,9 +106,13 @@ The following utility functions are defined:
 
 .. function:: Time2Internaldate(date_time)
 
-   Converts a :mod:`time` module tuple to an IMAP4 ``INTERNALDATE`` representation.
-   Returns a string in the form: ``"DD-Mmm-YYYY HH:MM:SS +HHMM"`` (including
-   double-quotes).
+   Convert *date_time* to an IMAP4 ``INTERNALDATE`` representation.  The
+   return value is a string in the form: ``"DD-Mmm-YYYY HH:MM:SS
+   +HHMM"`` (including double-quotes).  The *date_time* argument can be a
+   number (int or float) represening seconds since epoch (as returned
+   by :func:`time.time`), a 9-tuple representing local time (as returned by
+   :func:`time.localtime`), or a double-quoted string.  In the last case, it
+   is assumed to already be in the correct format.
 
 Note that IMAP4 message numbers change as the mailbox changes; in particular,
 after an ``EXPUNGE`` command performs deletions the remaining messages are
@@ -406,6 +416,15 @@ An :class:`IMAP4` instance has the following methods:
    numbers of matching messages.
 
    This is an ``IMAP4rev1`` extension command.
+
+
+.. method:: IMAP4.starttls(ssl_context=None)
+
+   Send a ``STARTTLS`` command.  The *ssl_context* argument is optional
+   and should be a :class:`ssl.SSLContext` object.  This will enable
+   encryption on the IMAP connection.
+
+   .. versionadded:: 3.2
 
 
 .. method:: IMAP4.status(mailbox, names)

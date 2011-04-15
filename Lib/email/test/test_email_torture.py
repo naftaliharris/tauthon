@@ -13,11 +13,11 @@ from io import StringIO
 from types import ListType
 
 from email.test.test_email import TestEmailBase
-from test.support import TestSkipped
+from test.support import TestSkipped, run_unittest
 
 import email
 from email import __file__ as testfile
-from email.Iterators import _structure
+from email.iterators import _structure
 
 def openfile(filename):
     from os.path import join, dirname, abspath
@@ -128,7 +128,7 @@ def suite():
 
 def test_main():
     for testclass in _testclasses():
-        support.run_unittest(testclass)
+        run_unittest(testclass)
 
 
 
