@@ -1,4 +1,4 @@
-:mod:`argparse` --- Parser for command line options, arguments and sub-commands
+:mod:`argparse` --- Parser for command-line options, arguments and sub-commands
 ===============================================================================
 
 .. module:: argparse
@@ -108,10 +108,10 @@ Parsing arguments
 ^^^^^^^^^^^^^^^^^
 
 :class:`ArgumentParser` parses args through the
-:meth:`~ArgumentParser.parse_args` method.  This will inspect the command-line,
+:meth:`~ArgumentParser.parse_args` method.  This will inspect the command line,
 convert each arg to the appropriate type and then invoke the appropriate action.
 In most cases, this means a simple namespace object will be built up from
-attributes parsed out of the command-line::
+attributes parsed out of the command line::
 
    >>> parser.parse_args(['--sum', '7', '-1', '42'])
    Namespace(accumulate=<built-in function sum>, integers=[7, -1, 42])
@@ -221,7 +221,7 @@ the parser's help message. For example, consider a file named
    parser.add_argument('--foo', help='foo help')
    args = parser.parse_args()
 
-If ``-h`` or ``--help`` is supplied is at the command-line, the ArgumentParser
+If ``-h`` or ``--help`` is supplied is at the command line, the ArgumentParser
 help will be printed::
 
    $ python myprogram.py --help
@@ -361,13 +361,10 @@ formatter_class
 ^^^^^^^^^^^^^^^
 
 :class:`ArgumentParser` objects allow the help formatting to be customized by
-specifying an alternate formatting class.  Currently, there are three such
-classes: :class:`argparse.RawDescriptionHelpFormatter`,
-:class:`argparse.RawTextHelpFormatter` and
-:class:`argparse.ArgumentDefaultsHelpFormatter`.  The first two allow more
-control over how textual descriptions are displayed, while the last
-automatically adds information about argument default values.
+specifying an alternate formatting class.
 
+:class:`RawDescriptionHelpFormatter` and :class:`RawTextHelpFormatter` give
+more control over how textual descriptions are displayed.
 By default, :class:`ArgumentParser` objects line-wrap the description_ and
 epilog_ texts in command-line help messages::
 
@@ -391,7 +388,7 @@ epilog_ texts in command-line help messages::
    likewise for this epilog whose whitespace will be cleaned up and whose words
    will be wrapped across a couple lines
 
-Passing :class:`argparse.RawDescriptionHelpFormatter` as ``formatter_class=``
+Passing :class:`RawDescriptionHelpFormatter` as ``formatter_class=``
 indicates that description_ and epilog_ are already correctly formatted and
 should not be line-wrapped::
 
@@ -417,11 +414,11 @@ should not be line-wrapped::
    optional arguments:
     -h, --help  show this help message and exit
 
-:class:`RawTextHelpFormatter` maintains whitespace for all sorts of help text
+:class:`RawTextHelpFormatter` maintains whitespace for all sorts of help text,
 including argument descriptions.
 
-The other formatter class available, :class:`ArgumentDefaultsHelpFormatter`,
-will add information about the default value of each of the arguments::
+:class:`ArgumentDefaultsHelpFormatter` automatically adds information about
+default values to each of the argument help messages::
 
    >>> parser = argparse.ArgumentParser(
    ...     prog='PROG',
@@ -437,6 +434,25 @@ will add information about the default value of each of the arguments::
    optional arguments:
     -h, --help  show this help message and exit
     --foo FOO   FOO! (default: 42)
+
+:class:`MetavarTypeHelpFormatter` uses the name of the type_ argument for each
+argument as as the display name for its values (rather than using the dest_
+as the regular formatter does)::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     formatter_class=argparse.MetavarTypeHelpFormatter)
+   >>> parser.add_argument('--foo', type=int)
+   >>> parser.add_argument('bar', type=float)
+   >>> parser.print_help()
+   usage: PROG [-h] [--foo int] float
+
+   positional arguments:
+     float
+
+   optional arguments:
+     -h, --help  show this help message and exit
+     --foo int
 
 
 conflict_handler
@@ -578,21 +594,21 @@ The add_argument() method
                            [const], [default], [type], [choices], [required], \
                            [help], [metavar], [dest])
 
-   Define how a single command line argument should be parsed.  Each parameter
+   Define how a single command-line argument should be parsed.  Each parameter
    has its own more detailed description below, but in short they are:
 
    * `name or flags`_ - Either a name or a list of option strings, e.g. ``foo``
      or ``-f, --foo``
 
    * action_ - The basic type of action to be taken when this argument is
-     encountered at the command-line.
+     encountered at the command line.
 
    * nargs_ - The number of command-line arguments that should be consumed.
 
    * const_ - A constant value required by some action_ and nargs_ selections.
 
    * default_ - The value produced if the argument is absent from the
-     command-line.
+     command line.
 
    * type_ - The type to which the command-line arg should be converted.
 
@@ -752,7 +768,7 @@ single action to be taken.  The ``nargs`` keyword argument associates a
 different number of command-line arguments with a single action..  The supported
 values are:
 
-* N (an integer).  N args from the command-line will be gathered together into a
+* N (an integer).  N args from the command line will be gathered together into a
   list.  For example::
 
      >>> parser = argparse.ArgumentParser()
@@ -764,7 +780,7 @@ values are:
   Note that ``nargs=1`` produces a list of one item.  This is different from
   the default, in which the item is produced by itself.
 
-* ``'?'``. One arg will be consumed from the command-line if possible, and
+* ``'?'``. One arg will be consumed from the command line if possible, and
   produced as a single item.  If no command-line arg is present, the value from
   default_ will be produced.  Note that for optional arguments, there is an
   additional case - the option string is present but not followed by a
@@ -839,7 +855,7 @@ ArgumentParser actions.  The two most common uses of it are:
 
 * When :meth:`add_argument` is called with option strings (like ``-f`` or
   ``--foo``) and ``nargs='?'``.  This creates an optional argument that can be
-  followed by zero or one command-line args.  When parsing the command-line, if
+  followed by zero or one command-line args.  When parsing the command line, if
   the option string is encountered with no command-line arg following it, the
   value of ``const`` will be assumed instead. See the nargs_ description for
   examples.
@@ -851,7 +867,7 @@ default
 ^^^^^^^
 
 All optional arguments and some positional arguments may be omitted at the
-command-line.  The ``default`` keyword argument of :meth:`add_argument`, whose
+command line.  The ``default`` keyword argument of :meth:`add_argument`, whose
 value defaults to ``None``, specifies what value should be used if the
 command-line arg is not present.  For optional arguments, the ``default`` value
 is used when the option string was not present at the command line::
@@ -949,7 +965,7 @@ choices
 
 Some command-line args should be selected from a restricted set of values.
 These can be handled by passing a container object as the ``choices`` keyword
-argument to :meth:`add_argument`.  When the command-line is parsed, arg values
+argument to :meth:`add_argument`.  When the command line is parsed, arg values
 will be checked, and an error message will be displayed if the arg was not one
 of the acceptable values::
 
@@ -982,7 +998,7 @@ required
 ^^^^^^^^
 
 In general, the argparse module assumes that flags like ``-f`` and ``--bar``
-indicate *optional* arguments, which can always be omitted at the command-line.
+indicate *optional* arguments, which can always be omitted at the command line.
 To make an option *required*, ``True`` can be specified for the ``required=``
 keyword argument to :meth:`add_argument`::
 
@@ -1008,7 +1024,7 @@ help
 
 The ``help`` value is a string containing a brief description of the argument.
 When a user requests help (usually by using ``-h`` or ``--help`` at the
-command-line), these ``help`` descriptions will be displayed with each
+command line), these ``help`` descriptions will be displayed with each
 argument::
 
    >>> parser = argparse.ArgumentParser(prog='frobble')
@@ -1179,7 +1195,7 @@ passed as two separate arguments::
    Namespace(foo='FOO', x=None)
 
 For long options (options with names longer than a single character), the option
-and value can also be passed as a single command line argument, using ``=`` to
+and value can also be passed as a single command-line argument, using ``=`` to
 separate them::
 
    >>> parser.parse_args('--foo=FOO'.split())
@@ -1205,7 +1221,7 @@ as long as only the last option (or none of them) requires a value::
 Invalid arguments
 ^^^^^^^^^^^^^^^^^
 
-While parsing the command-line, ``parse_args`` checks for a variety of errors,
+While parsing the command line, ``parse_args`` checks for a variety of errors,
 including ambiguous options, invalid types, invalid options, wrong number of
 positional arguments, etc.  When it encounters such an error, it exits and
 prints the error along with a usage message::
@@ -1641,7 +1657,7 @@ Parser defaults
    Most of the time, the attributes of the object returned by :meth:`parse_args`
    will be fully determined by inspecting the command-line args and the argument
    actions.  :meth:`ArgumentParser.set_defaults` allows some additional
-   attributes that are determined without any inspection of the command-line to
+   attributes that are determined without any inspection of the command line to
    be added::
 
      >>> parser = argparse.ArgumentParser()
@@ -1712,7 +1728,7 @@ Partial parsing
 
 .. method:: ArgumentParser.parse_known_args(args=None, namespace=None)
 
-Sometimes a script may only parse a few of the command line arguments, passing
+Sometimes a script may only parse a few of the command-line arguments, passing
 the remaining arguments on to another script or program. In these cases, the
 :meth:`parse_known_args` method can be useful.  It works much like
 :meth:`~ArgumentParser.parse_args` except that it does not produce an error when
