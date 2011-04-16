@@ -1,4 +1,3 @@
-# -*- coding: iso-8859-1 -*-
 """Get useful information from live Python objects.
 
 This module encapsulates the interface provided by the internal special
@@ -17,7 +16,7 @@ Here are some of the useful functions provided by this module:
     getmodule() - determine the module that an object came from
     getclasstree() - arrange classes so as to represent their hierarchy
 
-    getargspec(), getargvalues() - get info about function arguments
+    getargspec(), getargvalues(), getcallargs() - get info about function arguments
     getfullargspec() - same, with support for Python-3000 features
     formatargspec(), formatargvalues() - format an argument spec
     getouterframes(), getinnerframes() - get info about frames
@@ -33,17 +32,28 @@ __date__ = '1 Jan 2001'
 import sys
 import os
 import types
+import itertools
 import string
 import re
-import dis
 import imp
 import tokenize
 import linecache
 from operator import attrgetter
 from collections import namedtuple
-# These constants are from Include/code.h.
-CO_OPTIMIZED, CO_NEWLOCALS, CO_VARARGS, CO_VARKEYWORDS = 0x1, 0x2, 0x4, 0x8
-CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
+
+# Create constants for the compiler flags in Include/code.h
+# We try to get them from dis to avoid duplication, but fall
+# back to hardcording so the dependency is optional
+try:
+    from dis import COMPILER_FLAG_NAMES as _flag_names
+except ImportError:
+    CO_OPTIMIZED, CO_NEWLOCALS = 0x1, 0x2
+    CO_VARARGS, CO_VARKEYWORDS = 0x4, 0x8
+    CO_NESTED, CO_GENERATOR, CO_NOFREE = 0x10, 0x20, 0x40
+else:
+    mod_dict = globals()
+    for k, v in _flag_names.items():
+        mod_dict["CO_" + v] = k
 
 # See Include/object.h
 TPFLAGS_IS_ABSTRACT = 1 << 20
@@ -53,6 +63,7 @@ def ismodule(object):
     """Return true if the object is a module.
 
     Module objects provide these attributes:
+        __cached__      pathname to byte compiled file
         __doc__         documentation string
         __file__        filename (missing for built-in modules)"""
     return isinstance(object, types.ModuleType)
@@ -327,22 +338,10 @@ def classify_class_attrs(cls):
     return result
 
 # ----------------------------------------------------------- class helpers
-def _searchbases(cls, accum):
-    # Simulate the "classic class" search order.
-    if cls in accum:
-        return
-    accum.append(cls)
-    for base in cls.__bases__:
-        _searchbases(base, accum)
 
 def getmro(cls):
     "Return tuple of base classes (including cls) in method resolution order."
-    if hasattr(cls, "__mro__"):
-        return cls.__mro__
-    else:
-        result = []
-        _searchbases(cls, result)
-        return tuple(result)
+    return cls.__mro__
 
 # -------------------------------------------------- source code extraction
 def indentsize(line):
@@ -915,6 +914,77 @@ def formatargvalues(args, varargs, varkw, locals,
         specs.append(formatvarkw(varkw) + formatvalue(locals[varkw]))
     return '(' + ', '.join(specs) + ')'
 
+def getcallargs(func, *positional, **named):
+    """Get the mapping of arguments to values.
+
+    A dict is returned, with keys the function argument names (including the
+    names of the * and ** arguments, if any), and values the respective bound
+    values from 'positional' and 'named'."""
+    spec = getfullargspec(func)
+    args, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, ann = spec
+    f_name = func.__name__
+    arg2value = {}
+
+    if ismethod(func) and func.__self__ is not None:
+        # implicit 'self' (or 'cls' for classmethods) argument
+        positional = (func.__self__,) + positional
+    num_pos = len(positional)
+    num_total = num_pos + len(named)
+    num_args = len(args)
+    num_defaults = len(defaults) if defaults else 0
+    for arg, value in zip(args, positional):
+        arg2value[arg] = value
+    if varargs:
+        if num_pos > num_args:
+            arg2value[varargs] = positional[-(num_pos-num_args):]
+        else:
+            arg2value[varargs] = ()
+    elif 0 < num_args < num_pos:
+        raise TypeError('%s() takes %s %d positional %s (%d given)' % (
+            f_name, 'at most' if defaults else 'exactly', num_args,
+            'arguments' if num_args > 1 else 'argument', num_total))
+    elif num_args == 0 and num_total:
+        if varkw or kwonlyargs:
+            if num_pos:
+                # XXX: We should use num_pos, but Python also uses num_total:
+                raise TypeError('%s() takes exactly 0 positional arguments '
+                                '(%d given)' % (f_name, num_total))
+        else:
+            raise TypeError('%s() takes no arguments (%d given)' %
+                            (f_name, num_total))
+
+    for arg in itertools.chain(args, kwonlyargs):
+        if arg in named:
+            if arg in arg2value:
+                raise TypeError("%s() got multiple values for keyword "
+                                "argument '%s'" % (f_name, arg))
+            else:
+                arg2value[arg] = named.pop(arg)
+    for kwonlyarg in kwonlyargs:
+        if kwonlyarg not in arg2value:
+            try:
+                arg2value[kwonlyarg] = kwonlydefaults[kwonlyarg]
+            except KeyError:
+                raise TypeError("%s() needs keyword-only argument %s" %
+                                (f_name, kwonlyarg))
+    if defaults:    # fill in any missing values with the defaults
+        for arg, value in zip(args[-num_defaults:], defaults):
+            if arg not in arg2value:
+                arg2value[arg] = value
+    if varkw:
+        arg2value[varkw] = named
+    elif named:
+        unexpected = next(iter(named))
+        raise TypeError("%s() got an unexpected keyword argument '%s'" %
+                        (f_name, unexpected))
+    unassigned = num_args - len([arg for arg in args if arg in arg2value])
+    if unassigned:
+        num_required = num_args - num_defaults
+        raise TypeError('%s() takes %s %d %s (%d given)' % (
+            f_name, 'at least' if defaults else 'exactly', num_required,
+            'arguments' if num_required > 1 else 'argument', num_total))
+    return arg2value
+
 # -------------------------------------------------- stack frame extraction
 
 Traceback = namedtuple('Traceback', 'filename lineno function code_context index')
@@ -979,10 +1049,9 @@ def getinnerframes(tb, context=1):
         tb = tb.tb_next
     return framelist
 
-if hasattr(sys, '_getframe'):
-    currentframe = sys._getframe
-else:
-    currentframe = lambda _=None: None
+def currentframe():
+    """Return the frame of the caller or None if this is not possible."""
+    return sys._getframe(1) if hasattr(sys, "_getframe") else None
 
 def stack(context=1):
     """Return a list of records for the stack above the caller's frame."""
@@ -991,3 +1060,115 @@ def stack(context=1):
 def trace(context=1):
     """Return a list of records for the stack below the current exception."""
     return getinnerframes(sys.exc_info()[2], context)
+
+
+# ------------------------------------------------ static version of getattr
+
+_sentinel = object()
+
+def _static_getmro(klass):
+    return type.__dict__['__mro__'].__get__(klass)
+
+def _check_instance(obj, attr):
+    instance_dict = {}
+    try:
+        instance_dict = object.__getattribute__(obj, "__dict__")
+    except AttributeError:
+        pass
+    return dict.get(instance_dict, attr, _sentinel)
+
+
+def _check_class(klass, attr):
+    for entry in _static_getmro(klass):
+        if not _shadowed_dict(type(entry)):
+            try:
+                return entry.__dict__[attr]
+            except KeyError:
+                pass
+    return _sentinel
+
+def _is_type(obj):
+    try:
+        _static_getmro(obj)
+    except TypeError:
+        return False
+    return True
+
+def _shadowed_dict(klass):
+    dict_attr = type.__dict__["__dict__"]
+    for entry in _static_getmro(klass):
+        try:
+            class_dict = dict_attr.__get__(entry)["__dict__"]
+        except KeyError:
+            pass
+        else:
+            if not (type(class_dict) is types.GetSetDescriptorType and
+                    class_dict.__name__ == "__dict__" and
+                    class_dict.__objclass__ is entry):
+                return True
+    return False
+
+def getattr_static(obj, attr, default=_sentinel):
+    """Retrieve attributes without triggering dynamic lookup via the
+       descriptor protocol,  __getattr__ or __getattribute__.
+
+       Note: this function may not be able to retrieve all attributes
+       that getattr can fetch (like dynamically created attributes)
+       and may find attributes that getattr can't (like descriptors
+       that raise AttributeError). It can also return descriptor objects
+       instead of instance members in some cases. See the
+       documentation for details.
+    """
+    instance_result = _sentinel
+    if not _is_type(obj):
+        klass = type(obj)
+        if not _shadowed_dict(klass):
+            instance_result = _check_instance(obj, attr)
+    else:
+        klass = obj
+
+    klass_result = _check_class(klass, attr)
+
+    if instance_result is not _sentinel and klass_result is not _sentinel:
+        if (_check_class(type(klass_result), '__get__') is not _sentinel and
+            _check_class(type(klass_result), '__set__') is not _sentinel):
+            return klass_result
+
+    if instance_result is not _sentinel:
+        return instance_result
+    if klass_result is not _sentinel:
+        return klass_result
+
+    if obj is klass:
+        # for types we check the metaclass too
+        for entry in _static_getmro(type(klass)):
+            try:
+                return entry.__dict__[attr]
+            except KeyError:
+                pass
+    if default is not _sentinel:
+        return default
+    raise AttributeError(attr)
+
+
+GEN_CREATED = 'GEN_CREATED'
+GEN_RUNNING = 'GEN_RUNNING'
+GEN_SUSPENDED = 'GEN_SUSPENDED'
+GEN_CLOSED = 'GEN_CLOSED'
+
+def getgeneratorstate(generator):
+    """Get current state of a generator-iterator.
+
+    Possible states are:
+      GEN_CREATED: Waiting to start execution.
+      GEN_RUNNING: Currently being executed by the interpreter.
+      GEN_SUSPENDED: Currently suspended at a yield expression.
+      GEN_CLOSED: Execution has completed.
+    """
+    if generator.gi_running:
+        return GEN_RUNNING
+    if generator.gi_frame is None:
+        return GEN_CLOSED
+    if generator.gi_frame.f_lasti == -1:
+        return GEN_CREATED
+    return GEN_SUSPENDED
