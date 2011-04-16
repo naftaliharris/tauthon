@@ -40,7 +40,13 @@ struct tok_state {
     int level;          /* () [] {} Parentheses nesting level */
             /* Used to allow free continuations inside them */
     /* Stuff for checking on different tab sizes */
-    const char *filename;   /* encoded to the filesystem encoding */
+#ifndef PGEN
+    /* pgen doesn't have access to Python codecs, it cannot decode the input
+       filename. The bytes filename might be kept, but it is only used by
+       indenterror() and it is not really needed: pgen only compiles one file
+       (Grammar/Grammar). */
+    PyObject *filename;
+#endif
     int altwarning;     /* Issue warning if alternate tabs don't match */
     int alterror;       /* Issue error if alternate tabs don't match */
     int alttabsize;     /* Alternate tab spacing */
@@ -69,7 +75,6 @@ extern void PyTokenizer_Free(struct tok_state *);
 extern int PyTokenizer_Get(struct tok_state *, char **, char **);
 extern char * PyTokenizer_RestoreEncoding(struct tok_state* tok,
                                           int len, int *offset);
-extern char * PyTokenizer_FindEncoding(int);
 
 #ifdef __cplusplus
 }

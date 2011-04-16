@@ -1,6 +1,7 @@
 """Unit tests for collections.py."""
 
 import unittest, doctest, operator
+from test.support import TESTFN, forget, unlink
 import inspect
 from test import support
 from collections import namedtuple, Counter, OrderedDict, _count_elements
@@ -10,17 +11,18 @@ from random import randrange, shuffle
 import keyword
 import re
 import sys
-from collections import _ChainMap as ChainMap
-from collections import Hashable, Iterable, Iterator
-from collections import Sized, Container, Callable
-from collections import Set, MutableSet
-from collections import Mapping, MutableMapping, KeysView, ItemsView, UserDict
-from collections import Sequence, MutableSequence
-from collections import ByteString
+from collections import UserDict
+from collections import ChainMap
+from collections.abc import Hashable, Iterable, Iterator
+from collections.abc import Sized, Container, Callable
+from collections.abc import Set, MutableSet
+from collections.abc import Mapping, MutableMapping, KeysView, ItemsView
+from collections.abc import Sequence, MutableSequence
+from collections.abc import ByteString
 
 
 ################################################################################
-### _ChainMap (helper class for configparser)
+### ChainMap (helper class for configparser and the string module)
 ################################################################################
 
 class TestChainMap(unittest.TestCase):
@@ -71,16 +73,22 @@ class TestChainMap(unittest.TestCase):
             for m1, m2 in zip(d.maps, e.maps):
                 self.assertIsNot(m1, m2, e)
 
-        d.new_child()
-        d['b'] = 5
-        self.assertEqual(d.maps, [{'b': 5}, {'c':30}, {'a':1, 'b':2}])
-        self.assertEqual(d.parents.maps, [{'c':30}, {'a':1, 'b':2}])   # check parents
-        self.assertEqual(d['b'], 5)                                    # find first in chain
-        self.assertEqual(d.parents['b'], 2)                            # look beyond maps[0]
+        f = d.new_child()
+        f['b'] = 5
+        self.assertEqual(f.maps, [{'b': 5}, {'c':30}, {'a':1, 'b':2}])
+        self.assertEqual(f.parents.maps, [{'c':30}, {'a':1, 'b':2}])   # check parents
+        self.assertEqual(f['b'], 5)                                    # find first in chain
+        self.assertEqual(f.parents['b'], 2)                            # look beyond maps[0]
 
     def test_contructor(self):
-        self.assertEqual(ChainedContext().maps, [{}])                  # no-args --> one new dict
+        self.assertEqual(ChainMap().maps, [{}])                        # no-args --> one new dict
         self.assertEqual(ChainMap({1:2}).maps, [{1:2}])                # 1 arg --> list
+
+    def test_bool(self):
+        self.assertFalse(ChainMap())
+        self.assertFalse(ChainMap({}, {}))
+        self.assertTrue(ChainMap({1:2}, {}))
+        self.assertTrue(ChainMap({}, {1:2}))
 
     def test_missing(self):
         class DefaultChainMap(ChainMap):
@@ -120,6 +128,7 @@ class TestNamedTuple(unittest.TestCase):
         self.assertEqual(Point.__module__, __name__)
         self.assertEqual(Point.__getitem__, tuple.__getitem__)
         self.assertEqual(Point._fields, ('x', 'y'))
+        self.assertIn('class Point(tuple)', Point._source)
 
         self.assertRaises(ValueError, namedtuple, 'abc%', 'efg ghi')       # type has non-alpha char
         self.assertRaises(ValueError, namedtuple, 'class', 'efg ghi')      # type has keyword
@@ -318,6 +327,17 @@ class TestNamedTuple(unittest.TestCase):
         class B(A):
             pass
         self.assertEqual(repr(B(1)), 'B(x=1)')
+
+    def test_source(self):
+        # verify that _source can be run through exec()
+        tmp = namedtuple('NTColor', 'red green blue')
+        globals().pop('NTColor', None)          # remove artifacts from other tests
+        exec(tmp._source, globals())
+        self.assertIn('NTColor', globals())
+        c = NTColor(10, 20, 30)
+        self.assertEqual((c.red, c.green, c.blue), (10, 20, 30))
+        self.assertEqual(NTColor._fields, ('red', 'green', 'blue'))
+        globals().pop('NTColor', None)          # clean-up after this test
 
 
 ################################################################################
@@ -721,6 +741,44 @@ class TestCollectionABCs(ABCTestCase):
         self.validate_abstract_methods(MutableSequence, '__contains__', '__iter__',
             '__len__', '__getitem__', '__setitem__', '__delitem__', 'insert')
 
+    def test_MutableSequence_mixins(self):
+        # Test the mixins of MutableSequence by creating a miminal concrete
+        # class inherited from it.
+        class MutableSequenceSubclass(MutableSequence):
+            def __init__(self):
+                self.lst = []
+
+            def __setitem__(self, index, value):
+                self.lst[index] = value
+
+            def __getitem__(self, index):
+                return self.lst[index]
+
+            def __len__(self):
+                return len(self.lst)
+
+            def __delitem__(self, index):
+                del self.lst[index]
+
+            def insert(self, index, value):
+                self.lst.insert(index, value)
+
+        mss = MutableSequenceSubclass()
+        mss.append(0)
+        mss.extend((1, 2, 3, 4))
+        self.assertEqual(len(mss), 5)
+        self.assertEqual(mss[3], 3)
+        mss.reverse()
+        self.assertEqual(mss[3], 1)
+        mss.pop()
+        self.assertEqual(len(mss), 4)
+        mss.remove(3)
+        self.assertEqual(len(mss), 3)
+        mss += (10, 20, 30)
+        self.assertEqual(len(mss), 6)
+        self.assertEqual(mss[-1], 30)
+        mss.clear()
+        self.assertEqual(len(mss), 0)
 
 ################################################################################
 ### Counter
@@ -1190,7 +1248,7 @@ import doctest, collections
 def test_main(verbose=None):
     NamedTupleDocs = doctest.DocTestSuite(module=collections)
     test_classes = [TestNamedTuple, NamedTupleDocs, TestOneTrickPonyABCs,
-                    TestCollectionABCs, TestCounter,
+                    TestCollectionABCs, TestCounter, TestChainMap,
                     TestOrderedDict, GeneralMappingTests, SubclassMappingTests]
     support.run_unittest(*test_classes)
     support.run_doctest(collections, verbose)
