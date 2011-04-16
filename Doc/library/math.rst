@@ -97,15 +97,23 @@ Number-theoretic and representation functions
    <http://code.activestate.com/recipes/393090/>`_\.
 
 
+.. function:: isfinite(x)
+
+   Return ``True`` if *x* is neither an infinity nor a NaN, and
+   ``False`` otherwise.  (Note that ``0.0`` *is* considered finite.)
+
+   .. versionadded:: 3.2
+
+
 .. function:: isinf(x)
 
-   Check if the float *x* is positive or negative infinity.
+   Return ``True`` if *x* is a positive or negative infinity, and
+   ``False`` otherwise.
 
 
 .. function:: isnan(x)
 
-   Check if the float *x* is a NaN (not a number).  For more information
-   on NaNs, see the IEEE 754 standards.
+   Return ``True`` if *x* is a NaN (not a number), and ``False`` otherwise.
 
 
 .. function:: ldexp(x, i)
@@ -144,6 +152,22 @@ Power and logarithmic functions
 .. function:: exp(x)
 
    Return ``e**x``.
+
+
+.. function:: expm1(x)
+
+   Return ``e**x - 1``.  For small floats *x*, the subtraction in ``exp(x) - 1``
+   can result in a `significant loss of precision
+   <http://en.wikipedia.org/wiki/Loss_of_significance>`_\; the :func:`expm1`
+   function provides a way to compute this quantity to full precision::
+
+      >>> from math import exp, expm1
+      >>> exp(1e-5) - 1  # gives result accurate to 11 places
+      1.0000050000069649e-05
+      >>> expm1(1e-5)    # result accurate to full precision
+      1.0000050000166668e-05
+
+   .. versionadded:: 3.2
 
 
 .. function:: log(x[, base])
@@ -245,6 +269,9 @@ Angular conversion
 Hyperbolic functions
 --------------------
 
+`Hyperbolic functions <http://en.wikipedia.org/wiki/Hyperbolic_function>`_
+are analogs of trigonometric functions that are based on hyperbolas
+instead of circles.
 
 .. function:: acosh(x)
 
@@ -274,6 +301,52 @@ Hyperbolic functions
 .. function:: tanh(x)
 
    Return the hyperbolic tangent of *x*.
+
+
+Special functions
+-----------------
+
+.. function:: erf(x)
+
+   Return the `error function <http://en.wikipedia.org/wiki/Error_function>`_ at
+   *x*.
+
+   The :func:`erf` function can be used to compute traditional statistical
+   functions such as the `cumulative standard normal distribution
+   <http://en.wikipedia.org/wiki/Normal_distribution#Cumulative_distribution_function>`_::
+
+     def phi(x):
+         'Cumulative distribution function for the standard normal distribution'
+         return (1.0 + erf(x / sqrt(2.0))) / 2.0
+
+   .. versionadded:: 3.2
+
+
+.. function:: erfc(x)
+
+   Return the complementary error function at *x*.  The `complementary error
+   function <http://en.wikipedia.org/wiki/Error_function>`_ is defined as
+   ``1.0 - erf(x)``.  It is used for large values of *x* where a subtraction
+   from one would cause a `loss of significance
+   <http://en.wikipedia.org/wiki/Loss_of_significance>`_\.
+
+   .. versionadded:: 3.2
+
+
+.. function:: gamma(x)
+
+   Return the `Gamma function <http://en.wikipedia.org/wiki/Gamma_function>`_ at
+   *x*.
+
+   .. versionadded:: 3.2
+
+
+.. function:: lgamma(x)
+
+   Return the natural logarithm of the absolute value of the Gamma
+   function at *x*.
+
+   .. versionadded:: 3.2
 
 
 Constants
