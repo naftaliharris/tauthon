@@ -8,7 +8,7 @@ File Objects
 .. index:: object: file
 
 These APIs are a minimal emulation of the Python 2 C API for built-in file
-objects, which used to rely on the buffered I/O (:ctype:`FILE\*`) support
+objects, which used to rely on the buffered I/O (:c:type:`FILE\*`) support
 from the C standard library.  In Python 3, files and streams use the new
 :mod:`io` module, which defines several layers over the low-level unbuffered
 I/O of the operating system.  The functions described below are
@@ -17,13 +17,14 @@ error reporting in the interpreter; third-party code is advised to access
 the :mod:`io` APIs instead.
 
 
-.. cfunction:: PyFile_FromFd(int fd, char *name, char *mode, int buffering, char *encoding, char *errors, char *newline, int closefd)
+.. c:function:: PyFile_FromFd(int fd, char *name, char *mode, int buffering, char *encoding, char *errors, char *newline, int closefd)
 
    Create a Python file object from the file descriptor of an already
    opened file *fd*.  The arguments *name*, *encoding*, *errors* and *newline*
    can be *NULL* to use the defaults; *buffering* can be *-1* to use the
-   default.  Return *NULL* on failure.  For a more comprehensive description of
-   the arguments, please refer to the :func:`io.open` function documentation.
+   default. *name* is ignored and kept for backward compatibility. Return
+   *NULL* on failure. For a more comprehensive description of the arguments,
+   please refer to the :func:`io.open` function documentation.
 
    .. warning::
 
@@ -31,17 +32,20 @@ the :mod:`io` APIs instead.
      OS-level file descriptors can produce various issues (such as unexpected
      ordering of data).
 
+   .. versionchanged:: 3.2
+      Ignore *name* attribute.
 
-.. cfunction:: int PyObject_AsFileDescriptor(PyObject *p)
 
-   Return the file descriptor associated with *p* as an :ctype:`int`.  If the
+.. c:function:: int PyObject_AsFileDescriptor(PyObject *p)
+
+   Return the file descriptor associated with *p* as an :c:type:`int`.  If the
    object is an integer, its value is returned.  If not, the
    object's :meth:`fileno` method is called if it exists; the method must return
    an integer, which is returned as the file descriptor value.  Sets an
    exception and returns ``-1`` on failure.
 
 
-.. cfunction:: PyObject* PyFile_GetLine(PyObject *p, int n)
+.. c:function:: PyObject* PyFile_GetLine(PyObject *p, int n)
 
    .. index:: single: EOFError (built-in exception)
 
@@ -55,7 +59,7 @@ the :mod:`io` APIs instead.
    raised if the end of the file is reached immediately.
 
 
-.. cfunction:: int PyFile_WriteObject(PyObject *obj, PyObject *p, int flags)
+.. c:function:: int PyFile_WriteObject(PyObject *obj, PyObject *p, int flags)
 
    .. index:: single: Py_PRINT_RAW
 
@@ -65,7 +69,7 @@ the :mod:`io` APIs instead.
    appropriate exception will be set.
 
 
-.. cfunction:: int PyFile_WriteString(const char *s, PyObject *p)
+.. c:function:: int PyFile_WriteString(const char *s, PyObject *p)
 
    Write string *s* to file object *p*.  Return ``0`` on success or ``-1`` on
    failure; the appropriate exception will be set.

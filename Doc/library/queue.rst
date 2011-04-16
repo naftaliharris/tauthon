@@ -1,10 +1,12 @@
-
 :mod:`queue` --- A synchronized queue class
 ===========================================
 
 .. module:: queue
    :synopsis: A synchronized queue class.
 
+**Source code:** :source:`Lib/queue.py`
+
+--------------
 
 The :mod:`queue` module implements multi-producer, multi-consumer queues.
 It is especially useful in threaded programming when information must be
@@ -20,17 +22,17 @@ the first retrieved (operating like a stack).  With a priority queue,
 the entries are kept sorted (using the :mod:`heapq` module) and the
 lowest valued entry is retrieved first.
 
+
 The :mod:`queue` module defines the following classes and exceptions:
 
-.. class:: Queue(maxsize)
+.. class:: Queue(maxsize=0)
 
    Constructor for a FIFO queue.  *maxsize* is an integer that sets the upperbound
    limit on the number of items that can be placed in the queue.  Insertion will
    block once this size has been reached, until queue items are consumed.  If
    *maxsize* is less than or equal to zero, the queue size is infinite.
 
-
-.. class:: LifoQueue(maxsize)
+.. class:: LifoQueue(maxsize=0)
 
    Constructor for a LIFO queue.  *maxsize* is an integer that sets the upperbound
    limit on the number of items that can be placed in the queue.  Insertion will
@@ -38,7 +40,7 @@ The :mod:`queue` module defines the following classes and exceptions:
    *maxsize* is less than or equal to zero, the queue size is infinite.
 
 
-.. class:: PriorityQueue(maxsize)
+.. class:: PriorityQueue(maxsize=0)
 
    Constructor for a priority queue.  *maxsize* is an integer that sets the upperbound
    limit on the number of items that can be placed in the queue.  Insertion will
@@ -60,12 +62,6 @@ The :mod:`queue` module defines the following classes and exceptions:
 
    Exception raised when non-blocking :meth:`put` (or :meth:`put_nowait`) is called
    on a :class:`Queue` object which is full.
-
-.. seealso::
-
-   :class:`collections.deque` is an alternative implementation of unbounded
-   queues with fast atomic :func:`append` and :func:`popleft` operations that
-   do not require locking.
 
 
 .. _queueobjects:
@@ -100,7 +96,7 @@ provide the public methods described below.
    guarantee that a subsequent call to put() will not block.
 
 
-.. method:: Queue.put(item[, block[, timeout]])
+.. method:: Queue.put(item, block=True, timeout=None)
 
    Put *item* into the queue. If optional args *block* is true and *timeout* is
    None (the default), block if necessary until a free slot is available. If
@@ -116,7 +112,7 @@ provide the public methods described below.
    Equivalent to ``put(item, False)``.
 
 
-.. method:: Queue.get([block[, timeout]])
+.. method:: Queue.get(block=True, timeout=None)
 
    Remove and return an item from the queue. If optional args *block* is true and
    *timeout* is None (the default), block if necessary until an item is available.
@@ -176,4 +172,15 @@ Example of how to wait for enqueued tasks to be completed::
        q.put(item)
 
    q.join()       # block until all tasks are done
+
+
+.. seealso::
+
+   Class :class:`multiprocessing.Queue`
+      A queue class for use in a multi-processing (rather than multi-threading)
+      context.
+
+   :class:`collections.deque` is an alternative implementation of unbounded
+   queues with fast atomic :func:`append` and :func:`popleft` operations that
+   do not require locking.
 

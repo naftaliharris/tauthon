@@ -787,9 +787,9 @@ Encodings and Unicode
 ---------------------
 
 Strings are stored internally as sequences of codepoints (to be precise
-as :ctype:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
+as :c:type:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
 via ``--without-wide-unicode`` or ``--with-wide-unicode``, with the
-former being the default) :ctype:`Py_UNICODE` is either a 16-bit or 32-bit data
+former being the default) :c:type:`Py_UNICODE` is either a 16-bit or 32-bit data
 type. Once a string object is used outside of CPU and memory, CPU endianness
 and how these arrays are stored as bytes become an issue.  Transforming a
 string object into a sequence of bytes is called encoding and recreating the
@@ -936,6 +936,8 @@ particular, the following variants typically exist:
 | cp500           | EBCDIC-CP-BE, EBCDIC-CP-CH,    | Western Europe                 |
 |                 | IBM500                         |                                |
 +-----------------+--------------------------------+--------------------------------+
+| cp720           |                                | Arabic                         |
++-----------------+--------------------------------+--------------------------------+
 | cp737           |                                | Greek                          |
 +-----------------+--------------------------------+--------------------------------+
 | cp775           | IBM775                         | Baltic languages               |
@@ -950,6 +952,8 @@ particular, the following variants typically exist:
 | cp856           |                                | Hebrew                         |
 +-----------------+--------------------------------+--------------------------------+
 | cp857           | 857, IBM857                    | Turkish                        |
++-----------------+--------------------------------+--------------------------------+
+| cp858           | 858, IBM858                    | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | cp860           | 860, IBM860                    | Portuguese                     |
 +-----------------+--------------------------------+--------------------------------+
@@ -1086,7 +1090,7 @@ particular, the following variants typically exist:
 +-----------------+--------------------------------+--------------------------------+
 | mac_latin2      | maclatin2, maccentraleurope    | Central and Eastern Europe     |
 +-----------------+--------------------------------+--------------------------------+
-| mac_roman       | macroman                       | Western Europe                 |
+| mac_roman       | macroman, macintosh            | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | mac_turkish     | macturkish                     | Turkish                        |
 +-----------------+--------------------------------+--------------------------------+
@@ -1110,9 +1114,9 @@ particular, the following variants typically exist:
 +-----------------+--------------------------------+--------------------------------+
 | utf_16          | U16, utf16                     | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
-| utf_16_be       | UTF-16BE                       | all languages (BMP only)       |
+| utf_16_be       | UTF-16BE                       | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
-| utf_16_le       | UTF-16LE                       | all languages (BMP only)       |
+| utf_16_le       | UTF-16LE                       | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
 | utf_7           | U7, unicode-1-1-utf-7          | all languages                  |
 +-----------------+--------------------------------+--------------------------------+
@@ -1160,6 +1164,44 @@ particular, the following variants typically exist:
 |                    |         | representation of the     |
 |                    |         | operand                   |
 +--------------------+---------+---------------------------+
+
+The following codecs provide bytes-to-bytes mappings.
+
++--------------------+---------------------------+---------------------------+
+| Codec              | Aliases                   | Purpose                   |
++====================+===========================+===========================+
+| base64_codec       | base64, base-64           | Convert operand to MIME   |
+|                    |                           | base64                    |
++--------------------+---------------------------+---------------------------+
+| bz2_codec          | bz2                       | Compress the operand      |
+|                    |                           | using bz2                 |
++--------------------+---------------------------+---------------------------+
+| hex_codec          | hex                       | Convert operand to        |
+|                    |                           | hexadecimal               |
+|                    |                           | representation, with two  |
+|                    |                           | digits per byte           |
++--------------------+---------------------------+---------------------------+
+| quopri_codec       | quopri, quoted-printable, | Convert operand to MIME   |
+|                    | quotedprintable           | quoted printable          |
++--------------------+---------------------------+---------------------------+
+| uu_codec           | uu                        | Convert the operand using |
+|                    |                           | uuencode                  |
++--------------------+---------------------------+---------------------------+
+| zlib_codec         | zip, zlib                 | Compress the operand      |
+|                    |                           | using gzip                |
++--------------------+---------------------------+---------------------------+
+
+The following codecs provide string-to-string mappings.
+
++--------------------+---------------------------+---------------------------+
+| Codec              | Aliases                   | Purpose                   |
++====================+===========================+===========================+
+| rot_13             | rot13                     | Returns the Caesar-cypher |
+|                    |                           | encryption of the operand |
++--------------------+---------------------------+---------------------------+
+
+.. versionadded:: 3.2
+   bytes-to-bytes and string-to-string codecs.
 
 
 :mod:`encodings.idna` --- Internationalized Domain Names in Applications
@@ -1225,6 +1267,23 @@ functions can be used directly if desired.
 .. function:: ToUnicode(label)
 
    Convert a label to Unicode, as specified in :rfc:`3490`.
+
+
+:mod:`encodings.mbcs` --- Windows ANSI codepage
+-----------------------------------------------
+
+.. module:: encodings.mbcs
+   :synopsis: Windows ANSI codepage
+
+Encode operand according to the ANSI codepage (CP_ACP). This codec only
+supports ``'strict'`` and ``'replace'`` error handlers to encode, and
+``'strict'`` and ``'ignore'`` error handlers to decode.
+
+Availability: Windows only.
+
+.. versionchanged:: 3.2
+   Before 3.2, the *errors* argument was ignored; ``'replace'`` was always used
+   to encode, and ``'ignore'`` to decode.
 
 
 :mod:`encodings.utf_8_sig` --- UTF-8 codec with BOM signature
