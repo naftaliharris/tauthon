@@ -19,6 +19,7 @@ import curses.panel
 from test.test_support import requires, TestSkipped
 requires('curses')
 
+
 # XXX: if newterm was supported we could use it instead of initscr and not exit
 term = os.environ.get('TERM')
 if not term or term == 'unknown':
@@ -129,6 +130,12 @@ def window_funcs(stdscr):
     stdscr.touchline(5,5,0)
     stdscr.vline('a', 3)
     stdscr.vline('a', 3, curses.A_STANDOUT)
+    stdscr.chgat(5, 2, 3, curses.A_BLINK)
+    stdscr.chgat(3, curses.A_BOLD)
+    stdscr.chgat(5, 8, curses.A_UNDERLINE)
+    stdscr.chgat(curses.A_BLINK)
+    stdscr.refresh()
+
     stdscr.vline(1,1, 'a', 3)
     stdscr.vline(1,1, 'a', 3, curses.A_STANDOUT)
 
@@ -209,8 +216,8 @@ def module_funcs(stdscr):
         if availmask != 0:
             curses.mouseinterval(10)
             # just verify these don't cause errors
+            curses.ungetmouse(0, 0, 0, 0, curses.BUTTON1_PRESSED)
             m = curses.getmouse()
-            curses.ungetmouse(*m)
 
     if hasattr(curses, 'is_term_resized'):
         curses.is_term_resized(*stdscr.getmaxyx())
@@ -249,6 +256,10 @@ def test_resize_term(stdscr):
         if curses.LINES != lines - 1 or curses.COLS != cols + 1:
             raise RuntimeError, "Expected resizeterm to update LINES and COLS"
 
+def test_issue6243(stdscr):
+    curses.ungetch(1025)
+    stdscr.getkey()
+
 def main(stdscr):
     curses.savetty()
     try:
@@ -256,6 +267,7 @@ def main(stdscr):
         window_funcs(stdscr)
         test_userptr_without_set(stdscr)
         test_resize_term(stdscr)
+        test_issue6243(stdscr)
     finally:
         curses.resetty()
 
@@ -263,13 +275,14 @@ if __name__ == '__main__':
     curses.wrapper(main)
     unit_tests()
 else:
+    if not sys.__stdout__.isatty():
+        raise TestSkipped("sys.__stdout__ is not a tty")
+    # testing setupterm() inside initscr/endwin
+    # causes terminal breakage
+    curses.setupterm(fd=sys.__stdout__.fileno())
     try:
-        # testing setupterm() inside initscr/endwin
-        # causes terminal breakage
-        curses.setupterm(fd=sys.__stdout__.fileno())
         stdscr = curses.initscr()
         main(stdscr)
     finally:
         curses.endwin()
-
     unit_tests()

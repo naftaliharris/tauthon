@@ -36,7 +36,7 @@ typedef struct {
 
 static PyTypeObject Dbmtype;
 
-#define is_dbmobject(v) ((v)->ob_type == &Dbmtype)
+#define is_dbmobject(v) (Py_TYPE(v) == &Dbmtype)
 #define check_dbmobject_open(v) if ((v)->di_dbm == NULL) \
     { PyErr_SetString(DbmError, "GDBM object has already been closed"); \
       return NULL; }
@@ -177,6 +177,40 @@ dbm_ass_sub(dbmobject *dp, PyObject *v, PyObject *w)
     }
     return 0;
 }
+
+static int
+dbm_contains(register dbmobject *dp, PyObject *arg)
+{
+    datum key;
+
+    if ((dp)->di_dbm == NULL) {
+        PyErr_SetString(DbmError,
+                        "GDBM object has already been closed");
+        return -1;
+    }
+    if (!PyString_Check(arg)) {
+        PyErr_Format(PyExc_TypeError,
+                     "gdbm key must be string, not %.100s",
+                     arg->ob_type->tp_name);
+        return -1;
+    }
+    key.dptr = PyString_AS_STRING(arg);
+    key.dsize = PyString_GET_SIZE(arg);
+    return gdbm_exists(dp->di_dbm, key);
+}
+
+static PySequenceMethods dbm_as_sequence = {
+    (lenfunc)dbm_length,               /*_length*/
+       0,              /*sq_concat*/
+       0,                      /*sq_repeat*/
+       0,                      /*sq_item*/
+       0,                      /*sq_slice*/
+       0,                      /*sq_ass_item*/
+       0,                  /*sq_ass_slice*/
+       (objobjproc)dbm_contains,               /*sq_contains*/
+       0,                  /*sq_inplace_concat*/
+       0                   /*sq_inplace_repeat*/
+};
 
 static PyMappingMethods dbm_as_mapping = {
     (lenfunc)dbm_length,		/*mp_length*/
@@ -370,8 +404,7 @@ dbm_getattr(dbmobject *dp, char *name)
 }
 
 static PyTypeObject Dbmtype = {
-    PyObject_HEAD_INIT(0)
-    0,
+    PyVarObject_HEAD_INIT(0, 0)
     "gdbm.gdbm",
     sizeof(dbmobject),
     0,
@@ -382,7 +415,7 @@ static PyTypeObject Dbmtype = {
     0,                                  /*tp_compare*/
     0,                                  /*tp_repr*/
     0,                                  /*tp_as_number*/
-    0,                                  /*tp_as_sequence*/
+    &dbm_as_sequence,                   /*tp_as_sequence*/
     &dbm_as_mapping,                    /*tp_as_mapping*/
     0,                                  /*tp_hash*/
     0,                                  /*tp_call*/
@@ -390,7 +423,7 @@ static PyTypeObject Dbmtype = {
     0,                                  /*tp_getattro*/
     0,                                  /*tp_setattro*/
     0,                                  /*tp_as_buffer*/
-    0,                                  /*tp_xxx4*/
+    Py_TPFLAGS_DEFAULT,                 /*tp_xxx4*/
     gdbm_object__doc__,                 /*tp_doc*/
 };
 

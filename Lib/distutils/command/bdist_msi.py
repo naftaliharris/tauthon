@@ -7,13 +7,13 @@
 Implements the bdist_msi command.
 """
 
-import sys, os, string
+import sys, os
 from distutils.core import Command
-from distutils.util import get_platform
 from distutils.dir_util import remove_tree
 from distutils.sysconfig import get_python_version
 from distutils.version import StrictVersion
 from distutils.errors import DistutilsOptionError
+from distutils.util import get_platform
 from distutils import log
 import msilib
 from msilib import schema, sequence, text
@@ -87,6 +87,9 @@ class bdist_msi (Command):
 
     user_options = [('bdist-dir=', None,
                      "temporary directory for creating the distribution"),
+                    ('plat-name=', 'p',
+                     "platform name to embed in generated filenames "
+                     "(default: %s)" % get_platform()),
                     ('keep-temp', 'k',
                      "keep the pseudo-installation tree around after " +
                      "creating the distribution archive"),
@@ -116,6 +119,7 @@ class bdist_msi (Command):
 
     def initialize_options (self):
         self.bdist_dir = None
+        self.plat_name = None
         self.keep_temp = 0
         self.no_target_compile = 0
         self.no_target_optimize = 0
@@ -134,12 +138,15 @@ class bdist_msi (Command):
             if not self.skip_build and self.distribution.has_ext_modules()\
                and self.target_version != short_version:
                 raise DistutilsOptionError, \
-                      "target version can only be %s, or the '--skip_build'" \
+                      "target version can only be %s, or the '--skip-build'" \
                       " option must be specified" % (short_version,)
         else:
             self.target_version = short_version
 
-        self.set_undefined_options('bdist', ('dist_dir', 'dist_dir'))
+        self.set_undefined_options('bdist',
+                                   ('dist_dir', 'dist_dir'),
+                                   ('plat_name', 'plat_name'),
+                                   )
 
         if self.pre_install_script:
             raise DistutilsOptionError, "the pre-install-script feature is not yet implemented"
@@ -181,7 +188,7 @@ class bdist_msi (Command):
             if not target_version:
                 assert self.skip_build, "Should have already checked this"
                 target_version = sys.version[0:3]
-            plat_specifier = ".%s-%s" % (get_platform(), target_version)
+            plat_specifier = ".%s-%s" % (self.plat_name, target_version)
             build = self.get_finalized_command('build')
             build.build_lib = os.path.join(build.build_base,
                                            'lib' + plat_specifier)
@@ -275,9 +282,14 @@ class bdist_msi (Command):
         PYTHON.USER if defined, else from PYTHON.MACHINE.
         PYTHON is PYTHONDIR\python.exe"""
         install_path = r"SOFTWARE\Python\PythonCore\%s\InstallPath" % self.target_version
+        if msilib.Win64:
+            # type: msidbLocatorTypeRawValue + msidbLocatorType64bit
+            Type = 2+16
+        else:
+            Type = 2
         add_data(self.db, "RegLocator",
-                [("python.machine", 2, install_path, None, 2),
-                 ("python.user", 1, install_path, None, 2)])
+                [("python.machine", 2, install_path, None, Type),
+                 ("python.user", 1, install_path, None, Type)])
         add_data(self.db, "AppSearch",
                 [("PYTHON.MACHINE", "python.machine"),
                  ("PYTHON.USER", "python.user")])
@@ -633,7 +645,7 @@ class bdist_msi (Command):
 
     def get_installer_filename(self, fullname):
         # Factored out to allow overriding in subclasses
-        installer_name = os.path.join(self.dist_dir,
-                                      "%s.win32-py%s.msi" %
-                                       (fullname, self.target_version))
+        base_name = "%s.%s-py%s.msi" % (fullname, self.plat_name,
+                                        self.target_version)
+        installer_name = os.path.join(self.dist_dir, base_name)
         return installer_name

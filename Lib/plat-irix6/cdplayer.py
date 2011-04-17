@@ -13,6 +13,9 @@
 # It is also possible to set the above mentioned variables to new values.
 # You can then use c.write() to write out the changed values to the
 # .cdplayerrc file.
+from warnings import warnpy3k
+warnpy3k("the cdplayer module has been removed in Python 3.0", stacklevel=2)
+del warnpy3k
 
 cdplayerrc = '.cdplayerrc'
 
@@ -82,7 +85,7 @@ class Cdplayer:
         new.write(self.id + '.title:\t' + self.title + '\n')
         new.write(self.id + '.artist:\t' + self.artist + '\n')
         for i in range(1, len(self.track)):
-            new.write('%s.track.%r:\t%s\n' % (i, track))
+            new.write('%s.track.%r:\t%s\n' % (self.id, i, self.track[i]))
         old.close()
         new.close()
         posix.rename(filename + '.new', filename)

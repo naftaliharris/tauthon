@@ -26,10 +26,10 @@ class BinASCIITest(unittest.TestCase):
                 prefixes.extend(["crc_", "rlecode_", "rledecode_"])
             for prefix in prefixes:
                 name = prefix + suffix
-                self.assert_(callable(getattr(binascii, name)))
+                self.assertTrue(hasattr(getattr(binascii, name), '__call__'))
                 self.assertRaises(TypeError, getattr(binascii, name))
         for name in ("hexlify", "unhexlify"):
-            self.assert_(callable(getattr(binascii, name)))
+            self.assertTrue(hasattr(getattr(binascii, name), '__call__'))
             self.assertRaises(TypeError, getattr(binascii, name))
 
     def test_base64valid(self):
@@ -104,6 +104,9 @@ class BinASCIITest(unittest.TestCase):
 
         self.assertRaises(binascii.Error, binascii.b2a_uu, 46*"!")
 
+        # Issue #7701 (crash on a pydebug build)
+        self.assertEqual(binascii.b2a_uu('x'), '!>   \n')
+
     def test_crc32(self):
         crc = binascii.crc32("Test the CRC-32 of")
         crc = binascii.crc32(" this string.", crc)
@@ -147,6 +150,15 @@ class BinASCIITest(unittest.TestCase):
             binascii.b2a_qp("0"*75+"\xff\r\n\xff\r\n\xff"),
             "0"*75+"=\r\n=FF\r\n=FF\r\n=FF"
         )
+
+        self.assertEqual(binascii.b2a_qp('\0\n'), '=00\n')
+        self.assertEqual(binascii.b2a_qp('\0\n', quotetabs=True), '=00\n')
+        self.assertEqual(binascii.b2a_qp('foo\tbar\t\n'), 'foo\tbar=09\n')
+        self.assertEqual(binascii.b2a_qp('foo\tbar\t\n', quotetabs=True), 'foo=09bar=09\n')
+
+        self.assertEqual(binascii.b2a_qp('.'), '=2E')
+        self.assertEqual(binascii.b2a_qp('.\n'), '=2E\n')
+        self.assertEqual(binascii.b2a_qp('a.\n'), 'a.\n')
 
     def test_empty_string(self):
         # A test for SF bug #1022953.  Make sure SystemError is not raised.

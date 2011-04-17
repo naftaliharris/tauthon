@@ -5,16 +5,59 @@ import sys, os
 
 # find_library(name) returns the pathname of a library, or None.
 if os.name == "nt":
+
+    def _get_build_version():
+        """Return the version of MSVC that was used to build Python.
+
+        For Python 2.3 and up, the version number is included in
+        sys.version.  For earlier versions, assume the compiler is MSVC 6.
+        """
+        # This function was copied from Lib/distutils/msvccompiler.py
+        prefix = "MSC v."
+        i = sys.version.find(prefix)
+        if i == -1:
+            return 6
+        i = i + len(prefix)
+        s, rest = sys.version[i:].split(" ", 1)
+        majorVersion = int(s[:-2]) - 6
+        minorVersion = int(s[2:3]) / 10.0
+        # I don't think paths are affected by minor version in version 6
+        if majorVersion == 6:
+            minorVersion = 0
+        if majorVersion >= 6:
+            return majorVersion + minorVersion
+        # else we don't know what version of the compiler this is
+        return None
+
+    def find_msvcrt():
+        """Return the name of the VC runtime dll"""
+        version = _get_build_version()
+        if version is None:
+            # better be safe than sorry
+            return None
+        if version <= 6:
+            clibname = 'msvcrt'
+        else:
+            clibname = 'msvcr%d' % (version * 10)
+
+        # If python was built with in debug mode
+        import imp
+        if imp.get_suffixes()[0][0] == '_d.pyd':
+            clibname += 'd'
+        return clibname+'.dll'
+
     def find_library(name):
+        if name in ('c', 'm'):
+            return find_msvcrt()
         # See MSDN for the REAL search order.
         for directory in os.environ['PATH'].split(os.pathsep):
             fname = os.path.join(directory, name)
-            if os.path.exists(fname):
+            if os.path.isfile(fname):
                 return fname
             if fname.lower().endswith(".dll"):
                 continue
             fname = fname + ".dll"
-            if os.path.exists(fname):
+            if os.path.isfile(fname):
                 return fname
         return None
 
@@ -49,18 +92,20 @@ elif os.name == "posix":
         expr = r'[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
         fdout, ccout = tempfile.mkstemp()
         os.close(fdout)
-        cmd = 'if type gcc >/dev/null 2>&1; then CC=gcc; else CC=cc; fi;' \
+        cmd = 'if type gcc >/dev/null 2>&1; then CC=gcc; elif type cc >/dev/null 2>&1; then CC=cc;else exit 10; fi;' \
               '$CC -Wl,-t -o ' + ccout + ' 2>&1 -l' + name
         try:
             f = os.popen(cmd)
             trace = f.read()
-            f.close()
+            rv = f.close()
         finally:
             try:
                 os.unlink(ccout)
             except OSError, e:
                 if e.errno != errno.ENOENT:
                     raise
+        if rv == 10:
+            raise OSError, 'gcc or cc command not found'
         res = re.search(expr, trace)
         if not res:
             return None
@@ -82,7 +127,13 @@ elif os.name == "posix":
             # assuming GNU binutils / ELF
             if not f:
                 return None
-            cmd = "objdump -p -j .dynamic 2>/dev/null " + f
+            cmd = 'if ! type objdump >/dev/null 2>&1; then exit 10; fi;' \
+                  "objdump -p -j .dynamic 2>/dev/null " + f
+            f = os.popen(cmd)
+            dump = f.read()
+            rv = f.close()
+            if rv == 10:
+                raise OSError, 'objdump command not found'
             res = re.search(r'\sSONAME\s+([^\s]+)', os.popen(cmd).read())
             if not res:
                 return None
@@ -128,8 +179,32 @@ elif os.name == "posix":
                     return None
             return res.group(0)
 
+        def _findSoname_ldconfig(name):
+            import struct
+            if struct.calcsize('l') == 4:
+                machine = os.uname()[4] + '-32'
+            else:
+                machine = os.uname()[4] + '-64'
+            mach_map = {
+                'x86_64-64': 'libc6,x86-64',
+                'ppc64-64': 'libc6,64bit',
+                'sparc64-64': 'libc6,64bit',
+                's390x-64': 'libc6,64bit',
+                'ia64-64': 'libc6,IA-64',
+                }
+            abi_type = mach_map.get(machine, 'libc6')
+
+            # XXX assuming GLIBC's ldconfig (with option -p)
+            expr = r'(\S+)\s+\((%s(?:, OS ABI:[^\)]*)?)\)[^/]*(/[^\(\)\s]*lib%s\.[^\(\)\s]*)' \
+                   % (abi_type, re.escape(name))
+            res = re.search(expr,
+                            os.popen('LANG=C /sbin/ldconfig -p 2>/dev/null').read())
+            if not res:
+                return None
+            return res.group(1)
+
         def find_library(name):
-            return _get_soname(_findLib_ldconfig(name) or _findLib_gcc(name))
+            return _findSoname_ldconfig(name) or _get_soname(_findLib_gcc(name))
 
 ################################################################
 # test code

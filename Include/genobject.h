@@ -18,6 +18,9 @@ typedef struct {
 
 	/* True if generator is being executed. */
 	int gi_running;
+    
+	/* The code object backing the generator */
+	PyObject *gi_code;
 
 	/* List of weak reference. */
 	PyObject *gi_weakreflist;
@@ -26,7 +29,7 @@ typedef struct {
 PyAPI_DATA(PyTypeObject) PyGen_Type;
 
 #define PyGen_Check(op) PyObject_TypeCheck(op, &PyGen_Type)
-#define PyGen_CheckExact(op) ((op)->ob_type == &PyGen_Type)
+#define PyGen_CheckExact(op) (Py_TYPE(op) == &PyGen_Type)
 
 PyAPI_FUNC(PyObject *) PyGen_New(struct _frame *);
 PyAPI_FUNC(int) PyGen_NeedsFinalizing(PyGenObject *);

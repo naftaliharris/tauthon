@@ -3,6 +3,16 @@ import unittest
 from ctypes import *
 
 class MemFunctionsTest(unittest.TestCase):
+##    def test_overflow(self):
+##        # string_at and wstring_at must use the Python calling
+##        # convention (which acquires the GIL and checks the Python
+##        # error flag).  Provoke an error and catch it; see also issue
+##        # #3554: <http://bugs.python.org/issue3554>
+##        self.assertRaises((OverflowError, MemoryError, SystemError),
+##                          lambda: wstring_at(u"foo", sys.maxint - 1))
+##        self.assertRaises((OverflowError, MemoryError, SystemError),
+##                          lambda: string_at("foo", sys.maxint - 1))
+
     def test_memmove(self):
         # large buffers apparently increase the chance that the memory
         # is allocated in high address space.
@@ -30,6 +40,14 @@ class MemFunctionsTest(unittest.TestCase):
         self.failUnlessEqual(cast(a, c_char_p).value, "abcdef")
         self.failUnlessEqual(cast(a, POINTER(c_byte))[:7],
                              [97, 98, 99, 100, 101, 102, 0])
+        self.failUnlessEqual(cast(a, POINTER(c_byte))[:7:],
+                             [97, 98, 99, 100, 101, 102, 0])
+        self.failUnlessEqual(cast(a, POINTER(c_byte))[6:-1:-1],
+                             [0, 102, 101, 100, 99, 98, 97])
+        self.failUnlessEqual(cast(a, POINTER(c_byte))[:7:2],
+                             [97, 99, 101, 0])
+        self.failUnlessEqual(cast(a, POINTER(c_byte))[:7:7],
+                             [97])
 
     def test_string_at(self):
         s = string_at("foo bar")

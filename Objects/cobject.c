@@ -9,13 +9,6 @@
 typedef void (*destructor1)(void *);
 typedef void (*destructor2)(void *, void*);
 
-typedef struct {
-    PyObject_HEAD
-    void *cobject;
-    void *desc;
-    void (*destructor)(void *);
-} PyCObject;
-
 PyObject *
 PyCObject_FromVoidPtr(void *cobj, void (*destr)(void *))
 {
@@ -135,8 +128,7 @@ extension modules, so that extension modules can use the Python import\n\
 mechanism to link to one another.");
 
 PyTypeObject PyCObject_Type = {
-    PyObject_HEAD_INIT(&PyType_Type)
-    0,				/*ob_size*/
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "PyCObject",		/*tp_name*/
     sizeof(PyCObject),		/*tp_basicsize*/
     0,				/*tp_itemsize*/

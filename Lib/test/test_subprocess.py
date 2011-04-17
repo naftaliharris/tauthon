@@ -4,6 +4,7 @@ import subprocess
 import sys
 import signal
 import os
+import errno
 import tempfile
 import time
 import re
@@ -241,7 +242,7 @@ class ProcessTestCase(unittest.TestCase):
         self.assertEquals(rc, 2)
 
     def test_cwd(self):
-        tmpdir = os.getenv("TEMP", "/tmp")
+        tmpdir = tempfile.gettempdir()
         # We cannot use os.path.realpath to canonicalize the path,
         # since it doesn't expand Tru64 {memb} strings. See bug 1063571.
         cwd = os.getcwd()
@@ -287,14 +288,12 @@ class ProcessTestCase(unittest.TestCase):
                              stderr=subprocess.PIPE)
         (stdout, stderr) = p.communicate()
         self.assertEqual(stdout, None)
-        # When running with a pydebug build, the # of references is outputted
-        # to stderr, so just check if stderr at least started with "pinapple"
-        self.assert_(stderr.startswith("pineapple"))
+        self.assertEqual(remove_stderr_debug_decorations(stderr), "pineapple")
 
     def test_communicate(self):
         p = subprocess.Popen([sys.executable, "-c",
-                          'import sys,os;' \
-                          'sys.stderr.write("pineapple");' \
+                          'import sys,os;'
+                          'sys.stderr.write("pineapple");'
                           'sys.stdout.write(sys.stdin.read())'],
                          stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE,
@@ -438,6 +437,8 @@ class ProcessTestCase(unittest.TestCase):
                          '"a b c" d e')
         self.assertEqual(subprocess.list2cmdline(['ab"c', '\\', 'd']),
                          'ab\\"c \\ d')
+        self.assertEqual(subprocess.list2cmdline(['ab"c', ' \\', 'd']),
+                         'ab\\"c " \\\\" d')
         self.assertEqual(subprocess.list2cmdline(['a\\\\\\b', 'de fg', 'h']),
                          'a\\\\\\b "de fg" h')
         self.assertEqual(subprocess.list2cmdline(['a\\"b', 'c', 'd']),
@@ -484,6 +485,22 @@ class ProcessTestCase(unittest.TestCase):
         else:
             self.fail("Expected TypeError")
 
+    def test_leaking_fds_on_error(self):
+        # see bug #5179: Popen leaks file descriptors to PIPEs if
+        # the child fails to execute; this will eventually exhaust
+        # the maximum number of open fds. 1024 seems a very common
+        # value for that limit, but Windows has 2048, so we loop
+        # 1024 times (each call leaked two fds).
+        for i in range(1024):
+            try:
+                subprocess.Popen(['nonexisting_i_hope'],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            # Windows raises IOError
+            except (IOError, OSError), err:
+                if err.errno != 2:  # ignore "no such file"
+                    raise
+
     #
     # POSIX tests
     #
@@ -504,6 +521,20 @@ class ProcessTestCase(unittest.TestCase):
             """Try to prevent core files from being created.
             Returns previous ulimit if successful, else None.
             """
+            if sys.platform == 'darwin':
+                # Check if the 'Crash Reporter' on OSX was configured
+                # in 'Developer' mode and warn that it will get triggered
+                # when it is.
+                #
+                # This assumes that this context manager is used in tests
+                # that might trigger the next manager.
+                value = subprocess.Popen(['/usr/bin/defaults', 'read',
+                    'com.apple.CrashReporter', 'DialogType'],
+                    stdout=subprocess.PIPE).communicate()[0]
+                if value.strip() == b'developer':
+                    print "this tests triggers the Crash Reporter, that is intentional"
+                    sys.stdout.flush()
+
             try:
                 import resource
                 old_limit = resource.getrlimit(resource.RLIMIT_CORE)
@@ -546,7 +577,7 @@ class ProcessTestCase(unittest.TestCase):
             # args is a string
             f, fname = self.mkstemp()
             os.write(f, "#!/bin/sh\n")
-            os.write(f, "exec %s -c 'import sys; sys.exit(47)'\n" %
+            os.write(f, "exec '%s' -c 'import sys; sys.exit(47)'\n" %
                         sys.executable)
             os.close(f)
             os.chmod(fname, 0700)
@@ -588,7 +619,7 @@ class ProcessTestCase(unittest.TestCase):
             # call() function with string argument on UNIX
             f, fname = self.mkstemp()
             os.write(f, "#!/bin/sh\n")
-            os.write(f, "exec %s -c 'import sys; sys.exit(47)'\n" %
+            os.write(f, "exec '%s' -c 'import sys; sys.exit(47)'\n" %
                         sys.executable)
             os.close(f)
             os.chmod(fname, 0700)
@@ -596,6 +627,48 @@ class ProcessTestCase(unittest.TestCase):
             os.remove(fname)
             self.assertEqual(rc, 47)
 
+        def test_specific_shell(self):
+            # Issue #9265: Incorrect name passed as arg[0].
+            shells = []
+            for prefix in ['/bin', '/usr/bin/', '/usr/local/bin']:
+                for name in ['bash', 'ksh']:
+                    sh = os.path.join(prefix, name)
+                    if os.path.isfile(sh):
+                        shells.append(sh)
+            if not shells:  # Will probably work for any shell but csh.
+                return  # skip test
+            sh = '/bin/sh'
+            if os.path.isfile(sh) and not os.path.islink(sh):
+                # Test will fail if /bin/sh is a symlink to csh.
+                shells.append(sh)
+            for sh in shells:
+                p = subprocess.Popen("echo $0", executable=sh, shell=True,
+                                     stdout=subprocess.PIPE)
+                self.assertEqual(p.stdout.read().strip(), sh)
+
+        def DISABLED_test_send_signal(self):
+            p = subprocess.Popen([sys.executable,
+                              "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.send_signal(signal.SIGINT)
+            self.assertNotEqual(p.wait(), 0)
+
+        def DISABLED_test_kill(self):
+            p = subprocess.Popen([sys.executable,
+                            "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.kill()
+            self.assertEqual(p.wait(), -signal.SIGKILL)
+
+        def DISABLED_test_terminate(self):
+            p = subprocess.Popen([sys.executable,
+                            "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.terminate()
+            self.assertEqual(p.wait(), -signal.SIGTERM)
 
     #
     # Windows tests
@@ -633,7 +706,15 @@ class ProcessTestCase(unittest.TestCase):
             self.assertRaises(ValueError, subprocess.call,
                               [sys.executable,
                                "-c", "import sys; sys.exit(47)"],
+                              stdout=subprocess.PIPE,
                               close_fds=True)
+
+        def test_close_fds(self):
+            # close file descriptors
+            rc = subprocess.call([sys.executable, "-c",
+                                  "import sys; sys.exit(47)"],
+                                  close_fds=True)
+            self.assertEqual(rc, 47)
 
         def test_shell_sequence(self):
             # Run command through the shell (sequence)
@@ -659,9 +740,54 @@ class ProcessTestCase(unittest.TestCase):
                                  ' -c "import sys; sys.exit(47)"')
             self.assertEqual(rc, 47)
 
+        def DISABLED_test_send_signal(self):
+            p = subprocess.Popen([sys.executable,
+                              "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.send_signal(signal.SIGTERM)
+            self.assertNotEqual(p.wait(), 0)
+
+        def DISABLED_test_kill(self):
+            p = subprocess.Popen([sys.executable,
+                            "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.kill()
+            self.assertNotEqual(p.wait(), 0)
+
+        def DISABLED_test_terminate(self):
+            p = subprocess.Popen([sys.executable,
+                            "-c", "input()"])
+
+            self.assert_(p.poll() is None, p.poll())
+            p.terminate()
+            self.assertNotEqual(p.wait(), 0)
+
+class HelperFunctionTests(unittest.TestCase):
+    def _test_eintr_retry_call(self):
+        record_calls = []
+        def fake_os_func(*args):
+            record_calls.append(args)
+            if len(record_calls) == 2:
+                raise OSError(errno.EINTR, "fake interrupted system call")
+            return tuple(reversed(args))
+
+        self.assertEqual((999, 256),
+                         subprocess._eintr_retry_call(fake_os_func, 256, 999))
+        self.assertEqual([(256, 999)], record_calls)
+        # This time there will be an EINTR so it will loop once.
+        self.assertEqual((666,),
+                         subprocess._eintr_retry_call(fake_os_func, 666))
+        self.assertEqual([(256, 999), (666,), (666,)], record_calls)
+
+    if not mswindows:
+        test_eintr_retry_call = _test_eintr_retry_call
+
 
 def test_main():
-    test_support.run_unittest(ProcessTestCase)
+    test_support.run_unittest(ProcessTestCase,
+                              HelperFunctionTests)
     if hasattr(test_support, "reap_children"):
         test_support.reap_children()
 

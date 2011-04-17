@@ -49,7 +49,7 @@ result_2004_html = """
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=ascii" />
 <link rel="stylesheet" type="text/css" href="calendar.css" />
-<title>Calendar for 2004</title
+<title>Calendar for 2004</title>
 </head>
 <body>
 <table border="0" cellpadding="0" cellspacing="0" class="year">
@@ -170,7 +170,7 @@ result_2004_html = """
 
 class OutputTestCase(unittest.TestCase):
     def normalize_calendar(self, s):
-        # Filters out locale dependant strings
+        # Filters out locale dependent strings
         def neitherspacenordigit(c):
             return not c.isspace() and not c.isdigit()
 

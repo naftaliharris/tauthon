@@ -4,10 +4,11 @@ import keyword
 import exceptions
 import __builtin__
 from string import Template
+from sys import subversion
 
-comment_header = """" Auto-generated Vim syntax file for Python
+comment_header = '''" Auto-generated Vim syntax file for Python (%s: r%s).
 "
-" To use: copy or symlink to ~/.vim/syntax/python.vim"""
+" To use: copy or symlink to ~/.vim/syntax/python.vim'''
 
 statement_header = """
 if exists("b:current_syntax")
@@ -30,14 +31,14 @@ boolean_ops = ('and', 'in', 'is', 'not', 'or')
 import_stmts = ('import', 'from')
 object_defs = ('def', 'class')
 
-exception_names = frozenset(exc for exc in dir(exceptions)
+exception_names = sorted(exc for exc in dir(exceptions)
                                 if not exc.startswith('__'))
 
 # Need to include functions that start with '__' (e.g., __import__), but
 # nothing that comes with modules (e.g., __name__), so just exclude anything in
 # the 'exceptions' module since we want to ignore exceptions *and* what any
 # module would have
-builtin_names = frozenset(builtin for builtin in dir(__builtin__)
+builtin_names = sorted(builtin for builtin in dir(__builtin__)
                             if builtin not in dir(exceptions))
 
 escapes = (r'+\\[abfnrtv\'"\\]+', r'"\\\o\{1,3}"', r'"\\x\x\{2}"',
@@ -160,7 +161,7 @@ FILL = 80
 def main(file_path):
     with open(file_path, 'w') as FILE:
         # Comment for file
-        print>>FILE, comment_header
+        print>>FILE, comment_header % subversion[1:]
         print>>FILE, ''
         # Statements at start of file
         print>>FILE, statement_header

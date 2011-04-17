@@ -1,9 +1,15 @@
 # This module should be kept compatible with Python 2.1.
+"""distutils.command.install_lib
+
+Implements the Distutils 'install_lib' command
+(install all Python modules)."""
 
 __revision__ = "$Id$"
 
-import sys, os, string
+import os
 from types import IntType
+import sys
+
 from distutils.core import Command
 from distutils.errors import DistutilsOptionError
 
@@ -80,7 +86,8 @@ class install_lib (Command):
         if type(self.optimize) is not IntType:
             try:
                 self.optimize = int(self.optimize)
-                assert 0 <= self.optimize <= 2
+                if self.optimize not in (0, 1, 2):
+                    raise AssertionError
             except (ValueError, AssertionError):
                 raise DistutilsOptionError, "optimize must be 0, 1, or 2"
 
@@ -121,6 +128,10 @@ class install_lib (Command):
         return outfiles
 
     def byte_compile (self, files):
+        if sys.dont_write_bytecode:
+            self.warn('byte-compiling is disabled, skipping.')
+            return
+
         from distutils.util import byte_compile
 
         # Get the "--root" directory supplied to the "install" command,

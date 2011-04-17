@@ -2,9 +2,11 @@
 # Copyright (C) 2005 Martin v. Löwis
 # Licensed to PSF under a Contributor Agreement.
 from _msi import *
-import sets, os, string, re
+import os, string, re, sys
 
-Win64=0
+AMD64 = "AMD64" in sys.version
+Itanium = "Itanium" in sys.version
+Win64 = AMD64 or Itanium
 
 # Partially taken from Wine
 datasizemask=      0x00ff
@@ -145,8 +147,10 @@ def init_database(name, schema,
     si.SetProperty(PID_TITLE, "Installation Database")
     si.SetProperty(PID_SUBJECT, ProductName)
     si.SetProperty(PID_AUTHOR, Manufacturer)
-    if Win64:
+    if Itanium:
         si.SetProperty(PID_TEMPLATE, "Intel64;1033")
+    elif AMD64:
+        si.SetProperty(PID_TEMPLATE, "x64;1033")
     else:
         si.SetProperty(PID_TEMPLATE, "Intel;1033")
     si.SetProperty(PID_REVNUMBER, gen_uuid())
@@ -184,7 +188,7 @@ class CAB:
     def __init__(self, name):
         self.name = name
         self.files = []
-        self.filenames = sets.Set()
+        self.filenames = set()
         self.index = 0
 
     def gen_id(self, file):
@@ -215,7 +219,7 @@ class CAB:
         os.unlink(filename)
         db.Commit()
 
-_directories = sets.Set()
+_directories = set()
 class Directory:
     def __init__(self, db, cab, basedir, physical, _logical, default, componentflags=None):
         """Create a new directory in the Directory table. There is a current component
@@ -239,8 +243,8 @@ class Directory:
         self.physical = physical
         self.logical = logical
         self.component = None
-        self.short_names = sets.Set()
-        self.ids = sets.Set()
+        self.short_names = set()
+        self.ids = set()
         self.keyfiles = {}
         self.componentflags = componentflags
         if basedir:

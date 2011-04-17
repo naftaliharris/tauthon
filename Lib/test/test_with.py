@@ -2,14 +2,12 @@
 
 """Unit tests for the with statement specified in PEP 343."""
 
-from __future__ import with_statement
 
 __author__ = "Mike Bland"
 __email__ = "mbland at acm dot org"
 
 import sys
 import unittest
-import StringIO
 from collections import deque
 from contextlib import GeneratorContextManager, contextmanager
 from test.test_support import run_unittest
@@ -531,7 +529,7 @@ class ExceptionalTestCase(unittest.TestCase, ContextmanagerAssertionMixin):
         self.assertRaises(AssertionError, falseAsBool)
 
         def failAsBool():
-            with cm(lambda: 1//0):
+            with cm(lambda: 1 // 0):
                 self.fail("Should NOT see this")
         self.assertRaises(ZeroDivisionError, failAsBool)
 
@@ -639,7 +637,7 @@ class ExitSwallowsExceptionTestCase(unittest.TestCase):
             def __exit__(self, t, v, tb): return True
         try:
             with AfricanSwallow():
-                1/0
+                1 // 0
         except ZeroDivisionError:
             self.fail("ZeroDivisionError should have been swallowed")
 
@@ -649,42 +647,11 @@ class ExitSwallowsExceptionTestCase(unittest.TestCase):
             def __exit__(self, t, v, tb): return False
         try:
             with EuropeanSwallow():
-                1/0
+                1 // 0
         except ZeroDivisionError:
             pass
         else:
             self.fail("ZeroDivisionError should have been raised")
-
-
-class NewKeywordsWarningTestCase(unittest.TestCase):
-
-    def check(self, code, word=None):
-        save = sys.stderr
-        sys.stderr = stream = StringIO.StringIO()
-        try:
-            compile(code, "<string>", "exec", 0, True)
-        finally:
-            sys.stderr = save
-        if word:
-            self.assert_("Warning: %r will become a reserved keyword in Python 2.6" % word
-                         in stream.getvalue())
-        else:
-            self.assertEqual(stream.getvalue(), "")
-
-    def test_basic(self):
-        self.check("as = 4", "as")
-        self.check("with = 4", "with")
-        self.check("class as: pass", "as")
-        self.check("class with: pass", "with")
-        self.check("obj.as = 4", "as")
-        self.check("with.obj = 4", "with")
-        self.check("def with(): pass", "with")
-        self.check("do(); with = 23", "with")
-
-    def test_after_import(self):
-        # issue 3936
-        self.check("import sys\nas = 4", "as")
-        self.check("import sys\nwith = 4", "with")
 
 
 def test_main():
@@ -692,8 +659,7 @@ def test_main():
                  NestedNonexceptionalTestCase, ExceptionalTestCase,
                  NonLocalFlowControlTestCase,
                  AssignmentTargetTestCase,
-                 ExitSwallowsExceptionTestCase,
-                 NewKeywordsWarningTestCase)
+                 ExitSwallowsExceptionTestCase)
 
 
 if __name__ == '__main__':

@@ -30,10 +30,10 @@ Each function will be called at most once for each event.
 """
 
 import sys
-import os
 import string
 import re
 import Tkinter
+from idlelib import macosxSupport
 
 # the event type constants, which define the meaning of mc_type
 MC_KEYPRESS=0; MC_KEYRELEASE=1; MC_BUTTONPRESS=2; MC_BUTTONRELEASE=3;
@@ -46,7 +46,7 @@ MC_SHIFT = 1<<0; MC_CONTROL = 1<<2; MC_ALT = 1<<3; MC_META = 1<<5
 MC_OPTION = 1<<6; MC_COMMAND = 1<<7
 
 # define the list of modifiers, to be used in complex event types.
-if sys.platform == "darwin" and sys.executable.count(".app"):
+if macosxSupport.runningAsOSXApp():
     _modifiers = (("Shift",), ("Control",), ("Option",), ("Command",))
     _modifier_masks = (MC_SHIFT, MC_CONTROL, MC_OPTION, MC_COMMAND)
 else:
@@ -107,23 +107,39 @@ class _SimpleBinder:
 # a list of the states which are a subset of it. This list is ordered by the
 # number of modifiers is the state - the most specific state comes first.
 _states = range(1 << len(_modifiers))
-_state_names = [reduce(lambda x, y: x + y,
-                       [_modifiers[i][0]+'-' for i in range(len(_modifiers))
-                        if (1 << i) & s],
-                       "")
+_state_names = [''.join(m[0]+'-'
+                        for i, m in enumerate(_modifiers)
+                        if (1 << i) & s)
                 for s in _states]
-_state_subsets = map(lambda i: filter(lambda j: not (j & (~i)), _states),
-                      _states)
-for l in _state_subsets:
-    l.sort(lambda a, b, nummod = lambda x: len(filter(lambda i: (1<<i) & x,
-                                                      range(len(_modifiers)))):
-           nummod(b) - nummod(a))
+
+def expand_substates(states):
+    '''For each item of states return a list containing all combinations of
+    that item with individual bits reset, sorted by the number of set bits.
+    '''
+    def nbits(n):
+        "number of bits set in n base 2"
+        nb = 0
+        while n:
+            n, rem = divmod(n, 2)
+            nb += rem
+        return nb
+    statelist = []
+    for state in states:
+        substates = list(set(state & x for x in states))
+        substates.sort(key=nbits, reverse=True)
+        statelist.append(substates)
+    return statelist
+
+_state_subsets = expand_substates(_states)
+
 # _state_codes gives for each state, the portable code to be passed as mc_state
-_state_codes = [reduce(lambda x, y: x | y,
-                       [_modifier_masks[i] for i in range(len(_modifiers))
-                        if (1 << i) & s],
-                       0)
-                for s in _states]
+_state_codes = []
+for s in _states:
+    r = 0
+    for i in range(len(_modifiers)):
+        if (1 << i) & s:
+            r |= _modifier_masks[i]
+    _state_codes.append(r)
 
 class _ComplexBinder:
     # This class binds many functions, and only unbinds them when it is deleted.
@@ -296,7 +312,7 @@ def MultiCallCreator(widget):
         assert issubclass(widget, Tkinter.Misc)
 
         def __init__(self, *args, **kwargs):
-            apply(widget.__init__, (self,)+args, kwargs)
+            widget.__init__(self, *args, **kwargs)
             # a dictionary which maps a virtual event to a tuple with:
             #  0. the function binded
             #  1. a list of triplets - the sequences it is binded to

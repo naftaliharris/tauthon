@@ -121,7 +121,15 @@ class SMTPChannel(asynchat.async_chat):
         self.__rcpttos = []
         self.__data = ''
         self.__fqdn = socket.getfqdn()
-        self.__peer = conn.getpeername()
+        try:
+            self.__peer = conn.getpeername()
+        except socket.error as err:
+            # a race condition  may occur if the other end is closing
+            # before we can get the peername
+            self.close()
+            if err.args[0] != errno.ENOTCONN:
+                raise
+            return
         print >> DEBUGSTREAM, 'Peer:', repr(self.__peer)
         self.push('220 %s %s' % (self.__fqdn, __version__))
         self.set_terminator('\r\n')
@@ -274,18 +282,37 @@ class SMTPServer(asyncore.dispatcher):
         self._localaddr = localaddr
         self._remoteaddr = remoteaddr
         asyncore.dispatcher.__init__(self)
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        # try to re-use a server port if possible
-        self.set_reuse_addr()
-        self.bind(localaddr)
-        self.listen(5)
-        print >> DEBUGSTREAM, \
-              '%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (
-            self.__class__.__name__, time.ctime(time.time()),
-            localaddr, remoteaddr)
+        try:
+            self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+            # try to re-use a server port if possible
+            self.set_reuse_addr()
+            self.bind(localaddr)
+            self.listen(5)
+        except:
+            # cleanup asyncore.socket_map before raising
+            self.close()
+            raise
+        else:
+            print >> DEBUGSTREAM, \
+                  '%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (
+                self.__class__.__name__, time.ctime(time.time()),
+                localaddr, remoteaddr)
 
     def handle_accept(self):
-        conn, addr = self.accept()
+        try:
+            conn, addr = self.accept()
+        except TypeError:
+            # sometimes accept() might return None
+            return
+        except socket.error as err:
+            # ECONNABORTED might be thrown
+            if err.args[0] != errno.ECONNABORTED:
+                raise
+            return
+        else:
+            # sometimes addr == None instead of (ip, port)
+            if addr == None:
+                return
         print >> DEBUGSTREAM, 'Incoming connection from %s' % repr(addr)
         channel = SMTPChannel(self, conn, addr)
 
@@ -420,7 +447,7 @@ class MailmanProxy(PureProxy):
         s = StringIO(data)
         msg = Message.Message(s)
         # These headers are required for the proper execution of Mailman.  All
-        # MTAs in existance seem to add these if the original message doesn't
+        # MTAs in existence seem to add these if the original message doesn't
         # have them.
         if not msg.getheader('from'):
             msg['From'] = mailfrom

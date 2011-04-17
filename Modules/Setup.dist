@@ -98,7 +98,10 @@ EXTRAMACHDEPPATH=
 # The TKPATH variable is always enabled, to save you the effort.
 TKPATH=:lib-tk
 
-COREPYTHONPATH=$(DESTPATH)$(SITEPATH)$(TESTPATH)$(MACHDEPPATH)$(EXTRAMACHDEPPATH)$(TKPATH)
+# Path component for old modules.
+OLDPATH=:lib-old
+
+COREPYTHONPATH=$(DESTPATH)$(SITEPATH)$(TESTPATH)$(MACHDEPPATH)$(EXTRAMACHDEPPATH)$(TKPATH)$(OLDPATH)
 PYTHONPATH=$(COREPYTHONPATH)
 
 
@@ -173,9 +176,14 @@ GLHACK=-Dclear=__GLclear
 #_weakref _weakref.c	# basic weak reference support
 #_testcapi _testcapimodule.c    # Python C API test module
 #_random _randommodule.c	# Random number generator
-#collections collectionsmodule.c # Container types
+#_collections _collectionsmodule.c # Container types
 #itertools itertoolsmodule.c	# Functions creating iterators for efficient looping 
 #strop stropmodule.c		# String manipulations
+#_functools _functoolsmodule.c	# Tools for working with functions and callable objects
+#_elementtree -I$(srcdir)/Modules/expat -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI _elementtree.c	# elementtree accelerator
+#_pickle _pickle.c	# pickle accelerator
+#datetime datetimemodule.c	# date/time type
+#_bisect _bisectmodule.c	# Bisection algorithms
 
 #unicodedata unicodedata.c    # static Unicode character database
 
@@ -231,7 +239,6 @@ GLHACK=-Dclear=__GLclear
 
 #audioop audioop.c	# Operations on audio samples
 #imageop imageop.c	# Operations on images
-#rgbimg rgbimgmodule.c	# Read SGI RGB image files (but coded portably)
 
 
 # Note that the _md5 and _sha modules are normally only built if the
@@ -244,9 +251,11 @@ GLHACK=-Dclear=__GLclear
 #_md5 md5module.c md5.c
 
 
-# The _sha module implements the SHA checksum algorithm.
-# (NIST's Secure Hash Algorithm.)
+# The _sha module implements the SHA checksum algorithms.
+# (NIST's Secure Hash Algorithms.)
 #_sha shamodule.c
+#_sha256 sha256module.c
+#_sha512 sha512module.c
 
 
 # SGI IRIX specific modules -- off by default.
@@ -464,8 +473,7 @@ GLHACK=-Dclear=__GLclear
 #
 # More information on Expat can be found at www.libexpat.org.
 #
-#EXPAT_DIR=/usr/local/src/expat-1.95.2
-#pyexpat pyexpat.c -DHAVE_EXPAT_H -I$(EXPAT_DIR)/lib -L$(EXPAT_DIR) -lexpat
+#pyexpat expat/xmlparse.c expat/xmlrole.c expat/xmltok.c pyexpat.c -I$(srcdir)/Modules/expat -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI
 
 
 # Hye-Shik Chang's CJKCodecs

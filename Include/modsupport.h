@@ -24,7 +24,7 @@ PyAPI_FUNC(PyObject *) _Py_VaBuildValue_SizeT(const char *, va_list);
 #endif
 
 PyAPI_FUNC(int) PyArg_Parse(PyObject *, const char *, ...);
-PyAPI_FUNC(int) PyArg_ParseTuple(PyObject *, const char *, ...);
+PyAPI_FUNC(int) PyArg_ParseTuple(PyObject *, const char *, ...) Py_FORMAT_PARSETUPLE(PyArg_ParseTuple, 2, 3);
 PyAPI_FUNC(int) PyArg_ParseTupleAndKeywords(PyObject *, PyObject *,
                                                   const char *, char **, ...);
 PyAPI_FUNC(int) PyArg_UnpackTuple(PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...);
@@ -40,7 +40,8 @@ PyAPI_FUNC(PyObject *) Py_VaBuildValue(const char *, va_list);
 PyAPI_FUNC(int) PyModule_AddObject(PyObject *, const char *, PyObject *);
 PyAPI_FUNC(int) PyModule_AddIntConstant(PyObject *, const char *, long);
 PyAPI_FUNC(int) PyModule_AddStringConstant(PyObject *, const char *, const char *);
-
+#define PyModule_AddIntMacro(m, c) PyModule_AddIntConstant(m, #c, c)
+#define PyModule_AddStringMacro(m, c) PyModule_AddStringConstant(m, #c, c)
 
 #define PYTHON_API_VERSION 1013
 #define PYTHON_API_STRING "1013"

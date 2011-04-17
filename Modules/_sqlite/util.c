@@ -1,6 +1,6 @@
 /* util.c - various utility functions
  *
- * Copyright (C) 2005-2006 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -24,8 +24,7 @@
 #include "module.h"
 #include "connection.h"
 
-int _sqlite_step_with_busyhandler(sqlite3_stmt* statement, Connection* connection
-)
+int pysqlite_step(sqlite3_stmt* statement, pysqlite_Connection* connection)
 {
     int rc;
 
@@ -46,9 +45,14 @@ int _sqlite_step_with_busyhandler(sqlite3_stmt* statement, Connection* connectio
  * Checks the SQLite error code and sets the appropriate DB-API exception.
  * Returns the error code (0 means no error occurred).
  */
-int _seterror(sqlite3* db)
+int _pysqlite_seterror(sqlite3* db, sqlite3_stmt* st)
 {
     int errorcode;
+
+    /* SQLite often doesn't report anything useful, unless you reset the statement first */
+    if (st != NULL) {
+        (void)sqlite3_reset(st);
+    }
 
     errorcode = sqlite3_errcode(db);
 
@@ -59,7 +63,7 @@ int _seterror(sqlite3* db)
             break;
         case SQLITE_INTERNAL:
         case SQLITE_NOTFOUND:
-            PyErr_SetString(InternalError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_InternalError, sqlite3_errmsg(db));
             break;
         case SQLITE_NOMEM:
             (void)PyErr_NoMemory();
@@ -77,23 +81,23 @@ int _seterror(sqlite3* db)
         case SQLITE_PROTOCOL:
         case SQLITE_EMPTY:
         case SQLITE_SCHEMA:
-            PyErr_SetString(OperationalError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_OperationalError, sqlite3_errmsg(db));
             break;
         case SQLITE_CORRUPT:
-            PyErr_SetString(DatabaseError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_DatabaseError, sqlite3_errmsg(db));
             break;
         case SQLITE_TOOBIG:
-            PyErr_SetString(DataError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_DataError, sqlite3_errmsg(db));
             break;
         case SQLITE_CONSTRAINT:
         case SQLITE_MISMATCH:
-            PyErr_SetString(IntegrityError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_IntegrityError, sqlite3_errmsg(db));
             break;
         case SQLITE_MISUSE:
-            PyErr_SetString(ProgrammingError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_ProgrammingError, sqlite3_errmsg(db));
             break;
         default:
-            PyErr_SetString(DatabaseError, sqlite3_errmsg(db));
+            PyErr_SetString(pysqlite_DatabaseError, sqlite3_errmsg(db));
             break;
     }
 

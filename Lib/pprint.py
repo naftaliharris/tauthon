@@ -35,6 +35,7 @@ saferepr()
 """
 
 import sys as _sys
+import warnings
 
 from cStringIO import StringIO as _StringIO
 
@@ -69,6 +70,13 @@ def isreadable(object):
 def isrecursive(object):
     """Determine if object requires a recursive representation."""
     return _safe_repr(object, {}, None, 0)[2]
+
+def _sorted(iterable):
+    with warnings.catch_warnings():
+        if _sys.py3kwarning:
+            warnings.filterwarnings("ignore", "comparing unequal types "
+                                    "not supported", DeprecationWarning)
+        return sorted(iterable)
 
 class PrettyPrinter:
     def __init__(self, indent=1, width=80, depth=None, stream=None):
@@ -131,62 +139,89 @@ class PrettyPrinter:
         sepLines = _len(rep) > (self._width - 1 - indent - allowance)
         write = stream.write
 
-        if sepLines:
-            r = getattr(typ, "__repr__", None)
-            if issubclass(typ, dict) and r is dict.__repr__:
-                write('{')
-                if self._indent_per_level > 1:
-                    write((self._indent_per_level - 1) * ' ')
-                length = _len(object)
-                if length:
-                    context[objid] = 1
-                    indent = indent + self._indent_per_level
-                    items  = object.items()
-                    items.sort()
-                    key, ent = items[0]
-                    rep = self._repr(key, context, level)
-                    write(rep)
-                    write(': ')
-                    self._format(ent, stream, indent + _len(rep) + 2,
-                                  allowance + 1, context, level)
-                    if length > 1:
-                        for key, ent in items[1:]:
-                            rep = self._repr(key, context, level)
-                            write(',\n%s%s: ' % (' '*indent, rep))
-                            self._format(ent, stream, indent + _len(rep) + 2,
-                                          allowance + 1, context, level)
-                    indent = indent - self._indent_per_level
-                    del context[objid]
-                write('}')
-                return
+        if self._depth and level > self._depth:
+            write(rep)
+            return
 
-            if (issubclass(typ, list) and r is list.__repr__) or \
-               (issubclass(typ, tuple) and r is tuple.__repr__):
-                if issubclass(typ, list):
-                    write('[')
-                    endchar = ']'
-                else:
-                    write('(')
-                    endchar = ')'
-                if self._indent_per_level > 1:
-                    write((self._indent_per_level - 1) * ' ')
-                length = _len(object)
-                if length:
-                    context[objid] = 1
-                    indent = indent + self._indent_per_level
-                    self._format(object[0], stream, indent, allowance + 1,
-                                 context, level)
-                    if length > 1:
-                        for ent in object[1:]:
+        r = getattr(typ, "__repr__", None)
+        if issubclass(typ, dict) and r is dict.__repr__:
+            write('{')
+            if self._indent_per_level > 1:
+                write((self._indent_per_level - 1) * ' ')
+            length = _len(object)
+            if length:
+                context[objid] = 1
+                indent = indent + self._indent_per_level
+                items = _sorted(object.items())
+                key, ent = items[0]
+                rep = self._repr(key, context, level)
+                write(rep)
+                write(': ')
+                self._format(ent, stream, indent + _len(rep) + 2,
+                              allowance + 1, context, level)
+                if length > 1:
+                    for key, ent in items[1:]:
+                        rep = self._repr(key, context, level)
+                        if sepLines:
+                            write(',\n%s%s: ' % (' '*indent, rep))
+                        else:
+                            write(', %s: ' % rep)
+                        self._format(ent, stream, indent + _len(rep) + 2,
+                                      allowance + 1, context, level)
+                indent = indent - self._indent_per_level
+                del context[objid]
+            write('}')
+            return
+
+        if ((issubclass(typ, list) and r is list.__repr__) or
+            (issubclass(typ, tuple) and r is tuple.__repr__) or
+            (issubclass(typ, set) and r is set.__repr__) or
+            (issubclass(typ, frozenset) and r is frozenset.__repr__)
+           ):
+            length = _len(object)
+            if issubclass(typ, list):
+                write('[')
+                endchar = ']'
+            elif issubclass(typ, set):
+                if not length:
+                    write('set()')
+                    return
+                write('set([')
+                endchar = '])'
+                object = _sorted(object)
+                indent += 4
+            elif issubclass(typ, frozenset):
+                if not length:
+                    write('frozenset()')
+                    return
+                write('frozenset([')
+                endchar = '])'
+                object = _sorted(object)
+                indent += 10
+            else:
+                write('(')
+                endchar = ')'
+            if self._indent_per_level > 1 and sepLines:
+                write((self._indent_per_level - 1) * ' ')
+            if length:
+                context[objid] = 1
+                indent = indent + self._indent_per_level
+                self._format(object[0], stream, indent, allowance + 1,
+                             context, level)
+                if length > 1:
+                    for ent in object[1:]:
+                        if sepLines:
                             write(',\n' + ' '*indent)
-                            self._format(ent, stream, indent,
-                                          allowance + 1, context, level)
-                    indent = indent - self._indent_per_level
-                    del context[objid]
-                if issubclass(typ, tuple) and length == 1:
-                    write(',')
-                write(endchar)
-                return
+                        else:
+                            write(', ')
+                        self._format(ent, stream, indent,
+                                      allowance + 1, context, level)
+                indent = indent - self._indent_per_level
+                del context[objid]
+            if issubclass(typ, tuple) and length == 1:
+                write(',')
+            write(endchar)
+            return
 
         write(rep)
 
@@ -235,7 +270,7 @@ def _safe_repr(object, context, maxlevels, level):
         if not object:
             return "{}", True, False
         objid = _id(object)
-        if maxlevels and level > maxlevels:
+        if maxlevels and level >= maxlevels:
             return "{...}", False, objid in context
         if objid in context:
             return _recursion(object), False, True
@@ -246,7 +281,7 @@ def _safe_repr(object, context, maxlevels, level):
         append = components.append
         level += 1
         saferepr = _safe_repr
-        for k, v in sorted(object.items()):
+        for k, v in _sorted(object.items()):
             krepr, kreadable, krecur = saferepr(k, context, maxlevels, level)
             vrepr, vreadable, vrecur = saferepr(v, context, maxlevels, level)
             append("%s: %s" % (krepr, vrepr))
@@ -269,7 +304,7 @@ def _safe_repr(object, context, maxlevels, level):
                 return "()", True, False
             format = "(%s)"
         objid = _id(object)
-        if maxlevels and level > maxlevels:
+        if maxlevels and level >= maxlevels:
             return format % "...", False, objid in context
         if objid in context:
             return _recursion(object), False, True

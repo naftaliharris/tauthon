@@ -10,9 +10,7 @@ dis(pickle, out=None, memo=None, indentlevel=4)
    Print a symbolic disassembly of a pickle.
 '''
 
-__all__ = ['dis',
-           'genops',
-          ]
+__all__ = ['dis', 'genops', 'optimize']
 
 # Other ideas:
 #
@@ -1350,7 +1348,7 @@ opcodes = [
       arg=None,
       stack_before=[markobject, stackslice],
       stack_after=[],
-      proto=0,
+      proto=1,
       doc="""Pop all the stack objects at and above the topmost markobject.
 
       When an opcode using a variable number of stack objects is done,
@@ -1858,6 +1856,33 @@ def genops(pickle):
             break
 
 ##############################################################################
+# A pickle optimizer.
+
+def optimize(p):
+    'Optimize a pickle string by removing unused PUT opcodes'
+    gets = set()            # set of args used by a GET opcode
+    puts = []               # (arg, startpos, stoppos) for the PUT opcodes
+    prevpos = None          # set to pos if previous opcode was a PUT
+    for opcode, arg, pos in genops(p):
+        if prevpos is not None:
+            puts.append((prevarg, prevpos, pos))
+            prevpos = None
+        if 'PUT' in opcode.name:
+            prevarg, prevpos = arg, pos
+        elif 'GET' in opcode.name:
+            gets.add(arg)
+
+    # Copy the pickle string except for PUTS without a corresponding GET
+    s = []
+    i = 0
+    for arg, start, stop in puts:
+        j = stop if (arg in gets) else start
+        s.append(p[i:j])
+        i = stop
+    s.append(p[i:])
+    return ''.join(s)
+
+##############################################################################
 # A symbolic pickle disassembler.
 
 def dis(pickle, out=None, memo=None, indentlevel=4):
@@ -2058,11 +2083,11 @@ highest protocol among opcodes = 1
 
 Exercise the INST/OBJ/BUILD family.
 
->>> import random
->>> dis(pickle.dumps(random.random, 0))
-    0: c    GLOBAL     'random random'
-   15: p    PUT        0
-   18: .    STOP
+>>> import pickletools
+>>> dis(pickle.dumps(pickletools.dis, 0))
+    0: c    GLOBAL     'pickletools dis'
+   17: p    PUT        0
+   20: .    STOP
 highest protocol among opcodes = 0
 
 >>> from pickletools import _Example
