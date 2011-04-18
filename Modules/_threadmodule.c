@@ -53,6 +53,7 @@ acquire_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds)
     _PyTime_timeval curtime;
     _PyTime_timeval endtime;
 
+
     if (microseconds > 0) {
         _PyTime_gettimeofday(&endtime);
         endtime.tv_sec += microseconds / (1000 * 1000);
@@ -75,7 +76,7 @@ acquire_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds)
 
             /* If we're using a timeout, recompute the timeout after processing
              * signals, since those can take time.  */
-            if (microseconds >= 0) {
+            if (microseconds > 0) {
                 _PyTime_gettimeofday(&curtime);
                 microseconds = ((endtime.tv_sec - curtime.tv_sec) * 1000000 +
                                 (endtime.tv_usec - curtime.tv_usec));
@@ -1307,7 +1308,9 @@ PyInit__thread(void)
 
     /* Add a symbolic constant */
     d = PyModule_GetDict(m);
-    ThreadError = PyErr_NewException("_thread.error", NULL, NULL);
+    ThreadError = PyExc_RuntimeError;
+    Py_INCREF(ThreadError);
+    
     PyDict_SetItemString(d, "error", ThreadError);
     Locktype.tp_doc = lock_doc;
     Py_INCREF(&Locktype);
