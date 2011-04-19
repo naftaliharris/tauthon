@@ -1,9 +1,12 @@
-
 :mod:`socketserver` --- A framework for network servers
 =======================================================
 
 .. module:: socketserver
    :synopsis: A framework for network servers.
+
+**Source code:** :source:`Lib/socketserver.py`
+
+--------------
 
 The :mod:`socketserver` module simplifies the task of writing network servers.
 
