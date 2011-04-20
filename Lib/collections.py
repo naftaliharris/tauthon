@@ -13,6 +13,7 @@ import sys as _sys
 import heapq as _heapq
 from weakref import proxy as _proxy
 from itertools import repeat as _repeat, chain as _chain, starmap as _starmap
+from reprlib import recursive_repr as _recursive_repr
 
 ################################################################################
 ### OrderedDict
@@ -31,6 +32,7 @@ class OrderedDict(dict):
     # The internal self.__map dictionary maps keys to links in a doubly linked list.
     # The circular doubly linked list starts and ends with a sentinel element.
     # The sentinel element never gets deleted (this simplifies the algorithm).
+    # The sentinel is stored in self.__hardroot with a weakref proxy in self.__root.
     # The prev/next links are weakref proxies (to prevent circular references).
     # Individual links are kept alive by the hard reference in self.__map.
     # Those hard references disappear when a key is deleted from an OrderedDict.
@@ -43,42 +45,39 @@ class OrderedDict(dict):
         '''
         if len(args) > 1:
             raise TypeError('expected at most 1 arguments, got %d' % len(args))
-        self.__in_repr = False              # detects recursive repr
         try:
             self.__root
         except AttributeError:
-            self.__root = root = _Link()    # sentinel node for the doubly linked list
+            self.__hardroot = _Link()
+            self.__root = root = _proxy(self.__hardroot)
             root.prev = root.next = root
             self.__map = {}
         self.__update(*args, **kwds)
 
-    def clear(self):
-        'od.clear() -> None.  Remove all items from od.'
-        root = self.__root
-        root.prev = root.next = root
-        self.__map.clear()
-        dict.clear(self)
-
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value,
+                    dict_setitem=dict.__setitem__, proxy=_proxy, Link=_Link):
         'od.__setitem__(i, y) <==> od[i]=y'
         # Setting a new item creates a new link which goes at the end of the linked
         # list, and the inherited dictionary is updated with the new key/value pair.
         if key not in self:
-            self.__map[key] = link = _Link()
+            self.__map[key] = link = Link()
             root = self.__root
             last = root.prev
             link.prev, link.next, link.key = last, root, key
-            last.next = root.prev = _proxy(link)
-        dict.__setitem__(self, key, value)
+            last.next = link
+            root.prev = proxy(link)
+        dict_setitem(self, key, value)
 
-    def __delitem__(self, key):
+    def __delitem__(self, key, dict_delitem=dict.__delitem__):
         'od.__delitem__(y) <==> del od[y]'
         # Deleting an existing item uses self.__map to find the link which is
         # then removed by updating the links in the predecessor and successor nodes.
-        dict.__delitem__(self, key)
+        dict_delitem(self, key)
         link = self.__map.pop(key)
-        link.prev.next = link.next
-        link.next.prev = link.prev
+        link_prev = link.prev
+        link_next = link.next
+        link_prev.next = link_next
+        link_next.prev = link_prev
 
     def __iter__(self):
         'od.__iter__() <==> iter(od)'
@@ -98,21 +97,85 @@ class OrderedDict(dict):
             yield curr.key
             curr = curr.prev
 
+    def clear(self):
+        'od.clear() -> None.  Remove all items from od.'
+        root = self.__root
+        root.prev = root.next = root
+        self.__map.clear()
+        dict.clear(self)
+
+    def popitem(self, last=True):
+        '''od.popitem() -> (k, v), return and remove a (key, value) pair.
+        Pairs are returned in LIFO order if last is true or FIFO order if false.
+
+        '''
+        if not self:
+            raise KeyError('dictionary is empty')
+        root = self.__root
+        if last:
+            link = root.prev
+            link_prev = link.prev
+            link_prev.next = root
+            root.prev = link_prev
+        else:
+            link = root.next
+            link_next = link.next
+            root.next = link_next
+            link_next.prev = root
+        key = link.key
+        del self.__map[key]
+        value = dict.pop(self, key)
+        return key, value
+
+    def move_to_end(self, key, last=True):
+        '''Move an existing element to the end (or beginning if last==False).
+
+        Raises KeyError if the element does not exist.
+        When last=True, acts like a fast version of self[key]=self.pop(key).
+
+        '''
+        link = self.__map[key]
+        link_prev = link.prev
+        link_next = link.next
+        link_prev.next = link_next
+        link_next.prev = link_prev
+        root = self.__root
+        if last:
+            last = root.prev
+            link.prev = last
+            link.next = root
+            last.next = root.prev = link
+        else:
+            first = root.next
+            link.prev = root
+            link.next = first
+            root.next = first.prev = link
+
     def __reduce__(self):
         'Return state information for pickling'
         items = [[k, self[k]] for k in self]
-        tmp = self.__map, self.__root, self.__in_repr
-        del self.__map, self.__root, self.__in_repr
+        tmp = self.__map, self.__root, self.__hardroot
+        del self.__map, self.__root, self.__hardroot
         inst_dict = vars(self).copy()
-        self.__map, self.__root, self.__in_repr = tmp
+        self.__map, self.__root, self.__hardroot = tmp
         if inst_dict:
             return (self.__class__, (items,), inst_dict)
         return self.__class__, (items,)
+
+    def __sizeof__(self):
+        sizeof = _sys.getsizeof
+        n = len(self) + 1                       # number of links including root
+        size = sizeof(self.__dict__)            # instance dictionary
+        size += sizeof(self.__map) * 2          # internal dict and inherited dict
+        size += sizeof(self.__hardroot) * n     # link objects
+        size += sizeof(self.__root) * n         # proxy objects
+        return size
 
     update = __update = MutableMapping.update
     keys = MutableMapping.keys
     values = MutableMapping.values
     items = MutableMapping.items
+    __ne__ = MutableMapping.__ne__
 
     __marker = object()
 
@@ -126,35 +189,18 @@ class OrderedDict(dict):
         return default
 
     def setdefault(self, key, default=None):
-        'od.setdefault(k[,d]) -> od.get(k,d), also set od[k]=d if k not in od'
+        'OD.setdefault(k[,d]) -> OD.get(k,d), also set OD[k]=d if k not in OD'
         if key in self:
             return self[key]
         self[key] = default
         return default
 
-    def popitem(self, last=True):
-        '''od.popitem() -> (k, v), return and remove a (key, value) pair.
-        Pairs are returned in LIFO order if last is true or FIFO order if false.
-
-        '''
-        if not self:
-            raise KeyError('dictionary is empty')
-        key = next(reversed(self) if last else iter(self))
-        value = self.pop(key)
-        return key, value
-
+    @_recursive_repr()
     def __repr__(self):
         'od.__repr__() <==> repr(od)'
-        if self.__in_repr:
-            return '...'
         if not self:
             return '%s()' % (self.__class__.__name__,)
-        self.__in_repr = True
-        try:
-            result = '%s(%r)' % (self.__class__.__name__, list(self.items()))
-        finally:
-            self.__in_repr = False
-        return result
+        return '%s(%r)' % (self.__class__.__name__, list(self.items()))
 
     def copy(self):
         'od.copy() -> a shallow copy of od'
@@ -180,14 +226,6 @@ class OrderedDict(dict):
             return len(self)==len(other) and \
                    all(p==q for p, q in zip(self.items(), other.items()))
         return dict.__eq__(self, other)
-
-    def __ne__(self, other):
-        '''od.__ne__(y) <==> od!=y.  Comparison to another OD is order-sensitive
-        while comparison to a regular mapping is order-insensitive.
-
-        '''
-        return not self == other
-
 
 
 ################################################################################
@@ -257,6 +295,7 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
         __slots__ = () \n
         _fields = %(field_names)r \n
         def __new__(_cls, %(argtxt)s):
+            'Create new instance of %(typename)s(%(argtxt)s)'
             return _tuple.__new__(_cls, (%(argtxt)s)) \n
         @classmethod
         def _make(cls, iterable, new=tuple.__new__, len=len):
@@ -266,7 +305,8 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
                 raise TypeError('Expected %(numfields)d arguments, got %%d' %% len(result))
             return result \n
         def __repr__(self):
-            return '%(typename)s(%(reprtxt)s)' %% self \n
+            'Return a nicely formatted representation string'
+            return self.__class__.__name__ + '(%(reprtxt)s)' %% self \n
         def _asdict(self):
             'Return a new OrderedDict which maps field names to their values'
             return OrderedDict(zip(self._fields, self)) \n
@@ -277,9 +317,10 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
                 raise ValueError('Got unexpected field names: %%r' %% kwds.keys())
             return result \n
         def __getnewargs__(self):
+            'Return self as a plain tuple.  Used by copy and pickle.'
             return tuple(self) \n\n''' % locals()
     for i, name in enumerate(field_names):
-        template += '        %s = _property(_itemgetter(%d))\n' % (name, i)
+        template += "        %s = _property(_itemgetter(%d), doc='Alias for field number %d')\n" % (name, i, i)
     if verbose:
         print(template)
 
@@ -290,7 +331,7 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
     try:
         exec(template, namespace)
     except SyntaxError as e:
-        raise SyntaxError(e.msg + ':\n' + template) from e
+        raise SyntaxError(e.msg + ':\n\n' + template)
     result = namespace[typename]
 
     # For pickling to work, the __module__ variable needs to be set to the frame
@@ -308,6 +349,17 @@ def namedtuple(typename, field_names, verbose=False, rename=False):
 ########################################################################
 ###  Counter
 ########################################################################
+
+def _count_elements(mapping, iterable):
+    'Tally elements from the iterable.'
+    mapping_get = mapping.get
+    for elem in iterable:
+        mapping[elem] = mapping_get(elem, 0) + 1
+
+try:                                    # Load C helper function if available
+    from _collections import _count_elements
+except ImportError:
+    pass
 
 class Counter(dict):
     '''Dict subclass for counting hashable items.  Sometimes called a bag
@@ -452,11 +504,36 @@ class Counter(dict):
                 else:
                     super().update(iterable) # fast path when counter is empty
             else:
-                self_get = self.get
-                for elem in iterable:
-                    self[elem] = 1 + self_get(elem, 0)
+                _count_elements(self, iterable)
         if kwds:
             self.update(kwds)
+
+    def subtract(self, iterable=None, **kwds):
+        '''Like dict.update() but subtracts counts instead of replacing them.
+        Counts can be reduced below zero.  Both the inputs and outputs are
+        allowed to contain zero and negative counts.
+
+        Source can be an iterable, a dictionary, or another Counter instance.
+
+        >>> c = Counter('which')
+        >>> c.subtract('witch')             # subtract elements from another iterable
+        >>> c.subtract(Counter('watch'))    # subtract elements from another counter
+        >>> c['h']                          # 2 in which, minus 1 in witch, minus 1 in watch
+        0
+        >>> c['w']                          # 1 in which, minus 1 in witch, minus 1 in watch
+        -1
+
+        '''
+        if iterable is not None:
+            self_get = self.get
+            if isinstance(iterable, Mapping):
+                for elem, count in iterable.items():
+                    self[elem] = self_get(elem, 0) - count
+            else:
+                for elem in iterable:
+                    self[elem] = self_get(elem, 0) - 1
+        if kwds:
+            self.subtract(kwds)
 
     def copy(self):
         'Return a shallow copy.'
@@ -559,6 +636,106 @@ class Counter(dict):
             if newcount > 0:
                 result[elem] = newcount
         return result
+
+
+########################################################################
+###  ChainMap (helper for configparser)
+########################################################################
+
+class _ChainMap(MutableMapping):
+    ''' A ChainMap groups multiple dicts (or other mappings) together
+    to create a single, updateable view.
+
+    The underlying mappings are stored in a list.  That list is public and can
+    accessed or updated using the *maps* attribute.  There is no other state.
+
+    Lookups search the underlying mappings successively until a key is found.
+    In contrast, writes, updates, and deletions only operate on the first
+    mapping.
+
+    '''
+
+    def __init__(self, *maps):
+        '''Initialize a ChainMap by setting *maps* to the given mappings.
+        If no mappings are provided, a single empty dictionary is used.
+
+        '''
+        self.maps = list(maps) or [{}]          # always at least one map
+
+    def __missing__(self, key):
+        raise KeyError(key)
+
+    def __getitem__(self, key):
+        for mapping in self.maps:
+            try:
+                return mapping[key]             # can't use 'key in mapping' with defaultdict
+            except KeyError:
+                pass
+        return self.__missing__(key)            # support subclasses that define __missing__
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
+    def __len__(self):
+        return len(set().union(*self.maps))     # reuses stored hash values if possible
+
+    def __iter__(self):
+        return iter(set().union(*self.maps))
+
+    def __contains__(self, key):
+        return any(key in m for m in self.maps)
+
+    @_recursive_repr()
+    def __repr__(self):
+        return '{0.__class__.__name__}({1})'.format(
+            self, ', '.join(map(repr, self.maps)))
+
+    @classmethod
+    def fromkeys(cls, iterable, *args):
+        'Create a ChainMap with a single dict created from the iterable.'
+        return cls(dict.fromkeys(iterable, *args))
+
+    def copy(self):
+        'New ChainMap or subclass with a new copy of maps[0] and refs to maps[1:]'
+        return self.__class__(self.maps[0].copy(), *self.maps[1:])
+
+    __copy__ = copy
+
+    def new_child(self):                        # like Django's Context.push()
+        'New ChainMap with a new dict followed by all previous maps.'
+        return self.__class__({}, *self.maps)
+
+    @property
+    def parents(self):                          # like Django's Context.pop()
+        'New ChainMap from maps[1:].'
+        return self.__class__(*self.maps[1:])
+
+    def __setitem__(self, key, value):
+        self.maps[0][key] = value
+
+    def __delitem__(self, key):
+        try:
+            del self.maps[0][key]
+        except KeyError:
+            raise KeyError('Key not found in the first mapping: {!r}'.format(key))
+
+    def popitem(self):
+        'Remove and return an item pair from maps[0]. Raise KeyError is maps[0] is empty.'
+        try:
+            return self.maps[0].popitem()
+        except KeyError:
+            raise KeyError('No keys found in the first mapping.')
+
+    def pop(self, key, *args):
+        'Remove *key* from maps[0] and return its value. Raise KeyError if *key* not in maps[0].'
+        try:
+            return self.maps[0].pop(key, *args)
+        except KeyError:
+            raise KeyError('Key not found in the first mapping: {!r}'.format(key))
+
+    def clear(self):
+        'Clear maps[0], leaving maps[1:] intact.'
+        self.maps[0].clear()
 
 
 ################################################################################
@@ -802,6 +979,8 @@ class UserString(Sequence):
             new = new.data
         return self.__class__(self.data.replace(old, new, maxsplit))
     def rfind(self, sub, start=0, end=_sys.maxsize):
+        if isinstance(sub, UserString):
+            sub = sub.data
         return self.data.rfind(sub, start, end)
     def rindex(self, sub, start=0, end=_sys.maxsize):
         return self.data.rindex(sub, start, end)

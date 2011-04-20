@@ -15,7 +15,9 @@ General GUI Questions
 What platform-independent GUI toolkits exist for Python?
 ========================================================
 
-Depending on what platform(s) you are aiming at, there are several.
+Depending on what platform(s) you are aiming at, there are several.  Some
+of them haven't been ported to Python 3 yet.  At least `Tkinter`_ and `Qt`_
+are known to be Python 3-compatible.
 
 .. XXX check links
 
@@ -23,12 +25,14 @@ Tkinter
 -------
 
 Standard builds of Python include an object-oriented interface to the Tcl/Tk
-widget set, called Tkinter.  This is probably the easiest to install and use.
-For more info about Tk, including pointers to the source, see the Tcl/Tk home
-page at http://www.tcl.tk.  Tcl/Tk is fully portable to the MacOS, Windows, and
-Unix platforms.
+widget set, called :ref:`tkinter <Tkinter>`.  This is probably the easiest to
+install (since it comes included with most
+`binary distributions <http://www.python.org/download/>`_ of Python) and use.
+For more info about Tk, including pointers to the source, see the
+`Tcl/Tk home page <http://www.tcl.tk>`_.  Tcl/Tk is fully portable to the
+MacOS, Windows, and Unix platforms.
 
-wxWindows
+wxWidgets
 ---------
 
 wxWidgets (http://www.wxwidgets.org) is a free, portable GUI class
@@ -47,22 +51,25 @@ Both wxWidgets and wxPython are free, open source, software with
 permissive licences that allow their use in commercial products as
 well as in freeware or shareware.
 
+
 Qt
 ---
 
-There are bindings available for the Qt toolkit (`PyQt
-<http://www.riverbankcomputing.co.uk/software/pyqt/>`_) and for KDE (PyKDE).  If
-you're writing open source software, you don't need to pay for PyQt, but if you
-want to write proprietary applications, you must buy a PyQt license from
-`Riverbank Computing <http://www.riverbankcomputing.co.uk>`_ and (up to Qt 4.4;
-Qt 4.5 upwards is licensed under the LGPL license) a Qt license from `Trolltech
-<http://www.trolltech.com>`_.
+There are bindings available for the Qt toolkit (using either `PyQt
+<http://www.riverbankcomputing.co.uk/software/pyqt/>`_ or `PySide
+<http://www.pyside.org/>`_) and for KDE (`PyKDE <http://www.riverbankcomputing.co.uk/software/pykde/intro>`__).
+PyQt is currently more mature than PySide, but you must buy a PyQt license from
+`Riverbank Computing <http://www.riverbankcomputing.co.uk/software/pyqt/license>`_
+if you want to write proprietary applications.  PySide is free for all applications.
+
+Qt 4.5 upwards is licensed under the LGPL license; also, commercial licenses
+are available from `Nokia <http://qt.nokia.com/>`_.
 
 Gtk+
 ----
 
 PyGtk bindings for the `Gtk+ toolkit <http://www.gtk.org>`_ have been
-implemented by by James Henstridge; see ftp://ftp.gtk.org/pub/gtk/python/.
+implemented by James Henstridge; see <http://www.pygtk.org>.
 
 FLTK
 ----
@@ -91,14 +98,15 @@ What platform-specific GUI toolkits exist for Python?
 
 `The Mac port <http://python.org/download/mac>`_ by Jack Jansen has a rich and
 ever-growing set of modules that support the native Mac toolbox calls.  The port
-includes support for MacOS9 and MacOS X's Carbon libraries.  By installing the
-`PyObjc Objective-C bridge <http://pyobjc.sourceforge.net>`_, Python programs
-can use MacOS X's Cocoa libraries. See the documentation that comes with the Mac
-port.
+supports MacOS X's Carbon libraries.
+
+By installing the `PyObjc Objective-C bridge
+<http://pyobjc.sourceforge.net>`_, Python programs can use MacOS X's
+Cocoa libraries. See the documentation that comes with the Mac port.
 
 :ref:`Pythonwin <windows-faq>` by Mark Hammond includes an interface to the
-Microsoft Foundation Classes and a Python programming environment using it
-that's written mostly in Python.
+Microsoft Foundation Classes and a Python programming environment
+that's written mostly in Python using the MFC classes.
 
 
 Tkinter questions
@@ -111,23 +119,26 @@ Freeze is a tool to create stand-alone applications.  When freezing Tkinter
 applications, the applications will not be truly stand-alone, as the application
 will still need the Tcl and Tk libraries.
 
-One solution is to ship the application with the tcl and tk libraries, and point
+One solution is to ship the application with the Tcl and Tk libraries, and point
 to them at run-time using the :envvar:`TCL_LIBRARY` and :envvar:`TK_LIBRARY`
 environment variables.
 
 To get truly stand-alone applications, the Tcl scripts that form the library
 have to be integrated into the application as well. One tool supporting that is
 SAM (stand-alone modules), which is part of the Tix distribution
-(http://tix.mne.com).  Build Tix with SAM enabled, perform the appropriate call
-to Tclsam_init etc inside Python's Modules/tkappinit.c, and link with libtclsam
-and libtksam (you might include the Tix libraries as well).
+(http://tix.sourceforge.net/).
+
+Build Tix with SAM enabled, perform the appropriate call to
+:c:func:`Tclsam_init`, etc. inside Python's
+:file:`Modules/tkappinit.c`, and link with libtclsam and libtksam (you
+might include the Tix libraries as well).
 
 
 Can I have Tk events handled while waiting for I/O?
 ---------------------------------------------------
 
 Yes, and you don't even need threads!  But you'll have to restructure your I/O
-code a bit.  Tk has the equivalent of Xt's XtAddInput() call, which allows you
+code a bit.  Tk has the equivalent of Xt's :c:func:`XtAddInput()` call, which allows you
 to register a callback function which will be called from the Tk mainloop when
 I/O is possible on a file descriptor.  Here's what you need::
 
