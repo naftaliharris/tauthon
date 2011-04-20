@@ -25,8 +25,9 @@ def raise2():
 
 class TestCase(unittest.TestCase):
     def setUp(self):
+        self.save_stdout = sys.stdout
+        self.save_stderr = sys.stderr
         self.stream = io.StringIO()
-        self.save_stdout, self.save_stderr = sys.stderr, sys.stdout
         sys.stdout = sys.stderr = self.stream
         atexit._clear()
 
@@ -64,6 +65,14 @@ class TestCase(unittest.TestCase):
         atexit.register(raise2)
 
         self.assertRaises(TypeError, atexit._run_exitfuncs)
+
+    def test_raise_unnormalized(self):
+        # Issue #10756: Make sure that an unnormalized exception is
+        # handled properly
+        atexit.register(lambda: 1 / 0)
+
+        self.assertRaises(ZeroDivisionError, atexit._run_exitfuncs)
+        self.assertIn("ZeroDivisionError", self.stream.getvalue())
 
     def test_stress(self):
         a = [0]
