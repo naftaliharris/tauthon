@@ -19,7 +19,7 @@ from collections import deque
 
 __all__ = ['active_count', 'Condition', 'current_thread', 'enumerate', 'Event',
            'Lock', 'RLock', 'Semaphore', 'BoundedSemaphore', 'Thread', 'Barrier',
-           'Timer', 'setprofile', 'settrace', 'local', 'stack_size']
+           'Timer', 'setprofile', 'settrace', 'local', 'stack_size', '_info']
 
 # Rename some stuff so "from threading import *" is safe
 _start_new_thread = _thread.start_new_thread
@@ -31,6 +31,7 @@ try:
 except AttributeError:
     _CRLock = None
 TIMEOUT_MAX = _thread.TIMEOUT_MAX
+_info = _thread.info
 del _thread
 
 
@@ -622,7 +623,7 @@ class Thread(_Verbose):
     #XXX __exc_clear = _sys.exc_clear
 
     def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
+                 args=(), kwargs=None, verbose=None, *, daemon=None):
         assert group is None, "group argument must be None for now"
         _Verbose.__init__(self, verbose)
         if kwargs is None:
@@ -631,7 +632,10 @@ class Thread(_Verbose):
         self._name = str(name or _newname())
         self._args = args
         self._kwargs = kwargs
-        self._daemonic = self._set_daemon()
+        if daemon is not None:
+            self._daemonic = daemon
+        else:
+            self._daemonic = current_thread().daemon
         self._ident = None
         self._started = Event()
         self._stopped = False
@@ -647,10 +651,6 @@ class Thread(_Verbose):
         if hasattr(self, '_block'):  # DummyThread deletes _block
             self._block.__init__()
         self._started._reset_internal_locks()
-
-    def _set_daemon(self):
-        # Overridden in _MainThread and _DummyThread
-        return current_thread().daemon
 
     def __repr__(self):
         assert self._initialized, "Thread.__init__() was not called"
@@ -948,14 +948,11 @@ class _Timer(Thread):
 class _MainThread(Thread):
 
     def __init__(self):
-        Thread.__init__(self, name="MainThread")
+        Thread.__init__(self, name="MainThread", daemon=False)
         self._started.set()
         self._set_ident()
         with _active_limbo_lock:
             _active[self._ident] = self
-
-    def _set_daemon(self):
-        return False
 
     def _exitfunc(self):
         self._stop()
@@ -988,7 +985,7 @@ def _pickSomeNonDaemonThread():
 class _DummyThread(Thread):
 
     def __init__(self):
-        Thread.__init__(self, name=_newname("Dummy-%d"))
+        Thread.__init__(self, name=_newname("Dummy-%d"), daemon=True)
 
         # Thread._block consumes an OS-level locking primitive, which
         # can never be used by a _DummyThread.  Since a _DummyThread
@@ -999,9 +996,6 @@ class _DummyThread(Thread):
         self._set_ident()
         with _active_limbo_lock:
             _active[self._ident] = self
-
-    def _set_daemon(self):
-        return True
 
     def join(self, timeout=None):
         assert False, "cannot join a dummy thread"
