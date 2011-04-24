@@ -1,5 +1,6 @@
 import unittest
-from test.support import verbose, run_unittest, strip_python_stderr
+from test.support import (verbose, refcount_test, run_unittest,
+                            strip_python_stderr)
 import sys
 import gc
 import weakref
@@ -175,6 +176,7 @@ class GCTests(unittest.TestCase):
         del d
         self.assertEqual(gc.collect(), 2)
 
+    @refcount_test
     def test_frame(self):
         def f():
             frame = sys._getframe()
@@ -242,6 +244,7 @@ class GCTests(unittest.TestCase):
     # For example, disposed tuples are not freed, but reused.
     # To minimize variations, though, we first store the get_count() results
     # and check them at the end.
+    @refcount_test
     def test_get_count(self):
         gc.collect()
         a, b, c = gc.get_count()
@@ -255,6 +258,7 @@ class GCTests(unittest.TestCase):
         # created (the list).
         self.assertGreater(d, a)
 
+    @refcount_test
     def test_collect_generations(self):
         gc.collect()
         # This object will "trickle" into generation N + 1 after

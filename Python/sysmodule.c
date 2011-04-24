@@ -1177,7 +1177,6 @@ PySys_AddXOption(const wchar_t *s)
     PyObject *opts;
     PyObject *name = NULL, *value = NULL;
     const wchar_t *name_end;
-    int r;
 
     opts = get_xoptions();
     if (opts == NULL)
@@ -1195,7 +1194,7 @@ PySys_AddXOption(const wchar_t *s)
     }
     if (name == NULL || value == NULL)
         goto error;
-    r = PyDict_SetItem(opts, name, value);
+    PyDict_SetItem(opts, name, value);
     Py_DECREF(name);
     Py_DECREF(value);
     return;
@@ -1257,7 +1256,6 @@ int_info -- a struct sequence with information about the int implementation.\n\
 maxsize -- the largest supported length of containers.\n\
 maxunicode -- the largest supported character\n\
 builtin_module_names -- tuple of module names built into this interpreter\n\
-subversion -- subversion information of the build as tuple\n\
 version -- the version of this interpreter as a string\n\
 version_info -- version information as a named tuple\n\
 hexversion -- version information encoded as a single integer\n\
@@ -1305,43 +1303,6 @@ settrace() -- set the global debug tracing function\n\
 )
 /* end of sys_doc */ ;
 
-/* Subversion branch and revision management */
-static int svn_initialized;
-static char patchlevel_revision[50]; /* Just the number */
-static char branch[50];
-static char shortbranch[50];
-static const char *svn_revision;
-
-static void
-svnversion_init(void)
-{
-    if (svn_initialized)
-        return;
-
-    svn_initialized = 1;
-    *patchlevel_revision = '\0';
-    strcpy(branch, "");
-    strcpy(shortbranch, "unknown");
-    svn_revision = "";
-}
-
-/* Return svnversion output if available.
-   Else return Revision of patchlevel.h if on branch.
-   Else return empty string */
-const char*
-Py_SubversionRevision()
-{
-    svnversion_init();
-    return svn_revision;
-}
-
-const char*
-Py_SubversionShortBranch()
-{
-    svnversion_init();
-    return shortbranch;
-}
-
 
 PyDoc_STRVAR(flags__doc__,
 "sys.flags\n\
@@ -1352,7 +1313,6 @@ static PyTypeObject FlagsType;
 
 static PyStructSequence_Field flags_fields[] = {
     {"debug",                   "-d"},
-    {"division_warning",        "-Q"},
     {"inspect",                 "-i"},
     {"interactive",             "-i"},
     {"optimize",                "-O or -OO"},
@@ -1376,9 +1336,9 @@ static PyStructSequence_Desc flags_desc = {
     flags__doc__,       /* doc */
     flags_fields,       /* fields */
 #ifdef RISCOS
-    13
-#else
     12
+#else
+    11
 #endif
 };
 
@@ -1396,7 +1356,6 @@ make_flags(void)
     PyStructSequence_SET_ITEM(seq, pos++, PyLong_FromLong(flag))
 
     SetFlag(Py_DebugFlag);
-    SetFlag(Py_DivisionWarningFlag);
     SetFlag(Py_InspectFlag);
     SetFlag(Py_InteractiveFlag);
     SetFlag(Py_OptimizeFlag);
@@ -1545,10 +1504,6 @@ _PySys_Init(void)
                          PyUnicode_FromString(Py_GetVersion()));
     SET_SYS_FROM_STRING("hexversion",
                          PyLong_FromLong(PY_VERSION_HEX));
-    svnversion_init();
-    SET_SYS_FROM_STRING("subversion",
-                        Py_BuildValue("(sss)", "CPython", branch,
-                                      svn_revision));
     SET_SYS_FROM_STRING("_mercurial",
                         Py_BuildValue("(szz)", "CPython", _Py_hgidentifier(),
                                       _Py_hgversion()));
