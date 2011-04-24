@@ -23,16 +23,16 @@ class ObjectsTestCase(unittest.TestCase):
 
     def test_ints(self):
         i = 42000123
-        rc = grc(i)
+        refcnt = grc(i)
         ci = c_int(i)
-        self.assertEqual(rc, grc(i))
+        self.assertEqual(refcnt, grc(i))
         self.assertEqual(ci._objects, None)
 
     def test_c_char_p(self):
         s = b"Hello, World"
-        rc = grc(s)
+        refcnt = grc(s)
         cs = c_char_p(s)
-        self.assertEqual(rc + 1, grc(s))
+        self.assertEqual(refcnt + 1, grc(s))
         self.assertSame(cs._objects, s)
 
     def test_simple_struct(self):
@@ -70,19 +70,17 @@ class ObjectsTestCase(unittest.TestCase):
         class Y(Structure):
             _fields_ = [("x", X), ("y", X)]
 
-        s1 = "Hello, World"
-        s2 = "Hallo, Welt"
+        s1 = b"Hello, World"
+        s2 = b"Hallo, Welt"
 
         x = X()
         x.a = s1
         x.b = s2
-        self.assertEqual(x._objects, {"0": bytes(s1, "ascii"),
-                                          "1": bytes(s2, "ascii")})
+        self.assertEqual(x._objects, {"0": s1, "1": s2})
 
         y = Y()
         y.x = x
-        self.assertEqual(y._objects, {"0": {"0": bytes(s1, "ascii"),
-                                                "1": bytes(s2, "ascii")}})
+        self.assertEqual(y._objects, {"0": {"0": s1, "1": s2}})
 ##        x = y.x
 ##        del y
 ##        print x._b_base_._objects

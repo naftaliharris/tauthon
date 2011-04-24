@@ -28,6 +28,7 @@ SHORTEST    = 3 # the shorter of QP and base64, but only for headers
 RFC2047_CHROME_LEN = 7
 
 DEFAULT_CHARSET = 'us-ascii'
+UNKNOWN8BIT = 'unknown-8bit'
 EMPTYSTRING = ''
 
 
@@ -153,6 +154,16 @@ def add_codec(charset, codecname):
 
 
 
+# Convenience function for encoding strings, taking into account
+# that they might be unknown-8bit (ie: have surrogate-escaped bytes)
+def _encode(string, codec):
+    if codec == UNKNOWN8BIT:
+        return string.encode('ascii', 'surrogateescape')
+    else:
+        return string.encode(codec)
+
+
+
 class Charset:
     """Map character sets to their email properties.
 
@@ -252,7 +263,7 @@ class Charset:
 
         Returns "quoted-printable" if self.body_encoding is QP.
         Returns "base64" if self.body_encoding is BASE64.
-        Returns "7bit" otherwise.
+        Returns conversion function otherwise.
         """
         assert self.body_encoding != SHORTEST
         if self.body_encoding == QP:
@@ -282,8 +293,7 @@ class Charset:
         :return: The encoded string, with RFC 2047 chrome.
         """
         codec = self.output_codec or 'us-ascii'
-        charset = self.get_output_charset()
-        header_bytes = string.encode(codec)
+        header_bytes = _encode(string, codec)
         # 7bit/8bit encodings return the string unchanged (modulo conversions)
         encoder_module = self._get_encoder(header_bytes)
         if encoder_module is None:
@@ -309,9 +319,9 @@ class Charset:
         """
         # See which encoding we should use.
         codec = self.output_codec or 'us-ascii'
-        header_bytes = string.encode(codec)
+        header_bytes = _encode(string, codec)
         encoder_module = self._get_encoder(header_bytes)
-        encoder = partial(encoder_module.header_encode, charset=str(self))
+        encoder = partial(encoder_module.header_encode, charset=codec)
         # Calculate the number of characters that the RFC 2047 chrome will
         # contribute to each line.
         charset = self.get_output_charset()
@@ -333,7 +343,7 @@ class Charset:
         for character in string:
             current_line.append(character)
             this_line = EMPTYSTRING.join(current_line)
-            length = encoder_module.header_length(this_line.encode(charset))
+            length = encoder_module.header_length(_encode(this_line, charset))
             if length > maxlen:
                 # This last character doesn't fit so pop it off.
                 current_line.pop()
@@ -343,12 +353,12 @@ class Charset:
                 else:
                     separator = (' ' if lines else '')
                     joined_line = EMPTYSTRING.join(current_line)
-                    header_bytes = joined_line.encode(codec)
+                    header_bytes = _encode(joined_line, codec)
                     lines.append(encoder(header_bytes))
                 current_line = [character]
                 maxlen = next(maxlengths) - extra
         joined_line = EMPTYSTRING.join(current_line)
-        header_bytes = joined_line.encode(codec)
+        header_bytes = _encode(joined_line, codec)
         lines.append(encoder(header_bytes))
         return lines
 
@@ -371,7 +381,10 @@ class Charset:
         """Body-encode a string by converting it first to bytes.
 
         The type of encoding (base64 or quoted-printable) will be based on
-        self.body_encoding.
+        self.body_encoding.  If body_encoding is None, we assume the
+        output charset is a 7bit encoding, so re-encoding the decoded
+        string using the ascii codec produces the correct string version
+        of the content.
         """
         # 7bit/8bit encodings return the string unchanged (module conversions)
         if self.body_encoding is BASE64:
@@ -381,4 +394,6 @@ class Charset:
         elif self.body_encoding is QP:
             return email.quoprimime.body_encode(string)
         else:
+            if isinstance(string, str):
+                string = string.encode(self.output_charset).decode('ascii')
             return string
