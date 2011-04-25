@@ -21,8 +21,8 @@ structs and the intended conversion to/from Python values.
    alignment is taken into account when unpacking.  This behavior is chosen so
    that the bytes of a packed struct correspond exactly to the layout in memory
    of the corresponding C struct.  To handle platform-independent data formats
-   or omit implicit pad bytes, use `standard` size and alignment instead of
-   `native` size and alignment: see :ref:`struct-alignment` for details.
+   or omit implicit pad bytes, use ``standard`` size and alignment instead of
+   ``native`` size and alignment: see :ref:`struct-alignment` for details.
 
 Functions and Exceptions
 ------------------------
@@ -157,63 +157,66 @@ is, when the format string starts with one of ``'<'``, ``'>'``, ``'!'`` or
 ``'='``.  When using native size, the size of the packed value is
 platform-dependent.
 
-+--------+-------------------------+--------------------+----------------+------------+
-| Format | C Type                  | Python type        | Standard size  | Notes      |
-+========+=========================+====================+================+============+
-| ``x``  | pad byte                | no value           |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``c``  | :ctype:`char`           | bytes of length 1  | 1              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``b``  | :ctype:`signed char`    | integer            | 1              | \(1)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``B``  | :ctype:`unsigned char`  | integer            | 1              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``?``  | :ctype:`_Bool`          | bool               | 1              | \(2)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``h``  | :ctype:`short`          | integer            | 2              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``H``  | :ctype:`unsigned short` | integer            | 2              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``i``  | :ctype:`int`            | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``I``  | :ctype:`unsigned int`   | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``l``  | :ctype:`long`           | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``L``  | :ctype:`unsigned long`  | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``q``  | :ctype:`long long`      | integer            | 8              | \(3)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``Q``  | :ctype:`unsigned long   | integer            | 8              | \(3)       |
-|        | long`                   |                    |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``f``  | :ctype:`float`          | float              | 4              | \(4)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``d``  | :ctype:`double`         | float              | 8              | \(4)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``s``  | :ctype:`char[]`         | bytes              |                | \(1)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``p``  | :ctype:`char[]`         | bytes              |                | \(1)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``P``  | :ctype:`void \*`        | integer            |                | \(5)       |
-+--------+-------------------------+--------------------+----------------+------------+
++--------+--------------------------+--------------------+----------------+------------+
+| Format | C Type                   | Python type        | Standard size  | Notes      |
++========+==========================+====================+================+============+
+| ``x``  | pad byte                 | no value           |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``c``  | :c:type:`char`           | bytes of length 1  | 1              |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``b``  | :c:type:`signed char`    | integer            | 1              | \(1),\(3)  |
++--------+--------------------------+--------------------+----------------+------------+
+| ``B``  | :c:type:`unsigned char`  | integer            | 1              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``?``  | :c:type:`_Bool`          | bool               | 1              | \(1)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``h``  | :c:type:`short`          | integer            | 2              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``H``  | :c:type:`unsigned short` | integer            | 2              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``i``  | :c:type:`int`            | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``I``  | :c:type:`unsigned int`   | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``l``  | :c:type:`long`           | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``L``  | :c:type:`unsigned long`  | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``q``  | :c:type:`long long`      | integer            | 8              | \(2), \(3) |
++--------+--------------------------+--------------------+----------------+------------+
+| ``Q``  | :c:type:`unsigned long   | integer            | 8              | \(2), \(3) |
+|        | long`                    |                    |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``f``  | :c:type:`float`          | float              | 4              | \(4)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``d``  | :c:type:`double`         | float              | 8              | \(4)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``s``  | :c:type:`char[]`         | bytes              |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``p``  | :c:type:`char[]`         | bytes              |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``P``  | :c:type:`void \*`        | integer            |                | \(5)       |
++--------+--------------------------+--------------------+----------------+------------+
 
 Notes:
 
 (1)
-   The ``c``, ``s`` and ``p`` conversion codes operate on :class:`bytes`
-   objects, but packing with such codes also supports :class:`str` objects,
-   which are encoded using UTF-8.
-
-(2)
-   The ``'?'`` conversion code corresponds to the :ctype:`_Bool` type defined by
-   C99. If this type is not available, it is simulated using a :ctype:`char`. In
+   The ``'?'`` conversion code corresponds to the :c:type:`_Bool` type defined by
+   C99. If this type is not available, it is simulated using a :c:type:`char`. In
    standard mode, it is always represented by one byte.
 
-(3)
+(2)
    The ``'q'`` and ``'Q'`` conversion codes are available in native mode only if
-   the platform C compiler supports C :ctype:`long long`, or, on Windows,
-   :ctype:`__int64`.  They are always available in standard modes.
+   the platform C compiler supports C :c:type:`long long`, or, on Windows,
+   :c:type:`__int64`.  They are always available in standard modes.
+
+(3)
+   When attempting to pack a non-integer using any of the integer conversion
+   codes, if the non-integer has a :meth:`__index__` method then that method is
+   called to convert the argument to an integer before packing.
+
+   .. versionchanged:: 3.2
+      Use of the :meth:`__index__` method for non-integers is new in 3.2.
 
 (4)
    For the ``'f'`` and ``'d'`` conversion codes, the packed representation uses
@@ -302,9 +305,9 @@ the result in a named tuple::
 The ordering of format characters may have an impact on size since the padding
 needed to satisfy alignment requirements is different::
 
-    >>> pack('ci', '*', 0x12131415)
+    >>> pack('ci', b'*', 0x12131415)
     b'*\x00\x00\x00\x12\x13\x14\x15'
-    >>> pack('ic', 0x12131415, '*')
+    >>> pack('ic', 0x12131415, b'*')
     b'\x12\x13\x14\x15*'
     >>> calcsize('ci')
     8
