@@ -1,4 +1,4 @@
-# Copyright 2001-2010 by Vinay Sajip. All Rights Reserved.
+# Copyright 2001-2011 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -18,7 +18,7 @@
 Logging package for Python. Based on PEP 282 and comments thereto in
 comp.lang.python, and influenced by Apache's log4j system.
 
-Copyright (C) 2001-2010 Vinay Sajip. All Rights Reserved.
+Copyright (C) 2001-2011 Vinay Sajip. All Rights Reserved.
 
 To use, simply 'import logging' and log away!
 """
@@ -1650,6 +1650,10 @@ def basicConfig(**kwargs):
     stream    Use the specified stream to initialize the StreamHandler. Note
               that this argument is incompatible with 'filename' - if both
               are present, 'stream' is ignored.
+    handlers  If specified, this should be an iterable of already created
+              handlers, which will be added to the root handler. Any handler
+              in the list which does not have a formatter assigned will be
+              assigned the formatter created in this function.
 
     Note that you could specify a stream created using open(filename, mode)
     rather than passing the filename and mode in. However, it should be
@@ -1657,27 +1661,47 @@ def basicConfig(**kwargs):
     using sys.stdout or sys.stderr), whereas FileHandler closes its stream
     when the handler is closed.
 
-    .. versionchanged: 3.2
+    .. versionchanged:: 3.2
        Added the ``style`` parameter.
+
+    .. versionchanged:: 3.3
+       Added the ``handlers`` parameter. A ``ValueError`` is now thrown for
+       incompatible arguments (e.g. ``handlers`` specified together with
+       ``filename``/``filemode``, or ``filename``/``filemode`` specified
+       together with ``stream``, or ``handlers`` specified together with
+       ``stream``.
     """
     # Add thread safety in case someone mistakenly calls
     # basicConfig() from multiple threads
     _acquireLock()
     try:
         if len(root.handlers) == 0:
-            filename = kwargs.get("filename")
-            if filename:
-                mode = kwargs.get("filemode", 'a')
-                hdlr = FileHandler(filename, mode)
+            handlers = kwargs.get("handlers")
+            if handlers is None:
+                if "stream" in kwargs and "filename" in kwargs:
+                    raise ValueError("'stream' and 'filename' should not be "
+                                     "specified together")
             else:
-                stream = kwargs.get("stream")
-                hdlr = StreamHandler(stream)
+                if "stream" in kwargs or "filename" in kwargs:
+                    raise ValueError("'stream' or 'filename' should not be "
+                                     "specified together with 'handlers'")
+            if handlers is None:
+                filename = kwargs.get("filename")
+                if filename:
+                    mode = kwargs.get("filemode", 'a')
+                    h = FileHandler(filename, mode)
+                else:
+                    stream = kwargs.get("stream")
+                    h = StreamHandler(stream)
+                handlers = [h]
             fs = kwargs.get("format", BASIC_FORMAT)
             dfs = kwargs.get("datefmt", None)
             style = kwargs.get("style", '%')
             fmt = Formatter(fs, dfs, style)
-            hdlr.setFormatter(fmt)
-            root.addHandler(hdlr)
+            for h in handlers:
+                if h.formatter is None:
+                    h.setFormatter(fmt)
+                root.addHandler(h)
             level = kwargs.get("level")
             if level is not None:
                 root.setLevel(level)
@@ -1826,10 +1850,10 @@ class NullHandler(Handler):
     package.
     """
     def handle(self, record):
-        pass
+        """Stub."""
 
     def emit(self, record):
-        pass
+        """Stub."""
 
     def createLock(self):
         self.lock = None
