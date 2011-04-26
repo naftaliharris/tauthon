@@ -6,9 +6,24 @@ import types
 from opcode import *
 from opcode import __all__ as _opcodes_all
 
-__all__ = ["dis", "disassemble", "distb", "disco",
-           "findlinestarts", "findlabels"] + _opcodes_all
+__all__ = ["code_info", "dis", "disassemble", "distb", "disco",
+           "findlinestarts", "findlabels", "show_code"] + _opcodes_all
 del _opcodes_all
+
+_have_code = (types.MethodType, types.FunctionType, types.CodeType, type)
+
+def _try_compile(source, name):
+    """Attempts to compile the given source, first as an expression and
+       then as a statement if the first approach fails.
+
+       Utility function to accept strings in functions that otherwise
+       expect code objects
+    """
+    try:
+        c = compile(source, name, 'eval')
+    except SyntaxError:
+        c = compile(source, name, 'exec')
+    return c
 
 def dis(x=None):
     """Disassemble classes, methods, functions, or code.
@@ -19,25 +34,26 @@ def dis(x=None):
     if x is None:
         distb()
         return
-    if hasattr(x, '__func__'):
+    if hasattr(x, '__func__'):  # Method
         x = x.__func__
-    if hasattr(x, '__code__'):
+    if hasattr(x, '__code__'):  # Function
         x = x.__code__
-    if hasattr(x, '__dict__'):
+    if hasattr(x, '__dict__'):  # Class or module
         items = sorted(x.__dict__.items())
         for name, x1 in items:
-            if isinstance(x1, (types.MethodType, types.FunctionType,
-                               types.CodeType, type)):
+            if isinstance(x1, _have_code):
                 print("Disassembly of %s:" % name)
                 try:
                     dis(x1)
                 except TypeError as msg:
                     print("Sorry:", msg)
                 print()
-    elif hasattr(x, 'co_code'):
+    elif hasattr(x, 'co_code'): # Code object
         disassemble(x)
-    elif isinstance(x, (bytes, bytearray)):
-        disassemble_string(x)
+    elif isinstance(x, (bytes, bytearray)): # Raw bytecode
+        _disassemble_bytes(x)
+    elif isinstance(x, str):    # Source code
+        _disassemble_str(x)
     else:
         raise TypeError("don't know how to disassemble %s objects" %
                         type(x).__name__)
@@ -52,9 +68,10 @@ def distb(tb=None):
         while tb.tb_next: tb = tb.tb_next
     disassemble(tb.tb_frame.f_code, tb.tb_lasti)
 
-# XXX This duplicates information from code.h, also duplicated in inspect.py.
-# XXX Maybe this ought to be put in a central location, like opcode.py?
-flag2name = {
+# The inspect module interrogates this dictionary to build its
+# list of CO_* constants. It is also used by pretty_flags to
+# turn the co_flags field into a human readable list.
+COMPILER_FLAG_NAMES = {
      1: "OPTIMIZED",
      2: "NEWLOCALS",
      4: "VARARGS",
@@ -70,7 +87,7 @@ def pretty_flags(flags):
     for i in range(32):
         flag = 1<<i
         if flags & flag:
-            names.append(flag2name.get(flag, hex(flag)))
+            names.append(COMPILER_FLAG_NAMES.get(flag, hex(flag)))
             flags ^= flag
             if not flags:
                 break
@@ -78,35 +95,54 @@ def pretty_flags(flags):
         names.append(hex(flags))
     return ", ".join(names)
 
-def show_code(co):
-    """Show details about a code object."""
-    print("Name:             ", co.co_name)
-    print("Filename:         ", co.co_filename)
-    print("Argument count:   ", co.co_argcount)
-    print("Kw-only arguments:", co.co_kwonlyargcount)
-    print("Number of locals: ", co.co_nlocals)
-    print("Stack size:       ", co.co_stacksize)
-    print("Flags:            ", pretty_flags(co.co_flags))
+def code_info(x):
+    """Formatted details of methods, functions, or code."""
+    if hasattr(x, '__func__'): # Method
+        x = x.__func__
+    if hasattr(x, '__code__'): # Function
+        x = x.__code__
+    if isinstance(x, str):     # Source code
+        x = _try_compile(x, "<code_info>")
+    if hasattr(x, 'co_code'):  # Code object
+        return _format_code_info(x)
+    else:
+        raise TypeError("don't know how to disassemble %s objects" %
+                        type(x).__name__)
+
+def _format_code_info(co):
+    lines = []
+    lines.append("Name:              %s" % co.co_name)
+    lines.append("Filename:          %s" % co.co_filename)
+    lines.append("Argument count:    %s" % co.co_argcount)
+    lines.append("Kw-only arguments: %s" % co.co_kwonlyargcount)
+    lines.append("Number of locals:  %s" % co.co_nlocals)
+    lines.append("Stack size:        %s" % co.co_stacksize)
+    lines.append("Flags:             %s" % pretty_flags(co.co_flags))
     if co.co_consts:
-        print("Constants:")
+        lines.append("Constants:")
         for i_c in enumerate(co.co_consts):
-            print("%4d: %r" % i_c)
+            lines.append("%4d: %r" % i_c)
     if co.co_names:
-        print("Names:")
+        lines.append("Names:")
         for i_n in enumerate(co.co_names):
-            print("%4d: %s" % i_n)
+            lines.append("%4d: %s" % i_n)
     if co.co_varnames:
-        print("Variable names:")
+        lines.append("Variable names:")
         for i_n in enumerate(co.co_varnames):
-            print("%4d: %s" % i_n)
+            lines.append("%4d: %s" % i_n)
     if co.co_freevars:
-        print("Free variables:")
+        lines.append("Free variables:")
         for i_n in enumerate(co.co_freevars):
-            print("%4d: %s" % i_n)
+            lines.append("%4d: %s" % i_n)
     if co.co_cellvars:
-        print("Cell variables:")
+        lines.append("Cell variables:")
         for i_n in enumerate(co.co_cellvars):
-            print("%4d: %s" % i_n)
+            lines.append("%4d: %s" % i_n)
+    return "\n".join(lines)
+
+def show_code(co):
+    """Print details of methods, functions, or code to stdout."""
+    print(code_info(co))
 
 def disassemble(co, lasti=-1):
     """Disassemble a code object."""
@@ -156,7 +192,7 @@ def disassemble(co, lasti=-1):
                 print('(' + free[oparg] + ')', end=' ')
         print()
 
-def disassemble_string(code, lasti=-1, varnames=None, names=None,
+def _disassemble_bytes(code, lasti=-1, varnames=None, names=None,
                        constants=None):
     labels = findlabels(code)
     n = len(code)
@@ -194,6 +230,10 @@ def disassemble_string(code, lasti=-1, varnames=None, names=None,
             elif op in hascompare:
                 print('(' + cmp_op[oparg] + ')', end=' ')
         print()
+
+def _disassemble_str(source):
+    """Compile the source string, then disassemble the code object."""
+    disassemble(_try_compile(source, '<dis>'))
 
 disco = disassemble                     # XXX For backwards compatibility
 

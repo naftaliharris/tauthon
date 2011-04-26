@@ -19,7 +19,7 @@ stringlib_find(const STRINGLIB_CHAR* str, Py_ssize_t str_len,
     if (sub_len == 0)
         return offset;
 
-    pos = fastsearch(str, str_len, sub, sub_len, FAST_SEARCH);
+    pos = fastsearch(str, str_len, sub, sub_len, -1, FAST_SEARCH);
 
     if (pos >= 0)
         pos += offset;
@@ -32,42 +32,43 @@ stringlib_rfind(const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                 const STRINGLIB_CHAR* sub, Py_ssize_t sub_len,
                 Py_ssize_t offset)
 {
-    /* XXX - create reversefastsearch helper! */
-    if (sub_len == 0) {
-        if (str_len < 0)
-            return -1;
-	return str_len + offset;
-    } else {
-	Py_ssize_t j, pos = -1;
-	for (j = str_len - sub_len; j >= 0; --j)
-            if (STRINGLIB_CMP(str+j, sub, sub_len) == 0) {
-                pos = j + offset;
-                break;
-            }
-        return pos;
-    }
+    Py_ssize_t pos;
+
+    if (str_len < 0)
+        return -1;
+    if (sub_len == 0)
+        return str_len + offset;
+
+    pos = fastsearch(str, str_len, sub, sub_len, -1, FAST_RSEARCH);
+
+    if (pos >= 0)
+        pos += offset;
+
+    return pos;
 }
+
+/* helper macro to fixup start/end slice values */
+#define ADJUST_INDICES(start, end, len)         \
+    if (end > len)                              \
+        end = len;                              \
+    else if (end < 0) {                         \
+        end += len;                             \
+        if (end < 0)                            \
+            end = 0;                            \
+    }                                           \
+    if (start < 0) {                            \
+        start += len;                           \
+        if (start < 0)                          \
+            start = 0;                          \
+    }
 
 Py_LOCAL_INLINE(Py_ssize_t)
 stringlib_find_slice(const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                      const STRINGLIB_CHAR* sub, Py_ssize_t sub_len,
                      Py_ssize_t start, Py_ssize_t end)
 {
-    if (start < 0)
-        start += str_len;
-    if (start < 0)
-        start = 0;
-    if (end > str_len)
-        end = str_len;
-    if (end < 0)
-        end += str_len;
-    if (end < 0)
-        end = 0;
-
-    return stringlib_find(
-        str + start, end - start,
-        sub, sub_len, start
-        );
+    ADJUST_INDICES(start, end, str_len);
+    return stringlib_find(str + start, end - start, sub, sub_len, start);
 }
 
 Py_LOCAL_INLINE(Py_ssize_t)
@@ -75,17 +76,7 @@ stringlib_rfind_slice(const STRINGLIB_CHAR* str, Py_ssize_t str_len,
                       const STRINGLIB_CHAR* sub, Py_ssize_t sub_len,
                       Py_ssize_t start, Py_ssize_t end)
 {
-    if (start < 0)
-        start += str_len;
-    if (start < 0)
-        start = 0;
-    if (end > str_len)
-        end = str_len;
-    if (end < 0)
-        end += str_len;
-    if (end < 0)
-        end = 0;
-
+    ADJUST_INDICES(start, end, str_len);
     return stringlib_rfind(str + start, end - start, sub, sub_len, start);
 }
 
@@ -100,7 +91,7 @@ stringlib_contains_obj(PyObject* str, PyObject* sub)
         ) != -1;
 }
 
-#endif /* STRINGLIB_STR */
+#endif /* STRINGLIB_WANT_CONTAINS_OBJ */
 
 /*
 This function is a helper for the "find" family (find, rfind, index,
@@ -149,7 +140,7 @@ stringlib_parse_args_finds(const char * function_name, PyObject *args,
 
 #undef FORMAT_BUFFER_SIZE
 
-#ifdef FROM_UNICODE
+#if STRINGLIB_IS_UNICODE
 
 /*
 Wraps stringlib_parse_args_finds() and additionally ensures that the
@@ -179,13 +170,6 @@ stringlib_parse_args_finds_unicode(const char * function_name, PyObject *args,
     return 0;
 }
 
-#endif /* FROM_UNICODE */
+#endif /* STRINGLIB_IS_UNICODE */
 
 #endif /* STRINGLIB_FIND_H */
-
-/*
-Local variables:
-c-basic-offset: 4
-indent-tabs-mode: nil
-End:
-*/

@@ -127,9 +127,9 @@ increased speed.
 
 .. XXX seems to have overlap with other questions!
 
-`Pyrex <http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_ can compile a
-slightly modified version of Python code into a C extension, and can be used on
-many different platforms.
+`Cython <http://cython.org>`_ and `Pyrex <http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_
+can compile a slightly modified version of Python code into a C extension, and
+can be used on many different platforms.
 
 `Psyco <http://psyco.sourceforge.net>`_ is a just-in-time compiler that
 translates Python code into x86 assembly language.  If you can use it, Psyco can
@@ -178,9 +178,10 @@ it is much shorter and far faster to use ::
 
    L2 = list(L1[:3])  # "list" is redundant if L1 is a list.
 
-Note that the functionally-oriented builtins such as :func:`map`, :func:`zip`,
-and friends can be a convenient accelerator for loops that perform a single
-task.  For example to pair the elements of two lists together::
+Note that the functionally-oriented built-in functions such as :func:`map`,
+:func:`zip`, and friends can be a convenient accelerator for loops that
+perform a single task.  For example to pair the elements of two lists
+together::
 
    >>> list(zip([1, 2, 3], [4, 5, 6]))
    [(1, 4), (2, 5), (3, 6)]
@@ -203,7 +204,7 @@ manipulating strings, use the ``replace()`` and the ``format()`` :ref:`methods
 on string objects <string-methods>`.  Use regular expressions only when you're
 not dealing with constant string patterns.
 
-Be sure to use the :meth:`list.sort` builtin method to do sorting, and see the
+Be sure to use the :meth:`list.sort` built-in method to do sorting, and see the
 `sorting mini-HOWTO <http://wiki.python.org/moin/HowTo/Sorting>`_ for examples
 of moderately advanced usage.  :meth:`list.sort` beats other techniques for
 sorting in all but the most extreme circumstances.
@@ -361,7 +362,7 @@ Though a bit surprising at first, a moment's consideration explains this.  On
 one hand, requiring :keyword:`global` for assigned variables provides a bar
 against unintended side-effects.  On the other hand, if ``global`` was required
 for all global references, you'd be using ``global`` all the time.  You'd have
-to declare as global every reference to a builtin function or to a component of
+to declare as global every reference to a built-in function or to a component of
 an imported module.  This clutter would defeat the usefulness of the ``global``
 declaration for identifying side-effects.
 
@@ -987,8 +988,8 @@ and then convert decimal strings to numeric values using :func:`int` or
 :func:`float`.  ``split()`` supports an optional "sep" parameter which is useful
 if the line uses something other than whitespace as a separator.
 
-For more complicated input parsing, regular expressions more powerful than C's
-:cfunc:`sscanf` and better suited for the task.
+For more complicated input parsing, regular expressions are more powerful
+than C's :c:func:`sscanf` and better suited for the task.
 
 
 What does 'UnicodeDecodeError' or 'UnicodeEncodeError' error  mean?
@@ -1033,7 +1034,7 @@ trailing newline from a string.
 How do I iterate over a sequence in reverse order?
 --------------------------------------------------
 
-Use the :func:`reversed` builtin function, which is new in Python 2.4::
+Use the :func:`reversed` built-in function, which is new in Python 2.4::
 
    for x in reversed(sequence):
        ... # do something with x...
