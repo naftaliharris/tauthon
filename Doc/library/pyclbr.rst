@@ -1,4 +1,3 @@
-
 :mod:`pyclbr` --- Python class browser support
 ==============================================
 
@@ -6,6 +5,9 @@
    :synopsis: Supports information extraction for a Python class browser.
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/pyclbr.py`
+
+--------------
 
 The :mod:`pyclbr` module can be used to determine some limited information
 about the classes, methods and top-level functions defined in a module.  The
@@ -17,7 +19,7 @@ not implemented in Python, including all standard and optional extension
 modules.
 
 
-.. function:: readmodule(module[, path=None])
+.. function:: readmodule(module, path=None)
 
    Read a module and return a dictionary mapping class names to class
    descriptor objects.  The parameter *module* should be the name of a
@@ -26,7 +28,7 @@ modules.
    of ``sys.path``, which is used to locate module source code.
 
 
-.. function:: readmodule_ex(module[, path=None])
+.. function:: readmodule_ex(module, path=None)
 
    Like :func:`readmodule`, but the returned dictionary, in addition to
    mapping class names to class descriptor objects, also maps top-level

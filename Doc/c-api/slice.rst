@@ -6,18 +6,18 @@ Slice Objects
 -------------
 
 
-.. cvar:: PyTypeObject PySlice_Type
+.. c:var:: PyTypeObject PySlice_Type
 
    The type object for slice objects.  This is the same as :class:`slice` in the
    Python layer.
 
 
-.. cfunction:: int PySlice_Check(PyObject *ob)
+.. c:function:: int PySlice_Check(PyObject *ob)
 
    Return true if *ob* is a slice object; *ob* must not be *NULL*.
 
 
-.. cfunction:: PyObject* PySlice_New(PyObject *start, PyObject *stop, PyObject *step)
+.. c:function:: PyObject* PySlice_New(PyObject *start, PyObject *stop, PyObject *step)
 
    Return a new slice object with the given values.  The *start*, *stop*, and
    *step* parameters are used as the values of the slice object attributes of
@@ -26,7 +26,7 @@ Slice Objects
    the new object could not be allocated.
 
 
-.. cfunction:: int PySlice_GetIndices(PySliceObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step)
+.. c:function:: int PySlice_GetIndices(PyObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step)
 
    Retrieve the start, stop and step indices from the slice object *slice*,
    assuming a sequence of length *length*. Treats indices greater than
@@ -38,13 +38,21 @@ Slice Objects
 
    You probably do not want to use this function.
 
+   .. versionchanged:: 3.2
+      The parameter type for the *slice* parameter was ``PySliceObject*``
+      before.
 
-.. cfunction:: int PySlice_GetIndicesEx(PySliceObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength)
 
-   Usable replacement for :cfunc:`PySlice_GetIndices`.  Retrieve the start,
+.. c:function:: int PySlice_GetIndicesEx(PyObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength)
+
+   Usable replacement for :c:func:`PySlice_GetIndices`.  Retrieve the start,
    stop, and step indices from the slice object *slice* assuming a sequence of
    length *length*, and store the length of the slice in *slicelength*.  Out
    of bounds indices are clipped in a manner consistent with the handling of
    normal slices.
 
    Returns 0 on success and -1 on error with exception set.
+
+   .. versionchanged:: 3.2
+      The parameter type for the *slice* parameter was ``PySliceObject*``
+      before.
