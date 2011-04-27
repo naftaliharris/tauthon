@@ -30,6 +30,7 @@
 #include "Python.h"
 
 #if defined(__VMS)
+#    error "PEP 11: VMS is now unsupported, code will be removed in Python 3.4"
 #    include <unixio.h>
 #endif /* defined(__VMS) */
 
@@ -45,6 +46,7 @@ corresponding Unix manual entries for more information on calls.");
 
 
 #if defined(PYOS_OS2)
+#error "PEP 11: OS/2 is now unsupported, code will be removed in Python 3.4"
 #define  INCL_DOS
 #define  INCL_DOSERRORS
 #define  INCL_DOSPROCESS
@@ -3083,9 +3085,7 @@ posix_getpriority(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "ii", &which, &who))
         return NULL;
     errno = 0;
-    Py_BEGIN_ALLOW_THREADS
     retval = getpriority(which, who);
-    Py_END_ALLOW_THREADS
     if (errno != 0)
         return posix_error();
     return PyLong_FromLong((long)retval);
@@ -3105,9 +3105,7 @@ posix_setpriority(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "iii", &which, &who, &prio))
         return NULL;
-    Py_BEGIN_ALLOW_THREADS
     retval = setpriority(which, who, prio);
-    Py_END_ALLOW_THREADS
     if (retval == -1)
         return posix_error();
     Py_RETURN_NONE;
@@ -6010,9 +6008,7 @@ posix_dup(PyObject *self, PyObject *args)
         return NULL;
     if (!_PyVerify_fd(fd))
         return posix_error();
-    Py_BEGIN_ALLOW_THREADS
     fd = dup(fd);
-    Py_END_ALLOW_THREADS
     if (fd < 0)
         return posix_error();
     return PyLong_FromLong((long)fd);
@@ -6031,9 +6027,7 @@ posix_dup2(PyObject *self, PyObject *args)
         return NULL;
     if (!_PyVerify_fd_dup2(fd, fd2))
         return posix_error();
-    Py_BEGIN_ALLOW_THREADS
     res = dup2(fd, fd2);
-    Py_END_ALLOW_THREADS
     if (res < 0)
         return posix_error();
     Py_INCREF(Py_None);
@@ -6525,9 +6519,7 @@ posix_pipe(PyObject *self, PyObject *noargs)
     HFILE read, write;
     APIRET rc;
 
-    Py_BEGIN_ALLOW_THREADS
     rc = DosCreatePipe( &read, &write, 4096);
-    Py_END_ALLOW_THREADS
     if (rc != NO_ERROR)
         return os2_error(rc);
 
@@ -6536,9 +6528,7 @@ posix_pipe(PyObject *self, PyObject *noargs)
 #if !defined(MS_WINDOWS)
     int fds[2];
     int res;
-    Py_BEGIN_ALLOW_THREADS
     res = pipe(fds);
-    Py_END_ALLOW_THREADS
     if (res != 0)
         return posix_error();
     return Py_BuildValue("(ii)", fds[0], fds[1]);
@@ -6546,9 +6536,7 @@ posix_pipe(PyObject *self, PyObject *noargs)
     HANDLE read, write;
     int read_fd, write_fd;
     BOOL ok;
-    Py_BEGIN_ALLOW_THREADS
     ok = CreatePipe(&read, &write, NULL, 0);
-    Py_END_ALLOW_THREADS
     if (!ok)
         return win32_error("CreatePipe", NULL);
     read_fd = _open_osfhandle((Py_intptr_t)read, 0);
