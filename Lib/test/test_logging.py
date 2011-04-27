@@ -40,9 +40,10 @@ from socketserver import ThreadingTCPServer, StreamRequestHandler
 import struct
 import sys
 import tempfile
-from test.support import captured_stdout, run_with_locale, run_unittest
+from test.support import captured_stdout, run_with_locale, run_unittest, patch
 from test.support import TestHandler, Matcher
 import textwrap
+import time
 import unittest
 import warnings
 import weakref
@@ -351,6 +352,10 @@ class BasicFilterTest(BaseTest):
         finally:
             handler.removeFilter(filterfunc)
 
+    def test_empty_filter(self):
+        f = logging.Filter()
+        r = logging.makeLogRecord({'name': 'spam.eggs'})
+        self.assertTrue(f.filter(r))
 
 #
 #   First, we define our levels. There can be as many as you want - the only
@@ -493,6 +498,93 @@ class CustomLevelsAndFiltersTest(BaseTest):
                 self.root_logger.removeFilter(specific_filter)
             handler.removeFilter(garr)
 
+
+class HandlerTest(BaseTest):
+    def test_name(self):
+        h = logging.Handler()
+        h.name = 'generic'
+        self.assertEqual(h.name, 'generic')
+        h.name = 'anothergeneric'
+        self.assertEqual(h.name, 'anothergeneric')
+        self.assertRaises(NotImplementedError, h.emit, None)
+
+    def test_builtin_handlers(self):
+        # We can't actually *use* too many handlers in the tests,
+        # but we can try instantiating them with various options
+        if sys.platform in ('linux2', 'darwin'):
+            for existing in (True, False):
+                fd, fn = tempfile.mkstemp()
+                os.close(fd)
+                if not existing:
+                    os.unlink(fn)
+                h = logging.handlers.WatchedFileHandler(fn, delay=True)
+                if existing:
+                    self.assertNotEqual(h.dev, -1)
+                    self.assertNotEqual(h.ino, -1)
+                else:
+                    self.assertEqual(h.dev, -1)
+                    self.assertEqual(h.ino, -1)
+                h.close()
+                if existing:
+                    os.unlink(fn)
+            if sys.platform == 'darwin':
+                sockname = '/var/run/syslog'
+            else:
+                sockname = '/dev/log'
+            try:
+                h = logging.handlers.SysLogHandler(sockname)
+                self.assertEqual(h.facility, h.LOG_USER)
+                self.assertTrue(h.unixsocket)
+                h.close()
+            except socket.error: # syslogd might not be available
+                pass
+        h = logging.handlers.SMTPHandler('localhost', 'me', 'you', 'Log')
+        self.assertEqual(h.toaddrs, ['you'])
+        h.close()
+        for method in ('GET', 'POST', 'PUT'):
+            if method == 'PUT':
+                self.assertRaises(ValueError, logging.handlers.HTTPHandler,
+                                  'localhost', '/log', method)
+            else:
+                h = logging.handlers.HTTPHandler('localhost', '/log', method)
+                h.close()
+        h = logging.handlers.BufferingHandler(0)
+        r = logging.makeLogRecord({})
+        self.assertTrue(h.shouldFlush(r))
+        h.close()
+        h = logging.handlers.BufferingHandler(1)
+        self.assertFalse(h.shouldFlush(r))
+        h.close()
+
+class BadStream(object):
+    def write(self, data):
+        raise RuntimeError('deliberate mistake')
+
+class TestStreamHandler(logging.StreamHandler):
+    def handleError(self, record):
+        self.error_record = record
+
+class StreamHandlerTest(BaseTest):
+    def test_error_handling(self):
+        h = TestStreamHandler(BadStream())
+        r = logging.makeLogRecord({})
+        old_raise = logging.raiseExceptions
+        old_stderr = sys.stderr
+        try:
+            h.handle(r)
+            self.assertIs(h.error_record, r)
+            h = logging.StreamHandler(BadStream())
+            sys.stderr = sio = io.StringIO()
+            h.handle(r)
+            self.assertTrue('\nRuntimeError: '
+                            'deliberate mistake\n' in sio.getvalue())
+            logging.raiseExceptions = False
+            sys.stderr = sio = io.StringIO()
+            h.handle(r)
+            self.assertEqual('', sio.getvalue())
+        finally:
+            logging.raiseExceptions = old_raise
+            sys.stderr = old_stderr
 
 class MemoryHandlerTest(BaseTest):
 
@@ -1083,28 +1175,39 @@ class WarningsTest(BaseTest):
     def test_warnings(self):
         with warnings.catch_warnings():
             logging.captureWarnings(True)
-            try:
-                warnings.filterwarnings("always", category=UserWarning)
-                file = io.StringIO()
-                h = logging.StreamHandler(file)
-                logger = logging.getLogger("py.warnings")
-                logger.addHandler(h)
-                warnings.warn("I'm warning you...")
-                logger.removeHandler(h)
-                s = file.getvalue()
-                h.close()
-                self.assertTrue(s.find("UserWarning: I'm warning you...\n") > 0)
+            self.addCleanup(lambda: logging.captureWarnings(False))
+            warnings.filterwarnings("always", category=UserWarning)
+            stream = io.StringIO()
+            h = logging.StreamHandler(stream)
+            logger = logging.getLogger("py.warnings")
+            logger.addHandler(h)
+            warnings.warn("I'm warning you...")
+            logger.removeHandler(h)
+            s = stream.getvalue()
+            h.close()
+            self.assertTrue(s.find("UserWarning: I'm warning you...\n") > 0)
 
-                #See if an explicit file uses the original implementation
-                file = io.StringIO()
-                warnings.showwarning("Explicit", UserWarning, "dummy.py", 42,
-                                        file, "Dummy line")
-                s = file.getvalue()
-                file.close()
-                self.assertEqual(s,
-                        "dummy.py:42: UserWarning: Explicit\n  Dummy line\n")
-            finally:
-                logging.captureWarnings(False)
+            #See if an explicit file uses the original implementation
+            a_file = io.StringIO()
+            warnings.showwarning("Explicit", UserWarning, "dummy.py", 42,
+                                 a_file, "Dummy line")
+            s = a_file.getvalue()
+            a_file.close()
+            self.assertEqual(s,
+                "dummy.py:42: UserWarning: Explicit\n  Dummy line\n")
+
+    def test_warnings_no_handlers(self):
+        with warnings.catch_warnings():
+            logging.captureWarnings(True)
+            self.addCleanup(lambda: logging.captureWarnings(False))
+
+            # confirm our assumption: no loggers are set
+            logger = logging.getLogger("py.warnings")
+            assert logger.handlers == []
+
+            warnings.showwarning("Explicit", UserWarning, "dummy.py", 42)
+            self.assertTrue(len(logger.handlers) == 1)
+            self.assertIsInstance(logger.handlers[0], logging.NullHandler)
 
 
 def formatFunc(format, datefmt=None):
@@ -1990,6 +2093,27 @@ class ConfigDictTest(BaseTest):
             # Original logger output is empty.
             self.assert_log_lines([])
 
+    def test_baseconfig(self):
+        d = {
+            'atuple': (1, 2, 3),
+            'alist': ['a', 'b', 'c'],
+            'adict': {'d': 'e', 'f': 3 },
+            'nest1': ('g', ('h', 'i'), 'j'),
+            'nest2': ['k', ['l', 'm'], 'n'],
+            'nest3': ['o', 'cfg://alist', 'p'],
+        }
+        bc = logging.config.BaseConfigurator(d)
+        self.assertEqual(bc.convert('cfg://atuple[1]'), 2)
+        self.assertEqual(bc.convert('cfg://alist[1]'), 'b')
+        self.assertEqual(bc.convert('cfg://nest1[1][0]'), 'h')
+        self.assertEqual(bc.convert('cfg://nest2[1][1]'), 'm')
+        self.assertEqual(bc.convert('cfg://adict.d'), 'e')
+        self.assertEqual(bc.convert('cfg://adict[f]'), 3)
+        v = bc.convert('cfg://nest3')
+        self.assertEqual(v.pop(1), ['a', 'b', 'c'])
+        self.assertRaises(KeyError, bc.convert, 'cfg://nosuch')
+        self.assertRaises(ValueError, bc.convert, 'cfg://!')
+        self.assertRaises(KeyError, bc.convert, 'cfg://adict[2]')
 
 class ManagerTest(BaseTest):
     def test_manager_loggerclass(self):
@@ -2008,6 +2132,11 @@ class ManagerTest(BaseTest):
 
         self.assertEqual(logged, ['should appear in logged'])
 
+    def test_set_log_record_factory(self):
+        man = logging.Manager(None)
+        expected = object()
+        man.setLogRecordFactory(expected)
+        self.assertEqual(man.logRecordFactory, expected)
 
 class ChildLoggerTest(BaseTest):
     def test_child_loggers(self):
@@ -2107,6 +2236,18 @@ class QueueHandlerTest(BaseTest):
         self.assertTrue(handler.matches(levelno=logging.ERROR, message='2'))
         self.assertTrue(handler.matches(levelno=logging.CRITICAL, message='3'))
 
+ZERO = datetime.timedelta(0)
+
+class UTC(datetime.tzinfo):
+    def utcoffset(self, dt):
+        return ZERO
+
+    dst = utcoffset
+
+    def tzname(self, dt):
+        return 'UTC'
+
+utc = UTC()
 
 class FormatterTest(unittest.TestCase):
     def setUp(self):
@@ -2180,6 +2321,69 @@ class FormatterTest(unittest.TestCase):
         f = logging.Formatter('asctime', style='$')
         self.assertFalse(f.usesTime())
 
+    def test_invalid_style(self):
+        self.assertRaises(ValueError, logging.Formatter, None, None, 'x')
+
+    def test_time(self):
+        r = self.get_record()
+        dt = datetime.datetime(1993,4,21,8,3,0,0,utc)
+        r.created = time.mktime(dt.timetuple()) - time.timezone
+        r.msecs = 123
+        f = logging.Formatter('%(asctime)s %(message)s')
+        f.converter = time.gmtime
+        self.assertEqual(f.formatTime(r), '1993-04-21 08:03:00,123')
+        self.assertEqual(f.formatTime(r, '%Y:%d'), '1993:21')
+        f.format(r)
+        self.assertEqual(r.asctime, '1993-04-21 08:03:00,123')
+
+class TestBufferingFormatter(logging.BufferingFormatter):
+    def formatHeader(self, records):
+        return '[(%d)' % len(records)
+
+    def formatFooter(self, records):
+        return '(%d)]' % len(records)
+
+class BufferingFormatterTest(unittest.TestCase):
+    def setUp(self):
+        self.records = [
+            logging.makeLogRecord({'msg': 'one'}),
+            logging.makeLogRecord({'msg': 'two'}),
+        ]
+
+    def test_default(self):
+        f = logging.BufferingFormatter()
+        self.assertEqual('', f.format([]))
+        self.assertEqual('onetwo', f.format(self.records))
+
+    def test_custom(self):
+        f = TestBufferingFormatter()
+        self.assertEqual('[(2)onetwo(2)]', f.format(self.records))
+        lf = logging.Formatter('<%(message)s>')
+        f = TestBufferingFormatter(lf)
+        self.assertEqual('[(2)<one><two>(2)]', f.format(self.records))
+
+class ExceptionTest(BaseTest):
+    def test_formatting(self):
+        r = self.root_logger
+        h = RecordingHandler()
+        r.addHandler(h)
+        try:
+            raise RuntimeError('deliberate mistake')
+        except:
+            logging.exception('failed', stack_info=True)
+        r.removeHandler(h)
+        h.close()
+        r = h.records[0]
+        self.assertTrue(r.exc_text.startswith('Traceback (most recent '
+                                              'call last):\n'))
+        self.assertTrue(r.exc_text.endswith('\nRuntimeError: '
+                                            'deliberate mistake'))
+        self.assertTrue(r.stack_info.startswith('Stack (most recent '
+                                              'call last):\n'))
+        self.assertTrue(r.stack_info.endswith('logging.exception(\'failed\', '
+                                            'stack_info=True)'))
+
+
 class LastResortTest(BaseTest):
     def test_last_resort(self):
         # Test the last resort handler
@@ -2214,6 +2418,539 @@ class LastResortTest(BaseTest):
             logging.raiseExceptions = old_raise_exceptions
 
 
+class FakeHandler:
+
+    def __init__(self, identifier, called):
+        for method in ('acquire', 'flush', 'close', 'release'):
+            setattr(self, method, self.record_call(identifier, method, called))
+
+    def record_call(self, identifier, method_name, called):
+        def inner():
+            called.append('{} - {}'.format(identifier, method_name))
+        return inner
+
+
+class RecordingHandler(logging.NullHandler):
+
+    def __init__(self, *args, **kwargs):
+        super(RecordingHandler, self).__init__(*args, **kwargs)
+        self.records = []
+
+    def handle(self, record):
+        """Keep track of all the emitted records."""
+        self.records.append(record)
+
+
+class ShutdownTest(BaseTest):
+
+    """Test suite for the shutdown method."""
+
+    def setUp(self):
+        super(ShutdownTest, self).setUp()
+        self.called = []
+
+        raise_exceptions = logging.raiseExceptions
+        self.addCleanup(lambda: setattr(logging, 'raiseExceptions', raise_exceptions))
+
+    def raise_error(self, error):
+        def inner():
+            raise error()
+        return inner
+
+    def test_no_failure(self):
+        # create some fake handlers
+        handler0 = FakeHandler(0, self.called)
+        handler1 = FakeHandler(1, self.called)
+        handler2 = FakeHandler(2, self.called)
+
+        # create live weakref to those handlers
+        handlers = map(logging.weakref.ref, [handler0, handler1, handler2])
+
+        logging.shutdown(handlerList=list(handlers))
+
+        expected = ['2 - acquire', '2 - flush', '2 - close', '2 - release',
+                    '1 - acquire', '1 - flush', '1 - close', '1 - release',
+                    '0 - acquire', '0 - flush', '0 - close', '0 - release']
+        self.assertEqual(expected, self.called)
+
+    def _test_with_failure_in_method(self, method, error):
+        handler = FakeHandler(0, self.called)
+        setattr(handler, method, self.raise_error(error))
+        handlers = [logging.weakref.ref(handler)]
+
+        logging.shutdown(handlerList=list(handlers))
+
+        self.assertEqual('0 - release', self.called[-1])
+
+    def test_with_ioerror_in_acquire(self):
+        self._test_with_failure_in_method('acquire', IOError)
+
+    def test_with_ioerror_in_flush(self):
+        self._test_with_failure_in_method('flush', IOError)
+
+    def test_with_ioerror_in_close(self):
+        self._test_with_failure_in_method('close', IOError)
+
+    def test_with_valueerror_in_acquire(self):
+        self._test_with_failure_in_method('acquire', ValueError)
+
+    def test_with_valueerror_in_flush(self):
+        self._test_with_failure_in_method('flush', ValueError)
+
+    def test_with_valueerror_in_close(self):
+        self._test_with_failure_in_method('close', ValueError)
+
+    def test_with_other_error_in_acquire_without_raise(self):
+        logging.raiseExceptions = False
+        self._test_with_failure_in_method('acquire', IndexError)
+
+    def test_with_other_error_in_flush_without_raise(self):
+        logging.raiseExceptions = False
+        self._test_with_failure_in_method('flush', IndexError)
+
+    def test_with_other_error_in_close_without_raise(self):
+        logging.raiseExceptions = False
+        self._test_with_failure_in_method('close', IndexError)
+
+    def test_with_other_error_in_acquire_with_raise(self):
+        logging.raiseExceptions = True
+        self.assertRaises(IndexError, self._test_with_failure_in_method,
+                          'acquire', IndexError)
+
+    def test_with_other_error_in_flush_with_raise(self):
+        logging.raiseExceptions = True
+        self.assertRaises(IndexError, self._test_with_failure_in_method,
+                          'flush', IndexError)
+
+    def test_with_other_error_in_close_with_raise(self):
+        logging.raiseExceptions = True
+        self.assertRaises(IndexError, self._test_with_failure_in_method,
+                          'close', IndexError)
+
+
+class ModuleLevelMiscTest(BaseTest):
+
+    """Test suite for some module level methods."""
+
+    def test_disable(self):
+        old_disable = logging.root.manager.disable
+        # confirm our assumptions are correct
+        assert old_disable == 0
+        self.addCleanup(lambda: logging.disable(old_disable))
+
+        logging.disable(83)
+        self.assertEqual(logging.root.manager.disable, 83)
+
+    def _test_log(self, method, level=None):
+        called = []
+        patch(self, logging, 'basicConfig',
+              lambda *a, **kw: called.append((a, kw)))
+
+        recording = RecordingHandler()
+        logging.root.addHandler(recording)
+
+        log_method = getattr(logging, method)
+        if level is not None:
+            log_method(level, "test me: %r", recording)
+        else:
+            log_method("test me: %r", recording)
+
+        self.assertEqual(len(recording.records), 1)
+        record = recording.records[0]
+        self.assertEqual(record.getMessage(), "test me: %r" % recording)
+
+        expected_level = level if level is not None else getattr(logging, method.upper())
+        self.assertEqual(record.levelno, expected_level)
+
+        # basicConfig was not called!
+        self.assertEqual(called, [])
+
+    def test_log(self):
+        self._test_log('log', logging.ERROR)
+
+    def test_debug(self):
+        self._test_log('debug')
+
+    def test_info(self):
+        self._test_log('info')
+
+    def test_warning(self):
+        self._test_log('warning')
+
+    def test_error(self):
+        self._test_log('error')
+
+    def test_critical(self):
+        self._test_log('critical')
+
+    def test_set_logger_class(self):
+        self.assertRaises(TypeError, logging.setLoggerClass, object)
+
+        class MyLogger(logging.Logger):
+            pass
+
+        logging.setLoggerClass(MyLogger)
+        self.assertEqual(logging.getLoggerClass(), MyLogger)
+
+        logging.setLoggerClass(logging.Logger)
+        self.assertEqual(logging.getLoggerClass(), logging.Logger)
+
+class LogRecordTest(BaseTest):
+    def test_str_rep(self):
+        r = logging.makeLogRecord({})
+        s = str(r)
+        self.assertTrue(s.startswith('<LogRecord: '))
+        self.assertTrue(s.endswith('>'))
+
+    def test_dict_arg(self):
+        h = RecordingHandler()
+        r = logging.getLogger()
+        r.addHandler(h)
+        d = {'less' : 'more' }
+        logging.warning('less is %(less)s', d)
+        self.assertIs(h.records[0].args, d)
+        self.assertEqual(h.records[0].message, 'less is more')
+        r.removeHandler(h)
+        h.close()
+
+class BasicConfigTest(unittest.TestCase):
+
+    """Test suite for logging.basicConfig."""
+
+    def setUp(self):
+        super(BasicConfigTest, self).setUp()
+        self.handlers = logging.root.handlers
+        self.saved_handlers = logging._handlers.copy()
+        self.saved_handler_list = logging._handlerList[:]
+        self.original_logging_level = logging.root.level
+        self.addCleanup(self.cleanup)
+        logging.root.handlers = []
+
+    def tearDown(self):
+        for h in logging.root.handlers[:]:
+            logging.root.removeHandler(h)
+            h.close()
+        super(BasicConfigTest, self).tearDown()
+
+    def cleanup(self):
+        setattr(logging.root, 'handlers', self.handlers)
+        logging._handlers.clear()
+        logging._handlers.update(self.saved_handlers)
+        logging._handlerList[:] = self.saved_handler_list
+        logging.root.level = self.original_logging_level
+
+    def test_no_kwargs(self):
+        logging.basicConfig()
+
+        # handler defaults to a StreamHandler to sys.stderr
+        self.assertEqual(len(logging.root.handlers), 1)
+        handler = logging.root.handlers[0]
+        self.assertIsInstance(handler, logging.StreamHandler)
+        self.assertEqual(handler.stream, sys.stderr)
+
+        formatter = handler.formatter
+        # format defaults to logging.BASIC_FORMAT
+        self.assertEqual(formatter._style._fmt, logging.BASIC_FORMAT)
+        # datefmt defaults to None
+        self.assertIsNone(formatter.datefmt)
+        # style defaults to %
+        self.assertIsInstance(formatter._style, logging.PercentStyle)
+
+        # level is not explicitely set
+        self.assertEqual(logging.root.level, self.original_logging_level)
+
+    def test_filename(self):
+        logging.basicConfig(filename='test.log')
+
+        self.assertEqual(len(logging.root.handlers), 1)
+        handler = logging.root.handlers[0]
+        self.assertIsInstance(handler, logging.FileHandler)
+
+        expected = logging.FileHandler('test.log', 'a')
+        self.addCleanup(expected.close)
+        self.assertEqual(handler.stream.mode, expected.stream.mode)
+        self.assertEqual(handler.stream.name, expected.stream.name)
+
+    def test_filemode(self):
+        logging.basicConfig(filename='test.log', filemode='wb')
+
+        handler = logging.root.handlers[0]
+        expected = logging.FileHandler('test.log', 'wb')
+        self.addCleanup(expected.close)
+        self.assertEqual(handler.stream.mode, expected.stream.mode)
+
+    def test_stream(self):
+        stream = io.StringIO()
+        self.addCleanup(stream.close)
+        logging.basicConfig(stream=stream)
+
+        self.assertEqual(len(logging.root.handlers), 1)
+        handler = logging.root.handlers[0]
+        self.assertIsInstance(handler, logging.StreamHandler)
+        self.assertEqual(handler.stream, stream)
+
+    def test_format(self):
+        logging.basicConfig(format='foo')
+
+        formatter = logging.root.handlers[0].formatter
+        self.assertEqual(formatter._style._fmt, 'foo')
+
+    def test_datefmt(self):
+        logging.basicConfig(datefmt='bar')
+
+        formatter = logging.root.handlers[0].formatter
+        self.assertEqual(formatter.datefmt, 'bar')
+
+    def test_style(self):
+        logging.basicConfig(style='$')
+
+        formatter = logging.root.handlers[0].formatter
+        self.assertIsInstance(formatter._style, logging.StringTemplateStyle)
+
+    def test_level(self):
+        old_level = logging.root.level
+        self.addCleanup(lambda: logging.root.setLevel(old_level))
+
+        logging.basicConfig(level=57)
+        self.assertEqual(logging.root.level, 57)
+        # Test that second call has no effect
+        logging.basicConfig(level=58)
+        self.assertEqual(logging.root.level, 57)
+
+    def test_incompatible(self):
+        assertRaises = self.assertRaises
+        handlers = [logging.StreamHandler()]
+        stream = sys.stderr
+        assertRaises(ValueError, logging.basicConfig, filename='test.log',
+                                                     stream=stream)
+        assertRaises(ValueError, logging.basicConfig, filename='test.log',
+                                                     handlers=handlers)
+        assertRaises(ValueError, logging.basicConfig, stream=stream,
+                                                     handlers=handlers)
+
+    def test_handlers(self):
+        handlers = [
+            logging.StreamHandler(),
+            logging.StreamHandler(sys.stdout),
+            logging.StreamHandler(),
+        ]
+        f = logging.Formatter()
+        handlers[2].setFormatter(f)
+        logging.basicConfig(handlers=handlers)
+        self.assertIs(handlers[0], logging.root.handlers[0])
+        self.assertIs(handlers[1], logging.root.handlers[1])
+        self.assertIs(handlers[2], logging.root.handlers[2])
+        self.assertIsNotNone(handlers[0].formatter)
+        self.assertIsNotNone(handlers[1].formatter)
+        self.assertIs(handlers[2].formatter, f)
+        self.assertIs(handlers[0].formatter, handlers[1].formatter)
+
+    def _test_log(self, method, level=None):
+        # logging.root has no handlers so basicConfig should be called
+        called = []
+
+        old_basic_config = logging.basicConfig
+        def my_basic_config(*a, **kw):
+            old_basic_config()
+            old_level = logging.root.level
+            logging.root.setLevel(100)  # avoid having messages in stderr
+            self.addCleanup(lambda: logging.root.setLevel(old_level))
+            called.append((a, kw))
+
+        patch(self, logging, 'basicConfig', my_basic_config)
+
+        log_method = getattr(logging, method)
+        if level is not None:
+            log_method(level, "test me")
+        else:
+            log_method("test me")
+
+        # basicConfig was called with no arguments
+        self.assertEqual(called, [((), {})])
+
+    def test_log(self):
+        self._test_log('log', logging.WARNING)
+
+    def test_debug(self):
+        self._test_log('debug')
+
+    def test_info(self):
+        self._test_log('info')
+
+    def test_warning(self):
+        self._test_log('warning')
+
+    def test_error(self):
+        self._test_log('error')
+
+    def test_critical(self):
+        self._test_log('critical')
+
+
+class LoggerAdapterTest(unittest.TestCase):
+
+    def setUp(self):
+        super(LoggerAdapterTest, self).setUp()
+        old_handler_list = logging._handlerList[:]
+
+        self.recording = RecordingHandler()
+        self.logger = logging.root
+        self.logger.addHandler(self.recording)
+        self.addCleanup(lambda: self.logger.removeHandler(self.recording))
+        self.addCleanup(self.recording.close)
+
+        def cleanup():
+            logging._handlerList[:] = old_handler_list
+
+        self.addCleanup(cleanup)
+        self.addCleanup(logging.shutdown)
+        self.adapter = logging.LoggerAdapter(logger=self.logger, extra=None)
+
+    def test_exception(self):
+        msg = 'testing exception: %r'
+        exc = None
+        try:
+            assert False
+        except AssertionError as e:
+            exc = e
+            self.adapter.exception(msg, self.recording)
+
+        self.assertEqual(len(self.recording.records), 1)
+        record = self.recording.records[0]
+        self.assertEqual(record.levelno, logging.ERROR)
+        self.assertEqual(record.msg, msg)
+        self.assertEqual(record.args, (self.recording,))
+        self.assertEqual(record.exc_info,
+                         (exc.__class__, exc, exc.__traceback__))
+
+    def test_critical(self):
+        msg = 'critical test! %r'
+        self.adapter.critical(msg, self.recording)
+
+        self.assertEqual(len(self.recording.records), 1)
+        record = self.recording.records[0]
+        self.assertEqual(record.levelno, logging.CRITICAL)
+        self.assertEqual(record.msg, msg)
+        self.assertEqual(record.args, (self.recording,))
+
+    def test_is_enabled_for(self):
+        old_disable = self.adapter.logger.manager.disable
+        self.adapter.logger.manager.disable = 33
+        self.addCleanup(lambda: setattr(self.adapter.logger.manager,
+                                        'disable', old_disable))
+        self.assertFalse(self.adapter.isEnabledFor(32))
+
+    def test_has_handlers(self):
+        self.assertTrue(self.adapter.hasHandlers())
+
+        for handler in self.logger.handlers:
+            self.logger.removeHandler(handler)
+        assert not self.logger.hasHandlers()
+
+        self.assertFalse(self.adapter.hasHandlers())
+
+
+class LoggerTest(BaseTest):
+
+    def setUp(self):
+        super(LoggerTest, self).setUp()
+        self.recording = RecordingHandler()
+        self.logger = logging.Logger(name='blah')
+        self.logger.addHandler(self.recording)
+        self.addCleanup(lambda: self.logger.removeHandler(self.recording))
+        self.addCleanup(self.recording.close)
+        self.addCleanup(logging.shutdown)
+
+    def test_set_invalid_level(self):
+        self.assertRaises(TypeError, self.logger.setLevel, object())
+
+    def test_exception(self):
+        msg = 'testing exception: %r'
+        exc = None
+        try:
+            assert False
+        except AssertionError as e:
+            exc = e
+            self.logger.exception(msg, self.recording)
+
+        self.assertEqual(len(self.recording.records), 1)
+        record = self.recording.records[0]
+        self.assertEqual(record.levelno, logging.ERROR)
+        self.assertEqual(record.msg, msg)
+        self.assertEqual(record.args, (self.recording,))
+        self.assertEqual(record.exc_info,
+                         (exc.__class__, exc, exc.__traceback__))
+
+    def test_log_invalid_level_with_raise(self):
+        old_raise = logging.raiseExceptions
+        self.addCleanup(lambda: setattr(logging, 'raiseExecptions', old_raise))
+
+        logging.raiseExceptions = True
+        self.assertRaises(TypeError, self.logger.log, '10', 'test message')
+
+    def test_log_invalid_level_no_raise(self):
+        old_raise = logging.raiseExceptions
+        self.addCleanup(lambda: setattr(logging, 'raiseExecptions', old_raise))
+
+        logging.raiseExceptions = False
+        self.logger.log('10', 'test message')  # no exception happens
+
+    def test_find_caller_with_stack_info(self):
+        called = []
+        patch(self, logging.traceback, 'print_stack',
+              lambda f, file: called.append(file.getvalue()))
+
+        self.logger.findCaller(stack_info=True)
+
+        self.assertEqual(len(called), 1)
+        self.assertEqual('Stack (most recent call last):\n', called[0])
+
+    def test_make_record_with_extra_overwrite(self):
+        name = 'my record'
+        level = 13
+        fn = lno = msg = args = exc_info = func = sinfo = None
+        rv = logging._logRecordFactory(name, level, fn, lno, msg, args,
+                                       exc_info, func, sinfo)
+
+        for key in ('message', 'asctime') + tuple(rv.__dict__.keys()):
+            extra = {key: 'some value'}
+            self.assertRaises(KeyError, self.logger.makeRecord, name, level,
+                              fn, lno, msg, args, exc_info,
+                              extra=extra, sinfo=sinfo)
+
+    def test_make_record_with_extra_no_overwrite(self):
+        name = 'my record'
+        level = 13
+        fn = lno = msg = args = exc_info = func = sinfo = None
+        extra = {'valid_key': 'some value'}
+        result = self.logger.makeRecord(name, level, fn, lno, msg, args,
+                                        exc_info, extra=extra, sinfo=sinfo)
+        self.assertIn('valid_key', result.__dict__)
+
+    def test_has_handlers(self):
+        self.assertTrue(self.logger.hasHandlers())
+
+        for handler in self.logger.handlers:
+            self.logger.removeHandler(handler)
+        assert not self.logger.hasHandlers()
+
+        self.assertFalse(self.logger.hasHandlers())
+
+    def test_has_handlers_no_propagate(self):
+        child_logger = logging.getLogger('blah.child')
+        child_logger.propagate = False
+        assert child_logger.handlers == []
+
+        self.assertFalse(child_logger.hasHandlers())
+
+    def test_is_enabled_for(self):
+        old_disable = self.logger.manager.disable
+        self.logger.manager.disable = 23
+        self.addCleanup(lambda: setattr(self.logger.manager,
+                                        'disable', old_disable))
+        self.assertFalse(self.logger.isEnabledFor(22))
+
+
 class BaseFileTest(BaseTest):
     "Base class for handler tests that write log files"
 
@@ -2236,6 +2973,17 @@ class BaseFileTest(BaseTest):
                         msg="Log file %r does not exist")
         self.rmfiles.append(filename)
 
+
+class FileHandlerTest(BaseFileTest):
+    def test_delay(self):
+        os.unlink(self.fn)
+        fh = logging.FileHandler(self.fn, delay=True)
+        self.assertIsNone(fh.stream)
+        self.assertFalse(os.path.exists(self.fn))
+        fh.handle(logging.makeLogRecord({}))
+        self.assertIsNotNone(fh.stream)
+        self.assertTrue(os.path.exists(self.fn))
+        fh.close()
 
 class RotatingFileHandlerTest(BaseFileTest):
     def next_rec(self):
@@ -2330,13 +3078,15 @@ for when, exp in (('S', 1),
 @run_with_locale('LC_ALL', '')
 def test_main():
     run_unittest(BuiltinLevelsTest, BasicFilterTest,
-                 CustomLevelsAndFiltersTest, MemoryHandlerTest,
+                 CustomLevelsAndFiltersTest, HandlerTest, MemoryHandlerTest,
                  ConfigFileTest, SocketHandlerTest, MemoryTest,
                  EncodingTest, WarningsTest, ConfigDictTest, ManagerTest,
-                 FormatterTest,
+                 FormatterTest, BufferingFormatterTest, StreamHandlerTest,
                  LogRecordFactoryTest, ChildLoggerTest, QueueHandlerTest,
-                 RotatingFileHandlerTest,
-                 LastResortTest,
+                 ShutdownTest, ModuleLevelMiscTest, BasicConfigTest,
+                 LoggerAdapterTest, LoggerTest,
+                 FileHandlerTest, RotatingFileHandlerTest,
+                 LastResortTest, LogRecordTest, ExceptionTest,
                  TimedRotatingFileHandlerTest
                 )
 
