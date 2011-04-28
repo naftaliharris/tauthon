@@ -97,7 +97,7 @@ def cmp_to_key(mycmp):
     """Convert a cmp= function into a key= function"""
     class K(object):
         __slots__ = ['obj']
-        def __init__(self, obj, *args):
+        def __init__(self, obj):
             self.obj = obj
         def __lt__(self, other):
             return mycmp(self.obj, other.obj) < 0
@@ -114,6 +114,11 @@ def cmp_to_key(mycmp):
         def __hash__(self):
             raise TypeError('hash not implemented')
     return K
+
+try:
+    from _functools import cmp_to_key
+except ImportError:
+    pass
 
 _CacheInfo = namedtuple("CacheInfo", "hits misses maxsize currsize")
 
@@ -141,7 +146,7 @@ def lru_cache(maxsize=100):
                 tuple=tuple, sorted=sorted, len=len, KeyError=KeyError):
 
         hits = misses = 0
-        kwd_mark = object()             # separates positional and keyword args
+        kwd_mark = (object(),)          # separates positional and keyword args
         lock = Lock()                   # needed because ordereddicts aren't threadsafe
 
         if maxsize is None:
@@ -152,7 +157,7 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += (kwd_mark,) + tuple(sorted(kwds.items()))
+                    key += kwd_mark + tuple(sorted(kwds.items()))
                 try:
                     result = cache[key]
                     hits += 1
@@ -171,7 +176,7 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += (kwd_mark,) + tuple(sorted(kwds.items()))
+                    key += kwd_mark + tuple(sorted(kwds.items()))
                 try:
                     with lock:
                         result = cache[key]
