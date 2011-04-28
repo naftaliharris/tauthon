@@ -9,19 +9,7 @@ class StringBufferTestCase(unittest.TestCase):
         self.assertEqual(sizeof(b), 32 * sizeof(c_char))
         self.assertTrue(type(b[0]) is bytes)
 
-        b = create_string_buffer("abc")
-        self.assertEqual(len(b), 4) # trailing nul char
-        self.assertEqual(sizeof(b), 4 * sizeof(c_char))
-        self.assertTrue(type(b[0]) is bytes)
-        self.assertEqual(b[0], b"a")
-        self.assertEqual(b[:], b"abc\0")
-        self.assertEqual(b[::], b"abc\0")
-        self.assertEqual(b[::-1], b"\0cba")
-        self.assertEqual(b[::2], b"ac")
-        self.assertEqual(b[::5], b"a")
-
-    def test_string_conversion(self):
-        b = create_string_buffer("abc")
+        b = create_string_buffer(b"abc")
         self.assertEqual(len(b), 4) # trailing nul char
         self.assertEqual(sizeof(b), 4 * sizeof(c_char))
         self.assertTrue(type(b[0]) is bytes)

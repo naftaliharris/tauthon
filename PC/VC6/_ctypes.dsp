@@ -43,10 +43,10 @@ RSC=rc.exe
 # PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 F90=df.exe
-# ADD BASE CPP /nologo /MT /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /YX /FD /c
-# ADD CPP /nologo /MD /W3 /GX /Zi /O2 /I "..\..\Include" /I ".." /I "..\..\Modules\_ctypes\libffi_msvc" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /YX /FD /c
-# ADD BASE MTL /nologo /D "Py_BUILD_CORE_MODULE" /D "NDEBUG" /mktyplib203 /o "NUL" /win32
-# ADD MTL /nologo /D "Py_BUILD_CORE_MODULE" /D "NDEBUG" /mktyplib203 /o "NUL" /win32
+# ADD BASE CPP /nologo /MT /W3 /GX /O2 /D "Py_BUILD_CORE_MODULE" /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /YX /FD /c
+# ADD CPP /nologo /MD /W3 /GX /Zi /O2 /I "..\..\Include" /I ".." /I "..\..\Modules\_ctypes\libffi_msvc" /D "Py_BUILD_CORE_MODULE" /D "NDEBUG" /D "WIN32" /D "_WINDOWS" /YX /FD /c
+# ADD BASE MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
+# ADD MTL /nologo /D "NDEBUG" /mktyplib203 /o "NUL" /win32
 # ADD BASE RSC /l 0x409 /d "NDEBUG"
 # ADD RSC /l 0x409 /d "NDEBUG"
 BSC32=bscmake.exe
