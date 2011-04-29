@@ -46,7 +46,7 @@ internationalized, to the local language and cultural habits.
 #   find this format documented anywhere.
 
 
-import locale, copy, os, re, struct, sys
+import locale, copy, io, os, re, struct, sys
 from errno import ENOENT
 
 
@@ -58,28 +58,13 @@ __all__ = ['NullTranslations', 'GNUTranslations', 'Catalog',
 _default_localedir = os.path.join(sys.prefix, 'share', 'locale')
 
 
-def test(condition, true, false):
-    """
-    Implements the C expression:
-
-      condition ? true : false
-
-    Required to correctly interpret plural forms.
-    """
-    if condition:
-        return true
-    else:
-        return false
-
-
 def c2py(plural):
     """Gets a C expression as used in PO files for plural forms and returns a
     Python lambda function that implements an equivalent expression.
     """
     # Security check, allow only the "n" identifier
-    from io import StringIO
     import token, tokenize
-    tokens = tokenize.generate_tokens(StringIO(plural).readline)
+    tokens = tokenize.generate_tokens(io.StringIO(plural).readline)
     try:
         danger = [x for x in tokens if x[0] == token.NAME and x[1] != 'n']
     except tokenize.TokenError:
@@ -96,11 +81,11 @@ def c2py(plural):
     plural = expr.sub(' not \\1', plural)
 
     # Regular expression and replacement function used to transform
-    # "a?b:c" to "test(a,b,c)".
+    # "a?b:c" to "b if a else c".
     expr = re.compile(r'(.*?)\?(.*?):(.*)')
     def repl(x):
-        return "test(%s, %s, %s)" % (x.group(1), x.group(2),
-                                     expr.sub(repl, x.group(3)))
+        return "(%s if %s else %s)" % (x.group(2), x.group(1),
+                                       expr.sub(repl, x.group(3)))
 
     # Code to transform the plural expression, taking care of parentheses
     stack = ['']
@@ -123,36 +108,35 @@ def c2py(plural):
 
 
 
-def _expand_lang(locale):
-    from locale import normalize
-    locale = normalize(locale)
+def _expand_lang(loc):
+    loc = locale.normalize(loc)
     COMPONENT_CODESET   = 1 << 0
     COMPONENT_TERRITORY = 1 << 1
     COMPONENT_MODIFIER  = 1 << 2
     # split up the locale into its base components
     mask = 0
-    pos = locale.find('@')
+    pos = loc.find('@')
     if pos >= 0:
-        modifier = locale[pos:]
-        locale = locale[:pos]
+        modifier = loc[pos:]
+        loc = loc[:pos]
         mask |= COMPONENT_MODIFIER
     else:
         modifier = ''
-    pos = locale.find('.')
+    pos = loc.find('.')
     if pos >= 0:
-        codeset = locale[pos:]
-        locale = locale[:pos]
+        codeset = loc[pos:]
+        loc = loc[:pos]
         mask |= COMPONENT_CODESET
     else:
         codeset = ''
-    pos = locale.find('_')
+    pos = loc.find('_')
     if pos >= 0:
-        territory = locale[pos:]
-        locale = locale[:pos]
+        territory = loc[pos:]
+        loc = loc[:pos]
         mask |= COMPONENT_TERRITORY
     else:
         territory = ''
-    language = locale
+    language = loc
     ret = []
     for i in range(mask+1):
         if not (i & ~mask):  # if all components for this combo exist ...
