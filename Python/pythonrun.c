@@ -62,6 +62,7 @@ static PyObject *run_mod(mod_ty, const char *, PyObject *, PyObject *,
 static PyObject *run_pyc_file(FILE *, const char *, PyObject *, PyObject *,
                               PyCompilerFlags *);
 static void err_input(perrdetail *);
+static void err_free(perrdetail *);
 static void initsigs(void);
 static void call_py_exitfuncs(void);
 static void wait_for_thread_shutdown(void);
@@ -70,6 +71,8 @@ extern void _PyUnicode_Init(void);
 extern void _PyUnicode_Fini(void);
 extern int _PyLong_Init(void);
 extern void PyLong_Fini(void);
+extern int _PyFaulthandler_Init(void);
+extern void _PyFaulthandler_Fini(void);
 
 #ifdef WITH_THREAD
 extern void _PyGILState_Init(PyInterpreterState *, PyThreadState *);
@@ -286,6 +289,10 @@ Py_InitializeEx(int install_sigs)
 
     _PyImportHooks_Init();
 
+    /* initialize the faulthandler module */
+    if (_PyFaulthandler_Init())
+        Py_FatalError("Py_Initialize: can't initialize faulthandler");
+
     /* Initialize _warnings. */
     _PyWarnings_Init();
 
@@ -454,6 +461,9 @@ Py_Finalize(void)
 
     /* Destroy the database used by _PyImport_{Fixup,Find}Extension */
     _PyImport_Fini();
+
+    /* unload faulthandler module */
+    _PyFaulthandler_Fini();
 
     /* Debugging stuff */
 #ifdef COUNT_ALLOCS
@@ -1885,12 +1895,13 @@ PyParser_ASTFromString(const char *s, const char *filename, int start,
         flags->cf_flags |= iflags & PyCF_MASK;
         mod = PyAST_FromNode(n, flags, filename, arena);
         PyNode_Free(n);
-        return mod;
     }
     else {
         err_input(&err);
-        return NULL;
+        mod = NULL;
     }
+    err_free(&err);
+    return mod;
 }
 
 mod_ty
@@ -1915,14 +1926,15 @@ PyParser_ASTFromFile(FILE *fp, const char *filename, const char* enc,
         flags->cf_flags |= iflags & PyCF_MASK;
         mod = PyAST_FromNode(n, flags, filename, arena);
         PyNode_Free(n);
-        return mod;
     }
     else {
         err_input(&err);
         if (errcode)
             *errcode = err.error;
-        return NULL;
+        mod = NULL;
     }
+    err_free(&err);
+    return mod;
 }
 
 /* Simplified interface to parsefile -- return node or set exception */
@@ -1936,6 +1948,7 @@ PyParser_SimpleParseFileFlags(FILE *fp, const char *filename, int start, int fla
                                       start, NULL, NULL, &err, flags);
     if (n == NULL)
         err_input(&err);
+    err_free(&err);
 
     return n;
 }
@@ -1950,6 +1963,7 @@ PyParser_SimpleParseStringFlags(const char *str, int start, int flags)
                                         start, &err, flags);
     if (n == NULL)
         err_input(&err);
+    err_free(&err);
     return n;
 }
 
@@ -1962,6 +1976,7 @@ PyParser_SimpleParseStringFlagsFilename(const char *str, const char *filename,
                             &_PyParser_Grammar, start, &err, flags);
     if (n == NULL)
         err_input(&err);
+    err_free(&err);
     return n;
 }
 
@@ -1975,9 +1990,21 @@ PyParser_SimpleParseStringFilename(const char *str, const char *filename, int st
    even parser modules. */
 
 void
+PyParser_ClearError(perrdetail *err)
+{
+    err_free(err);
+}
+
+void
 PyParser_SetError(perrdetail *err)
 {
     err_input(err);
+}
+
+static void
+err_free(perrdetail *err)
+{
+    Py_CLEAR(err->filename);
 }
 
 /* Set the error appropriate to the given input error code (see errcode.h) */
@@ -1987,7 +2014,6 @@ err_input(perrdetail *err)
 {
     PyObject *v, *w, *errtype, *errtext;
     PyObject *msg_obj = NULL;
-    PyObject *filename;
     char *msg = NULL;
 
     errtype = PyExc_SyntaxError;
@@ -2073,17 +2099,8 @@ err_input(perrdetail *err)
         errtext = PyUnicode_DecodeUTF8(err->text, strlen(err->text),
                                        "replace");
     }
-    if (err->filename != NULL)
-        filename = PyUnicode_DecodeFSDefault(err->filename);
-    else {
-        Py_INCREF(Py_None);
-        filename = Py_None;
-    }
-    if (filename != NULL)
-        v = Py_BuildValue("(NiiN)", filename,
-                          err->lineno, err->offset, errtext);
-    else
-        v = NULL;
+    v = Py_BuildValue("(OiiN)", err->filename,
+                      err->lineno, err->offset, errtext);
     if (v != NULL) {
         if (msg_obj)
             w = Py_BuildValue("(OO)", msg_obj, v);
@@ -2107,11 +2124,24 @@ cleanup:
 void
 Py_FatalError(const char *msg)
 {
+    const int fd = fileno(stderr);
+    PyThreadState *tstate;
+
     fprintf(stderr, "Fatal Python error: %s\n", msg);
     fflush(stderr); /* it helps in Windows debug build */
     if (PyErr_Occurred()) {
         PyErr_PrintEx(0);
     }
+    else {
+        tstate = _Py_atomic_load_relaxed(&_PyThreadState_Current);
+        if (tstate != NULL) {
+            fputc('\n', stderr);
+            fflush(stderr);
+            _Py_DumpTraceback(fd, tstate);
+        }
+        _PyFaulthandler_Fini();
+    }
+
 #ifdef MS_WINDOWS
     {
         size_t len = strlen(msg);
