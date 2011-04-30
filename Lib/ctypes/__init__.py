@@ -259,41 +259,31 @@ class c_bool(_SimpleCData):
 
 from _ctypes import POINTER, pointer, _pointer_type_cache
 
-try:
-    from _ctypes import set_conversion_mode
-except ImportError:
-    pass
-else:
-    if _os.name in ("nt", "ce"):
-        set_conversion_mode("mbcs", "ignore")
-    else:
-        set_conversion_mode("ascii", "strict")
+class c_wchar_p(_SimpleCData):
+    _type_ = "Z"
 
-    class c_wchar_p(_SimpleCData):
-        _type_ = "Z"
+class c_wchar(_SimpleCData):
+    _type_ = "u"
 
-    class c_wchar(_SimpleCData):
-        _type_ = "u"
+POINTER(c_wchar).from_param = c_wchar_p.from_param #_SimpleCData.c_wchar_p_from_param
 
-    POINTER(c_wchar).from_param = c_wchar_p.from_param #_SimpleCData.c_wchar_p_from_param
-
-    def create_unicode_buffer(init, size=None):
-        """create_unicode_buffer(aString) -> character array
-        create_unicode_buffer(anInteger) -> character array
-        create_unicode_buffer(aString, anInteger) -> character array
-        """
-        if isinstance(init, (str, bytes)):
-            if size is None:
-                size = len(init)+1
-            buftype = c_wchar * size
-            buf = buftype()
-            buf.value = init
-            return buf
-        elif isinstance(init, int):
-            buftype = c_wchar * init
-            buf = buftype()
-            return buf
-        raise TypeError(init)
+def create_unicode_buffer(init, size=None):
+    """create_unicode_buffer(aString) -> character array
+    create_unicode_buffer(anInteger) -> character array
+    create_unicode_buffer(aString, anInteger) -> character array
+    """
+    if isinstance(init, (str, bytes)):
+        if size is None:
+            size = len(init)+1
+        buftype = c_wchar * size
+        buf = buftype()
+        buf.value = init
+        return buf
+    elif isinstance(init, int):
+        buftype = c_wchar * init
+        buf = buftype()
+        return buf
+    raise TypeError(init)
 
 POINTER(c_char).from_param = c_char_p.from_param #_SimpleCData.c_char_p_from_param
 
@@ -459,10 +449,13 @@ _pointer_type_cache[None] = c_void_p
 
 if sizeof(c_uint) == sizeof(c_void_p):
     c_size_t = c_uint
+    c_ssize_t = c_int
 elif sizeof(c_ulong) == sizeof(c_void_p):
     c_size_t = c_ulong
+    c_ssize_t = c_long
 elif sizeof(c_ulonglong) == sizeof(c_void_p):
     c_size_t = c_ulonglong
+    c_ssize_t = c_longlong
 
 # functions
 

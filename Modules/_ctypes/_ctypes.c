@@ -132,8 +132,6 @@ static PyTypeObject Simple_Type;
 /* a callable object used for unpickling */
 static PyObject *_unpickle;
 
-char *_ctypes_conversion_encoding = NULL;
-char *_ctypes_conversion_errors = NULL;
 
 
 /****************************************************************/
@@ -1096,13 +1094,7 @@ CharArray_set_value(CDataObject *self, PyObject *value)
         return -1;
     }
 
-    if (PyUnicode_Check(value)) {
-        value = PyUnicode_AsEncodedString(value,
-                                          _ctypes_conversion_encoding,
-                                          _ctypes_conversion_errors);
-        if (!value)
-            return -1;
-    } else if (!PyBytes_Check(value)) {
+    if (!PyBytes_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                      "str/bytes expected instead of %s instance",
                      Py_TYPE(value)->tp_name);
@@ -1156,13 +1148,7 @@ WCharArray_set_value(CDataObject *self, PyObject *value)
                         "can't delete attribute");
         return -1;
     }
-    if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return -1;
-    } else if (!PyUnicode_Check(value)) {
+    if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
                         Py_TYPE(value)->tp_name);
@@ -1175,7 +1161,7 @@ WCharArray_set_value(CDataObject *self, PyObject *value)
         result = -1;
         goto done;
     }
-    result = PyUnicode_AsWideChar((PyUnicodeObject *)value,
+    result = PyUnicode_AsWideChar(value,
                                   (wchar_t *)self->b_ptr,
                                   self->b_size/sizeof(wchar_t));
     if (result >= 0 && (size_t)result < self->b_size/sizeof(wchar_t))
@@ -1521,7 +1507,7 @@ c_char_p_from_param(PyObject *type, PyObject *value)
         Py_INCREF(Py_None);
         return Py_None;
     }
-    if (PyBytes_Check(value) || PyUnicode_Check(value)) {
+    if (PyBytes_Check(value)) {
         PyCArgObject *parg;
         struct fielddesc *fd = _ctypes_get_fielddesc("z");
 
@@ -2519,7 +2505,7 @@ static PyBufferProcs PyCData_as_buffer = {
 /*
  * CData objects are mutable, so they cannot be hashable!
  */
-static long
+static Py_hash_t
 PyCData_nohash(PyObject *self)
 {
     PyErr_SetString(PyExc_TypeError, "unhashable type");
@@ -3398,7 +3384,7 @@ PyCFuncPtr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->callable = callable;
 
     self->thunk = thunk;
-    *(void **)self->b_ptr = (void *)thunk->pcl;
+    *(void **)self->b_ptr = (void *)thunk->pcl_exec;
 
     Py_INCREF((PyObject *)thunk); /* for KeepRef */
     if (-1 == KeepRef((CDataObject *)self, 0, (PyObject *)thunk)) {
@@ -3970,14 +3956,14 @@ PyTypeObject PyCFuncPtr_Type = {
 
   Returns -1 on error, or the index of next argument on success.
  */
-static int
+static Py_ssize_t
 _init_pos_args(PyObject *self, PyTypeObject *type,
                PyObject *args, PyObject *kwds,
-               int index)
+               Py_ssize_t index)
 {
     StgDictObject *dict;
     PyObject *fields;
-    int i;
+    Py_ssize_t i;
 
     if (PyType_stgdict((PyObject *)type->tp_base)) {
         index = _init_pos_args(self, type->tp_base,
@@ -4219,7 +4205,7 @@ Array_subscript(PyObject *_self, PyObject *item)
         PyObject *np;
         Py_ssize_t start, stop, step, slicelen, cur, i;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
+        if (PySlice_GetIndicesEx(item,
                                  self->b_length, &start, &stop,
                                  &step, &slicelen) < 0) {
             return NULL;
@@ -4353,7 +4339,7 @@ Array_ass_subscript(PyObject *_self, PyObject *item, PyObject *value)
     else if (PySlice_Check(item)) {
         Py_ssize_t start, stop, step, slicelen, otherlen, i, cur;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
+        if (PySlice_GetIndicesEx(item,
                                  self->b_length, &start, &stop,
                                  &step, &slicelen) < 0) {
             return -1;
@@ -4498,7 +4484,7 @@ PyCArrayType_from_ctype(PyObject *itemtype, Py_ssize_t length)
 #endif
 
     result = PyObject_CallFunction((PyObject *)&PyCArrayType_Type,
-                                   "U(O){s:n,s:O}",
+                                   "s(O){s:n,s:O}",
                                    name,
                                    &PyCArray_Type,
                                    "_length_",
