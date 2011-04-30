@@ -608,6 +608,30 @@ class TestFTPClass(TestCase):
         self.assertEqual(self.server.handler_instance.last_received_cmd, 'quit')
         self.assertFalse(is_client_connected())
 
+    def test_source_address(self):
+        self.client.quit()
+        port = support.find_unused_port()
+        try:
+            self.client.connect(self.server.host, self.server.port,
+                                source_address=(HOST, port))
+            self.assertEqual(self.client.sock.getsockname()[1], port)
+            self.client.quit()
+        except IOError as e:
+            if e.errno == errno.EADDRINUSE:
+                self.skipTest("couldn't bind to port %d" % port)
+            raise
+
+    def test_source_address_passive_connection(self):
+        port = support.find_unused_port()
+        self.client.source_address = (HOST, port)
+        try:
+            with self.client.transfercmd('list') as sock:
+                self.assertEqual(sock.getsockname()[1], port)
+        except IOError as e:
+            if e.errno == errno.EADDRINUSE:
+                self.skipTest("couldn't bind to port %d" % port)
+            raise
+
     def test_parse257(self):
         self.assertEqual(ftplib.parse257('257 "/foo/bar"'), '/foo/bar')
         self.assertEqual(ftplib.parse257('257 "/foo/bar" created'), '/foo/bar')
@@ -849,7 +873,7 @@ class TestTimeouts(TestCase):
 
 def test_main():
     tests = [TestFTPClass, TestTimeouts]
-    if socket.has_ipv6:
+    if support.IPV6_ENABLED:
         try:
             DummyFTPServer((HOST, 0), af=socket.AF_INET6)
         except socket.error:
