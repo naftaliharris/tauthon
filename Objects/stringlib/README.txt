@@ -16,10 +16,6 @@ STRINGLIB_EMPTY
     a PyObject representing the empty string, only to be used if
     STRINGLIB_MUTABLE is 0
 
-int STRINGLIB_CMP(STRINGLIB_CHAR*, STRINGLIB_CHAR*, Py_ssize_t)
-
-    compares two strings. returns 0 if they match, and non-zero if not.
-
 Py_ssize_t STRINGLIB_LEN(PyObject*)
 
     returns the length of the given string object (which must be of the
