@@ -9,6 +9,13 @@ What's New in Python 2.7.2?
 Core and Builtins
 -----------------
 
+- Issue #10517: After fork(), reinitialize the TLS used by the PyGILState_*
+  APIs, to avoid a crash with the pthread implementation in RHEL 5.  Patch
+  by Charles-François Natali.
+
+- Issue #6780: fix starts/endswith error message to mention that tuples are
+  accepted too.
+
 - Issue #5057: fix a bug in the peepholer that led to non-portable pyc files
   between narrow and wide builds while optimizing BINARY_SUBSCR on non-BMP
   chars (e.g. u"\U00012345"[0]).
@@ -43,6 +50,9 @@ Core and Builtins
   rather than the Py_IsInitialized flag, avoiding a Fatal Python
   error in certain circumstances when an import is done in __del__.
 
+- issue #11828: startswith and endswith don't accept None as slice index.
+  Patch by Torsten Becker.
+
 - Issue #10674: Remove unused 'dictmaker' rule from grammar.
 
 - Issue #10596: Fix float.__mod__ to have the same behaviour as
@@ -55,8 +65,28 @@ Core and Builtins
 Library
 -------
 
+- Issue #10761: Fix tarfile.extractall failure  when symlinked files are
+  present. Initial patch by Scott Leerssen.
+
+- Issue #11763: don't use difflib in TestCase.assertMultiLineEqual if the
+  strings are too long.
+
+- Issue #11236: getpass.getpass responds to ctrl-c or ctrl-z on terminal.
+
+- Issue #11768: The signal handler of the signal module only calls
+  Py_AddPendingCall() for the first signal to fix a deadlock on reentrant or
+  parallel calls. PyErr_SetInterrupt() writes also into the wake up file.
+
+- Issue #11875: collections.OrderedDict's __reduce__ was temporarily
+  mutating the object instead of just working on a copy.
+
+- Issue #11442: Add a charset parameter to the Content-type in SimpleHTTPServer
+  to avoid XSS attacks.
+
 - Issue #11467: Fix urlparse behavior when handling urls which contains scheme
   specific part only digits. Patch by Santoso Wijaya.
+
+- collections.Counter().copy() now works correctly for subclasses.
 
 - Issue #11474: Fix the bug with url2pathname() handling of '/C|/' on Windows.
   Patch by Santoso Wijaya.
@@ -357,6 +387,8 @@ IDLE
 
 Tests
 -----
+
+- Fix test_startfile to wait for child process to terminate before finishing.
 
 - Issue #11719: Fix message about unexpected test_msilib skip on non-Windows
   platforms. Patch by Nadeem Vawda.
