@@ -1,58 +1,31 @@
 # Tests invocation of the interpreter with various command line arguments
-# All tests are executed with environment variables ignored
+# Most tests are executed with environment variables ignored
 # See test_cmd_line_script.py for testing of script execution
 
-import os
 import test.support, unittest
 import os
 import sys
 import subprocess
+import tempfile
+from test.script_helper import spawn_python, kill_python, assert_python_ok, assert_python_failure
 
-def _spawn_python(*args):
-    cmd_line = [sys.executable]
-    # When testing -S, we need PYTHONPATH to work (see test_site_flag())
-    if '-S' not in args:
-        cmd_line.append('-E')
-    cmd_line.extend(args)
-    return subprocess.Popen(cmd_line, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-def _kill_python(p):
-    return _kill_python_and_exit_code(p)[0]
-
+# XXX (ncoghlan): Move to script_helper and make consistent with run_python
 def _kill_python_and_exit_code(p):
-    p.stdin.close()
-    data = p.stdout.read()
-    p.stdout.close()
-    # try to cleanup the child so we don't appear to leak when running
-    # with regrtest -R.  This should be a no-op on Windows.
-    subprocess._cleanup()
+    data = kill_python(p)
     returncode = p.wait()
     return data, returncode
 
 class CmdLineTest(unittest.TestCase):
-    def start_python(self, *args):
-        return self.start_python_and_exit_code(*args)[0]
-
-    def start_python_and_exit_code(self, *args):
-        p = _spawn_python(*args)
-        return _kill_python_and_exit_code(p)
-
-    def exit_code(self, *args):
-        cmd_line = [sys.executable, '-E']
-        cmd_line.extend(args)
-        with open(os.devnull, 'w') as devnull:
-            return subprocess.call(cmd_line, stdout=devnull,
-                                   stderr=subprocess.STDOUT)
-
     def test_directories(self):
-        self.assertNotEqual(self.exit_code('.'), 0)
-        self.assertNotEqual(self.exit_code('< .'), 0)
+        assert_python_failure('.')
+        assert_python_failure('< .')
 
     def verify_valid_flag(self, cmd_line):
-        data = self.start_python(cmd_line)
-        self.assertTrue(data == b'' or data.endswith(b'\n'))
-        self.assertTrue(b'Traceback' not in data)
+        rc, out, err = assert_python_ok(*cmd_line)
+        self.assertTrue(out == b'' or out.endswith(b'\n'))
+        self.assertNotIn(b'Traceback', out)
+        self.assertNotIn(b'Traceback', err)
 
     def test_optimize(self):
         self.verify_valid_flag('-O')
@@ -65,84 +38,147 @@ class CmdLineTest(unittest.TestCase):
         self.verify_valid_flag('-Qwarnall')
 
     def test_site_flag(self):
-        if os.name == 'posix':
-            # Workaround bug #586680 by adding the extension dir to PYTHONPATH
-            from distutils.util import get_platform
-            s = "./build/lib.%s-%.3s" % (get_platform(), sys.version)
-            if hasattr(sys, 'gettotalrefcount'):
-                s += '-pydebug'
-            p = os.environ.get('PYTHONPATH', '')
-            if p:
-                p += ':'
-            os.environ['PYTHONPATH'] = p + s
         self.verify_valid_flag('-S')
 
     def test_usage(self):
-        self.assertTrue(b'usage' in self.start_python('-h'))
+        rc, out, err = assert_python_ok('-h')
+        self.assertIn(b'usage', out)
 
     def test_version(self):
         version = ('Python %d.%d' % sys.version_info[:2]).encode("ascii")
-        self.assertTrue(self.start_python('-V').startswith(version))
+        rc, out, err = assert_python_ok('-V')
+        self.assertTrue(err.startswith(version))
 
     def test_verbose(self):
         # -v causes imports to write to stderr.  If the write to
         # stderr itself causes an import to happen (for the output
         # codec), a recursion loop can occur.
-        data, rc = self.start_python_and_exit_code('-v')
-        self.assertEqual(rc, 0)
-        self.assertTrue(b'stack overflow' not in data)
-        data, rc = self.start_python_and_exit_code('-vv')
-        self.assertEqual(rc, 0)
-        self.assertTrue(b'stack overflow' not in data)
+        rc, out, err = assert_python_ok('-v')
+        self.assertNotIn(b'stack overflow', err)
+        rc, out, err = assert_python_ok('-vv')
+        self.assertNotIn(b'stack overflow', err)
+
+    def test_xoptions(self):
+        rc, out, err = assert_python_ok('-c', 'import sys; print(sys._xoptions)')
+        opts = eval(out.splitlines()[0])
+        self.assertEqual(opts, {})
+        rc, out, err = assert_python_ok(
+            '-Xa', '-Xb=c,d=e', '-c', 'import sys; print(sys._xoptions)')
+        opts = eval(out.splitlines()[0])
+        self.assertEqual(opts, {'a': True, 'b': 'c,d=e'})
 
     def test_run_module(self):
         # Test expected operation of the '-m' switch
         # Switch needs an argument
-        self.assertNotEqual(self.exit_code('-m'), 0)
+        assert_python_failure('-m')
         # Check we get an error for a nonexistent module
-        self.assertNotEqual(
-            self.exit_code('-m', 'fnord43520xyz'),
-            0)
+        assert_python_failure('-m', 'fnord43520xyz')
         # Check the runpy module also gives an error for
         # a nonexistent module
-        self.assertNotEqual(
-            self.exit_code('-m', 'runpy', 'fnord43520xyz'),
-            0)
+        assert_python_failure('-m', 'runpy', 'fnord43520xyz'),
         # All good if module is located and run successfully
-        self.assertEqual(
-            self.exit_code('-m', 'timeit', '-n', '1'),
-            0)
+        assert_python_ok('-m', 'timeit', '-n', '1'),
 
     def test_run_module_bug1764407(self):
         # -m and -i need to play well together
         # Runs the timeit module and checks the __main__
         # namespace has been populated appropriately
-        p = _spawn_python('-i', '-m', 'timeit', '-n', '1')
+        p = spawn_python('-i', '-m', 'timeit', '-n', '1')
         p.stdin.write(b'Timer\n')
         p.stdin.write(b'exit()\n')
-        data = _kill_python(p)
+        data = kill_python(p)
         self.assertTrue(data.find(b'1 loop') != -1)
         self.assertTrue(data.find(b'__main__.Timer') != -1)
 
     def test_run_code(self):
         # Test expected operation of the '-c' switch
         # Switch needs an argument
-        self.assertNotEqual(self.exit_code('-c'), 0)
+        assert_python_failure('-c')
         # Check we get an error for an uncaught exception
-        self.assertNotEqual(
-            self.exit_code('-c', 'raise Exception'),
-            0)
+        assert_python_failure('-c', 'raise Exception')
         # All good if execution is successful
-        self.assertEqual(
-            self.exit_code('-c', 'pass'),
-            0)
+        assert_python_ok('-c', 'pass')
 
+    @unittest.skipIf(sys.getfilesystemencoding() == 'ascii',
+                     'need a filesystem encoding different than ASCII')
+    def test_non_ascii(self):
         # Test handling of non-ascii data
-        if sys.getfilesystemencoding() != 'ascii':
-            command = "assert(ord('\xe9') == 0xe9)"
-            self.assertEqual(
-                self.exit_code('-c', command),
-                0)
+        if test.support.verbose:
+            import locale
+            print('locale encoding = %s, filesystem encoding = %s'
+                  % (locale.getpreferredencoding(), sys.getfilesystemencoding()))
+        command = "assert(ord('\xe9') == 0xe9)"
+        assert_python_ok('-c', command)
+
+    # On Windows, pass bytes to subprocess doesn't test how Python decodes the
+    # command line, but how subprocess does decode bytes to unicode. Python
+    # doesn't decode the command line because Windows provides directly the
+    # arguments as unicode (using wmain() instead of main()).
+    @unittest.skipIf(sys.platform == 'win32',
+                     'Windows has a native unicode API')
+    def test_undecodable_code(self):
+        undecodable = b"\xff"
+        env = os.environ.copy()
+        # Use C locale to get ascii for the locale encoding
+        env['LC_ALL'] = 'C'
+        code = (
+            b'import locale; '
+            b'print(ascii("' + undecodable + b'"), '
+                b'locale.getpreferredencoding())')
+        p = subprocess.Popen(
+            [sys.executable, "-c", code],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            env=env)
+        stdout, stderr = p.communicate()
+        if p.returncode == 1:
+            # _Py_char2wchar() decoded b'\xff' as '\udcff' (b'\xff' is not
+            # decodable from ASCII) and run_command() failed on
+            # PyUnicode_AsUTF8String(). This is the expected behaviour on
+            # Linux.
+            pattern = b"Unable to decode the command from the command line:"
+        elif p.returncode == 0:
+            # _Py_char2wchar() decoded b'\xff' as '\xff' even if the locale is
+            # C and the locale encoding is ASCII. It occurs on FreeBSD, Solaris
+            # and Mac OS X.
+            pattern = b"'\\xff' "
+            # The output is followed by the encoding name, an alias to ASCII.
+            # Examples: "US-ASCII" or "646" (ISO 646, on Solaris).
+        else:
+            raise AssertionError("Unknown exit code: %s, output=%a" % (p.returncode, stdout))
+        if not stdout.startswith(pattern):
+            raise AssertionError("%a doesn't start with %a" % (stdout, pattern))
+
+    @unittest.skipUnless(sys.platform == 'darwin', 'test specific to Mac OS X')
+    def test_osx_utf8(self):
+        def check_output(text):
+            decoded = text.decode('utf8', 'surrogateescape')
+            expected = ascii(decoded).encode('ascii') + b'\n'
+
+            env = os.environ.copy()
+            # C locale gives ASCII locale encoding, but Python uses UTF-8
+            # to parse the command line arguments on Mac OS X
+            env['LC_ALL'] = 'C'
+
+            p = subprocess.Popen(
+                (sys.executable, "-c", "import sys; print(ascii(sys.argv[1]))", text),
+                stdout=subprocess.PIPE,
+                env=env)
+            stdout, stderr = p.communicate()
+            self.assertEqual(stdout, expected)
+            self.assertEqual(p.returncode, 0)
+
+        # test valid utf-8
+        text = 'e:\xe9, euro:\u20ac, non-bmp:\U0010ffff'.encode('utf-8')
+        check_output(text)
+
+        # test invalid utf-8
+        text = (
+            b'\xff'         # invalid byte
+            b'\xc3\xa9'     # valid utf-8 character
+            b'\xc3\xff'     # invalid byte sequence
+            b'\xed\xa0\x80' # lone surrogate character (invalid)
+        )
+        check_output(text)
 
     def test_unbuffered_output(self):
         # Test expected operation of the '-u' switch
@@ -150,21 +186,21 @@ class CmdLineTest(unittest.TestCase):
             # Binary is unbuffered
             code = ("import os, sys; sys.%s.buffer.write(b'x'); os._exit(0)"
                 % stream)
-            data, rc = self.start_python_and_exit_code('-u', '-c', code)
-            self.assertEqual(rc, 0)
+            rc, out, err = assert_python_ok('-u', '-c', code)
+            data = err if stream == 'stderr' else out
             self.assertEqual(data, b'x', "binary %s not unbuffered" % stream)
             # Text is line-buffered
             code = ("import os, sys; sys.%s.write('x\\n'); os._exit(0)"
                 % stream)
-            data, rc = self.start_python_and_exit_code('-u', '-c', code)
-            self.assertEqual(rc, 0)
+            rc, out, err = assert_python_ok('-u', '-c', code)
+            data = err if stream == 'stderr' else out
             self.assertEqual(data.strip(), b'x',
                 "text %s not line-buffered" % stream)
 
     def test_unbuffered_input(self):
         # sys.stdin still works with '-u'
         code = ("import sys; sys.stdout.write(sys.stdin.read(1))")
-        p = _spawn_python('-u', '-c', code)
+        p = spawn_python('-u', '-c', code)
         p.stdin.write(b'x')
         p.stdin.flush()
         data, rc = _kill_python_and_exit_code(p)
@@ -172,23 +208,62 @@ class CmdLineTest(unittest.TestCase):
         self.assertTrue(data.startswith(b'x'), data)
 
     def test_large_PYTHONPATH(self):
-        with test.support.EnvironmentVarGuard() as env:
-            path1 = "ABCDE" * 100
-            path2 = "FGHIJ" * 100
-            env['PYTHONPATH'] = path1 + os.pathsep + path2
+        path1 = "ABCDE" * 100
+        path2 = "FGHIJ" * 100
+        path = path1 + os.pathsep + path2
 
-            code = """
-import sys
-path = ":".join(sys.path)
-path = path.encode("ascii", "backslashreplace")
-sys.stdout.buffer.write(path)"""
-            code = code.strip().splitlines()
-            code = '; '.join(code)
-            p = _spawn_python('-S', '-c', code)
-            stdout, _ = p.communicate()
-            p.stdout.close()
-            self.assertTrue(path1.encode('ascii') in stdout)
-            self.assertTrue(path2.encode('ascii') in stdout)
+        code = """if 1:
+            import sys
+            path = ":".join(sys.path)
+            path = path.encode("ascii", "backslashreplace")
+            sys.stdout.buffer.write(path)"""
+        rc, out, err = assert_python_ok('-S', '-c', code,
+                                        PYTHONPATH=path)
+        self.assertIn(path1.encode('ascii'), out)
+        self.assertIn(path2.encode('ascii'), out)
+
+    def test_displayhook_unencodable(self):
+        for encoding in ('ascii', 'latin1', 'utf8'):
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = encoding
+            p = subprocess.Popen(
+                [sys.executable, '-i'],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=env)
+            # non-ascii, surrogate, non-BMP printable, non-BMP unprintable
+            text = "a=\xe9 b=\uDC80 c=\U00010000 d=\U0010FFFF"
+            p.stdin.write(ascii(text).encode('ascii') + b"\n")
+            p.stdin.write(b'exit()\n')
+            data = kill_python(p)
+            escaped = repr(text).encode(encoding, 'backslashreplace')
+            self.assertIn(escaped, data)
+
+    def check_input(self, code, expected):
+        with tempfile.NamedTemporaryFile("wb+") as stdin:
+            sep = os.linesep.encode('ASCII')
+            stdin.write(sep.join((b'abc', b'def')))
+            stdin.flush()
+            stdin.seek(0)
+            with subprocess.Popen(
+                (sys.executable, "-c", code),
+                stdin=stdin, stdout=subprocess.PIPE) as proc:
+                stdout, stderr = proc.communicate()
+        self.assertEqual(stdout.rstrip(), expected)
+
+    def test_stdin_readline(self):
+        # Issue #11272: check that sys.stdin.readline() replaces '\r\n' by '\n'
+        # on Windows (sys.stdin is opened in binary mode)
+        self.check_input(
+            "import sys; print(repr(sys.stdin.readline()))",
+            b"'abc\\n'")
+
+    def test_builtin_input(self):
+        # Issue #11272: check that input() strips newlines ('\n' or '\r\n')
+        self.check_input(
+            "print(repr(input()))",
+            b"'abc'")
 
 
 def test_main():
