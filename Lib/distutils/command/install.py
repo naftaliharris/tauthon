@@ -48,7 +48,7 @@ INSTALL_SCHEMES = {
     'unix_prefix': {
         'purelib': '$base/lib/python$py_version_short/site-packages',
         'platlib': '$platbase/lib/python$py_version_short/site-packages',
-        'headers': '$base/include/python$py_version_short/$dist_name',
+        'headers': '$base/include/python$py_version_short$abiflags/$dist_name',
         'scripts': '$base/bin',
         'data'   : '$base',
         },
@@ -60,14 +60,6 @@ INSTALL_SCHEMES = {
         'data'   : '$base',
         },
     'nt': WINDOWS_SCHEME,
-    'mac': {
-        'purelib': '$base/Lib/site-packages',
-        'platlib': '$base/Lib/site-packages',
-        'headers': '$base/Include/$dist_name',
-        'scripts': '$base/Scripts',
-        'data'   : '$base',
-        },
-
     'os2': {
         'purelib': '$base/Lib/site-packages',
         'platlib': '$base/Lib/site-packages',
@@ -90,15 +82,8 @@ if HAS_USER_SITE:
     INSTALL_SCHEMES['unix_user'] = {
         'purelib': '$usersite',
         'platlib': '$usersite',
-        'headers': '$userbase/include/python$py_version_short/$dist_name',
-        'scripts': '$userbase/bin',
-        'data'   : '$userbase',
-        }
-
-    INSTALL_SCHEMES['mac_user'] = {
-        'purelib': '$usersite',
-        'platlib': '$usersite',
-        'headers': '$userbase/$py_version_short/include/$dist_name',
+        'headers':
+            '$userbase/include/python$py_version_short$abiflags/$dist_name',
         'scripts': '$userbase/bin',
         'data'   : '$userbase',
         }
@@ -328,6 +313,11 @@ class install(Command):
 
         py_version = sys.version.split()[0]
         (prefix, exec_prefix) = get_config_vars('prefix', 'exec_prefix')
+        try:
+            abiflags = sys.abiflags
+        except AttributeError:
+            # sys.abiflags may not be defined on all platforms.
+            abiflags = ''
         self.config_vars = {'dist_name': self.distribution.get_name(),
                             'dist_version': self.distribution.get_version(),
                             'dist_fullname': self.distribution.get_fullname(),
@@ -338,6 +328,7 @@ class install(Command):
                             'prefix': prefix,
                             'sys_exec_prefix': exec_prefix,
                             'exec_prefix': exec_prefix,
+                            'abiflags': abiflags,
                            }
 
         if HAS_USER_SITE:

@@ -3,21 +3,21 @@ Test suite for socketserver.
 """
 
 import contextlib
-import errno
 import imp
 import os
 import select
 import signal
 import socket
 import tempfile
-import threading
-import time
 import unittest
 import socketserver
 
 import test.support
-from test.support import reap_children, verbose
-from test.support import TESTFN as TEST_FILE
+from test.support import reap_children, reap_threads, verbose
+try:
+    import threading
+except ImportError:
+    threading = None
 
 test.support.requires("network")
 
@@ -123,6 +123,8 @@ class SocketServerTest(unittest.TestCase):
         self.assertEqual(server.server_address, server.socket.getsockname())
         return server
 
+    @unittest.skipUnless(threading, 'Threading required for this test.')
+    @reap_threads
     def run_server(self, svrcls, hdlrbase, testfunc):
         server = self.make_server(self.pickaddr(svrcls.address_family),
                                   svrcls, hdlrbase)
@@ -149,6 +151,7 @@ class SocketServerTest(unittest.TestCase):
         if verbose: print("waiting for server")
         server.shutdown()
         t.join()
+        server.server_close()
         if verbose: print("done")
 
     def stream_examine(self, proto, addr):
@@ -244,6 +247,7 @@ class SocketServerTest(unittest.TestCase):
     #                             socketserver.DatagramRequestHandler,
     #                             self.dgram_examine)
 
+    @reap_threads
     def test_shutdown(self):
         # Issue #2302: shutdown() should always succeed in making an
         # other thread leave serve_forever().
@@ -267,6 +271,7 @@ class SocketServerTest(unittest.TestCase):
             s.shutdown()
         for t, s in threads:
             t.join()
+            s.server_close()
 
 
 def test_main():
