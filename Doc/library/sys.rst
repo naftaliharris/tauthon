@@ -36,18 +36,6 @@ always available.
    little-endian (least-significant byte first) platforms.
 
 
-.. data:: subversion
-
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
-
-
 .. data:: builtin_module_names
 
    A tuple of strings giving the names of all modules that are compiled into this
@@ -236,14 +224,13 @@ always available.
 
 .. data:: flags
 
-   The struct sequence *flags* exposes the status of command line flags. The
-   attributes are read only.
+   The :term:`struct sequence` *flags* exposes the status of command line
+   flags. The attributes are read only.
 
    ============================= =============================
    attribute                     flag
    ============================= =============================
    :const:`debug`                :option:`-d`
-   :const:`division_warning`     :option:`-Q`
    :const:`inspect`              :option:`-i`
    :const:`interactive`          :option:`-i`
    :const:`optimize`             :option:`-O` or :option:`-OO`
@@ -259,15 +246,18 @@ always available.
    .. versionchanged:: 3.2
       Added ``quiet`` attribute for the new :option:`-q` flag.
 
+   .. versionchanged:: 3.3
+      Removed obsolete ``division_warning`` attribute.
+
 
 .. data:: float_info
 
-   A structseq holding information about the float type. It contains low level
-   information about the precision and internal representation.  The values
-   correspond to the various floating-point constants defined in the standard
-   header file :file:`float.h` for the 'C' programming language; see section
-   5.2.4.2.2 of the 1999 ISO/IEC C standard [C99]_, 'Characteristics of
-   floating types', for details.
+   A :term:`struct sequence` holding information about the float type. It
+   contains low level information about the precision and internal
+   representation.  The values correspond to the various floating-point
+   constants defined in the standard header file :file:`float.h` for the 'C'
+   programming language; see section 5.2.4.2.2 of the 1999 ISO/IEC C standard
+   [C99]_, 'Characteristics of floating types', for details.
 
    +---------------------+----------------+--------------------------------------------------+
    | attribute           | float.h macro  | explanation                                      |
@@ -513,8 +503,9 @@ always available.
 
 .. data:: hash_info
 
-   A structseq giving parameters of the numeric hash implementation.  For
-   more details about hashing of numeric types, see :ref:`numeric-hash`.
+   A :term:`struct sequence` giving parameters of the numeric hash
+   implementation.  For more details about hashing of numeric types, see
+   :ref:`numeric-hash`.
 
    +---------------------+--------------------------------------------------+
    | attribute           | explanation                                      |
@@ -549,8 +540,8 @@ always available.
 
    This is called ``hexversion`` since it only really looks meaningful when viewed
    as the result of passing it to the built-in :func:`hex` function.  The
-   struct sequence  :data:`sys.version_info` may be used for a more human-friendly
-   encoding of the same information.
+   :term:`struct sequence`  :data:`sys.version_info` may be used for a more
+   human-friendly encoding of the same information.
 
    The ``hexversion`` is a 32-bit number with the following layout:
 
@@ -578,8 +569,8 @@ always available.
 
 .. data:: int_info
 
-   A struct sequence that holds information about Python's
-   internal representation of integers.  The attributes are read only.
+   A :term:`struct sequence` that holds information about Python's internal
+   representation of integers.  The attributes are read only.
 
    +-------------------------+----------------------------------------------+
    | Attribute               | Explanation                                  |
@@ -968,6 +959,35 @@ always available.
        original values ``__stdin__``, ``__stdout__`` and ``__stderr__`` can be
        None. It is usually the case for Windows GUI apps that aren't connected
        to a console and Python apps started with :program:`pythonw`.
+
+
+.. data:: thread_info
+
+   A :term:`struct sequence` holding information about the thread
+   implementation.
+
+   +------------------+---------------------------------------------------------+
+   | Attribute        | Explanation                                             |
+   +==================+=========================================================+
+   | :const:`name`    | Name of the thread implementation:                      |
+   |                  |                                                         |
+   |                  |  * ``'nt'``: Windows threads                            |
+   |                  |  * ``'os2'``: OS/2 threads                              |
+   |                  |  * ``'pthread'``: POSIX threads                         |
+   |                  |  * ``'solaris'``: Solaris threads                       |
+   +------------------+---------------------------------------------------------+
+   | :const:`lock`    | Name of the lock implementation:                        |
+   |                  |                                                         |
+   |                  |  * ``'semaphore'``: a lock uses a semaphore             |
+   |                  |  * ``'mutex+cond'``: a lock uses a mutex                |
+   |                  |    and a condition variable                             |
+   |                  |  * ``None`` if this information is unknown              |
+   +------------------+---------------------------------------------------------+
+   | :const:`version` | Name and version of the thread library. It is a string, |
+   |                  | or ``None`` if these informations are unknown.          |
+   +------------------+---------------------------------------------------------+
+
+   .. versionadded:: 3.3
 
 
 .. data:: tracebacklimit
