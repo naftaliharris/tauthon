@@ -483,11 +483,97 @@ class ItimerTest(unittest.TestCase):
         # and the handler should have been called
         self.assertEqual(self.hndl_called, True)
 
+
+@unittest.skipUnless(hasattr(signal, 'pthread_sigmask'),
+                     'need signal.pthread_sigmask()')
+class PendingSignalsTests(unittest.TestCase):
+    """
+    Tests for the pthread_sigmask() function.
+    """
+    def handler(self, signum, frame):
+        1/0
+
+    def read_sigmask(self):
+        return signal.pthread_sigmask(signal.SIG_BLOCK, [])
+
+    def test_pthread_sigmask_arguments(self):
+        self.assertRaises(TypeError, signal.pthread_sigmask)
+        self.assertRaises(TypeError, signal.pthread_sigmask, 1)
+        self.assertRaises(TypeError, signal.pthread_sigmask, 1, 2, 3)
+        self.assertRaises(RuntimeError, signal.pthread_sigmask, 1700, [])
+
+    def test_pthread_sigmask(self):
+        import faulthandler
+        pid = os.getpid()
+        signum = signal.SIGUSR1
+
+        # The fault handler timeout thread masks all signals. If the main
+        # thread masks also SIGUSR1, all threads mask this signal. In this
+        # case, if we send SIGUSR1 to the process, the signal is pending in the
+        # main or the faulthandler timeout thread.  Unblock SIGUSR1 in the main
+        # thread calls the signal handler only if the signal is pending for the
+        # main thread.
+        #
+        # Stop the faulthandler timeout thread to workaround this problem.
+        # Another solution would be to send the signal directly to the main
+        # thread using pthread_kill(), but Python doesn't expose this
+        # function.
+        faulthandler.cancel_dump_tracebacks_later()
+
+        # Issue #11998: The _tkinter module loads the Tcl library which creates
+        # a thread waiting events in select(). This thread receives signals
+        # blocked by all other threads. We cannot test blocked signals if the
+        # _tkinter module is loaded.
+        can_test_blocked_signals = ('_tkinter' not in sys.modules)
+        if not can_test_blocked_signals:
+            print("WARNING: _tkinter is loaded, cannot test signals "
+                  "blocked by pthread_sigmask() (issue #11998)")
+
+        # Install our signal handler
+        old_handler = signal.signal(signum, self.handler)
+        self.addCleanup(signal.signal, signum, old_handler)
+
+        # Unblock SIGUSR1 (and copy the old mask) to test our signal handler
+        old_mask = signal.pthread_sigmask(signal.SIG_UNBLOCK, [signum])
+        self.addCleanup(signal.pthread_sigmask, signal.SIG_SETMASK, old_mask)
+        with self.assertRaises(ZeroDivisionError):
+            os.kill(pid, signum)
+
+        # Block and then raise SIGUSR1. The signal is blocked: the signal
+        # handler is not called, and the signal is now pending
+        signal.pthread_sigmask(signal.SIG_BLOCK, [signum])
+        if can_test_blocked_signals:
+            os.kill(pid, signum)
+
+        # Check the new mask
+        blocked = self.read_sigmask()
+        self.assertIn(signum, blocked)
+        self.assertEqual(old_mask ^ blocked, {signum})
+
+        # Unblock SIGUSR1
+        if can_test_blocked_signals:
+            with self.assertRaises(ZeroDivisionError):
+                # unblock the pending signal calls immediatly the signal handler
+                signal.pthread_sigmask(signal.SIG_UNBLOCK, [signum])
+        else:
+            signal.pthread_sigmask(signal.SIG_UNBLOCK, [signum])
+        with self.assertRaises(ZeroDivisionError):
+            os.kill(pid, signum)
+
+        # Check the new mask
+        unblocked = self.read_sigmask()
+        self.assertNotIn(signum, unblocked)
+        self.assertEqual(blocked ^ unblocked, {signum})
+        self.assertSequenceEqual(old_mask, unblocked)
+        # Finally, restore the previous signal handler and the signal mask
+
+
 def test_main():
     try:
         support.run_unittest(BasicSignalTests, InterProcessSignalTests,
                              WakeupSignalTests, SiginterruptTest,
-                             ItimerTest, WindowsSignalTests)
+                             ItimerTest, WindowsSignalTests,
+                             PendingSignalsTests)
     finally:
         support.reap_children()
 

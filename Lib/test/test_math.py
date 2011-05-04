@@ -6,7 +6,6 @@ import unittest
 import math
 import os
 import sys
-import random
 import struct
 import sysconfig
 
@@ -457,12 +456,12 @@ class MathTests(unittest.TestCase):
 
     def testFmod(self):
         self.assertRaises(TypeError, math.fmod)
-        self.ftest('fmod(10,1)', math.fmod(10,1), 0)
-        self.ftest('fmod(10,0.5)', math.fmod(10,0.5), 0)
-        self.ftest('fmod(10,1.5)', math.fmod(10,1.5), 1)
-        self.ftest('fmod(-10,1)', math.fmod(-10,1), 0)
-        self.ftest('fmod(-10,0.5)', math.fmod(-10,0.5), 0)
-        self.ftest('fmod(-10,1.5)', math.fmod(-10,1.5), -1)
+        self.ftest('fmod(10, 1)', math.fmod(10, 1), 0.0)
+        self.ftest('fmod(10, 0.5)', math.fmod(10, 0.5), 0.0)
+        self.ftest('fmod(10, 1.5)', math.fmod(10, 1.5), 1.0)
+        self.ftest('fmod(-10, 1)', math.fmod(-10, 1), -0.0)
+        self.ftest('fmod(-10, 0.5)', math.fmod(-10, 0.5), -0.0)
+        self.ftest('fmod(-10, 1.5)', math.fmod(-10, 1.5), -1.0)
         self.assertTrue(math.isnan(math.fmod(NAN, 1.)))
         self.assertTrue(math.isnan(math.fmod(1., NAN)))
         self.assertTrue(math.isnan(math.fmod(NAN, NAN)))
@@ -1010,7 +1009,6 @@ class MathTests(unittest.TestCase):
 
     @requires_IEEE_754
     def test_mtestfile(self):
-        ALLOWED_ERROR = 20  # permitted error, in ulps
         fail_fmt = "{}:{}({!r}): expected {!r}, got {!r}"
 
         failures = []
