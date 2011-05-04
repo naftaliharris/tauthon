@@ -49,6 +49,9 @@ def _get_sep(path):
 def normcase(s):
     """Normalize case of pathname.  Has no effect under Posix"""
     # TODO: on Mac OS X, this should really return s.lower().
+    if not isinstance(s, (bytes, str)):
+        raise TypeError("normcase() argument must be str or bytes, "
+                        "not '{}'".format(s.__class__.__name__))
     return s
 
 
@@ -158,7 +161,7 @@ def islink(path):
 def lexists(path):
     """Test whether a path exists.  Returns True for broken symbolic links"""
     try:
-        st = os.lstat(path)
+        os.lstat(path)
     except os.error:
         return False
     return True
@@ -259,7 +262,7 @@ def expanduser(path):
             return path
         userhome = pwent.pw_dir
     if isinstance(path, bytes):
-        userhome = userhome.encode(sys.getfilesystemencoding())
+        userhome = os.fsencode(userhome)
         root = b'/'
     else:
         root = '/'
@@ -424,7 +427,7 @@ def _resolve_link(path):
             path = normpath(resolved)
     return path
 
-supports_unicode_filenames = False
+supports_unicode_filenames = (sys.platform == 'darwin')
 
 def relpath(path, start=None):
     """Return a relative version of a path"""
