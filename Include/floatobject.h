@@ -11,21 +11,17 @@ PyFloatObject represents a (double precision) floating point number.
 extern "C" {
 #endif
 
+#ifndef Py_LIMITED_API
 typedef struct {
     PyObject_HEAD
     double ob_fval;
 } PyFloatObject;
+#endif
 
 PyAPI_DATA(PyTypeObject) PyFloat_Type;
 
 #define PyFloat_Check(op) PyObject_TypeCheck(op, &PyFloat_Type)
 #define PyFloat_CheckExact(op) (Py_TYPE(op) == &PyFloat_Type)
-
-/* The str() precision PyFloat_STR_PRECISION is chosen so that in most cases,
-   the rounding noise created by various operations is suppressed, while
-   giving plenty of precision for practical use. */
-
-#define PyFloat_STR_PRECISION 12
 
 #ifdef Py_NAN
 #define Py_RETURN_NAN return PyFloat_FromDouble(Py_NAN)
@@ -51,8 +47,11 @@ PyAPI_FUNC(PyObject *) PyFloat_FromDouble(double);
 /* Extract C double from Python float.  The macro version trades safety for
    speed. */
 PyAPI_FUNC(double) PyFloat_AsDouble(PyObject *);
+#ifndef Py_LIMITED_API
 #define PyFloat_AS_DOUBLE(op) (((PyFloatObject *)(op))->ob_fval)
+#endif
 
+#ifndef Py_LIMITED_API
 /* _PyFloat_{Pack,Unpack}{4,8}
  *
  * The struct and pickle (at least) modules need an efficient platform-
@@ -116,6 +115,7 @@ PyAPI_FUNC(int) PyFloat_ClearFreeList(void);
 PyAPI_FUNC(PyObject *) _PyFloat_FormatAdvanced(PyObject *obj,
 					       Py_UNICODE *format_spec,
 					       Py_ssize_t format_spec_len);
+#endif /* Py_LIMITED_API */
 
 #ifdef __cplusplus
 }
