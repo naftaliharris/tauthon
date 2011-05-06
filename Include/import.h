@@ -24,7 +24,16 @@ PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleWithPathnames(
     char *pathname,             /* decoded from the filesystem encoding */
     char *cpathname             /* decoded from the filesystem encoding */
     );
+PyAPI_FUNC(PyObject *) PyImport_ExecCodeModuleObject(
+    PyObject *name,
+    PyObject *co,
+    PyObject *pathname,
+    PyObject *cpathname
+    );
 PyAPI_FUNC(PyObject *) PyImport_GetModuleDict(void);
+PyAPI_FUNC(PyObject *) PyImport_AddModuleObject(
+    PyObject *name
+    );
 PyAPI_FUNC(PyObject *) PyImport_AddModule(
     const char *name            /* UTF-8 encoded string */
     );
@@ -41,6 +50,13 @@ PyAPI_FUNC(PyObject *) PyImport_ImportModuleLevel(
     PyObject *fromlist,
     int level
     );
+PyAPI_FUNC(PyObject *) PyImport_ImportModuleLevelObject(
+    PyObject *name,
+    PyObject *globals,
+    PyObject *locals,
+    PyObject *fromlist,
+    int level
+    );
 
 #define PyImport_ImportModuleEx(n, g, l, f) \
     PyImport_ImportModuleLevel(n, g, l, f, -1)
@@ -49,6 +65,9 @@ PyAPI_FUNC(PyObject *) PyImport_GetImporter(PyObject *path);
 PyAPI_FUNC(PyObject *) PyImport_Import(PyObject *name);
 PyAPI_FUNC(PyObject *) PyImport_ReloadModule(PyObject *m);
 PyAPI_FUNC(void) PyImport_Cleanup(void);
+PyAPI_FUNC(int) PyImport_ImportFrozenModuleObject(
+    PyObject *name
+    );
 PyAPI_FUNC(int) PyImport_ImportFrozenModule(
     char *name                  /* UTF-8 encoded string */
     );
@@ -65,17 +84,17 @@ PyAPI_FUNC(int) _PyImport_ReleaseLock(void);
 PyAPI_FUNC(void) _PyImport_ReInitLock(void);
 
 PyAPI_FUNC(PyObject *)_PyImport_FindBuiltin(
-    char *name                  /* UTF-8 encoded string */
+    const char *name            /* UTF-8 encoded string */
     );
-PyAPI_FUNC(PyObject *)_PyImport_FindExtensionUnicode(char *, PyObject *);
+PyAPI_FUNC(PyObject *)_PyImport_FindExtensionObject(PyObject *, PyObject *);
 PyAPI_FUNC(int)_PyImport_FixupBuiltin(
     PyObject *mod,
     char *name                  /* UTF-8 encoded string */
     );
-PyAPI_FUNC(int)_PyImport_FixupExtensionUnicode(PyObject*, char *, PyObject *);
+PyAPI_FUNC(int)_PyImport_FixupExtensionObject(PyObject*, PyObject *, PyObject *);
 
 struct _inittab {
-    char *name;
+    char *name;                 /* ASCII encoded string */
     PyObject* (*initfunc)(void);
 };
 PyAPI_DATA(struct _inittab *) PyImport_Inittab;
