@@ -357,10 +357,10 @@ class catch_warnings(object):
 # If either if the compiled regexs are None, match anything.
 _warnings_defaults = False
 try:
-    from _warnings import (filters, default_action, once_registry,
+    from _warnings import (filters, _defaultaction, _onceregistry,
                             warn, warn_explicit)
-    defaultaction = default_action
-    onceregistry = once_registry
+    defaultaction = _defaultaction
+    onceregistry = _onceregistry
     _warnings_defaults = True
 except ImportError:
     filters = []
@@ -371,8 +371,10 @@ except ImportError:
 # Module initialization
 _processoptions(sys.warnoptions)
 if not _warnings_defaults:
-    simplefilter("ignore", category=PendingDeprecationWarning, append=1)
-    simplefilter("ignore", category=ImportWarning, append=1)
+    silence = [ImportWarning, PendingDeprecationWarning]
+    silence.append(DeprecationWarning)
+    for cls in silence:
+        simplefilter("ignore", category=cls)
     bytes_warning = sys.flags.bytes_warning
     if bytes_warning > 1:
         bytes_action = "error"
@@ -381,4 +383,11 @@ if not _warnings_defaults:
     else:
         bytes_action = "ignore"
     simplefilter(bytes_action, category=BytesWarning, append=1)
+    # resource usage warnings are enabled by default in pydebug mode
+    if hasattr(sys, 'gettotalrefcount'):
+        resource_action = "always"
+    else:
+        resource_action = "ignore"
+    simplefilter(resource_action, category=ResourceWarning, append=1)
+
 del _warnings_defaults
