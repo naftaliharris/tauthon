@@ -92,7 +92,7 @@ classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
                          "descriptor '%V' for type '%s' "
                          "needs either an object or a type",
                          descr_name((PyDescrObject *)descr), "?",
-                         descr->d_type->tp_name);
+                         PyDescr_TYPE(descr)->tp_name);
             return NULL;
         }
     }
@@ -101,16 +101,16 @@ classmethod_get(PyMethodDescrObject *descr, PyObject *obj, PyObject *type)
                      "descriptor '%V' for type '%s' "
                      "needs a type, not a '%s' as arg 2",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name,
+                     PyDescr_TYPE(descr)->tp_name,
                      type->ob_type->tp_name);
         return NULL;
     }
-    if (!PyType_IsSubtype((PyTypeObject *)type, descr->d_type)) {
+    if (!PyType_IsSubtype((PyTypeObject *)type, PyDescr_TYPE(descr))) {
         PyErr_Format(PyExc_TypeError,
                      "descriptor '%V' for type '%s' "
                      "doesn't apply to type '%s'",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name,
+                     PyDescr_TYPE(descr)->tp_name,
                      ((PyTypeObject *)type)->tp_name);
         return NULL;
     }
@@ -149,7 +149,7 @@ getset_get(PyGetSetDescrObject *descr, PyObject *obj, PyObject *type)
     PyErr_Format(PyExc_AttributeError,
                  "attribute '%V' of '%.100s' objects is not readable",
                  descr_name((PyDescrObject *)descr), "?",
-                 descr->d_type->tp_name);
+                 PyDescr_TYPE(descr)->tp_name);
     return NULL;
 }
 
@@ -204,7 +204,7 @@ getset_set(PyGetSetDescrObject *descr, PyObject *obj, PyObject *value)
     PyErr_Format(PyExc_AttributeError,
                  "attribute '%V' of '%.100s' objects is not writable",
                  descr_name((PyDescrObject *)descr), "?",
-                 descr->d_type->tp_name);
+                 PyDescr_TYPE(descr)->tp_name);
     return -1;
 }
 
@@ -222,18 +222,18 @@ methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
                      "descriptor '%V' of '%.100s' "
                      "object needs an argument",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name);
+                     PyDescr_TYPE(descr)->tp_name);
         return NULL;
     }
     self = PyTuple_GET_ITEM(args, 0);
     if (!_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
-                                  (PyObject *)(descr->d_type))) {
+                                  (PyObject *)PyDescr_TYPE(descr))) {
         PyErr_Format(PyExc_TypeError,
                      "descriptor '%V' "
                      "requires a '%.100s' object "
                      "but received a '%.100s'",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name,
+                     PyDescr_TYPE(descr)->tp_name,
                      self->ob_type->tp_name);
         return NULL;
     }
@@ -258,7 +258,7 @@ classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
 {
     PyObject *func, *result;
 
-    func = PyCFunction_New(descr->d_method, (PyObject *)descr->d_type);
+    func = PyCFunction_New(descr->d_method, (PyObject *)PyDescr_TYPE(descr));
     if (func == NULL)
         return NULL;
 
@@ -281,18 +281,18 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
                      "descriptor '%V' of '%.100s' "
                      "object needs an argument",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name);
+                     PyDescr_TYPE(descr)->tp_name);
         return NULL;
     }
     self = PyTuple_GET_ITEM(args, 0);
     if (!_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
-                                  (PyObject *)(descr->d_type))) {
+                                  (PyObject *)PyDescr_TYPE(descr))) {
         PyErr_Format(PyExc_TypeError,
                      "descriptor '%V' "
                      "requires a '%.100s' object "
                      "but received a '%.100s'",
                      descr_name((PyDescrObject *)descr), "?",
-                     descr->d_type->tp_name,
+                     PyDescr_TYPE(descr)->tp_name,
                      self->ob_type->tp_name);
         return NULL;
     }
@@ -712,19 +712,19 @@ proxy_get(proxyobject *pp, PyObject *args)
 static PyObject *
 proxy_keys(proxyobject *pp)
 {
-    return PyMapping_Keys(pp->dict);
+    return PyObject_CallMethod(pp->dict, "keys", NULL);
 }
 
 static PyObject *
 proxy_values(proxyobject *pp)
 {
-    return PyMapping_Values(pp->dict);
+    return PyObject_CallMethod(pp->dict, "values", NULL);
 }
 
 static PyObject *
 proxy_items(proxyobject *pp)
 {
-    return PyMapping_Items(pp->dict);
+    return PyObject_CallMethod(pp->dict, "items", NULL);
 }
 
 static PyObject *
@@ -924,10 +924,10 @@ wrapper_richcompare(PyObject *a, PyObject *b, int op)
     return v;
 }
 
-static long
+static Py_hash_t
 wrapper_hash(wrapperobject *wp)
 {
-    int x, y;
+    Py_hash_t x, y;
     x = _Py_HashPointer(wp->descr);
     if (x == -1)
         return -1;
@@ -957,7 +957,7 @@ static PyMemberDef wrapper_members[] = {
 static PyObject *
 wrapper_objclass(wrapperobject *wp)
 {
-    PyObject *c = (PyObject *)wp->descr->d_type;
+    PyObject *c = (PyObject *)PyDescr_TYPE(wp->descr);
 
     Py_INCREF(c);
     return c;
@@ -1068,7 +1068,7 @@ PyWrapper_New(PyObject *d, PyObject *self)
     assert(PyObject_TypeCheck(d, &PyWrapperDescr_Type));
     descr = (PyWrapperDescrObject *)d;
     assert(_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
-                                    (PyObject *)(descr->d_type)));
+                                    (PyObject *)PyDescr_TYPE(descr)));
 
     wp = PyObject_GC_New(wrapperobject, &wrappertype);
     if (wp != NULL) {
@@ -1124,7 +1124,7 @@ typedef struct {
 } propertyobject;
 
 static PyObject * property_copy(PyObject *, PyObject *, PyObject *,
-                                  PyObject *, PyObject *);
+                                  PyObject *);
 
 static PyMemberDef property_members[] = {
     {"fget", T_OBJECT, offsetof(propertyobject, prop_get), READONLY},
@@ -1141,7 +1141,7 @@ PyDoc_STRVAR(getter_doc,
 static PyObject *
 property_getter(PyObject *self, PyObject *getter)
 {
-    return property_copy(self, getter, NULL, NULL, NULL);
+    return property_copy(self, getter, NULL, NULL);
 }
 
 
@@ -1151,7 +1151,7 @@ PyDoc_STRVAR(setter_doc,
 static PyObject *
 property_setter(PyObject *self, PyObject *setter)
 {
-    return property_copy(self, NULL, setter, NULL, NULL);
+    return property_copy(self, NULL, setter, NULL);
 }
 
 
@@ -1161,7 +1161,7 @@ PyDoc_STRVAR(deleter_doc,
 static PyObject *
 property_deleter(PyObject *self, PyObject *deleter)
 {
-    return property_copy(self, NULL, NULL, deleter, NULL);
+    return property_copy(self, NULL, NULL, deleter);
 }
 
 
@@ -1199,7 +1199,7 @@ property_descr_get(PyObject *self, PyObject *obj, PyObject *type)
         PyErr_SetString(PyExc_AttributeError, "unreadable attribute");
         return NULL;
     }
-    return PyObject_CallFunction(gs->prop_get, "(O)", obj);
+    return PyObject_CallFunctionObjArgs(gs->prop_get, obj, NULL);
 }
 
 static int
@@ -1220,9 +1220,9 @@ property_descr_set(PyObject *self, PyObject *obj, PyObject *value)
         return -1;
     }
     if (value == NULL)
-        res = PyObject_CallFunction(func, "(O)", obj);
+        res = PyObject_CallFunctionObjArgs(func, obj, NULL);
     else
-        res = PyObject_CallFunction(func, "(OO)", obj, value);
+        res = PyObject_CallFunctionObjArgs(func, obj, value, NULL);
     if (res == NULL)
         return -1;
     Py_DECREF(res);
@@ -1230,11 +1230,10 @@ property_descr_set(PyObject *self, PyObject *obj, PyObject *value)
 }
 
 static PyObject *
-property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del,
-                PyObject *doc)
+property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del)
 {
     propertyobject *pold = (propertyobject *)old;
-    PyObject *new, *type;
+    PyObject *new, *type, *doc;
 
     type = PyObject_Type(old);
     if (type == NULL)
@@ -1252,15 +1251,12 @@ property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del,
         Py_XDECREF(del);
         del = pold->prop_del ? pold->prop_del : Py_None;
     }
-    if (doc == NULL || doc == Py_None) {
-        Py_XDECREF(doc);
-        if (pold->getter_doc && get != Py_None) {
-            /* make _init use __doc__ from getter */
-            doc = Py_None;
-        }
-        else {
-            doc = pold->prop_doc ? pold->prop_doc : Py_None;
-        }
+    if (pold->getter_doc && get != Py_None) {
+        /* make _init use __doc__ from getter */
+        doc = Py_None;
+    }
+    else {
+        doc = pold->prop_doc ? pold->prop_doc : Py_None;
     }
 
     new =  PyObject_CallFunction(type, "OOOO", get, set, del, doc);
