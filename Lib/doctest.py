@@ -318,7 +318,8 @@ class _OutputRedirectingPdb(pdb.Pdb):
     def __init__(self, out):
         self.__out = out
         self.__debugger_used = False
-        pdb.Pdb.__init__(self, stdout=out)
+        # do not play signal games in the pdb
+        pdb.Pdb.__init__(self, stdout=out, nosigint=True)
         # still use input() to get user input
         self.use_rawinput = 1
 
@@ -1280,9 +1281,9 @@ class DocTestRunner:
 
                 # Another chance if they didn't care about the detail.
                 elif self.optionflags & IGNORE_EXCEPTION_DETAIL:
-                    m1 = re.match(r'[^:]*:', example.exc_msg)
-                    m2 = re.match(r'[^:]*:', exc_msg)
-                    if m1 and m2 and check(m1.group(0), m2.group(0),
+                    m1 = re.match(r'(?:[^:]*\.)?([^:]*:)', example.exc_msg)
+                    m2 = re.match(r'(?:[^:]*\.)?([^:]*:)', exc_msg)
+                    if m1 and m2 and check(m1.group(1), m2.group(1),
                                            self.optionflags):
                         outcome = SUCCESS
 
@@ -1320,7 +1321,7 @@ class DocTestRunner:
         self.tries += t
 
     __LINECACHE_FILENAME_RE = re.compile(r'<doctest '
-                                         r'(?P<name>[\w\.]+)'
+                                         r'(?P<name>.+)'
                                          r'\[(?P<examplenum>\d+)\]>$')
     def __patched_linecache_getlines(self, filename, module_globals=None):
         m = self.__LINECACHE_FILENAME_RE.match(filename)
@@ -2207,6 +2208,19 @@ class DocTestCase(unittest.TestCase):
     def shortDescription(self):
         return "Doctest: " + self._dt_test.name
 
+class SkipDocTestCase(DocTestCase):
+    def __init__(self):
+        DocTestCase.__init__(self, None)
+
+    def setUp(self):
+        self.skipTest("DocTestSuite will not work with -O2 and above")
+
+    def test_skip(self):
+        pass
+
+    def shortDescription(self):
+        return "Skipping tests from %s" % module.__name__
+
 def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
                  **options):
     """
@@ -2249,13 +2263,20 @@ def DocTestSuite(module=None, globs=None, extraglobs=None, test_finder=None,
 
     module = _normalize_module(module)
     tests = test_finder.find(module, globs=globs, extraglobs=extraglobs)
-    if not tests:
+
+    if not tests and sys.flags.optimize >=2:
+        # Skip doctests when running with -O2
+        suite = unittest.TestSuite()
+        suite.addTest(SkipDocTestCase())
+        return suite
+    elif not tests:
         # Why do we want to do this? Because it reveals a bug that might
         # otherwise be hidden.
         raise ValueError(module, "has no tests")
 
     tests.sort()
     suite = unittest.TestSuite()
+
     for test in tests:
         if len(test.examples) == 0:
             continue
@@ -2508,14 +2529,16 @@ def debug_script(src, pm=False, globs=None):
                     exec(f.read(), globs, globs)
             except:
                 print(sys.exc_info()[1])
-                pdb.post_mortem(sys.exc_info()[2])
+                p = pdb.Pdb(nosigint=True)
+                p.reset()
+                p.interaction(None, sys.exc_info()[2])
         else:
             fp = open(srcfilename)
             try:
                 script = fp.read()
             finally:
                 fp.close()
-            pdb.run("exec(%r)" % script, globs, globs)
+            pdb.Pdb(nosigint=True).run("exec(%r)" % script, globs, globs)
 
     finally:
         os.remove(srcfilename)
