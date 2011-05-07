@@ -4,7 +4,6 @@
 # a real test suite
 
 import poplib
-import threading
 import asyncore
 import asynchat
 import socket
@@ -14,6 +13,7 @@ import errno
 
 from unittest import TestCase
 from test import support as test_support
+threading = test_support.import_module('threading')
 
 HOST = test_support.HOST
 PORT = 0
@@ -122,6 +122,7 @@ class DummyPOP3Server(asyncore.dispatcher, threading.Thread):
         self.active = False
         self.active_lock = threading.Lock()
         self.host, self.port = self.socket.getsockname()[:2]
+        self.handler_instance = None
 
     def start(self):
         assert not self.active
@@ -143,10 +144,8 @@ class DummyPOP3Server(asyncore.dispatcher, threading.Thread):
         self.active = False
         self.join()
 
-    def handle_accept(self):
-        conn, addr = self.accept()
-        self.handler = self.handler(conn)
-        self.close()
+    def handle_accepted(self, conn, addr):
+        self.handler_instance = self.handler(conn)
 
     def handle_connect(self):
         self.close()
@@ -285,7 +284,24 @@ if hasattr(poplib, 'POP3_SSL'):
             self.client = poplib.POP3_SSL(self.server.host, self.server.port)
 
         def test__all__(self):
-            self.assertTrue('POP3_SSL' in poplib.__all__)
+            self.assertIn('POP3_SSL', poplib.__all__)
+
+        def test_context(self):
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, keyfile=CERTFILE, context=ctx)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, certfile=CERTFILE, context=ctx)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, keyfile=CERTFILE,
+                              certfile=CERTFILE, context=ctx)
+
+            self.client.quit()
+            self.client = poplib.POP3_SSL(self.server.host, self.server.port,
+                                          context=ctx)
+            self.assertIsInstance(self.client.sock, ssl.SSLSocket)
+            self.assertIs(self.client.sock.context, ctx)
+            self.assertTrue(self.client.noop().startswith(b'+OK'))
 
 
 class TestTimeouts(TestCase):

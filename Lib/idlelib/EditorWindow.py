@@ -3,7 +3,6 @@ import os
 import re
 import string
 import imp
-from itertools import count
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -51,6 +50,17 @@ def _find_module(fullname, path=None):
             path = module.__path__
         except AttributeError:
             raise ImportError('No source for module ' + module.__name__)
+    if descr[2] != imp.PY_SOURCE:
+        # If all of the above fails and didn't raise an exception,fallback
+        # to a straight import which can find __init__.py in a package.
+        m = __import__(fullname)
+        try:
+            filename = m.__file__
+        except AttributeError:
+            pass
+        else:
+            file = None
+            descr = os.path.splitext(filename)[1], None, imp.PY_SOURCE
     return file, filename, descr
 
 class EditorWindow(object):
@@ -385,7 +395,7 @@ class EditorWindow(object):
             underline, label = prepstr(label)
             menudict[name] = menu = Menu(mbar, name=name)
             mbar.add_cascade(label=label, menu=menu, underline=underline)
-        if macosxSupport.runningAsOSXApp():
+        if macosxSupport.isCarbonAquaTk(self.root):
             # Insert the application menu
             menudict['application'] = menu = Menu(mbar, name='apple')
             mbar.add_cascade(label='IDLE', menu=menu)
@@ -799,8 +809,8 @@ class EditorWindow(object):
         for instance in self.top.instance_dict:
             menu = instance.recent_files_menu
             menu.delete(1, END)  # clear, and rebuild:
-            for i, file in zip(count(), rf_list):
-                file_name = file[0:-1]  # zap \n
+            for i, file_name in enumerate(rf_list):
+                file_name = file_name.rstrip()  # zap \n
                 # make unicode string to display non-ASCII chars correctly
                 ufile_name = self._filename_to_unicode(file_name)
                 callback = instance.__recent_file_callback(file_name)
@@ -1544,7 +1554,12 @@ keynames = {
 
 def get_accelerator(keydefs, eventname):
     keylist = keydefs.get(eventname)
-    if not keylist:
+    # issue10940: temporary workaround to prevent hang with OS X Cocoa Tk 8.5
+    # if not keylist:
+    if (not keylist) or (macosxSupport.runningAsOSXApp() and eventname in {
+                            "<<open-module>>",
+                            "<<goto-line>>",
+                            "<<change-indentwidth>>"}):
         return ""
     s = keylist[0]
     s = re.sub(r"-[a-z]\b", lambda m: m.group().upper(), s)
