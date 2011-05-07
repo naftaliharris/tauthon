@@ -49,11 +49,11 @@ class TestTemplate(unittest.TestCase):
             (?P<invalid>)            |
             (?P<escaped>%(delim)s)   |
             @(?P<named>%(id)s)       |
-            @{(?P<braced>%(id)s)}    
+            @{(?P<braced>%(id)s)}
             )
             """
         s = MyPattern('$')
-        self.assertRaises(ValueError, s.substitute, dict()) 
+        self.assertRaises(ValueError, s.substitute, dict())
 
     def test_percents(self):
         eq = self.assertEqual
