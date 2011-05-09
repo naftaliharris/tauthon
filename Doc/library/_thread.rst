@@ -28,7 +28,7 @@ implementation.  For systems lacking the :mod:`_thread` module, the
 :mod:`_dummy_thread` module is available. It duplicates this module's interface
 and can be used as a drop-in replacement.
 
-It defines the following constant and functions:
+It defines the following constants and functions:
 
 
 .. exception:: error
@@ -103,18 +103,42 @@ It defines the following constant and functions:
    Availability: Windows, systems with POSIX threads.
 
 
+.. data:: TIMEOUT_MAX
+
+   The maximum value allowed for the *timeout* parameter of
+   :meth:`Lock.acquire`. Specifying a timeout greater than this value will
+   raise an :exc:`OverflowError`.
+
+   .. versionadded:: 3.2
+
+
 Lock objects have the following methods:
 
 
-.. method:: lock.acquire([waitflag])
+.. method:: lock.acquire(waitflag=1, timeout=-1)
 
-   Without the optional argument, this method acquires the lock unconditionally, if
+   Without any optional argument, this method acquires the lock unconditionally, if
    necessary waiting until it is released by another thread (only one thread at a
-   time can acquire a lock --- that's their reason for existence).  If the integer
-   *waitflag* argument is present, the action depends on its value: if it is zero,
-   the lock is only acquired if it can be acquired immediately without waiting,
-   while if it is nonzero, the lock is acquired unconditionally as before.  The
-   return value is ``True`` if the lock is acquired successfully, ``False`` if not.
+   time can acquire a lock --- that's their reason for existence).
+
+   If the integer *waitflag* argument is present, the action depends on its
+   value: if it is zero, the lock is only acquired if it can be acquired
+   immediately without waiting, while if it is nonzero, the lock is acquired
+   unconditionally as above.
+
+   If the floating-point *timeout* argument is present and positive, it
+   specifies the maximum wait time in seconds before returning.  A negative
+   *timeout* argument specifies an unbounded wait.  You cannot specify
+   a *timeout* if *waitflag* is zero.
+
+   The return value is ``True`` if the lock is acquired successfully,
+   ``False`` if not.
+
+   .. versionchanged:: 3.2
+      The *timeout* parameter is new.
+
+   .. versionchanged:: 3.2
+      Lock acquires can now be interrupted by signals on POSIX.
 
 
 .. method:: lock.release()
@@ -156,12 +180,10 @@ In addition to these methods, lock objects can also be used via the
 * It is not possible to interrupt the :meth:`acquire` method on a lock --- the
   :exc:`KeyboardInterrupt` exception will happen after the lock has been acquired.
 
-  .. index:: pair: threads; IRIX
-
 * When the main thread exits, it is system defined whether the other threads
-  survive.  On SGI IRIX using the native thread implementation, they survive.  On
-  most other systems, they are killed without executing :keyword:`try` ...
-  :keyword:`finally` clauses or executing object destructors.
+  survive.  On most systems, they are killed without executing
+  :keyword:`try` ... :keyword:`finally` clauses or executing object
+  destructors.
 
 * When the main thread exits, it does not do any of its usual cleanup (except
   that :keyword:`try` ... :keyword:`finally` clauses are honored), and the
