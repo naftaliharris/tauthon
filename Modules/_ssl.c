@@ -63,8 +63,10 @@ enum py_ssl_cert_requirements {
 };
 
 enum py_ssl_version {
+#ifndef OPENSSL_NO_SSL2
     PY_SSL_VERSION_SSL2,
-    PY_SSL_VERSION_SSL3,
+#endif
+    PY_SSL_VERSION_SSL3=1,
     PY_SSL_VERSION_SSL23,
     PY_SSL_VERSION_TLS1
 };
@@ -354,7 +356,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLSocket *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -1090,7 +1091,6 @@ static PyObject *PySSL_SSLwrite(PySSLSocket *self, PyObject *args)
         goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         len = SSL_write(self->ssl, buf.buf, buf.len);
         err = SSL_get_error(self->ssl, len);
@@ -1226,7 +1226,6 @@ static PyObject *PySSL_SSLread(PySSLSocket *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, mem, len);
         err = SSL_get_error(self->ssl, count);
@@ -1450,8 +1449,10 @@ context_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         ctx = SSL_CTX_new(TLSv1_method());
     else if (proto_version == PY_SSL_VERSION_SSL3)
         ctx = SSL_CTX_new(SSLv3_method());
+#ifndef OPENSSL_NO_SSL2
     else if (proto_version == PY_SSL_VERSION_SSL2)
         ctx = SSL_CTX_new(SSLv2_method());
+#endif
     else if (proto_version == PY_SSL_VERSION_SSL23)
         ctx = SSL_CTX_new(SSLv23_method());
     else
@@ -2110,8 +2111,10 @@ PyInit__ssl(void)
                             PY_SSL_CERT_REQUIRED);
 
     /* protocol versions */
+#ifndef OPENSSL_NO_SSL2
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv2",
                             PY_SSL_VERSION_SSL2);
+#endif
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv3",
                             PY_SSL_VERSION_SSL3);
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv23",
