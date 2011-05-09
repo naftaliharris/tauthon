@@ -12,7 +12,7 @@ extern "C" {
 #define ROT_TWO		2
 #define ROT_THREE	3
 #define DUP_TOP		4
-#define ROT_FOUR	5
+#define DUP_TOP_TWO     5
 #define NOP		9
 
 #define UNARY_POSITIVE	10
@@ -83,7 +83,7 @@ extern "C" {
 #define DELETE_ATTR	96	/* "" */
 #define STORE_GLOBAL	97	/* "" */
 #define DELETE_GLOBAL	98	/* "" */
-#define DUP_TOPX	99	/* number of items to duplicate */
+
 #define LOAD_CONST	100	/* Index in const list */
 #define LOAD_NAME	101	/* Index in name list */
 #define BUILD_TUPLE	102	/* Number of tuple items */
@@ -123,6 +123,7 @@ extern "C" {
 #define LOAD_CLOSURE    135     /* Load free variable from closure */
 #define LOAD_DEREF      136     /* Load and dereference from closure cell */ 
 #define STORE_DEREF     137     /* Store into cell */ 
+#define DELETE_DEREF    138     /* Delete closure cell */ 
 
 /* The next 3 opcodes must be contiguous and satisfy
    (CALL_FUNCTION_VAR - CALL_FUNCTION) & 3 == 1  */
@@ -130,8 +131,10 @@ extern "C" {
 #define CALL_FUNCTION_KW           141	/* #args + (#kwargs<<8) */
 #define CALL_FUNCTION_VAR_KW       142	/* #args + (#kwargs<<8) */
 
+#define SETUP_WITH 143
+
 /* Support for opargs more than 16 bits long */
-#define EXTENDED_ARG  143
+#define EXTENDED_ARG  144
 
 #define LIST_APPEND     145
 #define SET_ADD         146

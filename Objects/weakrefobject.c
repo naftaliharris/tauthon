@@ -139,7 +139,7 @@ weakref_call(PyWeakReference *self, PyObject *args, PyObject *kw)
 }
 
 
-static long
+static Py_hash_t
 weakref_hash(PyWeakReference *self)
 {
     if (self->hash != -1)
@@ -583,7 +583,7 @@ proxy_iternext(PyWeakReference *proxy)
 }
 
 
-WRAP_METHOD(proxy_bytes, "__bytes__");
+WRAP_METHOD(proxy_bytes, "__bytes__")
 
 
 static PyMethodDef proxy_methods[] = {
