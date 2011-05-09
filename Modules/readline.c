@@ -38,14 +38,37 @@
 #if defined(_RL_FUNCTION_TYPEDEF)
 extern char **completion_matches(char *, rl_compentry_func_t *);
 #else
+
+#if !defined(__APPLE__)
 extern char **completion_matches(char *, CPFunction *);
 #endif
 #endif
+#endif
 
+#ifdef __APPLE__
+/*
+ * It is possible to link the readline module to the readline
+ * emulation library of editline/libedit.
+ *
+ * On OSX this emulation library is not 100% API compatible
+ * with the "real" readline and cannot be detected at compile-time,
+ * hence we use a runtime check to detect if we're using libedit
+ *
+ * Currently there is one know API incompatibility:
+ * - 'get_history' has a 1-based index with GNU readline, and a 0-based
+ *   index with libedit's emulation.
+ * - Note that replace_history and remove_history use a 0-based index
+ *   with both implementation.
+ */
+static int using_libedit_emulation = 0;
+static const char libedit_version_tag[] = "EditLine wrapper";
+#endif /* __APPLE__ */
+
+#ifdef HAVE_RL_COMPLETION_DISPLAY_MATCHES_HOOK
 static void
 on_completion_display_matches_hook(char **matches,
                                    int num_matches, int max_length);
-
+#endif
 
 /* Exported function to send one line to readline's init file parser */
 
@@ -76,10 +99,16 @@ Parse and execute single line of a readline init file.");
 static PyObject *
 read_init_file(PyObject *self, PyObject *args)
 {
-    char *s = NULL;
-    if (!PyArg_ParseTuple(args, "|z:read_init_file", &s))
+    PyObject *filename_obj = Py_None, *filename_bytes;
+    if (!PyArg_ParseTuple(args, "|O:read_init_file", &filename_obj))
         return NULL;
-    errno = rl_read_init_file(s);
+    if (filename_obj != Py_None) {
+        if (!PyUnicode_FSConverter(filename_obj, &filename_bytes))
+            return NULL;
+        errno = rl_read_init_file(PyBytes_AsString(filename_bytes));
+        Py_DECREF(filename_bytes);
+    } else
+        errno = rl_read_init_file(NULL);
     if (errno)
         return PyErr_SetFromErrno(PyExc_IOError);
     Py_RETURN_NONE;
@@ -96,10 +125,16 @@ The default filename is the last filename used.");
 static PyObject *
 read_history_file(PyObject *self, PyObject *args)
 {
-    char *s = NULL;
-    if (!PyArg_ParseTuple(args, "|z:read_history_file", &s))
+    PyObject *filename_obj = Py_None, *filename_bytes;
+    if (!PyArg_ParseTuple(args, "|O:read_history_file", &filename_obj))
         return NULL;
-    errno = read_history(s);
+    if (filename_obj != Py_None) {
+        if (!PyUnicode_FSConverter(filename_obj, &filename_bytes))
+            return NULL;
+        errno = read_history(PyBytes_AsString(filename_bytes));
+        Py_DECREF(filename_bytes);
+    } else
+        errno = read_history(NULL);
     if (errno)
         return PyErr_SetFromErrno(PyExc_IOError);
     Py_RETURN_NONE;
@@ -117,12 +152,22 @@ The default filename is ~/.history.");
 static PyObject *
 write_history_file(PyObject *self, PyObject *args)
 {
-    char *s = NULL;
-    if (!PyArg_ParseTuple(args, "|z:write_history_file", &s))
+    PyObject *filename_obj = Py_None, *filename_bytes;
+    char *filename;
+    if (!PyArg_ParseTuple(args, "|O:write_history_file", &filename_obj))
         return NULL;
-    errno = write_history(s);
+    if (filename_obj != Py_None) {
+        if (!PyUnicode_FSConverter(filename_obj, &filename_bytes))
+            return NULL;
+        filename = PyBytes_AsString(filename_bytes);
+    } else {
+        filename_bytes = NULL;
+        filename = NULL;
+    }
+    errno = write_history(filename);
     if (!errno && _history_length >= 0)
-        history_truncate_file(s, _history_length);
+        history_truncate_file(filename, _history_length);
+    Py_XDECREF(filename_bytes);
     if (errno)
         return PyErr_SetFromErrno(PyExc_IOError);
     Py_RETURN_NONE;
@@ -519,6 +564,27 @@ get_history_item(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "i:index", &idx))
         return NULL;
+#ifdef  __APPLE__
+    if (using_libedit_emulation) {
+        /* Libedit emulation uses 0-based indexes,
+         * the real one uses 1-based indexes,
+         * adjust the index to ensure that Python
+         * code doesn't have to worry about the
+         * difference.
+         */
+        int length = _py_get_history_length();
+        idx --;
+
+        /*
+         * Apple's readline emulation crashes when
+         * the index is out of range, therefore
+         * test for that and fail gracefully.
+         */
+        if (idx < 0 || idx >= length) {
+            Py_RETURN_NONE;
+        }
+    }
+#endif /* __APPLE__ */
     if ((hist_ent = history_get(idx)))
         return PyUnicode_FromString(hist_ent->line);
     else {
@@ -709,6 +775,7 @@ on_pre_input_hook(void)
 
 /* C function to call the Python completion_display_matches */
 
+#ifdef HAVE_RL_COMPLETION_DISPLAY_MATCHES_HOOK
 static void
 on_completion_display_matches_hook(char **matches,
                                    int num_matches, int max_length)
@@ -750,6 +817,7 @@ on_completion_display_matches_hook(char **matches,
 #endif
 }
 
+#endif
 
 /* C function to call the Python completer. */
 
@@ -821,6 +889,14 @@ setup_readline(void)
         Py_FatalError("not enough memory to save locale");
 #endif
 
+#ifdef __APPLE__
+    /* the libedit readline emulation resets key bindings etc 
+     * when calling rl_initialize.  So call it upfront
+     */
+    if (using_libedit_emulation)
+        rl_initialize();
+#endif /* __APPLE__ */
+
     using_history();
 
     rl_readline_name = "python";
@@ -852,8 +928,13 @@ setup_readline(void)
      * XXX: A bug in the readline-2.2 library causes a memory leak
      * inside this function.  Nothing we can do about it.
      */
-    rl_initialize();
-
+#ifdef __APPLE__
+    if (using_libedit_emulation)
+	rl_read_init_file(NULL);
+    else
+#endif /* __APPLE__ */
+        rl_initialize();
+    
     RESTORE_LOCALE(saved_locale)
 }
 
@@ -1015,10 +1096,19 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
     /* we have a valid line */
     n = strlen(p);
     if (n > 0) {
-        char *line;
+        const char *line;
         int length = _py_get_history_length();
         if (length > 0)
-            line = history_get(length)->line;
+#ifdef __APPLE__
+            if (using_libedit_emulation) {
+                /*
+                 * Libedit's emulation uses 0-based indexes,
+                 * the real readline uses 1-based indexes.
+                 */
+                line = (const char *)history_get(length - 1)->line;
+            } else
+#endif /* __APPLE__ */
+            line = (const char *)history_get(length)->line;
         else
             line = "";
         if (strcmp(p, line))
@@ -1044,6 +1134,10 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
 PyDoc_STRVAR(doc_module,
 "Importing this module enables command line editing using GNU readline.");
 
+#ifdef __APPLE__
+PyDoc_STRVAR(doc_module_le,
+"Importing this module enables command line editing using libedit readline.");
+#endif /* __APPLE__ */
 
 static struct PyModuleDef readlinemodule = {
     PyModuleDef_HEAD_INIT,
@@ -1057,14 +1151,28 @@ static struct PyModuleDef readlinemodule = {
     NULL
 };
 
+
 PyMODINIT_FUNC
 PyInit_readline(void)
 {
     PyObject *m;
 
+#ifdef __APPLE__
+    if (strncmp(rl_library_version, libedit_version_tag, strlen(libedit_version_tag)) == 0) {
+        using_libedit_emulation = 1;
+    }
+
+    if (using_libedit_emulation)
+        readlinemodule.m_doc = doc_module_le;
+
+#endif /* __APPLE__ */
+
     m = PyModule_Create(&readlinemodule);
+
     if (m == NULL)
         return NULL;
+
+
 
     PyOS_ReadlineFunctionPointer = call_readline;
     setup_readline();
