@@ -38,6 +38,8 @@
 
 /* EVP is the preferred interface to hashing in OpenSSL */
 #include <openssl/evp.h>
+/* We use the object interface to discover what hashes OpenSSL supports. */
+#include <openssl/objects.h>
 
 #define MUNCH_SIZE INT_MAX
 
@@ -49,6 +51,10 @@
 #define HASH_OBJ_CONSTRUCTOR 0
 #endif
 
+/* Minimum OpenSSL version needed to support sha224 and higher. */
+#if defined(OPENSSL_VERSION_NUMBER) && (OPENSSL_VERSION_NUMBER >= 0x00908000)
+#define _OPENSSL_SUPPORTS_SHA2
+#endif
 
 typedef struct {
     PyObject_HEAD
@@ -70,10 +76,12 @@ static PyTypeObject EVPtype;
 
 DEFINE_CONSTS_FOR_NEW(md5)
 DEFINE_CONSTS_FOR_NEW(sha1)
+#ifdef _OPENSSL_SUPPORTS_SHA2
 DEFINE_CONSTS_FOR_NEW(sha224)
 DEFINE_CONSTS_FOR_NEW(sha256)
 DEFINE_CONSTS_FOR_NEW(sha384)
 DEFINE_CONSTS_FOR_NEW(sha512)
+#endif
 
 
 static EVPobject *
@@ -482,6 +490,62 @@ EVP_new(PyObject *self, PyObject *args, PyObject *kwdict)
     return ret_obj;
 }
 
+
+/* State for our callback function so that it can accumulate a result. */
+typedef struct _internal_name_mapper_state {
+    PyObject *set;
+    int error;
+} _InternalNameMapperState;
+
+
+/* A callback function to pass to OpenSSL's OBJ_NAME_do_all(...) */
+static void
+_openssl_hash_name_mapper(const OBJ_NAME *openssl_obj_name, void *arg)
+{
+    _InternalNameMapperState *state = (_InternalNameMapperState *)arg;
+    PyObject *py_name;
+
+    assert(state != NULL);
+    if (openssl_obj_name == NULL)
+        return;
+    /* Ignore aliased names, they pollute the list and OpenSSL appears to
+     * have a its own definition of alias as the resulting list still
+     * contains duplicate and alternate names for several algorithms.     */
+    if (openssl_obj_name->alias)
+        return;
+
+    py_name = PyUnicode_FromString(openssl_obj_name->name);
+    if (py_name == NULL) {
+        state->error = 1;
+    } else {
+        if (PySet_Add(state->set, py_name) != 0) {
+            Py_DECREF(py_name);
+            state->error = 1;
+        }
+    }
+}
+
+
+/* Ask OpenSSL for a list of supported ciphers, filling in a Python set. */
+static PyObject*
+generate_hash_name_list(void)
+{
+    _InternalNameMapperState state;
+    state.set = PyFrozenSet_New(NULL);
+    if (state.set == NULL)
+        return NULL;
+    state.error = 0;
+
+    OBJ_NAME_do_all(OBJ_NAME_TYPE_MD_METH, &_openssl_hash_name_mapper, &state);
+
+    if (state.error) {
+        Py_DECREF(state.set);
+        return NULL;
+    }
+    return state.set;
+}
+
+
 /*
  *  This macro generates constructor function definitions for specific
  *  hash algorithms.  These constructors are much faster than calling
@@ -534,10 +598,12 @@ EVP_new(PyObject *self, PyObject *args, PyObject *kwdict)
 
 GEN_CONSTRUCTOR(md5)
 GEN_CONSTRUCTOR(sha1)
+#ifdef _OPENSSL_SUPPORTS_SHA2
 GEN_CONSTRUCTOR(sha224)
 GEN_CONSTRUCTOR(sha256)
 GEN_CONSTRUCTOR(sha384)
 GEN_CONSTRUCTOR(sha512)
+#endif
 
 /* List of functions exported by this module */
 
@@ -545,11 +611,13 @@ static struct PyMethodDef EVP_functions[] = {
     {"new", (PyCFunction)EVP_new, METH_VARARGS|METH_KEYWORDS, EVP_new__doc__},
     CONSTRUCTOR_METH_DEF(md5),
     CONSTRUCTOR_METH_DEF(sha1),
+#ifdef _OPENSSL_SUPPORTS_SHA2
     CONSTRUCTOR_METH_DEF(sha224),
     CONSTRUCTOR_METH_DEF(sha256),
     CONSTRUCTOR_METH_DEF(sha384),
     CONSTRUCTOR_METH_DEF(sha512),
-    {NULL, NULL}   /* Sentinel */
+#endif
+    {NULL,      NULL}            /* Sentinel */
 };
 
 
@@ -571,7 +639,7 @@ static struct PyModuleDef _hashlibmodule = {
 PyMODINIT_FUNC
 PyInit__hashlib(void)
 {
-    PyObject *m;
+    PyObject *m, *openssl_md_meth_names;
 
     OpenSSL_add_all_digests();
 
@@ -588,6 +656,16 @@ PyInit__hashlib(void)
     if (m == NULL)
         return NULL;
 
+    openssl_md_meth_names = generate_hash_name_list();
+    if (openssl_md_meth_names == NULL) {
+        Py_DECREF(m);
+        return NULL;
+    }
+    if (PyModule_AddObject(m, "openssl_md_meth_names", openssl_md_meth_names)) {
+        Py_DECREF(m);
+        return NULL;
+    }
+
 #if HASH_OBJ_CONSTRUCTOR
     Py_INCREF(&EVPtype);
     PyModule_AddObject(m, "HASH", (PyObject *)&EVPtype);
@@ -596,9 +674,11 @@ PyInit__hashlib(void)
     /* these constants are used by the convenience constructors */
     INIT_CONSTRUCTOR_CONSTANTS(md5);
     INIT_CONSTRUCTOR_CONSTANTS(sha1);
+#ifdef _OPENSSL_SUPPORTS_SHA2
     INIT_CONSTRUCTOR_CONSTANTS(sha224);
     INIT_CONSTRUCTOR_CONSTANTS(sha256);
     INIT_CONSTRUCTOR_CONSTANTS(sha384);
     INIT_CONSTRUCTOR_CONSTANTS(sha512);
+#endif
     return m;
 }

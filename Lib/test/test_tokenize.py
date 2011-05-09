@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 doctests = """
 Tests for the tokenize module.
 
@@ -42,7 +40,7 @@ brevity.
         ...
     IndentationError: unindent does not match any outer indentation level
 
-There are some standard formattig practises that are easy to get right.
+There are some standard formatting practices that are easy to get right.
 
     >>> roundtrip("if x == 1:\\n"
     ...           "    print(x)\\n")
@@ -566,7 +564,8 @@ Non-ascii identifiers
 
 from test import support
 from tokenize import (tokenize, _tokenize, untokenize, NUMBER, NAME, OP,
-                     STRING, ENDMARKER, tok_name, detect_encoding)
+                     STRING, ENDMARKER, tok_name, detect_encoding,
+                     open as tokenize_open)
 from io import BytesIO
 from unittest import TestCase
 import os, sys, glob
@@ -613,11 +612,11 @@ def decistmt(s):
 
     The format of the exponent is inherited from the platform C library.
     Known cases are "e-007" (Windows) and "e-07" (not Windows).  Since
-    we're only showing 12 digits, and the 13th isn't close to 5, the
+    we're only showing 11 digits, and the 12th isn't close to 5, the
     rest of the output should be platform-independent.
 
     >>> exec(s) #doctest: +ELLIPSIS
-    -3.21716034272e-0...7
+    -3.2171603427...e-0...7
 
     Output from calculations with Decimal should be identical across all
     platforms.
@@ -741,7 +740,7 @@ class TestDetectEncoding(TestCase):
             b'do_something(else)\n'
         )
         encoding, consumed_lines = detect_encoding(self.get_readline(lines))
-        self.assertEqual(encoding, 'utf-8')
+        self.assertEqual(encoding, 'utf-8-sig')
         self.assertEqual(consumed_lines,
                          [b'# something\n', b'print(something)\n'])
 
@@ -762,7 +761,7 @@ class TestDetectEncoding(TestCase):
             b'do_something(else)\n'
         )
         encoding, consumed_lines = detect_encoding(self.get_readline(lines))
-        self.assertEqual(encoding, 'utf-8')
+        self.assertEqual(encoding, 'utf-8-sig')
         self.assertEqual(consumed_lines, [b'# coding=utf-8\n'])
 
     def test_mismatched_bom_and_cookie_first_line_raises_syntaxerror(self):
@@ -794,7 +793,7 @@ class TestDetectEncoding(TestCase):
             b'do_something(else)\n'
         )
         encoding, consumed_lines = detect_encoding(self.get_readline(lines))
-        self.assertEqual(encoding, 'utf-8')
+        self.assertEqual(encoding, 'utf-8-sig')
         self.assertEqual(consumed_lines,
                          [b'#! something\n', b'f# coding=utf-8\n'])
 
@@ -848,16 +847,36 @@ class TestDetectEncoding(TestCase):
 
         readline = self.get_readline((b'\xef\xbb\xbfprint(something)\n',))
         encoding, consumed_lines = detect_encoding(readline)
-        self.assertEqual(encoding, 'utf-8')
+        self.assertEqual(encoding, 'utf-8-sig')
         self.assertEqual(consumed_lines, [b'print(something)\n'])
 
         readline = self.get_readline((b'\xef\xbb\xbf',))
         encoding, consumed_lines = detect_encoding(readline)
-        self.assertEqual(encoding, 'utf-8')
+        self.assertEqual(encoding, 'utf-8-sig')
         self.assertEqual(consumed_lines, [])
 
         readline = self.get_readline((b'# coding: bad\n',))
         self.assertRaises(SyntaxError, detect_encoding, readline)
+
+    def test_open(self):
+        filename = support.TESTFN + '.py'
+        self.addCleanup(support.unlink, filename)
+
+        # test coding cookie
+        for encoding in ('iso-8859-15', 'utf-8'):
+            with open(filename, 'w', encoding=encoding) as fp:
+                print("# coding: %s" % encoding, file=fp)
+                print("print('euro:\u20ac')", file=fp)
+            with tokenize_open(filename) as fp:
+                self.assertEqual(fp.encoding, encoding)
+                self.assertEqual(fp.mode, 'r')
+
+        # test BOM (no coding cookie)
+        with open(filename, 'w', encoding='utf-8-sig') as fp:
+            print("print('euro:\u20ac')", file=fp)
+        with tokenize_open(filename) as fp:
+            self.assertEqual(fp.encoding, 'utf-8-sig')
+            self.assertEqual(fp.mode, 'r')
 
 class TestTokenize(TestCase):
 
