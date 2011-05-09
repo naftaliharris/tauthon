@@ -15,7 +15,7 @@ import shutil
 import warnings
 import unittest
 import importlib
-import collections
+import collections.abc
 import re
 import subprocess
 import imp
@@ -33,16 +33,15 @@ __all__ = [
     "verbose", "use_resources", "max_memuse", "record_original_stdout",
     "get_original_stdout", "unload", "unlink", "rmtree", "forget",
     "is_resource_enabled", "requires", "find_unused_port", "bind_port",
-    "fcmp", "is_jython", "TESTFN", "HOST", "FUZZ", "SAVEDCWD", "temp_cwd",
+    "IPV6_ENABLED", "is_jython", "TESTFN", "HOST", "SAVEDCWD", "temp_cwd",
     "findfile", "sortdict", "check_syntax_error", "open_urlresource",
     "check_warnings", "CleanImport", "EnvironmentVarGuard",
-    "TransientResource", "captured_output", "captured_stdout",
-    "time_out", "socket_peer_reset", "ioerror_peer_reset",
-    "run_with_locale", 'temp_umask', "transient_internet",
-    "set_memlimit", "bigmemtest", "bigaddrspacetest", "BasicTestRunner",
-    "run_unittest", "run_doctest", "threading_setup", "threading_cleanup",
-    "reap_children", "cpython_only", "check_impl_detail", "get_attribute",
-    "swap_item", "swap_attr", "requires_IEEE_754",
+    "TransientResource", "captured_output", "captured_stdout", "time_out",
+    "socket_peer_reset", "ioerror_peer_reset", "run_with_locale", 'temp_umask',
+    "transient_internet", "set_memlimit", "bigmemtest", "bigaddrspacetest",
+    "BasicTestRunner", "run_unittest", "run_doctest", "threading_setup",
+    "threading_cleanup", "reap_children", "cpython_only", "check_impl_detail",
+    "get_attribute", "swap_item", "swap_attr", "requires_IEEE_754",
     "TestHandler", "Matcher", "can_symlink", "skip_unless_symlink",
     "import_fresh_module"
     ]
@@ -386,23 +385,20 @@ def bind_port(sock, host=HOST):
     port = sock.getsockname()[1]
     return port
 
-FUZZ = 1e-6
-
-def fcmp(x, y): # fuzzy comparison function
-    if isinstance(x, float) or isinstance(y, float):
+def _is_ipv6_enabled():
+    """Check whether IPv6 is enabled on this host."""
+    if socket.has_ipv6:
         try:
-            fuzz = (abs(x) + abs(y)) * FUZZ
-            if abs(x-y) <= fuzz:
-                return 0
-        except:
+            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            sock.bind(('::1', 0))
+        except (socket.error, socket.gaierror):
             pass
-    elif type(x) == type(y) and isinstance(x, (tuple, list)):
-        for i in range(min(len(x), len(y))):
-            outcome = fcmp(x[i], y[i])
-            if outcome != 0:
-                return outcome
-        return (len(x) > len(y)) - (len(x) < len(y))
-    return (x > y) - (x < y)
+        else:
+            sock.close()
+            return True
+    return False
+
+IPV6_ENABLED = _is_ipv6_enabled()
 
 # decorator for skipping tests on non-IEEE 754 platforms
 requires_IEEE_754 = unittest.skipUnless(
@@ -719,7 +715,7 @@ class CleanImport(object):
         sys.modules.update(self.original_modules)
 
 
-class EnvironmentVarGuard(collections.MutableMapping):
+class EnvironmentVarGuard(collections.abc.MutableMapping):
 
     """Class to help protect the environment variable properly.  Can be used as
     a context manager."""
@@ -1054,6 +1050,11 @@ def bigmemtest(minsize, memuse):
     return decorator
 
 def precisionbigmemtest(size, memuse):
+    """Decorator for bigmem tests that need exact sizes.
+
+    Like bigmemtest, but without the size scaling upward to fill available
+    memory.
+    """
     def decorator(f):
         def wrapper(self):
             size = wrapper.size
@@ -1148,6 +1149,32 @@ def check_impl_detail(**guards):
     guards, default = _parse_guards(guards)
     return guards.get(platform.python_implementation().lower(), default)
 
+
+def no_tracing(func):
+    """Decorator to temporarily turn off tracing for the duration of a test."""
+    if not hasattr(sys, 'gettrace'):
+        return func
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            original_trace = sys.gettrace()
+            try:
+                sys.settrace(None)
+                return func(*args, **kwargs)
+            finally:
+                sys.settrace(original_trace)
+        return wrapper
+
+
+def refcount_test(test):
+    """Decorator for tests which involve reference counting.
+
+    To start, the decorator does not run the test if is not run by CPython.
+    After that, any trace function is unset during the test to prevent
+    unexpected refcounts caused by the trace function.
+
+    """
+    return no_tracing(cpython_only(test))
 
 
 def _run_suite(suite):
@@ -1373,7 +1400,7 @@ def strip_python_stderr(stderr):
 
 def args_from_interpreter_flags():
     """Return a list of command-line arguments reproducing the current
-    settings in sys.flags."""
+    settings in sys.flags and sys.warnoptions."""
     flag_opt_map = {
         'bytes_warning': 'b',
         'dont_write_bytecode': 'B',
@@ -1388,6 +1415,8 @@ def args_from_interpreter_flags():
         v = getattr(sys.flags, flag)
         if v > 0:
             args.append('-' + opt * v)
+    for opt in sys.warnoptions:
+        args.append('-W' + opt)
     return args
 
 #============================================================
@@ -1461,9 +1490,11 @@ def can_symlink():
     global _can_symlink
     if _can_symlink is not None:
         return _can_symlink
+    symlink_path = TESTFN + "can_symlink"
     try:
-        os.symlink(TESTFN, TESTFN + "can_symlink")
+        os.symlink(TESTFN, symlink_path)
         can = True
+        os.remove(symlink_path)
     except (OSError, NotImplementedError):
         can = False
     _can_symlink = can

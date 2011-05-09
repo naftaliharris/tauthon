@@ -406,6 +406,14 @@ class ThreadTests(BaseTestCase):
         t.daemon = True
         self.assertTrue('daemon' in repr(t))
 
+    def test_deamon_param(self):
+        t = threading.Thread()
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=False)
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=True)
+        self.assertTrue(t.daemon)
+
 
 class ThreadJoinOnShutdown(BaseTestCase):
 
@@ -691,6 +699,10 @@ class ThreadingExceptionTests(BaseTestCase):
         thread.start()
         self.assertRaises(RuntimeError, setattr, thread, "daemon", True)
 
+    def test_releasing_unacquired_lock(self):
+        lock = threading.Lock()
+        self.assertRaises(RuntimeError, lock.release)
+
 
 class LockTests(lock_tests.LockTests):
     locktype = staticmethod(threading.Lock)
@@ -720,6 +732,7 @@ class BoundedSemaphoreTests(lock_tests.BoundedSemaphoreTests):
 class BarrierTests(lock_tests.BarrierTests):
     barriertype = staticmethod(threading.Barrier)
 
+
 def test_main():
     test.support.run_unittest(LockTests, PyRLockTests, CRLockTests, EventTests,
                               ConditionAsRLockTests, ConditionTests,
@@ -727,7 +740,7 @@ def test_main():
                               ThreadTests,
                               ThreadJoinOnShutdown,
                               ThreadingExceptionTests,
-                              BarrierTests
+                              BarrierTests,
                               )
 
 if __name__ == "__main__":
