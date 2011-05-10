@@ -659,7 +659,7 @@ class PyBuildExt(build_ext):
             libs = ['crypt']
         else:
             libs = []
-        exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
+        exts.append( Extension('_crypt', ['_cryptmodule.c'], libraries=libs) )
 
         # CSV files
         exts.append( Extension('_csv', ['_csv.c']) )
@@ -1256,11 +1256,11 @@ class PyBuildExt(build_ext):
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', ['bz2module.c'],
+            exts.append( Extension('_bz2', ['_bz2module.c'],
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
-            missing.append('bz2')
+            missing.append('_bz2')
 
         # Interface to the Expat XML parser
         #
@@ -1353,14 +1353,11 @@ class PyBuildExt(build_ext):
         if platform == 'win32':
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
                                      '_multiprocessing/semaphore.c',
-                                     '_multiprocessing/pipe_connection.c',
-                                     '_multiprocessing/socket_connection.c',
                                      '_multiprocessing/win32_functions.c'
                                    ]
 
         else:
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
-                                     '_multiprocessing/socket_connection.c'
                                    ]
             if (sysconfig.get_config_var('HAVE_SEM_OPEN') and not
                 sysconfig.get_config_var('POSIX_SEMAPHORES_NOT_ENABLED')):
