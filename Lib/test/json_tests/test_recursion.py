@@ -76,4 +76,3 @@ class TestRecursion(TestCase):
             json.loads('{"a":' * 100000 + '[1]' + '}' * 100000)
         with self.assertRaises(RuntimeError):
             json.loads('[' * 100000 + '1' + ']' * 100000)
-
