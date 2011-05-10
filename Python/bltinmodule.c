@@ -5,9 +5,12 @@
 
 #include "node.h"
 #include "code.h"
-#include "eval.h"
 
 #include <ctype.h>
+
+#ifdef HAVE_LANGINFO_H
+#include <langinfo.h>   /* CODESET */
+#endif
 
 /* The default encoding used by the platform file system APIs
    Can remain NULL for all platforms that don't have such a concept
@@ -21,33 +24,13 @@ int Py_HasFileSystemDefaultEncoding = 1;
 #elif defined(__APPLE__)
 const char *Py_FileSystemDefaultEncoding = "utf-8";
 int Py_HasFileSystemDefaultEncoding = 1;
-#else
-const char *Py_FileSystemDefaultEncoding = NULL; /* use default */
+#elif defined(HAVE_LANGINFO_H) && defined(CODESET)
+const char *Py_FileSystemDefaultEncoding = NULL; /* set by initfsencoding() */
 int Py_HasFileSystemDefaultEncoding = 0;
+#else
+const char *Py_FileSystemDefaultEncoding = "utf-8";
+int Py_HasFileSystemDefaultEncoding = 1;
 #endif
-
-int
-_Py_SetFileSystemEncoding(PyObject *s)
-{
-    PyObject *defenc, *codec;
-    if (!PyUnicode_Check(s)) {
-        PyErr_BadInternalCall();
-        return -1;
-    }
-    defenc = _PyUnicode_AsDefaultEncodedString(s, NULL);
-    if (!defenc)
-        return -1;
-    codec = _PyCodec_Lookup(PyBytes_AsString(defenc));
-    if (codec == NULL)
-        return -1;
-    Py_DECREF(codec);
-    if (!Py_HasFileSystemDefaultEncoding && Py_FileSystemDefaultEncoding)
-        /* A file system encoding was set at run-time */
-        free((char*)Py_FileSystemDefaultEncoding);
-    Py_FileSystemDefaultEncoding = strdup(PyBytes_AsString(defenc));
-    Py_HasFileSystemDefaultEncoding = 0;
-    return 0;
-}
 
 static PyObject *
 builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
@@ -189,8 +172,12 @@ builtin___import__(PyObject *self, PyObject *args, PyObject *kwds)
 PyDoc_STRVAR(import_doc,
 "__import__(name, globals={}, locals={}, fromlist=[], level=-1) -> module\n\
 \n\
-Import a module.  The globals are only used to determine the context;\n\
-they are not modified.  The locals are currently unused.  The fromlist\n\
+Import a module. Because this function is meant for use by the Python\n\
+interpreter and not for general use it is better to use\n\
+importlib.import_module() to programmatically import a module.\n\
+\n\
+The globals argument is only used to determine the context;\n\
+they are not modified.  The locals argument is unused.  The fromlist\n\
 should be a list of names to emulate ``from name import ...'', or an\n\
 empty list to emulate ``import name''.\n\
 When importing a module from a package, note that __import__('A.B', ...)\n\
@@ -320,7 +307,21 @@ builtin_bin(PyObject *self, PyObject *v)
 PyDoc_STRVAR(bin_doc,
 "bin(number) -> string\n\
 \n\
-Return the binary representation of an integer or long integer.");
+Return the binary representation of an integer.");
+
+
+static PyObject *
+builtin_callable(PyObject *self, PyObject *v)
+{
+    return PyBool_FromLong((long)PyCallable_Check(v));
+}
+
+PyDoc_STRVAR(callable_doc,
+"callable(object) -> bool\n\
+\n\
+Return whether the object is callable (i.e., some kind of function).\n\
+Note that classes are callable, as are instances of classes with a\n\
+__call__() method.");
 
 
 typedef struct {
@@ -542,19 +543,20 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
     int mode = -1;
     int dont_inherit = 0;
     int supplied_flags = 0;
+    int optimize = -1;
     int is_ast;
     PyCompilerFlags cf;
     PyObject *cmd;
     static char *kwlist[] = {"source", "filename", "mode", "flags",
-                             "dont_inherit", NULL};
+                             "dont_inherit", "optimize", NULL};
     int start[] = {Py_file_input, Py_eval_input, Py_single_input};
     PyObject *result;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO&s|ii:compile",  kwlist,
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO&s|iii:compile",  kwlist,
                                      &cmd,
                                      PyUnicode_FSConverter, &filename_obj,
                                      &startstr, &supplied_flags,
-                                     &dont_inherit))
+                                     &dont_inherit, &optimize))
         return NULL;
 
     filename = PyBytes_AS_STRING(filename_obj);
@@ -568,6 +570,12 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
         goto error;
     }
     /* XXX Warn if (supplied_flags & PyCF_MASK_OBSOLETE) != 0? */
+
+    if (optimize < -1 || optimize > 2) {
+        PyErr_SetString(PyExc_ValueError,
+                        "compile(): invalid optimize value");
+        goto error;
+    }
 
     if (!dont_inherit) {
         PyEval_MergeCompilerFlags(&cf);
@@ -603,8 +611,8 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
                 PyArena_Free(arena);
                 goto error;
             }
-            result = (PyObject*)PyAST_Compile(mod, filename,
-                                              &cf, arena);
+            result = (PyObject*)PyAST_CompileEx(mod, filename,
+                                                &cf, optimize, arena);
             PyArena_Free(arena);
         }
         goto finally;
@@ -614,7 +622,7 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
     if (str == NULL)
         goto error;
 
-    result = Py_CompileStringFlags(str, filename, start[mode], &cf);
+    result = Py_CompileStringExFlags(str, filename, start[mode], &cf, optimize);
     goto finally;
 
 error:
@@ -726,7 +734,7 @@ builtin_eval(PyObject *self, PyObject *args)
         "code object passed to eval() may not contain free variables");
             return NULL;
         }
-        return PyEval_EvalCode((PyCodeObject *) cmd, globals, locals);
+        return PyEval_EvalCode(cmd, globals, locals);
     }
 
     cf.cf_flags = PyCF_SOURCE_IS_UTF8;
@@ -802,7 +810,7 @@ builtin_exec(PyObject *self, PyObject *args)
                 "contain free variables");
             return NULL;
         }
-        v = PyEval_EvalCode((PyCodeObject *) prog, globals, locals);
+        v = PyEval_EvalCode(prog, globals, locals);
     }
     else {
         char *str;
@@ -897,24 +905,21 @@ builtin_hasattr(PyObject *self, PyObject *args)
     }
     v = PyObject_GetAttr(v, name);
     if (v == NULL) {
-        if (!PyErr_ExceptionMatches(PyExc_Exception))
-            return NULL;
-        else {
+        if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
             PyErr_Clear();
-            Py_INCREF(Py_False);
-            return Py_False;
+            Py_RETURN_FALSE;
         }
+        return NULL;
     }
     Py_DECREF(v);
-    Py_INCREF(Py_True);
-    return Py_True;
+    Py_RETURN_TRUE;
 }
 
 PyDoc_STRVAR(hasattr_doc,
 "hasattr(object, name) -> bool\n\
 \n\
 Return whether the object has an attribute with the given name.\n\
-(This is done by calling getattr(object, name) and catching exceptions.)");
+(This is done by calling getattr(object, name) and catching AttributeError.)");
 
 
 static PyObject *
@@ -1163,12 +1168,12 @@ Delete a named attribute on an object; delattr(x, 'y') is equivalent to\n\
 static PyObject *
 builtin_hash(PyObject *self, PyObject *v)
 {
-    long x;
+    Py_hash_t x;
 
     x = PyObject_Hash(v);
     if (x == -1)
         return NULL;
-    return PyLong_FromLong(x);
+    return PyLong_FromSsize_t(x);
 }
 
 PyDoc_STRVAR(hash_doc,
@@ -1187,7 +1192,7 @@ builtin_hex(PyObject *self, PyObject *v)
 PyDoc_STRVAR(hex_doc,
 "hex(number) -> string\n\
 \n\
-Return the hexadecimal representation of an integer or long integer.");
+Return the hexadecimal representation of an integer.");
 
 
 static PyObject *
@@ -1375,7 +1380,7 @@ builtin_oct(PyObject *self, PyObject *v)
 PyDoc_STRVAR(oct_doc,
 "oct(number) -> string\n\
 \n\
-Return the octal representation of an integer or long integer.");
+Return the octal representation of an integer.");
 
 
 static PyObject *
@@ -1486,13 +1491,19 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
             Py_RETURN_NONE;
     }
 
-    if (sep && sep != Py_None && !PyUnicode_Check(sep)) {
+    if (sep == Py_None) {
+        sep = NULL;
+    }
+    else if (sep && !PyUnicode_Check(sep)) {
         PyErr_Format(PyExc_TypeError,
                      "sep must be None or a string, not %.200s",
                      sep->ob_type->tp_name);
         return NULL;
     }
-    if (end && end != Py_None && !PyUnicode_Check(end)) {
+    if (end == Py_None) {
+        end = NULL;
+    }
+    else if (end && !PyUnicode_Check(end)) {
         PyErr_Format(PyExc_TypeError,
                      "end must be None or a string, not %.200s",
                      end->ob_type->tp_name);
@@ -1501,7 +1512,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
 
     for (i = 0; i < PyTuple_Size(args); i++) {
         if (i > 0) {
-            if (sep == NULL || sep == Py_None)
+            if (sep == NULL)
                 err = PyFile_WriteString(" ", file);
             else
                 err = PyFile_WriteObject(sep, file,
@@ -1515,7 +1526,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
             return NULL;
     }
 
-    if (end == NULL || end == Py_None)
+    if (end == NULL)
         err = PyFile_WriteString("\n", file);
     else
         err = PyFile_WriteObject(end, file, Py_PRINT_RAW);
@@ -1608,13 +1619,20 @@ builtin_input(PyObject *self, PyObject *args)
         char *prompt;
         char *s;
         PyObject *stdin_encoding;
+        char *stdin_encoding_str;
         PyObject *result;
+        size_t len;
 
         stdin_encoding = PyObject_GetAttrString(fin, "encoding");
         if (!stdin_encoding)
             /* stdin is a text stream, so it must have an
                encoding. */
             return NULL;
+        stdin_encoding_str = _PyUnicode_AsString(stdin_encoding);
+        if (stdin_encoding_str  == NULL) {
+            Py_DECREF(stdin_encoding);
+            return NULL;
+        }
         tmp = PyObject_CallMethod(fout, "flush", "");
         if (tmp == NULL)
             PyErr_Clear();
@@ -1623,10 +1641,16 @@ builtin_input(PyObject *self, PyObject *args)
         if (promptarg != NULL) {
             PyObject *stringpo;
             PyObject *stdout_encoding;
-            stdout_encoding = PyObject_GetAttrString(fout,
-                                                     "encoding");
+            char *stdout_encoding_str;
+            stdout_encoding = PyObject_GetAttrString(fout, "encoding");
             if (stdout_encoding == NULL) {
                 Py_DECREF(stdin_encoding);
+                return NULL;
+            }
+            stdout_encoding_str = _PyUnicode_AsString(stdout_encoding);
+            if (stdout_encoding_str == NULL) {
+                Py_DECREF(stdin_encoding);
+                Py_DECREF(stdout_encoding);
                 return NULL;
             }
             stringpo = PyObject_Str(promptarg);
@@ -1636,7 +1660,7 @@ builtin_input(PyObject *self, PyObject *args)
                 return NULL;
             }
             po = PyUnicode_AsEncodedString(stringpo,
-                _PyUnicode_AsString(stdout_encoding), NULL);
+                stdout_encoding_str, NULL);
             Py_DECREF(stdout_encoding);
             Py_DECREF(stringpo);
             if (po == NULL) {
@@ -1662,22 +1686,23 @@ builtin_input(PyObject *self, PyObject *args)
             Py_DECREF(stdin_encoding);
             return NULL;
         }
-        if (*s == '\0') {
+
+        len = strlen(s);
+        if (len == 0) {
             PyErr_SetNone(PyExc_EOFError);
             result = NULL;
         }
-        else { /* strip trailing '\n' */
-            size_t len = strlen(s);
+        else {
             if (len > PY_SSIZE_T_MAX) {
                 PyErr_SetString(PyExc_OverflowError,
                                 "input: input too long");
                 result = NULL;
             }
             else {
-                result = PyUnicode_Decode
-                    (s, len-1,
-                     _PyUnicode_AsString(stdin_encoding),
-                     NULL);
+                len--;   /* strip trailing '\n' */
+                if (len != 0 && s[len-1] == '\r')
+                    len--;   /* strip trailing '\r' */
+                result = PyUnicode_Decode(s, len, stdin_encoding_str, NULL);
             }
         }
         Py_DECREF(stdin_encoding);
@@ -1979,6 +2004,15 @@ builtin_sum(PyObject *self, PyObject *args)
             }
             break;
         }
+        /* It's tempting to use PyNumber_InPlaceAdd instead of
+           PyNumber_Add here, to avoid quadratic running time
+           when doing 'sum(list_of_lists, [])'.  However, this
+           would produce a change in behaviour: a snippet like
+
+             empty = []
+             sum([[x] for x in range(10)], empty)
+
+           would change the value of empty. */
         temp = PyNumber_Add(result, item);
         Py_DECREF(result);
         Py_DECREF(item);
@@ -2233,6 +2267,7 @@ static PyMethodDef builtin_methods[] = {
     {"any",             builtin_any,        METH_O, any_doc},
     {"ascii",           builtin_ascii,      METH_O, ascii_doc},
     {"bin",             builtin_bin,        METH_O, bin_doc},
+    {"callable",        builtin_callable,   METH_O, callable_doc},
     {"chr",             builtin_chr,        METH_VARARGS, chr_doc},
     {"compile",         (PyCFunction)builtin_compile,    METH_VARARGS | METH_KEYWORDS, compile_doc},
     {"delattr",         builtin_delattr,    METH_VARARGS, delattr_doc},
@@ -2323,9 +2358,7 @@ _PyBuiltin_Init(void)
     SETBUILTIN("bytearray",             &PyByteArray_Type);
     SETBUILTIN("bytes",                 &PyBytes_Type);
     SETBUILTIN("classmethod",           &PyClassMethod_Type);
-#ifndef WITHOUT_COMPLEX
     SETBUILTIN("complex",               &PyComplex_Type);
-#endif
     SETBUILTIN("dict",                  &PyDict_Type);
     SETBUILTIN("enumerate",             &PyEnum_Type);
     SETBUILTIN("filter",                &PyFilter_Type);
