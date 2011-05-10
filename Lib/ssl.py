@@ -76,7 +76,8 @@ from _ssl import (
     SSL_ERROR_INVALID_ERROR_CODE,
     )
 from _ssl import HAS_SNI
-from _ssl import PROTOCOL_SSLv3, PROTOCOL_SSLv23, PROTOCOL_TLSv1
+from _ssl import (PROTOCOL_SSLv3, PROTOCOL_SSLv23,
+                  PROTOCOL_TLSv1)
 _PROTOCOL_NAMES = {
     PROTOCOL_TLSv1: "TLSv1",
     PROTOCOL_SSLv23: "SSLv23",
@@ -91,7 +92,7 @@ else:
 
 from socket import getnameinfo as _getnameinfo
 from socket import error as socket_error
-from socket import socket, AF_INET, SOCK_STREAM
+from socket import socket, AF_INET, SOCK_STREAM, create_connection
 import base64        # for DER-to-PEM translation
 import traceback
 import errno
@@ -554,9 +555,9 @@ def get_server_certificate(addr, ssl_version=PROTOCOL_SSLv3, ca_certs=None):
         cert_reqs = CERT_REQUIRED
     else:
         cert_reqs = CERT_NONE
-    s = wrap_socket(socket(), ssl_version=ssl_version,
+    s = create_connection(addr)
+    s = wrap_socket(s, ssl_version=ssl_version,
                     cert_reqs=cert_reqs, ca_certs=ca_certs)
-    s.connect(addr)
     dercert = s.getpeercert(True)
     s.close()
     return DER_cert_to_PEM_cert(dercert)
