@@ -24,14 +24,18 @@ class TestGdbm(unittest.TestCase):
         self.g[b'bytes'] = b'data'
         key_set = set(self.g.keys())
         self.assertEqual(key_set, set([b'a', b'bytes', b'12345678910']))
-        self.assertTrue(b'a' in self.g)
+        self.assertIn(b'a', self.g)
         self.assertEqual(self.g[b'bytes'], b'data')
         key = self.g.firstkey()
         while key:
-            self.assertTrue(key in key_set)
+            self.assertIn(key, key_set)
             key_set.remove(key)
             key = self.g.nextkey(key)
         self.assertRaises(KeyError, lambda: self.g['xxx'])
+        # get() and setdefault() work as in the dict interface
+        self.assertEqual(self.g.get(b'xxx', b'foo'), b'foo')
+        self.assertEqual(self.g.setdefault(b'xxx', b'foo'), b'foo')
+        self.assertEqual(self.g[b'xxx'], b'foo')
 
     def test_error_conditions(self):
         # Try to open a non-existent database.
