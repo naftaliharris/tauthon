@@ -88,7 +88,7 @@ my_fgets(char *buf, int len, FILE *fp)
 #endif
             if (s < 0)
                     return 1;
-            /* try again */
+	    /* try again */
             continue;
         }
 #endif

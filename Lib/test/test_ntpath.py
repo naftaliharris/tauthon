@@ -1,7 +1,9 @@
 import ntpath
 import os
-from test.support import verbose, TestFailed
-import test.support as support
+import sys
+from test.support import TestFailed
+from test import support, test_genericpath
+from tempfile import TemporaryFile
 import unittest
 
 
@@ -238,9 +240,27 @@ class TestNtpath(unittest.TestCase):
         tester('ntpath.relpath("/a/b", "/a/b")', '.')
         tester('ntpath.relpath("c:/foo", "C:/FOO")', '.')
 
+    def test_sameopenfile(self):
+        with TemporaryFile() as tf1, TemporaryFile() as tf2:
+            # Make sure the same file is really the same
+            self.assertTrue(ntpath.sameopenfile(tf1.fileno(), tf1.fileno()))
+            # Make sure different files are really different
+            self.assertFalse(ntpath.sameopenfile(tf1.fileno(), tf2.fileno()))
+            # Make sure invalid values don't cause issues on win32
+            if sys.platform == "win32":
+                with self.assertRaises(OSError):
+                    # Invalid file descriptors shouldn't display assert
+                    # dialogs (#4804)
+                    ntpath.sameopenfile(-1, -1)
+
+
+class NtCommonTest(test_genericpath.CommonTest):
+    pathmodule = ntpath
+    attributes = ['relpath', 'splitunc']
+
 
 def test_main():
-    support.run_unittest(TestNtpath)
+    support.run_unittest(TestNtpath, NtCommonTest)
 
 
 if __name__ == "__main__":

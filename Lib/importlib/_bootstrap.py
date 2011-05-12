@@ -22,7 +22,7 @@ work. One should use importlib as the public-facing version of this module.
 def _path_join(*args):
     """Replacement for os.path.join."""
     return path_sep.join(x[:-len(path_sep)] if x.endswith(path_sep) else x
-                            for x in args)
+                            for x in args if x)
 
 
 def _path_exists(path):
@@ -53,6 +53,8 @@ def _path_isfile(path):
 # XXX Could also expose Modules/getpath.c:isdir()
 def _path_isdir(path):
     """Replacement for os.path.isdir."""
+    if not path:
+        path = _os.getcwd()
     return _path_is_mode_type(path, 0o040000)
 
 
@@ -78,26 +80,14 @@ def _path_absolute(path):
             return _path_join(_os.getcwd(), path)
 
 
-class _closing:
-
-    """Simple replacement for contextlib.closing."""
-
-    def __init__(self, obj):
-        self.obj = obj
-
-    def __enter__(self):
-        return self.obj
-
-    def __exit__(self, *args):
-        self.obj.close()
-
-
 def _wrap(new, old):
     """Simple substitute for functools.wraps."""
     for replace in ['__module__', '__name__', '__doc__']:
         setattr(new, replace, getattr(old, replace))
     new.__dict__.update(old.__dict__)
 
+
+code_type = type(_wrap.__code__)
 
 # Finder/loader utility code ##################################################
 
@@ -138,7 +128,7 @@ def module_for_loader(fxn):
     the second argument.
 
     """
-    def decorated(self, fullname):
+    def decorated(self, fullname, *args, **kwargs):
         module = sys.modules.get(fullname)
         is_reload = bool(module)
         if not is_reload:
@@ -148,7 +138,7 @@ def module_for_loader(fxn):
             module = imp.new_module(fullname)
             sys.modules[fullname] = module
         try:
-            return fxn(self, module)
+            return fxn(self, module, *args, **kwargs)
         except:
             if not is_reload:
                 del sys.modules[fullname]
@@ -301,242 +291,238 @@ class FrozenImporter:
         return imp.is_frozen_package(fullname)
 
 
-class PyLoader:
+class _LoaderBasics:
 
-    """Loader base class for Python source code.
+    """Base class of common code needed by both SourceLoader and
+    _SourcelessFileLoader."""
 
-    Subclasses need to implement the methods:
+    def is_package(self, fullname):
+        """Concrete implementation of InspectLoader.is_package by checking if
+        the path returned by get_filename has a filename of '__init__.py'."""
+        filename = self.get_filename(fullname).rpartition(path_sep)[2]
+        return filename.rsplit('.', 1)[0] == '__init__'
 
-    - source_path
-    - get_data
-    - is_package
+    def _bytes_from_bytecode(self, fullname, data, source_mtime):
+        """Return the marshalled bytes from bytecode, verifying the magic
+        number and timestamp along the way.
 
-    """
+        If source_mtime is None then skip the timestamp check.
+
+        """
+        magic = data[:4]
+        raw_timestamp = data[4:8]
+        if len(magic) != 4 or magic != imp.get_magic():
+            raise ImportError("bad magic number in {}".format(fullname))
+        elif len(raw_timestamp) != 4:
+            raise EOFError("bad timestamp in {}".format(fullname))
+        elif source_mtime is not None:
+            if marshal._r_long(raw_timestamp) != source_mtime:
+                raise ImportError("bytecode is stale for {}".format(fullname))
+        # Can't return the code object as errors from marshal loading need to
+        # propagate even when source is available.
+        return data[8:]
 
     @module_for_loader
-    def load_module(self, module):
-        """Load a source module."""
-        return self._load_module(module)
-
-    def _load_module(self, module):
-        """Initialize a module from source."""
+    def _load_module(self, module, *, sourceless=False):
+        """Helper for load_module able to handle either source or sourceless
+        loading."""
         name = module.__name__
-        code_object = self.get_code(module.__name__)
-        # __file__ may have been set by the caller, e.g. bytecode path.
-        if not hasattr(module, '__file__'):
-            module.__file__ = self.source_path(name)
+        code_object = self.get_code(name)
+        module.__file__ = self.get_filename(name)
+        if not sourceless:
+            module.__cached__ = imp.cache_from_source(module.__file__)
+        else:
+            module.__cached__ = module.__file__
+        module.__package__ = name
         if self.is_package(name):
-            module.__path__  = [module.__file__.rsplit(path_sep, 1)[0]]
-        module.__package__ = module.__name__
-        if not hasattr(module, '__path__'):
+            module.__path__ = [module.__file__.rsplit(path_sep, 1)[0]]
+        else:
             module.__package__ = module.__package__.rpartition('.')[0]
         module.__loader__ = self
         exec(code_object, module.__dict__)
         return module
 
-    def get_code(self, fullname):
-        """Get a code object from source."""
-        source_path = self.source_path(fullname)
-        if source_path is None:
-            message = "a source path must exist to load {0}".format(fullname)
-            raise ImportError(message)
-        source = self.get_data(source_path)
-        # Convert to universal newlines.
-        line_endings = b'\n'
-        for index, c in enumerate(source):
-            if c == ord(b'\n'):
-                break
-            elif c == ord(b'\r'):
-                line_endings = b'\r'
-                try:
-                    if source[index+1] == ord(b'\n'):
-                        line_endings += b'\n'
-                except IndexError:
-                    pass
-                break
-        if line_endings != b'\n':
-            source = source.replace(line_endings, b'\n')
-        return compile(source, source_path, 'exec', dont_inherit=True)
 
-    # Never use in implementing import! Imports code within the method.
-    def get_source(self, fullname):
-        """Return the source code for a module.
+class SourceLoader(_LoaderBasics):
 
-        self.source_path() and self.get_data() are used to implement this
-        method.
+    def path_mtime(self, path):
+        """Optional method that returns the modification time (an int) for the
+        specified path, where path is a str.
+
+        Implementing this method allows the loader to read bytecode files.
 
         """
-        path = self.source_path(fullname)
-        if path is None:
-            return None
+        raise NotImplementedError
+
+    def set_data(self, path, data):
+        """Optional method which writes data (bytes) to a file path (a str).
+
+        Implementing this method allows for the writing of bytecode files.
+
+        """
+        raise NotImplementedError
+
+
+    def get_source(self, fullname):
+        """Concrete implementation of InspectLoader.get_source."""
+        import tokenize
+        path = self.get_filename(fullname)
         try:
             source_bytes = self.get_data(path)
         except IOError:
-            return ImportError("source not available through get_data()")
-        import io
-        import tokenize
-        encoding = tokenize.detect_encoding(io.BytesIO(source_bytes).readline)
-        return source_bytes.decode(encoding[0])
-
-
-class PyPycLoader(PyLoader):
-
-    """Loader base class for Python source and bytecode.
-
-    Requires implementing the methods needed for PyLoader as well as
-    source_mtime, bytecode_path, and write_bytecode.
-
-    """
-
-    @module_for_loader
-    def load_module(self, module):
-        """Load a module from source or bytecode."""
-        name = module.__name__
-        source_path = self.source_path(name)
-        bytecode_path = self.bytecode_path(name)
-        # get_code can worry about no viable paths existing.
-        module.__file__ = source_path or bytecode_path
-        return self._load_module(module)
+            raise ImportError("source not available through get_data()")
+        encoding = tokenize.detect_encoding(_io.BytesIO(source_bytes).readline)
+        newline_decoder = _io.IncrementalNewlineDecoder(None, True)
+        return newline_decoder.decode(source_bytes.decode(encoding[0]))
 
     def get_code(self, fullname):
-        """Get a code object from source or bytecode."""
-        # XXX Care enough to make sure this call does not happen if the magic
-        #     number is bad?
-        source_timestamp = self.source_mtime(fullname)
-        # Try to use bytecode if it is available.
-        bytecode_path = self.bytecode_path(fullname)
-        if bytecode_path:
-            data = self.get_data(bytecode_path)
+        """Concrete implementation of InspectLoader.get_code.
+
+        Reading of bytecode requires path_mtime to be implemented. To write
+        bytecode, set_data must also be implemented.
+
+        """
+        source_path = self.get_filename(fullname)
+        bytecode_path = imp.cache_from_source(source_path)
+        source_mtime = None
+        if bytecode_path is not None:
             try:
-                magic = data[:4]
-                if len(magic) < 4:
-                    raise ImportError("bad magic number in {}".format(fullname))
-                raw_timestamp = data[4:8]
-                if len(raw_timestamp) < 4:
-                    raise EOFError("bad timestamp in {}".format(fullname))
-                pyc_timestamp = marshal._r_long(raw_timestamp)
-                bytecode = data[8:]
-                # Verify that the magic number is valid.
-                if imp.get_magic() != magic:
-                    raise ImportError("bad magic number in {}".format(fullname))
-                # Verify that the bytecode is not stale (only matters when
-                # there is source to fall back on.
-                if source_timestamp:
-                    if pyc_timestamp < source_timestamp:
-                        raise ImportError("bytecode is stale")
-            except (ImportError, EOFError):
-                # If source is available give it a shot.
-                if source_timestamp is not None:
+                source_mtime = self.path_mtime(source_path)
+            except NotImplementedError:
+                pass
+            else:
+                try:
+                    data = self.get_data(bytecode_path)
+                except IOError:
                     pass
                 else:
-                    raise
-            else:
-                # Bytecode seems fine, so try to use it.
-                # XXX If the bytecode is ill-formed, would it be beneficial to
-                #     try for using source if available and issue a warning?
-                return marshal.loads(bytecode)
-        elif source_timestamp is None:
-            raise ImportError("no source or bytecode available to create code "
-                                "object for {0!r}".format(fullname))
-        # Use the source.
-        code_object = super().get_code(fullname)
-        # Generate bytecode and write it out.
-        if not sys.dont_write_bytecode:
+                    try:
+                        bytes_data = self._bytes_from_bytecode(fullname, data,
+                                                               source_mtime)
+                    except (ImportError, EOFError):
+                        pass
+                    else:
+                        found = marshal.loads(bytes_data)
+                        if isinstance(found, code_type):
+                            return found
+                        else:
+                            msg = "Non-code object in {}"
+                            raise ImportError(msg.format(bytecode_path))
+        source_bytes = self.get_data(source_path)
+        code_object = compile(source_bytes, source_path, 'exec',
+                                dont_inherit=True)
+        if (not sys.dont_write_bytecode and bytecode_path is not None and
+                source_mtime is not None):
+            # If e.g. Jython ever implements imp.cache_from_source to have
+            # their own cached file format, this block of code will most likely
+            # throw an exception.
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(source_timestamp))
+            data.extend(marshal._w_long(source_mtime))
             data.extend(marshal.dumps(code_object))
-            self.write_bytecode(fullname, data)
+            try:
+                self.set_data(bytecode_path, data)
+            except NotImplementedError:
+                pass
         return code_object
 
+    def load_module(self, fullname):
+        """Concrete implementation of Loader.load_module.
 
-class _PyFileLoader(PyLoader):
+        Requires ExecutionLoader.get_filename and ResourceLoader.get_data to be
+        implemented to load source code. Use of bytecode is dictated by whether
+        get_code uses/writes bytecode.
 
-    """Load a Python source file."""
+        """
+        return self._load_module(fullname)
 
-    def __init__(self, name, path, is_pkg):
-        self._name = name
-        self._is_pkg = is_pkg
-        # Figure out the base path based on whether it was source or bytecode
-        # that was found.
-        try:
-            self._base_path = _path_without_ext(path, imp.PY_SOURCE)
-        except ValueError:
-            self._base_path = _path_without_ext(path, imp.PY_COMPILED)
 
-    def _find_path(self, ext_type):
-        """Find a path from the base path and the specified extension type that
-        exists, returning None if one is not found."""
-        for suffix in _suffix_list(ext_type):
-            path = self._base_path + suffix
-            if _path_exists(path):
-                return path
-        else:
-            return None
+class _FileLoader:
+
+    """Base file loader class which implements the loader protocol methods that
+    require file system usage."""
+
+    def __init__(self, fullname, path):
+        """Cache the module name and the path to the file found by the
+        finder."""
+        self._name = fullname
+        self._path = path
 
     @_check_name
-    def source_path(self, fullname):
-        """Return the path to an existing source file for the module, or None
-        if one cannot be found."""
-        # Not a property so that it is easy to override.
-        return self._find_path(imp.PY_SOURCE)
+    def get_filename(self, fullname):
+        """Return the path to the source file as found by the finder."""
+        return self._path
 
     def get_data(self, path):
         """Return the data from path as raw bytes."""
-        return _io.FileIO(path, 'r').read()  # Assuming bytes.
-
-    @_check_name
-    def is_package(self, fullname):
-        """Return a boolean based on whether the module is a package.
-
-        Raises ImportError (like get_source) if the loader cannot handle the
-        package.
-
-        """
-        return self._is_pkg
+        with _io.FileIO(path, 'r') as file:
+            return file.read()
 
 
-class _PyPycFileLoader(PyPycLoader, _PyFileLoader):
+class _SourceFileLoader(_FileLoader, SourceLoader):
 
-    """Load a module from a source or bytecode file."""
+    """Concrete implementation of SourceLoader using the file system."""
 
-    @_check_name
-    def source_mtime(self, name):
-        """Return the modification time of the source for the specified
-        module."""
-        source_path = self.source_path(name)
-        if not source_path:
-            return None
-        return int(_os.stat(source_path).st_mtime)
+    def path_mtime(self, path):
+        """Return the modification time for the path."""
+        return int(_os.stat(path).st_mtime)
 
-    @_check_name
-    def bytecode_path(self, fullname):
-        """Return the path to a bytecode file, or None if one does not
-        exist."""
-        # Not a property for easy overriding.
-        return self._find_path(imp.PY_COMPILED)
-
-    @_check_name
-    def write_bytecode(self, name, data):
-        """Write out 'data' for the specified module, returning a boolean
-        signifying if the write-out actually occurred.
-
-        Raises ImportError (just like get_source) if the specified module
-        cannot be handled by the loader.
-
-        """
-        bytecode_path = self.bytecode_path(name)
-        if not bytecode_path:
-            bytecode_path = self._base_path + _suffix_list(imp.PY_COMPILED)[0]
+    def set_data(self, path, data):
+        """Write bytes data to a file."""
+        parent, _, filename = path.rpartition(path_sep)
+        path_parts = []
+        # Figure out what directories are missing.
+        while parent and not _path_isdir(parent):
+            parent, _, part = parent.rpartition(path_sep)
+            path_parts.append(part)
+        # Create needed directories.
+        for part in reversed(path_parts):
+            parent = _path_join(parent, part)
+            try:
+                _os.mkdir(parent)
+            except OSError as exc:
+                # Probably another Python process already created the dir.
+                if exc.errno == errno.EEXIST:
+                    continue
+                else:
+                    raise
+            except IOError as exc:
+                # If can't get proper access, then just forget about writing
+                # the data.
+                if exc.errno == errno.EACCES:
+                    return
+                else:
+                    raise
         try:
-            # Assuming bytes.
-            with _closing(_io.FileIO(bytecode_path, 'w')) as bytecode_file:
-                bytecode_file.write(data)
-                return True
+            with _io.FileIO(path, 'wb') as file:
+                file.write(data)
         except IOError as exc:
+            # Don't worry if you can't write bytecode.
             if exc.errno == errno.EACCES:
-                return False
+                return
             else:
                 raise
+
+
+class _SourcelessFileLoader(_FileLoader, _LoaderBasics):
+
+    """Loader which handles sourceless file imports."""
+
+    def load_module(self, fullname):
+        return self._load_module(fullname, sourceless=True)
+
+    def get_code(self, fullname):
+        path = self.get_filename(fullname)
+        data = self.get_data(path)
+        bytes_data = self._bytes_from_bytecode(fullname, data, None)
+        found = marshal.loads(bytes_data)
+        if isinstance(found, code_type):
+            return found
+        else:
+            raise ImportError("Non-code object in {}".format(path))
+
+    def get_source(self, fullname):
+        """Return None as there is no source code."""
+        return None
 
 
 class _ExtensionFileLoader:
@@ -547,7 +533,7 @@ class _ExtensionFileLoader:
 
     """
 
-    def __init__(self, name, path, is_pkg):
+    def __init__(self, name, path):
         """Initialize the loader.
 
         If is_pkg is True then an exception is raised as extension modules
@@ -556,8 +542,6 @@ class _ExtensionFileLoader:
         """
         self._name = name
         self._path = path
-        if is_pkg:
-            raise ValueError("extension modules cannot be packages")
 
     @_check_name
     @set_package
@@ -655,147 +639,88 @@ class PathFinder:
             return None
 
 
-class _ChainedFinder:
-
-    """Finder that sequentially calls other finders."""
-
-    def __init__(self, *finders):
-        self._finders = finders
-
-    def find_module(self, fullname, path=None):
-        for finder in self._finders:
-            result = finder.find_module(fullname, path)
-            if result:
-                return result
-        else:
-            return None
-
-
 class _FileFinder:
 
-    """Base class for file finders.
+    """File-based finder.
 
-    Subclasses are expected to define the following attributes:
-
-        * _suffixes
-            Sequence of file suffixes whose order will be followed.
-
-        * _possible_package
-            True if importer should check for packages.
-
-        * _loader
-            A callable that takes the module name, a file path, and whether
-            the path points to a package and returns a loader for the module
-            found at that path.
+    Constructor takes a list of objects detailing what file extensions their
+    loader supports along with whether it can be used for a package.
 
     """
 
-    def __init__(self, path_entry):
-        """Initialize an importer for the passed-in sys.path entry (which is
-        assumed to have already been verified as an existing directory).
+    def __init__(self, path, *details):
+        """Initialize with finder details."""
+        packages = []
+        modules = []
+        for detail in details:
+            modules.extend((suffix, detail.loader) for suffix in detail.suffixes)
+            if detail.supports_packages:
+                packages.extend((suffix, detail.loader)
+                                for suffix in detail.suffixes)
+        self.packages = packages
+        self.modules = modules
+        self.path = path
 
-        Can be used as an entry on sys.path_hook.
-
-        """
-        absolute_path = _path_absolute(path_entry)
-        if not _path_isdir(absolute_path):
-            raise ImportError("only directories are supported")
-        self._path_entry = absolute_path
-
-    def find_module(self, fullname, path=None):
+    def find_module(self, fullname):
+        """Try to find a loader for the specified module."""
         tail_module = fullname.rpartition('.')[2]
-        package_directory = None
-        if self._possible_package:
-            for ext in self._suffixes:
-                package_directory = _path_join(self._path_entry, tail_module)
-                init_filename = '__init__' + ext
-                package_init = _path_join(package_directory, init_filename)
-                if (_path_isfile(package_init) and
-                        _case_ok(self._path_entry, tail_module) and
-                        _case_ok(package_directory, init_filename)):
-                    return self._loader(fullname, package_init, True)
-        for ext in self._suffixes:
-            file_name = tail_module + ext
-            file_path = _path_join(self._path_entry, file_name)
-            if (_path_isfile(file_path) and
-                    _case_ok(self._path_entry, file_name)):
-                return self._loader(fullname, file_path, False)
-        else:
-            # Raise a warning if it matches a directory w/o an __init__ file.
-            if (package_directory is not None and
-                    _path_isdir(package_directory) and
-                    _case_ok(self._path_entry, tail_module)):
-                _warnings.warn("Not importing directory %s: missing __init__"
-                                % package_directory, ImportWarning)
-            return None
+        base_path = _path_join(self.path, tail_module)
+        if _path_isdir(base_path) and _case_ok(self.path, tail_module):
+            for suffix, loader in self.packages:
+                init_filename = '__init__' + suffix
+                full_path = _path_join(base_path, init_filename)
+                if (_path_isfile(full_path) and
+                        _case_ok(base_path, init_filename)):
+                    return loader(fullname, full_path)
+            else:
+                msg = "Not importing directory {}: missing __init__"
+                _warnings.warn(msg.format(base_path), ImportWarning)
+        for suffix, loader in self.modules:
+            mod_filename = tail_module + suffix
+            full_path = _path_join(self.path, mod_filename)
+            if _path_isfile(full_path) and _case_ok(self.path, mod_filename):
+                return loader(fullname, full_path)
+        return None
+
+class _SourceFinderDetails:
+
+    loader = _SourceFileLoader
+    supports_packages = True
+
+    def __init__(self):
+        self.suffixes = _suffix_list(imp.PY_SOURCE)
+
+class _SourcelessFinderDetails:
+
+    loader = _SourcelessFileLoader
+    supports_packages = True
+
+    def __init__(self):
+        self.suffixes = _suffix_list(imp.PY_COMPILED)
 
 
-class _PyFileFinder(_FileFinder):
+class _ExtensionFinderDetails:
 
-    """Importer for source/bytecode files."""
+    loader = _ExtensionFileLoader
+    supports_packages = False
 
-    _possible_package = True
-    _loader = _PyFileLoader
-
-    def __init__(self, path_entry):
-        # Lack of imp during class creation means _suffixes is set here.
-        # Make sure that Python source files are listed first!  Needed for an
-        # optimization by the loader.
-        self._suffixes = _suffix_list(imp.PY_SOURCE)
-        super().__init__(path_entry)
-
-
-class _PyPycFileFinder(_PyFileFinder):
-
-    """Finder for source and bytecode files."""
-
-    _loader = _PyPycFileLoader
-
-    def __init__(self, path_entry):
-        super().__init__(path_entry)
-        self._suffixes += _suffix_list(imp.PY_COMPILED)
-
-
-
-
-class _ExtensionFileFinder(_FileFinder):
-
-    """Importer for extension files."""
-
-    _possible_package = False
-    _loader = _ExtensionFileLoader
-
-    def __init__(self, path_entry):
-        # Assigning to _suffixes here instead of at the class level because
-        # imp is not imported at the time of class creation.
-        self._suffixes = _suffix_list(imp.C_EXTENSION)
-        super().__init__(path_entry)
+    def __init__(self):
+        self.suffixes = _suffix_list(imp.C_EXTENSION)
 
 
 # Import itself ###############################################################
 
-def _chained_path_hook(*path_hooks):
-    """Create a closure which sequentially checks path hooks to see which ones
-    (if any) can work with a path."""
-    def path_hook(entry):
-        """Check to see if 'entry' matches any of the enclosed path hooks."""
-        finders = []
-        for hook in path_hooks:
-            try:
-                finder = hook(entry)
-            except ImportError:
-                continue
-            else:
-                finders.append(finder)
-        if not finders:
-            raise ImportError("no finder found")
-        else:
-            return _ChainedFinder(*finders)
-
-    return path_hook
+def _file_path_hook(path):
+    """If the path is a directory, return a file-based finder."""
+    if _path_isdir(path):
+        return _FileFinder(path, _ExtensionFinderDetails(),
+                           _SourceFinderDetails(),
+                           _SourcelessFinderDetails())
+    else:
+        raise ImportError("only directories are supported")
 
 
-_DEFAULT_PATH_HOOK = _chained_path_hook(_ExtensionFileFinder, _PyPycFileFinder)
+_DEFAULT_PATH_HOOK = _file_path_hook
 
 class _DefaultPathFinder(PathFinder):
 
@@ -832,6 +757,8 @@ class _ImportLockContext:
 
 
 _IMPLICIT_META_PATH = [BuiltinImporter, FrozenImporter, _DefaultPathFinder]
+
+_ERR_MSG = 'No module named {}'
 
 def _gcd_import(name, package=None, level=0):
     """Import and return the module based on its name, the package the call is
@@ -880,7 +807,11 @@ def _gcd_import(name, package=None, level=0):
                 _gcd_import(parent)
             # Backwards-compatibility; be nicer to skip the dict lookup.
             parent_module = sys.modules[parent]
-            path = parent_module.__path__
+            try:
+                path = parent_module.__path__
+            except AttributeError:
+                msg = (_ERR_MSG + '; {} is not a package').format(name, parent)
+                raise ImportError(msg)
         meta_path = sys.meta_path + _IMPLICIT_META_PATH
         for finder in meta_path:
             loader = finder.find_module(name, path)
@@ -888,7 +819,7 @@ def _gcd_import(name, package=None, level=0):
                 loader.load_module(name)
                 break
         else:
-            raise ImportError("No module named {0}".format(name))
+            raise ImportError(_ERR_MSG.format(name))
         # Backwards-compatibility; be nicer to skip the dict lookup.
         module = sys.modules[name]
         if parent:
@@ -918,13 +849,15 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
     import (e.g. ``from ..pkg import mod`` would have a 'level' of 2).
 
     """
+    if not hasattr(name, 'rpartition'):
+        raise TypeError("module name must be str, not {}".format(type(name)))
     if level == 0:
         module = _gcd_import(name)
     else:
-        # __package__ is not guaranteed to be defined.
-        try:
-            package = globals['__package__']
-        except KeyError:
+        # __package__ is not guaranteed to be defined or could be set to None
+        # to represent that it's proper value is unknown
+        package = globals.get('__package__')
+        if package is None:
             package = globals['__name__']
             if '__path__' not in globals:
                 package = package.rpartition('.')[0]
@@ -944,6 +877,7 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
         # If a package was imported, try to import stuff from fromlist.
         if hasattr(module, '__path__'):
             if '*' in fromlist and hasattr(module, '__all__'):
+                fromlist = list(fromlist)
                 fromlist.remove('*')
                 fromlist.extend(module.__all__)
             for x in (y for y in fromlist if not hasattr(module,y)):

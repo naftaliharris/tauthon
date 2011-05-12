@@ -6,6 +6,10 @@
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 .. Documentations stolen from comments in file.
 
+**Source code:** :source:`Lib/wave.py`
+
+--------------
+
 The :mod:`wave` module provides a convenient interface to the WAV sound format.
 It does not support compression/decompression, but it does support mono/stereo.
 
@@ -161,6 +165,10 @@ Wave_write objects, as returned by :func:`.open`, have the following methods:
 .. method:: Wave_write.setframerate(n)
 
    Set the frame rate to *n*.
+
+   .. versionchanged:: 3.2
+      A non-integral input to this method is rounded to the nearest
+      integer.
 
 
 .. method:: Wave_write.setnframes(n)
