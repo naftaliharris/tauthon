@@ -34,7 +34,6 @@ MAINCC=		@MAINCC@
 LINKCC=		@LINKCC@
 AR=		@AR@
 RANLIB=		@RANLIB@
-SVNVERSION=	@SVNVERSION@
 SOABI=		@SOABI@
 LDVERSION=	@LDVERSION@
 HGVERSION=	@HGVERSION@
@@ -240,14 +239,13 @@ POBJS=		\
 		Parser/listnode.o \
 		Parser/node.o \
 		Parser/parser.o \
-		Parser/parsetok.o \
 		Parser/bitset.o \
 		Parser/metagrammar.o \
 		Parser/firstsets.o \
 		Parser/grammar.o \
 		Parser/pgen.o
 
-PARSER_OBJS=	$(POBJS) Parser/myreadline.o Parser/tokenizer.o
+PARSER_OBJS=	$(POBJS) Parser/myreadline.o Parser/parsetok.o Parser/tokenizer.o
 
 PGOBJS=		\
 		Objects/obmalloc.o \
@@ -256,10 +254,12 @@ PGOBJS=		\
 		Python/pyctype.o \
 		Parser/tokenizer_pgen.o \
 		Parser/printgrammar.o \
+		Parser/parsetok_pgen.o \
 		Parser/pgenmain.o
 
 PARSER_HEADERS= \
 		Parser/parser.h \
+		Include/parsetok.h \
 		Parser/tokenizer.h
 
 PGENOBJS=	$(PGENMAIN) $(POBJS) $(PGOBJS)
@@ -554,7 +554,6 @@ Modules/getbuildinfo.o: $(PARSER_OBJS) \
 		$(MODOBJS) \
 		$(srcdir)/Modules/getbuildinfo.c
 	$(CC) -c $(PY_CORE_CFLAGS) \
-	      -DSVNVERSION="\"`LC_ALL=C $(SVNVERSION)`\"" \
 	      -DHGVERSION="\"`LC_ALL=C $(HGVERSION)`\"" \
 	      -DHGTAG="\"`LC_ALL=C $(HGTAG)`\"" \
 	      -DHGBRANCH="\"`LC_ALL=C $(HGBRANCH)`\"" \
@@ -599,6 +598,7 @@ Parser/grammar.o:	$(srcdir)/Parser/grammar.c \
 Parser/metagrammar.o:	$(srcdir)/Parser/metagrammar.c
 
 Parser/tokenizer_pgen.o:	$(srcdir)/Parser/tokenizer.c
+Parser/parsetok_pgen.o:	$(srcdir)/Parser/parsetok.c
 
 Parser/pgenmain.o:	$(srcdir)/Include/parsetok.h
 
@@ -706,7 +706,6 @@ PYTHON_HEADERS= \
 		Include/objimpl.h \
 		Include/opcode.h \
 		Include/osdefs.h \
-		Include/parsetok.h \
 		Include/patchlevel.h \
 		Include/pgen.h \
 		Include/pgenheaders.h \
@@ -912,7 +911,7 @@ LIBSUBDIRS=	tkinter tkinter/test tkinter/test/test_tkinter \
                 tkinter/test/test_ttk site-packages test \
 		test/decimaltestdata test/xmltestdata test/subprocessdata \
 		test/tracedmodules test/encoded_modules \
-		concurrent concurrent/futures encodings \
+		collections concurrent concurrent/futures encodings \
 		email email/mime email/test email/test/data \
 		html json test/json_tests http dbm xmlrpc \
 		sqlite3 sqlite3/test \
@@ -1279,7 +1278,6 @@ smelly: all
 # Find files with funny names
 funny:
 	find $(DISTDIRS) \
-		-name .svn -prune \
 		-o -type d \
 		-o -name '*.[chs]' \
 		-o -name '*.py' \
