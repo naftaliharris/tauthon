@@ -303,6 +303,7 @@ class SysModuleTest(unittest.TestCase):
             self.assertEqual(sys.getdlopenflags(), oldflags+1)
             sys.setdlopenflags(oldflags)
 
+    @test.support.refcount_test
     def test_refcount(self):
         # n here must be a global in order for this test to pass while
         # tracing with a python function.  Tracing calls PyFrame_FastToLocals
@@ -473,6 +474,14 @@ class SysModuleTest(unittest.TestCase):
         if not sys.platform.startswith('win'):
             self.assertIsInstance(sys.abiflags, str)
 
+    @unittest.skipUnless(hasattr(sys, 'thread_info'),
+                         'Threading required for this test.')
+    def test_thread_info(self):
+        info = sys.thread_info
+        self.assertEqual(len(info), 3)
+        self.assertIn(info.name, ('nt', 'os2', 'pthread', 'solaris', None))
+        self.assertIn(info.lock, ('semaphore', 'mutex+cond', None))
+
     def test_43581(self):
         # Can't use sys.stdout, as this is a StringIO object when
         # the test runs under regrtest.
@@ -500,7 +509,7 @@ class SysModuleTest(unittest.TestCase):
 
     def test_sys_flags(self):
         self.assertTrue(sys.flags)
-        attrs = ("debug", "division_warning",
+        attrs = ("debug",
                  "inspect", "interactive", "optimize", "dont_write_bytecode",
                  "no_user_site", "no_site", "ignore_environment", "verbose",
                  "bytes_warning", "quiet")
