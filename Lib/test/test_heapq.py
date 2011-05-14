@@ -319,23 +319,21 @@ def L(seqn):
     return chain(map(lambda x:x, R(Ig(G(seqn)))))
 
 
-@skipUnless(c_heapq, 'requires _heapq')
 class TestErrorHandling(TestCase):
-    # only for C implementation
-    module = c_heapq
+    module = None
 
     def test_non_sequence(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
         for f in (self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10, 10)
 
     def test_len_only(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, LenOnly())
+            self.assertRaises((TypeError, AttributeError), f, LenOnly())
         for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, LenOnly(), 10)
+            self.assertRaises((TypeError, AttributeError), f, LenOnly(), 10)
         for f in (self.module.nlargest, self.module.nsmallest):
             self.assertRaises(TypeError, f, 2, LenOnly())
 
@@ -360,7 +358,7 @@ class TestErrorHandling(TestCase):
         for f in (self.module.heapify, self.module.heappop,
                   self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
 
     def test_iterable_args(self):
         for f in (self.module.nlargest, self.module.nsmallest):
@@ -373,11 +371,20 @@ class TestErrorHandling(TestCase):
                 self.assertRaises(ZeroDivisionError, f, 2, E(s))
 
 
+class TestErrorHandlingPython(TestErrorHandling):
+    module = py_heapq
+
+@skipUnless(c_heapq, 'requires _heapq')
+class TestErrorHandlingC(TestErrorHandling):
+    module = c_heapq
+
+
 #==============================================================================
 
 
 def test_main(verbose=None):
-    test_classes = [TestModules, TestHeapPython, TestHeapC, TestErrorHandling]
+    test_classes = [TestModules, TestHeapPython, TestHeapC,
+                    TestErrorHandlingPython, TestErrorHandlingC]
     support.run_unittest(*test_classes)
 
     # verify reference counting
