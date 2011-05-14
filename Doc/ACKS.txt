@@ -120,6 +120,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Robert Lehmann
    * Marc-André Lemburg
    * Ross Light
+   * Gediminas Liktaras
    * Ulf A. Lindgren
    * Everett Lipman
    * Mirko Liss
@@ -213,6 +214,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Mats Wichmann
    * Gerry Wiener
    * Timothy Wild
+   * Paul Winkler
    * Collin Winter
    * Blake Winton
    * Dan Wolfe
