@@ -7,6 +7,9 @@
 .. sectionauthor:: Paul Prescod <paul@prescod.net>
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
 
+**Source code:** :source:`Lib/xml/dom/minidom.py`
+
+--------------
 
 :mod:`xml.dom.minidom` is a light-weight implementation of the Document Object
 Model interface.  It is intended to be simpler than the full DOM and also
@@ -78,22 +81,12 @@ document: the one that holds all others.  Here is an example program::
    dom3 = parseString("<myxml>Some data</myxml>")
    assert dom3.documentElement.tagName == "myxml"
 
-When you are finished with a DOM, you should clean it up.  This is necessary
-because some versions of Python do not support garbage collection of objects
-that refer to each other in a cycle.  Until this restriction is removed from all
-versions of Python, it is safest to write your code as if cycles would not be
-cleaned up.
-
-The way to clean up a DOM is to call its :meth:`unlink` method::
-
-   dom1.unlink()
-   dom2.unlink()
-   dom3.unlink()
-
-:meth:`unlink` is a :mod:`xml.dom.minidom`\ -specific extension to the DOM API.
-After calling :meth:`unlink` on a node, the node and its descendants are
-essentially useless.
-
+When you are finished with a DOM tree, you may optionally call the
+:meth:`unlink` method to encourage early cleanup of the now-unneeded
+objects.  :meth:`unlink` is a :mod:`xml.dom.minidom`\ -specific
+extension to the DOM API that renders the node and its descendants are
+essentially useless.  Otherwise, Python's garbage collector will
+eventually take care of the objects in the tree.
 
 .. seealso::
 
@@ -120,6 +113,13 @@ module documentation.  This section lists the differences between the API and
    to be called on the :class:`Document` object, but may be called on child nodes
    to discard children of that node.
 
+   You can avoid calling this method explicitly by using the :keyword:`with`
+   statement. The following code will automatically unlink *dom* when the
+   :keyword:`with` block is exited::
+
+      with xml.dom.minidom.parse(datasource) as dom:
+          ... # Work with dom.
+
 
 .. method:: Node.writexml(writer, indent="", addindent="", newl="")
 
@@ -135,18 +135,20 @@ module documentation.  This section lists the differences between the API and
 
 .. method:: Node.toxml(encoding=None)
 
-   Return the XML that the DOM represents as a string.
+   Return a string or byte string containing the XML represented by
+   the DOM node.
 
-   With no argument, the XML header does not specify an encoding, and the result is
-   Unicode string if the default encoding cannot represent all characters in the
-   document. Encoding this string in an encoding other than UTF-8 is likely
-   incorrect, since UTF-8 is the default encoding of XML.
+   With an explicit *encoding* [1]_ argument, the result is a byte
+   string in the specified encoding.  It is recommended that you
+   always specify an encoding; you may use any encoding you like, but
+   an argument of "utf-8" is the most common choice, avoiding
+   :exc:`UnicodeError` exceptions in case of unrepresentable text
+   data.
 
-   With an explicit *encoding* [1]_ argument, the result is a byte string in the
-   specified encoding. It is recommended that this argument is always specified. To
-   avoid :exc:`UnicodeError` exceptions in case of unrepresentable text data, the
-   encoding argument should be specified as "utf-8".
-
+   With no *encoding* argument, the result is a Unicode string, and the
+   XML declaration in the resulting string does not specify an
+   encoding. Encoding this string in an encoding other than UTF-8 is
+   likely incorrect, since UTF-8 is the default encoding of XML.
 
 .. method:: Node.toprettyxml(indent="", newl="", encoding="")
 
@@ -154,7 +156,8 @@ module documentation.  This section lists the differences between the API and
    indentation string and defaults to a tabulator; *newl* specifies the string
    emitted at the end of each line and defaults to ``\n``.
 
-   There's also an *encoding* argument; see :meth:`toxml`.
+   The *encoding* argument behaves like the corresponding argument of
+   :meth:`toxml`.
 
 
 .. _dom-example:
@@ -239,7 +242,9 @@ utility to most DOM users.
 
 .. rubric:: Footnotes
 
-.. [#] The encoding string included in XML output should conform to the
-   appropriate standards. For example, "UTF-8" is valid, but "UTF8" is
-   not. See http://www.w3.org/TR/2006/REC-xml11-20060816/#NT-EncodingDecl
+.. [#] The encoding name included in the XML output should conform to
+   the appropriate standards. For example, "UTF-8" is valid, but
+   "UTF8" is not valid in an XML document's declaration, even though
+   Python accepts it as an encoding name.
+   See http://www.w3.org/TR/2006/REC-xml11-20060816/#NT-EncodingDecl
    and http://www.iana.org/assignments/character-sets .

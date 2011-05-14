@@ -6,6 +6,9 @@
 .. module:: warnings
    :synopsis: Issue warning messages and control their disposition.
 
+**Source code:** :source:`Lib/warnings.py`
+
+--------------
 
 Warning messages are typically issued in situations where it is useful to alert
 the user of some condition in a program, where that condition (normally) doesn't
@@ -13,7 +16,7 @@ warrant raising an exception and terminating the program.  For example, one
 might want to issue a warning when a program uses an obsolete module.
 
 Python programmers issue warnings by calling the :func:`warn` function defined
-in this module.  (C programmers use :cfunc:`PyErr_WarnEx`; see
+in this module.  (C programmers use :c:func:`PyErr_WarnEx`; see
 :ref:`exceptionhandling` for details).
 
 Warning messages are normally written to ``sys.stderr``, but their disposition
@@ -57,7 +60,7 @@ following warnings category classes are currently defined:
 | :exc:`UserWarning`               | The default category for :func:`warn`.        |
 +----------------------------------+-----------------------------------------------+
 | :exc:`DeprecationWarning`        | Base category for warnings about deprecated   |
-|                                  | features.                                     |
+|                                  | features (ignored by default).                |
 +----------------------------------+-----------------------------------------------+
 | :exc:`SyntaxWarning`             | Base category for warnings about dubious      |
 |                                  | syntactic features.                           |
@@ -81,6 +84,9 @@ following warnings category classes are currently defined:
 +----------------------------------+-----------------------------------------------+
 | :exc:`BytesWarning`              | Base category for warnings related to         |
 |                                  | :class:`bytes` and :class:`buffer`.           |
++----------------------------------+-----------------------------------------------+
+| :exc:`ResourceWarning`           | Base category for warnings related to         |
+|                                  | resource usage.                               |
 +----------------------------------+-----------------------------------------------+
 
 
@@ -150,14 +156,6 @@ interpreter command line.  The interpreter saves the arguments for all
 :mod:`warnings` module parses these when it is first imported (invalid options
 are ignored, after printing a message to ``sys.stderr``).
 
-The warnings that are ignored by default may be enabled by passing :option:`-Wd`
-to the interpreter. This enables default handling for all warnings, including
-those that are normally ignored by default. This is particular useful for
-enabling ImportWarning when debugging problems importing a developed package.
-ImportWarning can also be enabled explicitly in Python code using::
-
-   warnings.simplefilter('default', ImportWarning)
-
 
 Default Warning Filters
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -166,11 +164,18 @@ By default, Python installs several warning filters, which can be overridden by
 the command-line options passed to :option:`-W` and calls to
 :func:`filterwarnings`.
 
-* :exc:`PendingDeprecationWarning`, and :exc:`ImportWarning` are ignored.
+* :exc:`DeprecationWarning` and :exc:`PendingDeprecationWarning`, and
+  :exc:`ImportWarning` are ignored.
 
 * :exc:`BytesWarning` is ignored unless the :option:`-b` option is given once or
   twice; in this case this warning is either printed (``-b``) or turned into an
   exception (``-bb``).
+
+* :exc:`ResourceWarning` is ignored unless Python was built in debug mode.
+
+.. versionchanged:: 3.2
+   :exc:`DeprecationWarning` is now ignored by default in addition to
+   :exc:`PendingDeprecationWarning`.
 
 
 .. _warning-suppress:
@@ -194,7 +199,10 @@ the warning using the :class:`catch_warnings` context manager::
 While within the context manager all warnings will simply be ignored. This
 allows you to use known-deprecated code without having to see the warning while
 not suppressing the warning for other code that might not be aware of its use
-of deprecated code.
+of deprecated code.  Note: this can only be guaranteed in a single-threaded
+application. If two or more threads use the :class:`catch_warnings` context
+manager at the same time, the behavior is undefined.
+
 
 
 .. _warning-testing:
@@ -232,7 +240,9 @@ Once the context manager exits, the warnings filter is restored to its state
 when the context was entered. This prevents tests from changing the warnings
 filter in unexpected ways between tests and leading to indeterminate test
 results. The :func:`showwarning` function in the module is also restored to
-its original value.
+its original value.  Note: this can only be guaranteed in a single-threaded
+application. If two or more threads use the :class:`catch_warnings` context
+manager at the same time, the behavior is undefined.
 
 When testing multiple operations that raise the same kind of warning, it
 is important to test them in a manner that confirms each operation is raising
@@ -240,6 +250,42 @@ a new warning (e.g. set warnings to be raised as exceptions and check the
 operations raise exceptions, check that the length of the warning list
 continues to increase after each operation, or else delete the previous
 entries from the warnings list before each new operation).
+
+
+.. _warning-ignored:
+
+Updating Code For New Versions of Python
+----------------------------------------
+
+Warnings that are only of interest to the developer are ignored by default. As
+such you should make sure to test your code with typically ignored warnings
+made visible. You can do this from the command-line by passing :option:`-Wd`
+to the interpreter (this is shorthand for :option:`-W default`).  This enables
+default handling for all warnings, including those that are ignored by default.
+To change what action is taken for encountered warnings you simply change what
+argument is passed to :option:`-W`, e.g. :option:`-W error`. See the
+:option:`-W` flag for more details on what is possible.
+
+To programmatically do the same as :option:`-Wd`, use::
+
+  warnings.simplefilter('default')
+
+Make sure to execute this code as soon as possible. This prevents the
+registering of what warnings have been raised from unexpectedly influencing how
+future warnings are treated.
+
+Having certain warnings ignored by default is done to prevent a user from
+seeing warnings that are only of interest to the developer. As you do not
+necessarily have control over what interpreter a user uses to run their code,
+it is possible that a new version of Python will be released between your
+release cycles.  The new interpreter release could trigger new warnings in your
+code that were not there in an older interpreter, e.g.
+:exc:`DeprecationWarning` for a module that you are using. While you as a
+developer want to be notified that your code is using a deprecated module, to a
+user this information is essentially noise and provides no benefit to them.
+
+The :mod:`unittest` module has been also updated to use the ``'default'``
+filter while running tests.
 
 
 .. _warning-functions:
@@ -351,3 +397,11 @@ Available Context Managers
     module returned when you import :mod:`warnings` whose filter will be
     protected. This argument exists primarily for testing the :mod:`warnings`
     module itself.
+
+    .. note::
+
+        The :class:`catch_warnings` manager works by replacing and
+        then later restoring the module's
+        :func:`showwarning` function and internal list of filter
+        specifications.  This means the context manager is modifying
+        global state and therefore is not thread-safe.
