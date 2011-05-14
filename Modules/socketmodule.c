@@ -155,7 +155,7 @@ shutdown(how) -- shut down traffic in one or both directions\n\
 #endif
 
 #ifdef HAVE_GETHOSTBYNAME_R
-# if defined(_AIX) || defined(__osf__)
+# if defined(_AIX)
 #  define HAVE_GETHOSTBYNAME_R_3_ARG
 # elif defined(__sun) || defined(__sgi)
 #  define HAVE_GETHOSTBYNAME_R_5_ARG
@@ -3149,6 +3149,37 @@ PyDoc_STRVAR(gethostname_doc,
 \n\
 Return the current host name.");
 
+#ifdef HAVE_SETHOSTNAME
+PyDoc_STRVAR(sethostname_doc,
+"sethostname(name)\n\n\
+Sets the hostname to name.");
+
+static PyObject *
+socket_sethostname(PyObject *self, PyObject *args)
+{
+    PyObject *hnobj;
+    Py_buffer buf;
+    int res, flag = 0;
+
+    if (!PyArg_ParseTuple(args, "S:sethostname", &hnobj)) {
+        PyErr_Clear();
+        if (!PyArg_ParseTuple(args, "O&:sethostname",
+                PyUnicode_FSConverter, &hnobj))
+            return NULL;
+        flag = 1;
+    }
+    res = PyObject_GetBuffer(hnobj, &buf, PyBUF_SIMPLE);
+    if (!res) {
+        res = sethostname(buf.buf, buf.len);
+        PyBuffer_Release(&buf);
+    }
+    if (flag)
+        Py_DECREF(hnobj);
+    if (res)
+        return set_error();
+    Py_RETURN_NONE;
+}
+#endif
 
 /* Python interface to gethostbyname(name). */
 
@@ -3421,7 +3452,7 @@ socket_gethostbyaddr(PyObject *self, PyObject *args)
         goto finally;
     af = sa->sa_family;
     ap = NULL;
-    al = 0;
+    /* al = 0; */
     switch (af) {
     case AF_INET:
         ap = (char *)&((struct sockaddr_in *)sa)->sin_addr;
@@ -4247,6 +4278,10 @@ static PyMethodDef socket_methods[] = {
      METH_VARARGS, gethostbyaddr_doc},
     {"gethostname",             socket_gethostname,
      METH_NOARGS,  gethostname_doc},
+#ifdef HAVE_SETHOSTNAME
+    {"sethostname",             socket_sethostname,
+     METH_VARARGS,  sethostname_doc},
+#endif
     {"getservbyname",           socket_getservbyname,
      METH_VARARGS, getservbyname_doc},
     {"getservbyport",           socket_getservbyport,
