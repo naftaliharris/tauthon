@@ -197,7 +197,7 @@ The following exceptions are the exceptions that are usually raised.
    Raised when an operation runs out of memory but the situation may still be
    rescued (by deleting some objects).  The associated value is a string indicating
    what kind of (internal) operation ran out of memory. Note that because of the
-   underlying memory management architecture (C's :cfunc:`malloc` function), the
+   underlying memory management architecture (C's :c:func:`malloc` function), the
    interpreter may not always be able to completely recover from this situation; it
    nevertheless raises an exception so that a stack traceback can be printed, in
    case a run-away program was the cause.
@@ -224,8 +224,8 @@ The following exceptions are the exceptions that are usually raised.
    This exception is derived from :exc:`EnvironmentError`.  It is raised when a
    function returns a system-related error (not for illegal argument types or
    other incidental errors).  The :attr:`errno` attribute is a numeric error
-   code from :cdata:`errno`, and the :attr:`strerror` attribute is the
-   corresponding string, as would be printed by the C function :cfunc:`perror`.
+   code from :c:data:`errno`, and the :attr:`strerror` attribute is the
+   corresponding string, as would be printed by the C function :c:func:`perror`.
    See the module :mod:`errno`, which contains names for the error codes defined
    by the underlying operating system.
 
@@ -261,8 +261,8 @@ The following exceptions are the exceptions that are usually raised.
 
 .. exception:: StopIteration
 
-   Raised by builtin :func:`next` and an :term:`iterator`\'s :meth:`__next__`
-   method to signal that there are no further values.
+   Raised by built-in function :func:`next` and an :term:`iterator`\'s
+   :meth:`__next__` method to signal that there are no further values.
 
 
 .. exception:: SyntaxError
@@ -307,7 +307,7 @@ The following exceptions are the exceptions that are usually raised.
    This exception is raised by the :func:`sys.exit` function.  When it is not
    handled, the Python interpreter exits; no stack traceback is printed.  If the
    associated value is an integer, it specifies the system exit status (passed
-   to C's :cfunc:`exit` function); if it is ``None``, the exit status is zero;
+   to C's :c:func:`exit` function); if it is ``None``, the exit status is zero;
    if it has another type (such as a string), the object's value is printed and
    the exit status is one.
 
@@ -380,9 +380,9 @@ The following exceptions are the exceptions that are usually raised.
 .. exception:: WindowsError
 
    Raised when a Windows-specific error occurs or when the error number does not
-   correspond to an :cdata:`errno` value.  The :attr:`winerror` and
+   correspond to an :c:data:`errno` value.  The :attr:`winerror` and
    :attr:`strerror` values are created from the return values of the
-   :cfunc:`GetLastError` and :cfunc:`FormatMessage` functions from the Windows
+   :c:func:`GetLastError` and :c:func:`FormatMessage` functions from the Windows
    Platform API. The :attr:`errno` value maps the :attr:`winerror` value to
    corresponding ``errno.h`` values. This is a subclass of :exc:`OSError`.
 
@@ -442,9 +442,19 @@ module for more information.
 
    Base class for warnings related to Unicode.
 
+
 .. exception:: BytesWarning
 
    Base class for warnings related to :class:`bytes` and :class:`buffer`.
+
+
+.. exception:: ResourceWarning
+
+   Base class for warnings related to resource usage.
+
+   .. versionadded:: 3.2
+
+
 
 Exception hierarchy
 -------------------

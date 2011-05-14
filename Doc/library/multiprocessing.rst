@@ -16,7 +16,7 @@ to this, the :mod:`multiprocessing` module allows the programmer to fully
 leverage multiple processors on a given machine.  It runs on both Unix and
 Windows.
 
-.. warning::
+.. note::
 
     Some of this package's functionality requires a functioning shared semaphore
     implementation on the host operating system. Without one, the
@@ -120,7 +120,9 @@ processes:
           print(q.get())    # prints "[42, None, 'hello']"
           p.join()
 
-   Queues are thread and process safe.
+   Queues are thread and process safe, but note that they must never
+   be instantiated as a side effect of importing a module: this can lead
+   to a deadlock!  (see :ref:`threaded-imports`)
 
 **Pipes**
 
@@ -406,7 +408,7 @@ The :mod:`multiprocessing` package mostly replicates the API of the
    .. method:: terminate()
 
       Terminate the process.  On Unix this is done using the ``SIGTERM`` signal;
-      on Windows :cfunc:`TerminateProcess` is used.  Note that exit handlers and
+      on Windows :c:func:`TerminateProcess` is used.  Note that exit handlers and
       finally clauses, etc., will not be executed.
 
       Note that descendant processes of the process will *not* be terminated --
@@ -420,9 +422,9 @@ The :mod:`multiprocessing` package mostly replicates the API of the
          acquired a lock or semaphore etc. then terminating it is liable to
          cause other processes to deadlock.
 
-   Note that the :meth:`start`, :meth:`join`, :meth:`is_alive` and
-   :attr:`exit_code` methods should only be called by the process that created
-   the process object.
+   Note that the :meth:`start`, :meth:`join`, :meth:`is_alive`,
+   :meth:`terminate` and :attr:`exit_code` methods should only be called by
+   the process that created the process object.
 
    Example usage of some of the methods of :class:`Process`:
 
@@ -1130,7 +1132,7 @@ their parent process exits.  The manager classes are defined in the
 
    Create a BaseManager object.
 
-   Once created one should call :meth:`start` or :meth:`serve_forever` to ensure
+   Once created one should call :meth:`start` or ``get_server().serve_forever()`` to ensure
    that the manager object refers to a started manager process.
 
    *address* is the address on which the manager process listens for new
@@ -1145,10 +1147,6 @@ their parent process exits.  The manager classes are defined in the
 
       Start a subprocess to start the manager.  If *initializer* is not ``None``
       then the subprocess will call ``initializer(*initargs)`` when it starts.
-
-   .. method:: serve_forever()
-
-      Run the server in the current process.
 
    .. method:: get_server()
 
@@ -1552,7 +1550,7 @@ Process Pools
 One can create a pool of processes which will carry out tasks submitted to it
 with the :class:`Pool` class.
 
-.. class:: multiprocessing.Pool([processes[, initializer[, initargs]]])
+.. class:: multiprocessing.Pool([processes[, initializer[, initargs[, maxtasksperchild]]]])
 
    A process pool object which controls a pool of worker processes to which jobs
    can be submitted.  It supports asynchronous results with timeouts and
@@ -1563,6 +1561,22 @@ with the :class:`Pool` class.
    *initializer* is not ``None`` then each worker process will call
    ``initializer(*initargs)`` when it starts.
 
+   .. versionadded:: 3.2
+      *maxtasksperchild* is the number of tasks a worker process can complete
+      before it will exit and be replaced with a fresh worker process, to enable
+      unused resources to be freed. The default *maxtasksperchild* is None, which
+      means worker processes will live as long as the pool.
+
+   .. note::
+
+      Worker processes within a :class:`Pool` typically live for the complete
+      duration of the Pool's work queue. A frequent pattern found in other
+      systems (such as Apache, mod_wsgi, etc) to free resources held by
+      workers is to allow a worker within a pool to complete only a set
+      amount of work before being exiting, being cleaned up and a new
+      process spawned to replace the old one. The *maxtasksperchild*
+      argument to the :class:`Pool` exposes this ability to the end user.
+
    .. method:: apply(func[, args[, kwds]])
 
       Call *func* with arguments *args* and keyword arguments *kwds*.  It blocks
@@ -1570,14 +1584,21 @@ with the :class:`Pool` class.
       suited for performing work in parallel. Additionally, the passed in
       function is only executed in one of the workers of the pool.
 
-   .. method:: apply_async(func[, args[, kwds[, callback]]])
+   .. method:: apply_async(func[, args[, kwds[, callback[, error_callback]]]])
 
       A variant of the :meth:`apply` method which returns a result object.
 
       If *callback* is specified then it should be a callable which accepts a
       single argument.  When the result becomes ready *callback* is applied to
-      it (unless the call failed).  *callback* should complete immediately since
-      otherwise the thread which handles the results will get blocked.
+      it, that is unless the call failed, in which case the *error_callback*
+      is applied instead
+
+      If *error_callback* is specified then it should be a callable which
+      accepts a single argument.  If the target function fails, then
+      the *error_callback* is called with the exception instance.
+
+      Callbacks should complete immediately since otherwise the thread which
+      handles the results will get blocked.
 
    .. method:: map(func, iterable[, chunksize])
 
@@ -1594,8 +1615,15 @@ with the :class:`Pool` class.
 
       If *callback* is specified then it should be a callable which accepts a
       single argument.  When the result becomes ready *callback* is applied to
-      it (unless the call failed).  *callback* should complete immediately since
-      otherwise the thread which handles the results will get blocked.
+      it, that is unless the call failed, in which case the *error_callback*
+      is applied instead
+
+      If *error_callback* is specified then it should be a callable which
+      accepts a single argument.  If the target function fails, then
+      the *error_callback* is called with the exception instance.
+
+      Callbacks should complete immediately since otherwise the thread which
+      handles the results will get blocked.
 
    .. method:: imap(func, iterable[, chunksize])
 

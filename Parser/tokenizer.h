@@ -53,15 +53,16 @@ struct tok_state {
     int cont_line;          /* whether we are in a continuation line. */
     const char* line_start;     /* pointer to start of current line */
 #ifndef PGEN
-    PyObject *decoding_readline; /* codecs.open(...).readline */
+    PyObject *decoding_readline; /* open(...).readline */
     PyObject *decoding_buffer;
 #endif
     const char* enc;        /* Encoding for the current str. */
     const char* str;
+    const char* input; /* Tokenizer's newline translated copy of the string. */
 };
 
-extern struct tok_state *PyTokenizer_FromString(const char *);
-extern struct tok_state *PyTokenizer_FromUTF8(const char *);
+extern struct tok_state *PyTokenizer_FromString(const char *, int);
+extern struct tok_state *PyTokenizer_FromUTF8(const char *, int);
 extern struct tok_state *PyTokenizer_FromFile(FILE *, char*,
                                               char *, char *);
 extern void PyTokenizer_Free(struct tok_state *);
