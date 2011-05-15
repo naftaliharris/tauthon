@@ -10,6 +10,7 @@
 #include "Python.h"
 #include <float.h>
 #include "structmember.h"
+#include "datetime.h"
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -224,7 +225,7 @@ test_lazy_hash_inheritance(PyObject* self)
 {
     PyTypeObject *type;
     PyObject *obj;
-    long hash;
+    Py_hash_t hash;
 
     type = &_HashInheritanceTester_Type;
 
@@ -447,6 +448,336 @@ test_longlong_api(PyObject* self, PyObject *args)
 #undef F_U_TO_PY
 #undef F_PY_TO_U
 
+/* Test the PyLong_AsLongAndOverflow API. General conversion to PY_LONG
+   is tested by test_long_api_inner. This test will concentrate on proper
+   handling of overflow.
+*/
+
+static PyObject *
+test_long_and_overflow(PyObject *self)
+{
+    PyObject *num, *one, *temp;
+    long value;
+    int overflow;
+
+    /* Test that overflow is set properly for a large value. */
+    /* num is a number larger than LONG_MAX even on 64-bit platforms */
+    num = PyLong_FromString("FFFFFFFFFFFFFFFFFFFFFFFF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != 1)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not set to 1");
+
+    /* Same again, with num = LONG_MAX + 1 */
+    num = PyLong_FromLong(LONG_MAX);
+    if (num == NULL)
+        return NULL;
+    one = PyLong_FromLong(1L);
+    if (one == NULL) {
+        Py_DECREF(num);
+        return NULL;
+    }
+    temp = PyNumber_Add(num, one);
+    Py_DECREF(one);
+    Py_DECREF(num);
+    num = temp;
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != 1)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not set to 1");
+
+    /* Test that overflow is set properly for a large negative value. */
+    /* num is a number smaller than LONG_MIN even on 64-bit platforms */
+    num = PyLong_FromString("-FFFFFFFFFFFFFFFFFFFFFFFF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != -1)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not set to -1");
+
+    /* Same again, with num = LONG_MIN - 1 */
+    num = PyLong_FromLong(LONG_MIN);
+    if (num == NULL)
+        return NULL;
+    one = PyLong_FromLong(1L);
+    if (one == NULL) {
+        Py_DECREF(num);
+        return NULL;
+    }
+    temp = PyNumber_Subtract(num, one);
+    Py_DECREF(one);
+    Py_DECREF(num);
+    num = temp;
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != -1)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not set to -1");
+
+    /* Test that overflow is cleared properly for small values. */
+    num = PyLong_FromString("FF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != 0xFF)
+        return raiseTestError("test_long_and_overflow",
+            "expected return value 0xFF");
+    if (overflow != 0)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not cleared");
+
+    num = PyLong_FromString("-FF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -0xFF)
+        return raiseTestError("test_long_and_overflow",
+            "expected return value 0xFF");
+    if (overflow != 0)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was set incorrectly");
+
+    num = PyLong_FromLong(LONG_MAX);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != LONG_MAX)
+        return raiseTestError("test_long_and_overflow",
+            "expected return value LONG_MAX");
+    if (overflow != 0)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not cleared");
+
+    num = PyLong_FromLong(LONG_MIN);
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != LONG_MIN)
+        return raiseTestError("test_long_and_overflow",
+            "expected return value LONG_MIN");
+    if (overflow != 0)
+        return raiseTestError("test_long_and_overflow",
+            "overflow was not cleared");
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+/* Test the PyLong_AsLongLongAndOverflow API. General conversion to
+   PY_LONG_LONG is tested by test_long_api_inner. This test will
+   concentrate on proper handling of overflow.
+*/
+
+static PyObject *
+test_long_long_and_overflow(PyObject *self)
+{
+    PyObject *num, *one, *temp;
+    PY_LONG_LONG value;
+    int overflow;
+
+    /* Test that overflow is set properly for a large value. */
+    /* num is a number larger than PY_LLONG_MAX on a typical machine. */
+    num = PyLong_FromString("FFFFFFFFFFFFFFFFFFFFFFFF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != 1)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not set to 1");
+
+    /* Same again, with num = PY_LLONG_MAX + 1 */
+    num = PyLong_FromLongLong(PY_LLONG_MAX);
+    if (num == NULL)
+        return NULL;
+    one = PyLong_FromLong(1L);
+    if (one == NULL) {
+        Py_DECREF(num);
+        return NULL;
+    }
+    temp = PyNumber_Add(num, one);
+    Py_DECREF(one);
+    Py_DECREF(num);
+    num = temp;
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != 1)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not set to 1");
+
+    /* Test that overflow is set properly for a large negative value. */
+    /* num is a number smaller than PY_LLONG_MIN on a typical platform */
+    num = PyLong_FromString("-FFFFFFFFFFFFFFFFFFFFFFFF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not set to -1");
+
+    /* Same again, with num = PY_LLONG_MIN - 1 */
+    num = PyLong_FromLongLong(PY_LLONG_MIN);
+    if (num == NULL)
+        return NULL;
+    one = PyLong_FromLong(1L);
+    if (one == NULL) {
+        Py_DECREF(num);
+        return NULL;
+    }
+    temp = PyNumber_Subtract(num, one);
+    Py_DECREF(one);
+    Py_DECREF(num);
+    num = temp;
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "return value was not set to -1");
+    if (overflow != -1)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not set to -1");
+
+    /* Test that overflow is cleared properly for small values. */
+    num = PyLong_FromString("FF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != 0xFF)
+        return raiseTestError("test_long_long_and_overflow",
+            "expected return value 0xFF");
+    if (overflow != 0)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not cleared");
+
+    num = PyLong_FromString("-FF", NULL, 16);
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != -0xFF)
+        return raiseTestError("test_long_long_and_overflow",
+            "expected return value 0xFF");
+    if (overflow != 0)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was set incorrectly");
+
+    num = PyLong_FromLongLong(PY_LLONG_MAX);
+    if (num == NULL)
+        return NULL;
+    overflow = 1234;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != PY_LLONG_MAX)
+        return raiseTestError("test_long_long_and_overflow",
+            "expected return value PY_LLONG_MAX");
+    if (overflow != 0)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not cleared");
+
+    num = PyLong_FromLongLong(PY_LLONG_MIN);
+    if (num == NULL)
+        return NULL;
+    overflow = 0;
+    value = PyLong_AsLongLongAndOverflow(num, &overflow);
+    Py_DECREF(num);
+    if (value == -1 && PyErr_Occurred())
+        return NULL;
+    if (value != PY_LLONG_MIN)
+        return raiseTestError("test_long_long_and_overflow",
+            "expected return value PY_LLONG_MIN");
+    if (overflow != 0)
+        return raiseTestError("test_long_long_and_overflow",
+            "overflow was not cleared");
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 /* Test the L code for PyArg_ParseTuple.  This should deliver a PY_LONG_LONG
    for both long and int arguments.  The test may leak a little memory if
    it fails.
@@ -540,6 +871,15 @@ getargs_B(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "B", &value))
         return NULL;
     return PyLong_FromUnsignedLong((unsigned long)value);
+}
+
+static PyObject *
+getargs_h(PyObject *self, PyObject *args)
+{
+    short value;
+    if (!PyArg_ParseTuple(args, "h", &value))
+        return NULL;
+    return PyLong_FromLong((long)value);
 }
 
 static PyObject *
@@ -671,6 +1011,157 @@ test_k_code(PyObject *self)
     return Py_None;
 }
 
+static PyObject *
+getargs_s(PyObject *self, PyObject *args)
+{
+    char *str;
+    if (!PyArg_ParseTuple(args, "s", &str))
+        return NULL;
+    return PyBytes_FromString(str);
+}
+
+static PyObject *
+getargs_s_star(PyObject *self, PyObject *args)
+{
+    Py_buffer buffer;
+    PyObject *bytes;
+    if (!PyArg_ParseTuple(args, "s*", &buffer))
+        return NULL;
+    bytes = PyBytes_FromStringAndSize(buffer.buf, buffer.len);
+    PyBuffer_Release(&buffer);
+    return bytes;
+}
+
+static PyObject *
+getargs_s_hash(PyObject *self, PyObject *args)
+{
+    char *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "s#", &str, &size))
+        return NULL;
+    return PyBytes_FromStringAndSize(str, size);
+}
+
+static PyObject *
+getargs_z(PyObject *self, PyObject *args)
+{
+    char *str;
+    if (!PyArg_ParseTuple(args, "z", &str))
+        return NULL;
+    if (str != NULL)
+        return PyBytes_FromString(str);
+    else
+        Py_RETURN_NONE;
+}
+
+static PyObject *
+getargs_z_star(PyObject *self, PyObject *args)
+{
+    Py_buffer buffer;
+    PyObject *bytes;
+    if (!PyArg_ParseTuple(args, "z*", &buffer))
+        return NULL;
+    if (buffer.buf != NULL)
+        bytes = PyBytes_FromStringAndSize(buffer.buf, buffer.len);
+    else {
+        Py_INCREF(Py_None);
+        bytes = Py_None;
+    }
+    PyBuffer_Release(&buffer);
+    return bytes;
+}
+
+static PyObject *
+getargs_z_hash(PyObject *self, PyObject *args)
+{
+    char *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "z#", &str, &size))
+        return NULL;
+    if (str != NULL)
+        return PyBytes_FromStringAndSize(str, size);
+    else
+        Py_RETURN_NONE;
+}
+
+static PyObject *
+getargs_y(PyObject *self, PyObject *args)
+{
+    char *str;
+    if (!PyArg_ParseTuple(args, "y", &str))
+        return NULL;
+    return PyBytes_FromString(str);
+}
+
+static PyObject *
+getargs_y_star(PyObject *self, PyObject *args)
+{
+    Py_buffer buffer;
+    PyObject *bytes;
+    if (!PyArg_ParseTuple(args, "y*", &buffer))
+        return NULL;
+    bytes = PyBytes_FromStringAndSize(buffer.buf, buffer.len);
+    PyBuffer_Release(&buffer);
+    return bytes;
+}
+
+static PyObject *
+getargs_y_hash(PyObject *self, PyObject *args)
+{
+    char *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "y#", &str, &size))
+        return NULL;
+    return PyBytes_FromStringAndSize(str, size);
+}
+
+static PyObject *
+getargs_u(PyObject *self, PyObject *args)
+{
+    Py_UNICODE *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "u", &str))
+        return NULL;
+    size = Py_UNICODE_strlen(str);
+    return PyUnicode_FromUnicode(str, size);
+}
+
+static PyObject *
+getargs_u_hash(PyObject *self, PyObject *args)
+{
+    Py_UNICODE *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "u#", &str, &size))
+        return NULL;
+    return PyUnicode_FromUnicode(str, size);
+}
+
+static PyObject *
+getargs_Z(PyObject *self, PyObject *args)
+{
+    Py_UNICODE *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "Z", &str))
+        return NULL;
+    if (str != NULL) {
+        size = Py_UNICODE_strlen(str);
+        return PyUnicode_FromUnicode(str, size);
+    } else
+        Py_RETURN_NONE;
+}
+
+static PyObject *
+getargs_Z_hash(PyObject *self, PyObject *args)
+{
+    Py_UNICODE *str;
+    Py_ssize_t size;
+    if (!PyArg_ParseTuple(args, "Z#", &str, &size))
+        return NULL;
+    if (str != NULL)
+        return PyUnicode_FromUnicode(str, size);
+    else
+        Py_RETURN_NONE;
+}
 
 /* Test the s and z codes for PyArg_ParseTuple.
 */
@@ -762,7 +1253,6 @@ test_u_code(PyObject *self)
     PyObject *tuple, *obj;
     Py_UNICODE *value;
     Py_ssize_t len;
-    int x;
 
     /* issue4122: Undefined reference to _Py_ascii_whitespace on Windows */
     /* Just use the macro and check that it compiles */
@@ -896,6 +1386,80 @@ test_widechar(PyObject *self)
 }
 
 static PyObject *
+unicode_aswidechar(PyObject *self, PyObject *args)
+{
+    PyObject *unicode, *result;
+    Py_ssize_t buflen, size;
+    wchar_t *buffer;
+
+    if (!PyArg_ParseTuple(args, "Un", &unicode, &buflen))
+        return NULL;
+    buffer = PyMem_Malloc(buflen * sizeof(wchar_t));
+    if (buffer == NULL)
+        return PyErr_NoMemory();
+
+    size = PyUnicode_AsWideChar(unicode, buffer, buflen);
+    if (size == -1) {
+        PyMem_Free(buffer);
+        return NULL;
+    }
+
+    if (size < buflen)
+        buflen = size + 1;
+    else
+        buflen = size;
+    result = PyUnicode_FromWideChar(buffer, buflen);
+    PyMem_Free(buffer);
+    if (result == NULL)
+        return NULL;
+
+    return Py_BuildValue("(Nn)", result, size);
+}
+
+static PyObject *
+unicode_aswidecharstring(PyObject *self, PyObject *args)
+{
+    PyObject *unicode, *result;
+    Py_ssize_t size;
+    wchar_t *buffer;
+
+    if (!PyArg_ParseTuple(args, "U", &unicode))
+        return NULL;
+
+    buffer = PyUnicode_AsWideCharString(unicode, &size);
+    if (buffer == NULL)
+        return NULL;
+
+    result = PyUnicode_FromWideChar(buffer, size + 1);
+    PyMem_Free(buffer);
+    if (result == NULL)
+        return NULL;
+    return Py_BuildValue("(Nn)", result, size);
+}
+
+static PyObject *
+getargs_w_star(PyObject *self, PyObject *args)
+{
+    Py_buffer buffer;
+    PyObject *result;
+    char *str;
+
+    if (!PyArg_ParseTuple(args, "w*:getargs_w_star", &buffer))
+        return NULL;
+
+    if (2 <= buffer.len) {
+        str = buffer.buf;
+        str[0] = '[';
+        str[buffer.len-1] = ']';
+    }
+
+    result = PyBytes_FromStringAndSize(buffer.buf, buffer.len);
+    PyBuffer_Release(&buffer);
+    return result;
+}
+
+
+static PyObject *
 test_empty_argparse(PyObject *self)
 {
     /* Test that formats can begin with '|'. See issue #4720. */
@@ -1022,6 +1586,31 @@ raise_exception(PyObject *self, PyObject *args)
     Py_DECREF(exc_args);
     return NULL;
 }
+
+
+static int test_run_counter = 0;
+
+static PyObject *
+test_datetime_capi(PyObject *self, PyObject *args) {
+    if (PyDateTimeAPI) {
+        if (test_run_counter) {
+            /* Probably regrtest.py -R */
+            Py_RETURN_NONE;
+        }
+        else {
+            PyErr_SetString(PyExc_AssertionError,
+                            "PyDateTime_CAPI somehow initialized");
+            return NULL;
+        }
+    }
+    test_run_counter++;
+    PyDateTime_IMPORT;
+    if (PyDateTimeAPI)
+        Py_RETURN_NONE;
+    else
+        return NULL;
+}
+
 
 #ifdef WITH_THREAD
 
@@ -1152,15 +1741,16 @@ test_string_from_format(PyObject *self, PyObject *args)
 {
     PyObject *result;
     char *msg;
+    static const Py_UNICODE one[] = {'1', 0};
 
-#define CHECK_1_FORMAT(FORMAT, TYPE)                    \
-    result = PyUnicode_FromFormat(FORMAT, (TYPE)1);     \
-    if (result == NULL)                                 \
-        return NULL;                                    \
-    if (strcmp(_PyUnicode_AsString(result), "1")) {     \
-        msg = FORMAT " failed at 1";                    \
-        goto Fail;                                      \
-    }                                                   \
+#define CHECK_1_FORMAT(FORMAT, TYPE)                                \
+    result = PyUnicode_FromFormat(FORMAT, (TYPE)1);                 \
+    if (result == NULL)                                             \
+        return NULL;                                                \
+    if (Py_UNICODE_strcmp(PyUnicode_AS_UNICODE(result), one)) {     \
+        msg = FORMAT " failed at 1";                                \
+        goto Fail;                                                  \
+    }                                                               \
     Py_DECREF(result)
 
     CHECK_1_FORMAT("%d", int);
@@ -1172,6 +1762,12 @@ test_string_from_format(PyObject *self, PyObject *args)
     CHECK_1_FORMAT("%u", unsigned int);
     CHECK_1_FORMAT("%lu", unsigned long);
     CHECK_1_FORMAT("%zu", size_t);
+
+    /* "%lld" and "%llu" support added in Python 2.7. */
+#ifdef HAVE_LONG_LONG
+    CHECK_1_FORMAT("%llu", unsigned PY_LONG_LONG);
+    CHECK_1_FORMAT("%lld", PY_LONG_LONG);
+#endif
 
     Py_RETURN_NONE;
 
@@ -1197,7 +1793,7 @@ test_unicode_compare_with_ascii(PyObject *self) {
         return NULL;
     }
     Py_RETURN_NONE;
-};
+}
 
 /* This is here to provide a docstring for test_descr. */
 static PyObject *
@@ -1592,7 +2188,7 @@ argparsing(PyObject *o, PyObject *args)
             /* argument converter not called? */
             return NULL;
         /* Should be 1 */
-        res = PyLong_FromLong(Py_REFCNT(str2));
+        res = PyLong_FromSsize_t(Py_REFCNT(str2));
         Py_DECREF(str2);
         PyErr_Clear();
         return res;
@@ -1600,15 +2196,77 @@ argparsing(PyObject *o, PyObject *args)
     Py_RETURN_NONE;
 }
 
+/* To test that the result of PyCode_NewEmpty has the right members. */
+static PyObject *
+code_newempty(PyObject *self, PyObject *args)
+{
+    const char *filename;
+    const char *funcname;
+    int firstlineno;
+
+    if (!PyArg_ParseTuple(args, "ssi:code_newempty",
+                          &filename, &funcname, &firstlineno))
+        return NULL;
+
+    return (PyObject *)PyCode_NewEmpty(filename, funcname, firstlineno);
+}
+
+/* Test PyErr_NewExceptionWithDoc (also exercise PyErr_NewException).
+   Run via Lib/test/test_exceptions.py */
+static PyObject *
+make_exception_with_doc(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    const char *name;
+    const char *doc = NULL;
+    PyObject *base = NULL;
+    PyObject *dict = NULL;
+
+    static char *kwlist[] = {"name", "doc", "base", "dict", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+                    "s|sOO:make_exception_with_doc", kwlist,
+                                     &name, &doc, &base, &dict))
+        return NULL;
+
+    return PyErr_NewExceptionWithDoc(name, doc, base, dict);
+}
+
+static PyObject *
+make_memoryview_from_NULL_pointer(PyObject *self)
+{
+    Py_buffer info;
+    if (PyBuffer_FillInfo(&info, NULL, NULL, 1, 1, PyBUF_FULL_RO) < 0)
+        return NULL;
+    return PyMemoryView_FromBuffer(&info);
+}
+
+/* Test that the fatal error from not having a current thread doesn't
+   cause an infinite loop.  Run via Lib/test/test_capi.py */
+static PyObject *
+crash_no_current_thread(PyObject *self)
+{
+    Py_BEGIN_ALLOW_THREADS
+    /* Using PyThreadState_Get() directly allows the test to pass in
+       !pydebug mode. However, the test only actually tests anything
+       in pydebug mode, since that's where the infinite loop was in
+       the first place. */
+    PyThreadState_Get();
+    Py_END_ALLOW_THREADS
+    return NULL;
+}
+
 static PyMethodDef TestMethods[] = {
     {"raise_exception",         raise_exception,                 METH_VARARGS},
     {"raise_memoryerror",   (PyCFunction)raise_memoryerror,  METH_NOARGS},
     {"test_config",             (PyCFunction)test_config,        METH_NOARGS},
+    {"test_datetime_capi",  test_datetime_capi,              METH_NOARGS},
     {"test_list_api",           (PyCFunction)test_list_api,      METH_NOARGS},
     {"test_dict_iteration",     (PyCFunction)test_dict_iteration,METH_NOARGS},
     {"test_lazy_hash_inheritance",      (PyCFunction)test_lazy_hash_inheritance,METH_NOARGS},
     {"test_broken_memoryview",          (PyCFunction)test_broken_memoryview,METH_NOARGS},
     {"test_long_api",           (PyCFunction)test_long_api,      METH_NOARGS},
+    {"test_long_and_overflow", (PyCFunction)test_long_and_overflow,
+     METH_NOARGS},
     {"test_long_numbits",       (PyCFunction)test_long_numbits,  METH_NOARGS},
     {"test_k_code",             (PyCFunction)test_k_code,        METH_NOARGS},
     {"test_empty_argparse", (PyCFunction)test_empty_argparse,METH_NOARGS},
@@ -1625,6 +2283,7 @@ static PyMethodDef TestMethods[] = {
       METH_VARARGS|METH_KEYWORDS},
     {"getargs_b",               getargs_b,                       METH_VARARGS},
     {"getargs_B",               getargs_B,                       METH_VARARGS},
+    {"getargs_h",               getargs_h,                       METH_VARARGS},
     {"getargs_H",               getargs_H,                       METH_VARARGS},
     {"getargs_I",               getargs_I,                       METH_VARARGS},
     {"getargs_k",               getargs_k,                       METH_VARARGS},
@@ -1635,26 +2294,50 @@ static PyMethodDef TestMethods[] = {
     {"getargs_L",               getargs_L,                       METH_VARARGS},
     {"getargs_K",               getargs_K,                       METH_VARARGS},
     {"test_longlong_api",       test_longlong_api,               METH_NOARGS},
+    {"test_long_long_and_overflow",
+        (PyCFunction)test_long_long_and_overflow, METH_NOARGS},
     {"test_L_code",             (PyCFunction)test_L_code,        METH_NOARGS},
-    {"codec_incrementalencoder",
-     (PyCFunction)codec_incrementalencoder,      METH_VARARGS},
-    {"codec_incrementaldecoder",
-     (PyCFunction)codec_incrementaldecoder,      METH_VARARGS},
 #endif
+    {"getargs_s",               getargs_s,                       METH_VARARGS},
+    {"getargs_s_star",          getargs_s_star,                  METH_VARARGS},
+    {"getargs_s_hash",          getargs_s_hash,                  METH_VARARGS},
+    {"getargs_z",               getargs_z,                       METH_VARARGS},
+    {"getargs_z_star",          getargs_z_star,                  METH_VARARGS},
+    {"getargs_z_hash",          getargs_z_hash,                  METH_VARARGS},
+    {"getargs_y",               getargs_y,                       METH_VARARGS},
+    {"getargs_y_star",          getargs_y_star,                  METH_VARARGS},
+    {"getargs_y_hash",          getargs_y_hash,                  METH_VARARGS},
+    {"getargs_u",               getargs_u,                       METH_VARARGS},
+    {"getargs_u_hash",          getargs_u_hash,                  METH_VARARGS},
+    {"getargs_Z",               getargs_Z,                       METH_VARARGS},
+    {"getargs_Z_hash",          getargs_Z_hash,                  METH_VARARGS},
+    {"getargs_w_star",          getargs_w_star,                  METH_VARARGS},
+    {"codec_incrementalencoder",
+     (PyCFunction)codec_incrementalencoder,                      METH_VARARGS},
+    {"codec_incrementaldecoder",
+     (PyCFunction)codec_incrementaldecoder,                      METH_VARARGS},
     {"test_s_code",             (PyCFunction)test_s_code,        METH_NOARGS},
     {"test_u_code",             (PyCFunction)test_u_code,        METH_NOARGS},
     {"test_Z_code",             (PyCFunction)test_Z_code,        METH_NOARGS},
     {"test_widechar",           (PyCFunction)test_widechar,      METH_NOARGS},
+    {"unicode_aswidechar",      unicode_aswidechar,                 METH_VARARGS},
+    {"unicode_aswidecharstring",unicode_aswidecharstring,           METH_VARARGS},
 #ifdef WITH_THREAD
-    {"_test_thread_state",  test_thread_state,                   METH_VARARGS},
+    {"_test_thread_state",      test_thread_state,               METH_VARARGS},
     {"_pending_threadfunc",     pending_threadfunc,              METH_VARARGS},
 #endif
 #ifdef HAVE_GETTIMEOFDAY
-    {"profile_int",             profile_int,                    METH_NOARGS},
+    {"profile_int",             profile_int,                     METH_NOARGS},
 #endif
-    {"traceback_print", traceback_print,                 METH_VARARGS},
-    {"exception_print", exception_print,                 METH_VARARGS},
-    {"argparsing",     argparsing, METH_VARARGS},
+    {"traceback_print",         traceback_print,                 METH_VARARGS},
+    {"exception_print",         exception_print,                 METH_VARARGS},
+    {"argparsing",              argparsing,                      METH_VARARGS},
+    {"code_newempty",           code_newempty,                   METH_VARARGS},
+    {"make_exception_with_doc", (PyCFunction)make_exception_with_doc,
+     METH_VARARGS | METH_KEYWORDS},
+    {"make_memoryview_from_NULL_pointer", (PyCFunction)make_memoryview_from_NULL_pointer,
+     METH_NOARGS},
+    {"crash_no_current_thread", (PyCFunction)crash_no_current_thread, METH_NOARGS},
     {NULL, NULL} /* sentinel */
 };
 
