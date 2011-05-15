@@ -29,7 +29,7 @@ class MixInCheckStateHandling:
             d = codecs.getincrementaldecoder(encoding)()
             part1 = d.decode(s[:i])
             state = d.getstate()
-            self.assertTrue(isinstance(state[1], int))
+            self.assertIsInstance(state[1], int)
             # Check that the condition stated in the documentation for
             # IncrementalDecoder.getstate() holds
             if not state[1]:
@@ -72,7 +72,6 @@ class ReadTest(unittest.TestCase, MixInCheckStateHandling):
         # check that there's nothing left in the buffers
         self.assertEqual(r.read(), "")
         self.assertEqual(r.bytebuffer, b"")
-        self.assertEqual(r.charbuffer, "")
 
         # do the check again, this time using a incremental decoder
         d = codecs.getincrementaldecoder(self.encoding)()
@@ -545,6 +544,12 @@ class UTF16LETest(ReadTest):
         self.assertRaises(UnicodeDecodeError, codecs.utf_16_le_decode,
                           b"\xff", "strict", True)
 
+    def test_nonbmp(self):
+        self.assertEqual("\U00010203".encode(self.encoding),
+                         b'\x00\xd8\x03\xde')
+        self.assertEqual(b'\x00\xd8\x03\xde'.decode(self.encoding),
+                         "\U00010203")
+
 class UTF16BETest(ReadTest):
     encoding = "utf-16-be"
 
@@ -566,6 +571,12 @@ class UTF16BETest(ReadTest):
     def test_errors(self):
         self.assertRaises(UnicodeDecodeError, codecs.utf_16_be_decode,
                           b"\xff", "strict", True)
+
+    def test_nonbmp(self):
+        self.assertEqual("\U00010203".encode(self.encoding),
+                         b'\xd8\x00\xde\x03')
+        self.assertEqual(b'\xd8\x00\xde\x03'.decode(self.encoding),
+                         "\U00010203")
 
 class UTF8Test(ReadTest):
     encoding = "utf-8"
@@ -652,18 +663,6 @@ class ReadBufferTest(unittest.TestCase):
     def test_bad_args(self):
         self.assertRaises(TypeError, codecs.readbuffer_encode)
         self.assertRaises(TypeError, codecs.readbuffer_encode, 42)
-
-class CharBufferTest(unittest.TestCase):
-
-    def test_string(self):
-        self.assertEqual(codecs.charbuffer_encode(b"spam"), (b"spam", 4))
-
-    def test_empty(self):
-        self.assertEqual(codecs.charbuffer_encode(b""), (b"", 0))
-
-    def test_bad_args(self):
-        self.assertRaises(TypeError, codecs.charbuffer_encode)
-        self.assertRaises(TypeError, codecs.charbuffer_encode, 42)
 
 class UTF8SigTest(ReadTest):
     encoding = "utf-8-sig"
@@ -1276,6 +1275,7 @@ all_unicode_encodings = [
     "cp424",
     "cp437",
     "cp500",
+    "cp720",
     "cp737",
     "cp775",
     "cp850",
@@ -1283,6 +1283,7 @@ all_unicode_encodings = [
     "cp855",
     "cp856",
     "cp857",
+    "cp858",
     "cp860",
     "cp861",
     "cp862",
@@ -1371,11 +1372,6 @@ broken_incremental_coders = broken_unicode_with_streams + [
     "idna",
 ]
 
-# The following encodings only support "strict" mode
-only_strict_mode = [
-    "idna",
-]
-
 class BasicUnicodeTest(unittest.TestCase, MixInCheckStateHandling):
     def test_basics(self):
         s = "abc123" # all codecs should be able to encode these
@@ -1450,7 +1446,7 @@ class BasicUnicodeTest(unittest.TestCase, MixInCheckStateHandling):
                     result = "".join(codecs.iterdecode(codecs.iterencode("", encoding), encoding))
                     self.assertEqual(result, "")
 
-                if encoding not in only_strict_mode:
+                if encoding not in ("idna", "mbcs"):
                     # check incremental decoder/encoder with errors argument
                     try:
                         encoder = codecs.getincrementalencoder(encoding)("ignore")
@@ -1675,6 +1671,54 @@ class BomTest(unittest.TestCase):
                 self.assertEqual(f.read(), data * 2)
 
 
+bytes_transform_encodings = [
+    "base64_codec",
+    "uu_codec",
+    "quopri_codec",
+    "hex_codec",
+]
+try:
+    import zlib
+except ImportError:
+    pass
+else:
+    bytes_transform_encodings.append("zlib_codec")
+try:
+    import bz2
+except ImportError:
+    pass
+else:
+    bytes_transform_encodings.append("bz2_codec")
+
+class TransformCodecTest(unittest.TestCase):
+
+    def test_basics(self):
+        binput = bytes(range(256))
+        for encoding in bytes_transform_encodings:
+            # generic codecs interface
+            (o, size) = codecs.getencoder(encoding)(binput)
+            self.assertEqual(size, len(binput))
+            (i, size) = codecs.getdecoder(encoding)(o)
+            self.assertEqual(size, len(o))
+            self.assertEqual(i, binput)
+
+    def test_read(self):
+        for encoding in bytes_transform_encodings:
+            sin = codecs.encode(b"\x80", encoding)
+            reader = codecs.getreader(encoding)(io.BytesIO(sin))
+            sout = reader.read()
+            self.assertEqual(sout, b"\x80")
+
+    def test_readline(self):
+        for encoding in bytes_transform_encodings:
+            if encoding in ['uu_codec', 'zlib_codec']:
+                continue
+            sin = codecs.encode(b"\x80", encoding)
+            reader = codecs.getreader(encoding)(io.BytesIO(sin))
+            sout = reader.readline()
+            self.assertEqual(sout, b"\x80")
+
+
 def test_main():
     support.run_unittest(
         UTF32Test,
@@ -1688,7 +1732,6 @@ def test_main():
         UTF7Test,
         UTF16ExTest,
         ReadBufferTest,
-        CharBufferTest,
         RecodingTest,
         PunycodeTest,
         UnicodeInternalTest,
@@ -1703,6 +1746,7 @@ def test_main():
         TypesTest,
         SurrogateEscapeTest,
         BomTest,
+        TransformCodecTest,
     )
 
 
