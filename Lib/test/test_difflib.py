@@ -4,8 +4,64 @@ import unittest
 import doctest
 import sys
 
-class TestSFbugs(unittest.TestCase):
 
+class TestWithAscii(unittest.TestCase):
+    def test_one_insert(self):
+        sm = difflib.SequenceMatcher(None, 'b' * 100, 'a' + 'b' * 100)
+        self.assertAlmostEqual(sm.ratio(), 0.995, places=3)
+        self.assertEqual(list(sm.get_opcodes()),
+            [   ('insert', 0, 0, 0, 1),
+                ('equal', 0, 100, 1, 101)])
+        self.assertEqual(sm.bpopular, set())
+        sm = difflib.SequenceMatcher(None, 'b' * 100, 'b' * 50 + 'a' + 'b' * 50)
+        self.assertAlmostEqual(sm.ratio(), 0.995, places=3)
+        self.assertEqual(list(sm.get_opcodes()),
+            [   ('equal', 0, 50, 0, 50),
+                ('insert', 50, 50, 50, 51),
+                ('equal', 50, 100, 51, 101)])
+        self.assertEqual(sm.bpopular, set())
+
+    def test_one_delete(self):
+        sm = difflib.SequenceMatcher(None, 'a' * 40 + 'c' + 'b' * 40, 'a' * 40 + 'b' * 40)
+        self.assertAlmostEqual(sm.ratio(), 0.994, places=3)
+        self.assertEqual(list(sm.get_opcodes()),
+            [   ('equal', 0, 40, 0, 40),
+                ('delete', 40, 41, 40, 40),
+                ('equal', 41, 81, 40, 80)])
+
+    def test_bjunk(self):
+        sm = difflib.SequenceMatcher(isjunk=lambda x: x == ' ',
+                a='a' * 40 + 'b' * 40, b='a' * 44 + 'b' * 40)
+        self.assertEqual(sm.bjunk, set())
+
+        sm = difflib.SequenceMatcher(isjunk=lambda x: x == ' ',
+                a='a' * 40 + 'b' * 40, b='a' * 44 + 'b' * 40 + ' ' * 20)
+        self.assertEqual(sm.bjunk, {' '})
+
+        sm = difflib.SequenceMatcher(isjunk=lambda x: x in [' ', 'b'],
+                a='a' * 40 + 'b' * 40, b='a' * 44 + 'b' * 40 + ' ' * 20)
+        self.assertEqual(sm.bjunk, {' ', 'b'})
+
+
+class TestAutojunk(unittest.TestCase):
+    """Tests for the autojunk parameter added in 2.7"""
+    def test_one_insert_homogenous_sequence(self):
+        # By default autojunk=True and the heuristic kicks in for a sequence
+        # of length 200+
+        seq1 = 'b' * 200
+        seq2 = 'a' + 'b' * 200
+
+        sm = difflib.SequenceMatcher(None, seq1, seq2)
+        self.assertAlmostEqual(sm.ratio(), 0, places=3)
+        self.assertEqual(sm.bpopular, {'b'})
+
+        # Now turn the heuristic off
+        sm = difflib.SequenceMatcher(None, seq1, seq2, autojunk=False)
+        self.assertAlmostEqual(sm.ratio(), 0.9975, places=3)
+        self.assertEqual(sm.bpopular, set())
+
+
+class TestSFbugs(unittest.TestCase):
     def test_ratio_for_null_seqn(self):
         # Check clearing of SF bug 763023
         s = difflib.SequenceMatcher(None, [], [])
@@ -225,7 +281,9 @@ class TestOutputFormat(unittest.TestCase):
 def test_main():
     difflib.HtmlDiff._default_prefix = 0
     Doctests = doctest.DocTestSuite(difflib)
-    run_unittest(TestSFpatches, TestSFbugs, Doctests, TestOutputFormat)
+    run_unittest(
+        TestWithAscii, TestAutojunk, TestSFpatches, TestSFbugs,
+        TestOutputFormat, Doctests)
 
 if __name__ == '__main__':
     test_main()
