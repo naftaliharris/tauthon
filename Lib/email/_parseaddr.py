@@ -64,8 +64,10 @@ def parsedate_tz(data):
     if len(data) == 4:
         s = data[3]
         i = s.find('+')
+        if i == -1:
+            i = s.find('-')
         if i > 0:
-            data[3:] = [s[:i], s[i+1:]]
+            data[3:] = [s[:i], s[i:]]
         else:
             data.append('') # Dummy tz
     if len(data) < 5:
@@ -199,14 +201,18 @@ class AddrlistClass:
         self.commentlist = []
 
     def gotonext(self):
-        """Parse up to the start of the next address."""
+        """Skip white space and extract comments."""
+        wslist = []
         while self.pos < len(self.field):
             if self.field[self.pos] in self.LWS + '\n\r':
+                if self.field[self.pos] not in '\n\r':
+                    wslist.append(self.field[self.pos])
                 self.pos += 1
             elif self.field[self.pos] == '(':
                 self.commentlist.append(self.getcomment())
             else:
                 break
+        return EMPTYSTRING.join(wslist)
 
     def getaddrlist(self):
         """Parse all addresses.
@@ -319,16 +325,24 @@ class AddrlistClass:
 
         self.gotonext()
         while self.pos < len(self.field):
+            preserve_ws = True
             if self.field[self.pos] == '.':
+                if aslist and not aslist[-1].strip():
+                    aslist.pop()
                 aslist.append('.')
                 self.pos += 1
+                preserve_ws = False
             elif self.field[self.pos] == '"':
                 aslist.append('"%s"' % quote(self.getquote()))
             elif self.field[self.pos] in self.atomends:
+                if aslist and not aslist[-1].strip():
+                    aslist.pop()
                 break
             else:
                 aslist.append(self.getatom())
-            self.gotonext()
+            ws = self.gotonext()
+            if preserve_ws and ws:
+                aslist.append(ws)
 
         if self.pos >= len(self.field) or self.field[self.pos] != '@':
             return EMPTYSTRING.join(aslist)

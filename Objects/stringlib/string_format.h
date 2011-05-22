@@ -499,13 +499,16 @@ get_field_object(SubString *input, PyObject *args, PyObject *kwargs,
         PyObject *key = SubString_new_object(&first);
         if (key == NULL)
             goto error;
-        if ((kwargs == NULL) || (obj = PyDict_GetItem(kwargs, key)) == NULL) {
+
+        /* Use PyObject_GetItem instead of PyDict_GetItem because this
+           code is no longer just used with kwargs. It might be passed
+           a non-dict when called through format_map. */
+        if ((kwargs == NULL) || (obj = PyObject_GetItem(kwargs, key)) == NULL) {
             PyErr_SetObject(PyExc_KeyError, key);
             Py_DECREF(key);
             goto error;
         }
         Py_DECREF(key);
-        Py_INCREF(obj);
     }
     else {
         /* look up in args */
@@ -1039,6 +1042,11 @@ do_string_format(PyObject *self, PyObject *args, PyObject *kwargs)
     return build_string(&input, args, kwargs, recursion_depth, &auto_number);
 }
 
+static PyObject *
+do_string_format_map(PyObject *self, PyObject *obj)
+{
+    return do_string_format(self, NULL, obj);
+}
 
 
 /************************************************************************/
@@ -1180,9 +1188,14 @@ static PyTypeObject PyFormatterIter_Type = {
    describing the parsed elements.  It's a wrapper around
    stringlib/string_format.h's MarkupIterator */
 static PyObject *
-formatter_parser(STRINGLIB_OBJECT *self)
+formatter_parser(PyObject *ignored, STRINGLIB_OBJECT *self)
 {
     formatteriterobject *it;
+
+    if (!PyUnicode_Check(self)) {
+        PyErr_Format(PyExc_TypeError, "expected str, got %s", Py_TYPE(self)->tp_name);
+        return NULL;
+    }
 
     it = PyObject_New(formatteriterobject, &PyFormatterIter_Type);
     if (it == NULL)
@@ -1315,7 +1328,7 @@ static PyTypeObject PyFieldNameIter_Type = {
    field_name_split.  The iterator it returns is a
    FieldNameIterator */
 static PyObject *
-formatter_field_name_split(STRINGLIB_OBJECT *self)
+formatter_field_name_split(PyObject *ignored, STRINGLIB_OBJECT *self)
 {
     SubString first;
     Py_ssize_t first_idx;
@@ -1323,6 +1336,11 @@ formatter_field_name_split(STRINGLIB_OBJECT *self)
 
     PyObject *first_obj = NULL;
     PyObject *result = NULL;
+
+    if (!PyUnicode_Check(self)) {
+        PyErr_Format(PyExc_TypeError, "expected str, got %s", Py_TYPE(self)->tp_name);
+        return NULL;
+    }
 
     it = PyObject_New(fieldnameiterobject, &PyFieldNameIter_Type);
     if (it == NULL)

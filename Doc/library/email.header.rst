@@ -104,16 +104,33 @@ Here is the :class:`Header` class description:
       Optional *errors* is passed as the errors argument to the decode call
       if *s* is a byte string.
 
-   .. method:: encode(splitchars=';, \\t', maxlinelen=None)
+
+   .. method:: encode(splitchars=';, \\t', maxlinelen=None, linesep='\\n')
 
       Encode a message header into an RFC-compliant format, possibly wrapping
       long lines and encapsulating non-ASCII parts in base64 or quoted-printable
-      encodings.  Optional *splitchars* is a string containing characters to
-      split long ASCII lines on, in rough support of :rfc:`2822`'s *highest
-      level syntactic breaks*.  This doesn't affect :rfc:`2047` encoded lines.
+      encodings.
+
+      Optional *splitchars* is a string containing characters which should be
+      given extra weight by the splitting algorithm during normal header
+      wrapping.  This is in very rough support of :RFC:`2822`\'s 'higher level
+      syntactic breaks':  split points preceded by a splitchar are preferred
+      during line splitting, with the characters preferred in the order in
+      which they appear in the string.  Space and tab may be included in the
+      string to indicate whether preference should be given to one over the
+      other as a split point when other split chars do not appear in the line
+      being split.  Splitchars does not affect :RFC:`2047` encoded lines.
 
       *maxlinelen*, if given, overrides the instance's value for the maximum
       line length.
+
+      *linesep* specifies the characters used to separate the lines of the
+      folded header.  It defaults to the most useful value for Python
+      application code (``\n``), but ``\r\n`` can be specified in order
+      to produce headers with RFC-compliant line separators.
+
+      .. versionchanged:: 3.2
+         Added the *linesep* argument.
 
 
    The :class:`Header` class also provides a number of methods to support
@@ -121,8 +138,14 @@ Here is the :class:`Header` class description:
 
    .. method:: __str__()
 
-      A helper for :class:`str`'s :func:`encode` method.  Returns the header as
-      a Unicode string.
+      Returns an approximation of the :class:`Header` as a string, using an
+      unlimited line length.  All pieces are converted to unicode using the
+      specified encoding and joined together appropriately.  Any pieces with a
+      charset of `unknown-8bit` are decoded as `ASCII` using the `replace`
+      error handler.
+
+      .. versionchanged:: 3.2
+         Added handling for the `unknown-8bit` charset.
 
 
    .. method:: __eq__(other)
