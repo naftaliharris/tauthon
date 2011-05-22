@@ -5,8 +5,8 @@ from test.support import run_unittest, verbose, requires_IEEE_754
 import unittest
 import math
 import os
+import platform
 import sys
-import random
 import struct
 import sysconfig
 
@@ -457,12 +457,12 @@ class MathTests(unittest.TestCase):
 
     def testFmod(self):
         self.assertRaises(TypeError, math.fmod)
-        self.ftest('fmod(10,1)', math.fmod(10,1), 0)
-        self.ftest('fmod(10,0.5)', math.fmod(10,0.5), 0)
-        self.ftest('fmod(10,1.5)', math.fmod(10,1.5), 1)
-        self.ftest('fmod(-10,1)', math.fmod(-10,1), 0)
-        self.ftest('fmod(-10,0.5)', math.fmod(-10,0.5), 0)
-        self.ftest('fmod(-10,1.5)', math.fmod(-10,1.5), -1)
+        self.ftest('fmod(10, 1)', math.fmod(10, 1), 0.0)
+        self.ftest('fmod(10, 0.5)', math.fmod(10, 0.5), 0.0)
+        self.ftest('fmod(10, 1.5)', math.fmod(10, 1.5), 1.0)
+        self.ftest('fmod(-10, 1)', math.fmod(-10, 1), -0.0)
+        self.ftest('fmod(-10, 0.5)', math.fmod(-10, 0.5), -0.0)
+        self.ftest('fmod(-10, 1.5)', math.fmod(-10, 1.5), -1.0)
         self.assertTrue(math.isnan(math.fmod(NAN, 1.)))
         self.assertTrue(math.isnan(math.fmod(1., NAN)))
         self.assertTrue(math.isnan(math.fmod(NAN, NAN)))
@@ -649,6 +649,34 @@ class MathTests(unittest.TestCase):
         self.assertRaises(TypeError, math.log1p)
         n= 2**90
         self.assertAlmostEqual(math.log1p(n), math.log1p(float(n)))
+
+    @requires_IEEE_754
+    def testLog2(self):
+        self.assertRaises(TypeError, math.log2)
+
+        # Check some integer values
+        self.assertEqual(math.log2(1), 0.0)
+        self.assertEqual(math.log2(2), 1.0)
+        self.assertEqual(math.log2(4), 2.0)
+
+        # Large integer values
+        self.assertEqual(math.log2(2**1023), 1023.0)
+        self.assertEqual(math.log2(2**1024), 1024.0)
+        self.assertEqual(math.log2(2**2000), 2000.0)
+
+        self.assertRaises(ValueError, math.log2, -1.5)
+        self.assertRaises(ValueError, math.log2, NINF)
+        self.assertTrue(math.isnan(math.log2(NAN)))
+
+    @requires_IEEE_754
+    @unittest.skipIf(sys.platform == 'darwin'
+                     and platform.mac_ver()[0].startswith('10.4.'),
+                     'Mac OS X Tiger log2() is not accurate enough')
+    def testLog2Exact(self):
+        # Check that we get exact equality for log2 of powers of 2.
+        actual = [math.log2(math.ldexp(1.0, n)) for n in range(-1074, 1024)]
+        expected = [float(n) for n in range(-1074, 1024)]
+        self.assertEqual(actual, expected)
 
     def testLog10(self):
         self.assertRaises(TypeError, math.log10)
@@ -1010,7 +1038,6 @@ class MathTests(unittest.TestCase):
 
     @requires_IEEE_754
     def test_mtestfile(self):
-        ALLOWED_ERROR = 20  # permitted error, in ulps
         fail_fmt = "{}:{}({!r}): expected {!r}, got {!r}"
 
         failures = []
