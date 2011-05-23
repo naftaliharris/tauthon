@@ -733,6 +733,8 @@ class Aifc_write:
         if self._comp:
             self._comp.CloseCompressor()
             self._comp = None
+        # Prevent ref cycles
+        self._convert = None
         self._file.close()
 
     #

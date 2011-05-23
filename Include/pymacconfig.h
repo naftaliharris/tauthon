@@ -16,7 +16,13 @@
 # undef SIZEOF_TIME_T
 # undef SIZEOF_VOID_P
 # undef SIZEOF__BOOL
+# undef SIZEOF_UINTPTR_T
+# undef SIZEOF_PTHREAD_T
 # undef WORDS_BIGENDIAN
+# undef DOUBLE_IS_ARM_MIXED_ENDIAN_IEEE754
+# undef DOUBLE_IS_BIG_ENDIAN_IEEE754
+# undef DOUBLE_IS_LITTLE_ENDIAN_IEEE754
+# undef HAVE_GCC_ASM_FOR_X87
 
 #    undef VA_LIST_IS_ARRAY
 #    if defined(__LP64__) && defined(__x86_64__)
@@ -37,6 +43,8 @@
 #        define SIZEOF_SIZE_T           8
 #        define SIZEOF_TIME_T           8
 #        define SIZEOF_VOID_P           8
+#        define SIZEOF_UINTPTR_T        8
+#        define SIZEOF_PTHREAD_T        8
 #    else
 #        ifdef __ppc__
 #           define SIZEOF__BOOL         4
@@ -48,10 +56,12 @@
 #        define SIZEOF_SIZE_T           4
 #        define SIZEOF_TIME_T           4
 #        define SIZEOF_VOID_P           4
+#        define SIZEOF_UINTPTR_T        4
+#        define SIZEOF_PTHREAD_T        4
 #    endif
 
 #    if defined(__LP64__)
-     /* MacOSX 10.4 (the first release to suppport 64-bit code
+     /* MacOSX 10.4 (the first release to support 64-bit code
       * at all) only supports 64-bit in the UNIX layer.
       * Therefore surpress the toolbox-glue in 64-bit mode.
       */
@@ -65,7 +75,14 @@
 
 #ifdef __BIG_ENDIAN__
 #define WORDS_BIGENDIAN 1
+#define DOUBLE_IS_BIG_ENDIAN_IEEE754
+#else
+#define DOUBLE_IS_LITTLE_ENDIAN_IEEE754
 #endif /* __BIG_ENDIAN */
+
+#ifdef __i386__
+# define HAVE_GCC_ASM_FOR_X87
+#endif
 
     /*
      * The definition in pyconfig.h is only valid on the OS release

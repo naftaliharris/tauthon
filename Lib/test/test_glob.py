@@ -59,8 +59,8 @@ class GlobTests(unittest.TestCase):
         if set(type(x) for x in tmp) == uniset:
             u1 = glob.glob(u'*')
             u2 = glob.glob(u'./*')
-            self.assertEquals(set(type(r) for r in u1), uniset)
-            self.assertEquals(set(type(r) for r in u2), uniset)
+            self.assertEqual(set(type(r) for r in u1), uniset)
+            self.assertEqual(set(type(r) for r in u2), uniset)
 
     def test_glob_one_directory(self):
         eq = self.assertSequencesEqual_noorder
@@ -96,7 +96,7 @@ class GlobTests(unittest.TestCase):
         res = glob.glob(self.tempdir + '*' + os.sep)
         self.assertEqual(len(res), 1)
         # either of these results are reasonable
-        self.assertTrue(res[0] in [self.tempdir, self.tempdir + os.sep])
+        self.assertIn(res[0], [self.tempdir, self.tempdir + os.sep])
 
     def test_glob_broken_symlinks(self):
         if hasattr(os, 'symlink'):

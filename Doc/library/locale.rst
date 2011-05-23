@@ -40,7 +40,7 @@ The :mod:`locale` module defines the following exception and functions:
    If *locale* is omitted or ``None``, the current setting for *category* is
    returned.
 
-   :func:`setlocale` is not thread safe on most systems. Applications typically
+   :func:`setlocale` is not thread-safe on most systems. Applications typically
    start with a call of ::
 
       import locale
@@ -165,7 +165,7 @@ The :mod:`locale` module defines the following exception and functions:
    .. data:: D_T_FMT
 
       Get a string that can be used as a format string for :func:`strftime` to
-      represent time and date in a locale-specific way.
+      represent date and time in a locale-specific way.
 
    .. data:: D_FMT
 
@@ -250,12 +250,17 @@ The :mod:`locale` module defines the following exception and functions:
 
    .. data:: ERA_D_T_FMT
 
-      Get a format string for :func:`strftime` to represent dates and times in a
+      Get a format string for :func:`strftime` to represent date and time in a
       locale-specific era-based way.
 
    .. data:: ERA_D_FMT
 
-      Get a format string for :func:`strftime` to represent time in a
+      Get a format string for :func:`strftime` to represent a date in a
+      locale-specific era-based way.
+
+   .. data:: ERA_T_FMT
+
+      Get a format string for :func:`strftime` to represent a time in a
       locale-specific era-based way.
 
    .. data:: ALT_DIGITS
@@ -554,7 +559,7 @@ catalogs, and the C library's search algorithms for locating message catalogs.
 
 Python applications should normally find no need to invoke these functions, and
 should use :mod:`gettext` instead.  A known exception to this rule are
-applications that link use additional C libraries which internally invoke
+applications that link with additional C libraries which internally invoke
 :cfunc:`gettext` or :func:`dcgettext`.  For these applications, it may be
 necessary to bind the text domain, so that the libraries can properly locate
 their message catalogs.

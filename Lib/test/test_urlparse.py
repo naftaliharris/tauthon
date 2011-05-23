@@ -97,6 +97,9 @@ class UrlParseTestCase(unittest.TestCase):
               '', '', ''),
              ('mms', 'wms.sys.hinet.net', '/cts/Drama/09006251100.asf',
               '', '')),
+            ('nfs://server/path/to/file.txt',
+             ('nfs', 'server', '/path/to/file.txt',  '', '', ''),
+             ('nfs', 'server', '/path/to/file.txt', '', '')),
             ('svn+ssh://svn.zope.org/repos/main/ZConfig/trunk/',
              ('svn+ssh', 'svn.zope.org', '/repos/main/ZConfig/trunk/',
               '', '', ''),
@@ -193,10 +196,13 @@ class UrlParseTestCase(unittest.TestCase):
         #self.checkJoin(RFC1808_BASE, 'http:g', 'http:g')
         #self.checkJoin(RFC1808_BASE, 'http:', 'http:')
 
+    def test_RFC2368(self):
+        # Issue 11467: path that starts with a number is not parsed correctly
+        self.assertEqual(urlparse.urlparse('mailto:1337@example.org'),
+                ('mailto', '', '1337@example.org', '', '', ''))
+
     def test_RFC2396(self):
         # cases from RFC 2396
-
-
         self.checkJoin(RFC2396_BASE, 'g:h', 'g:h')
         self.checkJoin(RFC2396_BASE, 'g', 'http://a/b/c/g')
         self.checkJoin(RFC2396_BASE, './g', 'http://a/b/c/g')
@@ -290,7 +296,10 @@ class UrlParseTestCase(unittest.TestCase):
         self.checkJoin(RFC3986_BASE, 'g#s/./x','http://a/b/c/g#s/./x')
         self.checkJoin(RFC3986_BASE, 'g#s/../x','http://a/b/c/g#s/../x')
         #self.checkJoin(RFC3986_BASE, 'http:g','http:g') # strict parser
-        self.checkJoin(RFC3986_BASE, 'http:g','http://a/b/c/g') #relaxed parser
+        self.checkJoin(RFC3986_BASE, 'http:g','http://a/b/c/g') # relaxed parser
+
+        # Test for issue9721
+        self.checkJoin('http://a/b/c/de', ';x','http://a/b/c/;x')
 
     def test_urljoins(self):
         self.checkJoin(SIMPLE_BASE, 'g:h','g:h')
@@ -322,6 +331,40 @@ class UrlParseTestCase(unittest.TestCase):
         self.checkJoin(SIMPLE_BASE, 'http:?y','http://a/b/c/d?y')
         self.checkJoin(SIMPLE_BASE, 'http:g?y','http://a/b/c/g?y')
         self.checkJoin(SIMPLE_BASE, 'http:g?y/./x','http://a/b/c/g?y/./x')
+
+    def test_RFC2732(self):
+        for url, hostname, port in [
+            ('http://Test.python.org:5432/foo/', 'test.python.org', 5432),
+            ('http://12.34.56.78:5432/foo/', '12.34.56.78', 5432),
+            ('http://[::1]:5432/foo/', '::1', 5432),
+            ('http://[dead:beef::1]:5432/foo/', 'dead:beef::1', 5432),
+            ('http://[dead:beef::]:5432/foo/', 'dead:beef::', 5432),
+            ('http://[dead:beef:cafe:5417:affe:8FA3:deaf:feed]:5432/foo/',
+             'dead:beef:cafe:5417:affe:8fa3:deaf:feed', 5432),
+            ('http://[::12.34.56.78]:5432/foo/', '::12.34.56.78', 5432),
+            ('http://[::ffff:12.34.56.78]:5432/foo/',
+             '::ffff:12.34.56.78', 5432),
+            ('http://Test.python.org/foo/', 'test.python.org', None),
+            ('http://12.34.56.78/foo/', '12.34.56.78', None),
+            ('http://[::1]/foo/', '::1', None),
+            ('http://[dead:beef::1]/foo/', 'dead:beef::1', None),
+            ('http://[dead:beef::]/foo/', 'dead:beef::', None),
+            ('http://[dead:beef:cafe:5417:affe:8FA3:deaf:feed]/foo/',
+             'dead:beef:cafe:5417:affe:8fa3:deaf:feed', None),
+            ('http://[::12.34.56.78]/foo/', '::12.34.56.78', None),
+            ('http://[::ffff:12.34.56.78]/foo/',
+             '::ffff:12.34.56.78', None),
+            ]:
+            urlparsed = urlparse.urlparse(url)
+            self.assertEqual((urlparsed.hostname, urlparsed.port) , (hostname, port))
+
+        for invalid_url in [
+                'http://::12.34.56.78]/',
+                'http://[::1/foo/',
+                'ftp://[::1/foo/bad]/bad',
+                'http://[::1/foo/bad]/bad',
+                'http://[::ffff:12.34.56.78']:
+            self.assertRaises(ValueError, urlparse.urlparse, invalid_url)
 
     def test_urldefrag(self):
         for url, defrag, frag in [
@@ -441,6 +484,26 @@ class UrlParseTestCase(unittest.TestCase):
         self.assertEqual(urlparse.urlparse("x-newscheme://foo.com/stuff"),
                          ('x-newscheme','foo.com','/stuff','','',''))
 
+    def test_withoutscheme(self):
+        # Test urlparse without scheme
+        # Issue 754016: urlparse goes wrong with IP:port without scheme
+        # RFC 1808 specifies that netloc should start with //, urlparse expects
+        # the same, otherwise it classifies the portion of url as path.
+        self.assertEqual(urlparse.urlparse("path"),
+                ('','','path','','',''))
+        self.assertEqual(urlparse.urlparse("//www.python.org:80"),
+                ('','www.python.org:80','','','',''))
+        self.assertEqual(urlparse.urlparse("http://www.python.org:80"),
+                ('http','www.python.org:80','','','',''))
+
+    def test_portseparator(self):
+        # Issue 754016 makes changes for port separator ':' from scheme separator
+        self.assertEqual(urlparse.urlparse("path:80"),
+                ('','','path:80','','',''))
+        self.assertEqual(urlparse.urlparse("http:"),('http','','','','',''))
+        self.assertEqual(urlparse.urlparse("https:"),('https','','','','',''))
+        self.assertEqual(urlparse.urlparse("http://www.python.org:80"),
+                ('http','www.python.org:80','','','',''))
 
 
 def test_main():

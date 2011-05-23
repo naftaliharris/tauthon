@@ -83,7 +83,7 @@ This example uses the iterator form::
    >>> for row in c:
    ...    print row
    ...
-   (u'2006-01-05', u'BUY', u'RHAT', 100, 35.140000000000001)
+   (u'2006-01-05', u'BUY', u'RHAT', 100, 35.14)
    (u'2006-03-28', u'BUY', u'IBM', 1000, 45.0)
    (u'2006-04-06', u'SELL', u'IBM', 500, 53.0)
    (u'2006-04-05', u'BUY', u'MSOFT', 1000, 72.0)
@@ -138,7 +138,7 @@ Module functions and constants
    first blank for the column name: the column name would simply be "x".
 
 
-.. function:: connect(database[, timeout, isolation_level, detect_types, factory])
+.. function:: connect(database[, timeout, detect_types, isolation_level, check_same_thread, factory, cached_statements])
 
    Opens a connection to the SQLite database file *database*. You can use
    ``":memory:"`` to open a database connection to a database that resides in RAM
@@ -258,22 +258,21 @@ Connection Objects
 .. method:: Connection.execute(sql, [parameters])
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`execute<Cursor.execute>` method with the parameters given.
+   calling the cursor method, then calls the cursor's :meth:`execute
+   <Cursor.execute>` method with the parameters given.
 
 
 .. method:: Connection.executemany(sql, [parameters])
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`executemany<Cursor.executemany>` method with the parameters given.
+   calling the cursor method, then calls the cursor's :meth:`executemany
+   <Cursor.executemany>` method with the parameters given.
 
 .. method:: Connection.executescript(sql_script)
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`executescript<Cursor.executescript>` method with the parameters
-   given.
+   calling the cursor method, then calls the cursor's :meth:`executescript
+   <Cursor.executescript>` method with the parameters given.
 
 
 .. method:: Connection.create_function(name, num_params, func)
@@ -368,6 +367,25 @@ Connection Objects
    method with :const:`None` for *handler*.
 
 
+.. method:: Connection.enable_load_extension(enabled)
+
+   .. versionadded:: 2.7
+
+   This routine allows/disallows the SQLite engine to load SQLite extensions
+   from shared libraries.  SQLite extensions can define new functions,
+   aggregates or whole new virtual table implementations.  One well-known
+   extension is the fulltext-search extension distributed with SQLite.
+
+   .. literalinclude:: ../includes/sqlite3/load_extension.py
+
+.. method:: Connection.load_extension(path)
+
+   .. versionadded:: 2.7
+
+   This routine loads a SQLite extension from a shared library.  You have to
+   enable extension loading with :meth:`enable_load_extension` before you can
+   use this routine.
+
 .. attribute:: Connection.row_factory
 
    You can change this attribute to a callable that accepts the cursor and the
@@ -441,7 +459,7 @@ Cursor Objects
 
 .. class:: Cursor
 
-   A SQLite database cursor has the following attributes and methods:
+   A :class:`Cursor` instance has the following attributes and methods.
 
 .. method:: Cursor.execute(sql, [parameters])
 
@@ -602,7 +620,7 @@ Now we plug :class:`Row` in::
     >>> type(r)
     <type 'sqlite3.Row'>
     >>> r
-    (u'2006-01-05', u'BUY', u'RHAT', 100.0, 35.140000000000001)
+    (u'2006-01-05', u'BUY', u'RHAT', 100.0, 35.14)
     >>> len(r)
     5
     >>> r[2]
@@ -861,3 +879,17 @@ exception, the transaction is rolled back; otherwise, the transaction is
 committed:
 
 .. literalinclude:: ../includes/sqlite3/ctx_manager.py
+
+
+Common issues
+-------------
+
+Multithreading
+^^^^^^^^^^^^^^
+
+Older SQLite versions had issues with sharing connections between threads.
+That's why the Python module disallows sharing connections and cursors between
+threads. If you still try to do so, you will get an exception at runtime.
+
+The only exception is calling the :meth:`~Connection.interrupt` method, which
+only makes sense to call from a different thread.

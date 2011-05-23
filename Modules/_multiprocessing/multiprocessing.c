@@ -8,6 +8,12 @@
 
 #include "multiprocessing.h"
 
+#ifdef SCM_RIGHTS
+    #define HAVE_FD_TRANSFER 1
+#else
+    #define HAVE_FD_TRANSFER 0
+#endif
+
 PyObject *create_win32_namespace(void);
 
 PyObject *pickle_dumps, *pickle_loads, *pickle_protocol;
@@ -116,7 +122,7 @@ multiprocessing_sendfd(PyObject *self, PyObject *args)
     cmsg->cmsg_type = SCM_RIGHTS;
     cmsg->cmsg_len = CMSG_LEN(sizeof(int));
     msg.msg_controllen = cmsg->cmsg_len;
-    *(int*)CMSG_DATA(cmsg) = fd;
+    *CMSG_DATA(cmsg) = fd;
 
     Py_BEGIN_ALLOW_THREADS
     res = sendmsg(conn, &msg, 0);
@@ -159,7 +165,7 @@ multiprocessing_recvfd(PyObject *self, PyObject *args)
     if (res < 0)
         return PyErr_SetFromErrno(PyExc_OSError);
 
-    fd = *(int*)CMSG_DATA(cmsg);
+    fd = *CMSG_DATA(cmsg);
     return Py_BuildValue("i", fd);
 }
 
@@ -244,13 +250,25 @@ init_multiprocessing(void)
     Py_INCREF(&ConnectionType);
     PyModule_AddObject(module, "Connection", (PyObject*)&ConnectionType);
 
-#if defined(MS_WINDOWS) || HAVE_SEM_OPEN
+#if defined(MS_WINDOWS) ||                                              \
+  (defined(HAVE_SEM_OPEN) && !defined(POSIX_SEMAPHORES_NOT_ENABLED))
     /* Add SemLock type to module */
     if (PyType_Ready(&SemLockType) < 0)
         return;
     Py_INCREF(&SemLockType);
-    PyDict_SetItemString(SemLockType.tp_dict, "SEM_VALUE_MAX",
-                         Py_BuildValue("i", SEM_VALUE_MAX));
+    {
+        PyObject *py_sem_value_max;
+        /* Some systems define SEM_VALUE_MAX as an unsigned value that
+         * causes it to be negative when used as an int (NetBSD). */
+        if ((int)(SEM_VALUE_MAX) < 0)
+            py_sem_value_max = PyLong_FromLong(INT_MAX);
+        else
+            py_sem_value_max = PyLong_FromLong(SEM_VALUE_MAX);
+        if (py_sem_value_max == NULL)
+            return;
+        PyDict_SetItemString(SemLockType.tp_dict, "SEM_VALUE_MAX",
+                             py_sem_value_max);
+    }
     PyModule_AddObject(module, "SemLock", (PyObject*)&SemLockType);
 #endif
 
@@ -291,7 +309,7 @@ init_multiprocessing(void)
         Py_DECREF(temp); Py_DECREF(value); return; }              \
     Py_DECREF(value)
 
-#ifdef HAVE_SEM_OPEN
+#if defined(HAVE_SEM_OPEN) && !defined(POSIX_SEMAPHORES_NOT_ENABLED)
     ADD_FLAG(HAVE_SEM_OPEN);
 #endif
 #ifdef HAVE_SEM_TIMEDWAIT

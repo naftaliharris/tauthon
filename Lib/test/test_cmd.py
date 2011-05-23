@@ -7,6 +7,7 @@ Original by Michael Schneider
 
 import cmd
 import sys
+from test import test_support
 import re
 import unittest
 import StringIO
@@ -60,15 +61,17 @@ class samplecmdclass(cmd.Cmd):
     >>> mycmd.completenames("12")
     []
     >>> mycmd.completenames("help")
-    ['help', 'help']
+    ['help']
 
     Test for the function complete_help():
     >>> mycmd.complete_help("a")
     ['add']
     >>> mycmd.complete_help("he")
-    ['help', 'help']
+    ['help']
     >>> mycmd.complete_help("12")
     []
+    >>> sorted(mycmd.complete_help(""))
+    ['add', 'exit', 'help', 'shell']
 
     Test for the function do_help():
     >>> mycmd.do_help("testet")
@@ -185,19 +188,19 @@ class TestAlternateInput(unittest.TestCase):
         cmd = self.simplecmd(stdin=input, stdout=output)
         cmd.use_rawinput = False
         cmd.cmdloop()
-        self.assertEqual(output.getvalue(),
+        self.assertMultiLineEqual(output.getvalue(),
             ("(Cmd) test\n"
              "(Cmd) test2\n"
              "(Cmd) "))
 
 
 def test_main(verbose=None):
-    from test import test_support, test_cmd
+    from test import test_cmd
     test_support.run_doctest(test_cmd, verbose)
     test_support.run_unittest(TestAlternateInput)
 
 def test_coverage(coverdir):
-    import trace
+    trace = test_support.import_module('trace')
     tracer=trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix,],
                         trace=0, count=1)
     tracer.run('reload(cmd);test_main()')

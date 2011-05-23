@@ -284,12 +284,28 @@ comparison is ``==`` or ``!=``.  The latter cases return :const:`False` or
 efficient pickling, and in Boolean contexts, a :class:`timedelta` object is
 considered to be true if and only if it isn't equal to ``timedelta(0)``.
 
+Instance methods:
+
+.. method:: timedelta.total_seconds()
+
+   Return the total number of seconds contained in the duration.
+   Equivalent to ``(td.microseconds + (td.seconds + td.days * 24 *
+   3600) * 10**6) / 10**6`` computed with true division enabled.
+
+   Note that for very large time intervals (greater than 270 years on
+   most platforms) this method will lose microsecond accuracy.
+
+   .. versionadded:: 2.7
+
+
 Example usage:
 
     >>> from datetime import timedelta
     >>> year = timedelta(days=365)
     >>> another_year = timedelta(weeks=40, days=84, hours=23,
     ...                          minutes=50, seconds=600)  # adds up to 365 days
+    >>> year.total_seconds()
+    31536000.0
     >>> year == another_year
     True
     >>> ten_years = 10 * year
@@ -457,7 +473,9 @@ Instance methods:
    Return a :class:`time.struct_time` such as returned by :func:`time.localtime`.
    The hours, minutes and seconds are 0, and the DST flag is -1. ``d.timetuple()``
    is equivalent to ``time.struct_time((d.year, d.month, d.day, 0, 0, 0,
-   d.weekday(), d.toordinal() - date(d.year, 1, 1).toordinal() + 1, -1))``
+   d.weekday(), yday, -1))``, where ``yday = d.toordinal() - date(d.year, 1,
+   1).toordinal() + 1`` is the day number within the current year starting with
+   ``1`` for January 1st.
 
 
 .. method:: date.toordinal()
@@ -922,12 +940,13 @@ Instance methods:
 
    Return a :class:`time.struct_time` such as returned by :func:`time.localtime`.
    ``d.timetuple()`` is equivalent to ``time.struct_time((d.year, d.month, d.day,
-   d.hour, d.minute, d.second, d.weekday(), d.toordinal() - date(d.year, 1,
-   1).toordinal() + 1, dst))`` The :attr:`tm_isdst` flag of the result is set
-   according to the :meth:`dst` method:  :attr:`tzinfo` is ``None`` or :meth:`dst`
-   returns ``None``, :attr:`tm_isdst` is set to  ``-1``; else if :meth:`dst`
-   returns a non-zero value, :attr:`tm_isdst` is set to ``1``; else ``tm_isdst`` is
-   set to ``0``.
+   d.hour, d.minute, d.second, d.weekday(), yday, dst))``, where ``yday =
+   d.toordinal() - date(d.year, 1, 1).toordinal() + 1`` is the day number within
+   the current year starting with ``1`` for January 1st. The :attr:`tm_isdst` flag
+   of the result is set according to the :meth:`dst` method: :attr:`tzinfo` is
+   ``None`` or :meth:`dst` returns ``None``, :attr:`tm_isdst` is set to ``-1``;
+   else if :meth:`dst` returns a non-zero value, :attr:`tm_isdst` is set to ``1``;
+   else :attr:`tm_isdst` is set to ``0``.
 
 
 .. method:: datetime.utctimetuple()

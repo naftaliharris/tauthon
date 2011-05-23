@@ -62,8 +62,10 @@ enum py_ssl_cert_requirements {
 };
 
 enum py_ssl_version {
+#ifndef OPENSSL_NO_SSL2
     PY_SSL_VERSION_SSL2,
-    PY_SSL_VERSION_SSL3,
+#endif
+    PY_SSL_VERSION_SSL3=1,
     PY_SSL_VERSION_SSL23,
     PY_SSL_VERSION_TLS1
 };
@@ -263,7 +265,7 @@ newPySSLObject(PySocketSockObject *Sock, char *key_file, char *cert_file,
                enum py_ssl_server_or_client socket_type,
                enum py_ssl_cert_requirements certreq,
                enum py_ssl_version proto_version,
-               char *cacerts_file)
+               char *cacerts_file, char *ciphers)
 {
     PySSLObject *self;
     char *errstr = NULL;
@@ -302,8 +304,10 @@ newPySSLObject(PySocketSockObject *Sock, char *key_file, char *cert_file,
         self->ctx = SSL_CTX_new(TLSv1_method()); /* Set up context */
     else if (proto_version == PY_SSL_VERSION_SSL3)
         self->ctx = SSL_CTX_new(SSLv3_method()); /* Set up context */
+#ifndef OPENSSL_NO_SSL2
     else if (proto_version == PY_SSL_VERSION_SSL2)
         self->ctx = SSL_CTX_new(SSLv2_method()); /* Set up context */
+#endif
     else if (proto_version == PY_SSL_VERSION_SSL23)
         self->ctx = SSL_CTX_new(SSLv23_method()); /* Set up context */
     PySSL_END_ALLOW_THREADS
@@ -311,6 +315,14 @@ newPySSLObject(PySocketSockObject *Sock, char *key_file, char *cert_file,
     if (self->ctx == NULL) {
         errstr = ERRSTR("Invalid SSL protocol variant specified.");
         goto fail;
+    }
+
+    if (ciphers != NULL) {
+        ret = SSL_CTX_set_cipher_list(self->ctx, ciphers);
+        if (ret == 0) {
+            errstr = ERRSTR("No cipher can be selected.");
+            goto fail;
+        }
     }
 
     if (certreq != PY_SSL_CERT_NONE) {
@@ -412,14 +424,15 @@ PySSL_sslwrap(PyObject *self, PyObject *args)
     char *key_file = NULL;
     char *cert_file = NULL;
     char *cacerts_file = NULL;
+    char *ciphers = NULL;
 
-    if (!PyArg_ParseTuple(args, "O!i|zziiz:sslwrap",
+    if (!PyArg_ParseTuple(args, "O!i|zziizz:sslwrap",
                           PySocketModule.Sock_Type,
                           &Sock,
                           &server_side,
                           &key_file, &cert_file,
                           &verification_mode, &protocol,
-                          &cacerts_file))
+                          &cacerts_file, &ciphers))
         return NULL;
 
     /*
@@ -432,12 +445,13 @@ PySSL_sslwrap(PyObject *self, PyObject *args)
 
     return (PyObject *) newPySSLObject(Sock, key_file, cert_file,
                                        server_side, verification_mode,
-                                       protocol, cacerts_file);
+                                       protocol, cacerts_file,
+                                       ciphers);
 }
 
 PyDoc_STRVAR(ssl_doc,
 "sslwrap(socket, server_side, [keyfile, certfile, certs_mode, protocol,\n"
-"                              cacertsfile]) -> sslobject");
+"                              cacertsfile, ciphers]) -> sslobject");
 
 /* SSL object methods */
 
@@ -454,7 +468,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLObject *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -671,12 +684,17 @@ _get_peer_alt_names (X509 *certificate) {
     X509_EXTENSION *ext = NULL;
     GENERAL_NAMES *names = NULL;
     GENERAL_NAME *name;
-    X509V3_EXT_METHOD *method;
+    const X509V3_EXT_METHOD *method;
     BIO *biobuf = NULL;
     char buf[2048];
     char *vptr;
     int len;
+    /* Issue #2973: ASN1_item_d2i() API changed in OpenSSL 0.9.6m */
+#if OPENSSL_VERSION_NUMBER >= 0x009060dfL
     const unsigned char *p;
+#else
+    unsigned char *p;
+#endif
 
     if (certificate == NULL)
         return peer_alt_names;
@@ -1027,15 +1045,15 @@ return the certificate even if it wasn't validated.");
 static PyObject *PySSL_cipher (PySSLObject *self) {
 
     PyObject *retval, *v;
-    SSL_CIPHER *current;
+    const SSL_CIPHER *current;
     char *cipher_name;
     char *cipher_protocol;
 
     if (self->ssl == NULL)
-        return Py_None;
+        Py_RETURN_NONE;
     current = SSL_get_current_cipher(self->ssl);
     if (current == NULL)
-        return Py_None;
+        Py_RETURN_NONE;
 
     retval = PyTuple_New(3);
     if (retval == NULL)
@@ -1043,6 +1061,7 @@ static PyObject *PySSL_cipher (PySSLObject *self) {
 
     cipher_name = (char *) SSL_CIPHER_get_name(current);
     if (cipher_name == NULL) {
+        Py_INCREF(Py_None);
         PyTuple_SET_ITEM(retval, 0, Py_None);
     } else {
         v = PyString_FromString(cipher_name);
@@ -1052,6 +1071,7 @@ static PyObject *PySSL_cipher (PySSLObject *self) {
     }
     cipher_protocol = SSL_CIPHER_get_version(current);
     if (cipher_protocol == NULL) {
+        Py_INCREF(Py_None);
         PyTuple_SET_ITEM(retval, 1, Py_None);
     } else {
         v = PyString_FromString(cipher_protocol);
@@ -1154,14 +1174,13 @@ normal_return:
 
 static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
 {
-    char *data;
+    Py_buffer buf;
     int len;
-    int count;
     int sockstate;
     int err;
     int nonblocking;
 
-    if (!PyArg_ParseTuple(args, "s#:write", &data, &count))
+    if (!PyArg_ParseTuple(args, "s*:write", &buf))
         return NULL;
 
     /* just in case the blocking state of the socket has been changed */
@@ -1173,24 +1192,23 @@ static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
     if (sockstate == SOCKET_HAS_TIMED_OUT) {
         PyErr_SetString(PySSLErrorObject,
                         "The write operation timed out");
-        return NULL;
+        goto error;
     } else if (sockstate == SOCKET_HAS_BEEN_CLOSED) {
         PyErr_SetString(PySSLErrorObject,
                         "Underlying socket has been closed.");
-        return NULL;
+        goto error;
     } else if (sockstate == SOCKET_TOO_LARGE_FOR_SELECT) {
         PyErr_SetString(PySSLErrorObject,
                         "Underlying socket too large for select().");
-        return NULL;
+        goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
-        len = SSL_write(self->ssl, data, count);
+        len = SSL_write(self->ssl, buf.buf, buf.len);
         err = SSL_get_error(self->ssl, len);
         PySSL_END_ALLOW_THREADS
-        if(PyErr_CheckSignals()) {
-            return NULL;
+        if (PyErr_CheckSignals()) {
+            goto error;
         }
         if (err == SSL_ERROR_WANT_READ) {
             sockstate = check_socket_and_wait_for_timeout(self->Socket, 0);
@@ -1202,19 +1220,25 @@ static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
         if (sockstate == SOCKET_HAS_TIMED_OUT) {
             PyErr_SetString(PySSLErrorObject,
                             "The write operation timed out");
-            return NULL;
+            goto error;
         } else if (sockstate == SOCKET_HAS_BEEN_CLOSED) {
             PyErr_SetString(PySSLErrorObject,
                             "Underlying socket has been closed.");
-            return NULL;
+            goto error;
         } else if (sockstate == SOCKET_IS_NONBLOCKING) {
             break;
         }
     } while (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE);
+
+    PyBuffer_Release(&buf);
     if (len > 0)
         return PyInt_FromLong(len);
     else
         return PySSL_SetError(self, len, __FILE__, __LINE__);
+
+error:
+    PyBuffer_Release(&buf);
+    return NULL;
 }
 
 PyDoc_STRVAR(PySSL_SSLwrite_doc,
@@ -1295,7 +1319,6 @@ static PyObject *PySSL_SSLread(PySSLObject *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, PyString_AsString(buf), len);
         err = SSL_get_error(self->ssl, count);
@@ -1624,7 +1647,9 @@ for documentation.");
 PyMODINIT_FUNC
 init_ssl(void)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *r;
+    unsigned long libver;
+    unsigned int major, minor, fix, patch, status;
 
     Py_TYPE(&PySSL_Type) = &PyType_Type;
 
@@ -1687,12 +1712,40 @@ init_ssl(void)
                             PY_SSL_CERT_REQUIRED);
 
     /* protocol versions */
+#ifndef OPENSSL_NO_SSL2
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv2",
                             PY_SSL_VERSION_SSL2);
+#endif
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv3",
                             PY_SSL_VERSION_SSL3);
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv23",
                             PY_SSL_VERSION_SSL23);
     PyModule_AddIntConstant(m, "PROTOCOL_TLSv1",
                             PY_SSL_VERSION_TLS1);
+
+    /* OpenSSL version */
+    /* SSLeay() gives us the version of the library linked against,
+       which could be different from the headers version.
+    */
+    libver = SSLeay();
+    r = PyLong_FromUnsignedLong(libver);
+    if (r == NULL)
+        return;
+    if (PyModule_AddObject(m, "OPENSSL_VERSION_NUMBER", r))
+        return;
+    status = libver & 0xF;
+    libver >>= 4;
+    patch = libver & 0xFF;
+    libver >>= 8;
+    fix = libver & 0xFF;
+    libver >>= 8;
+    minor = libver & 0xFF;
+    libver >>= 8;
+    major = libver & 0xFF;
+    r = Py_BuildValue("IIIII", major, minor, fix, patch, status);
+    if (r == NULL || PyModule_AddObject(m, "OPENSSL_VERSION_INFO", r))
+        return;
+    r = PyString_FromString(SSLeay_version(SSLEAY_VERSION));
+    if (r == NULL || PyModule_AddObject(m, "OPENSSL_VERSION", r))
+        return;
 }

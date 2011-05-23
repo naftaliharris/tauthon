@@ -207,7 +207,7 @@ class build_ext (Command):
 
             elif MSVC_VERSION == 8:
                 self.library_dirs.append(os.path.join(sys.exec_prefix,
-                                         'PC', 'VS8.0', 'win32release'))
+                                         'PC', 'VS8.0'))
             elif MSVC_VERSION == 7:
                 self.library_dirs.append(os.path.join(sys.exec_prefix,
                                          'PC', 'VS7.1'))
@@ -753,7 +753,9 @@ class build_ext (Command):
         elif sys.platform == 'darwin':
             # Don't use the default code below
             return ext.libraries
-
+        elif sys.platform[:3] == 'aix':
+            # Don't use the default code below
+            return ext.libraries
         else:
             from distutils import sysconfig
             if sysconfig.get_config_var('Py_ENABLE_SHARED'):

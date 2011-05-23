@@ -104,17 +104,17 @@ class MutableStringTest(UserStringTest):
                     data.reverse()
                     L[start:stop:step] = data
                     s[start:stop:step] = "".join(data)
-                    self.assertEquals(s, "".join(L))
+                    self.assertEqual(s, "".join(L))
 
                     del L[start:stop:step]
                     del s[start:stop:step]
-                    self.assertEquals(s, "".join(L))
+                    self.assertEqual(s, "".join(L))
 
     def test_immutable(self):
         s = self.type2test("foobar")
         s2 = s.immutable()
         self.assertEqual(s, s2)
-        self.assert_(isinstance(s2, UserString))
+        self.assertIsInstance(s2, UserString)
 
     def test_iadd(self):
         s = self.type2test("foo")

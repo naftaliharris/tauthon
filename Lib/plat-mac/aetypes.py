@@ -131,7 +131,7 @@ class Keyword:
         self.keyword = "%-4.4s" % str(keyword)
 
     def __repr__(self):
-        return "Keyword(%r)" % `self.keyword`
+        return "Keyword(%r)" % repr(self.keyword)
 
     def __str__(self):
         return string.strip(self.keyword)
@@ -533,10 +533,10 @@ class ComponentItem(SelectableItem):
         return s
 
     def __getattr__(self, name):
-        if self._elemdict.has_key(name):
+        if name in self._elemdict:
             cls = self._elemdict[name]
             return DelayedComponentItem(cls, self)
-        if self._propdict.has_key(name):
+        if name in self._propdict:
             cls = self._propdict[name]
             return cls(self)
         raise AttributeError, name

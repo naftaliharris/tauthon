@@ -3,12 +3,16 @@
 OS/2+EMX doesn't support the file locking operations.
 
 """
-import fcntl
 import os
 import struct
 import sys
 import unittest
-from test.test_support import verbose, TESTFN, unlink, run_unittest
+from test.test_support import (verbose, TESTFN, unlink, run_unittest,
+    import_module)
+
+# Skip test if no fnctl module.
+fcntl = import_module('fcntl')
+
 
 # TODO - Write tests for flock() and lockf().
 
@@ -89,8 +93,7 @@ class TestFcntl(unittest.TestCase):
             # This flag is larger than 2**31 in 64-bit builds
             flags = fcntl.DN_MULTISHOT
         except AttributeError:
-            # F_NOTIFY or DN_MULTISHOT unavailable, skipping
-            return
+            self.skipTest("F_NOTIFY or DN_MULTISHOT unavailable")
         fd = os.open(os.path.dirname(os.path.abspath(TESTFN)), os.O_RDONLY)
         try:
             fcntl.fcntl(fd, cmd, flags)

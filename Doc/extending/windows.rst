@@ -114,7 +114,7 @@ described here are distributed with the Python sources in the
    Now your options are:
 
 #. Copy :file:`example.sln` and :file:`example.vcproj`, rename them to
-      :file:`spam.\*`, and edit them by hand, or
+   :file:`spam.\*`, and edit them by hand, or
 
 #. Create a brand new project; instructions are below.
 
@@ -175,16 +175,16 @@ If your module creates a new type, you may have trouble with this line::
 
    PyObject_HEAD_INIT(&PyType_Type)
 
-Change it to::
+Static type object initializers in extension modules may cause
+compiles to fail with an error message like "initializer not a
+constant".  This shows up when building DLL under MSVC.  Change it to::
 
    PyObject_HEAD_INIT(NULL)
 
 and add the following to the module initialization function::
 
-   MyObject_Type.ob_type = &PyType_Type;
-
-Refer to section 3 of the `Python FAQ <http://www.python.org/doc/faq>`_ for
-details on why you must do this.
+   if (PyType_Ready(&MyObject_Type) < 0)
+        return NULL;
 
 
 .. _dynamic-linking:

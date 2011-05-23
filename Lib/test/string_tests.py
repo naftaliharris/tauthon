@@ -62,7 +62,7 @@ class CommonTest(unittest.TestCase):
                 pass
             object = subtype(object)
             realresult = getattr(object, methodname)(*args)
-            self.assert_(object is not realresult)
+            self.assertTrue(object is not realresult)
 
     # check that object.method(*args) raises exc
     def checkraises(self, exc, object, methodname, *args):
@@ -185,6 +185,9 @@ class CommonTest(unittest.TestCase):
         self.checkequal(-1, '', 'find', 'xx', 1, 1)
         self.checkequal(-1, '', 'find', 'xx', sys.maxint, 0)
 
+        # issue 7458
+        self.checkequal(-1, 'ab', 'find', 'xxx', sys.maxsize + 1, 0)
+
         # For a variety of combinations,
         #    verify that str.find() matches __contains__
         #    and that the found substring is really at that location
@@ -205,8 +208,7 @@ class CommonTest(unittest.TestCase):
                 loc = i.find(j)
                 r1 = (loc != -1)
                 r2 = j in i
-                if r1 != r2:
-                    self.assertEqual(r1, r2)
+                self.assertEqual(r1, r2)
                 if loc != -1:
                     self.assertEqual(i[loc:loc+len(j)], j)
 
@@ -229,6 +231,33 @@ class CommonTest(unittest.TestCase):
 
         self.checkraises(TypeError, 'hello', 'rfind')
         self.checkraises(TypeError, 'hello', 'rfind', 42)
+
+        # For a variety of combinations,
+        #    verify that str.rfind() matches __contains__
+        #    and that the found substring is really at that location
+        charset = ['', 'a', 'b', 'c']
+        digits = 5
+        base = len(charset)
+        teststrings = set()
+        for i in xrange(base ** digits):
+            entry = []
+            for j in xrange(digits):
+                i, m = divmod(i, base)
+                entry.append(charset[m])
+            teststrings.add(''.join(entry))
+        teststrings = list(teststrings)
+        for i in teststrings:
+            i = self.fixtype(i)
+            for j in teststrings:
+                loc = i.rfind(j)
+                r1 = (loc != -1)
+                r2 = j in i
+                self.assertEqual(r1, r2)
+                if loc != -1:
+                    self.assertEqual(i[loc:loc+len(j)], self.fixtype(j))
+
+        # issue 7458
+        self.checkequal(-1, 'ab', 'rfind', 'xxx', sys.maxsize + 1, 0)
 
     def test_index(self):
         self.checkequal(0, 'abcdefghiabc', 'index', '')
@@ -686,7 +715,7 @@ class CommonTest(unittest.TestCase):
         EQ("bobobXbobob", "bobobobXbobobob", "replace", "bobob", "bob")
         EQ("BOBOBOB", "BOBOBOB", "replace", "bob", "bobby")
 
-        with test_support._check_py3k_warnings():
+        with test_support.check_py3k_warnings():
             ba = buffer('a')
             bb = buffer('b')
         EQ("bbc", "abc", "replace", ba, bb)
@@ -1090,15 +1119,8 @@ class MixinStrUnicodeUserStringTest:
             format = '%%.%if' % prec
             value = 0.01
             for x in xrange(60):
-                value = value * 3.141592655 / 3.0 * 10.0
-                # The formatfloat() code in stringobject.c and
-                # unicodeobject.c uses a 120 byte buffer and switches from
-                # 'f' formatting to 'g' at precision 50, so we expect
-                # OverflowErrors for the ranges x < 50 and prec >= 67.
-                if x < 50 and prec >= 67:
-                    self.checkraises(OverflowError, format, "__mod__", value)
-                else:
-                    self.checkcall(format, "__mod__", value)
+                value = value * 3.14159265359 / 3.0 * 10.0
+                self.checkcall(format, "__mod__", value)
 
     def test_inplace_rewrites(self):
         # Check that strings don't copy and modify cached single-character strings
@@ -1154,6 +1176,63 @@ class MixinStrUnicodeUserStringTest:
 
         # mixed use of str and unicode
         self.assertEqual('a/b/c'.rpartition(u'/'), ('a/b', '/', 'c'))
+
+    def test_none_arguments(self):
+        # issue 11828
+        s = 'hello'
+        self.checkequal(2, s, 'find', 'l', None)
+        self.checkequal(3, s, 'find', 'l', -2, None)
+        self.checkequal(2, s, 'find', 'l', None, -2)
+        self.checkequal(0, s, 'find', 'h', None, None)
+
+        self.checkequal(3, s, 'rfind', 'l', None)
+        self.checkequal(3, s, 'rfind', 'l', -2, None)
+        self.checkequal(2, s, 'rfind', 'l', None, -2)
+        self.checkequal(0, s, 'rfind', 'h', None, None)
+
+        self.checkequal(2, s, 'index', 'l', None)
+        self.checkequal(3, s, 'index', 'l', -2, None)
+        self.checkequal(2, s, 'index', 'l', None, -2)
+        self.checkequal(0, s, 'index', 'h', None, None)
+
+        self.checkequal(3, s, 'rindex', 'l', None)
+        self.checkequal(3, s, 'rindex', 'l', -2, None)
+        self.checkequal(2, s, 'rindex', 'l', None, -2)
+        self.checkequal(0, s, 'rindex', 'h', None, None)
+
+        self.checkequal(2, s, 'count', 'l', None)
+        self.checkequal(1, s, 'count', 'l', -2, None)
+        self.checkequal(1, s, 'count', 'l', None, -2)
+        self.checkequal(0, s, 'count', 'x', None, None)
+
+        self.checkequal(True, s, 'endswith', 'o', None)
+        self.checkequal(True, s, 'endswith', 'lo', -2, None)
+        self.checkequal(True, s, 'endswith', 'l', None, -2)
+        self.checkequal(False, s, 'endswith', 'x', None, None)
+
+        self.checkequal(True, s, 'startswith', 'h', None)
+        self.checkequal(True, s, 'startswith', 'l', -2, None)
+        self.checkequal(True, s, 'startswith', 'h', None, -2)
+        self.checkequal(False, s, 'startswith', 'x', None, None)
+
+    def test_find_etc_raise_correct_error_messages(self):
+        # issue 11828
+        s = 'hello'
+        x = 'x'
+        self.assertRaisesRegexp(TypeError, r'\bfind\b', s.find,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'\brfind\b', s.rfind,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'\bindex\b', s.index,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'\brindex\b', s.rindex,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'^count\(', s.count,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'^startswith\(', s.startswith,
+                                x, None, None, None)
+        self.assertRaisesRegexp(TypeError, r'^endswith\(', s.endswith,
+                                x, None, None, None)
 
 class MixinStrStringUserStringTest:
     # Additional tests for 8bit strings, i.e. str, UserString and
@@ -1221,34 +1300,34 @@ class MixinStrUnicodeTest:
             pass
         s1 = subclass("abcd")
         s2 = t().join([s1])
-        self.assert_(s1 is not s2)
-        self.assert_(type(s2) is t)
+        self.assertTrue(s1 is not s2)
+        self.assertTrue(type(s2) is t)
 
         s1 = t("abcd")
         s2 = t().join([s1])
-        self.assert_(s1 is s2)
+        self.assertTrue(s1 is s2)
 
         # Should also test mixed-type join.
         if t is unicode:
             s1 = subclass("abcd")
             s2 = "".join([s1])
-            self.assert_(s1 is not s2)
-            self.assert_(type(s2) is t)
+            self.assertTrue(s1 is not s2)
+            self.assertTrue(type(s2) is t)
 
             s1 = t("abcd")
             s2 = "".join([s1])
-            self.assert_(s1 is s2)
+            self.assertTrue(s1 is s2)
 
         elif t is str:
             s1 = subclass("abcd")
             s2 = u"".join([s1])
-            self.assert_(s1 is not s2)
-            self.assert_(type(s2) is unicode) # promotes!
+            self.assertTrue(s1 is not s2)
+            self.assertTrue(type(s2) is unicode) # promotes!
 
             s1 = t("abcd")
             s2 = u"".join([s1])
-            self.assert_(s1 is not s2)
-            self.assert_(type(s2) is unicode) # promotes!
+            self.assertTrue(s1 is not s2)
+            self.assertTrue(type(s2) is unicode) # promotes!
 
         else:
             self.fail("unexpected type for MixinStrUnicodeTest %r" % t)

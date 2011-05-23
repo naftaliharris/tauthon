@@ -7,6 +7,7 @@ from distutils.command.install_scripts import install_scripts
 from distutils.core import Distribution
 
 from distutils.tests import support
+from test.test_support import run_unittest
 
 
 class InstallScriptsTestCase(support.TempdirManager,
@@ -23,15 +24,15 @@ class InstallScriptsTestCase(support.TempdirManager,
             skip_build=1,
             )
         cmd = install_scripts(dist)
-        self.assert_(not cmd.force)
-        self.assert_(not cmd.skip_build)
-        self.assert_(cmd.build_dir is None)
-        self.assert_(cmd.install_dir is None)
+        self.assertTrue(not cmd.force)
+        self.assertTrue(not cmd.skip_build)
+        self.assertTrue(cmd.build_dir is None)
+        self.assertTrue(cmd.install_dir is None)
 
         cmd.finalize_options()
 
-        self.assert_(cmd.force)
-        self.assert_(cmd.skip_build)
+        self.assertTrue(cmd.force)
+        self.assertTrue(cmd.skip_build)
         self.assertEqual(cmd.build_dir, "/foo/bar")
         self.assertEqual(cmd.install_dir, "/splat/funk")
 
@@ -42,8 +43,10 @@ class InstallScriptsTestCase(support.TempdirManager,
         def write_script(name, text):
             expected.append(name)
             f = open(os.path.join(source, name), "w")
-            f.write(text)
-            f.close()
+            try:
+                f.write(text)
+            finally:
+                f.close()
 
         write_script("script1.py", ("#! /usr/bin/env python2.3\n"
                                     "# bogus script w/ Python sh-bang\n"
@@ -69,11 +72,11 @@ class InstallScriptsTestCase(support.TempdirManager,
 
         installed = os.listdir(target)
         for name in expected:
-            self.assert_(name in installed)
+            self.assertTrue(name in installed)
 
 
 def test_suite():
     return unittest.makeSuite(InstallScriptsTestCase)
 
 if __name__ == "__main__":
-    unittest.main(defaultTest="test_suite")
+    run_unittest(test_suite())

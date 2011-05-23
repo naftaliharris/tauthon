@@ -298,7 +298,7 @@ PyThreadState_Delete(PyThreadState *tstate)
         Py_FatalError("PyThreadState_Delete: tstate is still current");
     tstate_delete_common(tstate);
 #ifdef WITH_THREAD
-    if (autoTLSkey && PyThread_get_key_value(autoTLSkey) == tstate)
+    if (autoInterpreterState && PyThread_get_key_value(autoTLSkey) == tstate)
         PyThread_delete_key_value(autoTLSkey);
 #endif /* WITH_THREAD */
 }
@@ -314,7 +314,7 @@ PyThreadState_DeleteCurrent()
             "PyThreadState_DeleteCurrent: no current tstate");
     _PyThreadState_Current = NULL;
     tstate_delete_common(tstate);
-    if (autoTLSkey && PyThread_get_key_value(autoTLSkey) == tstate)
+    if (autoInterpreterState && PyThread_get_key_value(autoTLSkey) == tstate)
         PyThread_delete_key_value(autoTLSkey);
     PyEval_ReleaseLock();
 }
@@ -463,7 +463,7 @@ _PyThread_CurrentFrames(void)
     /* for i in all interpreters:
      *     for t in all of i's thread states:
      *          if t's frame isn't NULL, map t's id to its frame
-     * Because these lists can mutute even when the GIL is held, we
+     * Because these lists can mutate even when the GIL is held, we
      * need to grab head_mutex for the duration.
      */
     HEAD_LOCK();
@@ -534,8 +534,24 @@ void
 _PyGILState_Fini(void)
 {
     PyThread_delete_key(autoTLSkey);
-    autoTLSkey = 0;
     autoInterpreterState = NULL;
+}
+
+/* Reset the TLS key - called by PyOS_AfterFork.
+ * This should not be necessary, but some - buggy - pthread implementations
+ * don't flush TLS on fork, see issue #10517.
+ */
+void
+_PyGILState_Reinit(void)
+{
+    PyThreadState *tstate = PyGILState_GetThisThreadState();
+    PyThread_delete_key(autoTLSkey);
+    if ((autoTLSkey = PyThread_create_key()) == -1)
+        Py_FatalError("Could not allocate TLS entry");
+
+    /* re-associate the current thread state with the new key */
+    if (PyThread_set_key_value(autoTLSkey, (void *)tstate) < 0)
+        Py_FatalError("Couldn't create autoTLSkey mapping");
 }
 
 /* When a thread state is created for a thread by some mechanism other than
@@ -546,10 +562,10 @@ _PyGILState_Fini(void)
 static void
 _PyGILState_NoteThreadState(PyThreadState* tstate)
 {
-    /* If autoTLSkey is 0, this must be the very first threadstate created
-       in Py_Initialize().  Don't do anything for now (we'll be back here
-       when _PyGILState_Init is called). */
-    if (!autoTLSkey)
+    /* If autoTLSkey isn't initialized, this must be the very first
+       threadstate created in Py_Initialize().  Don't do anything for now
+       (we'll be back here when _PyGILState_Init is called). */
+    if (!autoInterpreterState)
         return;
 
     /* Stick the thread state for this thread in thread local storage.
@@ -577,7 +593,7 @@ _PyGILState_NoteThreadState(PyThreadState* tstate)
 PyThreadState *
 PyGILState_GetThisThreadState(void)
 {
-    if (autoInterpreterState == NULL || autoTLSkey == 0)
+    if (autoInterpreterState == NULL)
         return NULL;
     return (PyThreadState *)PyThread_get_key_value(autoTLSkey);
 }

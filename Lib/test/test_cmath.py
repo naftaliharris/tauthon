@@ -1,7 +1,6 @@
 from test.test_support import run_unittest
 from test.test_math import parse_testfile, test_file
 import unittest
-import os, sys
 import cmath, math
 from cmath import phase, polar, rect, pi
 
@@ -46,37 +45,6 @@ complex_nans = [complex(x, y) for x, y in [
         (INF, NAN)
         ]]
 
-def almostEqualF(a, b, rel_err=2e-15, abs_err = 5e-323):
-    """Determine whether floating-point values a and b are equal to within
-    a (small) rounding error.  The default values for rel_err and
-    abs_err are chosen to be suitable for platforms where a float is
-    represented by an IEEE 754 double.  They allow an error of between
-    9 and 19 ulps."""
-
-    # special values testing
-    if math.isnan(a):
-        return math.isnan(b)
-    if math.isinf(a):
-        return a == b
-
-    # if both a and b are zero, check whether they have the same sign
-    # (in theory there are examples where it would be legitimate for a
-    # and b to have opposite signs; in practice these hardly ever
-    # occur).
-    if not a and not b:
-        return math.copysign(1., a) == math.copysign(1., b)
-
-    # if a-b overflows, or b is infinite, return False.  Again, in
-    # theory there are examples where a is within a few ulps of the
-    # max representable float, and then b could legitimately be
-    # infinite.  In practice these examples are rare.
-    try:
-        absolute_error = abs(b-a)
-    except OverflowError:
-        return False
-    else:
-        return absolute_error <= max(abs_err, rel_err * abs(a))
-
 class CMathTests(unittest.TestCase):
     # list of all functions in cmath
     test_functions = [getattr(cmath, fname) for fname in [
@@ -93,47 +61,63 @@ class CMathTests(unittest.TestCase):
     def tearDown(self):
         self.test_values.close()
 
-    def rAssertAlmostEqual(self, a, b, rel_err = 2e-15, abs_err = 5e-323):
-        """Check that two floating-point numbers are almost equal."""
+    def rAssertAlmostEqual(self, a, b, rel_err = 2e-15, abs_err = 5e-323,
+                           msg=None):
+        """Fail if the two floating-point numbers are not almost equal.
+
+        Determine whether floating-point values a and b are equal to within
+        a (small) rounding error.  The default values for rel_err and
+        abs_err are chosen to be suitable for platforms where a float is
+        represented by an IEEE 754 double.  They allow an error of between
+        9 and 19 ulps.
+        """
 
         # special values testing
         if math.isnan(a):
             if math.isnan(b):
                 return
-            self.fail("%s should be nan" % repr(b))
+            self.fail(msg or '{!r} should be nan'.format(b))
 
         if math.isinf(a):
             if a == b:
                 return
-            self.fail("finite result where infinity excpected: "
-                      "expected %s, got %s" % (repr(a), repr(b)))
+            self.fail(msg or 'finite result where infinity expected: '
+                      'expected {!r}, got {!r}'.format(a, b))
 
+        # if both a and b are zero, check whether they have the same sign
+        # (in theory there are examples where it would be legitimate for a
+        # and b to have opposite signs; in practice these hardly ever
+        # occur).
         if not a and not b:
-            if math.atan2(a, -1.) != math.atan2(b, -1.):
-                self.fail("zero has wrong sign: expected %s, got %s" %
-                          (repr(a), repr(b)))
+            if math.copysign(1., a) != math.copysign(1., b):
+                self.fail(msg or 'zero has wrong sign: expected {!r}, '
+                          'got {!r}'.format(a, b))
 
-        # test passes if either the absolute error or the relative
-        # error is sufficiently small.  The defaults amount to an
-        # error of between 9 ulps and 19 ulps on an IEEE-754 compliant
-        # machine.
-
+        # if a-b overflows, or b is infinite, return False.  Again, in
+        # theory there are examples where a is within a few ulps of the
+        # max representable float, and then b could legitimately be
+        # infinite.  In practice these examples are rare.
         try:
             absolute_error = abs(b-a)
         except OverflowError:
             pass
         else:
+            # test passes if either the absolute error or the relative
+            # error is sufficiently small.  The defaults amount to an
+            # error of between 9 ulps and 19 ulps on an IEEE-754 compliant
+            # machine.
             if absolute_error <= max(abs_err, rel_err * abs(a)):
                 return
-        self.fail("%s and %s are not sufficiently close" % (repr(a), repr(b)))
+        self.fail(msg or
+                  '{!r} and {!r} are not sufficiently close'.format(a, b))
 
     def test_constants(self):
         e_expected = 2.71828182845904523536
         pi_expected = 3.14159265358979323846
         self.assertAlmostEqual(cmath.pi, pi_expected, places=9,
-            msg="cmath.pi is %s; should be %s" % (cmath.pi, pi_expected))
+            msg="cmath.pi is {}; should be {}".format(cmath.pi, pi_expected))
         self.assertAlmostEqual(cmath.e, e_expected, places=9,
-            msg="cmath.e is %s; should be %s" % (cmath.e, e_expected))
+            msg="cmath.e is {}; should be {}".format(cmath.e, e_expected))
 
     def test_user_object(self):
         # Test automatic calling of __complex__ and __float__ by cmath
@@ -325,8 +309,8 @@ class CMathTests(unittest.TestCase):
                 except ValueError:
                     continue
                 else:
-                    test_str = "%s: %s(complex(%r, %r))" % (id, fn, ar, ai)
-                    self.fail('ValueError not raised in test %s' % test_str)
+                    self.fail('ValueError not raised in test '
+                          '{}: {}(complex({!r}, {!r}))'.format(id, fn, ar, ai))
 
             if 'overflow' in flags:
                 try:
@@ -334,8 +318,8 @@ class CMathTests(unittest.TestCase):
                 except OverflowError:
                     continue
                 else:
-                    test_str = "%s: %s(complex(%r, %r))" % (id, fn, ar, ai)
-                    self.fail('OverflowError not raised in test %s' % test_str)
+                    self.fail('OverflowError not raised in test '
+                          '{}: {}(complex({!r}, {!r}))'.format(id, fn, ar, ai))
 
             actual = function(arg)
 
@@ -353,17 +337,19 @@ class CMathTests(unittest.TestCase):
             else:
                 real_abs_err = 5e-323
 
-            if not (almostEqualF(expected.real, actual.real,
-                                 abs_err = real_abs_err) and
-                    almostEqualF(expected.imag, actual.imag)):
-                error_message = (
-                    "%s: %s(complex(%r, %r))\n" % (id, fn, ar, ai) +
-                    "Expected: complex(%r, %r)\n" %
-                                    (expected.real, expected.imag) +
-                    "Received: complex(%r, %r)\n" %
-                                    (actual.real, actual.imag) +
-                    "Received value insufficiently close to expected value.")
-                self.fail(error_message)
+            error_message = (
+                '{}: {}(complex({!r}, {!r}))\n'
+                'Expected: complex({!r}, {!r})\n'
+                'Received: complex({!r}, {!r})\n'
+                'Received value insufficiently close to expected value.'
+                ).format(id, fn, ar, ai,
+                     expected.real, expected.imag,
+                     actual.real, actual.imag)
+            self.rAssertAlmostEqual(expected.real, actual.real,
+                                        abs_err=real_abs_err,
+                                        msg=error_message)
+            self.rAssertAlmostEqual(expected.imag, actual.imag,
+                                        msg=error_message)
 
     def assertCISEqual(self, a, b):
         eps = 1E-7
@@ -416,7 +402,7 @@ class CMathTests(unittest.TestCase):
 
         # real or imaginary part NaN
         for z in complex_nans:
-            self.assert_(math.isnan(phase(z)))
+            self.assertTrue(math.isnan(phase(z)))
 
     def test_abs(self):
         # zeros
@@ -429,18 +415,18 @@ class CMathTests(unittest.TestCase):
 
         # real or imaginary part NaN
         self.assertEqual(abs(complex(NAN, -INF)), INF)
-        self.assert_(math.isnan(abs(complex(NAN, -2.3))))
-        self.assert_(math.isnan(abs(complex(NAN, -0.0))))
-        self.assert_(math.isnan(abs(complex(NAN, 0.0))))
-        self.assert_(math.isnan(abs(complex(NAN, 2.3))))
+        self.assertTrue(math.isnan(abs(complex(NAN, -2.3))))
+        self.assertTrue(math.isnan(abs(complex(NAN, -0.0))))
+        self.assertTrue(math.isnan(abs(complex(NAN, 0.0))))
+        self.assertTrue(math.isnan(abs(complex(NAN, 2.3))))
         self.assertEqual(abs(complex(NAN, INF)), INF)
         self.assertEqual(abs(complex(-INF, NAN)), INF)
-        self.assert_(math.isnan(abs(complex(-2.3, NAN))))
-        self.assert_(math.isnan(abs(complex(-0.0, NAN))))
-        self.assert_(math.isnan(abs(complex(0.0, NAN))))
-        self.assert_(math.isnan(abs(complex(2.3, NAN))))
+        self.assertTrue(math.isnan(abs(complex(-2.3, NAN))))
+        self.assertTrue(math.isnan(abs(complex(-0.0, NAN))))
+        self.assertTrue(math.isnan(abs(complex(0.0, NAN))))
+        self.assertTrue(math.isnan(abs(complex(2.3, NAN))))
         self.assertEqual(abs(complex(INF, NAN)), INF)
-        self.assert_(math.isnan(abs(complex(NAN, NAN))))
+        self.assertTrue(math.isnan(abs(complex(NAN, NAN))))
 
         # result overflows
         if float.__getformat__("double").startswith("IEEE"):
@@ -459,26 +445,26 @@ class CMathTests(unittest.TestCase):
         self.assertCEqual(rect(1, -pi/2), (0, -1.))
 
     def test_isnan(self):
-        self.failIf(cmath.isnan(1))
-        self.failIf(cmath.isnan(1j))
-        self.failIf(cmath.isnan(INF))
-        self.assert_(cmath.isnan(NAN))
-        self.assert_(cmath.isnan(complex(NAN, 0)))
-        self.assert_(cmath.isnan(complex(0, NAN)))
-        self.assert_(cmath.isnan(complex(NAN, NAN)))
-        self.assert_(cmath.isnan(complex(NAN, INF)))
-        self.assert_(cmath.isnan(complex(INF, NAN)))
+        self.assertFalse(cmath.isnan(1))
+        self.assertFalse(cmath.isnan(1j))
+        self.assertFalse(cmath.isnan(INF))
+        self.assertTrue(cmath.isnan(NAN))
+        self.assertTrue(cmath.isnan(complex(NAN, 0)))
+        self.assertTrue(cmath.isnan(complex(0, NAN)))
+        self.assertTrue(cmath.isnan(complex(NAN, NAN)))
+        self.assertTrue(cmath.isnan(complex(NAN, INF)))
+        self.assertTrue(cmath.isnan(complex(INF, NAN)))
 
     def test_isinf(self):
-        self.failIf(cmath.isinf(1))
-        self.failIf(cmath.isinf(1j))
-        self.failIf(cmath.isinf(NAN))
-        self.assert_(cmath.isinf(INF))
-        self.assert_(cmath.isinf(complex(INF, 0)))
-        self.assert_(cmath.isinf(complex(0, INF)))
-        self.assert_(cmath.isinf(complex(INF, INF)))
-        self.assert_(cmath.isinf(complex(NAN, INF)))
-        self.assert_(cmath.isinf(complex(INF, NAN)))
+        self.assertFalse(cmath.isinf(1))
+        self.assertFalse(cmath.isinf(1j))
+        self.assertFalse(cmath.isinf(NAN))
+        self.assertTrue(cmath.isinf(INF))
+        self.assertTrue(cmath.isinf(complex(INF, 0)))
+        self.assertTrue(cmath.isinf(complex(0, INF)))
+        self.assertTrue(cmath.isinf(complex(INF, INF)))
+        self.assertTrue(cmath.isinf(complex(NAN, INF)))
+        self.assertTrue(cmath.isinf(complex(INF, NAN)))
 
 
 def test_main():

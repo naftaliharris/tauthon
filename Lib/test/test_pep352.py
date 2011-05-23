@@ -31,7 +31,7 @@ class ExceptionClassTests(unittest.TestCase):
     inheritance hierarchy)"""
 
     def test_builtins_new_style(self):
-        self.failUnless(issubclass(Exception, object))
+        self.assertTrue(issubclass(Exception, object))
 
     @ignore_deprecation_warnings
     def verify_instance_interface(self, ins):
@@ -51,7 +51,7 @@ class ExceptionClassTests(unittest.TestCase):
                 last_exc = getattr(__builtin__, superclass_name)
             except AttributeError:
                 self.fail("base class %s not a built-in" % superclass_name)
-            self.failUnless(superclass_name in exc_set)
+            self.assertIn(superclass_name, exc_set)
             exc_set.discard(superclass_name)
             superclasses = []  # Loop will insert base exception
             last_depth = 0
@@ -78,27 +78,27 @@ class ExceptionClassTests(unittest.TestCase):
                 elif last_depth > depth:
                     while superclasses[-1][0] >= depth:
                         superclasses.pop()
-                self.failUnless(issubclass(exc, superclasses[-1][1]),
+                self.assertTrue(issubclass(exc, superclasses[-1][1]),
                 "%s is not a subclass of %s" % (exc.__name__,
                     superclasses[-1][1].__name__))
                 try:  # Some exceptions require arguments; just skip them
                     self.verify_instance_interface(exc())
                 except TypeError:
                     pass
-                self.failUnless(exc_name in exc_set)
+                self.assertIn(exc_name, exc_set)
                 exc_set.discard(exc_name)
                 last_exc = exc
                 last_depth = depth
         finally:
             inheritance_tree.close()
-        self.failUnlessEqual(len(exc_set), 0, "%s not accounted for" % exc_set)
+        self.assertEqual(len(exc_set), 0, "%s not accounted for" % exc_set)
 
     interface_tests = ("length", "args", "message", "str", "unicode", "repr",
             "indexing")
 
     def interface_test_driver(self, results):
         for test_name, (given, expected) in zip(self.interface_tests, results):
-            self.failUnlessEqual(given, expected, "%s: %s != %s" % (test_name,
+            self.assertEqual(given, expected, "%s: %s != %s" % (test_name,
                 given, expected))
 
     @ignore_deprecation_warnings
@@ -215,28 +215,19 @@ class UsageTests(unittest.TestCase):
             warnings.resetwarnings()
             warnings.filterwarnings("error")
             str_exc = "spam"
-            try:
+            with self.assertRaises(DeprecationWarning):
                 try:
                     raise StandardError
                 except str_exc:
                     pass
-            except DeprecationWarning:
-                pass
-            except StandardError:
-                self.fail("catching a string exception did not raise "
-                            "DeprecationWarning")
+
             # Make sure that even if the string exception is listed in a tuple
             # that a warning is raised.
-            try:
+            with self.assertRaises(DeprecationWarning):
                 try:
                     raise StandardError
                 except (AssertionError, str_exc):
                     pass
-            except DeprecationWarning:
-                pass
-            except StandardError:
-                self.fail("catching a string exception specified in a tuple did "
-                            "not raise DeprecationWarning")
 
 
 def test_main():

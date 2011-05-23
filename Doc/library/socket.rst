@@ -205,7 +205,7 @@ The module :mod:`socket` exports the following constants and functions:
    .. versionadded:: 2.3
 
 
-.. function:: create_connection(address[, timeout])
+.. function:: create_connection(address[, timeout[, source_address]])
 
    Convenience function.  Connect to *address* (a 2-tuple ``(host, port)``),
    and return the socket object.  Passing the optional *timeout* parameter will
@@ -213,7 +213,14 @@ The module :mod:`socket` exports the following constants and functions:
    *timeout* is supplied, the global default timeout setting returned by
    :func:`getdefaulttimeout` is used.
 
+   If supplied, *source_address* must be a 2-tuple ``(host, port)`` for the
+   socket to bind to as its source address before connecting.  If host or port
+   are '' or 0 respectively the OS default behavior will be used.
+
    .. versionadded:: 2.6
+
+   .. versionchanged:: 2.7
+      *source_address* was added.
 
 
 .. function:: getaddrinfo(host, port, family=0, socktype=0, proto=0, flags=0)
@@ -508,6 +515,9 @@ The module :mod:`socket` exports the following constants and functions:
    Module :mod:`SocketServer`
       Classes that simplify writing network servers.
 
+   Module :mod:`ssl`
+      A TLS/SSL wrapper for socket objects.
+
 
 .. _socket-objects:
 
@@ -543,6 +553,12 @@ correspond to Unix system calls applicable to sockets.
    Close the socket.  All future operations on the socket object will fail. The
    remote end will receive no more data (after queued data is flushed). Sockets are
    automatically closed when they are garbage-collected.
+
+   .. note::
+      :meth:`close()` releases the resource associated with a connection but
+      does not necessarily close the connection immediately.  If you want
+      to close the connection in a timely fashion, call :meth:`shutdown()`
+      before :meth:`close()`.
 
 
 .. method:: socket.connect(address)
@@ -628,8 +644,8 @@ correspond to Unix system calls applicable to sockets.
 .. method:: socket.listen(backlog)
 
    Listen for connections made to the socket.  The *backlog* argument specifies the
-   maximum number of queued connections and should be at least 1; the maximum value
-   is system-dependent (usually 5).
+   maximum number of queued connections and should be at least 0; the maximum value
+   is system-dependent (usually 5), the minimum value is forced to 0.
 
 
 .. method:: socket.makefile([mode[, bufsize]])
@@ -643,6 +659,12 @@ correspond to Unix system calls applicable to sockets.
    The socket must be in blocking mode (it can not have a timeout). The optional
    *mode* and *bufsize* arguments are interpreted the same way as by the built-in
    :func:`file` function.
+
+   .. note::
+
+      On Windows, the file-like object created by :meth:`makefile` cannot be
+      used where a file object with a file descriptor is expected, such as the
+      stream arguments of :meth:`subprocess.Popen`.
 
 
 .. method:: socket.recv(bufsize[, flags])
@@ -733,7 +755,7 @@ correspond to Unix system calls applicable to sockets.
 
    Set a timeout on blocking socket operations.  The *value* argument can be a
    nonnegative float expressing seconds, or ``None``. If a float is given,
-   subsequent socket operations will raise an :exc:`timeout` exception if the
+   subsequent socket operations will raise a :exc:`timeout` exception if the
    timeout period *value* has elapsed before the operation has completed.  Setting
    a timeout of ``None`` disables timeouts on socket operations.
    ``s.settimeout(0.0)`` is equivalent to ``s.setblocking(0)``;
@@ -791,7 +813,9 @@ timeout error of its own regardless of any Python socket timeout setting.
    Shut down one or both halves of the connection.  If *how* is :const:`SHUT_RD`,
    further receives are disallowed.  If *how* is :const:`SHUT_WR`, further sends
    are disallowed.  If *how* is :const:`SHUT_RDWR`, further sends and receives are
-   disallowed.
+   disallowed.  Depending on the platform, shutting down one half of the connection
+   can also close the opposite half (e.g. on Mac OS X, ``shutdown(SHUT_WR)`` does
+   not allow further reads on the other end of the connection).
 
 Note that there are no methods :meth:`read` or :meth:`write`; use
 :meth:`~socket.recv` and :meth:`~socket.send` without *flags* argument instead.

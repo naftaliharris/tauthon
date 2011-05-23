@@ -11,6 +11,7 @@ for manipulation of the pathname component of URLs.
 """
 
 import os
+import sys
 import stat
 import genericpath
 import warnings
@@ -139,7 +140,7 @@ def islink(path):
 def lexists(path):
     """Test whether a path exists.  Returns True for broken symbolic links"""
     try:
-        st = os.lstat(path)
+        os.lstat(path)
     except os.error:
         return False
     return True
@@ -379,12 +380,12 @@ def _resolve_link(path):
     until we either arrive at something that isn't a symlink, or
     encounter a path we've seen before (meaning that there's a loop).
     """
-    paths_seen = []
+    paths_seen = set()
     while islink(path):
         if path in paths_seen:
             # Already seen this path, so we must have a symlink loop
             return None
-        paths_seen.append(path)
+        paths_seen.add(path)
         # Resolve where the link points to
         resolved = os.readlink(path)
         if not isabs(resolved):
@@ -394,7 +395,7 @@ def _resolve_link(path):
             path = normpath(resolved)
     return path
 
-supports_unicode_filenames = False
+supports_unicode_filenames = (sys.platform == 'darwin')
 
 def relpath(path, start=curdir):
     """Return a relative version of a path"""
@@ -402,8 +403,8 @@ def relpath(path, start=curdir):
     if not path:
         raise ValueError("no path specified")
 
-    start_list = abspath(start).split(sep)
-    path_list = abspath(path).split(sep)
+    start_list = [x for x in abspath(start).split(sep) if x]
+    path_list = [x for x in abspath(path).split(sep) if x]
 
     # Work out how much of the filepath is shared by start and path.
     i = len(commonprefix([start_list, path_list]))

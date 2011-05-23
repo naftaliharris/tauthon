@@ -151,64 +151,10 @@ is a separate error indicator for each thread.
 
 .. cfunction:: PyObject* PyErr_Format(PyObject *exception, const char *format, ...)
 
-   This function sets the error indicator and returns *NULL*. *exception* should be
-   a Python exception (class, not an instance).  *format* should be a string,
-   containing format codes, similar to :cfunc:`printf`. The ``width.precision``
-   before a format code is parsed, but the width part is ignored.
-
-   .. % This should be exactly the same as the table in PyString_FromFormat.
-   .. % One should just refer to the other.
-   .. % The descriptions for %zd and %zu are wrong, but the truth is complicated
-   .. % because not all compilers support the %z width modifier -- we fake it
-   .. % when necessary via interpolating PY_FORMAT_SIZE_T.
-   .. % %u, %lu, %zu should have "new in Python 2.5" blurbs.
-
-   +-------------------+---------------+--------------------------------+
-   | Format Characters | Type          | Comment                        |
-   +===================+===============+================================+
-   | :attr:`%%`        | *n/a*         | The literal % character.       |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%c`        | int           | A single character,            |
-   |                   |               | represented as an C int.       |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%d`        | int           | Exactly equivalent to          |
-   |                   |               | ``printf("%d")``.              |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%u`        | unsigned int  | Exactly equivalent to          |
-   |                   |               | ``printf("%u")``.              |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%ld`       | long          | Exactly equivalent to          |
-   |                   |               | ``printf("%ld")``.             |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%lu`       | unsigned long | Exactly equivalent to          |
-   |                   |               | ``printf("%lu")``.             |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%zd`       | Py_ssize_t    | Exactly equivalent to          |
-   |                   |               | ``printf("%zd")``.             |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%zu`       | size_t        | Exactly equivalent to          |
-   |                   |               | ``printf("%zu")``.             |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%i`        | int           | Exactly equivalent to          |
-   |                   |               | ``printf("%i")``.              |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%x`        | int           | Exactly equivalent to          |
-   |                   |               | ``printf("%x")``.              |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%s`        | char\*        | A null-terminated C character  |
-   |                   |               | array.                         |
-   +-------------------+---------------+--------------------------------+
-   | :attr:`%p`        | void\*        | The hex representation of a C  |
-   |                   |               | pointer. Mostly equivalent to  |
-   |                   |               | ``printf("%p")`` except that   |
-   |                   |               | it is guaranteed to start with |
-   |                   |               | the literal ``0x`` regardless  |
-   |                   |               | of what the platform's         |
-   |                   |               | ``printf`` yields.             |
-   +-------------------+---------------+--------------------------------+
-
-   An unrecognized format character causes all the rest of the format string to be
-   copied as-is to the result string, and any extra arguments discarded.
+   This function sets the error indicator and returns *NULL*.  *exception*
+   should be a Python exception class.  The *format* and subsequent
+   parameters help format the error message; they have the same meaning and
+   values as in :cfunc:`PyString_FromFormat`.
 
 
 .. cfunction:: void PyErr_SetNone(PyObject *type)
@@ -401,6 +347,8 @@ is a separate error indicator for each thread.
    error checking.  *fd* should be a valid file descriptor.  The function should
    only be called from the main thread.
 
+   .. versionadded:: 2.6
+
 
 .. cfunction:: PyObject* PyErr_NewException(char *name, PyObject *base, PyObject *dict)
 
@@ -417,6 +365,15 @@ is a separate error indicator for each thread.
    argument can be used to specify a dictionary of class variables and methods.
 
 
+.. cfunction:: PyObject* PyErr_NewExceptionWithDoc(char *name, char *doc, PyObject *base, PyObject *dict)
+
+   Same as :cfunc:`PyErr_NewException`, except that the new exception class can
+   easily be given a docstring: If *doc* is non-*NULL*, it will be used as the
+   docstring for the exception class.
+
+   .. versionadded:: 2.7
+
+
 .. cfunction:: void PyErr_WriteUnraisable(PyObject *obj)
 
    This utility function prints a warning message to ``sys.stderr`` when an
@@ -427,6 +384,83 @@ is a separate error indicator for each thread.
    The function is called with a single argument *obj* that identifies the context
    in which the unraisable exception occurred. The repr of *obj* will be printed in
    the warning message.
+
+
+.. _unicodeexceptions:
+
+Unicode Exception Objects
+=========================
+
+The following functions are used to create and modify Unicode exceptions from C.
+
+.. cfunction:: PyObject* PyUnicodeDecodeError_Create(const char *encoding, const char *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
+
+   Create a :class:`UnicodeDecodeError` object with the attributes *encoding*,
+   *object*, *length*, *start*, *end* and *reason*.
+
+.. cfunction:: PyObject* PyUnicodeEncodeError_Create(const char *encoding, const Py_UNICODE *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
+
+   Create a :class:`UnicodeEncodeError` object with the attributes *encoding*,
+   *object*, *length*, *start*, *end* and *reason*.
+
+.. cfunction:: PyObject* PyUnicodeTranslateError_Create(const Py_UNICODE *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
+
+   Create a :class:`UnicodeTranslateError` object with the attributes *object*,
+   *length*, *start*, *end* and *reason*.
+
+.. cfunction:: PyObject* PyUnicodeDecodeError_GetEncoding(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetEncoding(PyObject *exc)
+
+   Return the *encoding* attribute of the given exception object.
+
+.. cfunction:: PyObject* PyUnicodeDecodeError_GetObject(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetObject(PyObject *exc)
+               PyObject* PyUnicodeTranslateError_GetObject(PyObject *exc)
+
+   Return the *object* attribute of the given exception object.
+
+.. cfunction:: int PyUnicodeDecodeError_GetStart(PyObject *exc, Py_ssize_t *start)
+               int PyUnicodeEncodeError_GetStart(PyObject *exc, Py_ssize_t *start)
+               int PyUnicodeTranslateError_GetStart(PyObject *exc, Py_ssize_t *start)
+
+   Get the *start* attribute of the given exception object and place it into
+   *\*start*.  *start* must not be *NULL*.  Return ``0`` on success, ``-1`` on
+   failure.
+
+.. cfunction:: int PyUnicodeDecodeError_SetStart(PyObject *exc, Py_ssize_t start)
+               int PyUnicodeEncodeError_SetStart(PyObject *exc, Py_ssize_t start)
+               int PyUnicodeTranslateError_SetStart(PyObject *exc, Py_ssize_t start)
+
+   Set the *start* attribute of the given exception object to *start*.  Return
+   ``0`` on success, ``-1`` on failure.
+
+.. cfunction:: int PyUnicodeDecodeError_GetEnd(PyObject *exc, Py_ssize_t *end)
+               int PyUnicodeEncodeError_GetEnd(PyObject *exc, Py_ssize_t *end)
+               int PyUnicodeTranslateError_GetEnd(PyObject *exc, Py_ssize_t *end)
+
+   Get the *end* attribute of the given exception object and place it into
+   *\*end*.  *end* must not be *NULL*.  Return ``0`` on success, ``-1`` on
+   failure.
+
+.. cfunction:: int PyUnicodeDecodeError_SetEnd(PyObject *exc, Py_ssize_t end)
+               int PyUnicodeEncodeError_SetEnd(PyObject *exc, Py_ssize_t end)
+               int PyUnicodeTranslateError_SetEnd(PyObject *exc, Py_ssize_t end)
+
+   Set the *end* attribute of the given exception object to *end*.  Return ``0``
+   on success, ``-1`` on failure.
+
+.. cfunction:: PyObject* PyUnicodeDecodeError_GetReason(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetReason(PyObject *exc)
+               PyObject* PyUnicodeTranslateError_GetReason(PyObject *exc)
+
+   Return the *reason* attribute of the given exception object.
+
+.. cfunction:: int PyUnicodeDecodeError_SetReason(PyObject *exc, const char *reason)
+               int PyUnicodeEncodeError_SetReason(PyObject *exc, const char *reason)
+               int PyUnicodeTranslateError_SetReason(PyObject *exc, const char *reason)
+
+   Set the *reason* attribute of the given exception object to *reason*.  Return
+   ``0`` on success, ``-1`` on failure.
 
 
 Recursion Control
@@ -578,14 +612,10 @@ Notes:
    .. versionadded:: 2.5
 
 
-Deprecation of String Exceptions
-================================
+String Exceptions
+=================
 
-.. index:: single: BaseException (built-in exception)
-
-All exceptions built into Python or provided in the standard library are derived
-from :exc:`BaseException`.
-
-String exceptions are still supported in the interpreter to allow existing code
-to run unmodified, but this will also change in a future release.
+.. versionchanged:: 2.6
+   All exceptions to be raised or caught must be derived from :exc:`BaseException`.
+   Trying to raise a string exception now raises :exc:`TypeError`.
 

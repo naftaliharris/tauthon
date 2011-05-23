@@ -53,6 +53,13 @@ always available.
    ``modules.keys()`` only lists the imported modules.)
 
 
+.. function:: call_tracing(func, args)
+
+   Call ``func(*args)``, while tracing is enabled.  The tracing state is saved,
+   and restored afterwards.  This is intended to be called from a debugger from
+   a checkpoint, to recursively debug some other code.
+
+
 .. data:: copyright
 
    A string containing the copyright pertaining to the Python interpreter.
@@ -201,7 +208,7 @@ always available.
 
    A string giving the site-specific directory prefix where the platform-dependent
    Python files are installed; by default, this is also ``'/usr/local'``.  This can
-   be set at build time with the :option:`--exec-prefix` argument to the
+   be set at build time with the ``--exec-prefix`` argument to the
    :program:`configure` script.  Specifically, all configuration files (e.g. the
    :file:`pyconfig.h` header file) are installed in the directory ``exec_prefix +
    '/lib/pythonversion/config'``, and shared library modules are installed in
@@ -219,19 +226,25 @@ always available.
 
    Exit from Python.  This is implemented by raising the :exc:`SystemExit`
    exception, so cleanup actions specified by finally clauses of :keyword:`try`
-   statements are honored, and it is possible to intercept the exit attempt at an
-   outer level.  The optional argument *arg* can be an integer giving the exit
-   status (defaulting to zero), or another type of object.  If it is an integer,
-   zero is considered "successful termination" and any nonzero value is considered
-   "abnormal termination" by shells and the like.  Most systems require it to be in
-   the range 0-127, and produce undefined results otherwise.  Some systems have a
-   convention for assigning specific meanings to specific exit codes, but these are
-   generally underdeveloped; Unix programs generally use 2 for command line syntax
-   errors and 1 for all other kind of errors.  If another type of object is passed,
-   ``None`` is equivalent to passing zero, and any other object is printed to
-   ``sys.stderr`` and results in an exit code of 1.  In particular,
-   ``sys.exit("some error message")`` is a quick way to exit a program when an
-   error occurs.
+   statements are honored, and it is possible to intercept the exit attempt at
+   an outer level.
+
+   The optional argument *arg* can be an integer giving the exit status
+   (defaulting to zero), or another type of object.  If it is an integer, zero
+   is considered "successful termination" and any nonzero value is considered
+   "abnormal termination" by shells and the like.  Most systems require it to be
+   in the range 0-127, and produce undefined results otherwise.  Some systems
+   have a convention for assigning specific meanings to specific exit codes, but
+   these are generally underdeveloped; Unix programs generally use 2 for command
+   line syntax errors and 1 for all other kind of errors.  If another type of
+   object is passed, ``None`` is equivalent to passing zero, and any other
+   object is printed to :data:`stderr` and results in an exit code of 1.  In
+   particular, ``sys.exit("some error message")`` is a quick way to exit a
+   program when an error occurs.
+
+   Since :func:`exit` ultimately "only" raises an exception, it will only exit
+   the process when called from the main thread, and the exception is not
+   intercepted.
 
 
 .. data:: exitfunc
@@ -256,39 +269,25 @@ always available.
    The struct sequence *flags* exposes the status of command line flags. The
    attributes are read only.
 
-   +------------------------------+------------------------------------------+
-   | attribute                    | flag                                     |
-   +==============================+==========================================+
-   | :const:`debug`               | -d                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`py3k_warning`        | -3                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`division_warning`    | -Q                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`division_new`        | -Qnew                                    |
-   +------------------------------+------------------------------------------+
-   | :const:`inspect`             | -i                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`interactive`         | -i                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`optimize`            | -O or -OO                                |
-   +------------------------------+------------------------------------------+
-   | :const:`dont_write_bytecode` | -B                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`no_user_site`        | -s                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`no_site`             | -S                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`ignore_environment`  | -E                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`tabcheck`            | -t or -tt                                |
-   +------------------------------+------------------------------------------+
-   | :const:`verbose`             | -v                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`unicode`             | -U                                       |
-   +------------------------------+------------------------------------------+
-   | :const:`bytes_warning`       | -b                                       |
-   +------------------------------+------------------------------------------+
+   ============================= ===================================
+   attribute                     flag
+   ============================= ===================================
+   :const:`debug`                :option:`-d`
+   :const:`py3k_warning`         :option:`-3`
+   :const:`division_warning`     :option:`-Q`
+   :const:`division_new`         :option:`-Qnew <-Q>`
+   :const:`inspect`              :option:`-i`
+   :const:`interactive`          :option:`-i`
+   :const:`optimize`             :option:`-O` or :option:`-OO`
+   :const:`dont_write_bytecode`  :option:`-B`
+   :const:`no_user_site`         :option:`-s`
+   :const:`no_site`              :option:`-S`
+   :const:`ignore_environment`   :option:`-E`
+   :const:`tabcheck`             :option:`-t` or :option:`-tt <-t>`
+   :const:`verbose`              :option:`-v`
+   :const:`unicode`              :option:`-U`
+   :const:`bytes_warning`        :option:`-b`
+   ============================= ===================================
 
    .. versionadded:: 2.6
 
@@ -357,6 +356,18 @@ always available.
       '9876543211234568'
 
    .. versionadded:: 2.6
+
+.. data:: float_repr_style
+
+   A string indicating how the :func:`repr` function behaves for
+   floats.  If the string has value ``'short'`` then for a finite
+   float ``x``, ``repr(x)`` aims to produce a short string with the
+   property that ``float(repr(x)) == x``.  This is the usual behaviour
+   in Python 2.7 and later.  Otherwise, ``float_repr_style`` has value
+   ``'legacy'`` and ``repr(x)`` behaves in the same way as it did in
+   versions of Python prior to 2.7.
+
+   .. versionadded:: 2.7
 
 
 .. function:: getcheckinterval()
@@ -482,9 +493,15 @@ always available.
 
 .. function:: getwindowsversion()
 
-   Return a tuple containing five components, describing the Windows version
-   currently running.  The elements are *major*, *minor*, *build*, *platform*, and
-   *text*.  *text* contains a string while all other values are integers.
+   Return a named tuple describing the Windows version
+   currently running.  The named elements are *major*, *minor*,
+   *build*, *platform*, *service_pack*, *service_pack_minor*,
+   *service_pack_major*, *suite_mask*, and *product_type*.
+   *service_pack* contains a string while all other values are
+   integers. The components can also be accessed by name, so
+   ``sys.getwindowsversion()[0]`` is equivalent to
+   ``sys.getwindowsversion().major``. For compatibility with prior
+   versions, only the first 5 elements are retrievable by indexing.
 
    *platform* may be one of the following values:
 
@@ -500,12 +517,31 @@ always available.
    | :const:`3 (VER_PLATFORM_WIN32_CE)`      | Windows CE              |
    +-----------------------------------------+-------------------------+
 
-   This function wraps the Win32 :cfunc:`GetVersionEx` function; see the Microsoft
-   documentation for more information about these fields.
+   *product_type* may be one of the following values:
+
+   +---------------------------------------+---------------------------------+
+   | Constant                              | Meaning                         |
+   +=======================================+=================================+
+   | :const:`1 (VER_NT_WORKSTATION)`       | The system is a workstation.    |
+   +---------------------------------------+---------------------------------+
+   | :const:`2 (VER_NT_DOMAIN_CONTROLLER)` | The system is a domain          |
+   |                                       | controller.                     |
+   +---------------------------------------+---------------------------------+
+   | :const:`3 (VER_NT_SERVER)`            | The system is a server, but not |
+   |                                       | a domain controller.            |
+   +---------------------------------------+---------------------------------+
+
+
+   This function wraps the Win32 :cfunc:`GetVersionEx` function; see the
+   Microsoft documentation on :cfunc:`OSVERSIONINFOEX` for more information
+   about these fields.
 
    Availability: Windows.
 
    .. versionadded:: 2.3
+   .. versionchanged:: 2.7
+      Changed to a named tuple and added *service_pack_minor*,
+      *service_pack_major*, *suite_mask*, and *product_type*.
 
 
 .. data:: hexversion
@@ -526,7 +562,50 @@ always available.
    ``version_info`` value may be used for a more human-friendly encoding of the
    same information.
 
+   The ``hexversion`` is a 32-bit number with the following layout:
+
+   +-------------------------+------------------------------------------------+
+   | Bits (big endian order) | Meaning                                        |
+   +=========================+================================================+
+   | :const:`1-8`            |  ``PY_MAJOR_VERSION``  (the ``2`` in           |
+   |                         |  ``2.1.0a3``)                                  |
+   +-------------------------+------------------------------------------------+
+   | :const:`9-16`           |  ``PY_MINOR_VERSION``  (the ``1`` in           |
+   |                         |  ``2.1.0a3``)                                  |
+   +-------------------------+------------------------------------------------+
+   | :const:`17-24`          |  ``PY_MICRO_VERSION``  (the ``0`` in           |
+   |                         |  ``2.1.0a3``)                                  |
+   +-------------------------+------------------------------------------------+
+   | :const:`25-28`          |  ``PY_RELEASE_LEVEL``  (``0xA`` for alpha,     |
+   |                         |  ``0xB`` for beta, ``0xC`` for release         |
+   |                         |  candidate and ``0xF`` for final)              |
+   +-------------------------+------------------------------------------------+
+   | :const:`29-32`          |  ``PY_RELEASE_SERIAL``  (the ``3`` in          |
+   |                         |  ``2.1.0a3``, zero for final releases)         |
+   +-------------------------+------------------------------------------------+
+
+   Thus ``2.1.0a3`` is hexversion ``0x020100a3``.
+
    .. versionadded:: 1.5.2
+
+
+.. data:: long_info
+
+   A struct sequence that holds information about Python's
+   internal representation of integers.  The attributes are read only.
+
+   +-------------------------+----------------------------------------------+
+   | Attribute               | Explanation                                  |
+   +=========================+==============================================+
+   | :const:`bits_per_digit` | number of bits held in each digit.  Python   |
+   |                         | integers are stored internally in base       |
+   |                         | ``2**long_info.bits_per_digit``              |
+   +-------------------------+----------------------------------------------+
+   | :const:`sizeof_digit`   | size in bytes of the C type used to          |
+   |                         | represent a digit                            |
+   +-------------------------+----------------------------------------------+
+
+   .. versionadded:: 2.7
 
 
 .. data:: last_type
@@ -666,7 +745,7 @@ always available.
 
    A string giving the site-specific directory prefix where the platform
    independent Python files are installed; by default, this is the string
-   ``'/usr/local'``.  This can be set at build time with the :option:`--prefix`
+   ``'/usr/local'``.  This can be set at build time with the ``--prefix``
    argument to the :program:`configure` script.  The main collection of Python
    library modules is installed in the directory ``prefix + '/lib/pythonversion'``
    while the platform independent header files (all except :file:`pyconfig.h`) are
@@ -810,14 +889,17 @@ always available.
       specifies the local trace function.
 
    ``'line'``
-      The interpreter is about to execute a new line of code (sometimes multiple
-      line events on one line exist).  The local trace function is called; *arg*
-      is ``None``; the return value specifies the new local trace function.
+      The interpreter is about to execute a new line of code or re-execute the
+      condition of a loop.  The local trace function is called; *arg* is
+      ``None``; the return value specifies the new local trace function.  See
+      :file:`Objects/lnotab_notes.txt` for a detailed explanation of how this
+      works.
 
    ``'return'``
       A function (or other code block) is about to return.  The local trace
-      function is called; *arg* is the value that will be returned.  The trace
-      function's return value is ignored.
+      function is called; *arg* is the value that will be returned, or ``None``
+      if the event is caused by an exception being raised.  The trace function's
+      return value is ignored.
 
    ``'exception'``
       An exception has occurred.  The local trace function is called; *arg* is a
@@ -829,10 +911,10 @@ always available.
       a built-in.  *arg* is the C function object.
 
    ``'c_return'``
-      A C function has returned. *arg* is ``None``.
+      A C function has returned. *arg* is the C function object.
 
    ``'c_exception'``
-      A C function has thrown an exception.  *arg* is ``None``.
+      A C function has raised an exception.  *arg* is the C function object.
 
    Note that as an exception is propagated down the chain of callers, an
    ``'exception'`` event is generated at each level.
@@ -851,7 +933,7 @@ always available.
 
    Activate dumping of VM measurements using the Pentium timestamp counter, if
    *on_flag* is true. Deactivate these dumps if *on_flag* is off. The function is
-   available only if Python was compiled with :option:`--with-tsc`. To understand
+   available only if Python was compiled with ``--with-tsc``. To understand
    the output of this dump, read :file:`Python/ceval.c` in the Python sources.
 
    .. versionadded:: 2.4
@@ -929,9 +1011,13 @@ always available.
    *micro*, *releaselevel*, and *serial*.  All values except *releaselevel* are
    integers; the release level is ``'alpha'``, ``'beta'``, ``'candidate'``, or
    ``'final'``.  The ``version_info`` value corresponding to the Python version 2.0
-   is ``(2, 0, 0, 'final', 0)``.
+   is ``(2, 0, 0, 'final', 0)``.  The components can also be accessed by name,
+   so ``sys.version_info[0]`` is equivalent to ``sys.version_info.major``
+   and so on.
 
    .. versionadded:: 2.0
+   .. versionchanged:: 2.7
+      Added named component attributes
 
 
 .. data:: warnoptions

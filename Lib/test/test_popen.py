@@ -14,13 +14,11 @@ import os, sys
 # This results in Python being spawned and printing the sys.argv list.
 # We can then eval() the result of this, and see what each argv was.
 python = sys.executable
-if ' ' in python:
-    python = '"' + python + '"'     # quote embedded space for cmdline
 
 class PopenTest(unittest.TestCase):
     def _do_test_commandline(self, cmdline, expected):
         cmd = '%s -c "import sys;print sys.argv" %s' % (python, cmdline)
-        data = os.popen(cmd).read()
+        data = os.popen(cmd).read() + '\n'
         got = eval(data)[1:] # strip off argv[0]
         self.assertEqual(got, expected)
 
@@ -39,6 +37,13 @@ class PopenTest(unittest.TestCase):
             ["foo", 'a "quoted" arg', "bar"]
         )
         test_support.reap_children()
+
+    def test_return_code(self):
+        self.assertEqual(os.popen("exit 0").close(), None)
+        if os.name == 'nt':
+            self.assertEqual(os.popen("exit 42").close(), 42)
+        else:
+            self.assertEqual(os.popen("exit 42").close(), 42 << 8)
 
 def test_main():
     test_support.run_unittest(PopenTest)

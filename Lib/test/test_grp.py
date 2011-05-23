@@ -1,8 +1,9 @@
 """Test script for the grp module."""
 
-import grp
 import unittest
 from test import test_support
+
+grp = test_support.import_module('grp')
 
 class GroupDatabaseTestCase(unittest.TestCase):
 
@@ -11,13 +12,13 @@ class GroupDatabaseTestCase(unittest.TestCase):
         # attributes promised by the docs
         self.assertEqual(len(value), 4)
         self.assertEqual(value[0], value.gr_name)
-        self.assert_(isinstance(value.gr_name, basestring))
+        self.assertIsInstance(value.gr_name, basestring)
         self.assertEqual(value[1], value.gr_passwd)
-        self.assert_(isinstance(value.gr_passwd, basestring))
+        self.assertIsInstance(value.gr_passwd, basestring)
         self.assertEqual(value[2], value.gr_gid)
-        self.assert_(isinstance(value.gr_gid, int))
+        self.assertIsInstance(value.gr_gid, int)
         self.assertEqual(value[3], value.gr_mem)
-        self.assert_(isinstance(value.gr_mem, list))
+        self.assertIsInstance(value.gr_mem, list)
 
     def test_values(self):
         entries = grp.getgrall()
@@ -32,12 +33,16 @@ class GroupDatabaseTestCase(unittest.TestCase):
             e2 = grp.getgrgid(e.gr_gid)
             self.check_value(e2)
             self.assertEqual(e2.gr_gid, e.gr_gid)
-            e2 = grp.getgrnam(e.gr_name)
+            name = e.gr_name
+            if name.startswith('+') or name.startswith('-'):
+                # NIS-related entry
+                continue
+            e2 = grp.getgrnam(name)
             self.check_value(e2)
             # There are instances where getgrall() returns group names in
             # lowercase while getgrgid() returns proper casing.
             # Discovered on Ubuntu 5.04 (custom).
-            self.assertEqual(e2.gr_name.lower(), e.gr_name.lower())
+            self.assertEqual(e2.gr_name.lower(), name.lower())
 
     def test_errors(self):
         self.assertRaises(TypeError, grp.getgrgid)

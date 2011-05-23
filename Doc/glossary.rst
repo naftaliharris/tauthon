@@ -19,7 +19,7 @@ Glossary
 
    2to3
       A tool that tries to convert Python 2.x code to Python 3.x code by
-      handling most of the incompatibilites which can be detected by parsing the
+      handling most of the incompatibilities which can be detected by parsing the
       source and traversing the parse tree.
 
       2to3 is available in the standard library as :mod:`lib2to3`; a standalone
@@ -27,7 +27,7 @@ Glossary
       :ref:`2to3-reference`.
 
    abstract base class
-      Abstract Base Classes (abbreviated ABCs) complement :term:`duck-typing` by
+      :ref:`abstract-base-classes` complement :term:`duck-typing` by
       providing a way to define interfaces when other techniques like
       :func:`hasattr` would be clumsy. Python comes with many built-in ABCs for
       data structures (in the :mod:`collections` module), numbers (in the
@@ -62,6 +62,9 @@ Glossary
       second time (recompilation from source to bytecode can be avoided).  This
       "intermediate language" is said to run on a :term:`virtual machine`
       that executes the machine code corresponding to each bytecode.
+
+      A list of bytecode instructions can be found in the documentation for
+      :ref:`the dis module <bytecodes>`.
 
    class
       A template for creating user-defined objects. Class definitions
@@ -103,9 +106,10 @@ Glossary
       See :pep:`343`.
 
    CPython
-      The canonical implementation of the Python programming language.  The
-      term "CPython" is used in contexts when necessary to distinguish this
-      implementation from others such as Jython or IronPython.
+      The canonical implementation of the Python programming language, as
+      distributed on `python.org <http://python.org>`_.  The term "CPython"
+      is used when necessary to distinguish this implementation from others
+      such as Jython or IronPython.
 
    decorator
       A function returning another function, usually applied as a function
@@ -140,10 +144,9 @@ Glossary
       For more information about descriptors' methods, see :ref:`descriptors`.
 
    dictionary
-      An associative array, where arbitrary keys are mapped to values.  The use
-      of :class:`dict` closely resembles that for :class:`list`, but the keys can
-      be any object with a :meth:`__hash__` function, not just integers.
-      Called a hash in Perl.
+      An associative array, where arbitrary keys are mapped to values.  The keys
+      can be any object with :meth:`__hash__` function and :meth:`__eq__`
+      methods. Called a hash in Perl.
 
    docstring
       A string literal which appears as the first expression in a class,
@@ -154,9 +157,9 @@ Glossary
       object.
 
    duck-typing
-      A pythonic programming style which determines an object's type by inspection
-      of its method or attribute signature rather than by explicit relationship
-      to some type object ("If it looks like a duck and quacks like a duck, it
+      A programming style which does not look at an object's type to determine
+      if it has the right interface; instead, the method or attribute is simply
+      called or used ("If it looks like a duck and quacks like a duck, it
       must be a duck.")  By emphasizing interfaces rather than specific types,
       well-designed code improves its flexibility by allowing polymorphic
       substitution.  Duck-typing avoids tests using :func:`type` or
@@ -182,13 +185,20 @@ Glossary
       not expressions.
 
    extension module
-      A module written in C or C++, using Python's C API to interact with the core and
-      with user code.
+      A module written in C or C++, using Python's C API to interact with the
+      core and with user code.
 
    finder
       An object that tries to find the :term:`loader` for a module. It must
       implement a method named :meth:`find_module`. See :pep:`302` for
       details.
+
+   floor division
+      Mathematical division that rounds down to nearest integer.  The floor
+      division operator is ``//``.  For example, the expression ``11 // 4``
+      evaluates to ``2`` in contrast to the ``2.75`` returned by float true
+      division.  Note that ``(-11) // 4`` is ``-3`` because that is ``-2.75``
+      rounded *downward*. See :pep:`238`.
 
    function
       A series of statements which returns some value to a caller. It can also
@@ -196,7 +206,7 @@ Glossary
       the body. See also :term:`argument` and :term:`method`.
 
    __future__
-      A pseudo module which programmers can use to enable new language features
+      A pseudo-module which programmers can use to enable new language features
       which are not compatible with the current interpreter.  For example, the
       expression ``11/4`` currently evaluates to ``2``. If the module in which
       it is executed had enabled *true division* by executing::
@@ -221,13 +231,13 @@ Glossary
 
    generator
       A function which returns an iterator.  It looks like a normal function
-      except that values are returned to the caller using a :keyword:`yield`
-      statement instead of a :keyword:`return` statement.  Generator functions
-      often contain one or more :keyword:`for` or :keyword:`while` loops which
-      :keyword:`yield` elements back to the caller.  The function execution is
-      stopped at the :keyword:`yield` keyword (returning the result) and is
-      resumed there when the next element is requested by calling the
-      :meth:`next` method of the returned iterator.
+      except that it contains :keyword:`yield` statements for producing a series
+      a values usable in a for-loop or that can be retrieved one at a time with
+      the :func:`next` function. Each :keyword:`yield` temporarily suspends
+      processing, remembering the location execution state (including local
+      variables and pending try-statements).  When the generator resumes, it
+      picks-up where it left-off (in contrast to functions which start fresh on
+      every invocation).
 
       .. index:: single: generator expression
 
@@ -244,16 +254,25 @@ Glossary
       See :term:`global interpreter lock`.
 
    global interpreter lock
-      The lock used by Python threads to assure that only one thread
-      executes in the :term:`CPython` :term:`virtual machine` at a time.
-      This simplifies the CPython implementation by assuring that no two
-      processes can access the same memory at the same time.  Locking the
-      entire interpreter makes it easier for the interpreter to be
-      multi-threaded, at the expense of much of the parallelism afforded by
-      multi-processor machines.  Efforts have been made in the past to
-      create a "free-threaded" interpreter (one which locks shared data at a
-      much finer granularity), but so far none have been successful because
-      performance suffered in the common single-processor case.
+      The mechanism used by the :term:`CPython` interpreter to assure that
+      only one thread executes Python :term:`bytecode` at a time.
+      This simplifies the CPython implementation by making the object model
+      (including critical built-in types such as :class:`dict`) implicitly
+      safe against concurrent access.  Locking the entire interpreter
+      makes it easier for the interpreter to be multi-threaded, at the
+      expense of much of the parallelism afforded by multi-processor
+      machines.
+
+      However, some extension modules, either standard or third-party,
+      are designed so as to release the GIL when doing computationally-intensive
+      tasks such as compression or hashing.  Also, the GIL is always released
+      when doing I/O.
+
+      Past efforts to create a "free-threaded" interpreter (one which locks
+      shared data at a much finer granularity) have not been successful
+      because performance suffered in the common single-processor case. It
+      is believed that overcoming this performance issue would make the
+      implementation much more complicated and therefore costlier to maintain.
 
    hashable
       An object is *hashable* if it has a hash value which never changes during
@@ -272,9 +291,7 @@ Glossary
    IDLE
       An Integrated Development Environment for Python.  IDLE is a basic editor
       and interpreter environment which ships with the standard distribution of
-      Python.  Good for beginners, it also serves as clear example code for
-      those wanting to implement a moderately sophisticated, multi-platform GUI
-      application.
+      Python.
 
    immutable
       An object with a fixed value.  Immutable objects include numbers, strings and
@@ -349,6 +366,26 @@ Glossary
 
       More information can be found in :ref:`typeiter`.
 
+   key function
+      A key function or collation function is a callable that returns a value
+      used for sorting or ordering.  For example, :func:`locale.strxfrm` is
+      used to produce a sort key that is aware of locale specific sort
+      conventions.
+
+      A number of tools in Python accept key functions to control how elements
+      are ordered or grouped.  They include :func:`min`, :func:`max`,
+      :func:`sorted`, :meth:`list.sort`, :func:`heapq.nsmallest`,
+      :func:`heapq.nlargest`, and :func:`itertools.groupby`.
+
+      There are several ways to create a key function.  For example. the
+      :meth:`str.lower` method can serve as a key function for case insensitive
+      sorts.  Alternatively, an ad-hoc key function can be built from a
+      :keyword:`lambda` expression such as ``lambda r: (r[0], r[2])``.  Also,
+      the :mod:`operator` module provides three key function constuctors:
+      :func:`~operator.attrgetter`, :func:`~operator.itemgetter`, and
+      :func:`~operator.methodcaller`.  See the :ref:`Sorting HOW TO
+      <sortinghowto>` for examples of how to create and use key functions.
+
    keyword argument
       Arguments which are preceded with a ``variable_name=`` in the call.
       The variable name designates the local name in the function to which the
@@ -385,8 +422,11 @@ Glossary
       :term:`finder`. See :pep:`302` for details.
 
    mapping
-      A container object (such as :class:`dict`) which supports arbitrary key
-      lookups using the special method :meth:`__getitem__`.
+      A container object that supports arbitrary key lookups and implements the
+      methods specified in the :class:`Mapping` or :class:`MutableMapping`
+      :ref:`abstract base classes <abstract-base-classes>`. Examples include
+      :class:`dict`, :class:`collections.defaultdict`,
+      :class:`collections.OrderedDict` and :class:`collections.Counter`.
 
    metaclass
       The class of a class.  Class definitions create a class name, a class
@@ -541,6 +581,13 @@ Glossary
       The type of a Python object determines what kind of object it is; every
       object has a type.  An object's type is accessible as its
       :attr:`__class__` attribute or can be retrieved with ``type(obj)``.
+
+   view
+      The objects returned from :meth:`dict.viewkeys`, :meth:`dict.viewvalues`,
+      and :meth:`dict.viewitems` are called dictionary views.  They are lazy
+      sequences that will see changes in the underlying dictionary.  To force
+      the dictionary view to become a full list use ``list(dictview)``.  See
+      :ref:`dict-views`.
 
    virtual machine
       A computer defined entirely in software.  Python's virtual machine

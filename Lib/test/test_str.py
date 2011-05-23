@@ -86,7 +86,7 @@ class StrTest(
             def __unicode__(self):
                 return "not unicode"
 
-        self.assert_(str(Foo0()).startswith("<")) # this is different from __unicode__
+        self.assertTrue(str(Foo0()).startswith("<")) # this is different from __unicode__
         self.assertEqual(str(Foo1()), "foo")
         self.assertEqual(str(Foo2()), "foo")
         self.assertEqual(str(Foo3()), "foo")
@@ -276,7 +276,7 @@ class StrTest(
         # format specifiers for user defined type
         self.assertEqual('{0:abc}'.format(C()), 'abc')
 
-        # !r and !s coersions
+        # !r and !s coercions
         self.assertEqual('{0!s}'.format('Hello'), 'Hello')
         self.assertEqual('{0!s:}'.format('Hello'), 'Hello')
         self.assertEqual('{0!s:15}'.format('Hello'), 'Hello          ')
@@ -290,11 +290,14 @@ class StrTest(
         self.assertEqual('{0}'.format([]), '[]')
         self.assertEqual('{0}'.format([1]), '[1]')
         self.assertEqual('{0}'.format(E('data')), 'E(data)')
-        self.assertEqual('{0:^10}'.format(E('data')), ' E(data)  ')
-        self.assertEqual('{0:^10s}'.format(E('data')), ' E(data)  ')
         self.assertEqual('{0:d}'.format(G('data')), 'G(data)')
-        self.assertEqual('{0:>15s}'.format(G('data')), ' string is data')
         self.assertEqual('{0!s}'.format(G('data')), 'string is data')
+
+        msg = 'object.__format__ with a non-empty format string is deprecated'
+        with test_support.check_warnings((msg, PendingDeprecationWarning)):
+            self.assertEqual('{0:^10}'.format(E('data')), ' E(data)  ')
+            self.assertEqual('{0:^10s}'.format(E('data')), ' E(data)  ')
+            self.assertEqual('{0:>15s}'.format(G('data')), ' string is data')
 
         self.assertEqual("{0:date: %Y-%m-%d}".format(I(year=2007,
                                                        month=8,
@@ -347,9 +350,9 @@ class StrTest(
         self.assertRaises(ValueError, "{0!}".format, 0)
         self.assertRaises(ValueError, "{0!rs}".format, 0)
         self.assertRaises(ValueError, "{!}".format)
-        self.assertRaises(ValueError, "{:}".format)
-        self.assertRaises(ValueError, "{:s}".format)
-        self.assertRaises(ValueError, "{}".format)
+        self.assertRaises(IndexError, "{:}".format)
+        self.assertRaises(IndexError, "{:s}".format)
+        self.assertRaises(IndexError, "{}".format)
 
         # issue 6089
         self.assertRaises(ValueError, "{0[0]x}".format, [None])
@@ -368,9 +371,61 @@ class StrTest(
         self.assertRaises(ValueError, format, "", "-")
         self.assertRaises(ValueError, "{0:=s}".format, '')
 
+    def test_format_auto_numbering(self):
+        class C:
+            def __init__(self, x=100):
+                self._x = x
+            def __format__(self, spec):
+                return spec
+
+        self.assertEqual('{}'.format(10), '10')
+        self.assertEqual('{:5}'.format('s'), 's    ')
+        self.assertEqual('{!r}'.format('s'), "'s'")
+        self.assertEqual('{._x}'.format(C(10)), '10')
+        self.assertEqual('{[1]}'.format([1, 2]), '2')
+        self.assertEqual('{[a]}'.format({'a':4, 'b':2}), '4')
+        self.assertEqual('a{}b{}c'.format(0, 1), 'a0b1c')
+
+        self.assertEqual('a{:{}}b'.format('x', '^10'), 'a    x     b')
+        self.assertEqual('a{:{}x}b'.format(20, '#'), 'a0x14b')
+
+        # can't mix and match numbering and auto-numbering
+        self.assertRaises(ValueError, '{}{1}'.format, 1, 2)
+        self.assertRaises(ValueError, '{1}{}'.format, 1, 2)
+        self.assertRaises(ValueError, '{:{1}}'.format, 1, 2)
+        self.assertRaises(ValueError, '{0:{}}'.format, 1, 2)
+
+        # can mix and match auto-numbering and named
+        self.assertEqual('{f}{}'.format(4, f='test'), 'test4')
+        self.assertEqual('{}{f}'.format(4, f='test'), '4test')
+        self.assertEqual('{:{f}}{g}{}'.format(1, 3, g='g', f=2), ' 1g3')
+        self.assertEqual('{f:{}}{}{g}'.format(2, 4, f=1, g='g'), ' 14g')
+
     def test_buffer_is_readonly(self):
         self.assertRaises(TypeError, sys.stdin.readinto, b"")
 
+    def test_encode_and_decode_kwargs(self):
+        self.assertEqual('abcde'.encode('ascii', 'replace'),
+                         'abcde'.encode('ascii', errors='replace'))
+        self.assertEqual('abcde'.encode('ascii', 'ignore'),
+                         'abcde'.encode(encoding='ascii', errors='ignore'))
+        self.assertEqual('Andr\202 x'.decode('ascii', 'ignore'),
+                         'Andr\202 x'.decode('ascii', errors='ignore'))
+        self.assertEqual('Andr\202 x'.decode('ascii', 'replace'),
+                         'Andr\202 x'.decode(encoding='ascii', errors='replace'))
+
+    def test_startswith_endswith_errors(self):
+        with self.assertRaises(UnicodeDecodeError):
+            '\xff'.startswith(u'x')
+        with self.assertRaises(UnicodeDecodeError):
+            '\xff'.endswith(u'x')
+        for meth in ('foo'.startswith, 'foo'.endswith):
+            with self.assertRaises(TypeError) as cm:
+                meth(['f'])
+            exc = str(cm.exception)
+            self.assertIn('unicode', exc)
+            self.assertIn('str', exc)
+            self.assertIn('tuple', exc)
 
 def test_main():
     test_support.run_unittest(StrTest)

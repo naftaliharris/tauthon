@@ -25,7 +25,7 @@ EXEC_PREFIX = os.path.normpath(sys.exec_prefix)
 # Path to the base directory of the project. On Windows the binary may
 # live in project/PCBuild9.  If we're dealing with an x64 Windows build,
 # it'll live in project/PCbuild/amd64.
-project_base = os.path.dirname(os.path.realpath(sys.executable))
+project_base = os.path.dirname(os.path.abspath(sys.executable))
 if os.name == "nt" and "pcbuild" in project_base[-8:].lower():
     project_base = os.path.abspath(os.path.join(project_base, os.path.pardir))
 # PC/VS7.1
@@ -74,7 +74,7 @@ def get_python_inc(plat_specific=0, prefix=None):
 
     if os.name == "posix":
         if python_build:
-            buildir = os.path.dirname(os.path.realpath(sys.executable))
+            buildir = os.path.dirname(sys.executable)
             if plat_specific:
                 # python.h is located in the buildir
                 inc_dir = buildir
@@ -88,11 +88,6 @@ def get_python_inc(plat_specific=0, prefix=None):
         return os.path.join(prefix, "include", "python" + get_python_version())
     elif os.name == "nt":
         return os.path.join(prefix, "include")
-    elif os.name == "mac":
-        if plat_specific:
-            return os.path.join(prefix, "Mac", "Include")
-        else:
-            return os.path.join(prefix, "Include")
     elif os.name == "os2":
         return os.path.join(prefix, "Include")
     else:
@@ -132,18 +127,6 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
         else:
             if get_python_version() < "2.2":
                 return prefix
-            else:
-                return os.path.join(prefix, "Lib", "site-packages")
-
-    elif os.name == "mac":
-        if plat_specific:
-            if standard_lib:
-                return os.path.join(prefix, "Lib", "lib-dynload")
-            else:
-                return os.path.join(prefix, "Lib", "site-packages")
-        else:
-            if standard_lib:
-                return os.path.join(prefix, "Lib")
             else:
                 return os.path.join(prefix, "Lib", "site-packages")
 
@@ -222,8 +205,7 @@ def get_config_h_filename():
 def get_makefile_filename():
     """Return full pathname of installed Makefile from the Python build."""
     if python_build:
-        return os.path.join(os.path.dirname(os.path.realpath(sys.executable)),
-                            "Makefile")
+        return os.path.join(os.path.dirname(sys.executable), "Makefile")
     lib_dir = get_python_lib(plat_specific=1, standard_lib=1)
     return os.path.join(lib_dir, "config", "Makefile")
 
@@ -336,6 +318,11 @@ def parse_makefile(fn, g=None):
 
     fp.close()
 
+    # strip spurious spaces
+    for k, v in done.items():
+        if isinstance(v, str):
+            done[k] = v.strip()
+
     # save the results in the global dictionary
     g.update(done)
     return g
@@ -402,7 +389,7 @@ def _init_posix():
         cur_target = os.getenv('MACOSX_DEPLOYMENT_TARGET', '')
         if cur_target == '':
             cur_target = cfg_target
-            os.putenv('MACOSX_DEPLOYMENT_TARGET', cfg_target)
+            os.environ['MACOSX_DEPLOYMENT_TARGET'] = cfg_target
         elif map(int, cfg_target.split('.')) > map(int, cur_target.split('.')):
             my_msg = ('$MACOSX_DEPLOYMENT_TARGET mismatch: now "%s" but "%s" during configure'
                 % (cur_target, cfg_target))
@@ -460,34 +447,8 @@ def _init_nt():
     g['SO'] = '.pyd'
     g['EXE'] = ".exe"
     g['VERSION'] = get_python_version().replace(".", "")
-    g['BINDIR'] = os.path.dirname(os.path.realpath(sys.executable))
+    g['BINDIR'] = os.path.dirname(os.path.abspath(sys.executable))
 
-    global _config_vars
-    _config_vars = g
-
-
-def _init_mac():
-    """Initialize the module as appropriate for Macintosh systems"""
-    g = {}
-    # set basic install directories
-    g['LIBDEST'] = get_python_lib(plat_specific=0, standard_lib=1)
-    g['BINLIBDEST'] = get_python_lib(plat_specific=1, standard_lib=1)
-
-    # XXX hmmm.. a normal install puts include files here
-    g['INCLUDEPY'] = get_python_inc(plat_specific=0)
-
-    import MacOS
-    if not hasattr(MacOS, 'runtimemodel'):
-        g['SO'] = '.ppc.slb'
-    else:
-        g['SO'] = '.%s.slb' % MacOS.runtimemodel
-
-    # XXX are these used anywhere?
-    g['install_lib'] = os.path.join(EXEC_PREFIX, "Lib")
-    g['install_platlib'] = os.path.join(EXEC_PREFIX, "Mac", "Lib")
-
-    # These are used by the extension module build
-    g['srcdir'] = ':'
     global _config_vars
     _config_vars = g
 

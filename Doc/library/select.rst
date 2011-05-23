@@ -100,6 +100,15 @@ The module defines the following:
       library, and does not handle file descriptors that don't originate from
       WinSock.
 
+.. attribute:: select.PIPE_BUF
+
+   Files reported as ready for writing by :func:`select`, :func:`poll` or
+   similar interfaces in this module are guaranteed to not block on a write
+   of up to :const:`PIPE_BUF` bytes.
+   This value is guaranteed by POSIX to be at least 512.  Availability: Unix.
+
+   .. versionadded:: 2.7
+
 
 .. _epoll-objects:
 
@@ -129,15 +138,15 @@ Edge and Level Trigger Polling (epoll) Objects
    | :const:`EPOLLONESHOT` | Set one-shot behavior. After one event is     |
    |                       | pulled out, the fd is internally disabled     |
    +-----------------------+-----------------------------------------------+
-   | :const:`EPOLLRDNORM`  | ???                                           |
+   | :const:`EPOLLRDNORM`  | Equivalent to :const:`EPOLLIN`                |
    +-----------------------+-----------------------------------------------+
-   | :const:`EPOLLRDBAND`  | ???                                           |
+   | :const:`EPOLLRDBAND`  | Priority data band can be read.               |
    +-----------------------+-----------------------------------------------+
-   | :const:`EPOLLWRNORM`  | ???                                           |
+   | :const:`EPOLLWRNORM`  | Equivalent to :const:`EPOLLOUT`               |
    +-----------------------+-----------------------------------------------+
-   | :const:`EPOLLWRBAND`  | ???                                           |
+   | :const:`EPOLLWRBAND`  | Priority data may be written.                 |
    +-----------------------+-----------------------------------------------+
-   | :const:`EPOLLMSG`     | ???                                           |
+   | :const:`EPOLLMSG`     | Ignored.                                      |
    +-----------------------+-----------------------------------------------+
 
 
@@ -231,7 +240,7 @@ linearly scanned again. :cfunc:`select` is O(highest file descriptor), while
 .. method:: poll.modify(fd, eventmask)
 
    Modifies an already registered fd. This has the same effect as
-   :meth:`register(fd, eventmask)`.  Attempting to modify a file descriptor
+   ``register(fd, eventmask)``.  Attempting to modify a file descriptor
    that was never registered causes an :exc:`IOError` exception with errno
    :const:`ENOENT` to be raised.
 

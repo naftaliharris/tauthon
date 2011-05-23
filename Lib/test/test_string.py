@@ -176,7 +176,7 @@ class ModuleTest(unittest.TestCase):
         # test all parameters used
         class CheckAllUsedFormatter(string.Formatter):
             def check_unused_args(self, used_args, args, kwargs):
-                # Track which arguments actuallly got used
+                # Track which arguments actually got used
                 unused_args = set(kwargs.keys())
                 unused_args.update(range(0, len(args)))
 
@@ -202,13 +202,13 @@ class ModuleTest(unittest.TestCase):
 class BytesAliasTest(unittest.TestCase):
 
     def test_builtin(self):
-        self.assert_(str is bytes)
+        self.assertTrue(str is bytes)
 
     def test_syntax(self):
         self.assertEqual(b"spam", "spam")
         self.assertEqual(br"egg\foo", "egg\\foo")
-        self.assert_(type(b""), str)
-        self.assert_(type(br""), str)
+        self.assertTrue(type(b""), str)
+        self.assertTrue(type(br""), str)
 
 def test_main():
     test_support.run_unittest(StringTest, ModuleTest, BytesAliasTest)

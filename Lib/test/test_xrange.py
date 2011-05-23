@@ -37,14 +37,14 @@ class XrangeTest(unittest.TestCase):
             if x == y:
                 continue
             elif x == sentinel:
-                self.fail('{0}: iterator ended unexpectedly '
-                          'at position {1}; expected {2}'.format(test_id, i, y))
+                self.fail('{}: iterator ended unexpectedly '
+                          'at position {}; expected {}'.format(test_id, i, y))
             elif y == sentinel:
-                self.fail('{0}: unexpected excess element {1} at '
-                          'position {2}'.format(test_id, x, i))
+                self.fail('{}: unexpected excess element {} at '
+                          'position {}'.format(test_id, x, i))
             else:
-                self.fail('{0}: wrong element at position {1};'
-                          'expected {2}, got {3}'.format(test_id, i, y, x))
+                self.fail('{}: wrong element at position {};'
+                          'expected {}, got {}'.format(test_id, i, y, x))
 
     def test_xrange(self):
         self.assertEqual(list(xrange(3)), [0, 1, 2])
@@ -63,25 +63,25 @@ class XrangeTest(unittest.TestCase):
         self.assertEqual(list(xrange(a+4, a, -2)), [a+4, a+2])
 
         seq = list(xrange(a, b, c))
-        self.assert_(a in seq)
-        self.assert_(b not in seq)
+        self.assertIn(a, seq)
+        self.assertNotIn(b, seq)
         self.assertEqual(len(seq), 2)
 
         seq = list(xrange(b, a, -c))
-        self.assert_(b in seq)
-        self.assert_(a not in seq)
+        self.assertIn(b, seq)
+        self.assertNotIn(a, seq)
         self.assertEqual(len(seq), 2)
 
         seq = list(xrange(-a, -b, -c))
-        self.assert_(-a in seq)
-        self.assert_(-b not in seq)
+        self.assertIn(-a, seq)
+        self.assertNotIn(-b, seq)
         self.assertEqual(len(seq), 2)
 
         self.assertRaises(TypeError, xrange)
         self.assertRaises(TypeError, xrange, 1, 2, 3, 4)
         self.assertRaises(ValueError, xrange, 1, 2, 0)
 
-        self.assertRaises(OverflowError, xrange, 1e100, 1e101, 1e101)
+        self.assertRaises(OverflowError, xrange, 10**100, 10**101, 10**101)
 
         self.assertRaises(TypeError, xrange, 0, "spam")
         self.assertRaises(TypeError, xrange, 0, 42, "spam")
@@ -101,8 +101,8 @@ class XrangeTest(unittest.TestCase):
         for proto in range(pickle.HIGHEST_PROTOCOL + 1):
             for t in testcases:
                 r = xrange(*t)
-                self.assertEquals(list(pickle.loads(pickle.dumps(r, proto))),
-                                  list(r))
+                self.assertEqual(list(pickle.loads(pickle.dumps(r, proto))),
+                                 list(r))
 
     def test_range_iterators(self):
         # see issue 7298
@@ -122,7 +122,7 @@ class XrangeTest(unittest.TestCase):
                 pass
             else:
                 iter2 = pyrange(start, end, step)
-                test_id = "xrange({0}, {1}, {2})".format(start, end, step)
+                test_id = "xrange({}, {}, {})".format(start, end, step)
                 # check first 100 entries
                 self.assert_iterators_equal(iter1, iter2, test_id, limit=100)
 
@@ -132,8 +132,7 @@ class XrangeTest(unittest.TestCase):
                 pass
             else:
                 iter2 = pyrange_reversed(start, end, step)
-                test_id = "reversed(xrange({0}, {1}, {2}))".format(
-                    start, end, step)
+                test_id = "reversed(xrange({}, {}, {}))".format(start, end, step)
                 self.assert_iterators_equal(iter1, iter2, test_id, limit=100)
 
 

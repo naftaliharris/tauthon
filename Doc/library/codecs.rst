@@ -760,7 +760,7 @@ Encodings and Unicode
 
 Unicode strings are stored internally as sequences of codepoints (to be precise
 as :ctype:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
-via :option:`--enable-unicode=ucs2` or :option:`--enable-unicode=ucs4`, with the
+via ``--enable-unicode=ucs2`` or ``--enable-unicode=ucs4``, with the
 former being the default) :ctype:`Py_UNICODE` is either a 16-bit or 32-bit data
 type. Once a Unicode object is used outside of CPU and memory, CPU endianness
 and how these arrays are stored as bytes become an issue.  Transforming a
@@ -908,6 +908,8 @@ particular, the following variants typically exist:
 | cp500           | EBCDIC-CP-BE, EBCDIC-CP-CH,    | Western Europe                 |
 |                 | IBM500                         |                                |
 +-----------------+--------------------------------+--------------------------------+
+| cp720           |                                | Arabic                         |
++-----------------+--------------------------------+--------------------------------+
 | cp737           |                                | Greek                          |
 +-----------------+--------------------------------+--------------------------------+
 | cp775           | IBM775                         | Baltic languages               |
@@ -922,6 +924,8 @@ particular, the following variants typically exist:
 | cp856           |                                | Hebrew                         |
 +-----------------+--------------------------------+--------------------------------+
 | cp857           | 857, IBM857                    | Turkish                        |
++-----------------+--------------------------------+--------------------------------+
+| cp858           | 858, IBM858                    | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | cp860           | 860, IBM860                    | Portuguese                     |
 +-----------------+--------------------------------+--------------------------------+
@@ -1197,14 +1201,20 @@ the user: The application should transparently convert Unicode domain labels to
 IDNA on the wire, and convert back ACE labels to Unicode before presenting them
 to the user.
 
-Python supports this conversion in several ways: The ``idna`` codec allows to
-convert between Unicode and the ACE. Furthermore, the :mod:`socket` module
+Python supports this conversion in several ways:  the ``idna`` codec performs
+conversion between Unicode and ACE, separating an input string into labels
+based on the separator characters defined in `section 3.1`_ (1) of :rfc:`3490`
+and converting each label to ACE as required, and conversely separating an input
+byte string into labels based on the ``.`` separator and converting any ACE
+labels found into unicode.  Furthermore, the :mod:`socket` module
 transparently converts Unicode host names to ACE, so that applications need not
 be concerned about converting host names themselves when they pass them to the
 socket module. On top of that, modules that have host names as function
 parameters, such as :mod:`httplib` and :mod:`ftplib`, accept Unicode host names
 (:mod:`httplib` then also transparently sends an IDNA hostname in the
 :mailheader:`Host` field if it sends that field at all).
+
+.. _section 3.1: http://tools.ietf.org/html/rfc3490#section-3.1
 
 When receiving host names from the wire (such as in reverse name lookup), no
 automatic conversion to Unicode is performed: Applications wishing to present

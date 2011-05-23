@@ -2,9 +2,9 @@
 
 .. _abstract-buffer:
 
+
 Old Buffer Protocol
 ===================
-
 
 This section describes the legacy buffer protocol, which has been introduced
 in Python 1.6. It is still supported but deprecated in the Python 2.x series.

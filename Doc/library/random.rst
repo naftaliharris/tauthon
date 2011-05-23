@@ -9,6 +9,11 @@
 This module implements pseudo-random number generators for various
 distributions.
 
+.. seealso::
+
+   Latest version of the `random module Python source code
+   <http://svn.python.org/view/python/branches/release27-maint/Lib/random.py?view=markup>`_
+
 For integers, uniform selection from a range. For sequences, uniform selection
 of a random element, a function to generate a random permutation of a list
 in-place, and a function for random sampling without replacement.
@@ -72,10 +77,6 @@ Bookkeeping functions:
 
    .. versionchanged:: 2.4
       formerly, operating system resources were not used.
-
-   If *x* is not ``None`` or an int or long, ``hash(x)`` is used instead. If *x* is
-   an int or long, *x* is used directly.
-
 
 .. function:: getstate()
 

@@ -7,6 +7,26 @@ Built-in Functions
 The Python interpreter has a number of functions built into it that are always
 available.  They are listed here in alphabetical order.
 
+===================  =================  ==================  =================  ====================
+..                   ..                 Built-in Functions  ..                 ..
+===================  =================  ==================  =================  ====================
+:func:`abs`          :func:`divmod`     :func:`input`       :func:`open`       :func:`staticmethod`
+:func:`all`          :func:`enumerate`  :func:`int`         :func:`ord`        :func:`str`
+:func:`any`          :func:`eval`       :func:`isinstance`  :func:`pow`        :func:`sum`
+:func:`basestring`   :func:`execfile`   :func:`issubclass`  :func:`print`      :func:`super`
+:func:`bin`          :func:`file`       :func:`iter`        :func:`property`   :func:`tuple`
+:func:`bool`         :func:`filter`     :func:`len`         :func:`range`      :func:`type`
+:func:`bytearray`    :func:`float`      :func:`list`        :func:`raw_input`  :func:`unichr`
+:func:`callable`     :func:`format`     :func:`locals`      :func:`reduce`     :func:`unicode`
+:func:`chr`          :func:`frozenset`  :func:`long`        :func:`reload`     :func:`vars`
+:func:`classmethod`  :func:`getattr`    :func:`map`         :func:`repr`       :func:`xrange`
+:func:`cmp`          :func:`globals`    :func:`max`         :func:`reversed`   :func:`zip`
+:func:`compile`      :func:`hasattr`    :func:`memoryview`  :func:`round`      :func:`__import__`
+:func:`complex`      :func:`hash`       :func:`min`         :func:`set`        :func:`apply`
+:func:`delattr`      :func:`help`       :func:`next`        :func:`setattr`    :func:`buffer`
+:func:`dict`         :func:`hex`        :func:`object`      :func:`slice`      :func:`coerce`
+:func:`dir`          :func:`id`         :func:`oct`         :func:`sorted`     :func:`intern`
+===================  =================  ==================  =================  ====================
 
 .. function:: abs(x)
 
@@ -76,6 +96,32 @@ available.  They are listed here in alphabetical order.
 
    .. versionchanged:: 2.3
       If no argument is given, this function returns :const:`False`.
+
+
+.. function:: bytearray([source[, encoding[, errors]]])
+
+   Return a new array of bytes.  The :class:`bytearray` type is a mutable
+   sequence of integers in the range 0 <= x < 256.  It has most of the usual
+   methods of mutable sequences, described in :ref:`typesseq-mutable`, as well
+   as most methods that the :class:`str` type has, see :ref:`string-methods`.
+
+   The optional *source* parameter can be used to initialize the array in a few
+   different ways:
+
+   * If it is a *string*, you must also give the *encoding* (and optionally,
+     *errors*) parameters; :func:`bytearray` then converts the string to
+     bytes using :meth:`str.encode`.
+
+   * If it is an *integer*, the array will have that size and will be
+     initialized with null bytes.
+
+   * If it is an object conforming to the *buffer* interface, a read-only buffer
+     of the object will be used to initialize the bytes array.
+
+   * If it is an *iterable*, it must be an iterable of integers in the range
+     ``0 <= x < 256``, which are used as the initial contents of the array.
+
+   Without an argument, an array of size 0 is created.
 
 
 .. function:: callable(object)
@@ -173,17 +219,20 @@ available.  They are listed here in alphabetical order.
 
    .. note::
 
-      When compiling a string with multi-line code, line endings must be
-      represented by a single newline character (``'\n'``), and the input must
-      be terminated by at least one newline character.  If line endings are
-      represented by ``'\r\n'``, use :meth:`str.replace` to change them into
-      ``'\n'``.
+      When compiling a string with multi-line code in ``'single'`` or
+      ``'eval'`` mode, input must be terminated by at least one newline
+      character.  This is to facilitate detection of incomplete and complete
+      statements in the :mod:`code` module.
 
    .. versionchanged:: 2.3
       The *flags* and *dont_inherit* arguments were added.
 
    .. versionchanged:: 2.6
       Support for compiling AST objects.
+
+   .. versionchanged:: 2.7
+      Allowed use of Windows and Mac newlines.  Also input in ``'exec'`` mode
+      does not have to end in a newline anymore.
 
 
 .. function:: complex([real[, imag]])
@@ -344,6 +393,9 @@ available.  They are listed here in alphabetical order.
    returns the current global and local dictionary, respectively, which may be
    useful to pass around for use by :func:`eval` or :func:`execfile`.
 
+   See :func:`ast.literal_eval` for a function that can safely evaluate strings
+   with expressions containing only literals.
+
 
 .. function:: execfile(filename[, globals[, locals]])
 
@@ -462,7 +514,7 @@ available.  They are listed here in alphabetical order.
 
 .. function:: getattr(object, name[, default])
 
-   Return the value of the named attributed of *object*.  *name* must be a string.
+   Return the value of the named attribute of *object*.  *name* must be a string.
    If the string is the name of one of the object's attributes, the result is the
    value of that attribute.  For example, ``getattr(x, 'foobar')`` is equivalent to
    ``x.foobar``.  If the named attribute does not exist, *default* is returned if
@@ -687,6 +739,13 @@ available.  They are listed here in alphabetical order.
 
    .. versionchanged:: 2.5
       Added support for the optional *key* argument.
+
+
+.. function:: memoryview(obj)
+   :noindex:
+
+   Return a "memory view" object created from the given argument.  See
+   :ref:`typememoryview` for more information.
 
 
 .. function:: min(iterable[, args...][key])
@@ -1088,6 +1147,14 @@ available.  They are listed here in alphabetical order.
    example, ``round(0.5)`` is ``1.0`` and ``round(-0.5)`` is ``-1.0``).
 
 
+   .. note::
+
+      The behavior of :func:`round` for floats can be surprising: for example,
+      ``round(2.675, 2)`` gives ``2.67`` instead of the expected ``2.68``.
+      This is not a bug: it's a result of the fact that most decimal fractions
+      can't be represented exactly as a float.  See :ref:`tut-fp-issues` for
+      more information.
+
 .. function:: set([iterable])
    :noindex:
 
@@ -1148,9 +1215,8 @@ available.  They are listed here in alphabetical order.
    In general, the *key* and *reverse* conversion processes are much faster
    than specifying an equivalent *cmp* function.  This is because *cmp* is
    called multiple times for each list element while *key* and *reverse* touch
-   each element only once.  To convert an old-style *cmp* function to a *key*
-   function, see the `CmpToKey recipe in the ASPN cookbook
-   <http://code.activestate.com/recipes/576653/>`_\.
+   each element only once.  Use :func:`functools.cmp_to_key` to convert an
+   old-style *cmp* function to a *key* function.
 
    For sorting examples and a brief sorting tutorial, see `Sorting HowTo
    <http://wiki.python.org/moin/HowTo/Sorting/>`_\.
@@ -1207,10 +1273,13 @@ available.  They are listed here in alphabetical order.
 
    Sums *start* and the items of an *iterable* from left to right and returns the
    total.  *start* defaults to ``0``. The *iterable*'s items are normally numbers,
-   and are not allowed to be strings.  The fast, correct way to concatenate a
-   sequence of strings is by calling ``''.join(sequence)``. Note that
-   ``sum(range(n), m)`` is equivalent to ``reduce(operator.add, range(n), m)``
-   To add floating point values with extended precision, see :func:`math.fsum`\.
+   and the start value is not allowed to be a string.
+
+   For some use cases, there are good alternatives to :func:`sum`.
+   The preferred, fast way to concatenate a sequence of strings is by calling
+   ``''.join(sequence)``.  To add floating point values with extended precision,
+   see :func:`math.fsum`\.  To concatenate a series of iterables, consider using
+   :func:`itertools.chain`.
 
    .. versionadded:: 2.3
 
@@ -1394,8 +1463,8 @@ available.  They are listed here in alphabetical order.
       restricts all arguments to native C longs ("short" Python integers), and
       also requires that the number of elements fit in a native C long.  If a
       larger range is needed, an alternate version can be crafted using the
-      :mod:`itertools` module: ``takewhile(lambda x: x<stop, (start+i*step
-      for i in count()))``.
+      :mod:`itertools` module: ``islice(count(start, step),
+      (stop-start+step-1+2*(step<0))//step)``.
 
 
 .. function:: zip([iterable, ...])
