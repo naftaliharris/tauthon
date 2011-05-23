@@ -9,19 +9,12 @@ expression.  They cache the compiled regular expressions for speed.
 The function translate(PATTERN) returns a regular expression
 corresponding to PATTERN.  (It does not compile it.)
 """
-
+import os
+import posixpath
 import re
+import functools
 
 __all__ = ["filter", "fnmatch", "fnmatchcase", "translate"]
-
-_cache = {}  # Maps text patterns to compiled regexen.
-_cacheb = {}  # Ditto for bytes patterns.
-_MAXCACHE = 100 # Maximum size of caches
-
-def _purge():
-    """Clear the pattern cache"""
-    _cache.clear()
-    _cacheb.clear()
 
 def fnmatch(name, pat):
     """Test whether FILENAME matches PATTERN.
@@ -38,33 +31,25 @@ def fnmatch(name, pat):
     if the operating system requires it.
     If you don't want this, use fnmatchcase(FILENAME, PATTERN).
     """
-
-    import os
     name = os.path.normcase(name)
     pat = os.path.normcase(pat)
     return fnmatchcase(name, pat)
 
-def _compile_pattern(pat):
-    cache = _cacheb if isinstance(pat, bytes) else _cache
-    regex = cache.get(pat)
-    if regex is None:
-        if isinstance(pat, bytes):
-            pat_str = str(pat, 'ISO-8859-1')
-            res_str = translate(pat_str)
-            res = bytes(res_str, 'ISO-8859-1')
-        else:
-            res = translate(pat)
-        if len(cache) >= _MAXCACHE:
-            cache.clear()
-        cache[pat] = regex = re.compile(res)
-    return regex.match
+@functools.lru_cache(maxsize=250)
+def _compile_pattern(pat, is_bytes=False):
+    if is_bytes:
+        pat_str = str(pat, 'ISO-8859-1')
+        res_str = translate(pat_str)
+        res = bytes(res_str, 'ISO-8859-1')
+    else:
+        res = translate(pat)
+    return re.compile(res).match
 
 def filter(names, pat):
-    """Return the subset of the list NAMES that match PAT"""
-    import os,posixpath
+    """Return the subset of the list NAMES that match PAT."""
     result = []
     pat = os.path.normcase(pat)
-    match = _compile_pattern(pat)
+    match = _compile_pattern(pat, isinstance(pat, bytes))
     if os.path is posixpath:
         # normcase on posix is NOP. Optimize it away from the loop.
         for name in names:
@@ -82,9 +67,9 @@ def fnmatchcase(name, pat):
     This is a version of fnmatch() which doesn't case-normalize
     its arguments.
     """
-
-    match = _compile_pattern(pat)
+    match = _compile_pattern(pat, isinstance(pat, bytes))
     return match(name) is not None
+
 
 def translate(pat):
     """Translate a shell PATTERN to a regular expression.

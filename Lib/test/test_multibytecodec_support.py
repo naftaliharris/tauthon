@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # test_multibytecodec_support.py
 #   Common Unittest Routines for CJK codecs
@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import unittest
+from http.client import HTTPException
 from test import support
 from io import BytesIO
 
@@ -281,7 +282,7 @@ class TestBase_Mapping(unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kw)
         try:
             self.open_mapping_file().close() # test it to report the error early
-        except IOError:
+        except (IOError, HTTPException):
             self.skipTest("Could not retrieve "+self.mapfileurl)
 
     def open_mapping_file(self):

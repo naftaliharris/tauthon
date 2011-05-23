@@ -418,11 +418,9 @@ much speed.
 .. XXX check which of these projects are still alive
 
 There are also several programs which make it easier to intermingle Python and C
-code in various ways to increase performance.  See, for example, `Psyco
-<http://psyco.sourceforge.net/>`_, `Pyrex
-<http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_, `PyInline
-<http://pyinline.sourceforge.net/>`_, `Py2Cmod
-<http://sourceforge.net/projects/py2cmod/>`_, and `Weave
+code in various ways to increase performance.  See, for example, `Cython
+<http://cython.org/>`_, `Pyrex
+<http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_ and `Weave
 <http://www.scipy.org/Weave>`_.
 
 
@@ -649,9 +647,10 @@ order to remind you of that fact, it does not return the sorted list.  This way,
 you won't be fooled into accidentally overwriting a list when you need a sorted
 copy but also need to keep the unsorted version around.
 
-In Python 2.4 a new builtin -- :func:`sorted` -- has been added.  This function
-creates a new list from a provided iterable, sorts it and returns it.  For
-example, here's how to iterate over the keys of a dictionary in sorted order::
+In Python 2.4 a new built-in function -- :func:`sorted` -- has been added.
+This function creates a new list from a provided iterable, sorts it and returns
+it.  For example, here's how to iterate over the keys of a dictionary in sorted
+order::
 
    for key in sorted(mydict):
        ... # do whatever with mydict[key]...
