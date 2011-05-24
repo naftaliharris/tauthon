@@ -4,6 +4,9 @@
 .. module:: dis
    :synopsis: Disassembler for Python bytecode.
 
+**Source code:** :source:`Lib/dis.py`
+
+--------------
 
 The :mod:`dis` module supports the analysis of CPython :term:`bytecode` by
 disassembling it. The CPython bytecode which this module takes as an
@@ -12,7 +15,7 @@ and the interpreter.
 
 .. impl-detail::
 
-   Bytecode is an implementation detail of the CPython interpreter!  No
+   Bytecode is an implementation detail of the CPython interpreter.  No
    guarantees are made that bytecode will not be added, removed, or changed
    between versions of Python.  Use of this module should not be considered to
    work across Python VMs or Python releases.
@@ -35,6 +38,28 @@ the following command can be used to get the disassembly of :func:`myfunc`::
 
 The :mod:`dis` module defines the following functions and constants:
 
+
+.. function:: code_info(x)
+
+   Return a formatted multi-line string with detailed code object information
+   for the supplied function, method, source code string or code object.
+
+   Note that the exact contents of code info strings are highly implementation
+   dependent and they may change arbitrarily across Python VMs or Python
+   releases.
+
+   .. versionadded:: 3.2
+
+
+.. function:: show_code(x)
+
+   Print detailed code object information for the supplied function, method,
+   source code string or code object to stdout.
+
+   This is a convenient shorthand for ``print(code_info(x))``, intended for
+   interactive exploration at the interpreter prompt.
+
+   .. versionadded:: 3.2
 
 .. function:: dis(x=None)
 
@@ -172,15 +197,15 @@ The Python compiler currently generates the following bytecode instructions.
    three.
 
 
-.. opcode:: ROT_FOUR
-
-   Lifts second, third and forth stack item one position up, moves top down to
-   position four.
-
-
 .. opcode:: DUP_TOP
 
    Duplicates the reference on top of the stack.
+
+
+.. opcode:: DUP_TOP_TWO
+
+   Duplicates the two references on top of the stack, leaving them in the
+   same order.
 
 
 **Unary operations**
@@ -445,6 +470,18 @@ the stack so that it is available for further iterations of the loop.
    by ``CALL_FUNCTION`` to construct a class.
 
 
+.. opcode:: SETUP_WITH (delta)
+
+   This opcode performs several operations before a with block starts.  First,
+   it loads :meth:`~object.__exit__` from the context manager and pushes it onto
+   the stack for later use by :opcode:`WITH_CLEANUP`.  Then,
+   :meth:`~object.__enter__` is called, and a finally block pointing to *delta*
+   is pushed.  Finally, the result of calling the enter method is pushed onto
+   the stack.  The next opcode will either ignore it (:opcode:`POP_TOP`), or
+   store it in (a) variable(s) (:opcode:`STORE_FAST`, :opcode:`STORE_NAME`, or
+   :opcode:`UNPACK_SEQUENCE`).
+
+
 .. opcode:: WITH_CLEANUP
 
    Cleans up the stack when a :keyword:`with` statement block exits.  TOS is
@@ -505,12 +542,6 @@ the more significant byte last.
    The low byte of *counts* is the number of values before the list value, the
    high byte of *counts* the number of values after it.  The resulting values
    are put onto the stack right-to-left.
-
-
-.. opcode:: DUP_TOPX (count)
-
-   Duplicate *count* items, keeping them in the same order. Due to implementation
-   limits, *count* should be between 1 and 5 inclusive.
 
 
 .. opcode:: STORE_ATTR (namei)
@@ -693,6 +724,12 @@ the more significant byte last.
 
    Stores TOS into the cell contained in slot *i* of the cell and free variable
    storage.
+
+
+.. opcode:: DELETE_DEREF (i)
+
+   Empties the cell contained in slot *i* of the cell and free variable storage.
+   Used by the :keyword:`del` statement.
 
 
 .. opcode:: RAISE_VARARGS (argc)

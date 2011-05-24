@@ -29,7 +29,7 @@ class AbstractMemoryTests:
         oldrefcount = sys.getrefcount(b)
         m = self._view(b)
         self.assertEqual(m[0], item(b"a"))
-        self.assertTrue(isinstance(m[0], bytes), type(m[0]))
+        self.assertIsInstance(m[0], bytes)
         self.assertEqual(m[5], item(b"f"))
         self.assertEqual(m[-1], item(b"f"))
         self.assertEqual(m[-6], item(b"a"))
@@ -129,7 +129,7 @@ class AbstractMemoryTests:
             expected = b"".join(
                 self.getitem_type(bytes([c])) for c in b"abcdef")
             self.assertEqual(b, expected)
-            self.assertTrue(isinstance(b, bytes), type(b))
+            self.assertIsInstance(b, bytes)
 
     def test_tolist(self):
         for tp in self._types:
@@ -226,6 +226,52 @@ class AbstractMemoryTests:
             gc.collect()
             self.assertTrue(wr() is None, wr())
 
+    def _check_released(self, m, tp):
+        check = self.assertRaisesRegex(ValueError, "released")
+        with check: bytes(m)
+        with check: m.tobytes()
+        with check: m.tolist()
+        with check: m[0]
+        with check: m[0] = b'x'
+        with check: len(m)
+        with check: m.format
+        with check: m.itemsize
+        with check: m.ndim
+        with check: m.readonly
+        with check: m.shape
+        with check: m.strides
+        with check:
+            with m:
+                pass
+        # str() and repr() still function
+        self.assertIn("released memory", str(m))
+        self.assertIn("released memory", repr(m))
+        self.assertEqual(m, m)
+        self.assertNotEqual(m, memoryview(tp(self._source)))
+        self.assertNotEqual(m, tp(self._source))
+
+    def test_contextmanager(self):
+        for tp in self._types:
+            b = tp(self._source)
+            m = self._view(b)
+            with m as cm:
+                self.assertIs(cm, m)
+            self._check_released(m, tp)
+            m = self._view(b)
+            # Can release explicitly inside the context manager
+            with m:
+                m.release()
+
+    def test_release(self):
+        for tp in self._types:
+            b = tp(self._source)
+            m = self._view(b)
+            m.release()
+            self._check_released(m, tp)
+            # Can be called a second time (it's a no-op)
+            m.release()
+            self._check_released(m, tp)
+
     def test_writable_readonly(self):
         # Issue #10451: memoryview incorrectly exposes a readonly
         # buffer as writable causing a segfault if using mmap
@@ -251,7 +297,7 @@ class BaseBytesMemoryTests(AbstractMemoryTests):
 class BaseArrayMemoryTests(AbstractMemoryTests):
     ro_type = None
     rw_type = lambda self, b: array.array('i', list(b))
-    getitem_type = lambda self, b: array.array('i', list(b)).tostring()
+    getitem_type = lambda self, b: array.array('i', list(b)).tobytes()
     itemsize = array.array('i').itemsize
     format = 'i'
 
