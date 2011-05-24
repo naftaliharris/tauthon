@@ -4260,6 +4260,8 @@ class DictProxyTests(unittest.TestCase):
                 pass
         self.C = C
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_keys(self):
         # Testing dict-proxy keys...
         it = self.C.__dict__.keys()
@@ -4269,6 +4271,8 @@ class DictProxyTests(unittest.TestCase):
         self.assertEqual(keys, ['__dict__', '__doc__', '__module__',
             '__weakref__', 'meth'])
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_values(self):
         # Testing dict-proxy values...
         it = self.C.__dict__.values()
@@ -4276,6 +4280,8 @@ class DictProxyTests(unittest.TestCase):
         values = list(it)
         self.assertEqual(len(values), 5)
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_items(self):
         # Testing dict-proxy iteritems...
         it = self.C.__dict__.items()
