@@ -102,6 +102,14 @@ class BasicSocketTests(unittest.TestCase):
             sys.stdout.write("\n RAND_status is %d (%s)\n"
                              % (v, (v and "sufficient randomness") or
                                 "insufficient randomness"))
+
+        data, is_cryptographic = ssl.RAND_pseudo_bytes(16)
+        self.assertEqual(len(data), 16)
+        self.assertEqual(is_cryptographic, v == 1)
+        if v:
+            data = ssl.RAND_bytes(16)
+            self.assertEqual(len(data), 16)
+
         try:
             ssl.RAND_egd(1)
         except TypeError:
@@ -645,25 +653,30 @@ class NetworkedTests(unittest.TestCase):
                 sys.stdout.write("\nNeeded %d calls to do_handshake() to establish session.\n" % count)
 
     def test_get_server_certificate(self):
-        with support.transient_internet("svn.python.org"):
-            pem = ssl.get_server_certificate(("svn.python.org", 443))
-            if not pem:
-                self.fail("No server certificate on svn.python.org:443!")
+        def _test_get_server_certificate(host, port, cert=None):
+            with support.transient_internet(host):
+                pem = ssl.get_server_certificate((host, port))
+                if not pem:
+                    self.fail("No server certificate on %s:%s!" % (host, port))
 
-            try:
-                pem = ssl.get_server_certificate(("svn.python.org", 443), ca_certs=CERTFILE)
-            except ssl.SSLError as x:
-                #should fail
+                try:
+                    pem = ssl.get_server_certificate((host, port), ca_certs=CERTFILE)
+                except ssl.SSLError as x:
+                    #should fail
+                    if support.verbose:
+                        sys.stdout.write("%s\n" % x)
+                else:
+                    self.fail("Got server certificate %s for %s:%s!" % (pem, host, port))
+
+                pem = ssl.get_server_certificate((host, port), ca_certs=cert)
+                if not pem:
+                    self.fail("No server certificate on %s:%s!" % (host, port))
                 if support.verbose:
-                    sys.stdout.write("%s\n" % x)
-            else:
-                self.fail("Got server certificate %s for svn.python.org!" % pem)
+                    sys.stdout.write("\nVerified certificate for %s:%s is\n%s\n" % (host, port ,pem))
 
-            pem = ssl.get_server_certificate(("svn.python.org", 443), ca_certs=SVN_PYTHON_ORG_ROOT_CERT)
-            if not pem:
-                self.fail("No server certificate on svn.python.org:443!")
-            if support.verbose:
-                sys.stdout.write("\nVerified certificate for svn.python.org:443 is\n%s\n" % pem)
+        _test_get_server_certificate('svn.python.org', 443, SVN_PYTHON_ORG_ROOT_CERT)
+        if support.IPV6_ENABLED:
+            _test_get_server_certificate('ipv6.google.com', 443)
 
     def test_ciphers(self):
         remote = ("svn.python.org", 443)
@@ -1222,7 +1235,8 @@ else:
                 t.join()
 
         @skip_if_broken_ubuntu_ssl
-        @unittest.skipUnless(hasattr(ssl, 'PROTOCOL_SSLv2'), "need SSLv2")
+        @unittest.skipUnless(hasattr(ssl, 'PROTOCOL_SSLv2'),
+                             "OpenSSL is compiled without SSLv2 support")
         def test_protocol_sslv2(self):
             """Connecting to an SSLv2 server with various client options"""
             if support.verbose:
