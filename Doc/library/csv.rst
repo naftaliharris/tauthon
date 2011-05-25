@@ -188,6 +188,15 @@ The :mod:`csv` module defines the following classes:
    TAB-delimited file.  It is registered with the dialect name ``'excel-tab'``.
 
 
+.. class:: unix_dialect()
+
+   The :class:`unix_dialect` class defines the usual properties of a CSV file
+   generated on UNIX systems, i.e. using ``'\n'`` as line terminator and quoting
+   all fields.  It is registered with the dialect name ``'unix'``.
+
+   .. versionadded:: 3.2
+
+
 .. class:: Sniffer()
 
    The :class:`Sniffer` class is used to deduce the format of a CSV file.
@@ -391,6 +400,16 @@ Writer objects have the following public attribute:
 .. attribute:: csvwriter.dialect
 
    A read-only description of the dialect in use by the writer.
+
+
+DictWriter objects have the following public method:
+
+
+.. method:: DictWriter.writeheader()
+
+   Write a row with the field names (as specified in the constructor).
+
+   .. versionadded:: 3.2
 
 
 .. _csv-examples:

@@ -1,7 +1,7 @@
-What's New in IDLE 3.1.4?
+What's New in IDLE 3.2.1?
 =========================
 
-*Release date: XX-XXX-11*
+*Release date: 15-May-11*
 
 - Issue #6378: Further adjust idle.bat to start associated Python
 

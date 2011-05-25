@@ -90,7 +90,7 @@ This example uses the iterator form::
 
 .. seealso::
 
-   http://www.pysqlite.org
+   http://code.google.com/p/pysqlite/
       The pysqlite web page -- sqlite3 is developed externally under the name
       "pysqlite".
 
@@ -227,6 +227,12 @@ Connection Objects
    one of "DEFERRED", "IMMEDIATE" or "EXCLUSIVE". See section
    :ref:`sqlite3-controlling-transactions` for a more detailed explanation.
 
+.. attribute:: Connection.in_transaction
+
+   :const:`True` if a transaction is active (there are uncommitted changes),
+   :const:`False` otherwise.  Read-only attribute.
+
+   .. versionadded:: 3.2
 
 .. method:: Connection.cursor([cursorClass])
 
@@ -362,6 +368,29 @@ Connection Objects
    If you want to clear any previously installed progress handler, call the
    method with :const:`None` for *handler*.
 
+
+.. method:: Connection.enable_load_extension(enabled)
+
+   This routine allows/disallows the SQLite engine to load SQLite extensions
+   from shared libraries.  SQLite extensions can define new functions,
+   aggregates or whole new virtual table implementations.  One well-known
+   extension is the fulltext-search extension distributed with SQLite.
+
+   .. versionadded:: 3.2
+
+   .. literalinclude:: ../includes/sqlite3/load_extension.py
+
+   Loadable extensions are disabled by default. See [#f1]_.
+
+.. method:: Connection.load_extension(path)
+
+   This routine loads a SQLite extension from a shared library.  You have to
+   enable extension loading with :meth:`enable_load_extension` before you can
+   use this routine.
+
+   .. versionadded:: 3.2
+
+   Loadable extensions are disabled by default. See [#f1]_.
 
 .. attribute:: Connection.row_factory
 
@@ -785,7 +814,8 @@ So if you are within a transaction and issue a command like ``CREATE TABLE
 before executing that command. There are two reasons for doing that. The first
 is that some of these commands don't work within transactions. The other reason
 is that sqlite3 needs to keep track of the transaction state (if a transaction
-is active or not).
+is active or not).  The current transaction state is exposed through the
+:attr:`Connection.in_transaction` attribute of the connection object.
 
 You can control which kind of ``BEGIN`` statements sqlite3 implicitly executes
 (or none at all) via the *isolation_level* parameter to the :func:`connect`
@@ -852,3 +882,10 @@ threads. If you still try to do so, you will get an exception at runtime.
 
 The only exception is calling the :meth:`~Connection.interrupt` method, which
 only makes sense to call from a different thread.
+
+.. rubric:: Footnotes
+
+.. [#f1] The sqlite3 module is not built with loadable extension support by
+  default, because some platforms (notably Mac OS X) have SQLite libraries which
+  are compiled without this feature. To get loadable extension support, you must
+  pass --enable-loadable-sqlite-extensions to configure.
