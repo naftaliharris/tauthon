@@ -1905,13 +1905,26 @@ static PyObject *
 _dir_object(PyObject *obj)
 {
     PyObject *result = NULL;
-    PyObject *dirfunc = PyObject_GetAttrString((PyObject *)obj->ob_type,
-                                               "__dir__");
+    static PyObject *dir_str = NULL;
+    PyObject *dirfunc;
 
     assert(obj);
+    if (PyInstance_Check(obj)) {
+        dirfunc = PyObject_GetAttrString(obj, "__dir__");
+        if (dirfunc == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                PyErr_Clear();
+            else
+                return NULL;
+        }
+    }
+    else {
+        dirfunc = _PyObject_LookupSpecial(obj, "__dir__", &dir_str);
+        if (PyErr_Occurred())
+            return NULL;
+    }
     if (dirfunc == NULL) {
         /* use default implementation */
-        PyErr_Clear();
         if (PyModule_Check(obj))
             result = _specialized_dir_module(obj);
         else if (PyType_Check(obj) || PyClass_Check(obj))
@@ -1921,7 +1934,7 @@ _dir_object(PyObject *obj)
     }
     else {
         /* use __dir__ */
-        result = PyObject_CallFunctionObjArgs(dirfunc, obj, NULL);
+        result = PyObject_CallFunctionObjArgs(dirfunc, NULL);
         Py_DECREF(dirfunc);
         if (result == NULL)
             return NULL;

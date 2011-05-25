@@ -2244,8 +2244,10 @@ sock_listen(PySocketSockObject *s, PyObject *arg)
     if (backlog == -1 && PyErr_Occurred())
         return NULL;
     Py_BEGIN_ALLOW_THREADS
-    if (backlog < 1)
-        backlog = 1;
+    /* To avoid problems on systems that don't allow a negative backlog
+     * (which doesn't make sense anyway) we force a minimum value of 0. */
+    if (backlog < 0)
+        backlog = 0;
     res = listen(s->sock_fd, backlog);
     Py_END_ALLOW_THREADS
     if (res < 0)
@@ -2258,8 +2260,9 @@ PyDoc_STRVAR(listen_doc,
 "listen(backlog)\n\
 \n\
 Enable a server to accept connections.  The backlog argument must be at\n\
-least 1; it specifies the number of unaccepted connection that the system\n\
-will allow before refusing new connections.");
+least 0 (if it is lower, it is set to 0); it specifies the number of\n\
+unaccepted connections that the system will allow before refusing new\n\
+connections.");
 
 
 #ifndef NO_DUP
@@ -2826,14 +2829,24 @@ sock_sendto(PySocketSockObject *s, PyObject *args)
     Py_ssize_t len;
     sock_addr_t addrbuf;
     int addrlen, n = -1, flags, timeout;
+    int arglen;
 
     flags = 0;
-    if (!PyArg_ParseTuple(args, "s*O:sendto", &pbuf, &addro)) {
-        PyErr_Clear();
-        if (!PyArg_ParseTuple(args, "s*iO:sendto",
-                              &pbuf, &flags, &addro))
-            return NULL;
+    arglen = PyTuple_Size(args);
+    switch(arglen) {
+        case 2:
+            PyArg_ParseTuple(args, "s*O:sendto", &pbuf, &addro);
+            break;
+        case 3:
+            PyArg_ParseTuple(args, "s*iO:sendto", &pbuf, &flags, &addro);
+            break;
+        default:
+            PyErr_Format(PyExc_TypeError, "sendto() takes 2 or 3"
+                         " arguments (%d given)", arglen);
     }
+    if (PyErr_Occurred())
+        return NULL;
+
     buf = pbuf.buf;
     len = pbuf.len;
 

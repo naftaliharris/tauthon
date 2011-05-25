@@ -9,6 +9,12 @@ What's New in Python 2.7.2?
 Core and Builtins
 -----------------
 
+- Correct lookup of __dir__ on objects. Among other things, this causes errors
+  besides AttributeError found on lookup to be propagated.
+
+- Issue #1195: Fix input() if it is interrupted by CTRL+d and then CTRL+c,
+  clear the end-of-file indicator after CTRL+d.
+
 - Issue #8651: PyArg_Parse*() functions raise an OverflowError if the file
   doesn't have PY_SSIZE_T_CLEAN define and the size doesn't fit in an int
   (length bigger than 2^31-1 bytes).
@@ -76,6 +82,36 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #12124: zipimport doesn't keep a reference to zlib.decompress() anymore
+  to be able to unload the module.
+
+- Issue #11088: don't crash when using F5 to run a script in IDLE on MacOSX
+  with Tk 8.5.
+
+- Issue #10154, #10090: change the normalization of UTF-8 to "UTF-8" instead
+  of "UTF8" in the locale module as the latter is not supported MacOSX and OpenBSD.
+
+- Issue #9516: avoid errors in sysconfig when MACOSX_DEPLOYMENT_TARGET is
+  set in shell.
+
+- Issue #12050: zlib.decompressobj().decompress() now clears the unconsumed_tail
+  attribute when called without a max_length argument.
+
+- Issue #12062: In the `io` module, fix a flushing bug when doing a certain
+  type of I/O sequence on a file opened in read+write mode (namely: reading,
+  seeking a bit forward, writing, then seeking before the previous write but
+  still within buffered data, and writing again).
+
+- Issue #8498: In socket.accept(), allow to specify 0 as a backlog value in
+  order to accept exactly one connection.  Patch by Daniel Evers.
+
+- Issue #12012: ssl.PROTOCOL_SSLv2 becomes optional.
+
+- Issue #11164: Remove obsolete allnodes test from minidom test.
+
+- Issue #11927: SMTP_SSL now uses port 465 by default as documented.  Patch
+  by Kasun Herath.
 
 - Issue 11999: fixed sporadic sync failure mailbox.Maildir due to its trying to
   detect mtime changes by comparing to the system clock instead of to the
@@ -358,6 +394,18 @@ Library
 Extension Modules
 -----------------
 
+- Stop using the old interface for providing methods and attributes in the _sre
+  module. Among other things, this gives these classes ``__class__``
+  attributes. (See #12099)
+
+- Issue #10169: Fix argument parsing in socket.sendto() to avoid error masking.
+
+- Issue #12051: Fix segfault in json.dumps() while encoding highly-nested
+  objects using the C accelerations.
+
+- Issue #12017: Fix segfault in json.loads() while decoding highly-nested
+  objects using the C accelerations.
+
 - Issue #1838: Prevent segfault in ctypes, when _as_parameter_ on a class is set
   to an instance of the class.
 
@@ -412,6 +460,10 @@ IDLE
 
 Tests
 -----
+
+- Issue #5723: Improve json tests to be executed with and without accelerations.
+
+- Issue #11910: Fix test_heapq to skip the C tests when _heapq is missing.
 
 - Fix test_startfile to wait for child process to terminate before finishing.
 
