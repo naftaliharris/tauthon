@@ -6,15 +6,22 @@
 #  Licensed to PSF under a Contributor Agreement.
 #
 
+import array
 import hashlib
-from io import StringIO
+import itertools
+import sys
 try:
     import threading
 except ImportError:
     threading = None
 import unittest
+import warnings
 from test import support
 from test.support import _4G, precisionbigmemtest
+
+# Were we compiled --with-pydebug or with #define Py_DEBUG?
+COMPILED_WITH_PYDEBUG = hasattr(sys, 'gettotalrefcount')
+
 
 def hexstr(s):
     assert isinstance(s, bytes), repr(s)
@@ -30,6 +37,79 @@ class HashLibTestCase(unittest.TestCase):
                              'sha224', 'SHA224', 'sha256', 'SHA256',
                              'sha384', 'SHA384', 'sha512', 'SHA512' )
 
+    _warn_on_extension_import = COMPILED_WITH_PYDEBUG
+
+    def _conditional_import_module(self, module_name):
+        """Import a module and return a reference to it or None on failure."""
+        try:
+            exec('import '+module_name)
+        except ImportError as error:
+            if self._warn_on_extension_import:
+                warnings.warn('Did a C extension fail to compile? %s' % error)
+        return locals().get(module_name)
+
+    def __init__(self, *args, **kwargs):
+        algorithms = set()
+        for algorithm in self.supported_hash_names:
+            algorithms.add(algorithm.lower())
+        self.constructors_to_test = {}
+        for algorithm in algorithms:
+            self.constructors_to_test[algorithm] = set()
+
+        # For each algorithm, test the direct constructor and the use
+        # of hashlib.new given the algorithm name.
+        for algorithm, constructors in self.constructors_to_test.items():
+            constructors.add(getattr(hashlib, algorithm))
+            def _test_algorithm_via_hashlib_new(data=None, _alg=algorithm):
+                if data is None:
+                    return hashlib.new(_alg)
+                return hashlib.new(_alg, data)
+            constructors.add(_test_algorithm_via_hashlib_new)
+
+        _hashlib = self._conditional_import_module('_hashlib')
+        if _hashlib:
+            # These two algorithms should always be present when this module
+            # is compiled.  If not, something was compiled wrong.
+            assert hasattr(_hashlib, 'openssl_md5')
+            assert hasattr(_hashlib, 'openssl_sha1')
+            for algorithm, constructors in self.constructors_to_test.items():
+                constructor = getattr(_hashlib, 'openssl_'+algorithm, None)
+                if constructor:
+                    constructors.add(constructor)
+
+        _md5 = self._conditional_import_module('_md5')
+        if _md5:
+            self.constructors_to_test['md5'].add(_md5.md5)
+        _sha1 = self._conditional_import_module('_sha1')
+        if _sha1:
+            self.constructors_to_test['sha1'].add(_sha1.sha1)
+        _sha256 = self._conditional_import_module('_sha256')
+        if _sha256:
+            self.constructors_to_test['sha224'].add(_sha256.sha224)
+            self.constructors_to_test['sha256'].add(_sha256.sha256)
+        _sha512 = self._conditional_import_module('_sha512')
+        if _sha512:
+            self.constructors_to_test['sha384'].add(_sha512.sha384)
+            self.constructors_to_test['sha512'].add(_sha512.sha512)
+
+        super(HashLibTestCase, self).__init__(*args, **kwargs)
+
+    def test_hash_array(self):
+        a = array.array("b", range(10))
+        constructors = self.constructors_to_test.values()
+        for cons in itertools.chain.from_iterable(constructors):
+            c = cons(a)
+            c.hexdigest()
+
+    def test_algorithms_guaranteed(self):
+        self.assertEqual(hashlib.algorithms_guaranteed,
+            set(_algo for _algo in self.supported_hash_names
+                  if _algo.islower()))
+
+    def test_algorithms_available(self):
+        self.assertTrue(set(hashlib.algorithms_guaranteed).
+                            issubset(hashlib.algorithms_available))
+
     def test_unknown_hash(self):
         try:
             hashlib.new('spam spam spam spam spam')
@@ -37,6 +117,24 @@ class HashLibTestCase(unittest.TestCase):
             pass
         else:
             self.assertTrue(0 == "hashlib didn't reject bogus hash name")
+
+    def test_get_builtin_constructor(self):
+        get_builtin_constructor = hashlib.__dict__[
+                '__get_builtin_constructor']
+        self.assertRaises(ValueError, get_builtin_constructor, 'test')
+        try:
+            import _md5
+        except ImportError:
+            pass
+        # This forces an ImportError for "import _md5" statements
+        sys.modules['_md5'] = None
+        try:
+            self.assertRaises(ValueError, get_builtin_constructor, 'md5')
+        finally:
+            if '_md5' in locals():
+                sys.modules['_md5'] = _md5
+            else:
+                del sys.modules['_md5']
 
     def test_hexdigest(self):
         for name in self.supported_hash_names:
@@ -61,17 +159,23 @@ class HashLibTestCase(unittest.TestCase):
             self.assertEqual(m1.digest(), m2.digest())
 
     def check(self, name, data, digest):
-        # test the direct constructors
-        computed = getattr(hashlib, name)(data).hexdigest()
-        self.assertEqual(computed, digest)
-        # test the general new() interface
-        computed = hashlib.new(name, data).hexdigest()
-        self.assertEqual(computed, digest)
+        constructors = self.constructors_to_test[name]
+        # 2 is for hashlib.name(...) and hashlib.new(name, ...)
+        self.assertGreaterEqual(len(constructors), 2)
+        for hash_object_constructor in constructors:
+            computed = hash_object_constructor(data).hexdigest()
+            self.assertEqual(
+                    computed, digest,
+                    "Hash algorithm %s constructed using %s returned hexdigest"
+                    " %r for %d byte input data that should have hashed to %r."
+                    % (name, hash_object_constructor,
+                       computed, len(data), digest))
 
     def check_no_unicode(self, algorithm_name):
         # Unicode objects are not allowed as input.
-        self.assertRaises(TypeError, getattr(hashlib, algorithm_name), 'spam')
-        self.assertRaises(TypeError, hashlib.new, algorithm_name, 'spam')
+        constructors = self.constructors_to_test[algorithm_name]
+        for hash_object_constructor in constructors:
+            self.assertRaises(TypeError, hash_object_constructor, 'spam')
 
     def test_no_unicode(self):
         self.check_no_unicode('md5')
@@ -229,10 +333,9 @@ class HashLibTestCase(unittest.TestCase):
         m = hashlib.md5(b'x' * gil_minsize)
         self.assertEqual(m.hexdigest(), 'cfb767f225d58469c5de3632a8803958')
 
+    @unittest.skipUnless(threading, 'Threading required for this test.')
+    @support.reap_threads
     def test_threaded_hashing(self):
-        if not threading:
-            raise unittest.SkipTest('No threading module.')
-
         # Updating the same hash object from several threads at once
         # using data chunk sizes containing the same byte sequences.
         #
@@ -267,7 +370,6 @@ class HashLibTestCase(unittest.TestCase):
 
         self.assertEqual(expected_hash, hasher.hexdigest())
 
-@support.reap_threads
 def test_main():
     support.run_unittest(HashLibTestCase)
 

@@ -13,6 +13,10 @@
    import itertools
    __name__ = '<doctest>'
 
+**Source code:** :source:`Lib/collections.py` and :source:`Lib/_abcoll.py`
+
+--------------
+
 This module implements specialized container datatypes providing alternatives to
 Python's general purpose built-in containers, :class:`dict`, :class:`list`,
 :class:`set`, and :class:`tuple`.
@@ -29,7 +33,7 @@ Python's general purpose built-in containers, :class:`dict`, :class:`list`,
 =====================   ====================================================================
 
 In addition to the concrete container classes, the collections module provides
-ABCs (abstract base classes) that can be used to test whether a class provides a
+:ref:`abstract-base-classes` that can be used to test whether a class provides a
 particular interface, for example, whether it is hashable or a mapping.
 
 
@@ -85,7 +89,7 @@ For example::
    .. versionadded:: 3.1
 
 
-   Counter objects support two methods beyond those available for all
+   Counter objects support three methods beyond those available for all
    dictionaries:
 
    .. method:: elements()
@@ -107,6 +111,19 @@ For example::
 
             >>> Counter('abracadabra').most_common(3)
             [('a', 5), ('r', 2), ('b', 2)]
+
+   .. method:: subtract([iterable-or-mapping])
+
+      Elements are subtracted from an *iterable* or from another *mapping*
+      (or counter).  Like :meth:`dict.update` but subtracts counts instead
+      of replacing them.  Both inputs and outputs may be zero or negative.
+
+            >>> c = Counter(a=4, b=2, c=0, d=-2)
+            >>> d = Counter(a=1, b=2, c=3, d=4)
+            >>> c.subtract(d)
+            Counter({'a': 3, 'b': 0, 'c': -3, 'd': -6})
+
+      .. versionadded:: 3.2
 
    The usual dictionary methods are available for :class:`Counter` objects
    except for two which work differently for counters.
@@ -188,14 +205,14 @@ counts, but the output will exclude results with counts of zero or less.
     * `Bag class <http://www.gnu.org/software/smalltalk/manual-base/html_node/Bag.html>`_
       in Smalltalk.
 
-    * Wikipedia entry for `Multisets <http://en.wikipedia.org/wiki/Multiset>`_\.
+    * Wikipedia entry for `Multisets <http://en.wikipedia.org/wiki/Multiset>`_.
 
     * `C++ multisets <http://www.demo2s.com/Tutorial/Cpp/0380__set-multiset/Catalog0380__set-multiset.htm>`_
       tutorial with examples.
 
     * For mathematical operations on multisets and their use cases, see
       *Knuth, Donald. The Art of Computer Programming Volume II,
-      Section 4.6.3, Exercise 19*\.
+      Section 4.6.3, Exercise 19*.
 
     * To enumerate all distinct multisets of a given size over a given set of
       elements, see :func:`itertools.combinations_with_replacement`.
@@ -248,6 +265,13 @@ counts, but the output will exclude results with counts of zero or less.
       Remove all elements from the deque leaving it with length 0.
 
 
+   .. method:: count(x)
+
+      Count the number of deque elements equal to *x*.
+
+      .. versionadded:: 3.2
+
+
    .. method:: extend(iterable)
 
       Extend the right side of the deque by appending elements from the iterable
@@ -277,6 +301,13 @@ counts, but the output will exclude results with counts of zero or less.
 
       Removed the first occurrence of *value*.  If not found, raises a
       :exc:`ValueError`.
+
+
+   .. method:: reverse()
+
+      Reverse the elements of the deque in-place and then return ``None``.
+
+      .. versionadded:: 3.2
 
 
    .. method:: rotate(n)
@@ -555,11 +586,15 @@ they add the ability to access fields by name instead of position index.
    .. versionchanged:: 3.1
       Added support for *rename*.
 
-Example:
 
 .. doctest::
    :options: +NORMALIZE_WHITESPACE
 
+   >>> # Basic example
+   >>> Point = namedtuple('Point', ['x', 'y'])
+   >>> p = Point(x=10, y=11)
+
+   >>> # Example using the verbose option to print the class definition
    >>> Point = namedtuple('Point', 'x y', verbose=True)
    class Point(tuple):
            'Point(x, y)'
@@ -569,6 +604,7 @@ Example:
            _fields = ('x', 'y')
    <BLANKLINE>
            def __new__(_cls, x, y):
+               'Create a new instance of Point(x, y)'
                return _tuple.__new__(_cls, (x, y))
    <BLANKLINE>
            @classmethod
@@ -580,7 +616,8 @@ Example:
                return result
    <BLANKLINE>
            def __repr__(self):
-               return 'Point(x=%r, y=%r)' % self
+               'Return a nicely formatted representation string'
+               return self.__class__.__name__ + '(x=%r, y=%r)' % self
    <BLANKLINE>
            def _asdict(self):
                'Return a new OrderedDict which maps field names to their values'
@@ -594,10 +631,11 @@ Example:
                return result
    <BLANKLINE>
            def __getnewargs__(self):
+               'Return self as a plain tuple.   Used by copy and pickle.'
                return tuple(self)
    <BLANKLINE>
-           x = _property(_itemgetter(0))
-           y = _property(_itemgetter(1))
+           x = _property(_itemgetter(0), doc='Alias for field number 0')
+           y = _property(_itemgetter(1), doc='Alias for field number 1')
 
    >>> p = Point(11, y=22)     # instantiate with positional or keyword arguments
    >>> p[0] + p[1]             # indexable like the plain tuple (11, 22)
@@ -698,15 +736,15 @@ functionality with a subclass.  Here is how to add a calculated field and
 a fixed-width print format:
 
     >>> class Point(namedtuple('Point', 'x y')):
-    ...     __slots__ = ()
-    ...     @property
-    ...     def hypot(self):
-    ...         return (self.x ** 2 + self.y ** 2) ** 0.5
-    ...     def __str__(self):
-    ...         return 'Point: x=%6.3f  y=%6.3f  hypot=%6.3f' % (self.x, self.y, self.hypot)
+            __slots__ = ()
+            @property
+            def hypot(self):
+                return (self.x ** 2 + self.y ** 2) ** 0.5
+            def __str__(self):
+                return 'Point: x=%6.3f  y=%6.3f  hypot=%6.3f' % (self.x, self.y, self.hypot)
 
     >>> for p in Point(3, 4), Point(14, 5/7):
-    ...     print(p)
+            print(p)
     Point: x= 3.000  y= 4.000  hypot= 5.000
     Point: x=14.000  y= 0.714  hypot=14.018
 
@@ -733,12 +771,19 @@ and more efficient to use a simple class declaration:
     >>> Status.open, Status.pending, Status.closed
     (0, 1, 2)
     >>> class Status:
-    ...     open, pending, closed = range(3)
+            open, pending, closed = range(3)
 
 .. seealso::
 
-   `Named tuple recipe <http://code.activestate.com/recipes/500261/>`_
-   adapted for Python 2.4.
+   * `Named tuple recipe <http://code.activestate.com/recipes/500261/>`_
+     adapted for Python 2.4.
+
+   * `Recipe for named tuple abstract base class with a metaclass mix-in
+     <http://code.activestate.com/recipes/577629-namedtupleabc-abstract-base-class-mix-in-for-named/>`_
+     by Jan Kaliszewski.  Besides providing an :term:`abstract base class` for
+     named tuples, it also supports an alternate :term:`metaclass`-based
+     constructor that is convenient for use cases where named tuples are being
+     subclassed.
 
 
 :class:`OrderedDict` objects
@@ -763,6 +808,23 @@ the items are returned in the order their keys were first added.
       The :meth:`popitem` method for ordered dictionaries returns and removes a
       (key, value) pair.  The pairs are returned in LIFO order if *last* is true
       or FIFO order if false.
+
+   .. method:: move_to_end(key, last=True)
+
+      Move an existing *key* to either end of an ordered dictionary.  The item
+      is moved to the right end if *last* is true (the default) or to the
+      beginning if *last* is false.  Raises :exc:`KeyError` if the *key* does
+      not exist::
+
+          >>> d = OrderedDict.fromkeys('abcde')
+          >>> d.move_to_end('b')
+          >>> ''.join(d.keys)
+          'acdeb'
+          >>> d.move_to_end('b', last=False)
+          >>> ''.join(d.keys)
+          'bacde'
+
+      .. versionadded:: 3.2
 
 In addition to the usual mapping methods, ordered dictionaries also support
 reverse iteration using :func:`reversed`.
@@ -827,10 +889,6 @@ so that the counter remembers the order elements are first encountered::
    class OrderedCounter(Counter, OrderedDict):
         'Counter that remembers the order elements are first encountered'
 
-        def __init__(self, iterable=None, **kwds):
-            OrderedDict.__init__(self)
-            Counter.__init__(self, iterable, **kwds)
-
         def __repr__(self):
             return '%s(%r)' % (self.__class__.__name__, OrderedDict(self))
 
@@ -862,6 +920,7 @@ attribute.
 
       A real dictionary used to store the contents of the :class:`UserDict`
       class.
+
 
 
 :class:`UserList` objects
@@ -923,6 +982,7 @@ attribute.
    subclass) or an arbitrary sequence which can be converted into a string using
    the built-in :func:`str` function.
 
+.. _abstract-base-classes:
 
 ABCs - abstract base classes
 ----------------------------
@@ -939,7 +999,7 @@ ABC                        Inherits from          Abstract Methods        Mixin 
 :class:`Sized`                                    ``__len__``
 :class:`Callable`                                 ``__call__``
 
-:class:`Sequence`          :class:`Sized`,        ``__getitem__``         ``__contains__``. ``__iter__``, ``__reversed__``,
+:class:`Sequence`          :class:`Sized`,        ``__getitem__``         ``__contains__``, ``__iter__``, ``__reversed__``,
                            :class:`Iterable`,                             ``index``, and ``count``
                            :class:`Container`
 
@@ -1073,6 +1133,9 @@ Notes on using :class:`Set` and :class:`MutableSet` as a mixin:
    ``__hash__ = Set._hash``.
 
 .. seealso::
+
+   * Latest version of the :source:`Python source code for the collections
+     abstract base classes <Lib/_abcoll.py>`
 
    * `OrderedSet recipe <http://code.activestate.com/recipes/576694/>`_ for an
      example built on :class:`MutableSet`.

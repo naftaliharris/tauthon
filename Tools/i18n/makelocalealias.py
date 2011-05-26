@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
     Convert the X11 locale.alias file into a mapping dictionary suitable
     for locale.py.
@@ -9,7 +9,7 @@
 import locale
 
 # Location of the alias file
-LOCALE_ALIAS = '/usr/lib/X11/locale/locale.alias'
+LOCALE_ALIAS = '/usr/share/X11/locale/locale.alias'
 
 def parse(filename):
 
