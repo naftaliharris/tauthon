@@ -14,12 +14,12 @@ from sysconfig import (get_paths, get_platform, get_config_vars,
                        _get_default_scheme, _expand_vars,
                        get_scheme_names, get_config_var, _main)
 
+
 class TestSysConfig(unittest.TestCase):
 
     def setUp(self):
         super(TestSysConfig, self).setUp()
         self.sys_path = sys.path[:]
-        self.makefile = None
         # patching os.uname
         if hasattr(os, 'uname'):
             self.uname = os.uname
@@ -47,8 +47,6 @@ class TestSysConfig(unittest.TestCase):
 
     def tearDown(self):
         sys.path[:] = self.sys_path
-        if self.makefile is not None:
-            os.unlink(self.makefile)
         self._cleanup_testfn()
         if self.uname is not None:
             os.uname = self.uname
@@ -208,9 +206,9 @@ class TestSysConfig(unittest.TestCase):
             get_config_vars()['CFLAGS'] = ('-arch %s -isysroot '
                                            '/Developer/SDKs/MacOSX10.4u.sdk  '
                                            '-fno-strict-aliasing -fno-common '
-                                           '-dynamic -DNDEBUG -g -O3'%(arch,))
+                                           '-dynamic -DNDEBUG -g -O3' % arch)
 
-            self.assertEqual(get_platform(), 'macosx-10.4-%s'%(arch,))
+            self.assertEqual(get_platform(), 'macosx-10.4-%s' % arch)
 
         # linux debian sarge
         os.name = 'posix'
@@ -227,12 +225,6 @@ class TestSysConfig(unittest.TestCase):
     def test_get_config_h_filename(self):
         config_h = sysconfig.get_config_h_filename()
         self.assertTrue(os.path.isfile(config_h), config_h)
-
-    @unittest.skipIf(sys.platform.startswith('win'),
-                     'Test is not Windows compatible')
-    def test_get_makefile_filename(self):
-        makefile = sysconfig.get_makefile_filename()
-        self.assertTrue(os.path.isfile(makefile), makefile)
 
     def test_get_scheme_names(self):
         wanted = ('nt', 'nt_user', 'os2', 'os2_home', 'osx_framework_user',
@@ -329,8 +321,34 @@ class TestSysConfig(unittest.TestCase):
         self.assertEqual(my_platform, test_platform)
 
 
+class MakefileTests(unittest.TestCase):
+
+    @unittest.skipIf(sys.platform.startswith('win'),
+                     'Test is not Windows compatible')
+    def test_get_makefile_filename(self):
+        makefile = sysconfig.get_makefile_filename()
+        self.assertTrue(os.path.isfile(makefile), makefile)
+
+    def test_parse_makefile(self):
+        self.addCleanup(unlink, TESTFN)
+        with open(TESTFN, "w") as makefile:
+            print("var1=a$(VAR2)", file=makefile)
+            print("VAR2=b$(var3)", file=makefile)
+            print("var3=42", file=makefile)
+            print("var4=$/invalid", file=makefile)
+            print("var5=dollar$$5", file=makefile)
+        vars = sysconfig._parse_makefile(TESTFN)
+        self.assertEqual(vars, {
+            'var1': 'ab42',
+            'VAR2': 'b42',
+            'var3': 42,
+            'var4': '$/invalid',
+            'var5': 'dollar$5',
+        })
+
+
 def test_main():
-    run_unittest(TestSysConfig)
+    run_unittest(TestSysConfig, MakefileTests)
 
 if __name__ == "__main__":
     test_main()

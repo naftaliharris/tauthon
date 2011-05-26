@@ -124,6 +124,14 @@ os
   (Patch submitted by Giampaolo Rodolà in :issue:`10784`.)
 
 
+pydoc
+-----
+
+The Tk GUI and the :func:`~pydoc.serve` function have been removed from the
+:mod:`pydoc` module: ``pydoc -g`` and :func:`~pydoc.serve` have been deprecated
+in Python 3.2.
+
+
 sys
 ---
 
