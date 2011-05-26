@@ -529,7 +529,6 @@ class ForkingMixIn:
                 self.active_children = []
             self.active_children.append(pid)
             self.close_request(request)
-            return
         else:
             # Child process.
             # This must never return, hence os._exit()!
