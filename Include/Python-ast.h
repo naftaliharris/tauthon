@@ -34,6 +34,8 @@ typedef struct _keyword *keyword_ty;
 
 typedef struct _alias *alias_ty;
 
+typedef struct _withitem *withitem_ty;
+
 
 enum _mod_kind {Module_kind=1, Interactive_kind=2, Expression_kind=3,
                  Suite_kind=4};
@@ -143,14 +145,12 @@ struct _stmt {
                 } If;
                 
                 struct {
-                        expr_ty context_expr;
-                        expr_ty optional_vars;
+                        asdl_seq *items;
                         asdl_seq *body;
                 } With;
                 
                 struct {
-                        expr_ty context_expr;
-                        expr_ty optional_vars;
+                        asdl_seq *items;
                         asdl_seq *body;
                 } AsyncWith;
                 
@@ -401,6 +401,11 @@ struct _alias {
         identifier asname;
 };
 
+struct _withitem {
+        expr_ty context_expr;
+        expr_ty optional_vars;
+};
+
 
 #define Module(a0, a1) _Py_Module(a0, a1)
 mod_ty _Py_Module(asdl_seq * body, PyArena *arena);
@@ -448,12 +453,12 @@ stmt_ty _Py_While(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
 #define If(a0, a1, a2, a3, a4, a5) _Py_If(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_If(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
                int col_offset, PyArena *arena);
-#define With(a0, a1, a2, a3, a4, a5) _Py_With(a0, a1, a2, a3, a4, a5)
-stmt_ty _Py_With(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body,
-                 int lineno, int col_offset, PyArena *arena);
-#define AsyncWith(a0, a1, a2, a3, a4, a5) _Py_AsyncWith(a0, a1, a2, a3, a4, a5)
-stmt_ty _Py_AsyncWith(expr_ty context_expr, expr_ty optional_vars, asdl_seq *
-                      body, int lineno, int col_offset, PyArena *arena);
+#define With(a0, a1, a2, a3, a4) _Py_With(a0, a1, a2, a3, a4)
+stmt_ty _Py_With(asdl_seq * items, asdl_seq * body, int lineno, int col_offset,
+                 PyArena *arena);
+#define AsyncWith(a0, a1, a2, a3, a4) _Py_AsyncWith(a0, a1, a2, a3, a4)
+stmt_ty _Py_AsyncWith(asdl_seq * items, asdl_seq * body, int lineno, int
+                      col_offset, PyArena *arena);
 #define Raise(a0, a1, a2, a3, a4, a5) _Py_Raise(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_Raise(expr_ty type, expr_ty inst, expr_ty tback, int lineno, int
                   col_offset, PyArena *arena);
@@ -574,6 +579,9 @@ arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, identifier
 keyword_ty _Py_keyword(identifier arg, expr_ty value, PyArena *arena);
 #define alias(a0, a1, a2) _Py_alias(a0, a1, a2)
 alias_ty _Py_alias(identifier name, identifier asname, PyArena *arena);
+#define withitem(a0, a1, a2) _Py_withitem(a0, a1, a2)
+withitem_ty _Py_withitem(expr_ty context_expr, expr_ty optional_vars, PyArena
+                         *arena);
 
 PyObject* PyAST_mod2obj(mod_ty t);
 mod_ty PyAST_obj2mod(PyObject* ast, PyArena* arena, int mode);

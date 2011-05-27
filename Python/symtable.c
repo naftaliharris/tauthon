@@ -176,6 +176,7 @@ static int symtable_visit_slice(struct symtable *st, slice_ty);
 static int symtable_visit_params(struct symtable *st, asdl_seq *args, int top);
 static int symtable_visit_params_nested(struct symtable *st, asdl_seq *args);
 static int symtable_implicit_arg(struct symtable *st, int pos);
+static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
 static identifier top = NULL, lambda = NULL, genexpr = NULL, setcomp = NULL,
@@ -1188,10 +1189,7 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         /* nothing to do here */
         break;
     case With_kind:
-        VISIT(st, expr, s->v.With.context_expr);
-        if (s->v.With.optional_vars) {
-            VISIT(st, expr, s->v.With.optional_vars);
-        }
+        VISIT_SEQ(st, withitem, s->v.With.items);
         VISIT_SEQ(st, stmt, s->v.With.body);
         break;
     }
@@ -1409,6 +1407,16 @@ symtable_visit_excepthandler(struct symtable *st, excepthandler_ty eh)
     if (eh->v.ExceptHandler.name)
         VISIT(st, expr, eh->v.ExceptHandler.name);
     VISIT_SEQ(st, stmt, eh->v.ExceptHandler.body);
+    return 1;
+}
+
+static int
+symtable_visit_withitem(struct symtable *st, withitem_ty item)
+{
+    VISIT(st, expr, item->context_expr);
+    if (item->optional_vars) {
+        VISIT(st, expr, item->optional_vars);
+    }
     return 1;
 }
 
