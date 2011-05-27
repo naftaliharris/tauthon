@@ -135,6 +135,7 @@ managed by compiler_enter_scope() and compiler_exit_scope().
 
 struct compiler {
     const char *c_filename;
+    PyObject *c_filename_obj;
     struct symtable *c_st;
     PyFutureFeatures *c_future; /* pointer to module's __future__ */
     PyCompilerFlags *c_flags;
@@ -178,7 +179,7 @@ static int compiler_in_loop(struct compiler *);
 static int inplace_binop(struct compiler *, operator_ty);
 static int expr_constant(struct compiler *, expr_ty);
 
-static int compiler_with(struct compiler *, stmt_ty);
+static int compiler_with(struct compiler *, stmt_ty, int);
 static int compiler_call_helper(struct compiler *c, int n,
                                 asdl_seq *args,
                                 asdl_seq *keywords,
@@ -272,6 +273,9 @@ PyAST_CompileEx(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     if (!compiler_init(&c))
         return NULL;
     c.c_filename = filename;
+    c.c_filename_obj = PyUnicode_DecodeFSDefault(filename);
+    if (!c.c_filename_obj)
+        goto finally;
     c.c_arena = arena;
     c.c_future = PyFuture_FromAST(mod, filename);
     if (c.c_future == NULL)
@@ -324,6 +328,8 @@ compiler_free(struct compiler *c)
         PySymtable_Free(c->c_st);
     if (c->c_future)
         PyObject_Free(c->c_future);
+    if (c->c_filename_obj)
+        Py_DECREF(c->c_filename_obj);
     Py_DECREF(c->c_stack);
 }
 
@@ -2335,7 +2341,7 @@ compiler_visit_stmt(struct compiler *c, stmt_ty s)
     case Continue_kind:
         return compiler_continue(c);
     case With_kind:
-        return compiler_with(c, s);
+        return compiler_with(c, s, 0);
     }
     return 1;
 }
@@ -3026,7 +3032,7 @@ expr_constant(struct compiler *c, expr_ty e)
     case Name_kind:
         /* optimize away names that can't be reassigned */
         id = PyBytes_AS_STRING(
-            _PyUnicode_AsDefaultEncodedString(e->v.Name.id, NULL));
+            _PyUnicode_AsDefaultEncodedString(e->v.Name.id));
         if (strcmp(id, "True") == 0) return 1;
         if (strcmp(id, "False") == 0) return 0;
         if (strcmp(id, "None") == 0) return 0;
@@ -3062,9 +3068,10 @@ expr_constant(struct compiler *c, expr_ty e)
        exit(*exc)
  */
 static int
-compiler_with(struct compiler *c, stmt_ty s)
+compiler_with(struct compiler *c, stmt_ty s, int pos)
 {
     basicblock *block, *finally;
+    withitem_ty item = asdl_seq_GET(s->v.With.items, pos);
 
     assert(s->kind == With_kind);
 
@@ -3074,7 +3081,7 @@ compiler_with(struct compiler *c, stmt_ty s)
         return 0;
 
     /* Evaluate EXPR */
-    VISIT(c, expr, s->v.With.context_expr);
+    VISIT(c, expr, item->context_expr);
     ADDOP_JREL(c, SETUP_WITH, finally);
 
     /* SETUP_WITH pushes a finally block. */
@@ -3083,16 +3090,20 @@ compiler_with(struct compiler *c, stmt_ty s)
         return 0;
     }
 
-    if (s->v.With.optional_vars) {
-        VISIT(c, expr, s->v.With.optional_vars);
+    if (item->optional_vars) {
+        VISIT(c, expr, item->optional_vars);
     }
     else {
     /* Discard result from context.__enter__() */
         ADDOP(c, POP_TOP);
     }
 
-    /* BLOCK code */
-    VISIT_SEQ(c, stmt, s->v.With.body);
+    pos++;
+    if (pos == asdl_seq_LEN(s->v.With.items))
+        /* BLOCK code */
+        VISIT_SEQ(c, stmt, s->v.With.body)
+    else if (!compiler_with(c, s, pos))
+            return 0;
 
     /* End of try block; start the finally block */
     ADDOP(c, POP_BLOCK);
@@ -3361,7 +3372,7 @@ compiler_in_loop(struct compiler *c) {
 static int
 compiler_error(struct compiler *c, const char *errstr)
 {
-    PyObject *loc, *filename;
+    PyObject *loc;
     PyObject *u = NULL, *v = NULL;
 
     loc = PyErr_ProgramText(c->c_filename, c->u->u_lineno);
@@ -3369,16 +3380,7 @@ compiler_error(struct compiler *c, const char *errstr)
         Py_INCREF(Py_None);
         loc = Py_None;
     }
-    if (c->c_filename != NULL) {
-        filename = PyUnicode_DecodeFSDefault(c->c_filename);
-        if (!filename)
-            goto exit;
-    }
-    else {
-        Py_INCREF(Py_None);
-        filename = Py_None;
-    }
-    u = Py_BuildValue("(NiiO)", filename, c->u->u_lineno,
+    u = Py_BuildValue("(OiiO)", c->c_filename_obj, c->u->u_lineno,
                       c->u->u_col_offset, loc);
     if (!u)
         goto exit;
@@ -3927,7 +3929,6 @@ makecode(struct compiler *c, struct assembler *a)
     PyObject *consts = NULL;
     PyObject *names = NULL;
     PyObject *varnames = NULL;
-    PyObject *filename = NULL;
     PyObject *name = NULL;
     PyObject *freevars = NULL;
     PyObject *cellvars = NULL;
@@ -3951,10 +3952,6 @@ makecode(struct compiler *c, struct assembler *a)
     freevars = dict_keys_inorder(c->u->u_freevars, PyTuple_Size(cellvars));
     if (!freevars)
         goto error;
-    filename = PyUnicode_DecodeFSDefault(c->c_filename);
-    if (!filename)
-        goto error;
-
     nlocals = PyDict_Size(c->u->u_varnames);
     flags = compute_code_flags(c);
     if (flags < 0)
@@ -3974,14 +3971,13 @@ makecode(struct compiler *c, struct assembler *a)
                     nlocals, stackdepth(c), flags,
                     bytecode, consts, names, varnames,
                     freevars, cellvars,
-                    filename, c->u->u_name,
+                    c->c_filename_obj, c->u->u_name,
                     c->u->u_firstlineno,
                     a->a_lnotab);
  error:
     Py_XDECREF(consts);
     Py_XDECREF(names);
     Py_XDECREF(varnames);
-    Py_XDECREF(filename);
     Py_XDECREF(name);
     Py_XDECREF(freevars);
     Py_XDECREF(cellvars);
