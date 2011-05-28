@@ -60,6 +60,10 @@ exec_tests = [
     "break",
     # Continue
     "continue",
+    # for statements with naked tuples (see http://bugs.python.org/issue6704)
+    "for a,b in c: pass",
+    "[(a,b) for a,b in c]",
+    "((a,b) for a,b in c)",
 ]
 
 # These are compiled through "single"
@@ -140,6 +144,16 @@ class AST_Tests(unittest.TestCase):
                 self.assertEqual(to_tuple(ast_tree), o)
                 self._assertTrueorder(ast_tree, (0, 0))
 
+    def test_slice(self):
+        slc = ast.parse("x[::]").body[0].value.slice
+        self.assertIsNone(slc.upper)
+        self.assertIsNone(slc.lower)
+        self.assertIsNone(slc.step)
+
+    def test_from_import(self):
+        im = ast.parse("from . import y").body[0]
+        self.assertIsNone(im.module)
+
     def test_base_classes(self):
         self.assertTrue(issubclass(ast.For, ast.stmt))
         self.assertTrue(issubclass(ast.Name, ast.expr))
@@ -186,12 +200,9 @@ class AST_Tests(unittest.TestCase):
     def test_invalid_sum(self):
         pos = dict(lineno=2, col_offset=3)
         m = ast.Module([ast.Expr(ast.expr(**pos), **pos)])
-        try:
+        with self.assertRaises(TypeError) as cm:
             compile(m, "<test>", "exec")
-        except TypeError as exc:
-            self.assertIn("but got <_ast.expr", str(exc))
-        else:
-            self.fail("needed TypeError")
+        self.assertIn("but got <_ast.expr", str(cm.exception))
 
 
 class ASTHelpers_Test(unittest.TestCase):
@@ -289,13 +300,17 @@ class ASTHelpers_Test(unittest.TestCase):
         self.assertEqual(ast.literal_eval('[1, 2, 3]'), [1, 2, 3])
         self.assertEqual(ast.literal_eval('{"foo": 42}'), {"foo": 42})
         self.assertEqual(ast.literal_eval('(True, False, None)'), (True, False, None))
+        self.assertEqual(ast.literal_eval('{1, 2, 3}'), {1, 2, 3})
+        self.assertEqual(ast.literal_eval('b"hi"'), b"hi")
         self.assertRaises(ValueError, ast.literal_eval, 'foo()')
+        self.assertEqual(ast.literal_eval('-6'), -6)
+        self.assertEqual(ast.literal_eval('-6j+3'), 3-6j)
+        self.assertEqual(ast.literal_eval('3.25'), 3.25)
 
     def test_literal_eval_issue4907(self):
         self.assertEqual(ast.literal_eval('2j'), 2j)
         self.assertEqual(ast.literal_eval('10 + 2j'), 10 + 2j)
         self.assertEqual(ast.literal_eval('1.5 - 2j'), 1.5 - 2j)
-        self.assertRaises(ValueError, ast.literal_eval, '2 + (3 + 4j)')
 
 
 def test_main():
@@ -337,6 +352,9 @@ exec_results = [
 ('Module', [('Pass', (1, 0))]),
 ('Module', [('Break', (1, 0))]),
 ('Module', [('Continue', (1, 0))]),
+('Module', [('For', (1, 0), ('Tuple', (1, 4), [('Name', (1, 4), 'a', ('Store',)), ('Name', (1, 6), 'b', ('Store',))], ('Store',)), ('Name', (1, 11), 'c', ('Load',)), [('Pass', (1, 14))], [])]),
+('Module', [('Expr', (1, 0), ('ListComp', (1, 1), ('Tuple', (1, 2), [('Name', (1, 2), 'a', ('Load',)), ('Name', (1, 4), 'b', ('Load',))], ('Load',)), [('comprehension', ('Tuple', (1, 11), [('Name', (1, 11), 'a', ('Store',)), ('Name', (1, 13), 'b', ('Store',))], ('Store',)), ('Name', (1, 18), 'c', ('Load',)), [])]))]),
+('Module', [('Expr', (1, 0), ('GeneratorExp', (1, 1), ('Tuple', (1, 2), [('Name', (1, 2), 'a', ('Load',)), ('Name', (1, 4), 'b', ('Load',))], ('Load',)), [('comprehension', ('Tuple', (1, 11), [('Name', (1, 11), 'a', ('Store',)), ('Name', (1, 13), 'b', ('Store',))], ('Store',)), ('Name', (1, 18), 'c', ('Load',)), [])]))]),
 ]
 single_results = [
 ('Interactive', [('Expr', (1, 0), ('BinOp', (1, 0), ('Num', (1, 0), 1), ('Add',), ('Num', (1, 2), 2)))]),

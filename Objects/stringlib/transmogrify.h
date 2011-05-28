@@ -1,13 +1,6 @@
 /* NOTE: this API is -ONLY- for use with single byte character strings. */
 /* Do not use it with Unicode. */
 
-#include "bytes_methods.h"
-
-#ifndef STRINGLIB_MUTABLE
-#warning "STRINGLIB_MUTABLE not defined before #include, assuming 0"
-#define STRINGLIB_MUTABLE 0
-#endif
-
 /* the more complicated methods.  parts of these should be pulled out into the
    shared code in bytes_methods.c to cut down on duplicate code bloat.  */
 
@@ -25,10 +18,10 @@ stringlib_expandtabs(PyObject *self, PyObject *args)
     size_t i, j;
     PyObject *u;
     int tabsize = 8;
-
+    
     if (!PyArg_ParseTuple(args, "|i:expandtabs", &tabsize))
         return NULL;
-
+    
     /* First pass: determine size of output string */
     i = j = 0;
     e = STRINGLIB_STR(self) + STRINGLIB_LEN(self);
@@ -55,20 +48,20 @@ stringlib_expandtabs(PyObject *self, PyObject *args)
                 }
             }
         }
-
+    
     if ((i + j) > PY_SSIZE_T_MAX) {
         PyErr_SetString(PyExc_OverflowError, "result is too long");
         return NULL;
     }
-
+    
     /* Second pass: create output string and fill it */
     u = STRINGLIB_NEW(NULL, i + j);
     if (!u)
         return NULL;
-
+    
     j = 0;
     q = STRINGLIB_STR(u);
-
+    
     for (p = STRINGLIB_STR(self); p < e; p++)
         if (*p == '\t') {
             if (tabsize > 0) {
@@ -84,7 +77,7 @@ stringlib_expandtabs(PyObject *self, PyObject *args)
             if (*p == '\n' || *p == '\r')
                 j = 0;
         }
-
+    
     return u;
 }
 
@@ -110,16 +103,16 @@ pad(PyObject *self, Py_ssize_t left, Py_ssize_t right, char fill)
     }
 
     u = STRINGLIB_NEW(NULL,
-                                   left + STRINGLIB_LEN(self) + right);
+				   left + STRINGLIB_LEN(self) + right);
     if (u) {
         if (left)
             memset(STRINGLIB_STR(u), fill, left);
         Py_MEMCPY(STRINGLIB_STR(u) + left,
-               STRINGLIB_STR(self),
-               STRINGLIB_LEN(self));
+	       STRINGLIB_STR(self),
+	       STRINGLIB_LEN(self));
         if (right)
             memset(STRINGLIB_STR(u) + left + STRINGLIB_LEN(self),
-                   fill, right);
+		   fill, right);
     }
 
     return u;
@@ -269,87 +262,3 @@ stringlib_zfill(PyObject *self, PyObject *args)
 
     return (PyObject*) s;
 }
-
-
-#define _STRINGLIB_SPLIT_APPEND(data, left, right)              \
-        str = STRINGLIB_NEW((data) + (left),                    \
-                                         (right) - (left));     \
-        if (str == NULL)                                        \
-                goto onError;                                   \
-        if (PyList_Append(list, str)) {                         \
-                Py_DECREF(str);                                 \
-                goto onError;                                   \
-        }                                                       \
-        else                                                    \
-                Py_DECREF(str);
-
-PyDoc_STRVAR(splitlines__doc__,
-"B.splitlines([keepends]) -> list of lines\n\
-\n\
-Return a list of the lines in B, breaking at line boundaries.\n\
-Line breaks are not included in the resulting list unless keepends\n\
-is given and true.");
-
-static PyObject*
-stringlib_splitlines(PyObject *self, PyObject *args)
-{
-    register Py_ssize_t i;
-    register Py_ssize_t j;
-    Py_ssize_t len;
-    int keepends = 0;
-    PyObject *list;
-    PyObject *str;
-    char *data;
-
-    if (!PyArg_ParseTuple(args, "|i:splitlines", &keepends))
-        return NULL;
-
-    data = STRINGLIB_STR(self);
-    len = STRINGLIB_LEN(self);
-
-    /* This does not use the preallocated list because splitlines is
-       usually run with hundreds of newlines.  The overhead of
-       switching between PyList_SET_ITEM and append causes about a
-       2-3% slowdown for that common case.  A smarter implementation
-       could move the if check out, so the SET_ITEMs are done first
-       and the appends only done when the prealloc buffer is full.
-       That's too much work for little gain.*/
-
-    list = PyList_New(0);
-    if (!list)
-        goto onError;
-
-    for (i = j = 0; i < len; ) {
-        Py_ssize_t eol;
-
-        /* Find a line and append it */
-        while (i < len && data[i] != '\n' && data[i] != '\r')
-            i++;
-
-        /* Skip the line break reading CRLF as one line break */
-        eol = i;
-        if (i < len) {
-            if (data[i] == '\r' && i + 1 < len &&
-                data[i+1] == '\n')
-                i += 2;
-            else
-                i++;
-            if (keepends)
-                eol = i;
-        }
-        _STRINGLIB_SPLIT_APPEND(data, j, eol);
-        j = i;
-    }
-    if (j < len) {
-        _STRINGLIB_SPLIT_APPEND(data, j, len);
-    }
-
-    return list;
-
- onError:
-    Py_XDECREF(list);
-    return NULL;
-}
-
-#undef _STRINGLIB_SPLIT_APPEND
-
