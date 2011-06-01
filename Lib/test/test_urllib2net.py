@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import unittest
 from test import support
@@ -6,10 +6,13 @@ from test.test_urllib2 import sanepathname2url
 
 import os
 import socket
-import sys
 import urllib.error
 import urllib.request
 import sys
+try:
+    import ssl
+except ImportError:
+    ssl = None
 
 TIMEOUT = 60  # seconds
 
@@ -78,8 +81,6 @@ class AuthTests(unittest.TestCase):
 class CloseSocketTest(unittest.TestCase):
 
     def test_close(self):
-        import socket, http.client, gc
-
         # calling .close() on urllib2's response objects should close the
         # underlying socket
 
@@ -174,7 +175,6 @@ class OtherNetworkTests(unittest.TestCase):
             self.assertEqual(request.get_header('User-agent'),'Test-Agent')
 
     def _test_urls(self, urls, handlers, retry=True):
-        import socket
         import time
         import logging
         debug = logging.getLogger("test_urllib2").debug
@@ -188,6 +188,7 @@ class OtherNetworkTests(unittest.TestCase):
                 url, req, expected_err = url
             else:
                 req = expected_err = None
+
             with support.transient_internet(url):
                 debug(url)
                 try:
@@ -197,7 +198,7 @@ class OtherNetworkTests(unittest.TestCase):
                     if expected_err:
                         msg = ("Didn't get expected error(s) %s for %s %s, got %s: %s" %
                                (expected_err, url, req, type(err), err))
-                        self.assertTrue(isinstance(err, expected_err), msg)
+                        self.assertIsInstance(err, expected_err, msg)
                 except urllib.error.URLError as err:
                     if isinstance(err[0], socket.timeout):
                         print("<timeout: %s>" % url, file=sys.stderr)
@@ -263,7 +264,7 @@ class TimeoutTest(unittest.TestCase):
             u = _urlopen_with_retry(url, timeout=120)
             self.assertEqual(u.fp.raw._sock.gettimeout(), 120)
 
-    FTP_HOST = "ftp://ftp.mirror.nl/pub/mirror/gnu/"
+    FTP_HOST = "ftp://ftp.mirror.nl/pub/gnu/"
 
     def test_ftp_basic(self):
         self.assertTrue(socket.getdefaulttimeout() is None)
@@ -297,13 +298,35 @@ class TimeoutTest(unittest.TestCase):
             self.assertEqual(u.fp.fp.raw._sock.gettimeout(), 60)
 
 
+@unittest.skipUnless(ssl, "requires SSL support")
+class HTTPSTests(unittest.TestCase):
+
+    def test_sni(self):
+        self.skipTest("test disabled - test server needed")
+        # Checks that Server Name Indication works, if supported by the
+        # OpenSSL linked to.
+        # The ssl module itself doesn't have server-side support for SNI,
+        # so we rely on a third-party test site.
+        expect_sni = ssl.HAS_SNI
+        with support.transient_internet("XXX"):
+            u = urllib.request.urlopen("XXX")
+            contents = u.readall()
+            if expect_sni:
+                self.assertIn(b"Great", contents)
+                self.assertNotIn(b"Unfortunately", contents)
+            else:
+                self.assertNotIn(b"Great", contents)
+                self.assertIn(b"Unfortunately", contents)
+
+
 def test_main():
     support.requires("network")
     support.run_unittest(AuthTests,
-                              OtherNetworkTests,
-                              CloseSocketTest,
-                              TimeoutTest,
-                              )
+                         HTTPSTests,
+                         OtherNetworkTests,
+                         CloseSocketTest,
+                         TimeoutTest,
+                         )
 
 if __name__ == "__main__":
     test_main()

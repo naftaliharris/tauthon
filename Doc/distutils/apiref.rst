@@ -1311,8 +1311,7 @@ provides the following additional features:
   the "negative alias" of :option:`--verbose`, then :option:`--quiet` on the
   command line sets *verbose* to false.
 
-.. XXX Should be replaced with :mod:`optparse`.
-
+.. XXX Should be replaced with optparse
 
 .. function:: fancy_getopt(options, negative_opt, object, args)
 
