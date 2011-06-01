@@ -10,6 +10,15 @@ What's New in Python 3.3 Alpha 1?
 Core and Builtins
 -----------------
 
+- Issue #12225: Still allow Python to build if Python is not in its hg repo or
+  mercurial is not installed.
+
+- Issue #1195: my_fgets() now always clears errors before calling fgets(). Fix
+  the following case: sys.stdin.read() stopped with CTRL+d (end of file),
+  raw_input() interrupted by CTRL+c.
+
+- Issue #12216: Allow unexpected EOF errors to happen on any line of the file.
+
 - Issue #12199: The TryExcept and TryFinally and AST nodes have been unified
   into a Try node.
 
@@ -175,7 +184,24 @@ Core and Builtins
 Library
 -------
 
-- Issue #12196: Add pipe2() to the os module. 
+- Issue #12221: Remove __version__ attributes from pyexpat, pickle, tarfile,
+  pydoc, tkinter, and xml.parsers.expat. This were useless version constants
+  left over from the Mercurial transition
+
+- Issue #12085: Fix an attribute error in subprocess.Popen destructor if the
+  constructor has failed, e.g. because of an undeclared keyword argument. Patch
+  written by Oleg Oshmyan.
+
+- Issue #12028: Make threading._get_ident() public, rename it to
+  threading.get_ident() and document it. This function was already used using
+  _thread.get_ident().
+
+- Issue #12171: IncrementalEncoder.reset() of CJK codecs (multibytecodec) calls
+  encreset() instead of decreset().
+
+- Issue #12218: Removed wsgiref.egg-info.
+
+- Issue #12196: Add pipe2() to the os module.
 
 - Issue #985064: Make plistlib more resilient to faulty input plists.
   Patch by Mher Movsisyan.
@@ -758,6 +784,8 @@ Tools/Demos
 Extension Modules
 -----------------
 
+- Issue #12221: Replace pyexpat.__version__ with the Python version.
+
 - Issue #12051: Fix segfault in json.dumps() while encoding highly-nested
   objects using the C accelerations.
 
@@ -769,6 +797,9 @@ Extension Modules
 
 Tests
 -----
+
+- Issue #12057: Add tests for ISO 2022 codecs (iso2022_jp, iso2022_jp_2,
+  iso2022_kr).
 
 - Issue #12180: Fixed a few remaining errors in test_packaging when no
   threading.
@@ -834,8 +865,8 @@ Tests
 
 - Issue #11503: improve test coverage of posixpath.py. Patch by Evan Dandrea.
 
-- Issue #11505: improves test coverage of string.py. Patch by Alicia
-  Arlen.
+- Issue #11505: improves test coverage of string.py, increases granularity of
+  string.Formatter tests. Initial patch by Alicia Arlen.
 
 - Issue #11548: Improve test coverage of the shutil module. Patch by
   Evan Dandrea.

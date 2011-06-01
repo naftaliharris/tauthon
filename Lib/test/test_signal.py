@@ -229,12 +229,13 @@ class WakeupSignalTests(unittest.TestCase):
     def handler(self, signum, frame):
         pass
 
-    def check_signum(self, *signals, **kw):
+    def check_signum(self, *signals):
         data = os.read(self.read, len(signals)+1)
         raised = struct.unpack('%uB' % len(data), data)
-        if kw.get('unordered', False):
-            raised = set(raised)
-            signals = set(signals)
+        # We don't care of the signal delivery order (it's not portable or
+        # reliable)
+        raised = set(raised)
+        signals = set(signals)
         self.assertEqual(raised, signals)
 
     def test_wakeup_fd_early(self):
@@ -291,7 +292,7 @@ class WakeupSignalTests(unittest.TestCase):
         # Unblocking the 2 signals calls the C signal handler twice
         signal.pthread_sigmask(signal.SIG_UNBLOCK, (signum1, signum2))
 
-        self.check_signum(signum1, signum2, unordered=True)
+        self.check_signum(signum1, signum2)
 
     def setUp(self):
         import fcntl
@@ -557,7 +558,7 @@ class PendingSignalsTests(unittest.TestCase):
 
     def kill(self, signum):
         if self.has_pthread_kill:
-            tid = threading.current_thread().ident
+            tid = threading.get_ident()
             signal.pthread_kill(tid, signum)
         else:
             pid = os.getpid()
@@ -589,7 +590,7 @@ class PendingSignalsTests(unittest.TestCase):
                          'need signal.pthread_kill()')
     def test_pthread_kill(self):
         signum = signal.SIGUSR1
-        current = threading.current_thread().ident
+        current = threading.get_ident()
 
         old_handler = signal.signal(signum, self.handler)
         self.addCleanup(signal.signal, signum, old_handler)

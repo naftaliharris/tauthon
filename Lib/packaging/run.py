@@ -225,16 +225,22 @@ def _install(dispatcher, args, **kw):
         if 'setup.py' in listing or 'setup.cfg' in listing:
             args.insert(1, os.getcwd())
         else:
-            logger.warning('no project to install')
-            return
+            logger.warning('No project to install.')
+            return 1
 
     target = args[1]
     # installing from a source dir or archive file?
     if os.path.isdir(target) or _is_archive_file(target):
-        install_local_project(target)
+        if install_local_project(target):
+            return 0
+        else:
+            return 1
     else:
         # download from PyPI
-        install(target)
+        if install(target):
+            return 0
+        else:
+            return 1
 
 
 @action_help(metadata_usage)
@@ -337,13 +343,21 @@ def _run(dispatcher, args, **kw):
 def _list(dispatcher, args, **kw):
     opts = _parse_args(args[1:], '', ['all'])
     dists = get_distributions(use_egg_info=True)
-    if 'all' in opts:
+    if 'all' in opts or opts['args'] == []:
         results = dists
     else:
         results = [d for d in dists if d.name.lower() in opts['args']]
 
+    number = 0
     for dist in results:
         print('%s %s at %s' % (dist.name, dist.metadata['version'], dist.path))
+        number += 1
+
+    print('')
+    if number == 0:
+        print('Nothing seems to be installed.')
+    else:
+        print('Found %d projects installed.' % number)
 
 
 @action_help(search_usage)
@@ -353,8 +367,9 @@ def _search(dispatcher, args, **kw):
     It is able to search for a specific index (specified with --index), using
     the simple or xmlrpc index types (with --type xmlrpc / --type simple)
     """
-    opts = _parse_args(args[1:], '', ['simple', 'xmlrpc'])
+    #opts = _parse_args(args[1:], '', ['simple', 'xmlrpc'])
     # 1. what kind of index is requested ? (xmlrpc / simple)
+    raise NotImplementedError()
 
 
 actions = [
@@ -402,12 +417,9 @@ class Dispatcher:
             raise PackagingArgError(msg)
 
         self._set_logger()
-
-        # for display options we return immediately
-        option_order = self.parser.get_option_order()
-
         self.args = args
 
+        # for display options we return immediately
         if self.help or self.action is None:
             self._show_help(self.parser, display_options_=False)
 
@@ -577,8 +589,6 @@ class Dispatcher:
     def _show_command_help(self, command):
         if isinstance(command, str):
             command = get_command_class(command)
-
-        name = command.get_command_name()
 
         desc = getattr(command, 'description', '(no description available)')
         print('Description: %s' % desc)
