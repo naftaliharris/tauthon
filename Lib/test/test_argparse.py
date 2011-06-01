@@ -4017,6 +4017,37 @@ class TestHelpSubparsersWithHelpOrdering(HelpTestCase):
         '''
 
 
+
+class TestHelpMetavarTypeFormatter(HelpTestCase):
+    """"""
+
+    def custom_type(string):
+        return string
+
+    parser_signature = Sig(prog='PROG', description='description',
+                           formatter_class=argparse.MetavarTypeHelpFormatter)
+    argument_signatures = [Sig('a', type=int),
+                           Sig('-b', type=custom_type),
+                           Sig('-c', type=float, metavar='SOME FLOAT')]
+    argument_group_signatures = []
+    usage = '''\
+        usage: PROG [-h] [-b custom_type] [-c SOME FLOAT] int
+        '''
+    help = usage + '''\
+
+        description
+
+        positional arguments:
+          int
+
+        optional arguments:
+          -h, --help      show this help message and exit
+          -b custom_type
+          -c SOME FLOAT
+        '''
+    version = ''
+
+
 # =====================================
 # Optional/Positional constructor tests
 # =====================================
@@ -4407,7 +4438,7 @@ class TestEncoding(TestCase):
     def _test_module_encoding(self, path):
         path, _ = os.path.splitext(path)
         path += ".py"
-        with codecs.open(path, 'r', 'utf8') as f:
+        with codecs.open(path, 'r', 'utf-8') as f:
             f.read()
 
     def test_argparse_module_encoding(self):
