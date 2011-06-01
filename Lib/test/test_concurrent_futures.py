@@ -260,14 +260,14 @@ class WaitTests(unittest.TestCase):
 
     def test_timeout(self):
         future1 = self.executor.submit(mul, 6, 7)
-        future2 = self.executor.submit(time.sleep, 3)
+        future2 = self.executor.submit(time.sleep, 6)
 
         finished, pending = futures.wait(
                 [CANCELLED_AND_NOTIFIED_FUTURE,
                  EXCEPTION_FUTURE,
                  SUCCESSFUL_FUTURE,
                  future1, future2],
-                timeout=1.5,
+                timeout=5,
                 return_when=futures.ALL_COMPLETED)
 
         self.assertEqual(set([CANCELLED_AND_NOTIFIED_FUTURE,
@@ -357,8 +357,8 @@ class ExecutorTest(unittest.TestCase):
         results = []
         try:
             for i in self.executor.map(time.sleep,
-                                       [0, 0, 3],
-                                       timeout=1.5):
+                                       [0, 0, 6],
+                                       timeout=5):
                 results.append(i)
         except futures.TimeoutError:
             pass
@@ -369,7 +369,15 @@ class ExecutorTest(unittest.TestCase):
 
 
 class ThreadPoolExecutorTest(ThreadPoolMixin, ExecutorTest):
-    pass
+    def test_map_submits_without_iteration(self):
+        """Tests verifying issue 11777."""
+        finished = []
+        def record_finished(n):
+            finished.append(n)
+
+        self.executor.map(record_finished, range(10))
+        self.executor.shutdown(wait=True)
+        self.assertCountEqual(finished, range(10))
 
 
 class ProcessPoolExecutorTest(ProcessPoolMixin, ExecutorTest):
