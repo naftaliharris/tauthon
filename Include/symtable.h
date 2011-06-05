@@ -1,3 +1,4 @@
+#ifndef Py_LIMITED_API
 #ifndef Py_SYMTABLE_H
 #define Py_SYMTABLE_H
 
@@ -15,7 +16,8 @@ typedef enum _block_type { FunctionBlock, ClassBlock, ModuleBlock }
 struct _symtable_entry;
 
 struct symtable {
-    const char *st_filename;        /* name of file being compiled */
+    const char *st_filename;        /* name of file being compiled,
+                                       decoded from the filesystem encoding */
     struct _symtable_entry *st_cur; /* current symbol table entry */
     struct _symtable_entry *st_top; /* symbol table entry for module */
     PyObject *st_blocks;            /* dict: map AST node addresses
@@ -46,7 +48,9 @@ typedef struct _symtable_entry {
     unsigned ste_returns_value : 1;  /* true if namespace uses return with
                                         an argument */
     int ste_lineno;          /* first line of block */
+    int ste_col_offset;      /* offset of first line of block */
     int ste_opt_lineno;      /* lineno of last exec or import * */
+    int ste_opt_col_offset;  /* offset of last exec or import * */
     int ste_tmpname;         /* counter for listcomp temp vars */
     struct symtable *ste_table;
 } PySTEntryObject;
@@ -57,8 +61,10 @@ PyAPI_DATA(PyTypeObject) PySTEntry_Type;
 
 PyAPI_FUNC(int) PyST_GetScope(PySTEntryObject *, PyObject *);
 
-PyAPI_FUNC(struct symtable *) PySymtable_Build(mod_ty, const char *,
-                                              PyFutureFeatures *);
+PyAPI_FUNC(struct symtable *) PySymtable_Build(
+    mod_ty mod,
+    const char *filename,       /* decoded from the filesystem encoding */
+    PyFutureFeatures *future);
 PyAPI_FUNC(PySTEntryObject *) PySymtable_Lookup(struct symtable *, void *);
 
 PyAPI_FUNC(void) PySymtable_Free(struct symtable *);
@@ -70,13 +76,9 @@ PyAPI_FUNC(void) PySymtable_Free(struct symtable *);
 #define DEF_PARAM 2<<1         /* formal parameter */
 #define DEF_NONLOCAL 2<<2      /* nonlocal stmt */
 #define USE 2<<3               /* name is used */
-#define DEF_STAR 2<<4          /* parameter is star arg */
-#define DEF_DOUBLESTAR 2<<5    /* parameter is star-star arg */
-#define DEF_INTUPLE 2<<6       /* name defined in tuple in parameters */
-#define DEF_FREE 2<<7          /* name used but not defined in nested block */
-#define DEF_FREE_GLOBAL 2<<8   /* free variable is actually implicit global */
-#define DEF_FREE_CLASS 2<<9    /* free variable from class's method */
-#define DEF_IMPORT 2<<10        /* assignment occurred via import */
+#define DEF_FREE 2<<4          /* name used but not defined in nested block */
+#define DEF_FREE_CLASS 2<<5    /* free variable from class's method */
+#define DEF_IMPORT 2<<6        /* assignment occurred via import */
 
 #define DEF_BOUND (DEF_LOCAL | DEF_PARAM | DEF_IMPORT)
 
@@ -104,3 +106,4 @@ PyAPI_FUNC(void) PySymtable_Free(struct symtable *);
 }
 #endif
 #endif /* !Py_SYMTABLE_H */
+#endif /* Py_LIMITED_API */
