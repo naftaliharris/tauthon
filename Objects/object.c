@@ -2,7 +2,6 @@
 /* Generic object operations; and implementation of None (NoObject) */
 
 #include "Python.h"
-#include "sliceobject.h" /* For PyEllipsis_Type */
 #include "frameobject.h"
 
 #ifdef __cplusplus
@@ -536,10 +535,12 @@ do_richcompare(PyObject *v, PyObject *w, int op)
 {
     richcmpfunc f;
     PyObject *res;
+    int checked_reverse_op = 0;
 
     if (v->ob_type != w->ob_type &&
         PyType_IsSubtype(w->ob_type, v->ob_type) &&
         (f = w->ob_type->tp_richcompare) != NULL) {
+        checked_reverse_op = 1;
         res = (*f)(w, v, _Py_SwappedOp[op]);
         if (res != Py_NotImplemented)
             return res;
@@ -551,7 +552,7 @@ do_richcompare(PyObject *v, PyObject *w, int op)
             return res;
         Py_DECREF(res);
     }
-    if ((f = w->ob_type->tp_richcompare) != NULL) {
+    if (!checked_reverse_op && (f = w->ob_type->tp_richcompare) != NULL) {
         res = (*f)(w, v, _Py_SwappedOp[op]);
         if (res != Py_NotImplemented)
             return res;
@@ -634,77 +635,118 @@ PyObject_RichCompareBool(PyObject *v, PyObject *w, int op)
    All the utility functions (_Py_Hash*()) return "-1" to signify an error.
 */
 
-long
+/* For numeric types, the hash of a number x is based on the reduction
+   of x modulo the prime P = 2**_PyHASH_BITS - 1.  It's designed so that
+   hash(x) == hash(y) whenever x and y are numerically equal, even if
+   x and y have different types.
+
+   A quick summary of the hashing strategy:
+
+   (1) First define the 'reduction of x modulo P' for any rational
+   number x; this is a standard extension of the usual notion of
+   reduction modulo P for integers.  If x == p/q (written in lowest
+   terms), the reduction is interpreted as the reduction of p times
+   the inverse of the reduction of q, all modulo P; if q is exactly
+   divisible by P then define the reduction to be infinity.  So we've
+   got a well-defined map
+
+      reduce : { rational numbers } -> { 0, 1, 2, ..., P-1, infinity }.
+
+   (2) Now for a rational number x, define hash(x) by:
+
+      reduce(x)   if x >= 0
+      -reduce(-x) if x < 0
+
+   If the result of the reduction is infinity (this is impossible for
+   integers, floats and Decimals) then use the predefined hash value
+   _PyHASH_INF for x >= 0, or -_PyHASH_INF for x < 0, instead.
+   _PyHASH_INF, -_PyHASH_INF and _PyHASH_NAN are also used for the
+   hashes of float and Decimal infinities and nans.
+
+   A selling point for the above strategy is that it makes it possible
+   to compute hashes of decimal and binary floating-point numbers
+   efficiently, even if the exponent of the binary or decimal number
+   is large.  The key point is that
+
+      reduce(x * y) == reduce(x) * reduce(y) (modulo _PyHASH_MODULUS)
+
+   provided that {reduce(x), reduce(y)} != {0, infinity}.  The reduction of a
+   binary or decimal float is never infinity, since the denominator is a power
+   of 2 (for binary) or a divisor of a power of 10 (for decimal).  So we have,
+   for nonnegative x,
+
+      reduce(x * 2**e) == reduce(x) * reduce(2**e) % _PyHASH_MODULUS
+
+      reduce(x * 10**e) == reduce(x) * reduce(10**e) % _PyHASH_MODULUS
+
+   and reduce(10**e) can be computed efficiently by the usual modular
+   exponentiation algorithm.  For reduce(2**e) it's even better: since
+   P is of the form 2**n-1, reduce(2**e) is 2**(e mod n), and multiplication
+   by 2**(e mod n) modulo 2**n-1 just amounts to a rotation of bits.
+
+   */
+
+Py_hash_t
 _Py_HashDouble(double v)
 {
-    double intpart, fractpart;
-    int expo;
-    long hipart;
-    long x;             /* the final hash value */
-    /* This is designed so that Python numbers of different types
-     * that compare equal hash to the same value; otherwise comparisons
-     * of mapping keys will turn out weird.
-     */
+    int e, sign;
+    double m;
+    Py_uhash_t x, y;
 
-    fractpart = modf(v, &intpart);
-    if (fractpart == 0.0) {
-        /* This must return the same hash as an equal int or long. */
-        if (intpart > LONG_MAX/2 || -intpart > LONG_MAX/2) {
-            /* Convert to long and use its hash. */
-            PyObject *plong;                    /* converted to Python long */
-            if (Py_IS_INFINITY(intpart))
-                /* can't convert to long int -- arbitrary */
-                v = v < 0 ? -271828.0 : 314159.0;
-            plong = PyLong_FromDouble(v);
-            if (plong == NULL)
-                return -1;
-            x = PyObject_Hash(plong);
-            Py_DECREF(plong);
-            return x;
-        }
-        /* Fits in a C long == a Python int, so is its own hash. */
-        x = (long)intpart;
-        if (x == -1)
-            x = -2;
-        return x;
+    if (!Py_IS_FINITE(v)) {
+        if (Py_IS_INFINITY(v))
+            return v > 0 ? _PyHASH_INF : -_PyHASH_INF;
+        else
+            return _PyHASH_NAN;
     }
-    /* The fractional part is non-zero, so we don't have to worry about
-     * making this match the hash of some other type.
-     * Use frexp to get at the bits in the double.
-     * Since the VAX D double format has 56 mantissa bits, which is the
-     * most of any double format in use, each of these parts may have as
-     * many as (but no more than) 56 significant bits.
-     * So, assuming sizeof(long) >= 4, each part can be broken into two
-     * longs; frexp and multiplication are used to do that.
-     * Also, since the Cray double format has 15 exponent bits, which is
-     * the most of any double format in use, shifting the exponent field
-     * left by 15 won't overflow a long (again assuming sizeof(long) >= 4).
-     */
-    v = frexp(v, &expo);
-    v *= 2147483648.0;          /* 2**31 */
-    hipart = (long)v;           /* take the top 32 bits */
-    v = (v - (double)hipart) * 2147483648.0; /* get the next 32 bits */
-    x = hipart + (long)v + (expo << 15);
-    if (x == -1)
-        x = -2;
-    return x;
+
+    m = frexp(v, &e);
+
+    sign = 1;
+    if (m < 0) {
+        sign = -1;
+        m = -m;
+    }
+
+    /* process 28 bits at a time;  this should work well both for binary
+       and hexadecimal floating point. */
+    x = 0;
+    while (m) {
+        x = ((x << 28) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - 28);
+        m *= 268435456.0;  /* 2**28 */
+        e -= 28;
+        y = (Py_uhash_t)m;  /* pull out integer part */
+        m -= y;
+        x += y;
+        if (x >= _PyHASH_MODULUS)
+            x -= _PyHASH_MODULUS;
+    }
+
+    /* adjust for the exponent;  first reduce it modulo _PyHASH_BITS */
+    e = e >= 0 ? e % _PyHASH_BITS : _PyHASH_BITS-1-((-1-e) % _PyHASH_BITS);
+    x = ((x << e) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - e);
+
+    x = x * sign;
+    if (x == (Py_uhash_t)-1)
+        x = (Py_uhash_t)-2;
+    return (Py_hash_t)x;
 }
 
-long
+Py_hash_t
 _Py_HashPointer(void *p)
 {
-    long x;
+    Py_hash_t x;
     size_t y = (size_t)p;
     /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
        excessive hash collisions for dicts and sets */
     y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
-    x = (long)y;
+    x = (Py_hash_t)y;
     if (x == -1)
         x = -2;
     return x;
 }
 
-long
+Py_hash_t
 PyObject_HashNotImplemented(PyObject *v)
 {
     PyErr_Format(PyExc_TypeError, "unhashable type: '%.200s'",
@@ -712,7 +754,7 @@ PyObject_HashNotImplemented(PyObject *v)
     return -1;
 }
 
-long
+Py_hash_t
 PyObject_Hash(PyObject *v)
 {
     PyTypeObject *tp = Py_TYPE(v);
@@ -934,31 +976,7 @@ _PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
             goto done;
     }
 
-#if 0 /* XXX this is not quite _PyType_Lookup anymore */
-    /* Inline _PyType_Lookup */
-    {
-        Py_ssize_t i, n;
-        PyObject *mro, *base, *dict;
-
-        /* Look in tp_dict of types in MRO */
-        mro = tp->tp_mro;
-        assert(mro != NULL);
-        assert(PyTuple_Check(mro));
-        n = PyTuple_GET_SIZE(mro);
-        for (i = 0; i < n; i++) {
-            base = PyTuple_GET_ITEM(mro, i);
-            assert(PyType_Check(base));
-            dict = ((PyTypeObject *)base)->tp_dict;
-            assert(dict && PyDict_Check(dict));
-            descr = PyDict_GetItem(dict, name);
-            if (descr != NULL)
-                break;
-        }
-    }
-#else
     descr = _PyType_Lookup(tp, name);
-#endif
-
     Py_XINCREF(descr);
 
     f = NULL;
@@ -1553,10 +1571,9 @@ _Py_ReadyTypes(void)
     if (PyType_Ready(&PyStaticMethod_Type) < 0)
         Py_FatalError("Can't initialize static method type");
 
-#ifndef WITHOUT_COMPLEX
     if (PyType_Ready(&PyComplex_Type) < 0)
         Py_FatalError("Can't initialize complex type");
-#endif
+
     if (PyType_Ready(&PyFloat_Type) < 0)
         Py_FatalError("Can't initialize float type");
 
@@ -1739,10 +1756,6 @@ _Py_GetObjects(PyObject *self, PyObject *args)
 
 #endif
 
-/* Hack to force loading of cobject.o */
-PyTypeObject *_Py_cobject_hack = &PyCObject_Type;
-
-
 /* Hack to force loading of pycapsule.o */
 PyTypeObject *_PyCapsule_hack = &PyCapsule_Type;
 
@@ -1886,6 +1899,19 @@ _PyTrash_destroy_chain(void)
         --_PyTrash_delete_nesting;
     }
 }
+
+#ifndef Py_TRACE_REFS
+/* For Py_LIMITED_API, we need an out-of-line version of _Py_Dealloc.
+   Define this here, so we can undefine the macro. */
+#undef _Py_Dealloc
+PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
+void
+_Py_Dealloc(PyObject *op)
+{
+    _Py_INC_TPFREES(op) _Py_COUNT_ALLOCS_COMMA
+    (*Py_TYPE(op)->tp_dealloc)(op);
+}
+#endif
 
 #ifdef __cplusplus
 }

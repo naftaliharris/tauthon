@@ -76,7 +76,8 @@
 /* Whether or not to use semaphores directly rather than emulating them with
  * mutexes and condition variables:
  */
-#if defined(_POSIX_SEMAPHORES) && !defined(HAVE_BROKEN_POSIX_SEMAPHORES)
+#if (defined(_POSIX_SEMAPHORES) && !defined(HAVE_BROKEN_POSIX_SEMAPHORES) && \
+     defined(HAVE_SEM_TIMEDWAIT))
 #  define USE_SEMAPHORES
 #else
 #  undef USE_SEMAPHORES
@@ -93,6 +94,26 @@
 #else
 #  define SET_THREAD_SIGMASK sigprocmask
 #endif
+
+
+/* We assume all modern POSIX systems have gettimeofday() */
+#ifdef GETTIMEOFDAY_NO_TZ
+#define GETTIMEOFDAY(ptv) gettimeofday(ptv)
+#else
+#define GETTIMEOFDAY(ptv) gettimeofday(ptv, (struct timezone *)NULL)
+#endif
+
+#define MICROSECONDS_TO_TIMESPEC(microseconds, ts) \
+do { \
+    struct timeval tv; \
+    GETTIMEOFDAY(&tv); \
+    tv.tv_usec += microseconds % 1000000; \
+    tv.tv_sec += microseconds / 1000000; \
+    tv.tv_sec += tv.tv_usec / 1000000; \
+    tv.tv_usec %= 1000000; \
+    ts.tv_sec = tv.tv_sec; \
+    ts.tv_nsec = tv.tv_usec * 1000; \
+} while(0)
 
 
 /* A pthread mutex isn't sufficient to model the Python lock type
@@ -237,54 +258,14 @@ PyThread_get_thread_ident(void)
 #endif
 }
 
-static void
-do_PyThread_exit_thread(int no_cleanup)
-{
-    dprintf(("PyThread_exit_thread called\n"));
-    if (!initialized) {
-        if (no_cleanup)
-            _exit(0);
-        else
-            exit(0);
-    }
-}
-
 void
 PyThread_exit_thread(void)
 {
-    do_PyThread_exit_thread(0);
-}
-
-void
-PyThread__exit_thread(void)
-{
-    do_PyThread_exit_thread(1);
-}
-
-#ifndef NO_EXIT_PROG
-static void
-do_PyThread_exit_prog(int status, int no_cleanup)
-{
-    dprintf(("PyThread_exit_prog(%d) called\n", status));
+    dprintf(("PyThread_exit_thread called\n"));
     if (!initialized)
-        if (no_cleanup)
-            _exit(status);
-        else
-            exit(status);
+        exit(0);
+    pthread_exit(0);
 }
-
-void
-PyThread_exit_prog(int status)
-{
-    do_PyThread_exit_prog(status, 0);
-}
-
-void
-PyThread__exit_prog(int status)
-{
-    do_PyThread_exit_prog(status, 1);
-}
-#endif /* NO_EXIT_PROG */
 
 #ifdef USE_SEMAPHORES
 
@@ -347,31 +328,56 @@ fix_status(int status)
     return (status == -1) ? errno : status;
 }
 
-int
-PyThread_acquire_lock(PyThread_type_lock lock, int waitflag)
+PyLockStatus
+PyThread_acquire_lock_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds,
+                            int intr_flag)
 {
-    int success;
+    PyLockStatus success;
     sem_t *thelock = (sem_t *)lock;
     int status, error = 0;
+    struct timespec ts;
 
-    dprintf(("PyThread_acquire_lock(%p, %d) called\n", lock, waitflag));
+    dprintf(("PyThread_acquire_lock_timed(%p, %lld, %d) called\n",
+             lock, microseconds, intr_flag));
 
+    if (microseconds > 0)
+        MICROSECONDS_TO_TIMESPEC(microseconds, ts);
     do {
-        if (waitflag)
-            status = fix_status(sem_wait(thelock));
-        else
+        if (microseconds > 0)
+            status = fix_status(sem_timedwait(thelock, &ts));
+        else if (microseconds == 0)
             status = fix_status(sem_trywait(thelock));
-    } while (status == EINTR); /* Retry if interrupted by a signal */
+        else
+            status = fix_status(sem_wait(thelock));
+        /* Retry if interrupted by a signal, unless the caller wants to be
+           notified.  */
+    } while (!intr_flag && status == EINTR);
 
-    if (waitflag) {
-        CHECK_STATUS("sem_wait");
-    } else if (status != EAGAIN) {
-        CHECK_STATUS("sem_trywait");
+    /* Don't check the status if we're stopping because of an interrupt.  */
+    if (!(intr_flag && status == EINTR)) {
+        if (microseconds > 0) {
+            if (status != ETIMEDOUT)
+                CHECK_STATUS("sem_timedwait");
+        }
+        else if (microseconds == 0) {
+            if (status != EAGAIN)
+                CHECK_STATUS("sem_trywait");
+        }
+        else {
+            CHECK_STATUS("sem_wait");
+        }
     }
 
-    success = (status == 0) ? 1 : 0;
+    if (status == 0) {
+        success = PY_LOCK_ACQUIRED;
+    } else if (intr_flag && status == EINTR) {
+        success = PY_LOCK_INTR;
+    } else {
+        success = PY_LOCK_FAILURE;
+    }
 
-    dprintf(("PyThread_acquire_lock(%p, %d) -> %d\n", lock, waitflag, success));
+    dprintf(("PyThread_acquire_lock_timed(%p, %lld, %d) -> %d\n",
+             lock, microseconds, intr_flag, success));
     return success;
 }
 
@@ -410,6 +416,12 @@ PyThread_allocate_lock(void)
         status = pthread_mutex_init(&lock->mut,
                                     pthread_mutexattr_default);
         CHECK_STATUS("pthread_mutex_init");
+        /* Mark the pthread mutex underlying a Python mutex as
+           pure happens-before.  We can't simply mark the
+           Python-level mutex as a mutex because it can be
+           acquired and released in different threads, which
+           will cause errors. */
+        _Py_ANNOTATE_PURE_HAPPENS_BEFORE_MUTEX(&lock->mut);
 
         status = pthread_cond_init(&lock->lock_released,
                                    pthread_condattr_default);
@@ -442,37 +454,69 @@ PyThread_free_lock(PyThread_type_lock lock)
     free((void *)thelock);
 }
 
-int
-PyThread_acquire_lock(PyThread_type_lock lock, int waitflag)
+PyLockStatus
+PyThread_acquire_lock_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds,
+                            int intr_flag)
 {
-    int success;
+    PyLockStatus success;
     pthread_lock *thelock = (pthread_lock *)lock;
     int status, error = 0;
 
-    dprintf(("PyThread_acquire_lock(%p, %d) called\n", lock, waitflag));
+    dprintf(("PyThread_acquire_lock_timed(%p, %lld, %d) called\n",
+             lock, microseconds, intr_flag));
 
     status = pthread_mutex_lock( &thelock->mut );
     CHECK_STATUS("pthread_mutex_lock[1]");
-    success = thelock->locked == 0;
 
-    if ( !success && waitflag ) {
+    if (thelock->locked == 0) {
+        success = PY_LOCK_ACQUIRED;
+    } else if (microseconds == 0) {
+        success = PY_LOCK_FAILURE;
+    } else {
+        struct timespec ts;
+        if (microseconds > 0)
+            MICROSECONDS_TO_TIMESPEC(microseconds, ts);
         /* continue trying until we get the lock */
 
         /* mut must be locked by me -- part of the condition
          * protocol */
-        while ( thelock->locked ) {
-            status = pthread_cond_wait(&thelock->lock_released,
-                                       &thelock->mut);
-            CHECK_STATUS("pthread_cond_wait");
+        success = PY_LOCK_FAILURE;
+        while (success == PY_LOCK_FAILURE) {
+            if (microseconds > 0) {
+                status = pthread_cond_timedwait(
+                    &thelock->lock_released,
+                    &thelock->mut, &ts);
+                if (status == ETIMEDOUT)
+                    break;
+                CHECK_STATUS("pthread_cond_timed_wait");
+            }
+            else {
+                status = pthread_cond_wait(
+                    &thelock->lock_released,
+                    &thelock->mut);
+                CHECK_STATUS("pthread_cond_wait");
+            }
+
+            if (intr_flag && status == 0 && thelock->locked) {
+                /* We were woken up, but didn't get the lock.  We probably received
+                 * a signal.  Return PY_LOCK_INTR to allow the caller to handle
+                 * it and retry.  */
+                success = PY_LOCK_INTR;
+                break;
+            } else if (status == 0 && !thelock->locked) {
+                success = PY_LOCK_ACQUIRED;
+            } else {
+                success = PY_LOCK_FAILURE;
+            }
         }
-        success = 1;
     }
-    if (success) thelock->locked = 1;
+    if (success == PY_LOCK_ACQUIRED) thelock->locked = 1;
     status = pthread_mutex_unlock( &thelock->mut );
     CHECK_STATUS("pthread_mutex_unlock[1]");
 
-    if (error) success = 0;
-    dprintf(("PyThread_acquire_lock(%p, %d) -> %d\n", lock, waitflag, success));
+    if (error) success = PY_LOCK_FAILURE;
+    dprintf(("PyThread_acquire_lock_timed(%p, %lld, %d) -> %d\n",
+             lock, microseconds, intr_flag, success));
     return success;
 }
 
@@ -498,6 +542,12 @@ PyThread_release_lock(PyThread_type_lock lock)
 }
 
 #endif /* USE_SEMAPHORES */
+
+int
+PyThread_acquire_lock(PyThread_type_lock lock, int waitflag)
+{
+    return PyThread_acquire_lock_timed(lock, waitflag ? -1 : 0, /*intr_flag=*/0);
+}
 
 /* set the thread stack size.
  * Return 0 if size is valid, -1 if size is invalid,
@@ -543,3 +593,46 @@ _pythread_pthread_set_stacksize(size_t size)
 }
 
 #define THREAD_SET_STACKSIZE(x) _pythread_pthread_set_stacksize(x)
+
+#define Py_HAVE_NATIVE_TLS
+
+int
+PyThread_create_key(void)
+{
+    pthread_key_t key;
+    int fail = pthread_key_create(&key, NULL);
+    return fail ? -1 : key;
+}
+
+void
+PyThread_delete_key(int key)
+{
+    pthread_key_delete(key);
+}
+
+void
+PyThread_delete_key_value(int key)
+{
+    pthread_setspecific(key, NULL);
+}
+
+int
+PyThread_set_key_value(int key, void *value)
+{
+    int fail;
+    void *oldValue = pthread_getspecific(key);
+    if (oldValue != NULL)
+        return 0;
+    fail = pthread_setspecific(key, value);
+    return fail ? -1 : 0;
+}
+
+void *
+PyThread_get_key_value(int key)
+{
+    return pthread_getspecific(key);
+}
+
+void
+PyThread_ReInitTLS(void)
+{}
