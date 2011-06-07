@@ -187,6 +187,13 @@ Core and Builtins
 Library
 -------
 
+- Issue #12040: Expose a new attribute ``sentinel`` on instances of
+  :class:`multiprocessing.Process`.  Also, fix Process.join() to not use
+  polling anymore, when given a timeout.
+
+- Issue #11893: Remove obsolete internal wrapper class ``SSLFakeFile`` in the
+  smtplib module.  Patch by Catalin Iacob.
+
 - Issue #12080: Fix a Decimal.power() case that took an unreasonably long time
   to compute.
 
@@ -763,6 +770,9 @@ Library
 
 Build
 -----
+
+- Do not accidentally include the directory containing sqlite.h twice when
+  building sqlite3.
 
 - Issue #11217: For 64-bit/32-bit Mac OS X universal framework builds,
   ensure "make install" creates symlinks in --prefix bin for the "-32"
