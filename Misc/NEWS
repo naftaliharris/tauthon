@@ -191,6 +191,16 @@ Library
   an uninstalled Python (built in a source checkout).  Original patch by
   Tshepang Lekhonkhobe.
 
+- Issue #10694: zipfile now ignores garbage at the end of a zipfile.
+
+- Issue #12283: Fixed regression in smtplib quoting of leading dots in DATA.
+
+- Issue #10424: Argparse now includes the names of the missing required
+  arguments in the missing arguments error message.
+
+- Issue #12168: SysLogHandler now allows NUL termination to be controlled using
+  a new 'append_nul' attribute on the handler.
+
 - Issue #11583: Speed up os.path.isdir on Windows by using GetFileAttributes
   instead of os.stat.
 
