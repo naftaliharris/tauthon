@@ -647,7 +647,7 @@ class TestCopy(unittest.TestCase):
         x, y = C(), C()
         # The underlying containers are decoupled
         v[x] = y
-        self.assertFalse(x in u)
+        self.assertNotIn(x, u)
 
     def test_copy_weakkeydict(self):
         self._check_copy_weakdict(weakref.WeakKeyDictionary)
@@ -696,6 +696,17 @@ class TestCopy(unittest.TestCase):
         del x, y, z, t
         del d
         self.assertEqual(len(v), 1)
+
+    def test_deepcopy_bound_method(self):
+        class Foo(object):
+            def m(self):
+                pass
+        f = Foo()
+        f.b = f.m
+        g = copy.deepcopy(f)
+        self.assertEqual(g.m, g.b)
+        self.assertTrue(g.b.__self__ is g)
+        g.b()
 
 
 def global_foo(x, y): return x+y

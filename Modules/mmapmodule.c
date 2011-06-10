@@ -132,8 +132,6 @@ mmap_object_dealloc(mmap_object *m_obj)
     if (m_obj->fd >= 0)
         (void) close(m_obj->fd);
     if (m_obj->data!=NULL) {
-        if (m_obj->access != ACCESS_READ && m_obj->access != ACCESS_COPY)
-            msync(m_obj->data, m_obj->size, MS_SYNC);
         munmap(m_obj->data, m_obj->size);
     }
 #endif /* UNIX */
@@ -660,6 +658,31 @@ mmap_move_method(mmap_object *self, PyObject *args)
     }
 }
 
+static PyObject *
+mmap_closed_get(mmap_object *self)
+{
+#ifdef MS_WINDOWS
+    return PyBool_FromLong(self->map_handle == NULL ? 1 : 0);
+#elif defined(UNIX)
+    return PyBool_FromLong(self->data == NULL ? 1 : 0);
+#endif
+}
+
+static PyObject *
+mmap__enter__method(mmap_object *self, PyObject *args)
+{
+    CHECK_VALID(NULL);
+
+    Py_INCREF(self);
+    return (PyObject *)self;
+}
+
+static PyObject *
+mmap__exit__method(PyObject *self, PyObject *args)
+{
+    return PyObject_CallMethod(self, "close", NULL);
+}
+
 static struct PyMethodDef mmap_object_methods[] = {
     {"close",           (PyCFunction) mmap_close_method,        METH_NOARGS},
     {"find",            (PyCFunction) mmap_find_method,         METH_VARARGS},
@@ -675,8 +698,16 @@ static struct PyMethodDef mmap_object_methods[] = {
     {"tell",            (PyCFunction) mmap_tell_method,         METH_NOARGS},
     {"write",           (PyCFunction) mmap_write_method,        METH_VARARGS},
     {"write_byte",      (PyCFunction) mmap_write_byte_method,   METH_VARARGS},
+    {"__enter__",       (PyCFunction) mmap__enter__method,      METH_NOARGS},
+    {"__exit__",        (PyCFunction) mmap__exit__method,       METH_VARARGS},
     {NULL,         NULL}       /* sentinel */
 };
+
+static PyGetSetDef mmap_object_getset[] = {
+    {"closed", (getter) mmap_closed_get, NULL, NULL},
+    {NULL}
+};
+
 
 /* Functions for treating an mmap'ed file as a buffer */
 
@@ -735,7 +766,7 @@ mmap_subscript(mmap_object *self, PyObject *item)
     else if (PySlice_Check(item)) {
         Py_ssize_t start, stop, step, slicelen;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item, self->size,
+        if (PySlice_GetIndicesEx(item, self->size,
                          &start, &stop, &step, &slicelen) < 0) {
             return NULL;
         }
@@ -861,7 +892,7 @@ mmap_ass_subscript(mmap_object *self, PyObject *item, PyObject *value)
         Py_ssize_t start, stop, step, slicelen;
         Py_buffer vbuf;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
+        if (PySlice_GetIndicesEx(item,
                                  self->size, &start, &stop,
                                  &step, &slicelen) < 0) {
             return -1;
@@ -984,7 +1015,7 @@ static PyTypeObject mmap_object_type = {
     0,                                          /* tp_iternext */
     mmap_object_methods,                        /* tp_methods */
     0,                                          /* tp_members */
-    0,                                          /* tp_getset */
+    mmap_object_getset,                         /* tp_getset */
     0,                                          /* tp_base */
     0,                                          /* tp_dict */
     0,                                          /* tp_descr_get */
