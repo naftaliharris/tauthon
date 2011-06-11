@@ -91,12 +91,16 @@ class Process(object):
     '''
     _Popen = None
 
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs={},
+                 *, daemon=None):
         assert group is None, 'group argument must be None for now'
         count = next(_current_process._counter)
         self._identity = _current_process._identity + (count,)
         self._authkey = _current_process._authkey
-        self._daemonic = _current_process._daemonic
+        if daemon is not None:
+            self._daemonic = daemon
+        else:
+            self._daemonic = _current_process._daemonic
         self._tempdir = _current_process._tempdir
         self._parent_pid = os.getpid()
         self._popen = None
@@ -128,6 +132,7 @@ class Process(object):
         else:
             from .forking import Popen
         self._popen = Popen(self)
+        self._sentinel = self._popen.sentinel
         _current_process._children.add(self)
 
     def terminate(self):
@@ -213,6 +218,17 @@ class Process(object):
             return self._popen and self._popen.pid
 
     pid = ident
+
+    @property
+    def sentinel(self):
+        '''
+        Return a file descriptor (Unix) or handle (Windows) suitable for
+        waiting for process termination.
+        '''
+        try:
+            return self._sentinel
+        except AttributeError:
+            raise ValueError("process not started")
 
     def __repr__(self):
         if self is _current_process:
