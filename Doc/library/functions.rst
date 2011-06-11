@@ -10,20 +10,20 @@ are always available.  They are listed here in alphabetical order.
 ===================  =================  ==================  ================  ====================
 ..                   ..                 Built-in Functions  ..                ..
 ===================  =================  ==================  ================  ====================
-:func:`abs`          :func:`dir`        :func:`hex`         :func:`next`      :func:`slice`
-:func:`all`          :func:`divmod`     :func:`id`          :func:`object`    :func:`sorted`
-:func:`any`          :func:`enumerate`  :func:`input`       :func:`oct`       :func:`staticmethod`
-:func:`ascii`        :func:`eval`       :func:`int`         :func:`open`      :func:`str`
-:func:`bin`          :func:`exec`       :func:`isinstance`  :func:`ord`       :func:`sum`
-:func:`bool`         :func:`filter`     :func:`issubclass`  :func:`pow`       :func:`super`
-:func:`bytearray`    :func:`float`      :func:`iter`        :func:`print`     :func:`tuple`
-:func:`bytes`        :func:`format`     :func:`len`         :func:`property`  :func:`type`
+:func:`abs`          :func:`dict`       :func:`help`        :func:`min`       :func:`setattr`
+:func:`all`          :func:`dir`        :func:`hex`         :func:`next`      :func:`slice`
+:func:`any`          :func:`divmod`     :func:`id`          :func:`object`    :func:`sorted`
+:func:`ascii`        :func:`enumerate`  :func:`input`       :func:`oct`       :func:`staticmethod`
+:func:`bin`          :func:`eval`       :func:`int`         :func:`open`      :func:`str`
+:func:`bool`         :func:`exec`       :func:`isinstance`  :func:`ord`       :func:`sum`
+:func:`bytearray`    :func:`filter`     :func:`issubclass`  :func:`pow`       :func:`super`
+:func:`bytes`        :func:`float`      :func:`iter`        :func:`print`     :func:`tuple`
+:func:`callable`     :func:`format`     :func:`len`         :func:`property`  :func:`type`
 :func:`chr`          :func:`frozenset`  :func:`list`        :func:`range`     :func:`vars`
 :func:`classmethod`  :func:`getattr`    :func:`locals`      :func:`repr`      :func:`zip`
 :func:`compile`      :func:`globals`    :func:`map`         :func:`reversed`  :func:`__import__`
 :func:`complex`      :func:`hasattr`    :func:`max`         :func:`round`
 :func:`delattr`      :func:`hash`       :func:`memoryview`  :func:`set`
-:func:`dict`         :func:`help`       :func:`min`         :func:`setattr`
 ===================  =================  ==================  ================  ====================
 
 .. function:: abs(x)
@@ -121,6 +121,19 @@ are always available.  They are listed here in alphabetical order.
    Bytes objects can also be created with literals, see :ref:`strings`.
 
 
+.. function:: callable(object)
+
+   Return :const:`True` if the *object* argument appears callable,
+   :const:`False` if not.  If this returns true, it is still possible that a
+   call fails, but if it is false, calling *object* will never succeed.
+   Note that classes are callable (calling a class returns a new instance);
+   instances are callable if their class has a :meth:`__call__` method.
+
+   .. versionadded:: 3.2
+      This function was first removed in Python 3.0 and then brought back
+      in Python 3.2.
+
+
 .. function:: chr(i)
 
    Return the string representing a character whose Unicode codepoint is the integer
@@ -161,7 +174,7 @@ are always available.  They are listed here in alphabetical order.
    type hierarchy in :ref:`types`.
 
 
-.. function:: compile(source, filename, mode, flags=0, dont_inherit=False)
+.. function:: compile(source, filename, mode, flags=0, dont_inherit=False, optimize=-1)
 
    Compile the *source* into a code or AST object.  Code objects can be executed
    by :func:`exec` or :func:`eval`.  *source* can either be a string or an AST
@@ -193,16 +206,25 @@ are always available.  They are listed here in alphabetical order.
    can be found as the :attr:`compiler_flag` attribute on the :class:`_Feature`
    instance in the :mod:`__future__` module.
 
+   The argument *optimize* specifies the optimization level of the compiler; the
+   default value of ``-1`` selects the optimization level of the interpreter as
+   given by :option:`-O` options.  Explicit levels are ``0`` (no optimization;
+   ``__debug__`` is true), ``1`` (asserts are removed, ``__debug__`` is false)
+   or ``2`` (docstrings are removed too).
+
    This function raises :exc:`SyntaxError` if the compiled source is invalid,
    and :exc:`TypeError` if the source contains null bytes.
 
    .. note::
 
-      When compiling a string with multi-line statements, line endings must be
-      represented by a single newline character (``'\n'``), and the input must
-      be terminated by at least one newline character.  If line endings are
-      represented by ``'\r\n'``, use :meth:`str.replace` to change them into
-      ``'\n'``.
+      When compiling a string with multi-line code in ``'single'`` or
+      ``'eval'`` mode, input must be terminated by at least one newline
+      character.  This is to facilitate detection of incomplete and complete
+      statements in the :mod:`code` module.
+
+   .. versionchanged:: 3.2
+      Allowed use of Windows and Mac newlines.  Also input in ``'exec'`` mode
+      does not have to end in a newline anymore.  Added the *optimize* parameter.
 
 
 .. function:: complex([real[, imag]])
@@ -268,19 +290,18 @@ are always available.  They are listed here in alphabetical order.
    The resulting list is sorted alphabetically.  For example:
 
       >>> import struct
-      >>> dir()   # doctest: +SKIP
+      >>> dir()   # show the names in the module namespace
       ['__builtins__', '__doc__', '__name__', 'struct']
-      >>> dir(struct)   # doctest: +NORMALIZE_WHITESPACE
+      >>> dir(struct)   # show the names in the struct module
       ['Struct', '__builtins__', '__doc__', '__file__', '__name__',
        '__package__', '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
-      >>> class Foo:
-      ...     def __dir__(self):
-      ...         return ["kan", "ga", "roo"]
-      ...
-      >>> f = Foo()
-      >>> dir(f)
-      ['ga', 'kan', 'roo']
+      >>> class Shape(object):
+              def __dir__(self):
+                  return ['area', 'perimeter', 'location']
+      >>> s = Shape()
+      >>> dir(s)
+      ['area', 'perimeter', 'location']
 
    .. note::
 
@@ -311,15 +332,21 @@ are always available.  They are listed here in alphabetical order.
    :meth:`__next__` method of the iterator returned by :func:`enumerate` returns a
    tuple containing a count (from *start* which defaults to 0) and the
    corresponding value obtained from iterating over *iterable*.
-   :func:`enumerate` is useful for obtaining an indexed series: ``(0, seq[0])``,
-   ``(1, seq[1])``, ``(2, seq[2])``, .... For example:
 
-      >>> for i, season in enumerate(['Spring', 'Summer', 'Fall', 'Winter']):
-      ...     print(i, season)
-      0 Spring
-      1 Summer
-      2 Fall
-      3 Winter
+      >>> for i, season in enumerate('Spring Summer Fall Winter'.split(), start=1):
+              print(i, season)
+      1 Spring
+      2 Summer
+      3 Fall
+      4 Winter
+
+   Equivalent to::
+
+      def enumerate(sequence, start=0):
+          n = start
+          for elem in sequence:
+              yield n, elem
+              n += 1
 
 
 .. function:: eval(expression, globals=None, locals=None)
@@ -346,7 +373,7 @@ are always available.  They are listed here in alphabetical order.
    This function can also be used to execute arbitrary code objects (such as
    those created by :func:`compile`).  In this case pass a code object instead
    of a string.  If the code object has been compiled with ``'exec'`` as the
-   *kind* argument, :func:`eval`\'s return value will be ``None``.
+   *mode* argument, :func:`eval`\'s return value will be ``None``.
 
    Hints: dynamic execution of statements is supported by the :func:`exec`
    function.  The :func:`globals` and :func:`locals` functions
@@ -414,26 +441,54 @@ are always available.  They are listed here in alphabetical order.
 
 .. function:: float([x])
 
-   Convert a string or a number to floating point.  If the argument is a string,
-   it must contain a possibly signed decimal or floating point number, possibly
-   embedded in whitespace. The argument may also be ``'[+|-]nan'`` or
-   ``'[+|-]inf'``.  Otherwise, the argument may be an integer or a floating
-   point number, and a floating point number with the same value (within
-   Python's floating point precision) is returned.  If no argument is given,
-   ``0.0`` is returned.
+   .. index::
+      single: NaN
+      single: Infinity
 
-   .. note::
+   Convert a string or a number to floating point.
 
-      .. index::
-         single: NaN
-         single: Infinity
+   If the argument is a string, it should contain a decimal number, optionally
+   preceded by a sign, and optionally embedded in whitespace.  The optional
+   sign may be ``'+'`` or ``'-'``; a ``'+'`` sign has no effect on the value
+   produced.  The argument may also be a string representing a NaN
+   (not-a-number), or a positive or negative infinity.  More precisely, the
+   input must conform to the following grammar after leading and trailing
+   whitespace characters are removed:
 
-      When passing in a string, values for NaN and Infinity may be returned,
-      depending on the underlying C library.  Float accepts the strings
-      ``'nan'``, ``'inf'`` and ``'-inf'`` for NaN and positive or negative
-      infinity.  The case and a leading + are ignored as well as a leading - is
-      ignored for NaN.  Float always represents NaN and infinity as ``nan``,
-      ``inf`` or ``-inf``.
+   .. productionlist::
+      sign: "+" | "-"
+      infinity: "Infinity" | "inf"
+      nan: "nan"
+      numeric_value: `floatnumber` | `infinity` | `nan`
+      numeric_string: [`sign`] `numeric_value`
+
+   Here ``floatnumber`` is the form of a Python floating-point literal,
+   described in :ref:`floating`.  Case is not significant, so, for example,
+   "inf", "Inf", "INFINITY" and "iNfINity" are all acceptable spellings for
+   positive infinity.
+
+   Otherwise, if the argument is an integer or a floating point number, a
+   floating point number with the same value (within Python's floating point
+   precision) is returned.  If the argument is outside the range of a Python
+   float, an :exc:`OverflowError` will be raised.
+
+   For a general Python object ``x``, ``float(x)`` delegates to
+   ``x.__float__()``.
+
+   If no argument is given, ``0.0`` is returned.
+
+   Examples::
+
+      >>> float('+1.23')
+      1.23
+      >>> float('   -12345\n')
+      -12345.0
+      >>> float('1e-003')
+      0.001
+      >>> float('+1E6')
+      1000000.0
+      >>> float('-Infinity')
+      -inf
 
    The float type is described in :ref:`typesnumeric`.
 
@@ -448,11 +503,14 @@ are always available.  They are listed here in alphabetical order.
    of the *value* argument, however there is a standard formatting syntax that
    is used by most built-in types: :ref:`formatspec`.
 
-   .. note::
+   The default *format_spec* is an empty string which usually gives the same
+   effect as calling ``str(value)``.
 
-      ``format(value, format_spec)`` merely calls
-      ``value.__format__(format_spec)``.
-
+   A call to ``format(value, format_spec)`` is translated to
+   ``type(value).__format__(format_spec)`` which bypasses the instance
+   dictionary when searching for the value's :meth:`__format__` method.  A
+   :exc:`TypeError` exception is raised if the method is not found or if either
+   the *format_spec* or the return value are not strings.
 
 .. function:: frozenset([iterable])
    :noindex:
@@ -482,10 +540,10 @@ are always available.  They are listed here in alphabetical order.
 
 .. function:: hasattr(object, name)
 
-   The arguments are an object and a string.  The result is ``True`` if the string
-   is the name of one of the object's attributes, ``False`` if not. (This is
-   implemented by calling ``getattr(object, name)`` and seeing whether it raises an
-   exception or not.)
+   The arguments are an object and a string.  The result is ``True`` if the
+   string is the name of one of the object's attributes, ``False`` if not. (This
+   is implemented by calling ``getattr(object, name)`` and seeing whether it
+   raises an :exc:`AttributeError` or not.)
 
 
 .. function:: hash(object)
@@ -599,10 +657,10 @@ are always available.  They are listed here in alphabetical order.
 
    One useful application of the second form of :func:`iter` is to read lines of
    a file until a certain line is reached.  The following example reads a file
-   until ``"STOP"`` is reached: ::
+   until the :meth:`readline` method returns an empty string::
 
-      with open("mydata.txt") as fp:
-          for line in iter(fp.readline, "STOP"):
+      with open('mydata.txt') as fp:
+          for line in iter(fp.readline, ''):
               process_line(line)
 
 
@@ -653,6 +711,10 @@ are always available.  They are listed here in alphabetical order.
    The optional keyword-only *key* argument specifies a one-argument ordering
    function like that used for :meth:`list.sort`.
 
+   If multiple items are maximal, the function returns the first one
+   encountered.  This is consistent with other sort-stability preserving tools
+   such as ``sorted(iterable, key=keyfunc, reverse=True)[0]`` and
+   ``heapq.nlargest(1, iterable, key=keyfunc)``.
 
 .. function:: memoryview(obj)
    :noindex:
@@ -670,6 +732,10 @@ are always available.  They are listed here in alphabetical order.
    The optional keyword-only *key* argument specifies a one-argument ordering
    function like that used for :meth:`list.sort`.
 
+   If multiple items are minimal, the function returns the first one
+   encountered.  This is consistent with other sort-stability preserving tools
+   such as ``sorted(iterable, key=keyfunc)[0]`` and ``heapq.nsmallest(1,
+   iterable, key=keyfunc)``.
 
 .. function:: next(iterator[, default])
 
@@ -971,6 +1037,35 @@ are always available.  They are listed here in alphabetical order.
       >>> list(range(1, 0))
       []
 
+   Range objects implement the :class:`collections.Sequence` ABC, and provide
+   features such as containment tests, element index lookup, slicing and
+   support for negative indices:
+
+      >>> r = range(0, 20, 2)
+      >>> r
+      range(0, 20, 2)
+      >>> 11 in r
+      False
+      >>> 10 in r
+      True
+      >>> r.index(10)
+      5
+      >>> r[5]
+      10
+      >>> r[:5]
+      range(0, 10, 2)
+      >>> r[-1]
+      18
+
+   Ranges containing absolute values larger than :data:`sys.maxsize` are permitted
+   but some features (such as :func:`len`) will raise :exc:`OverflowError`.
+
+   .. versionchanged:: 3.2
+      Implement the Sequence ABC.
+      Support slicing and negative indices.
+      Test integers for membership in constant time instead of iterating
+      through all items.
+
 
 .. function:: repr(object)
 
@@ -1050,14 +1145,14 @@ are always available.  They are listed here in alphabetical order.
    Has two optional arguments which must be specified as keyword arguments.
 
    *key* specifies a function of one argument that is used to extract a comparison
-   key from each list element: ``key=str.lower``.  The default value is ``None``.
+   key from each list element: ``key=str.lower``.  The default value is ``None``
+   (compare the elements directly).
 
    *reverse* is a boolean value.  If set to ``True``, then the list elements are
    sorted as if each comparison were reversed.
 
-   To convert an old-style *cmp* function to a *key* function, see the
-   `CmpToKey recipe in the ASPN cookbook
-   <http://code.activestate.com/recipes/576653/>`_\.
+   Use :func:`functools.cmp_to_key` to convert an old-style *cmp* function to a
+   *key* function.
 
    For sorting examples and a brief sorting tutorial, see `Sorting HowTo
    <http://wiki.python.org/moin/HowTo/Sorting/>`_\.
@@ -1079,8 +1174,9 @@ are always available.  They are listed here in alphabetical order.
    It can be called either on the class (such as ``C.f()``) or on an instance (such
    as ``C().f()``).  The instance is ignored except for its class.
 
-   Static methods in Python are similar to those found in Java or C++. For a more
-   advanced concept, see :func:`classmethod` in this section.
+   Static methods in Python are similar to those found in Java or C++. Also see
+   :func:`classmethod` for a variant that is useful for creating alternate class
+   constructors.
 
    For more information on static methods, consult the documentation on the
    standard type hierarchy in :ref:`types`.
@@ -1179,6 +1275,10 @@ are always available.  They are listed here in alphabetical order.
    argument form specifies the arguments exactly and makes the appropriate
    references.  The zero argument form automatically searches the stack frame
    for the class (``__class__``) and the first argument.
+
+   For practical suggestions on how to design cooperative classes using
+   :func:`super`, see `guide to using super()
+   <http://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
 
 
 .. function:: tuple([iterable])

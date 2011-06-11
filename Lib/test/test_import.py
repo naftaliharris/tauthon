@@ -1,3 +1,4 @@
+import builtins
 import imp
 from importlib.test.import_ import test_relative_imports
 from importlib.test.import_ import util as importlib_util
@@ -8,12 +9,12 @@ import random
 import stat
 import sys
 import unittest
-import warnings
 import textwrap
 
 from test.support import (
-    EnvironmentVarGuard, TESTFN, forget, is_jython,
-    rmtree, run_unittest, unlink, unload)
+    EnvironmentVarGuard, TESTFN, check_warnings, forget, is_jython,
+    make_legacy_pyc, rmtree, run_unittest, swap_attr, swap_item, temp_umask,
+    unlink, unload)
 from test import script_helper
 
 
@@ -29,6 +30,9 @@ def remove_files(name):
 
 class ImportTests(unittest.TestCase):
 
+    def setUp(self):
+        remove_files(TESTFN)
+
     def tearDown(self):
         unload(TESTFN)
 
@@ -37,12 +41,8 @@ class ImportTests(unittest.TestCase):
     def test_case_sensitivity(self):
         # Brief digression to test that import is case-sensitive:  if we got
         # this far, we know for sure that "random" exists.
-        try:
+        with self.assertRaises(ImportError):
             import RAnDoM
-        except ImportError:
-            pass
-        else:
-            self.fail("import of RAnDoM should have failed (case mismatch)")
 
     def test_double_const(self):
         # Another brief digression to test the accuracy of manifest float
@@ -99,31 +99,29 @@ class ImportTests(unittest.TestCase):
     def test_execute_bit_not_copied(self):
         # Issue 6070: under posix .pyc files got their execute bit set if
         # the .py file had the execute bit set, but they aren't executable.
-        oldmask = os.umask(0o022)
-        sys.path.insert(0, os.curdir)
-        try:
-            fname = TESTFN + os.extsep + "py"
-            f = open(fname, 'w').close()
-            os.chmod(fname, (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH |
-                             stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
-            __import__(TESTFN)
-            fn = fname + 'c'
-            if not os.path.exists(fn):
-                fn = fname + 'o'
-                if not os.path.exists(fn): raise TestFailed("__import__ did "
-                    "not result in creation of either a .pyc or .pyo file")
-            s = os.stat(fn)
-            self.assertEqual(stat.S_IMODE(s.st_mode),
-                             stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        finally:
-            os.umask(oldmask)
-            remove_files(TESTFN)
-            if TESTFN in sys.modules: del sys.modules[TESTFN]
-            del sys.path[0]
+        with temp_umask(0o022):
+            sys.path.insert(0, os.curdir)
+            try:
+                fname = TESTFN + os.extsep + "py"
+                open(fname, 'w').close()
+                os.chmod(fname, (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH |
+                                 stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
+                __import__(TESTFN)
+                fn = imp.cache_from_source(fname)
+                if not os.path.exists(fn):
+                    self.fail("__import__ did not result in creation of "
+                              "either a .pyc or .pyo file")
+                    s = os.stat(fn)
+                    self.assertEqual(
+                        stat.S_IMODE(s.st_mode),
+                        stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+            finally:
+                del sys.path[0]
+                remove_files(TESTFN)
+                unload(TESTFN)
 
     def test_imp_module(self):
         # Verify that the imp module can correctly load and find .py files
-        import imp, os
         # XXX (ncoghlan): It would be nice to use support.CleanImport
         # here, but that breaks because the os module registers some
         # handlers in copy_reg on import. Since CleanImport doesn't
@@ -135,6 +133,7 @@ class ImportTests(unittest.TestCase):
         orig_getenv = os.getenv
         with EnvironmentVarGuard():
             x = imp.find_module("os")
+            self.addCleanup(x[0].close)
             new_os = imp.load_module("os", *x)
             self.assertIs(os, new_os)
             self.assertIs(orig_path, new_os.path)
@@ -153,6 +152,7 @@ class ImportTests(unittest.TestCase):
 
         try:
             # Compile & remove .py file; we only need .pyc (or .pyo).
+            # Bytecode must be relocated from the PEP 3147 bytecode-only location.
             py_compile.compile(filename)
         finally:
             unlink(filename)
@@ -161,6 +161,7 @@ class ImportTests(unittest.TestCase):
         sys.path.append('')
 
         try:
+            make_legacy_pyc(filename)
             # This used to crash.
             exec('import ' + module)
         finally:
@@ -198,13 +199,6 @@ class ImportTests(unittest.TestCase):
         # import x.y.z as w binds z as w
         import test.support as y
         self.assertTrue(y is test.support, y.__name__)
-
-    def test_import_initless_directory_warning(self):
-        with warnings.catch_warnings():
-            # Just a random non-package directory we always expect to be
-            # somewhere in sys.path...
-            warnings.simplefilter('error', ImportWarning)
-            self.assertRaises(ImportWarning, __import__, "site-packages")
 
     def test_failing_reload(self):
         # A failing reload should leave the module object in sys.modules.
@@ -256,6 +250,7 @@ class ImportTests(unittest.TestCase):
             self.assertTrue(mod.__file__.endswith('.py'))
             os.remove(source)
             del sys.modules[TESTFN]
+            make_legacy_pyc(source)
             mod = __import__(TESTFN)
             base, ext = os.path.splitext(mod.__file__)
             self.assertIn(ext, ('.pyc', '.pyo'))
@@ -276,15 +271,23 @@ class ImportTests(unittest.TestCase):
         import test.support as y
         self.assertIs(y, test.support, y.__name__)
 
+    def test_import_initless_directory_warning(self):
+        with check_warnings(('', ImportWarning)):
+            # Just a random non-package directory we always expect to be
+            # somewhere in sys.path...
+            self.assertRaises(ImportError, __import__, "site-packages")
+
     def test_import_by_filename(self):
         path = os.path.abspath(TESTFN)
+        encoding = sys.getfilesystemencoding()
         try:
+            path.encode(encoding)
+        except UnicodeEncodeError:
+            self.skipTest('path is not encodable to {}'.format(encoding))
+        with self.assertRaises(ImportError) as c:
             __import__(path)
-        except ImportError as err:
-            self.assertEqual("Import by filename is not supported.",
-                              err.args[0])
-        else:
-            self.fail("import by path didn't raise an exception")
+        self.assertEqual("Import by filename is not supported.",
+                         c.exception.args[0])
 
     def test_import_in_del_does_not_crash(self):
         # Issue 4236
@@ -315,7 +318,7 @@ func_filename = func.__code__.co_filename
 """
     dir_name = os.path.abspath(TESTFN)
     file_name = os.path.join(dir_name, module_name) + os.extsep + "py"
-    compiled_name = file_name + ("c" if __debug__ else "o")
+    compiled_name = imp.cache_from_source(file_name)
 
     def setUp(self):
         self.sys_path = sys.path[:]
@@ -362,8 +365,9 @@ func_filename = func.__code__.co_filename
         target = "another_module.py"
         py_compile.compile(self.file_name, dfile=target)
         os.remove(self.file_name)
+        pyc_file = make_legacy_pyc(self.file_name)
         mod = self.import_module()
-        self.assertEqual(mod.module_filename, self.compiled_name)
+        self.assertEqual(mod.module_filename, pyc_file)
         self.assertEqual(mod.code_filename, target)
         self.assertEqual(mod.func_filename, target)
 
@@ -481,6 +485,158 @@ class RelativeImportTests(unittest.TestCase):
                       "implicit absolute import")
 
 
+class OverridingImportBuiltinTests(unittest.TestCase):
+    def test_override_builtin(self):
+        # Test that overriding builtins.__import__ can bypass sys.modules.
+        import os
+
+        def foo():
+            import os
+            return os
+        self.assertEqual(foo(), os)  # Quick sanity check.
+
+        with swap_attr(builtins, "__import__", lambda *x: 5):
+            self.assertEqual(foo(), 5)
+
+        # Test what happens when we shadow __import__ in globals(); this
+        # currently does not impact the import process, but if this changes,
+        # other code will need to change, so keep this test as a tripwire.
+        with swap_item(globals(), "__import__", lambda *x: 5):
+            self.assertEqual(foo(), os)
+
+
+class PycacheTests(unittest.TestCase):
+    # Test the various PEP 3147 related behaviors.
+
+    tag = imp.get_tag()
+
+    def _clean(self):
+        forget(TESTFN)
+        rmtree('__pycache__')
+        unlink(self.source)
+
+    def setUp(self):
+        self.source = TESTFN + '.py'
+        self._clean()
+        with open(self.source, 'w') as fp:
+            print('# This is a test file written by test_import.py', file=fp)
+        sys.path.insert(0, os.curdir)
+
+    def tearDown(self):
+        assert sys.path[0] == os.curdir, 'Unexpected sys.path[0]'
+        del sys.path[0]
+        self._clean()
+
+    def test_import_pyc_path(self):
+        self.assertFalse(os.path.exists('__pycache__'))
+        __import__(TESTFN)
+        self.assertTrue(os.path.exists('__pycache__'))
+        self.assertTrue(os.path.exists(os.path.join(
+            '__pycache__', '{}.{}.py{}'.format(
+            TESTFN, self.tag, __debug__ and 'c' or 'o'))))
+
+    @unittest.skipUnless(os.name == 'posix',
+                         "test meaningful only on posix systems")
+    def test_unwritable_directory(self):
+        # When the umask causes the new __pycache__ directory to be
+        # unwritable, the import still succeeds but no .pyc file is written.
+        with temp_umask(0o222):
+            __import__(TESTFN)
+        self.assertTrue(os.path.exists('__pycache__'))
+        self.assertFalse(os.path.exists(os.path.join(
+            '__pycache__', '{}.{}.pyc'.format(TESTFN, self.tag))))
+
+    def test_missing_source(self):
+        # With PEP 3147 cache layout, removing the source but leaving the pyc
+        # file does not satisfy the import.
+        __import__(TESTFN)
+        pyc_file = imp.cache_from_source(self.source)
+        self.assertTrue(os.path.exists(pyc_file))
+        os.remove(self.source)
+        forget(TESTFN)
+        self.assertRaises(ImportError, __import__, TESTFN)
+
+    def test_missing_source_legacy(self):
+        # Like test_missing_source() except that for backward compatibility,
+        # when the pyc file lives where the py file would have been (and named
+        # without the tag), it is importable.  The __file__ of the imported
+        # module is the pyc location.
+        __import__(TESTFN)
+        # pyc_file gets removed in _clean() via tearDown().
+        pyc_file = make_legacy_pyc(self.source)
+        os.remove(self.source)
+        unload(TESTFN)
+        m = __import__(TESTFN)
+        self.assertEqual(m.__file__,
+                         os.path.join(os.curdir, os.path.relpath(pyc_file)))
+
+    def test___cached__(self):
+        # Modules now also have an __cached__ that points to the pyc file.
+        m = __import__(TESTFN)
+        pyc_file = imp.cache_from_source(TESTFN + '.py')
+        self.assertEqual(m.__cached__, os.path.join(os.curdir, pyc_file))
+
+    def test___cached___legacy_pyc(self):
+        # Like test___cached__() except that for backward compatibility,
+        # when the pyc file lives where the py file would have been (and named
+        # without the tag), it is importable.  The __cached__ of the imported
+        # module is the pyc location.
+        __import__(TESTFN)
+        # pyc_file gets removed in _clean() via tearDown().
+        pyc_file = make_legacy_pyc(self.source)
+        os.remove(self.source)
+        unload(TESTFN)
+        m = __import__(TESTFN)
+        self.assertEqual(m.__cached__,
+                         os.path.join(os.curdir, os.path.relpath(pyc_file)))
+
+    def test_package___cached__(self):
+        # Like test___cached__ but for packages.
+        def cleanup():
+            rmtree('pep3147')
+        os.mkdir('pep3147')
+        self.addCleanup(cleanup)
+        # Touch the __init__.py
+        with open(os.path.join('pep3147', '__init__.py'), 'w'):
+            pass
+        with open(os.path.join('pep3147', 'foo.py'), 'w'):
+            pass
+        unload('pep3147.foo')
+        unload('pep3147')
+        m = __import__('pep3147.foo')
+        init_pyc = imp.cache_from_source(
+            os.path.join('pep3147', '__init__.py'))
+        self.assertEqual(m.__cached__, os.path.join(os.curdir, init_pyc))
+        foo_pyc = imp.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        self.assertEqual(sys.modules['pep3147.foo'].__cached__,
+                         os.path.join(os.curdir, foo_pyc))
+
+    def test_package___cached___from_pyc(self):
+        # Like test___cached__ but ensuring __cached__ when imported from a
+        # PEP 3147 pyc file.
+        def cleanup():
+            rmtree('pep3147')
+        os.mkdir('pep3147')
+        self.addCleanup(cleanup)
+        unload('pep3147.foo')
+        unload('pep3147')
+        # Touch the __init__.py
+        with open(os.path.join('pep3147', '__init__.py'), 'w'):
+            pass
+        with open(os.path.join('pep3147', 'foo.py'), 'w'):
+            pass
+        m = __import__('pep3147.foo')
+        unload('pep3147.foo')
+        unload('pep3147')
+        m = __import__('pep3147.foo')
+        init_pyc = imp.cache_from_source(
+            os.path.join('pep3147', '__init__.py'))
+        self.assertEqual(m.__cached__, os.path.join(os.curdir, init_pyc))
+        foo_pyc = imp.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        self.assertEqual(sys.modules['pep3147.foo'].__cached__,
+                         os.path.join(os.curdir, foo_pyc))
+
+
 class RelativeImportFromImportlibTests(test_relative_imports.RelativeImports):
 
     def setUp(self):
@@ -492,8 +648,9 @@ class RelativeImportFromImportlibTests(test_relative_imports.RelativeImports):
 
 
 def test_main(verbose=None):
-    run_unittest(ImportTests,
+    run_unittest(ImportTests, PycacheTests,
                  PycRewritingTests, PathsTests, RelativeImportTests,
+                 OverridingImportBuiltinTests,
                  RelativeImportFromImportlibTests)
 
 

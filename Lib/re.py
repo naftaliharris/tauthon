@@ -118,6 +118,7 @@ This module also defines an exception 'error'.
 import sys
 import sre_compile
 import sre_parse
+import functools
 
 # public symbols
 __all__ = [ "match", "search", "sub", "subn", "split", "findall",
@@ -205,9 +206,9 @@ def compile(pattern, flags=0):
     return _compile(pattern, flags)
 
 def purge():
-    "Clear the regular expression cache"
-    _cache.clear()
-    _cache_repl.clear()
+    "Clear the regular expression caches"
+    _compile_typed.cache_clear()
+    _compile_repl.cache_clear()
 
 def template(pattern, flags=0):
     "Compile a template pattern, returning a pattern object"
@@ -248,20 +249,14 @@ def escape(pattern):
 # --------------------------------------------------------------------
 # internals
 
-_cache = {}
-_cache_repl = {}
-
 _pattern_type = type(sre_compile.compile("", 0))
 
-_MAXCACHE = 100
+def _compile(pattern, flags):
+    return _compile_typed(type(pattern), pattern, flags)
 
-def _compile(*key):
+@functools.lru_cache(maxsize=500)
+def _compile_typed(text_bytes_type, pattern, flags):
     # internal: compile pattern
-    cachekey = (type(key[0]),) + key
-    p = _cache.get(cachekey)
-    if p is not None:
-        return p
-    pattern, flags = key
     if isinstance(pattern, _pattern_type):
         if flags:
             raise ValueError(
@@ -269,23 +264,12 @@ def _compile(*key):
         return pattern
     if not sre_compile.isstring(pattern):
         raise TypeError("first argument must be string or compiled pattern")
-    p = sre_compile.compile(pattern, flags)
-    if len(_cache) >= _MAXCACHE:
-        _cache.clear()
-    _cache[cachekey] = p
-    return p
+    return sre_compile.compile(pattern, flags)
 
-def _compile_repl(*key):
+@functools.lru_cache(maxsize=500)
+def _compile_repl(repl, pattern):
     # internal: compile replacement pattern
-    p = _cache_repl.get(key)
-    if p is not None:
-        return p
-    repl, pattern = key
-    p = sre_parse.parse_template(repl, pattern)
-    if len(_cache_repl) >= _MAXCACHE:
-        _cache_repl.clear()
-    _cache_repl[key] = p
-    return p
+    return sre_parse.parse_template(repl, pattern)
 
 def _expand(pattern, match, template):
     # internal: match.expand implementation hook
