@@ -298,19 +298,18 @@ available.  They are listed here in alphabetical order.
    The resulting list is sorted alphabetically.  For example:
 
       >>> import struct
-      >>> dir()   # doctest: +SKIP
+      >>> dir()   # show the names in the module namespace
       ['__builtins__', '__doc__', '__name__', 'struct']
-      >>> dir(struct)   # doctest: +NORMALIZE_WHITESPACE
+      >>> dir(struct)   # show the names in the struct module
       ['Struct', '__builtins__', '__doc__', '__file__', '__name__',
        '__package__', '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
-      >>> class Foo(object):
-      ...     def __dir__(self):
-      ...         return ["kan", "ga", "roo"]
-      ...
-      >>> f = Foo()
-      >>> dir(f)
-      ['ga', 'kan', 'roo']
+      >>> class Shape(object):
+              def __dir__(self):
+                  return ['area', 'perimeter', 'location']
+      >>> s = Shape()
+      >>> dir(s)
+      ['area', 'perimeter', 'location']
 
    .. note::
 
@@ -342,16 +341,22 @@ available.  They are listed here in alphabetical order.
    :term:`iterator`, or some other object which supports iteration.  The
    :meth:`!next` method of the iterator returned by :func:`enumerate` returns a
    tuple containing a count (from *start* which defaults to 0) and the
-   corresponding value obtained from iterating over *iterable*.
-   :func:`enumerate` is useful for obtaining an indexed series: ``(0, seq[0])``,
-   ``(1, seq[1])``, ``(2, seq[2])``, .... For example:
+   corresponding value obtained from iterating over *sequence*::
 
-      >>> for i, season in enumerate(['Spring', 'Summer', 'Fall', 'Winter']):
-      ...     print i, season
-      0 Spring
-      1 Summer
-      2 Fall
-      3 Winter
+      >>> for i, season in enumerate('Spring Summer Fall Winter'.split(), start=1):
+              print i, season
+      1 Spring
+      2 Summer
+      3 Fall
+      4 Winter
+
+   Equivalent to::
+
+      def enumerate(sequence, start=0):
+          n = start
+          for elem in sequence:
+              yield n, elem
+              n += 1
 
    .. versionadded:: 2.3
    .. versionadded:: 2.6
@@ -586,13 +591,12 @@ available.  They are listed here in alphabetical order.
 
    Equivalent to ``eval(raw_input(prompt))``.
 
-   .. warning::
+   .. note::
 
-      This function is not safe from user errors!  It expects a valid Python
-      expression as input; if the input is not syntactically valid, a
-      :exc:`SyntaxError` will be raised. Other exceptions may be raised if there is an
-      error during evaluation.  (On the other hand, sometimes this is exactly what you
-      need when writing a quick script for expert use.)
+      This function does not catch user errors.  It expects a valid Python
+      expression as input. If the input is not syntactically valid, a
+      :exc:`SyntaxError` will be raised. Other exceptions may be raised if there
+      is an error during evaluation.
 
    If the :mod:`readline` module was loaded, then :func:`input` will use it to
    provide elaborate line editing and history features.
@@ -660,10 +664,10 @@ available.  They are listed here in alphabetical order.
 
    One useful application of the second form of :func:`iter` is to read lines of
    a file until a certain line is reached.  The following example reads a file
-   until ``"STOP"`` is reached: ::
+   until the :meth:`readline` method returns an empty string::
 
-      with open("mydata.txt") as fp:
-          for line in iter(fp.readline, "STOP"):
+      with open('mydata.txt') as fp:
+          for line in iter(fp.readline, ''):
               process_line(line)
 
    .. versionadded:: 2.2
@@ -1241,8 +1245,9 @@ available.  They are listed here in alphabetical order.
    It can be called either on the class (such as ``C.f()``) or on an instance (such
    as ``C().f()``).  The instance is ignored except for its class.
 
-   Static methods in Python are similar to those found in Java or C++. For a more
-   advanced concept, see :func:`classmethod` in this section.
+   Static methods in Python are similar to those found in Java or C++. Also see
+   :func:`classmethod` for a variant that is useful for creating alternate
+   class constructors.
 
    For more information on static methods, consult the documentation on the
    standard type hierarchy in :ref:`types`.
@@ -1334,6 +1339,10 @@ available.  They are listed here in alphabetical order.
    Also note that :func:`super` is not limited to use inside methods.  The two
    argument form specifies the arguments exactly and makes the appropriate
    references.
+
+   For practical suggestions on how to design cooperative classes using
+   :func:`super`, see `guide to using super()
+   <http://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
 
    .. versionadded:: 2.2
 
