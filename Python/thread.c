@@ -7,7 +7,6 @@
 
 #include "Python.h"
 
-
 #ifndef _POSIX_THREADS
 /* This means pthreads are not implemented in libc headers, hence the macro
    not present in unistd.h. But they still can be implemented as an external
@@ -100,6 +99,7 @@ static size_t _pythread_stacksize = 0;
 #endif
 
 #ifdef SOLARIS_THREADS
+#define PYTHREAD_NAME "solaris"
 #include "thread_solaris.h"
 #endif
 
@@ -115,6 +115,7 @@ static size_t _pythread_stacksize = 0;
 #endif
 
 #ifdef _POSIX_THREADS
+#define PYTHREAD_NAME "pthread"
 #include "thread_pthread.h"
 #endif
 
@@ -124,14 +125,17 @@ static size_t _pythread_stacksize = 0;
 #endif
 
 #ifdef NT_THREADS
+#define PYTHREAD_NAME "nt"
 #include "thread_nt.h"
 #endif
 
 #ifdef OS2_THREADS
+#define PYTHREAD_NAME "os2"
 #include "thread_os2.h"
 #endif
 
 #ifdef PLAN9_THREADS
+#define PYTHREAD_NAME "plan9"
 #include "thread_plan9.h"
 #endif
 
@@ -409,3 +413,84 @@ PyThread_ReInitTLS(void)
 }
 
 #endif /* Py_HAVE_NATIVE_TLS */
+
+PyDoc_STRVAR(threadinfo__doc__,
+"sys.thread_info\n\
+\n\
+A struct sequence holding information about the thread implementation.");
+
+static PyStructSequence_Field threadinfo_fields[] = {
+    {"name",    "name of the thread implementation"},
+    {"lock",    "name of the lock implementation"},
+    {"version", "name and version of the thread library"},
+    {0}
+};
+
+static PyStructSequence_Desc threadinfo_desc = {
+    "sys.thread_info",           /* name */
+    threadinfo__doc__,           /* doc */
+    threadinfo_fields,           /* fields */
+    3
+};
+
+static PyTypeObject ThreadInfoType;
+
+PyObject*
+PyThread_GetInfo(void)
+{
+    PyObject *threadinfo, *value;
+    int pos = 0;
+#if (defined(_POSIX_THREADS) && defined(HAVE_CONFSTR) \
+     && defined(_CS_GNU_LIBPTHREAD_VERSION))
+    char buffer[255];
+    int len;
+#endif
+
+    if (ThreadInfoType.tp_name == 0)
+        PyStructSequence_InitType(&ThreadInfoType, &threadinfo_desc);
+
+    threadinfo = PyStructSequence_New(&ThreadInfoType);
+    if (threadinfo == NULL)
+        return NULL;
+
+    value = PyUnicode_FromString(PYTHREAD_NAME);
+    if (value == NULL) {
+        Py_DECREF(threadinfo);
+        return NULL;
+    }
+    PyStructSequence_SET_ITEM(threadinfo, pos++, value);
+
+#ifdef _POSIX_THREADS
+#ifdef USE_SEMAPHORES
+    value = PyUnicode_FromString("semaphore");
+#else
+    value = PyUnicode_FromString("mutex+cond");
+#endif
+    if (value == NULL) {
+        Py_DECREF(threadinfo);
+        return NULL;
+    }
+#else
+    Py_INCREF(Py_None);
+    value = Py_None;
+#endif
+    PyStructSequence_SET_ITEM(threadinfo, pos++, value);
+
+#if (defined(_POSIX_THREADS) && defined(HAVE_CONFSTR) \
+     && defined(_CS_GNU_LIBPTHREAD_VERSION))
+    value = NULL;
+    len = confstr(_CS_GNU_LIBPTHREAD_VERSION, buffer, sizeof(buffer));
+    if (1 < len && len < sizeof(buffer)) {
+        value = PyUnicode_DecodeFSDefaultAndSize(buffer, len-1);
+        if (value == NULL)
+            PyErr_Clear();
+    }
+    if (value == NULL)
+#endif
+    {
+        Py_INCREF(Py_None);
+        value = Py_None;
+    }
+    PyStructSequence_SET_ITEM(threadinfo, pos++, value);
+    return threadinfo;
+}
