@@ -766,7 +766,7 @@ typedef struct
     PyObject *name;
 } PyDateTime_TimeZone;
 
-/* The interned UTC timezone instance */ 
+/* The interned UTC timezone instance */
 static PyObject *PyDateTime_TimeZone_UTC;
 
 /* Create new timezone instance checking offset range.  This
@@ -1166,31 +1166,6 @@ wrap_strftime(PyObject *object, PyObject *format, PyObject *timetuple,
     if (!pin)
         return NULL;
 
-    /* Give up if the year is before 1000.
-     * Python strftime() plays games with the year, and different
-     * games depending on whether envar PYTHON2K is set.  This makes
-     * years before 1000 a nightmare, even if the platform strftime
-     * supports them (and not all do).
-     * We could get a lot farther here by avoiding Python's strftime
-     * wrapper and calling the C strftime() directly, but that isn't
-     * an option in the Python implementation of this module.
-     */
-    {
-        long year;
-        PyObject *pyyear = PySequence_GetItem(timetuple, 0);
-        if (pyyear == NULL) return NULL;
-        assert(PyLong_Check(pyyear));
-        year = PyLong_AsLong(pyyear);
-        Py_DECREF(pyyear);
-        if (year < 1000) {
-            PyErr_Format(PyExc_ValueError, "year=%ld is before "
-                         "1000; the datetime strftime() "
-                         "methods require year >= 1000",
-                         year);
-            return NULL;
-        }
-    }
-
     /* Scan the input format, looking for %z/%Z/%f escapes, building
      * a new format.  Since computing the replacements for those codes
      * is expensive, don't unless they're actually used.
@@ -1461,7 +1436,7 @@ delta_to_microseconds(PyDateTime_Delta *self)
         goto Done;
     Py_DECREF(x1);
     Py_DECREF(x2);
-    x1 = x2 = NULL;
+    /* x1 = */ x2 = NULL;
 
     /* x3 has days+seconds in seconds */
     x1 = PyNumber_Multiply(x3, us_per_second);          /* us */
@@ -3288,7 +3263,6 @@ timezone_repr(PyDateTime_TimeZone *self)
 static PyObject *
 timezone_str(PyDateTime_TimeZone *self)
 {
-    char buf[10];
     int hours, minutes, seconds;
     PyObject *offset;
     char sign;
@@ -3314,11 +3288,9 @@ timezone_str(PyDateTime_TimeZone *self)
     Py_DECREF(offset);
     minutes = divmod(seconds, 60, &seconds);
     hours = divmod(minutes, 60, &minutes);
-    assert(seconds == 0);
     /* XXX ignore sub-minute data, curently not allowed. */
-    PyOS_snprintf(buf, sizeof(buf), "UTC%c%02d:%02d", sign, hours, minutes);
-
-    return PyUnicode_FromString(buf);
+    assert(seconds == 0);
+    return PyUnicode_FromFormat("UTC%c%02d:%02d", sign, hours, minutes);
 }
 
 static PyObject *
