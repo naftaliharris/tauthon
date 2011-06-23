@@ -902,7 +902,7 @@ subtype_dealloc(PyObject *self)
 
     /* Find the nearest base with a different tp_dealloc */
     base = type;
-    while ((basedealloc = base->tp_dealloc) == subtype_dealloc) {
+    while ((/*basedealloc =*/ base->tp_dealloc) == subtype_dealloc) {
         base = base->tp_base;
         assert(base);
     }
@@ -2572,6 +2572,82 @@ type_prepare(PyObject *self, PyObject *args, PyObject *kwds)
     return PyDict_New();
 }
 
+/* 
+   Merge the __dict__ of aclass into dict, and recursively also all
+   the __dict__s of aclass's base classes.  The order of merging isn't
+   defined, as it's expected that only the final set of dict keys is
+   interesting.
+   Return 0 on success, -1 on error.
+*/
+
+static int
+merge_class_dict(PyObject *dict, PyObject *aclass)
+{
+    PyObject *classdict;
+    PyObject *bases;
+
+    assert(PyDict_Check(dict));
+    assert(aclass);
+
+    /* Merge in the type's dict (if any). */
+    classdict = PyObject_GetAttrString(aclass, "__dict__");
+    if (classdict == NULL)
+        PyErr_Clear();
+    else {
+        int status = PyDict_Update(dict, classdict);
+        Py_DECREF(classdict);
+        if (status < 0)
+            return -1;
+    }
+
+    /* Recursively merge in the base types' (if any) dicts. */
+    bases = PyObject_GetAttrString(aclass, "__bases__");
+    if (bases == NULL)
+        PyErr_Clear();
+    else {
+        /* We have no guarantee that bases is a real tuple */
+        Py_ssize_t i, n;
+        n = PySequence_Size(bases); /* This better be right */
+        if (n < 0)
+            PyErr_Clear();
+        else {
+            for (i = 0; i < n; i++) {
+                int status;
+                PyObject *base = PySequence_GetItem(bases, i);
+                if (base == NULL) {
+                    Py_DECREF(bases);
+                    return -1;
+                }
+                status = merge_class_dict(dict, base);
+                Py_DECREF(base);
+                if (status < 0) {
+                    Py_DECREF(bases);
+                    return -1;
+                }
+            }
+        }
+        Py_DECREF(bases);
+    }
+    return 0;
+}
+
+/* __dir__ for type objects: returns __dict__ and __bases__.
+   We deliberately don't suck up its __class__, as methods belonging to the
+   metaclass would probably be more confusing than helpful.
+*/
+static PyObject *
+type_dir(PyObject *self, PyObject *args)
+{
+    PyObject *result = NULL;
+    PyObject *dict = PyDict_New();
+
+    if (dict != NULL && merge_class_dict(dict, self) == 0)
+        result = PyDict_Keys(dict);
+
+    Py_XDECREF(dict);
+    return result;
+}
+
 static PyMethodDef type_methods[] = {
     {"mro", (PyCFunction)mro_external, METH_NOARGS,
      PyDoc_STR("mro() -> list\nreturn a type's method resolution order")},
@@ -2585,6 +2661,8 @@ static PyMethodDef type_methods[] = {
      PyDoc_STR("__instancecheck__() -> bool\ncheck if an object is an instance")},
     {"__subclasscheck__", type___subclasscheck__, METH_O,
      PyDoc_STR("__subclasscheck__() -> bool\ncheck if a class is a subclass")},
+    {"__dir__", type_dir, METH_NOARGS,
+     PyDoc_STR("__dir__() -> list\nspecialized __dir__ implementation for types")},
     {0}
 };
 
@@ -3073,14 +3151,19 @@ static PyObject *
 import_copyreg(void)
 {
     static PyObject *copyreg_str;
+    static PyObject *mod_copyreg = NULL;
 
     if (!copyreg_str) {
         copyreg_str = PyUnicode_InternFromString("copyreg");
         if (copyreg_str == NULL)
             return NULL;
     }
+    if (!mod_copyreg) {
+        mod_copyreg = PyImport_Import(copyreg_str);
+    }
 
-    return PyImport_Import(copyreg_str);
+    Py_XINCREF(mod_copyreg);
+    return mod_copyreg;
 }
 
 static PyObject *
@@ -3089,14 +3172,16 @@ slotnames(PyObject *cls)
     PyObject *clsdict;
     PyObject *copyreg;
     PyObject *slotnames;
+    static PyObject *str_slotnames;
 
-    if (!PyType_Check(cls)) {
-        Py_INCREF(Py_None);
-        return Py_None;
+    if (str_slotnames == NULL) {
+        str_slotnames = PyUnicode_InternFromString("__slotnames__");
+        if (str_slotnames == NULL)
+            return NULL;
     }
 
     clsdict = ((PyTypeObject *)cls)->tp_dict;
-    slotnames = PyDict_GetItemString(clsdict, "__slotnames__");
+    slotnames = PyDict_GetItem(clsdict, str_slotnames);
     if (slotnames != NULL && PyList_Check(slotnames)) {
         Py_INCREF(slotnames);
         return slotnames;
@@ -3130,12 +3215,20 @@ reduce_2(PyObject *obj)
     PyObject *slots = NULL, *listitems = NULL, *dictitems = NULL;
     PyObject *copyreg = NULL, *newobj = NULL, *res = NULL;
     Py_ssize_t i, n;
+    static PyObject *str_getnewargs = NULL, *str_getstate = NULL,
+                    *str_newobj = NULL;
 
-    cls = PyObject_GetAttrString(obj, "__class__");
-    if (cls == NULL)
-        return NULL;
+    if (str_getnewargs == NULL) {
+        str_getnewargs = PyUnicode_InternFromString("__getnewargs__");
+        str_getstate = PyUnicode_InternFromString("__getstate__");
+        str_newobj = PyUnicode_InternFromString("__newobj__");
+        if (!str_getnewargs || !str_getstate || !str_newobj)
+            return NULL;
+    }
 
-    getnewargs = PyObject_GetAttrString(obj, "__getnewargs__");
+    cls = (PyObject *) Py_TYPE(obj);
+
+    getnewargs = PyObject_GetAttr(obj, str_getnewargs);
     if (getnewargs != NULL) {
         args = PyObject_CallObject(getnewargs, NULL);
         Py_DECREF(getnewargs);
@@ -3153,7 +3246,7 @@ reduce_2(PyObject *obj)
     if (args == NULL)
         goto end;
 
-    getstate = PyObject_GetAttrString(obj, "__getstate__");
+    getstate = PyObject_GetAttr(obj, str_getstate);
     if (getstate != NULL) {
         state = PyObject_CallObject(getstate, NULL);
         Py_DECREF(getstate);
@@ -3161,17 +3254,18 @@ reduce_2(PyObject *obj)
             goto end;
     }
     else {
+        PyObject **dict;
         PyErr_Clear();
-        state = PyObject_GetAttrString(obj, "__dict__");
-        if (state == NULL) {
-            PyErr_Clear();
+        dict = _PyObject_GetDictPtr(obj);
+        if (dict && *dict)
+            state = *dict;
+        else
             state = Py_None;
-            Py_INCREF(state);
-        }
+        Py_INCREF(state);
         names = slotnames(cls);
         if (names == NULL)
             goto end;
-        if (names != Py_None) {
+        if (names != Py_None && PyList_GET_SIZE(names) > 0) {
             assert(PyList_Check(names));
             slots = PyDict_New();
             if (slots == NULL)
@@ -3230,7 +3324,7 @@ reduce_2(PyObject *obj)
     copyreg = import_copyreg();
     if (copyreg == NULL)
         goto end;
-    newobj = PyObject_GetAttrString(copyreg, "__newobj__");
+    newobj = PyObject_GetAttr(copyreg, str_newobj);
     if (newobj == NULL)
         goto end;
 
@@ -3238,8 +3332,8 @@ reduce_2(PyObject *obj)
     args2 = PyTuple_New(n+1);
     if (args2 == NULL)
         goto end;
+    Py_INCREF(cls);
     PyTuple_SET_ITEM(args2, 0, cls);
-    cls = NULL;
     for (i = 0; i < n; i++) {
         PyObject *v = PyTuple_GET_ITEM(args, i);
         Py_INCREF(v);
@@ -3249,7 +3343,6 @@ reduce_2(PyObject *obj)
     res = PyTuple_Pack(5, newobj, args2, state, listitems, dictitems);
 
   end:
-    Py_XDECREF(cls);
     Py_XDECREF(args);
     Py_XDECREF(args2);
     Py_XDECREF(slots);
@@ -3309,31 +3402,34 @@ object_reduce(PyObject *self, PyObject *args)
 static PyObject *
 object_reduce_ex(PyObject *self, PyObject *args)
 {
+    static PyObject *str_reduce = NULL, *objreduce;
     PyObject *reduce, *res;
     int proto = 0;
 
     if (!PyArg_ParseTuple(args, "|i:__reduce_ex__", &proto))
         return NULL;
 
-    reduce = PyObject_GetAttrString(self, "__reduce__");
+    if (str_reduce == NULL) {
+        str_reduce = PyUnicode_InternFromString("__reduce__");
+        objreduce = PyDict_GetItemString(PyBaseObject_Type.tp_dict,
+                                         "__reduce__");
+        if (str_reduce == NULL || objreduce == NULL)
+            return NULL;
+    }
+
+    reduce = PyObject_GetAttr(self, str_reduce);
     if (reduce == NULL)
         PyErr_Clear();
     else {
-        PyObject *cls, *clsreduce, *objreduce;
+        PyObject *cls, *clsreduce;
         int override;
-        cls = PyObject_GetAttrString(self, "__class__");
-        if (cls == NULL) {
-            Py_DECREF(reduce);
-            return NULL;
-        }
-        clsreduce = PyObject_GetAttrString(cls, "__reduce__");
-        Py_DECREF(cls);
+
+        cls = (PyObject *) Py_TYPE(self);
+        clsreduce = PyObject_GetAttr(cls, str_reduce);
         if (clsreduce == NULL) {
             Py_DECREF(reduce);
             return NULL;
         }
-        objreduce = PyDict_GetItemString(PyBaseObject_Type.tp_dict,
-                                         "__reduce__");
         override = (clsreduce != objreduce);
         Py_DECREF(clsreduce);
         if (override) {
@@ -3383,21 +3479,21 @@ object_format(PyObject *self, PyObject *args)
     self_as_str = PyObject_Str(self);
     if (self_as_str != NULL) {
         /* Issue 7994: If we're converting to a string, we
-	   should reject format specifications */
+           should reject format specifications */
         if (PyUnicode_GET_SIZE(format_spec) > 0) {
-	    if (PyErr_WarnEx(PyExc_PendingDeprecationWarning,
-			     "object.__format__ with a non-empty format "
-			     "string is deprecated", 1) < 0) {
-	      goto done;
-	    }
-	    /* Eventually this will become an error:
-	       PyErr_Format(PyExc_TypeError,
-	       "non-empty format string passed to object.__format__");
-	       goto done;
-	    */
-	}
+            if (PyErr_WarnEx(PyExc_DeprecationWarning,
+                             "object.__format__ with a non-empty format "
+                             "string is deprecated", 1) < 0) {
+              goto done;
+            }
+            /* Eventually this will become an error:
+               PyErr_Format(PyExc_TypeError,
+               "non-empty format string passed to object.__format__");
+               goto done;
+            */
+        }
 
-	result = PyObject_Format(self_as_str, format_spec);
+        result = PyObject_Format(self_as_str, format_spec);
     }
 
 done:
@@ -3420,6 +3516,53 @@ object_sizeof(PyObject *self, PyObject *args)
     return PyLong_FromSsize_t(res);
 }
 
+/* __dir__ for generic objects: returns __dict__, __class__,
+   and recursively up the __class__.__bases__ chain.
+*/
+static PyObject *
+object_dir(PyObject *self, PyObject *args)
+{
+    PyObject *result = NULL;
+    PyObject *dict = NULL;
+    PyObject *itsclass = NULL;
+
+    /* Get __dict__ (which may or may not be a real dict...) */
+    dict = PyObject_GetAttrString(self, "__dict__");
+    if (dict == NULL) {
+        PyErr_Clear();
+        dict = PyDict_New();
+    }
+    else if (!PyDict_Check(dict)) {
+        Py_DECREF(dict);
+        dict = PyDict_New();
+    }
+    else {
+        /* Copy __dict__ to avoid mutating it. */
+        PyObject *temp = PyDict_Copy(dict);
+        Py_DECREF(dict);
+        dict = temp;
+    }
+
+    if (dict == NULL)
+        goto error;
+
+    /* Merge in attrs reachable from its class. */
+    itsclass = PyObject_GetAttrString(self, "__class__");
+    if (itsclass == NULL)
+        /* XXX(tomer): Perhaps fall back to obj->ob_type if no
+                       __class__ exists? */
+        PyErr_Clear();
+    else if (merge_class_dict(dict, itsclass) != 0)
+        goto error;
+
+    result = PyDict_Keys(dict);
+    /* fall through */
+error:
+    Py_XDECREF(itsclass);
+    Py_XDECREF(dict);
+    return result;
+}
+
 static PyMethodDef object_methods[] = {
     {"__reduce_ex__", object_reduce_ex, METH_VARARGS,
      PyDoc_STR("helper for pickle")},
@@ -3431,6 +3574,8 @@ static PyMethodDef object_methods[] = {
      PyDoc_STR("default object formatter")},
     {"__sizeof__", object_sizeof, METH_NOARGS,
      PyDoc_STR("__sizeof__() -> int\nsize of object in memory, in bytes")},
+    {"__dir__", object_dir, METH_NOARGS,
+     PyDoc_STR("__dir__() -> list\ndefault dir() implementation")},
     {0}
 };
 
@@ -4975,7 +5120,7 @@ slot_tp_str(PyObject *self)
         res = slot_tp_repr(self);
         if (!res)
             return NULL;
-        ress = _PyUnicode_AsDefaultEncodedString(res, NULL);
+        ress = _PyUnicode_AsDefaultEncodedString(res);
         Py_DECREF(res);
         return ress;
     }
@@ -6254,7 +6399,7 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
             PyObject *name = PyTuple_GET_ITEM(co->co_freevars, i);
             assert(PyUnicode_Check(name));
             if (!PyUnicode_CompareWithASCIIString(name,
-                                                  "__class__")) {
+                                                  "@__class__")) {
                 Py_ssize_t index = co->co_nlocals +
                     PyTuple_GET_SIZE(co->co_cellvars) + i;
                 PyObject *cell = f->f_localsplus[index];
