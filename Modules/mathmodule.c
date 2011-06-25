@@ -55,11 +55,6 @@ raised for division by zero and mod by zero.
 #include "Python.h"
 #include "_math.h"
 
-#ifdef _OSF_SOURCE
-/* OSF1 5.1 doesn't make this available with XOPEN_SOURCE_EXTENDED defined */
-extern double copysign(double, double);
-#endif
-
 /*
    sin(pi*x), giving accurate results for all finite x (especially x
    integral or close to an integer).  This is here for use in the
@@ -579,6 +574,61 @@ m_log(double x)
     else {
         errno = EDOM;
         return Py_NAN; /* log(-inf) = nan */
+    }
+}
+
+/*
+   log2: log to base 2.
+
+   Uses an algorithm that should:
+
+     (a) produce exact results for powers of 2, and
+     (b) give a monotonic log2 (for positive finite floats),
+         assuming that the system log is monotonic.
+*/
+
+static double
+m_log2(double x)
+{
+    if (!Py_IS_FINITE(x)) {
+        if (Py_IS_NAN(x))
+            return x; /* log2(nan) = nan */
+        else if (x > 0.0)
+            return x; /* log2(+inf) = +inf */
+        else {
+            errno = EDOM;
+            return Py_NAN; /* log2(-inf) = nan, invalid-operation */
+        }
+    }
+
+    if (x > 0.0) {
+#ifdef HAVE_LOG2
+        return log2(x);
+#else
+        double m;
+        int e;
+        m = frexp(x, &e);
+        /* We want log2(m * 2**e) == log(m) / log(2) + e.  Care is needed when
+         * x is just greater than 1.0: in that case e is 1, log(m) is negative,
+         * and we get significant cancellation error from the addition of
+         * log(m) / log(2) to e.  The slight rewrite of the expression below
+         * avoids this problem.
+         */
+        if (x >= 1.0) {
+            return log(2.0 * m) / log(2.0) + (e - 1);
+        }
+        else {
+            return log(m) / log(2.0) + e;
+        }
+#endif
+    }
+    else if (x == 0.0) {
+        errno = EDOM;
+        return -Py_HUGE_VAL; /* log2(0) = -inf, divide-by-zero */
+    }
+    else {
+        errno = EDOM;
+        return Py_NAN; /* log2(-inf) = nan, invalid-operation */
     }
 }
 
@@ -1628,6 +1678,15 @@ Return the logarithm of x to the given base.\n\
 If the base not specified, returns the natural logarithm (base e) of x.");
 
 static PyObject *
+math_log2(PyObject *self, PyObject *arg)
+{
+    return loghelper(arg, m_log2, "log2");
+}
+
+PyDoc_STRVAR(math_log2_doc,
+"log2(x)\n\nReturn the base 2 logarithm of x.");
+
+static PyObject *
 math_log10(PyObject *self, PyObject *arg)
 {
     return loghelper(arg, m_log10, "log10");
@@ -1899,6 +1958,7 @@ static PyMethodDef math_methods[] = {
     {"log",             math_log,       METH_VARARGS,   math_log_doc},
     {"log1p",           math_log1p,     METH_O,         math_log1p_doc},
     {"log10",           math_log10,     METH_O,         math_log10_doc},
+    {"log2",            math_log2,      METH_O,         math_log2_doc},
     {"modf",            math_modf,      METH_O,         math_modf_doc},
     {"pow",             math_pow,       METH_VARARGS,   math_pow_doc},
     {"radians",         math_radians,   METH_O,         math_radians_doc},
