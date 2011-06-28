@@ -6,6 +6,7 @@
 #include <locale.h>
 
 #ifdef __VMS
+#error "PEP 11: VMS is now unsupported, code will be removed in Python 3.4"
 #include <unixlib.h>
 #endif
 
@@ -100,6 +101,7 @@ static char *usage_5 =
 "               The default module search path uses %s.\n"
 "PYTHONCASEOK : ignore case in 'import' statements (Windows).\n"
 "PYTHONIOENCODING: Encoding[:errors] used for stdin/stdout/stderr.\n"
+"PYTHONFAULTHANDLER: dump the Python traceback on fatal errors.\n"
 ;
 
 static int
@@ -577,7 +579,6 @@ Py_Main(int argc, wchar_t **argv)
     if ((p = Py_GETENV("PYTHONEXECUTABLE")) && *p != '\0') {
         wchar_t* buffer;
         size_t len = strlen(p);
-        size_t r;
 
         buffer = malloc(len * sizeof(wchar_t));
         if (buffer == NULL) {
@@ -585,7 +586,7 @@ Py_Main(int argc, wchar_t **argv)
                "not enough memory to copy PYTHONEXECUTABLE");
         }
 
-        r = mbstowcs(buffer, p, len);
+        mbstowcs(buffer, p, len);
         Py_SetProgramName(buffer);
         /* buffer is now handed off - do not free */
     } else {
