@@ -188,24 +188,26 @@ class BaseBytesTest(unittest.TestCase):
 
     def test_encoding(self):
         sample = "Hello world\n\u1234\u5678\u9abc"
-        for enc in ("utf8", "utf16"):
+        for enc in ("utf-8", "utf-16"):
             b = self.type2test(sample, enc)
             self.assertEqual(b, self.type2test(sample.encode(enc)))
-        self.assertRaises(UnicodeEncodeError, self.type2test, sample, "latin1")
-        b = self.type2test(sample, "latin1", "ignore")
+        self.assertRaises(UnicodeEncodeError, self.type2test, sample, "latin-1")
+        b = self.type2test(sample, "latin-1", "ignore")
         self.assertEqual(b, self.type2test(sample[:-3], "utf-8"))
 
     def test_decode(self):
         sample = "Hello world\n\u1234\u5678\u9abc\def0\def0"
-        for enc in ("utf8", "utf16"):
+        for enc in ("utf-8", "utf-16"):
             b = self.type2test(sample, enc)
             self.assertEqual(b.decode(enc), sample)
         sample = "Hello world\n\x80\x81\xfe\xff"
-        b = self.type2test(sample, "latin1")
-        self.assertRaises(UnicodeDecodeError, b.decode, "utf8")
-        self.assertEqual(b.decode("utf8", "ignore"), "Hello world\n")
-        self.assertEqual(b.decode(errors="ignore", encoding="utf8"),
+        b = self.type2test(sample, "latin-1")
+        self.assertRaises(UnicodeDecodeError, b.decode, "utf-8")
+        self.assertEqual(b.decode("utf-8", "ignore"), "Hello world\n")
+        self.assertEqual(b.decode(errors="ignore", encoding="utf-8"),
                          "Hello world\n")
+        # Default encoding is utf-8
+        self.assertEqual(self.type2test(b'\xe2\x98\x83').decode(), '\u2603')
 
     def test_from_int(self):
         b = self.type2test(0)
@@ -633,6 +635,39 @@ class ByteArrayTest(BaseBytesTest):
         b = bytearray()
         b.reverse()
         self.assertFalse(b)
+
+    def test_clear(self):
+        b = bytearray(b'python')
+        b.clear()
+        self.assertEqual(b, b'')
+
+        b = bytearray(b'')
+        b.clear()
+        self.assertEqual(b, b'')
+
+        b = bytearray(b'')
+        b.append(ord('r'))
+        b.clear()
+        b.append(ord('p'))
+        self.assertEqual(b, b'p')
+
+    def test_copy(self):
+        b = bytearray(b'abc')
+        bb = b.copy()
+        self.assertEqual(bb, b'abc')
+
+        b = bytearray(b'')
+        bb = b.copy()
+        self.assertEqual(bb, b'')
+
+        # test that it's indeed a copy and not a reference
+        b = bytearray(b'abc')
+        bb = b.copy()
+        self.assertEqual(b, bb)
+        self.assertIsNot(b, bb)
+        bb.append(ord('d'))
+        self.assertEqual(bb, b'abcd')
+        self.assertEqual(b, b'abc')
 
     def test_regexps(self):
         def by(s):
