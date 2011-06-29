@@ -185,6 +185,7 @@ static int symtable_visit_params(struct symtable *st, asdl_seq *args);
 static int symtable_visit_argannotations(struct symtable *st, asdl_seq *args);
 static int symtable_implicit_arg(struct symtable *st, int pos);
 static int symtable_visit_annotations(struct symtable *st, stmt_ty s);
+static int symtable_visit_withitem(struct symtable *st, withitem_ty item);
 
 
 static identifier top = NULL, lambda = NULL, genexpr = NULL,
@@ -224,10 +225,17 @@ symtable_new(void)
 struct symtable *
 PySymtable_Build(mod_ty mod, const char *filename, PyFutureFeatures *future)
 {
-    struct symtable *st = symtable_new();
+    struct symtable *st;
     asdl_seq *seq;
     int i;
 
+    if (__class__ == NULL) {
+        __class__ = PyUnicode_InternFromString("@__class__");
+        if (__class__ == NULL)
+            return NULL;
+    }
+
+    st = symtable_new();
     if (st == NULL)
         return st;
     st->st_filename = filename;
@@ -743,14 +751,12 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
     }
     else {
         /* Special-case __class__ */
-        if (!GET_IDENTIFIER(__class__))
-            goto error;
         assert(PySet_Contains(local, __class__) == 1);
         if (PySet_Add(newbound, __class__) < 0)
             goto error;
     }
 
-    /* Recursively call analyze_block() on each child block.
+    /* Recursively call analyze_child_block() on each child block.
 
        newbound, newglobal now contain the names visible in
        nested blocks.  The free variables in the children will
@@ -782,7 +788,7 @@ analyze_block(PySTEntryObject *ste, PyObject *bound, PyObject *free,
                                                          NULL))
         goto error;
     else if (ste->ste_type == ClassBlock && !analyze_cells(scopes, newfree,
-                                                           "__class__"))
+                                                           "@__class__"))
         goto error;
     /* Records the results of the analysis in the symbol table entry */
     if (!update_symbols(ste->ste_symbols, scopes, bound, newfree,
@@ -1142,8 +1148,7 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         if (!symtable_enter_block(st, s->v.ClassDef.name, ClassBlock,
                                   (void *)s, s->lineno, s->col_offset))
             return 0;
-        if (!GET_IDENTIFIER(__class__) ||
-            !symtable_add_def(st, __class__, DEF_LOCAL) ||
+        if (!symtable_add_def(st, __class__, DEF_LOCAL) ||
             !GET_IDENTIFIER(__locals__) ||
             !symtable_add_def(st, __locals__, DEF_PARAM)) {
             symtable_exit_block(st, s);
@@ -1205,19 +1210,16 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
     case Raise_kind:
         if (s->v.Raise.exc) {
             VISIT(st, expr, s->v.Raise.exc);
-        if (s->v.Raise.cause) {
-        VISIT(st, expr, s->v.Raise.cause);
-        }
+            if (s->v.Raise.cause) {
+                VISIT(st, expr, s->v.Raise.cause);
+            }
         }
         break;
-    case TryExcept_kind:
-        VISIT_SEQ(st, stmt, s->v.TryExcept.body);
-        VISIT_SEQ(st, stmt, s->v.TryExcept.orelse);
-        VISIT_SEQ(st, excepthandler, s->v.TryExcept.handlers);
-        break;
-    case TryFinally_kind:
-        VISIT_SEQ(st, stmt, s->v.TryFinally.body);
-        VISIT_SEQ(st, stmt, s->v.TryFinally.finalbody);
+    case Try_kind:
+        VISIT_SEQ(st, stmt, s->v.Try.body);
+        VISIT_SEQ(st, stmt, s->v.Try.orelse);
+        VISIT_SEQ(st, excepthandler, s->v.Try.handlers);
+        VISIT_SEQ(st, stmt, s->v.Try.finalbody);
         break;
     case Assert_kind:
         VISIT(st, expr, s->v.Assert.test);
@@ -1305,10 +1307,7 @@ symtable_visit_stmt(struct symtable *st, stmt_ty s)
         /* nothing to do here */
         break;
     case With_kind:
-        VISIT(st, expr, s->v.With.context_expr);
-        if (s->v.With.optional_vars) {
-            VISIT(st, expr, s->v.With.optional_vars);
-        }
+        VISIT_SEQ(st, withitem, s->v.With.items);
         VISIT_SEQ(st, stmt, s->v.With.body);
         break;
     }
@@ -1422,8 +1421,7 @@ symtable_visit_expr(struct symtable *st, expr_ty e)
         if (e->v.Name.ctx == Load &&
             st->st_cur->ste_type == FunctionBlock &&
             !PyUnicode_CompareWithASCIIString(e->v.Name.id, "super")) {
-            if (!GET_IDENTIFIER(__class__) ||
-                !symtable_add_def(st, __class__, USE))
+            if (!symtable_add_def(st, __class__, USE))
                 return 0;
         }
         break;
@@ -1537,6 +1535,16 @@ symtable_visit_excepthandler(struct symtable *st, excepthandler_ty eh)
         if (!symtable_add_def(st, eh->v.ExceptHandler.name, DEF_LOCAL))
             return 0;
     VISIT_SEQ(st, stmt, eh->v.ExceptHandler.body);
+    return 1;
+}
+
+static int
+symtable_visit_withitem(struct symtable *st, withitem_ty item)
+{
+    VISIT(st, expr, item->context_expr);
+    if (item->optional_vars) {
+        VISIT(st, expr, item->optional_vars);
+    }
     return 1;
 }
 
