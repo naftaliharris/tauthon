@@ -25,6 +25,7 @@ import re
 
 from email import errors
 from email import message
+from email import policy
 
 NLCRE = re.compile('\r\n|\r|\n')
 NLCRE_bol = re.compile('(\r\n|\r|\n)')
@@ -120,9 +121,6 @@ class BufferedSubFile(object):
         # Reverse and insert at the front of the lines.
         self._lines[:0] = lines[::-1]
 
-    def is_closed(self):
-        return self._closed
-
     def __iter__(self):
         return self
 
@@ -137,9 +135,16 @@ class BufferedSubFile(object):
 class FeedParser:
     """A feed-style parser of email."""
 
-    def __init__(self, _factory=message.Message):
-        """_factory is called with no arguments to create a new message obj"""
+    def __init__(self, _factory=message.Message, *, policy=policy.default):
+        """_factory is called with no arguments to create a new message obj
+
+        The policy keyword specifies a policy object that controls a number of
+        aspects of the parser's operation.  The default policy maintains
+        backward compatibility.
+
+        """
         self._factory = _factory
+        self.policy = policy
         self._input = BufferedSubFile()
         self._msgstack = []
         self._parse = self._parsegen().__next__
@@ -171,7 +176,8 @@ class FeedParser:
         # Look for final set of defects
         if root.get_content_maintype() == 'multipart' \
                and not root.is_multipart():
-            root.defects.append(errors.MultipartInvariantViolationDefect())
+            defect = errors.MultipartInvariantViolationDefect()
+            self.policy.handle_defect(root, defect)
         return root
 
     def _new_message(self):
@@ -284,7 +290,8 @@ class FeedParser:
                 # defined a boundary.  That's a problem which we'll handle by
                 # reading everything until the EOF and marking the message as
                 # defective.
-                self._cur.defects.append(errors.NoBoundaryInMultipartDefect())
+                defect = errors.NoBoundaryInMultipartDefect()
+                self.policy.handle_defect(self._cur, defect)
                 lines = []
                 for line in self._input:
                     if line is NeedMoreData:
@@ -293,6 +300,11 @@ class FeedParser:
                     lines.append(line)
                 self._cur.set_payload(EMPTYSTRING.join(lines))
                 return
+            # Make sure a valid content type was specified per RFC 2045:6.4.
+            if (self._cur.get('content-transfer-encoding', '8bit').lower()
+                    not in ('7bit', '8bit', 'binary')):
+                defect = errors.InvalidMultipartContentTransferEncodingDefect()
+                self.policy.handle_defect(self._cur, defect)
             # Create a line match predicate which matches the inter-part
             # boundary as well as the end-of-multipart boundary.  Don't push
             # this onto the input stream until we've scanned past the
@@ -388,7 +400,8 @@ class FeedParser:
             # that as a defect and store the captured text as the payload.
             # Everything from here to the EOF is epilogue.
             if capturing_preamble:
-                self._cur.defects.append(errors.StartBoundaryNotFoundDefect())
+                defect = errors.StartBoundaryNotFoundDefect()
+                self.policy.handle_defect(self._cur, defect)
                 self._cur.set_payload(EMPTYSTRING.join(preamble))
                 epilogue = []
                 for line in self._input:
@@ -440,7 +453,7 @@ class FeedParser:
                     # is illegal, so let's note the defect, store the illegal
                     # line, and ignore it for purposes of headers.
                     defect = errors.FirstHeaderLineIsContinuationDefect(line)
-                    self._cur.defects.append(defect)
+                    self.policy.handle_defect(self._cur, defect)
                     continue
                 lastvalue.append(line)
                 continue
