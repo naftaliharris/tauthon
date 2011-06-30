@@ -15,7 +15,7 @@ import shutil
 import warnings
 import unittest
 import importlib
-import collections
+import collections.abc
 import re
 import subprocess
 import imp
@@ -28,25 +28,28 @@ try:
 except ImportError:
     _thread = None
 
+try:
+    import zlib
+except ImportError:
+    zlib = None
+
 __all__ = [
     "Error", "TestFailed", "ResourceDenied", "import_module",
     "verbose", "use_resources", "max_memuse", "record_original_stdout",
     "get_original_stdout", "unload", "unlink", "rmtree", "forget",
-    "is_resource_enabled", "requires", "requires_mac_ver",
-    "find_unused_port", "bind_port",
-    "fcmp", "is_jython", "TESTFN", "HOST", "FUZZ", "SAVEDCWD", "temp_cwd",
+    "is_resource_enabled", "requires", "requires_linux_version",
+    "requires_mac_ver", "find_unused_port", "bind_port",
+    "IPV6_ENABLED", "is_jython", "TESTFN", "HOST", "SAVEDCWD", "temp_cwd",
     "findfile", "sortdict", "check_syntax_error", "open_urlresource",
-    "check_warnings", "CleanImport", "EnvironmentVarGuard",
-    "TransientResource", "captured_output", "captured_stdout",
-    "captured_stdin", "captured_stderr",
-    "time_out", "socket_peer_reset", "ioerror_peer_reset",
-    "run_with_locale", 'temp_umask', "transient_internet",
-    "set_memlimit", "bigmemtest", "bigaddrspacetest", "BasicTestRunner",
-    "run_unittest", "run_doctest", "threading_setup", "threading_cleanup",
-    "reap_children", "cpython_only", "check_impl_detail", "get_attribute",
-    "swap_item", "swap_attr", "requires_IEEE_754",
+    "check_warnings", "CleanImport", "EnvironmentVarGuard", "TransientResource",
+    "captured_stdout", "captured_stdin", "captured_stderr", "time_out",
+    "socket_peer_reset", "ioerror_peer_reset", "run_with_locale", 'temp_umask',
+    "transient_internet", "set_memlimit", "bigmemtest", "bigaddrspacetest",
+    "BasicTestRunner", "run_unittest", "run_doctest", "threading_setup",
+    "threading_cleanup", "reap_children", "cpython_only", "check_impl_detail",
+    "get_attribute", "swap_item", "swap_attr", "requires_IEEE_754",
     "TestHandler", "Matcher", "can_symlink", "skip_unless_symlink",
-    "import_fresh_module"
+    "import_fresh_module", "requires_zlib", "PIPE_MAX_SIZE"
     ]
 
 class Error(Exception):
@@ -289,6 +292,33 @@ def requires(resource, msg=None):
             msg = "Use of the `%s' resource not enabled" % resource
         raise ResourceDenied(msg)
 
+def requires_linux_version(*min_version):
+    """Decorator raising SkipTest if the OS is Linux and the kernel version is
+    less than min_version.
+
+    For example, @requires_linux_version(2, 6, 35) raises SkipTest if the Linux
+    kernel version is less than 2.6.35.
+    """
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kw):
+            if sys.platform.startswith('linux'):
+                version_txt = platform.release().split('-', 1)[0]
+                try:
+                    version = tuple(map(int, version_txt.split('.')))
+                except ValueError:
+                    pass
+                else:
+                    if version < min_version:
+                        min_version_txt = '.'.join(map(str, min_version))
+                        raise unittest.SkipTest(
+                            "Linux kernel %s or higher required, not %s"
+                            % (min_version_txt, version_txt))
+            return func(*args, **kw)
+        wrapper.min_version = min_version
+        return wrapper
+    return decorator
+
 def requires_mac_ver(*min_version):
     """Decorator raising SkipTest if the OS is Mac OS X and the OS X
     version if less than min_version.
@@ -315,6 +345,7 @@ def requires_mac_ver(*min_version):
         wrapper.min_version = min_version
         return wrapper
     return decorator
+
 
 HOST = 'localhost'
 
@@ -411,28 +442,34 @@ def bind_port(sock, host=HOST):
     port = sock.getsockname()[1]
     return port
 
-FUZZ = 1e-6
-
-def fcmp(x, y): # fuzzy comparison function
-    if isinstance(x, float) or isinstance(y, float):
+def _is_ipv6_enabled():
+    """Check whether IPv6 is enabled on this host."""
+    if socket.has_ipv6:
         try:
-            fuzz = (abs(x) + abs(y)) * FUZZ
-            if abs(x-y) <= fuzz:
-                return 0
-        except:
+            sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            sock.bind(('::1', 0))
+        except (socket.error, socket.gaierror):
             pass
-    elif type(x) == type(y) and isinstance(x, (tuple, list)):
-        for i in range(min(len(x), len(y))):
-            outcome = fcmp(x[i], y[i])
-            if outcome != 0:
-                return outcome
-        return (len(x) > len(y)) - (len(x) < len(y))
-    return (x > y) - (x < y)
+        else:
+            sock.close()
+            return True
+    return False
+
+IPV6_ENABLED = _is_ipv6_enabled()
+
+
+# A constant likely larger than the underlying OS pipe buffer size.
+# Windows limit seems to be around 512B, and most Unix kernels have a 64K pipe
+# buffer size: take 1M to be sure.
+PIPE_MAX_SIZE = 1024 * 1024
+
 
 # decorator for skipping tests on non-IEEE 754 platforms
 requires_IEEE_754 = unittest.skipUnless(
     float.__getformat__("double").startswith("IEEE"),
     "test requires IEEE 754 doubles")
+
+requires_zlib = unittest.skipUnless(zlib, 'requires zlib')
 
 is_jython = sys.platform.startswith('java')
 
@@ -744,7 +781,7 @@ class CleanImport(object):
         sys.modules.update(self.original_modules)
 
 
-class EnvironmentVarGuard(collections.MutableMapping):
+class EnvironmentVarGuard(collections.abc.MutableMapping):
 
     """Class to help protect the environment variable properly.  Can be used as
     a context manager."""
@@ -1080,6 +1117,11 @@ def bigmemtest(minsize, memuse):
     return decorator
 
 def precisionbigmemtest(size, memuse):
+    """Decorator for bigmem tests that need exact sizes.
+
+    Like bigmemtest, but without the size scaling upward to fill available
+    memory.
+    """
     def decorator(f):
         def wrapper(self):
             size = wrapper.size
@@ -1174,6 +1216,32 @@ def check_impl_detail(**guards):
     guards, default = _parse_guards(guards)
     return guards.get(platform.python_implementation().lower(), default)
 
+
+def no_tracing(func):
+    """Decorator to temporarily turn off tracing for the duration of a test."""
+    if not hasattr(sys, 'gettrace'):
+        return func
+    else:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            original_trace = sys.gettrace()
+            try:
+                sys.settrace(None)
+                return func(*args, **kwargs)
+            finally:
+                sys.settrace(original_trace)
+        return wrapper
+
+
+def refcount_test(test):
+    """Decorator for tests which involve reference counting.
+
+    To start, the decorator does not run the test if is not run by CPython.
+    After that, any trace function is unset during the test to prevent
+    unexpected refcounts caused by the trace function.
+
+    """
+    return no_tracing(cpython_only(test))
 
 
 def _run_suite(suite):
@@ -1392,7 +1460,7 @@ def strip_python_stderr(stderr):
 
 def args_from_interpreter_flags():
     """Return a list of command-line arguments reproducing the current
-    settings in sys.flags."""
+    settings in sys.flags and sys.warnoptions."""
     flag_opt_map = {
         'bytes_warning': 'b',
         'dont_write_bytecode': 'B',
@@ -1407,6 +1475,8 @@ def args_from_interpreter_flags():
         v = getattr(sys.flags, flag)
         if v > 0:
             args.append('-' + opt * v)
+    for opt in sys.warnoptions:
+        args.append('-W' + opt)
     return args
 
 #============================================================
