@@ -237,7 +237,8 @@ PyObject_AsCharBuffer(PyObject *obj,
     pb = obj->ob_type->tp_as_buffer;
     if (pb == NULL || pb->bf_getbuffer == NULL) {
         PyErr_SetString(PyExc_TypeError,
-                        "expected an object with the buffer interface");
+                        "expected bytes, bytearray "
+                        "or buffer compatible object");
         return -1;
     }
     if ((*pb->bf_getbuffer)(obj, &view, PyBUF_SIMPLE)) return -1;
@@ -331,7 +332,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 {
     if (!PyObject_CheckBuffer(obj)) {
         PyErr_Format(PyExc_TypeError,
-                     "'%100s' does not support the buffer interface",
+                     "'%.100s' does not support the buffer interface",
                      Py_TYPE(obj)->tp_name);
         return -1;
     }
