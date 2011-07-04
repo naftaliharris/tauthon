@@ -5,6 +5,7 @@ import os
 import io
 import socket
 import array
+import sys
 
 import urllib.request
 # The proxy bypass method imported below has logic specific to the OSX
@@ -605,7 +606,7 @@ class OpenerDirectorTests(unittest.TestCase):
 
 def sanepathname2url(path):
     try:
-        path.encode("utf8")
+        path.encode("utf-8")
     except UnicodeEncodeError:
         raise unittest.SkipTest("path is not encodable to utf8")
     urlpath = urllib.request.pathname2url(path)
@@ -1165,6 +1166,8 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(req.get_host(), "proxy.example.com:3128")
         self.assertEqual(req.get_header("Proxy-authorization"),"FooBar")
 
+    # TODO: This should be only for OSX
+    @unittest.skipUnless(sys.platform == 'darwin', "only relevant for OSX")
     def test_osx_proxy_bypass(self):
         bypass = {
             'exclude_simple': False,
@@ -1268,6 +1271,26 @@ class HandlerTests(unittest.TestCase):
         # _test_basic_auth called .open() twice)
         self.assertEqual(opener.recorded, ["digest", "basic"]*2)
 
+    def test_unsupported_auth_digest_handler(self):
+        opener = OpenerDirector()
+        # While using DigestAuthHandler
+        digest_auth_handler = urllib.request.HTTPDigestAuthHandler(None)
+        http_handler = MockHTTPHandler(
+            401, 'WWW-Authenticate: Kerberos\r\n\r\n')
+        opener.add_handler(digest_auth_handler)
+        opener.add_handler(http_handler)
+        self.assertRaises(ValueError,opener.open,"http://www.example.com")
+
+    def test_unsupported_auth_basic_handler(self):
+        # While using BasicAuthHandler
+        opener = OpenerDirector()
+        basic_auth_handler = urllib.request.HTTPBasicAuthHandler(None)
+        http_handler = MockHTTPHandler(
+            401, 'WWW-Authenticate: NTLM\r\n\r\n')
+        opener.add_handler(basic_auth_handler)
+        opener.add_handler(http_handler)
+        self.assertRaises(ValueError,opener.open,"http://www.example.com")
+
     def _test_basic_auth(self, opener, auth_handler, auth_header,
                          realm, http_handler, password_manager,
                          request_url, protected_url):
@@ -1304,6 +1327,7 @@ class HandlerTests(unittest.TestCase):
         r = opener.open(request_url)
         self.assertEqual(len(http_handler.requests), 1)
         self.assertFalse(http_handler.requests[0].has_header(auth_header))
+
 
 class MiscTests(unittest.TestCase):
 

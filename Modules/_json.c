@@ -335,7 +335,7 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
     PyObject *rval = NULL;
     Py_ssize_t len = PyUnicode_GET_SIZE(pystr);
     Py_ssize_t begin = end - 1;
-    Py_ssize_t next = begin;
+    Py_ssize_t next /* = begin */;
     const Py_UNICODE *buf = PyUnicode_AS_UNICODE(pystr);
     PyObject *chunks = NULL;
     PyObject *chunk = NULL;
@@ -842,7 +842,8 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
     Py_ssize_t idx = start;
     int is_float = 0;
     PyObject *rval;
-    PyObject *numstr;
+    PyObject *numstr = NULL;
+    PyObject *custom_func;
 
     /* read a sign if it's there, make sure it's not the end of the string */
     if (str[idx] == '-') {
@@ -895,22 +896,37 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
         }
     }
 
-    /* copy the section we determined to be a number */
-    numstr = PyUnicode_FromUnicode(&str[start], idx - start);
-    if (numstr == NULL)
-        return NULL;
-    if (is_float) {
-        /* parse as a float using a fast path if available, otherwise call user defined method */
-        if (s->parse_float != (PyObject *)&PyFloat_Type) {
-            rval = PyObject_CallFunctionObjArgs(s->parse_float, numstr, NULL);
-        }
-        else {
-            rval = PyFloat_FromString(numstr);
-        }
+    if (is_float && s->parse_float != (PyObject *)&PyFloat_Type)
+        custom_func = s->parse_float;
+    else if (!is_float && s->parse_int != (PyObject *) &PyLong_Type)
+        custom_func = s->parse_int;
+    else
+        custom_func = NULL;
+
+    if (custom_func) {
+        /* copy the section we determined to be a number */
+        numstr = PyUnicode_FromUnicode(&str[start], idx - start);
+        if (numstr == NULL)
+            return NULL;
+        rval = PyObject_CallFunctionObjArgs(custom_func, numstr, NULL);
     }
     else {
-        /* no fast path for unicode -> int, just call */
-        rval = PyObject_CallFunctionObjArgs(s->parse_int, numstr, NULL);
+        Py_ssize_t i, n;
+        char *buf;
+        /* Straight conversion to ASCII, to avoid costly conversion of
+           decimal unicode digits (which cannot appear here) */
+        n = idx - start;
+        numstr = PyBytes_FromStringAndSize(NULL, n);
+        if (numstr == NULL)
+            return NULL;
+        buf = PyBytes_AS_STRING(numstr);
+        for (i = 0; i < n; i++) {
+            buf[i] = (char) str[i + start];
+        }
+        if (is_float)
+            rval = PyFloat_FromString(numstr);
+        else
+            rval = PyLong_FromString(buf, NULL, 10);
     }
     Py_DECREF(numstr);
     *next_idx_ptr = idx;
@@ -1556,13 +1572,12 @@ encoder_listencode_dict(PyEncoderObject *s, PyObject *rval, PyObject *dct, Py_ss
             goto bail;
         Py_CLEAR(ident);
     }
+    /* TODO DOES NOT RUN; dead code
     if (s->indent != Py_None) {
-        /* TODO: DOES NOT RUN */
         indent_level -= 1;
-        /*
-            yield '\n' + (' ' * (_indent * _current_indent_level))
-        */
-    }
+
+        yield '\n' + (' ' * (_indent * _current_indent_level))
+    }*/
     if (PyList_Append(rval, close_dict))
         goto bail;
     return 0;
@@ -1648,13 +1663,13 @@ encoder_listencode_list(PyEncoderObject *s, PyObject *rval, PyObject *seq, Py_ss
             goto bail;
         Py_CLEAR(ident);
     }
+
+    /* TODO: DOES NOT RUN
     if (s->indent != Py_None) {
-        /* TODO: DOES NOT RUN */
         indent_level -= 1;
-        /*
-            yield '\n' + (' ' * (_indent * _current_indent_level))
-        */
-    }
+
+        yield '\n' + (' ' * (_indent * _current_indent_level))
+    }*/
     if (PyList_Append(rval, close_array))
         goto bail;
     Py_DECREF(s_fast);
