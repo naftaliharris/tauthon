@@ -21,7 +21,7 @@ import tarfile
 import warnings
 
 from test import support
-from test.support import TESTFN, check_warnings, captured_stdout
+from test.support import TESTFN, check_warnings, captured_stdout, requires_zlib
 
 try:
     import bz2
@@ -37,11 +37,6 @@ try:
     UID_GID_SUPPORT = True
 except ImportError:
     UID_GID_SUPPORT = False
-
-try:
-    import zlib
-except ImportError:
-    zlib = None
 
 try:
     import zipfile
@@ -112,8 +107,7 @@ class TestShutil(unittest.TestCase):
             self.errorState = 0
             os.mkdir(TESTFN)
             self.childpath = os.path.join(TESTFN, 'a')
-            f = open(self.childpath, 'w')
-            f.close()
+            support.create_empty_file(self.childpath)
             old_dir_mode = os.stat(TESTFN).st_mode
             old_child_mode = os.stat(self.childpath).st_mode
             # Make unwritable.
@@ -161,7 +155,7 @@ class TestShutil(unittest.TestCase):
     def test_rmtree_dont_delete_file(self):
         # When called on a file instead of a directory, don't delete it.
         handle, path = tempfile.mkstemp()
-        os.fdopen(handle).close()
+        os.close(handle)
         self.assertRaises(OSError, shutil.rmtree, path)
         os.remove(path)
 
@@ -444,7 +438,7 @@ class TestShutil(unittest.TestCase):
             self.assertEqual(getattr(file1_stat, 'st_flags'),
                              getattr(file2_stat, 'st_flags'))
 
-    @unittest.skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_make_tarball(self):
         # creating something to tar
         tmpdir = self.mkdtemp()
@@ -507,7 +501,7 @@ class TestShutil(unittest.TestCase):
         base_name = os.path.join(tmpdir2, 'archive')
         return tmpdir, tmpdir2, base_name
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(find_executable('tar') and find_executable('gzip'),
                          'Need the tar command to run')
     def test_tarfile_vs_tar(self):
@@ -562,7 +556,7 @@ class TestShutil(unittest.TestCase):
         tarball = base_name + '.tar'
         self.assertTrue(os.path.exists(tarball))
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(ZIP_SUPPORT, 'Need zip support to run')
     def test_make_zipfile(self):
         # creating something to tar
@@ -586,7 +580,7 @@ class TestShutil(unittest.TestCase):
         base_name = os.path.join(tmpdir, 'archive')
         self.assertRaises(ValueError, make_archive, base_name, 'xxx')
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     def test_make_archive_owner_group(self):
         # testing make_archive with owner and group, with various combinations
         # this works even if there's not gid/uid support
@@ -614,7 +608,7 @@ class TestShutil(unittest.TestCase):
         self.assertTrue(os.path.exists(res))
 
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(UID_GID_SUPPORT, "Requires grp and pwd support")
     def test_tarfile_root_owner(self):
         tmpdir, tmpdir2, base_name =  self._create_files()
@@ -683,7 +677,7 @@ class TestShutil(unittest.TestCase):
                     diff.append(file_)
         return diff
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     def test_unpack_archive(self):
         formats = ['tar', 'gztar', 'zip']
         if BZ2_SUPPORTED:
@@ -733,6 +727,16 @@ class TestShutil(unittest.TestCase):
         # let's leave a clean state
         unregister_unpack_format('Boo2')
         self.assertEqual(get_unpack_formats(), formats)
+
+    @unittest.skipUnless(hasattr(shutil, 'disk_usage'),
+                         "disk_usage not available on this platform")
+    def test_disk_usage(self):
+        usage = shutil.disk_usage(os.getcwd())
+        self.assertGreater(usage.total, 0)
+        self.assertGreater(usage.used, 0)
+        self.assertGreaterEqual(usage.free, 0)
+        self.assertGreaterEqual(usage.total, usage.used)
+        self.assertGreater(usage.total, usage.free)
 
 
 class TestMove(unittest.TestCase):
