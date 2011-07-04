@@ -13,7 +13,15 @@ import can be suppressed using the interpreter's :option:`-S` option.
 
 .. index:: triple: module; search; path
 
-Importing this module will append site-specific paths to the module search path.
+Importing this module will append site-specific paths to the module search
+path, unless :option:`-S` was used.  In that case, this module can be safely
+imported with no automatic modifications to the module search path.  To
+explicitly trigger the usual site-specific additions, call the
+:func:`site.main` function.
+
+.. versionchanged:: 3.3
+   Importing the module used to trigger paths manipulation even when using
+   :option:`-S`.
 
 .. index::
    pair: site-python; directory
@@ -112,6 +120,17 @@ empty, and the path manipulations are skipped; however the import of
 
 
 .. envvar:: PYTHONUSERBASE
+
+
+.. function:: main()
+
+   Adds all the standard site-specific directories to the module search
+   path.  This function is called automatically when this module is imported,
+   unless the :program:`python` interpreter was started with the :option:`-S`
+   flag.
+
+   .. versionchanged:: 3.3
+      This function used to be called unconditionnally.
 
 
 .. function:: addsitedir(sitedir, known_paths=None)
