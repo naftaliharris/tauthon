@@ -356,7 +356,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLSocket *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -1092,7 +1091,6 @@ static PyObject *PySSL_SSLwrite(PySSLSocket *self, PyObject *args)
         goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         len = SSL_write(self->ssl, buf.buf, buf.len);
         err = SSL_get_error(self->ssl, len);
@@ -1228,7 +1226,6 @@ static PyObject *PySSL_SSLread(PySSLSocket *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, mem, len);
         err = SSL_get_error(self->ssl, count);
@@ -1890,6 +1887,69 @@ Mix string into the OpenSSL PRNG state.  entropy (a float) is a lower\n\
 bound on the entropy contained in string.  See RFC 1750.");
 
 static PyObject *
+PySSL_RAND(int len, int pseudo)
+{
+    int ok;
+    PyObject *bytes;
+    unsigned long err;
+    const char *errstr;
+    PyObject *v;
+
+    bytes = PyBytes_FromStringAndSize(NULL, len);
+    if (bytes == NULL)
+        return NULL;
+    if (pseudo) {
+        ok = RAND_pseudo_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 0 || ok == 1)
+            return Py_BuildValue("NO", bytes, ok == 1 ? Py_True : Py_False);
+    }
+    else {
+        ok = RAND_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 1)
+            return bytes;
+    }
+    Py_DECREF(bytes);
+
+    err = ERR_get_error();
+    errstr = ERR_reason_error_string(err);
+    v = Py_BuildValue("(ks)", err, errstr);
+    if (v != NULL) {
+        PyErr_SetObject(PySSLErrorObject, v);
+        Py_DECREF(v);
+    }
+    return NULL;
+}
+
+static PyObject *
+PySSL_RAND_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 0);
+}
+
+PyDoc_STRVAR(PySSL_RAND_bytes_doc,
+"RAND_bytes(n) -> bytes\n\
+\n\
+Generate n cryptographically strong pseudo-random bytes.");
+
+static PyObject *
+PySSL_RAND_pseudo_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_pseudo_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 1);
+}
+
+PyDoc_STRVAR(PySSL_RAND_pseudo_bytes_doc,
+"RAND_pseudo_bytes(n) -> (bytes, is_cryptographic)\n\
+\n\
+Generate n pseudo-random bytes. is_cryptographic is True if the bytes\
+generated are cryptographically strong.");
+
+static PyObject *
 PySSL_RAND_status(PyObject *self)
 {
     return PyLong_FromLong(RAND_status());
@@ -1942,6 +2002,10 @@ static PyMethodDef PySSL_methods[] = {
 #ifdef HAVE_OPENSSL_RAND
     {"RAND_add",            PySSL_RAND_add, METH_VARARGS,
      PySSL_RAND_add_doc},
+    {"RAND_bytes",          PySSL_RAND_bytes, METH_VARARGS,
+     PySSL_RAND_bytes_doc},
+    {"RAND_pseudo_bytes",   PySSL_RAND_pseudo_bytes, METH_VARARGS,
+     PySSL_RAND_pseudo_bytes_doc},
     {"RAND_egd",            PySSL_RAND_egd, METH_VARARGS,
      PySSL_RAND_egd_doc},
     {"RAND_status",         (PyCFunction)PySSL_RAND_status, METH_NOARGS,
