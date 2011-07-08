@@ -631,7 +631,7 @@ class TestStandard(BaseTest):
                                                option_list=options)
 
     def test_required_value(self):
-        self.assertParseFail(["-a"], "-a option requires an argument")
+        self.assertParseFail(["-a"], "-a option requires 1 argument")
 
     def test_invalid_integer(self):
         self.assertParseFail(["-b", "5x"],
@@ -1023,7 +1023,7 @@ class TestExtendAddTypes(BaseTest):
         TYPE_CHECKER["file"] = check_file
 
     def test_filetype_ok(self):
-        open(support.TESTFN, "w").close()
+        support.create_empty_file(support.TESTFN)
         self.assertParseOK(["--file", support.TESTFN, "-afoo"],
                            {'file': support.TESTFN, 'a': 'foo'},
                            [])
