@@ -526,6 +526,49 @@ The module :mod:`socket` exports the following constants and functions:
    meanings.
 
 
+.. function:: sethostname(name)
+
+   Set the machine's hostname to *name*.  This will raise a
+   :exc:`socket.error` if you don't have enough rights.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_nameindex()
+
+   Return a list of network interface information
+   (index int, name string) tuples.
+   :exc:`socket.error` if the system call fails.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_nametoindex(if_name)
+
+   Return a network interface index number corresponding to an
+   interface name.
+   :exc:`socket.error` if no interface with the given name exists.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_indextoname(if_index)
+
+   Return a network interface name corresponding to a
+   interface index number.
+   :exc:`socket.error` if no interface with the given index exists.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. data:: SocketType
 
    This is a Python type object that represents the socket object type. It is the
