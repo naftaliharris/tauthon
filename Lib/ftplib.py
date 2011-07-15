@@ -100,14 +100,15 @@ class FTP:
     file = None
     welcome = None
     passiveserver = 1
-    encoding = "latin1"
+    encoding = "latin-1"
 
     # Initialization method (called by class instantiation).
     # Initialize host to localhost, port to standard ftp port
     # Optional arguments are host (for connect()),
     # and user, passwd, acct (for login())
     def __init__(self, host='', user='', passwd='', acct='',
-                 timeout=_GLOBAL_DEFAULT_TIMEOUT):
+                 timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None):
+        self.source_address = source_address
         self.timeout = timeout
         if host:
             self.connect(host)
@@ -128,10 +129,12 @@ class FTP:
                 if self.sock is not None:
                     self.close()
 
-    def connect(self, host='', port=0, timeout=-999):
+    def connect(self, host='', port=0, timeout=-999, source_address=None):
         '''Connect to host.  Arguments are:
          - host: hostname to connect to (string, default previous host)
          - port: port to connect to (integer, default previous port)
+         - source_address: a 2-tuple (host, port) for the socket to bind
+           to as its source address before connecting.
         '''
         if host != '':
             self.host = host
@@ -139,7 +142,10 @@ class FTP:
             self.port = port
         if timeout != -999:
             self.timeout = timeout
-        self.sock = socket.create_connection((self.host, self.port), self.timeout)
+        if source_address is not None:
+            self.source_address = source_address
+        self.sock = socket.create_connection((self.host, self.port), self.timeout,
+                                             source_address=self.source_address)
         self.af = self.sock.family
         self.file = self.sock.makefile('r', encoding=self.encoding)
         self.welcome = self.getresp()
@@ -335,7 +341,8 @@ class FTP:
         size = None
         if self.passiveserver:
             host, port = self.makepasv()
-            conn = socket.create_connection((host, port), self.timeout)
+            conn = socket.create_connection((host, port), self.timeout,
+                                            source_address=self.source_address)
             if rest is not None:
                 self.sendcmd("REST %s" % rest)
             resp = self.sendcmd(cmd)
@@ -420,7 +427,7 @@ class FTP:
         """Retrieve data in line mode.  A new port is created for you.
 
         Args:
-          cmd: A RETR, LIST, NLST, or MLSD command.
+          cmd: A RETR, LIST, or NLST command.
           callback: An optional single parameter callable that is called
                     for each line with the trailing CRLF stripped.
                     [default: print_line()]
@@ -521,6 +528,34 @@ class FTP:
                 cmd = cmd + (' ' + arg)
         self.retrlines(cmd, func)
 
+    def mlsd(self, path="", facts=[]):
+        '''List a directory in a standardized format by using MLSD
+        command (RFC-3659). If path is omitted the current directory
+        is assumed. "facts" is a list of strings representing the type
+        of information desired (e.g. ["type", "size", "perm"]).
+
+        Return a generator object yielding a tuple of two elements
+        for every file found in path.
+        First element is the file name, the second one is a dictionary
+        including a variable number of "facts" depending on the server
+        and whether "facts" argument has been provided.
+        '''
+        if facts:
+            self.sendcmd("OPTS MLST " + ";".join(facts) + ";")
+        if path:
+            cmd = "MLSD %s" % path
+        else:
+            cmd = "MLSD"
+        lines = []
+        self.retrlines(cmd, lines.append)
+        for line in lines:
+            facts_found, _, name = line.rstrip(CRLF).partition(' ')
+            entry = {}
+            for fact in facts_found[:-1].split(";"):
+                key, _, value = fact.partition("=")
+                entry[key.lower()] = value
+            yield (name, entry)
+
     def rename(self, fromname, toname):
         '''Rename a file.'''
         resp = self.sendcmd('RNFR ' + fromname)
@@ -590,11 +625,11 @@ class FTP:
 
     def close(self):
         '''Close the connection without assuming anything about it.'''
-        if self.file:
+        if self.file is not None:
             self.file.close()
+        if self.sock is not None:
             self.sock.close()
-            self.file = self.sock = None
-
+        self.file = self.sock = None
 
 try:
     import ssl
@@ -638,7 +673,7 @@ else:
 
         def __init__(self, host='', user='', passwd='', acct='', keyfile=None,
                      certfile=None, context=None,
-                     timeout=_GLOBAL_DEFAULT_TIMEOUT):
+                     timeout=_GLOBAL_DEFAULT_TIMEOUT, source_address=None):
             if context is not None and keyfile is not None:
                 raise ValueError("context and keyfile arguments are mutually "
                                  "exclusive")
@@ -649,7 +684,7 @@ else:
             self.certfile = certfile
             self.context = context
             self._prot_p = False
-            FTP.__init__(self, host, user, passwd, acct, timeout)
+            FTP.__init__(self, host, user, passwd, acct, timeout, source_address)
 
         def login(self, user='', passwd='', acct='', secure=True):
             if secure and not isinstance(self.sock, ssl.SSLSocket):
@@ -671,6 +706,14 @@ else:
                                             self.certfile,
                                             ssl_version=self.ssl_version)
             self.file = self.sock.makefile(mode='r', encoding=self.encoding)
+            return resp
+
+        def ccc(self):
+            '''Switch back to a clear-text control connection.'''
+            if not isinstance(self.sock, ssl.SSLSocket):
+                raise ValueError("not using TLS")
+            resp = self.voidcmd('CCC')
+            self.sock = self.sock.unwrap()
             return resp
 
         def prot_p(self):
