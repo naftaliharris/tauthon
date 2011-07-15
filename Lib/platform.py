@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ This module tries to retrieve as much platform-identifying data as
     possible. It makes this information available via function APIs.
@@ -32,6 +32,7 @@
 #
 #    <see CVS and SVN checkin messages for history>
 #
+#    1.0.7 - added DEV_NULL
 #    1.0.6 - added linux_distribution()
 #    1.0.5 - fixed Java support to allow running the module on Jython
 #    1.0.4 - added IronPython support
@@ -108,9 +109,24 @@ __copyright__ = """
 
 """
 
-__version__ = '1.0.6'
+__version__ = '1.0.7'
 
 import sys, os, re
+
+### Globals & Constants
+
+# Determine the platform's /dev/null device
+try:
+    DEV_NULL = os.devnull
+except AttributeError:
+    # os.devnull was added in Python 2.4, so emulate it for earlier
+    # Python versions
+    if sys.platform in ('dos','win32','win16','os2'):
+        # Use the old CP/M NUL as device name
+        DEV_NULL = 'NUL'
+    else:
+        # Standard Unix uses /dev/null
+        DEV_NULL = '/dev/null'
 
 ### Platform specific APIs
 
@@ -184,9 +200,8 @@ def _dist_try_harder(distname,version,id):
     """
     if os.path.exists('/var/adm/inst-log/info'):
         # SuSE Linux stores distribution information in that file
-        info = open('/var/adm/inst-log/info').readlines()
         distname = 'SuSE'
-        for line in info:
+        for line in open('/var/adm/inst-log/info'):
             tv = line.split()
             if len(tv) == 2:
                 tag,value = tv
@@ -201,8 +216,7 @@ def _dist_try_harder(distname,version,id):
 
     if os.path.exists('/etc/.installed'):
         # Caldera OpenLinux has some infos in that file (thanks to Colin Kong)
-        info = open('/etc/.installed').readlines()
-        for line in info:
+        for line in open('/etc/.installed'):
             pkg = line.split('-')
             if len(pkg) >= 2 and pkg[0] == 'OpenLinux':
                 # XXX does Caldera support non Intel platforms ? If yes,
@@ -311,9 +325,8 @@ def linux_distribution(distname='', version='', id='',
         return _dist_try_harder(distname,version,id)
 
     # Read the first line
-    f = open('/etc/'+file, 'r')
-    firstline = f.readline()
-    f.close()
+    with open('/etc/'+file, 'r') as f:
+        firstline = f.readline()
     _distname, _version, _id = _parse_release_file(firstline)
 
     if _distname and full_distribution_name:
@@ -450,7 +463,16 @@ def _norm_version(version, build=''):
 
 _ver_output = re.compile(r'(?:([\w ]+) ([\w.]+) '
                          '.*'
-                         'Version ([\d.]+))', re.ASCII)
+                         '\[.* ([\d.]+)\])')
+
+# Examples of VER command output:
+#
+#   Windows 2000:  Microsoft Windows 2000 [Version 5.00.2195]
+#   Windows XP:    Microsoft Windows XP [Version 5.1.2600]
+#   Windows Vista: Microsoft Windows [Version 6.0.6002]
+#
+# Note that the "Version" string gets localized on different
+# Windows versions.
 
 def _syscmd_ver(system='', release='', version='',
 
@@ -589,6 +611,7 @@ def win32_ver(release='',version='',csd='',ptype=''):
     else:
         if csd[:13] == 'Service Pack ':
             csd = 'SP' + csd[13:]
+
     if plat == VER_PLATFORM_WIN32_WINDOWS:
         regkey = 'SOFTWARE\\Microsoft\\Windows\\CurrentVersion'
         # Try to guess the release name
@@ -603,6 +626,7 @@ def win32_ver(release='',version='',csd='',ptype=''):
                 release = 'postMe'
         elif maj == 5:
             release = '2000'
+
     elif plat == VER_PLATFORM_WIN32_NT:
         regkey = 'SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion'
         if maj <= 4:
@@ -646,6 +670,7 @@ def win32_ver(release='',version='',csd='',ptype=''):
                     release = '2008ServerR2'
             else:
                 release = 'post2008Server'
+
     else:
         if not release:
             # E.g. Win3.1 with win32s
@@ -733,6 +758,7 @@ def _mac_ver_gestalt():
                    0x2: 'PowerPC',
                    0xa: 'i386'}.get(sysa,'')
 
+    versioninfo=('', '', '')
     return release,versioninfo,machine
 
 def _mac_ver_xml():
@@ -947,7 +973,7 @@ def _syscmd_uname(option,default=''):
         # XXX Others too ?
         return default
     try:
-        f = os.popen('uname %s 2> /dev/null' % option)
+        f = os.popen('uname %s 2> %s' % (option, DEV_NULL))
     except (AttributeError,os.error):
         return default
     output = f.read().strip()
@@ -962,17 +988,16 @@ def _syscmd_file(target,default=''):
     """ Interface to the system's file command.
 
         The function uses the -b option of the file command to have it
-        ommit the filename in its output and if possible the -L option
-        to have the command follow symlinks. It returns default in
-        case the command should fail.
+        omit the filename in its output. Follow the symlinks. It returns
+        default in case the command should fail.
 
     """
     if sys.platform in ('dos','win32','win16','os2'):
         # XXX Others too ?
         return default
-    target = _follow_symlinks(target)
+    target = _follow_symlinks(target).replace('"', '\\"')
     try:
-        f = os.popen('file "%s" 2> /dev/null' % target)
+        f = os.popen('file -b "%s" 2> %s' % (target, DEV_NULL))
     except (AttributeError,os.error):
         return default
     output = f.read().strip()
@@ -991,8 +1016,6 @@ _default_architecture = {
     'win16': ('','Windows'),
     'dos': ('','MSDOS'),
 }
-
-_architecture_split = re.compile(r'[\s,]').split
 
 def architecture(executable=sys.executable,bits='',linkage=''):
 
@@ -1028,11 +1051,11 @@ def architecture(executable=sys.executable,bits='',linkage=''):
 
     # Get data from the 'file' system command
     if executable:
-        output = _syscmd_file(executable, '')
+        fileout = _syscmd_file(executable, '')
     else:
-        output = ''
+        fileout = ''
 
-    if not output and \
+    if not fileout and \
        executable == sys.executable:
         # "file" command did not return anything; we'll try to provide
         # some sensible defaults then...
@@ -1043,9 +1066,6 @@ def architecture(executable=sys.executable,bits='',linkage=''):
             if l:
                 linkage = l
         return bits,linkage
-
-    # Split the output into a list of strings omitting the filename
-    fileout = _architecture_split(output)[1:]
 
     if 'executable' not in fileout:
         # Format not supported
@@ -1131,7 +1151,11 @@ def uname():
             # http://support.microsoft.com/kb/888731 and
             # http://www.geocities.com/rick_lively/MANUALS/ENV/MSWIN/PROCESSI.HTM
             if not machine:
-                machine = os.environ.get('PROCESSOR_ARCHITECTURE', '')
+                # WOW64 processes mask the native architecture
+                if "PROCESSOR_ARCHITEW6432" in os.environ:
+                    machine = os.environ.get("PROCESSOR_ARCHITEW6432", '')
+                else:
+                    machine = os.environ.get('PROCESSOR_ARCHITECTURE', '')
             if not processor:
                 processor = os.environ.get('PROCESSOR_IDENTIFIER', machine)
 
@@ -1170,10 +1194,6 @@ def uname():
             version = ', '.join(vminfo)
             if not version:
                 version = vendor
-
-        elif os.name == 'mac':
-            release,(version,stage,nonrel),machine = mac_ver()
-            system = 'MacOS'
 
     # System specific extensions
     if system == 'OpenVMS':

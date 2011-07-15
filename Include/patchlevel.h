@@ -17,13 +17,13 @@
 /* Version parsed out into numeric values */
 /*--start constants--*/
 #define PY_MAJOR_VERSION	3
-#define PY_MINOR_VERSION	1
-#define PY_MICRO_VERSION	4
+#define PY_MINOR_VERSION	2
+#define PY_MICRO_VERSION	1
 #define PY_RELEASE_LEVEL	PY_RELEASE_LEVEL_FINAL
 #define PY_RELEASE_SERIAL	0
 
 /* Version as a string */
-#define PY_VERSION      	"3.1.4+"
+#define PY_VERSION      	"3.2.1+"
 /*--end constants--*/
 
 /* Subversion Revision number of this file (not of the repository). Empty

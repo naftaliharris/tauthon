@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from test import support
 import marshal
@@ -11,16 +11,10 @@ class HelperMixin:
         new = marshal.loads(marshal.dumps(sample, *extra))
         self.assertEqual(sample, new)
         try:
-            f = open(support.TESTFN, "wb")
-            try:
+            with open(support.TESTFN, "wb") as f:
                 marshal.dump(sample, f, *extra)
-            finally:
-                f.close()
-            f = open(support.TESTFN, "rb")
-            try:
+            with open(support.TESTFN, "rb") as f:
                 new = marshal.load(f)
-            finally:
-                f.close()
             self.assertEqual(sample, new)
         finally:
             support.unlink(support.TESTFN)
@@ -216,6 +210,30 @@ class BugsTestCase(unittest.TestCase):
         # Issue #7019: marshal.loads shouldn't produce unnormalized PyLongs
         invalid_string = b'l\x02\x00\x00\x00\x00\x00\x00\x00'
         self.assertRaises(ValueError, marshal.loads, invalid_string)
+
+    def test_multiple_dumps_and_loads(self):
+        # Issue 12291: marshal.load() should be callable multiple times
+        # with interleaved data written by non-marshal code
+        # Adapted from a patch by Engelbert Gruber.
+        data = (1, 'abc', b'def', 1.0, (2, 'a', ['b', b'c']))
+        for interleaved in (b'', b'0123'):
+            ilen = len(interleaved)
+            positions = []
+            try:
+                with open(support.TESTFN, 'wb') as f:
+                    for d in data:
+                        marshal.dump(d, f)
+                        if ilen:
+                            f.write(interleaved)
+                        positions.append(f.tell())
+                with open(support.TESTFN, 'rb') as f:
+                    for i, d in enumerate(data):
+                        self.assertEqual(d, marshal.load(f))
+                        if ilen:
+                            f.read(ilen)
+                        self.assertEqual(positions[i], f.tell())
+            finally:
+                support.unlink(support.TESTFN)
 
 
 def test_main():

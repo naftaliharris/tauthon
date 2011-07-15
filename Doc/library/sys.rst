@@ -10,6 +10,13 @@ interpreter and to functions that interact strongly with the interpreter. It is
 always available.
 
 
+.. data:: abiflags
+
+   On POSIX systems where Python is build with the standard ``configure``
+   script, this contains the ABI flags as specified by :pep:`3149`.
+
+   .. versionadded:: 3.2
+
 .. data:: argv
 
    The list of command line arguments passed to a Python script. ``argv[0]`` is the
@@ -27,18 +34,6 @@ always available.
    An indicator of the native byte order.  This will have the value ``'big'`` on
    big-endian (most-significant byte first) platforms, and ``'little'`` on
    little-endian (least-significant byte first) platforms.
-
-
-.. data:: subversion
-
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
 
 
 .. data:: builtin_module_names
@@ -92,12 +87,38 @@ always available.
 
 .. function:: displayhook(value)
 
-   If *value* is not ``None``, this function prints it to ``sys.stdout``, and saves
-   it in ``builtins._``.
+   If *value* is not ``None``, this function prints ``repr(value)`` to
+   ``sys.stdout``, and saves *value* in ``builtins._``. If ``repr(value)`` is
+   not encodable to ``sys.stdout.encoding`` with ``sys.stdout.errors`` error
+   handler (which is probably ``'strict'``), encode it to
+   ``sys.stdout.encoding`` with ``'backslashreplace'`` error handler.
 
    ``sys.displayhook`` is called on the result of evaluating an :term:`expression`
    entered in an interactive Python session.  The display of these values can be
    customized by assigning another one-argument function to ``sys.displayhook``.
+
+   Pseudo-code::
+
+       def displayhook(value):
+           if value is None:
+               return
+           # Set '_' to None to avoid recursion
+           builtins._ = None
+           text = repr(value)
+           try:
+               sys.stdout.write(text)
+           except UnicodeEncodeError:
+               bytes = text.encode(sys.stdout.encoding, 'backslashreplace')
+               if hasattr(sys.stdout, 'buffer'):
+                   sys.stdout.buffer.write(bytes)
+               else:
+                   text = bytes.decode(sys.stdout.encoding, 'strict')
+                   sys.stdout.write(text)
+           sys.stdout.write("\n")
+           builtins._ = value
+
+   .. versionchanged:: 3.2
+      Use ``'backslashreplace'`` error handler on :exc:`UnicodeEncodeError`.
 
 
 .. function:: excepthook(type, value, traceback)
@@ -220,7 +241,11 @@ always available.
    :const:`ignore_environment`   :option:`-E`
    :const:`verbose`              :option:`-v`
    :const:`bytes_warning`        :option:`-b`
+   :const:`quiet`                :option:`-q`
    ============================= =============================
+
+   .. versionchanged:: 3.2
+      Added ``quiet`` attribute for the new :option:`-q` flag.
 
 
 .. data:: float_info
@@ -303,6 +328,9 @@ always available.
 
    Return the interpreter's "check interval"; see :func:`setcheckinterval`.
 
+   .. deprecated:: 3.2
+      Use :func:`getswitchinterval` instead.
+
 
 .. function:: getdefaultencoding()
 
@@ -312,22 +340,20 @@ always available.
 
 .. function:: getdlopenflags()
 
-   Return the current value of the flags that are used for :cfunc:`dlopen` calls.
+   Return the current value of the flags that are used for :c:func:`dlopen` calls.
    The flag constants are defined in the :mod:`ctypes` and :mod:`DLFCN` modules.
    Availability: Unix.
 
 
 .. function:: getfilesystemencoding()
 
-   Return the name of the encoding used to convert Unicode filenames into system
-   file names, or ``None`` if the system default encoding is used. The result value
-   depends on the operating system:
+   Return the name of the encoding used to convert Unicode filenames into
+   system file names. The result value depends on the operating system:
 
    * On Mac OS X, the encoding is ``'utf-8'``.
 
    * On Unix, the encoding is the user's preference according to the result of
-     nl_langinfo(CODESET), or ``None`` if the ``nl_langinfo(CODESET)``
-     failed.
+     nl_langinfo(CODESET), or ``'utf-8'`` if ``nl_langinfo(CODESET)`` failed.
 
    * On Windows NT+, file names are Unicode natively, so no conversion is
      performed. :func:`getfilesystemencoding` still returns ``'mbcs'``, as
@@ -336,6 +362,10 @@ always available.
      used as file names.
 
    * On Windows 9x, the encoding is ``'mbcs'``.
+
+   .. versionchanged:: 3.2
+      On Unix, use ``'utf-8'`` instead of ``None`` if ``nl_langinfo(CODESET)``
+      failed. :func:`getfilesystemencoding` result cannot be ``None``.
 
 
 .. function:: getrefcount(object)
@@ -366,6 +396,17 @@ always available.
    :func:`getsizeof` calls the object's ``__sizeof__`` method and adds an
    additional garbage collector overhead if the object is managed by the garbage
    collector.
+
+   See `recursive sizeof recipe <http://code.activestate.com/recipes/577504>`_
+   for an example of using :func:`getsizeof` recursively to find the size of
+   containers and all their contents.
+
+.. function:: getswitchinterval()
+
+   Return the interpreter's "thread switch interval"; see
+   :func:`setswitchinterval`.
+
+   .. versionadded:: 3.2
 
 
 .. function:: _getframe([depth])
@@ -408,9 +449,15 @@ always available.
 
 .. function:: getwindowsversion()
 
-   Return a tuple containing five components, describing the Windows version
-   currently running.  The elements are *major*, *minor*, *build*, *platform*, and
-   *text*.  *text* contains a string while all other values are integers.
+   Return a named tuple describing the Windows version
+   currently running.  The named elements are *major*, *minor*,
+   *build*, *platform*, *service_pack*, *service_pack_minor*,
+   *service_pack_major*, *suite_mask*, and *product_type*.
+   *service_pack* contains a string while all other values are
+   integers. The components can also be accessed by name, so
+   ``sys.getwindowsversion()[0]`` is equivalent to
+   ``sys.getwindowsversion().major``. For compatibility with prior
+   versions, only the first 5 elements are retrievable by indexing.
 
    *platform* may be one of the following values:
 
@@ -426,10 +473,53 @@ always available.
    | :const:`3 (VER_PLATFORM_WIN32_CE)`      | Windows CE              |
    +-----------------------------------------+-------------------------+
 
-   This function wraps the Win32 :cfunc:`GetVersionEx` function; see the Microsoft
-   documentation for more information about these fields.
+   *product_type* may be one of the following values:
+
+   +---------------------------------------+---------------------------------+
+   | Constant                              | Meaning                         |
+   +=======================================+=================================+
+   | :const:`1 (VER_NT_WORKSTATION)`       | The system is a workstation.    |
+   +---------------------------------------+---------------------------------+
+   | :const:`2 (VER_NT_DOMAIN_CONTROLLER)` | The system is a domain          |
+   |                                       | controller.                     |
+   +---------------------------------------+---------------------------------+
+   | :const:`3 (VER_NT_SERVER)`            | The system is a server, but not |
+   |                                       | a domain controller.            |
+   +---------------------------------------+---------------------------------+
+
+
+   This function wraps the Win32 :c:func:`GetVersionEx` function; see the
+   Microsoft documentation on :c:func:`OSVERSIONINFOEX` for more information
+   about these fields.
 
    Availability: Windows.
+
+   .. versionchanged:: 3.2
+      Changed to a named tuple and added *service_pack_minor*,
+      *service_pack_major*, *suite_mask*, and *product_type*.
+
+
+.. data:: hash_info
+
+   A structseq giving parameters of the numeric hash implementation.  For
+   more details about hashing of numeric types, see :ref:`numeric-hash`.
+
+   +---------------------+--------------------------------------------------+
+   | attribute           | explanation                                      |
+   +=====================+==================================================+
+   | :const:`width`      | width in bits used for hash values               |
+   +---------------------+--------------------------------------------------+
+   | :const:`modulus`    | prime modulus P used for numeric hash scheme     |
+   +---------------------+--------------------------------------------------+
+   | :const:`inf`        | hash value returned for a positive infinity      |
+   +---------------------+--------------------------------------------------+
+   | :const:`nan`        | hash value returned for a nan                    |
+   +---------------------+--------------------------------------------------+
+   | :const:`imag`       | multiplier used for the imaginary part of a      |
+   |                     | complex number                                   |
+   +---------------------+--------------------------------------------------+
+
+   .. versionadded:: 3.2
 
 
 .. data:: hexversion
@@ -525,7 +615,7 @@ always available.
 
 .. data:: maxsize
 
-   An integer giving the maximum value a variable of type :ctype:`Py_ssize_t` can
+   An integer giving the maximum value a variable of type :c:type:`Py_ssize_t` can
    take.  It's usually ``2**31 - 1`` on a 32-bit platform and ``2**63 - 1`` on a
    64-bit platform.
 
@@ -544,7 +634,7 @@ always available.
     imported. The :meth:`find_module` method is called at least with the
     absolute name of the module being imported. If the module to be imported is
     contained in package then the parent package's :attr:`__path__` attribute
-    is passed in as a second argument. The method returns :keyword:`None` if
+    is passed in as a second argument. The method returns ``None`` if
     the module cannot be found, else returns a :term:`loader`.
 
     :data:`sys.meta_path` is searched before any implicit default finders or
@@ -597,7 +687,7 @@ always available.
     A dictionary acting as a cache for :term:`finder` objects. The keys are
     paths that have been passed to :data:`sys.path_hooks` and the values are
     the finders that are found. If a path is a valid file system path but no
-    explicit finder is found on :data:`sys.path_hooks` then :keyword:`None` is
+    explicit finder is found on :data:`sys.path_hooks` then ``None`` is
     stored to represent the implicit default finder should be used. If the path
     is not an existing path then :class:`imp.NullImporter` is set.
 
@@ -612,6 +702,12 @@ always available.
    For Unix systems, this is the lowercased OS name as returned by ``uname -s``
    with the first part of the version as returned by ``uname -r`` appended,
    e.g. ``'sunos5'`` or ``'linux2'``, *at the time when Python was built*.
+   Unless you want to test for a specific system version, it is therefore
+   recommended to use the following idiom::
+
+      if sys.platform.startswith('linux'):
+          # Linux-specific code here...
+
    For other systems, the values are:
 
    ================ ===========================
@@ -622,9 +718,14 @@ always available.
    Mac OS X         ``'darwin'``
    OS/2             ``'os2'``
    OS/2 EMX         ``'os2emx'``
-   AtheOS           ``'atheos'``
    ================ ===========================
 
+   .. seealso::
+      :attr:`os.name` has a coarser granularity.  :func:`os.uname` gives
+      system-dependent version information.
+
+      The :mod:`platform` module provides detailed checks for the
+      system's identity.
 
 .. data:: prefix
 
@@ -671,22 +772,15 @@ always available.
    performance for programs using threads.  Setting it to a value ``<=`` 0 checks
    every virtual instruction, maximizing responsiveness as well as overhead.
 
-
-.. function:: setdefaultencoding(name)
-
-   Set the current default string encoding used by the Unicode implementation.  If
-   *name* does not match any available encoding, :exc:`LookupError` is raised.
-   This function is only intended to be used by the :mod:`site` module
-   implementation and, where needed, by :mod:`sitecustomize`.  Once used by the
-   :mod:`site` module, it is removed from the :mod:`sys` module's namespace.
-
-   .. Note that :mod:`site` is not imported if the :option:`-S` option is passed
-      to the interpreter, in which case this function will remain available.
+   .. deprecated:: 3.2
+      This function doesn't have an effect anymore, as the internal logic for
+      thread switching and asynchronous tasks has been rewritten.  Use
+      :func:`setswitchinterval` instead.
 
 
 .. function:: setdlopenflags(n)
 
-   Set the flags used by the interpreter for :cfunc:`dlopen` calls, such as when
+   Set the flags used by the interpreter for :c:func:`dlopen` calls, such as when
    the interpreter loads extension modules.  Among other things, this will enable a
    lazy resolving of symbols when importing a module, if called as
    ``sys.setdlopenflags(0)``.  To share symbols across extension modules, call as
@@ -695,15 +789,6 @@ always available.
    module. If :mod:`DLFCN` is not available, it can be generated from
    :file:`/usr/include/dlfcn.h` using the :program:`h2py` script. Availability:
    Unix.
-
-.. function:: setfilesystemencoding(enc)
-
-   Set the encoding used when converting Python strings to file names to *enc*.
-   By default, Python tries to determine the encoding it should use automatically
-   on Unix; on Windows, it avoids such conversion completely. This function can
-   be used when Python's determination of the encoding needs to be overwritten,
-   e.g. when not all file names on disk can be decoded using the encoding that
-   Python had chosen.
 
 .. function:: setprofile(profilefunc)
 
@@ -729,9 +814,22 @@ always available.
    Python.
 
    The highest possible limit is platform-dependent.  A user may need to set the
-   limit higher when she has a program that requires deep recursion and a platform
+   limit higher when they have a program that requires deep recursion and a platform
    that supports a higher limit.  This should be done with care, because a too-high
    limit can lead to a crash.
+
+
+.. function:: setswitchinterval(interval)
+
+   Set the interpreter's thread switch interval (in seconds).  This floating-point
+   value determines the ideal duration of the "timeslices" allocated to
+   concurrently running Python threads.  Please note that the actual value
+   can be higher, especially if long-running internal functions or methods
+   are used.  Also, which thread becomes scheduled at the end of the interval
+   is the operating system's decision.  The interpreter doesn't have its
+   own scheduler.
+
+   .. versionadded:: 3.2
 
 
 .. function:: settrace(tracefunc)
@@ -766,9 +864,11 @@ always available.
       specifies the local trace function.
 
    ``'line'``
-      The interpreter is about to execute a new line of code (sometimes multiple
-      line events on one line exist).  The local trace function is called; *arg*
-      is ``None``; the return value specifies the new local trace function.
+      The interpreter is about to execute a new line of code or re-execute the
+      condition of a loop.  The local trace function is called; *arg* is
+      ``None``; the return value specifies the new local trace function.  See
+      :file:`Objects/lnotab_notes.txt` for a detailed explanation of how this
+      works.
 
    ``'return'``
       A function (or other code block) is about to return.  The local trace
@@ -810,6 +910,10 @@ always available.
    *on_flag* is true. Deactivate these dumps if *on_flag* is off. The function is
    available only if Python was compiled with ``--with-tsc``. To understand
    the output of this dump, read :file:`Python/ceval.c` in the Python sources.
+
+   .. impl-detail::
+      This function is intimately bound to CPython implementation details and
+      thus not likely to be implemented elsewhere.
 
 
 .. data:: stdin
@@ -866,6 +970,24 @@ always available.
        to a console and Python apps started with :program:`pythonw`.
 
 
+.. data:: subversion
+
+   A triple (repo, branch, version) representing the Subversion information of the
+   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
+   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
+   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
+   was built from a Subversion checkout; it contains the revision number (range)
+   and possibly a trailing 'M' if there were local modifications. If the tree was
+   exported (or svnversion was not available), it is the revision of
+   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
+
+   .. deprecated:: 3.2.1
+      Python is now `developed <http://docs.python.org/devguide/>`_ using
+      Mercurial.  In recent Python 3.2 bugfix releases, :data:`subversion`
+      therefore contains placeholder information.  It is removed in Python
+      3.3.
+
+
 .. data:: tracebacklimit
 
    When this variable is set to an integer value, it determines the maximum number
@@ -916,6 +1038,30 @@ always available.
    first three characters of :const:`version`.  It is provided in the :mod:`sys`
    module for informational purposes; modifying this value has no effect on the
    registry keys used by Python. Availability: Windows.
+
+
+.. data:: _xoptions
+
+   A dictionary of the various implementation-specific flags passed through
+   the :option:`-X` command-line option.  Option names are either mapped to
+   their values, if given explicitly, or to :const:`True`.  Example::
+
+      $ ./python -Xa=b -Xc
+      Python 3.2a3+ (py3k, Oct 16 2010, 20:14:50)
+      [GCC 4.4.3] on linux2
+      Type "help", "copyright", "credits" or "license" for more information.
+      >>> import sys
+      >>> sys._xoptions
+      {'a': 'b', 'c': True}
+
+   .. impl-detail::
+
+      This is a CPython-specific way of accessing options passed through
+      :option:`-X`.  Other implementations may export them through other
+      means, or not at all.
+
+   .. versionadded:: 3.2
+
 
 .. rubric:: Citations
 

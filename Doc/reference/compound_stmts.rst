@@ -352,6 +352,8 @@ The execution of the :keyword:`with` statement with one "item" proceeds as follo
 #. The context expression (the expression given in the :token:`with_item`) is
    evaluated to obtain a context manager.
 
+#. The context manager's :meth:`__exit__` is loaded for later use.
+
 #. The context manager's :meth:`__enter__` method is invoked.
 
 #. If a target was included in the :keyword:`with` statement, the return value
@@ -361,9 +363,9 @@ The execution of the :keyword:`with` statement with one "item" proceeds as follo
 
       The :keyword:`with` statement guarantees that if the :meth:`__enter__`
       method returns without an error, then :meth:`__exit__` will always be
-      called.  Thus, if an error occurs during the assignment to the target
-      list, it will be treated the same as an error occurring within the suite
-      would be.  See step 5 below.
+      called. Thus, if an error occurs during the assignment to the target list,
+      it will be treated the same as an error occurring within the suite would
+      be. See step 6 below.
 
 #. The suite is executed.
 
@@ -613,8 +615,9 @@ can be used to create instance variables with different implementation details.
 
 .. rubric:: Footnotes
 
-.. [#] The exception is propagated to the invocation stack only if there is no
-   :keyword:`finally` clause that negates the exception.
+.. [#] The exception is propagated to the invocation stack unless
+   there is a :keyword:`finally` clause which happens to raise another
+   exception. That new exception causes the old one to be lost.
 
 .. [#] Currently, control "flows off the end" except in the case of an exception
    or the execution of a :keyword:`return`, :keyword:`continue`, or

@@ -6,11 +6,14 @@
               os.lstat() and os.fstat().
 .. sectionauthor:: Skip Montanaro <skip@automatrix.com>
 
+**Source code:** :source:`Lib/stat.py`
+
+--------------
 
 The :mod:`stat` module defines constants and functions for interpreting the
 results of :func:`os.stat`, :func:`os.fstat` and :func:`os.lstat` (if they
-exist).  For complete details about the :cfunc:`stat`, :cfunc:`fstat` and
-:cfunc:`lstat` calls, consult the documentation for your system.
+exist).  For complete details about the :c:func:`stat`, :c:func:`fstat` and
+:c:func:`lstat` calls, consult the documentation for your system.
 
 The :mod:`stat` module defines the following functions to test for specific file
 types:
@@ -68,7 +71,7 @@ mode:
 
 Normally, you would use the :func:`os.path.is\*` functions for testing the type
 of a file; the functions here are useful when you are doing multiple tests of
-the same file and wish to avoid the overhead of the :cfunc:`stat` system call
+the same file and wish to avoid the overhead of the :c:func:`stat` system call
 for each test.  These are also useful when checking for information about a file
 that isn't handled by :mod:`os.path`, like the tests for block and character
 devices.
@@ -304,13 +307,21 @@ The following flags can be used in the *flags* argument of :func:`os.chflags`:
 
    The file may only be appended to.
 
+.. data:: UF_OPAQUE
+
+   The directory is opaque when viewed through a union stack.
+
 .. data:: UF_NOUNLINK
 
    The file may not be renamed or deleted.
 
-.. data:: UF_OPAQUE
+.. data:: UF_COMPRESSED
 
-   The directory is opaque when viewed through a union stack.
+   The file is stored compressed (Mac OS X 10.6+).
+
+.. data:: UF_HIDDEN
+
+   The file should not be displayed in a GUI (Mac OS X 10.5+).
 
 .. data:: SF_ARCHIVED
 

@@ -190,10 +190,11 @@ applications should use string objects to access all files.
    path, all previous components (on Windows, including the previous drive letter,
    if there was one) are thrown away, and joining continues.  The return value is
    the concatenation of *path1*, and optionally *path2*, etc., with exactly one
-   directory separator (``os.sep``) inserted between components, unless *path2* is
-   empty.  Note that on Windows, since there is a current directory for each drive,
-   ``os.path.join("c:", "foo")`` represents a path relative to the current
-   directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
+   directory separator (``os.sep``) following each non-empty part except the last.
+   (This means that an empty last part will result in a path that ends with a
+   separator.)  Note that on Windows, since there is a current directory for
+   each drive, ``os.path.join("c:", "foo")`` represents a path relative to the
+   current directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
 
 
 .. function:: normcase(path)
@@ -201,6 +202,7 @@ applications should use string objects to access all files.
    Normalize the case of a pathname.  On Unix and Mac OS X, this returns the
    path unchanged; on case-insensitive filesystems, it converts the path to
    lowercase.  On Windows, it also converts forward slashes to backward slashes.
+   Raise a TypeError if the type of *path* is not ``str`` or ``bytes``.
 
 
 .. function:: normpath(path)
@@ -220,7 +222,7 @@ applications should use string objects to access all files.
    links encountered in the path (if they are supported by the operating system).
 
 
-.. function:: relpath(path[, start])
+.. function:: relpath(path, start=None)
 
    Return a relative filepath to *path* either from the current directory or from
    an optional *start* point.
@@ -232,18 +234,27 @@ applications should use string objects to access all files.
 
 .. function:: samefile(path1, path2)
 
-   Return ``True`` if both pathname arguments refer to the same file or directory
-   (as indicated by device number and i-node number). Raise an exception if a
-   :func:`os.stat` call on either pathname fails.
+   Return ``True`` if both pathname arguments refer to the same file or directory.
+   On Unix, this is determined by the device number and i-node number and raises an
+   exception if a :func:`os.stat` call on either pathname fails.
 
-   Availability: Unix.
+   On Windows, two files are the same if they resolve to the same final path
+   name using the Windows API call GetFinalPathNameByHandle. This function
+   raises an exception if handles cannot be obtained to either file.
+
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.2
+      Added Windows support.
 
 
 .. function:: sameopenfile(fp1, fp2)
 
    Return ``True`` if the file descriptors *fp1* and *fp2* refer to the same file.
 
-   Availability: Unix.
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.2 Added Windows support.
 
 
 .. function:: samestat(stat1, stat2)

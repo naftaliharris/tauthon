@@ -98,20 +98,21 @@ following example shows all of the features of this directive type::
 
        Spam or ham the foo.
 
-The signatures of object methods or data attributes should always include the
-type name (``.. method:: FileInput.input(...)``), even if it is obvious from the
-context which type they belong to; this is to enable consistent
-cross-references.  If you describe methods belonging to an abstract protocol,
-such as "context managers", include a (pseudo-)type name too to make the
+The signatures of object methods or data attributes should not include the
+class name, but be nested in a class directive.  The generated files will
+reflect this nesting, and the target identifiers (for HTML output) will use
+both the class and method name, to enable consistent cross-references.  If you
+describe methods belonging to an abstract protocol such as context managers,
+use a class directive with a (pseudo-)type name too to make the
 index entries more informative.
 
 The directives are:
 
-.. describe:: cfunction
+.. describe:: c:function
 
    Describes a C function. The signature should be given as in C, e.g.::
 
-      .. cfunction:: PyObject* PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
+      .. c:function:: PyObject* PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)
 
    This is also used to describe function-like preprocessor macros.  The names
    of the arguments should be given so they may be used in the description.
@@ -119,29 +120,29 @@ The directives are:
    Note that you don't have to backslash-escape asterisks in the signature,
    as it is not parsed by the reST inliner.
 
-.. describe:: cmember
+.. describe:: c:member
 
    Describes a C struct member. Example signature::
 
-      .. cmember:: PyObject* PyTypeObject.tp_bases
+      .. c:member:: PyObject* PyTypeObject.tp_bases
 
    The text of the description should include the range of values allowed, how
    the value should be interpreted, and whether the value can be changed.
    References to structure members in text should use the ``member`` role.
 
-.. describe:: cmacro
+.. describe:: c:macro
 
    Describes a "simple" C macro.  Simple macros are macros which are used
    for code expansion, but which do not take arguments so cannot be described as
    functions.  This is not to be used for simple constant definitions.  Examples
-   of its use in the Python documentation include :cmacro:`PyObject_HEAD` and
-   :cmacro:`Py_BEGIN_ALLOW_THREADS`.
+   of its use in the Python documentation include :c:macro:`PyObject_HEAD` and
+   :c:macro:`Py_BEGIN_ALLOW_THREADS`.
 
-.. describe:: ctype
+.. describe:: c:type
 
    Describes a C type. The signature should just be the type name.
 
-.. describe:: cvar
+.. describe:: c:var
 
    Describes a global C variable.  The signature should include the type, such
    as::
@@ -177,6 +178,37 @@ The directives are:
    are modified), side effects, and possible exceptions.  A small example may be
    provided.
 
+.. describe:: decorator
+
+   Describes a decorator function.  The signature should *not* represent the
+   signature of the actual function, but the usage as a decorator.  For example,
+   given the functions
+
+   .. code-block:: python
+
+      def removename(func):
+          func.__name__ = ''
+          return func
+
+      def setnewname(name):
+          def decorator(func):
+              func.__name__ = name
+              return func
+          return decorator
+
+   the descriptions should look like this::
+
+      .. decorator:: removename
+
+         Remove name of the decorated function.
+
+      .. decorator:: setnewname(name)
+
+         Set name of the decorated function to *name*.
+
+   There is no ``deco`` role to link to a decorator that is marked up with
+   this directive; rather, use the ``:func:`` role.
+
 .. describe:: class
 
    Describes a class.  The signature can include parentheses with parameters
@@ -210,6 +242,12 @@ The directives are:
    parameter.  The description should include similar information to that
    described for ``function``.  This directive should be nested in a class
    directive, like in the example above.
+
+.. describe:: decoratormethod
+
+   Same as ``decorator``, but for decorators that are methods.
+
+   Refer to a decorator method using the ``:meth:`` role.
 
 .. describe:: opcode
 
@@ -383,21 +421,25 @@ the currently documented class.
 The following roles create cross-references to C-language constructs if they
 are defined in the API documentation:
 
-.. describe:: cdata
+.. describe:: c:data
 
    The name of a C-language variable.
 
-.. describe:: cfunc
+.. describe:: c:func
 
    The name of a C-language function. Should include trailing parentheses.
 
-.. describe:: cmacro
+.. describe:: c:macro
 
    The name of a "simple" C macro, as defined above.
 
-.. describe:: ctype
+.. describe:: c:type
 
    The name of a C-language type.
+
+.. describe:: c:member
+
+   The name of a C type member, as defined above.
 
 
 The following role does possibly create a cross-reference, but does not refer
@@ -541,10 +583,6 @@ in a different style:
    If you don't need the "variable part" indication, use the standard
    ````code```` instead.
 
-.. describe:: var
-
-   A Python or C variable or parameter name.
-
 
 The following roles generate external links:
 
@@ -590,6 +628,8 @@ Example::
 
 The ``:ref:`` invocation is replaced with the section title.
 
+Alternatively, you can reference any label (not just section titles)
+if you provide the link text ``:ref:`link text <reference-label>```.
 
 Paragraph-level markup
 ----------------------

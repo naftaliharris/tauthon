@@ -68,7 +68,25 @@ def mapstar(args):
 # Code run by worker processes
 #
 
-def worker(inqueue, outqueue, initializer=None, initargs=()):
+class MaybeEncodingError(Exception):
+    """Wraps possible unpickleable errors, so they can be
+    safely sent through the socket."""
+
+    def __init__(self, exc, value):
+        self.exc = repr(exc)
+        self.value = repr(value)
+        super(MaybeEncodingError, self).__init__(self.exc, self.value)
+
+    def __str__(self):
+        return "Error sending result: '%s'. Reason: '%s'" % (self.value,
+                                                             self.exc)
+
+    def __repr__(self):
+        return "<MaybeEncodingError: %s>" % str(self)
+
+
+def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None):
+    assert maxtasks is None or (type(maxtasks) == int and maxtasks > 0)
     put = outqueue.put
     get = inqueue.get
     if hasattr(inqueue, '_writer'):
@@ -78,7 +96,8 @@ def worker(inqueue, outqueue, initializer=None, initargs=()):
     if initializer is not None:
         initializer(*initargs)
 
-    while 1:
+    completed = 0
+    while maxtasks is None or (maxtasks and completed < maxtasks):
         try:
             task = get()
         except (EOFError, IOError):
@@ -94,7 +113,15 @@ def worker(inqueue, outqueue, initializer=None, initargs=()):
             result = (True, func(*args, **kwds))
         except Exception as e:
             result = (False, e)
-        put((job, i, result))
+        try:
+            put((job, i, result))
+        except Exception as e:
+            wrapped = MaybeEncodingError(e, result[1])
+            debug("Possible encoding error while sending result: %s" % (
+                wrapped))
+            put((job, i, (False, wrapped)))
+        completed += 1
+    debug('worker exiting after %d tasks' % completed)
 
 #
 # Class representing a process pool
@@ -106,31 +133,39 @@ class Pool(object):
     '''
     Process = Process
 
-    def __init__(self, processes=None, initializer=None, initargs=()):
+    def __init__(self, processes=None, initializer=None, initargs=(),
+                 maxtasksperchild=None):
         self._setup_queues()
         self._taskqueue = queue.Queue()
         self._cache = {}
         self._state = RUN
+        self._maxtasksperchild = maxtasksperchild
+        self._initializer = initializer
+        self._initargs = initargs
 
         if processes is None:
             try:
                 processes = cpu_count()
             except NotImplementedError:
                 processes = 1
+        if processes < 1:
+            raise ValueError("Number of processes must be at least 1")
 
         if initializer is not None and not hasattr(initializer, '__call__'):
             raise TypeError('initializer must be a callable')
 
+        self._processes = processes
         self._pool = []
-        for i in range(processes):
-            w = self.Process(
-                target=worker,
-                args=(self._inqueue, self._outqueue, initializer, initargs)
-                )
-            self._pool.append(w)
-            w.name = w.name.replace('Process', 'PoolWorker')
-            w.daemon = True
-            w.start()
+        self._repopulate_pool()
+
+        self._worker_handler = threading.Thread(
+            target=Pool._handle_workers,
+            args=(self, )
+            )
+        self._worker_handler.daemon = True
+        self._worker_handler._state = RUN
+        self._worker_handler.start()
+
 
         self._task_handler = threading.Thread(
             target=Pool._handle_tasks,
@@ -151,9 +186,47 @@ class Pool(object):
         self._terminate = Finalize(
             self, self._terminate_pool,
             args=(self._taskqueue, self._inqueue, self._outqueue, self._pool,
-                  self._task_handler, self._result_handler, self._cache),
+                  self._worker_handler, self._task_handler,
+                  self._result_handler, self._cache),
             exitpriority=15
             )
+
+    def _join_exited_workers(self):
+        """Cleanup after any worker processes which have exited due to reaching
+        their specified lifetime.  Returns True if any workers were cleaned up.
+        """
+        cleaned = False
+        for i in reversed(range(len(self._pool))):
+            worker = self._pool[i]
+            if worker.exitcode is not None:
+                # worker exited
+                debug('cleaning up worker %d' % i)
+                worker.join()
+                cleaned = True
+                del self._pool[i]
+        return cleaned
+
+    def _repopulate_pool(self):
+        """Bring the number of pool processes up to the specified number,
+        for use after reaping workers which have exited.
+        """
+        for i in range(self._processes - len(self._pool)):
+            w = self.Process(target=worker,
+                             args=(self._inqueue, self._outqueue,
+                                   self._initializer,
+                                   self._initargs, self._maxtasksperchild)
+                            )
+            self._pool.append(w)
+            w.name = w.name.replace('Process', 'PoolWorker')
+            w.daemon = True
+            w.start()
+            debug('added worker')
+
+    def _maintain_pool(self):
+        """Clean up any exited workers and start replacements for them.
+        """
+        if self._join_exited_workers():
+            self._repopulate_pool()
 
     def _setup_queues(self):
         from .queues import SimpleQueue
@@ -213,16 +286,18 @@ class Pool(object):
                      for i, x in enumerate(task_batches)), result._set_length))
             return (item for chunk in result for item in chunk)
 
-    def apply_async(self, func, args=(), kwds={}, callback=None):
+    def apply_async(self, func, args=(), kwds={}, callback=None,
+            error_callback=None):
         '''
         Asynchronous version of `apply()` method.
         '''
         assert self._state == RUN
-        result = ApplyResult(self._cache, callback)
+        result = ApplyResult(self._cache, callback, error_callback)
         self._taskqueue.put(([(result._job, None, func, args, kwds)], None))
         return result
 
-    def map_async(self, func, iterable, chunksize=None, callback=None):
+    def map_async(self, func, iterable, chunksize=None, callback=None,
+            error_callback=None):
         '''
         Asynchronous version of `map()` method.
         '''
@@ -238,10 +313,20 @@ class Pool(object):
             chunksize = 0
 
         task_batches = Pool._get_tasks(func, iterable, chunksize)
-        result = MapResult(self._cache, chunksize, len(iterable), callback)
+        result = MapResult(self._cache, chunksize, len(iterable), callback,
+                           error_callback=error_callback)
         self._taskqueue.put((((result._job, i, mapstar, (x,), {})
                               for i, x in enumerate(task_batches)), None))
         return result
+
+    @staticmethod
+    def _handle_workers(pool):
+        while pool._worker_handler._state == RUN and pool._state == RUN:
+            pool._maintain_pool()
+            time.sleep(0.1)
+        # send sentinel to stop workers
+        pool._taskqueue.put(None)
+        debug('worker handler exiting')
 
     @staticmethod
     def _handle_tasks(taskqueue, put, outqueue, pool):
@@ -358,16 +443,18 @@ class Pool(object):
         debug('closing pool')
         if self._state == RUN:
             self._state = CLOSE
-            self._taskqueue.put(None)
+            self._worker_handler._state = CLOSE
 
     def terminate(self):
         debug('terminating pool')
         self._state = TERMINATE
+        self._worker_handler._state = TERMINATE
         self._terminate()
 
     def join(self):
         debug('joining pool')
         assert self._state in (CLOSE, TERMINATE)
+        self._worker_handler.join()
         self._task_handler.join()
         self._result_handler.join()
         for p in self._pool:
@@ -384,12 +471,12 @@ class Pool(object):
 
     @classmethod
     def _terminate_pool(cls, taskqueue, inqueue, outqueue, pool,
-                        task_handler, result_handler, cache):
+                        worker_handler, task_handler, result_handler, cache):
         # this is guaranteed to only be called once
         debug('finalizing pool')
 
+        worker_handler._state = TERMINATE
         task_handler._state = TERMINATE
-        taskqueue.put(None)                 # sentinel
 
         debug('helping task handler/workers to finish')
         cls._help_stuff_finish(inqueue, task_handler, len(pool))
@@ -399,16 +486,23 @@ class Pool(object):
         result_handler._state = TERMINATE
         outqueue.put(None)                  # sentinel
 
+        # We must wait for the worker handler to exit before terminating
+        # workers because we don't want workers to be restarted behind our back.
+        debug('joining worker handler')
+        worker_handler.join()
+
+        # Terminate workers which haven't already finished.
         if pool and hasattr(pool[0], 'terminate'):
             debug('terminating workers')
             for p in pool:
-                p.terminate()
+                if p.exitcode is None:
+                    p.terminate()
 
         debug('joining task handler')
-        task_handler.join(1e100)
+        task_handler.join()
 
         debug('joining result handler')
-        result_handler.join(1e100)
+        result_handler.join()
 
         if pool and hasattr(pool[0], 'terminate'):
             debug('joining pool workers')
@@ -424,12 +518,13 @@ class Pool(object):
 
 class ApplyResult(object):
 
-    def __init__(self, cache, callback):
+    def __init__(self, cache, callback, error_callback):
         self._cond = threading.Condition(threading.Lock())
         self._job = next(job_counter)
         self._cache = cache
         self._ready = False
         self._callback = callback
+        self._error_callback = error_callback
         cache[self._job] = self
 
     def ready(self):
@@ -460,6 +555,8 @@ class ApplyResult(object):
         self._success, self._value = obj
         if self._callback and self._success:
             self._callback(self._value)
+        if self._error_callback and not self._success:
+            self._error_callback(self._value)
         self._cond.acquire()
         try:
             self._ready = True
@@ -474,8 +571,9 @@ class ApplyResult(object):
 
 class MapResult(ApplyResult):
 
-    def __init__(self, cache, chunksize, length, callback):
-        ApplyResult.__init__(self, cache, callback)
+    def __init__(self, cache, chunksize, length, callback, error_callback):
+        ApplyResult.__init__(self, cache, callback,
+                             error_callback=error_callback)
         self._success = True
         self._value = [None] * length
         self._chunksize = chunksize
@@ -500,10 +598,11 @@ class MapResult(ApplyResult):
                     self._cond.notify()
                 finally:
                     self._cond.release()
-
         else:
             self._success = False
             self._value = result
+            if self._error_callback:
+                self._error_callback(self._value)
             del self._cache[self._job]
             self._cond.acquire()
             try:

@@ -6,6 +6,9 @@
 .. moduleauthor:: Timothy O'Malley <timo@alum.mit.edu>
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 
+**Source code:** :source:`Lib/http/cookies.py`
+
+--------------
 
 The :mod:`http.cookies` module defines classes for abstracting the concept of
 cookies, an HTTP state management mechanism. It supports both simple string-only
@@ -149,7 +152,7 @@ Morsel Objects
 
 .. method:: Morsel.set(key, value, coded_value)
 
-   Set the *key*, *value* and *coded_value* members.
+   Set the *key*, *value* and *coded_value* attributes.
 
 
 .. method:: Morsel.isReservedKey(K)
