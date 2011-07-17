@@ -41,10 +41,11 @@ import collections
 import time
 import atexit
 import weakref
+import errno
 
 from queue import Empty, Full
 import _multiprocessing
-from multiprocessing import Pipe
+from multiprocessing.connection import Pipe, SentinelReady
 from multiprocessing.synchronize import Lock, BoundedSemaphore, Semaphore, Condition
 from multiprocessing.util import debug, info, Finalize, register_after_fork
 from multiprocessing.forking import assert_spawning
@@ -67,6 +68,8 @@ class Queue(object):
         else:
             self._wlock = Lock()
         self._sem = BoundedSemaphore(maxsize)
+        # For use by concurrent.futures
+        self._ignore_epipe = False
 
         self._after_fork()
 
@@ -178,7 +181,7 @@ class Queue(object):
         self._thread = threading.Thread(
             target=Queue._feed,
             args=(self._buffer, self._notempty, self._send,
-                  self._wlock, self._writer.close),
+                  self._wlock, self._writer.close, self._ignore_epipe),
             name='QueueFeederThread'
             )
         self._thread.daemon = True
@@ -229,7 +232,7 @@ class Queue(object):
             notempty.release()
 
     @staticmethod
-    def _feed(buffer, notempty, send, writelock, close):
+    def _feed(buffer, notempty, send, writelock, close, ignore_epipe):
         debug('starting thread to feed data to pipe')
         from .util import is_exiting
 
@@ -271,6 +274,8 @@ class Queue(object):
                 except IndexError:
                     pass
         except Exception as e:
+            if ignore_epipe and getattr(e, 'errno', 0) == errno.EPIPE:
+                return
             # Since this runs in a daemon thread the resources it uses
             # may be become unusable while the process is cleaning up.
             # We ignore errors which happen after the process has
@@ -372,10 +377,10 @@ class SimpleQueue(object):
     def _make_methods(self):
         recv = self._reader.recv
         racquire, rrelease = self._rlock.acquire, self._rlock.release
-        def get():
+        def get(*, sentinels=None):
             racquire()
             try:
-                return recv()
+                return recv(sentinels)
             finally:
                 rrelease()
         self.get = get
