@@ -876,7 +876,6 @@ array_inplace_repeat(arrayobject *self, Py_ssize_t n)
     if (Py_SIZE(self) > 0) {
         if (n < 0)
             n = 0;
-        items = self->ob_item;
         if ((self->ob_descr->itemsize != 0) &&
             (Py_SIZE(self) > PY_SSIZE_T_MAX / self->ob_descr->itemsize)) {
             return PyErr_NoMemory();
@@ -2092,7 +2091,7 @@ array_repr(arrayobject *a)
     if (len == 0) {
         return PyUnicode_FromFormat("array('%c')", (int)typecode);
     }
-    if ((typecode == 'u'))
+    if (typecode == 'u')
         v = array_tounicode(a, NULL);
     else
         v = array_tolist(a, NULL);
