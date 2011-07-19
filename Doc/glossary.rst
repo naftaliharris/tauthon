@@ -31,7 +31,7 @@ Glossary
       providing a way to define interfaces when other techniques like
       :func:`hasattr` would be clumsy or subtly wrong (for example with
       :ref:`magic methods <special-lookup>`). Python comes with many built-in ABCs for
-      data structures (in the :mod:`collections` module), numbers (in the
+      data structures (in the :mod:`collections.abc` module), numbers (in the
       :mod:`numbers` module), streams (in the :mod:`io` module), import finders
       and loaders (in the :mod:`importlib.abc` module).  You can create your own
       ABCs with the :mod:`abc` module.
@@ -581,6 +581,14 @@ Glossary
       A statement is part of a suite (a "block" of code).  A statement is either
       an :term:`expression` or a one of several constructs with a keyword, such
       as :keyword:`if`, :keyword:`while` or :keyword:`for`.
+
+   struct sequence
+      A tuple with named elements. Struct sequences expose an interface similiar
+      to :term:`named tuple` in that elements can either be accessed either by
+      index or as an attribute. However, they do not have any of the named tuple
+      methods like :meth:`~collections.somenamedtuple._make` or
+      :meth:`~collections.somenamedtuple._asdict`. Examples of struct sequences
+      include :data:`sys.float_info` and the return value of :func:`os.stat`.
 
    triple-quoted string
       A string which is bound by three instances of either a quotation mark
