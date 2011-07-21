@@ -46,8 +46,8 @@ library/functions,,:stop,"a[start:stop, i]"
 library/functions,,:stop,a[start:stop:step]
 library/hotshot,,:lineno,"ncalls  tottime  percall  cumtime  percall filename:lineno(function)"
 library/httplib,,:port,host:port
-library/imaplib,,:MM,"""DD-Mmm-YYYY HH:MM:SS +HHMM"""
-library/imaplib,,:SS,"""DD-Mmm-YYYY HH:MM:SS +HHMM"""
+library/imaplib,,:MM,"""DD-Mmm-YYYY HH:MM:SS"
+library/imaplib,,:SS,"""DD-Mmm-YYYY HH:MM:SS"
 library/itertools,,:stop,elements from seq[start:stop:step]
 library/itertools,,:step,elements from seq[start:stop:step]
 library/linecache,,:sys,"sys:x:3:3:sys:/dev:/bin/sh"
@@ -186,6 +186,99 @@ documenting/fromlatex,152,:noindex,:noindex:
 documenting/fromlatex,162,.. describe:,.. describe:: a == b
 documenting/fromlatex,168,.. cmdoption:,.. cmdoption:: -O
 documenting/fromlatex,168,.. envvar:,.. envvar:: PYTHONINSPECT
+documenting/markup,33,.. sectionauthor:,.. sectionauthor:: Guido van Rossum <guido@python.org>
+documenting/markup,42,:mod,:mod:`parrot` -- Dead parrot access
+documenting/markup,42,`,:mod:`parrot` -- Dead parrot access
+documenting/markup,42,.. module:,.. module:: parrot
+documenting/markup,42,:platform,":platform: Unix, Windows"
+documenting/markup,42,:synopsis,:synopsis: Analyze and reanimate dead parrots.
+documenting/markup,42,.. moduleauthor:,.. moduleauthor:: Eric Cleese <eric@python.invalid>
+documenting/markup,42,.. moduleauthor:,.. moduleauthor:: John Idle <john@python.invalid>
+documenting/markup,88,:noindex,:noindex:
+documenting/markup,95,.. function:,.. function:: spam(eggs)
+documenting/markup,95,:noindex,:noindex:
+documenting/markup,101,.. method:,.. method:: FileInput.input(...)
+documenting/markup,121,:function,c:function
+documenting/markup,121,.. c:,".. c:function:: PyObject* PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)"
+documenting/markup,121,::,".. c:function:: PyObject* PyType_GenericAlloc(PyTypeObject *type, Py_ssize_t nitems)"
+documenting/markup,131,:member,c:member
+documenting/markup,131,.. c:,.. c:member:: PyObject* PyTypeObject.tp_bases
+documenting/markup,131,::,.. c:member:: PyObject* PyTypeObject.tp_bases
+documenting/markup,139,:macro,c:macro
+documenting/markup,143,:type,c:type
+documenting/markup,150,:var,c:var
+documenting/markup,150,.. cvar:,.. cvar:: PyObject* PyClass_Type
+documenting/markup,179,.. function:,".. function:: Timer.repeat([repeat=3[, number=1000000]])"
+documenting/markup,210,.. decorator:,.. decorator:: removename
+documenting/markup,210,.. decorator:,.. decorator:: setnewname(name)
+documenting/markup,210,:func,:func:
+documenting/markup,233,:meth,:meth:
+documenting/markup,246,.. cmdoption:,.. cmdoption:: -m <module>
+documenting/markup,264,.. describe:,.. describe:: opcode
+documenting/markup,293,.. highlightlang:,.. highlightlang:: c
+documenting/markup,313,.. literalinclude:,.. literalinclude:: example.py
+documenting/markup,328,:rolename,:rolename:`content`
+documenting/markup,328,`,:rolename:`content`
+documenting/markup,333,:role,:role:`title <target>`
+documenting/markup,333,`,:role:`title <target>`
+documenting/markup,339,:meth,:meth:`~Queue.Queue.get`
+documenting/markup,339,`,:meth:`~Queue.Queue.get`
+documenting/markup,387,:func,:func:`filter`
+documenting/markup,387,`,:func:`filter`
+documenting/markup,387,:func,:func:`foo.filter`
+documenting/markup,387,`,:func:`foo.filter`
+documenting/markup,393,:func,:func:`open`
+documenting/markup,393,`,:func:`open`
+documenting/markup,393,:func,:func:`.open`
+documenting/markup,393,`,:func:`.open`
+documenting/markup,409,:data,c:data
+documenting/markup,413,:func,c:func
+documenting/markup,417,:macro,c:macro
+documenting/markup,421,:type,c:type
+documenting/markup,426,:member,c:member
+documenting/markup,476,:file,... is installed in :file:`/usr/lib/python2.{x}/site-packages` ...
+documenting/markup,476,`,... is installed in :file:`/usr/lib/python2.{x}/site-packages` ...
+documenting/markup,495,:kbd,:kbd:`C-x C-f`
+documenting/markup,495,`,:kbd:`C-x C-f`
+documenting/markup,495,:kbd,:kbd:`Control-x Control-f`
+documenting/markup,495,`,:kbd:`Control-x Control-f`
+documenting/markup,509,:mailheader,:mailheader:`Content-Type`
+documenting/markup,509,`,:mailheader:`Content-Type`
+documenting/markup,518,:manpage,:manpage:`ls(1)`
+documenting/markup,518,`,:manpage:`ls(1)`
+documenting/markup,534,:menuselection,:menuselection:`Start --> Programs`
+documenting/markup,534,`,:menuselection:`Start --> Programs`
+documenting/markup,549,`,``code``
+documenting/markup,567,:file,:file:
+documenting/markup,567,`,``code``
+documenting/markup,602,:ref,:ref:`label-name`
+documenting/markup,602,`,:ref:`label-name`
+documenting/markup,606,:ref,"It refers to the section itself, see :ref:`my-reference-label`."
+documenting/markup,606,`,"It refers to the section itself, see :ref:`my-reference-label`."
+documenting/markup,615,:ref,:ref:
+documenting/markup,636,.. note:,.. note::
+documenting/markup,663,.. versionadded:,.. versionadded:: 3.1
+documenting/markup,688,::,.. impl-detail::
+documenting/markup,688,::,.. impl-detail:: This shortly mentions an implementation detail.
+documenting/markup,708,.. seealso:,.. seealso::
+documenting/markup,708,:mod,Module :mod:`zipfile`
+documenting/markup,708,`,Module :mod:`zipfile`
+documenting/markup,708,:mod,Documentation of the :mod:`zipfile` standard module.
+documenting/markup,708,`,Documentation of the :mod:`zipfile` standard module.
+documenting/markup,708,`,"`GNU tar manual, Basic Tar Format <http://link>`_"
+documenting/markup,722,.. centered:,.. centered::
+documenting/markup,767,.. toctree:,.. toctree::
+documenting/markup,767,:maxdepth,:maxdepth: 2
+documenting/markup,783,.. index:,.. index::
+documenting/markup,813,.. index:,".. index:: BNF, grammar, syntax, notation"
+documenting/markup,844,`,"unaryneg ::= ""-"" `integer`"
+documenting/markup,849,.. productionlist:,.. productionlist::
+documenting/markup,849,`,"try1_stmt: ""try"" "":"" `suite`"
+documenting/markup,849,`,": (""except"" [`expression` ["","" `target`]] "":"" `suite`)+"
+documenting/markup,849,`,": [""else"" "":"" `suite`]"
+documenting/markup,849,`,": [""finally"" "":"" `suite`]"
+documenting/markup,849,`,"try2_stmt: ""try"" "":"" `suite`"
+documenting/markup,849,`,": ""finally"" "":"" `suite`"
 documenting/rest,33,`,``text``
 documenting/rest,47,:rolename,:rolename:`content`
 documenting/rest,47,`,:rolename:`content`
@@ -402,3 +495,26 @@ library/pprint,209,::,"'Programming Language :: Python :: 2.6',"
 library/pprint,209,::,"'Programming Language :: Python :: 2.7',"
 library/pprint,209,::,"'Topic :: Software Development :: Libraries',"
 library/pprint,209,::,"'Topic :: Software Development :: Libraries :: Python Modules'],"
+library/packaging.dist,,:action,http://pypi.python.org/pypi?:action=list_classifiers
+packaging/examples,,`,This is the description of the ``foobar`` project.
+packaging/setupcfg,,::,Development Status :: 3 - Alpha
+packaging/setupcfg,,::,License :: OSI Approved :: Mozilla Public License 1.1 (MPL 1.1)
+packaging/setupscript,,::,"'Development Status :: 4 - Beta',"
+packaging/setupscript,,::,"'Environment :: Console',"
+packaging/setupscript,,::,"'Environment :: Web Environment',"
+packaging/setupscript,,::,"'Intended Audience :: End Users/Desktop',"
+packaging/setupscript,,::,"'Intended Audience :: Developers',"
+packaging/setupscript,,::,"'Intended Audience :: System Administrators',"
+packaging/setupscript,,::,"'License :: OSI Approved :: Python Software Foundation License',"
+packaging/setupscript,,::,"'Operating System :: MacOS :: MacOS X',"
+packaging/setupscript,,::,"'Operating System :: Microsoft :: Windows',"
+packaging/setupscript,,::,"'Operating System :: POSIX',"
+packaging/setupscript,,::,"'Programming Language :: Python',"
+packaging/setupscript,,::,"'Topic :: Communications :: Email',"
+packaging/setupscript,,::,"'Topic :: Office/Business',"
+packaging/setupscript,,::,"'Topic :: Software Development :: Bug Tracking',"
+packaging/tutorial,,::,1) License :: OSI Approved :: GNU General Public License (GPL)
+packaging/tutorial,,::,2) License :: OSI Approved :: GNU Library or Lesser General Public License (LGPL)
+packaging/tutorial,,::,Type the number of the license you wish to use or ? to try again:: 1
+packaging/tutorial,,::,classifier = Development Status :: 3 - Alpha
+packaging/tutorial,,::,License :: OSI Approved :: GNU General Public License (GPL)
