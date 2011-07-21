@@ -14,7 +14,7 @@ import textwrap
 from test.support import (
     EnvironmentVarGuard, TESTFN, check_warnings, forget, is_jython,
     make_legacy_pyc, rmtree, run_unittest, swap_attr, swap_item, temp_umask,
-    unlink, unload)
+    unlink, unload, create_empty_file)
 from test import script_helper
 
 
@@ -103,7 +103,7 @@ class ImportTests(unittest.TestCase):
             sys.path.insert(0, os.curdir)
             try:
                 fname = TESTFN + os.extsep + "py"
-                open(fname, 'w').close()
+                create_empty_file(fname)
                 os.chmod(fname, (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH |
                                  stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
                 __import__(TESTFN)
@@ -286,8 +286,6 @@ class ImportTests(unittest.TestCase):
             self.skipTest('path is not encodable to {}'.format(encoding))
         with self.assertRaises(ImportError) as c:
             __import__(path)
-        self.assertEqual("Import by filename is not supported.",
-                         c.exception.args[0])
 
     def test_import_in_del_does_not_crash(self):
         # Issue 4236
