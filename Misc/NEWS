@@ -108,6 +108,11 @@ Build
 
 - Issue #12372: POSIX semaphores are broken on AIX: don't use them.
 
+Tools/Demos
+-----------
+
+- Issue #10639: reindent.py no longer converts newlines and will raise
+  an error if attempting to convert a file with mixed newlines.
 
 Tests
 -----
@@ -310,6 +315,7 @@ Build
 - Issue #11217: For 64-bit/32-bit Mac OS X universal framework builds, ensure
   "make install" creates symlinks in --prefix bin for the "-32" files in the
   framework bin directory like the installer does.
+
 
 Tests
 -----
