@@ -240,15 +240,37 @@ mmap_read_line_method(mmap_object *self,
     return result;
 }
 
+/* Basically the "n" format code with the ability to turn None into -1. */
+static int
+mmap_convert_ssize_t(PyObject *obj, void *result) {
+    Py_ssize_t limit;
+    if (obj == Py_None) {
+        limit = -1;
+    }
+    else if (PyNumber_Check(obj)) {
+        limit = PyNumber_AsSsize_t(obj, PyExc_OverflowError);
+        if (limit == -1 && PyErr_Occurred())
+            return 0;
+    }
+    else {
+        PyErr_Format(PyExc_TypeError,
+                     "integer argument expected, got '%.200s'",
+                     Py_TYPE(obj)->tp_name);
+        return 0;
+    }
+    *((Py_ssize_t *)result) = limit;
+    return 1;
+}
+
 static PyObject *
 mmap_read_method(mmap_object *self,
                  PyObject *args)
 {
-    Py_ssize_t num_bytes, n;
+    Py_ssize_t num_bytes = -1, n;
     PyObject *result;
 
     CHECK_VALID(NULL);
-    if (!PyArg_ParseTuple(args, "n:read", &num_bytes))
+    if (!PyArg_ParseTuple(args, "|O&:read", mmap_convert_ssize_t, &num_bytes))
         return(NULL);
 
     /* silently 'adjust' out-of-range requests */
@@ -645,9 +667,9 @@ mmap_move_method(mmap_object *self, PyObject *args)
         return NULL;
     } else {
         /* bounds check the values */
-        if (cnt < 0 || (cnt + dest) < cnt || (cnt + src) < cnt ||
-           src < 0 || src > self->size || (src + cnt) > self->size ||
-           dest < 0 || dest > self->size || (dest + cnt) > self->size) {
+        if ((cnt + dest) < cnt || (cnt + src) < cnt ||
+           src > self->size || (src + cnt) > self->size ||
+           dest > self->size || (dest + cnt) > self->size) {
             PyErr_SetString(PyExc_ValueError,
                 "source, destination, or count out of range");
             return NULL;
