@@ -10,8 +10,10 @@
 """
 
 ISSUE_URI = 'http://bugs.python.org/issue%s'
+SOURCE_URI = 'http://hg.python.org/cpython/file/3.2/%s'
 
 from docutils import nodes, utils
+from sphinx.util.nodes import split_explicit_title
 
 # monkey-patch reST parser to disable alphabetic and roman enumerated lists
 from docutils.parsers.rst.states import Body
@@ -44,6 +46,16 @@ def issue_role(typ, rawtext, text, lineno, inliner, options={}, content=[]):
     return [refnode], []
 
 
+# Support for linking to Python source files easily
+
+def source_role(typ, rawtext, text, lineno, inliner, options={}, content=[]):
+    has_t, title, target = split_explicit_title(text)
+    title = utils.unescape(title)
+    target = utils.unescape(target)
+    refnode = nodes.reference(title, title, refuri=SOURCE_URI % target)
+    return [refnode], []
+
+
 # Support for marking up implementation details
 
 from sphinx.util.compat import Directive
@@ -70,6 +82,67 @@ class ImplementationDetail(Directive):
         else:
             pnode.insert(0, nodes.paragraph('', '', add_text))
         return [pnode]
+
+
+# Support for documenting decorators
+
+from sphinx import addnodes
+from sphinx.domains.python import PyModulelevel, PyClassmember
+
+class PyDecoratorMixin(object):
+    def handle_signature(self, sig, signode):
+        ret = super(PyDecoratorMixin, self).handle_signature(sig, signode)
+        signode.insert(0, addnodes.desc_addname('@', '@'))
+        return ret
+
+    def needs_arglist(self):
+        return False
+
+class PyDecoratorFunction(PyDecoratorMixin, PyModulelevel):
+    def run(self):
+        # a decorator function is a function after all
+        self.name = 'py:function'
+        return PyModulelevel.run(self)
+
+class PyDecoratorMethod(PyDecoratorMixin, PyClassmember):
+    def run(self):
+        self.name = 'py:method'
+        return PyClassmember.run(self)
+
+
+# Support for documenting version of removal in deprecations
+
+from sphinx.locale import versionlabels
+from sphinx.util.compat import Directive
+
+versionlabels['deprecated-removed'] = \
+    'Deprecated since version %s, will be removed in version %s'
+
+class DeprecatedRemoved(Directive):
+    has_content = True
+    required_arguments = 2
+    optional_arguments = 1
+    final_argument_whitespace = True
+    option_spec = {}
+
+    def run(self):
+        node = addnodes.versionmodified()
+        node.document = self.state.document
+        node['type'] = 'deprecated-removed'
+        version = (self.arguments[0], self.arguments[1])
+        node['version'] = version
+        if len(self.arguments) == 3:
+            inodes, messages = self.state.inline_text(self.arguments[2],
+                                                      self.lineno+1)
+            node.extend(inodes)
+            if self.content:
+                self.state.nested_parse(self.content, self.content_offset, node)
+            ret = [node] + messages
+        else:
+            ret = [node]
+        env = self.state.document.settings.env
+        env.note_versionchange('deprecated', version[0], node, self.lineno)
+        return ret
 
 
 # Support for building "topic help" for pydoc
@@ -119,10 +192,10 @@ class PydocTopicsBuilder(Builder):
         for label in self.status_iterator(pydoc_topic_labels,
                                           'building topics... ',
                                           length=len(pydoc_topic_labels)):
-            if label not in self.env.labels:
+            if label not in self.env.domaindata['std']['labels']:
                 self.warn('label %r not in documentation' % label)
                 continue
-            docname, labelid, sectname = self.env.labels[label]
+            docname, labelid, sectname = self.env.domaindata['std']['labels'][label]
             doctree = self.env.get_and_resolve_doctree(docname, self)
             document = new_document('<section node>')
             document.append(doctree.ids[labelid])
@@ -147,7 +220,6 @@ import suspicious
 # Support for documenting Opcodes
 
 import re
-from sphinx import addnodes
 
 opcode_sig_re = re.compile(r'(\w+(?:\+\d)?)(?:\s*\((.*)\))?')
 
@@ -165,11 +237,41 @@ def parse_opcode_signature(env, sig, signode):
     return opname.strip()
 
 
+# Support for documenting pdb commands
+
+pdbcmd_sig_re = re.compile(r'([a-z()!]+)\s*(.*)')
+
+# later...
+#pdbargs_tokens_re = re.compile(r'''[a-zA-Z]+  |  # identifiers
+#                                   [.,:]+     |  # punctuation
+#                                   [\[\]()]   |  # parens
+#                                   \s+           # whitespace
+#                                   ''', re.X)
+
+def parse_pdb_command(env, sig, signode):
+    """Transform a pdb command signature into RST nodes."""
+    m = pdbcmd_sig_re.match(sig)
+    if m is None:
+        raise ValueError
+    name, args = m.groups()
+    fullname = name.replace('(', '').replace(')', '')
+    signode += addnodes.desc_name(name, name)
+    if args:
+        signode += addnodes.desc_addname(' '+args, ' '+args)
+    return fullname
+
+
 def setup(app):
     app.add_role('issue', issue_role)
+    app.add_role('source', source_role)
     app.add_directive('impl-detail', ImplementationDetail)
+    app.add_directive('deprecated-removed', DeprecatedRemoved)
     app.add_builder(PydocTopicsBuilder)
     app.add_builder(suspicious.CheckSuspiciousMarkupBuilder)
     app.add_description_unit('opcode', 'opcode', '%s (opcode)',
                              parse_opcode_signature)
+    app.add_description_unit('pdbcommand', 'pdbcmd', '%s (pdb command)',
+                             parse_pdb_command)
     app.add_description_unit('2to3fixer', '2to3fixer', '%s (2to3 fixer)')
+    app.add_directive_to_domain('py', 'decorator', PyDecoratorFunction)
+    app.add_directive_to_domain('py', 'decoratormethod', PyDecoratorMethod)

@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 # Read #define's and translate to Python code.
 # Handle #include statements.
@@ -49,13 +49,7 @@ except KeyError:
     try:
         searchdirs=os.environ['INCLUDE'].split(';')
     except KeyError:
-        try:
-            if sys.platform.startswith("atheos"):
-                searchdirs=os.environ['C_INCLUDE_PATH'].split(':')
-            else:
-                raise KeyError
-        except KeyError:
-            searchdirs=['/usr/include']
+        searchdirs=['/usr/include']
 
 def main():
     global filedict

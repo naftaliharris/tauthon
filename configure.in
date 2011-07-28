@@ -1,13 +1,20 @@
 dnl ***********************************************
 dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
-dnl NOTE: autoconf 2.64 doesn't seem to work (use 2.61).
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.1)
+m4_define(PYTHON_VERSION, 3.2)
+
+dnl Some m4 magic to ensure that the configure script is generated
+dnl by the correct autoconf version.
+m4_define([version_required],
+[m4_if(m4_version_compare(m4_defn([m4_PACKAGE_VERSION]), [$1]), 0,
+       [],
+       [m4_fatal([Autoconf version $1 is required for Python], 63)])
+])
+AC_PREREQ(2.65)
 
 AC_REVISION($Revision$)
-AC_PREREQ(2.61)
 AC_INIT(python, PYTHON_VERSION, http://bugs.python.org/)
 AC_CONFIG_SRCDIR([Include/object.h])
 AC_CONFIG_HEADER(pyconfig.h)
@@ -45,6 +52,7 @@ mv confdefs.h.new confdefs.h
 AC_SUBST(VERSION)
 VERSION=PYTHON_VERSION
 
+# Version number of Python's own shared library file.
 AC_SUBST(SOVERSION)
 SOVERSION=1.0
 
@@ -80,7 +88,7 @@ CONFIG_ARGS="$ac_configure_args"
 
 AC_MSG_CHECKING([for --enable-universalsdk])
 AC_ARG_ENABLE(universalsdk,
-	AC_HELP_STRING(--enable-universalsdk@<:@=SDKDIR@:>@, Build against Mac OS X 10.4u SDK (ppc/i386)),
+	AS_HELP_STRING([--enable-universalsdk@<:@=SDKDIR@:>@], [Build against Mac OS X 10.4u SDK (ppc/i386)]),
 [
 	case $enableval in
 	yes)
@@ -121,10 +129,9 @@ AC_SUBST(ARCH_RUN_32BIT)
 
 UNIVERSAL_ARCHS="32-bit"
 AC_SUBST(LIPO_32BIT_FLAGS)
-AC_SUBST(LIPO_64BIT_FLAGS)
 AC_MSG_CHECKING(for --with-universal-archs)
 AC_ARG_WITH(universal-archs,
-    AC_HELP_STRING(--with-universal-archs=ARCH, select architectures for universal build ("32-bit", "64-bit", "3-way", "intel" or "all")),
+    AS_HELP_STRING([--with-universal-archs=ARCH], [select architectures for universal build ("32-bit", "64-bit", "3-way", "intel" or "all")]),
 [
 	AC_MSG_RESULT($withval)
 	UNIVERSAL_ARCHS="$withval"
@@ -136,8 +143,8 @@ AC_ARG_WITH(universal-archs,
 
 
 AC_ARG_WITH(framework-name,
-              AC_HELP_STRING(--with-framework-name=FRAMEWORK, 
-                             specify an alternate name of the framework built with --enable-framework),
+              AS_HELP_STRING([--with-framework-name=FRAMEWORK],
+                             [specify an alternate name of the framework built with --enable-framework]),
 [
     PYTHONFRAMEWORK=${withval}
     PYTHONFRAMEWORKDIR=${withval}.framework
@@ -149,7 +156,7 @@ AC_ARG_WITH(framework-name,
 ])
 dnl quadrigraphs "@<:@" and "@:>@" produce "[" and "]" in the output
 AC_ARG_ENABLE(framework,
-              AC_HELP_STRING(--enable-framework@<:@=INSTALLDIR@:>@, Build (MacOSX|Darwin) framework),
+              AS_HELP_STRING([--enable-framework@<:@=INSTALLDIR@:>@], [Build (MacOSX|Darwin) framework]),
 [
 	case $enableval in
 	yes) 
@@ -173,26 +180,55 @@ AC_ARG_ENABLE(framework,
 		enable_framework=
 		;;
 	*)
-		PYTHONFRAMEWORKPREFIX=$enableval
+		PYTHONFRAMEWORKPREFIX="${enableval}"
 		PYTHONFRAMEWORKINSTALLDIR=$PYTHONFRAMEWORKPREFIX/$PYTHONFRAMEWORKDIR
 		FRAMEWORKINSTALLFIRST="frameworkinstallstructure"
 		FRAMEWORKALTINSTALLFIRST="frameworkinstallstructure "
-		case "${UNIVERSAL_ARCHS}" in
-		all|3-way|intel)
-			FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps4way frameworkinstallunixtools4way"
-			FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps4way frameworkaltinstallunixtools4way"
-			;;
-		*)
-			FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools"
-			FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkaltinstallunixtools"
-			;;
-		esac
+		FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools"
+		FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkaltinstallunixtools"
+		FRAMEWORKINSTALLAPPSPREFIX="/Applications"
 
 		if test "x${prefix}" = "xNONE" ; then
 			FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
+
 		else
 			FRAMEWORKUNIXTOOLSPREFIX="${prefix}"
 		fi
+
+		case "${enableval}" in
+		/System*)
+			FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+			if test "${prefix}" = "NONE" ; then
+				# See below
+				FRAMEWORKUNIXTOOLSPREFIX="/usr"
+			fi
+			;;
+
+		/Library*)
+			FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+			;;
+
+		*/Library/Frameworks)
+			MDIR="`dirname "${enableval}"`"
+			MDIR="`dirname "${MDIR}"`"
+			FRAMEWORKINSTALLAPPSPREFIX="${MDIR}/Applications"
+
+			if test "${prefix}" = "NONE"; then
+				# User hasn't specified the 
+				# --prefix option, but wants to install
+				# the framework in a non-default location,
+				# ensure that the compatibility links get
+				# installed relative to that prefix as well
+				# instead of in /usr/local.
+				FRAMEWORKUNIXTOOLSPREFIX="${MDIR}"
+			fi
+			;;
+
+		*)
+			FRAMEWORKINSTALLAPPSPREFIX="/Applications"
+			;;
+		esac
+
 		prefix=$PYTHONFRAMEWORKINSTALLDIR/Versions/$VERSION
 
 		# Add files for Mac specific code to the list of output
@@ -218,11 +254,6 @@ AC_ARG_ENABLE(framework,
 	fi
 	enable_framework=
 
-	if test "$UNIVERSAL_ARCHS" = "all" 
-	then
-		FRAMEWORKINSTALLLAST=update4wayuniversal
-		FRAMEWORKALTINSTALLLAST=update4wayuniversal
-	fi
 ])
 AC_SUBST(PYTHONFRAMEWORK)
 AC_SUBST(PYTHONFRAMEWORKIDENTIFIER)
@@ -234,10 +265,11 @@ AC_SUBST(FRAMEWORKINSTALLLAST)
 AC_SUBST(FRAMEWORKALTINSTALLFIRST)
 AC_SUBST(FRAMEWORKALTINSTALLLAST)
 AC_SUBST(FRAMEWORKUNIXTOOLSPREFIX)
+AC_SUBST(FRAMEWORKINSTALLAPPSPREFIX)
 
 ##AC_ARG_WITH(dyld,
-##            AC_HELP_STRING(--with-dyld,
-##                           Use (OpenStep|Rhapsody) dynamic linker))
+##            AS_HELP_STRING([--with-dyld],
+##                           [Use (OpenStep|Rhapsody) dynamic linker]))
 ##
 # Set name for machine-dependent library files
 AC_SUBST(MACHDEP)
@@ -260,7 +292,6 @@ then
 	case $MACHDEP in
 	cygwin*) MACHDEP="cygwin";;
 	darwin*) MACHDEP="darwin";;
-	atheos*) MACHDEP="atheos";;
         irix646) MACHDEP="irix6";;
 	'')	MACHDEP="unknown";;
 	esac
@@ -282,14 +313,14 @@ case $ac_sys_system/$ac_sys_release in
   # Reconfirmed for OpenBSD 3.3 by Zachary Hamm, for 3.4 by Jason Ish.
   # In addition, Stefan Krah confirms that issue #1244610 exists through
   # OpenBSD 4.6, but is fixed in 4.7.
-  OpenBSD/2.* | OpenBSD/3.@<:@0123456789@:>@ | OpenBSD/4.@<:@0123456@:>@) 
+  OpenBSD/2.* | OpenBSD/3.* | OpenBSD/4.@<:@0123456@:>@) 
     define_xopen_source=no
     # OpenBSD undoes our definition of __BSD_VISIBLE if _XOPEN_SOURCE is
     # also defined. This can be overridden by defining _BSD_SOURCE
     # As this has a different meaning on Linux, only define it on OpenBSD
     AC_DEFINE(_BSD_SOURCE, 1, [Define on OpenBSD to activate all library features])
     ;;
-  OpenBSD/4.@<:@789@:>@)
+  OpenBSD/*)
     # OpenBSD undoes our definition of __BSD_VISIBLE if _XOPEN_SOURCE is
     # also defined. This can be overridden by defining _BSD_SOURCE
     # As this has a different meaning on Linux, only define it on OpenBSD
@@ -300,9 +331,12 @@ case $ac_sys_system/$ac_sys_release in
   # Marc Recht
   NetBSD/1.5 | NetBSD/1.5.* | NetBSD/1.6 | NetBSD/1.6.* | NetBSD/1.6@<:@A-S@:>@)
     define_xopen_source=no;;
-  # On Solaris 2.6, sys/wait.h is inconsistent in the usage
-  # of union __?sigval. Reported by Stuart Bishop.
-  SunOS/5.6)
+  # From the perspective of Solaris, _XOPEN_SOURCE is not so much a
+  # request to enable features supported by the standard as a request
+  # to disable features not supported by the standard.  The best way
+  # for Python to use Solaris is simply to leave _XOPEN_SOURCE out
+  # entirely and define __EXTENSIONS__ instead.
+  SunOS/*)
     define_xopen_source=no;;
   # On UnixWare 7, u_long is never defined with _XOPEN_SOURCE,
   # but used in /usr/include/netinet/tcp.h. Reported by Tim Rice.
@@ -348,35 +382,15 @@ esac
 
 if test $define_xopen_source = yes
 then
-  # On Solaris w/ g++ it appears that _XOPEN_SOURCE has to be
-  # defined precisely as g++ defines it
-  # Furthermore, on Solaris 10, XPG6 requires the use of a C99
-  # compiler
-  case $ac_sys_system/$ac_sys_release in
-    SunOS/5.8|SunOS/5.9|SunOS/5.10|SunOS/5.11)
-      AC_DEFINE(_XOPEN_SOURCE, 500, 
-                Define to the level of X/Open that your system supports)
-      ;;
-    *)
-      AC_DEFINE(_XOPEN_SOURCE, 600, 
-                Define to the level of X/Open that your system supports)
-      ;;
-  esac
+  AC_DEFINE(_XOPEN_SOURCE, 600, 
+            Define to the level of X/Open that your system supports)
 
   # On Tru64 Unix 4.0F, defining _XOPEN_SOURCE also requires
   # definition of _XOPEN_SOURCE_EXTENDED and _POSIX_C_SOURCE, or else
   # several APIs are not declared. Since this is also needed in some
   # cases for HP-UX, we define it globally.
-  # except for Solaris 10, where it must not be defined, 
-  # as it implies XPG4.2
-  case $ac_sys_system/$ac_sys_release in
-    SunOS/5.10|SunOS/5.11)
-      ;;
-    *)
-      AC_DEFINE(_XOPEN_SOURCE_EXTENDED, 1,
-      		Define to activate Unix95-and-earlier features)
-      ;;
-  esac
+  AC_DEFINE(_XOPEN_SOURCE_EXTENDED, 1,
+   	    Define to activate Unix95-and-earlier features)
 
   AC_DEFINE(_POSIX_C_SOURCE, 200112L, Define to activate features from IEEE Stds 1003.1-2001)
   
@@ -424,7 +438,7 @@ AC_MSG_RESULT($ac_sys_machine)
 # on that fiddles with OPT and BASECFLAGS?
 AC_MSG_CHECKING(for --without-gcc)
 AC_ARG_WITH(gcc,
-            AC_HELP_STRING(--without-gcc,never use gcc),
+            AS_HELP_STRING([--without-gcc], [never use gcc]),
 [
 	case $withval in
 	no)	CC=${CC:-cc}
@@ -448,13 +462,19 @@ then
 (it is also a good idea to do 'make clean' before compiling)])
 fi
 
+# Don't let AC_PROG_CC set the default CFLAGS. It normally sets -g -O2
+# when the compiler supports them, but we don't always want -O2, and
+# we set -g later.
+if test -z "$CFLAGS"; then
+        CFLAGS=
+fi
 AC_PROG_CC
 
 AC_SUBST(CXX)
 AC_SUBST(MAINCC)
 AC_MSG_CHECKING(for --with-cxx-main=<compiler>)
 AC_ARG_WITH(cxx_main,
-            AC_HELP_STRING([--with-cxx-main=<compiler>],
+            AS_HELP_STRING([--with-cxx-main=<compiler>],
                            [compile main() and link python executable with C++ compiler]),
 [
 	
@@ -505,8 +525,20 @@ then
 fi
 
 
+AC_MSG_CHECKING([for -Wl,--no-as-needed])
+save_LDFLAGS="$LDFLAGS"
+LDFLAGS="$LDFLAGS -Wl,--no-as-needed"
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[]], [[]])],
+  [NO_AS_NEEDED="-Wl,--no-as-needed"
+   AC_MSG_RESULT([yes])],
+  [NO_AS_NEEDED=""
+   AC_MSG_RESULT([no])])
+LDFLAGS="$save_LDFLAGS"
+AC_SUBST(NO_AS_NEEDED)
+
+
 # checks for UNIX variants that set C preprocessor variables
-AC_AIX
+AC_USE_SYSTEM_EXTENSIONS
 
 # Check for unsupported systems
 case $ac_sys_system/$ac_sys_release in
@@ -519,7 +551,7 @@ esac
 AC_EXEEXT
 AC_MSG_CHECKING(for --with-suffix)
 AC_ARG_WITH(suffix,
-            AC_HELP_STRING(--with-suffix=.exe, set executable suffix),
+            AS_HELP_STRING([--with-suffix=.exe], [set executable suffix]),
 [
 	case $withval in
 	no)	EXEEXT=;;
@@ -558,10 +590,6 @@ hp*|HP*)
     case $CC in
     cc|*/cc) CC="$CC -Ae";;
     esac;;
-SunOS*)
-    # Some functions have a prototype only with that define, e.g. confstr
-    AC_DEFINE(__EXTENSIONS__, 1, [Defined on Solaris to see additional function prototypes.])
-    ;;
 esac
 
 
@@ -569,7 +597,7 @@ AC_SUBST(LIBRARY)
 AC_MSG_CHECKING(LIBRARY)
 if test -z "$LIBRARY"
 then
-	LIBRARY='libpython$(VERSION).a'
+	LIBRARY='libpython$(VERSION)$(ABIFLAGS).a'
 fi
 AC_MSG_RESULT($LIBRARY)
 
@@ -586,18 +614,24 @@ AC_MSG_RESULT($LIBRARY)
 #
 # INSTSONAME is the name of the shared library that will be use to install
 # on the system - some systems like version suffix, others don't
+#
+# LDVERSION is the shared library version number, normally the Python version
+# with the ABI build flags appended.
 AC_SUBST(LDLIBRARY)
 AC_SUBST(DLLLIBRARY)
 AC_SUBST(BLDLIBRARY)
+AC_SUBST(PY3LIBRARY)
 AC_SUBST(LDLIBRARYDIR)
 AC_SUBST(INSTSONAME)
 AC_SUBST(RUNSHARED)
+AC_SUBST(LDVERSION)
 LDLIBRARY="$LIBRARY"
 BLDLIBRARY='$(LDLIBRARY)'
 INSTSONAME='$(LDLIBRARY)'
 DLLLIBRARY=''
 LDLIBRARYDIR=''
 RUNSHARED=''
+LDVERSION="$VERSION"
 
 # LINKCC is the command that links the python executable -- default is $(CC).
 # If CXX is set, and if it is needed to link a main function that was
@@ -645,14 +679,21 @@ case `"$ac_prog" -V 2>&1 < /dev/null` in
 esac
 AC_MSG_RESULT($GNULD)
 
+AC_C_INLINE
+if test "$ac_cv_c_inline" != no ; then
+        AC_DEFINE(USE_INLINE, 1, [Define to use the C99 inline keyword.])
+        AC_SUBST(USE_INLINE)
+fi
+
+
 AC_MSG_CHECKING(for --enable-shared)
 AC_ARG_ENABLE(shared,
-              AC_HELP_STRING(--enable-shared, disable/enable building shared python library))
+              AS_HELP_STRING([--enable-shared], [disable/enable building shared python library]))
 
 if test -z "$enable_shared"
 then 
   case $ac_sys_system in
-  CYGWIN* | atheos*)
+  CYGWIN*)
     enable_shared="yes";;
   *)
     enable_shared="no";;
@@ -662,13 +703,13 @@ AC_MSG_RESULT($enable_shared)
 
 AC_MSG_CHECKING(for --enable-profiling)
 AC_ARG_ENABLE(profiling,
-              AC_HELP_STRING(--enable-profiling, enable C-level code profiling),
+              AS_HELP_STRING([--enable-profiling], [enable C-level code profiling]),
 [ac_save_cc="$CC"
  CC="$CC -pg"
- AC_TRY_RUN([int main() { return 0; }],
-   ac_enable_profiling="yes",
-   ac_enable_profiling="no",
-   ac_enable_profiling="no")
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[int main() { return 0; }]])],
+   [ac_enable_profiling="yes"],
+   [ac_enable_profiling="no"],
+   [ac_enable_profiling="no"])
  CC="$ac_save_cc"])
 AC_MSG_RESULT($ac_enable_profiling)
 
@@ -701,18 +742,22 @@ if test $enable_shared = "yes"; then
   AC_DEFINE(Py_ENABLE_SHARED, 1, [Defined if Python is built as a shared library.])
   case $ac_sys_system in
     CYGWIN*)
-          LDLIBRARY='libpython$(VERSION).dll.a'
-          DLLLIBRARY='libpython$(VERSION).dll'
+          LDLIBRARY='libpython$(LDVERSION).dll.a'
+          DLLLIBRARY='libpython$(LDVERSION).dll'
           ;;
     SunOS*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-Wl,-R,$(LIBDIR) -L. -lpython$(VERSION)'
+	  LDLIBRARY='libpython$(LDVERSION).so'
+	  BLDLIBRARY='-Wl,-R,$(LIBDIR) -L. -lpython$(LDVERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`:${LD_LIBRARY_PATH}
 	  INSTSONAME="$LDLIBRARY".$SOVERSION
+	  if test "$with_pydebug" != yes
+	  then
+	      PY3LIBRARY=libpython3.so
+	  fi
           ;;
-    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-L. -lpython$(VERSION)'
+    Linux*|GNU*|NetBSD*|FreeBSD*|DragonFly*|OpenBSD*)
+	  LDLIBRARY='libpython$(LDVERSION).so'
+	  BLDLIBRARY='-L. -lpython$(LDVERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`:${LD_LIBRARY_PATH}
 	  case $ac_sys_system in
 	      FreeBSD*)
@@ -720,36 +765,35 @@ if test $enable_shared = "yes"; then
 		;;
 	  esac
 	  INSTSONAME="$LDLIBRARY".$SOVERSION
+	  if test "$with_pydebug" != yes
+          then
+	      PY3LIBRARY=libpython3.so
+	  fi
 	  ;;
     hp*|HP*)
 	  case `uname -m` in
 		ia64)
-			LDLIBRARY='libpython$(VERSION).so'
+			LDLIBRARY='libpython$(LDVERSION).so'
 			;;
 		*)
-			LDLIBRARY='libpython$(VERSION).sl'
+			LDLIBRARY='libpython$(LDVERSION).sl'
 			;;
 	  esac
-	  BLDLIBRARY='-Wl,+b,$(LIBDIR) -L. -lpython$(VERSION)'
+	  BLDLIBRARY='-Wl,+b,$(LIBDIR) -L. -lpython$(LDVERSION)'
 	  RUNSHARED=SHLIB_PATH=`pwd`:${SHLIB_PATH}
 	  ;;
     OSF*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-rpath $(LIBDIR) -L. -lpython$(VERSION)'
+	  LDLIBRARY='libpython$(LDVERSION).so'
+	  BLDLIBRARY='-rpath $(LIBDIR) -L. -lpython$(LDVERSION)'
 	  RUNSHARED=LD_LIBRARY_PATH=`pwd`:${LD_LIBRARY_PATH}
 	  ;;
-    atheos*)
-	  LDLIBRARY='libpython$(VERSION).so'
-	  BLDLIBRARY='-L. -lpython$(VERSION)'
-	  RUNSHARED=DLL_PATH=`pwd`:${DLL_PATH:-/atheos/sys/libs:/atheos/autolnk/lib}
-	  ;;
     Darwin*)
-    	LDLIBRARY='libpython$(VERSION).dylib'
-	BLDLIBRARY='-L. -lpython$(VERSION)'
+    	LDLIBRARY='libpython$(LDVERSION).dylib'
+	BLDLIBRARY='-L. -lpython$(LDVERSION)'
 	RUNSHARED='DYLD_LIBRARY_PATH=`pwd`:${DYLD_LIBRARY_PATH}'
 	;;
     AIX*)
-	LDLIBRARY='libpython$(VERSION).so'
+	LDLIBRARY='libpython$(LDVERSION).so'
 	RUNSHARED=LIBPATH=`pwd`:${LIBPATH}
 	;;
 
@@ -758,7 +802,7 @@ else # shared is disabled
   case $ac_sys_system in
     CYGWIN*)
           BLDLIBRARY='$(LIBRARY)'
-          LDLIBRARY='libpython$(VERSION).dll.a'
+          LDLIBRARY='libpython$(LDVERSION).dll.a'
           ;;
   esac
 fi
@@ -788,7 +832,13 @@ fi
 AC_SUBST(HGVERSION)
 AC_SUBST(HGTAG)
 AC_SUBST(HGBRANCH)
+
+if test -e $srcdir/.hg/dirstate
+then
 AC_CHECK_PROG(HAS_HG, hg, found, not-found)
+else
+HAS_HG=no-repository
+fi
 if test $HAS_HG = found
 then
     HGVERSION="hg id -i \$(srcdir)"
@@ -799,6 +849,15 @@ else
     HGTAG=""
     HGBRANCH=""
 fi
+
+AC_SUBST(DISABLE_ASDLGEN)
+DISABLE_ASDLGEN=""
+AC_CHECK_PROG(HAS_PYTHON, python, found, not-found)
+if test $HAS_HG != found -o $HAS_PYTHON != found
+then
+    DISABLE_ASDLGEN="@echo hg: $HAS_HG, python: $HAS_PYTHON! cannot run \$(srcdir)/Parser/asdl_c.py #"
+fi
+
 
 case $MACHDEP in
 bsdos*|hp*|HP*)
@@ -815,15 +874,18 @@ AC_SUBST(LN)
 if test -z "$LN" ; then
 	case $ac_sys_system in
 		CYGWIN*) LN="ln -s";;
-		atheos*) LN="ln -s";;
 		*) LN=ln;;
 	esac
 fi
 
+# For calculating the .so ABI tag.
+AC_SUBST(ABIFLAGS)
+ABIFLAGS=""
+
 # Check for --with-pydebug
 AC_MSG_CHECKING(for --with-pydebug)
 AC_ARG_WITH(pydebug, 
-            AC_HELP_STRING(--with-pydebug, build with Py_DEBUG defined),
+            AS_HELP_STRING([--with-pydebug], [build with Py_DEBUG defined]),
 [
 if test "$withval" != no
 then 
@@ -831,6 +893,7 @@ then
   [Define if you want to build an interpreter with many run-time checks.]) 
   AC_MSG_RESULT(yes); 
   Py_DEBUG='true'
+  ABIFLAGS="${ABIFLAGS}d"
 else AC_MSG_RESULT(no); Py_DEBUG='false'
 fi],
 [AC_MSG_RESULT(no)])
@@ -867,7 +930,7 @@ then
 	    if test "$Py_DEBUG" = 'true' ; then
 		# Optimization messes up debuggers, so turn it off for
 		# debug builds.
-		OPT="-g -Wall $STRICT_PROTO"
+		OPT="-g -O0 -Wall $STRICT_PROTO"
 	    else
 		OPT="-g $WRAP -O3 -Wall $STRICT_PROTO"
 	    fi
@@ -968,30 +1031,28 @@ yes)
 	    if test "${enable_universalsdk}"; then
 		UNIVERSAL_ARCH_FLAGS=""
 	        if test "$UNIVERSAL_ARCHS" = "32-bit" ; then
-		   ARCH_RUN_32BIT=""
 		   UNIVERSAL_ARCH_FLAGS="-arch ppc -arch i386"
-
+		   ARCH_RUN_32BIT=""
+		   LIPO_32BIT_FLAGS=""
 	         elif test "$UNIVERSAL_ARCHS" = "64-bit" ; then
-		   ARCH_RUN_32BIT="true"
 		   UNIVERSAL_ARCH_FLAGS="-arch ppc64 -arch x86_64"
+		   LIPO_32BIT_FLAGS=""
+		   ARCH_RUN_32BIT="true"
 
 	         elif test "$UNIVERSAL_ARCHS" = "all" ; then
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
 		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch ppc64 -arch x86_64"
-		   LIPO_32BIT_FLAGS="-extract i386 -extract ppc7400"
-		   LIPO_64BIT_FLAGS="-extract x86_64 -extract ppc64"
+		   LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
+		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
 
 	         elif test "$UNIVERSAL_ARCHS" = "intel" ; then
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386"
 		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch x86_64"
 		   LIPO_32BIT_FLAGS="-extract i386"
-		   LIPO_64BIT_FLAGS="-extract x86_64"
+		   ARCH_RUN_32BIT="/usr/bin/arch -i386"
 
 	         elif test "$UNIVERSAL_ARCHS" = "3-way" ; then
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
 		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch x86_64"
-		   LIPO_32BIT_FLAGS="-extract i386 -extract ppc7400"
-		   LIPO_64BIT_FLAGS="-extract x86_64"
+		   LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
+		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
 
 		 else
 	           AC_MSG_ERROR([proper usage is --with-universal-arch=32-bit|64-bit|all|intel|3-way])
@@ -1004,7 +1065,7 @@ yes)
 		then
 			CFLAGS="-isysroot ${UNIVERSALSDK} ${CFLAGS}"
 			LDFLAGS="-isysroot ${UNIVERSALSDK} ${LDFLAGS}"
-			CPPFLAGSFLAGS="-isysroot ${UNIVERSALSDK} ${CPPFLAGS}"
+			CPPFLAGS="-isysroot ${UNIVERSALSDK} ${CPPFLAGS}"
 		fi
 	    fi
 
@@ -1082,62 +1143,21 @@ then
 	BASECFLAGS="$BASECFLAGS $ac_arch_flags"
 fi
 
-# disable check for icc since it seems to pass, but generates a warning
-if test "$CC" = icc
-then
-  ac_cv_opt_olimit_ok=no
-fi
-
-AC_MSG_CHECKING(whether $CC accepts -OPT:Olimit=0)
-AC_CACHE_VAL(ac_cv_opt_olimit_ok,
-[ac_save_cc="$CC"
-CC="$CC -OPT:Olimit=0"
-AC_TRY_RUN([int main() { return 0; }],
-  ac_cv_opt_olimit_ok=yes,
-  ac_cv_opt_olimit_ok=no,
-  ac_cv_opt_olimit_ok=no)
-CC="$ac_save_cc"])
-AC_MSG_RESULT($ac_cv_opt_olimit_ok)
-if test $ac_cv_opt_olimit_ok = yes; then
-    case $ac_sys_system in
-	# XXX is this branch needed? On MacOSX 10.2.2 the result of the
-	# olimit_ok test is "no".  Is it "yes" in some other Darwin-esque
-	# environment?
-        Darwin*)
-	    ;;
-        *)
-	    BASECFLAGS="$BASECFLAGS -OPT:Olimit=0"
-	    ;;
-    esac
-else
-  AC_MSG_CHECKING(whether $CC accepts -Olimit 1500)
-  AC_CACHE_VAL(ac_cv_olimit_ok,
-  [ac_save_cc="$CC"
-  CC="$CC -Olimit 1500"
-  AC_TRY_RUN([int main() { return 0; }],
-    ac_cv_olimit_ok=yes,
-    ac_cv_olimit_ok=no,
-    ac_cv_olimit_ok=no)
-  CC="$ac_save_cc"])
-  AC_MSG_RESULT($ac_cv_olimit_ok)
-  if test $ac_cv_olimit_ok = yes; then
-    BASECFLAGS="$BASECFLAGS -Olimit 1500"
-  fi
-fi
-
 # Check whether GCC supports PyArg_ParseTuple format
 if test "$GCC" = "yes"
 then
   AC_MSG_CHECKING(whether gcc supports ParseTuple __format__)
   save_CFLAGS=$CFLAGS
   CFLAGS="$CFLAGS -Werror"
-  AC_TRY_COMPILE([
-    void f(char*,...)__attribute((format(PyArg_ParseTuple, 1, 2)));
-  ],,
-  AC_DEFINE(HAVE_ATTRIBUTE_FORMAT_PARSETUPLE, 1, [Define if GCC supports __attribute__((format(PyArg_ParseTuple, 2, 3)))])
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-  )
+  AC_COMPILE_IFELSE([
+    AC_LANG_PROGRAM([[void f(char*,...)__attribute((format(PyArg_ParseTuple, 1, 2)));]], [[]])
+  ],[
+    AC_DEFINE(HAVE_ATTRIBUTE_FORMAT_PARSETUPLE, 1,
+      [Define if GCC supports __attribute__((format(PyArg_ParseTuple, 2, 3)))])
+    AC_MSG_RESULT(yes)
+  ],[
+    AC_MSG_RESULT(no)
+  ])
   CFLAGS=$save_CFLAGS
 fi
 
@@ -1148,7 +1168,7 @@ fi
 # options before we can check whether -Kpthread improves anything.
 AC_MSG_CHECKING(whether pthreads are available without options)
 AC_CACHE_VAL(ac_cv_pthread_is_default,
-[AC_TRY_RUN([
+[AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <pthread.h>
 
 void* routine(void* p){return NULL;}
@@ -1160,14 +1180,11 @@ int main(){
   (void)pthread_detach(p);
   return 0;
 }
-],
-[
+]])],[
   ac_cv_pthread_is_default=yes
   ac_cv_kthread=no
   ac_cv_pthread=no
-],
-  ac_cv_pthread_is_default=no,
-  ac_cv_pthread_is_default=no)
+],[ac_cv_pthread_is_default=no],[ac_cv_pthread_is_default=no])
 ])
 AC_MSG_RESULT($ac_cv_pthread_is_default)
 
@@ -1185,7 +1202,7 @@ AC_MSG_CHECKING(whether $CC accepts -Kpthread)
 AC_CACHE_VAL(ac_cv_kpthread,
 [ac_save_cc="$CC"
 CC="$CC -Kpthread"
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <pthread.h>
 
 void* routine(void* p){return NULL;}
@@ -1197,10 +1214,7 @@ int main(){
   (void)pthread_detach(p);
   return 0;
 }
-],
-  ac_cv_kpthread=yes,
-  ac_cv_kpthread=no,
-  ac_cv_kpthread=no)
+]])],[ac_cv_kpthread=yes],[ac_cv_kpthread=no],[ac_cv_kpthread=no])
 CC="$ac_save_cc"])
 AC_MSG_RESULT($ac_cv_kpthread)
 fi
@@ -1216,7 +1230,7 @@ AC_MSG_CHECKING(whether $CC accepts -Kthread)
 AC_CACHE_VAL(ac_cv_kthread,
 [ac_save_cc="$CC"
 CC="$CC -Kthread"
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <pthread.h>
 
 void* routine(void* p){return NULL;}
@@ -1228,10 +1242,7 @@ int main(){
   (void)pthread_detach(p);
   return 0;
 }
-],
-  ac_cv_kthread=yes,
-  ac_cv_kthread=no,
-  ac_cv_kthread=no)
+]])],[ac_cv_kthread=yes],[ac_cv_kthread=no],[ac_cv_kthread=no])
 CC="$ac_save_cc"])
 AC_MSG_RESULT($ac_cv_kthread)
 fi
@@ -1247,7 +1258,7 @@ AC_MSG_CHECKING(whether $CC accepts -pthread)
 AC_CACHE_VAL(ac_cv_thread,
 [ac_save_cc="$CC"
 CC="$CC -pthread"
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <pthread.h>
 
 void* routine(void* p){return NULL;}
@@ -1259,10 +1270,7 @@ int main(){
   (void)pthread_detach(p);
   return 0;
 }
-],
-  ac_cv_pthread=yes,
-  ac_cv_pthread=no,
-  ac_cv_pthread=no)
+]])],[ac_cv_pthread=yes],[ac_cv_pthread=no],[ac_cv_pthread=no])
 CC="$ac_save_cc"])
 AC_MSG_RESULT($ac_cv_pthread)
 fi
@@ -1308,11 +1316,11 @@ CXX="$ac_save_cxx"
 
 dnl # check for ANSI or K&R ("traditional") preprocessor
 dnl AC_MSG_CHECKING(for C preprocessor type)
-dnl AC_TRY_COMPILE([
+dnl AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 dnl #define spam(name, doc) {#name, &name, #name "() -- " doc}
 dnl int foo;
 dnl struct {char *name; int *addr; char *doc;} desc = spam(foo, "something");
-dnl ], [;], cpp_type=ansi, AC_DEFINE(HAVE_OLD_CPP) cpp_type=traditional)
+dnl ]], [[;]])],[cpp_type=ansi],[AC_DEFINE(HAVE_OLD_CPP) cpp_type=traditional])
 dnl AC_MSG_RESULT($cpp_type)
 
 # checks for header files
@@ -1328,7 +1336,7 @@ sys/param.h sys/poll.h sys/select.h sys/socket.h sys/statvfs.h sys/stat.h \
 sys/termio.h sys/time.h \
 sys/times.h sys/types.h sys/un.h sys/utsname.h sys/wait.h pty.h libutil.h \
 sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
-bluetooth/bluetooth.h linux/tipc.h)
+bluetooth/bluetooth.h linux/tipc.h spawn.h util.h)
 AC_HEADER_DIRENT
 AC_HEADER_MAJOR
 
@@ -1359,26 +1367,26 @@ AC_MSG_RESULT($was_it_defined)
 
 # Check whether using makedev requires defining _OSF_SOURCE
 AC_MSG_CHECKING(for makedev)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #if defined(MAJOR_IN_MKDEV)
 #include <sys/mkdev.h>
 #elif defined(MAJOR_IN_SYSMACROS)
 #include <sys/sysmacros.h>
 #else
 #include <sys/types.h>
-#endif ],
-	    [ makedev(0, 0) ],
-	    ac_cv_has_makedev=yes,
-	    ac_cv_has_makedev=no)
+#endif
+]], [[
+  makedev(0, 0) ]])
+],[ac_cv_has_makedev=yes],[ac_cv_has_makedev=no])
 if test "$ac_cv_has_makedev" = "no"; then
     # we didn't link, try if _OSF_SOURCE will allow us to link
-    AC_TRY_LINK([
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #define _OSF_SOURCE 1
 #include <sys/types.h>
-    ],
-    [ makedev(0, 0) ],
-    ac_cv_has_makedev=yes,
-    ac_cv_has_makedev=no)
+    ]],
+    [[ makedev(0, 0) ]])],
+    [ac_cv_has_makedev=yes],
+    [ac_cv_has_makedev=no])
     if test "$ac_cv_has_makedev" = "yes"; then
         AC_DEFINE(_OSF_SOURCE, 1, [Define _OSF_SOURCE to get the makedev macro.])
     fi
@@ -1397,11 +1405,11 @@ fi
 
 use_lfs=yes
 AC_MSG_CHECKING(Solaris LFS bug)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #define _LARGEFILE_SOURCE 1
 #define _FILE_OFFSET_BITS 64
 #include <sys/resource.h>
-],struct rlimit foo;,sol_lfs_bug=no,sol_lfs_bug=yes)
+]], [[struct rlimit foo;]])],[sol_lfs_bug=no],[sol_lfs_bug=yes])
 AC_MSG_RESULT($sol_lfs_bug)
 if test "$sol_lfs_bug" = "yes"; then
   use_lfs=no
@@ -1433,7 +1441,7 @@ EOF
 AC_TYPE_MODE_T
 AC_TYPE_OFF_T
 AC_TYPE_PID_T
-AC_TYPE_SIGNAL
+AC_DEFINE_UNQUOTED([RETSIGTYPE],[void],[assume C89 semantics that RETSIGTYPE is always void])
 AC_TYPE_SIZE_T
 AC_TYPE_UID_T
 AC_TYPE_UINT32_T
@@ -1441,7 +1449,7 @@ AC_TYPE_UINT64_T
 AC_TYPE_INT32_T
 AC_TYPE_INT64_T
 AC_CHECK_TYPE(ssize_t,
-  AC_DEFINE(HAVE_SSIZE_T, 1, Define if your compiler provides ssize_t),,)
+  AC_DEFINE(HAVE_SSIZE_T, 1, [Define if your compiler provides ssize_t]),,)
 
 # Sizes of various common basic types
 # ANSI C requires sizeof(char) == 1, so no need to check it
@@ -1457,10 +1465,10 @@ AC_CHECK_SIZEOF(pid_t, 4)
 
 AC_MSG_CHECKING(for long long support)
 have_long_long=no
-AC_TRY_COMPILE([], [long long x; x = (long long)0;], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[long long x; x = (long long)0;]])],[
   AC_DEFINE(HAVE_LONG_LONG, 1, [Define this if you have the type long long.]) 
   have_long_long=yes
-])
+],[])
 AC_MSG_RESULT($have_long_long)
 if test "$have_long_long" = yes ; then
 AC_CHECK_SIZEOF(long long, 8)
@@ -1468,10 +1476,10 @@ fi
 
 AC_MSG_CHECKING(for long double support)
 have_long_double=no
-AC_TRY_COMPILE([], [long double x; x = (long double)0;], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[long double x; x = (long double)0;]])],[
   AC_DEFINE(HAVE_LONG_DOUBLE, 1, [Define this if you have the type long double.]) 
   have_long_double=yes
-])
+],[])
 AC_MSG_RESULT($have_long_double)
 if test "$have_long_double" = yes ; then
 AC_CHECK_SIZEOF(long double, 16)
@@ -1480,10 +1488,10 @@ fi
 
 AC_MSG_CHECKING(for _Bool support)
 have_c99_bool=no
-AC_TRY_COMPILE([], [_Bool x; x = (_Bool)0;], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[_Bool x; x = (_Bool)0;]])],[
   AC_DEFINE(HAVE_C99_BOOL, 1, [Define this if you have the type _Bool.]) 
   have_c99_bool=yes
-])
+],[])
 AC_MSG_RESULT($have_c99_bool)
 if test "$have_c99_bool" = yes ; then
 AC_CHECK_SIZEOF(_Bool, 1)
@@ -1498,26 +1506,11 @@ AC_CHECK_TYPES(uintptr_t,
         #include <inttypes.h>
         #endif])
 
-
-# Hmph. AC_CHECK_SIZEOF() doesn't include <sys/types.h>.
-AC_MSG_CHECKING(size of off_t)
-AC_CACHE_VAL(ac_cv_sizeof_off_t,
-[AC_TRY_RUN([#include <stdio.h>
+AC_CHECK_SIZEOF(off_t, [], [
+#ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
-main()
-{
-  FILE *f=fopen("conftestval", "w");
-  if (!f) exit(1);
-  fprintf(f, "%d\n", sizeof(off_t));
-  exit(0);
-}],
-ac_cv_sizeof_off_t=`cat conftestval`,
-ac_cv_sizeof_off_t=0,
-ac_cv_sizeof_off_t=4)
+#endif
 ])
-AC_MSG_RESULT($ac_cv_sizeof_off_t)
-AC_DEFINE_UNQUOTED(SIZEOF_OFF_T, $ac_cv_sizeof_off_t,
-[The number of bytes in an off_t.])
 
 AC_MSG_CHECKING(whether to enable large file support)
 if test "$have_long_long" = yes
@@ -1537,26 +1530,14 @@ else
   AC_MSG_RESULT(no)
 fi
 
-# AC_CHECK_SIZEOF() doesn't include <time.h>.
-AC_MSG_CHECKING(size of time_t)
-AC_CACHE_VAL(ac_cv_sizeof_time_t,
-[AC_TRY_RUN([#include <stdio.h>
+AC_CHECK_SIZEOF(time_t, [], [
+#ifdef HAVE_SYS_TYPES_H
+#include <sys/types.h>
+#endif
+#ifdef HAVE_TIME_H
 #include <time.h>
-main()
-{
-  FILE *f=fopen("conftestval", "w");
-  if (!f) exit(1);
-  fprintf(f, "%d\n", sizeof(time_t));
-  exit(0);
-}],
-ac_cv_sizeof_time_t=`cat conftestval`,
-ac_cv_sizeof_time_t=0,
-ac_cv_sizeof_time_t=4)
+#endif
 ])
-AC_MSG_RESULT($ac_cv_sizeof_time_t)
-AC_DEFINE_UNQUOTED(SIZEOF_TIME_T, $ac_cv_sizeof_time_t, 
-[The number of bytes in a time_t.])
-
 
 # if have pthread_t then define SIZEOF_PTHREAD_T
 ac_save_cc="$CC"
@@ -1567,34 +1548,21 @@ then CC="$CC -Kthread"
 elif test "$ac_cv_pthread" = "yes"
 then CC="$CC -pthread"
 fi
+
 AC_MSG_CHECKING(for pthread_t)
 have_pthread_t=no
-AC_TRY_COMPILE([#include <pthread.h>], [pthread_t x; x = *(pthread_t*)0;], have_pthread_t=yes)
+AC_COMPILE_IFELSE([
+  AC_LANG_PROGRAM([[#include <pthread.h>]], [[pthread_t x; x = *(pthread_t*)0;]])
+],[have_pthread_t=yes],[])
 AC_MSG_RESULT($have_pthread_t)
 if test "$have_pthread_t" = yes ; then
-  # AC_CHECK_SIZEOF() doesn't include <pthread.h>.
-  AC_MSG_CHECKING(size of pthread_t)
-  AC_CACHE_VAL(ac_cv_sizeof_pthread_t,
-  [AC_TRY_RUN([#include <stdio.h>
+  AC_CHECK_SIZEOF(pthread_t, [], [
+#ifdef HAVE_PTHREAD_H
 #include <pthread.h>
-  main()
-  {
-    FILE *f=fopen("conftestval", "w");
-    if (!f) exit(1);
-    fprintf(f, "%d\n", sizeof(pthread_t));
-    exit(0);
-  }],
-  ac_cv_sizeof_pthread_t=`cat conftestval`,
-  ac_cv_sizeof_pthread_t=0,
-  ac_cv_sizeof_pthread_t=4)
+#endif
   ])
-  AC_MSG_RESULT($ac_cv_sizeof_pthread_t)
-  AC_DEFINE_UNQUOTED(SIZEOF_PTHREAD_T, $ac_cv_sizeof_pthread_t,
-   [The number of bytes in a pthread_t.])
 fi
 CC="$ac_save_cc"
-
-
 
 AC_SUBST(OTHER_LIBTOOL_OPT)
 case $ac_sys_system/$ac_sys_release in
@@ -1627,7 +1595,7 @@ case $ac_sys_system/$ac_sys_release in
         else 
             LIBTOOL_CRUFT=""
     fi
-    AC_TRY_RUN([
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
     #include <unistd.h>
     int main(int argc, char*argv[])
     {
@@ -1637,9 +1605,7 @@ case $ac_sys_system/$ac_sys_release in
       	  return 1;
       }
     }
-    ], ac_osx_32bit=yes,
-       ac_osx_32bit=no,
-       ac_osx_32bit=yes)
+    ]])],[ac_osx_32bit=yes],[ac_osx_32bit=no],[ac_osx_32bit=yes])
     
     if test "${ac_osx_32bit}" = "yes"; then
     	case `/usr/bin/arch` in
@@ -1709,37 +1675,10 @@ esac
 # Set info about shared libraries.
 AC_SUBST(SO)
 AC_SUBST(LDSHARED)
+AC_SUBST(LDCXXSHARED)
 AC_SUBST(BLDSHARED)
 AC_SUBST(CCSHARED)
 AC_SUBST(LINKFORSHARED)
-# SO is the extension of shared libraries `(including the dot!)
-# -- usually .so, .sl on HP-UX, .dll on Cygwin
-AC_MSG_CHECKING(SO)
-if test -z "$SO"
-then
-	case $ac_sys_system in
-	hp*|HP*)
-		case `uname -m` in
-			ia64) SO=.so;;
-	  		*)    SO=.sl;;
-		esac
-		;;
-	CYGWIN*)   SO=.dll;;
-	*)	   SO=.so;;
-	esac
-else
-	# this might also be a termcap variable, see #610332
-        echo
-        echo '====================================================================='
-        echo '+                                                                   +'
-	echo '+ WARNING: You have set SO in your environment.                     +'
-        echo '+ Do you really mean to change the extension for shared libraries?  +'
-        echo '+ Continuing in 10 seconds to let you to ponder.                    +'
-        echo '+                                                                   +'
-        echo '====================================================================='
-	sleep 10
-fi
-AC_MSG_RESULT($SO)
 
 AC_DEFINE_UNQUOTED(SHLIB_EXT, "$SO", [Define this to be extension of shared libraries (including the dot!).])
 # LDSHARED is the ld *command* used to create shared library
@@ -1757,36 +1696,47 @@ then
 	IRIX/5*) LDSHARED="ld -shared";;
 	IRIX*/6*) LDSHARED="ld ${SGI_ABI} -shared -all";;
 	SunOS/5*) 
-		if test "$GCC" = "yes"
-		then LDSHARED='$(CC) -shared $(LDFLAGS)'
-		else LDSHARED='$(CC) -G $(LDFLAGS)';
+		if test "$GCC" = "yes" ; then
+			LDSHARED='$(CC) -shared'
+			LDCXXSHARED='$(CXX) -shared'
+		else
+			LDSHARED='$(CC) -G'
+			LDCXXSHARED='$(CXX) -G'
 		fi ;;
 	hp*|HP*)
-		if test "$GCC" = "yes"
-		then LDSHARED='$(CC) -shared'
-		else LDSHARED='ld -b';
+		if test "$GCC" = "yes" ; then
+			LDSHARED='$(CC) -shared'
+			LDCXXSHARED='$(CXX) -shared'
+		else
+			LDSHARED='ld -b'
 		fi ;;
 	OSF*) LDSHARED="ld -shared -expect_unresolved \"*\"";;
 	Darwin/1.3*)
-		LDSHARED='$(CC) $(LDFLAGS) -bundle'
+		LDSHARED='$(CC) -bundle'
+		LDCXXSHARED='$(CXX) -bundle'
 		if test "$enable_framework" ; then
 			# Link against the framework. All externals should be defined.
 			BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
 			# No framework. Ignore undefined symbols, assuming they come from Python
 			LDSHARED="$LDSHARED -undefined suppress"
+			LDCXXSHARED="$LDCXXSHARED -undefined suppress"
 		fi ;;
 	Darwin/1.4*|Darwin/5.*|Darwin/6.*)
-		LDSHARED='$(CC) $(LDFLAGS) -bundle'
+		LDSHARED='$(CC) -bundle'
+		LDCXXSHARED='$(CXX) -bundle'
 		if test "$enable_framework" ; then
 			# Link against the framework. All externals should be defined.
 			BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+			LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 		else
 			# No framework, use the Python app as bundle-loader
 			BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
 			LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+			LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
 		fi ;;
 	Darwin/*)
 		# Use -undefined dynamic_lookup whenever possible (10.3 and later).
@@ -1797,57 +1747,77 @@ then
 			if test "${enable_universalsdk}"; then
 				LDFLAGS="${UNIVERSAL_ARCH_FLAGS} -isysroot ${UNIVERSALSDK} ${LDFLAGS}"
 			fi
-			LDSHARED='$(CC) $(LDFLAGS) -bundle -undefined dynamic_lookup'
+			LDSHARED='$(CC) -bundle -undefined dynamic_lookup'
+			LDCXXSHARED='$(CXX) -bundle -undefined dynamic_lookup'
 			BLDSHARED="$LDSHARED"
 		else
-			LDSHARED='$(CC) $(LDFLAGS) -bundle'
+			LDSHARED='$(CC) -bundle'
+			LDCXXSHARED='$(CXX) -bundle'
 			if test "$enable_framework" ; then
 				# Link against the framework. All externals should be defined.
 				BLDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 				LDSHARED="$LDSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
+				LDCXXSHARED="$LDCXXSHARED "'$(PYTHONFRAMEWORKPREFIX)/$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
 			else
 				# No framework, use the Python app as bundle-loader
 				BLDSHARED="$LDSHARED "'-bundle_loader $(BUILDPYTHON)'
 				LDSHARED="$LDSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
+				LDCXXSHARED="$LDCXXSHARED "'-bundle_loader $(BINDIR)/python$(VERSION)$(EXE)'
 			fi
 		fi
 		;;
-	Linux*|GNU*|QNX*) LDSHARED='$(CC) -shared';;
-	BSD/OS*/4*) LDSHARED="gcc -shared";;
+	Linux*|GNU*|QNX*)
+		LDSHARED='$(CC) -shared'
+		LDCXXSHARED='$(CXX) -shared';;
+	BSD/OS*/4*)
+		LDSHARED="gcc -shared"
+		LDCXXSHARED="g++ -shared";;
 	FreeBSD*)
 		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
 		then
-			LDSHARED='$(CC) -shared ${LDFLAGS}'
+			LDSHARED='$(CC) -shared'
+			LDCXXSHARED='$(CXX) -shared'
 		else
-			LDSHARED="ld -Bshareable ${LDFLAGS}"
+			LDSHARED="ld -Bshareable"
 		fi;;
 	OpenBSD*)
 		if [[ "`$CC -dM -E - </dev/null | grep __ELF__`" != "" ]]
 		then
-				LDSHARED='$(CC) -shared $(CCSHARED) ${LDFLAGS}'
+				LDSHARED='$(CC) -shared $(CCSHARED)'
+				LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
 		else
 				case `uname -r` in
 				[[01]].* | 2.[[0-7]] | 2.[[0-7]].*)
 				   LDSHARED="ld -Bshareable ${LDFLAGS}"
 				   ;;
 				*)
-				   LDSHARED='$(CC) -shared $(CCSHARED) ${LDFLAGS}'
+				   LDSHARED='$(CC) -shared $(CCSHARED)'
+				   LDCXXSHARED='$(CXX) -shared $(CCSHARED)'
 				   ;;
 				esac
 		fi;;
-	NetBSD*|DragonFly*) LDSHARED='$(CC) -shared ${LDFLAGS}';;
+	NetBSD*|DragonFly*)
+		LDSHARED='$(CC) -shared'
+		LDCXXSHARED='$(CXX) -shared';;
 	OpenUNIX*|UnixWare*)
-		if test "$GCC" = "yes"
-		then LDSHARED='$(CC) -shared'
-		else LDSHARED='$(CC) -G'
+		if test "$GCC" = "yes" ; then
+			LDSHARED='$(CC) -shared'
+			LDCXXSHARED='$(CXX) -shared'
+		else
+			LDSHARED='$(CC) -G'
+			LDCXXSHARED='$(CXX) -G'
 		fi;;
-	SCO_SV*) LDSHARED='$(CC) -Wl,-G,-Bexport';;
-	CYGWIN*) LDSHARED="gcc -shared -Wl,--enable-auto-image-base";;
-	atheos*) LDSHARED="gcc -shared";;
+	SCO_SV*)
+		LDSHARED='$(CC) -Wl,-G,-Bexport'
+		LDCXXSHARED='$(CXX) -Wl,-G,-Bexport';;
+	CYGWIN*)
+		LDSHARED="gcc -shared -Wl,--enable-auto-image-base"
+		LDCXXSHARED="g++ -shared -Wl,--enable-auto-image-base";;
 	*)	LDSHARED="ld";;
 	esac
 fi
 AC_MSG_RESULT($LDSHARED)
+LDCXXSHARED=${LDCXXSHARED-$LDSHARED}
 BLDSHARED=${BLDSHARED-$LDSHARED}
 # CCSHARED are the C *flags* used to create objects to go into a shared
 # library (module) -- this is only needed for a few systems
@@ -1882,7 +1852,6 @@ then
 		   *gcc*) CCSHARED="-shared";;
 		   *) CCSHARED="";;
 		   esac;;
-	atheos*) CCSHARED="-fPIC";;
 	esac
 fi
 AC_MSG_RESULT($CCSHARED)
@@ -1990,13 +1959,17 @@ AC_CHECK_LIB(intl, textdomain,
 # checks for system dependent C++ extensions support
 case "$ac_sys_system" in
 	AIX*)	AC_MSG_CHECKING(for genuine AIX C++ extensions support)
-		AC_TRY_LINK([#include <load.h>],
-			    [loadAndInit("", 0, "")],
-			    [AC_DEFINE(AIX_GENUINE_CPLUSPLUS, 1,
+		AC_LINK_IFELSE([
+		  AC_LANG_PROGRAM([[#include <load.h>]],
+				  [[loadAndInit("", 0, "")]])
+		],[
+		  AC_DEFINE(AIX_GENUINE_CPLUSPLUS, 1,
                       [Define for AIX if your compiler is a genuine IBM xlC/xlC_r
                        and you want support for AIX C++ shared extension modules.])
-			     AC_MSG_RESULT(yes)],
-			    [AC_MSG_RESULT(no)]);;
+		  AC_MSG_RESULT(yes)
+		],[
+		  AC_MSG_RESULT(no)
+		]);;
 	*) ;;
 esac
 
@@ -2006,26 +1979,53 @@ AC_CHECK_LIB(socket, socket, [LIBS="-lsocket $LIBS"], [], $LIBS) # SVR4 sockets
 
 AC_MSG_CHECKING(for --with-libs)
 AC_ARG_WITH(libs,
-            AC_HELP_STRING(--with-libs='lib1 ...', link against additional libs),
+            AS_HELP_STRING([--with-libs='lib1 ...'], [link against additional libs]),
 [
 AC_MSG_RESULT($withval)
 LIBS="$withval $LIBS"
 ],
 [AC_MSG_RESULT(no)])
 
+AC_PATH_TOOL([PKG_CONFIG], [pkg-config])
+
+# Check for use of the system expat library
+AC_MSG_CHECKING(for --with-system-expat)
+AC_ARG_WITH(system_expat,
+            AS_HELP_STRING([--with-system-expat], [build pyexpat module using an installed expat library]),
+            [],
+            [with_system_expat="no"])
+
+AC_MSG_RESULT($with_system_expat)
+
 # Check for use of the system libffi library
 AC_MSG_CHECKING(for --with-system-ffi)
 AC_ARG_WITH(system_ffi,
-            AC_HELP_STRING(--with-system-ffi, build _ctypes module using an installed ffi library),
+            AS_HELP_STRING([--with-system-ffi], [build _ctypes module using an installed ffi library]),
             [],
             [with_system_ffi="no"])
 
+if test "$with_system_ffi" = "yes" && test -n "$PKG_CONFIG"; then
+    LIBFFI_INCLUDEDIR="`"$PKG_CONFIG" libffi --cflags-only-I 2>/dev/null | sed -e 's/^-I//;s/ *$//'`"
+else
+    LIBFFI_INCLUDEDIR=""
+fi
+AC_SUBST(LIBFFI_INCLUDEDIR)
+
 AC_MSG_RESULT($with_system_ffi)
+
+# Check for support for loadable sqlite extensions
+AC_MSG_CHECKING(for --enable-loadable-sqlite-extensions)
+AC_ARG_ENABLE(loadable-sqlite-extensions,
+              AS_HELP_STRING([--enable-loadable-sqlite-extensions], [support loadable extensions in _sqlite module]),
+              [],
+              [enable_loadable_sqlite_extensions="no"])
+
+AC_MSG_RESULT($enable_loadable_sqlite_extensions)
 
 # Check for --with-dbmliborder
 AC_MSG_CHECKING(for --with-dbmliborder)
 AC_ARG_WITH(dbmliborder,
-            AC_HELP_STRING([--with-dbmliborder=db1:db2:...], [order to check db backends for dbm. Valid value is a colon separated string with the backend names `ndbm', `gdbm' and `bdb'.]),
+            AS_HELP_STRING([--with-dbmliborder=db1:db2:...], [order to check db backends for dbm. Valid value is a colon separated string with the backend names `ndbm', `gdbm' and `bdb'.]),
 [
 if test x$with_dbmliborder = xyes
 then
@@ -2045,7 +2045,7 @@ AC_SUBST(USE_SIGNAL_MODULE)
 AC_SUBST(SIGNAL_OBJS)
 AC_MSG_CHECKING(for --with-signal-module)
 AC_ARG_WITH(signal-module,
-            AC_HELP_STRING(--with-signal-module, disable/enable signal module))
+            AS_HELP_STRING([--with-signal-module], [disable/enable signal module]))
 
 if test -z "$with_signal_module"
 then with_signal_module="yes"
@@ -2067,7 +2067,7 @@ USE_THREAD_MODULE=""
 AC_MSG_CHECKING(for --with-dec-threads)
 AC_SUBST(LDLAST)
 AC_ARG_WITH(dec-threads,
-            AC_HELP_STRING(--with-dec-threads, use DEC Alpha/OSF1 thread-safe libraries),
+            AS_HELP_STRING([--with-dec-threads], [use DEC Alpha/OSF1 thread-safe libraries]),
 [
 AC_MSG_RESULT($withval)
 LDLAST=-threads
@@ -2087,12 +2087,12 @@ AH_TEMPLATE(WITH_THREAD,
 AC_MSG_CHECKING(for --with-threads)
 dnl quadrigraphs "@<:@" and "@:>@" produce "[" and "]" in the output
 AC_ARG_WITH(threads,
-            AC_HELP_STRING(--with(out)-threads@<:@=DIRECTORY@:>@, disable/enable thread support))
+            AS_HELP_STRING([--with(out)-threads@<:@=DIRECTORY@:>@], [disable/enable thread support]))
 
 # --with-thread is deprecated, but check for it anyway
 dnl quadrigraphs "@<:@" and "@:>@" produce "[" and "]" in the output
 AC_ARG_WITH(thread,
-            AC_HELP_STRING(--with(out)-thread@<:@=DIRECTORY@:>@, deprecated; use --with(out)-threads),
+            AS_HELP_STRING([--with(out)-thread@<:@=DIRECTORY@:>@], [deprecated; use --with(out)-threads]),
             [with_threads=$with_thread])
 
 if test -z "$with_threads"
@@ -2171,27 +2171,16 @@ yes
     AC_DEFINE(MACH_C_THREADS, 1,
     [Define if you are using Mach cthreads under mach /])
     THREADOBJ="Python/thread.o"],[
-    AC_MSG_CHECKING(for --with-pth)
-    AC_ARG_WITH([pth],
-                AC_HELP_STRING(--with-pth, use GNU pth threading libraries),
-                [AC_MSG_RESULT($withval)
-                  AC_DEFINE([WITH_THREAD])
-                  AC_DEFINE([HAVE_PTH], 1,
-                            [Define if you have GNU PTH threads.])
-                  LIBS="-lpth $LIBS"
-                  THREADOBJ="Python/thread.o"],
-	        [AC_MSG_RESULT(no)
-
     # Just looking for pthread_create in libpthread is not enough:
     # on HP/UX, pthread.h renames pthread_create to a different symbol name.
     # So we really have to include pthread.h, and then link.
     _libs=$LIBS
     LIBS="$LIBS -lpthread"
     AC_MSG_CHECKING([for pthread_create in -lpthread])
-    AC_TRY_LINK([#include <pthread.h>
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <pthread.h>
 
-void * start_routine (void *arg) { exit (0); }], [
-pthread_create (NULL, NULL, start_routine, NULL)], [
+void * start_routine (void *arg) { exit (0); }]], [[
+pthread_create (NULL, NULL, start_routine, NULL)]])],[
     AC_MSG_RESULT(yes)
     AC_DEFINE(WITH_THREAD)
     posix_threads=yes
@@ -2199,10 +2188,6 @@ pthread_create (NULL, NULL, start_routine, NULL)], [
     LIBS=$_libs
     AC_CHECK_FUNC(pthread_detach, [AC_DEFINE(WITH_THREAD)
     posix_threads=yes
-    THREADOBJ="Python/thread.o"],[
-    AC_CHECK_HEADER(atheos/threads.h, [AC_DEFINE(WITH_THREAD)
-    AC_DEFINE(ATHEOS_THREADS, 1,
-    [Define this if you have AtheOS threads.])
     THREADOBJ="Python/thread.o"],[
     AC_CHECK_LIB(pthreads, pthread_create, [AC_DEFINE(WITH_THREAD)
     posix_threads=yes
@@ -2221,7 +2206,7 @@ pthread_create (NULL, NULL, start_routine, NULL)], [
     LIBS="$LIBS -lcma"
     THREADOBJ="Python/thread.o"],[
     USE_THREAD_MODULE="#"])
-    ])])])])])])])])])
+    ])])])])])])])
 
     AC_CHECK_LIB(mpc, usconfig, [AC_DEFINE(WITH_THREAD)
     LIBS="$LIBS -lmpc"
@@ -2254,23 +2239,20 @@ if test "$posix_threads" = "yes"; then
 
       # Bug 662787: Using semaphores causes unexplicable hangs on Solaris 8.
       case  $ac_sys_system/$ac_sys_release in
-  SunOS/5.6) AC_DEFINE(HAVE_PTHREAD_DESTRUCTOR, 1,
-                       Defined for Solaris 2.6 bug in pthread header.)
+      SunOS/5.6) AC_DEFINE(HAVE_PTHREAD_DESTRUCTOR, 1,
+                       [Defined for Solaris 2.6 bug in pthread header.])
 		       ;;
       SunOS/5.8) AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
-		       Define if the Posix semaphores do not work on your system)
+		       [Define if the Posix semaphores do not work on your system])
 		       ;;
-      AIX/5) AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
-		       Define if the Posix semaphores do not work on your system)
+      AIX/*) AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
+		       [Define if the Posix semaphores do not work on your system])
 		       ;;
-      AIX/6) AC_DEFINE(HAVE_BROKEN_POSIX_SEMAPHORES, 1,
-                      Define if the Posix semaphores do not work on your system)
-                      ;;
       esac
 
       AC_MSG_CHECKING(if PTHREAD_SCOPE_SYSTEM is supported)
       AC_CACHE_VAL(ac_cv_pthread_system_supported,
-      [AC_TRY_RUN([#include <pthread.h>
+      [AC_RUN_IFELSE([AC_LANG_SOURCE([[#include <pthread.h>
       void *foo(void *parm) {
         return NULL;
       }
@@ -2281,10 +2263,10 @@ if test "$posix_threads" = "yes"; then
         if (pthread_attr_setscope(&attr, PTHREAD_SCOPE_SYSTEM)) exit(-1);
         if (pthread_create(&id, &attr, foo, NULL)) exit(-1);
         exit(0);
-      }],
-      ac_cv_pthread_system_supported=yes,
-      ac_cv_pthread_system_supported=no,
-      ac_cv_pthread_system_supported=no)
+      }]])],
+      [ac_cv_pthread_system_supported=yes],
+      [ac_cv_pthread_system_supported=no],
+      [ac_cv_pthread_system_supported=no])
       ])
       AC_MSG_RESULT($ac_cv_pthread_system_supported)
       if test "$ac_cv_pthread_system_supported" = "yes"; then
@@ -2319,7 +2301,7 @@ AC_ARG_ENABLE(ipv6,
 
 [
 dnl the check does not work on cross compilation case...
-  AC_TRY_RUN([ /* AF_INET6 available check */
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[ /* AF_INET6 available check */
 #include <sys/types.h>
 #include <sys/socket.h>
 main()
@@ -2329,25 +2311,31 @@ main()
  else
    exit(0);
 }
-],
+]])],[
   AC_MSG_RESULT(yes)
-  ipv6=yes,
-  AC_MSG_RESULT(no)
-  ipv6=no,
+  ipv6=yes
+],[
   AC_MSG_RESULT(no)
   ipv6=no
-)
+],[
+  AC_MSG_RESULT(no)
+  ipv6=no
+])
 
 if test "$ipv6" = "yes"; then
 	AC_MSG_CHECKING(if RFC2553 API is available)
-	AC_TRY_COMPILE([#include <sys/types.h>
-#include <netinet/in.h>],
-	[struct sockaddr_in6 x;
-x.sin6_scope_id;],
-		AC_MSG_RESULT(yes)
-		ipv6=yes,
-		AC_MSG_RESULT(no, IPv6 disabled)
-		ipv6=no)
+	AC_COMPILE_IFELSE([
+	  AC_LANG_PROGRAM([[#include <sys/types.h>
+#include <netinet/in.h>]],
+			  [[struct sockaddr_in6 x;
+			    x.sin6_scope_id;]])
+	],[
+	  AC_MSG_RESULT(yes)
+	  ipv6=yes
+	],[
+	  AC_MSG_RESULT(no, IPv6 disabled)
+	  ipv6=no
+	])
 fi
 
 if test "$ipv6" = "yes"; then
@@ -2468,16 +2456,19 @@ if test "$ipv6" = "yes" -a "$ipv6lib" != "none"; then
 fi
 
 AC_MSG_CHECKING(for OSX 10.5 SDK or later)
-AC_TRY_COMPILE([#include <Carbon/Carbon.h>], FSIORefNum fRef = 0,
-  AC_DEFINE(HAVE_OSX105_SDK, 1, Define if compiling using MacOS X 10.5 SDK or later.)
-  AC_MSG_RESULT(yes),
+AC_COMPILE_IFELSE([
+  AC_LANG_PROGRAM([[#include <Carbon/Carbon.h>]], [[FSIORefNum fRef = 0]])
+],[
+  AC_DEFINE(HAVE_OSX105_SDK, 1, [Define if compiling using MacOS X 10.5 SDK or later.])
+  AC_MSG_RESULT(yes)
+],[
   AC_MSG_RESULT(no)
-)
+])
 
 # Check for --with-doc-strings
 AC_MSG_CHECKING(for --with-doc-strings)
 AC_ARG_WITH(doc-strings,
-            AC_HELP_STRING(--with(out)-doc-strings, disable/enable documentation strings))
+            AS_HELP_STRING([--with(out)-doc-strings], [disable/enable documentation strings]))
 
 if test -z "$with_doc_strings"
 then with_doc_strings="yes"
@@ -2492,7 +2483,7 @@ AC_MSG_RESULT($with_doc_strings)
 # Check if eval loop should use timestamp counter profiling
 AC_MSG_CHECKING(for --with-tsc)
 AC_ARG_WITH(tsc,
-[  --with(out)-tsc         enable/disable timestamp counter profile], [
+	    AS_HELP_STRING([--with(out)-tsc],[enable/disable timestamp counter profile]),[
 if test "$withval" != no
 then 
   AC_DEFINE(WITH_TSC, 1, 
@@ -2505,10 +2496,12 @@ fi],
 # Check for Python-specific malloc support
 AC_MSG_CHECKING(for --with-pymalloc)
 AC_ARG_WITH(pymalloc,
-            AC_HELP_STRING(--with(out)-pymalloc, disable/enable specialized mallocs))
+            AS_HELP_STRING([--with(out)-pymalloc], [disable/enable specialized mallocs]))
 
 if test -z "$with_pymalloc"
-then with_pymalloc="yes"
+then
+    with_pymalloc="yes"
+    ABIFLAGS="${ABIFLAGS}m"
 fi
 if test "$with_pymalloc" != "no"
 then
@@ -2517,20 +2510,19 @@ then
 fi
 AC_MSG_RESULT($with_pymalloc)
 
-# Check for --with-wctype-functions
-AC_MSG_CHECKING(for --with-wctype-functions)
-AC_ARG_WITH(wctype-functions, 
-            AC_HELP_STRING(--with-wctype-functions, use wctype.h functions),
-[
-if test "$withval" != no
-then 
-  AC_DEFINE(WANT_WCTYPE_FUNCTIONS, 1,
-  [Define if you want wctype.h functions to be used instead of the
-   one supplied by Python itself. (see Include/unicodectype.h).]) 
-  AC_MSG_RESULT(yes)
-else AC_MSG_RESULT(no)
-fi],
-[AC_MSG_RESULT(no)])
+# Check for Valgrind support
+AC_MSG_CHECKING([for --with-valgrind])
+AC_ARG_WITH([valgrind],
+  AS_HELP_STRING([--with-valgrind], [Enable Valgrind support]),,
+  with_valgrind=no)
+AC_MSG_RESULT([$with_valgrind])
+if test "$with_valgrind" != no; then
+    AC_CHECK_HEADER([valgrind/valgrind.h],
+      [AC_DEFINE([WITH_VALGRIND], 1, [Define if you want pymalloc to be disabled when running under valgrind])],
+      [AC_MSG_ERROR([Valgrind support requested but headers not available])]
+    )
+    OPT="-DDYNAMIC_ANNOTATIONS_ENABLED=1 $OPT"
+fi
 
 # -I${DLINCLDIR} is added to the compile rule for importdl.o
 AC_SUBST(DLINCLDIR)
@@ -2556,7 +2548,6 @@ then
 	hp*|HP*) DYNLOADFILE="dynload_hpux.o";;
 	# Use dynload_next.c only on 10.2 and below, which don't have native dlopen()
 	Darwin/@<:@0156@:>@\..*) DYNLOADFILE="dynload_next.o";;
-	atheos*) DYNLOADFILE="dynload_atheos.o";;
 	*)
 	# use dynload_shlib.c and dlopen() if we have it; otherwise stub
 	# out any dynamic loading
@@ -2587,17 +2578,17 @@ fi
 AC_MSG_RESULT(MACHDEP_OBJS)
 
 # checks for library functions
-AC_CHECK_FUNCS(alarm setitimer getitimer bind_textdomain_codeset chown \
+AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
  clock confstr ctermid execv fchmod fchown fork fpathconf ftime ftruncate \
  gai_strerror getgroups getlogin getloadavg getpeername getpgid getpid \
- getpriority getpwent getspnam getspent getsid getwd \
- kill killpg lchmod lchown lstat mbrtowc mkfifo mknod mktime \
+ getpriority getresuid getresgid getpwent getspnam getspent getsid getwd \
+ initgroups kill killpg lchmod lchown lstat mbrtowc mkfifo mknod mktime \
  mremap nice pathconf pause plock poll pthread_init \
  putenv readlink realpath \
  select sem_open sem_timedwait sem_getvalue sem_unlink setegid seteuid \
  setgid \
- setlocale setregid setreuid setsid setpgid setpgrp setuid setvbuf snprintf \
- sigaction siginterrupt sigrelse strftime strlcpy \
+ setlocale setregid setreuid setresuid setresgid setsid setpgid setpgrp setuid setvbuf \
+ sigaction siginterrupt sigrelse snprintf strftime strlcpy \
  sysconf tcgetpgrp tcsetpgrp tempnam timegm times tmpfile tmpnam tmpnam_r \
  truncate uname unsetenv utimes waitpid wait3 wait4 \
  wcscoll wcsftime wcsxfrm _getpty)
@@ -2605,56 +2596,56 @@ AC_CHECK_FUNCS(alarm setitimer getitimer bind_textdomain_codeset chown \
 # For some functions, having a definition is not sufficient, since
 # we want to take their address.
 AC_MSG_CHECKING(for chroot)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=chroot,
-  AC_DEFINE(HAVE_CHROOT, 1, Define if you have the 'chroot' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=chroot]])],
+  [AC_DEFINE(HAVE_CHROOT, 1, Define if you have the 'chroot' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for link)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=link,
-  AC_DEFINE(HAVE_LINK, 1, Define if you have the 'link' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=link]])],
+  [AC_DEFINE(HAVE_LINK, 1, Define if you have the 'link' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for symlink)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=symlink,
-  AC_DEFINE(HAVE_SYMLINK, 1, Define if you have the 'symlink' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=symlink]])],
+  [AC_DEFINE(HAVE_SYMLINK, 1, Define if you have the 'symlink' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for fchdir)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=fchdir,
-  AC_DEFINE(HAVE_FCHDIR, 1, Define if you have the 'fchdir' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=fchdir]])],
+  [AC_DEFINE(HAVE_FCHDIR, 1, Define if you have the 'fchdir' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for fsync)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=fsync,
-  AC_DEFINE(HAVE_FSYNC, 1, Define if you have the 'fsync' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=fsync]])],
+  [AC_DEFINE(HAVE_FSYNC, 1, Define if you have the 'fsync' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for fdatasync)
-AC_TRY_COMPILE([#include <unistd.h>], void *x=fdatasync,
-  AC_DEFINE(HAVE_FDATASYNC, 1, Define if you have the 'fdatasync' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[void *x=fdatasync]])],
+  [AC_DEFINE(HAVE_FDATASYNC, 1, Define if you have the 'fdatasync' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for epoll)
-AC_TRY_COMPILE([#include <sys/epoll.h>], void *x=epoll_create,
-  AC_DEFINE(HAVE_EPOLL, 1, Define if you have the 'epoll' functions.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/epoll.h>]], [[void *x=epoll_create]])],
+  [AC_DEFINE(HAVE_EPOLL, 1, Define if you have the 'epoll' functions.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 AC_MSG_CHECKING(for kqueue)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/event.h>
-    ], int x=kqueue(),
-  AC_DEFINE(HAVE_KQUEUE, 1, Define if you have the 'kqueue' functions.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+    ]], [[int x=kqueue()]])],
+  [AC_DEFINE(HAVE_KQUEUE, 1, Define if you have the 'kqueue' functions.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 # On some systems (eg. FreeBSD 5), we would find a definition of the
 # functions ctermid_r, setgroups in the library, but no prototype
 # (e.g. because we use _XOPEN_SOURCE). See whether we can take their
@@ -2662,14 +2653,13 @@ AC_TRY_COMPILE([
 # because of the missing prototypes.
 
 AC_MSG_CHECKING(for ctermid_r)
-AC_TRY_COMPILE([
-#include "confdefs.h" 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <stdio.h>
-], void* p = ctermid_r,
-  AC_DEFINE(HAVE_CTERMID_R, 1, Define if you have the 'ctermid_r' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = ctermid_r]])],
+  [AC_DEFINE(HAVE_CTERMID_R, 1, Define if you have the 'ctermid_r' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 AC_CACHE_CHECK([for flock declaration], [ac_cv_flock_decl],
   [AC_COMPILE_IFELSE(
@@ -2691,14 +2681,13 @@ if test "x${ac_cv_flock_decl}" = xyes; then
 fi
 
 AC_MSG_CHECKING(for getpagesize)
-AC_TRY_COMPILE([
-#include "confdefs.h" 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <unistd.h>
-], void* p = getpagesize,
-  AC_DEFINE(HAVE_GETPAGESIZE, 1, Define if you have the 'getpagesize' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = getpagesize]])],
+  [AC_DEFINE(HAVE_GETPAGESIZE, 1, Define if you have the 'getpagesize' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 dnl check for true
 AC_CHECK_PROGS(TRUE, true, /bin/true)
@@ -2712,7 +2701,7 @@ AC_CHECK_LIB(c, inet_aton, [$ac_cv_prog_TRUE],
 # On Tru64, chflags seems to be present, but calling it will
 # exit Python
 AC_CACHE_CHECK([for chflags], [ac_cv_have_chflags], [dnl
-AC_TRY_RUN([[
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <sys/stat.h>
 #include <unistd.h>
 int main(int argc, char*argv[])
@@ -2721,19 +2710,20 @@ int main(int argc, char*argv[])
     return 1;
   return 0;
 }
-]], ac_cv_have_chflags=yes,
-   ac_cv_have_chflags=no,
-   ac_cv_have_chflags=cross)
+]])],
+[ac_cv_have_chflags=yes],
+[ac_cv_have_chflags=no],
+[ac_cv_have_chflags=cross])
 ])
 if test "$ac_cv_have_chflags" = cross ; then
   AC_CHECK_FUNC([chflags], [ac_cv_have_chflags="yes"], [ac_cv_have_chflags="no"])
 fi
 if test "$ac_cv_have_chflags" = yes ; then
-  AC_DEFINE(HAVE_CHFLAGS, 1, Define to 1 if you have the `chflags' function.)
+  AC_DEFINE(HAVE_CHFLAGS, 1, [Define to 1 if you have the 'chflags' function.])
 fi
 
 AC_CACHE_CHECK([for lchflags], [ac_cv_have_lchflags], [dnl
-AC_TRY_RUN([[
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <sys/stat.h>
 #include <unistd.h>
 int main(int argc, char*argv[])
@@ -2742,15 +2732,13 @@ int main(int argc, char*argv[])
     return 1;
   return 0;
 }
-]], ac_cv_have_lchflags=yes,
-   ac_cv_have_lchflags=no,
-   ac_cv_have_lchflags=cross)
+]])],[ac_cv_have_lchflags=yes],[ac_cv_have_lchflags=no],[ac_cv_have_lchflags=cross])
 ])
 if test "$ac_cv_have_lchflags" = cross ; then
   AC_CHECK_FUNC([lchflags], [ac_cv_have_lchflags="yes"], [ac_cv_have_lchflags="no"])
 fi
 if test "$ac_cv_have_lchflags" = yes ; then
-  AC_DEFINE(HAVE_LCHFLAGS, 1, Define to 1 if you have the `lchflags' function.)
+  AC_DEFINE(HAVE_LCHFLAGS, 1, [Define to 1 if you have the 'lchflags' function.])
 fi
 
 dnl Check if system zlib has *Copy() functions
@@ -2773,7 +2761,7 @@ Darwin/*)
 	;;
 esac
 
-AC_CHECK_LIB(z, inflateCopy, AC_DEFINE(HAVE_ZLIB_COPY, 1, Define if the zlib library has inflateCopy))
+AC_CHECK_LIB(z, inflateCopy, AC_DEFINE(HAVE_ZLIB_COPY, 1, [Define if the zlib library has inflateCopy]))
 
 case $ac_sys_system/$ac_sys_release in
 Darwin/*) 
@@ -2783,55 +2771,50 @@ Darwin/*)
 esac
 
 AC_MSG_CHECKING(for hstrerror)
-AC_TRY_LINK([
-#include "confdefs.h" 
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <netdb.h>
-], void* p = hstrerror; hstrerror(0),
-  AC_DEFINE(HAVE_HSTRERROR, 1, Define if you have the 'hstrerror' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = hstrerror; hstrerror(0)]])],
+  [AC_DEFINE(HAVE_HSTRERROR, 1, Define if you have the 'hstrerror' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 AC_MSG_CHECKING(for inet_aton)
-AC_TRY_LINK([
-#include "confdefs.h" 
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-], void* p = inet_aton;inet_aton(0,0),
-  AC_DEFINE(HAVE_INET_ATON, 1, Define if you have the 'inet_aton' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = inet_aton;inet_aton(0,0)]])],
+  [AC_DEFINE(HAVE_INET_ATON, 1, Define if you have the 'inet_aton' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 AC_MSG_CHECKING(for inet_pton)
-AC_TRY_COMPILE([
-#include "confdefs.h" 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-], void* p = inet_pton,
-  AC_DEFINE(HAVE_INET_PTON, 1, Define if you have the 'inet_pton' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = inet_pton]])],
+  [AC_DEFINE(HAVE_INET_PTON, 1, Define if you have the 'inet_pton' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 # On some systems, setgroups is in unistd.h, on others, in grp.h
 AC_MSG_CHECKING(for setgroups)
-AC_TRY_COMPILE([
-#include "confdefs.h" 
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <unistd.h>
 #ifdef HAVE_GRP_H
 #include <grp.h>
 #endif
-], 
-void* p = setgroups,
-  AC_DEFINE(HAVE_SETGROUPS, 1, Define if you have the 'setgroups' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
-)
+]], [[void* p = setgroups]])],
+  [AC_DEFINE(HAVE_SETGROUPS, 1, Define if you have the 'setgroups' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
 
 # check for openpty and forkpty
 
@@ -2856,30 +2839,27 @@ AC_CHECK_FUNCS(fseek64 fseeko fstatvfs ftell64 ftello statvfs)
 
 AC_REPLACE_FUNCS(dup2 getcwd strdup)
 AC_CHECK_FUNCS(getpgrp, 
-  AC_TRY_COMPILE([#include <unistd.h>], 
-   [getpgrp(0);], 
-   AC_DEFINE(GETPGRP_HAVE_ARG, 1,
-   [Define if getpgrp() must be called as getpgrp(0).])
- )
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[getpgrp(0);]])],
+    [AC_DEFINE(GETPGRP_HAVE_ARG, 1, [Define if getpgrp() must be called as getpgrp(0).])],
+    [])
 )
 AC_CHECK_FUNCS(setpgrp,
-  AC_TRY_COMPILE([#include <unistd.h>],
-    [setpgrp(0,0);],
-    AC_DEFINE(SETPGRP_HAVE_ARG, 1,
-    [Define if setpgrp() must be called as setpgrp(0, 0).])
-  )
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[setpgrp(0,0);]])],
+    [AC_DEFINE(SETPGRP_HAVE_ARG, 1, [Define if setpgrp() must be called as setpgrp(0, 0).])],
+    [])
 )
 AC_CHECK_FUNCS(gettimeofday, 
-  AC_TRY_COMPILE([#include <sys/time.h>], 
-    [gettimeofday((struct timeval*)0,(struct timezone*)0);], ,
-    AC_DEFINE(GETTIMEOFDAY_NO_TZ, 1,
-    [Define if gettimeofday() does not have second (timezone) argument
-     This is the case on Motorola V4 (R40V4.2)])
-  )
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/time.h>]],
+  				     [[gettimeofday((struct timeval*)0,(struct timezone*)0);]])],
+    [],
+    [AC_DEFINE(GETTIMEOFDAY_NO_TZ, 1,
+      [Define if gettimeofday() does not have second (timezone) argument
+       This is the case on Motorola V4 (R40V4.2)])
+    ])
 )
 
 AC_MSG_CHECKING(for major, minor, and makedev)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #if defined(MAJOR_IN_MKDEV)
 #include <sys/mkdev.h>
 #elif defined(MAJOR_IN_SYSMACROS)
@@ -2887,9 +2867,9 @@ AC_TRY_LINK([
 #else
 #include <sys/types.h>
 #endif
-],[
+]], [[
   makedev(major(0),minor(0));
-],[
+]])],[
   AC_DEFINE(HAVE_DEVICE_MACROS, 1,
 	    [Define to 1 if you have the device macros.])
   AC_MSG_RESULT(yes)
@@ -2900,24 +2880,27 @@ AC_TRY_LINK([
 # On OSF/1 V5.1, getaddrinfo is available, but a define
 # for [no]getaddrinfo in netdb.h. 
 AC_MSG_CHECKING(for getaddrinfo)
-AC_TRY_LINK([
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <stdio.h>
-],[
-getaddrinfo(NULL, NULL, NULL, NULL);
-], [
-AC_MSG_RESULT(yes)
-AC_MSG_CHECKING(getaddrinfo bug)
-AC_TRY_RUN([
+]], [[getaddrinfo(NULL, NULL, NULL, NULL);]])],
+[have_getaddrinfo=yes],
+[have_getaddrinfo=no])
+AC_MSG_RESULT($have_getaddrinfo)
+if test $have_getaddrinfo = yes
+then
+  AC_MSG_CHECKING(getaddrinfo bug)
+  AC_CACHE_VAL(ac_cv_buggy_getaddrinfo,
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[[
 #include <sys/types.h>
 #include <netdb.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-main()
+int main()
 {
   int passive, gaierr, inet4 = 0, inet6 = 0;
   struct addrinfo hints, *ai, *aitop;
@@ -2989,26 +2972,25 @@ main()
 
   if (aitop)
     freeaddrinfo(aitop);
-  exit(0);
+  return 0;
 
  bad:
   if (aitop)
     freeaddrinfo(aitop);
-  exit(1);
+  return 1;
 }
-],
-AC_MSG_RESULT(good)
-buggygetaddrinfo=no,
-AC_MSG_RESULT(buggy)
-buggygetaddrinfo=yes,
-AC_MSG_RESULT(buggy)
-buggygetaddrinfo=yes)], [
-AC_MSG_RESULT(no)
-buggygetaddrinfo=yes
-])
+]]])],
+[ac_cv_buggy_getaddrinfo=no],
+[ac_cv_buggy_getaddrinfo=yes],
+[ac_cv_buggy_getaddrinfo=yes]))
+fi
 
-if test "$buggygetaddrinfo" = "yes"; then
-	if test "$ipv6" = "yes"; then
+AC_MSG_RESULT($ac_cv_buggy_getaddrinfo)
+
+if test $have_getaddrinfo = no -o "$ac_cv_buggy_getaddrinfo" = yes
+then
+	if test $ipv6 = yes
+	then
 		echo 'Fatal: You must get working getaddrinfo() function.'
 		echo '       or you can specify "--disable-ipv6"'.
 		exit 1
@@ -3016,6 +2998,7 @@ if test "$buggygetaddrinfo" = "yes"; then
 else
 	AC_DEFINE(HAVE_GETADDRINFO, 1, [Define if you have the getaddrinfo function.])
 fi
+
 AC_CHECK_FUNCS(getnameinfo)
 
 # checks for structures
@@ -3030,10 +3013,11 @@ AC_CHECK_MEMBERS([struct stat.st_birthtime])
 AC_STRUCT_ST_BLOCKS
 
 AC_MSG_CHECKING(for time.h that defines altzone)
-AC_CACHE_VAL(ac_cv_header_time_altzone,
-[AC_TRY_COMPILE([#include <time.h>], [return altzone;],
-  ac_cv_header_time_altzone=yes,
-  ac_cv_header_time_altzone=no)])
+AC_CACHE_VAL(ac_cv_header_time_altzone,[
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[return altzone;]])],
+    [ac_cv_header_time_altzone=yes],
+    [ac_cv_header_time_altzone=no])
+  ])
 AC_MSG_RESULT($ac_cv_header_time_altzone)
 if test $ac_cv_header_time_altzone = yes; then
   AC_DEFINE(HAVE_ALTZONE, 1, [Define this if your time.h defines altzone.])
@@ -3041,25 +3025,23 @@ fi
 
 was_it_defined=no
 AC_MSG_CHECKING(whether sys/select.h and sys/time.h may both be included)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/time.h>
-], [;], [
+]], [[;]])],[
   AC_DEFINE(SYS_SELECT_WITH_SYS_TIME, 1,
   [Define if  you can safely include both <sys/select.h> and <sys/time.h>
    (which you can't on SCO ODT 3.0).]) 
   was_it_defined=yes
-])
+],[])
 AC_MSG_RESULT($was_it_defined)
 
 AC_MSG_CHECKING(for addrinfo)
 AC_CACHE_VAL(ac_cv_struct_addrinfo,
-AC_TRY_COMPILE([
-#		include <netdb.h>],
-	[struct addrinfo a],
-	ac_cv_struct_addrinfo=yes,
-	ac_cv_struct_addrinfo=no))
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <netdb.h>]], [[struct addrinfo a]])],
+  [ac_cv_struct_addrinfo=yes],
+  [ac_cv_struct_addrinfo=no]))
 AC_MSG_RESULT($ac_cv_struct_addrinfo)
 if test $ac_cv_struct_addrinfo = yes; then
 	AC_DEFINE(HAVE_ADDRINFO, 1, [struct addrinfo (netdb.h)])
@@ -3067,12 +3049,11 @@ fi
 
 AC_MSG_CHECKING(for sockaddr_storage)
 AC_CACHE_VAL(ac_cv_struct_sockaddr_storage,
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #		include <sys/types.h>
-#		include <sys/socket.h>],
-	[struct sockaddr_storage s],
-	ac_cv_struct_sockaddr_storage=yes,
-	ac_cv_struct_sockaddr_storage=no))
+#		include <sys/socket.h>]], [[struct sockaddr_storage s]])],
+  [ac_cv_struct_sockaddr_storage=yes],
+  [ac_cv_struct_sockaddr_storage=no]))
 AC_MSG_RESULT($ac_cv_struct_sockaddr_storage)
 if test $ac_cv_struct_sockaddr_storage = yes; then
 	AC_DEFINE(HAVE_SOCKADDR_STORAGE, 1, [struct sockaddr_storage (sys/socket.h)])
@@ -3085,30 +3066,33 @@ AC_C_CONST
 
 works=no
 AC_MSG_CHECKING(for working volatile)
-AC_TRY_COMPILE([],[volatile int x; x = 0;], works=yes, 
-  AC_DEFINE(volatile, [], [Define to empty if the keyword does not work.])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[volatile int x; x = 0;]])],
+  [works=yes],
+  [AC_DEFINE(volatile, , [Define to empty if the keyword does not work.])]
 )
 AC_MSG_RESULT($works)
 
 works=no
 AC_MSG_CHECKING(for working signed char)
-AC_TRY_COMPILE([], [signed char c;], works=yes, 
-  AC_DEFINE(signed, [], [Define to empty if the keyword does not work.])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[signed char c;]])],
+  [works=yes],
+  [AC_DEFINE(signed, , [Define to empty if the keyword does not work.])]
 )
 AC_MSG_RESULT($works)
 
 have_prototypes=no
 AC_MSG_CHECKING(for prototypes)
-AC_TRY_COMPILE([int foo(int x) { return 0; }], [return foo(10);],[
-  AC_DEFINE(HAVE_PROTOTYPES, 1, 
-   [Define if your compiler supports function prototype]) 
-  have_prototypes=yes
-])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[int foo(int x) { return 0; }]], [[return foo(10);]])],
+  [AC_DEFINE(HAVE_PROTOTYPES, 1, 
+     [Define if your compiler supports function prototype]) 
+   have_prototypes=yes],
+  []
+)
 AC_MSG_RESULT($have_prototypes)
 
 works=no
 AC_MSG_CHECKING(for variable length prototypes and stdarg.h)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <stdarg.h>
 int foo(int x, ...) {
 	va_list va;
@@ -3118,44 +3102,44 @@ int foo(int x, ...) {
 	va_arg(va, double);
 	return 0;
 }
-], [return foo(10, "", 3.14);], [
+]], [[return foo(10, "", 3.14);]])],[
   AC_DEFINE(HAVE_STDARG_PROTOTYPES, 1,
    [Define if your compiler supports variable length function prototypes
    (e.g. void fprintf(FILE *, char *, ...);) *and* <stdarg.h>]) 
   works=yes
-])
+],[])
 AC_MSG_RESULT($works)
 
 # check for socketpair
 AC_MSG_CHECKING(for socketpair)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #include <sys/socket.h>
-], void *x=socketpair,
-  AC_DEFINE(HAVE_SOCKETPAIR, 1, Define if you have the 'socketpair' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
+]], [[void *x=socketpair]])],
+  [AC_DEFINE(HAVE_SOCKETPAIR, 1, [Define if you have the 'socketpair' function.])
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)]
 )
 
 # check if sockaddr has sa_len member
 AC_MSG_CHECKING(if sockaddr has sa_len member)
-AC_TRY_COMPILE([#include <sys/types.h>
-#include <sys/socket.h>],
-[struct sockaddr x;
-x.sa_len = 0;],
-	AC_MSG_RESULT(yes)
-	AC_DEFINE(HAVE_SOCKADDR_SA_LEN, 1, [Define if sockaddr has sa_len member]),
-	AC_MSG_RESULT(no))
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
+#include <sys/socket.h>]], [[struct sockaddr x;
+x.sa_len = 0;]])],
+  [AC_MSG_RESULT(yes)
+   AC_DEFINE(HAVE_SOCKADDR_SA_LEN, 1, [Define if sockaddr has sa_len member])],
+  [AC_MSG_RESULT(no)]
+)
 
 va_list_is_array=no
 AC_MSG_CHECKING(whether va_list is an array)
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #ifdef HAVE_STDARG_PROTOTYPES
 #include <stdarg.h>
 #else
 #include <varargs.h>
 #endif
-], [va_list list1, list2; list1 = list2;], , [
+]], [[va_list list1, list2; list1 = list2;]])],[],[
  AC_DEFINE(VA_LIST_IS_ARRAY, 1, [Define if a va_list is an array of some kind]) 
  va_list_is_array=yes
 ])
@@ -3170,9 +3154,9 @@ AC_CHECK_FUNC(gethostbyname_r, [
   AC_MSG_CHECKING([gethostbyname_r with 6 args])
   OLD_CFLAGS=$CFLAGS
   CFLAGS="$CFLAGS $MY_CPPFLAGS $MY_THREAD_CPPFLAGS $MY_CFLAGS"
-  AC_TRY_COMPILE([
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #   include <netdb.h>
-  ], [
+  ]], [[
     char *name;
     struct hostent *he, *res;
     char buffer[2048];
@@ -3180,48 +3164,50 @@ AC_CHECK_FUNC(gethostbyname_r, [
     int h_errnop;
 
     (void) gethostbyname_r(name, he, buffer, buflen, &res, &h_errnop)
-  ], [
+  ]])],[
     AC_DEFINE(HAVE_GETHOSTBYNAME_R)
     AC_DEFINE(HAVE_GETHOSTBYNAME_R_6_ARG, 1,
     [Define this if you have the 6-arg version of gethostbyname_r().])
     AC_MSG_RESULT(yes)
-  ], [
+  ],[
     AC_MSG_RESULT(no)
     AC_MSG_CHECKING([gethostbyname_r with 5 args])
-    AC_TRY_COMPILE([
-#     include <netdb.h>
-    ], [
-      char *name;
-      struct hostent *he;
-      char buffer[2048];
-      int buflen = 2048;
-      int h_errnop;
-
-      (void) gethostbyname_r(name, he, buffer, buflen, &h_errnop)
-    ], [
-      AC_DEFINE(HAVE_GETHOSTBYNAME_R)
-      AC_DEFINE(HAVE_GETHOSTBYNAME_R_5_ARG, 1,
-      [Define this if you have the 5-arg version of gethostbyname_r().])
-      AC_MSG_RESULT(yes)
-    ], [
-      AC_MSG_RESULT(no)
-      AC_MSG_CHECKING([gethostbyname_r with 3 args])
-      AC_TRY_COMPILE([
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #       include <netdb.h>
-      ], [
+      ]], [[
         char *name;
         struct hostent *he;
-        struct hostent_data data;
+        char buffer[2048];
+        int buflen = 2048;
+        int h_errnop;
 
-        (void) gethostbyname_r(name, he, &data);
-      ], [
+        (void) gethostbyname_r(name, he, buffer, buflen, &h_errnop)
+      ]])],
+      [
         AC_DEFINE(HAVE_GETHOSTBYNAME_R)
-        AC_DEFINE(HAVE_GETHOSTBYNAME_R_3_ARG, 1,
-        [Define this if you have the 3-arg version of gethostbyname_r().])
+        AC_DEFINE(HAVE_GETHOSTBYNAME_R_5_ARG, 1,
+          [Define this if you have the 5-arg version of gethostbyname_r().])
         AC_MSG_RESULT(yes)
       ], [
         AC_MSG_RESULT(no)
-      ])
+        AC_MSG_CHECKING([gethostbyname_r with 3 args])
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#           include <netdb.h>
+          ]], [[
+            char *name;
+            struct hostent *he;
+            struct hostent_data data;
+
+            (void) gethostbyname_r(name, he, &data);
+          ]])],
+          [
+            AC_DEFINE(HAVE_GETHOSTBYNAME_R)
+            AC_DEFINE(HAVE_GETHOSTBYNAME_R_3_ARG, 1,
+              [Define this if you have the 3-arg version of gethostbyname_r().])
+            AC_MSG_RESULT(yes)
+          ], [
+           AC_MSG_RESULT(no)
+        ])
     ])
   ])
   CFLAGS=$OLD_CFLAGS
@@ -3246,7 +3232,7 @@ AC_CHECK_FUNC(__fpu_control,
 # Check for --with-fpectl
 AC_MSG_CHECKING(for --with-fpectl)
 AC_ARG_WITH(fpectl,
-            AC_HELP_STRING(--with-fpectl, enable SIGFPE catching),
+            AS_HELP_STRING([--with-fpectl], [enable SIGFPE catching]),
 [
 if test "$withval" != no
 then 
@@ -3265,7 +3251,7 @@ Darwin) ;;
 esac
 AC_MSG_CHECKING(for --with-libm=STRING)
 AC_ARG_WITH(libm,
-            AC_HELP_STRING(--with-libm=STRING, math library),
+            AS_HELP_STRING([--with-libm=STRING], [math library]),
 [
 if test "$withval" = no
 then LIBM=
@@ -3281,7 +3267,7 @@ fi],
 AC_SUBST(LIBC)
 AC_MSG_CHECKING(for --with-libc=STRING)
 AC_ARG_WITH(libc,
-            AC_HELP_STRING(--with-libc=STRING, C library),
+            AS_HELP_STRING([--with-libc=STRING], [C library]),
 [
 if test "$withval" = no
 then LIBC=
@@ -3299,7 +3285,7 @@ fi],
 
 AC_MSG_CHECKING(whether C doubles are little-endian IEEE 754 binary64)
 AC_CACHE_VAL(ac_cv_little_endian_double, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <string.h>
 int main() {
     double x = 9006104071832581.0;
@@ -3308,10 +3294,10 @@ int main() {
     else
         return 1;
 }
-],
-ac_cv_little_endian_double=yes,
-ac_cv_little_endian_double=no,
-ac_cv_little_endian_double=no)])
+]])],
+[ac_cv_little_endian_double=yes],
+[ac_cv_little_endian_double=no],
+[ac_cv_little_endian_double=no])])
 AC_MSG_RESULT($ac_cv_little_endian_double)
 if test "$ac_cv_little_endian_double" = yes
 then
@@ -3322,7 +3308,7 @@ fi
 
 AC_MSG_CHECKING(whether C doubles are big-endian IEEE 754 binary64)
 AC_CACHE_VAL(ac_cv_big_endian_double, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <string.h>
 int main() {
     double x = 9006104071832581.0;
@@ -3331,10 +3317,10 @@ int main() {
     else
         return 1;
 }
-],
-ac_cv_big_endian_double=yes,
-ac_cv_big_endian_double=no,
-ac_cv_big_endian_double=no)])
+]])],
+[ac_cv_big_endian_double=yes],
+[ac_cv_big_endian_double=no],
+[ac_cv_big_endian_double=no])])
 AC_MSG_RESULT($ac_cv_big_endian_double)
 if test "$ac_cv_big_endian_double" = yes
 then
@@ -3349,7 +3335,7 @@ fi
 # conversions work.
 AC_MSG_CHECKING(whether C doubles are ARM mixed-endian IEEE 754 binary64)
 AC_CACHE_VAL(ac_cv_mixed_endian_double, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <string.h>
 int main() {
     double x = 9006104071832581.0;
@@ -3358,10 +3344,10 @@ int main() {
     else
         return 1;
 }
-],
-ac_cv_mixed_endian_double=yes,
-ac_cv_mixed_endian_double=no,
-ac_cv_mixed_endian_double=no)])
+]])],
+[ac_cv_mixed_endian_double=yes],
+[ac_cv_mixed_endian_double=no],
+[ac_cv_mixed_endian_double=no])])
 AC_MSG_RESULT($ac_cv_mixed_endian_double)
 if test "$ac_cv_mixed_endian_double" = yes
 then
@@ -3374,25 +3360,23 @@ fi
 # correctly-rounded string <-> double conversion functions from
 # Python/dtoa.c, which in turn require that the FPU uses 53-bit
 # rounding; this is a problem on x86, where the x87 FPU has a default
-# rounding precision of 64 bits.  For gcc/x86, we try to fix this by
+# rounding precision of 64 bits.  For gcc/x86, we can fix this by
 # using inline assembler to get and set the x87 FPU control word.
-if test "$GCC" = yes && test -n "`$CC -dM -E - </dev/null | grep i386`"
+
+# This inline assembler syntax may also work for suncc and icc,
+# so we try it on all platforms.
+
+AC_MSG_CHECKING(whether we can use gcc inline assembler to get and set x87 control word)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[
+  unsigned short cw;
+  __asm__ __volatile__ ("fnstcw %0" : "=m" (cw));
+  __asm__ __volatile__ ("fldcw %0" : : "m" (cw));
+]])],[have_gcc_asm_for_x87=yes],[have_gcc_asm_for_x87=no])
+AC_MSG_RESULT($have_gcc_asm_for_x87)
+if test "$have_gcc_asm_for_x87" = yes
 then
-    # Check that it's okay to use gcc inline assembler to get and set
-    # x87 control word.  It should be, but you never know...
-    AC_MSG_CHECKING(whether we can use gcc inline assembler to get and set x87 control word)
-    AC_TRY_COMPILE([], [
-      unsigned short cw;
-      __asm__ __volatile__ ("fnstcw %0" : "=m" (cw));
-      __asm__ __volatile__ ("fldcw %0" : : "m" (cw));
-    ],
-    [have_gcc_asm_for_x87=yes], [have_gcc_asm_for_x87=no])
-    AC_MSG_RESULT($have_gcc_asm_for_x87)
-    if test "$have_gcc_asm_for_x87" = yes
-    then
-        AC_DEFINE(HAVE_GCC_ASM_FOR_X87, 1,
-        [Define if we can use gcc inline assembler to get and set x87 control word])
-    fi
+    AC_DEFINE(HAVE_GCC_ASM_FOR_X87, 1,
+    [Define if we can use gcc inline assembler to get and set x87 control word])
 fi
 
 # Detect whether system arithmetic is subject to x87-style double
@@ -3404,7 +3388,7 @@ AC_MSG_CHECKING(for x87-style double rounding)
 # $BASECFLAGS may affect the result
 ac_save_cc="$CC"
 CC="$CC $BASECFLAGS"
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdlib.h>
 #include <math.h>
 int main() {
@@ -3423,10 +3407,10 @@ int main() {
     /* both tests show evidence of double rounding */
     exit(1);
 }
-],
-ac_cv_x87_double_rounding=no,
-ac_cv_x87_double_rounding=yes,
-ac_cv_x87_double_rounding=no)
+]])],
+[ac_cv_x87_double_rounding=no],
+[ac_cv_x87_double_rounding=yes],
+[ac_cv_x87_double_rounding=no])
 CC="$ac_save_cc"
 AC_MSG_RESULT($ac_cv_x87_double_rounding)
 if test "$ac_cv_x87_double_rounding" = yes
@@ -3442,11 +3426,15 @@ fi
 LIBS_SAVE=$LIBS
 LIBS="$LIBS $LIBM"
 
+AC_CHECK_FUNCS([acosh asinh atanh copysign erf erfc expm1 finite gamma])
+AC_CHECK_FUNCS([hypot lgamma log1p round tgamma])
+AC_CHECK_DECLS([isinf, isnan, isfinite], [], [], [[#include <math.h>]])
+
 # On FreeBSD 6.2, it appears that tanh(-0.) returns 0. instead of
 # -0. on some architectures.
 AC_MSG_CHECKING(whether tanh preserves the sign of zero)
 AC_CACHE_VAL(ac_cv_tanh_preserves_zero_sign, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <math.h>
 #include <stdlib.h>
 int main() {
@@ -3457,10 +3445,10 @@ int main() {
       atan2(tanh(-0.), -1.) == atan2(-0., -1.)) exit(0);
   else exit(1);
 }
-],
-ac_cv_tanh_preserves_zero_sign=yes,
-ac_cv_tanh_preserves_zero_sign=no,
-ac_cv_tanh_preserves_zero_sign=no)])
+]])],
+[ac_cv_tanh_preserves_zero_sign=yes],
+[ac_cv_tanh_preserves_zero_sign=no],
+[ac_cv_tanh_preserves_zero_sign=no])])
 AC_MSG_RESULT($ac_cv_tanh_preserves_zero_sign)
 if test "$ac_cv_tanh_preserves_zero_sign" = yes
 then
@@ -3468,8 +3456,34 @@ then
   [Define if tanh(-0.) is -0., or if platform doesn't have signed zeros])
 fi
 
-AC_CHECK_FUNCS([acosh asinh atanh copysign expm1 finite hypot log1p round])
-AC_CHECK_DECLS([isinf, isnan, isfinite], [], [], [[#include <math.h>]])
+if test "$ac_cv_func_log1p" = yes
+then
+    # On some versions of AIX, log1p(-0.) returns 0. instead of
+    # -0.  See issue #9920.
+    AC_MSG_CHECKING(whether log1p drops the sign of negative zero)
+    AC_CACHE_VAL(ac_cv_log1p_drops_zero_sign, [
+    AC_RUN_IFELSE([AC_LANG_SOURCE([[
+    #include <math.h>
+    #include <stdlib.h>
+    int main() {
+        /* Fail if the signs of log1p(-0.) and -0. can be
+	   distinguished. */
+        if (atan2(log1p(-0.), -1.) == atan2(-0., -1.))
+            return 0;
+        else
+            return 1;
+    }
+    ]])],
+    [ac_cv_log1p_drops_zero_sign=no],
+    [ac_cv_log1p_drops_zero_sign=yes],
+    [ac_cv_log1p_drops_zero_sign=no])])
+    AC_MSG_RESULT($ac_cv_log1p_drops_zero_sign)
+fi
+if test "$ac_cv_log1p_drops_zero_sign" = yes
+then
+  AC_DEFINE(LOG1P_DROPS_ZERO_SIGN, 1,
+  [Define if log1p(-0.) is 0. rather than -0.])
+fi
 
 LIBS=$LIBS_SAVE
 
@@ -3480,7 +3494,7 @@ LIBS=$LIBS_SAVE
 # sem_open results in a 'Signal 12' error.
 AC_MSG_CHECKING(whether POSIX semaphores are enabled)
 AC_CACHE_VAL(ac_cv_posix_semaphores_enabled,
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -3497,9 +3511,10 @@ int main(void) {
   sem_unlink("/autoconf");
   return 0;
 }
-], ac_cv_posix_semaphores_enabled=yes,
-   ac_cv_posix_semaphores_enabled=no,
-   ac_cv_posix_semaphores_enabled=yes)
+]])],
+[ac_cv_posix_semaphores_enabled=yes],
+[ac_cv_posix_semaphores_enabled=no],
+[ac_cv_posix_semaphores_enabled=yes])
 )
 AC_MSG_RESULT($ac_cv_posix_semaphores_enabled)
 if test $ac_cv_posix_semaphores_enabled = no
@@ -3510,7 +3525,8 @@ fi
 
 # Multiprocessing check for broken sem_getvalue
 AC_MSG_CHECKING(for broken sem_getvalue)
-AC_TRY_RUN([
+AC_CACHE_VAL(ac_cv_broken_sem_getvalue,
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -3531,16 +3547,22 @@ int main(void){
   sem_unlink("/autocftw");
   return res==-1 ? 1 : 0;
 }
-]
-,AC_MSG_RESULT(no),
- AC_MSG_RESULT(yes)
-  AC_DEFINE(HAVE_BROKEN_SEM_GETVALUE, 1, define to 1 if your sem_getvalue is broken.)
+]])],
+[ac_cv_broken_sem_getvalue=no],
+[ac_cv_broken_sem_getvalue=yes],
+[ac_cv_broken_sem_getvalue=yes])
 )
+AC_MSG_RESULT($ac_cv_broken_sem_getvalue)
+if test $ac_cv_broken_sem_getvalue = yes
+then
+  AC_DEFINE(HAVE_BROKEN_SEM_GETVALUE, 1,
+  [define to 1 if your sem_getvalue is broken.])
+fi
 
 # determine what size digit to use for Python's longs
 AC_MSG_CHECKING([digit size for Python's longs])
 AC_ARG_ENABLE(big-digits,
-AC_HELP_STRING([--enable-big-digits@<:@=BITS@:>@],[use big digits for Python longs [[BITS=30]]]),
+AS_HELP_STRING([--enable-big-digits@<:@=BITS@:>@],[use big digits for Python longs [[BITS=30]]]),
 [case $enable_big_digits in
 yes)
   enable_big_digits=30 ;;
@@ -3573,14 +3595,14 @@ fi
 
 AC_MSG_CHECKING(for UCS-4 tcl)
 have_ucs4_tcl=no
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <tcl.h>
 #if TCL_UTF_MAX != 6
 # error "NOT UCS4_TCL"
-#endif], [], [
+#endif]], [[]])],[
   AC_DEFINE(HAVE_UCS4_TCL, 1, [Define this if you have tcl and TCL_UTF_MAX==6])
   have_ucs4_tcl=yes
-])
+],[])
 AC_MSG_RESULT($have_ucs4_tcl)
 
 # check whether wchar_t is signed or not
@@ -3589,23 +3611,23 @@ then
   # check whether wchar_t is signed or not
   AC_MSG_CHECKING(whether wchar_t is signed)
   AC_CACHE_VAL(ac_cv_wchar_t_signed, [
-  AC_TRY_RUN([
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[
   #include <wchar.h>
   int main()
   {
 	/* Success: exit code 0 */
         exit((((wchar_t) -1) < ((wchar_t) 0)) ? 0 : 1);
   }
-  ],
-  ac_cv_wchar_t_signed=yes,
-  ac_cv_wchar_t_signed=no,
-  ac_cv_wchar_t_signed=yes)])
+  ]])],
+  [ac_cv_wchar_t_signed=yes],
+  [ac_cv_wchar_t_signed=no],
+  [ac_cv_wchar_t_signed=yes])])
   AC_MSG_RESULT($ac_cv_wchar_t_signed)
 fi
 
 AC_MSG_CHECKING(what type to use for str)
 AC_ARG_WITH(wide-unicode, 
-            AC_HELP_STRING(--with-wide-unicode, Use 4-byte Unicode characters (default is 2 bytes)),
+            AS_HELP_STRING([--with-wide-unicode], [Use 4-byte Unicode characters (default is 2 bytes)]),
 [
 if test "$withval" != no
 then unicode_size="4"
@@ -3614,7 +3636,7 @@ fi
 ],
 [
 case "$have_ucs4_tcl" in
-  yes) unicode_size="4" ;;
+  yes) unicode_size="4";;
   *)   unicode_size="2" ;;
 esac
 ])
@@ -3622,7 +3644,10 @@ esac
 AH_TEMPLATE(Py_UNICODE_SIZE,
   [Define as the size of the unicode type.])
 case "$unicode_size" in
-  4) AC_DEFINE(Py_UNICODE_SIZE, 4) ;;
+  4)
+     AC_DEFINE(Py_UNICODE_SIZE, 4)
+     ABIFLAGS="${ABIFLAGS}u"
+     ;;
   *) AC_DEFINE(Py_UNICODE_SIZE, 2) ;;
 esac
 
@@ -3655,19 +3680,75 @@ AC_MSG_RESULT($PY_UNICODE_TYPE)
 # check for endianness
 AC_C_BIGENDIAN
 
+# ABI version string for Python extension modules.  This appears between the
+# periods in shared library file names, e.g. foo.<SOABI>.so.  It is calculated
+# from the following attributes which affect the ABI of this Python build (in
+# this order):
+#
+# * The Python implementation (always 'cpython-' for us)
+# * The major and minor version numbers
+# * --with-pydebug (adds a 'd')
+# * --with-pymalloc (adds a 'm')
+# * --with-wide-unicode (adds a 'u')
+#
+# Thus for example, Python 3.2 built with wide unicode, pydebug, and pymalloc,
+# would get a shared library ABI version tag of 'cpython-32dmu' and shared
+# libraries would be named 'foo.cpython-32dmu.so'.
+AC_SUBST(SOABI)
+AC_MSG_CHECKING(ABIFLAGS)
+AC_MSG_RESULT($ABIFLAGS)
+AC_MSG_CHECKING(SOABI)
+SOABI='cpython-'`echo $VERSION | tr -d .`${ABIFLAGS}
+AC_MSG_RESULT($SOABI)
+
+AC_MSG_CHECKING(LDVERSION)
+LDVERSION='$(VERSION)$(ABIFLAGS)'
+AC_MSG_RESULT($LDVERSION)
+
+# SO is the extension of shared libraries `(including the dot!)
+# -- usually .so, .sl on HP-UX, .dll on Cygwin
+AC_MSG_CHECKING(SO)
+if test -z "$SO"
+then
+	case $ac_sys_system in
+	hp*|HP*)
+		case `uname -m` in
+			ia64) SO=.so;;
+	  		*)    SO=.sl;;
+		esac
+		;;
+	CYGWIN*)   SO=.dll;;
+	Linux*|GNU*)
+		   SO=.${SOABI}.so;;
+	*)	   SO=.so;;
+	esac
+else
+	# this might also be a termcap variable, see #610332
+	echo
+	echo '====================================================================='
+	echo '+                                                                   +'
+	echo '+ WARNING: You have set SO in your environment.                     +'
+	echo '+ Do you really mean to change the extension for shared libraries?  +'
+	echo '+ Continuing in 10 seconds to let you to ponder.                    +'
+	echo '+                                                                   +'
+	echo '====================================================================='
+	sleep 10
+fi
+AC_MSG_RESULT($SO)
+
 # Check whether right shifting a negative integer extends the sign bit
 # or fills with zeros (like the Cray J90, according to Tim Peters).
 AC_MSG_CHECKING(whether right shift extends the sign bit)
 AC_CACHE_VAL(ac_cv_rshift_extends_sign, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 int main()
 {
 	exit(((-1)>>3 == -1) ? 0 : 1);
 }
-],
-ac_cv_rshift_extends_sign=yes,
-ac_cv_rshift_extends_sign=no,
-ac_cv_rshift_extends_sign=yes)])
+]])],
+[ac_cv_rshift_extends_sign=yes],
+[ac_cv_rshift_extends_sign=no],
+[ac_cv_rshift_extends_sign=yes])])
 AC_MSG_RESULT($ac_cv_rshift_extends_sign)
 if test "$ac_cv_rshift_extends_sign" = no
 then
@@ -3679,12 +3760,12 @@ fi
 # check for getc_unlocked and related locking functions
 AC_MSG_CHECKING(for getc_unlocked() and friends)
 AC_CACHE_VAL(ac_cv_have_getc_unlocked, [
-AC_TRY_LINK([#include <stdio.h>],[
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdio.h>]], [[
 	FILE *f = fopen("/dev/null", "r");
 	flockfile(f);
 	getc_unlocked(f);
 	funlockfile(f);
-], ac_cv_have_getc_unlocked=yes, ac_cv_have_getc_unlocked=no)])
+]])],[ac_cv_have_getc_unlocked=yes],[ac_cv_have_getc_unlocked=no])])
 AC_MSG_RESULT($ac_cv_have_getc_unlocked)
 if test "$ac_cv_have_getc_unlocked" = yes
 then
@@ -3731,8 +3812,10 @@ AC_CHECK_LIB(readline, rl_callback_handler_install,
         [Define if you have readline 2.1]), ,$READLINE_LIBS)
 
 # check for readline 2.2
-AC_TRY_CPP([#include <readline/readline.h>],
-have_readline=yes, have_readline=no)
+AC_PREPROC_IFELSE([AC_LANG_SOURCE([[#include <readline/readline.h>]])],
+  [have_readline=yes],
+  [have_readline=no]
+)
 if test $have_readline = yes
 then
   AC_EGREP_HEADER([extern int rl_completion_append_character;],
@@ -3761,8 +3844,10 @@ AC_CHECK_LIB(readline, rl_completion_matches,
         [Define if you have readline 4.2]), ,$READLINE_LIBS)
 
 # also in readline 4.2
-AC_TRY_CPP([#include <readline/readline.h>],
-have_readline=yes, have_readline=no)
+AC_PREPROC_IFELSE([AC_LANG_SOURCE([[#include <readline/readline.h>]])],
+  [have_readline=yes],
+  [have_readline=no]
+)
 if test $have_readline = yes
 then
   AC_EGREP_HEADER([extern int rl_catch_signals;],
@@ -3776,7 +3861,7 @@ LIBS=$LIBS_no_readline
 
 AC_MSG_CHECKING(for broken nice())
 AC_CACHE_VAL(ac_cv_broken_nice, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 int main()
 {
 	int val1 = nice(1);
@@ -3784,10 +3869,10 @@ int main()
 		exit(0);
 	exit(1);
 }
-],
-ac_cv_broken_nice=yes,
-ac_cv_broken_nice=no,
-ac_cv_broken_nice=no)])
+]])],
+[ac_cv_broken_nice=yes],
+[ac_cv_broken_nice=no],
+[ac_cv_broken_nice=no])])
 AC_MSG_RESULT($ac_cv_broken_nice)
 if test "$ac_cv_broken_nice" = yes
 then
@@ -3796,34 +3881,29 @@ then
 fi
 
 AC_MSG_CHECKING(for broken poll())
-AC_TRY_RUN([
+AC_CACHE_VAL(ac_cv_broken_poll,
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <poll.h>
 
-int main (void)
-    {
+int main()
+{
     struct pollfd poll_struct = { 42, POLLIN|POLLPRI|POLLOUT, 0 };
-    
+    int poll_test;
+
     close (42);
 
-    int poll_test = poll (&poll_struct, 1, 0);
-
+    poll_test = poll(&poll_struct, 1, 0);
     if (poll_test < 0)
-        {
-        exit(0);
-        }
+        return 0;
     else if (poll_test == 0 && poll_struct.revents != POLLNVAL)
-        {
-        exit(0);
-        }
+        return 0;
     else
-        {
-        exit(1);
-        }
-    }
-],
-ac_cv_broken_poll=yes,
-ac_cv_broken_poll=no,
-ac_cv_broken_poll=no)
+        return 1;
+}
+]])],
+[ac_cv_broken_poll=yes],
+[ac_cv_broken_poll=no],
+[ac_cv_broken_poll=no]))
 AC_MSG_RESULT($ac_cv_broken_poll)
 if test "$ac_cv_broken_poll" = yes
 then
@@ -3839,7 +3919,7 @@ AC_STRUCT_TIMEZONE
 # check tzset(3) exists and works like we expect it to
 AC_MSG_CHECKING(for working tzset())
 AC_CACHE_VAL(ac_cv_working_tzset, [
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
@@ -3902,10 +3982,10 @@ int main()
 
 	exit(0);
 }
-],
-ac_cv_working_tzset=yes,
-ac_cv_working_tzset=no,
-ac_cv_working_tzset=no)])
+]])],
+[ac_cv_working_tzset=yes],
+[ac_cv_working_tzset=no],
+[ac_cv_working_tzset=no])])
 AC_MSG_RESULT($ac_cv_working_tzset)
 if test "$ac_cv_working_tzset" = yes
 then
@@ -3916,13 +3996,12 @@ fi
 # Look for subsecond timestamps in struct stat
 AC_MSG_CHECKING(for tv_nsec in struct stat)
 AC_CACHE_VAL(ac_cv_stat_tv_nsec,
-AC_TRY_COMPILE([#include <sys/stat.h>], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/stat.h>]], [[
 struct stat st;
 st.st_mtim.tv_nsec = 1;
-],
-ac_cv_stat_tv_nsec=yes,
-ac_cv_stat_tv_nsec=no,
-ac_cv_stat_tv_nsec=no))
+]])],
+[ac_cv_stat_tv_nsec=yes],
+[ac_cv_stat_tv_nsec=no]))
 AC_MSG_RESULT($ac_cv_stat_tv_nsec)
 if test "$ac_cv_stat_tv_nsec" = yes
 then
@@ -3933,13 +4012,12 @@ fi
 # Look for BSD style subsecond timestamps in struct stat
 AC_MSG_CHECKING(for tv_nsec2 in struct stat)
 AC_CACHE_VAL(ac_cv_stat_tv_nsec2,
-AC_TRY_COMPILE([#include <sys/stat.h>], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/stat.h>]], [[
 struct stat st;
 st.st_mtimespec.tv_nsec = 1;
-],
-ac_cv_stat_tv_nsec2=yes,
-ac_cv_stat_tv_nsec2=no,
-ac_cv_stat_tv_nsec2=no))
+]])],
+[ac_cv_stat_tv_nsec2=yes],
+[ac_cv_stat_tv_nsec2=no]))
 AC_MSG_RESULT($ac_cv_stat_tv_nsec2)
 if test "$ac_cv_stat_tv_nsec2" = yes
 then
@@ -3950,12 +4028,12 @@ fi
 # On HP/UX 11.0, mvwdelch is a block with a return statement
 AC_MSG_CHECKING(whether mvwdelch is an expression)
 AC_CACHE_VAL(ac_cv_mvwdelch_is_expression,
-AC_TRY_COMPILE([#include <curses.h>], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <curses.h>]], [[
   int rtn;
   rtn = mvwdelch(0,0,0);
-], ac_cv_mvwdelch_is_expression=yes,
-   ac_cv_mvwdelch_is_expression=no,
-   ac_cv_mvwdelch_is_expression=yes))
+]])],
+[ac_cv_mvwdelch_is_expression=yes],
+[ac_cv_mvwdelch_is_expression=no]))
 AC_MSG_RESULT($ac_cv_mvwdelch_is_expression)
 
 if test "$ac_cv_mvwdelch_is_expression" = yes
@@ -3966,12 +4044,12 @@ fi
 
 AC_MSG_CHECKING(whether WINDOW has _flags)
 AC_CACHE_VAL(ac_cv_window_has_flags,
-AC_TRY_COMPILE([#include <curses.h>], [
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <curses.h>]], [[
   WINDOW *w;
   w->_flags = 0;
-], ac_cv_window_has_flags=yes,
-   ac_cv_window_has_flags=no,
-   ac_cv_window_has_flags=no))
+]])],
+[ac_cv_window_has_flags=yes],
+[ac_cv_window_has_flags=no]))
 AC_MSG_RESULT($ac_cv_window_has_flags)
 
 
@@ -3982,24 +4060,24 @@ then
 fi
 
 AC_MSG_CHECKING(for is_term_resized)
-AC_TRY_COMPILE([#include <curses.h>], void *x=is_term_resized,
-  AC_DEFINE(HAVE_CURSES_IS_TERM_RESIZED, 1, Define if you have the 'is_term_resized' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <curses.h>]], [[void *x=is_term_resized]])],
+  [AC_DEFINE(HAVE_CURSES_IS_TERM_RESIZED, 1, Define if you have the 'is_term_resized' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)]
 )
 
 AC_MSG_CHECKING(for resize_term)
-AC_TRY_COMPILE([#include <curses.h>], void *x=resize_term,
-  AC_DEFINE(HAVE_CURSES_RESIZE_TERM, 1, Define if you have the 'resize_term' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <curses.h>]], [[void *x=resize_term]])],
+  [AC_DEFINE(HAVE_CURSES_RESIZE_TERM, 1, Define if you have the 'resize_term' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)]
 )
 
 AC_MSG_CHECKING(for resizeterm)
-AC_TRY_COMPILE([#include <curses.h>], void *x=resizeterm,
-  AC_DEFINE(HAVE_CURSES_RESIZETERM, 1, Define if you have the 'resizeterm' function.)
-  AC_MSG_RESULT(yes),
-  AC_MSG_RESULT(no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <curses.h>]], [[void *x=resizeterm]])],
+  [AC_DEFINE(HAVE_CURSES_RESIZETERM, 1, Define if you have the 'resizeterm' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)]
 )
 
 AC_MSG_CHECKING(for /dev/ptmx)
@@ -4024,8 +4102,62 @@ else
   AC_MSG_RESULT(no)
 fi
 
-AC_MSG_CHECKING(for %zd printf() format support)
-AC_TRY_RUN([#include <stdio.h>
+if test "$have_long_long" = yes
+then
+  AC_MSG_CHECKING(for %lld and %llu printf() format support)
+  AC_CACHE_VAL(ac_cv_have_long_long_format,
+  AC_RUN_IFELSE([AC_LANG_SOURCE([[[
+  #include <stdio.h>
+  #include <stddef.h>
+  #include <string.h>
+
+  #ifdef HAVE_SYS_TYPES_H
+  #include <sys/types.h>
+  #endif
+
+  int main()
+  {
+      char buffer[256];
+
+      if (sprintf(buffer, "%lld", (long long)123) < 0)
+          return 1;
+      if (strcmp(buffer, "123"))
+          return 1;
+
+      if (sprintf(buffer, "%lld", (long long)-123) < 0)
+          return 1;
+      if (strcmp(buffer, "-123"))
+          return 1;
+
+      if (sprintf(buffer, "%llu", (unsigned long long)123) < 0)
+          return 1;
+      if (strcmp(buffer, "123"))
+          return 1;
+
+      return 0;
+  }
+  ]]])],
+  [ac_cv_have_long_long_format=yes],
+  [ac_cv_have_long_long_format=no],
+  [ac_cv_have_long_long_format=no])
+  )
+  AC_MSG_RESULT($ac_cv_have_long_long_format)
+fi
+
+if test "$ac_cv_have_long_long_format" = yes
+then
+  AC_DEFINE(PY_FORMAT_LONG_LONG, "ll",
+  [Define to printf format modifier for long long type])
+fi
+
+if test $ac_sys_system = Darwin
+then
+	LIBS="$LIBS -framework CoreFoundation"
+fi
+
+AC_CACHE_CHECK([for %zd printf() format support], ac_cv_have_size_t_format, [dnl
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
+#include <stdio.h>
 #include <stddef.h>
 #include <string.h>
 
@@ -4058,14 +4190,20 @@ int main()
 	return 1;
 
     return 0;
-}],
-[AC_MSG_RESULT(yes)
- AC_DEFINE(PY_FORMAT_SIZE_T, "z", [Define to printf format modifier for Py_ssize_t])],
- AC_MSG_RESULT(no))
+}
+]])],
+  [ac_cv_have_size_t_format=yes],
+  [ac_cv_have_size_t_format=no],
+  [ac_cv_have_size_t_format="cross -- assuming yes"
+])])
+if test "$ac_cv_have_size_t_format" != no ; then
+  AC_DEFINE(PY_FORMAT_SIZE_T, "z",
+  [Define to printf format modifier for Py_ssize_t])
+fi
 
 AC_CHECK_TYPE(socklen_t,,
   AC_DEFINE(socklen_t,int,
-            Define to `int' if <sys/socket.h> does not define.),[
+            [Define to `int' if <sys/socket.h> does not define.]),[
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
 #endif
@@ -4075,7 +4213,8 @@ AC_CHECK_TYPE(socklen_t,,
 ])
 
 AC_MSG_CHECKING(for broken mbstowcs)
-AC_TRY_RUN([
+AC_CACHE_VAL(ac_cv_broken_mbstowcs,
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 #include<stdlib.h>
 int main() {
     size_t len = -1;
@@ -4083,10 +4222,10 @@ int main() {
     len = mbstowcs(NULL, str, 0);
     return (len != 4);
 }
-],
-ac_cv_broken_mbstowcs=no,
-ac_cv_broken_mbstowcs=yes,
-ac_cv_broken_mbstowcs=no)
+]])],
+[ac_cv_broken_mbstowcs=no],
+[ac_cv_broken_mbstowcs=yes],
+[ac_cv_broken_mbstowcs=no]))
 AC_MSG_RESULT($ac_cv_broken_mbstowcs)
 if test "$ac_cv_broken_mbstowcs" = yes
 then
@@ -4095,27 +4234,62 @@ then
    wide chars that would be converted.])
 fi
 
+AC_MSG_CHECKING(whether $CC supports computed gotos)
+AC_CACHE_VAL(ac_cv_computed_gotos,
+AC_RUN_IFELSE([AC_LANG_SOURCE([[[
+int main(int argc, char **argv)
+{
+    static void *targets[1] = { &&LABEL1 };
+    goto LABEL2;
+LABEL1:
+    return 0;
+LABEL2:
+    goto *targets[0];
+    return 1;
+}
+]]])],
+[ac_cv_computed_gotos=yes],
+[ac_cv_computed_gotos=no],
+[ac_cv_computed_gotos=no]))
+AC_MSG_RESULT($ac_cv_computed_gotos)
+if test "$ac_cv_computed_gotos" = yes
+then
+  AC_DEFINE(HAVE_COMPUTED_GOTOS, 1,
+  [Define if the C compiler supports computed gotos.])
+fi
+
 # Check for --with-computed-gotos
 AC_MSG_CHECKING(for --with-computed-gotos)
 AC_ARG_WITH(computed-gotos,
-            AC_HELP_STRING(--with-computed-gotos,
-                           Use computed gotos / threaded dispatch in evaluation loop (not available on all compilers)),
+            AS_HELP_STRING([--with(out)-computed-gotos],
+                           [Use computed gotos in evaluation loop (enabled by default on supported compilers)]),
 [
-if test "$withval" != no
+if test "$withval" = yes
 then 
   AC_DEFINE(USE_COMPUTED_GOTOS, 1,
   [Define if you want to use computed gotos in ceval.c.]) 
   AC_MSG_RESULT(yes)
-else AC_MSG_RESULT(no)
-fi],
-[AC_MSG_RESULT(no)])
-
-if test $ac_sys_system = Darwin
-then
-	LIBS="$LIBS -framework CoreFoundation"
 fi
+if test "$withval" = no
+then 
+  AC_DEFINE(USE_COMPUTED_GOTOS, 0,
+  [Define if you want to use computed gotos in ceval.c.]) 
+  AC_MSG_RESULT(no)
+fi
+],
+[AC_MSG_RESULT(no value specified)])
+
+case $ac_sys_system in
+AIX*)   
+  AC_DEFINE(HAVE_BROKEN_PIPE_BUF, 1, [Define if the system reports an invalid PIPE_BUF value.]) ;;
+esac
 
 
+case $ac_sys_system in
+  OSF*) AC_MSG_ERROR(OSF* systems are deprecated unless somebody volunteers. Check http://bugs.python.org/issue8606) ;;
+esac
+
+AC_CHECK_FUNC(pipe2, AC_DEFINE(HAVE_PIPE2, 1, [Define if the OS supports pipe2()]), )
 
 AC_SUBST(THREADHEADERS)
 

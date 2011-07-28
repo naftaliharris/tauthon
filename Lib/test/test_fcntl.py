@@ -16,15 +16,12 @@ fcntl = import_module('fcntl')
 # TODO - Write tests for flock() and lockf().
 
 def get_lockdata():
-    if sys.platform.startswith('atheos'):
-        start_len = "qq"
+    try:
+        os.O_LARGEFILE
+    except AttributeError:
+        start_len = "ll"
     else:
-        try:
-            os.O_LARGEFILE
-        except AttributeError:
-            start_len = "ll"
-        else:
-            start_len = "qq"
+        start_len = "qq"
 
     if sys.platform in ('netbsd1', 'netbsd2', 'netbsd3',
                         'Darwin1.2', 'darwin',
@@ -65,7 +62,7 @@ class TestFcntl(unittest.TestCase):
 
     def test_fcntl_fileno(self):
         # the example from the library docs
-        self.f = open(TESTFN, 'w')
+        self.f = open(TESTFN, 'wb')
         rv = fcntl.fcntl(self.f.fileno(), fcntl.F_SETFL, os.O_NONBLOCK)
         if verbose:
             print('Status from fcntl with O_NONBLOCK: ', rv)
@@ -77,7 +74,7 @@ class TestFcntl(unittest.TestCase):
 
     def test_fcntl_file_descriptor(self):
         # again, but pass the file rather than numeric descriptor
-        self.f = open(TESTFN, 'w')
+        self.f = open(TESTFN, 'wb')
         rv = fcntl.fcntl(self.f, fcntl.F_SETFL, os.O_NONBLOCK)
         if sys.platform not in ['os2emx']:
             rv = fcntl.fcntl(self.f, fcntl.F_SETLKW, lockdata)

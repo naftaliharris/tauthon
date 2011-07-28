@@ -5,6 +5,9 @@
    :synopsis: Compare files efficiently.
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 
+**Source code:** :source:`Lib/filecmp.py`
+
+--------------
 
 The :mod:`filecmp` module defines functions to compare files and directories,
 with various optional time/correctness trade-offs. For comparing files,

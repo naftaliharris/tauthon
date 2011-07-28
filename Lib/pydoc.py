@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# -*- coding: latin-1 -*-
+#!/usr/bin/env python3
 """Generate Python documentation in HTML or text for interactive use.
 
 In the Python interpreter, do "from pydoc import help" to provide online
@@ -16,11 +15,17 @@ backslash on Windows) it is treated as the path to a Python source file.
 Run "pydoc -k <keyword>" to search for a keyword in the synopsis lines
 of all available modules.
 
-Run "pydoc -p <port>" to start an HTTP server on a given port on the
-local machine to generate documentation web pages.
+Run "pydoc -p <port>" to start an HTTP server on the given port on the
+local machine.  Port number 0 can be used to get an arbitrary unused port.
+
+Run "pydoc -b" to start an HTTP server on an arbitrary unused port and
+open a Web browser to interactively browse documentation.  The -p option
+can be used with the -b option to explicitly specify the server port.
 
 For platforms without a command line, "pydoc -g" starts the HTTP server
-and also pops up a little window for controlling it.
+and also pops up a little window for controlling it.  This option is
+deprecated, since the server can now be controlled directly from HTTP
+clients.
 
 Run "pydoc -w <name>" to write out the HTML documentation for a module
 to a file named "<name>.html".
@@ -52,10 +57,23 @@ Richard Chamberlain, for the first implementation of textdoc.
 #     the current directory is changed with os.chdir(), an incorrect
 #     path will be displayed.
 
-import sys, imp, os, re, inspect, builtins, pkgutil
-from reprlib import Repr
-from traceback import extract_tb as _extract_tb
+import builtins
+import imp
+import inspect
+import io
+import os
+import pkgutil
+import platform
+import re
+import sys
+import time
+import tokenize
+import warnings
 from collections import deque
+from reprlib import Repr
+from traceback import extract_tb, format_exception_only
+
+
 # --------------------------------------------------------- common routines
 
 def pathdirs():
@@ -148,15 +166,19 @@ def _split_list(s, predicate):
             no.append(x)
     return yes, no
 
-def visiblename(name, all=None):
+def visiblename(name, all=None, obj=None):
     """Decide whether to show documentation on a variable."""
     # Certain special names are redundant.
     _hidden_names = ('__builtins__', '__doc__', '__file__', '__path__',
                      '__module__', '__name__', '__slots__', '__package__',
-                     '__author__', '__credits__', '__date__', '__version__')
+                     '__cached__', '__author__', '__credits__', '__date__',
+                     '__version__')
     if name in _hidden_names: return 0
     # Private names are hidden, but special names are displayed.
     if name.startswith('__') and name.endswith('__'): return 1
+    # Namedtuples have public fields and methods with a single leading underscore
+    if name.startswith('_') and hasattr(obj, '_fields'):
+        return True
     if all is not None:
         # only document that which the programmer exported in __all__
         return name in all
@@ -206,7 +228,7 @@ def synopsis(filename, cache={}):
     if lastupdate < mtime:
         info = inspect.getmoduleinfo(filename)
         try:
-            file = open(filename)
+            file = tokenize.open(filename)
         except IOError:
             # module can't be opened, so skip it
             return None
@@ -234,20 +256,18 @@ class ErrorDuringImport(Exception):
 def importfile(path):
     """Import a Python source file or compiled file given its path."""
     magic = imp.get_magic()
-    file = open(path, 'r')
-    if file.read(len(magic)) == magic:
-        kind = imp.PY_COMPILED
-    else:
-        kind = imp.PY_SOURCE
-    file.close()
-    filename = os.path.basename(path)
-    name, ext = os.path.splitext(filename)
-    file = open(path, 'r')
-    try:
-        module = imp.load_module(name, file, path, (ext, 'r', kind))
-    except:
-        raise ErrorDuringImport(path, sys.exc_info())
-    file.close()
+    with open(path, 'rb') as file:
+        if file.read(len(magic)) == magic:
+            kind = imp.PY_COMPILED
+        else:
+            kind = imp.PY_SOURCE
+        file.seek(0)
+        filename = os.path.basename(path)
+        name, ext = os.path.splitext(filename)
+        try:
+            module = imp.load_module(name, file, path, (ext, 'r', kind))
+        except:
+            raise ErrorDuringImport(path, sys.exc_info())
     return module
 
 def safeimport(path, forceload=0, cache={}):
@@ -285,7 +305,7 @@ def safeimport(path, forceload=0, cache={}):
         elif exc is SyntaxError:
             # A SyntaxError occurred before we could execute the module.
             raise ErrorDuringImport(value.filename, info)
-        elif exc is ImportError and _extract_tb(tb)[-1][2]=='safeimport':
+        elif exc is ImportError and extract_tb(tb)[-1][2]=='safeimport':
             # The import error occurred directly in this function,
             # which means there is no such module in the path.
             return None
@@ -513,6 +533,10 @@ class HTMLDoc(Doc):
             text = name
         return '<a href="%s">%s</a>' % (url, text)
 
+    def filelink(self, url, path):
+        """Make a link to source file."""
+        return '<a href="file:%s">%s</a>' % (url, path)
+
     def markup(self, text, escape=None, funcs={}, classes={}, methods={}):
         """Mark up some plain text, given a context of symbols to look for.
         Each context dictionary maps object names to anchor names."""
@@ -591,7 +615,7 @@ class HTMLDoc(Doc):
             if sys.platform == 'win32':
                 import nturl2path
                 url = nturl2path.pathname2url(path)
-            filelink = '<a href="file:%s">%s</a>' % (url, path)
+            filelink = self.filelink(url, path)
         except TypeError:
             filelink = '(built-in)'
         info = []
@@ -620,7 +644,7 @@ class HTMLDoc(Doc):
             # if __all__ exists, believe it.  Otherwise use old heuristic.
             if (all is not None or
                 (inspect.getmodule(value) or object) is object):
-                if visiblename(key, all):
+                if visiblename(key, all, object):
                     classes.append((key, value))
                     cdict[key] = cdict[value] = '#' + key
         for key, value in classes:
@@ -636,13 +660,13 @@ class HTMLDoc(Doc):
             # if __all__ exists, believe it.  Otherwise use old heuristic.
             if (all is not None or
                 inspect.isbuiltin(value) or inspect.getmodule(value) is object):
-                if visiblename(key, all):
+                if visiblename(key, all, object):
                     funcs.append((key, value))
                     fdict[key] = '#-' + key
                     if inspect.isfunction(value): fdict[value] = fdict[key]
         data = []
         for key, value in inspect.getmembers(object, isdata):
-            if visiblename(key, all):
+            if visiblename(key, all, object):
                 data.append((key, value))
 
         doc = self.markup(getdoc(object), self.preformat, fdict, cdict)
@@ -767,7 +791,7 @@ class HTMLDoc(Doc):
 
         attrs = [(name, kind, cls, value)
                  for name, kind, cls, value in classify_class_attrs(object)
-                 if visiblename(name)]
+                 if visiblename(name, obj=object)]
 
         mdict = {}
         for key, kind, homecls, value in attrs:
@@ -978,7 +1002,7 @@ class TextDoc(Doc):
 
     def bold(self, text):
         """Format a string in bold by overstriking."""
-        return ''.join(map(lambda ch: ch + '\b' + ch, text))
+        return ''.join(ch + '\b' + ch for ch in text)
 
     def indent(self, text, prefix='    '):
         """Indent text by prepending a given prefix to each line."""
@@ -1002,7 +1026,7 @@ class TextDoc(Doc):
                 c, bases = entry
                 result = result + prefix + classname(c, modname)
                 if bases and bases != (parent,):
-                    parents = map(lambda c, m=modname: classname(c, m), bases)
+                    parents = (classname(c, modname) for c in bases)
                     result = result + '(%s)' % ', '.join(parents)
                 result = result + '\n'
             elif type(entry) is type([]):
@@ -1034,18 +1058,18 @@ doubt, consult the module reference at the location listed above.
             # if __all__ exists, believe it.  Otherwise use old heuristic.
             if (all is not None
                 or (inspect.getmodule(value) or object) is object):
-                if visiblename(key, all):
+                if visiblename(key, all, object):
                     classes.append((key, value))
         funcs = []
         for key, value in inspect.getmembers(object, inspect.isroutine):
             # if __all__ exists, believe it.  Otherwise use old heuristic.
             if (all is not None or
                 inspect.isbuiltin(value) or inspect.getmodule(value) is object):
-                if visiblename(key, all):
+                if visiblename(key, all, object):
                     funcs.append((key, value))
         data = []
         for key, value in inspect.getmembers(object, isdata):
-            if visiblename(key, all):
+            if visiblename(key, all, object):
                 data.append((key, value))
 
         modpkgs = []
@@ -1184,7 +1208,7 @@ doubt, consult the module reference at the location listed above.
 
         attrs = [(name, kind, cls, value)
                  for name, kind, cls, value in classify_class_attrs(object)
-                 if visiblename(name)]
+                 if visiblename(name, obj=object)]
 
         while attrs:
             if mro:
@@ -1309,6 +1333,11 @@ doubt, consult the module reference at the location listed above.
         if doc is not None:
             line += '\n' + self.indent(str(doc))
         return line
+
+class _PlainTextDoc(TextDoc):
+    """Subclass of TextDoc which overrides string styling"""
+    def bold(self, text):
+        return text
 
 # --------------------------------------------------------- user interfaces
 
@@ -1464,6 +1493,7 @@ def locate(path, forceload=0):
 # --------------------------------------- interactive interpreter interface
 
 text = TextDoc()
+plaintext = _PlainTextDoc()
 html = HTMLDoc()
 
 def resolve(thing, forceload=0):
@@ -1476,8 +1506,11 @@ def resolve(thing, forceload=0):
     else:
         return thing, getattr(thing, '__name__', None)
 
-def render_doc(thing, title='Python Library Documentation: %s', forceload=0):
+def render_doc(thing, title='Python Library Documentation: %s', forceload=0,
+        renderer=None):
     """Render text documentation, given an object or a path to an object."""
+    if renderer is None:
+        renderer = text
     object, name = resolve(thing, forceload)
     desc = describe(object)
     module = inspect.getmodule(object)
@@ -1496,12 +1529,16 @@ def render_doc(thing, title='Python Library Documentation: %s', forceload=0):
         # document its available methods instead of its value.
         object = type(object)
         desc += ' object'
-    return title % desc + '\n\n' + text.document(object, name)
+    return title % desc + '\n\n' + renderer.document(object, name)
 
-def doc(thing, title='Python Library Documentation: %s', forceload=0):
+def doc(thing, title='Python Library Documentation: %s', forceload=0,
+        output=None):
     """Display text documentation, given an object or a path to an object."""
     try:
-        pager(render_doc(thing, title, forceload))
+        if output is None:
+            pager(render_doc(thing, title, forceload))
+        else:
+            output.write(render_doc(thing, title, forceload, plaintext))
     except (ImportError, ErrorDuringImport) as value:
         print(value)
 
@@ -1761,9 +1798,9 @@ has the same effect as typing a particular string at the help> prompt.
                 doc(eval(request), 'Help on %s:')
             elif request in self.keywords: self.showtopic(request)
             elif request in self.topics: self.showtopic(request)
-            elif request: doc(request, 'Help on %s:')
+            elif request: doc(request, 'Help on %s:', output=self._output)
         elif isinstance(request, Helper): self()
-        else: doc(request, 'Help on %s:')
+        else: doc(request, 'Help on %s:', output=self._output)
         self.output.write('\n')
 
     def intro(self):
@@ -1844,11 +1881,38 @@ module "pydoc_data.topics" could not be found.
         if more_xrefs:
             xrefs = (xrefs or '') + ' ' + more_xrefs
         if xrefs:
-            import io, formatter
+            import formatter
             buffer = io.StringIO()
             formatter.DumbWriter(buffer).send_flowing_data(
                 'Related help topics: ' + ', '.join(xrefs.split()) + '\n')
             self.output.write('\n%s\n' % buffer.getvalue())
+
+    def _gettopic(self, topic, more_xrefs=''):
+        """Return unbuffered tuple of (topic, xrefs).
+
+        If an error occurs here, the exception is caught and displayed by
+        the url handler.
+
+        This function duplicates the showtopic method but returns its
+        result directly so it can be formatted for display in an html page.
+        """
+        try:
+            import pydoc_data.topics
+        except ImportError:
+            return('''
+Sorry, topic and keyword documentation is not available because the
+module "pydoc_data.topics" could not be found.
+''' , '')
+        target = self.topics.get(topic, self.keywords.get(topic))
+        if not target:
+            raise ValueError('could not find topic')
+        if isinstance(target, str):
+            return self._gettopic(target, more_xrefs)
+        label, xrefs = target
+        doc = pydoc_data.topics.topics[label]
+        if more_xrefs:
+            xrefs = (xrefs or '') + ' ' + more_xrefs
+        return doc, xrefs
 
     def showsymbol(self, symbol):
         target = self.symbols[symbol]
@@ -1931,6 +1995,15 @@ class ModuleScanner:
         for importer, modname, ispkg in pkgutil.walk_packages(onerror=onerror):
             if self.quit:
                 break
+
+            # XXX Skipping this file is a workaround for a bug
+            # that causes python to crash with a segfault.
+            # http://bugs.python.org/issue9319
+            #
+            # TODO Remove this once the bug is fixed.
+            if modname in {'test.badsyntax_pep3120', 'badsyntax_pep3120'}:
+                continue
+
             if key is None:
                 callback(None, modname, '')
             else:
@@ -1946,7 +2019,6 @@ class ModuleScanner:
                         if onerror:
                             onerror(modname)
                         continue
-                    import io
                     desc = source_synopsis(io.StringIO(source)) or ''
                     if hasattr(loader, 'get_filename'):
                         path = loader.get_filename(modname)
@@ -1976,15 +2048,17 @@ def apropos(key):
         print(modname, desc and '- ' + desc)
     def onerror(modname):
         pass
-    try: import warnings
-    except ImportError: pass
-    else: warnings.filterwarnings('ignore') # ignore problems during import
-    ModuleScanner().run(callback, key, onerror=onerror)
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore') # ignore problems during import
+        ModuleScanner().run(callback, key, onerror=onerror)
 
-# --------------------------------------------------- web browser interface
+# --------------------------------------------------- Web browser interface
 
 def serve(port, callback=None, completer=None):
     import http.server, email.message, select
+
+    msg = 'the pydoc.serve() function is deprecated'
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
 
     class DocHandler(http.server.BaseHTTPRequestHandler):
         def send_document(self, title, contents):
@@ -2033,8 +2107,8 @@ pydoc</strong> by Ka-Ping Yee &lt;ping@lfw.org&gt;</font>'''
 
     class DocServer(http.server.HTTPServer):
         def __init__(self, port, callback):
-            host = (sys.platform == 'mac') and '127.0.0.1' or 'localhost'
-            self.address = ('', port)
+            host = 'localhost'
+            self.address = (host, port)
             self.url = 'http://%s:%d/' % (host, port)
             self.callback = callback
             self.base.__init__(self, self.address, self.handler)
@@ -2045,6 +2119,7 @@ pydoc</strong> by Ka-Ping Yee &lt;ping@lfw.org&gt;</font>'''
             while not self.quit:
                 rd, wr, ex = select.select([self.socket.fileno()], [], [], 1)
                 if rd: self.handle_request()
+            self.server_close()
 
         def server_activate(self):
             self.base.server_activate(self)
@@ -2064,7 +2139,12 @@ pydoc</strong> by Ka-Ping Yee &lt;ping@lfw.org&gt;</font>'''
 # ----------------------------------------------------- graphical interface
 
 def gui():
-    """Graphical interface (starts web server and pops up a control window)."""
+    """Graphical interface (starts Web server and pops up a control window)."""
+
+    msg = ('the pydoc.gui() function and "pydoc -g" option are deprecated\n',
+           'use "pydoc.browse() function and "pydoc -b" option instead.')
+    warnings.warn(msg, DeprecationWarning, stacklevel=2)
+
     class GUI:
         def __init__(self, window, port=7464):
             self.window = window
@@ -2144,19 +2224,8 @@ def gui():
 
         def open(self, event=None, url=None):
             url = url or self.server.url
-            try:
-                import webbrowser
-                webbrowser.open(url)
-            except ImportError: # pre-webbrowser.py compatibility
-                if sys.platform == 'win32':
-                    os.system('start "%s"' % url)
-                elif sys.platform == 'mac':
-                    try: import ic
-                    except ImportError: pass
-                    else: ic.launchurl(url)
-                else:
-                    rc = os.system('netscape -remote "openURL(%s)" &' % url)
-                    if rc: os.system('netscape "%s" &' % url)
+            import webbrowser
+            webbrowser.open(url)
 
         def quit(self, event=None):
             if self.server:
@@ -2248,6 +2317,444 @@ def gui():
     except KeyboardInterrupt:
         pass
 
+
+# --------------------------------------- enhanced Web browser interface
+
+def _start_server(urlhandler, port):
+    """Start an HTTP server thread on a specific port.
+
+    Start an HTML/text server thread, so HTML or text documents can be
+    browsed dynamically and interactively with a Web browser.  Example use:
+
+        >>> import time
+        >>> import pydoc
+
+        Define a URL handler.  To determine what the client is asking
+        for, check the URL and content_type.
+
+        Then get or generate some text or HTML code and return it.
+
+        >>> def my_url_handler(url, content_type):
+        ...     text = 'the URL sent was: (%s, %s)' % (url, content_type)
+        ...     return text
+
+        Start server thread on port 0.
+        If you use port 0, the server will pick a random port number.
+        You can then use serverthread.port to get the port number.
+
+        >>> port = 0
+        >>> serverthread = pydoc._start_server(my_url_handler, port)
+
+        Check that the server is really started.  If it is, open browser
+        and get first page.  Use serverthread.url as the starting page.
+
+        >>> if serverthread.serving:
+        ...    import webbrowser
+
+        The next two lines are commented out so a browser doesn't open if
+        doctest is run on this module.
+
+        #...    webbrowser.open(serverthread.url)
+        #True
+
+        Let the server do its thing. We just need to monitor its status.
+        Use time.sleep so the loop doesn't hog the CPU.
+
+        >>> starttime = time.time()
+        >>> timeout = 1                    #seconds
+
+        This is a short timeout for testing purposes.
+
+        >>> while serverthread.serving:
+        ...     time.sleep(.01)
+        ...     if serverthread.serving and time.time() - starttime > timeout:
+        ...          serverthread.stop()
+        ...          break
+
+        Print any errors that may have occurred.
+
+        >>> print(serverthread.error)
+        None
+   """
+    import http.server
+    import email.message
+    import select
+    import threading
+
+    class DocHandler(http.server.BaseHTTPRequestHandler):
+
+        def do_GET(self):
+            """Process a request from an HTML browser.
+
+            The URL received is in self.path.
+            Get an HTML page from self.urlhandler and send it.
+            """
+            if self.path.endswith('.css'):
+                content_type = 'text/css'
+            else:
+                content_type = 'text/html'
+            self.send_response(200)
+            self.send_header('Content-Type', '%s; charset=UTF-8' % content_type)
+            self.end_headers()
+            self.wfile.write(self.urlhandler(
+                self.path, content_type).encode('utf-8'))
+
+        def log_message(self, *args):
+            # Don't log messages.
+            pass
+
+    class DocServer(http.server.HTTPServer):
+
+        def __init__(self, port, callback):
+            self.host = (sys.platform == 'mac') and '127.0.0.1' or 'localhost'
+            self.address = ('', port)
+            self.callback = callback
+            self.base.__init__(self, self.address, self.handler)
+            self.quit = False
+
+        def serve_until_quit(self):
+            while not self.quit:
+                rd, wr, ex = select.select([self.socket.fileno()], [], [], 1)
+                if rd:
+                    self.handle_request()
+            self.server_close()
+
+        def server_activate(self):
+            self.base.server_activate(self)
+            if self.callback:
+                self.callback(self)
+
+    class ServerThread(threading.Thread):
+
+        def __init__(self, urlhandler, port):
+            self.urlhandler = urlhandler
+            self.port = int(port)
+            threading.Thread.__init__(self)
+            self.serving = False
+            self.error = None
+
+        def run(self):
+            """Start the server."""
+            try:
+                DocServer.base = http.server.HTTPServer
+                DocServer.handler = DocHandler
+                DocHandler.MessageClass = email.message.Message
+                DocHandler.urlhandler = staticmethod(self.urlhandler)
+                docsvr = DocServer(self.port, self.ready)
+                self.docserver = docsvr
+                docsvr.serve_until_quit()
+            except Exception as e:
+                self.error = e
+
+        def ready(self, server):
+            self.serving = True
+            self.host = server.host
+            self.port = server.server_port
+            self.url = 'http://%s:%d/' % (self.host, self.port)
+
+        def stop(self):
+            """Stop the server and this thread nicely"""
+            self.docserver.quit = True
+            self.serving = False
+            self.url = None
+
+    thread = ServerThread(urlhandler, port)
+    thread.start()
+    # Wait until thread.serving is True to make sure we are
+    # really up before returning.
+    while not thread.error and not thread.serving:
+        time.sleep(.01)
+    return thread
+
+
+def _url_handler(url, content_type="text/html"):
+    """The pydoc url handler for use with the pydoc server.
+
+    If the content_type is 'text/css', the _pydoc.css style
+    sheet is read and returned if it exits.
+
+    If the content_type is 'text/html', then the result of
+    get_html_page(url) is returned.
+    """
+    class _HTMLDoc(HTMLDoc):
+
+        def page(self, title, contents):
+            """Format an HTML page."""
+            css_path = "pydoc_data/_pydoc.css"
+            css_link = (
+                '<link rel="stylesheet" type="text/css" href="%s">' %
+                css_path)
+            return '''\
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html><head><title>Pydoc: %s</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+%s</head><body bgcolor="#f0f0f8">%s<div style="clear:both;padding-top:.5em;">%s</div>
+</body></html>''' % (title, css_link, html_navbar(), contents)
+
+        def filelink(self, url, path):
+            return '<a href="getfile?key=%s">%s</a>' % (url, path)
+
+
+    html = _HTMLDoc()
+
+    def html_navbar():
+        version = html.escape("%s [%s, %s]" % (platform.python_version(),
+                                               platform.python_build()[0],
+                                               platform.python_compiler()))
+        return """
+            <div style='float:left'>
+                Python %s<br>%s
+            </div>
+            <div style='float:right'>
+                <div style='text-align:center'>
+                  <a href="index.html">Module Index</a>
+                  : <a href="topics.html">Topics</a>
+                  : <a href="keywords.html">Keywords</a>
+                </div>
+                <div>
+                    <form action="get" style='display:inline;'>
+                      <input type=text name=key size=15>
+                      <input type=submit value="Get">
+                    </form>&nbsp;
+                    <form action="search" style='display:inline;'>
+                      <input type=text name=key size=15>
+                      <input type=submit value="Search">
+                    </form>
+                </div>
+            </div>
+            """ % (version, html.escape(platform.platform(terse=True)))
+
+    def html_index():
+        """Module Index page."""
+
+        def bltinlink(name):
+            return '<a href="%s.html">%s</a>' % (name, name)
+
+        heading = html.heading(
+            '<big><big><strong>Index of Modules</strong></big></big>',
+            '#ffffff', '#7799ee')
+        names = [name for name in sys.builtin_module_names
+                 if name != '__main__']
+        contents = html.multicolumn(names, bltinlink)
+        contents = [heading, '<p>' + html.bigsection(
+            'Built-in Modules', '#ffffff', '#ee77aa', contents)]
+
+        seen = {}
+        for dir in sys.path:
+            contents.append(html.index(dir, seen))
+
+        contents.append(
+            '<p align=right><font color="#909090" face="helvetica,'
+            'arial"><strong>pydoc</strong> by Ka-Ping Yee'
+            '&lt;ping@lfw.org&gt;</font>')
+        return 'Index of Modules', ''.join(contents)
+
+    def html_search(key):
+        """Search results page."""
+        # scan for modules
+        search_result = []
+
+        def callback(path, modname, desc):
+            if modname[-9:] == '.__init__':
+                modname = modname[:-9] + ' (package)'
+            search_result.append((modname, desc and '- ' + desc))
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore') # ignore problems during import
+            ModuleScanner().run(callback, key)
+
+        # format page
+        def bltinlink(name):
+            return '<a href="%s.html">%s</a>' % (name, name)
+
+        results = []
+        heading = html.heading(
+            '<big><big><strong>Search Results</strong></big></big>',
+            '#ffffff', '#7799ee')
+        for name, desc in search_result:
+            results.append(bltinlink(name) + desc)
+        contents = heading + html.bigsection(
+            'key = %s' % key, '#ffffff', '#ee77aa', '<br>'.join(results))
+        return 'Search Results', contents
+
+    def html_getfile(path):
+        """Get and display a source file listing safely."""
+        path = path.replace('%20', ' ')
+        with tokenize.open(path) as fp:
+            lines = html.escape(fp.read())
+        body = '<pre>%s</pre>' % lines
+        heading = html.heading(
+            '<big><big><strong>File Listing</strong></big></big>',
+            '#ffffff', '#7799ee')
+        contents = heading + html.bigsection(
+            'File: %s' % path, '#ffffff', '#ee77aa', body)
+        return 'getfile %s' % path, contents
+
+    def html_topics():
+        """Index of topic texts available."""
+
+        def bltinlink(name):
+            return '<a href="topic?key=%s">%s</a>' % (name, name)
+
+        heading = html.heading(
+            '<big><big><strong>INDEX</strong></big></big>',
+            '#ffffff', '#7799ee')
+        names = sorted(Helper.topics.keys())
+
+        contents = html.multicolumn(names, bltinlink)
+        contents = heading + html.bigsection(
+            'Topics', '#ffffff', '#ee77aa', contents)
+        return 'Topics', contents
+
+    def html_keywords():
+        """Index of keywords."""
+        heading = html.heading(
+            '<big><big><strong>INDEX</strong></big></big>',
+            '#ffffff', '#7799ee')
+        names = sorted(Helper.keywords.keys())
+
+        def bltinlink(name):
+            return '<a href="topic?key=%s">%s</a>' % (name, name)
+
+        contents = html.multicolumn(names, bltinlink)
+        contents = heading + html.bigsection(
+            'Keywords', '#ffffff', '#ee77aa', contents)
+        return 'Keywords', contents
+
+    def html_topicpage(topic):
+        """Topic or keyword help page."""
+        buf = io.StringIO()
+        htmlhelp = Helper(buf, buf)
+        contents, xrefs = htmlhelp._gettopic(topic)
+        if topic in htmlhelp.keywords:
+            title = 'KEYWORD'
+        else:
+            title = 'TOPIC'
+        heading = html.heading(
+            '<big><big><strong>%s</strong></big></big>' % title,
+            '#ffffff', '#7799ee')
+        contents = '<pre>%s</pre>' % html.markup(contents)
+        contents = html.bigsection(topic , '#ffffff','#ee77aa', contents)
+        if xrefs:
+            xrefs = sorted(xrefs.split())
+
+            def bltinlink(name):
+                return '<a href="topic?key=%s">%s</a>' % (name, name)
+
+            xrefs = html.multicolumn(xrefs, bltinlink)
+            xrefs = html.section('Related help topics: ',
+                                 '#ffffff', '#ee77aa', xrefs)
+        return ('%s %s' % (title, topic),
+                ''.join((heading, contents, xrefs)))
+
+    def html_getobj(url):
+        obj = locate(url, forceload=1)
+        if obj is None and url != 'None':
+            raise ValueError('could not find object')
+        title = describe(obj)
+        content = html.document(obj, url)
+        return title, content
+
+    def html_error(url, exc):
+        heading = html.heading(
+            '<big><big><strong>Error</strong></big></big>',
+            '#ffffff', '#7799ee')
+        contents = '<br>'.join(html.escape(line) for line in
+                               format_exception_only(type(exc), exc))
+        contents = heading + html.bigsection(url, '#ffffff', '#bb0000',
+                                             contents)
+        return "Error - %s" % url, contents
+
+    def get_html_page(url):
+        """Generate an HTML page for url."""
+        complete_url = url
+        if url.endswith('.html'):
+            url = url[:-5]
+        try:
+            if url in ("", "index"):
+                title, content = html_index()
+            elif url == "topics":
+                title, content = html_topics()
+            elif url == "keywords":
+                title, content = html_keywords()
+            elif '=' in url:
+                op, _, url = url.partition('=')
+                if op == "search?key":
+                    title, content = html_search(url)
+                elif op == "getfile?key":
+                    title, content = html_getfile(url)
+                elif op == "topic?key":
+                    # try topics first, then objects.
+                    try:
+                        title, content = html_topicpage(url)
+                    except ValueError:
+                        title, content = html_getobj(url)
+                elif op == "get?key":
+                    # try objects first, then topics.
+                    if url in ("", "index"):
+                        title, content = html_index()
+                    else:
+                        try:
+                            title, content = html_getobj(url)
+                        except ValueError:
+                            title, content = html_topicpage(url)
+                else:
+                    raise ValueError('bad pydoc url')
+            else:
+                title, content = html_getobj(url)
+        except Exception as exc:
+            # Catch any errors and display them in an error page.
+            title, content = html_error(complete_url, exc)
+        return html.page(title, content)
+
+    if url.startswith('/'):
+        url = url[1:]
+    if content_type == 'text/css':
+        path_here = os.path.dirname(os.path.realpath(__file__))
+        css_path = os.path.join(path_here, url)
+        with open(css_path) as fp:
+            return ''.join(fp.readlines())
+    elif content_type == 'text/html':
+        return get_html_page(url)
+    # Errors outside the url handler are caught by the server.
+    raise TypeError('unknown content type %r for url %s' % (content_type, url))
+
+
+def browse(port=0, *, open_browser=True):
+    """Start the enhanced pydoc Web server and open a Web browser.
+
+    Use port '0' to start the server on an arbitrary port.
+    Set open_browser to False to suppress opening a browser.
+    """
+    import webbrowser
+    serverthread = _start_server(_url_handler, port)
+    if serverthread.error:
+        print(serverthread.error)
+        return
+    if serverthread.serving:
+        server_help_msg = 'Server commands: [b]rowser, [q]uit'
+        if open_browser:
+            webbrowser.open(serverthread.url)
+        try:
+            print('Server ready at', serverthread.url)
+            print(server_help_msg)
+            while serverthread.serving:
+                cmd = input('server> ')
+                cmd = cmd.lower()
+                if cmd == 'q':
+                    break
+                elif cmd == 'b':
+                    webbrowser.open(serverthread.url)
+                else:
+                    print(server_help_msg)
+        except (KeyboardInterrupt, EOFError):
+            print()
+        finally:
+            if serverthread.serving:
+                serverthread.stop()
+                print('Server stopped')
+
+
 # -------------------------------------------------- command-line interface
 
 def ispath(x):
@@ -2267,29 +2774,32 @@ def cli():
         sys.path.insert(0, '.')
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'gk:p:w')
-        writing = 0
-
+        opts, args = getopt.getopt(sys.argv[1:], 'bgk:p:w')
+        writing = False
+        start_server = False
+        open_browser = False
+        port = None
         for opt, val in opts:
             if opt == '-g':
                 gui()
                 return
+            if opt == '-b':
+                start_server = True
+                open_browser = True
             if opt == '-k':
                 apropos(val)
                 return
             if opt == '-p':
-                try:
-                    port = int(val)
-                except ValueError:
-                    raise BadUsage
-                def ready(server):
-                    print('pydoc server ready at %s' % server.url)
-                def stopped():
-                    print('pydoc server stopped')
-                serve(port, ready, stopped)
-                return
+                start_server = True
+                port = val
             if opt == '-w':
-                writing = 1
+                writing = True
+
+        if start_server == True:
+            if port == None:
+                port = 0
+            browse(port, open_browser=open_browser)
+            return
 
         if not args: raise BadUsage
         for arg in args:
@@ -2310,30 +2820,37 @@ def cli():
                 print(value)
 
     except (getopt.error, BadUsage):
-        cmd = os.path.basename(sys.argv[0])
+        cmd = os.path.splitext(os.path.basename(sys.argv[0]))[0]
         print("""pydoc - the Python documentation tool
 
-%s <name> ...
+{cmd} <name> ...
     Show text documentation on something.  <name> may be the name of a
     Python keyword, topic, function, module, or package, or a dotted
     reference to a class or function within a module or module in a
-    package.  If <name> contains a '%s', it is used as the path to a
+    package.  If <name> contains a '{sep}', it is used as the path to a
     Python source file to document. If name is 'keywords', 'topics',
     or 'modules', a listing of these things is displayed.
 
-%s -k <keyword>
+{cmd} -k <keyword>
     Search for a keyword in the synopsis lines of all available modules.
 
-%s -p <port>
-    Start an HTTP server on the given port on the local machine.
+{cmd} -p <port>
+    Start an HTTP server on the given port on the local machine.  Port
+    number 0 can be used to get an arbitrary unused port.
 
-%s -g
-    Pop up a graphical interface for finding and serving documentation.
+{cmd} -b
+    Start an HTTP server on an arbitrary unused port and open a Web browser
+    to interactively browse documentation.  The -p option can be used with
+    the -b option to explicitly specify the server port.
 
-%s -w <name> ...
+{cmd} -g
+    Deprecated.
+
+{cmd} -w <name> ...
     Write out the HTML documentation for a module to a file in the current
-    directory.  If <name> contains a '%s', it is treated as a filename; if
+    directory.  If <name> contains a '{sep}', it is treated as a filename; if
     it names a directory, documentation is written for all the contents.
-""" % (cmd, os.sep, cmd, cmd, cmd, cmd, os.sep))
+""".format(cmd=cmd, sep=os.sep))
 
-if __name__ == '__main__': cli()
+if __name__ == '__main__':
+    cli()

@@ -1,4 +1,4 @@
-
+#ifndef Py_LIMITED_API
 #ifndef Py_PYDEBUG_H
 #define Py_PYDEBUG_H
 #ifdef __cplusplus
@@ -7,6 +7,7 @@ extern "C" {
 
 PyAPI_DATA(int) Py_DebugFlag;
 PyAPI_DATA(int) Py_VerboseFlag;
+PyAPI_DATA(int) Py_QuietFlag;
 PyAPI_DATA(int) Py_InteractiveFlag;
 PyAPI_DATA(int) Py_InspectFlag;
 PyAPI_DATA(int) Py_OptimizeFlag;
@@ -31,3 +32,4 @@ PyAPI_FUNC(void) Py_FatalError(const char *message);
 }
 #endif
 #endif /* !Py_PYDEBUG_H */
+#endif /* Py_LIMITED_API */

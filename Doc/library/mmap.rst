@@ -21,6 +21,12 @@ file object, use its :meth:`fileno` method to obtain the correct value for the
 :func:`os.open` function, which returns a file descriptor directly (the file
 still needs to be closed when done).
 
+.. note::
+   If you want to create a memory-mapping for a writable, buffered file, you
+   should :func:`~io.IOBase.flush` the file first.  This is necessary to ensure
+   that local modifications to the buffers are actually available to the
+   mapping.
+
 For both the Unix and Windows versions of the constructor, *access* may be
 specified as an optional keyword parameter. *access* accepts one of three
 values: :const:`ACCESS_READ`, :const:`ACCESS_WRITE`, or :const:`ACCESS_COPY`
@@ -115,6 +121,18 @@ To map anonymous memory, -1 should be passed as the fileno along with the length
           map.close()
 
 
+   :class:`mmap` can also be used as a context manager in a :keyword:`with`
+   statement.::
+
+      import mmap
+
+      with mmap.mmap(-1, 13) as map:
+          map.write("Hello world!")
+
+   .. versionadded:: 3.2
+      Context manager support.
+
+
    The next example demonstrates how to create an anonymous map and exchange
    data between the parent and child processes::
 
@@ -135,11 +153,17 @@ To map anonymous memory, -1 should be passed as the fileno along with the length
 
    Memory-mapped file objects support the following methods:
 
-
    .. method:: close()
 
       Close the file.  Subsequent calls to other methods of the object will
       result in an exception being raised.
+
+
+   .. attribute:: closed
+
+      True if the file is closed.
+
+      .. versionadded:: 3.2
 
 
    .. method:: find(sub[, start[, end]])

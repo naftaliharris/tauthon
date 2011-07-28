@@ -3,6 +3,7 @@
 /* Interface to Sjoerd's portable C thread library */
 
 #include "Python.h"
+#include "structmember.h" /* offsetof */
 
 #ifndef WITH_THREAD
 #error "Error!  The rest of Python is not compiled with thread support."
@@ -13,19 +14,22 @@
 #include "pythread.h"
 
 static PyObject *ThreadError;
+static long nb_threads = 0;
 static PyObject *str_dict;
-
 
 /* Lock objects */
 
 typedef struct {
     PyObject_HEAD
     PyThread_type_lock lock_lock;
+    PyObject *in_weakreflist;
 } lockobject;
 
 static void
 lock_dealloc(lockobject *self)
 {
+    if (self->in_weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) self);
     if (self->lock_lock != NULL) {
         /* Unlock the lock so it's safe to free it */
         PyThread_acquire_lock(self->lock_lock, 0);
@@ -36,19 +40,101 @@ lock_dealloc(lockobject *self)
     PyObject_Del(self);
 }
 
-static PyObject *
-lock_PyThread_acquire_lock(lockobject *self, PyObject *args)
+/* Helper to acquire an interruptible lock with a timeout.  If the lock acquire
+ * is interrupted, signal handlers are run, and if they raise an exception,
+ * PY_LOCK_INTR is returned.  Otherwise, PY_LOCK_ACQUIRED or PY_LOCK_FAILURE
+ * are returned, depending on whether the lock can be acquired withing the
+ * timeout.
+ */
+static PyLockStatus
+acquire_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds)
 {
-    int i = 1;
+    PyLockStatus r;
+    _PyTime_timeval curtime;
+    _PyTime_timeval endtime;
 
-    if (!PyArg_ParseTuple(args, "|i:acquire", &i))
+    if (microseconds > 0) {
+        _PyTime_gettimeofday(&endtime);
+        endtime.tv_sec += microseconds / (1000 * 1000);
+        endtime.tv_usec += microseconds % (1000 * 1000);
+    }
+
+
+    do {
+        Py_BEGIN_ALLOW_THREADS
+        r = PyThread_acquire_lock_timed(lock, microseconds, 1);
+        Py_END_ALLOW_THREADS
+
+        if (r == PY_LOCK_INTR) {
+            /* Run signal handlers if we were interrupted.  Propagate
+             * exceptions from signal handlers, such as KeyboardInterrupt, by
+             * passing up PY_LOCK_INTR.  */
+            if (Py_MakePendingCalls() < 0) {
+                return PY_LOCK_INTR;
+            }
+
+            /* If we're using a timeout, recompute the timeout after processing
+             * signals, since those can take time.  */
+            if (microseconds >= 0) {
+                _PyTime_gettimeofday(&curtime);
+                microseconds = ((endtime.tv_sec - curtime.tv_sec) * 1000000 +
+                                (endtime.tv_usec - curtime.tv_usec));
+
+                /* Check for negative values, since those mean block forever.
+                 */
+                if (microseconds <= 0) {
+                    r = PY_LOCK_FAILURE;
+                }
+            }
+        }
+    } while (r == PY_LOCK_INTR);  /* Retry if we were interrupted. */
+
+    return r;
+}
+
+static PyObject *
+lock_PyThread_acquire_lock(lockobject *self, PyObject *args, PyObject *kwds)
+{
+    char *kwlist[] = {"blocking", "timeout", NULL};
+    int blocking = 1;
+    double timeout = -1;
+    PY_TIMEOUT_T microseconds;
+    PyLockStatus r;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|id:acquire", kwlist,
+                                     &blocking, &timeout))
         return NULL;
 
-    Py_BEGIN_ALLOW_THREADS
-    i = PyThread_acquire_lock(self->lock_lock, i);
-    Py_END_ALLOW_THREADS
+    if (!blocking && timeout != -1) {
+        PyErr_SetString(PyExc_ValueError, "can't specify a timeout "
+                        "for a non-blocking call");
+        return NULL;
+    }
+    if (timeout < 0 && timeout != -1) {
+        PyErr_SetString(PyExc_ValueError, "timeout value must be "
+                        "strictly positive");
+        return NULL;
+    }
+    if (!blocking)
+        microseconds = 0;
+    else if (timeout == -1)
+        microseconds = -1;
+    else {
+        timeout *= 1e6;
+        if (timeout >= (double) PY_TIMEOUT_MAX) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "timeout value is too large");
+            return NULL;
+        }
+        microseconds = (PY_TIMEOUT_T) timeout;
+    }
 
-    return PyBool_FromLong((long)i);
+    r = acquire_timed(self->lock_lock, microseconds);
+    if (r == PY_LOCK_INTR) {
+        return NULL;
+    }
+
+    return PyBool_FromLong(r == PY_LOCK_ACQUIRED);
 }
 
 PyDoc_STRVAR(acquire_doc,
@@ -60,7 +146,7 @@ locked (even by the same thread), waiting for another thread to release\n\
 the lock, and return None once the lock is acquired.\n\
 With an argument, this will only block if the argument is true,\n\
 and the return value reflects whether the lock is acquired.\n\
-The blocking operation is not interruptible.");
+The blocking operation is interruptible.");
 
 static PyObject *
 lock_PyThread_release_lock(lockobject *self)
@@ -103,9 +189,9 @@ Return whether the lock is in the locked state.");
 
 static PyMethodDef lock_methods[] = {
     {"acquire_lock", (PyCFunction)lock_PyThread_acquire_lock,
-     METH_VARARGS, acquire_doc},
+     METH_VARARGS | METH_KEYWORDS, acquire_doc},
     {"acquire",      (PyCFunction)lock_PyThread_acquire_lock,
-     METH_VARARGS, acquire_doc},
+     METH_VARARGS | METH_KEYWORDS, acquire_doc},
     {"release_lock", (PyCFunction)lock_PyThread_release_lock,
      METH_NOARGS, release_doc},
     {"release",      (PyCFunction)lock_PyThread_release_lock,
@@ -115,7 +201,7 @@ static PyMethodDef lock_methods[] = {
     {"locked",       (PyCFunction)lock_locked_lock,
      METH_NOARGS, locked_doc},
     {"__enter__",    (PyCFunction)lock_PyThread_acquire_lock,
-     METH_VARARGS, acquire_doc},
+     METH_VARARGS | METH_KEYWORDS, acquire_doc},
     {"__exit__",    (PyCFunction)lock_PyThread_release_lock,
      METH_VARARGS, release_doc},
     {NULL,           NULL}              /* sentinel */
@@ -147,10 +233,304 @@ static PyTypeObject Locktype = {
     0,                                  /*tp_traverse*/
     0,                                  /*tp_clear*/
     0,                                  /*tp_richcompare*/
-    0,                                  /*tp_weaklistoffset*/
+    offsetof(lockobject, in_weakreflist), /*tp_weaklistoffset*/
     0,                                  /*tp_iter*/
     0,                                  /*tp_iternext*/
     lock_methods,                       /*tp_methods*/
+};
+
+/* Recursive lock objects */
+
+typedef struct {
+    PyObject_HEAD
+    PyThread_type_lock rlock_lock;
+    long rlock_owner;
+    unsigned long rlock_count;
+    PyObject *in_weakreflist;
+} rlockobject;
+
+static void
+rlock_dealloc(rlockobject *self)
+{
+    assert(self->rlock_lock);
+    if (self->in_weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) self);
+    /* Unlock the lock so it's safe to free it */
+    if (self->rlock_count > 0)
+        PyThread_release_lock(self->rlock_lock);
+
+    PyThread_free_lock(self->rlock_lock);
+    Py_TYPE(self)->tp_free(self);
+}
+
+static PyObject *
+rlock_acquire(rlockobject *self, PyObject *args, PyObject *kwds)
+{
+    char *kwlist[] = {"blocking", "timeout", NULL};
+    int blocking = 1;
+    double timeout = -1;
+    PY_TIMEOUT_T microseconds;
+    long tid;
+    PyLockStatus r = PY_LOCK_ACQUIRED;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|id:acquire", kwlist,
+                                     &blocking, &timeout))
+        return NULL;
+
+    if (!blocking && timeout != -1) {
+        PyErr_SetString(PyExc_ValueError, "can't specify a timeout "
+                        "for a non-blocking call");
+        return NULL;
+    }
+    if (timeout < 0 && timeout != -1) {
+        PyErr_SetString(PyExc_ValueError, "timeout value must be "
+                        "strictly positive");
+        return NULL;
+    }
+    if (!blocking)
+        microseconds = 0;
+    else if (timeout == -1)
+        microseconds = -1;
+    else {
+        timeout *= 1e6;
+        if (timeout >= (double) PY_TIMEOUT_MAX) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "timeout value is too large");
+            return NULL;
+        }
+        microseconds = (PY_TIMEOUT_T) timeout;
+    }
+
+    tid = PyThread_get_thread_ident();
+    if (self->rlock_count > 0 && tid == self->rlock_owner) {
+        unsigned long count = self->rlock_count + 1;
+        if (count <= self->rlock_count) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "Internal lock count overflowed");
+            return NULL;
+        }
+        self->rlock_count = count;
+        Py_RETURN_TRUE;
+    }
+
+    if (self->rlock_count > 0 ||
+        !PyThread_acquire_lock(self->rlock_lock, 0)) {
+        if (microseconds == 0) {
+            Py_RETURN_FALSE;
+        }
+        r = acquire_timed(self->rlock_lock, microseconds);
+    }
+    if (r == PY_LOCK_ACQUIRED) {
+        assert(self->rlock_count == 0);
+        self->rlock_owner = tid;
+        self->rlock_count = 1;
+    }
+    else if (r == PY_LOCK_INTR) {
+        return NULL;
+    }
+
+    return PyBool_FromLong(r == PY_LOCK_ACQUIRED);
+}
+
+PyDoc_STRVAR(rlock_acquire_doc,
+"acquire(blocking=True) -> bool\n\
+\n\
+Lock the lock.  `blocking` indicates whether we should wait\n\
+for the lock to be available or not.  If `blocking` is False\n\
+and another thread holds the lock, the method will return False\n\
+immediately.  If `blocking` is True and another thread holds\n\
+the lock, the method will wait for the lock to be released,\n\
+take it and then return True.\n\
+(note: the blocking operation is interruptible.)\n\
+\n\
+In all other cases, the method will return True immediately.\n\
+Precisely, if the current thread already holds the lock, its\n\
+internal counter is simply incremented. If nobody holds the lock,\n\
+the lock is taken and its internal counter initialized to 1.");
+
+static PyObject *
+rlock_release(rlockobject *self)
+{
+    long tid = PyThread_get_thread_ident();
+
+    if (self->rlock_count == 0 || self->rlock_owner != tid) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "cannot release un-acquired lock");
+        return NULL;
+    }
+    if (--self->rlock_count == 0) {
+        self->rlock_owner = 0;
+        PyThread_release_lock(self->rlock_lock);
+    }
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(rlock_release_doc,
+"release()\n\
+\n\
+Release the lock, allowing another thread that is blocked waiting for\n\
+the lock to acquire the lock.  The lock must be in the locked state,\n\
+and must be locked by the same thread that unlocks it; otherwise a\n\
+`RuntimeError` is raised.\n\
+\n\
+Do note that if the lock was acquire()d several times in a row by the\n\
+current thread, release() needs to be called as many times for the lock\n\
+to be available for other threads.");
+
+static PyObject *
+rlock_acquire_restore(rlockobject *self, PyObject *arg)
+{
+    long owner;
+    unsigned long count;
+    int r = 1;
+
+    if (!PyArg_ParseTuple(arg, "kl:_acquire_restore", &count, &owner))
+        return NULL;
+
+    if (!PyThread_acquire_lock(self->rlock_lock, 0)) {
+        Py_BEGIN_ALLOW_THREADS
+        r = PyThread_acquire_lock(self->rlock_lock, 1);
+        Py_END_ALLOW_THREADS
+    }
+    if (!r) {
+        PyErr_SetString(ThreadError, "couldn't acquire lock");
+        return NULL;
+    }
+    assert(self->rlock_count == 0);
+    self->rlock_owner = owner;
+    self->rlock_count = count;
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(rlock_acquire_restore_doc,
+"_acquire_restore(state) -> None\n\
+\n\
+For internal use by `threading.Condition`.");
+
+static PyObject *
+rlock_release_save(rlockobject *self)
+{
+    long owner;
+    unsigned long count;
+
+    owner = self->rlock_owner;
+    count = self->rlock_count;
+    self->rlock_count = 0;
+    self->rlock_owner = 0;
+    PyThread_release_lock(self->rlock_lock);
+    return Py_BuildValue("kl", count, owner);
+}
+
+PyDoc_STRVAR(rlock_release_save_doc,
+"_release_save() -> tuple\n\
+\n\
+For internal use by `threading.Condition`.");
+
+
+static PyObject *
+rlock_is_owned(rlockobject *self)
+{
+    long tid = PyThread_get_thread_ident();
+
+    if (self->rlock_count > 0 && self->rlock_owner == tid) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
+}
+
+PyDoc_STRVAR(rlock_is_owned_doc,
+"_is_owned() -> bool\n\
+\n\
+For internal use by `threading.Condition`.");
+
+static PyObject *
+rlock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    rlockobject *self;
+
+    self = (rlockobject *) type->tp_alloc(type, 0);
+    if (self != NULL) {
+        self->rlock_lock = PyThread_allocate_lock();
+        if (self->rlock_lock == NULL) {
+            type->tp_free(self);
+            PyErr_SetString(ThreadError, "can't allocate lock");
+            return NULL;
+        }
+        self->in_weakreflist = NULL;
+        self->rlock_owner = 0;
+        self->rlock_count = 0;
+    }
+
+    return (PyObject *) self;
+}
+
+static PyObject *
+rlock_repr(rlockobject *self)
+{
+    return PyUnicode_FromFormat("<%s owner=%ld count=%lu>",
+        Py_TYPE(self)->tp_name, self->rlock_owner, self->rlock_count);
+}
+
+
+static PyMethodDef rlock_methods[] = {
+    {"acquire",      (PyCFunction)rlock_acquire,
+     METH_VARARGS | METH_KEYWORDS, rlock_acquire_doc},
+    {"release",      (PyCFunction)rlock_release,
+     METH_NOARGS, rlock_release_doc},
+    {"_is_owned",     (PyCFunction)rlock_is_owned,
+     METH_NOARGS, rlock_is_owned_doc},
+    {"_acquire_restore", (PyCFunction)rlock_acquire_restore,
+     METH_O, rlock_acquire_restore_doc},
+    {"_release_save", (PyCFunction)rlock_release_save,
+     METH_NOARGS, rlock_release_save_doc},
+    {"__enter__",    (PyCFunction)rlock_acquire,
+     METH_VARARGS | METH_KEYWORDS, rlock_acquire_doc},
+    {"__exit__",    (PyCFunction)rlock_release,
+     METH_VARARGS, rlock_release_doc},
+    {NULL,           NULL}              /* sentinel */
+};
+
+
+static PyTypeObject RLocktype = {
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    "_thread.RLock",                    /*tp_name*/
+    sizeof(rlockobject),                /*tp_size*/
+    0,                                  /*tp_itemsize*/
+    /* methods */
+    (destructor)rlock_dealloc,          /*tp_dealloc*/
+    0,                                  /*tp_print*/
+    0,                                  /*tp_getattr*/
+    0,                                  /*tp_setattr*/
+    0,                                  /*tp_reserved*/
+    (reprfunc)rlock_repr,               /*tp_repr*/
+    0,                                  /*tp_as_number*/
+    0,                                  /*tp_as_sequence*/
+    0,                                  /*tp_as_mapping*/
+    0,                                  /*tp_hash*/
+    0,                                  /*tp_call*/
+    0,                                  /*tp_str*/
+    0,                                  /*tp_getattro*/
+    0,                                  /*tp_setattro*/
+    0,                                  /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
+    0,                                  /*tp_doc*/
+    0,                                  /*tp_traverse*/
+    0,                                  /*tp_clear*/
+    0,                                  /*tp_richcompare*/
+    offsetof(rlockobject, in_weakreflist), /*tp_weaklistoffset*/
+    0,                                  /*tp_iter*/
+    0,                                  /*tp_iternext*/
+    rlock_methods,                      /*tp_methods*/
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    PyType_GenericAlloc,                /* tp_alloc */
+    rlock_new                           /* tp_new */
 };
 
 static lockobject *
@@ -161,6 +541,7 @@ newlockobject(void)
     if (self == NULL)
         return NULL;
     self->lock_lock = PyThread_allocate_lock();
+    self->in_weakreflist = NULL;
     if (self->lock_lock == NULL) {
         Py_DECREF(self);
         PyErr_SetString(ThreadError, "can't allocate lock");
@@ -605,6 +986,7 @@ t_bootstrap(void *boot_raw)
     tstate->thread_id = PyThread_get_thread_ident();
     _PyThreadState_Init(tstate);
     PyEval_AcquireThread(tstate);
+    nb_threads++;
     res = PyEval_CallObjectWithKeywords(
         boot->func, boot->args, boot->keyw);
     if (res == NULL) {
@@ -629,6 +1011,7 @@ t_bootstrap(void *boot_raw)
     Py_DECREF(boot->args);
     Py_XDECREF(boot->keyw);
     PyMem_DEL(boot_raw);
+    nb_threads--;
     PyThreadState_Clear(tstate);
     PyThreadState_DeleteCurrent();
     PyThread_exit_thread();
@@ -708,7 +1091,7 @@ thread_PyThread_exit_thread(PyObject *self)
 
 PyDoc_STRVAR(exit_doc,
 "exit()\n\
-(PyThread_exit_thread() is an obsolete synonym)\n\
+(exit_thread() is an obsolete synonym)\n\
 \n\
 This is synonymous to ``raise SystemExit''.  It will cause the current\n\
 thread to exit silently unless the exception is caught.");
@@ -727,18 +1110,6 @@ PyDoc_STRVAR(interrupt_doc,
 Raise a KeyboardInterrupt in the main thread.\n\
 A subthread can use this function to interrupt the main thread."
 );
-
-#ifndef NO_EXIT_PROG
-static PyObject *
-thread_PyThread_exit_prog(PyObject *self, PyObject *args)
-{
-    int sts;
-    if (!PyArg_ParseTuple(args, "i:exit_prog", &sts))
-        return NULL;
-    Py_Exit(sts); /* Calls PyThread_exit_prog(sts) or _PyThread_exit_prog(sts) */
-    for (;;) { } /* Should not be reached */
-}
-#endif
 
 static lockobject *newlockobject(void);
 
@@ -776,6 +1147,24 @@ Even though on some platforms threads identities may appear to be\n\
 allocated consecutive numbers starting at 1, this behavior should not\n\
 be relied upon, and the number should be seen purely as a magic cookie.\n\
 A thread's identity may be reused for another thread after it exits.");
+
+static PyObject *
+thread__count(PyObject *self)
+{
+    return PyLong_FromLong(nb_threads);
+}
+
+PyDoc_STRVAR(_count_doc,
+"_count() -> integer\n\
+\n\
+\
+Return the number of currently running Python threads, excluding \n\
+the main thread. The returned number comprises all threads created\n\
+through `start_new_thread()` as well as `threading.Thread`, and not\n\
+yet finished.\n\
+\n\
+This function is meant for internal and specialized purposes only.\n\
+In most applications `threading.enumerate()` should be used instead.");
 
 static PyObject *
 thread_stack_size(PyObject *self, PyObject *args)
@@ -850,13 +1239,11 @@ static PyMethodDef thread_methods[] = {
      METH_NOARGS, interrupt_doc},
     {"get_ident",               (PyCFunction)thread_get_ident,
      METH_NOARGS, get_ident_doc},
+    {"_count",                  (PyCFunction)thread__count,
+     METH_NOARGS, _count_doc},
     {"stack_size",              (PyCFunction)thread_stack_size,
                             METH_VARARGS,
                             stack_size_doc},
-#ifndef NO_EXIT_PROG
-    {"exit_prog",               (PyCFunction)thread_PyThread_exit_prog,
-     METH_VARARGS},
-#endif
     {NULL,                      NULL}           /* sentinel */
 };
 
@@ -895,7 +1282,7 @@ static struct PyModuleDef threadmodule = {
 PyMODINIT_FUNC
 PyInit__thread(void)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *timeout_max;
 
     /* Initialize types: */
     if (PyType_Ready(&localdummytype) < 0)
@@ -904,10 +1291,18 @@ PyInit__thread(void)
         return NULL;
     if (PyType_Ready(&Locktype) < 0)
         return NULL;
+    if (PyType_Ready(&RLocktype) < 0)
+        return NULL;
 
     /* Create the module and add the functions */
     m = PyModule_Create(&threadmodule);
     if (m == NULL)
+        return NULL;
+
+    timeout_max = PyFloat_FromDouble(PY_TIMEOUT_MAX / 1000000);
+    if (!timeout_max)
+        return NULL;
+    if (PyModule_AddObject(m, "TIMEOUT_MAX", timeout_max) < 0)
         return NULL;
 
     /* Add a symbolic constant */
@@ -918,9 +1313,15 @@ PyInit__thread(void)
     Py_INCREF(&Locktype);
     PyDict_SetItemString(d, "LockType", (PyObject *)&Locktype);
 
+    Py_INCREF(&RLocktype);
+    if (PyModule_AddObject(m, "RLock", (PyObject *)&RLocktype) < 0)
+        return NULL;
+
     Py_INCREF(&localtype);
     if (PyModule_AddObject(m, "_local", (PyObject *)&localtype) < 0)
         return NULL;
+
+    nb_threads = 0;
 
     str_dict = PyUnicode_InternFromString("__dict__");
     if (str_dict == NULL)

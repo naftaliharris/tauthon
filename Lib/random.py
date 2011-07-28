@@ -42,8 +42,8 @@ from types import MethodType as _MethodType, BuiltinMethodType as _BuiltinMethod
 from math import log as _log, exp as _exp, pi as _pi, e as _e, ceil as _ceil
 from math import sqrt as _sqrt, acos as _acos, cos as _cos, sin as _sin
 from os import urandom as _urandom
-from binascii import hexlify as _hexlify
-import collections as _collections
+from collections import Set as _Set, Sequence as _Sequence
+from hashlib import sha512 as _sha512
 
 __all__ = ["Random","seed","random","uniform","randint","choice","sample",
            "randrange","shuffle","normalvariate","lognormvariate",
@@ -91,21 +91,32 @@ class Random(_random.Random):
         self.seed(x)
         self.gauss_next = None
 
-    def seed(self, a=None):
+    def seed(self, a=None, version=2):
         """Initialize internal state from hashable object.
 
         None or no argument seeds from current time or from an operating
         system specific randomness source if available.
 
-        If a is not None or an int, hash(a) is used instead.
+        For version 2 (the default), all of the bits are used if *a *is a str,
+        bytes, or bytearray.  For version 1, the hash() of *a* is used instead.
+
+        If *a* is an int, all bits are used.
+
         """
 
         if a is None:
             try:
-                a = int(_hexlify(_urandom(16)), 16)
+                a = int.from_bytes(_urandom(32), 'big')
             except NotImplementedError:
                 import time
                 a = int(time.time() * 256) # use fractional seconds
+
+        if version == 2:
+            if isinstance(a, (str, bytes, bytearray)):
+                if isinstance(a, str):
+                    a = a.encode()
+                a += _sha512(a).digest()
+                a = int.from_bytes(a, 'big')
 
         super().seed(a)
         self.gauss_next = None
@@ -127,10 +138,10 @@ class Random(_random.Random):
             #   really unsigned 32-bit ints, so we convert negative ints from
             #   version 2 to positive longs for version 3.
             try:
-                internalstate = tuple( x % (2**32) for x in internalstate )
+                internalstate = tuple(x % (2**32) for x in internalstate)
             except ValueError as e:
                 raise TypeError from e
-            super(Random, self).setstate(internalstate)
+            super().setstate(internalstate)
         else:
             raise ValueError("state with version %s passed to "
                              "Random.setstate() of version %s" %
@@ -152,13 +163,13 @@ class Random(_random.Random):
 
 ## -------------------- integer methods  -------------------
 
-    def randrange(self, start, stop=None, step=1, int=int, default=None,
-                  maxwidth=1<<BPF):
+    def randrange(self, start, stop=None, step=1, int=int):
         """Choose a random item from range(start, stop[, step]).
 
         This fixes the problem with randint() which includes the
         endpoint; in Python this is usually not what you want.
-        Do not supply the 'int', 'default', and 'maxwidth' arguments.
+
+        Do not supply the 'int' argument.
         """
 
         # This code is a bit messy to make it fast for the
@@ -166,11 +177,9 @@ class Random(_random.Random):
         istart = int(start)
         if istart != start:
             raise ValueError("non-integer arg 1 for randrange()")
-        if stop is default:
+        if stop is None:
             if istart > 0:
-                if istart >= maxwidth:
-                    return self._randbelow(istart)
-                return int(self.random() * istart)
+                return self._randbelow(istart)
             raise ValueError("empty range for randrange()")
 
         # stop argument supplied.
@@ -179,22 +188,7 @@ class Random(_random.Random):
             raise ValueError("non-integer stop for randrange()")
         width = istop - istart
         if step == 1 and width > 0:
-            # Note that
-            #     int(istart + self.random()*width)
-            # instead would be incorrect.  For example, consider istart
-            # = -2 and istop = 0.  Then the guts would be in
-            # -2.0 to 0.0 exclusive on both ends (ignoring that random()
-            # might return 0.0), and because int() truncates toward 0, the
-            # final result would be -1 or 0 (instead of -2 or -1).
-            #     istart + int(self.random()*width)
-            # would also be incorrect, for a subtler reason:  the RHS
-            # can return a long, and then randrange() would also return
-            # a long, but we're supposed to return an int (for backward
-            # compatibility).
-
-            if width >= maxwidth:
-                return int(istart + self._randbelow(width))
-            return int(istart + int(self.random()*width))
+            return istart + self._randbelow(width)
         if step == 1:
             raise ValueError("empty range for randrange() (%d,%d, %d)" % (istart, istop, width))
 
@@ -212,9 +206,7 @@ class Random(_random.Random):
         if n <= 0:
             raise ValueError("empty range for randrange()")
 
-        if n >= maxwidth:
-            return istart + istep*self._randbelow(n)
-        return istart + istep*int(self.random() * n)
+        return istart + istep*self._randbelow(n)
 
     def randint(self, a, b):
         """Return random integer in range [a, b], including both end points.
@@ -222,38 +214,43 @@ class Random(_random.Random):
 
         return self.randrange(a, b+1)
 
-    def _randbelow(self, n, _log=_log, int=int, _maxwidth=1<<BPF,
-                   _Method=_MethodType, _BuiltinMethod=_BuiltinMethodType):
-        """Return a random int in the range [0,n)
+    def _randbelow(self, n, int=int, maxsize=1<<BPF, type=type,
+                   Method=_MethodType, BuiltinMethod=_BuiltinMethodType):
+        "Return a random int in the range [0,n).  Raises ValueError if n==0."
 
-        Handles the case where n has more bits than returned
-        by a single call to the underlying generator.
-        """
-
-        try:
-            getrandbits = self.getrandbits
-        except AttributeError:
-            pass
-        else:
-            # Only call self.getrandbits if the original random() builtin method
-            # has not been overridden or if a new getrandbits() was supplied.
-            # This assures that the two methods correspond.
-            if type(self.random) is _BuiltinMethod or type(getrandbits) is _Method:
-                k = int(1.00001 + _log(n-1, 2.0))   # 2**k > n-1 > 2**(k-2)
+        getrandbits = self.getrandbits
+        # Only call self.getrandbits if the original random() builtin method
+        # has not been overridden or if a new getrandbits() was supplied.
+        if type(self.random) is BuiltinMethod or type(getrandbits) is Method:
+            k = n.bit_length()  # don't use (n-1) here because n can be 1
+            r = getrandbits(k)          # 0 <= r < 2**k
+            while r >= n:
                 r = getrandbits(k)
-                while r >= n:
-                    r = getrandbits(k)
-                return r
-        if n >= _maxwidth:
+            return r
+        # There's an overriden random() method but no new getrandbits() method,
+        # so we can only use random() from here.
+        random = self.random
+        if n >= maxsize:
             _warn("Underlying random() generator does not supply \n"
-                "enough bits to choose from a population range this large")
-        return int(self.random() * n)
+                "enough bits to choose from a population range this large.\n"
+                "To remove the range limitation, add a getrandbits() method.")
+            return int(random() * n)
+        rem = maxsize % n
+        limit = (maxsize - rem) / maxsize   # int(limit * maxsize) % n == 0
+        r = random()
+        while r >= limit:
+            r = random()
+        return int(r*maxsize) % n
 
 ## -------------------- sequence methods  -------------------
 
     def choice(self, seq):
         """Choose a random element from a non-empty sequence."""
-        return seq[int(self.random() * len(seq))]  # raises IndexError if seq is empty
+        try:
+            i = self._randbelow(len(seq))
+        except ValueError:
+            raise IndexError('Cannot choose from an empty sequence')
+        return seq[i]
 
     def shuffle(self, x, random=None, int=int):
         """x, random=random.random -> shuffle list x in place; return None.
@@ -262,11 +259,10 @@ class Random(_random.Random):
         float in [0.0, 1.0); by default, the standard random.random.
         """
 
-        if random is None:
-            random = self.random
+        randbelow = self._randbelow
         for i in reversed(range(1, len(x))):
             # pick an element in x[:i+1] with which to exchange x[i]
-            j = int(random() * (i+1))
+            j = randbelow(i+1) if random is None else int(random() * (i+1))
             x[i], x[j] = x[j], x[i]
 
     def sample(self, population, k):
@@ -297,15 +293,14 @@ class Random(_random.Random):
         # preferred since the list takes less space than the
         # set and it doesn't suffer from frequent reselections.
 
-        if isinstance(population, _collections.Set):
+        if isinstance(population, _Set):
             population = tuple(population)
-        if not isinstance(population, _collections.Sequence):
-            raise TypeError("Population must be a sequence or Set.  For dicts, use list(d).")
-        random = self.random
+        if not isinstance(population, _Sequence):
+            raise TypeError("Population must be a sequence or set.  For dicts, use list(d).")
+        randbelow = self._randbelow
         n = len(population)
         if not 0 <= k <= n:
             raise ValueError("Sample larger than population")
-        _int = int
         result = [None] * k
         setsize = 21        # size of a small set minus size of an empty list
         if k > 5:
@@ -314,16 +309,16 @@ class Random(_random.Random):
             # An n-length list is smaller than a k-length set
             pool = list(population)
             for i in range(k):         # invariant:  non-selected at [0,n-i)
-                j = _int(random() * (n-i))
+                j = randbelow(n-i)
                 result[i] = pool[j]
                 pool[j] = pool[n-i-1]   # move non-selected item into vacancy
         else:
             selected = set()
             selected_add = selected.add
             for i in range(k):
-                j = _int(random() * n)
+                j = randbelow(n)
                 while j in selected:
-                    j = _int(random() * n)
+                    j = randbelow(n)
                 selected_add(j)
                 result[i] = population[j]
         return result
@@ -407,11 +402,9 @@ class Random(_random.Random):
         # lambd: rate lambd = 1/mean
         # ('lambda' is a Python reserved word)
 
-        random = self.random
-        u = random()
-        while u <= 1e-7:
-            u = random()
-        return -_log(u)/lambd
+        # we use 1-random() instead of random() to preclude the
+        # possibility of taking the log of zero.
+        return -_log(1.0 - self.random())/lambd
 
 ## -------------------- von Mises distribution --------------------
 
@@ -613,7 +606,7 @@ class Random(_random.Random):
         # Jain, pg. 495
 
         u = 1.0 - self.random()
-        return 1.0 / pow(u, 1.0/alpha)
+        return 1.0 / u ** (1.0/alpha)
 
 ## -------------------- Weibull --------------------
 
@@ -626,7 +619,7 @@ class Random(_random.Random):
         # Jain, pg. 499; bug fix courtesy Bill Arms
 
         u = 1.0 - self.random()
-        return alpha * pow(-_log(u), 1.0/beta)
+        return alpha * (-_log(u)) ** (1.0/beta)
 
 ## --------------- Operating System Random Source  ------------------
 
@@ -640,7 +633,7 @@ class SystemRandom(Random):
 
     def random(self):
         """Get the next random number in the range [0.0, 1.0)."""
-        return (int(_hexlify(_urandom(7)), 16) >> 3) * RECIP_BPF
+        return (int.from_bytes(_urandom(7), 'big') >> 3) * RECIP_BPF
 
     def getrandbits(self, k):
         """getrandbits(k) -> x.  Generates a long int with k random bits."""
@@ -648,9 +641,9 @@ class SystemRandom(Random):
             raise ValueError('number of bits must be greater than zero')
         if k != int(k):
             raise TypeError('number of bits should be an integer')
-        bytes = (k + 7) // 8                    # bits / 8 and rounded up
-        x = int(_hexlify(_urandom(bytes)), 16)
-        return x >> (bytes * 8 - k)             # trim excess bits
+        numbytes = (k + 7) // 8                       # bits / 8 and rounded up
+        x = int.from_bytes(_urandom(numbytes), 'big')
+        return x >> (numbytes * 8 - k)                # trim excess bits
 
     def seed(self, *args, **kwds):
         "Stub method.  Not used for a system random number generator."

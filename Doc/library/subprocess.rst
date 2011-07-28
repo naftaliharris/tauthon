@@ -28,7 +28,7 @@ Using the subprocess Module
 This module defines one class called :class:`Popen`:
 
 
-.. class:: Popen(args, bufsize=0, executable=None, stdin=None, stdout=None, stderr=None, preexec_fn=None, close_fds=False, shell=False, cwd=None, env=None, universal_newlines=False, startupinfo=None, creationflags=0)
+.. class:: Popen(args, bufsize=0, executable=None, stdin=None, stdout=None, stderr=None, preexec_fn=None, close_fds=True, shell=False, cwd=None, env=None, universal_newlines=False, startupinfo=None, creationflags=0, restore_signals=True, start_new_session=False, pass_fds=())
 
    Arguments are:
 
@@ -41,7 +41,8 @@ This module defines one class called :class:`Popen`:
    name for the executing program in utilities such as :program:`ps`.
 
    On Unix, with *shell=False* (default): In this case, the Popen class uses
-   :meth:`os.execvp` to execute the child program. *args* should normally be a
+   :meth:`os.execvp` like behavior to execute the child program.
+   *args* should normally be a
    sequence.  If a string is specified for *args*, it will be used as the name
    or path of the program to execute; this will only work if the program is
    being given no arguments.
@@ -130,25 +131,65 @@ This module defines one class called :class:`Popen`:
    applications should be captured into the same file handle as for stdout.
 
    If *preexec_fn* is set to a callable object, this object will be called in the
-   child process just before the child is executed. (Unix only)
+   child process just before the child is executed.
+   (Unix only)
+
+   .. warning::
+
+      The *preexec_fn* parameter is not safe to use in the presence of threads
+      in your application.  The child process could deadlock before exec is
+      called.
+      If you must use it, keep it trivial!  Minimize the number of libraries
+      you call into.
+
+   .. note::
+
+      If you need to modify the environment for the child use the *env*
+      parameter rather than doing it in a *preexec_fn*.
+      The *start_new_session* parameter can take the place of a previously
+      common use of *preexec_fn* to call os.setsid() in the child.
 
    If *close_fds* is true, all file descriptors except :const:`0`, :const:`1` and
    :const:`2` will be closed before the child process is executed. (Unix only).
-   Or, on Windows, if *close_fds* is true then no handles will be inherited by the
+   The default varies by platform:  Always true on Unix.  On Windows it is
+   true when *stdin*/*stdout*/*stderr* are :const:`None`, false otherwise.
+   On Windows, if *close_fds* is true then no handles will be inherited by the
    child process.  Note that on Windows, you cannot set *close_fds* to true and
    also redirect the standard handles by setting *stdin*, *stdout* or *stderr*.
 
-   If *shell* is :const:`True`, the specified command will be executed through the
-   shell.
+   .. versionchanged:: 3.2
+      The default for *close_fds* was changed from :const:`False` to
+      what is described above.
+
+   *pass_fds* is an optional sequence of file descriptors to keep open
+   between the parent and child.  Providing any *pass_fds* forces
+   *close_fds* to be :const:`True`.  (Unix only)
+
+   .. versionadded:: 3.2
+      The *pass_fds* parameter was added.
 
    If *cwd* is not ``None``, the child's current directory will be changed to *cwd*
    before it is executed.  Note that this directory is not considered when
    searching the executable, so you can't specify the program's path relative to
    *cwd*.
 
+   If *restore_signals* is True (the default) all signals that Python has set to
+   SIG_IGN are restored to SIG_DFL in the child process before the exec.
+   Currently this includes the SIGPIPE, SIGXFZ and SIGXFSZ signals.
+   (Unix only)
+
+   .. versionchanged:: 3.2
+      *restore_signals* was added.
+
+   If *start_new_session* is True the setsid() system call will be made in the
+   child process prior to the execution of the subprocess.  (Unix only)
+
+   .. versionchanged:: 3.2
+      *start_new_session* was added.
+
    If *env* is not ``None``, it must be a mapping that defines the environment
-   variables for the new process; these are used instead of inheriting the current
-   process' environment, which is the default behavior.
+   variables for the new process; these are used instead of the default
+   behavior of inheriting the current process' environment.
 
    .. note::
 
@@ -173,7 +214,18 @@ This module defines one class called :class:`Popen`:
 
    If given, *startupinfo* will be a :class:`STARTUPINFO` object, which is
    passed to the underlying ``CreateProcess`` function.
-   *creationflags*, if given, can be :data:`CREATE_NEW_CONSOLE`. (Windows only)
+   *creationflags*, if given, can be :data:`CREATE_NEW_CONSOLE` or
+   :data:`CREATE_NEW_PROCESS_GROUP`. (Windows only)
+
+   Popen objects are supported as context managers via the :keyword:`with` statement:
+   on exit, standard file descriptors are closed, and the process is waited for.
+   ::
+
+      with Popen(["ifconfig"], stdout=PIPE) as proc:
+          log.write(proc.stdout.read())
+
+   .. versionchanged:: 3.2
+      Added context manager support.
 
 
 .. data:: PIPE
@@ -201,15 +253,16 @@ This module also defines the following shortcut functions:
    Run command with arguments.  Wait for command to complete, then return the
    :attr:`returncode` attribute.
 
-   The arguments are the same as for the Popen constructor.  Example::
+   The arguments are the same as for the :class:`Popen` constructor.  Example::
 
       >>> retcode = subprocess.call(["ls", "-l"])
 
    .. warning::
 
-      Like :meth:`Popen.wait`, this will deadlock if the child process
-      generates enough output to a stdout or stderr pipe such that it blocks
-      waiting for the OS pipe buffer to accept more data.
+      Like :meth:`Popen.wait`, this will deadlock when using
+      ``stdout=PIPE`` and/or ``stderr=PIPE`` and the child process
+      generates enough output to a pipe such that it blocks waiting
+      for the OS pipe buffer to accept more data.
 
 
 .. function:: check_call(*popenargs, **kwargs)
@@ -219,7 +272,7 @@ This module also defines the following shortcut functions:
    :exc:`CalledProcessError` object will have the return code in the
    :attr:`returncode` attribute.
 
-   The arguments are the same as for the Popen constructor.  Example::
+   The arguments are the same as for the :class:`Popen` constructor.  Example::
 
       >>> subprocess.check_call(["ls", "-l"])
       0
@@ -262,7 +315,7 @@ This module also defines the following shortcut functions:
    ``(status, output)``.  *cmd* is actually run as ``{ cmd ; } 2>&1``, so that the
    returned output will contain output or error messages.  A trailing newline is
    stripped from the output.  The exit status for the command can be interpreted
-   according to the rules for the C function :cfunc:`wait`.  Example::
+   according to the rules for the C function :c:func:`wait`.  Example::
 
       >>> subprocess.getstatusoutput('ls /bin/ls')
       (0, '/bin/ls')
@@ -333,9 +386,10 @@ Instances of the :class:`Popen` class have the following methods:
 
    .. warning::
 
-      This will deadlock if the child process generates enough output to a
-      stdout or stderr pipe such that it blocks waiting for the OS pipe buffer
-      to accept more data.  Use :meth:`communicate` to avoid that.
+      This will deadlock when using ``stdout=PIPE`` and/or
+      ``stderr=PIPE`` and the child process generates enough output to
+      a pipe such that it blocks waiting for the OS pipe buffer to
+      accept more data.  Use :meth:`communicate` to avoid that.
 
 
 .. method:: Popen.communicate(input=None)
@@ -364,14 +418,15 @@ Instances of the :class:`Popen` class have the following methods:
 
    .. note::
 
-      On Windows only SIGTERM is supported so far. It's an alias for
-      :meth:`terminate`.
+      On Windows, SIGTERM is an alias for :meth:`terminate`. CTRL_C_EVENT and
+      CTRL_BREAK_EVENT can be sent to processes started with a *creationflags*
+      parameter which includes `CREATE_NEW_PROCESS_GROUP`.
 
 
 .. method:: Popen.terminate()
 
    Stop the child. On Posix OSs the method sends SIGTERM to the
-   child. On Windows the Win32 API function :cfunc:`TerminateProcess` is called
+   child. On Windows the Win32 API function :c:func:`TerminateProcess` is called
    to stop the child.
 
 
@@ -442,38 +497,39 @@ on Windows.
 
    .. attribute:: dwFlags
 
-      A bit field that determines whether certain :class:`STARTUPINFO` members
-      are used when the process creates a window. ::
+      A bit field that determines whether certain :class:`STARTUPINFO`
+      attributes are used when the process creates a window. ::
 
          si = subprocess.STARTUPINFO()
          si.dwFlags = subprocess.STARTF_USESTDHANDLES | subprocess.STARTF_USESHOWWINDOW
 
    .. attribute:: hStdInput
 
-      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this member is
-      the standard input handle for the process. If :data:`STARTF_USESTDHANDLES`
-      is not specified, the default for standard input is the keyboard buffer.
+      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this attribute
+      is the standard input handle for the process. If
+      :data:`STARTF_USESTDHANDLES` is not specified, the default for standard
+      input is the keyboard buffer.
 
    .. attribute:: hStdOutput
 
-      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this member is
-      the standard output handle for the process. Otherwise, this member is
-      ignored and the default for standard output is the console window's
+      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this attribute
+      is the standard output handle for the process. Otherwise, this attribute
+      is ignored and the default for standard output is the console window's
       buffer.
 
    .. attribute:: hStdError
 
-      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this member is
-      the standard error handle for the process. Otherwise, this member is
+      If :attr:`dwFlags` specifies :data:`STARTF_USESTDHANDLES`, this attribute
+      is the standard error handle for the process. Otherwise, this attribute is
       ignored and the default for standard error is the console window's buffer.
 
    .. attribute:: wShowWindow
 
-      If :attr:`dwFlags` specifies :data:`STARTF_USESHOWWINDOW`, this member
+      If :attr:`dwFlags` specifies :data:`STARTF_USESHOWWINDOW`, this attribute
       can be any of the values that can be specified in the ``nCmdShow``
       parameter for the
       `ShowWindow <http://msdn.microsoft.com/en-us/library/ms633548(v=vs.85).aspx>`__
-      function, except for ``SW_SHOWDEFAULT``. Otherwise, this member is
+      function, except for ``SW_SHOWDEFAULT``. Otherwise, this attribute is
       ignored.
 
       :data:`SW_HIDE` is provided for this attribute. It is used when
@@ -507,12 +563,12 @@ The :mod:`subprocess` module exposes the following constants.
 .. data:: STARTF_USESTDHANDLES
 
    Specifies that the :attr:`STARTUPINFO.hStdInput`,
-   :attr:`STARTUPINFO.hStdOutput`, and :attr:`STARTUPINFO.hStdError` members
+   :attr:`STARTUPINFO.hStdOutput`, and :attr:`STARTUPINFO.hStdError` attributes
    contain additional information.
 
 .. data:: STARTF_USESHOWWINDOW
 
-   Specifies that the :attr:`STARTUPINFO.wShowWindow` member contains
+   Specifies that the :attr:`STARTUPINFO.wShowWindow` attribute contains
    additional information.
 
 .. data:: CREATE_NEW_CONSOLE
@@ -521,6 +577,14 @@ The :mod:`subprocess` module exposes the following constants.
    console (the default).
 
    This flag is always set when :class:`Popen` is created with ``shell=True``.
+
+.. data:: CREATE_NEW_PROCESS_GROUP
+
+   A :class:`Popen` ``creationflags`` parameter to specify that a new process
+   group will be created. This flag is necessary for using :func:`os.kill`
+   on the subprocess.
+
+   This flag is ignored if :data:`CREATE_NEW_CONSOLE` is specified.
 
 
 .. _subprocess-replacements:
@@ -701,7 +765,8 @@ Replacing functions from the :mod:`popen2` module
 * ``stdin=PIPE`` and ``stdout=PIPE`` must be specified.
 
 * popen2 closes all file descriptors by default, but you have to specify
-  ``close_fds=True`` with :class:`Popen`.
+  ``close_fds=True`` with :class:`Popen` to guarantee this behavior on
+  all platforms or past Python versions.
 
 Notes
 -----
@@ -734,4 +799,5 @@ runtime):
    backslash.  If the number of backslashes is odd, the last
    backslash escapes the next double quotation mark as
    described in rule 3.
+
 

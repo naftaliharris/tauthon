@@ -376,6 +376,7 @@ class Obj2ModVisitor(PickleVisitor):
         self.emit(format % error, 1, reflow=False)
         if add_label:
             self.emit("failed:", 1)
+            self.emit("Py_XDECREF(tmp);", 1)
         self.emit("return 1;", 1)
         self.emit("}", 0)
         self.emit("", 0)
@@ -720,7 +721,7 @@ static PyTypeObject* make_type(char *type, PyTypeObject* base, char**fields, int
         }
         PyTuple_SET_ITEM(fnames, i, field);
     }
-    result = PyObject_CallFunction((PyObject*)&PyType_Type, "U(O){sOss}",
+    result = PyObject_CallFunction((PyObject*)&PyType_Type, "s(O){sOss}",
                     type, base, "_fields", fnames, "__module__", "_ast");
     Py_DECREF(fnames);
     return (PyTypeObject*)result;
@@ -730,8 +731,9 @@ static int add_attributes(PyTypeObject* type, char**attrs, int num_fields)
 {
     int i, result;
     PyObject *s, *l = PyTuple_New(num_fields);
-    if (!l) return 0;
-    for(i = 0; i < num_fields; i++) {
+    if (!l)
+        return 0;
+    for (i = 0; i < num_fields; i++) {
         s = PyUnicode_FromString(attrs[i]);
         if (!s) {
             Py_DECREF(l);
@@ -792,8 +794,23 @@ static int obj2ast_object(PyObject* obj, PyObject** out, PyArena* arena)
     return 0;
 }
 
-#define obj2ast_identifier obj2ast_object
-#define obj2ast_string obj2ast_object
+static int obj2ast_identifier(PyObject* obj, PyObject** out, PyArena* arena)
+{
+    if (!PyUnicode_CheckExact(obj) && obj != Py_None) {
+        PyErr_SetString(PyExc_TypeError, "AST identifier must be of type str");
+        return 1;
+    }
+    return obj2ast_object(obj, out, arena);
+}
+
+static int obj2ast_string(PyObject* obj, PyObject** out, PyArena* arena)
+{
+    if (!PyUnicode_CheckExact(obj)) {
+        PyErr_SetString(PyExc_TypeError, "AST string must be of type str");
+        return 1;
+    }
+    return obj2ast_object(obj, out, arena);
+}
 
 static int obj2ast_int(PyObject* obj, int* out, PyArena* arena)
 {
@@ -880,9 +897,6 @@ static int add_ast_fields(void)
             self.emit("if (!%s_singleton) return 0;" % cons.name, 1)
 
 
-def parse_version(mod):
-    return mod.version.value[12:-3]
-
 class ASTModuleVisitor(PickleVisitor):
 
     def visitModule(self, mod):
@@ -902,7 +916,7 @@ class ASTModuleVisitor(PickleVisitor):
         self.emit("return NULL;", 2)
         # Value of version: "$Revision$"
         self.emit('if (PyModule_AddStringConstant(m, "__version__", "%s") < 0)'
-                % parse_version(mod), 1)
+                % mod.version, 1)
         self.emit("return NULL;", 2)
         for dfn in mod.dfns:
             self.visit(dfn)
@@ -1141,6 +1155,7 @@ def main(srcfile):
     argv0 = os.sep.join(components[-2:])
     auto_gen_msg = common_msg % argv0
     mod = asdl.parse(srcfile)
+    mod.version = "82163"
     if not asdl.check(mod):
         sys.exit(1)
     if INC_DIR:
@@ -1162,7 +1177,7 @@ def main(srcfile):
         p = os.path.join(SRC_DIR, str(mod.name) + "-ast.c")
         f = open(p, "w")
         f.write(auto_gen_msg)
-        f.write(c_file_msg % parse_version(mod))
+        f.write(c_file_msg % mod.version)
         f.write('#include "Python.h"\n')
         f.write('#include "%s-ast.h"\n' % mod.name)
         f.write('\n')

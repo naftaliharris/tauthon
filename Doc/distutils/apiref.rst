@@ -72,8 +72,8 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    |                    | be built                       | :class:`distutils.core.Extension`                           |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *classifiers*      | A list of categories for the   | The list of available                                       |
-   |                    | package                        | categorizations is at                                       |
-   |                    |                                | http://pypi.python.org/pypi?:action=list_classifiers.       |
+   |                    | package                        | categorizations is available on `PyPI                       |
+   |                    |                                | <http://pypi.python.org/pypi?:action=list_classifiers>`_.   |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *distclass*        | the :class:`Distribution`      | A subclass of                                               |
    |                    | class to use                   | :class:`distutils.core.Distribution`                        |
@@ -1311,8 +1311,7 @@ provides the following additional features:
   the "negative alias" of :option:`--verbose`, then :option:`--quiet` on the
   command line sets *verbose* to false.
 
-.. XXX Should be replaced with :mod:`optparse`.
-
+.. XXX Should be replaced with optparse
 
 .. function:: fancy_getopt(options, negative_opt, object, args)
 
@@ -1815,7 +1814,7 @@ Subclasses of :class:`Command` must define the following methods.
 .. module:: distutils.command.bdist_msi
    :synopsis: Build a binary distribution as a Windows MSI file
 
-.. class:: bdist_msi(Command)
+.. class:: bdist_msi
 
    Builds a `Windows Installer`_ (.msi) binary package.
 
@@ -1894,9 +1893,9 @@ Subclasses of :class:`Command` must define the following methods.
    :synopsis: Build the .py/.pyc files of a package
 
 
-.. class:: build_py(Command)
+.. class:: build_py
 
-.. class:: build_py_2to3(build_py)
+.. class:: build_py_2to3
 
    Alternative implementation of build_py which also runs the
    2to3 conversion library on each .py file that is going to be

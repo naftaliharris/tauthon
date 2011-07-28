@@ -6,6 +6,9 @@
 .. moduleauthor:: Ka-Ping Yee <ping@lfw.org>
 .. sectionauthor:: Ka-Ping Yee <ping@lfw.org>
 
+**Source code:** :source:`Lib/inspect.py`
+
+--------------
 
 The :mod:`inspect` module provides several useful functions to help get
 information about live objects such as modules, classes, methods, functions,
@@ -87,7 +90,7 @@ attributes:
 | frame     | f_back          | next outer frame object   |
 |           |                 | (this frame's caller)     |
 +-----------+-----------------+---------------------------+
-|           | f_builtins      | built-in namespace seen   |
+|           | f_builtins      | builtins namespace seen   |
 |           |                 | by this frame             |
 +-----------+-----------------+---------------------------+
 |           | f_code          | code object being         |
@@ -295,7 +298,7 @@ attributes:
    .. impl-detail::
 
       getsets are attributes defined in extension modules via
-      :ctype:`PyGetSetDef` structures.  For Python implementations without such
+      :c:type:`PyGetSetDef` structures.  For Python implementations without such
       types, this method will always return ``False``.
 
 
@@ -306,7 +309,7 @@ attributes:
    .. impl-detail::
 
       Member descriptors are attributes defined in extension modules via
-      :ctype:`PyMemberDef` structures.  For Python implementations without such
+      :c:type:`PyMemberDef` structures.  For Python implementations without such
       types, this method will always return ``False``.
 
 
@@ -451,6 +454,32 @@ Classes and functions
    metatype is in use, cls will be the first element of the tuple.
 
 
+.. function:: getcallargs(func[, *args][, **kwds])
+
+   Bind the *args* and *kwds* to the argument names of the Python function or
+   method *func*, as if it was called with them. For bound methods, bind also the
+   first argument (typically named ``self``) to the associated instance. A dict
+   is returned, mapping the argument names (including the names of the ``*`` and
+   ``**`` arguments, if any) to their values from *args* and *kwds*. In case of
+   invoking *func* incorrectly, i.e. whenever ``func(*args, **kwds)`` would raise
+   an exception because of incompatible signature, an exception of the same type
+   and the same or similar message is raised. For example::
+
+    >>> from inspect import getcallargs
+    >>> def f(a, b=1, *pos, **named):
+    ...     pass
+    >>> getcallargs(f, 1, 2, 3)
+    {'a': 1, 'named': {}, 'b': 2, 'pos': (3,)}
+    >>> getcallargs(f, a=2, x=4)
+    {'a': 2, 'named': {'x': 4}, 'b': 1, 'pos': ()}
+    >>> getcallargs(f)
+    Traceback (most recent call last):
+    ...
+    TypeError: f() takes at least 1 argument (0 given)
+
+   .. versionadded:: 3.2
+
+
 .. _inspect-stack:
 
 The interpreter stack
@@ -536,3 +565,81 @@ line.
    entry in the list represents the caller; the last entry represents where the
    exception was raised.
 
+
+Fetching attributes statically
+------------------------------
+
+Both :func:`getattr` and :func:`hasattr` can trigger code execution when
+fetching or checking for the existence of attributes. Descriptors, like
+properties, will be invoked and :meth:`__getattr__` and :meth:`__getattribute__`
+may be called.
+
+For cases where you want passive introspection, like documentation tools, this
+can be inconvenient. `getattr_static` has the same signature as :func:`getattr`
+but avoids executing code when it fetches attributes.
+
+.. function:: getattr_static(obj, attr, default=None)
+
+   Retrieve attributes without triggering dynamic lookup via the
+   descriptor protocol, `__getattr__` or `__getattribute__`.
+
+   Note: this function may not be able to retrieve all attributes
+   that getattr can fetch (like dynamically created attributes)
+   and may find attributes that getattr can't (like descriptors
+   that raise AttributeError). It can also return descriptors objects
+   instead of instance members.
+
+   If the instance `__dict__` is shadowed by another member (for example a
+   property) then this function will be unable to find instance members.
+
+   .. versionadded:: 3.2
+
+`getattr_static` does not resolve descriptors, for example slot descriptors or
+getset descriptors on objects implemented in C. The descriptor object
+is returned instead of the underlying attribute.
+
+You can handle these with code like the following. Note that
+for arbitrary getset descriptors invoking these may trigger
+code execution::
+
+   # example code for resolving the builtin descriptor types
+   class _foo:
+       __slots__ = ['foo']
+
+   slot_descriptor = type(_foo.foo)
+   getset_descriptor = type(type(open(__file__)).name)
+   wrapper_descriptor = type(str.__dict__['__add__'])
+   descriptor_types = (slot_descriptor, getset_descriptor, wrapper_descriptor)
+
+   result = getattr_static(some_object, 'foo')
+   if type(result) in descriptor_types:
+       try:
+           result = result.__get__()
+       except AttributeError:
+           # descriptors can raise AttributeError to
+           # indicate there is no underlying value
+           # in which case the descriptor itself will
+           # have to do
+           pass
+
+
+Current State of a Generator
+----------------------------
+
+When implementing coroutine schedulers and for other advanced uses of
+generators, it is useful to determine whether a generator is currently
+executing, is waiting to start or resume or execution, or has already
+terminated. :func:`getgeneratorstate` allows the current state of a
+generator to be determined easily.
+
+.. function:: getgeneratorstate(generator)
+
+   Get current state of a generator-iterator.
+
+   Possible states are:
+    * GEN_CREATED: Waiting to start execution.
+    * GEN_RUNNING: Currently being executed by the interpreter.
+    * GEN_SUSPENDED: Currently suspended at a yield expression.
+    * GEN_CLOSED: Execution has completed.
+
+   .. versionadded:: 3.2
