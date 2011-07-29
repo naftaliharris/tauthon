@@ -319,11 +319,11 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 			their Makefile (other compilers are generally
 			taken care of by distutils.) */
 #			if defined(_DEBUG)
-#				pragma comment(lib,"python32_d.lib")
+#				pragma comment(lib,"python33_d.lib")
 #			elif defined(Py_LIMITED_API)
 #				pragma comment(lib,"python3.lib")
 #			else
-#				pragma comment(lib,"python32.lib")
+#				pragma comment(lib,"python33.lib")
 #			endif /* _DEBUG */
 #		endif /* _MSC_VER */
 #	endif /* Py_BUILD_CORE */
@@ -710,9 +710,6 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 
 /* Define if you have the <sys/utsname.h> header file.  */
 /* #define HAVE_SYS_UTSNAME_H 1 */
-
-/* Define if you have the <thread.h> header file.  */
-/* #undef HAVE_THREAD_H */
 
 /* Define if you have the <unistd.h> header file.  */
 /* #define HAVE_UNISTD_H 1 */
