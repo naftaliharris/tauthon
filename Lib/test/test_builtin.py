@@ -10,7 +10,7 @@ import ast
 import types
 import builtins
 import random
-from test.support import fcmp, TESTFN, unlink,  run_unittest, check_warnings
+from test.support import TESTFN, unlink,  run_unittest, check_warnings
 from operator import neg
 
 
@@ -372,7 +372,15 @@ class BuiltinTest(unittest.TestCase):
         f = Foo()
         self.assertTrue(dir(f) == ["ga", "kan", "roo"])
 
-        # dir(obj__dir__not_list)
+        # dir(obj__dir__tuple)
+        class Foo(object):
+            def __dir__(self):
+                return ("b", "c", "a")
+        res = dir(Foo())
+        self.assertIsInstance(res, list)
+        self.assertTrue(res == ["a", "b", "c"])
+
+        # dir(obj__dir__not_sequence)
         class Foo(object):
             def __dir__(self):
                 return 7
@@ -385,6 +393,8 @@ class BuiltinTest(unittest.TestCase):
         except:
             self.assertEqual(len(dir(sys.exc_info()[2])), 4)
 
+        # test that object has a __dir__()
+        self.assertEqual(sorted([].__dir__()), dir([]))
 
     def test_divmod(self):
         self.assertEqual(divmod(12, 7), (1, 5))
@@ -394,10 +404,13 @@ class BuiltinTest(unittest.TestCase):
 
         self.assertEqual(divmod(-sys.maxsize-1, -1), (sys.maxsize+1, 0))
 
-        self.assertTrue(not fcmp(divmod(3.25, 1.0), (3.0, 0.25)))
-        self.assertTrue(not fcmp(divmod(-3.25, 1.0), (-4.0, 0.75)))
-        self.assertTrue(not fcmp(divmod(3.25, -1.0), (-4.0, -0.75)))
-        self.assertTrue(not fcmp(divmod(-3.25, -1.0), (3.0, -0.25)))
+        for num, denom, exp_result in [ (3.25, 1.0, (3.0, 0.25)),
+                                        (-3.25, 1.0, (-4.0, 0.75)),
+                                        (3.25, -1.0, (-4.0, -0.75)),
+                                        (-3.25, -1.0, (3.0, -0.25))]:
+            result = divmod(num, denom)
+            self.assertAlmostEqual(result[0], exp_result[0])
+            self.assertAlmostEqual(result[1], exp_result[1])
 
         self.assertRaises(TypeError, divmod)
 
@@ -1276,14 +1289,14 @@ class BuiltinTest(unittest.TestCase):
 
         # --------------------------------------------------------------------
         # Issue #7994: object.__format__ with a non-empty format string is
-        #  pending deprecated
+        #  deprecated
         def test_deprecated_format_string(obj, fmt_str, should_raise_warning):
             with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always", PendingDeprecationWarning)
+                warnings.simplefilter("always", DeprecationWarning)
                 format(obj, fmt_str)
             if should_raise_warning:
                 self.assertEqual(len(w), 1)
-                self.assertIsInstance(w[0].message, PendingDeprecationWarning)
+                self.assertIsInstance(w[0].message, DeprecationWarning)
                 self.assertIn('object.__format__ with a non-empty format '
                               'string', str(w[0].message))
             else:
