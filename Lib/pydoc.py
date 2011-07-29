@@ -37,7 +37,7 @@ Reference Manual pages.
 __author__ = "Ka-Ping Yee <ping@lfw.org>"
 __date__ = "26 February 2001"
 
-__version__ = "$Revision$"
+__version__ = "$Revision: 88564 $"
 __credits__ = """Guido van Rossum, for an excellent programming language.
 Tommy Burnette, the original creator of manpy.
 Paul Prescod, for all his work on onlinehelp.
@@ -212,8 +212,8 @@ def source_synopsis(file):
 def synopsis(filename, cache={}):
     """Get the one-line summary out of a module file."""
     mtime = os.stat(filename).st_mtime
-    lastupdate, result = cache.get(filename, (0, None))
-    if lastupdate < mtime:
+    lastupdate, result = cache.get(filename, (None, None))
+    if lastupdate is None or lastupdate < mtime:
         info = inspect.getmoduleinfo(filename)
         try:
             file = open(filename)

@@ -37,6 +37,14 @@ Core and Builtins
 Library
 -------
 
+- Issue #12603: Fix pydoc.synopsis() on files with non-negative st_mtime.
+
+- Issue #12514: Use try/finally to assure the timeit module restores garbage
+  collections when it is done.
+
+- Issue #12607: In subprocess, fix issue where if stdin, stdout or stderr is
+  given as a low fd, it gets overwritten.
+
 - Issue #12102: Document that buffered files must be flushed before being used
   with mmap. Patch by Steffen Daode Nurpmeso.
 
@@ -137,6 +145,12 @@ Build
   os.lchflags() are once again built on systems that support these
   functions (*BSD and OS X).  Also add new stat file flags for OS X
   (UF_HIDDEN and UF_COMPRESSED).
+
+Tools/Demos
+-----------
+
+- Issue #10639: reindent.py no longer converts newlines and will raise
+  an error if attempting to convert a file with mixed newlines.
 
 Tests
 -----
