@@ -124,6 +124,17 @@ static unsigned int _ssl_locks_count = 0;
 # undef HAVE_SSL_CTX_CLEAR_OPTIONS
 #endif
 
+/* In case of 'tls-unique' it will be 12 bytes for TLS, 36 bytes for
+ * older SSL, but let's be safe */
+#define PySSL_CB_MAXLEN 128
+
+/* SSL_get_finished got added to OpenSSL in 0.9.5 */
+#if OPENSSL_VERSION_NUMBER >= 0x0090500fL
+# define HAVE_OPENSSL_FINISHED 1
+#else
+# define HAVE_OPENSSL_FINISHED 0
+#endif
+
 typedef struct {
     PyObject_HEAD
     SSL_CTX *ctx;
@@ -135,6 +146,7 @@ typedef struct {
     SSL *ssl;
     X509 *peer_cert;
     int shutdown_seen_zero;
+    enum py_ssl_server_or_client socket_type;
 } PySSLSocket;
 
 static PyTypeObject PySSLContext_Type;
@@ -328,6 +340,7 @@ newPySSLSocket(SSL_CTX *ctx, PySocketSockObject *sock,
         SSL_set_accept_state(self->ssl);
     PySSL_END_ALLOW_THREADS
 
+    self->socket_type = socket_type;
     self->Socket = PyWeakref_NewRef((PyObject *) sock, NULL);
     return self;
 }
@@ -356,7 +369,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLSocket *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -1092,7 +1104,6 @@ static PyObject *PySSL_SSLwrite(PySSLSocket *self, PyObject *args)
         goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         len = SSL_write(self->ssl, buf.buf, buf.len);
         err = SSL_get_error(self->ssl, len);
@@ -1228,7 +1239,6 @@ static PyObject *PySSL_SSLread(PySSLSocket *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, mem, len);
         err = SSL_get_error(self->ssl, count);
@@ -1380,6 +1390,41 @@ PyDoc_STRVAR(PySSL_SSLshutdown_doc,
 Does the SSL shutdown handshake with the remote end, and returns\n\
 the underlying socket object.");
 
+#if HAVE_OPENSSL_FINISHED
+static PyObject *
+PySSL_tls_unique_cb(PySSLSocket *self)
+{
+    PyObject *retval = NULL;
+    char buf[PySSL_CB_MAXLEN];
+    int len;
+
+    if (SSL_session_reused(self->ssl) ^ !self->socket_type) {
+        /* if session is resumed XOR we are the client */
+        len = SSL_get_finished(self->ssl, buf, PySSL_CB_MAXLEN);
+    }
+    else {
+        /* if a new session XOR we are the server */
+        len = SSL_get_peer_finished(self->ssl, buf, PySSL_CB_MAXLEN);
+    }
+
+    /* It cannot be negative in current OpenSSL version as of July 2011 */
+    assert(len >= 0);
+    if (len == 0)
+        Py_RETURN_NONE;
+
+    retval = PyBytes_FromStringAndSize(buf, len);
+
+    return retval;
+}
+
+PyDoc_STRVAR(PySSL_tls_unique_cb_doc,
+"tls_unique_cb() -> bytes\n\
+\n\
+Returns the 'tls-unique' channel binding data, as defined by RFC 5929.\n\
+\n\
+If the TLS handshake is not yet complete, None is returned");
+
+#endif /* HAVE_OPENSSL_FINISHED */
 
 static PyMethodDef PySSLMethods[] = {
     {"do_handshake", (PyCFunction)PySSL_SSLdo_handshake, METH_NOARGS},
@@ -1394,6 +1439,10 @@ static PyMethodDef PySSLMethods[] = {
     {"cipher", (PyCFunction)PySSL_cipher, METH_NOARGS},
     {"shutdown", (PyCFunction)PySSL_SSLshutdown, METH_NOARGS,
      PySSL_SSLshutdown_doc},
+#if HAVE_OPENSSL_FINISHED
+    {"tls_unique_cb", (PyCFunction)PySSL_tls_unique_cb, METH_NOARGS,
+     PySSL_tls_unique_cb_doc},
+#endif
     {NULL, NULL}
 };
 
@@ -1890,6 +1939,69 @@ Mix string into the OpenSSL PRNG state.  entropy (a float) is a lower\n\
 bound on the entropy contained in string.  See RFC 1750.");
 
 static PyObject *
+PySSL_RAND(int len, int pseudo)
+{
+    int ok;
+    PyObject *bytes;
+    unsigned long err;
+    const char *errstr;
+    PyObject *v;
+
+    bytes = PyBytes_FromStringAndSize(NULL, len);
+    if (bytes == NULL)
+        return NULL;
+    if (pseudo) {
+        ok = RAND_pseudo_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 0 || ok == 1)
+            return Py_BuildValue("NO", bytes, ok == 1 ? Py_True : Py_False);
+    }
+    else {
+        ok = RAND_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 1)
+            return bytes;
+    }
+    Py_DECREF(bytes);
+
+    err = ERR_get_error();
+    errstr = ERR_reason_error_string(err);
+    v = Py_BuildValue("(ks)", err, errstr);
+    if (v != NULL) {
+        PyErr_SetObject(PySSLErrorObject, v);
+        Py_DECREF(v);
+    }
+    return NULL;
+}
+
+static PyObject *
+PySSL_RAND_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 0);
+}
+
+PyDoc_STRVAR(PySSL_RAND_bytes_doc,
+"RAND_bytes(n) -> bytes\n\
+\n\
+Generate n cryptographically strong pseudo-random bytes.");
+
+static PyObject *
+PySSL_RAND_pseudo_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_pseudo_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 1);
+}
+
+PyDoc_STRVAR(PySSL_RAND_pseudo_bytes_doc,
+"RAND_pseudo_bytes(n) -> (bytes, is_cryptographic)\n\
+\n\
+Generate n pseudo-random bytes. is_cryptographic is True if the bytes\
+generated are cryptographically strong.");
+
+static PyObject *
 PySSL_RAND_status(PyObject *self)
 {
     return PyLong_FromLong(RAND_status());
@@ -1942,6 +2054,10 @@ static PyMethodDef PySSL_methods[] = {
 #ifdef HAVE_OPENSSL_RAND
     {"RAND_add",            PySSL_RAND_add, METH_VARARGS,
      PySSL_RAND_add_doc},
+    {"RAND_bytes",          PySSL_RAND_bytes, METH_VARARGS,
+     PySSL_RAND_bytes_doc},
+    {"RAND_pseudo_bytes",   PySSL_RAND_pseudo_bytes, METH_VARARGS,
+     PySSL_RAND_pseudo_bytes_doc},
     {"RAND_egd",            PySSL_RAND_egd, METH_VARARGS,
      PySSL_RAND_egd_doc},
     {"RAND_status",         (PyCFunction)PySSL_RAND_status, METH_NOARGS,
@@ -2156,6 +2272,14 @@ PyInit__ssl(void)
 #endif
     Py_INCREF(r);
     PyModule_AddObject(m, "HAS_SNI", r);
+
+#if HAVE_OPENSSL_FINISHED
+    r = Py_True;
+#else
+    r = Py_False;
+#endif
+    Py_INCREF(r);
+    PyModule_AddObject(m, "HAS_TLS_UNIQUE", r);
 
     /* OpenSSL version */
     /* SSLeay() gives us the version of the library linked against,
