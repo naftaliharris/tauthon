@@ -1,6 +1,6 @@
 -- ASDL's four builtin types are identifier, int, string, object
 
-module Python version "$Revision$"
+module Python
 {
 	mod = Module(stmt* body)
 	    | Interactive(stmt* body)
@@ -28,11 +28,10 @@ module Python version "$Revision$"
 	      | For(expr target, expr iter, stmt* body, stmt* orelse)
 	      | While(expr test, stmt* body, stmt* orelse)
 	      | If(expr test, stmt* body, stmt* orelse)
-	      | With(expr context_expr, expr? optional_vars, stmt* body)
+	      | With(withitem* items, stmt* body)
 
 	      | Raise(expr? exc, expr? cause)
-	      | TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
-	      | TryFinally(stmt* body, stmt* finalbody)
+	      | Try(stmt* body, excepthandler* handlers, stmt* orelse, stmt* finalbody)
 	      | Assert(expr test, expr? msg)
 
 	      | Import(alias* names)
@@ -100,7 +99,6 @@ module Python version "$Revision$"
 
 	comprehension = (expr target, expr iter, expr* ifs)
 
-	-- not sure what to call the first argument for raise and except
 	excepthandler = ExceptHandler(expr? type, identifier? name, stmt* body)
 	                attributes (int lineno, int col_offset)
 
@@ -115,5 +113,7 @@ module Python version "$Revision$"
 
         -- import name with optional 'as' alias.
         alias = (identifier name, identifier? asname)
+
+        withitem = (expr context_expr, expr? optional_vars)
 }
 
