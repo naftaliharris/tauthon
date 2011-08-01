@@ -172,6 +172,14 @@ Directory and files operations
    used.  Otherwise, *src* is copied (using :func:`copy2`) to *dst* and then
    removed.
 
+.. function:: disk_usage(path)
+
+   Return disk usage statistics about the given path as a namedtuple including
+   total, used and free space expressed in bytes.
+
+   .. versionadded:: 3.3
+
+   Availability: Unix, Windows.
 
 .. exception:: Error
 

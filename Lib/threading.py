@@ -25,7 +25,7 @@ __all__ = ['active_count', 'Condition', 'current_thread', 'enumerate', 'Event',
 # Rename some stuff so "from threading import *" is safe
 _start_new_thread = _thread.start_new_thread
 _allocate_lock = _thread.allocate_lock
-_get_ident = _thread.get_ident
+get_ident = _thread.get_ident
 ThreadError = _thread.error
 try:
     _CRLock = _thread.RLock
@@ -53,7 +53,7 @@ if __debug__:
                 format = format % args
                 # Issue #4188: calling current_thread() can incur an infinite
                 # recursion if it has to create a DummyThread on the fly.
-                ident = _get_ident()
+                ident = get_ident()
                 try:
                     name = _active[ident].name
                 except KeyError:
@@ -111,7 +111,7 @@ class _RLock(_Verbose):
                 self.__class__.__name__, owner, self._count)
 
     def acquire(self, blocking=True, timeout=-1):
-        me = _get_ident()
+        me = get_ident()
         if self._owner == me:
             self._count = self._count + 1
             if __debug__:
@@ -131,7 +131,7 @@ class _RLock(_Verbose):
     __enter__ = acquire
 
     def release(self):
-        if self._owner != _get_ident():
+        if self._owner != get_ident():
             raise RuntimeError("cannot release un-acquired lock")
         self._count = count = self._count - 1
         if not count:
@@ -157,6 +157,8 @@ class _RLock(_Verbose):
     def _release_save(self):
         if __debug__:
             self._note("%s._release_save()", self)
+        if self._count == 0:
+            raise RuntimeError("cannot release un-acquired lock")
         count = self._count
         self._count = 0
         owner = self._owner
@@ -165,15 +167,12 @@ class _RLock(_Verbose):
         return (count, owner)
 
     def _is_owned(self):
-        return self._owner == _get_ident()
+        return self._owner == get_ident()
 
 _PyRLock = _RLock
 
 
-def Condition(*args, **kwargs):
-    return _Condition(*args, **kwargs)
-
-class _Condition(_Verbose):
+class Condition(_Verbose):
 
     def __init__(self, lock=None, verbose=None):
         _Verbose.__init__(self, verbose)
@@ -306,10 +305,7 @@ class _Condition(_Verbose):
     notifyAll = notify_all
 
 
-def Semaphore(*args, **kwargs):
-    return _Semaphore(*args, **kwargs)
-
-class _Semaphore(_Verbose):
+class Semaphore(_Verbose):
 
     # After Tim Peters' semaphore class, but not quite the same (no maximum)
 
@@ -364,25 +360,19 @@ class _Semaphore(_Verbose):
         self.release()
 
 
-def BoundedSemaphore(*args, **kwargs):
-    return _BoundedSemaphore(*args, **kwargs)
-
-class _BoundedSemaphore(_Semaphore):
+class BoundedSemaphore(Semaphore):
     """Semaphore that checks that # releases is <= # acquires"""
     def __init__(self, value=1, verbose=None):
-        _Semaphore.__init__(self, value, verbose)
+        Semaphore.__init__(self, value, verbose)
         self._initial_value = value
 
     def release(self):
         if self._value >= self._initial_value:
             raise ValueError("Semaphore released too many times")
-        return _Semaphore.release(self)
+        return Semaphore.release(self)
 
 
-def Event(*args, **kwargs):
-    return _Event(*args, **kwargs)
-
-class _Event(_Verbose):
+class Event(_Verbose):
 
     # After Tim Peters' event class (without is_posted())
 
@@ -625,7 +615,7 @@ class Thread(_Verbose):
     #XXX __exc_clear = _sys.exc_clear
 
     def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
+                 args=(), kwargs=None, verbose=None, *, daemon=None):
         assert group is None, "group argument must be None for now"
         _Verbose.__init__(self, verbose)
         if kwargs is None:
@@ -634,7 +624,10 @@ class Thread(_Verbose):
         self._name = str(name or _newname())
         self._args = args
         self._kwargs = kwargs
-        self._daemonic = self._set_daemon()
+        if daemon is not None:
+            self._daemonic = daemon
+        else:
+            self._daemonic = current_thread().daemon
         self._ident = None
         self._started = Event()
         self._stopped = False
@@ -651,10 +644,6 @@ class Thread(_Verbose):
         if hasattr(self, '_block'):  # DummyThread deletes _block
             self._block.__init__()
         self._started._reset_internal_locks()
-
-    def _set_daemon(self):
-        # Overridden in _MainThread and _DummyThread
-        return current_thread().daemon
 
     def __repr__(self):
         assert self._initialized, "Thread.__init__() was not called"
@@ -717,7 +706,7 @@ class Thread(_Verbose):
             raise
 
     def _set_ident(self):
-        self._ident = _get_ident()
+        self._ident = get_ident()
 
     def _bootstrap_inner(self):
         try:
@@ -790,7 +779,7 @@ class Thread(_Verbose):
                 try:
                     # We don't call self._delete() because it also
                     # grabs _active_limbo_lock.
-                    del _active[_get_ident()]
+                    del _active[get_ident()]
                 except:
                     pass
 
@@ -826,7 +815,7 @@ class Thread(_Verbose):
 
         try:
             with _active_limbo_lock:
-                del _active[_get_ident()]
+                del _active[get_ident()]
                 # There must not be any python code between the previous line
                 # and after the lock is released.  Otherwise a tracing function
                 # could try to acquire the lock again in the same thread, (in
@@ -917,10 +906,7 @@ class Thread(_Verbose):
 
 # The timer class was contributed by Itamar Shtull-Trauring
 
-def Timer(*args, **kwargs):
-    return _Timer(*args, **kwargs)
-
-class _Timer(Thread):
+class Timer(Thread):
     """Call a function after a specified number of seconds:
 
     t = Timer(30.0, f, args=[], kwargs={})
@@ -952,14 +938,11 @@ class _Timer(Thread):
 class _MainThread(Thread):
 
     def __init__(self):
-        Thread.__init__(self, name="MainThread")
+        Thread.__init__(self, name="MainThread", daemon=False)
         self._started.set()
         self._set_ident()
         with _active_limbo_lock:
             _active[self._ident] = self
-
-    def _set_daemon(self):
-        return False
 
     def _exitfunc(self):
         self._stop()
@@ -992,7 +975,7 @@ def _pickSomeNonDaemonThread():
 class _DummyThread(Thread):
 
     def __init__(self):
-        Thread.__init__(self, name=_newname("Dummy-%d"))
+        Thread.__init__(self, name=_newname("Dummy-%d"), daemon=True)
 
         # Thread._block consumes an OS-level locking primitive, which
         # can never be used by a _DummyThread.  Since a _DummyThread
@@ -1004,9 +987,6 @@ class _DummyThread(Thread):
         with _active_limbo_lock:
             _active[self._ident] = self
 
-    def _set_daemon(self):
-        return True
-
     def join(self, timeout=None):
         assert False, "cannot join a dummy thread"
 
@@ -1015,9 +995,8 @@ class _DummyThread(Thread):
 
 def current_thread():
     try:
-        return _active[_get_ident()]
+        return _active[get_ident()]
     except KeyError:
-        ##print "current_thread(): no current thread for", _get_ident()
         return _DummyThread()
 
 currentThread = current_thread
@@ -1071,7 +1050,7 @@ def _after_fork():
             if thread is current:
                 # There is only one active thread. We reset the ident to
                 # its new value since it can have changed.
-                ident = _get_ident()
+                ident = get_ident()
                 thread._ident = ident
                 # Any condition variables hanging off of the active thread may
                 # be in an invalid state, so we reinitialize them.
