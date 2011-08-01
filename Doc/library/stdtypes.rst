@@ -2930,7 +2930,18 @@ This object is used by extended slice notation (see :ref:`slicings`).  It
 supports no special operations.  There is exactly one ellipsis object, named
 :const:`Ellipsis` (a built-in name).
 
-It is written as ``Ellipsis``.
+It is written as ``Ellipsis``.  When in a subscript, it can also be written as
+``...``, for example ``seq[...]``.
+
+
+The NotImplemented Object
+-------------------------
+
+This object is returned from comparisons and binary operations when they are
+asked to operate on types they don't support. See :ref:`comparisons` for more
+information.
+
+It is written as ``NotImplemented``.
 
 
 Boolean Values
