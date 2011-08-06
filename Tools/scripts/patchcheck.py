@@ -39,27 +39,13 @@ def status(message, modal=False, info=None):
 @status("Getting the list of files that have been added/changed",
         info=lambda x: n_files_str(len(x)))
 def changed_files():
-    """Get the list of changed or added files from the VCS."""
-    if os.path.isdir(os.path.join(SRCDIR, '.hg')):
-        vcs = 'hg'
-        cmd = 'hg status --added --modified --no-status'
-    elif os.path.isdir('.svn'):
-        vcs = 'svn'
-        cmd = 'svn status --quiet --non-interactive --ignore-externals'
-    else:
+    """Get the list of changed or added files from Mercurial."""
+    if not os.path.isdir(os.path.join(SRCDIR, '.hg')):
         sys.exit('need a checkout to get modified files')
 
-    st = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
-    try:
-        st.wait()
-        if vcs == 'hg':
-            return [x.decode().rstrip() for x in st.stdout]
-        else:
-            output = (x.decode().rstrip().rsplit(None, 1)[-1]
-                      for x in st.stdout if x[0] in b'AM')
-        return set(path for path in output if os.path.isfile(path))
-    finally:
-        st.stdout.close()
+    cmd = 'hg status --added --modified --no-status'
+    with subprocess.Popen(cmd.split(), stdout=subprocess.PIPE) as st:
+        return [x.decode().rstrip() for x in st.stdout]
 
 
 def report_modified_files(file_paths):
@@ -77,10 +63,8 @@ def report_modified_files(file_paths):
 def normalize_whitespace(file_paths):
     """Make sure that the whitespace for .py files have been normalized."""
     reindent.makebackup = False  # No need to create backups.
-    fixed = []
-    for path in (x for x in file_paths if x.endswith('.py')):
-        if reindent.check(os.path.join(SRCDIR, path)):
-            fixed.append(path)
+    fixed = [path for path in file_paths if path.endswith('.py') and
+             reindent.check(os.path.join(SRCDIR, path))]
     return fixed
 
 
