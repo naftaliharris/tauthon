@@ -42,6 +42,9 @@ Module interface:
 - socket.inet_ntoa(packed IP) -> IP address string
 - socket.getdefaulttimeout() -> None | float
 - socket.setdefaulttimeout(None | float)
+- socket.if_nameindex() -> list of tuples (if_index, if_name)
+- socket.if_nametoindex(name) -> corresponding interface index
+- socket.if_indextoname(index) -> corresponding interface name
 - an Internet socket address is a pair (hostname, port)
   where hostname can be anything recognized by gethostbyname()
   (including the dd.dd.dd.dd notation) and port is in host byte order
@@ -133,6 +136,9 @@ setblocking(0 | 1) -- set or clear the blocking I/O flag\n\
 setsockopt(level, optname, value) -- set socket options\n\
 settimeout(None | float) -- set or clear the timeout\n\
 shutdown(how) -- shut down traffic in one or both directions\n\
+if_nameindex() -- return all network interface indices and names\n\
+if_nametoindex(name) -- return the corresponding interface index\n\
+if_indextoname(index) -- return the corresponding interface name\n\
 \n\
  [*] not available on all platforms!");
 
@@ -155,7 +161,7 @@ shutdown(how) -- shut down traffic in one or both directions\n\
 #endif
 
 #ifdef HAVE_GETHOSTBYNAME_R
-# if defined(_AIX) || defined(__osf__)
+# if defined(_AIX)
 #  define HAVE_GETHOSTBYNAME_R_3_ARG
 # elif defined(__sun) || defined(__sgi)
 #  define HAVE_GETHOSTBYNAME_R_5_ARG
@@ -248,6 +254,14 @@ shutdown(how) -- shut down traffic in one or both directions\n\
 /* Generic includes */
 #ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
+#endif
+
+#ifdef HAVE_SYS_SOCKET_H
+#include <sys/socket.h>
+#endif
+
+#ifdef HAVE_NET_IF_H
+#include <net/if.h>
 #endif
 
 /* Generic socket object definitions and includes */
@@ -2768,6 +2782,7 @@ sock_sendto(PySocketSockObject *s, PyObject *args)
             PyErr_Format(PyExc_TypeError,
                          "sendto() takes 2 or 3 arguments (%d given)",
                          arglen);
+            return NULL;
     }
     if (PyErr_Occurred())
         return NULL;
@@ -3130,7 +3145,7 @@ socket_gethostname(PyObject *self, PyObject *unused)
         }
         return PyErr_SetExcFromWindowsErr(PyExc_WindowsError, GetLastError());
     }
-    return PyUnicode_FromUnicode(buf, size);            
+    return PyUnicode_FromUnicode(buf, size);
 #else
     char buf[1024];
     int res;
@@ -3149,6 +3164,37 @@ PyDoc_STRVAR(gethostname_doc,
 \n\
 Return the current host name.");
 
+#ifdef HAVE_SETHOSTNAME
+PyDoc_STRVAR(sethostname_doc,
+"sethostname(name)\n\n\
+Sets the hostname to name.");
+
+static PyObject *
+socket_sethostname(PyObject *self, PyObject *args)
+{
+    PyObject *hnobj;
+    Py_buffer buf;
+    int res, flag = 0;
+
+    if (!PyArg_ParseTuple(args, "S:sethostname", &hnobj)) {
+        PyErr_Clear();
+        if (!PyArg_ParseTuple(args, "O&:sethostname",
+                PyUnicode_FSConverter, &hnobj))
+            return NULL;
+        flag = 1;
+    }
+    res = PyObject_GetBuffer(hnobj, &buf, PyBUF_SIMPLE);
+    if (!res) {
+        res = sethostname(buf.buf, buf.len);
+        PyBuffer_Release(&buf);
+    }
+    if (flag)
+        Py_DECREF(hnobj);
+    if (res)
+        return set_error();
+    Py_RETURN_NONE;
+}
+#endif
 
 /* Python interface to gethostbyname(name). */
 
@@ -3421,7 +3467,7 @@ socket_gethostbyaddr(PyObject *self, PyObject *args)
         goto finally;
     af = sa->sa_family;
     ap = NULL;
-    al = 0;
+    /* al = 0; */
     switch (af) {
     case AF_INET:
         ap = (char *)&((struct sockaddr_in *)sa)->sin_addr;
@@ -3993,7 +4039,7 @@ socket_inet_ntop(PyObject *self, PyObject *args)
 static PyObject *
 socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
 {
-    static char* kwnames[] = {"host", "port", "family", "type", "proto", 
+    static char* kwnames[] = {"host", "port", "family", "type", "proto",
                               "flags", 0};
     struct addrinfo hints, *res;
     struct addrinfo *res0 = NULL;
@@ -4008,7 +4054,7 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
 
     family = socktype = protocol = flags = 0;
     family = AF_UNSPEC;
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|iiii:getaddrinfo", 
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|iiii:getaddrinfo",
                           kwnames, &hobj, &pobj, &family, &socktype,
                           &protocol, &flags)) {
         return NULL;
@@ -4235,6 +4281,101 @@ Set the default timeout in floating seconds for new socket objects.\n\
 A value of None indicates that new socket objects have no timeout.\n\
 When the socket module is first imported, the default is None.");
 
+#ifdef HAVE_IF_NAMEINDEX
+/* Python API for getting interface indices and names */
+
+static PyObject *
+socket_if_nameindex(PyObject *self, PyObject *arg)
+{
+    PyObject *list;
+    int i;
+    struct if_nameindex *ni;
+
+    ni = if_nameindex();
+    if (ni == NULL) {
+        PyErr_SetFromErrno(socket_error);
+        return NULL;
+    }
+
+    list = PyList_New(0);
+    if (list == NULL) {
+        if_freenameindex(ni);
+        return NULL;
+    }
+
+    for (i = 0; ni[i].if_index != 0 && i < INT_MAX; i++) {
+        PyObject *ni_tuple = Py_BuildValue("IO&",
+                ni[i].if_index, PyUnicode_DecodeFSDefault, ni[i].if_name);
+
+        if (ni_tuple == NULL || PyList_Append(list, ni_tuple) == -1) {
+            Py_XDECREF(ni_tuple);
+            Py_DECREF(list);
+            if_freenameindex(ni);
+            return NULL;
+        }
+        Py_DECREF(ni_tuple);
+    }
+
+    if_freenameindex(ni);
+    return list;
+}
+
+PyDoc_STRVAR(if_nameindex_doc,
+"if_nameindex()\n\
+\n\
+Returns a list of network interface information (index, name) tuples.");
+
+static PyObject *
+socket_if_nametoindex(PyObject *self, PyObject *args)
+{
+    PyObject *oname;
+    unsigned long index;
+
+    if (!PyArg_ParseTuple(args, "O&:if_nametoindex",
+                          PyUnicode_FSConverter, &oname))
+        return NULL;
+
+    index = if_nametoindex(PyBytes_AS_STRING(oname));
+    Py_DECREF(oname);
+    if (index == 0) {
+        /* if_nametoindex() doesn't set errno */
+        PyErr_SetString(socket_error, "no interface with this name");
+        return NULL;
+    }
+
+    return PyLong_FromUnsignedLong(index);
+}
+
+PyDoc_STRVAR(if_nametoindex_doc,
+"if_nametoindex(if_name)\n\
+\n\
+Returns the interface index corresponding to the interface name if_name.");
+
+static PyObject *
+socket_if_indextoname(PyObject *self, PyObject *arg)
+{
+    unsigned long index;
+    char name[IF_NAMESIZE + 1];
+
+    index = PyLong_AsUnsignedLong(arg);
+    if (index == (unsigned long) -1)
+        return NULL;
+
+    if (if_indextoname(index, name) == NULL) {
+        PyErr_SetFromErrno(socket_error);
+        return NULL;
+    }
+
+    return PyUnicode_DecodeFSDefault(name);
+}
+
+PyDoc_STRVAR(if_indextoname_doc,
+"if_indextoname(if_index)\n\
+\n\
+Returns the interface name corresponding to the interface index if_index.");
+
+#endif  /* HAVE_IF_NAMEINDEX */
+
 
 /* List of functions exported by this module. */
 
@@ -4247,6 +4388,10 @@ static PyMethodDef socket_methods[] = {
      METH_VARARGS, gethostbyaddr_doc},
     {"gethostname",             socket_gethostname,
      METH_NOARGS,  gethostname_doc},
+#ifdef HAVE_SETHOSTNAME
+    {"sethostname",             socket_sethostname,
+     METH_VARARGS,  sethostname_doc},
+#endif
     {"getservbyname",           socket_getservbyname,
      METH_VARARGS, getservbyname_doc},
     {"getservbyport",           socket_getservbyport,
@@ -4287,6 +4432,14 @@ static PyMethodDef socket_methods[] = {
      METH_NOARGS, getdefaulttimeout_doc},
     {"setdefaulttimeout",       socket_setdefaulttimeout,
      METH_O, setdefaulttimeout_doc},
+#ifdef HAVE_IF_NAMEINDEX
+    {"if_nameindex", socket_if_nameindex,
+     METH_NOARGS, if_nameindex_doc},
+    {"if_nametoindex", socket_if_nametoindex,
+     METH_VARARGS, if_nametoindex_doc},
+    {"if_indextoname", socket_if_indextoname,
+     METH_O, if_indextoname_doc},
+#endif
     {NULL,                      NULL}            /* Sentinel */
 };
 
