@@ -1,8 +1,6 @@
 # Autodetecting setup.py script for building the Python extensions
 #
 
-__version__ = "$Revision$"
-
 import sys, os, imp, re, optparse
 from glob import glob
 import sysconfig
@@ -659,7 +657,7 @@ class PyBuildExt(build_ext):
             libs = ['crypt']
         else:
             libs = []
-        exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
+        exts.append( Extension('_crypt', ['_cryptmodule.c'], libraries=libs) )
 
         # CSV files
         exts.append( Extension('_csv', ['_csv.c']) )
@@ -1047,10 +1045,15 @@ class PyBuildExt(build_ext):
             else:
                 sqlite_extra_link_args = ()
 
+            include_dirs = ["Modules/_sqlite"]
+            # Only include the directory where sqlite was found if it does
+            # not already exist in set include directories, otherwise you
+            # can end up with a bad search path order.
+            if sqlite_incdir not in self.compiler.include_dirs:
+                include_dirs.append(sqlite_incdir)
             exts.append(Extension('_sqlite3', sqlite_srcs,
                                   define_macros=sqlite_defines,
-                                  include_dirs=["Modules/_sqlite",
-                                                sqlite_incdir],
+                                  include_dirs=include_dirs,
                                   library_dirs=sqlite_libdir,
                                   runtime_library_dirs=sqlite_libdir,
                                   extra_link_args=sqlite_extra_link_args,
@@ -1158,6 +1161,10 @@ class PyBuildExt(build_ext):
         else:
             missing.extend(['nis', 'resource', 'termios'])
 
+        curses_defines = []
+        if curses_library == 'ncursesw':
+            curses_defines.append(('HAVE_NCURSESW', '1'))
+
         # Curses support, requiring the System V version of curses, often
         # provided by the ncurses library.
         panel_library = 'panel'
@@ -1168,6 +1175,7 @@ class PyBuildExt(build_ext):
                 panel_library = 'panelw'
             curses_libs = [curses_library]
             exts.append( Extension('_curses', ['_cursesmodule.c'],
+                                   define_macros=curses_defines,
                                    libraries = curses_libs) )
         elif curses_library == 'curses' and platform != 'darwin':
                 # OSX has an old Berkeley curses, not good enough for
@@ -1180,6 +1188,7 @@ class PyBuildExt(build_ext):
                 curses_libs = ['curses']
 
             exts.append( Extension('_curses', ['_cursesmodule.c'],
+                                   define_macros=curses_defines,
                                    libraries = curses_libs) )
         else:
             missing.append('_curses')
@@ -1256,11 +1265,11 @@ class PyBuildExt(build_ext):
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', ['bz2module.c'],
+            exts.append( Extension('_bz2', ['_bz2module.c'],
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
-            missing.append('bz2')
+            missing.append('_bz2')
 
         # Interface to the Expat XML parser
         #
@@ -1353,14 +1362,11 @@ class PyBuildExt(build_ext):
         if platform == 'win32':
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
                                      '_multiprocessing/semaphore.c',
-                                     '_multiprocessing/pipe_connection.c',
-                                     '_multiprocessing/socket_connection.c',
                                      '_multiprocessing/win32_functions.c'
                                    ]
 
         else:
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
-                                     '_multiprocessing/socket_connection.c'
                                    ]
             if (sysconfig.get_config_var('HAVE_SEM_OPEN') and not
                 sysconfig.get_config_var('POSIX_SEMAPHORES_NOT_ENABLED')):
@@ -1780,6 +1786,13 @@ class PyBuildInstall(install):
         install.initialize_options(self)
         self.warn_dir=0
 
+    # Customize subcommands to not install an egg-info file for Python
+    sub_commands = [('install_lib', install.has_lib),
+                    ('install_headers', install.has_headers),
+                    ('install_scripts', install.has_scripts),
+                    ('install_data', install.has_data)]
+
+
 class PyBuildInstallLib(install_lib):
     # Do exactly what install_lib does but make sure correct access modes get
     # set on installed directories and files. All installed files with get
@@ -1892,7 +1905,7 @@ def main():
           # check the PyBuildScripts command above, and change the links
           # created by the bininstall target in Makefile.pre.in
           scripts = ["Tools/scripts/pydoc3", "Tools/scripts/idle3",
-                     "Tools/scripts/2to3"]
+                     "Tools/scripts/2to3", "Tools/scripts/pysetup3"]
         )
 
 # --install-platlib
