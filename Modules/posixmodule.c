@@ -4925,10 +4925,9 @@ cpu_set_richcompare(Py_cpu_set *set, Py_cpu_set *other, int op)
 {
     int eq;
 
-    if ((op != Py_EQ && op != Py_NE) || Py_TYPE(other) != &cpu_set_type) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if ((op != Py_EQ && op != Py_NE) || Py_TYPE(other) != &cpu_set_type)
+        Py_RETURN_NOTIMPLEMENTED;
+
     eq = set->ncpus == other->ncpus && CPU_EQUAL_S(set->size, set->set, other->set);
     if ((op == Py_EQ) ? eq : !eq)
         Py_RETURN_TRUE;
@@ -4949,8 +4948,7 @@ cpu_set_richcompare(Py_cpu_set *set, Py_cpu_set *other, int op)
         } \
         if (Py_TYPE(right) != &cpu_set_type || left->ncpus != right->ncpus) { \
             Py_DECREF(res); \
-            Py_INCREF(Py_NotImplemented); \
-            return Py_NotImplemented; \
+            Py_RETURN_NOTIMPLEMENTED; \
         } \
         assert(left->size == right->size && right->size == res->size); \
         op(res->size, res->set, left->set, right->set); \
@@ -5072,7 +5070,7 @@ posix_sched_setaffinity(PyObject *self, PyObject *args)
     pid_t pid;
     Py_cpu_set *cpu_set;
 
-    if (!PyArg_ParseTuple(args, _Py_PARSE_PID "O!:schbed_setaffinity",
+    if (!PyArg_ParseTuple(args, _Py_PARSE_PID "O!:sched_setaffinity",
                           &pid, &cpu_set_type, &cpu_set))
         return NULL;
     if (sched_setaffinity(pid, cpu_set->size, cpu_set->set))
