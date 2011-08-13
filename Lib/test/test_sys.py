@@ -303,6 +303,7 @@ class SysModuleTest(unittest.TestCase):
             self.assertEqual(sys.getdlopenflags(), oldflags+1)
             sys.setdlopenflags(oldflags)
 
+    @test.support.refcount_test
     def test_refcount(self):
         # n here must be a global in order for this test to pass while
         # tracing with a python function.  Tracing calls PyFrame_FastToLocals
@@ -342,7 +343,7 @@ class SysModuleTest(unittest.TestCase):
     # Test sys._current_frames() in a WITH_THREADS build.
     @test.support.reap_threads
     def current_frames_with_threads(self):
-        import threading, _thread
+        import threading
         import traceback
 
         # Spawn a thread that blocks at a known place.  Then the main
@@ -356,7 +357,7 @@ class SysModuleTest(unittest.TestCase):
             g456()
 
         def g456():
-            thread_info.append(_thread.get_ident())
+            thread_info.append(threading.get_ident())
             entered_g.set()
             leave_g.wait()
 
@@ -372,7 +373,7 @@ class SysModuleTest(unittest.TestCase):
 
         d = sys._current_frames()
 
-        main_id = _thread.get_ident()
+        main_id = threading.get_ident()
         self.assertIn(main_id, d)
         self.assertIn(thread_id, d)
 
@@ -473,6 +474,14 @@ class SysModuleTest(unittest.TestCase):
         if not sys.platform.startswith('win'):
             self.assertIsInstance(sys.abiflags, str)
 
+    @unittest.skipUnless(hasattr(sys, 'thread_info'),
+                         'Threading required for this test.')
+    def test_thread_info(self):
+        info = sys.thread_info
+        self.assertEqual(len(info), 3)
+        self.assertIn(info.name, ('nt', 'os2', 'pthread', 'solaris', None))
+        self.assertIn(info.lock, ('semaphore', 'mutex+cond', None))
+
     def test_43581(self):
         # Can't use sys.stdout, as this is a StringIO object when
         # the test runs under regrtest.
@@ -500,7 +509,7 @@ class SysModuleTest(unittest.TestCase):
 
     def test_sys_flags(self):
         self.assertTrue(sys.flags)
-        attrs = ("debug", "division_warning",
+        attrs = ("debug",
                  "inspect", "interactive", "optimize", "dont_write_bytecode",
                  "no_user_site", "no_site", "ignore_environment", "verbose",
                  "bytes_warning", "quiet")
@@ -656,7 +665,7 @@ class SizeofTest(unittest.TestCase):
             return inner
         check(get_cell().__closure__[0], size(h + 'P'))
         # code
-        check(get_cell().__code__, size(h + '5i8Pi3P'))
+        check(get_cell().__code__, size(h + '5i9Pi3P'))
         # complex
         check(complex(0,1), size(h + '2d'))
         # method_descriptor (descriptor object)
