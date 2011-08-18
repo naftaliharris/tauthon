@@ -1631,12 +1631,7 @@ order (MRO) for bases """
             for attr, obj in env.items():
                 setattr(X, attr, obj)
             setattr(X, name, ErrDescr())
-            try:
-                runner(X())
-            except MyException:
-                pass
-            else:
-                self.fail("{0!r} didn't raise".format(name))
+            self.assertRaises(MyException, runner, X())
 
     def test_specials(self):
         # Testing special operators...
@@ -2073,9 +2068,6 @@ order (MRO) for bases """
         # Two essentially featureless objects, just inheriting stuff from
         # object.
         self.assertEqual(dir(NotImplemented), dir(Ellipsis))
-        if support.check_impl_detail():
-            # None differs in PyPy: it has a __nonzero__
-            self.assertEqual(dir(None), dir(Ellipsis))
 
         # Nasty test case for proxied objects
         class Wrapper(object):
@@ -4261,6 +4253,27 @@ order (MRO) for bases """
         foo = Foo()
         str(foo)
 
+    def test_slot_shadows_class_variable(self):
+        with self.assertRaises(ValueError) as cm:
+            class X:
+                __slots__ = ["foo"]
+                foo = None
+        m = str(cm.exception)
+        self.assertEqual("'foo' in __slots__ conflicts with class variable", m)
+
+    def test_set_doc(self):
+        class X:
+            "elephant"
+        X.__doc__ = "banana"
+        self.assertEqual(X.__doc__, "banana")
+        with self.assertRaises(TypeError) as cm:
+            type(list).__dict__["__doc__"].__set__(list, "blah")
+        self.assertIn("can't set list.__doc__", str(cm.exception))
+        with self.assertRaises(TypeError) as cm:
+            type(X).__dict__["__doc__"].__delete__(X)
+        self.assertIn("can't delete X.__doc__", str(cm.exception))
+        self.assertEqual(X.__doc__, "banana")
+
 class DictProxyTests(unittest.TestCase):
     def setUp(self):
         class C(object):
@@ -4268,6 +4281,8 @@ class DictProxyTests(unittest.TestCase):
                 pass
         self.C = C
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_keys(self):
         # Testing dict-proxy keys...
         it = self.C.__dict__.keys()
@@ -4277,6 +4292,8 @@ class DictProxyTests(unittest.TestCase):
         self.assertEqual(keys, ['__dict__', '__doc__', '__module__',
             '__weakref__', 'meth'])
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_values(self):
         # Testing dict-proxy values...
         it = self.C.__dict__.values()
@@ -4284,6 +4301,8 @@ class DictProxyTests(unittest.TestCase):
         values = list(it)
         self.assertEqual(len(values), 5)
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_items(self):
         # Testing dict-proxy iteritems...
         it = self.C.__dict__.items()
