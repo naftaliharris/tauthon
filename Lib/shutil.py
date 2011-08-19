@@ -35,6 +35,7 @@ __all__ = ["copyfileobj", "copyfile", "copymode", "copystat", "copy", "copy2",
            "register_archive_format", "unregister_archive_format",
            "get_unpack_formats", "register_unpack_format",
            "unregister_unpack_format", "unpack_archive"]
+           # disk_usage is added later, if available on the platform
 
 class Error(EnvironmentError):
     pass
@@ -266,7 +267,7 @@ def rmtree(path, ignore_errors=False, onerror=None):
     names = []
     try:
         names = os.listdir(path)
-    except os.error as err:
+    except os.error:
         onerror(os.listdir, path, sys.exc_info())
     for name in names:
         fullname = os.path.join(path, name)
@@ -279,7 +280,7 @@ def rmtree(path, ignore_errors=False, onerror=None):
         else:
             try:
                 os.remove(fullname)
-            except os.error as err:
+            except os.error:
                 onerror(os.remove, fullname, sys.exc_info())
     try:
         os.rmdir(path)
@@ -322,7 +323,7 @@ def move(src, dst):
             raise Error("Destination path '%s' already exists" % real_dst)
     try:
         os.rename(src, real_dst)
-    except OSError as exc:
+    except OSError:
         if os.path.isdir(src):
             if _destinsrc(src, dst):
                 raise Error("Cannot move a directory '%s' into itself '%s'." % (src, dst))
@@ -754,3 +755,37 @@ def unpack_archive(filename, extract_dir=None, format=None):
         func = _UNPACK_FORMATS[format][1]
         kwargs = dict(_UNPACK_FORMATS[format][2])
         func(filename, extract_dir, **kwargs)
+
+
+if hasattr(os, 'statvfs'):
+
+    __all__.append('disk_usage')
+    _ntuple_diskusage = collections.namedtuple('usage', 'total used free')
+
+    def disk_usage(path):
+        """Return disk usage statistics about the given path.
+
+        Returned valus is a named tuple with attributes 'total', 'used' and
+        'free', which are the amount of total, used and free space, in bytes.
+        """
+        st = os.statvfs(path)
+        free = st.f_bavail * st.f_frsize
+        total = st.f_blocks * st.f_frsize
+        used = (st.f_blocks - st.f_bfree) * st.f_frsize
+        return _ntuple_diskusage(total, used, free)
+
+elif os.name == 'nt':
+
+    import nt
+    __all__.append('disk_usage')
+    _ntuple_diskusage = collections.namedtuple('usage', 'total used free')
+
+    def disk_usage(path):
+        """Return disk usage statistics about the given path.
+
+        Returned valus is a named tuple with attributes 'total', 'used' and
+        'free', which are the amount of total, used and free space, in bytes.
+        """
+        total, free = nt._getdiskusage(path)
+        used = total - free
+        return _ntuple_diskusage(total, used, free)

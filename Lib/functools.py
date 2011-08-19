@@ -114,6 +114,11 @@ def cmp_to_key(mycmp):
         __hash__ = None
     return K
 
+try:
+    from _functools import cmp_to_key
+except ImportError:
+    pass
+
 _CacheInfo = namedtuple("CacheInfo", "hits misses maxsize currsize")
 
 def lru_cache(maxsize=100):
