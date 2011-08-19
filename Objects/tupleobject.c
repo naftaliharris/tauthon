@@ -86,7 +86,7 @@ PyTuple_New(register Py_ssize_t size)
         {
             return PyErr_NoMemory();
         }
-        nbytes += sizeof(PyTupleObject) - sizeof(PyObject *);
+        /* nbytes += sizeof(PyTupleObject) - sizeof(PyObject *); */
 
         op = PyObject_GC_NewVar(PyTupleObject, &PyTuple_Type, size);
         if (op == NULL)
@@ -546,10 +546,8 @@ tuplerichcompare(PyObject *v, PyObject *w, int op)
     Py_ssize_t i;
     Py_ssize_t vlen, wlen;
 
-    if (!PyTuple_Check(v) || !PyTuple_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PyTuple_Check(v) || !PyTuple_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     vt = (PyTupleObject *)v;
     wt = (PyTupleObject *)w;
