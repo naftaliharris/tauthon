@@ -32,7 +32,7 @@ class CharsetError(MessageError):
 
 
 # These are parsing defects which the parser was able to work around.
-class MessageDefect:
+class MessageDefect(Exception):
     """Base class for a message defect."""
 
     def __init__(self, line=None):
@@ -55,3 +55,6 @@ class MalformedHeaderDefect(MessageDefect):
 
 class MultipartInvariantViolationDefect(MessageDefect):
     """A message claimed to be a multipart but no subparts were found."""
+
+class InvalidMultipartContentTransferEncodingDefect(MessageDefect):
+    """An invalid content transfer encoding was set on the multipart itself."""
