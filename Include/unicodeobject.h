@@ -109,6 +109,10 @@ Copyright (c) Corporation for National Research Initiatives.
 # endif
 #endif
 
+#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#  define HAVE_MBCS
+#endif
+
 #ifdef HAVE_WCHAR_H
 /* Work around a cosmetic bug in BSDI 4.x wchar.h; thanks to Thomas Wouters */
 # ifdef _HAVE_BSDI
@@ -668,8 +672,7 @@ PyAPI_FUNC(int) PyUnicode_ClearFreeList(void);
 
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _PyUnicode_AsDefaultEncodedString(
-    PyObject *unicode,
-    const char *errors);
+    PyObject *unicode);
 #endif
 
 /* Returns a pointer to the default encoding (UTF-8) of the
@@ -1163,7 +1166,7 @@ PyAPI_FUNC(PyObject *) PyUnicode_TranslateCharmap(
     );
 #endif
 
-#ifdef MS_WIN32
+#ifdef HAVE_MBCS
 
 /* --- MBCS codecs for Windows -------------------------------------------- */
 
@@ -1192,7 +1195,7 @@ PyAPI_FUNC(PyObject*) PyUnicode_EncodeMBCS(
     );
 #endif
 
-#endif /* MS_WIN32 */
+#endif /* HAVE_MBCS */
 
 /* --- Decimal Encoder ---------------------------------------------------- */
 
