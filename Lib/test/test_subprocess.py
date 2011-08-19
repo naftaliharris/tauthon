@@ -955,23 +955,13 @@ class POSIXProcessTestCase(BaseTestCase):
                               'time.sleep(0.2)'],
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
+        self.addCleanup(p.stdout.close)
+        self.addCleanup(p.stderr.close)
         ident = id(p)
         pid = p.pid
         del p
         # check that p is in the active processes list
         self.assertIn(ident, [id(o) for o in subprocess._active])
-
-        # sleep a little to let the process exit, and create a new Popen: this
-        # should trigger the wait() of p
-        time.sleep(1)
-        with self.assertRaises(EnvironmentError) as c:
-            with subprocess.Popen(['nonexisting_i_hope'],
-                                  stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE) as proc:
-                pass
-        # p should have been wait()ed on, and removed from the _active list
-        self.assertRaises(OSError, os.waitpid, pid, 0)
-        self.assertNotIn(ident, [id(o) for o in subprocess._active])
 
     def test_leak_fast_process_del_killed(self):
         # Issue #12650: on Unix, if Popen.__del__() was called before the
@@ -984,6 +974,8 @@ class POSIXProcessTestCase(BaseTestCase):
                               'time.sleep(3)'],
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE)
+        self.addCleanup(p.stdout.close)
+        self.addCleanup(p.stderr.close)
         ident = id(p)
         pid = p.pid
         del p
