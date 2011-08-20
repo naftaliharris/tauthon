@@ -18,34 +18,14 @@ import contextlib
 from weakref import proxy
 import signal
 import math
+import pickle
 try:
     import fcntl
 except ImportError:
     fcntl = False
 
-def try_address(host, port=0, family=socket.AF_INET):
-    """Try to bind a socket on the given host:port and return True
-    if that has been possible."""
-    try:
-        sock = socket.socket(family, socket.SOCK_STREAM)
-        sock.bind((host, port))
-    except (socket.error, socket.gaierror):
-        return False
-    else:
-        sock.close()
-        return True
-
-def linux_version():
-    try:
-        # platform.release() is something like '2.6.33.7-desktop-2mnb'
-        version_string = platform.release().split('-')[0]
-        return tuple(map(int, version_string.split('.')))
-    except ValueError:
-        return 0, 0, 0
-
 HOST = support.HOST
-MSG = 'Michael Gilfix was here\u1234\r\n'.encode('utf8') ## test unicode string and carriage return
-SUPPORTS_IPV6 = socket.has_ipv6 and try_address('::1', family=socket.AF_INET6)
+MSG = 'Michael Gilfix was here\u1234\r\n'.encode('utf-8') ## test unicode string and carriage return
 
 try:
     import _thread as thread
@@ -282,18 +262,13 @@ class GeneralModuleTests(unittest.TestCase):
 
     def testSocketError(self):
         # Testing socket module exceptions
-        def raise_error(*args, **kwargs):
+        msg = "Error raising socket exception (%s)."
+        with self.assertRaises(socket.error, msg=msg % 'socket.error'):
             raise socket.error
-        def raise_herror(*args, **kwargs):
+        with self.assertRaises(socket.error, msg=msg % 'socket.herror'):
             raise socket.herror
-        def raise_gaierror(*args, **kwargs):
+        with self.assertRaises(socket.error, msg=msg % 'socket.gaierror'):
             raise socket.gaierror
-        self.assertRaises(socket.error, raise_error,
-                              "Error raising socket exception.")
-        self.assertRaises(socket.error, raise_herror,
-                              "Error raising socket exception.")
-        self.assertRaises(socket.error, raise_gaierror,
-                              "Error raising socket exception.")
 
     def testSendtoErrors(self):
         # Testing that sendto doens't masks failures. See #10169.
@@ -368,6 +343,52 @@ class GeneralModuleTests(unittest.TestCase):
         fqhn = socket.getfqdn(ip)
         if not fqhn in all_host_names:
             self.fail("Error testing host resolution mechanisms. (fqdn: %s, all: %s)" % (fqhn, repr(all_host_names)))
+
+    @unittest.skipUnless(hasattr(socket, 'sethostname'), "test needs socket.sethostname()")
+    @unittest.skipUnless(hasattr(socket, 'gethostname'), "test needs socket.gethostname()")
+    def test_sethostname(self):
+        oldhn = socket.gethostname()
+        try:
+            socket.sethostname('new')
+        except socket.error as e:
+            if e.errno == errno.EPERM:
+                self.skipTest("test should be run as root")
+            else:
+                raise
+        try:
+            # running test as root!
+            self.assertEqual(socket.gethostname(), 'new')
+            # Should work with bytes objects too
+            socket.sethostname(b'bar')
+            self.assertEqual(socket.gethostname(), 'bar')
+        finally:
+            socket.sethostname(oldhn)
+
+    @unittest.skipUnless(hasattr(socket, 'if_nameindex'),
+                         'socket.if_nameindex() not available.')
+    def testInterfaceNameIndex(self):
+        interfaces = socket.if_nameindex()
+        for index, name in interfaces:
+            self.assertIsInstance(index, int)
+            self.assertIsInstance(name, str)
+            # interface indices are non-zero integers
+            self.assertGreater(index, 0)
+            _index = socket.if_nametoindex(name)
+            self.assertIsInstance(_index, int)
+            self.assertEqual(index, _index)
+            _name = socket.if_indextoname(index)
+            self.assertIsInstance(_name, str)
+            self.assertEqual(name, _name)
+
+    @unittest.skipUnless(hasattr(socket, 'if_nameindex'),
+                         'socket.if_nameindex() not available.')
+    def testInvalidInterfaceNameIndex(self):
+        # test nonexistent interface index/name
+        self.assertRaises(socket.error, socket.if_indextoname, 0)
+        self.assertRaises(socket.error, socket.if_nametoindex, '_DEADBEEF')
+        # test with invalid values
+        self.assertRaises(TypeError, socket.if_nametoindex, 0)
+        self.assertRaises(TypeError, socket.if_indextoname, '_DEADBEEF')
 
     def testRefCountGetNameInfo(self):
         # Testing reference count for getnameinfo
@@ -654,7 +675,7 @@ class GeneralModuleTests(unittest.TestCase):
         socket.getaddrinfo('localhost', 80)
         socket.getaddrinfo('127.0.0.1', 80)
         socket.getaddrinfo(None, 80)
-        if SUPPORTS_IPV6:
+        if support.IPV6_ENABLED:
             socket.getaddrinfo('::1', 80)
         # port can be a string service name such as "http", a numeric
         # port number or None
@@ -774,7 +795,13 @@ class GeneralModuleTests(unittest.TestCase):
             fp.close()
             self.assertEqual(repr(fp), "<_io.BufferedReader name=-1>")
 
-    def testListenBacklog0(self):
+    def test_pickle(self):
+        sock = socket.socket()
+        with sock:
+            for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
+                self.assertRaises(TypeError, pickle.dumps, sock, protocol)
+
+    def test_listen_backlog0(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.bind((HOST, 0))
         # backlog = 0
@@ -996,11 +1023,8 @@ class NonBlockingTCPTests(ThreadedTCPSocketTest):
         pass
 
     if hasattr(socket, "SOCK_NONBLOCK"):
+        @support.requires_linux_version(2, 6, 28)
         def testInitNonBlocking(self):
-            v = linux_version()
-            if v < (2, 6, 28):
-                self.skipTest("Linux kernel 2.6.28 or higher required, not %s"
-                              % ".".join(map(str, v)))
             # reinit server socket
             self.serv.close()
             self.serv = socket.socket(socket.AF_INET, socket.SOCK_STREAM |
@@ -1102,7 +1126,7 @@ class FileObjectClassTestCase(SocketConnectedTest):
     """
 
     bufsize = -1 # Use default buffer size
-    encoding = 'utf8'
+    encoding = 'utf-8'
     errors = 'strict'
     newline = None
 
@@ -1323,7 +1347,7 @@ class FileObjectInterruptedTestCase(unittest.TestCase):
             data = b''
         else:
             data = ''
-            expecting = expecting.decode('utf8')
+            expecting = expecting.decode('utf-8')
         while len(data) != len(expecting):
             part = fo.read(size)
             if not part:
@@ -1485,7 +1509,7 @@ class UnicodeReadFileObjectClassTestCase(FileObjectClassTestCase):
     """Tests for socket.makefile() in text mode (rather than binary)"""
 
     read_mode = 'r'
-    read_msg = MSG.decode('utf8')
+    read_msg = MSG.decode('utf-8')
     write_mode = 'wb'
     write_msg = MSG
     newline = ''
@@ -1497,7 +1521,7 @@ class UnicodeWriteFileObjectClassTestCase(FileObjectClassTestCase):
     read_mode = 'rb'
     read_msg = MSG
     write_mode = 'w'
-    write_msg = MSG.decode('utf8')
+    write_msg = MSG.decode('utf-8')
     newline = ''
 
 
@@ -1505,9 +1529,9 @@ class UnicodeReadWriteFileObjectClassTestCase(FileObjectClassTestCase):
     """Tests for socket.makefile() in text mode (rather than binary)"""
 
     read_mode = 'r'
-    read_msg = MSG.decode('utf8')
+    read_msg = MSG.decode('utf-8')
     write_mode = 'w'
-    write_msg = MSG.decode('utf8')
+    write_msg = MSG.decode('utf-8')
     newline = ''
 
 
@@ -1974,11 +1998,8 @@ class ContextManagersTest(ThreadedTCPSocketTest):
                      "SOCK_CLOEXEC not defined")
 @unittest.skipUnless(fcntl, "module fcntl not available")
 class CloexecConstantTest(unittest.TestCase):
+    @support.requires_linux_version(2, 6, 28)
     def test_SOCK_CLOEXEC(self):
-        v = linux_version()
-        if v < (2, 6, 28):
-            self.skipTest("Linux kernel 2.6.28 or higher required, not %s"
-                          % ".".join(map(str, v)))
         with socket.socket(socket.AF_INET,
                            socket.SOCK_STREAM | socket.SOCK_CLOEXEC) as s:
             self.assertTrue(s.type & socket.SOCK_CLOEXEC)
@@ -1996,11 +2017,8 @@ class NonblockConstantTest(unittest.TestCase):
             self.assertFalse(s.type & socket.SOCK_NONBLOCK)
             self.assertEqual(s.gettimeout(), None)
 
+    @support.requires_linux_version(2, 6, 28)
     def test_SOCK_NONBLOCK(self):
-        v = linux_version()
-        if v < (2, 6, 28):
-            self.skipTest("Linux kernel 2.6.28 or higher required, not %s"
-                          % ".".join(map(str, v)))
         # a lot of it seems silly and redundant, but I wanted to test that
         # changing back and forth worked ok
         with socket.socket(socket.AF_INET,
@@ -2056,7 +2074,7 @@ def test_main():
     ])
     if hasattr(socket, "socketpair"):
         tests.append(BasicSocketPairTest)
-    if sys.platform == 'linux2':
+    if sys.platform.startswith('linux'):
         tests.append(TestLinuxAbstractNamespace)
     if isTipcAvailable():
         tests.append(TIPCTest)
