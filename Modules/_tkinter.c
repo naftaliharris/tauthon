@@ -2005,7 +2005,7 @@ static int
 PythonCmd(ClientData clientData, Tcl_Interp *interp, int argc, char *argv[])
 {
     PythonCmd_ClientData *data = (PythonCmd_ClientData *)clientData;
-    PyObject *self, *func, *arg, *res;
+    PyObject *func, *arg, *res;
     int i, rv;
     Tcl_Obj *obj_res;
 
@@ -2014,7 +2014,6 @@ PythonCmd(ClientData clientData, Tcl_Interp *interp, int argc, char *argv[])
     /* TBD: no error checking here since we know, via the
      * Tkapp_CreateCommand() that the client data is a two-tuple
      */
-    self = data->self;
     func = data->func;
 
     /* Create argument list (argv1, ..., argvN) */
@@ -2413,11 +2412,9 @@ static PyObject *
 Tktt_Repr(PyObject *self)
 {
     TkttObject *v = (TkttObject *)self;
-    char buf[100];
-
-    PyOS_snprintf(buf, sizeof(buf), "<tktimertoken at %p%s>", v,
-                    v->func == NULL ? ", handler deleted" : "");
-    return PyUnicode_FromString(buf);
+    return PyUnicode_FromFormat("<tktimertoken at %p%s>",
+                                v,
+                                v->func == NULL ? ", handler deleted" : "");
 }
 
 static PyTypeObject Tktt_Type =

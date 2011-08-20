@@ -71,6 +71,23 @@ HAVE_GETVALUE = not getattr(_multiprocessing,
                             'HAVE_BROKEN_SEM_GETVALUE', False)
 
 WIN32 = (sys.platform == "win32")
+if WIN32:
+    from _subprocess import WaitForSingleObject, INFINITE, WAIT_OBJECT_0
+
+    def wait_for_handle(handle, timeout):
+        if timeout is None or timeout < 0.0:
+            timeout = INFINITE
+        else:
+            timeout = int(1000 * timeout)
+        return WaitForSingleObject(handle, timeout) == WAIT_OBJECT_0
+else:
+    from select import select
+    _select = util._eintr_retry(select)
+
+    def wait_for_handle(handle, timeout):
+        if timeout is not None and timeout < 0.0:
+            timeout = None
+        return handle in _select([handle], [], [], timeout)[0]
 
 #
 # Some tests require ctypes
@@ -163,6 +180,18 @@ class _TestProcess(BaseTestCase):
         self.assertTrue(len(authkey) > 0)
         self.assertEqual(current.ident, os.getpid())
         self.assertEqual(current.exitcode, None)
+
+    def test_daemon_argument(self):
+        if self.TYPE == "threads":
+            return
+
+        # By default uses the current process's daemon flag.
+        proc0 = self.Process(target=self._test)
+        self.assertEqual(proc0.daemon, self.current_process().daemon)
+        proc1 = self.Process(target=self._test, daemon=True)
+        self.assertTrue(proc1.daemon)
+        proc2 = self.Process(target=self._test, daemon=False)
+        self.assertFalse(proc2.daemon)
 
     @classmethod
     def _test(cls, q, *args, **kwds):
@@ -294,6 +323,26 @@ class _TestProcess(BaseTestCase):
                 [1, 1]
             ]
         self.assertEqual(result, expected)
+
+    @classmethod
+    def _test_sentinel(cls, event):
+        event.wait(10.0)
+
+    def test_sentinel(self):
+        if self.TYPE == "threads":
+            return
+        event = self.Event()
+        p = self.Process(target=self._test_sentinel, args=(event,))
+        with self.assertRaises(ValueError):
+            p.sentinel
+        p.start()
+        self.addCleanup(p.join)
+        sentinel = p.sentinel
+        self.assertIsInstance(sentinel, int)
+        self.assertFalse(wait_for_handle(sentinel, timeout=0.0))
+        event.set()
+        p.join()
+        self.assertTrue(wait_for_handle(sentinel, timeout=DELTA))
 
 #
 #
@@ -1930,9 +1979,15 @@ class TestInvalidHandle(unittest.TestCase):
 
     @unittest.skipIf(WIN32, "skipped on Windows")
     def test_invalid_handles(self):
-        conn = _multiprocessing.Connection(44977608)
-        self.assertRaises(IOError, conn.poll)
-        self.assertRaises(IOError, _multiprocessing.Connection, -1)
+        conn = multiprocessing.connection.Connection(44977608)
+        try:
+            self.assertRaises((ValueError, IOError), conn.poll)
+        finally:
+            # Hack private attribute _handle to avoid printing an error
+            # in conn.__del__
+            conn._handle = None
+        self.assertRaises((ValueError, IOError),
+                          multiprocessing.connection.Connection, -1)
 
 #
 # Functions used to create test cases from the base ones in this module
