@@ -20,6 +20,11 @@ python -E -Wd -m test [options] [test_name1 ...]
 Options:
 
 -h/--help       -- print this text and exit
+--timeout TIMEOUT
+                -- dump the traceback and exit if a test takes more
+                   than TIMEOUT seconds; disabled if TIMEOUT is negative
+                   or equals to zero
+--wait          -- wait for user input, e.g., allow a debugger to be attached
 
 Verbosity
 
@@ -44,6 +49,9 @@ Selecting tests
                 -- specify which special resource intensive tests to run
 -M/--memlimit LIMIT
                 -- run very large memory-consuming tests
+   --testdir DIR
+                -- execute test files in the specified directory (instead
+                   of the Python stdlib test suite)
 
 Special runs
 
@@ -125,6 +133,8 @@ resources to test.  Currently only the following are defined:
 
     all -       Enable all special resources.
 
+    none -      Disable all special resources (this is the default).
+
     audio -     Tests that use the audio device.  (There are known
                 cases of broken audio drivers that can crash Python or
                 even the Linux kernel.)
@@ -157,6 +167,7 @@ option '-uall,-gui'.
 
 import builtins
 import errno
+import faulthandler
 import getopt
 import io
 import json
@@ -165,6 +176,7 @@ import os
 import platform
 import random
 import re
+import signal
 import sys
 import sysconfig
 import tempfile
@@ -224,6 +236,7 @@ ENV_CHANGED = -1
 SKIPPED = -2
 RESOURCE_DENIED = -3
 INTERRUPTED = -4
+CHILD_ERROR = -5   # error in a child process
 
 from test import support
 
@@ -267,6 +280,18 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
     on the command line.
     """
 
+    # Display the Python traceback on fatal errors (e.g. segfault)
+    faulthandler.enable(all_threads=True)
+
+    # Display the Python traceback on SIGALRM or SIGUSR1 signal
+    signals = []
+    if hasattr(signal, 'SIGALRM'):
+        signals.append(signal.SIGALRM)
+    if hasattr(signal, 'SIGUSR1'):
+        signals.append(signal.SIGUSR1)
+    for signum in signals:
+        faulthandler.register(signum, chain=True)
+
     replace_stdout()
 
     support.record_original_stdout(sys.stdout)
@@ -277,7 +302,8 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
              'use=', 'threshold=', 'trace', 'coverdir=', 'nocoverdir',
              'runleaks', 'huntrleaks=', 'memlimit=', 'randseed=',
              'multiprocess=', 'coverage', 'slaveargs=', 'forever', 'debug',
-             'start=', 'nowindows', 'header', 'failfast', 'match'])
+             'start=', 'nowindows', 'header', 'testdir=', 'timeout=', 'wait',
+             'failfast', 'match'])
     except getopt.error as msg:
         usage(msg)
 
@@ -288,6 +314,7 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
         use_resources = []
     debug = False
     start = None
+    timeout = None
     for o, a in opts:
         if o in ('-h', '--help'):
             print(__doc__)
@@ -331,7 +358,9 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
         elif o in ('-T', '--coverage'):
             trace = True
         elif o in ('-D', '--coverdir'):
-            coverdir = os.path.join(os.getcwd(), a)
+            # CWD is replaced with a temporary dir before calling main(), so we
+            # need  join it with the saved CWD so it goes where the user expects.
+            coverdir = os.path.join(support.SAVEDCWD, a)
         elif o in ('-N', '--nocoverdir'):
             coverdir = None
         elif o in ('-R', '--huntrleaks'):
@@ -359,6 +388,9 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             for r in u:
                 if r == 'all':
                     use_resources[:] = RESOURCE_NAMES
+                    continue
+                if r == 'none':
+                    del use_resources[:]
                     continue
                 remove = False
                 if r[0] == '-':
@@ -390,6 +422,15 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             forever = True
         elif o in ('-j', '--multiprocess'):
             use_mp = int(a)
+            if use_mp <= 0:
+                try:
+                    import multiprocessing
+                    # Use all cores + extras for tests that like to sleep
+                    use_mp = 2 + multiprocessing.cpu_count()
+                except (ImportError, NotImplementedError):
+                    use_mp = 3
+            if use_mp == 1:
+                use_mp = None
         elif o == '--header':
             header = True
         elif o == '--slaveargs':
@@ -402,6 +443,21 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             print()   # Force a newline (just in case)
             print(json.dumps(result))
             sys.exit(0)
+        elif o == '--testdir':
+            # CWD is replaced with a temporary dir before calling main(), so we
+            # join it with the saved CWD so it ends up where the user expects.
+            testdir = os.path.join(support.SAVEDCWD, a)
+        elif o == '--timeout':
+            if hasattr(faulthandler, 'dump_tracebacks_later'):
+                timeout = float(a)
+                if timeout <= 0:
+                    timeout = None
+            else:
+                print("Warning: The timeout option requires "
+                      "faulthandler.dump_tracebacks_later")
+                timeout = None
+        elif o == '--wait':
+            input("Press any key to continue...")
         else:
             print(("No handler for option {}.  Please report this as a bug "
                    "at http://bugs.python.org.").format(o), file=sys.stderr)
@@ -478,7 +534,13 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
         print("==  ", os.getcwd())
         print("Testing with flags:", sys.flags)
 
-    alltests = findtests(testdir, stdtests, nottests)
+    # if testdir is set, then we are not running the python tests suite, so
+    # don't add default tests to be executed or skipped (pass empty values)
+    if testdir:
+        alltests = findtests(testdir, list(), set())
+    else:
+        alltests = findtests(testdir, stdtests, nottests)
+
     selected = tests or args or alltests
     if single:
         selected = selected[:1]
@@ -554,7 +616,8 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
                     (test, verbose, quiet),
                     dict(huntrleaks=huntrleaks, use_resources=use_resources,
                          debug=debug, output_on_failure=verbose3,
-                         failfast=failfast, match_tests=match_tests)
+                         timeout=timeout, failfast=failfast,
+                         match_tests=match_tests)
                 )
                 yield (test, args_tuple)
         pending = tests_and_args()
@@ -575,10 +638,15 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
                                    universal_newlines=True,
                                    close_fds=(os.name != 'nt'))
                     stdout, stderr = popen.communicate()
+                    retcode = popen.wait()
                     # Strip last refcount output line if it exists, since it
                     # comes from the shutdown of the interpreter in the subcommand.
                     stderr = debug_output_pat.sub("", stderr)
                     stdout, _, result = stdout.strip().rpartition("\n")
+                    if retcode != 0:
+                        result = (CHILD_ERROR, "Exit code %s" % retcode)
+                        output.put((test, stdout.rstrip(), stderr.rstrip(), result))
+                        return
                     if not result:
                         output.put((None, None, None, None))
                         return
@@ -611,6 +679,8 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
                 if result[0] == INTERRUPTED:
                     assert result[1] == 'KeyboardInterrupt'
                     raise KeyboardInterrupt   # What else?
+                if result[0] == CHILD_ERROR:
+                    raise Exception("Child error on {}: {}".format(test, result[1]))
                 test_index += 1
         except KeyboardInterrupt:
             interrupted = True
@@ -627,13 +697,14 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             if trace:
                 # If we're tracing code coverage, then we don't exit with status
                 # if on a false return value from main.
-                tracer.runctx('runtest(test, verbose, quiet)',
+                tracer.runctx('runtest(test, verbose, quiet, timeout=timeout)',
                               globals=globals(), locals=vars())
             else:
                 try:
                     result = runtest(test, verbose, quiet, huntrleaks, debug,
                                      output_on_failure=verbose3,
-                                     failfast=failfast, match_tests=match_tests)
+                                     timeout=timeout, failfast=failfast,
+                                     match_tests=match_tests)
                     accumulate_result(test, result)
                 except KeyboardInterrupt:
                     interrupted = True
@@ -704,7 +775,7 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             sys.stdout.flush()
             try:
                 verbose = True
-                ok = runtest(test, True, quiet, huntrleaks, debug)
+                ok = runtest(test, True, quiet, huntrleaks, debug, timeout=timeout)
             except KeyboardInterrupt:
                 # print a newline separate from the ^C
                 print()
@@ -729,6 +800,8 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
     sys.exit(len(bad) > 0 or interrupted)
 
 
+# small set of tests to determine if we have a basically functioning interpreter
+# (i.e. if any of these fail, then anything else is likely to follow)
 STDTESTS = [
     'test_grammar',
     'test_opcodes',
@@ -739,12 +812,11 @@ STDTESTS = [
     'test_unittest',
     'test_doctest',
     'test_doctest2',
+    'test_support'
 ]
 
-NOTTESTS = {
-    'test_future1',
-    'test_future2',
-}
+# set of tests that we don't want to be executed when using regrtest
+NOTTESTS = set()
 
 def findtests(testdir=None, stdtests=STDTESTS, nottests=NOTTESTS):
     """Return a list of all applicable test modules."""
@@ -753,25 +825,22 @@ def findtests(testdir=None, stdtests=STDTESTS, nottests=NOTTESTS):
     tests = []
     others = set(stdtests) | nottests
     for name in names:
-        modname, ext = os.path.splitext(name)
-        if modname[:5] == "test_" and ext == ".py" and modname not in others:
-            tests.append(modname)
+        mod, ext = os.path.splitext(name)
+        if mod[:5] == "test_" and ext in (".py", "") and mod not in others:
+            tests.append(mod)
     return stdtests + sorted(tests)
 
 def replace_stdout():
     """Set stdout encoder error handler to backslashreplace (as stderr error
     handler) to avoid UnicodeEncodeError when printing a traceback"""
-    if os.name == "nt":
-        # Replace sys.stdout breaks the stdout newlines on Windows: issue #8533
-        return
-
     import atexit
 
     stdout = sys.stdout
     sys.stdout = open(stdout.fileno(), 'w',
         encoding=stdout.encoding,
         errors="backslashreplace",
-        closefd=False)
+        closefd=False,
+        newline='\n')
 
     def restore_stdout():
         sys.stdout.close()
@@ -780,7 +849,8 @@ def replace_stdout():
 
 def runtest(test, verbose, quiet,
             huntrleaks=False, debug=False, use_resources=None,
-            output_on_failure=False, failfast=False, match_tests=None):
+            output_on_failure=False, failfast=False, match_tests=None,
+            timeout=None):
     """Run a single test.
 
     test -- the name of the test
@@ -790,6 +860,8 @@ def runtest(test, verbose, quiet,
     huntrleaks -- run multiple times to test for leaks; requires a debug
                   build; a triple corresponding to -R's three arguments
     output_on_failure -- if true, display test output on failure
+    timeout -- dump the traceback and exit if a test takes more than
+               timeout seconds
 
     Returns one of the test result constants:
         INTERRUPTED      KeyboardInterrupt when run under -j
@@ -802,6 +874,9 @@ def runtest(test, verbose, quiet,
 
     if use_resources is not None:
         support.use_resources = use_resources
+    use_timeout = (timeout is not None)
+    if use_timeout:
+        faulthandler.dump_tracebacks_later(timeout, exit=True)
     try:
         support.match_tests = match_tests
         if failfast:
@@ -840,6 +915,8 @@ def runtest(test, verbose, quiet,
                                    display_failure=not verbose)
         return result
     finally:
+        if use_timeout:
+            faulthandler.cancel_dump_tracebacks_later()
         cleanup_test_droppings(test, verbose)
 runtest.stringio = None
 
@@ -885,7 +962,7 @@ class saved_test_environment:
     resources = ('sys.argv', 'cwd', 'sys.stdin', 'sys.stdout', 'sys.stderr',
                  'os.environ', 'sys.path', 'sys.path_hooks', '__import__',
                  'warnings.filters', 'asyncore.socket_map',
-                 'logging._handlers', 'logging._handlerList',
+                 'logging._handlers', 'logging._handlerList', 'sys.gettrace',
                  'sys.warnoptions', 'threading._dangling',
                  'multiprocessing.process._dangling')
 
@@ -933,6 +1010,11 @@ class saved_test_environment:
     def restore_sys_path_hooks(self, saved_hooks):
         sys.path_hooks = saved_hooks[1]
         sys.path_hooks[:] = saved_hooks[2]
+
+    def get_sys_gettrace(self):
+        return sys.gettrace()
+    def restore_sys_gettrace(self, trace_fxn):
+        sys.settrace(trace_fxn)
 
     def get___import__(self):
         return builtins.__import__
@@ -1139,7 +1221,8 @@ def dash_R(the_module, test, indirect_test, huntrleaks):
         False if the test didn't leak references; True if we detected refleaks.
     """
     # This code is hackish and inelegant, but it seems to do the job.
-    import copyreg, _abcoll
+    import copyreg
+    import collections.abc
 
     if not hasattr(sys, 'gettotalrefcount'):
         raise Exception("Tracking reference leaks requires a debug build "
@@ -1156,7 +1239,7 @@ def dash_R(the_module, test, indirect_test, huntrleaks):
     else:
         zdc = zipimport._zip_directory_cache.copy()
     abcs = {}
-    for abc in [getattr(_abcoll, a) for a in _abcoll.__all__]:
+    for abc in [getattr(collections.abc, a) for a in collections.abc.__all__]:
         if not isabstract(abc):
             continue
         for obj in abc.__subclasses__() + [abc]:
@@ -1202,7 +1285,7 @@ def dash_R_cleanup(fs, ps, pic, zdc, abcs):
     import gc, copyreg
     import _strptime, linecache
     import urllib.parse, urllib.request, mimetypes, doctest
-    import struct, filecmp, _abcoll
+    import struct, filecmp, collections.abc
     from distutils.dir_util import _path_created
     from weakref import WeakSet
 
@@ -1229,7 +1312,7 @@ def dash_R_cleanup(fs, ps, pic, zdc, abcs):
     sys._clear_type_cache()
 
     # Clear ABC registries, restoring previously saved ABC registries.
-    for abc in [getattr(_abcoll, a) for a in _abcoll.__all__]:
+    for abc in [getattr(collections.abc, a) for a in collections.abc.__all__]:
         if not isabstract(abc):
             continue
         for obj in abc.__subclasses__() + [abc]:
@@ -1308,8 +1391,8 @@ def printlist(x, width=70, indent=4):
 # Tests that are expected to be skipped everywhere except on one platform
 # are also handled separately.
 
-_expectations = {
-    'win32':
+_expectations = (
+    ('win32',
         """
         test__locale
         test_crypt
@@ -1337,15 +1420,15 @@ _expectations = {
         test_threadsignals
         test_wait3
         test_wait4
-        """,
-    'linux2':
+        """),
+    ('linux',
         """
         test_curses
         test_largefile
         test_kqueue
         test_ossaudiodev
-        """,
-    'unixware7':
+        """),
+    ('unixware',
         """
         test_epoll
         test_largefile
@@ -1355,8 +1438,8 @@ _expectations = {
         test_pyexpat
         test_sax
         test_sundry
-        """,
-    'openunix8':
+        """),
+    ('openunix',
         """
         test_epoll
         test_largefile
@@ -1366,8 +1449,8 @@ _expectations = {
         test_pyexpat
         test_sax
         test_sundry
-        """,
-    'sco_sv3':
+        """),
+    ('sco_sv',
         """
         test_asynchat
         test_fork1
@@ -1386,8 +1469,8 @@ _expectations = {
         test_threaded_import
         test_threadedtempfile
         test_threading
-        """,
-    'darwin':
+        """),
+    ('darwin',
         """
         test__locale
         test_curses
@@ -1399,8 +1482,8 @@ _expectations = {
         test_minidom
         test_ossaudiodev
         test_poll
-        """,
-    'sunos5':
+        """),
+    ('sunos',
         """
         test_curses
         test_dbm
@@ -1411,8 +1494,8 @@ _expectations = {
         test_openpty
         test_zipfile
         test_zlib
-        """,
-    'hp-ux11':
+        """),
+    ('hp-ux',
         """
         test_curses
         test_epoll
@@ -1427,8 +1510,8 @@ _expectations = {
         test_sax
         test_zipfile
         test_zlib
-        """,
-    'cygwin':
+        """),
+    ('cygwin',
         """
         test_curses
         test_dbm
@@ -1439,8 +1522,8 @@ _expectations = {
         test_locale
         test_ossaudiodev
         test_socketserver
-        """,
-    'os2emx':
+        """),
+    ('os2emx',
         """
         test_audioop
         test_curses
@@ -1453,8 +1536,8 @@ _expectations = {
         test_pty
         test_resource
         test_signal
-        """,
-    'freebsd4':
+        """),
+    ('freebsd',
         """
         test_epoll
         test_dbm_gnu
@@ -1470,8 +1553,8 @@ _expectations = {
         test_timeout
         test_urllibnet
         test_multiprocessing
-        """,
-    'aix5':
+        """),
+    ('aix',
         """
         test_bz2
         test_epoll
@@ -1485,8 +1568,8 @@ _expectations = {
         test_ttk_textonly
         test_zipimport
         test_zlib
-        """,
-    'openbsd3':
+        """),
+    ('openbsd',
         """
         test_ctypes
         test_epoll
@@ -1500,8 +1583,8 @@ _expectations = {
         test_ttk_guionly
         test_ttk_textonly
         test_multiprocessing
-        """,
-    'netbsd3':
+        """),
+    ('netbsd',
         """
         test_ctypes
         test_curses
@@ -1515,12 +1598,8 @@ _expectations = {
         test_ttk_guionly
         test_ttk_textonly
         test_multiprocessing
-        """,
-}
-_expectations['freebsd5'] = _expectations['freebsd4']
-_expectations['freebsd6'] = _expectations['freebsd4']
-_expectations['freebsd7'] = _expectations['freebsd4']
-_expectations['freebsd8'] = _expectations['freebsd4']
+        """),
+)
 
 class _ExpectedSkips:
     def __init__(self):
@@ -1528,9 +1607,13 @@ class _ExpectedSkips:
         from test import test_timeout
 
         self.valid = False
-        if sys.platform in _expectations:
-            s = _expectations[sys.platform]
-            self.expected = set(s.split())
+        expected = None
+        for item in _expectations:
+            if sys.platform.startswith(item[0]):
+                expected = item[1]
+                break
+        if expected is not None:
+            self.expected = set(expected.split())
 
             # These are broken tests, for now skipped on every platform.
             # XXX Fix these!
