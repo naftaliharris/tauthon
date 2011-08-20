@@ -10,11 +10,20 @@ What's New in Python 3.2.3?
 Core and Builtins
 -----------------
 
+- Issue #12791: Break reference cycles early when a generator exits with
+  an exception.
+
 - Issue #12266: Fix str.capitalize() to correctly uppercase/lowercase
   titlecased and cased non-letter characters.
 
 Library
 -------
+
+- Issue #12213: Fix a buffering bug with interleaved reads and writes that
+  could appear on BufferedRandom streams.
+
+- Issue #12326: sys.platform is now always 'linux2' on Linux, even if Python
+  is compiled on Linux 3.
 
 - Issue #12650: Fix a race condition where a subprocess.Popen could leak
   resources (FD/zombie) when killed at the wrong time.
