@@ -40,6 +40,15 @@ Core and Builtins
 Library
 -------
 
+- Issue #12786: Set communication pipes used by subprocess.Popen CLOEXEC to
+  avoid them being inherited by other subprocesses.
+
+- Issue #4106: Fix occasional exceptions printed out by multiprocessing on
+  interpreter shutdown.
+
+- Issue #11657: Fix sending file descriptors over 255 over a multiprocessing
+  Pipe.
+
 - Issue #12213: Fix a buffering bug with interleaved reads and writes that
   could appear on io.BufferedRandom streams.
 
@@ -182,6 +191,8 @@ Tools/Demos
 
 Tests
 -----
+
+- Issue #12821: Fix test_fcntl failures on OpenBSD 5.
 
 - Issue #12331: The test suite for lib2to3 can now run from an installed
   Python.
