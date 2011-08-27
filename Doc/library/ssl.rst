@@ -162,6 +162,35 @@ instead.
 Random generation
 ^^^^^^^^^^^^^^^^^
 
+.. function:: RAND_bytes(num)
+
+   Returns *num* cryptographically strong pseudo-random bytes. Raises an
+   :class:`SSLError` if the PRNG has not been seeded with enough data or if the
+   operation is not supported by the current RAND method. :func:`RAND_status`
+   can be used to check the status of the PRNG and :func:`RAND_add` can be used
+   to seed the PRNG.
+
+   Read the Wikipedia article, `Cryptographically secure pseudorandom number
+   generator (CSPRNG)
+   <http://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator>`_,
+   to get the requirements of a cryptographically generator.
+
+   .. versionadded:: 3.3
+
+.. function:: RAND_pseudo_bytes(num)
+
+   Returns (bytes, is_cryptographic): bytes are *num* pseudo-random bytes,
+   is_cryptographic is True if the bytes generated are cryptographically
+   strong. Raises an :class:`SSLError` if the operation is not supported by the
+   current RAND method.
+
+   Generated pseudo-random byte sequences will be unique if they are of
+   sufficient length, but are not necessarily unpredictable. They can be used
+   for non-cryptographic purposes and for certain purposes in cryptographic
+   protocols, but usually not for key generation etc.
+
+   .. versionadded:: 3.3
+
 .. function:: RAND_status()
 
    Returns True if the SSL pseudo-random number generator has been seeded with
@@ -171,7 +200,7 @@ Random generation
 
 .. function:: RAND_egd(path)
 
-   If you are running an entropy-gathering daemon (EGD) somewhere, and ``path``
+   If you are running an entropy-gathering daemon (EGD) somewhere, and *path*
    is the pathname of a socket connection open to it, this will read 256 bytes
    of randomness from the socket, and add it to the SSL pseudo-random number
    generator to increase the security of generated secret keys.  This is
@@ -182,8 +211,8 @@ Random generation
 
 .. function:: RAND_add(bytes, entropy)
 
-   Mixes the given ``bytes`` into the SSL pseudo-random number generator.  The
-   parameter ``entropy`` (a float) is a lower bound on the entropy contained in
+   Mixes the given *bytes* into the SSL pseudo-random number generator.  The
+   parameter *entropy* (a float) is a lower bound on the entropy contained in
    string (so you can always use :const:`0.0`).  See :rfc:`1750` for more
    information on sources of entropy.
 
@@ -238,6 +267,9 @@ Certificate handling
    same format as used for the same parameter in :func:`wrap_socket`.  The call
    will attempt to validate the server certificate against that set of root
    certificates, and will fail if the validation attempt fails.
+
+   .. versionchanged:: 3.3
+      This function is now IPv6-compatible.
 
 .. function:: DER_cert_to_PEM_cert(DER_cert_bytes)
 
@@ -354,6 +386,13 @@ Constants
 
    .. versionadded:: 3.2
 
+.. data:: CHANNEL_BINDING_TYPES
+
+   List of supported TLS channel binding types.  Strings in this list
+   can be used as arguments to :meth:`SSLSocket.get_channel_binding`.
+
+   .. versionadded:: 3.3
+
 .. data:: OPENSSL_VERSION
 
    The version string of the OpenSSL library loaded by the interpreter::
@@ -463,6 +502,18 @@ SSL sockets also have the following additional methods and attributes:
    version of the SSL protocol that defines its use, and the number of secret
    bits being used.  If no connection has been established, returns ``None``.
 
+.. method:: SSLSocket.get_channel_binding(cb_type="tls-unique")
+
+   Get channel binding data for current connection, as a bytes object.  Returns
+   ``None`` if not connected or the handshake has not been completed.
+
+   The *cb_type* parameter allow selection of the desired channel binding
+   type. Valid channel binding types are listed in the
+   :data:`CHANNEL_BINDING_TYPES` list.  Currently only the 'tls-unique' channel
+   binding, defined by :rfc:`5929`, is supported.  :exc:`ValueError` will be
+   raised if an unsupported channel binding type is requested.
+
+   .. versionadded:: 3.3
 
 .. method:: SSLSocket.unwrap()
 
@@ -502,7 +553,7 @@ to speed up repeated connections from the same clients.
 
 :class:`SSLContext` objects have the following methods and attributes:
 
-.. method:: SSLContext.load_cert_chain(certfile, keyfile=None)
+.. method:: SSLContext.load_cert_chain(certfile, keyfile=None, password=None)
 
    Load a private key and the corresponding certificate.  The *certfile*
    string must be the path to a single file in PEM format containing the
@@ -513,8 +564,24 @@ to speed up repeated connections from the same clients.
    :ref:`ssl-certificates` for more information on how the certificate
    is stored in the *certfile*.
 
+   The *password* argument may be a function to call to get the password for
+   decrypting the private key.  It will only be called if the private key is
+   encrypted and a password is necessary.  It will be called with no arguments,
+   and it should return a string, bytes, or bytearray.  If the return value is
+   a string it will be encoded as UTF-8 before using it to decrypt the key.
+   Alternatively a string, bytes, or bytearray value may be supplied directly
+   as the *password* argument.  It will be ignored if the private key is not
+   encrypted and no password is needed.
+
+   If the *password* argument is not specified and a password is required,
+   OpenSSL's built-in password prompting mechanism will be used to
+   interactively prompt the user for a password.
+
    An :class:`SSLError` is raised if the private key doesn't
    match with the certificate.
+
+   .. versionchanged:: 3.3
+      New optional argument *password*.
 
 .. method:: SSLContext.load_verify_locations(cafile=None, capath=None)
 
