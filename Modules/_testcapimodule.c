@@ -22,14 +22,7 @@ static PyObject *TestError;     /* set to exception object in init */
 static PyObject *
 raiseTestError(const char* test_name, const char* msg)
 {
-    char buf[2048];
-
-    if (strlen(test_name) + strlen(msg) > sizeof(buf) - 50)
-        PyErr_SetString(TestError, "internal error msg too large");
-    else {
-        PyOS_snprintf(buf, sizeof(buf), "%s: %s", test_name, msg);
-        PyErr_SetString(TestError, buf);
-    }
+    PyErr_Format(TestError, "%s: %s", test_name, msg);
     return NULL;
 }
 
@@ -43,11 +36,9 @@ static PyObject*
 sizeof_error(const char* fatname, const char* typname,
     int expected, int got)
 {
-    char buf[1024];
-    PyOS_snprintf(buf, sizeof(buf),
-        "%.200s #define == %d but sizeof(%.200s) == %d",
+    PyErr_Format(TestError,
+        "%s #define == %d but sizeof(%s) == %d",
         fatname, expected, typname, got);
-    PyErr_SetString(TestError, buf);
     return (PyObject*)NULL;
 }
 
@@ -1009,6 +1000,15 @@ test_k_code(PyObject *self)
     Py_DECREF(tuple);
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+static PyObject *
+getargs_c(PyObject *self, PyObject *args)
+{
+    char c;
+    if (!PyArg_ParseTuple(args, "c", &c))
+        return NULL;
+    return PyBytes_FromStringAndSize(&c, 1);
 }
 
 static PyObject *
@@ -2298,6 +2298,7 @@ static PyMethodDef TestMethods[] = {
         (PyCFunction)test_long_long_and_overflow, METH_NOARGS},
     {"test_L_code",             (PyCFunction)test_L_code,        METH_NOARGS},
 #endif
+    {"getargs_c",               getargs_c,                       METH_VARARGS},
     {"getargs_s",               getargs_s,                       METH_VARARGS},
     {"getargs_s_star",          getargs_s_star,                  METH_VARARGS},
     {"getargs_s_hash",          getargs_s_hash,                  METH_VARARGS},
