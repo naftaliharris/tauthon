@@ -226,6 +226,17 @@ process and user.
    Availability: Unix.
 
 
+.. function:: getgrouplist(user, group)
+
+   Return list of group ids that *user* belongs to. If *group* is not in the
+   list, it is included; typically, *group* is specified as the group ID
+   field from the password record for *user*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: getgroups()
 
    Return list of supplemental group ids associated with the current process.
@@ -293,6 +304,22 @@ process and user.
    .. versionchanged:: 3.2
       Added support for Windows.
 
+.. function:: getpriority(which, who)
+
+   .. index:: single: process; scheduling priority
+
+   Get program scheduling priority. The value *which* is one of
+   :const:`PRIO_PROCESS`, :const:`PRIO_PGRP`, or :const:`PRIO_USER`, and *who*
+   is interpreted relative to *which* (a process identifier for
+   :const:`PRIO_PROCESS`, process group identifier for :const:`PRIO_PGRP`, and a
+   user ID for :const:`PRIO_USER`). A zero value for *who* denotes
+   (respectively) the calling process, the process group of the calling process,
+   or the real user ID of the calling process.
+
+   Availability: Unix
+
+   .. versionadded:: 3.3
+
 .. function:: getresuid()
 
    Return a tuple (ruid, euid, suid) denoting the current process's
@@ -343,6 +370,15 @@ process and user.
 
    .. versionadded:: 3.2
 
+.. data:: PRIO_PROCESS
+          PRIO_PGRP
+          PRIO_USER
+
+   Parameters for :func:`getpriority` and :func:`setpriority` functions.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 .. function:: putenv(key, value)
 
@@ -410,6 +446,25 @@ process and user.
    for the semantics.
 
    Availability: Unix.
+
+
+.. function:: setpriority(which, who, priority)
+
+   .. index:: single: process; scheduling priority
+
+   Set program scheduling priority. The value *which* is one of
+   :const:`PRIO_PROCESS`, :const:`PRIO_PGRP`, or :const:`PRIO_USER`, and *who*
+   is interpreted relative to *which* (a process identifier for
+   :const:`PRIO_PROCESS`, process group identifier for :const:`PRIO_PGRP`, and a
+   user ID for :const:`PRIO_USER`). A zero value for *who* denotes
+   (respectively) the calling process, the process group of the calling process,
+   or the real user ID of the calling process.
+   *priority* is a value in the range -20 to 19. The default priority is 0;
+   lower priorities cause more favorable scheduling.
+
+   Availability: Unix
+
+   .. versionadded:: 3.3
 
 
 .. function:: setregid(rgid, egid)
@@ -569,6 +624,21 @@ associated with a :term:`file object` when required.  Note that using the file
 descriptor directly will bypass the file object methods, ignoring aspects such
 as internal buffering of data.
 
+.. data:: AT_SYMLINK_NOFOLLOW
+          AT_EACCESS
+          AT_FDCWD
+          AT_REMOVEDIR
+          AT_SYMLINK_FOLLOW
+          UTIME_NOW
+          UTIME_OMIT
+
+   These parameters are used as flags to the \*at family of functions.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: close(fd)
 
    Close file descriptor *fd*.
@@ -617,6 +687,19 @@ as internal buffering of data.
    Availability: Unix, Windows.
 
 
+.. function:: faccessat(dirfd, path, mode, flags=0)
+
+   Like :func:`access` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and can be constructed by ORing together zero or more
+   of these values: :data:`AT_SYMLINK_NOFOLLOW`, :data:`AT_EACCESS`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: fchmod(fd, mode)
 
    Change the mode of the file given by *fd* to the numeric *mode*.  See the docs
@@ -625,12 +708,36 @@ as internal buffering of data.
    Availability: Unix.
 
 
+.. function:: fchmodat(dirfd, path, mode, flags=0)
+
+   Like :func:`chmod` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: fchown(fd, uid, gid)
 
    Change the owner and group id of the file given by *fd* to the numeric *uid*
    and *gid*.  To leave one of the ids unchanged, set it to -1.
 
    Availability: Unix.
+
+
+.. function:: fchownat(dirfd, path, uid, gid, flags=0)
+
+   Like :func:`chown` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: fdatasync(fd)
@@ -642,6 +749,27 @@ as internal buffering of data.
 
    .. note::
       This function is not available on MacOS.
+
+
+.. function:: fdlistdir(fd)
+
+   Like :func:`listdir`, but uses a file descriptor instead and always returns
+   strings.  After execution of this function, *fd* will be closed.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: fexecve(fd, args, env)
+
+   Execute the program specified by a file descriptor *fd* with arguments given
+   by *args* and environment given by *env*, replacing the current process.
+   *args* and *env* are given as in :func:`execve`.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: fpathconf(fd, name)
@@ -667,6 +795,17 @@ as internal buffering of data.
    Return status for file descriptor *fd*, like :func:`~os.stat`.
 
    Availability: Unix, Windows.
+
+.. function:: fstatat(dirfd, path, flags=0)
+
+   Like :func:`stat` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: fstatvfs(fd)
@@ -697,6 +836,57 @@ as internal buffering of data.
    Availability: Unix.
 
 
+.. function:: futimesat(dirfd, path, (atime, mtime))
+              futimesat(dirfd, path, None)
+
+   Like :func:`utime` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: futimens(fd, (atime_sec, atime_nsec), (mtime_sec, mtime_nsec))
+              futimens(fd, None, None)
+
+   Updates the timestamps of a file specified by the file descriptor *fd*, with
+   nanosecond precision.
+   The second form sets *atime* and *mtime* to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_NOW`, the corresponding
+   timestamp is updated to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_OMIT`, the corresponding
+   timestamp is not updated.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: UTIME_NOW
+          UTIME_OMIT
+
+   Flags used with :func:`futimens` to specify that the timestamp must be
+   updated either to the current time or not updated at all.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: futimes(fd, (atime, mtime))
+              futimes(fd, None)
+
+   Set the access and modified time of the file specified by the file
+   descriptor *fd* to the given values. If the second form is used, set the
+   access and modified times to the current time.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: isatty(fd)
 
    Return ``True`` if the file descriptor *fd* is open and connected to a
@@ -704,6 +894,44 @@ as internal buffering of data.
 
    Availability: Unix.
 
+
+.. function:: linkat(srcfd, srcpath, dstfd, dstpath, flags=0)
+
+   Like :func:`link` but if *srcpath* is relative, it is taken as relative to *srcfd*
+   and if *dstpath* is relative, it is taken as relative to *dstfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_FOLLOW`.
+   If *srcpath* is relative and *srcfd* is the special value :data:`AT_FDCWD`, then
+   *srcpath* is interpreted relative to the current working directory. This
+   also applies for *dstpath*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: lockf(fd, cmd, len)
+
+   Apply, test or remove a POSIX lock on an open file descriptor.
+   *fd* is an open file descriptor.
+   *cmd* specifies the command to use - one of :data:`F_LOCK`, :data:`F_TLOCK`,
+   :data:`F_ULOCK` or :data:`F_TEST`.
+   *len* specifies the section of the file to lock.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: F_LOCK
+          F_TLOCK
+          F_ULOCK
+          F_TEST
+
+   Flags that specify what action :func:`lockf` will take.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 .. function:: lseek(fd, pos, how)
 
@@ -722,6 +950,39 @@ as internal buffering of data.
 
    Parameters to the :func:`lseek` function. Their values are 0, 1, and 2,
    respectively. Availability: Windows, Unix.
+
+
+.. function:: mkdirat(dirfd, path, mode=0o777)
+
+   Like :func:`mkdir` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: mkfifoat(dirfd, path, mode=0o666)
+
+   Like :func:`mkfifo` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: mknodat(dirfd, path, mode=0o600, device=0)
+
+   Like :func:`mknod` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: open(file, flags[, mode])
@@ -746,6 +1007,17 @@ as internal buffering of data.
       wrap a file descriptor in a file object, use :func:`fdopen`.
 
 
+.. function:: openat(dirfd, path, flags, mode=0o777)
+
+   Like :func:`open` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: openpty()
 
    .. index:: module: pty
@@ -765,6 +1037,79 @@ as internal buffering of data.
    Availability: Unix, Windows.
 
 
+.. function:: pipe2(flags)
+
+   Create a pipe with *flags* set atomically.
+   *flags* can be constructed by ORing together one or more of these values:
+   :data:`O_NONBLOCK`, :data:`O_CLOEXEC`.
+   Return a pair of file descriptors ``(r, w)`` usable for reading and writing,
+   respectively.
+
+   Availability: some flavors of Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: posix_fallocate(fd, offset, len)
+
+   Ensures that enough disk space is allocated for the file specified by *fd*
+   starting from *offset* and continuing for *len* bytes.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: posix_fadvise(fd, offset, len, advice)
+
+   Announces an intention to access data in a specific pattern thus allowing
+   the kernel to make optimizations.
+   The advice applies to the region of the file specified by *fd* starting at
+   *offset* and continuing for *len* bytes.
+   *advice* is one of :data:`POSIX_FADV_NORMAL`, :data:`POSIX_FADV_SEQUENTIAL`,
+   :data:`POSIX_FADV_RANDOM`, :data:`POSIX_FADV_NOREUSE`,
+   :data:`POSIX_FADV_WILLNEED` or :data:`POSIX_FADV_DONTNEED`.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: POSIX_FADV_NORMAL
+          POSIX_FADV_SEQUENTIAL
+          POSIX_FADV_RANDOM
+          POSIX_FADV_NOREUSE
+          POSIX_FADV_WILLNEED
+          POSIX_FADV_DONTNEED
+
+   Flags that can be used in *advice* in :func:`posix_fadvise` that specify
+   the access pattern that is likely to be used.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: pread(fd, buffersize, offset)
+
+   Read from a file descriptor, *fd*, at a position of *offset*. It will read up
+   to *buffersize* number of bytes. The file offset remains unchanged.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: pwrite(fd, string, offset)
+
+   Write *string* to a file descriptor, *fd*, from *offset*, leaving the file
+   offset unchanged.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: read(fd, n)
 
    Read at most *n* bytes from file descriptor *fd*. Return a bytestring containing the
@@ -780,6 +1125,93 @@ as internal buffering of data.
       returned by the built-in function :func:`open` or by :func:`popen` or
       :func:`fdopen`, or :data:`sys.stdin`, use its :meth:`~file.read` or
       :meth:`~file.readline` methods.
+
+
+.. function:: sendfile(out, in, offset, nbytes)
+              sendfile(out, in, offset, nbytes, headers=None, trailers=None, flags=0)
+
+   Copy *nbytes* bytes from file descriptor *in* to file descriptor *out*
+   starting at *offset*.
+   Return the number of bytes sent. When EOF is reached return 0.
+
+   The first function notation is supported by all platforms that define
+   :func:`sendfile`.
+
+   On Linux, if *offset* is given as ``None``, the bytes are read from the
+   current position of *in* and the position of *in* is updated.
+
+   The second case may be used on Mac OS X and FreeBSD where *headers* and
+   *trailers* are arbitrary sequences of buffers that are written before and
+   after the data from *in* is written. It returns the same as the first case.
+
+   On Mac OS X and FreeBSD, a value of 0 for *nbytes* specifies to send until
+   the end of *in* is reached.
+
+   On Solaris, *out* may be the file descriptor of a regular file or the file
+   descriptor of a socket. On all other platforms, *out* must be the file
+   descriptor of an open socket.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: SF_NODISKIO
+          SF_MNOWAIT
+          SF_SYNC
+
+   Parameters to the :func:`sendfile` function, if the implementation supports
+   them.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: readlinkat(dirfd, path)
+
+   Like :func:`readlink` but if *path* is relative, it is taken as relative to *dirfd*.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: renameat(olddirfd, oldpath, newdirfd, newpath)
+
+   Like :func:`rename` but if *oldpath* is relative, it is taken as relative to
+   *olddirfd* and if *newpath* is relative, it is taken as relative to *newdirfd*.
+   If *oldpath* is relative and *olddirfd* is the special value :data:`AT_FDCWD`, then
+   *oldpath* is interpreted relative to the current working directory. This
+   also applies for *newpath*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: symlinkat(src, dstfd, dst)
+
+   Like :func:`symlink` but if *dst* is relative, it is taken as relative to *dstfd*.
+   If *dst* is relative and *dstfd* is the special value :data:`AT_FDCWD`, then *dst*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: readv(fd, buffers)
+
+   Read from a file descriptor into a number of writable buffers. *buffers* is
+   an arbitrary sequence of writable buffers. Returns the total number of bytes
+   read.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: tcgetpgrp(fd)
@@ -807,6 +1239,38 @@ as internal buffering of data.
    Availability: Unix.
 
 
+.. function:: unlinkat(dirfd, path, flags=0)
+
+   Like :func:`unlink` but if *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_REMOVEDIR`. If :data:`AT_REMOVEDIR` is
+   specified, :func:`unlinkat` behaves like :func:`rmdir`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: utimensat(dirfd, path, (atime_sec, atime_nsec), (mtime_sec, mtime_nsec), flags)
+              utimensat(dirfd, path, None, None, flags)
+
+   Updates the timestamps of a file with nanosecond precision.
+   The second form sets *atime* and *mtime* to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_NOW`, the corresponding
+   timestamp is updated to the current time.
+   If *atime_nsec* or *mtime_nsec* is specified as :data:`UTIME_OMIT`, the corresponding
+   timestamp is not updated.
+   If *path* is relative, it is taken as relative to *dirfd*.
+   *flags* is optional and may be 0 or :data:`AT_SYMLINK_NOFOLLOW`.
+   If *path* is relative and *dirfd* is the special value :data:`AT_FDCWD`, then *path*
+   is interpreted relative to the current working directory.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: write(fd, str)
 
    Write the bytestring in *str* to file descriptor *fd*. Return the number of
@@ -821,6 +1285,17 @@ as internal buffering of data.
       object" returned by the built-in function :func:`open` or by :func:`popen` or
       :func:`fdopen`, or :data:`sys.stdout` or :data:`sys.stderr`, use its
       :meth:`~file.write` method.
+
+
+.. function:: writev(fd, buffers)
+
+   Write the the contents of *buffers* to file descriptor *fd*, where *buffers*
+   is an arbitrary sequence of buffers.
+   Returns the total number of bytes written.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. _open-constants:
@@ -854,6 +1329,7 @@ or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Window
           O_NOCTTY
           O_SHLOCK
           O_EXLOCK
+          O_CLOEXEC
 
    These constants are only available on Unix.
 
@@ -1054,6 +1530,9 @@ Files and Directories
    Change the owner and group id of *path* to the numeric *uid* and *gid*. To leave
    one of the ids unchanged, set it to -1.
 
+   See :func:`shutil.chown` for a higher-level function that accepts names in
+   addition to numeric ids.
+
    Availability: Unix.
 
 
@@ -1115,6 +1594,17 @@ Files and Directories
 
    .. versionchanged:: 3.2
       Added support for Windows 6.0 (Vista) symbolic links.
+
+
+.. function:: lutimes(path, (atime, mtime))
+              lutimes(path, None)
+
+   Like :func:`utime`, but if *path* is a symbolic link, it is not
+   dereferenced.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: mkfifo(path[, mode])
@@ -1459,6 +1949,25 @@ Files and Directories
 
    .. versionchanged:: 3.2
       Added support for Windows 6.0 (Vista) symbolic links.
+
+
+.. function:: sync()
+
+   Force write of everything to disk.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: truncate(path, length)
+
+   Truncate the file corresponding to *path*, so that it is at most
+   *length* bytes in size.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: unlink(path)
@@ -1833,6 +2342,8 @@ written in Python, such as a mail server's external command delivery program.
    will be set to *sig*. The Windows version of :func:`kill` additionally takes
    process handles to be killed.
 
+   See also :func:`signal.pthread_kill`.
+
    .. versionadded:: 3.2
       Windows support.
 
@@ -2043,6 +2554,58 @@ written in Python, such as a mail server's external command delivery program.
 
    Availability: Unix.
 
+.. function:: waitid(idtype, id, options)
+
+   Wait for the completion of one or more child processes.
+   *idtype* can be :data:`P_PID`, :data:`P_PGID` or :data:`P_ALL`.
+   *id* specifies the pid to wait on.
+   *options* is constructed from the ORing of one or more of :data:`WEXITED`,
+   :data:`WSTOPPED` or :data:`WCONTINUED` and additionally may be ORed with
+   :data:`WNOHANG` or :data:`WNOWAIT`. The return value is an object
+   representing the data contained in the :c:type:`siginfo_t` structure, namely:
+   :attr:`si_pid`, :attr:`si_uid`, :attr:`si_signo`, :attr:`si_status`,
+   :attr:`si_code` or ``None`` if :data:`WNOHANG` is specified and there are no
+   children in a waitable state.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+.. data:: P_PID
+          P_PGID
+          P_ALL
+
+   These are the possible values for *idtype* in :func:`waitid`. They affect
+   how *id* is interpreted.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+.. data:: WEXITED
+          WSTOPPED
+          WNOWAIT
+
+   Flags that can be used in *options* in :func:`waitid` that specify what
+   child signal to wait for.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLD_EXITED
+          CLD_DUMPED
+          CLD_TRAPPED
+          CLD_CONTINUED
+
+   These are the possible values for :attr:`si_code` in the result returned by
+   :func:`waitid`.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
 
 .. function:: waitpid(pid, options)
 
@@ -2182,6 +2745,155 @@ used to determine the disposition of a process.
    Return the signal which caused the process to exit.
 
    Availability: Unix.
+
+
+Interface to the scheduler
+--------------------------
+
+These functions control how a process is allocated CPU time by the operating
+system. They are only available on some Unix platforms. For more detailed
+information, consult your Unix manpages.
+
+.. versionadded:: 3.3
+
+The following scheduling policies are exposed if they are a supported by the
+operating system.
+
+.. data:: SCHED_OTHER
+
+   The default scheduling policy.
+
+.. data:: SCHED_BATCH
+
+   Scheduling policy for CPU-intensive processes that tries to preserve
+   interactivity on the rest of the computer.
+
+.. data:: SCHED_IDLE
+
+   Scheduling policy for extremely low priority background tasks.
+
+.. data:: SCHED_SPORADIC
+
+   Scheduling policy for sporadic server programs.
+
+.. data:: SCHED_FIFO
+
+   A First In First Out scheduling policy.
+
+.. data:: SCHED_RR
+
+   A round-robin scheduling policy.
+
+.. data:: SCHED_RESET_ON_FORK
+
+   This flag can OR'ed with any other scheduling policy. When a process with
+   this flag set forks, its child's scheduling policy and priority are reset to
+   the default.
+
+
+.. class:: sched_param(sched_priority)
+
+   This class represents tunable scheduling parameters used in
+   :func:`sched_setparam`, :func:`sched_setscheduler`, and
+   :func:`sched_getparam`. It is immutable.
+
+   At the moment, there is only one possible parameter:
+
+   .. attribute:: sched_priority
+
+      The scheduling priority for a scheduling policy.
+
+
+.. function:: sched_get_priority_min(policy)
+
+   Get the minimum priority value for *policy*. *policy* is one of the
+   scheduling policy constants above.
+
+
+.. function:: sched_get_priority_max(policy)
+
+   Get the maximum priority value for *policy*. *policy* is one of the
+   scheduling policy constants above.
+
+
+.. function:: sched_setscheduler(pid, policy, param)
+
+   Set the scheduling policy for the process with PID *pid*. A *pid* of 0 means
+   the calling process. *policy* is one of the scheduling policy constants
+   above. *param* is a :class:`sched_param` instance.
+
+
+.. function:: sched_getscheduler(pid)
+
+   Return the scheduling policy for the process with PID *pid*. A *pid* of 0
+   means the calling process. The result is one of the scheduling policy
+   constants above.
+
+
+.. function:: sched_setparam(pid, param)
+
+   Set a scheduling parameters for the process with PID *pid*. A *pid* of 0 means
+   the calling process. *param* is a :class:`sched_param` instance.
+
+
+.. function:: sched_getparam(pid)
+
+   Return the scheduling parameters as a :class:`sched_param` instance for the
+   process with PID *pid*. A *pid* of 0 means the calling process.
+
+
+.. function:: sched_rr_get_interval(pid)
+
+   Return the round-robin quantum in seconds for the process with PID *pid*. A
+   *pid* of 0 means the calling process.
+
+
+.. function:: sched_yield()
+
+   Voluntarily relinquish the CPU.
+
+
+.. class:: cpu_set(ncpus)
+
+   :class:`cpu_set` represents a set of CPUs on which a process is eligible to
+   run. *ncpus* is the number of CPUs the set should describe. Methods on
+   :class:`cpu_set` allow CPUs to be add or removed.
+
+   :class:`cpu_set` supports the AND, OR, and XOR bitwise operations. For
+   example, given two cpu_sets, ``one`` and ``two``, ``one | two`` returns a
+   :class:`cpu_set` containing the cpus enabled both in ``one`` and ``two``.
+
+   .. method:: set(i)
+
+      Enable CPU *i*.
+
+   .. method:: clear(i)
+
+      Remove CPU *i*.
+
+   .. method:: isset(i)
+
+      Return ``True`` if CPU *i* is enabled in the set.
+
+   .. method:: count()
+
+      Return the number of enabled CPUs in the set.
+
+   .. method:: zero()
+
+      Clear the set completely.
+
+
+.. function:: sched_setaffinity(pid, mask)
+
+   Restrict the process with PID *pid* to a set of CPUs. *mask* is a
+   :class:`cpu_set` instance.
+
+
+.. function:: sched_getaffinity(pid, size)
+
+   Return the :class:`cpu_set` the process with PID *pid* is restricted to. The
+   result will contain *size* CPUs.
 
 
 .. _os-path:
