@@ -25,6 +25,12 @@ Library
 - Issue #10946: The distutils commands bdist_dumb, bdist_wininst and bdist_msi
   now respect a --skip-build option given to bdist.
 
+- Issue #12847: Fix a crash with negative PUT and LONG_BINPUT arguments in
+  the C pickle implementation.
+
+- Issue #11564: Avoid crashes when trying to pickle huge objects or containers
+  (more than 2**31 items).  Instead, in most cases, an OverflowError is raised.
+
 - Issue #12287: Fix a stack corruption in ossaudiodev module when the FD is
   greater than FD_SETSIZE.
 
