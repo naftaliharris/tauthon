@@ -209,6 +209,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * David Turner
    * Sandro Tosi
    * Ville Vainio
+   * Nadeem Vawda
    * Martijn Vries
    * Charles G. Waldman
    * Greg Ward
