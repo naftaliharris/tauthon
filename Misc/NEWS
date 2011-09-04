@@ -2,6 +2,57 @@
 Python News
 +++++++++++
 
+What's New in Python 3.2.3?
+===========================
+
+*Release date: XX-XXX-2011*
+
+Core and Builtins
+-----------------
+
+- Issue #12802: the Windows error ERROR_DIRECTORY (numbered 267) is now
+  mapped to POSIX errno ENOTDIR (previously EINVAL).
+
+- Issue #9200: The str.is* methods now work with strings that contain non-BMP
+  characters even in narrow Unicode builds.
+
+- Issue #12791: Break reference cycles early when a generator exits with
+  an exception.
+
+- Issue #12266: Fix str.capitalize() to correctly uppercase/lowercase
+  titlecased and cased non-letter characters.
+
+Library
+-------
+
+- Issue #12878: Expose a __dict__ attribute on io.IOBase and its subclasses.
+
+- Issue #12636: IDLE reads the coding cookie when executing a Python script.
+
+- Issue #12847: Fix a crash with negative PUT and LONG_BINPUT arguments in
+  the C pickle implementation.
+
+- Issue #11564: Avoid crashes when trying to pickle huge objects or containers
+  (more than 2**31 items).  Instead, in most cases, an OverflowError is raised.
+
+- Issue #12287: Fix a stack corruption in ossaudiodev module when the FD is
+  greater than FD_SETSIZE.
+
+- Issue #11657: Fix sending file descriptors over 255 over a multiprocessing
+  Pipe.
+
+- Issue #12213: Fix a buffering bug with interleaved reads and writes that
+  could appear on BufferedRandom streams.
+
+- Issue #12650: Fix a race condition where a subprocess.Popen could leak
+  resources (FD/zombie) when killed at the wrong time.
+
+Tests
+-----
+
+- Issue #12821: Fix test_fcntl failures on OpenBSD 5.
+
+
 What's New in Python 3.2.2?
 ===========================
 
@@ -60,7 +111,7 @@ Core and Builtins
 - Issue #11627: Fix segfault when __new__ on a exception returns a
   non-exception class.
 
-- Issue #12149: Update the method cache after a type's dictionnary gets
+- Issue #12149: Update the method cache after a type's dictionary gets
   cleared by the garbage collector.  This fixes a segfault when an instance
   and its type get caught in a reference cycle, and the instance's
   deallocator calls one of the methods on the type (e.g. when subclassing
@@ -162,6 +213,11 @@ Library
 
 Extension Modules
 -----------------
+
+- Issue #12764: Fix a crash in ctypes when the name of a Structure field is not
+  a string.
+
+- Issue #11241: subclasses of ctypes.Array can now be subclassed.
 
 - Issue #10309: Define _GNU_SOURCE so that mremap() gets the proper
   signature.  Without this, architectures where sizeof void* != sizeof int are
