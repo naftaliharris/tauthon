@@ -3,19 +3,33 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.2)
+m4_define(PYTHON_VERSION, 3.3)
 
-dnl Some m4 magic to ensure that the configure script is generated
-dnl by the correct autoconf version.
-m4_define([version_required],
-[m4_if(m4_version_compare(m4_defn([m4_PACKAGE_VERSION]), [$1]), 0,
-       [],
-       [m4_fatal([Autoconf version $1 is required for Python], 63)])
-])
 AC_PREREQ(2.65)
 
-AC_REVISION($Revision$)
 AC_INIT(python, PYTHON_VERSION, http://bugs.python.org/)
+
+AC_SUBST(HGVERSION)
+AC_SUBST(HGTAG)
+AC_SUBST(HGBRANCH)
+
+if test -e $srcdir/.hg/dirstate
+then
+AC_CHECK_PROG(HAS_HG, hg, found, not-found)
+else
+HAS_HG=no-repository
+fi
+if test $HAS_HG = found
+then
+    HGVERSION="hg id -i \$(srcdir)"
+    HGTAG="hg id -t \$(srcdir)"
+    HGBRANCH="hg id -b \$(srcdir)"
+else
+    HGVERSION=""
+    HGTAG=""
+    HGBRANCH=""
+fi
+
 AC_CONFIG_SRCDIR([Include/object.h])
 AC_CONFIG_HEADER(pyconfig.h)
 
@@ -290,7 +304,7 @@ then
 	MACHDEP="$ac_md_system$ac_md_release"
 
 	case $MACHDEP in
-	linux*) MACHDEP="linux2";;
+	linux*) MACHDEP="linux";;
 	cygwin*) MACHDEP="cygwin";;
 	darwin*) MACHDEP="darwin";;
         irix646) MACHDEP="irix6";;
@@ -783,11 +797,6 @@ if test $enable_shared = "yes"; then
 	  BLDLIBRARY='-Wl,+b,$(LIBDIR) -L. -lpython$(LDVERSION)'
 	  RUNSHARED=SHLIB_PATH=`pwd`:${SHLIB_PATH}
 	  ;;
-    OSF*)
-	  LDLIBRARY='libpython$(LDVERSION).so'
-	  BLDLIBRARY='-rpath $(LIBDIR) -L. -lpython$(LDVERSION)'
-	  RUNSHARED=LD_LIBRARY_PATH=`pwd`:${LD_LIBRARY_PATH}
-	  ;;
     Darwin*)
     	LDLIBRARY='libpython$(LDVERSION).dylib'
 	BLDLIBRARY='-L. -lpython$(LDVERSION)'
@@ -819,36 +828,6 @@ AC_SUBST(ARFLAGS)
 if test -z "$ARFLAGS"
 then
         ARFLAGS="rc"
-fi
-
-AC_SUBST(SVNVERSION)
-AC_CHECK_PROG(SVNVERSION, svnversion, found, not-found)
-if test $SVNVERSION = found
-then
-	SVNVERSION="svnversion \$(srcdir)"
-else
-	SVNVERSION="echo Unversioned directory"
-fi
-
-AC_SUBST(HGVERSION)
-AC_SUBST(HGTAG)
-AC_SUBST(HGBRANCH)
-
-if test -e $srcdir/.hg/dirstate
-then
-AC_CHECK_PROG(HAS_HG, hg, found, not-found)
-else
-HAS_HG=no-repository
-fi
-if test $HAS_HG = found
-then
-    HGVERSION="hg id -i \$(srcdir)"
-    HGTAG="hg id -t \$(srcdir)"
-    HGBRANCH="hg id -b \$(srcdir)"
-else
-    HGVERSION=""
-    HGTAG=""
-    HGBRANCH=""
 fi
 
 AC_SUBST(DISABLE_ASDLGEN)
@@ -1112,9 +1091,6 @@ yes)
 	    EXPORT_MACOSX_DEPLOYMENT_TARGET=''
 
 	    ;;
-	OSF*)
-	    BASECFLAGS="$BASECFLAGS -mieee"
-	    ;;
     esac
     ;;
 
@@ -1123,9 +1099,6 @@ yes)
     OpenUNIX*|UnixWare*)
 	BASECFLAGS="$BASECFLAGS -K pentium,host,inline,loop_unroll,alloca "
 	;;
-    OSF*)
-	BASECFLAGS="$BASECFLAGS -ieee -std"
-    	;;
     SCO_SV*)
 	BASECFLAGS="$BASECFLAGS -belf -Ki486 -DSCO5"
 	;;
@@ -1326,20 +1299,37 @@ dnl AC_MSG_RESULT($cpp_type)
 
 # checks for header files
 AC_HEADER_STDC
-AC_CHECK_HEADERS(asm/types.h conio.h curses.h direct.h dlfcn.h errno.h \
+AC_CHECK_HEADERS(asm/types.h attr/xattr.h conio.h curses.h direct.h dlfcn.h errno.h \
 fcntl.h grp.h \
 ieeefp.h io.h langinfo.h libintl.h ncurses.h poll.h process.h pthread.h \
-shadow.h signal.h stdint.h stropts.h termios.h thread.h \
+sched.h shadow.h signal.h stdint.h stropts.h termios.h \
 unistd.h utime.h \
 sys/audioio.h sys/bsdtty.h sys/epoll.h sys/event.h sys/file.h sys/loadavg.h \
 sys/lock.h sys/mkdev.h sys/modem.h \
-sys/param.h sys/poll.h sys/select.h sys/socket.h sys/statvfs.h sys/stat.h \
-sys/termio.h sys/time.h \
-sys/times.h sys/types.h sys/un.h sys/utsname.h sys/wait.h pty.h libutil.h \
-sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
+sys/param.h sys/poll.h sys/select.h sys/sendfile.h sys/socket.h sys/statvfs.h \
+sys/stat.h sys/termio.h sys/time.h \
+sys/times.h sys/types.h sys/uio.h sys/un.h sys/utsname.h sys/wait.h pty.h \
+libutil.h sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
 bluetooth/bluetooth.h linux/tipc.h spawn.h util.h)
 AC_HEADER_DIRENT
 AC_HEADER_MAJOR
+
+# On Darwin (OS X) net/if.h requires sys/socket.h to be imported first.
+AC_CHECK_HEADERS([net/if.h], [], [],
+[#include <stdio.h>
+#ifdef STDC_HEADERS
+# include <stdlib.h>
+# include <stddef.h>
+#else
+# ifdef HAVE_STDLIB_H
+#  include <stdlib.h>
+# endif
+#endif
+#ifdef HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif
+])
+
 
 # On Solaris, term.h requires curses.h
 AC_CHECK_HEADERS(term.h,,,[
@@ -1366,7 +1356,6 @@ AC_EGREP_HEADER(clock_t, time.h, was_it_defined=yes, [
 ])
 AC_MSG_RESULT($was_it_defined)
 
-# Check whether using makedev requires defining _OSF_SOURCE
 AC_MSG_CHECKING(for makedev)
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 #if defined(MAJOR_IN_MKDEV)
@@ -1379,19 +1368,6 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 ]], [[
   makedev(0, 0) ]])
 ],[ac_cv_has_makedev=yes],[ac_cv_has_makedev=no])
-if test "$ac_cv_has_makedev" = "no"; then
-    # we didn't link, try if _OSF_SOURCE will allow us to link
-    AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-#define _OSF_SOURCE 1
-#include <sys/types.h>
-    ]],
-    [[ makedev(0, 0) ]])],
-    [ac_cv_has_makedev=yes],
-    [ac_cv_has_makedev=no])
-    if test "$ac_cv_has_makedev" = "yes"; then
-        AC_DEFINE(_OSF_SOURCE, 1, [Define _OSF_SOURCE to get the makedev macro.])
-    fi
-fi
 AC_MSG_RESULT($ac_cv_has_makedev)
 if test "$ac_cv_has_makedev" = "yes"; then
     AC_DEFINE(HAVE_MAKEDEV, 1, [Define this if you have the makedev macro.])
@@ -1711,7 +1687,6 @@ then
 		else
 			LDSHARED='ld -b'
 		fi ;;
-	OSF*) LDSHARED="ld -shared -expect_unresolved \"*\"";;
 	Darwin/1.3*)
 		LDSHARED='$(CC) -bundle'
 		LDCXXSHARED='$(CXX) -bundle'
@@ -1941,6 +1916,7 @@ AC_MSG_RESULT($SHLIBS)
 
 
 # checks for libraries
+AC_CHECK_LIB(sendfile, sendfile)
 AC_CHECK_LIB(dl, dlopen)	# Dynamic linking for SunOS/Solaris and SYSV
 AC_CHECK_LIB(dld, shl_load)	# Dynamic linking for HP-UX
 
@@ -2065,21 +2041,10 @@ fi
 AC_SUBST(USE_THREAD_MODULE)
 USE_THREAD_MODULE=""
 
-AC_MSG_CHECKING(for --with-dec-threads)
 AC_SUBST(LDLAST)
-AC_ARG_WITH(dec-threads,
-            AS_HELP_STRING([--with-dec-threads], [use DEC Alpha/OSF1 thread-safe libraries]),
-[
-AC_MSG_RESULT($withval)
-LDLAST=-threads
-if test "${with_thread+set}" != set; then
-   with_thread="$withval";
-fi],
-[AC_MSG_RESULT(no)])
 
 # Templates for things AC_DEFINEd more than once.
 # For a single AC_DEFINE, no template is needed.
-AH_TEMPLATE(C_THREADS,[Define if you have the Mach cthreads package])
 AH_TEMPLATE(_REENTRANT,
   [Define to force use of thread-safe errno, h_errno, and other functions])
 AH_TEMPLATE(WITH_THREAD,
@@ -2161,17 +2126,6 @@ yes
     AC_MSG_RESULT($unistd_defines_pthreads)
 
     AC_DEFINE(_REENTRANT)
-    AC_CHECK_HEADER(cthreads.h, [AC_DEFINE(WITH_THREAD)
-    AC_DEFINE(C_THREADS)
-    AC_DEFINE(HURD_C_THREADS, 1,
-    [Define if you are using Mach cthreads directly under /include])
-    LIBS="$LIBS -lthreads"
-    THREADOBJ="Python/thread.o"],[
-    AC_CHECK_HEADER(mach/cthreads.h, [AC_DEFINE(WITH_THREAD)
-    AC_DEFINE(C_THREADS)
-    AC_DEFINE(MACH_C_THREADS, 1,
-    [Define if you are using Mach cthreads under mach /])
-    THREADOBJ="Python/thread.o"],[
     # Just looking for pthread_create in libpthread is not enough:
     # on HP/UX, pthread.h renames pthread_create to a different symbol name.
     # So we really have to include pthread.h, and then link.
@@ -2207,7 +2161,7 @@ pthread_create (NULL, NULL, start_routine, NULL)]])],[
     LIBS="$LIBS -lcma"
     THREADOBJ="Python/thread.o"],[
     USE_THREAD_MODULE="#"])
-    ])])])])])])])
+    ])])])])])
 
     AC_CHECK_LIB(mpc, usconfig, [AC_DEFINE(WITH_THREAD)
     LIBS="$LIBS -lmpc"
@@ -2219,15 +2173,6 @@ pthread_create (NULL, NULL, start_routine, NULL)]])],[
       LIBS="$LIBS -lthread"
       THREADOBJ="Python/thread.o"
       USE_THREAD_MODULE=""])
-    fi
-
-    if test "$USE_THREAD_MODULE" != "#"
-    then
-        # If the above checks didn't disable threads, (at least) OSF1
-        # needs this '-threads' argument during linking.
-        case $ac_sys_system in
-        OSF1) LDLAST=-threads;;
-        esac
     fi
 fi
 
@@ -2580,19 +2525,25 @@ AC_MSG_RESULT(MACHDEP_OBJS)
 
 # checks for library functions
 AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
- clock confstr ctermid execv fchmod fchown fork fpathconf ftime ftruncate \
- gai_strerror getgroups getlogin getloadavg getpeername getpgid getpid \
+ clock confstr ctermid execv faccessat fchmod fchmodat fchown fchownat \
+ fexecve fdopendir fork fpathconf fstatat ftime ftruncate futimesat \
+ futimens futimes gai_strerror \
+ getgrouplist getgroups getlogin getloadavg getpeername getpgid getpid \
  getpriority getresuid getresgid getpwent getspnam getspent getsid getwd \
- initgroups kill killpg lchmod lchown lstat mbrtowc mkfifo mknod mktime \
- mremap nice pathconf pause plock poll pthread_init \
- putenv readlink realpath \
- select sem_open sem_timedwait sem_getvalue sem_unlink setegid seteuid \
- setgid \
- setlocale setregid setreuid setresuid setresgid setsid setpgid setpgrp setuid setvbuf \
- sigaction siginterrupt sigrelse snprintf strftime strlcpy \
+ if_nameindex \
+ initgroups kill killpg lchmod lchown lockf linkat lstat lutimes mbrtowc mkdirat mkfifo \
+ mkfifoat mknod mknodat mktime mremap nice openat pathconf pause pipe2 plock poll \
+ posix_fallocate posix_fadvise pread \
+ pthread_init pthread_kill putenv pwrite readlink readlinkat readv realpath renameat \
+ select sem_open sem_timedwait sem_getvalue sem_unlink sendfile setegid seteuid \
+ setgid sethostname \
+ setlocale setregid setreuid setresuid setresgid setsid setpgid setpgrp setpriority setuid setvbuf \
+ sched_setaffinity sched_setscheduler sched_setparam sched_rr_get_interval \
+ sigaction sigaltstack siginterrupt sigpending sigrelse \
+ sigtimedwait sigwait sigwaitinfo snprintf strftime strlcpy symlinkat sync \
  sysconf tcgetpgrp tcsetpgrp tempnam timegm times tmpfile tmpnam tmpnam_r \
- truncate uname unsetenv utimes waitpid wait3 wait4 \
- wcscoll wcsftime wcsxfrm _getpty)
+ truncate uname unlinkat unsetenv utimensat utimes waitid waitpid wait3 wait4 \
+ wcscoll wcsftime wcsxfrm writev _getpty)
 
 # For some functions, having a definition is not sufficient, since
 # we want to take their address.
@@ -2686,6 +2637,15 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <unistd.h>
 ]], [[void* p = getpagesize]])],
   [AC_DEFINE(HAVE_GETPAGESIZE, 1, Define if you have the 'getpagesize' function.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
+
+AC_MSG_CHECKING(whether mallopt can set malloc mmap threshold)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <malloc.h>
+]], [[mallopt(M_MMAP_THRESHOLD, 256 * 1024)]])],
+  [AC_DEFINE(HAVE_MALLOPT_MMAP_THRESHOLD, 1, Define if mallopt can set malloc mmap threshold.)
    AC_MSG_RESULT(yes)],
   [AC_MSG_RESULT(no)
 ])
@@ -3428,7 +3388,7 @@ LIBS_SAVE=$LIBS
 LIBS="$LIBS $LIBM"
 
 AC_CHECK_FUNCS([acosh asinh atanh copysign erf erfc expm1 finite gamma])
-AC_CHECK_FUNCS([hypot lgamma log1p round tgamma])
+AC_CHECK_FUNCS([hypot lgamma log1p log2 round tgamma])
 AC_CHECK_DECLS([isinf, isnan, isfinite], [], [], [[#include <math.h>]])
 
 # On FreeBSD 6.2, it appears that tanh(-0.) returns 0. instead of
@@ -4285,12 +4245,6 @@ AIX*)
   AC_DEFINE(HAVE_BROKEN_PIPE_BUF, 1, [Define if the system reports an invalid PIPE_BUF value.]) ;;
 esac
 
-
-case $ac_sys_system in
-  OSF*) AC_MSG_ERROR(OSF* systems are deprecated unless somebody volunteers. Check http://bugs.python.org/issue8606) ;;
-esac
-
-AC_CHECK_FUNC(pipe2, AC_DEFINE(HAVE_PIPE2, 1, [Define if the OS supports pipe2()]), )
 
 AC_SUBST(THREADHEADERS)
 
