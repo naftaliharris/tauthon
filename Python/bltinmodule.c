@@ -6,6 +6,9 @@
 #include "node.h"
 #include "code.h"
 
+#include "asdl.h"
+#include "ast.h"
+
 #include <ctype.h>
 
 #ifdef HAVE_LANGINFO_H
@@ -18,18 +21,15 @@
    Don't forget to modify PyUnicode_DecodeFSDefault() if you touch any of the
    values for Py_FileSystemDefaultEncoding!
 */
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 const char *Py_FileSystemDefaultEncoding = "mbcs";
 int Py_HasFileSystemDefaultEncoding = 1;
 #elif defined(__APPLE__)
 const char *Py_FileSystemDefaultEncoding = "utf-8";
 int Py_HasFileSystemDefaultEncoding = 1;
-#elif defined(HAVE_LANGINFO_H) && defined(CODESET)
+#else
 const char *Py_FileSystemDefaultEncoding = NULL; /* set by initfsencoding() */
 int Py_HasFileSystemDefaultEncoding = 0;
-#else
-const char *Py_FileSystemDefaultEncoding = "utf-8";
-int Py_HasFileSystemDefaultEncoding = 1;
 #endif
 
 static PyObject *
@@ -37,7 +37,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
 {
     PyObject *func, *name, *bases, *mkw, *meta, *prep, *ns, *cell;
     PyObject *cls = NULL;
-    Py_ssize_t nargs, nbases;
+    Py_ssize_t nargs;
 
     assert(args != NULL);
     if (!PyTuple_Check(args)) {
@@ -61,7 +61,6 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     bases = PyTuple_GetSlice(args, 2, nargs);
     if (bases == NULL)
         return NULL;
-    nbases = nargs - 2;
 
     if (kwds == NULL) {
         meta = NULL;
@@ -156,17 +155,14 @@ builtin___import__(PyObject *self, PyObject *args, PyObject *kwds)
 {
     static char *kwlist[] = {"name", "globals", "locals", "fromlist",
                              "level", 0};
-    char *name;
-    PyObject *globals = NULL;
-    PyObject *locals = NULL;
-    PyObject *fromlist = NULL;
+    PyObject *name, *globals = NULL, *locals = NULL, *fromlist = NULL;
     int level = -1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|OOOi:__import__",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "U|OOOi:__import__",
                     kwlist, &name, &globals, &locals, &fromlist, &level))
         return NULL;
-    return PyImport_ImportModuleLevel(name, globals, locals,
-                                      fromlist, level);
+    return PyImport_ImportModuleLevelObject(name, globals, locals,
+                                            fromlist, level);
 }
 
 PyDoc_STRVAR(import_doc,
@@ -512,7 +508,7 @@ source_as_string(PyObject *cmd, char *funcname, char *what, PyCompilerFlags *cf)
 
     if (PyUnicode_Check(cmd)) {
         cf->cf_flags |= PyCF_IGNORE_COOKIE;
-        cmd = _PyUnicode_AsDefaultEncodedString(cmd, NULL);
+        cmd = _PyUnicode_AsDefaultEncodedString(cmd);
         if (cmd == NULL)
             return NULL;
     }
@@ -608,6 +604,10 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
             arena = PyArena_New();
             mod = PyAST_obj2mod(cmd, arena, mode);
             if (mod == NULL) {
+                PyArena_Free(arena);
+                goto error;
+            }
+            if (!PyAST_Validate(mod)) {
                 PyArena_Free(arena);
                 goto error;
             }
@@ -766,7 +766,6 @@ builtin_exec(PyObject *self, PyObject *args)
 {
     PyObject *v;
     PyObject *prog, *globals = Py_None, *locals = Py_None;
-    int plain = 0;
 
     if (!PyArg_UnpackTuple(args, "exec", 1, 3, &prog, &globals, &locals))
         return NULL;
@@ -775,7 +774,6 @@ builtin_exec(PyObject *self, PyObject *args)
         globals = PyEval_GetGlobals();
         if (locals == Py_None) {
             locals = PyEval_GetLocals();
-            plain = 1;
         }
         if (!globals || !locals) {
             PyErr_SetString(PyExc_SystemError,
@@ -1897,9 +1895,15 @@ builtin_sum(PyObject *self, PyObject *args)
             Py_DECREF(iter);
             return NULL;
         }
-        if (PyByteArray_Check(result)) {
+        if (PyBytes_Check(result)) {
             PyErr_SetString(PyExc_TypeError,
                 "sum() can't sum bytes [use b''.join(seq) instead]");
+            Py_DECREF(iter);
+            return NULL;
+        }
+        if (PyByteArray_Check(result)) {
+            PyErr_SetString(PyExc_TypeError,
+                "sum() can't sum bytearray [use b''.join(seq) instead]");
             Py_DECREF(iter);
             return NULL;
         }
