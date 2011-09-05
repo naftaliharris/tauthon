@@ -224,14 +224,13 @@ always available.
 
 .. data:: flags
 
-   The struct sequence *flags* exposes the status of command line flags. The
-   attributes are read only.
+   The :term:`struct sequence` *flags* exposes the status of command line
+   flags. The attributes are read only.
 
    ============================= =============================
    attribute                     flag
    ============================= =============================
    :const:`debug`                :option:`-d`
-   :const:`division_warning`     :option:`-Q`
    :const:`inspect`              :option:`-i`
    :const:`interactive`          :option:`-i`
    :const:`optimize`             :option:`-O` or :option:`-OO`
@@ -247,15 +246,18 @@ always available.
    .. versionchanged:: 3.2
       Added ``quiet`` attribute for the new :option:`-q` flag.
 
+   .. versionchanged:: 3.3
+      Removed obsolete ``division_warning`` attribute.
+
 
 .. data:: float_info
 
-   A structseq holding information about the float type. It contains low level
-   information about the precision and internal representation.  The values
-   correspond to the various floating-point constants defined in the standard
-   header file :file:`float.h` for the 'C' programming language; see section
-   5.2.4.2.2 of the 1999 ISO/IEC C standard [C99]_, 'Characteristics of
-   floating types', for details.
+   A :term:`struct sequence` holding information about the float type. It
+   contains low level information about the precision and internal
+   representation.  The values correspond to the various floating-point
+   constants defined in the standard header file :file:`float.h` for the 'C'
+   programming language; see section 5.2.4.2.2 of the 1999 ISO/IEC C standard
+   [C99]_, 'Characteristics of floating types', for details.
 
    +---------------------+----------------+--------------------------------------------------+
    | attribute           | float.h macro  | explanation                                      |
@@ -501,8 +503,9 @@ always available.
 
 .. data:: hash_info
 
-   A structseq giving parameters of the numeric hash implementation.  For
-   more details about hashing of numeric types, see :ref:`numeric-hash`.
+   A :term:`struct sequence` giving parameters of the numeric hash
+   implementation.  For more details about hashing of numeric types, see
+   :ref:`numeric-hash`.
 
    +---------------------+--------------------------------------------------+
    | attribute           | explanation                                      |
@@ -537,8 +540,8 @@ always available.
 
    This is called ``hexversion`` since it only really looks meaningful when viewed
    as the result of passing it to the built-in :func:`hex` function.  The
-   struct sequence  :data:`sys.version_info` may be used for a more human-friendly
-   encoding of the same information.
+   :term:`struct sequence`  :data:`sys.version_info` may be used for a more
+   human-friendly encoding of the same information.
 
    The ``hexversion`` is a 32-bit number with the following layout:
 
@@ -566,8 +569,8 @@ always available.
 
 .. data:: int_info
 
-   A struct sequence that holds information about Python's
-   internal representation of integers.  The attributes are read only.
+   A :term:`struct sequence` that holds information about Python's internal
+   representation of integers.  The attributes are read only.
 
    +-------------------------+----------------------------------------------+
    | Attribute               | Explanation                                  |
@@ -699,36 +702,35 @@ always available.
    This string contains a platform identifier that can be used to append
    platform-specific components to :data:`sys.path`, for instance.
 
-   For most Unix systems, this is the lowercased OS name as returned by ``uname
-   -s`` with the first part of the version as returned by ``uname -r`` appended,
-   e.g. ``'sunos5'``, *at the time when Python was built*.  Unless you want to
-   test for a specific system version, it is therefore recommended to use the
-   following idiom::
+   For Unix systems, except on Linux, this is the lowercased OS name as
+   returned by ``uname -s`` with the first part of the version as returned by
+   ``uname -r`` appended, e.g. ``'sunos5'`` or ``'freebsd8'``, *at the time
+   when Python was built*.  Unless you want to test for a specific system
+   version, it is therefore recommended to use the following idiom::
 
       if sys.platform.startswith('freebsd'):
           # FreeBSD-specific code here...
       elif sys.platform.startswith('linux'):
           # Linux-specific code here...
 
-   .. versionchanged:: 3.2.2
-      Since lots of code check for ``sys.platform == 'linux2'``, and there is
-      no essential change between Linux 2.x and 3.x, ``sys.platform`` is always
-      set to ``'linux2'``, even on Linux 3.x.  In Python 3.3 and later, the
-      value will always be set to ``'linux'``, so it is recommended to always
-      use the ``startswith`` idiom presented above.
-
    For other systems, the values are:
 
-   ====================== ===========================
-   System                 :data:`platform` value
-   ====================== ===========================
-   Linux (2.x *and* 3.x)  ``'linux2'``
-   Windows                ``'win32'``
-   Windows/Cygwin         ``'cygwin'``
-   Mac OS X               ``'darwin'``
-   OS/2                   ``'os2'``
-   OS/2 EMX               ``'os2emx'``
-   ====================== ===========================
+   ================ ===========================
+   System           :data:`platform` value
+   ================ ===========================
+   Linux            ``'linux'``
+   Windows          ``'win32'``
+   Windows/Cygwin   ``'cygwin'``
+   Mac OS X         ``'darwin'``
+   OS/2             ``'os2'``
+   OS/2 EMX         ``'os2emx'``
+   ================ ===========================
+
+   .. versionchanged:: 3.3
+      On Linux, :attr:`sys.platform` doesn't contain the major version anymore.
+      It is always ``'linux'``, instead of ``'linux2'`` or ``'linux3'``.  Since
+      older Python versions include the version number, it is recommended to
+      always use the ``startswith`` idiom presented above.
 
    .. seealso::
       :attr:`os.name` has a coarser granularity.  :func:`os.uname` gives
@@ -736,6 +738,7 @@ always available.
 
       The :mod:`platform` module provides detailed checks for the
       system's identity.
+
 
 .. data:: prefix
 
@@ -980,22 +983,33 @@ always available.
        to a console and Python apps started with :program:`pythonw`.
 
 
-.. data:: subversion
+.. data:: thread_info
 
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
+   A :term:`struct sequence` holding information about the thread
+   implementation.
 
-   .. deprecated:: 3.2.1
-      Python is now `developed <http://docs.python.org/devguide/>`_ using
-      Mercurial.  In recent Python 3.2 bugfix releases, :data:`subversion`
-      therefore contains placeholder information.  It is removed in Python
-      3.3.
+   +------------------+---------------------------------------------------------+
+   | Attribute        | Explanation                                             |
+   +==================+=========================================================+
+   | :const:`name`    | Name of the thread implementation:                      |
+   |                  |                                                         |
+   |                  |  * ``'nt'``: Windows threads                            |
+   |                  |  * ``'os2'``: OS/2 threads                              |
+   |                  |  * ``'pthread'``: POSIX threads                         |
+   |                  |  * ``'solaris'``: Solaris threads                       |
+   +------------------+---------------------------------------------------------+
+   | :const:`lock`    | Name of the lock implementation:                        |
+   |                  |                                                         |
+   |                  |  * ``'semaphore'``: a lock uses a semaphore             |
+   |                  |  * ``'mutex+cond'``: a lock uses a mutex                |
+   |                  |    and a condition variable                             |
+   |                  |  * ``None`` if this information is unknown              |
+   +------------------+---------------------------------------------------------+
+   | :const:`version` | Name and version of the thread library. It is a string, |
+   |                  | or ``None`` if these informations are unknown.          |
+   +------------------+---------------------------------------------------------+
+
+   .. versionadded:: 3.3
 
 
 .. data:: tracebacklimit
