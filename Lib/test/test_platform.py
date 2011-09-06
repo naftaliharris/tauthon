@@ -1,8 +1,9 @@
-import sys
 import os
-import unittest
 import platform
 import subprocess
+import sys
+import unittest
+import warnings
 
 from test import support
 
@@ -56,13 +57,11 @@ class PlatformTest(unittest.TestCase):
 
     def setUp(self):
         self.save_version = sys.version
-        self.save_subversion = sys.subversion
         self.save_mercurial = sys._mercurial
         self.save_platform = sys.platform
 
     def tearDown(self):
         sys.version = self.save_version
-        sys.subversion = self.save_subversion
         sys._mercurial = self.save_mercurial
         sys.platform = self.save_platform
 
@@ -77,7 +76,7 @@ class PlatformTest(unittest.TestCase):
              ('IronPython', '1.0.0', '', '', '', '', '.NET 2.0.50727.42')),
             ):
             # branch and revision are not "parsed", but fetched
-            # from sys.subversion.  Ignore them
+            # from sys._mercurial.  Ignore them
             (name, version, branch, revision, buildno, builddate, compiler) \
                    = platform._sys_version(input)
             self.assertEqual(
@@ -113,8 +112,6 @@ class PlatformTest(unittest.TestCase):
             if subversion is None:
                 if hasattr(sys, "_mercurial"):
                     del sys._mercurial
-                if hasattr(sys, "subversion"):
-                    del sys.subversion
             else:
                 sys._mercurial = subversion
             if sys_platform is not None:
@@ -246,6 +243,38 @@ class PlatformTest(unittest.TestCase):
             ('', ('', '', '')), # If there's nothing there.
             ):
             self.assertEqual(platform._parse_release_file(input), output)
+
+    def test_popen(self):
+        mswindows = (sys.platform == "win32")
+
+        if mswindows:
+            command = '"{}" -c "print(\'Hello\')"'.format(sys.executable)
+        else:
+            command = "'{}' -c 'print(\"Hello\")'".format(sys.executable)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with platform.popen(command) as stdout:
+                hello = stdout.read().strip()
+                stdout.close()
+                self.assertEqual(hello, "Hello")
+
+        data = 'plop'
+        if mswindows:
+            command = '"{}" -c "import sys; data=sys.stdin.read(); exit(len(data))"'
+        else:
+            command = "'{}' -c 'import sys; data=sys.stdin.read(); exit(len(data))'"
+        command = command.format(sys.executable)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with platform.popen(command, 'w') as stdin:
+                stdout = stdin.write(data)
+                ret = stdin.close()
+                self.assertIsNotNone(ret)
+                if os.name == 'nt':
+                    returncode = ret
+                else:
+                    returncode = ret >> 8
+                self.assertEqual(returncode, len(data))
 
 
 def test_main():
