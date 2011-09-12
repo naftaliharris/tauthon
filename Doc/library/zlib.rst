@@ -19,7 +19,7 @@ consult the zlib manual at http://www.zlib.net/manual.html for authoritative
 information.
 
 For reading and writing ``.gz`` files see the :mod:`gzip` module. For
-other archive formats, see the :mod:`bz2`, :mod:`zipfile`, and
+other related file formats, see the :mod:`bz2`, :mod:`zipfile`, and
 :mod:`tarfile` modules.
 
 The available exception and functions in this module are:
@@ -122,6 +122,7 @@ The available exception and functions in this module are:
    won't fit into memory at once.  The *wbits* parameter controls the size of the
    window buffer.
 
+
 Compression objects support the following methods:
 
 
@@ -215,6 +216,24 @@ Decompression objects support the following methods and attributes:
    Returns a copy of the decompression object.  This can be used to save the state
    of the decompressor midway through the data stream in order to speed up random
    seeks into the stream at a future point.
+
+
+Information about the version of the zlib library in use is available through
+the following constants:
+
+
+.. data:: ZLIB_VERSION
+
+   The version string of the zlib library that was used for building the module.
+   This may be different from the zlib library actually used at runtime, which
+   is available as :const:`ZLIB_RUNTIME_VERSION`.
+
+
+.. data:: ZLIB_RUNTIME_VERSION
+
+   The version string of the zlib library actually loaded by the interpreter.
+
+   .. versionadded:: 3.3
 
 
 .. seealso::
