@@ -22,14 +22,7 @@ static PyObject *TestError;     /* set to exception object in init */
 static PyObject *
 raiseTestError(const char* test_name, const char* msg)
 {
-    char buf[2048];
-
-    if (strlen(test_name) + strlen(msg) > sizeof(buf) - 50)
-        PyErr_SetString(TestError, "internal error msg too large");
-    else {
-        PyOS_snprintf(buf, sizeof(buf), "%s: %s", test_name, msg);
-        PyErr_SetString(TestError, buf);
-    }
+    PyErr_Format(TestError, "%s: %s", test_name, msg);
     return NULL;
 }
 
@@ -43,11 +36,9 @@ static PyObject*
 sizeof_error(const char* fatname, const char* typname,
     int expected, int got)
 {
-    char buf[1024];
-    PyOS_snprintf(buf, sizeof(buf),
-        "%.200s #define == %d but sizeof(%.200s) == %d",
+    PyErr_Format(TestError,
+        "%s #define == %d but sizeof(%s) == %d",
         fatname, expected, typname, got);
-    PyErr_SetString(TestError, buf);
     return (PyObject*)NULL;
 }
 
@@ -778,6 +769,68 @@ test_long_long_and_overflow(PyObject *self)
     return Py_None;
 }
 
+/* Test the PyLong_As{Size,Ssize}_t API. At present this just tests that
+   non-integer arguments are handled correctly. It should be extended to
+   test overflow handling.
+ */
+
+static PyObject *
+test_long_as_size_t(PyObject *self)
+{
+    size_t out_u;
+    Py_ssize_t out_s;
+
+    Py_INCREF(Py_None);
+
+    out_u = PyLong_AsSize_t(Py_None);
+    if (out_u != (size_t)-1 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSize_t(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSize_t(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    out_s = PyLong_AsSsize_t(Py_None);
+    if (out_s != (Py_ssize_t)-1 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSsize_t(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSsize_t(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    /* Py_INCREF(Py_None) omitted - we already have a reference to it. */
+    return Py_None;
+}
+
+/* Test the PyLong_AsDouble API. At present this just tests that
+   non-integer arguments are handled correctly.
+ */
+
+static PyObject *
+test_long_as_double(PyObject *self)
+{
+    double out;
+
+    Py_INCREF(Py_None);
+
+    out = PyLong_AsDouble(Py_None);
+    if (out != -1.0 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_double",
+                              "PyLong_AsDouble(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_double",
+                              "PyLong_AsDouble(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    /* Py_INCREF(Py_None) omitted - we already have a reference to it. */
+    return Py_None;
+}
+
 /* Test the L code for PyArg_ParseTuple.  This should deliver a PY_LONG_LONG
    for both long and int arguments.  The test may leak a little memory if
    it fails.
@@ -1009,6 +1062,15 @@ test_k_code(PyObject *self)
     Py_DECREF(tuple);
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+static PyObject *
+getargs_c(PyObject *self, PyObject *args)
+{
+    char c;
+    if (!PyArg_ParseTuple(args, "c", &c))
+        return NULL;
+    return PyBytes_FromStringAndSize(&c, 1);
 }
 
 static PyObject *
@@ -2267,6 +2329,8 @@ static PyMethodDef TestMethods[] = {
     {"test_long_api",           (PyCFunction)test_long_api,      METH_NOARGS},
     {"test_long_and_overflow", (PyCFunction)test_long_and_overflow,
      METH_NOARGS},
+    {"test_long_as_double",     (PyCFunction)test_long_as_double,METH_NOARGS},
+    {"test_long_as_size_t",     (PyCFunction)test_long_as_size_t,METH_NOARGS},
     {"test_long_numbits",       (PyCFunction)test_long_numbits,  METH_NOARGS},
     {"test_k_code",             (PyCFunction)test_k_code,        METH_NOARGS},
     {"test_empty_argparse", (PyCFunction)test_empty_argparse,METH_NOARGS},
@@ -2298,6 +2362,7 @@ static PyMethodDef TestMethods[] = {
         (PyCFunction)test_long_long_and_overflow, METH_NOARGS},
     {"test_L_code",             (PyCFunction)test_L_code,        METH_NOARGS},
 #endif
+    {"getargs_c",               getargs_c,                       METH_VARARGS},
     {"getargs_s",               getargs_s,                       METH_VARARGS},
     {"getargs_s_star",          getargs_s_star,                  METH_VARARGS},
     {"getargs_s_hash",          getargs_s_hash,                  METH_VARARGS},
