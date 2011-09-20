@@ -227,6 +227,11 @@ select_select(PyObject *self, PyObject *args)
                             "timeout period too long");
             return NULL;
         }
+        if (timeout < 0) {
+            PyErr_SetString(PyExc_ValueError,
+                        "timeout must be non-negative");
+            return NULL;
+        }
         seconds = (long)timeout;
         timeout = timeout - (double)seconds;
         tv.tv_sec = seconds;
