@@ -16,7 +16,6 @@
 
 PyObject *create_win32_namespace(void);
 
-PyObject *pickle_dumps, *pickle_loads, *pickle_protocol;
 PyObject *ProcessError, *BufferTooShort;
 
 /*
@@ -48,16 +47,6 @@ mp_SetError(PyObject *Type, int num)
 #endif /* !MS_WINDOWS */
     case MP_MEMORY_ERROR:
         PyErr_NoMemory();
-        break;
-    case MP_END_OF_FILE:
-        PyErr_SetNone(PyExc_EOFError);
-        break;
-    case MP_EARLY_END_OF_FILE:
-        PyErr_SetString(PyExc_IOError,
-                        "got end of file during message");
-        break;
-    case MP_BAD_MESSAGE_LENGTH:
-        PyErr_SetString(PyExc_IOError, "bad message length");
         break;
     case MP_EXCEPTION_HAS_BEEN_SET:
         break;
@@ -199,7 +188,7 @@ multiprocessing_address_of_buffer(PyObject *self, PyObject *obj)
     if (PyObject_AsWriteBuffer(obj, &buffer, &buffer_len) < 0)
         return NULL;
 
-    return Py_BuildValue("N" F_PY_SSIZE_T,
+    return Py_BuildValue("Nn",
                          PyLong_FromVoidPtr(buffer), buffer_len);
 }
 
@@ -253,27 +242,12 @@ PyInit__multiprocessing(void)
     if (!module)
         return NULL;
 
-    /* Get copy of objects from pickle */
-    temp = PyImport_ImportModule(PICKLE_MODULE);
-    if (!temp)
-        return NULL;
-    pickle_dumps = PyObject_GetAttrString(temp, "dumps");
-    pickle_loads = PyObject_GetAttrString(temp, "loads");
-    pickle_protocol = PyObject_GetAttrString(temp, "HIGHEST_PROTOCOL");
-    Py_XDECREF(temp);
-
     /* Get copy of BufferTooShort */
     temp = PyImport_ImportModule("multiprocessing");
     if (!temp)
         return NULL;
     BufferTooShort = PyObject_GetAttrString(temp, "BufferTooShort");
     Py_XDECREF(temp);
-
-    /* Add connection type to module */
-    if (PyType_Ready(&ConnectionType) < 0)
-        return NULL;
-    Py_INCREF(&ConnectionType);
-    PyModule_AddObject(module, "Connection", (PyObject*)&ConnectionType);
 
 #if defined(MS_WINDOWS) ||                                              \
   (defined(HAVE_SEM_OPEN) && !defined(POSIX_SEMAPHORES_NOT_ENABLED))
@@ -298,13 +272,6 @@ PyInit__multiprocessing(void)
 #endif
 
 #ifdef MS_WINDOWS
-    /* Add PipeConnection to module */
-    if (PyType_Ready(&PipeConnectionType) < 0)
-        return NULL;
-    Py_INCREF(&PipeConnectionType);
-    PyModule_AddObject(module, "PipeConnection",
-                       (PyObject*)&PipeConnectionType);
-
     /* Initialize win32 class and add to multiprocessing */
     temp = create_win32_namespace();
     if (!temp)
