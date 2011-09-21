@@ -15,11 +15,6 @@
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 
-#ifdef _OSF_SOURCE
-/* OSF1 5.1 doesn't make this available with XOPEN_SOURCE_EXTENDED defined */
-extern int finite(double);
-#endif
-
 /* Special free list
 
    Since some Python programs can spend much of their time allocating
@@ -197,7 +192,6 @@ PyFloat_FromString(PyObject *v)
             Py_DECREF(s_buffer);
             return NULL;
         }
-        last = s + len;
     }
     else if (PyObject_AsCharBuffer(v, &s, &len)) {
         PyErr_SetString(PyExc_TypeError,
@@ -523,8 +517,7 @@ float_richcompare(PyObject *v, PyObject *w, int op)
     return PyBool_FromLong(r);
 
  Unimplemented:
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static Py_hash_t
@@ -2246,7 +2239,7 @@ _PyFloat_Pack8(double x, unsigned char *p, int le)
 
         /* Eighth byte */
         *p = flo & 0xFF;
-        p += incr;
+        /* p += incr; */
 
         /* Done */
         return 0;
