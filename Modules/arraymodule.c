@@ -356,6 +356,59 @@ LL_setitem(arrayobject *ap, Py_ssize_t i, PyObject *v)
     return 0;
 }
 
+#ifdef HAVE_LONG_LONG
+
+static PyObject *
+q_getitem(arrayobject *ap, Py_ssize_t i)
+{
+    return PyLong_FromLongLong(((PY_LONG_LONG *)ap->ob_item)[i]);
+}
+
+static int
+q_setitem(arrayobject *ap, Py_ssize_t i, PyObject *v)
+{
+    PY_LONG_LONG x;
+    if (!PyArg_Parse(v, "L;array item must be integer", &x))
+        return -1;
+    if (i >= 0)
+        ((PY_LONG_LONG *)ap->ob_item)[i] = x;
+    return 0;
+}
+
+static PyObject *
+QQ_getitem(arrayobject *ap, Py_ssize_t i)
+{
+    return PyLong_FromUnsignedLongLong(
+        ((unsigned PY_LONG_LONG *)ap->ob_item)[i]);
+}
+
+static int
+QQ_setitem(arrayobject *ap, Py_ssize_t i, PyObject *v)
+{
+    unsigned PY_LONG_LONG x;
+    if (PyLong_Check(v)) {
+        x = PyLong_AsUnsignedLongLong(v);
+        if (x == (unsigned PY_LONG_LONG) -1 && PyErr_Occurred())
+            return -1;
+    }
+    else {
+        PY_LONG_LONG y;
+        if (!PyArg_Parse(v, "L;array item must be integer", &y))
+            return -1;
+        if (y < 0) {
+            PyErr_SetString(PyExc_OverflowError,
+                "unsigned long long is less than minimum");
+            return -1;
+        }
+        x = (unsigned PY_LONG_LONG)y;
+    }
+
+    if (i >= 0)
+        ((unsigned PY_LONG_LONG *)ap->ob_item)[i] = x;
+    return 0;
+}
+#endif
+
 static PyObject *
 f_getitem(arrayobject *ap, Py_ssize_t i)
 {
@@ -406,6 +459,10 @@ static struct arraydescr descriptors[] = {
     {'I', sizeof(int), II_getitem, II_setitem, "I", 1, 0},
     {'l', sizeof(long), l_getitem, l_setitem, "l", 1, 1},
     {'L', sizeof(long), LL_getitem, LL_setitem, "L", 1, 0},
+#ifdef HAVE_LONG_LONG
+    {'q', sizeof(PY_LONG_LONG), q_getitem, q_setitem, "q", 1, 1},
+    {'Q', sizeof(PY_LONG_LONG), QQ_getitem, QQ_setitem, "Q", 1, 0},
+#endif
     {'f', sizeof(float), f_getitem, f_setitem, "f", 0, 0},
     {'d', sizeof(double), d_getitem, d_setitem, "d", 0, 0},
     {'\0', 0, 0, 0, 0, 0, 0} /* Sentinel */
@@ -514,10 +571,8 @@ array_richcompare(PyObject *v, PyObject *w, int op)
     Py_ssize_t i, k;
     PyObject *res;
 
-    if (!array_Check(v) || !array_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!array_Check(v) || !array_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     va = (arrayobject *)v;
     wa = (arrayobject *)w;
@@ -876,7 +931,6 @@ array_inplace_repeat(arrayobject *self, Py_ssize_t n)
     if (Py_SIZE(self) > 0) {
         if (n < 0)
             n = 0;
-        items = self->ob_item;
         if ((self->ob_descr->itemsize != 0) &&
             (Py_SIZE(self) > PY_SSIZE_T_MAX / self->ob_descr->itemsize)) {
             return PyErr_NoMemory();
@@ -1658,6 +1712,16 @@ typecode_to_mformat_code(int typecode)
         intsize = sizeof(long);
         is_signed = 0;
         break;
+#if HAVE_LONG_LONG
+    case 'q':
+        intsize = sizeof(PY_LONG_LONG);
+        is_signed = 1;
+        break;
+    case 'Q':
+        intsize = sizeof(PY_LONG_LONG);
+        is_signed = 0;
+        break;
+#endif 
     default:
         return UNKNOWN_FORMAT;
     }
@@ -2092,7 +2156,7 @@ array_repr(arrayobject *a)
     if (len == 0) {
         return PyUnicode_FromFormat("array('%c')", (int)typecode);
     }
-    if ((typecode == 'u'))
+    if (typecode == 'u')
         v = array_tounicode(a, NULL);
     else
         v = array_tolist(a, NULL);
@@ -2287,7 +2351,7 @@ array_ass_subscr(arrayobject* self, PyObject* item, PyObject* value)
                 self->ob_item + (cur + 1) * itemsize,
                 lim * itemsize);
         }
-        cur = start + slicelength * step;
+        cur = start + (size_t)slicelength * step;
         if (cur < (size_t)Py_SIZE(self)) {
             memmove(self->ob_item + (cur-slicelength) * itemsize,
                 self->ob_item + cur * itemsize,
@@ -2504,7 +2568,11 @@ array_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         }
     }
     PyErr_SetString(PyExc_ValueError,
+#ifdef HAVE_LONG_LONG
+        "bad typecode (must be b, B, u, h, H, i, I, l, L, q, Q, f or d)");
+#else
         "bad typecode (must be b, B, u, h, H, i, I, l, L, f or d)");
+#endif
     return NULL;
 }
 
@@ -2527,11 +2595,17 @@ is a single character.  The following type codes are defined:\n\
     'I'         unsigned integer   2 \n\
     'l'         signed integer     4 \n\
     'L'         unsigned integer   4 \n\
+    'q'         signed integer     8 (see note) \n\
+    'Q'         unsigned integer   8 (see note) \n\
     'f'         floating point     4 \n\
     'd'         floating point     8 \n\
 \n\
-NOTE: The 'u' typecode corresponds to Python's unicode character. On \n\
+NOTE: The 'u' type code corresponds to Python's unicode character. On \n\
 narrow builds this is 2-bytes on wide builds this is 4-bytes.\n\
+\n\
+NOTE: The 'q' and 'Q' type codes are only available if the platform \n\
+C compiler used to build Python supports 'long long', or, on Windows, \n\
+'__int64'.\n\
 \n\
 The constructor is:\n\
 \n\

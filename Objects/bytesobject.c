@@ -41,10 +41,6 @@ static PyBytesObject *nullstring;
 #define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
 
 /*
-   For both PyBytes_FromString() and PyBytes_FromStringAndSize(), the
-   parameter `size' denotes number of characters to allocate, not counting any
-   null terminating character.
-
    For PyBytes_FromString(), the parameter `str' points to a null-terminated
    string containing exactly `size' bytes.
 
@@ -61,8 +57,8 @@ static PyBytesObject *nullstring;
 
    The PyObject member `op->ob_size', which denotes the number of "extra
    items" in a variable-size object, will contain the number of bytes
-   allocated for string data, not counting the null terminating character.  It
-   is therefore equal to the equal to the `size' parameter (for
+   allocated for string data, not counting the null terminating character.
+   It is therefore equal to the `size' parameter (for
    PyBytes_FromStringAndSize()) or the length of the string in the `str'
    parameter (for PyBytes_FromString()).
 */
@@ -873,16 +869,16 @@ bytes_hash(PyBytesObject *a)
 {
     register Py_ssize_t len;
     register unsigned char *p;
-    register Py_hash_t x;
+    register Py_uhash_t x;
 
     if (a->ob_shash != -1)
         return a->ob_shash;
     len = Py_SIZE(a);
     p = (unsigned char *) a->ob_sval;
-    x = *p << 7;
+    x = (Py_uhash_t)*p << 7;
     while (--len >= 0)
-        x = (1000003*x) ^ *p++;
-    x ^= Py_SIZE(a);
+        x = (1000003U*x) ^ (Py_uhash_t)*p++;
+    x ^= (Py_uhash_t)Py_SIZE(a);
     if (x == -1)
         x = -2;
     a->ob_shash = x;
@@ -2316,11 +2312,13 @@ Line breaks are not included in the resulting list unless keepends\n\
 is given and true.");
 
 static PyObject*
-bytes_splitlines(PyObject *self, PyObject *args)
+bytes_splitlines(PyObject *self, PyObject *args, PyObject *kwds)
 {
+    static char *kwlist[] = {"keepends", 0};
     int keepends = 0;
 
-    if (!PyArg_ParseTuple(args, "|i:splitlines", &keepends))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i:splitlines",
+                                     kwlist, &keepends))
         return NULL;
 
     return stringlib_splitlines(
@@ -2462,7 +2460,7 @@ bytes_methods[] = {
     {"rsplit", (PyCFunction)bytes_rsplit, METH_VARARGS, rsplit__doc__},
     {"rstrip", (PyCFunction)bytes_rstrip, METH_VARARGS, rstrip__doc__},
     {"split", (PyCFunction)bytes_split, METH_VARARGS, split__doc__},
-    {"splitlines", (PyCFunction)bytes_splitlines, METH_VARARGS,
+    {"splitlines", (PyCFunction)bytes_splitlines, METH_VARARGS | METH_KEYWORDS,
      splitlines__doc__},
     {"startswith", (PyCFunction)bytes_startswith, METH_VARARGS,
      startswith__doc__},
