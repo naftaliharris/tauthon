@@ -605,7 +605,7 @@ PyMemoTable_Set(PyMemoTable *self, PyObject *key, Py_ssize_t value)
 /*************************************************************************/
 
 /* Helpers for creating the argument tuple passed to functions. This has the
-   performance advantage of calling PyTuple_New() only once. 
+   performance advantage of calling PyTuple_New() only once.
 
    XXX(avassalotti): Inline directly in _Pickler_FastCall() and
    _Unpickler_FastCall(). */
@@ -813,7 +813,7 @@ _Pickler_SetProtocol(PicklerObject *self, PyObject *proto_obj,
     fix_imports = PyObject_IsTrue(fix_imports_obj);
     if (fix_imports == -1)
         return -1;
-    
+
     self->proto = proto;
     self->bin = proto > 0;
     self->fix_imports = fix_imports && proto < 3;
@@ -909,7 +909,7 @@ _Unpickler_ReadFromFile(UnpicklerObject *self, Py_ssize_t n)
     Py_ssize_t read_size, prefetched_size = 0;
 
     assert(self->read != NULL);
-    
+
     if (_Unpickler_SkipConsumed(self) < 0)
         return -1;
 
@@ -1037,7 +1037,7 @@ _Unpickler_Readline(UnpicklerObject *self, char **result)
         self->next_read_idx = num_read;
         return _Unpickler_CopyLine(self, self->input_buffer, num_read, result);
     }
- 
+
     /* If we get here, we've run off the end of the input string. Return the
        remaining string and let the caller figure it out. */
     *result = self->input_buffer + self->next_read_idx;
@@ -1543,7 +1543,10 @@ save_long(PicklerObject *self, PyObject *obj)
         PyErr_Clear();
     }
     else
-        return save_int(self, val);
+#if SIZEOF_LONG > 4
+        if (val <= 0x7fffffffL && val >= -0x80000000L)
+#endif
+            return save_int(self, val);
 
     if (self->proto >= 2) {
         /* Linear-time pickling. */
@@ -1598,7 +1601,7 @@ save_long(PicklerObject *self, PyObject *obj)
          * bits.
          */
         if (sign < 0 &&
-            nbytes > 1 && 
+            nbytes > 1 &&
             pdata[nbytes - 1] == 0xff &&
             (pdata[nbytes - 2] & 0x80) != 0) {
             nbytes--;
@@ -1664,7 +1667,7 @@ save_float(PicklerObject *self, PyObject *obj)
             return -1;
         if (_Pickler_Write(self, pdata, 9) < 0)
             return -1;
-   } 
+   }
     else {
         int result = -1;
         char *buf = NULL;
@@ -1766,33 +1769,37 @@ save_bytes(PicklerObject *self, PyObject *obj)
 /* A copy of PyUnicode_EncodeRawUnicodeEscape() that also translates
    backslash and newline characters to \uXXXX escapes. */
 static PyObject *
-raw_unicode_escape(const Py_UNICODE *s, Py_ssize_t size)
+raw_unicode_escape(PyObject *obj)
 {
+    static const char *hexdigits = "0123456789abcdef";
     PyObject *repr, *result;
     char *p;
-    char *q;
+    Py_ssize_t i, size, expandsize;
+    void *data;
+    unsigned int kind;
 
-    static const char *hexdigits = "0123456789abcdef";
+    if (PyUnicode_READY(obj))
+        return NULL;
 
-#ifdef Py_UNICODE_WIDE
-    const Py_ssize_t expandsize = 10;
-#else
-    const Py_ssize_t expandsize = 6;
-#endif
-    
+    size = PyUnicode_GET_LENGTH(obj);
+    data = PyUnicode_DATA(obj);
+    kind = PyUnicode_KIND(obj);
+    if (kind == PyUnicode_4BYTE_KIND)
+        expandsize = 10;
+    else
+        expandsize = 6;
+
     if (size > PY_SSIZE_T_MAX / expandsize)
         return PyErr_NoMemory();
-    
     repr = PyByteArray_FromStringAndSize(NULL, expandsize * size);
     if (repr == NULL)
         return NULL;
     if (size == 0)
         goto done;
 
-    p = q = PyByteArray_AS_STRING(repr);
-    while (size-- > 0) {
-        Py_UNICODE ch = *s++;
-#ifdef Py_UNICODE_WIDE
+    p = PyByteArray_AS_STRING(repr);
+    for (i=0; i < size; i++) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
         /* Map 32-bit characters to '\Uxxxxxxxx' */
         if (ch >= 0x10000) {
             *p++ = '\\';
@@ -1806,36 +1813,8 @@ raw_unicode_escape(const Py_UNICODE *s, Py_ssize_t size)
             *p++ = hexdigits[(ch >> 4) & 0xf];
             *p++ = hexdigits[ch & 15];
         }
-        else
-#else
-            /* Map UTF-16 surrogate pairs to '\U00xxxxxx' */
-            if (ch >= 0xD800 && ch < 0xDC00) {
-                Py_UNICODE ch2;
-                Py_UCS4 ucs;
-
-                ch2 = *s++;
-                size--;
-                if (ch2 >= 0xDC00 && ch2 <= 0xDFFF) {
-                    ucs = (((ch & 0x03FF) << 10) | (ch2 & 0x03FF)) + 0x00010000;
-                    *p++ = '\\';
-                    *p++ = 'U';
-                    *p++ = hexdigits[(ucs >> 28) & 0xf];
-                    *p++ = hexdigits[(ucs >> 24) & 0xf];
-                    *p++ = hexdigits[(ucs >> 20) & 0xf];
-                    *p++ = hexdigits[(ucs >> 16) & 0xf];
-                    *p++ = hexdigits[(ucs >> 12) & 0xf];
-                    *p++ = hexdigits[(ucs >> 8) & 0xf];
-                    *p++ = hexdigits[(ucs >> 4) & 0xf];
-                    *p++ = hexdigits[ucs & 0xf];
-                    continue;
-                }
-                /* Fall through: isolated surrogates are copied as-is */
-                s--;
-                size++;
-            }
-#endif
         /* Map 16-bit characters to '\uxxxx' */
-        if (ch >= 256 || ch == '\\' || ch == '\n') {
+        else if (ch >= 256 || ch == '\\' || ch == '\n') {
             *p++ = '\\';
             *p++ = 'u';
             *p++ = hexdigits[(ch >> 12) & 0xf];
@@ -1847,9 +1826,9 @@ raw_unicode_escape(const Py_UNICODE *s, Py_ssize_t size)
         else
             *p++ = (char) ch;
     }
-    size = p - q;
+    size = p - PyByteArray_AS_STRING(repr);
 
-  done:
+done:
     result = PyBytes_FromStringAndSize(PyByteArray_AS_STRING(repr), size);
     Py_DECREF(repr);
     return result;
@@ -1864,9 +1843,7 @@ save_unicode(PicklerObject *self, PyObject *obj)
     if (self->bin) {
         char pdata[5];
 
-        encoded = PyUnicode_EncodeUTF8(PyUnicode_AS_UNICODE(obj),
-                                    PyUnicode_GET_SIZE(obj),
-                                    "surrogatepass");
+        encoded = PyUnicode_AsEncodedString(obj, "utf-8", "surrogatepass");
         if (encoded == NULL)
             goto error;
 
@@ -1892,8 +1869,7 @@ save_unicode(PicklerObject *self, PyObject *obj)
     else {
         const char unicode_op = UNICODE;
 
-        encoded = raw_unicode_escape(PyUnicode_AS_UNICODE(obj),
-                                     PyUnicode_GET_SIZE(obj));
+        encoded = raw_unicode_escape(obj);
         if (encoded == NULL)
             goto error;
 
@@ -2849,6 +2825,28 @@ save_pers(PicklerObject *self, PyObject *obj, PyObject *func)
     return status;
 }
 
+static PyObject *
+get_class(PyObject *obj)
+{
+    PyObject *cls;
+    static PyObject *str_class;
+
+    if (str_class == NULL) {
+        str_class = PyUnicode_InternFromString("__class__");
+        if (str_class == NULL)
+            return NULL;
+    }
+    cls = PyObject_GetAttr(obj, str_class);
+    if (cls == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
+            PyErr_Clear();
+            cls = (PyObject *) Py_TYPE(obj);
+            Py_INCREF(cls);
+        }
+    }
+    return cls;
+}
+
 /* We're saving obj, and args is the 2-thru-5 tuple returned by the
  * appropriate __reduce__ method for obj.
  */
@@ -2914,17 +2912,18 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
     /* Protocol 2 special case: if callable's name is __newobj__, use
        NEWOBJ. */
     if (use_newobj) {
-        static PyObject *newobj_str = NULL;
-        PyObject *name_str;
+        static PyObject *newobj_str = NULL, *name_str = NULL;
+        PyObject *name;
 
         if (newobj_str == NULL) {
             newobj_str = PyUnicode_InternFromString("__newobj__");
-            if (newobj_str == NULL)
+            name_str = PyUnicode_InternFromString("__name__");
+            if (newobj_str == NULL || name_str == NULL)
                 return -1;
         }
 
-        name_str = PyObject_GetAttrString(callable, "__name__");
-        if (name_str == NULL) {
+        name = PyObject_GetAttr(callable, name_str);
+        if (name == NULL) {
             if (PyErr_ExceptionMatches(PyExc_AttributeError))
                 PyErr_Clear();
             else
@@ -2932,9 +2931,9 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
             use_newobj = 0;
         }
         else {
-            use_newobj = PyUnicode_Check(name_str) && 
-                PyUnicode_Compare(name_str, newobj_str) == 0;
-            Py_DECREF(name_str);
+            use_newobj = PyUnicode_Check(name) &&
+                         PyUnicode_Compare(name, newobj_str) == 0;
+            Py_DECREF(name);
         }
     }
     if (use_newobj) {
@@ -2950,20 +2949,14 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
         }
 
         cls = PyTuple_GET_ITEM(argtup, 0);
-        if (!PyObject_HasAttrString(cls, "__new__")) {
+        if (!PyType_Check(cls)) {
             PyErr_SetString(PicklingError, "args[0] from "
-                            "__newobj__ args has no __new__");
+                            "__newobj__ args is not a type");
             return -1;
         }
 
         if (obj != NULL) {
-            obj_class = PyObject_GetAttrString(obj, "__class__");
-            if (obj_class == NULL) {
-                if (PyErr_ExceptionMatches(PyExc_AttributeError))
-                    PyErr_Clear();
-                else
-                    return -1;
-            }
+            obj_class = get_class(obj);
             p = obj_class != cls;    /* true iff a problem */
             Py_DECREF(obj_class);
             if (p) {
@@ -3037,7 +3030,7 @@ save_reduce(PicklerObject *self, PyObject *args, PyObject *obj)
         return -1;
 
     if (state) {
-        if (save(self, state, 0) < 0 || 
+        if (save(self, state, 0) < 0 ||
             _Pickler_Write(self, &build_op, 1) < 0)
             return -1;
     }
@@ -3291,7 +3284,7 @@ Pickler_dump(PicklerObject *self, PyObject *args)
        Developers often forget to call __init__() in their subclasses, which
        would trigger a segfault without this check. */
     if (self->write == NULL) {
-        PyErr_Format(PicklingError, 
+        PyErr_Format(PicklingError,
                      "Pickler.__init__() was not called by %s.__init__()",
                      Py_TYPE(self)->tp_name);
         return NULL;
@@ -3771,7 +3764,7 @@ static PyTypeObject Pickler_Type = {
     0,                                  /*tp_is_gc*/
 };
 
-/* Temporary helper for calling self.find_class(). 
+/* Temporary helper for calling self.find_class().
 
    XXX: It would be nice to able to avoid Python function call overhead, by
    using directly the C version of find_class(), when find_class() is not
@@ -3824,7 +3817,7 @@ load_int(UnpicklerObject *self)
         return bad_readline();
 
     errno = 0;
-    /* XXX: Should the base argument of strtol() be explicitly set to 10? 
+    /* XXX: Should the base argument of strtol() be explicitly set to 10?
        XXX(avassalotti): Should this uses PyOS_strtol()? */
     x = strtol(s, &endptr, 0);
 
@@ -4189,7 +4182,7 @@ load_binstring(UnpicklerObject *self)
 
     x = calc_binint(s, 4);
     if (x < 0) {
-        PyErr_SetString(UnpicklingError, 
+        PyErr_SetString(UnpicklingError,
                         "BINSTRING pickle has negative byte count");
         return -1;
     }
@@ -4983,7 +4976,7 @@ do_setitems(UnpicklerObject *self, Py_ssize_t x)
         return stack_underflow();
     if (len == x)  /* nothing to do */
         return 0;
-    if ((len - x) % 2 != 0) { 
+    if ((len - x) % 2 != 0) {
         /* Currupt or hostile pickle -- we never write one like this. */
         PyErr_SetString(UnpicklingError, "odd number of items for SETITEMS");
         return -1;
@@ -5340,7 +5333,7 @@ Unpickler_load(UnpicklerObject *self)
        not call Unpickler.__init__(). Here, we simply ensure that self->read
        is not NULL. */
     if (self->read == NULL) {
-        PyErr_Format(UnpicklingError, 
+        PyErr_Format(UnpicklingError,
                      "Unpickler.__init__() was not called by %s.__init__()",
                      Py_TYPE(self)->tp_name);
         return NULL;
@@ -5442,7 +5435,7 @@ Unpickler_find_class(UnpicklerObject *self, PyObject *args)
         global = PyObject_GetAttr(module, global_name);
         Py_DECREF(module);
     }
-    else { 
+    else {
         global = PyObject_GetAttr(module, global_name);
     }
     return global;
@@ -5619,7 +5612,7 @@ Unpickler_init(UnpicklerObject *self, PyObject *args, PyObject *kwds)
  * intentional, as these should be treated as black-box implementation details.
  *
  * We do, however, have to implement pickling/unpickling support because of
- * real-world code like cvs2svn. 
+ * real-world code like cvs2svn.
  */
 
 typedef struct {
