@@ -100,16 +100,17 @@ static PyObject *
 set_error(xmlparseobject *self, enum XML_Error code)
 {
     PyObject *err;
-    char buffer[256];
+    PyObject *buffer;
     XML_Parser parser = self->itself;
     int lineno = XML_GetErrorLineNumber(parser);
     int column = XML_GetErrorColumnNumber(parser);
 
-    /* There is no risk of overflowing this buffer, since
-       even for 64-bit integers, there is sufficient space. */
-    sprintf(buffer, "%.200s: line %i, column %i",
-            XML_ErrorString(code), lineno, column);
-    err = PyObject_CallFunction(ErrorObject, "s", buffer);
+    buffer = PyUnicode_FromFormat("%s: line %i, column %i",
+                                  XML_ErrorString(code), lineno, column);
+    if (buffer == NULL)
+        return NULL;
+    err = PyObject_CallFunction(ErrorObject, "O", buffer);
+    Py_DECREF(buffer);
     if (  err != NULL
           && set_error_attr(err, "code", code)
           && set_error_attr(err, "offset", column)
@@ -1101,17 +1102,22 @@ PyUnknownEncodingHandler(void *encodingHandlerData,
     PyUnicodeObject *_u_string = NULL;
     int result = 0;
     int i;
+    int kind;
+    void *data;
 
     /* Yes, supports only 8bit encodings */
     _u_string = (PyUnicodeObject *)
         PyUnicode_Decode(template_buffer, 256, name, "replace");
 
-    if (_u_string == NULL)
+    if (_u_string == NULL || PyUnicode_READY(_u_string) == -1)
         return result;
+
+    kind = PyUnicode_KIND(_u_string);
+    data = PyUnicode_DATA(_u_string);
 
     for (i = 0; i < 256; i++) {
         /* Stupid to access directly, but fast */
-        Py_UNICODE c = _u_string->str[i];
+        Py_UCS4 c = PyUnicode_READ(kind, data, i);
         if (c == Py_UNICODE_REPLACEMENT_CHARACTER)
             info->map[i] = -1;
         else
@@ -1228,11 +1234,13 @@ get_pybool(int istrue)
 static PyObject *
 xmlparse_getattro(xmlparseobject *self, PyObject *nameobj)
 {
-    Py_UNICODE *name;
+    Py_UCS4 first_char;
     int handlernum = -1;
 
     if (!PyUnicode_Check(nameobj))
         goto generic;
+    if (PyUnicode_READY(nameobj))
+        return NULL;
 
     handlernum = handlername2int(nameobj);
 
@@ -1244,8 +1252,8 @@ xmlparse_getattro(xmlparseobject *self, PyObject *nameobj)
         return result;
     }
 
-    name = PyUnicode_AS_UNICODE(nameobj);
-    if (name[0] == 'E') {
+    first_char = PyUnicode_READ_CHAR(nameobj, 0);
+    if (first_char == 'E') {
         if (PyUnicode_CompareWithASCIIString(nameobj, "ErrorCode") == 0)
             return PyLong_FromLong((long)
                                   XML_GetErrorCode(self->itself));
@@ -1259,7 +1267,7 @@ xmlparse_getattro(xmlparseobject *self, PyObject *nameobj)
             return PyLong_FromLong((long)
                                   XML_GetErrorByteIndex(self->itself));
     }
-    if (name[0] == 'C') {
+    if (first_char == 'C') {
         if (PyUnicode_CompareWithASCIIString(nameobj, "CurrentLineNumber") == 0)
             return PyLong_FromLong((long)
                                   XML_GetCurrentLineNumber(self->itself));
@@ -1270,7 +1278,7 @@ xmlparse_getattro(xmlparseobject *self, PyObject *nameobj)
             return PyLong_FromLong((long)
                                   XML_GetCurrentByteIndex(self->itself));
     }
-    if (name[0] == 'b') {
+    if (first_char == 'b') {
         if (PyUnicode_CompareWithASCIIString(nameobj, "buffer_size") == 0)
             return PyLong_FromLong((long) self->buffer_size);
         if (PyUnicode_CompareWithASCIIString(nameobj, "buffer_text") == 0)
@@ -1661,7 +1669,6 @@ MODULE_INITFUNC(void)
     PyObject *errors_module;
     PyObject *modelmod_name;
     PyObject *model_module;
-    PyObject *version;
     PyObject *sys_modules;
     PyObject *tmpnum, *tmpstr;
     PyObject *codes_dict;
@@ -1698,10 +1705,6 @@ MODULE_INITFUNC(void)
     Py_INCREF(&Xmlparsetype);
     PyModule_AddObject(m, "XMLParserType", (PyObject *) &Xmlparsetype);
 
-    version = PyUnicode_FromString(PY_VERSION);
-    if (!version)
-        return NULL;
-    PyModule_AddObject(m, "__version__", version);
     PyModule_AddStringConstant(m, "EXPAT_VERSION",
                                (char *) XML_ExpatVersion());
     {
