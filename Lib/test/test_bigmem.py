@@ -1,3 +1,13 @@
+"""Bigmem tests - tests for the 32-bit boundary in containers.
+
+These tests try to exercise the 32-bit boundary that is sometimes, if
+rarely, exceeded in practice, but almost never tested.  They are really only
+meaningful on 64-bit builds on machines with a *lot* of memory, but the
+tests are always run, usually with very low memory limits to make sure the
+tests themselves don't suffer from bitrot.  To run them for real, pass a
+high memory limit to regrtest, with the -M option.
+"""
+
 from test import support
 from test.support import bigmemtest, _1G, _2G, _4G
 
@@ -6,20 +16,35 @@ import operator
 import sys
 import functools
 
+# These tests all use one of the bigmemtest decorators to indicate how much
+# memory they use and how much memory they need to be even meaningful.  The
+# decorators take two arguments: a 'memuse' indicator declaring
+# (approximate) bytes per size-unit the test will use (at peak usage), and a
+# 'minsize' indicator declaring a minimum *useful* size.  A test that
+# allocates a bytestring to test various operations near the end will have a
+# minsize of at least 2Gb (or it wouldn't reach the 32-bit limit, so the
+# test wouldn't be very useful) and a memuse of 1 (one byte per size-unit,
+# if it allocates only one big string at a time.)
+#
+# When run with a memory limit set, both decorators skip tests that need
+# more memory than available to be meaningful.  The precisionbigmemtest will
+# always pass minsize as size, even if there is much more memory available.
+# The bigmemtest decorator will scale size upward to fill available memory.
+#
 # Bigmem testing houserules:
 #
 #  - Try not to allocate too many large objects. It's okay to rely on
-#    refcounting semantics, but don't forget that 's = create_largestring()'
+#    refcounting semantics, and don't forget that 's = create_largestring()'
 #    doesn't release the old 's' (if it exists) until well after its new
 #    value has been created. Use 'del s' before the create_largestring call.
 #
-#  - Do *not* compare large objects using assertEqual or similar. It's a
-#    lengthy operation and the errormessage will be utterly useless due to
-#    its size. To make sure whether a result has the right contents, better
-#    to use the strip or count methods, or compare meaningful slices.
+#  - Do *not* compare large objects using assertEqual, assertIn or similar.
+#    It's a lengthy operation and the errormessage will be utterly useless
+#    due to its size.  To make sure whether a result has the right contents,
+#    better to use the strip or count methods, or compare meaningful slices.
 #
 #  - Don't forget to test for large indices, offsets and results and such,
-#    in addition to large sizes.
+#    in addition to large sizes. Anything that probes the 32-bit boundary.
 #
 #  - When repeating an object (say, a substring, or a small list) to create
 #    a large object, make the subobject of a length that is not a power of
@@ -37,7 +62,9 @@ import functools
 # fail as well. I do not know whether it is due to memory fragmentation
 # issues, or other specifics of the platform malloc() routine.
 
-character_size = 4 if sys.maxunicode > 0xFFFF else 2
+ascii_char_size = 1
+ucs2_char_size = 2
+ucs4_char_size = 4
 
 
 class BaseStrTest:
@@ -92,7 +119,7 @@ class BaseStrTest:
         _ = self.from_latin1
         s = _('-') * size
         tabsize = 8
-        self.assertEqual(s.expandtabs(), s)
+        self.assertTrue(s.expandtabs() == s)
         del s
         slen, remainder = divmod(size, tabsize)
         s = _('       \t') * slen
@@ -519,19 +546,19 @@ class BaseStrTest:
         edge = _('-') * (size // 2)
         s = _('').join([edge, SUBSTR, edge])
         del edge
-        self.assertIn(SUBSTR, s)
-        self.assertNotIn(SUBSTR * 2, s)
-        self.assertIn(_('-'), s)
-        self.assertNotIn(_('a'), s)
+        self.assertTrue(SUBSTR in s)
+        self.assertFalse(SUBSTR * 2 in s)
+        self.assertTrue(_('-') in s)
+        self.assertFalse(_('a') in s)
         s += _('a')
-        self.assertIn(_('a'), s)
+        self.assertTrue(_('a') in s)
 
     @bigmemtest(size=_2G + 10, memuse=2)
     def test_compare(self, size):
         _ = self.from_latin1
         s1 = _('-') * size
         s2 = _('-') * size
-        self.assertEqual(s1, s2)
+        self.assertTrue(s1 == s2)
         del s2
         s2 = s1 + _('a')
         self.assertFalse(s1 == s2)
@@ -552,7 +579,7 @@ class BaseStrTest:
         h1 = hash(s)
         del s
         s = _('\x00') * (size + 1)
-        self.assertFalse(h1 == hash(s))
+        self.assertNotEqual(h1, hash(s))
 
 
 class StrTest(unittest.TestCase, BaseStrTest):
@@ -563,7 +590,6 @@ class StrTest(unittest.TestCase, BaseStrTest):
     def basic_encode_test(self, size, enc, c='.', expectedsize=None):
         if expectedsize is None:
             expectedsize = size
-
         try:
             s = c * size
             self.assertEqual(len(s.encode(enc)), expectedsize)
@@ -582,7 +608,7 @@ class StrTest(unittest.TestCase, BaseStrTest):
                 memuse = meth.memuse
             except AttributeError:
                 continue
-            meth.memuse = character_size * memuse
+            meth.memuse = ascii_char_size * memuse
             self._adjusted[name] = memuse
 
     def tearDown(self):
@@ -590,40 +616,40 @@ class StrTest(unittest.TestCase, BaseStrTest):
             getattr(type(self), name).memuse = memuse
 
     # the utf8 encoder preallocates big time (4x the number of characters)
-    @bigmemtest(size=_2G + 2, memuse=character_size + 4)
+    @bigmemtest(size=_2G + 2, memuse=ascii_char_size + 4)
     def test_encode(self, size):
         return self.basic_encode_test(size, 'utf-8')
 
-    @bigmemtest(size=_4G // 6 + 2, memuse=character_size + 1)
+    @bigmemtest(size=_4G // 6 + 2, memuse=ascii_char_size + 1)
     def test_encode_raw_unicode_escape(self, size):
         try:
             return self.basic_encode_test(size, 'raw_unicode_escape')
         except MemoryError:
             pass # acceptable on 32-bit
 
-    @bigmemtest(size=_4G // 5 + 70, memuse=character_size + 1)
+    @bigmemtest(size=_4G // 5 + 70, memuse=ascii_char_size + 1)
     def test_encode_utf7(self, size):
         try:
             return self.basic_encode_test(size, 'utf7')
         except MemoryError:
             pass # acceptable on 32-bit
 
-    @bigmemtest(size=_4G // 4 + 5, memuse=character_size + 4)
+    @bigmemtest(size=_4G // 4 + 5, memuse=ascii_char_size + 4)
     def test_encode_utf32(self, size):
         try:
-            return self.basic_encode_test(size, 'utf32', expectedsize=4*size+4)
+            return self.basic_encode_test(size, 'utf32', expectedsize=4 * size + 4)
         except MemoryError:
             pass # acceptable on 32-bit
 
-    @bigmemtest(size=_2G - 1, memuse=character_size + 1)
+    @bigmemtest(size=_2G - 1, memuse=ascii_char_size + 1)
     def test_encode_ascii(self, size):
         return self.basic_encode_test(size, 'ascii', c='A')
 
-    @bigmemtest(size=_2G + 10, memuse=character_size * 2)
+    @bigmemtest(size=_2G + 10, memuse=ascii_char_size * 2)
     def test_format(self, size):
         s = '-' * size
         sf = '%s' % (s,)
-        self.assertEqual(s, sf)
+        self.assertTrue(s == sf)
         del sf
         sf = '..%s..' % (s,)
         self.assertEqual(len(sf), len(s) + 4)
@@ -640,7 +666,7 @@ class StrTest(unittest.TestCase, BaseStrTest):
         self.assertEqual(s.count('.'), 3)
         self.assertEqual(s.count('-'), size * 2)
 
-    @bigmemtest(size=_2G + 10, memuse=character_size * 2)
+    @bigmemtest(size=_2G + 10, memuse=ascii_char_size * 2)
     def test_repr_small(self, size):
         s = '-' * size
         s = repr(s)
@@ -661,7 +687,7 @@ class StrTest(unittest.TestCase, BaseStrTest):
         self.assertEqual(s.count('\\'), size)
         self.assertEqual(s.count('0'), size * 2)
 
-    @bigmemtest(size=_2G + 10, memuse=character_size * 5)
+    @bigmemtest(size=_2G + 10, memuse=ascii_char_size * 5)
     def test_repr_large(self, size):
         s = '\x00' * size
         s = repr(s)
@@ -671,7 +697,7 @@ class StrTest(unittest.TestCase, BaseStrTest):
         self.assertEqual(s.count('\\'), size)
         self.assertEqual(s.count('0'), size * 2)
 
-    @bigmemtest(size=_2G // 5 + 1, memuse=character_size * 7)
+    @bigmemtest(size=_2G // 5 + 1, memuse=ucs2_char_size + ascii_char_size * 6)
     def test_unicode_repr(self, size):
         # Use an assigned, but not printable code point.
         # It is in the range of the low surrogates \uDC00-\uDFFF.
@@ -686,9 +712,7 @@ class StrTest(unittest.TestCase, BaseStrTest):
         finally:
             r = s = None
 
-    # The character takes 4 bytes even in UCS-2 builds because it will
-    # be decomposed into surrogates.
-    @bigmemtest(size=_2G // 5 + 1, memuse=4 + character_size * 9)
+    @bigmemtest(size=_2G // 5 + 1, memuse=ucs4_char_size + ascii_char_size * 10)
     def test_unicode_repr_wide(self, size):
         char = "\U0001DCBA"
         s = char * size
@@ -701,24 +725,13 @@ class StrTest(unittest.TestCase, BaseStrTest):
         finally:
             r = s = None
 
-    @bigmemtest(size=_4G // 5, memuse=character_size * (6 + 1))
-    def _test_unicode_repr_overflow(self, size):
-        # XXX not sure what this test is about
-        char = "\uDCBA"
-        s = char * size
-        try:
-            r = repr(s)
-            self.assertTrue(s == eval(r))
-        finally:
-            r = s = None
-
 
 class BytesTest(unittest.TestCase, BaseStrTest):
 
     def from_latin1(self, s):
-        return s.encode("latin1")
+        return s.encode("latin-1")
 
-    @bigmemtest(size=_2G + 2, memuse=1 + character_size)
+    @bigmemtest(size=_2G + 2, memuse=1 + ascii_char_size)
     def test_decode(self, size):
         s = self.from_latin1('.') * size
         self.assertEqual(len(s.decode('utf-8')), size)
@@ -727,9 +740,9 @@ class BytesTest(unittest.TestCase, BaseStrTest):
 class BytearrayTest(unittest.TestCase, BaseStrTest):
 
     def from_latin1(self, s):
-        return bytearray(s.encode("latin1"))
+        return bytearray(s.encode("latin-1"))
 
-    @bigmemtest(size=_2G + 2, memuse=1 + character_size)
+    @bigmemtest(size=_2G + 2, memuse=1 + ascii_char_size)
     def test_decode(self, size):
         s = self.from_latin1('.') * size
         self.assertEqual(len(s.decode('utf-8')), size)
@@ -752,7 +765,7 @@ class TupleTest(unittest.TestCase):
     def test_compare(self, size):
         t1 = ('',) * size
         t2 = ('',) * size
-        self.assertEqual(t1, t2)
+        self.assertTrue(t1 == t2)
         del t2
         t2 = ('',) * (size + 1)
         self.assertFalse(t1 == t2)
@@ -783,9 +796,9 @@ class TupleTest(unittest.TestCase):
     def test_contains(self, size):
         t = (1, 2, 3, 4, 5) * size
         self.assertEqual(len(t), size * 5)
-        self.assertIn(5, t)
-        self.assertNotIn((1, 2, 3, 4, 5), t)
-        self.assertNotIn(0, t)
+        self.assertTrue(5 in t)
+        self.assertFalse((1, 2, 3, 4, 5) in t)
+        self.assertFalse(0 in t)
 
     @bigmemtest(size=_2G + 10, memuse=8)
     def test_hash(self, size):
@@ -869,11 +882,11 @@ class TupleTest(unittest.TestCase):
         self.assertEqual(s[-5:], '0, 0)')
         self.assertEqual(s.count('0'), size)
 
-    @bigmemtest(size=_2G // 3 + 2, memuse=8 + 3 * character_size)
+    @bigmemtest(size=_2G // 3 + 2, memuse=8 + 3 * ascii_char_size)
     def test_repr_small(self, size):
         return self.basic_test_repr(size)
 
-    @bigmemtest(size=_2G + 2, memuse=8 + 3 * character_size)
+    @bigmemtest(size=_2G + 2, memuse=8 + 3 * ascii_char_size)
     def test_repr_large(self, size):
         return self.basic_test_repr(size)
 
@@ -888,7 +901,7 @@ class ListTest(unittest.TestCase):
     def test_compare(self, size):
         l1 = [''] * size
         l2 = [''] * size
-        self.assertEqual(l1, l2)
+        self.assertTrue(l1 == l2)
         del l2
         l2 = [''] * (size + 1)
         self.assertFalse(l1 == l2)
@@ -934,9 +947,9 @@ class ListTest(unittest.TestCase):
     def test_contains(self, size):
         l = [1, 2, 3, 4, 5] * size
         self.assertEqual(len(l), size * 5)
-        self.assertIn(5, l)
-        self.assertNotIn([1, 2, 3, 4, 5], l)
-        self.assertNotIn(0, l)
+        self.assertTrue(5 in l)
+        self.assertFalse([1, 2, 3, 4, 5] in l)
+        self.assertFalse(0 in l)
 
     @bigmemtest(size=_2G + 10, memuse=8)
     def test_hash(self, size):
@@ -1044,11 +1057,11 @@ class ListTest(unittest.TestCase):
         self.assertEqual(s[-5:], '0, 0]')
         self.assertEqual(s.count('0'), size)
 
-    @bigmemtest(size=_2G // 3 + 2, memuse=8 + 3 * character_size)
+    @bigmemtest(size=_2G // 3 + 2, memuse=8 + 3 * ascii_char_size)
     def test_repr_small(self, size):
         return self.basic_test_repr(size)
 
-    @bigmemtest(size=_2G + 2, memuse=8 + 3 * character_size)
+    @bigmemtest(size=_2G + 2, memuse=8 + 3 * ascii_char_size)
     def test_repr_large(self, size):
         return self.basic_test_repr(size)
 

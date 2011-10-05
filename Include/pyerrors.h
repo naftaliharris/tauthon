@@ -70,7 +70,17 @@ PyAPI_FUNC(PyObject *) PyErr_Occurred(void);
 PyAPI_FUNC(void) PyErr_Clear(void);
 PyAPI_FUNC(void) PyErr_Fetch(PyObject **, PyObject **, PyObject **);
 PyAPI_FUNC(void) PyErr_Restore(PyObject *, PyObject *, PyObject *);
-PyAPI_FUNC(void) Py_FatalError(const char *message);
+
+#if defined(__clang__) || \
+    (defined(__GNUC__) && \
+     ((__GNUC_MAJOR__ >= 3) || \
+      (__GNUC_MAJOR__ == 2) && (__GNUC_MINOR__ >= 5)))
+#define _Py_NO_RETURN __attribute__((__noreturn__))
+#else
+#define _Py_NO_RETURN
+#endif
+
+PyAPI_FUNC(void) Py_FatalError(const char *message) _Py_NO_RETURN;
 
 #if defined(Py_DEBUG) || defined(Py_LIMITED_API)
 #define _PyErr_OCCURRED() PyErr_Occurred()
@@ -198,8 +208,6 @@ PyAPI_FUNC(PyObject *) PyErr_Format(
     );
 
 #ifdef MS_WINDOWS
-PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilenameObject(
-    int, const char *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilename(
     int ierr,
     const char *filename        /* decoded from the filesystem encoding */
@@ -289,6 +297,12 @@ PyAPI_FUNC(PyObject *) PyUnicodeEncodeError_Create(
 PyAPI_FUNC(PyObject *) PyUnicodeTranslateError_Create(
     const Py_UNICODE *object,
     Py_ssize_t length,
+    Py_ssize_t start,
+    Py_ssize_t end,
+    const char *reason          /* UTF-8 encoded string */
+    );
+PyAPI_FUNC(PyObject *) _PyUnicodeTranslateError_Create(
+    PyObject *object,
     Py_ssize_t start,
     Py_ssize_t end,
     const char *reason          /* UTF-8 encoded string */

@@ -1,5 +1,6 @@
 import sys, os
 import contextlib
+import subprocess
 
 # find_library(name) returns the pathname of a library, or None.
 if os.name == "nt":
@@ -136,16 +137,12 @@ elif os.name == "posix":
             rv = f.close()
             if rv == 10:
                 raise OSError('objdump command not found')
-            with contextlib.closing(os.popen(cmd)) as f:
-                data = f.read()
-            res = re.search(r'\sSONAME\s+([^\s]+)', data)
+            res = re.search(r'\sSONAME\s+([^\s]+)', dump)
             if not res:
                 return None
             return res.group(1)
 
-    if (sys.platform.startswith("freebsd")
-        or sys.platform.startswith("openbsd")
-        or sys.platform.startswith("dragonfly")):
+    if sys.platform.startswith(("freebsd", "openbsd", "dragonfly")):
 
         def _num_version(libname):
             # "libxyz.so.MAJOR.MINOR" => [ MAJOR, MINOR ]
@@ -171,22 +168,6 @@ elif os.name == "posix":
 
     else:
 
-        def _findLib_ldconfig(name):
-            # XXX assuming GLIBC's ldconfig (with option -p)
-            expr = r'/[^\(\)\s]*lib%s\.[^\(\)\s]*' % re.escape(name)
-            with contextlib.closing(os.popen('/sbin/ldconfig -p 2>/dev/null')) as f:
-                data = f.read()
-            res = re.search(expr, data)
-            if not res:
-                # Hm, this works only for libs needed by the python executable.
-                cmd = 'ldd %s 2>/dev/null' % sys.executable
-                with contextlib.closing(os.popen(cmd)) as f:
-                    data = f.read()
-                res = re.search(expr, data)
-                if not res:
-                    return None
-            return res.group(0)
-
         def _findSoname_ldconfig(name):
             import struct
             if struct.calcsize('l') == 4:
@@ -203,14 +184,19 @@ elif os.name == "posix":
             abi_type = mach_map.get(machine, 'libc6')
 
             # XXX assuming GLIBC's ldconfig (with option -p)
-            expr = r'(\S+)\s+\((%s(?:, OS ABI:[^\)]*)?)\)[^/]*(/[^\(\)\s]*lib%s\.[^\(\)\s]*)' \
-                   % (abi_type, re.escape(name))
-            with contextlib.closing(os.popen('LC_ALL=C LANG=C /sbin/ldconfig -p 2>/dev/null')) as f:
-                data = f.read()
-            res = re.search(expr, data)
-            if not res:
-                return None
-            return res.group(1)
+            regex = os.fsencode(
+                '\s+(lib%s\.[^\s]+)\s+\(%s' % (re.escape(name), abi_type))
+            try:
+                with subprocess.Popen(['/sbin/ldconfig', '-p'],
+                                      stdin=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL,
+                                      stdout=subprocess.PIPE,
+                                      env={'LC_ALL': 'C', 'LANG': 'C'}) as p:
+                    res = re.search(regex, p.stdout.read())
+                    if res:
+                        return os.fsdecode(res.group(1))
+            except OSError:
+                pass
 
         def find_library(name):
             return _findSoname_ldconfig(name) or _get_soname(_findLib_gcc(name))
