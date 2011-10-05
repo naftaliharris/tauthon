@@ -1,9 +1,9 @@
 /*
     An implementation of Buffered I/O as defined by PEP 3116 - "New I/O"
-    
+
     Classes defined here: BufferedIOBase, BufferedReader, BufferedWriter,
     BufferedRandom.
-    
+
     Written by Amaury Forgeot d'Arc and Antoine Pitrou
 */
 
@@ -198,7 +198,7 @@ typedef struct {
     int readable;
     int writable;
     int deallocating;
-    
+
     /* True if this is a vanilla Buffered object (rather than a user derived
        class) *and* the raw stream is a vanilla FileIO object. */
     int fast_closed_checks;
@@ -237,7 +237,7 @@ typedef struct {
 
 /*
     Implementation notes:
-    
+
     * BufferedReader, BufferedWriter and BufferedRandom try to share most
       methods (this is helped by the members `readable` and `writable`, which
       are initialized in the respective constructors)
@@ -255,7 +255,7 @@ typedef struct {
     NOTE: we should try to maintain block alignment of reads and writes to the
     raw stream (according to the buffer size), but for now it is only done
     in read() and friends.
-    
+
 */
 
 /* These macros protect the buffered object against concurrent operations. */
@@ -589,14 +589,15 @@ _bufferedreader_reset_buf(buffered *self);
 static void
 _bufferedwriter_reset_buf(buffered *self);
 static PyObject *
-_bufferedreader_peek_unlocked(buffered *self, Py_ssize_t);
+_bufferedreader_peek_unlocked(buffered *self);
 static PyObject *
 _bufferedreader_read_all(buffered *self);
 static PyObject *
 _bufferedreader_read_fast(buffered *self, Py_ssize_t);
 static PyObject *
 _bufferedreader_read_generic(buffered *self, Py_ssize_t);
-
+static Py_ssize_t
+_bufferedreader_raw_read(buffered *self, char *start, Py_ssize_t len);
 
 /*
  * Helpers
@@ -635,7 +636,7 @@ _buffered_raw_tell(buffered *self)
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_IOError,
                          "Raw stream returned invalid position %" PY_PRIdOFF,
-			 (PY_OFF_T_COMPAT)n);
+                         (PY_OFF_T_COMPAT)n);
         return -1;
     }
     self->abs_pos = n;
@@ -668,7 +669,7 @@ _buffered_raw_seek(buffered *self, Py_off_t target, int whence)
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_IOError,
                          "Raw stream returned invalid position %" PY_PRIdOFF,
-			 (PY_OFF_T_COMPAT)n);
+                         (PY_OFF_T_COMPAT)n);
         return -1;
     }
     self->abs_pos = n;
@@ -809,7 +810,7 @@ buffered_peek(buffered *self, PyObject *args)
             goto end;
         Py_CLEAR(res);
     }
-    res = _bufferedreader_peek_unlocked(self, n);
+    res = _bufferedreader_peek_unlocked(self);
 
 end:
     LEAVE_BUFFERED(self)
@@ -875,7 +876,7 @@ buffered_read1(buffered *self, PyObject *args)
 
     if (!ENTER_BUFFERED(self))
         return NULL;
-    
+
     /* Return up to n bytes.  If at least one byte is buffered, we
        only return buffered bytes.  Otherwise, we do one raw read. */
 
@@ -924,10 +925,78 @@ end:
 static PyObject *
 buffered_readinto(buffered *self, PyObject *args)
 {
+    Py_buffer buf;
+    Py_ssize_t n, written = 0, remaining;
+    PyObject *res = NULL;
+
     CHECK_INITIALIZED(self)
-    
-    /* TODO: use raw.readinto() (or a direct copy from our buffer) instead! */
-    return bufferediobase_readinto((PyObject *)self, args);
+
+    if (!PyArg_ParseTuple(args, "w*:readinto", &buf))
+        return NULL;
+
+    n = Py_SAFE_DOWNCAST(READAHEAD(self), Py_off_t, Py_ssize_t);
+    if (n > 0) {
+        if (n >= buf.len) {
+            memcpy(buf.buf, self->buffer + self->pos, buf.len);
+            self->pos += buf.len;
+            res = PyLong_FromSsize_t(buf.len);
+            goto end_unlocked;
+        }
+        memcpy(buf.buf, self->buffer + self->pos, n);
+        self->pos += n;
+        written = n;
+    }
+
+    if (!ENTER_BUFFERED(self))
+        goto end_unlocked;
+
+    if (self->writable) {
+        res = buffered_flush_and_rewind_unlocked(self);
+        if (res == NULL)
+            goto end;
+        Py_CLEAR(res);
+    }
+
+    _bufferedreader_reset_buf(self);
+    self->pos = 0;
+
+    for (remaining = buf.len - written;
+         remaining > 0;
+         written += n, remaining -= n) {
+        /* If remaining bytes is larger than internal buffer size, copy
+         * directly into caller's buffer. */
+        if (remaining > self->buffer_size) {
+            n = _bufferedreader_raw_read(self, (char *) buf.buf + written,
+                                         remaining);
+        }
+        else {
+            n = _bufferedreader_fill_buffer(self);
+            if (n > 0) {
+                if (n > remaining)
+                    n = remaining;
+                memcpy((char *) buf.buf + written,
+                       self->buffer + self->pos, n);
+                self->pos += n;
+                continue; /* short circuit */
+            }
+        }
+        if (n == 0 || (n == -2 && written > 0))
+            break;
+        if (n < 0) {
+            if (n == -2) {
+                Py_INCREF(Py_None);
+                res = Py_None;
+            }
+            goto end;
+        }
+    }
+    res = PyLong_FromSsize_t(written);
+
+end:
+    LEAVE_BUFFERED(self);
+end_unlocked:
+    PyBuffer_Release(&buf);
+    return res;
 }
 
 static PyObject *
@@ -1345,33 +1414,58 @@ static PyObject *
 _bufferedreader_read_all(buffered *self)
 {
     Py_ssize_t current_size;
-    PyObject *res, *data = NULL;
-    PyObject *chunks = PyList_New(0);
-
-    if (chunks == NULL)
-        return NULL;
+    PyObject *res, *data = NULL, *chunk, *chunks;
 
     /* First copy what we have in the current buffer. */
     current_size = Py_SAFE_DOWNCAST(READAHEAD(self), Py_off_t, Py_ssize_t);
     if (current_size) {
         data = PyBytes_FromStringAndSize(
             self->buffer + self->pos, current_size);
-        if (data == NULL) {
-            Py_DECREF(chunks);
+        if (data == NULL)
             return NULL;
-        }
         self->pos += current_size;
     }
     /* We're going past the buffer's bounds, flush it */
     if (self->writable) {
         res = buffered_flush_and_rewind_unlocked(self);
-        if (res == NULL) {
-            Py_DECREF(chunks);
+        if (res == NULL)
             return NULL;
-        }
         Py_CLEAR(res);
     }
     _bufferedreader_reset_buf(self);
+
+    if (PyObject_HasAttr(self->raw, _PyIO_str_readall)) {
+        chunk = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_readall, NULL);
+        if (chunk == NULL)
+            return NULL;
+        if (chunk != Py_None && !PyBytes_Check(chunk)) {
+            Py_XDECREF(data);
+            Py_DECREF(chunk);
+            PyErr_SetString(PyExc_TypeError, "readall() should return bytes");
+            return NULL;
+        }
+        if (chunk == Py_None) {
+            if (current_size == 0)
+                return chunk;
+            else {
+                Py_DECREF(chunk);
+                return data;
+            }
+        }
+        else if (current_size) {
+            PyBytes_Concat(&data, chunk);
+            Py_DECREF(chunk);
+            if (data == NULL)
+                return NULL;
+            return data;
+        } else
+            return chunk;
+    }
+
+    chunks = PyList_New(0);
+    if (chunks == NULL)
+        return NULL;
+
     while (1) {
         if (data) {
             if (PyList_Append(chunks, data) < 0) {
@@ -1533,7 +1627,7 @@ error:
 }
 
 static PyObject *
-_bufferedreader_peek_unlocked(buffered *self, Py_ssize_t n)
+_bufferedreader_peek_unlocked(buffered *self)
 {
     Py_ssize_t have, r;
 
@@ -1575,6 +1669,7 @@ static PyMethodDef bufferedreader_methods[] = {
     {"read", (PyCFunction)buffered_read, METH_VARARGS},
     {"peek", (PyCFunction)buffered_peek, METH_VARARGS},
     {"read1", (PyCFunction)buffered_read1, METH_VARARGS},
+    {"readinto", (PyCFunction)buffered_readinto, METH_VARARGS},
     {"readline", (PyCFunction)buffered_readline, METH_VARARGS},
     {"seek", (PyCFunction)buffered_seek, METH_VARARGS},
     {"tell", (PyCFunction)buffered_tell, METH_NOARGS},

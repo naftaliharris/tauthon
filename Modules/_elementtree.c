@@ -226,7 +226,7 @@ typedef struct {
     PyObject* *children;
 
     PyObject* _children[STATIC_CHILDREN];
-    
+
 } ElementObjectExtra;
 
 typedef struct {
@@ -354,14 +354,14 @@ element_resize(ElementObject* self, int extra)
         /* use Python 2.4's list growth strategy */
         size = (size >> 3) + (size < 9 ? 3 : 6) + size;
         /* Coverity CID #182 size_error: Allocating 1 bytes to pointer "children"
-         * which needs at least 4 bytes. 
-         * Although it's a false alarm always assume at least one child to 
+         * which needs at least 4 bytes.
+         * Although it's a false alarm always assume at least one child to
          * be safe.
          */
         size = size ? size : 1;
         if (self->extra->children != self->extra->_children) {
             /* Coverity CID #182 size_error: Allocating 1 bytes to pointer
-             * "children", which needs at least 4 bytes. Although it's a 
+             * "children", which needs at least 4 bytes. Although it's a
              * false alarm always assume at least one child to be safe.
              */
             children = PyObject_Realloc(self->extra->children,
@@ -606,7 +606,7 @@ element_copy(ElementObject* self, PyObject* args)
     Py_INCREF(JOIN_OBJ(element->tail));
 
     if (self->extra) {
-        
+
         if (element_resize(element, self->extra->length) < 0) {
             Py_DECREF(element);
             return NULL;
@@ -618,7 +618,7 @@ element_copy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-        
+
     }
 
     return (PyObject*) element;
@@ -661,7 +661,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
 
     if (!element)
         return NULL;
-    
+
     text = deepcopy(JOIN_OBJ(self->text), memo);
     if (!text)
         goto error;
@@ -675,7 +675,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
     element->tail = JOIN_SET(tail, JOIN_GET(self->tail));
 
     if (self->extra) {
-        
+
         if (element_resize(element, self->extra->length) < 0)
             goto error;
 
@@ -689,7 +689,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-        
+
     }
 
     /* add object to memo dictionary (so deepcopy won't visit it again) */
@@ -723,13 +723,16 @@ checkpath(PyObject* tag)
     (ch == '/' || ch == '*' || ch == '[' || ch == '@' || ch == '.')
 
     if (PyUnicode_Check(tag)) {
-        Py_UNICODE *p = PyUnicode_AS_UNICODE(tag);
-        for (i = 0; i < PyUnicode_GET_SIZE(tag); i++) {
-            if (p[i] == '{')
+        const Py_ssize_t len = PyUnicode_GET_LENGTH(tag);
+        void *data = PyUnicode_DATA(tag);
+        unsigned int kind = PyUnicode_KIND(tag);
+        for (i = 0; i < len; i++) {
+            Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+            if (ch == '{')
                 check = 0;
-            else if (p[i] == '}')
+            else if (ch == '}')
                 check = 1;
-            else if (check && PATHCHAR(p[i]))
+            else if (check && PATHCHAR(ch))
                 return 1;
         }
         return 0;
@@ -800,7 +803,7 @@ element_find(ElementObject* self, PyObject* args)
 
     if (!self->extra)
         Py_RETURN_NONE;
-        
+
     for (i = 0; i < self->extra->length; i++) {
         PyObject* item = self->extra->children[i];
         if (Element_CheckExact(item) &&
@@ -953,7 +956,7 @@ static PyObject*
 element_iter(ElementObject* self, PyObject* args)
 {
     PyObject* result;
-    
+
     PyObject* tag = Py_None;
     if (!PyArg_ParseTuple(args, "|O:iter", &tag))
         return NULL;
@@ -985,7 +988,7 @@ static PyObject*
 element_itertext(ElementObject* self, PyObject* args)
 {
     PyObject* result;
-    
+
     if (!PyArg_ParseTuple(args, ":itertext"))
         return NULL;
 
@@ -1483,7 +1486,7 @@ element_getattro(ElementObject* self, PyObject* nameobj)
 
     if (PyUnicode_Check(nameobj))
         name = _PyUnicode_AsString(nameobj);
-    
+
     if (name == NULL)
         return NULL;
 
@@ -2113,7 +2116,7 @@ makeuniversal(XMLParserObject* self, const char* string)
             Py_INCREF(key);
             tag = key;
         }
-        
+
         /* decode universal name */
         p = PyBytes_AS_STRING(tag);
         value = PyUnicode_DecodeUTF8(p, size, "strict");
@@ -2138,13 +2141,15 @@ makeuniversal(XMLParserObject* self, const char* string)
 static void
 expat_set_error(const char* message, int line, int column)
 {
-    PyObject *error;
-    PyObject *position;
-    char buffer[256];
+    PyObject *errmsg, *error, *position;
 
-    sprintf(buffer, "%.100s: line %d, column %d", message, line, column);
+    errmsg = PyUnicode_FromFormat("%s: line %d, column %d",
+                                  message, line, column);
+    if (errmsg == NULL)
+        return;
 
-    error = PyObject_CallFunction(elementtree_parseerror_obj, "s", buffer);
+    error = PyObject_CallFunction(elementtree_parseerror_obj, "O", errmsg);
+    Py_DECREF(errmsg);
     if (!error)
         return;
 
@@ -2399,29 +2404,33 @@ expat_unknown_encoding_handler(XMLParserObject *self, const XML_Char *name,
                                XML_Encoding *info)
 {
     PyObject* u;
-    Py_UNICODE* p;
     unsigned char s[256];
     int i;
+    void *data;
+    unsigned int kind;
 
     memset(info, 0, sizeof(XML_Encoding));
 
     for (i = 0; i < 256; i++)
         s[i] = i;
-    
+
     u = PyUnicode_Decode((char*) s, 256, name, "replace");
     if (!u)
         return XML_STATUS_ERROR;
+    if (PyUnicode_READY(u))
+        return XML_STATUS_ERROR;
 
-    if (PyUnicode_GET_SIZE(u) != 256) {
+    if (PyUnicode_GET_LENGTH(u) != 256) {
         Py_DECREF(u);
         return XML_STATUS_ERROR;
     }
 
-    p = PyUnicode_AS_UNICODE(u);
-
+    kind = PyUnicode_KIND(u);
+    data = PyUnicode_DATA(u);
     for (i = 0; i < 256; i++) {
-        if (p[i] != Py_UNICODE_REPLACEMENT_CHARACTER)
-            info->map[i] = p[i];
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+        if (ch != Py_UNICODE_REPLACEMENT_CHARACTER)
+            info->map[i] = ch;
         else
             info->map[i] = -1;
     }
@@ -2466,7 +2475,7 @@ xmlparser(PyObject* self_, PyObject* args, PyObject* kw)
         PyObject_Del(self);
         return NULL;
     }
-     
+
     self->names = PyDict_New();
     if (!self->names) {
         PyObject_Del(self->entity);
@@ -2645,7 +2654,7 @@ xmlparser_parse(XMLParserObject* self, PyObject* args)
     reader = PyObject_GetAttrString(fileobj, "read");
     if (!reader)
         return NULL;
-    
+
     /* read from open file object */
     for (;;) {
 
@@ -2796,7 +2805,7 @@ static PyMethodDef xmlparser_methods[] = {
     {NULL, NULL}
 };
 
-static PyObject*  
+static PyObject*
 xmlparser_getattro(XMLParserObject* self, PyObject* nameobj)
 {
     if (PyUnicode_Check(nameobj)) {
@@ -2957,7 +2966,7 @@ PyInit__elementtree(void)
         "            break\n"
         "          parser.feed(data)\n"
         "        self._root = parser.close()\n"
-        "      else:\n" 
+        "      else:\n"
         "        parser = cElementTree.XMLParser()\n"
         "        self._root = parser._parse(source)\n"
         "      return self._root\n"

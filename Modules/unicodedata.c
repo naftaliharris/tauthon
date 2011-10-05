@@ -92,16 +92,13 @@ new_previous_version(const char*name, const change_record* (*getrecord)(Py_UCS4)
 
 static Py_UCS4 getuchar(PyUnicodeObject *obj)
 {
-    Py_UNICODE *v = PyUnicode_AS_UNICODE(obj);
-
-    if (PyUnicode_GET_SIZE(obj) == 1)
-        return *v;
-#ifndef Py_UNICODE_WIDE
-    else if ((PyUnicode_GET_SIZE(obj) == 2) &&
-             (0xD800 <= v[0] && v[0] <= 0xDBFF) &&
-             (0xDC00 <= v[1] && v[1] <= 0xDFFF))
-        return (((v[0] & 0x3FF)<<10) | (v[1] & 0x3FF)) + 0x10000;
-#endif
+    if (PyUnicode_READY(obj))
+        return (Py_UCS4)-1;
+    if (PyUnicode_GET_LENGTH(obj) == 1) {
+        if (PyUnicode_READY(obj))
+            return (Py_UCS4)-1;
+        return PyUnicode_READ_CHAR(obj, 0);
+    }
     PyErr_SetString(PyExc_TypeError,
                     "need a single Unicode character as parameter");
     return (Py_UCS4)-1;
@@ -442,7 +439,7 @@ unicodedata_decomposition(PyObject *self, PyObject *args)
        from Tools/unicode/makeunicodedata.py, it should not be possible
        to overflow decomp_prefix. */
     prefix_index = decomp_data[index] & 255;
-    assert(prefix_index < (sizeof(decomp_prefix)/sizeof(*decomp_prefix)));
+    assert(prefix_index < Py_ARRAY_LENGTH(decomp_prefix));
 
     /* copy prefix */
     i = strlen(decomp_prefix[prefix_index]);
@@ -497,36 +494,44 @@ static PyObject*
 nfd_nfkd(PyObject *self, PyObject *input, int k)
 {
     PyObject *result;
-    Py_UNICODE *i, *end, *o;
+    Py_UCS4 *output;
+    Py_ssize_t i, o, osize;
+    int kind;
+    void *data;
     /* Longest decomposition in Unicode 3.2: U+FDFA */
-    Py_UNICODE stack[20];
+    Py_UCS4 stack[20];
     Py_ssize_t space, isize;
     int index, prefix, count, stackptr;
     unsigned char prev, cur;
 
     stackptr = 0;
-    isize = PyUnicode_GET_SIZE(input);
+    isize = PyUnicode_GET_LENGTH(input);
     /* Overallocate atmost 10 characters. */
     space = (isize > 10 ? 10 : isize) + isize;
-    result = PyUnicode_FromUnicode(NULL, space);
-    if (!result)
+    osize = space;
+    output = PyMem_Malloc(space * sizeof(Py_UCS4));
+    if (!output) {
+        PyErr_NoMemory();
         return NULL;
-    i = PyUnicode_AS_UNICODE(input);
-    end = i + isize;
-    o = PyUnicode_AS_UNICODE(result);
+    }
+    i = o = 0;
+    kind = PyUnicode_KIND(input);
+    data = PyUnicode_DATA(input);
 
-    while (i < end) {
-        stack[stackptr++] = *i++;
+    while (i < isize) {
+        stack[stackptr++] = PyUnicode_READ(kind, data, i++);
         while(stackptr) {
-            Py_UNICODE code = stack[--stackptr];
+            Py_UCS4 code = stack[--stackptr];
             /* Hangul Decomposition adds three characters in
                a single step, so we need atleast that much room. */
             if (space < 3) {
-                Py_ssize_t newsize = PyUnicode_GET_SIZE(result) + 10;
+                osize += 10;
                 space += 10;
-                if (PyUnicode_Resize(&result, newsize) == -1)
+                output = PyMem_Realloc(output, osize*sizeof(Py_UCS4));
+                if (output == NULL) {
+                    PyErr_NoMemory();
                     return NULL;
-                o = PyUnicode_AS_UNICODE(result) + newsize - space;
+                }
             }
             /* Hangul Decomposition. */
             if (SBase <= code && code < (SBase+SCount)) {
@@ -534,11 +539,11 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
                 int L = LBase + SIndex / NCount;
                 int V = VBase + (SIndex % NCount) / TCount;
                 int T = TBase + SIndex % TCount;
-                *o++ = L;
-                *o++ = V;
+                output[o++] = L;
+                output[o++] = V;
                 space -= 2;
                 if (T != TBase) {
-                    *o++ = T;
+                    output[o++] = T;
                     space --;
                 }
                 continue;
@@ -558,7 +563,7 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
             /* Copy character if it is not decomposable, or has a
                compatibility decomposition, but we do NFD. */
             if (!count || (prefix && !k)) {
-                *o++ = code;
+                output[o++] = code;
                 space--;
                 continue;
             }
@@ -571,15 +576,20 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
         }
     }
 
-    /* Drop overallocation. Cannot fail. */
-    PyUnicode_Resize(&result, PyUnicode_GET_SIZE(result) - space);
+    result = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND,
+                                       output, o);
+    PyMem_Free(output);
+    if (!result)
+        return NULL;
+    /* result is guaranteed to be ready, as it is compact. */
+    kind = PyUnicode_KIND(result);
+    data = PyUnicode_DATA(result);
 
     /* Sort canonically. */
-    i = PyUnicode_AS_UNICODE(result);
-    prev = _getrecord_ex(*i)->combining;
-    end = i + PyUnicode_GET_SIZE(result);
-    for (i++; i < end; i++) {
-        cur = _getrecord_ex(*i)->combining;
+    i = 0;
+    prev = _getrecord_ex(PyUnicode_READ(kind, data, i))->combining;
+    for (i++; i < PyUnicode_GET_LENGTH(result); i++) {
+        cur = _getrecord_ex(PyUnicode_READ(kind, data, i))->combining;
         if (prev == 0 || cur == 0 || prev <= cur) {
             prev = cur;
             continue;
@@ -587,23 +597,24 @@ nfd_nfkd(PyObject *self, PyObject *input, int k)
         /* Non-canonical order. Need to switch *i with previous. */
         o = i - 1;
         while (1) {
-            Py_UNICODE tmp = o[1];
-            o[1] = o[0];
-            o[0] = tmp;
+            Py_UCS4 tmp = PyUnicode_READ(kind, data, o+1);
+            PyUnicode_WRITE(kind, data, o+1,
+                            PyUnicode_READ(kind, data, o));
+            PyUnicode_WRITE(kind, data, o, tmp);
             o--;
-            if (o < PyUnicode_AS_UNICODE(result))
+            if (o < 0)
                 break;
-            prev = _getrecord_ex(*o)->combining;
+            prev = _getrecord_ex(PyUnicode_READ(kind, data, o))->combining;
             if (prev == 0 || prev <= cur)
                 break;
         }
-        prev = _getrecord_ex(*i)->combining;
+        prev = _getrecord_ex(PyUnicode_READ(kind, data, i))->combining;
     }
     return result;
 }
 
 static int
-find_nfc_index(PyObject *self, struct reindex* nfc, Py_UNICODE code)
+find_nfc_index(PyObject *self, struct reindex* nfc, Py_UCS4 code)
 {
     int index;
     for (index = 0; nfc[index].start; index++) {
@@ -622,27 +633,36 @@ static PyObject*
 nfc_nfkc(PyObject *self, PyObject *input, int k)
 {
     PyObject *result;
-    Py_UNICODE *i, *i1, *o, *end;
+    int kind;
+    void *data;
+    Py_UCS4 *output;
+    Py_ssize_t i, i1, o, len;
     int f,l,index,index1,comb;
-    Py_UNICODE code;
-    Py_UNICODE *skipped[20];
+    Py_UCS4 code;
+    Py_ssize_t skipped[20];
     int cskipped = 0;
 
     result = nfd_nfkd(self, input, k);
     if (!result)
         return NULL;
+    /* result will be "ready". */
+    kind = PyUnicode_KIND(result);
+    data = PyUnicode_DATA(result);
+    len = PyUnicode_GET_LENGTH(result);
 
-    /* We are going to modify result in-place.
-       If nfd_nfkd is changed to sometimes return the input,
-       this code needs to be reviewed. */
-    assert(result != input);
-
-    i = PyUnicode_AS_UNICODE(result);
-    end = i + PyUnicode_GET_SIZE(result);
-    o = PyUnicode_AS_UNICODE(result);
+    /* We allocate a buffer for the output.
+       If we find that we made no changes, we still return
+       the NFD result. */
+    output = PyMem_Malloc(len * sizeof(Py_UCS4));
+    if (!output) {
+        PyErr_NoMemory();
+        Py_DECREF(result);
+        return 0;
+    }
+    i = o = 0;
 
   again:
-    while (i < end) {
+    while (i < len) {
       for (index = 0; index < cskipped; index++) {
           if (skipped[index] == i) {
               /* *i character is skipped.
@@ -655,33 +675,41 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
       }
       /* Hangul Composition. We don't need to check for <LV,T>
          pairs, since we always have decomposed data. */
-      if (LBase <= *i && *i < (LBase+LCount) &&
-          i + 1 < end &&
-          VBase <= i[1] && i[1] <= (VBase+VCount)) {
+      code = PyUnicode_READ(kind, data, i);
+      if (LBase <= code && code < (LBase+LCount) &&
+          i + 1 < len &&
+          VBase <= PyUnicode_READ(kind, data, i+1) &&
+          PyUnicode_READ(kind, data, i+1) <= (VBase+VCount)) {
           int LIndex, VIndex;
-          LIndex = i[0] - LBase;
-          VIndex = i[1] - VBase;
+          LIndex = code - LBase;
+          VIndex = PyUnicode_READ(kind, data, i+1) - VBase;
           code = SBase + (LIndex*VCount+VIndex)*TCount;
           i+=2;
-          if (i < end &&
-              TBase <= *i && *i <= (TBase+TCount)) {
-              code += *i-TBase;
+          if (i < len &&
+              TBase <= PyUnicode_READ(kind, data, i) &&
+              PyUnicode_READ(kind, data, i) <= (TBase+TCount)) {
+              code += PyUnicode_READ(kind, data, i)-TBase;
               i++;
           }
-          *o++ = code;
+          output[o++] = code;
           continue;
       }
 
-      f = find_nfc_index(self, nfc_first, *i);
+      /* code is still input[i] here */
+      f = find_nfc_index(self, nfc_first, code);
       if (f == -1) {
-          *o++ = *i++;
+          output[o++] = code;
+          i++;
           continue;
       }
       /* Find next unblocked character. */
       i1 = i+1;
       comb = 0;
-      while (i1 < end) {
-          int comb1 = _getrecord_ex(*i1)->combining;
+      /* output base character for now; might be updated later. */
+      output[o] = PyUnicode_READ(kind, data, i);
+      while (i1 < len) {
+          Py_UCS4 code1 = PyUnicode_READ(kind, data, i1);
+          int comb1 = _getrecord_ex(code1)->combining;
           if (comb) {
               if (comb1 == 0)
                   break;
@@ -691,8 +719,8 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
                   continue;
               }
           }
-          l = find_nfc_index(self, nfc_last, *i1);
-          /* *i1 cannot be combined with *i. If *i1
+          l = find_nfc_index(self, nfc_last, code1);
+          /* i1 cannot be combined with i. If i1
              is a starter, we don't need to look further.
              Otherwise, record the combining class. */
           if (l == -1) {
@@ -711,19 +739,28 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
               goto not_combinable;
 
           /* Replace the original character. */
-          *i = code;
+          output[o] = code;
           /* Mark the second character unused. */
           assert(cskipped < 20);
           skipped[cskipped++] = i1;
           i1++;
-          f = find_nfc_index(self, nfc_first, *i);
+          f = find_nfc_index(self, nfc_first, output[o]);
           if (f == -1)
               break;
       }
-      *o++ = *i++;
+      /* Output character was already written.
+         Just advance the indices. */
+      o++; i++;
     }
-    if (o != end)
-        PyUnicode_Resize(&result, o - PyUnicode_AS_UNICODE(result));
+    if (o == len) {
+        /* No changes. Return original string. */
+        PyMem_Free(output);
+        return result;
+    }
+    Py_DECREF(result);
+    result = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND,
+                                       output, o);
+    PyMem_Free(output);
     return result;
 }
 
@@ -731,7 +768,9 @@ nfc_nfkc(PyObject *self, PyObject *input, int k)
 static int
 is_normalized(PyObject *self, PyObject *input, int nfc, int k)
 {
-    Py_UNICODE *i, *end;
+    Py_ssize_t i, len;
+    int kind;
+    void *data;
     unsigned char prev_combining = 0, quickcheck_mask;
 
     /* An older version of the database is requested, quickchecks must be
@@ -743,10 +782,13 @@ is_normalized(PyObject *self, PyObject *input, int nfc, int k)
        as described in http://unicode.org/reports/tr15/#Annex8. */
     quickcheck_mask = 3 << ((nfc ? 4 : 0) + (k ? 2 : 0));
 
-    i = PyUnicode_AS_UNICODE(input);
-    end = i + PyUnicode_GET_SIZE(input);
-    while (i < end) {
-        const _PyUnicode_DatabaseRecord *record = _getrecord_ex(*i++);
+    i = 0;
+    kind = PyUnicode_KIND(input);
+    data = PyUnicode_DATA(input);
+    len = PyUnicode_GET_LENGTH(input);
+    while (i < len) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i++);
+        const _PyUnicode_DatabaseRecord *record = _getrecord_ex(ch);
         unsigned char combining = record->combining;
         unsigned char quickcheck = record->normalization_quick_check;
 
@@ -775,7 +817,10 @@ unicodedata_normalize(PyObject *self, PyObject *args)
                          &form, &PyUnicode_Type, &input))
         return NULL;
 
-    if (PyUnicode_GetSize(input) == 0) {
+    if (PyUnicode_READY(input) == -1)
+        return NULL;
+
+    if (PyUnicode_GET_LENGTH(input) == 0) {
         /* Special case empty input strings, since resizing
            them  later would cause internal errors. */
         Py_INCREF(input);
@@ -1142,7 +1187,6 @@ static PyObject *
 unicodedata_lookup(PyObject* self, PyObject* args)
 {
     Py_UCS4 code;
-    Py_UNICODE str[2];
 
     char* name;
     int namelen;
@@ -1155,15 +1199,7 @@ unicodedata_lookup(PyObject* self, PyObject* args)
         return NULL;
     }
 
-#ifndef Py_UNICODE_WIDE
-    if (code >= 0x10000) {
-        str[0] = 0xd800 + ((code - 0x10000) >> 10);
-        str[1] = 0xdc00 + ((code - 0x10000) & 0x3ff);
-        return PyUnicode_FromUnicode(str, 2);
-    }
-#endif
-    str[0] = (Py_UNICODE) code;
-    return PyUnicode_FromUnicode(str, 1);
+    return PyUnicode_FromOrdinal(code);
 }
 
 /* XXX Add doc strings. */
