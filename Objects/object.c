@@ -1,5 +1,5 @@
 
-/* Generic object operations; and implementation of None (NoObject) */
+/* Generic object operations; and implementation of None */
 
 #include "Python.h"
 #include "frameobject.h"
@@ -28,8 +28,6 @@ _Py_GetRefTotal(void)
     return total;
 }
 #endif /* Py_REF_DEBUG */
-
-int Py_DivisionWarningFlag;
 
 /* Object allocation routines used by NEWOBJ and NEWVAROBJ macros.
    These are used by the individual routines for object creation.
@@ -297,9 +295,7 @@ PyObject_Print(PyObject *op, FILE *fp, int flags)
             }
             else if (PyUnicode_Check(s)) {
                 PyObject *t;
-                t = PyUnicode_EncodeUTF8(PyUnicode_AS_UNICODE(s),
-                                         PyUnicode_GET_SIZE(s),
-                                         "backslashreplace");
+                t = PyUnicode_AsEncodedString(s, "utf-8", "backslashreplace");
                 if (t == NULL)
                     ret = 0;
                 else {
@@ -441,11 +437,7 @@ PyObject_ASCII(PyObject *v)
         return NULL;
 
     /* repr is guaranteed to be a PyUnicode object by PyObject_Repr */
-    ascii = PyUnicode_EncodeASCII(
-        PyUnicode_AS_UNICODE(repr),
-        PyUnicode_GET_SIZE(repr),
-        "backslashreplace");
-
+    ascii = _PyUnicode_AsASCIIString(repr, "backslashreplace");
     Py_DECREF(repr);
     if (ascii == NULL)
         return NULL;
@@ -1184,66 +1176,6 @@ PyCallable_Check(PyObject *x)
     return x->ob_type->tp_call != NULL;
 }
 
-/* ------------------------- PyObject_Dir() helpers ------------------------- */
-
-/* Helper for PyObject_Dir.
-   Merge the __dict__ of aclass into dict, and recursively also all
-   the __dict__s of aclass's base classes.  The order of merging isn't
-   defined, as it's expected that only the final set of dict keys is
-   interesting.
-   Return 0 on success, -1 on error.
-*/
-
-static int
-merge_class_dict(PyObject* dict, PyObject* aclass)
-{
-    PyObject *classdict;
-    PyObject *bases;
-
-    assert(PyDict_Check(dict));
-    assert(aclass);
-
-    /* Merge in the type's dict (if any). */
-    classdict = PyObject_GetAttrString(aclass, "__dict__");
-    if (classdict == NULL)
-        PyErr_Clear();
-    else {
-        int status = PyDict_Update(dict, classdict);
-        Py_DECREF(classdict);
-        if (status < 0)
-            return -1;
-    }
-
-    /* Recursively merge in the base types' (if any) dicts. */
-    bases = PyObject_GetAttrString(aclass, "__bases__");
-    if (bases == NULL)
-        PyErr_Clear();
-    else {
-        /* We have no guarantee that bases is a real tuple */
-        Py_ssize_t i, n;
-        n = PySequence_Size(bases); /* This better be right */
-        if (n < 0)
-            PyErr_Clear();
-        else {
-            for (i = 0; i < n; i++) {
-                int status;
-                PyObject *base = PySequence_GetItem(bases, i);
-                if (base == NULL) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-                status = merge_class_dict(dict, base);
-                Py_DECREF(base);
-                if (status < 0) {
-                    Py_DECREF(bases);
-                    return -1;
-                }
-            }
-        }
-        Py_DECREF(bases);
-    }
-    return 0;
-}
 
 /* Helper for PyObject_Dir without arguments: returns the local scope. */
 static PyObject *
@@ -1267,140 +1199,43 @@ _dir_locals(void)
         Py_DECREF(names);
         return NULL;
     }
+    if (PyList_Sort(names)) {
+        Py_DECREF(names);
+        return NULL;
+    }
     /* the locals don't need to be DECREF'd */
     return names;
 }
 
-/* Helper for PyObject_Dir of type objects: returns __dict__ and __bases__.
-   We deliberately don't suck up its __class__, as methods belonging to the
-   metaclass would probably be more confusing than helpful.
-*/
-static PyObject *
-_specialized_dir_type(PyObject *obj)
-{
-    PyObject *result = NULL;
-    PyObject *dict = PyDict_New();
-
-    if (dict != NULL && merge_class_dict(dict, obj) == 0)
-        result = PyDict_Keys(dict);
-
-    Py_XDECREF(dict);
-    return result;
-}
-
-/* Helper for PyObject_Dir of module objects: returns the module's __dict__. */
-static PyObject *
-_specialized_dir_module(PyObject *obj)
-{
-    PyObject *result = NULL;
-    PyObject *dict = PyObject_GetAttrString(obj, "__dict__");
-
-    if (dict != NULL) {
-        if (PyDict_Check(dict))
-            result = PyDict_Keys(dict);
-        else {
-            const char *name = PyModule_GetName(obj);
-            if (name)
-                PyErr_Format(PyExc_TypeError,
-                             "%.200s.__dict__ is not a dictionary",
-                             name);
-        }
-    }
-
-    Py_XDECREF(dict);
-    return result;
-}
-
-/* Helper for PyObject_Dir of generic objects: returns __dict__, __class__,
-   and recursively up the __class__.__bases__ chain.
-*/
-static PyObject *
-_generic_dir(PyObject *obj)
-{
-    PyObject *result = NULL;
-    PyObject *dict = NULL;
-    PyObject *itsclass = NULL;
-
-    /* Get __dict__ (which may or may not be a real dict...) */
-    dict = PyObject_GetAttrString(obj, "__dict__");
-    if (dict == NULL) {
-        PyErr_Clear();
-        dict = PyDict_New();
-    }
-    else if (!PyDict_Check(dict)) {
-        Py_DECREF(dict);
-        dict = PyDict_New();
-    }
-    else {
-        /* Copy __dict__ to avoid mutating it. */
-        PyObject *temp = PyDict_Copy(dict);
-        Py_DECREF(dict);
-        dict = temp;
-    }
-
-    if (dict == NULL)
-        goto error;
-
-    /* Merge in attrs reachable from its class. */
-    itsclass = PyObject_GetAttrString(obj, "__class__");
-    if (itsclass == NULL)
-        /* XXX(tomer): Perhaps fall back to obj->ob_type if no
-                       __class__ exists? */
-        PyErr_Clear();
-    else {
-        if (merge_class_dict(dict, itsclass) != 0)
-            goto error;
-    }
-
-    result = PyDict_Keys(dict);
-    /* fall through */
-error:
-    Py_XDECREF(itsclass);
-    Py_XDECREF(dict);
-    return result;
-}
-
-/* Helper for PyObject_Dir: object introspection.
-   This calls one of the above specialized versions if no __dir__ method
-   exists. */
+/* Helper for PyObject_Dir: object introspection. */
 static PyObject *
 _dir_object(PyObject *obj)
 {
-    PyObject *result = NULL;
+    PyObject *result, *sorted;
     static PyObject *dir_str = NULL;
     PyObject *dirfunc = _PyObject_LookupSpecial(obj, "__dir__", &dir_str);
 
     assert(obj);
     if (dirfunc == NULL) {
-        if (PyErr_Occurred())
-            return NULL;
-        /* use default implementation */
-        if (PyModule_Check(obj))
-            result = _specialized_dir_module(obj);
-        else if (PyType_Check(obj))
-            result = _specialized_dir_type(obj);
-        else
-            result = _generic_dir(obj);
+        if (!PyErr_Occurred())
+            PyErr_SetString(PyExc_TypeError, "object does not provide __dir__");
+        return NULL;
     }
-    else {
-        /* use __dir__ */
-        result = PyObject_CallFunctionObjArgs(dirfunc, NULL);
-        Py_DECREF(dirfunc);
-        if (result == NULL)
-            return NULL;
-
-        /* result must be a list */
-        /* XXX(gbrandl): could also check if all items are strings */
-        if (!PyList_Check(result)) {
-            PyErr_Format(PyExc_TypeError,
-                         "__dir__() must return a list, not %.200s",
-                         Py_TYPE(result)->tp_name);
-            Py_DECREF(result);
-            result = NULL;
-        }
+    /* use __dir__ */
+    result = PyObject_CallFunctionObjArgs(dirfunc, NULL);
+    Py_DECREF(dirfunc);
+    if (result == NULL)
+        return NULL;
+    /* return sorted(result) */
+    sorted = PySequence_List(result);
+    Py_DECREF(result);
+    if (sorted == NULL)
+        return NULL;
+    if (PyList_Sort(sorted)) {
+        Py_DECREF(sorted);
+        return NULL;
     }
-
-    return result;
+    return sorted;
 }
 
 /* Implementation of dir() -- if obj is NULL, returns the names in the current
@@ -1410,31 +1245,13 @@ _dir_object(PyObject *obj)
 PyObject *
 PyObject_Dir(PyObject *obj)
 {
-    PyObject * result;
-
-    if (obj == NULL)
-        /* no object -- introspect the locals */
-        result = _dir_locals();
-    else
-        /* object -- introspect the object */
-        result = _dir_object(obj);
-
-    assert(result == NULL || PyList_Check(result));
-
-    if (result != NULL && PyList_Sort(result) != 0) {
-        /* sorting the list failed */
-        Py_DECREF(result);
-        result = NULL;
-    }
-
-    return result;
+    return (obj == NULL) ? _dir_locals() : _dir_object(obj);
 }
 
 /*
-NoObject is usable as a non-NULL undefined value, used by the macro None.
+None is a non-NULL undefined value.
 There is (and should be!) no way to create other objects of this type,
 so there is exactly one (which is indestructible, by the way).
-(XXX This type and the type of NotImplemented below should be unified.)
 */
 
 /* ARGSUSED */
@@ -1454,6 +1271,58 @@ none_dealloc(PyObject* ignore)
     Py_FatalError("deallocating None");
 }
 
+static PyObject *
+none_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    if (PyTuple_GET_SIZE(args) || (kwargs && PyDict_Size(kwargs))) {
+        PyErr_SetString(PyExc_TypeError, "NoneType takes no arguments");
+        return NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+static int
+none_bool(PyObject *v)
+{
+    return 0;
+}
+
+static PyNumberMethods none_as_number = {
+    0,                          /* nb_add */
+    0,                          /* nb_subtract */
+    0,                          /* nb_multiply */
+    0,                          /* nb_remainder */
+    0,                          /* nb_divmod */
+    0,                          /* nb_power */
+    0,                          /* nb_negative */
+    0,                          /* nb_positive */
+    0,                          /* nb_absolute */
+    (inquiry)none_bool,         /* nb_bool */
+    0,                          /* nb_invert */
+    0,                          /* nb_lshift */
+    0,                          /* nb_rshift */
+    0,                          /* nb_and */
+    0,                          /* nb_xor */
+    0,                          /* nb_or */
+    0,                          /* nb_int */
+    0,                          /* nb_reserved */
+    0,                          /* nb_float */
+    0,                          /* nb_inplace_add */
+    0,                          /* nb_inplace_subtract */
+    0,                          /* nb_inplace_multiply */
+    0,                          /* nb_inplace_remainder */
+    0,                          /* nb_inplace_power */
+    0,                          /* nb_inplace_lshift */
+    0,                          /* nb_inplace_rshift */
+    0,                          /* nb_inplace_and */
+    0,                          /* nb_inplace_xor */
+    0,                          /* nb_inplace_or */
+    0,                          /* nb_floor_divide */
+    0,                          /* nb_true_divide */
+    0,                          /* nb_inplace_floor_divide */
+    0,                          /* nb_inplace_true_divide */
+    0,                          /* nb_index */
+};
 
 static PyTypeObject PyNone_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
@@ -1466,10 +1335,34 @@ static PyTypeObject PyNone_Type = {
     0,                  /*tp_setattr*/
     0,                  /*tp_reserved*/
     none_repr,          /*tp_repr*/
-    0,                  /*tp_as_number*/
+    &none_as_number,    /*tp_as_number*/
     0,                  /*tp_as_sequence*/
     0,                  /*tp_as_mapping*/
     0,                  /*tp_hash */
+    0,                  /*tp_call */
+    0,                  /*tp_str */
+    0,                  /*tp_getattro */
+    0,                  /*tp_setattro */
+    0,                  /*tp_as_buffer */
+    Py_TPFLAGS_DEFAULT, /*tp_flags */
+    0,                  /*tp_doc */
+    0,                  /*tp_traverse */
+    0,                  /*tp_clear */
+    0,                  /*tp_richcompare */
+    0,                  /*tp_weaklistoffset */
+    0,                  /*tp_iter */
+    0,                  /*tp_iternext */
+    0,                  /*tp_methods */
+    0,                  /*tp_members */
+    0,                  /*tp_getset */
+    0,                  /*tp_base */
+    0,                  /*tp_dict */
+    0,                  /*tp_descr_get */
+    0,                  /*tp_descr_set */
+    0,                  /*tp_dictoffset */
+    0,                  /*tp_init */
+    0,                  /*tp_alloc */
+    none_new,           /*tp_new */
 };
 
 PyObject _Py_NoneStruct = {
@@ -1484,6 +1377,16 @@ static PyObject *
 NotImplemented_repr(PyObject *op)
 {
     return PyUnicode_FromString("NotImplemented");
+}
+
+static PyObject *
+notimplemented_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    if (PyTuple_GET_SIZE(args) || (kwargs && PyDict_Size(kwargs))) {
+        PyErr_SetString(PyExc_TypeError, "NotImplementedType takes no arguments");
+        return NULL;
+    }
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static PyTypeObject PyNotImplemented_Type = {
@@ -1501,6 +1404,30 @@ static PyTypeObject PyNotImplemented_Type = {
     0,                  /*tp_as_sequence*/
     0,                  /*tp_as_mapping*/
     0,                  /*tp_hash */
+    0,                  /*tp_call */
+    0,                  /*tp_str */
+    0,                  /*tp_getattro */
+    0,                  /*tp_setattro */
+    0,                  /*tp_as_buffer */
+    Py_TPFLAGS_DEFAULT, /*tp_flags */
+    0,                  /*tp_doc */
+    0,                  /*tp_traverse */
+    0,                  /*tp_clear */
+    0,                  /*tp_richcompare */
+    0,                  /*tp_weaklistoffset */
+    0,                  /*tp_iter */
+    0,                  /*tp_iternext */
+    0,                  /*tp_methods */
+    0,                  /*tp_members */
+    0,                  /*tp_getset */
+    0,                  /*tp_base */
+    0,                  /*tp_dict */
+    0,                  /*tp_descr_get */
+    0,                  /*tp_descr_set */
+    0,                  /*tp_dictoffset */
+    0,                  /*tp_init */
+    0,                  /*tp_alloc */
+    notimplemented_new, /*tp_new */
 };
 
 PyObject _Py_NotImplementedStruct = {
