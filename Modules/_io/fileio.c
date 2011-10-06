@@ -259,9 +259,11 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
     }
 
 #ifdef MS_WINDOWS
-    if (PyUnicode_Check(nameobj))
-        widename = PyUnicode_AS_UNICODE(nameobj);
-    if (widename == NULL)
+    if (PyUnicode_Check(nameobj)) {
+        widename = PyUnicode_AsUnicode(nameobj);
+        if (widename == NULL)
+            return -1;
+    } else
 #endif
     if (fd < 0)
     {
@@ -378,7 +380,7 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
         if (self->fd < 0) {
 #ifdef MS_WINDOWS
             if (widename != NULL)
-                PyErr_SetFromErrnoWithUnicodeFilename(PyExc_IOError, widename);
+                PyErr_SetFromErrnoWithFilenameObject(PyExc_IOError, nameobj);
             else
 #endif
                 PyErr_SetFromErrnoWithFilename(PyExc_IOError, name);
@@ -547,14 +549,14 @@ fileio_readinto(fileio *self, PyObject *args)
 }
 
 static size_t
-new_buffersize(fileio *self, size_t currentsize)
+new_buffersize(fileio *self, size_t currentsize
+#ifdef HAVE_FSTAT
+               , off_t pos, off_t end
+#endif
+               )
 {
 #ifdef HAVE_FSTAT
-    off_t pos, end;
-    struct stat st;
-    if (fstat(self->fd, &st) == 0) {
-        end = st.st_size;
-        pos = lseek(self->fd, 0L, SEEK_CUR);
+    if (end != (off_t)-1) {
         /* Files claiming a size smaller than SMALLCHUNK may
            actually be streaming pseudo-files. In this case, we
            apply the more aggressive algorithm below.
@@ -579,9 +581,14 @@ new_buffersize(fileio *self, size_t currentsize)
 static PyObject *
 fileio_readall(fileio *self)
 {
+#ifdef HAVE_FSTAT
+    struct stat st;
+    off_t pos, end;
+#endif
     PyObject *result;
     Py_ssize_t total = 0;
     int n;
+    size_t newsize;
 
     if (self->fd < 0)
         return err_closed();
@@ -592,8 +599,23 @@ fileio_readall(fileio *self)
     if (result == NULL)
         return NULL;
 
+#ifdef HAVE_FSTAT
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+    pos = _lseeki64(self->fd, 0L, SEEK_CUR);
+#else
+    pos = lseek(self->fd, 0L, SEEK_CUR);
+#endif
+    if (fstat(self->fd, &st) == 0)
+        end = st.st_size;
+    else
+        end = (off_t)-1;
+#endif
     while (1) {
-        size_t newsize = new_buffersize(self, total);
+#ifdef HAVE_FSTAT
+        newsize = new_buffersize(self, total, pos, end);
+#else
+        newsize = new_buffersize(self, total);
+#endif
         if (newsize > PY_SSIZE_T_MAX || newsize <= 0) {
             PyErr_SetString(PyExc_OverflowError,
                 "unbounded read returned more bytes "
@@ -632,6 +654,9 @@ fileio_readall(fileio *self)
             return NULL;
         }
         total += n;
+#ifdef HAVE_FSTAT
+        pos += n;
+#endif
     }
 
     if (PyBytes_GET_SIZE(result) > total) {
