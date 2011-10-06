@@ -501,7 +501,7 @@ calc_number_widths(NumberFieldWidths *spec, Py_ssize_t n_prefix,
         spec->n_grouped_digits = 0;
     else
         spec->n_grouped_digits = _PyUnicode_InsertThousandsGrouping(
-            PyUnicode_1BYTE_KIND, NULL, 0, NULL,
+            NULL, PyUnicode_1BYTE_KIND, NULL, 0, NULL,
             spec->n_digits, spec->n_min_width,
             locale->grouping, locale->thousands_sep);
 
@@ -603,7 +603,7 @@ fill_number(PyObject *out, Py_ssize_t pos, const NumberFieldWidths *spec,
         r =
 #endif
             _PyUnicode_InsertThousandsGrouping(
-                kind,
+                out, kind,
                 (char*)data + PyUnicode_KIND_SIZE(kind, pos),
                 spec->n_grouped_digits,
                 pdigits + PyUnicode_KIND_SIZE(kind, d_pos),
@@ -1284,33 +1284,31 @@ _PyUnicode_FormatAdvanced(PyObject *obj,
                           Py_ssize_t start, Py_ssize_t end)
 {
     InternalFormatSpec format;
-    PyObject *result = NULL;
+    PyObject *result;
 
     /* check for the special case of zero length format spec, make
        it equivalent to str(obj) */
-    if (start == end) {
-        result = PyObject_Str(obj);
-        goto done;
-    }
+    if (start == end)
+        return PyObject_Str(obj);
 
     /* parse the format_spec */
     if (!parse_internal_render_format_spec(format_spec, start, end,
                                            &format, 's', '<'))
-        goto done;
+        return NULL;
 
     /* type conversion? */
     switch (format.type) {
     case 's':
         /* no type conversion needed, already a string.  do the formatting */
         result = format_string_internal(obj, &format);
+        if (result != NULL)
+            assert(_PyUnicode_CheckConsistency(result, 1));
         break;
     default:
         /* unknown */
         unknown_presentation_type(format.type, obj->ob_type->tp_name);
-        goto done;
+        result = NULL;
     }
-
-done:
     return result;
 }
 
