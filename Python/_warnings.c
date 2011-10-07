@@ -409,10 +409,10 @@ warn_explicit(PyObject *category, PyObject *message,
         else {
             PyObject *res;
 
-            if (!PyMethod_Check(show_fxn) && !PyFunction_Check(show_fxn)) {
+            if (!PyCallable_Check(show_fxn)) {
                 PyErr_SetString(PyExc_TypeError,
                                 "warnings.showwarning() must be set to a "
-                                "function or method");
+                                "callable");
                 Py_DECREF(show_fxn);
                 goto cleanup;
             }
@@ -497,18 +497,27 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
     /* Setup filename. */
     *filename = PyDict_GetItemString(globals, "__file__");
     if (*filename != NULL && PyUnicode_Check(*filename)) {
-        Py_ssize_t len = PyUnicode_GetSize(*filename);
-        Py_UNICODE *unicode = PyUnicode_AS_UNICODE(*filename);
+        Py_ssize_t len;
+        int kind;
+        void *data;
+
+        if (PyUnicode_READY(*filename))
+            goto handle_error;
+
+        len = PyUnicode_GetSize(*filename);
+        kind = PyUnicode_KIND(*filename);
+        data = PyUnicode_DATA(*filename);
 
         /* if filename.lower().endswith((".pyc", ".pyo")): */
         if (len >= 4 &&
-            unicode[len-4] == '.' &&
-            Py_UNICODE_TOLOWER(unicode[len-3]) == 'p' &&
-            Py_UNICODE_TOLOWER(unicode[len-2]) == 'y' &&
-            (Py_UNICODE_TOLOWER(unicode[len-1]) == 'c' ||
-                Py_UNICODE_TOLOWER(unicode[len-1]) == 'o'))
+            PyUnicode_READ(kind, data, len-4) == '.' &&
+            Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-3)) == 'p' &&
+            Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-2)) == 'y' &&
+            (Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-1)) == 'c' ||
+                Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-1)) == 'o'))
         {
-            *filename = PyUnicode_FromUnicode(unicode, len-1);
+            *filename = PyUnicode_Substring(*filename, 0,
+                                            PyUnicode_GET_LENGTH(*filename)-1);
             if (*filename == NULL)
                 goto handle_error;
         }
