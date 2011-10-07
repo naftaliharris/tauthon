@@ -41,10 +41,6 @@ static PyBytesObject *nullstring;
 #define PyBytesObject_SIZE (offsetof(PyBytesObject, ob_sval) + 1)
 
 /*
-   For both PyBytes_FromString() and PyBytes_FromStringAndSize(), the
-   parameter `size' denotes number of characters to allocate, not counting any
-   null terminating character.
-
    For PyBytes_FromString(), the parameter `str' points to a null-terminated
    string containing exactly `size' bytes.
 
@@ -61,8 +57,8 @@ static PyBytesObject *nullstring;
 
    The PyObject member `op->ob_size', which denotes the number of "extra
    items" in a variable-size object, will contain the number of bytes
-   allocated for string data, not counting the null terminating character.  It
-   is therefore equal to the equal to the `size' parameter (for
+   allocated for string data, not counting the null terminating character.
+   It is therefore equal to the `size' parameter (for
    PyBytes_FromStringAndSize()) or the length of the string in the `str'
    parameter (for PyBytes_FromString()).
 */
@@ -570,74 +566,68 @@ PyBytes_Repr(PyObject *obj, int smartquotes)
 {
     static const char *hexdigits = "0123456789abcdef";
     register PyBytesObject* op = (PyBytesObject*) obj;
-    Py_ssize_t length = Py_SIZE(op);
-    size_t newsize;
+    Py_ssize_t i, length = Py_SIZE(op);
+    size_t newsize, squotes, dquotes;
     PyObject *v;
-    if (length > (PY_SSIZE_T_MAX - 3) / 4) {
+    unsigned char quote, *s, *p;
+
+    /* Compute size of output string */
+    squotes = dquotes = 0;
+    newsize = 3; /* b'' */
+    s = (unsigned char*)op->ob_sval;
+    for (i = 0; i < length; i++) {
+        switch(s[i]) {
+        case '\'': squotes++; newsize++; break;
+        case '"':  dquotes++; newsize++; break;
+        case '\\': case '\t': case '\n': case '\r':
+            newsize += 2; break; /* \C */
+        default:
+            if (s[i] < ' ' || s[i] >= 0x7f)
+                newsize += 4; /* \xHH */
+            else
+                newsize++;
+        }
+    }
+    quote = '\'';
+    if (smartquotes && squotes && !dquotes)
+        quote = '"';
+    if (squotes && quote == '\'')
+        newsize += squotes;
+
+    if (newsize > (PY_SSIZE_T_MAX - sizeof(PyUnicodeObject) - 1)) {
         PyErr_SetString(PyExc_OverflowError,
             "bytes object is too large to make repr");
         return NULL;
     }
-    newsize = 3 + 4 * length;
-    v = PyUnicode_FromUnicode(NULL, newsize);
+
+    v = PyUnicode_New(newsize, 127);
     if (v == NULL) {
         return NULL;
     }
-    else {
-        register Py_ssize_t i;
-        register Py_UNICODE c;
-        register Py_UNICODE *p = PyUnicode_AS_UNICODE(v);
-        int quote;
+    p = PyUnicode_1BYTE_DATA(v);
 
-        /* Figure out which quote to use; single is preferred */
-        quote = '\'';
-        if (smartquotes) {
-            char *test, *start;
-            start = PyBytes_AS_STRING(op);
-            for (test = start; test < start+length; ++test) {
-                if (*test == '"') {
-                    quote = '\''; /* back to single */
-                    goto decided;
-                }
-                else if (*test == '\'')
-                    quote = '"';
-            }
-            decided:
-            ;
+    *p++ = 'b', *p++ = quote;
+    for (i = 0; i < length; i++) {
+        unsigned char c = op->ob_sval[i];
+        if (c == quote || c == '\\')
+            *p++ = '\\', *p++ = c;
+        else if (c == '\t')
+            *p++ = '\\', *p++ = 't';
+        else if (c == '\n')
+            *p++ = '\\', *p++ = 'n';
+        else if (c == '\r')
+            *p++ = '\\', *p++ = 'r';
+        else if (c < ' ' || c >= 0x7f) {
+            *p++ = '\\';
+            *p++ = 'x';
+            *p++ = hexdigits[(c & 0xf0) >> 4];
+            *p++ = hexdigits[c & 0xf];
         }
-
-        *p++ = 'b', *p++ = quote;
-        for (i = 0; i < length; i++) {
-            /* There's at least enough room for a hex escape
-               and a closing quote. */
-            assert(newsize - (p - PyUnicode_AS_UNICODE(v)) >= 5);
-            c = op->ob_sval[i];
-            if (c == quote || c == '\\')
-                *p++ = '\\', *p++ = c;
-            else if (c == '\t')
-                *p++ = '\\', *p++ = 't';
-            else if (c == '\n')
-                *p++ = '\\', *p++ = 'n';
-            else if (c == '\r')
-                *p++ = '\\', *p++ = 'r';
-            else if (c < ' ' || c >= 0x7f) {
-                *p++ = '\\';
-                *p++ = 'x';
-                *p++ = hexdigits[(c & 0xf0) >> 4];
-                *p++ = hexdigits[c & 0xf];
-            }
-            else
-                *p++ = c;
-        }
-        assert(newsize - (p - PyUnicode_AS_UNICODE(v)) >= 1);
-        *p++ = quote;
-        *p = '\0';
-        if (PyUnicode_Resize(&v, (p - PyUnicode_AS_UNICODE(v)))) {
-            Py_DECREF(v);
-            return NULL;
-        }
-        return v;
+        else
+            *p++ = c;
     }
+    *p++ = quote;
+    return v;
 }
 
 static PyObject *
@@ -873,16 +863,16 @@ bytes_hash(PyBytesObject *a)
 {
     register Py_ssize_t len;
     register unsigned char *p;
-    register Py_hash_t x;
+    register Py_uhash_t x;
 
     if (a->ob_shash != -1)
         return a->ob_shash;
     len = Py_SIZE(a);
     p = (unsigned char *) a->ob_sval;
-    x = *p << 7;
+    x = (Py_uhash_t)*p << 7;
     while (--len >= 0)
-        x = (1000003*x) ^ *p++;
-    x ^= Py_SIZE(a);
+        x = (1000003U*x) ^ (Py_uhash_t)*p++;
+    x ^= (Py_uhash_t)Py_SIZE(a);
     if (x == -1)
         x = -2;
     a->ob_shash = x;
@@ -2316,11 +2306,13 @@ Line breaks are not included in the resulting list unless keepends\n\
 is given and true.");
 
 static PyObject*
-bytes_splitlines(PyObject *self, PyObject *args)
+bytes_splitlines(PyObject *self, PyObject *args, PyObject *kwds)
 {
+    static char *kwlist[] = {"keepends", 0};
     int keepends = 0;
 
-    if (!PyArg_ParseTuple(args, "|i:splitlines", &keepends))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|i:splitlines",
+                                     kwlist, &keepends))
         return NULL;
 
     return stringlib_splitlines(
@@ -2338,7 +2330,7 @@ Spaces between two numbers are accepted.\n\
 Example: bytes.fromhex('B9 01EF') -> b'\\xb9\\x01\\xef'.");
 
 static int
-hex_digit_to_int(Py_UNICODE c)
+hex_digit_to_int(Py_UCS4 c)
 {
     if (c >= 128)
         return -1;
@@ -2358,15 +2350,20 @@ bytes_fromhex(PyObject *cls, PyObject *args)
 {
     PyObject *newstring, *hexobj;
     char *buf;
-    Py_UNICODE *hex;
     Py_ssize_t hexlen, byteslen, i, j;
     int top, bot;
+    void *data;
+    unsigned int kind;
 
     if (!PyArg_ParseTuple(args, "U:fromhex", &hexobj))
         return NULL;
     assert(PyUnicode_Check(hexobj));
-    hexlen = PyUnicode_GET_SIZE(hexobj);
-    hex = PyUnicode_AS_UNICODE(hexobj);
+    if (PyUnicode_READY(hexobj))
+        return NULL;
+    kind = PyUnicode_KIND(hexobj);
+    data = PyUnicode_DATA(hexobj);
+    hexlen = PyUnicode_GET_LENGTH(hexobj);
+
     byteslen = hexlen/2; /* This overestimates if there are spaces */
     newstring = PyBytes_FromStringAndSize(NULL, byteslen);
     if (!newstring)
@@ -2374,12 +2371,12 @@ bytes_fromhex(PyObject *cls, PyObject *args)
     buf = PyBytes_AS_STRING(newstring);
     for (i = j = 0; i < hexlen; i += 2) {
         /* skip over spaces in the input */
-        while (hex[i] == ' ')
+        while (PyUnicode_READ(kind, data, i) == ' ')
             i++;
         if (i >= hexlen)
             break;
-        top = hex_digit_to_int(hex[i]);
-        bot = hex_digit_to_int(hex[i+1]);
+        top = hex_digit_to_int(PyUnicode_READ(kind, data, i));
+        bot = hex_digit_to_int(PyUnicode_READ(kind, data, i+1));
         if (top == -1 || bot == -1) {
             PyErr_Format(PyExc_ValueError,
                          "non-hexadecimal number found in "
@@ -2462,7 +2459,7 @@ bytes_methods[] = {
     {"rsplit", (PyCFunction)bytes_rsplit, METH_VARARGS, rsplit__doc__},
     {"rstrip", (PyCFunction)bytes_rstrip, METH_VARARGS, rstrip__doc__},
     {"split", (PyCFunction)bytes_split, METH_VARARGS, split__doc__},
-    {"splitlines", (PyCFunction)bytes_splitlines, METH_VARARGS,
+    {"splitlines", (PyCFunction)bytes_splitlines, METH_VARARGS | METH_KEYWORDS,
      splitlines__doc__},
     {"startswith", (PyCFunction)bytes_startswith, METH_VARARGS,
      startswith__doc__},
