@@ -237,7 +237,8 @@ PyObject_AsCharBuffer(PyObject *obj,
     pb = obj->ob_type->tp_as_buffer;
     if (pb == NULL || pb->bf_getbuffer == NULL) {
         PyErr_SetString(PyExc_TypeError,
-                        "expected an object with the buffer interface");
+                        "expected bytes, bytearray "
+                        "or buffer compatible object");
         return -1;
     }
     if ((*pb->bf_getbuffer)(obj, &view, PyBUF_SIMPLE)) return -1;
@@ -331,7 +332,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 {
     if (!PyObject_CheckBuffer(obj)) {
         PyErr_Format(PyExc_TypeError,
-                     "'%100s' does not support the buffer interface",
+                     "'%.100s' does not support the buffer interface",
                      Py_TYPE(obj)->tp_name);
         return -1;
     }
@@ -792,8 +793,7 @@ binary_op1(PyObject *v, PyObject *w, const int op_slot)
             return x;
         Py_DECREF(x); /* can't do it */
     }
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static PyObject *
@@ -1379,9 +1379,7 @@ PyNumber_Long(PyObject *o)
                                 PyBytes_GET_SIZE(o));
     if (PyUnicode_Check(o))
         /* The above check is done in PyLong_FromUnicode(). */
-        return PyLong_FromUnicode(PyUnicode_AS_UNICODE(o),
-                                  PyUnicode_GET_SIZE(o),
-                                  10);
+        return PyLong_FromUnicodeObject(o, 10);
     if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
         return long_from_string(buffer, buffer_len);
 

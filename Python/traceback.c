@@ -13,8 +13,13 @@
 
 #define OFF(x) offsetof(PyTracebackObject, x)
 
-/* Method from Parser/tokenizer.c */
-extern char * PyTokenizer_FindEncoding(int);
+#define PUTS(fd, str) write(fd, str, strlen(str))
+#define MAX_STRING_LENGTH 100
+#define MAX_FRAME_DEPTH 100
+#define MAX_NTHREADS 100
+
+/* Function from Parser/tokenizer.c */
+extern char * PyTokenizer_FindEncodingFilename(int, PyObject *);
 
 static PyObject *
 tb_dir(PyTracebackObject *self)
@@ -224,8 +229,8 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent)
     PyObject *lineobj = NULL;
     PyObject *res;
     char buf[MAXPATHLEN+1];
-    Py_UNICODE *u, *p;
-    Py_ssize_t len;
+    int kind;
+    void *data;
 
     /* open the file */
     if (filename == NULL)
@@ -246,7 +251,7 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent)
 
     /* use the right encoding to decode the file as unicode */
     fd = PyObject_AsFileDescriptor(binary);
-    found_encoding = PyTokenizer_FindEncoding(fd);
+    found_encoding = PyTokenizer_FindEncodingFilename(fd, filename);
     encoding = (found_encoding != NULL) ? found_encoding : "utf-8";
     lseek(fd, 0, 0); /* Reset position */
     fob = PyObject_CallMethod(io, "TextIOWrapper", "Os", binary, encoding);
@@ -280,13 +285,16 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent)
     }
 
     /* remove the indentation of the line */
-    u = PyUnicode_AS_UNICODE(lineobj);
-    len = PyUnicode_GET_SIZE(lineobj);
-    for (p=u; *p == ' ' || *p == '\t' || *p == '\014'; p++)
-        len--;
-    if (u != p) {
+    kind = PyUnicode_KIND(lineobj);
+    data = PyUnicode_DATA(lineobj);
+    for (i=0; i < PyUnicode_GET_LENGTH(lineobj); i++) {
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+        if (ch != ' ' && ch != '\t' && ch != '\014')
+            break;
+    }
+    if (i) {
         PyObject *truncated;
-        truncated = PyUnicode_FromUnicode(p, len);
+        truncated = PyUnicode_Substring(lineobj, i, PyUnicode_GET_LENGTH(lineobj));
         if (truncated) {
             Py_DECREF(lineobj);
             lineobj = truncated;
@@ -402,3 +410,257 @@ PyTraceBack_Print(PyObject *v, PyObject *f)
         err = tb_printinternal((PyTracebackObject *)v, f, limit);
     return err;
 }
+
+/* Reverse a string. For example, "abcd" becomes "dcba".
+
+   This function is signal safe. */
+
+static void
+reverse_string(char *text, const size_t len)
+{
+    char tmp;
+    size_t i, j;
+    if (len == 0)
+        return;
+    for (i=0, j=len-1; i < j; i++, j--) {
+        tmp = text[i];
+        text[i] = text[j];
+        text[j] = tmp;
+    }
+}
+
+/* Format an integer in range [0; 999999] to decimal,
+   and write it into the file fd.
+
+   This function is signal safe. */
+
+static void
+dump_decimal(int fd, int value)
+{
+    char buffer[7];
+    int len;
+    if (value < 0 || 999999 < value)
+        return;
+    len = 0;
+    do {
+        buffer[len] = '0' + (value % 10);
+        value /= 10;
+        len++;
+    } while (value);
+    reverse_string(buffer, len);
+    write(fd, buffer, len);
+}
+
+/* Format an integer in range [0; 0xffffffff] to hexdecimal of 'width' digits,
+   and write it into the file fd.
+
+   This function is signal safe. */
+
+static void
+dump_hexadecimal(int width, unsigned long value, int fd)
+{
+    const char *hexdigits = "0123456789abcdef";
+    int len;
+    char buffer[sizeof(unsigned long) * 2 + 1];
+    len = 0;
+    do {
+        buffer[len] = hexdigits[value & 15];
+        value >>= 4;
+        len++;
+    } while (len < width || value);
+    reverse_string(buffer, len);
+    write(fd, buffer, len);
+}
+
+/* Write an unicode object into the file fd using ascii+backslashreplace.
+
+   This function is signal safe. */
+
+static void
+dump_ascii(int fd, PyObject *text)
+{
+    PyASCIIObject *ascii = (PyASCIIObject *)text;
+    Py_ssize_t i, size;
+    int truncated;
+    int kind;
+    void *data = NULL;
+    wchar_t *wstr = NULL;
+    Py_UCS4 ch;
+
+    size = ascii->length;
+    kind = ascii->state.kind;
+    if (ascii->state.compact) {
+        if (ascii->state.ascii)
+            data = ((PyASCIIObject*)text) + 1;
+        else
+            data = ((PyCompactUnicodeObject*)text) + 1;
+    }
+    else if (kind != PyUnicode_WCHAR_KIND) {
+        data = ((PyUnicodeObject *)text)->data.any;
+        if (data == NULL)
+            return;
+    }
+    else {
+        wstr = ((PyASCIIObject *)text)->wstr;
+        if (wstr == NULL)
+            return;
+        size = ((PyCompactUnicodeObject *)text)->wstr_length;
+    }
+
+    if (MAX_STRING_LENGTH < size) {
+        size = MAX_STRING_LENGTH;
+        truncated = 1;
+    }
+    else
+        truncated = 0;
+
+    for (i=0; i < size; i++) {
+        if (kind != PyUnicode_WCHAR_KIND)
+            ch = PyUnicode_READ(kind, data, i);
+        else
+            ch = wstr[i];
+        if (ch < 128) {
+            char c = (char)ch;
+            write(fd, &c, 1);
+        }
+        else if (ch < 256) {
+            PUTS(fd, "\\x");
+            dump_hexadecimal(2, ch, fd);
+        }
+        else
+#ifdef Py_UNICODE_WIDE
+        if (ch < 65536)
+#endif
+        {
+            PUTS(fd, "\\u");
+            dump_hexadecimal(4, ch, fd);
+#ifdef Py_UNICODE_WIDE
+        }
+        else {
+            PUTS(fd, "\\U");
+            dump_hexadecimal(8, ch, fd);
+#endif
+        }
+    }
+    if (truncated)
+        PUTS(fd, "...");
+}
+
+/* Write a frame into the file fd: "File "xxx", line xxx in xxx".
+
+   This function is signal safe. */
+
+static void
+dump_frame(int fd, PyFrameObject *frame)
+{
+    PyCodeObject *code;
+    int lineno;
+
+    code = frame->f_code;
+    PUTS(fd, "  File ");
+    if (code != NULL && code->co_filename != NULL
+        && PyUnicode_Check(code->co_filename))
+    {
+        write(fd, "\"", 1);
+        dump_ascii(fd, code->co_filename);
+        write(fd, "\"", 1);
+    } else {
+        PUTS(fd, "???");
+    }
+
+    /* PyFrame_GetLineNumber() was introduced in Python 2.7.0 and 3.2.0 */
+    lineno = PyCode_Addr2Line(code, frame->f_lasti);
+    PUTS(fd, ", line ");
+    dump_decimal(fd, lineno);
+    PUTS(fd, " in ");
+
+    if (code != NULL && code->co_name != NULL
+        && PyUnicode_Check(code->co_name))
+        dump_ascii(fd, code->co_name);
+    else
+        PUTS(fd, "???");
+
+    write(fd, "\n", 1);
+}
+
+static void
+dump_traceback(int fd, PyThreadState *tstate, int write_header)
+{
+    PyFrameObject *frame;
+    unsigned int depth;
+
+    if (write_header)
+        PUTS(fd, "Traceback (most recent call first):\n");
+
+    frame = _PyThreadState_GetFrame(tstate);
+    if (frame == NULL)
+        return;
+
+    depth = 0;
+    while (frame != NULL) {
+        if (MAX_FRAME_DEPTH <= depth) {
+            PUTS(fd, "  ...\n");
+            break;
+        }
+        if (!PyFrame_Check(frame))
+            break;
+        dump_frame(fd, frame);
+        frame = frame->f_back;
+        depth++;
+    }
+}
+
+void
+_Py_DumpTraceback(int fd, PyThreadState *tstate)
+{
+    dump_traceback(fd, tstate, 1);
+}
+
+/* Write the thread identifier into the file 'fd': "Current thread 0xHHHH:\" if
+   is_current is true, "Thread 0xHHHH:\n" otherwise.
+
+   This function is signal safe. */
+
+static void
+write_thread_id(int fd, PyThreadState *tstate, int is_current)
+{
+    if (is_current)
+        PUTS(fd, "Current thread 0x");
+    else
+        PUTS(fd, "Thread 0x");
+    dump_hexadecimal(sizeof(long)*2, (unsigned long)tstate->thread_id, fd);
+    PUTS(fd, ":\n");
+}
+
+const char*
+_Py_DumpTracebackThreads(int fd, PyInterpreterState *interp,
+                         PyThreadState *current_thread)
+{
+    PyThreadState *tstate;
+    unsigned int nthreads;
+
+    /* Get the current interpreter from the current thread */
+    tstate = PyInterpreterState_ThreadHead(interp);
+    if (tstate == NULL)
+        return "unable to get the thread head state";
+
+    /* Dump the traceback of each thread */
+    tstate = PyInterpreterState_ThreadHead(interp);
+    nthreads = 0;
+    do
+    {
+        if (nthreads != 0)
+            write(fd, "\n", 1);
+        if (nthreads >= MAX_NTHREADS) {
+            PUTS(fd, "...\n");
+            break;
+        }
+        write_thread_id(fd, tstate, tstate == current_thread);
+        dump_traceback(fd, tstate, 0);
+        tstate = PyThreadState_Next(tstate);
+        nthreads++;
+    } while (tstate != NULL);
+
+    return NULL;
+}
+

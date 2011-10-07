@@ -132,7 +132,7 @@ Used in:  PY_LONG_LONG
 #endif
 
 /* Parameters used for the numeric hash implementation.  See notes for
-   _PyHash_Double in Objects/object.c.  Numeric hashes are based on
+   _Py_HashDouble in Objects/object.c.  Numeric hashes are based on
    reduction modulo the prime 2**_PyHASH_BITS - 1. */
 
 #if SIZEOF_VOID_P >= 8
@@ -286,12 +286,15 @@ typedef size_t Py_uhash_t;
 /* fastest possible local call under MSVC */
 #define Py_LOCAL(type) static type __fastcall
 #define Py_LOCAL_INLINE(type) static __inline type __fastcall
+#define Py_LOCAL_CALLBACK(name) (__fastcall *name)
 #elif defined(USE_INLINE)
 #define Py_LOCAL(type) static type
 #define Py_LOCAL_INLINE(type) static inline type
+#define Py_LOCAL_CALLBACK(name) (*name)
 #else
 #define Py_LOCAL(type) static type
 #define Py_LOCAL_INLINE(type) static type
+#define Py_LOCAL_CALLBACK(name) (*name)
 #endif
 
 /* Py_MEMCPY can be used instead of memcpy in cases where the copied blocks
