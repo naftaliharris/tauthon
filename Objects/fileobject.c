@@ -103,23 +103,18 @@ PyFile_GetLine(PyObject *f, int n)
         }
     }
     if (n < 0 && result != NULL && PyUnicode_Check(result)) {
-        Py_UNICODE *s = PyUnicode_AS_UNICODE(result);
-        Py_ssize_t len = PyUnicode_GET_SIZE(result);
+        Py_ssize_t len = PyUnicode_GET_LENGTH(result);
         if (len == 0) {
             Py_DECREF(result);
             result = NULL;
             PyErr_SetString(PyExc_EOFError,
                             "EOF when reading a line");
         }
-        else if (s[len-1] == '\n') {
-            if (result->ob_refcnt == 1)
-                PyUnicode_Resize(&result, len-1);
-            else {
-                PyObject *v;
-                v = PyUnicode_FromUnicode(s, len-1);
-                Py_DECREF(result);
-                result = v;
-            }
+        else if (PyUnicode_READ_CHAR(result, len-1) == '\n') {
+            PyObject *v;
+            v = PyUnicode_Substring(result, 0, len-1);
+            Py_DECREF(result);
+            result = v;
         }
     }
     return result;
@@ -297,8 +292,8 @@ Py_UniversalNewlineFgets(char *buf, int n, FILE *stream, PyObject *fobj)
         *p++ = c;
         if (c == '\n') break;
     }
-    if ( c == EOF && skipnextlf )
-        newlinetypes |= NEWLINE_CR;
+    /* if ( c == EOF && skipnextlf )
+        newlinetypes |= NEWLINE_CR; */
     FUNLOCKFILE(stream);
     *p = '\0';
     if ( skipnextlf ) {

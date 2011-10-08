@@ -736,6 +736,19 @@ listinsert(PyListObject *self, PyObject *args)
 }
 
 static PyObject *
+listclear(PyListObject *self)
+{
+    list_clear(self);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+listcopy(PyListObject *self)
+{
+    return list_slice(self, 0, Py_SIZE(self));
+}
+
+static PyObject *
 listappend(PyListObject *self, PyObject *v)
 {
     if (app1(self, v) == 0)
@@ -2201,10 +2214,8 @@ list_richcompare(PyObject *v, PyObject *w, int op)
     PyListObject *vl, *wl;
     Py_ssize_t i;
 
-    if (!PyList_Check(v) || !PyList_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PyList_Check(v) || !PyList_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     vl = (PyListObject *)v;
     wl = (PyListObject *)w;
@@ -2313,6 +2324,10 @@ PyDoc_STRVAR(reversed_doc,
 "L.__reversed__() -- return a reverse iterator over the list");
 PyDoc_STRVAR(sizeof_doc,
 "L.__sizeof__() -- size of L in memory, in bytes");
+PyDoc_STRVAR(clear_doc,
+"L.clear() -> None -- remove all items from L");
+PyDoc_STRVAR(copy_doc,
+"L.copy() -> list -- a shallow copy of L");
 PyDoc_STRVAR(append_doc,
 "L.append(object) -- append object to end");
 PyDoc_STRVAR(extend_doc,
@@ -2341,9 +2356,11 @@ static PyMethodDef list_methods[] = {
     {"__getitem__", (PyCFunction)list_subscript, METH_O|METH_COEXIST, getitem_doc},
     {"__reversed__",(PyCFunction)list_reversed, METH_NOARGS, reversed_doc},
     {"__sizeof__",  (PyCFunction)list_sizeof, METH_NOARGS, sizeof_doc},
+    {"clear",           (PyCFunction)listclear,   METH_NOARGS, clear_doc},
+    {"copy",            (PyCFunction)listcopy,   METH_NOARGS, copy_doc},
     {"append",          (PyCFunction)listappend,  METH_O, append_doc},
     {"insert",          (PyCFunction)listinsert,  METH_VARARGS, insert_doc},
-    {"extend",      (PyCFunction)listextend,  METH_O, extend_doc},
+    {"extend",          (PyCFunction)listextend,  METH_O, extend_doc},
     {"pop",             (PyCFunction)listpop,     METH_VARARGS, pop_doc},
     {"remove",          (PyCFunction)listremove,  METH_O, remove_doc},
     {"index",           (PyCFunction)listindex,   METH_VARARGS, index_doc},
@@ -2406,7 +2423,7 @@ list_subscript(PyListObject* self, PyObject* item)
             src = self->ob_item;
             dest = ((PyListObject *)result)->ob_item;
             for (cur = start, i = 0; i < slicelength;
-                 cur += step, i++) {
+                 cur += (size_t)step, i++) {
                 it = src[cur];
                 Py_INCREF(it);
                 dest[i] = it;
@@ -2497,7 +2514,7 @@ list_ass_subscript(PyListObject* self, PyObject* item, PyObject* value)
                     self->ob_item + cur + 1,
                     lim * sizeof(PyObject *));
             }
-            cur = start + slicelength*step;
+            cur = start + (size_t)slicelength * step;
             if (cur < (size_t)Py_SIZE(self)) {
                 memmove(self->ob_item + cur - slicelength,
                     self->ob_item + cur,
@@ -2561,7 +2578,7 @@ list_ass_subscript(PyListObject* self, PyObject* item, PyObject* value)
             selfitems = self->ob_item;
             seqitems = PySequence_Fast_ITEMS(seq);
             for (cur = start, i = 0; i < slicelength;
-                 cur += step, i++) {
+                 cur += (size_t)step, i++) {
                 garbage[i] = selfitems[cur];
                 ins = seqitems[i];
                 Py_INCREF(ins);
