@@ -147,6 +147,7 @@ Anders Chrigström
 Tom Christiansen
 Vadim Chugunov
 David Cinege
+Craig Citro
 Mike Clarkson
 Andrew Clegg
 Brad Clements
@@ -162,6 +163,7 @@ Geremy Condra
 Juan José Conti
 Matt Conway
 David M. Cooke
+Garrett Cooper
 Greg Copeland
 Aldo Cortesi
 David Costanzo
@@ -193,6 +195,7 @@ Ned Deily
 Vincent Delft
 Arnaud Delobelle
 Erik Demaine
+John Dennis
 Roger Dev
 Raghuram Devarakonda
 Catherine Devlin
@@ -243,6 +246,7 @@ Carey Evans
 Tim Everett
 Paul Everitt
 David Everly
+Daniel Evers
 Greg Ewing
 Martijn Faassen
 Clovis Fabricio
@@ -306,6 +310,7 @@ Hans de Graaff
 Eddy De Greef
 Duncan Grisby
 Fabian Groffen
+John S. Gruber
 Dag Gruneau
 Filip Gruszczyński
 Michael Guravage
@@ -337,6 +342,7 @@ Malte Helmert
 Lance Finn Helsten
 Jonathan Hendry
 James Henstridge
+Kasun Herath
 Chris Herborth
 Ivan Herman
 Jürgen Hermann
@@ -380,6 +386,7 @@ Eric Huss
 Jeremy Hylton
 Gerhard Häring
 Fredrik Håård
+Catalin Iacob
 Mihai Ibanescu
 Lars Immisch
 Bobby Impollonia
@@ -396,6 +403,7 @@ Kjetil Jacobsen
 Geert Jansen
 Jack Jansen
 Bill Janssen
+Thomas Jarosch
 Drew Jenkins
 Flemming Kjær Jensen
 Jiba
@@ -428,6 +436,7 @@ Robert Kern
 Randall Kern
 Magnus Kessler
 Lawrence Kesteloot
+Rafe Kettler
 Vivek Khera
 Akira Kitada
 Mads Kiilerich
@@ -440,6 +449,8 @@ Ron Klatchko
 Bastian Kleineidam
 Bob Kline
 Matthias Klose
+Jeremy Kloth
+Thomas Kluyver
 Kim Knapp
 Lenny Kneler
 Pat Knight
@@ -456,7 +467,9 @@ Hannu Krosing
 Andrej Krpic
 Ivan Krstić
 Andrew Kuchling
+Ralf W. Grosse-Kunstleve
 Vladimir Kushnir
+Kirill Kuzminykh (Кирилл Кузьминых)
 Ross Lagerwall
 Cameron Laird
 Łukasz Langa
@@ -562,6 +575,7 @@ Paul Moore
 Derek Morr
 James A Morrison
 Pablo Mouzo
+Ruslan Mstoi
 Sjoerd Mullender
 Sape Mullender
 Michael Muller
@@ -603,6 +617,7 @@ Piet van Oostrum
 Jason Orendorff
 Douglas Orr
 Michele Orrù
+Oleg Oshmyan
 Denis S. Otkidach
 Michael Otteneder
 R. M. Oudkerk
@@ -664,6 +679,7 @@ Chris Rebert
 Marc Recht
 John Redford
 Terry Reedy
+Gareth Rees
 Steve Reeves
 Lennart Regebro
 Ofir Reichenberg
@@ -678,7 +694,9 @@ Jan Pieter Riegel
 Armin Rigo
 Nicholas Riley
 Jean-Claude Rimbault
+Vlad Riscutia
 Juan M. Bello Rivas
+Davide Rizzo
 Anthony Roach
 Mark Roberts
 Jim Robinson
@@ -706,6 +724,7 @@ Sam Rushing
 Mark Russell
 Nick Russo
 Sébastien Sablé
+Suman Saha
 Hajime Saitou
 George Sakkis
 Rich Salz
@@ -761,6 +780,7 @@ Dirk Soede
 Paul Sokolovsky
 Cody Somerville
 Clay Spence
+Stefan Sperling
 Per Spilling
 Joshua Spoerri
 Noah Spurrier
@@ -780,6 +800,7 @@ Ken Stox
 Patrick Strawderman
 Dan Stromberg
 Daniel Stutzbach
+Andreas Stührk
 Nathan Sullivan
 Mark Summerfield
 Hisao Suzuki
@@ -797,9 +818,12 @@ Monty Taylor
 Amy Taylor
 Anatoly Techtonik
 Mikhail Terekhov
+Richard M. Tew
 Tobias Thelen
+Nicolas M. Thiéry
 James Thomas
 Robin Thomas
+Stephen Thorne
 Eric Tiedemann
 Tracy Tims
 Oren Tirosh

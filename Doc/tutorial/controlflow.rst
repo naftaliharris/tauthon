@@ -156,6 +156,9 @@ following loop, which searches for prime numbers::
    8 equals 2 * 4
    9 equals 3 * 3
 
+(Yes, this is the correct code.  Look closely: the ``else`` clause belongs to
+the :keyword:`for` loop, **not** the :keyword:`if` statement.)
+
 
 .. _tut-pass:
 
@@ -455,10 +458,9 @@ and of course it would print::
    shopkeeper : Michael Palin
    sketch : Cheese Shop Sketch
 
-Note that the :meth:`sort` method of the list of keyword argument names is
-called before printing the contents of the ``keywords`` dictionary; if this is
-not done, the order in which the arguments are printed is undefined.
-
+Note that the list of keyword argument names is created by sorting the result
+of the keywords dictionary's ``keys()`` method before printing its contents;
+if this is not done, the order in which the arguments are printed is undefined.
 
 .. _tut-arbitraryargs:
 

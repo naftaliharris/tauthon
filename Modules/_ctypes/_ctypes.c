@@ -2576,8 +2576,10 @@ static int PyCData_NewGetBuffer(PyObject *_self, Py_buffer *view, int flags)
     view->ndim = dict->ndim;
     view->shape = dict->shape;
     view->itemsize = self->b_size;
-    for (i = 0; i < view->ndim; ++i) {
-        view->itemsize /= dict->shape[i];
+    if (view->itemsize) {
+        for (i = 0; i < view->ndim; ++i) {
+            view->itemsize /= dict->shape[i];
+        }
     }
     view->strides = NULL;
     view->suboffsets = NULL;
@@ -4676,6 +4678,7 @@ PyCArrayType_from_ctype(PyObject *itemtype, Py_ssize_t length)
     if (!PyType_Check(itemtype)) {
         PyErr_SetString(PyExc_TypeError,
                         "Expected a type object");
+        Py_DECREF(key);
         return NULL;
     }
 #ifdef MS_WIN64

@@ -5,15 +5,18 @@
    :synopsis: TLS/SSL wrapper for socket objects
 
 .. moduleauthor:: Bill Janssen <bill.janssen@gmail.com>
-
-.. versionadded:: 2.6
-
 .. sectionauthor::  Bill Janssen <bill.janssen@gmail.com>
 
 
 .. index:: single: OpenSSL; (use in module ssl)
 
 .. index:: TLS, SSL, Transport Layer Security, Secure Sockets Layer
+
+.. versionadded:: 2.6
+
+**Source code:** :source:`Lib/ssl.py`
+
+--------------
 
 This module provides access to Transport Layer Security (often known as "Secure
 Sockets Layer") encryption and peer authentication facilities for network
@@ -236,6 +239,9 @@ Functions, Constants, and Exceptions
 .. data:: PROTOCOL_SSLv2
 
    Selects SSL version 2 as the channel encryption protocol.
+
+   This protocol is not available if OpenSSL is compiled with OPENSSL_NO_SSL2
+   flag.
 
    .. warning::
 
@@ -616,8 +622,8 @@ And go back to listening for new client connections.
    Class :class:`socket.socket`
             Documentation of underlying :mod:`socket` class
 
-   `Introducing SSL and Certificates using OpenSSL <http://old.pseudonym.org/ssl/wwwj-index.html>`_
-       Frederick J. Hirsch
+   `TLS (Transport Layer Security) and SSL (Secure Socket Layer) <http://www3.rad.com/networks/applications/secure/tls.htm>`_
+      Debby Koren
 
    `RFC 1422: Privacy Enhancement for Internet Electronic Mail: Part II: Certificate-Based Key Management <http://www.ietf.org/rfc/rfc1422>`_
        Steve Kent

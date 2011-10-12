@@ -1,13 +1,364 @@
 Python News
 +++++++++++
 
-What's New in Python 2.7.2?
+What's New in Python 2.7.3?
 ===========================
 
 *Release date: XXXX-XX-XX*
 
 Core and Builtins
 -----------------
+
+- Issue #7732: Fix a crash on importing a module if a directory has the same
+  name than a Python module (e.g. "__init__.py"): don't close the file twice.
+
+- Issue #12973: Fix overflow checks that invoked undefined behaviour in
+  int.__pow__.  These overflow checks were causing int.__pow__ to produce
+  incorrect results with recent versions of Clang, as a result of the
+  compiler optimizing the check away.  Also fix similar overflow checks
+  in list_repeat (listobject.c) and islice_next (itertoolsmodule.c).  These
+  bugs caused test failures with recent versions of Clang.
+
+- Issue #12266: Fix str.capitalize() to correctly uppercase/lowercase
+  titlecased and cased non-letter characters.
+
+- Issues #12610 and #12609: Verify that user generated AST has correct string
+  and identifier types before compiling.
+
+- Issue #11627: Fix segfault when __new__ on a exception returns a
+  non-exception class.
+
+- Issue #12149: Update the method cache after a type's dictionnary gets
+  cleared by the garbage collector.  This fixes a segfault when an instance
+  and its type get caught in a reference cycle, and the instance's
+  deallocator calls one of the methods on the type (e.g. when subclassing
+  IOBase).  Diagnosis and patch by Davide Rizzo.
+
+- Issue #12501: Adjust callable() warning: callable() is only not supported in
+  Python 3.1. callable() is again supported in Python 3.2.
+
+- Issue #9611, #9015: FileIO.read(), FileIO.readinto(), FileIO.write() and
+  os.write() clamp the length to INT_MAX on Windows.
+
+- Issue #1195: my_fgets() now always clears errors before calling fgets(). Fix
+  the following case: sys.stdin.read() stopped with CTRL+d (end of file),
+  raw_input() interrupted by CTRL+c.
+
+- dict_proxy objects now display their contents rather than just the class
+  name.
+
+Library
+-------
+
+- Issue #13114: Fix the distutils commands check and register when the
+  long description is a Unicode string with non-ASCII characters.
+
+- Issue #7367: Fix pkgutil.walk_paths to skip directories whose
+  contents cannot be read.
+
+- Issue #7425: Prevent pydoc -k failures due to module import errors.
+  (Backport to 2.7 of existing 3.x fix)
+
+- Issue #13099: Fix sqlite3.Cursor.lastrowid under a Turkish locale.
+  Reported and diagnosed by Thomas Kluyver.
+
+- Issue #7689: Allow pickling of dynamically created classes when their
+  metaclass is registered with copy_reg.  Patch by Nicolas M. Thiéry and
+  Craig Citro.
+
+- Issue #13058: ossaudiodev: fix a file descriptor leak on error. Patch by
+  Thomas Jarosch.
+
+- Issue #12931: xmlrpclib now encodes Unicode URI to ISO-8859-1, instead of
+  failing with a UnicodeDecodeError.
+
+- Issue #8933: distutils' PKG-INFO files will now correctly report
+  Metadata-Version: 1.1 instead of 1.0 if a Classifier or Download-URL field is
+  present.
+
+- Issue #8286: The distutils command sdist will print a warning message instead
+  of crashing when an invalid path is given in the manifest template.
+
+- Issue #12841: tarfile unnecessarily checked the existence of numerical user
+  and group ids on extraction. If one of them did not exist the respective id
+  of the current user (i.e. root) was used for the file and ownership
+  information was lost.
+
+- Issue #10946: The distutils commands bdist_dumb, bdist_wininst and bdist_msi
+  now respect a --skip-build option given to bdist.
+
+- Issue #12287: Fix a stack corruption in ossaudiodev module when the FD is
+  greater than FD_SETSIZE.
+
+- Issue #12839: Fix crash in zlib module due to version mismatch.
+  Fix by Richard M. Tew.
+
+- Issue #12786: Set communication pipes used by subprocess.Popen CLOEXEC to
+  avoid them being inherited by other subprocesses.
+
+- Issue #4106: Fix occasional exceptions printed out by multiprocessing on
+  interpreter shutdown.
+
+- Issue #11657: Fix sending file descriptors over 255 over a multiprocessing
+  Pipe.
+
+- Issue #12213: Fix a buffering bug with interleaved reads and writes that
+  could appear on io.BufferedRandom streams.
+
+- Issue #12326: sys.platform is now always 'linux2' on Linux, even if Python
+  is compiled on Linux 3.
+
+- Issue #13007: whichdb should recognize gdbm 1.9 magic numbers.
+
+- Issue #9173: Let shutil._make_archive work if the logger argument is None.
+
+- Issue #12650: Fix a race condition where a subprocess.Popen could leak
+  resources (FD/zombie) when killed at the wrong time.
+
+- Issue #12752: Fix regression which prevented locale.normalize() from
+  accepting unicode strings.
+
+- Issue #12683: urlparse updated to include svn as schemes that uses relative
+  paths. (svn from 1.5 onwards support relative path).
+
+- Issue #11933: Fix incorrect mtime comparison in distutils.
+
+- Issues #11104, #8688: Fix the behavior of distutils' sdist command with
+  manually-maintained MANIFEST files.
+
+- Issue #8887: "pydoc somebuiltin.somemethod" (or help('somebuiltin.somemethod')
+  in Python code) now finds the doc of the method.
+
+- Issue #12603: Fix pydoc.synopsis() on files with non-negative st_mtime.
+
+- Issue #12514: Use try/finally to assure the timeit module restores garbage
+  collections when it is done.
+
+- Issue #12607: In subprocess, fix issue where if stdin, stdout or stderr is
+  given as a low fd, it gets overwritten.
+
+- Issue #12102: Document that buffered files must be flushed before being used
+  with mmap. Patch by Steffen Daode Nurpmeso.
+
+- Issue #12560: Build libpython.so on OpenBSD. Patch by Stefan Sperling.
+
+- Issue #1813: Fix codec lookup and setting/getting locales under Turkish
+  locales.
+
+- Issue #10883: Fix socket leaks in urllib when using FTP.
+
+- Issue #12592: Make Python build on OpenBSD 5 (and future major releases).
+
+- Issue #12372: POSIX semaphores are broken on AIX: don't use them.
+
+- Issue #12571: Add a plat-linux3 directory mirroring the plat-linux2
+  directory, so that "import DLFCN" and other similar imports work on
+  Linux 3.0.
+
+- Issue #7484: smtplib no longer puts <> around addresses in VRFY and EXPN
+  commands; they aren't required and in fact postfix doesn't support that form.
+
+- Issue #11603: Fix a crash when __str__ is rebound as __repr__.  Patch by
+  Andreas Stührk.
+
+- Issue #12502: asyncore: fix polling loop with AF_UNIX sockets.
+
+- Issue #4376: ctypes now supports nested structures in a endian different than
+  the parent structure. Patch by Vlad Riscutia.
+
+- Issue #12493: subprocess: Popen.communicate() now also handles EINTR errors
+  if the process has only one pipe.
+
+- Issue #12467: warnings: fix a race condition if a warning is emitted at
+  shutdown, if globals()['__file__'] is None.
+
+- Issue #12352: Fix a deadlock in multiprocessing.Heap when a block is freed by
+  the garbage collector while the Heap lock is held.
+
+- Issue #9516: On Mac OS X, change Distutils to no longer globally attempt to
+  check or set the MACOSX_DEPLOYMENT_TARGET environment variable for the
+  interpreter process.  This could cause failures in non-Distutils subprocesses
+  and was unreliable since tests or user programs could modify the interpreter
+  environment after Distutils set it.  Instead, have Distutils set the the
+  deployment target only in the environment of each build subprocess.  It is
+  still possible to globally override the default by setting
+  MACOSX_DEPLOYMENT_TARGET before launching the interpreter; its value must be
+  greater or equal to the default value, the value with which the interpreter
+  was built.
+
+- Issue #11802:  The cache in filecmp now has a maximum size of 100 so that
+  it won't grow without bound.
+
+- Issue #12404: Remove C89 incompatible code from mmap module. Patch by Akira
+  Kitada.
+
+- Issue #11700: mailbox proxy object close methods can now be called multiple
+  times without error, and _ProxyFile now closes the wrapped file.
+
+- Issue #12133: AbstractHTTPHandler.do_open() of urllib.request closes the HTTP
+  connection if its getresponse() method fails with a socket error. Patch
+  written by Ezio Melotti.
+
+- Issue #9284: Allow inspect.findsource() to find the source of doctest
+  functions.
+
+- Issue #10694: zipfile now ignores garbage at the end of a zipfile.
+
+- Issue #11583: Speed up os.path.isdir on Windows by using GetFileAttributes
+  instead of os.stat.
+
+- Issue #12080: Fix a performance issue in Decimal._power_exact that caused
+  some corner-case Decimal.__pow__ calls to take an unreasonably long time.
+
+- Named tuples now work correctly with vars().
+
+- sys.setcheckinterval() now updates the current ticker count as well as
+  updating the check interval, so if the user decreases the check interval,
+  the ticker doesn't have to wind down to zero from the old starting point
+  before the new interval takes effect.  And if the user increases the
+  interval, it makes sure the new limit takes effect right away rather have an
+  early task switch before recognizing the new interval.
+
+- Issue #12085: Fix an attribute error in subprocess.Popen destructor if the
+  constructor has failed, e.g. because of an undeclared keyword argument. Patch
+  written by Oleg Oshmyan.
+
+Extension Modules
+-----------------
+
+- Issue #13070: Fix a crash when a TextIOWrapper caught in a reference cycle
+  would be finalized after the reference to its underlying BufferedRWPair's
+  writer got cleared by the GC.
+
+- Issue #12881: ctypes: Fix segfault with large structure field names.
+
+- Issue #13013: ctypes: Fix a reference leak in PyCArrayType_from_ctype.
+  Thanks to Suman Saha for finding the bug and providing a patch.
+
+- Issue #13022: Fix: _multiprocessing.recvfd() doesn't check that
+  file descriptor was actually received.
+
+- Issue #12483: ctypes: Fix a crash when the destruction of a callback
+  object triggers the garbage collector.
+
+- Issue #12950: Fix passing file descriptors in multiprocessing, under
+  OpenIndiana/Illumos.
+
+- Issue #12764: Fix a crash in ctypes when the name of a Structure field is not
+  a string.
+
+- Issue #9651: Fix a crash when ctypes.create_string_buffer(0) was passed to
+  some functions like file.write().
+
+- Issue #10309: Define _GNU_SOURCE so that mremap() gets the proper
+  signature.  Without this, architectures where sizeof void* != sizeof int are
+  broken.  Patch given by Hallvard B Furuseth.
+
+Build
+-----
+
+- Issue #8746: Correct faulty configure checks so that os.chflags() and
+  os.lchflags() are once again built on systems that support these
+  functions (*BSD and OS X).  Also add new stat file flags for OS X
+  (UF_HIDDEN and UF_COMPRESSED).
+
+Tools/Demos
+-----------
+
+- Issue #10639: reindent.py no longer converts newlines and will raise
+  an error if attempting to convert a file with mixed newlines.
+
+Tests
+-----
+
+- Issue #12821: Fix test_fcntl failures on OpenBSD 5.
+
+- Issue #12331: The test suite for lib2to3 can now run from an installed
+  Python.
+
+- Issue #12549: Correct test_platform to not fail when OS X returns 'x86_64'
+  as the processor type on some Mac systems.
+
+- Skip network tests when getaddrinfo() returns EAI_AGAIN, meaning a temporary
+  failure in name resolution.
+
+- Avoid failing in test_robotparser when mueblesmoraleda.com is flaky and
+  an overzealous DNS service (e.g. OpenDNS) redirects to a placeholder
+  Web site.
+
+- Avoid failing in test_urllibnet.test_bad_address when some overzealous
+  DNS service (e.g. OpenDNS) resolves a non-existent domain name.  The test
+  is now skipped instead.
+
+- Issue #8716: Avoid crashes caused by Aqua Tk on OSX when attempting to run
+  test_tk or test_ttk_guionly under a username that is not currently logged
+  in to the console windowserver (as may be the case under buildbot or ssh).
+
+- Issue #12141: Install a copy of template C module file so that
+  test_build_ext of test_distutils is no longer silently skipped when
+  run outside of a build directory.
+
+- Issue #8746: Add additional tests for os.chflags() and os.lchflags().
+  Patch by Garrett Cooper.
+
+- Issue #10736: Fix test_ttk test_widgets failures with Cocoa Tk 8.5.9
+  on Mac OS X.  (Patch by Ronald Oussoren)
+
+- Issue #12057: Add tests for ISO 2022 codecs (iso2022_jp, iso2022_jp_2,
+  iso2022_kr).
+
+
+What's New in Python 2.7.2?
+===========================
+
+*Release date: 2011-06-11*
+
+Library
+-------
+
+- Issue #12009: Fixed regression in netrc file comment handling.
+
+Extension Modules
+-----------------
+
+- Issue #1221: Make pyexpat.__version__ equal to the Python version.
+
+
+What's New in Python 2.7.2 release candidate 1?
+===============================================
+
+*Release date: 2011-05-29*
+
+Core and Builtins
+-----------------
+
+- Issue #9670: Increase the default stack size for secondary threads on
+  Mac OS X and FreeBSD to reduce the chances of a crash instead of a
+  "maximum recursion depth" RuntimeError exception.
+  (patch by Ronald Oussoren)
+
+- Correct lookup of __dir__ on objects. This allows old-style classes to have
+  __dir__. It also causes errors besides AttributeError found on lookup to be
+  propagated.
+
+- Issue #1195: Fix input() if it is interrupted by CTRL+d and then CTRL+c,
+  clear the end-of-file indicator after CTRL+d.
+
+- Issue #8651: PyArg_Parse*() functions raise an OverflowError if the file
+  doesn't have PY_SSIZE_T_CLEAN define and the size doesn't fit in an int
+  (length bigger than 2^31-1 bytes).
+
+- Issue #8651: Fix "z#" format of PyArg_Parse*() function: the size was not
+  written if PY_SSIZE_T_CLEAN is defined.
+
+- Issue #9756: When calling a method descriptor or a slot wrapper descriptor,
+  the check of the object type doesn't read the __class__ attribute anymore.
+  Fix a crash if a class override its __class__ attribute (e.g. a proxy of the
+  str type). Patch written by Andreas Stührk.
+
+- Issue #10517: After fork(), reinitialize the TLS used by the PyGILState_*
+  APIs, to avoid a crash with the pthread implementation in RHEL 5.  Patch
+  by Charles-François Natali.
 
 - Issue #6780: fix starts/endswith error message to mention that tuples are
   accepted too.
@@ -60,6 +411,73 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #12590: IDLE editor window now always displays the first line
+  when opening a long file.  With Tk 8.5, the first line was hidden.
+
+- Issue #12161: Cause StringIO.getvalue() to raise a ValueError when used on a
+  closed StringIO instance.
+
+- Issue #12182: Fix pydoc.HTMLDoc.multicolumn() if Python uses the new (true)
+  division (python -Qnew). Patch written by Ralf W. Grosse-Kunstleve.
+
+- Issue #12175: RawIOBase.readall() now returns None if read() returns None.
+
+- Issue #12175: FileIO.readall() now raises a ValueError instead of an IOError
+  if the file is closed.
+
+- Issue #1441530: In imaplib, use makefile() to wrap the SSL socket to avoid
+  heap fragmentation and MemoryError with some malloc implementations.
+
+- Issue #12100: Don't reset incremental encoders of CJK codecs at each call to
+  their encode() method anymore, but continue to call the reset() method if the
+  final argument is True.
+
+- Issue #12124: zipimport doesn't keep a reference to zlib.decompress() anymore
+  to be able to unload the module.
+
+- Issue #11088: don't crash when using F5 to run a script in IDLE on MacOSX
+  with Tk 8.5.
+
+- Issue #10154, #10090: change the normalization of UTF-8 to "UTF-8" instead
+  of "UTF8" in the locale module as the latter is not supported MacOSX and OpenBSD.
+
+- Issue #9516: avoid errors in sysconfig when MACOSX_DEPLOYMENT_TARGET is
+  set in shell.
+
+- Issue #12050: zlib.decompressobj().decompress() now clears the unconsumed_tail
+  attribute when called without a max_length argument.
+
+- Issue #12062: In the `io` module, fix a flushing bug when doing a certain
+  type of I/O sequence on a file opened in read+write mode (namely: reading,
+  seeking a bit forward, writing, then seeking before the previous write but
+  still within buffered data, and writing again).
+
+- Issue #8498: In socket.accept(), allow to specify 0 as a backlog value in
+  order to accept exactly one connection.  Patch by Daniel Evers.
+
+- Issue #12012: ssl.PROTOCOL_SSLv2 becomes optional.
+
+- Issue #11164: Remove obsolete allnodes test from minidom test.
+
+- Issue #11927: SMTP_SSL now uses port 465 by default as documented.  Patch
+  by Kasun Herath.
+
+- Issue 11999: fixed sporadic sync failure mailbox.Maildir due to its trying to
+  detect mtime changes by comparing to the system clock instead of to the
+  previous value of the mtime.
+
+- Issue #10684: shutil.move used to delete a folder on case insensitive
+  filesystems when the source and destination name where the same except
+  for the case.
+
+- Issue #11982: fix json.loads('""') to return u'' rather than ''.
+
+- Issue #11277: mmap.mmap() calls fcntl(fd, F_FULLFSYNC) on Mac OS X to get
+  around a mmap bug with sparse files. Patch written by Steffen Daode Nurpmeso.
+
+- Issue #10761: Fix tarfile.extractall failure  when symlinked files are
+  present. Initial patch by Scott Leerssen.
 
 - Issue #11763: don't use difflib in TestCase.assertMultiLineEqual if the
   strings are too long.
@@ -326,6 +744,18 @@ Library
 Extension Modules
 -----------------
 
+- Stop using the old interface for providing methods and attributes in the _sre
+  module. Among other things, this gives these classes ``__class__``
+  attributes. (See #12099)
+
+- Issue #10169: Fix argument parsing in socket.sendto() to avoid error masking.
+
+- Issue #12051: Fix segfault in json.dumps() while encoding highly-nested
+  objects using the C accelerations.
+
+- Issue #12017: Fix segfault in json.loads() while decoding highly-nested
+  objects using the C accelerations.
+
 - Issue #1838: Prevent segfault in ctypes, when _as_parameter_ on a class is set
   to an instance of the class.
 
@@ -333,6 +763,10 @@ Extension Modules
 
 Build
 -----
+
+- Issue #11217: For 64-bit/32-bit Mac OS X universal framework builds,
+  ensure "make install" creates symlinks in --prefix bin for the "-32"
+  files in the framework bin directory like the installer does.
 
 - Issue #11411: Fix 'make DESTDIR=' with a relative destination.
 
@@ -380,6 +814,12 @@ IDLE
 
 Tests
 -----
+
+- Issue #12205: Fix test_subprocess failure due to uninstalled test data.
+
+- Issue #5723: Improve json tests to be executed with and without accelerations.
+
+- Issue #11910: Fix test_heapq to skip the C tests when _heapq is missing.
 
 - Fix test_startfile to wait for child process to terminate before finishing.
 

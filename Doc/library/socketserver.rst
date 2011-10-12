@@ -1,4 +1,3 @@
-
 :mod:`SocketServer` --- A framework for network servers
 =======================================================
 
@@ -11,6 +10,9 @@
    Python 3.0.  The :term:`2to3` tool will automatically adapt imports when
    converting your sources to 3.0.
 
+**Source code:** :source:`Lib/SocketServer.py`
+
+--------------
 
 The :mod:`SocketServer` module simplifies the task of writing network servers.
 
@@ -85,7 +87,7 @@ a threading UDP server class is created as follows::
    class ThreadingUDPServer(ThreadingMixIn, UDPServer): pass
 
 The mix-in class must come first, since it overrides a method defined in
-:class:`UDPServer`.  Setting the various member variables also changes the
+:class:`UDPServer`.  Setting the various attributes also change the
 behavior of the underlying server mechanism.
 
 To implement a service, you must derive a class from :class:`BaseRequestHandler`

@@ -77,6 +77,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Travis B. Hartwell
    * Tim Hatch
    * Janko Hauser
+   * Ben Hayden
    * Thomas Heller
    * Bernhard Herzog
    * Magnus L. Hetland
@@ -103,6 +104,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Robert Kern
    * Jim Kerr
    * Jan Kim
+   * Kamil Kisiel
    * Greg Kochanski
    * Guido Kollerie
    * Peter A. Koren
@@ -139,7 +141,8 @@ docs@python.org), and we'll be glad to correct the problem.
    * Ross Moore
    * Sjoerd Mullender
    * Dale Nagata
-   * Michal Nowikowski 
+   * Michal Nowikowski
+   * Steffen Daode Nurpmeso
    * Ng Pheng Siong
    * Koray Oner
    * Tomas Oppelstrup
@@ -180,6 +183,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Joakim Sernbrant
    * Justin Sheehy
    * Charlie Shepherd
+   * Yue Shuaijie
    * Michael Simcich
    * Ionel Simionescu
    * Michael Sloan
@@ -197,6 +201,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Kalle Svensson
    * Jim Tittsler
    * David Turner
+   * Sandro Tosi
    * Ville Vainio
    * Martijn Vries
    * Charles G. Waldman
@@ -214,6 +219,7 @@ docs@python.org), and we'll be glad to correct the problem.
    * Collin Winter
    * Blake Winton
    * Dan Wolfe
+   * Adam Woodbeck
    * Steven Work
    * Thomas Wouters
    * Ka-Ping Yee

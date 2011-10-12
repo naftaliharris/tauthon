@@ -1013,6 +1013,8 @@ subtype_dealloc(PyObject *self)
     assert(basedealloc);
     basedealloc(self);
 
+    PyType_Modified(type);
+
     /* Can't reference self beyond this point */
     Py_DECREF(type);
 
@@ -2233,8 +2235,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
                 (add_weak && strcmp(s, "__weakref__") == 0))
                 continue;
             tmp =_Py_Mangle(name, tmp);
-            if (!tmp)
+            if (!tmp) {
+                Py_DECREF(newslots);
                 goto bad_slots;
+            }
             PyList_SET_ITEM(newslots, j, tmp);
             j++;
         }
@@ -2665,9 +2669,9 @@ static PyMethodDef type_methods[] = {
     {"__subclasses__", (PyCFunction)type_subclasses, METH_NOARGS,
      PyDoc_STR("__subclasses__() -> list of immediate subclasses")},
     {"__instancecheck__", type___instancecheck__, METH_O,
-     PyDoc_STR("__instancecheck__() -> check if an object is an instance")},
+     PyDoc_STR("__instancecheck__() -> bool\ncheck if an object is an instance")},
     {"__subclasscheck__", type___subclasscheck__, METH_O,
-     PyDoc_STR("__subclasscheck__() -> check if a class is a subclass")},
+     PyDoc_STR("__subclasscheck__() -> bool\ncheck if a class is a subclass")},
     {0}
 };
 
@@ -2978,7 +2982,7 @@ object_str(PyObject *self)
     unaryfunc f;
 
     f = Py_TYPE(self)->tp_repr;
-    if (f == NULL)
+    if (f == NULL || f == object_str)
         f = object_repr;
     return f(self);
 }
@@ -3490,7 +3494,7 @@ static PyMethodDef object_methods[] = {
     {"__format__", object_format, METH_VARARGS,
      PyDoc_STR("default object formatter")},
     {"__sizeof__", object_sizeof, METH_NOARGS,
-     PyDoc_STR("__sizeof__() -> size of object in memory, in bytes")},
+     PyDoc_STR("__sizeof__() -> int\nsize of object in memory, in bytes")},
     {0}
 };
 

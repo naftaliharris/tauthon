@@ -11,6 +11,9 @@
    3.0.  The :term:`2to3` tool will automatically adapt imports when converting
    your sources to 3.0.
 
+**Source code:** :source:`Lib/Cookie.py`
+
+--------------
 
 The :mod:`Cookie` module defines classes for abstracting the concept of
 cookies, an HTTP state management mechanism. It supports both simple string-only
@@ -191,7 +194,7 @@ Morsel Objects
 
 .. method:: Morsel.set(key, value, coded_value)
 
-   Set the *key*, *value* and *coded_value* members.
+   Set the *key*, *value* and *coded_value* attributes.
 
 
 .. method:: Morsel.isReservedKey(K)

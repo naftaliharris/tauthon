@@ -23,7 +23,7 @@ built-in function :func:`open`, but accepts Universal Resource Locators (URLs)
 instead of filenames.  Some restrictions apply --- it can only open URLs for
 reading, and no seek operations are available.
 
-.. warning:: When opening HTTPS URLs, it is not attempted to validate the
+.. warning:: When opening HTTPS URLs, it does not attempt to validate the
    server certificate.  Use at your own risk!
 
 
@@ -210,7 +210,7 @@ Utility functions
 
    Replace special characters in *string* using the ``%xx`` escape. Letters,
    digits, and the characters ``'_.-'`` are never quoted. By default, this
-   function is intended for quoting the path section of the URL.The optional
+   function is intended for quoting the path section of the URL. The optional
    *safe* parameter specifies additional characters that should not be quoted
    --- its default value is ``'/'``.
 

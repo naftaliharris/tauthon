@@ -1,4 +1,5 @@
 from test.test_support import run_unittest, verbose
+from platform import linux_distribution
 import unittest
 import locale
 import sys
@@ -395,6 +396,26 @@ class TestMiscellaneous(unittest.TestCase):
 
         # crasher from bug #7419
         self.assertRaises(locale.Error, locale.setlocale, 12345)
+
+    @unittest.skipIf(linux_distribution()[0] == 'Fedora', "Fedora setlocale() "
+                     "bug: https://bugzilla.redhat.com/show_bug.cgi?id=726536")
+    def test_getsetlocale_issue1813(self):
+        # Issue #1813: setting and getting the locale under a Turkish locale
+        oldlocale = locale.getlocale()
+        self.addCleanup(locale.setlocale, locale.LC_CTYPE, oldlocale)
+        try:
+            locale.setlocale(locale.LC_CTYPE, 'tr_TR')
+        except locale.Error:
+            # Unsupported locale on this system
+            self.skipTest('test needs Turkish locale')
+        loc = locale.getlocale()
+        locale.setlocale(locale.LC_CTYPE, loc)
+        self.assertEqual(loc, locale.getlocale())
+
+    def test_normalize_issue12752(self):
+        # Issue #1813 caused a regression where locale.normalize() would no
+        # longer accept unicode strings.
+        self.assertEqual(locale.normalize(u'en_US'), 'en_US.ISO8859-1')
 
 
 def test_main():

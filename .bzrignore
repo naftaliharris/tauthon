@@ -13,6 +13,7 @@ Makefile.pre
 platform
 pyconfig.h
 libpython*.a
+libpython*.so*
 python.exe
 python-gdb.py
 reflog.txt
@@ -33,3 +34,6 @@ Parser/pgen
 Lib/test/data/*
 Lib/lib2to3/Grammar*.pickle
 Lib/lib2to3/PatternGrammar*.pickle
+.coverage
+coverage/*
+htmlcov/*

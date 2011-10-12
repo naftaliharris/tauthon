@@ -23,6 +23,9 @@
 
 #ifndef MS_WINDOWS
 #define UNIX
+# ifdef __APPLE__
+#  include <fcntl.h>
+# endif
 #endif
 
 #ifdef MS_WINDOWS
@@ -1170,6 +1173,12 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
                             "mmap invalid access parameter.");
     }
 
+#ifdef __APPLE__
+    /* Issue #11277: fsync(2) is not enough on OS X - a special, OS X specific
+       fcntl(2) is necessary to force DISKSYNC and get around mmap(2) bug */
+    if (fd != -1)
+        (void)fcntl(fd, F_FULLFSYNC);
+#endif
 #ifdef HAVE_FSTAT
 #  ifdef __VMS
     /* on OpenVMS we must ensure that all bytes are written to the file */
@@ -1179,12 +1188,13 @@ new_mmap_object(PyTypeObject *type, PyObject *args, PyObject *kwdict)
 #  endif
     if (fd != -1 && fstat(fd, &st) == 0 && S_ISREG(st.st_mode)) {
         if (map_size == 0) {
+            off_t calc_size;
             if (offset >= st.st_size) {
                 PyErr_SetString(PyExc_ValueError,
                                 "mmap offset is greater than file size");
                 return NULL;
             }
-            off_t calc_size = st.st_size - offset;
+            calc_size = st.st_size - offset;
             map_size = calc_size;
             if (map_size != calc_size) {
                 PyErr_SetString(PyExc_ValueError,

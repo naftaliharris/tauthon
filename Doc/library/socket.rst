@@ -488,7 +488,7 @@ The module :mod:`socket` exports the following constants and functions:
 
 .. function:: getdefaulttimeout()
 
-   Return the default timeout in floating seconds for new socket objects. A value
+   Return the default timeout in seconds (float) for new socket objects. A value
    of ``None`` indicates that new socket objects have no timeout. When the socket
    module is first imported, the default is ``None``.
 
@@ -497,7 +497,7 @@ The module :mod:`socket` exports the following constants and functions:
 
 .. function:: setdefaulttimeout(timeout)
 
-   Set the default timeout in floating seconds for new socket objects. A value of
+   Set the default timeout in seconds (float) for new socket objects. A value of
    ``None`` indicates that new socket objects have no timeout. When the socket
    module is first imported, the default is ``None``.
 
@@ -644,8 +644,8 @@ correspond to Unix system calls applicable to sockets.
 .. method:: socket.listen(backlog)
 
    Listen for connections made to the socket.  The *backlog* argument specifies the
-   maximum number of queued connections and should be at least 1; the maximum value
-   is system-dependent (usually 5).
+   maximum number of queued connections and should be at least 0; the maximum value
+   is system-dependent (usually 5), the minimum value is forced to 0.
 
 
 .. method:: socket.makefile([mode[, bufsize]])
@@ -766,7 +766,7 @@ correspond to Unix system calls applicable to sockets.
 
 .. method:: socket.gettimeout()
 
-   Return the timeout in floating seconds associated with socket operations, or
+   Return the timeout in seconds (float) associated with socket operations, or
    ``None`` if no timeout is set.  This reflects the last call to
    :meth:`setblocking` or :meth:`settimeout`.
 
@@ -989,3 +989,22 @@ the interface::
 
    # disabled promiscuous mode
    s.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
+
+
+Running an example several times with too small delay between executions, could
+lead to this error::
+
+   socket.error: [Errno 98] Address already in use
+
+This is because the previous execution has left the socket in a ``TIME_WAIT``
+state, and can't be immediately reused.
+
+There is a :mod:`socket` flag to set, in order to prevent this,
+:data:`socket.SO_REUSEADDR`::
+
+   s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+   s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+   s.bind((HOST, PORT))
+
+the :data:`SO_REUSEADDR` flag tells the kernel to reuse a local socket in
+``TIME_WAIT`` state, without waiting for its natural timeout to expire.

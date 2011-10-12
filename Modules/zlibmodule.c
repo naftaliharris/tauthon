@@ -72,7 +72,13 @@ typedef struct
 static void
 zlib_error(z_stream zst, int err, char *msg)
 {
-    const char *zmsg = zst.msg;
+    const char *zmsg = Z_NULL;
+    /* In case of a version mismatch, zst.msg won't be initialized.
+       Check for this case first, before looking at zst.msg. */
+    if (err == Z_VERSION_ERROR)
+        zmsg = "library version mismatch";
+    if (zmsg == Z_NULL)
+        zmsg = zst.msg;
     if (zmsg == Z_NULL) {
         switch (err) {
         case Z_BUF_ERROR:
@@ -535,17 +541,22 @@ PyZlib_objdecompress(compobject *self, PyObject *args)
         Py_END_ALLOW_THREADS
     }
 
-    /* Not all of the compressed data could be accommodated in the output buffer
-       of specified size. Return the unconsumed tail in an attribute.*/
     if(max_length) {
+        /* Not all of the compressed data could be accommodated in a buffer of
+           the specified size. Return the unconsumed tail in an attribute. */
         Py_DECREF(self->unconsumed_tail);
         self->unconsumed_tail = PyString_FromStringAndSize((char *)self->zst.next_in,
                                                            self->zst.avail_in);
-        if(!self->unconsumed_tail) {
-            Py_DECREF(RetVal);
-            RetVal = NULL;
-            goto error;
-        }
+    }
+    else if (PyString_GET_SIZE(self->unconsumed_tail) > 0) {
+        /* All of the compressed data was consumed. Clear unconsumed_tail. */
+        Py_DECREF(self->unconsumed_tail);
+        self->unconsumed_tail = PyString_FromStringAndSize("", 0);
+    }
+    if(!self->unconsumed_tail) {
+        Py_DECREF(RetVal);
+        RetVal = NULL;
+        goto error;
     }
 
     /* The end of the compressed data has been reached, so set the

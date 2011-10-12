@@ -331,6 +331,13 @@ def _test():
 # overridden below)
 _setlocale = setlocale
 
+# Avoid relying on the locale-dependent .lower() method
+# (see issue #1813).
+_ascii_lower_map = ''.join(
+    chr(x + 32 if x >= ord('A') and x <= ord('Z') else x)
+    for x in range(256)
+)
+
 def normalize(localename):
 
     """ Returns a normalized locale code for the given locale
@@ -348,7 +355,9 @@ def normalize(localename):
 
     """
     # Normalize the locale name and extract the encoding
-    fullname = localename.lower()
+    if isinstance(localename, unicode):
+        localename = localename.encode('ascii')
+    fullname = localename.translate(_ascii_lower_map)
     if ':' in fullname:
         # ':' is sometimes used as encoding delimiter.
         fullname = fullname.replace(':', '.')
@@ -621,7 +630,7 @@ locale_encoding_alias = {
     'tactis':                       'TACTIS',
     'euc_jp':                       'eucJP',
     'euc_kr':                       'eucKR',
-    'utf_8':                        'UTF8',
+    'utf_8':                        'UTF-8',
     'koi8_r':                       'KOI8-R',
     'koi8_u':                       'KOI8-U',
     # XXX This list is still incomplete. If you know more

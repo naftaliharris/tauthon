@@ -1,4 +1,3 @@
-
 :mod:`xml.etree.ElementTree` --- The ElementTree XML API
 ========================================================
 
@@ -8,6 +7,10 @@
 
 
 .. versionadded:: 2.5
+
+**Source code:** :source:`Lib/xml/etree/ElementTree.py`
+
+--------------
 
 The :class:`Element` type is a flexible container object, designed to store
 hierarchical data structures in memory.  The type can be described as a cross
@@ -332,6 +335,8 @@ Element Objects
       document (depth first) order.  If *tag* is not ``None`` or ``'*'``, only
       elements whose tag equals *tag* are returned from the iterator.  If the
       tree structure is modified during iteration, the result is undefined.
+
+      .. versionadded:: 2.7
 
 
    .. method:: iterfind(match)

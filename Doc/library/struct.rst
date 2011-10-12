@@ -22,8 +22,8 @@ structs and the intended conversion to/from Python values.
    alignment is taken into account when unpacking.  This behavior is chosen so
    that the bytes of a packed struct correspond exactly to the layout in memory
    of the corresponding C struct.  To handle platform-independent data formats
-   or omit implicit pad bytes, use `standard` size and alignment instead of
-   `native` size and alignment: see :ref:`struct-alignment` for details.
+   or omit implicit pad bytes, use ``standard`` size and alignment instead of
+   ``native`` size and alignment: see :ref:`struct-alignment` for details.
 
 Functions and Exceptions
 ------------------------
@@ -257,10 +257,11 @@ not contain whitespace though.
 For the ``'s'`` format character, the count is interpreted as the size of the
 string, not a repeat count like for the other format characters; for example,
 ``'10s'`` means a single 10-byte string, while ``'10c'`` means 10 characters.
-For packing, the string is truncated or padded with null bytes as appropriate to
-make it fit. For unpacking, the resulting string always has exactly the
-specified number of bytes.  As a special case, ``'0s'`` means a single, empty
-string (while ``'0c'`` means 0 characters).
+If a count is not given, it defaults to 1.  For packing, the string is
+truncated or padded with null bytes as appropriate to make it fit. For
+unpacking, the resulting string always has exactly the specified number of
+bytes.  As a special case, ``'0s'`` means a single, empty string (while
+``'0c'`` means 0 characters).
 
 The ``'p'`` format character encodes a "Pascal string", meaning a short
 variable-length string stored in a *fixed number of bytes*, given by the count.
@@ -314,7 +315,7 @@ the result in a named tuple::
 
     >>> from collections import namedtuple
     >>> Student = namedtuple('Student', 'name serialnum school gradelevel')
-    >>> Student._make(unpack('<10sHHb', s))
+    >>> Student._make(unpack('<10sHHb', record))
     Student(name='raymond   ', serialnum=4658, school=264, gradelevel=8)
 
 The ordering of format characters may have an impact on size since the padding

@@ -126,7 +126,7 @@ Process-wide parameters
    program name is ``'/usr/local/bin/python'``, the prefix is ``'/usr/local'``. The
    returned string points into static storage; the caller should not modify its
    value.  This corresponds to the :makevar:`prefix` variable in the top-level
-   :file:`Makefile` and the :option:`--prefix` argument to the :program:`configure`
+   :file:`Makefile` and the ``--prefix`` argument to the :program:`configure`
    script at build time.  The value is available to Python code as ``sys.prefix``.
    It is only useful on Unix.  See also the next function.
 
@@ -139,7 +139,7 @@ Process-wide parameters
    program name is ``'/usr/local/bin/python'``, the exec-prefix is
    ``'/usr/local'``.  The returned string points into static storage; the caller
    should not modify its value.  This corresponds to the :makevar:`exec_prefix`
-   variable in the top-level :file:`Makefile` and the :option:`--exec-prefix`
+   variable in the top-level :file:`Makefile` and the ``--exec-prefix``
    argument to the :program:`configure` script at build  time.  The value is
    available to Python code as ``sys.exec_prefix``.  It is only useful on Unix.
 
@@ -638,6 +638,16 @@ with sub-interpreters:
    .. versionadded:: 2.3
 
 
+.. cfunction:: PyThreadState PyGILState_GetThisThreadState()
+
+   Get the current thread state for this thread.  May return ``NULL`` if no
+   GILState API has been used on the current thread.  Note that the main thread
+   always has such a thread-state, even if no auto-thread-state call has been
+   made on the main thread.  This is mainly a helper/diagnostic function.
+
+   .. versionadded:: 2.3
+
+
 The following macros are normally used without a trailing semicolon; look for
 example usage in the Python source distribution.
 
@@ -881,7 +891,7 @@ by such objects may affect the wrong (sub-)interpreter's dictionary of loaded
 modules.
 
 Also note that combining this functionality with :cfunc:`PyGILState_\*` APIs
-is delicate, become these APIs assume a bijection between Python thread states
+is delicate, because these APIs assume a bijection between Python thread states
 and OS-level threads, an assumption broken by the presence of sub-interpreters.
 It is highly recommended that you don't switch sub-interpreters between a pair
 of matching :cfunc:`PyGILState_Ensure` and :cfunc:`PyGILState_Release` calls.
@@ -906,7 +916,7 @@ a worker thread and the actual call than made at the earliest convenience by the
 main thread where it has possession of the global interpreter lock and can
 perform any Python API calls.
 
-.. cfunction:: void Py_AddPendingCall(int (*func)(void *), void *arg)
+.. cfunction:: int Py_AddPendingCall(int (*func)(void *), void *arg)
 
    .. index:: single: Py_AddPendingCall()
 

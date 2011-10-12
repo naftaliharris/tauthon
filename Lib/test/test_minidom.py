@@ -46,26 +46,6 @@ def create_doc_with_doctype():
     return doc
 
 class MinidomTest(unittest.TestCase):
-    def tearDown(self):
-        try:
-            Node.allnodes
-        except AttributeError:
-            # We don't actually have the minidom from the standard library,
-            # but are picking up the PyXML version from site-packages.
-            pass
-        else:
-            self.confirm(len(Node.allnodes) == 0,
-                    "assertion: len(Node.allnodes) == 0")
-            if len(Node.allnodes):
-                print "Garbage left over:"
-                if verbose:
-                    print Node.allnodes.items()[0:10]
-                else:
-                    # Don't print specific nodes if repeatable results
-                    # are needed
-                    print len(Node.allnodes)
-            Node.allnodes = {}
-
     def confirm(self, test, testname = "Test"):
         self.assertTrue(test, testname)
 
@@ -458,6 +438,13 @@ class MinidomTest(unittest.TestCase):
         domstr = dom.toprettyxml(newl="\r\n")
         dom.unlink()
         self.confirm(domstr == str.replace("\n", "\r\n"))
+
+    def test_toprettyxml_preserves_content_of_text_node(self):
+        str = '<A>B</A>'
+        dom = parseString(str)
+        dom2 = parseString(dom.toprettyxml())
+        self.assertEqual(dom.childNodes[0].childNodes[0].toxml(),
+                         dom2.childNodes[0].childNodes[0].toxml())
 
     def testProcessingInstruction(self):
         dom = parseString('<e><?mypi \t\n data \t\n ?></e>')

@@ -1,4 +1,3 @@
-
 :mod:`shutil` --- High-level file operations
 ============================================
 
@@ -11,15 +10,14 @@
    single: file; copying
    single: copying files
 
+**Source code:** :source:`Lib/shutil.py`
+
+--------------
+
 The :mod:`shutil` module offers a number of high-level operations on files and
 collections of files.  In particular, functions are provided  which support file
 copying and removal. For operations on individual files, see also the
 :mod:`os` module.
-
-.. seealso::
-
-   Latest version of the `shutil module Python source code
-   <http://svn.python.org/view/python/branches/release27-maint/Lib/shutil.py?view=markup>`_
 
 .. warning::
 
@@ -105,8 +103,9 @@ Directory and files operations
    :func:`copy2`.
 
    If *symlinks* is true, symbolic links in the source tree are represented as
-   symbolic links in the new tree; if false or omitted, the contents of the
-   linked files are copied to the new tree.
+   symbolic links in the new tree, but the metadata of the original links is NOT
+   copied; if false or omitted, the contents and metadata of the linked files
+   are copied to the new tree.
 
    If *ignore* is given, it must be a callable that will receive as its
    arguments the directory being visited by :func:`copytree`, and a list of its
@@ -161,21 +160,30 @@ Directory and files operations
 
 .. function:: move(src, dst)
 
-   Recursively move a file or directory to another location.
+   Recursively move a file or directory (*src*) to another location (*dst*).
 
-   If the destination is on the current filesystem, then simply use rename.
-   Otherwise, copy src (with :func:`copy2`) to the dst and then remove src.
+   If the destination is a directory or a symlink to a directory, then *src* is
+   moved inside that directory.
+
+   The destination directory must not already exist.  If the destination already
+   exists but is not a directory, it may be overwritten depending on
+   :func:`os.rename` semantics.
+
+   If the destination is on the current filesystem, then :func:`os.rename` is
+   used.  Otherwise, *src* is copied (using :func:`copy2`) to *dst* and then
+   removed.
 
    .. versionadded:: 2.3
 
 
 .. exception:: Error
 
-   This exception collects exceptions that raised during a multi-file operation. For
-   :func:`copytree`, the exception argument is a list of 3-tuples (*srcname*,
-   *dstname*, *exception*).
+   This exception collects exceptions that are raised during a multi-file
+   operation. For :func:`copytree`, the exception argument is a list of 3-tuples
+   (*srcname*, *dstname*, *exception*).
 
    .. versionadded:: 2.3
+
 
 .. _shutil-example:
 
@@ -270,12 +278,14 @@ Archives operations
    *owner* and *group* are used when creating a tar archive. By default,
    uses the current owner and group.
 
+   *logger* is an instance of :class:`logging.Logger`.
+
    .. versionadded:: 2.7
 
 
 .. function:: get_archive_formats()
 
-   Returns a list of supported formats for archiving.
+   Return a list of supported formats for archiving.
    Each element of the returned sequence is a tuple ``(name, description)``
 
    By default :mod:`shutil` provides these formats:
@@ -293,7 +303,7 @@ Archives operations
 
 .. function:: register_archive_format(name, function, [extra_args, [description]])
 
-   Registers an archiver for the format *name*. *function* is a callable that
+   Register an archiver for the format *name*. *function* is a callable that
    will be used to invoke the archiver.
 
    If given, *extra_args* is a sequence of ``(name, value)`` that will be

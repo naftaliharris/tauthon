@@ -474,7 +474,7 @@ static PyObject *
 fileio_readinto(fileio *self, PyObject *args)
 {
     Py_buffer pbuf;
-    Py_ssize_t n;
+    Py_ssize_t n, len;
 
     if (self->fd < 0)
         return err_closed();
@@ -485,9 +485,16 @@ fileio_readinto(fileio *self, PyObject *args)
         return NULL;
 
     if (_PyVerify_fd(self->fd)) {
+        len = pbuf.len;
         Py_BEGIN_ALLOW_THREADS
         errno = 0;
-        n = read(self->fd, pbuf.buf, pbuf.len);
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+        if (len > INT_MAX)
+            len = INT_MAX;
+        n = read(self->fd, pbuf.buf, (int)len);
+#else
+        n = read(self->fd, pbuf.buf, len);
+#endif
         Py_END_ALLOW_THREADS
     } else
         n = -1;
@@ -539,6 +546,8 @@ fileio_readall(fileio *self)
     Py_ssize_t total = 0;
     int n;
 
+    if (self->fd < 0)
+        return err_closed();
     if (!_PyVerify_fd(self->fd))
         return PyErr_SetFromErrno(PyExc_IOError);
 
@@ -618,6 +627,10 @@ fileio_read(fileio *self, PyObject *args)
         return fileio_readall(self);
     }
 
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+    if (size > INT_MAX)
+        size = INT_MAX;
+#endif
     bytes = PyBytes_FromStringAndSize(NULL, size);
     if (bytes == NULL)
         return NULL;
@@ -626,7 +639,11 @@ fileio_read(fileio *self, PyObject *args)
     if (_PyVerify_fd(self->fd)) {
         Py_BEGIN_ALLOW_THREADS
         errno = 0;
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+        n = read(self->fd, ptr, (int)size);
+#else
         n = read(self->fd, ptr, size);
+#endif
         Py_END_ALLOW_THREADS
     } else
         n = -1;
@@ -653,7 +670,7 @@ static PyObject *
 fileio_write(fileio *self, PyObject *args)
 {
     Py_buffer pbuf;
-    Py_ssize_t n;
+    Py_ssize_t n, len;
 
     if (self->fd < 0)
         return err_closed();
@@ -666,7 +683,14 @@ fileio_write(fileio *self, PyObject *args)
     if (_PyVerify_fd(self->fd)) {
         Py_BEGIN_ALLOW_THREADS
         errno = 0;
-        n = write(self->fd, pbuf.buf, pbuf.len);
+        len = pbuf.len;
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+        if (len > INT_MAX)
+            len = INT_MAX;
+        n = write(self->fd, pbuf.buf, (int)len);
+#else
+        n = write(self->fd, pbuf.buf, len);
+#endif
         Py_END_ALLOW_THREADS
     } else
         n = -1;

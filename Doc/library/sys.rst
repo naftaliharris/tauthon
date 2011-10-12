@@ -32,20 +32,6 @@ always available.
    .. versionadded:: 2.0
 
 
-.. data:: subversion
-
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
-
-   .. versionadded:: 2.5
-
-
 .. data:: builtin_module_names
 
    A tuple of strings giving the names of all modules that are compiled into this
@@ -107,6 +93,17 @@ always available.
    ``sys.displayhook`` is called on the result of evaluating an :term:`expression`
    entered in an interactive Python session.  The display of these values can be
    customized by assigning another one-argument function to ``sys.displayhook``.
+
+
+.. data:: dont_write_bytecode
+
+   If this is true, Python won't try to write ``.pyc`` or ``.pyo`` files on the
+   import of source modules.  This value is initially set to ``True`` or
+   ``False`` depending on the :option:`-B` command line option and the
+   :envvar:`PYTHONDONTWRITEBYTECODE` environment variable, but you can set it
+   yourself to control bytecode file generation.
+
+   .. versionadded:: 2.6
 
 
 .. function:: excepthook(type, value, traceback)
@@ -210,10 +207,10 @@ always available.
    Python files are installed; by default, this is also ``'/usr/local'``.  This can
    be set at build time with the ``--exec-prefix`` argument to the
    :program:`configure` script.  Specifically, all configuration files (e.g. the
-   :file:`pyconfig.h` header file) are installed in the directory ``exec_prefix +
-   '/lib/pythonversion/config'``, and shared library modules are installed in
-   ``exec_prefix + '/lib/pythonversion/lib-dynload'``, where *version* is equal to
-   ``version[:3]``.
+   :file:`pyconfig.h` header file) are installed in the directory
+   :file:`{exec_prefix}/lib/python{X.Y}/config', and shared library modules are
+   installed in :file:`{exec_prefix}/lib/python{X.Y}/lib-dynload`, where *X.Y*
+   is the version number of Python, for example ``2.7``.
 
 
 .. data:: executable
@@ -562,10 +559,10 @@ always available.
    ``version_info`` value may be used for a more human-friendly encoding of the
    same information.
 
-   The ``hexversion`` is a 32-bit number with the following layout
+   The ``hexversion`` is a 32-bit number with the following layout:
 
    +-------------------------+------------------------------------------------+
-   | bits (big endian order) | meaning                                        |
+   | Bits (big endian order) | Meaning                                        |
    +=========================+================================================+
    | :const:`1-8`            |  ``PY_MAJOR_VERSION``  (the ``2`` in           |
    |                         |  ``2.1.0a3``)                                  |
@@ -577,14 +574,14 @@ always available.
    |                         |  ``2.1.0a3``)                                  |
    +-------------------------+------------------------------------------------+
    | :const:`25-28`          |  ``PY_RELEASE_LEVEL``  (``0xA`` for alpha,     |
-   |                         |  ``0xB`` for beta, ``0xC`` for gamma and       |
-   |                         |  ``0xF`` for final)                            |
+   |                         |  ``0xB`` for beta, ``0xC`` for release         |
+   |                         |  candidate and ``0xF`` for final)              |
    +-------------------------+------------------------------------------------+
    | :const:`29-32`          |  ``PY_RELEASE_SERIAL``  (the ``3`` in          |
-   |                         |  ``2.1.0a3``)                                  |
+   |                         |  ``2.1.0a3``, zero for final releases)         |
    +-------------------------+------------------------------------------------+
 
-   thus ``2.1.0a3`` is hexversion ``0x020100a3``
+   Thus ``2.1.0a3`` is hexversion ``0x020100a3``.
 
    .. versionadded:: 1.5.2
 
@@ -595,7 +592,7 @@ always available.
    internal representation of integers.  The attributes are read only.
 
    +-------------------------+----------------------------------------------+
-   | attribute               | explanation                                  |
+   | Attribute               | Explanation                                  |
    +=========================+==============================================+
    | :const:`bits_per_digit` | number of bits held in each digit.  Python   |
    |                         | integers are stored internally in base       |
@@ -723,23 +720,45 @@ always available.
    This string contains a platform identifier that can be used to append
    platform-specific components to :data:`sys.path`, for instance.
 
-   For Unix systems, this is the lowercased OS name as returned by ``uname -s``
-   with the first part of the version as returned by ``uname -r`` appended,
-   e.g. ``'sunos5'`` or ``'linux2'``, *at the time when Python was built*.
+   For most Unix systems, this is the lowercased OS name as returned by ``uname
+   -s`` with the first part of the version as returned by ``uname -r`` appended,
+   e.g. ``'sunos5'``, *at the time when Python was built*.  Unless you want to
+   test for a specific system version, it is therefore recommended to use the
+   following idiom::
+
+      if sys.platform.startswith('freebsd'):
+          # FreeBSD-specific code here...
+      elif sys.platform.startswith('linux'):
+          # Linux-specific code here...
+
+   .. versionchanged:: 2.7.3
+      Since lots of code check for ``sys.platform == 'linux2'``, and there is
+      no essential change between Linux 2.x and 3.x, ``sys.platform`` is always
+      set to ``'linux2'``, even on Linux 3.x.  In Python 3.3 and later, the
+      value will always be set to ``'linux'``, so it is recommended to always
+      use the ``startswith`` idiom presented above.
+
    For other systems, the values are:
 
-   ================ ===========================
-   System           :data:`platform` value
-   ================ ===========================
-   Windows          ``'win32'``
-   Windows/Cygwin   ``'cygwin'``
-   Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
-   RiscOS           ``'riscos'``
-   AtheOS           ``'atheos'``
-   ================ ===========================
+   ===================== ===========================
+   System                :data:`platform` value
+   ===================== ===========================
+   Linux (2.x *and* 3.x) ``'linux2'``
+   Windows               ``'win32'``
+   Windows/Cygwin        ``'cygwin'``
+   Mac OS X              ``'darwin'``
+   OS/2                  ``'os2'``
+   OS/2 EMX              ``'os2emx'``
+   RiscOS                ``'riscos'``
+   AtheOS                ``'atheos'``
+   ===================== ===========================
 
+   .. seealso::
+      :attr:`os.name` has a coarser granularity.  :func:`os.uname` gives
+      system-dependent version information.
+
+      The :mod:`platform` module provides detailed checks for the
+      system's identity.
 
 .. data:: prefix
 
@@ -747,10 +766,10 @@ always available.
    independent Python files are installed; by default, this is the string
    ``'/usr/local'``.  This can be set at build time with the ``--prefix``
    argument to the :program:`configure` script.  The main collection of Python
-   library modules is installed in the directory ``prefix + '/lib/pythonversion'``
+   library modules is installed in the directory :file:`{prefix}/lib/python{X.Y}``
    while the platform independent header files (all except :file:`pyconfig.h`) are
-   stored in ``prefix + '/include/pythonversion'``, where *version* is equal to
-   ``version[:3]``.
+   stored in :file:`{prefix}/include/python{X.Y}``, where *X.Y* is the version
+   number of Python, for example ``2.7``.
 
 
 .. data:: ps1
@@ -774,17 +793,6 @@ always available.
    when Python is started with the -3 option.  (This should be considered
    read-only; setting it to a different value doesn't have an effect on
    Python 3.0 warnings.)
-
-   .. versionadded:: 2.6
-
-
-.. data:: dont_write_bytecode
-
-   If this is true, Python won't try to write ``.pyc`` or ``.pyo`` files on the
-   import of source modules.  This value is initially set to ``True`` or ``False``
-   depending on the ``-B`` command line option and the ``PYTHONDONTWRITEBYTECODE``
-   environment variable, but you can set it yourself to control bytecode file
-   generation.
 
    .. versionadded:: 2.6
 
@@ -978,6 +986,26 @@ always available.
    in case they have been overwritten with a broken object.  However, the
    preferred way to do this is to explicitly save the previous stream before
    replacing it, and restore the saved object.
+
+
+.. data:: subversion
+
+   A triple (repo, branch, version) representing the Subversion information of the
+   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
+   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
+   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
+   was built from a Subversion checkout; it contains the revision number (range)
+   and possibly a trailing 'M' if there were local modifications. If the tree was
+   exported (or svnversion was not available), it is the revision of
+   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
+
+   .. versionadded:: 2.5
+
+   .. note::
+      Python is now `developed <http://docs.python.org/devguide/>`_ using
+      Mercurial.  In recent Python 2.7 bugfix releases, :data:`subversion`
+      therefore contains placeholder information.  It is removed in Python
+      3.3.
 
 
 .. data:: tracebacklimit

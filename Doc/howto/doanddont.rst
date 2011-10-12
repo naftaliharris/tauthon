@@ -32,8 +32,8 @@ Inside Function Definitions
 versions of Python do not check for the invalidity, it does not make it more
 valid, no more than having a smart lawyer makes a man innocent. Do not use it
 like that ever. Even in versions where it was accepted, it made the function
-execution slower, because the compiler could not be certain which names are
-local and which are global. In Python 2.1 this construct causes warnings, and
+execution slower, because the compiler could not be certain which names were
+local and which were global. In Python 2.1 this construct causes warnings, and
 sometimes even errors.
 
 
@@ -46,7 +46,7 @@ you can know where each toplevel name is defined by a simple "search" function
 in your favourite editor. You also open yourself to trouble in the future, if
 some module grows additional functions or classes.
 
-One of the most awful question asked on the newsgroup is why this code::
+One of the most awful questions asked on the newsgroup is why this code::
 
    f = open("www")
    f.read()
@@ -113,7 +113,7 @@ from module import name1, name2
 
 This is a "don't" which is much weaker than the previous "don't"s but is still
 something you should not do if you don't have good reasons to do that. The
-reason it is usually bad idea is because you suddenly have an object which lives
+reason it is usually a bad idea is because you suddenly have an object which lives
 in two separate namespaces. When the binding in one namespace changes, the
 binding in the other will not, so there will be a discrepancy between them. This
 happens when, for example, one module is reloaded, or changes the definition of

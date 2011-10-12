@@ -186,6 +186,16 @@ class OtherNetworkTests(unittest.TestCase):
             opener.open(request)
             self.assertEqual(request.get_header('User-agent'),'Test-Agent')
 
+    def test_sites_no_connection_close(self):
+        # Some sites do not send Connection: close header.
+        # Verify that those work properly. (#issue12576)
+
+        URL = 'http://www.imdb.com' # No Connection:close
+        with test_support.transient_internet(URL):
+            req = urllib2.urlopen(URL)
+            res = req.read()
+            self.assertTrue(res)
+
     def _test_urls(self, urls, handlers, retry=True):
         import time
         import logging
@@ -231,6 +241,7 @@ class OtherNetworkTests(unittest.TestCase):
         handlers = []
 
         cfh = urllib2.CacheFTPHandler()
+        self.addCleanup(cfh.clear_cache)
         cfh.setTimeout(1)
         handlers.append(cfh)
 

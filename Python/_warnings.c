@@ -491,7 +491,7 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
 
     /* Setup filename. */
     *filename = PyDict_GetItemString(globals, "__file__");
-    if (*filename != NULL) {
+    if (*filename != NULL && PyString_Check(*filename)) {
             Py_ssize_t len = PyString_Size(*filename);
         const char *file_str = PyString_AsString(*filename);
             if (file_str == NULL || (len < 0 && PyErr_Occurred()))
@@ -514,6 +514,7 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
     }
     else {
         const char *module_str = PyString_AsString(*module);
+        *filename = NULL;
         if (module_str && strcmp(module_str, "__main__") == 0) {
             PyObject *argv = PySys_GetObject("argv");
             if (argv != NULL && PyList_Size(argv) > 0) {

@@ -1718,6 +1718,7 @@ order (MRO) for bases """
             ("__exit__", run_context, swallow, set(), {"__enter__" : iden}),
             ("__complex__", complex, complex_num, set(), {}),
             ("__format__", format, format_impl, set(), {}),
+            ("__dir__", dir, empty_seq, set(), {}),
             ]
 
         class Checker(object):
@@ -4564,6 +4565,30 @@ order (MRO) for bases """
         with self.assertRaises(AttributeError):
             del X.__abstractmethods__
 
+    def test_proxy_call(self):
+        class FakeStr(object):
+            __class__ = str
+
+        fake_str = FakeStr()
+        # isinstance() reads __class__ on new style classes
+        self.assertTrue(isinstance(fake_str, str))
+
+        # call a method descriptor
+        with self.assertRaises(TypeError):
+            str.split(fake_str)
+
+        # call a slot wrapper descriptor
+        with self.assertRaises(TypeError):
+            str.__add__(fake_str, "abc")
+
+    def test_repr_as_str(self):
+        # Issue #11603: crash or infinite loop when rebinding __str__ as
+        # __repr__.
+        class Foo(object):
+            pass
+        Foo.__repr__ = Foo.__str__
+        foo = Foo()
+        str(foo)
 
 class DictProxyTests(unittest.TestCase):
     def setUp(self):
@@ -4571,6 +4596,10 @@ class DictProxyTests(unittest.TestCase):
             def meth(self):
                 pass
         self.C = C
+
+    def test_repr(self):
+        self.assertIn('dict_proxy({', repr(vars(self.C)))
+        self.assertIn("'meth':", repr(vars(self.C)))
 
     def test_iter_keys(self):
         # Testing dict-proxy iterkeys...

@@ -9,6 +9,10 @@
 
 .. versionadded:: 2.1
 
+**Source code:** :source:`Lib/warnings.py`
+
+--------------
+
 Warning messages are typically issued in situations where it is useful to alert
 the user of some condition in a program, where that condition (normally) doesn't
 warrant raising an exception and terminating the program.  For example, one
@@ -38,6 +42,10 @@ The printing of warning messages is done by calling :func:`showwarning`, which
 may be overridden; the default implementation of this function formats the
 message by calling :func:`formatwarning`, which is also available for use by
 custom implementations.
+
+.. seealso::
+   :func:`logging.captureWarnings` allows you to handle all warnings with
+   the standard logging infrastructure.
 
 
 .. _warning-categories:

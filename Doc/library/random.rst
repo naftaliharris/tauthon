@@ -1,18 +1,15 @@
-
 :mod:`random` --- Generate pseudo-random numbers
 ================================================
 
 .. module:: random
    :synopsis: Generate pseudo-random numbers with various common distributions.
 
+**Source code:** :source:`Lib/random.py`
+
+--------------
 
 This module implements pseudo-random number generators for various
 distributions.
-
-.. seealso::
-
-   Latest version of the `random module Python source code
-   <http://svn.python.org/view/python/branches/release27-maint/Lib/random.py?view=markup>`_
 
 For integers, uniform selection from a range. For sequences, uniform selection
 of a random element, a function to generate a random permutation of a list
@@ -199,6 +196,7 @@ be found in any statistics text.
    The end-point value ``b`` may or may not be included in the range
    depending on floating-point rounding in the equation ``a + (b-a) * random()``.
 
+
 .. function:: triangular(low, high, mode)
 
    Return a random floating point number *N* such that ``low <= N <= high`` and
@@ -228,6 +226,12 @@ be found in any statistics text.
 
    Gamma distribution.  (*Not* the gamma function!)  Conditions on the
    parameters are ``alpha > 0`` and ``beta > 0``.
+
+   The probability distribution function is::
+
+                 x ** (alpha - 1) * math.exp(-x / beta)
+       pdf(x) =  --------------------------------------
+                   math.gamma(alpha) * beta ** alpha
 
 
 .. function:: gauss(mu, sigma)

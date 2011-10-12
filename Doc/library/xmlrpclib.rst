@@ -17,6 +17,10 @@
 
 .. versionadded:: 2.2
 
+**Source code:** :source:`Lib/xmlrpclib.py`
+
+--------------
+
 XML-RPC is a Remote Procedure Call method that uses XML passed via HTTP as a
 transport.  With it, a client can call methods with parameters on a remote
 server (the server is named by a URI) and get back structured data.  This module
@@ -148,7 +152,7 @@ returning a value, which may be either returned data in a conformant type or a
 :class:`Fault` or :class:`ProtocolError` object indicating an error.
 
 Servers that support the XML introspection API support some common methods
-grouped under the reserved :attr:`system` member:
+grouped under the reserved :attr:`system` attribute:
 
 
 .. method:: ServerProxy.system.listMethods()
@@ -341,7 +345,7 @@ Fault Objects
 -------------
 
 A :class:`Fault` object encapsulates the content of an XML-RPC fault tag. Fault
-objects have the following members:
+objects have the following attributes:
 
 
 .. attribute:: Fault.faultCode
@@ -390,7 +394,7 @@ ProtocolError Objects
 
 A :class:`ProtocolError` object describes a protocol error in the underlying
 transport layer (such as a 404 'not found' error if the server named by the URI
-does not exist).  It has the following members:
+does not exist).  It has the following attributes:
 
 
 .. attribute:: ProtocolError.url
@@ -435,8 +439,8 @@ MultiCall Objects
 
 .. versionadded:: 2.4
 
-In http://www.xmlrpc.com/discuss/msgReader%241208, an approach is presented to
-encapsulate multiple calls to a remote server into a single request.
+The :class:`MultiCall` object provides a way to encapsulate multiple calls to a
+remote server into a single request [#]_.
 
 
 .. class:: MultiCall(server)
@@ -577,3 +581,10 @@ Example of Client and Server Usage
 See :ref:`simplexmlrpcserver-example`.
 
 
+.. rubric:: Footnotes
+
+.. [#] This approach has been first presented in `a discussion on xmlrpc.com
+   <http://web.archive.org/web/20060624230303/http://www.xmlrpc.com/discuss/msgReader$1208?mode=topic>`_.
+.. the link now points to webarchive since the one at
+.. http://www.xmlrpc.com/discuss/msgReader%241208 is broken (and webadmin
+.. doesn't reply)

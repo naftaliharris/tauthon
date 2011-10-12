@@ -25,7 +25,8 @@ except ImportError:
 __all__ = ["copyfileobj", "copyfile", "copymode", "copystat", "copy", "copy2",
            "copytree", "move", "rmtree", "Error", "SpecialFileError",
            "ExecError", "make_archive", "get_archive_formats",
-           "register_archive_format", "unregister_archive_format"]
+           "register_archive_format", "unregister_archive_format",
+           "ignore_patterns"]
 
 class Error(EnvironmentError):
     pass
@@ -277,6 +278,12 @@ def move(src, dst):
     """
     real_dst = dst
     if os.path.isdir(dst):
+        if _samefile(src, dst):
+            # We might be on a case insensitive filesystem,
+            # perform the rename anyway.
+            os.rename(src, dst)
+            return
+
         real_dst = os.path.join(dst, _basename(src))
         if os.path.exists(real_dst):
             raise Error, "Destination path '%s' already exists" % real_dst
@@ -353,7 +360,8 @@ def _make_tarball(base_name, base_dir, compress="gzip", verbose=0, dry_run=0,
     archive_dir = os.path.dirname(archive_name)
 
     if not os.path.exists(archive_dir):
-        logger.info("creating %s" % archive_dir)
+        if logger is not None:
+            logger.info("creating %s", archive_dir)
         if not dry_run:
             os.makedirs(archive_dir)
 

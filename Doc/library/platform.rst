@@ -9,6 +9,10 @@
 
 .. versionadded:: 2.3
 
+**Source code:** :source:`Lib/platform.py`
+
+--------------
+
 .. note::
 
    Specific platforms listed alphabetically, with Linux included in the Unix
@@ -108,7 +112,7 @@ Cross Platform
 .. function:: python_implementation()
 
    Returns a string identifying the Python implementation. Possible return values
-   are: 'CPython', 'IronPython', 'Jython'.
+   are: 'CPython', 'IronPython', 'Jython', 'PyPy'.
 
    .. versionadded:: 2.6
 
@@ -232,9 +236,6 @@ Mac OS Platform
 
    Entries which cannot be determined are set to ``''``.  All tuple entries are
    strings.
-
-   Documentation for the underlying :cfunc:`gestalt` API is available online at
-   http://www.rgaros.nl/gestalt/.
 
 
 Unix Platforms
