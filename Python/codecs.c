@@ -465,9 +465,11 @@ PyObject *PyCodec_LookupError(const char *name)
 
 static void wrong_exception_type(PyObject *exc)
 {
-    PyObject *type = PyObject_GetAttrString(exc, "__class__");
+    _Py_identifier(__class__);
+    _Py_identifier(__name__);
+    PyObject *type = _PyObject_GetAttrId(exc, &PyId___class__);
     if (type != NULL) {
-        PyObject *name = PyObject_GetAttrString(type, "__name__");
+        PyObject *name = _PyObject_GetAttrId(type, &PyId___name__);
         Py_DECREF(type);
         if (name != NULL) {
             PyErr_Format(PyExc_TypeError,
@@ -513,50 +515,50 @@ PyObject *PyCodec_IgnoreErrors(PyObject *exc)
 
 PyObject *PyCodec_ReplaceErrors(PyObject *exc)
 {
-    PyObject *restuple;
-    Py_ssize_t start;
-    Py_ssize_t end;
-    Py_ssize_t i;
+    Py_ssize_t start, end, i, len;
 
     if (PyObject_IsInstance(exc, PyExc_UnicodeEncodeError)) {
         PyObject *res;
-        Py_UNICODE *p;
+        int kind;
+        void *data;
         if (PyUnicodeEncodeError_GetStart(exc, &start))
             return NULL;
         if (PyUnicodeEncodeError_GetEnd(exc, &end))
             return NULL;
-        res = PyUnicode_FromUnicode(NULL, end-start);
+        len = end - start;
+        res = PyUnicode_New(len, '?');
         if (res == NULL)
             return NULL;
-        for (p = PyUnicode_AS_UNICODE(res), i = start;
-            i<end; ++p, ++i)
-            *p = '?';
-        restuple = Py_BuildValue("(On)", res, end);
-        Py_DECREF(res);
-        return restuple;
+        kind = PyUnicode_KIND(res);
+        data = PyUnicode_DATA(res);
+        for (i = 0; i < len; ++i)
+            PyUnicode_WRITE(kind, data, i, '?');
+        return Py_BuildValue("(Nn)", res, end);
     }
     else if (PyObject_IsInstance(exc, PyExc_UnicodeDecodeError)) {
-        Py_UNICODE res = Py_UNICODE_REPLACEMENT_CHARACTER;
         if (PyUnicodeDecodeError_GetEnd(exc, &end))
             return NULL;
-        return Py_BuildValue("(u#n)", &res, 1, end);
+        return Py_BuildValue("(Cn)",
+                             (int)Py_UNICODE_REPLACEMENT_CHARACTER,
+                             end);
     }
     else if (PyObject_IsInstance(exc, PyExc_UnicodeTranslateError)) {
         PyObject *res;
-        Py_UNICODE *p;
+        int kind;
+        void *data;
         if (PyUnicodeTranslateError_GetStart(exc, &start))
             return NULL;
         if (PyUnicodeTranslateError_GetEnd(exc, &end))
             return NULL;
-        res = PyUnicode_FromUnicode(NULL, end-start);
+        len = end - start;
+        res = PyUnicode_New(len, Py_UNICODE_REPLACEMENT_CHARACTER);
         if (res == NULL)
             return NULL;
-        for (p = PyUnicode_AS_UNICODE(res), i = start;
-            i<end; ++p, ++i)
-            *p = Py_UNICODE_REPLACEMENT_CHARACTER;
-        restuple = Py_BuildValue("(On)", res, end);
-        Py_DECREF(res);
-        return restuple;
+        kind = PyUnicode_KIND(res);
+        data = PyUnicode_DATA(res);
+        for (i=0; i < len; i++)
+            PyUnicode_WRITE(kind, data, i, Py_UNICODE_REPLACEMENT_CHARACTER);
+        return Py_BuildValue("(Nn)", res, end);
     }
     else {
         wrong_exception_type(exc);
@@ -671,10 +673,7 @@ PyObject *PyCodec_XMLCharRefReplaceErrors(PyObject *exc)
     }
 }
 
-static Py_UNICODE hexdigits[] = {
-    '0', '1', '2', '3', '4', '5', '6', '7',
-    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
-};
+static const char *hexdigits = "0123456789abcdef";
 
 PyObject *PyCodec_BackslashReplaceErrors(PyObject *exc)
 {
@@ -1048,7 +1047,7 @@ static int _PyCodecRegistry_Init(void)
     interp->codec_error_registry = PyDict_New();
 
     if (interp->codec_error_registry) {
-        for (i = 0; i < sizeof(methods)/sizeof(methods[0]); ++i) {
+        for (i = 0; i < Py_ARRAY_LENGTH(methods); ++i) {
             PyObject *func = PyCFunction_New(&methods[i].def, NULL);
             int res;
             if (!func)
