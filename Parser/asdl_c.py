@@ -5,6 +5,7 @@
 # handle fields that have a type but no name
 
 import os, sys
+import subprocess
 
 import asdl
 
@@ -84,7 +85,15 @@ class EmitVisitor(asdl.VisitorBase):
 
     def __init__(self, file):
         self.file = file
+        self.identifiers = set()
         super(EmitVisitor, self).__init__()
+
+    def emit_identifier(self, name):
+        name = str(name)
+        if name in self.identifiers:
+            return
+        self.emit("_Py_identifier(%s);" % name, 0)
+        self.identifiers.add(name)
 
     def emit(self, s, depth, reflow=True):
         # XXX reflow long lines?
@@ -485,12 +494,12 @@ class Obj2ModVisitor(PickleVisitor):
 
     def visitField(self, field, name, sum=None, prod=None, depth=0):
         ctype = get_c_type(field.type)
-        self.emit("if (PyObject_HasAttrString(obj, \"%s\")) {" % field.name, depth)
+        self.emit("if (_PyObject_HasAttrId(obj, &PyId_%s)) {" % field.name, depth)
         self.emit("int res;", depth+1)
         if field.seq:
             self.emit("Py_ssize_t len;", depth+1)
             self.emit("Py_ssize_t i;", depth+1)
-        self.emit("tmp = PyObject_GetAttrString(obj, \"%s\");" % field.name, depth+1)
+        self.emit("tmp = _PyObject_GetAttrId(obj, &PyId_%s);" % field.name, depth+1)
         self.emit("if (tmp == NULL) goto failed;", depth+1)
         if field.seq:
             self.emit("if (!PyList_Check(tmp)) {", depth+1)
@@ -552,6 +561,8 @@ class PyTypesDeclareVisitor(PickleVisitor):
         self.emit("static PyTypeObject *%s_type;" % name, 0)
         self.emit("static PyObject* ast2obj_%s(void*);" % name, 0)
         if prod.fields:
+            for f in prod.fields:
+                self.emit_identifier(f.name)
             self.emit("static char *%s_fields[]={" % name,0)
             for f in prod.fields:
                 self.emit('"%s",' % f.name, 1)
@@ -560,6 +571,8 @@ class PyTypesDeclareVisitor(PickleVisitor):
     def visitSum(self, sum, name):
         self.emit("static PyTypeObject *%s_type;" % name, 0)
         if sum.attributes:
+            for a in sum.attributes:
+                self.emit_identifier(a.name)
             self.emit("static char *%s_attributes[] = {" % name, 0)
             for a in sum.attributes:
                 self.emit('"%s",' % a.name, 1)
@@ -579,6 +592,8 @@ class PyTypesDeclareVisitor(PickleVisitor):
     def visitConstructor(self, cons, name):
         self.emit("static PyTypeObject *%s_type;" % cons.name, 0)
         if cons.fields:
+            for t in cons.fields:
+                self.emit_identifier(t.name)
             self.emit("static char *%s_fields[]={" % cons.name, 0)
             for t in cons.fields:
                 self.emit('"%s",' % t.name, 1)
@@ -591,10 +606,11 @@ class PyTypesVisitor(PickleVisitor):
 static int
 ast_type_init(PyObject *self, PyObject *args, PyObject *kw)
 {
+    _Py_identifier(_fields);
     Py_ssize_t i, numfields = 0;
     int res = -1;
     PyObject *key, *value, *fields;
-    fields = PyObject_GetAttrString((PyObject*)Py_TYPE(self), "_fields");
+    fields = _PyObject_GetAttrId((PyObject*)Py_TYPE(self), &PyId__fields);
     if (!fields)
         PyErr_Clear();
     if (fields) {
@@ -644,7 +660,8 @@ static PyObject *
 ast_type_reduce(PyObject *self, PyObject *unused)
 {
     PyObject *res;
-    PyObject *dict = PyObject_GetAttrString(self, "__dict__");
+    _Py_identifier(__dict__);
+    PyObject *dict = _PyObject_GetAttrId(self, &PyId___dict__);
     if (dict == NULL) {
         if (PyErr_ExceptionMatches(PyExc_AttributeError))
             PyErr_Clear();
@@ -730,6 +747,7 @@ static PyTypeObject* make_type(char *type, PyTypeObject* base, char**fields, int
 static int add_attributes(PyTypeObject* type, char**attrs, int num_fields)
 {
     int i, result;
+    _Py_IDENTIFIER(_attributes);
     PyObject *s, *l = PyTuple_New(num_fields);
     if (!l)
         return 0;
@@ -741,7 +759,7 @@ static int add_attributes(PyTypeObject* type, char**attrs, int num_fields)
         }
         PyTuple_SET_ITEM(l, i, s);
     }
-    result = PyObject_SetAttrString((PyObject*)type, "_attributes", l) >= 0;
+    result = _PyObject_SetAttrId((PyObject*)type, &PyId__attributes, l) >= 0;
     Py_DECREF(l);
     return result;
 }
@@ -775,6 +793,7 @@ static PyObject* ast2obj_object(void *o)
 }
 #define ast2obj_identifier ast2obj_object
 #define ast2obj_string ast2obj_object
+#define ast2obj_bytes ast2obj_object
 
 static PyObject* ast2obj_int(long b)
 {
@@ -807,6 +826,15 @@ static int obj2ast_string(PyObject* obj, PyObject** out, PyArena* arena)
 {
     if (!PyUnicode_CheckExact(obj) && !PyBytes_CheckExact(obj)) {
         PyErr_SetString(PyExc_TypeError, "AST string must be of type str");
+        return 1;
+    }
+    return obj2ast_object(obj, out, arena);
+}
+
+static int obj2ast_bytes(PyObject* obj, PyObject** out, PyArena* arena)
+{
+    if (!PyBytes_CheckExact(obj)) {
+        PyErr_SetString(PyExc_TypeError, "AST bytes must be of type bytes");
         return 1;
     }
     return obj2ast_object(obj, out, arena);
@@ -914,10 +942,6 @@ class ASTModuleVisitor(PickleVisitor):
         self.emit('if (PyDict_SetItemString(d, "AST", (PyObject*)&AST_type) < 0) return NULL;', 1)
         self.emit('if (PyModule_AddIntConstant(m, "PyCF_ONLY_AST", PyCF_ONLY_AST) < 0)', 1)
         self.emit("return NULL;", 2)
-        # Value of version: "$Revision$"
-        self.emit('if (PyModule_AddStringConstant(m, "__version__", "%s") < 0)'
-                % mod.version, 1)
-        self.emit("return NULL;", 2)
         for dfn in mod.dfns:
             self.visit(dfn)
         self.emit("return m;", 1)
@@ -1001,7 +1025,7 @@ class ObjVisitor(PickleVisitor):
         for a in sum.attributes:
             self.emit("value = ast2obj_%s(o->%s);" % (a.type, a.name), 1)
             self.emit("if (!value) goto failed;", 1)
-            self.emit('if (PyObject_SetAttrString(result, "%s", value) < 0)' % a.name, 1)
+            self.emit('if (_PyObject_SetAttrId(result, &PyId_%s, value) < 0)' % a.name, 1)
             self.emit('goto failed;', 2)
             self.emit('Py_DECREF(value);', 1)
         self.func_end()
@@ -1047,7 +1071,7 @@ class ObjVisitor(PickleVisitor):
             value = "o->v.%s.%s" % (name, field.name)
         self.set(field, value, depth)
         emit("if (!value) goto failed;", 0)
-        emit('if (PyObject_SetAttrString(result, "%s", value) == -1)' % field.name, 0)
+        emit('if (_PyObject_SetAttrId(result, &PyId_%s, value) == -1)' % field.name, 0)
         emit("goto failed;", 1)
         emit("Py_DECREF(value);", 0)
 
@@ -1138,24 +1162,12 @@ class ChainOfVisitors:
 
 common_msg = "/* File automatically generated by %s. */\n\n"
 
-c_file_msg = """
-/*
-   __version__ %s.
-
-   This module must be committed separately after each AST grammar change;
-   The __version__ number is set to the revision number of the commit
-   containing the grammar change.
-*/
-
-"""
-
 def main(srcfile):
     argv0 = sys.argv[0]
     components = argv0.split(os.sep)
     argv0 = os.sep.join(components[-2:])
     auto_gen_msg = common_msg % argv0
     mod = asdl.parse(srcfile)
-    mod.version = "82163"
     if not asdl.check(mod):
         sys.exit(1)
     if INC_DIR:
@@ -1177,7 +1189,6 @@ def main(srcfile):
         p = os.path.join(SRC_DIR, str(mod.name) + "-ast.c")
         f = open(p, "w")
         f.write(auto_gen_msg)
-        f.write(c_file_msg % mod.version)
         f.write('#include "Python.h"\n')
         f.write('#include "%s-ast.h"\n' % mod.name)
         f.write('\n')
