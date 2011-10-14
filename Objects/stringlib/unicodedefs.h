@@ -6,7 +6,10 @@
    compiled as unicode. */
 #define STRINGLIB_IS_UNICODE     1
 
+#define FASTSEARCH               fastsearch
+#define STRINGLIB(F)             stringlib_##F
 #define STRINGLIB_OBJECT         PyUnicodeObject
+#define STRINGLIB_SIZEOF_CHAR    Py_UNICODE_SIZE
 #define STRINGLIB_CHAR           Py_UNICODE
 #define STRINGLIB_TYPE_NAME      "unicode"
 #define STRINGLIB_PARSE_CODE     "U"
