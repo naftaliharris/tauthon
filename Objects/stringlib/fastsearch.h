@@ -1,6 +1,5 @@
 /* stringlib: fastsearch implementation */
 
-#ifndef STRINGLIB_FASTSEARCH_H
 #define STRINGLIB_FASTSEARCH_H
 
 /* fast search/count implementation, based on a mix between boyer-
@@ -33,8 +32,62 @@
 #define STRINGLIB_BLOOM(mask, ch)     \
     ((mask &  (1UL << ((ch) & (STRINGLIB_BLOOM_WIDTH -1)))))
 
+
 Py_LOCAL_INLINE(Py_ssize_t)
-fastsearch(const STRINGLIB_CHAR* s, Py_ssize_t n,
+STRINGLIB(fastsearch_memchr_1char)(const STRINGLIB_CHAR* s, Py_ssize_t n,
+                                   STRINGLIB_CHAR ch, unsigned char needle,
+                                   Py_ssize_t maxcount, int mode)
+{
+    void *candidate;
+    const STRINGLIB_CHAR *found;
+
+#define DO_MEMCHR(memchr, s, needle, nchars) do { \
+    candidate = memchr((const void *) (s), (needle), (nchars) * sizeof(STRINGLIB_CHAR)); \
+    found = (const STRINGLIB_CHAR *) \
+        ((Py_ssize_t) candidate & (~ ((Py_ssize_t) sizeof(STRINGLIB_CHAR) - 1))); \
+    } while (0)
+
+    if (mode == FAST_SEARCH) {
+        const STRINGLIB_CHAR *_s = s;
+        const STRINGLIB_CHAR *e = s + n;
+        while (_s < e) {
+            DO_MEMCHR(memchr, _s, needle, e - _s);
+            if (found == NULL)
+                return -1;
+            if (sizeof(STRINGLIB_CHAR) == 1 || *found == ch)
+                return (found - _s);
+            /* False positive */
+            _s = found + 1;
+        }
+        return -1;
+    }
+#ifdef HAVE_MEMRCHR
+    /* memrchr() is a GNU extension, available since glibc 2.1.91.
+       it doesn't seem as optimized as memchr(), but is still quite
+       faster than our hand-written loop in FASTSEARCH below */
+    else if (mode == FAST_RSEARCH) {
+        while (n > 0) {
+            DO_MEMCHR(memrchr, s, needle, n);
+            if (found == NULL)
+                return -1;
+            n = found - s;
+            if (sizeof(STRINGLIB_CHAR) == 1 || *found == ch)
+                return n;
+            /* False positive */
+        }
+        return -1;
+    }
+#endif
+    else {
+        assert(0); /* Should never get here */
+        return 0;
+    }
+
+#undef DO_MEMCHR
+}
+
+Py_LOCAL_INLINE(Py_ssize_t)
+FASTSEARCH(const STRINGLIB_CHAR* s, Py_ssize_t n,
            const STRINGLIB_CHAR* p, Py_ssize_t m,
            Py_ssize_t maxcount, int mode)
 {
@@ -52,6 +105,24 @@ fastsearch(const STRINGLIB_CHAR* s, Py_ssize_t n,
         if (m <= 0)
             return -1;
         /* use special case for 1-character strings */
+        if (n > 10 && (mode == FAST_SEARCH
+#ifdef HAVE_MEMRCHR
+                    || mode == FAST_RSEARCH
+#endif
+                    )) {
+            /* use memchr if we can choose a needle without two many likely
+               false positives */
+            unsigned char needle;
+            needle = p[0] & 0xff;
+#if STRINGLIB_SIZEOF_CHAR > 1
+            /* If looking for a multiple of 256, we'd have two
+               many false positives looking for the '\0' byte in UCS2
+               and UCS4 representations. */
+            if (needle != 0)
+#endif
+                return STRINGLIB(fastsearch_memchr_1char)
+                       (s, n, p[0], needle, maxcount, mode);
+        }
         if (mode == FAST_COUNT) {
             for (i = 0; i < n; i++)
                 if (s[i] == p[0]) {
@@ -157,4 +228,3 @@ fastsearch(const STRINGLIB_CHAR* s, Py_ssize_t n,
     return count;
 }
 
-#endif
