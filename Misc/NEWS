@@ -43,6 +43,15 @@ Core and Builtins
 Library
 -------
 
+- Issue #13158: Fix decoding and encoding of GNU tar specific base-256 number
+  fields in tarfile.
+
+- Issue #13025: mimetypes is now reading MIME types using the UTF-8 encoding,
+  instead of the locale encoding.
+
+- Issue #10653: On Windows, use strftime() instead of wcsftime() because
+  wcsftime() doesn't format time zone correctly.
+
 - Issue #11171: Fix distutils.sysconfig.get_makefile_filename when Python was
   configured with different prefix and exec-prefix.
 
@@ -120,6 +129,9 @@ Tests
 
 Extension Modules
 -----------------
+
+- Issue #13159: FileIO and BZ2File now use a linear-time buffer growth
+  strategy instead of a quadratic-time one.
 
 - Issue #13070: Fix a crash when a TextIOWrapper caught in a reference cycle
   would be finalized after the reference to its underlying BufferedRWPair's
