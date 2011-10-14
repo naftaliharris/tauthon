@@ -341,7 +341,7 @@ PyObject *
 PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
 {
     PyObject *message;
-    PyObject *v;
+    PyObject *v, *args;
     int i = errno;
 #ifndef MS_WINDOWS
     char *s;
@@ -395,7 +395,7 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
                 /* remove trailing cr/lf and dots */
                 while (len > 0 && (s_buf[len-1] <= L' ' || s_buf[len-1] == L'.'))
                     s_buf[--len] = L'\0';
-                message = PyUnicode_FromUnicode(s_buf, len);
+                message = PyUnicode_FromWideChar(s_buf, len);
             }
         }
     }
@@ -410,14 +410,18 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
     }
 
     if (filenameObject != NULL)
-        v = Py_BuildValue("(iOO)", i, message, filenameObject);
+        args = Py_BuildValue("(iOO)", i, message, filenameObject);
     else
-        v = Py_BuildValue("(iO)", i, message);
+        args = Py_BuildValue("(iO)", i, message);
     Py_DECREF(message);
 
-    if (v != NULL) {
-        PyErr_SetObject(exc, v);
-        Py_DECREF(v);
+    if (args != NULL) {
+        v = PyObject_Call(exc, args, NULL);
+        Py_DECREF(args);
+        if (v != NULL) {
+            PyErr_SetObject((PyObject *) Py_TYPE(v), v);
+            Py_DECREF(v);
+        }
     }
 #ifdef MS_WINDOWS
     LocalFree(s_buf);
@@ -487,7 +491,7 @@ PyObject *PyErr_SetExcFromWindowsErrWithFilenameObject(
         /* remove trailing cr/lf and dots */
         while (len > 0 && (s_buf[len-1] <= L' ' || s_buf[len-1] == L'.'))
             s_buf[--len] = L'\0';
-        message = PyUnicode_FromUnicode(s_buf, len);
+        message = PyUnicode_FromWideChar(s_buf, len);
     }
 
     if (message == NULL)
@@ -496,10 +500,11 @@ PyObject *PyErr_SetExcFromWindowsErrWithFilenameObject(
         return NULL;
     }
 
-    if (filenameObject != NULL)
-        v = Py_BuildValue("(iOO)", err, message, filenameObject);
-    else
-        v = Py_BuildValue("(iO)", err, message);
+    if (filenameObject == NULL)
+        filenameObject = Py_None;
+    /* This is the constructor signature for passing a Windows error code.
+       The POSIX translation will be figured out by the constructor. */
+    v = Py_BuildValue("(iOOi)", 0, message, filenameObject, err);
     Py_DECREF(message);
 
     if (v != NULL) {
@@ -707,6 +712,7 @@ PyErr_NewExceptionWithDoc(const char *name, const char *doc,
 void
 PyErr_WriteUnraisable(PyObject *obj)
 {
+    _Py_identifier(__module__);
     PyObject *f, *t, *v, *tb;
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
@@ -723,7 +729,7 @@ PyErr_WriteUnraisable(PyObject *obj)
                     className = dot+1;
             }
 
-            moduleName = PyObject_GetAttrString(t, "__module__");
+            moduleName = _PyObject_GetAttrId(t, &PyId___module__);
             if (moduleName == NULL)
                 PyFile_WriteString("<unknown>", f);
             else {

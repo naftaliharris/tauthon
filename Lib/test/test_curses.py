@@ -264,6 +264,22 @@ def test_issue6243(stdscr):
     curses.ungetch(1025)
     stdscr.getkey()
 
+def test_unget_wch(stdscr):
+    if not hasattr(curses, 'unget_wch'):
+        return
+    ch = 'a'
+    curses.unget_wch(ch)
+    read = stdscr.get_wch()
+    read = chr(read)
+    if read != ch:
+        raise AssertionError("%r != %r" % (read, ch))
+
+    ch = ord('a')
+    curses.unget_wch(ch)
+    read = stdscr.get_wch()
+    if read != ch:
+        raise AssertionError("%r != %r" % (read, ch))
+
 def main(stdscr):
     curses.savetty()
     try:
@@ -272,15 +288,16 @@ def main(stdscr):
         test_userptr_without_set(stdscr)
         test_resize_term(stdscr)
         test_issue6243(stdscr)
+        test_unget_wch(stdscr)
     finally:
         curses.resetty()
 
 def test_main():
-    if not sys.stdout.isatty():
-        raise unittest.SkipTest("sys.stdout is not a tty")
+    if not sys.__stdout__.isatty():
+        raise unittest.SkipTest("sys.__stdout__ is not a tty")
     # testing setupterm() inside initscr/endwin
     # causes terminal breakage
-    curses.setupterm(fd=sys.stdout.fileno())
+    curses.setupterm(fd=sys.__stdout__.fileno())
     try:
         stdscr = curses.initscr()
         main(stdscr)

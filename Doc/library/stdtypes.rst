@@ -15,6 +15,10 @@ interpreter.
 The principal built-in types are numerics, sequences, mappings, classes,
 instances and exceptions.
 
+Some collection classes are mutable.  The methods that add, subtract, or
+rearrange their members in place, and don't return a specific item, never return
+the collection instance itself but ``None``.
+
 Some operations are supported by several object types; in particular,
 practically all objects can be compared, tested for truth value, and converted
 to a string (with the :func:`repr` function or the slightly different
@@ -1664,6 +1668,8 @@ Note that while lists allow their items to be of any type, bytearray object
    single: append() (sequence method)
    single: extend() (sequence method)
    single: count() (sequence method)
+   single: clear() (sequence method)
+   single: copy() (sequence method)
    single: index() (sequence method)
    single: insert() (sequence method)
    single: pop() (sequence method)
@@ -1694,6 +1700,12 @@ Note that while lists allow their items to be of any type, bytearray object
 +------------------------------+--------------------------------+---------------------+
 | ``s.extend(x)``              | same as ``s[len(s):len(s)] =   | \(2)                |
 |                              | x``                            |                     |
++------------------------------+--------------------------------+---------------------+
+| ``s.clear()``                | remove all items from ``s``    |                     |
+|                              |                                |                     |
++------------------------------+--------------------------------+---------------------+
+| ``s.copy()``                 | return a shallow copy of ``s`` |                     |
+|                              |                                |                     |
 +------------------------------+--------------------------------+---------------------+
 | ``s.count(x)``               | return number of *i*'s for     |                     |
 |                              | which ``s[i] == x``            |                     |
@@ -1772,6 +1784,9 @@ Notes:
 
 (8)
    :meth:`sort` is not supported by :class:`bytearray` objects.
+
+    .. versionadded:: 3.3
+       :meth:`clear` and :meth:`!copy` methods.
 
 
 .. _bytes-methods:
@@ -2695,7 +2710,7 @@ The Null Object
 
 This object is returned by functions that don't explicitly return a value.  It
 supports no special operations.  There is exactly one null object, named
-``None`` (a built-in name).
+``None`` (a built-in name).  ``type(None)()`` produces the same singleton.
 
 It is written as ``None``.
 
@@ -2707,7 +2722,8 @@ The Ellipsis Object
 
 This object is commonly used by slicing (see :ref:`slicings`).  It supports no
 special operations.  There is exactly one ellipsis object, named
-:const:`Ellipsis` (a built-in name).
+:const:`Ellipsis` (a built-in name).  ``type(Ellipsis)()`` produces the
+:const:`Ellipsis` singleton.
 
 It is written as ``Ellipsis`` or ``...``.
 
@@ -2719,7 +2735,8 @@ The NotImplemented Object
 
 This object is returned from comparisons and binary operations when they are
 asked to operate on types they don't support. See :ref:`comparisons` for more
-information.
+information.  There is exactly one ``NotImplemented`` object.
+``type(NotImplemented)()`` produces the singleton instance.
 
 It is written as ``NotImplemented``.
 
