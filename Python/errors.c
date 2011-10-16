@@ -341,7 +341,7 @@ PyObject *
 PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
 {
     PyObject *message;
-    PyObject *v;
+    PyObject *v, *args;
     int i = errno;
 #ifndef MS_WINDOWS
     char *s;
@@ -395,7 +395,7 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
                 /* remove trailing cr/lf and dots */
                 while (len > 0 && (s_buf[len-1] <= L' ' || s_buf[len-1] == L'.'))
                     s_buf[--len] = L'\0';
-                message = PyUnicode_FromUnicode(s_buf, len);
+                message = PyUnicode_FromWideChar(s_buf, len);
             }
         }
     }
@@ -410,14 +410,18 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
     }
 
     if (filenameObject != NULL)
-        v = Py_BuildValue("(iOO)", i, message, filenameObject);
+        args = Py_BuildValue("(iOO)", i, message, filenameObject);
     else
-        v = Py_BuildValue("(iO)", i, message);
+        args = Py_BuildValue("(iO)", i, message);
     Py_DECREF(message);
 
-    if (v != NULL) {
-        PyErr_SetObject(exc, v);
-        Py_DECREF(v);
+    if (args != NULL) {
+        v = PyObject_Call(exc, args, NULL);
+        Py_DECREF(args);
+        if (v != NULL) {
+            PyErr_SetObject((PyObject *) Py_TYPE(v), v);
+            Py_DECREF(v);
+        }
     }
 #ifdef MS_WINDOWS
     LocalFree(s_buf);
@@ -487,7 +491,7 @@ PyObject *PyErr_SetExcFromWindowsErrWithFilenameObject(
         /* remove trailing cr/lf and dots */
         while (len > 0 && (s_buf[len-1] <= L' ' || s_buf[len-1] == L'.'))
             s_buf[--len] = L'\0';
-        message = PyUnicode_FromUnicode(s_buf, len);
+        message = PyUnicode_FromWideChar(s_buf, len);
     }
 
     if (message == NULL)
@@ -496,10 +500,11 @@ PyObject *PyErr_SetExcFromWindowsErrWithFilenameObject(
         return NULL;
     }
 
-    if (filenameObject != NULL)
-        v = Py_BuildValue("(iOO)", err, message, filenameObject);
-    else
-        v = Py_BuildValue("(iO)", err, message);
+    if (filenameObject == NULL)
+        filenameObject = Py_None;
+    /* This is the constructor signature for passing a Windows error code.
+       The POSIX translation will be figured out by the constructor. */
+    v = Py_BuildValue("(iOOi)", 0, message, filenameObject, err);
     Py_DECREF(message);
 
     if (v != NULL) {
@@ -707,6 +712,7 @@ PyErr_NewExceptionWithDoc(const char *name, const char *doc,
 void
 PyErr_WriteUnraisable(PyObject *obj)
 {
+    _Py_IDENTIFIER(__module__);
     PyObject *f, *t, *v, *tb;
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
@@ -723,7 +729,7 @@ PyErr_WriteUnraisable(PyObject *obj)
                     className = dot+1;
             }
 
-            moduleName = PyObject_GetAttrString(t, "__module__");
+            moduleName = _PyObject_GetAttrId(t, &PyId___module__);
             if (moduleName == NULL)
                 PyFile_WriteString("<unknown>", f);
             else {
@@ -774,6 +780,12 @@ void
 PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
 {
     PyObject *exc, *v, *tb, *tmp;
+    _Py_IDENTIFIER(filename);
+    _Py_IDENTIFIER(lineno);
+    _Py_IDENTIFIER(msg);
+    _Py_IDENTIFIER(offset);
+    _Py_IDENTIFIER(print_file_and_line);
+    _Py_IDENTIFIER(text);
 
     /* add attributes for the line number and filename for the error */
     PyErr_Fetch(&exc, &v, &tb);
@@ -784,7 +796,7 @@ PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
     if (tmp == NULL)
         PyErr_Clear();
     else {
-        if (PyObject_SetAttrString(v, "lineno", tmp))
+        if (_PyObject_SetAttrId(v, &PyId_lineno, tmp))
             PyErr_Clear();
         Py_DECREF(tmp);
     }
@@ -793,7 +805,7 @@ PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
         if (tmp == NULL)
             PyErr_Clear();
         else {
-            if (PyObject_SetAttrString(v, "offset", tmp))
+            if (_PyObject_SetAttrId(v, &PyId_offset, tmp))
                 PyErr_Clear();
             Py_DECREF(tmp);
         }
@@ -803,35 +815,35 @@ PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
         if (tmp == NULL)
             PyErr_Clear();
         else {
-            if (PyObject_SetAttrString(v, "filename", tmp))
+            if (_PyObject_SetAttrId(v, &PyId_filename, tmp))
                 PyErr_Clear();
             Py_DECREF(tmp);
         }
 
         tmp = PyErr_ProgramText(filename, lineno);
         if (tmp) {
-            if (PyObject_SetAttrString(v, "text", tmp))
+            if (_PyObject_SetAttrId(v, &PyId_text, tmp))
                 PyErr_Clear();
             Py_DECREF(tmp);
         }
     }
-    if (PyObject_SetAttrString(v, "offset", Py_None)) {
+    if (_PyObject_SetAttrId(v, &PyId_offset, Py_None)) {
         PyErr_Clear();
     }
     if (exc != PyExc_SyntaxError) {
-        if (!PyObject_HasAttrString(v, "msg")) {
+        if (!_PyObject_HasAttrId(v, &PyId_msg)) {
             tmp = PyObject_Str(v);
             if (tmp) {
-                if (PyObject_SetAttrString(v, "msg", tmp))
+                if (_PyObject_SetAttrId(v, &PyId_msg, tmp))
                     PyErr_Clear();
                 Py_DECREF(tmp);
             } else {
                 PyErr_Clear();
             }
         }
-        if (!PyObject_HasAttrString(v, "print_file_and_line")) {
-            if (PyObject_SetAttrString(v, "print_file_and_line",
-                                       Py_None))
+        if (!_PyObject_HasAttrId(v, &PyId_print_file_and_line)) {
+            if (_PyObject_SetAttrId(v, &PyId_print_file_and_line,
+                                    Py_None))
                 PyErr_Clear();
         }
     }
