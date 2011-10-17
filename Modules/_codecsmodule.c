@@ -162,7 +162,6 @@ static PyObject *
 escape_encode(PyObject *self,
               PyObject *args)
 {
-    static const char *hexdigits = "0123456789abcdef";
     PyObject *str;
     Py_ssize_t size;
     Py_ssize_t newsize;
@@ -205,8 +204,8 @@ escape_encode(PyObject *self,
             else if (c < ' ' || c >= 0x7f) {
                 *p++ = '\\';
                 *p++ = 'x';
-                *p++ = hexdigits[(c & 0xf0) >> 4];
-                *p++ = hexdigits[c & 0xf];
+                *p++ = Py_hexdigits[(c & 0xf0) >> 4];
+                *p++ = Py_hexdigits[c & 0xf];
             }
             else
                 *p++ = c;
@@ -588,7 +587,7 @@ charmap_decode(PyObject *self,
     return codec_tuple(unicode, pbuf.len);
 }
 
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 
 static PyObject *
 mbcs_decode(PyObject *self,
@@ -613,7 +612,7 @@ mbcs_decode(PyObject *self,
     return codec_tuple(decoded, consumed);
 }
 
-#endif /* MS_WINDOWS */
+#endif /* HAVE_MBCS */
 
 /* --- Encoder ------------------------------------------------------------ */
 
@@ -700,12 +699,10 @@ utf_8_encode(PyObject *self,
         return NULL;
 
     str = PyUnicode_FromObject(str);
-    if (str == NULL)
+    if (str == NULL || PyUnicode_READY(str) == -1)
         return NULL;
-    v = codec_tuple(PyUnicode_EncodeUTF8(PyUnicode_AS_UNICODE(str),
-                                         PyUnicode_GET_SIZE(str),
-                                         errors),
-                    PyUnicode_GET_SIZE(str));
+    v = codec_tuple(PyUnicode_AsEncodedString(str, "utf-8", errors),
+                    PyUnicode_GET_LENGTH(str));
     Py_DECREF(str);
     return v;
 }
@@ -989,7 +986,7 @@ charmap_build(PyObject *self, PyObject *args)
     return PyUnicode_BuildEncodingMap(map);
 }
 
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 
 static PyObject *
 mbcs_encode(PyObject *self,
@@ -1014,7 +1011,7 @@ mbcs_encode(PyObject *self,
     return v;
 }
 
-#endif /* MS_WINDOWS */
+#endif /* HAVE_MBCS */
 
 /* --- Error handler registry --------------------------------------------- */
 
@@ -1101,7 +1098,7 @@ static PyMethodDef _codecs_functions[] = {
     {"charmap_decode",          charmap_decode,                 METH_VARARGS},
     {"charmap_build",           charmap_build,                  METH_VARARGS},
     {"readbuffer_encode",       readbuffer_encode,              METH_VARARGS},
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
     {"mbcs_encode",             mbcs_encode,                    METH_VARARGS},
     {"mbcs_decode",             mbcs_decode,                    METH_VARARGS},
 #endif
