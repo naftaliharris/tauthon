@@ -22,7 +22,7 @@ from xml.etree import ElementTree as ET
 
 SIMPLE_XMLFILE = findfile("simple.xml", subdir="xmltestdata")
 try:
-    SIMPLE_XMLFILE.encode("utf8")
+    SIMPLE_XMLFILE.encode("utf-8")
 except UnicodeEncodeError:
     raise unittest.SkipTest("filename is not encodable to utf8")
 SIMPLE_NS_XMLFILE = findfile("simple-ns.xml", subdir="xmltestdata")
@@ -1255,8 +1255,8 @@ def processinginstruction():
 
     >>> ET.tostring(ET.PI('test', '<testing&>'))
     b'<?test <testing&>?>'
-    >>> ET.tostring(ET.PI('test', '<testing&>\xe3'), 'latin1')
-    b"<?xml version='1.0' encoding='latin1'?>\\n<?test <testing&>\\xe3?>"
+    >>> ET.tostring(ET.PI('test', '<testing&>\xe3'), 'latin-1')
+    b"<?xml version='1.0' encoding='latin-1'?>\\n<?test <testing&>\\xe3?>"
     """
 
 #
@@ -1339,7 +1339,7 @@ def xinclude_loader(href, parse="xml", encoding=None):
     try:
         data = XINCLUDE[href]
     except KeyError:
-        raise IOError("resource not found")
+        raise OSError("resource not found")
     if parse == "xml":
         from xml.etree.ElementTree import XML
         return XML(data)
@@ -1404,7 +1404,7 @@ def xinclude():
     >>> document = xinclude_loader("C5.xml")
     >>> ElementInclude.include(document, xinclude_loader)
     Traceback (most recent call last):
-    IOError: resource not found
+    OSError: resource not found
     >>> # print(serialize(document)) # C5
     """
 
@@ -1611,7 +1611,7 @@ def bug_xmltoolkit55():
 
 class ExceptionFile:
     def read(self, x):
-        raise IOError
+        raise OSError
 
 def xmltoolkit60():
     """
@@ -1619,7 +1619,7 @@ def xmltoolkit60():
     Handle crash in stream source.
     >>> tree = ET.parse(ExceptionFile())
     Traceback (most recent call last):
-    IOError
+    OSError
 
     """
 
