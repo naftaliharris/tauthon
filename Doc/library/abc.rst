@@ -18,7 +18,7 @@ regarding a type hierarchy for numbers based on ABCs.)
 
 The :mod:`collections` module has some concrete classes that derive from
 ABCs; these can, of course, be further derived. In addition the
-:mod:`collections` module has some ABCs that can be used to test whether
+:mod:`collections.abc` submodule has some ABCs that can be used to test whether
 a class or instance provides a particular interface, for example, is it
 hashable or a mapping.
 
@@ -54,6 +54,9 @@ This module provides the following class:
 
         assert issubclass(tuple, MyABC)
         assert isinstance((), MyABC)
+
+      .. versionchanged:: 3.3
+         Returns the registered subclass, to allow usage as a class decorator.
 
    You can also override this method in an abstract base class:
 
@@ -191,7 +194,7 @@ It also provides the following decorators:
    .. versionadded:: 3.2
 
 
-.. function:: abstractproperty(fget=None, fset=None, fdel=None, doc=None)
+.. decorator:: abstractproperty(fget=None, fset=None, fdel=None, doc=None)
 
    A subclass of the built-in :func:`property`, indicating an abstract property.
 
