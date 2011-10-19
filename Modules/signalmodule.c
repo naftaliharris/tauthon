@@ -22,6 +22,14 @@
 #include <sys/time.h>
 #endif
 
+#if defined(HAVE_PTHREAD_SIGMASK) && !defined(HAVE_BROKEN_PTHREAD_SIGMASK)
+#  define PYPTHREAD_SIGMASK
+#endif
+
+#if defined(PYPTHREAD_SIGMASK) && defined(HAVE_PTHREAD_H)
+#  include <pthread.h>
+#endif
+
 #ifndef SIG_ERR
 #define SIG_ERR ((PyOS_sighandler_t)(-1))
 #endif
@@ -168,15 +176,19 @@ checksignals_witharg(void * unused)
 static void
 trip_signal(int sig_num)
 {
+    unsigned char byte;
+
     Handlers[sig_num].tripped = 1;
+    if (wakeup_fd != -1) {
+        byte = (unsigned char)sig_num;
+        write(wakeup_fd, &byte, 1);
+    }
     if (is_tripped)
         return;
     /* Set is_tripped after setting .tripped, as it gets
        cleared in PyErr_CheckSignals() before .tripped. */
     is_tripped = 1;
     Py_AddPendingCall(checksignals_witharg, NULL);
-    if (wakeup_fd != -1)
-        write(wakeup_fd, "\0", 1);
 }
 
 static void
@@ -313,7 +325,7 @@ signal_signal(PyObject *self, PyObject *args)
     else
         func = signal_handler;
     if (PyOS_setsig(sig_num, func) == SIG_ERR) {
-        PyErr_SetFromErrno(PyExc_RuntimeError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     old_handler = Handlers[sig_num].func;
@@ -382,7 +394,7 @@ signal_siginterrupt(PyObject *self, PyObject *args)
         return NULL;
     }
     if (siginterrupt(sig_num, flag)<0) {
-        PyErr_SetFromErrno(PyExc_RuntimeError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
 
@@ -495,6 +507,346 @@ PyDoc_STRVAR(getitimer_doc,
 Returns current value of given itimer.");
 #endif
 
+#if defined(PYPTHREAD_SIGMASK) || defined(HAVE_SIGWAIT) || \
+        defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
+/* Convert an iterable to a sigset.
+   Return 0 on success, return -1 and raise an exception on error. */
+
+static int
+iterable_to_sigset(PyObject *iterable, sigset_t *mask)
+{
+    int result = -1;
+    PyObject *iterator, *item;
+    long signum;
+    int err;
+
+    sigemptyset(mask);
+
+    iterator = PyObject_GetIter(iterable);
+    if (iterator == NULL)
+        goto error;
+
+    while (1)
+    {
+        item = PyIter_Next(iterator);
+        if (item == NULL) {
+            if (PyErr_Occurred())
+                goto error;
+            else
+                break;
+        }
+
+        signum = PyLong_AsLong(item);
+        Py_DECREF(item);
+        if (signum == -1 && PyErr_Occurred())
+            goto error;
+        if (0 < signum && signum < NSIG)
+            err = sigaddset(mask, (int)signum);
+        else
+            err = 1;
+        if (err) {
+            PyErr_Format(PyExc_ValueError,
+                         "signal number %ld out of range", signum);
+            goto error;
+        }
+    }
+    result = 0;
+
+error:
+    Py_XDECREF(iterator);
+    return result;
+}
+#endif
+
+#if defined(PYPTHREAD_SIGMASK) || defined(HAVE_SIGPENDING)
+static PyObject*
+sigset_to_set(sigset_t mask)
+{
+    PyObject *signum, *result;
+    int sig;
+
+    result = PySet_New(0);
+    if (result == NULL)
+        return NULL;
+
+    for (sig = 1; sig < NSIG; sig++) {
+        if (sigismember(&mask, sig) != 1)
+            continue;
+
+        /* Handle the case where it is a member by adding the signal to
+           the result list.  Ignore the other cases because they mean the
+           signal isn't a member of the mask or the signal was invalid,
+           and an invalid signal must have been our fault in constructing
+           the loop boundaries. */
+        signum = PyLong_FromLong(sig);
+        if (signum == NULL) {
+            Py_DECREF(result);
+            return NULL;
+        }
+        if (PySet_Add(result, signum) == -1) {
+            Py_DECREF(signum);
+            Py_DECREF(result);
+            return NULL;
+        }
+        Py_DECREF(signum);
+    }
+    return result;
+}
+#endif
+
+#ifdef PYPTHREAD_SIGMASK
+static PyObject *
+signal_pthread_sigmask(PyObject *self, PyObject *args)
+{
+    int how;
+    PyObject *signals;
+    sigset_t mask, previous;
+    int err;
+
+    if (!PyArg_ParseTuple(args, "iO:pthread_sigmask", &how, &signals))
+        return NULL;
+
+    if (iterable_to_sigset(signals, &mask))
+        return NULL;
+
+    err = pthread_sigmask(how, &mask, &previous);
+    if (err != 0) {
+        errno = err;
+        PyErr_SetFromErrno(PyExc_OSError);
+        return NULL;
+    }
+
+    /* if signals was unblocked, signal handlers have been called */
+    if (PyErr_CheckSignals())
+        return NULL;
+
+    return sigset_to_set(previous);
+}
+
+PyDoc_STRVAR(signal_pthread_sigmask_doc,
+"pthread_sigmask(how, mask) -> old mask\n\
+\n\
+Fetch and/or change the signal mask of the calling thread.");
+#endif   /* #ifdef PYPTHREAD_SIGMASK */
+
+
+#ifdef HAVE_SIGPENDING
+static PyObject *
+signal_sigpending(PyObject *self)
+{
+    int err;
+    sigset_t mask;
+    err = sigpending(&mask);
+    if (err)
+        return PyErr_SetFromErrno(PyExc_OSError);
+    return sigset_to_set(mask);
+}
+
+PyDoc_STRVAR(signal_sigpending_doc,
+"sigpending() -> list\n\
+\n\
+Examine pending signals.");
+#endif   /* #ifdef HAVE_SIGPENDING */
+
+
+#ifdef HAVE_SIGWAIT
+static PyObject *
+signal_sigwait(PyObject *self, PyObject *args)
+{
+    PyObject *signals;
+    sigset_t set;
+    int err, signum;
+
+    if (!PyArg_ParseTuple(args, "O:sigwait", &signals))
+        return NULL;
+
+    if (iterable_to_sigset(signals, &set))
+        return NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    err = sigwait(&set, &signum);
+    Py_END_ALLOW_THREADS
+    if (err) {
+        errno = err;
+        return PyErr_SetFromErrno(PyExc_OSError);
+    }
+
+    return PyLong_FromLong(signum);
+}
+
+PyDoc_STRVAR(signal_sigwait_doc,
+"sigwait(sigset) -> signum\n\
+\n\
+Wait a signal.");
+#endif   /* #ifdef HAVE_SIGPENDING */
+
+#if defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
+static int initialized;
+static PyStructSequence_Field struct_siginfo_fields[] = {
+    {"si_signo",        "signal number"},
+    {"si_code",         "signal code"},
+    {"si_errno",        "errno associated with this signal"},
+    {"si_pid",          "sending process ID"},
+    {"si_uid",          "real user ID of sending process"},
+    {"si_status",       "exit value or signal"},
+    {"si_band",         "band event for SIGPOLL"},
+    {0}
+};
+
+PyDoc_STRVAR(struct_siginfo__doc__,
+"struct_siginfo: Result from sigwaitinfo or sigtimedwait.\n\n\
+This object may be accessed either as a tuple of\n\
+(si_signo, si_code, si_errno, si_pid, si_uid, si_status, si_band),\n\
+or via the attributes si_signo, si_code, and so on.");
+
+static PyStructSequence_Desc struct_siginfo_desc = {
+    "signal.struct_siginfo",           /* name */
+    struct_siginfo__doc__,       /* doc */
+    struct_siginfo_fields,       /* fields */
+    7          /* n_in_sequence */
+};
+
+static PyTypeObject SiginfoType;
+
+static PyObject *
+fill_siginfo(siginfo_t *si)
+{
+    PyObject *result = PyStructSequence_New(&SiginfoType);
+    if (!result)
+        return NULL;
+
+    PyStructSequence_SET_ITEM(result, 0, PyLong_FromLong((long)(si->si_signo)));
+    PyStructSequence_SET_ITEM(result, 1, PyLong_FromLong((long)(si->si_code)));
+    PyStructSequence_SET_ITEM(result, 2, PyLong_FromLong((long)(si->si_errno)));
+    PyStructSequence_SET_ITEM(result, 3, PyLong_FromPid(si->si_pid));
+    PyStructSequence_SET_ITEM(result, 4, PyLong_FromLong((long)(si->si_uid)));
+    PyStructSequence_SET_ITEM(result, 5,
+                                PyLong_FromLong((long)(si->si_status)));
+    PyStructSequence_SET_ITEM(result, 6, PyLong_FromLong(si->si_band));
+    if (PyErr_Occurred()) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    return result;
+}
+#endif
+
+#ifdef HAVE_SIGWAITINFO
+static PyObject *
+signal_sigwaitinfo(PyObject *self, PyObject *args)
+{
+    PyObject *signals;
+    sigset_t set;
+    siginfo_t si;
+    int err;
+
+    if (!PyArg_ParseTuple(args, "O:sigwaitinfo", &signals))
+        return NULL;
+
+    if (iterable_to_sigset(signals, &set))
+        return NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    err = sigwaitinfo(&set, &si);
+    Py_END_ALLOW_THREADS
+    if (err == -1)
+        return PyErr_SetFromErrno(PyExc_OSError);
+
+    return fill_siginfo(&si);
+}
+
+PyDoc_STRVAR(signal_sigwaitinfo_doc,
+"sigwaitinfo(sigset) -> struct_siginfo\n\
+\n\
+Wait synchronously for a signal until one of the signals in *sigset* is\n\
+delivered.\n\
+Returns a struct_siginfo containing information about the signal.");
+#endif   /* #ifdef HAVE_SIGWAITINFO */
+
+#ifdef HAVE_SIGTIMEDWAIT
+static PyObject *
+signal_sigtimedwait(PyObject *self, PyObject *args)
+{
+    PyObject *signals, *timeout;
+    struct timespec buf;
+    sigset_t set;
+    siginfo_t si;
+    int err;
+
+    if (!PyArg_ParseTuple(args, "OO:sigtimedwait", &signals, &timeout))
+        return NULL;
+
+    if (!PyTuple_Check(timeout) || PyTuple_Size(timeout) != 2) {
+        PyErr_SetString(PyExc_TypeError,
+            "sigtimedwait() arg 2 must be a tuple "
+            "(timeout_sec, timeout_nsec)");
+        return NULL;
+    } else if (!PyArg_ParseTuple(timeout, "ll:sigtimedwait",
+                    &(buf.tv_sec), &(buf.tv_nsec)))
+        return NULL;
+
+    if (buf.tv_sec < 0 || buf.tv_nsec < 0) {
+        PyErr_SetString(PyExc_ValueError, "timeout must be non-negative");
+        return NULL;
+    }
+
+    if (iterable_to_sigset(signals, &set))
+        return NULL;
+
+    Py_BEGIN_ALLOW_THREADS
+    err = sigtimedwait(&set, &si, &buf);
+    Py_END_ALLOW_THREADS
+    if (err == -1) {
+        if (errno == EAGAIN)
+            Py_RETURN_NONE;
+        else
+            return PyErr_SetFromErrno(PyExc_OSError);
+    }
+
+    return fill_siginfo(&si);
+}
+
+PyDoc_STRVAR(signal_sigtimedwait_doc,
+"sigtimedwait(sigset, (timeout_sec, timeout_nsec)) -> struct_siginfo\n\
+\n\
+Like sigwaitinfo(), but with a timeout specified as a tuple of (seconds,\n\
+nanoseconds).");
+#endif   /* #ifdef HAVE_SIGTIMEDWAIT */
+
+
+#if defined(HAVE_PTHREAD_KILL) && defined(WITH_THREAD)
+static PyObject *
+signal_pthread_kill(PyObject *self, PyObject *args)
+{
+    long tid;
+    int signum;
+    int err;
+
+    if (!PyArg_ParseTuple(args, "li:pthread_kill", &tid, &signum))
+        return NULL;
+
+    err = pthread_kill((pthread_t)tid, signum);
+    if (err != 0) {
+        errno = err;
+        PyErr_SetFromErrno(PyExc_OSError);
+        return NULL;
+    }
+
+    /* the signal may have been send to the current thread */
+    if (PyErr_CheckSignals())
+        return NULL;
+
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(signal_pthread_kill_doc,
+"pthread_kill(thread_id, signum)\n\
+\n\
+Send a signal to a thread.");
+#endif   /* #if defined(HAVE_PTHREAD_KILL) && defined(WITH_THREAD) */
+
+
 
 /* List of functions defined in the module */
 static PyMethodDef signal_methods[] = {
@@ -515,10 +867,34 @@ static PyMethodDef signal_methods[] = {
 #endif
 #ifdef HAVE_PAUSE
     {"pause",                   (PyCFunction)signal_pause,
-     METH_NOARGS,pause_doc},
+     METH_NOARGS, pause_doc},
 #endif
     {"default_int_handler", signal_default_int_handler,
      METH_VARARGS, default_int_handler_doc},
+#if defined(HAVE_PTHREAD_KILL) && defined(WITH_THREAD)
+    {"pthread_kill",            (PyCFunction)signal_pthread_kill,
+     METH_VARARGS, signal_pthread_kill_doc},
+#endif
+#ifdef PYPTHREAD_SIGMASK
+    {"pthread_sigmask",         (PyCFunction)signal_pthread_sigmask,
+     METH_VARARGS, signal_pthread_sigmask_doc},
+#endif
+#ifdef HAVE_SIGPENDING
+    {"sigpending",              (PyCFunction)signal_sigpending,
+     METH_NOARGS, signal_sigpending_doc},
+#endif
+#ifdef HAVE_SIGWAIT
+    {"sigwait",                 (PyCFunction)signal_sigwait,
+     METH_VARARGS, signal_sigwait_doc},
+#endif
+#ifdef HAVE_SIGWAITINFO
+    {"sigwaitinfo",             (PyCFunction)signal_sigwaitinfo,
+     METH_VARARGS, signal_sigwaitinfo_doc},
+#endif
+#ifdef HAVE_SIGTIMEDWAIT
+    {"sigtimedwait",            (PyCFunction)signal_sigtimedwait,
+     METH_VARARGS, signal_sigtimedwait_doc},
+#endif
     {NULL,                      NULL}           /* sentinel */
 };
 
@@ -587,6 +963,15 @@ PyInit_signal(void)
     if (m == NULL)
         return NULL;
 
+#if defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
+    if (!initialized)
+        PyStructSequence_InitType(&SiginfoType, &struct_siginfo_desc);
+
+    Py_INCREF((PyObject*) &SiginfoType);
+    PyModule_AddObject(m, "struct_siginfo", (PyObject*) &SiginfoType);
+    initialized = 1;
+#endif
+
     /* Add some symbolic constants to the module */
     d = PyModule_GetDict(m);
 
@@ -602,6 +987,19 @@ PyInit_signal(void)
     if (!x || PyDict_SetItemString(d, "NSIG", x) < 0)
         goto finally;
     Py_DECREF(x);
+
+#ifdef SIG_BLOCK
+    if (PyModule_AddIntMacro(m, SIG_BLOCK))
+         goto finally;
+#endif
+#ifdef SIG_UNBLOCK
+    if (PyModule_AddIntMacro(m, SIG_UNBLOCK))
+         goto finally;
+#endif
+#ifdef SIG_SETMASK
+    if (PyModule_AddIntMacro(m, SIG_SETMASK))
+         goto finally;
+#endif
 
     x = IntHandler = PyDict_GetItemString(d, "default_int_handler");
     if (!x)

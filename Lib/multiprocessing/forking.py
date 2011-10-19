@@ -35,6 +35,7 @@
 import os
 import sys
 import signal
+import select
 
 from multiprocessing import util, process
 
@@ -101,10 +102,12 @@ else:
 
 if sys.platform != 'win32':
     import time
+    import select
 
     exit = os._exit
     duplicate = os.dup
     close = os.close
+    _select = util._eintr_retry(select.select)
 
     #
     # We define a Popen class similar to the one from subprocess, but
@@ -118,8 +121,12 @@ if sys.platform != 'win32':
             sys.stderr.flush()
             self.returncode = None
 
+            r, w = os.pipe()
+            self.sentinel = r
+
             self.pid = os.fork()
             if self.pid == 0:
+                os.close(r)
                 if 'random' in sys.modules:
                     import random
                     random.seed()
@@ -127,6 +134,11 @@ if sys.platform != 'win32':
                 sys.stdout.flush()
                 sys.stderr.flush()
                 os._exit(code)
+
+            # `w` will be closed when the child exits, at which point `r`
+            # will become ready for reading (using e.g. select()).
+            os.close(w)
+            util.Finalize(self, os.close, (r,))
 
         def poll(self, flag=os.WNOHANG):
             if self.returncode is None:
@@ -145,20 +157,14 @@ if sys.platform != 'win32':
             return self.returncode
 
         def wait(self, timeout=None):
-            if timeout is None:
-                return self.poll(0)
-            deadline = time.time() + timeout
-            delay = 0.0005
-            while 1:
-                res = self.poll()
-                if res is not None:
-                    break
-                remaining = deadline - time.time()
-                if remaining <= 0:
-                    break
-                delay = min(delay * 2, remaining, 0.05)
-                time.sleep(delay)
-            return res
+            if self.returncode is None:
+                if timeout is not None:
+                    r = _select([self.sentinel], [], [], timeout)[0]
+                    if not r:
+                        return None
+                # This shouldn't block if select() returned successfully.
+                return self.poll(os.WNOHANG if timeout == 0.0 else 0)
+            return self.returncode
 
         def terminate(self):
             if self.returncode is None:
@@ -183,7 +189,7 @@ else:
     import time
 
     from pickle import dump, load, HIGHEST_PROTOCOL
-    from _multiprocessing import win32, Connection, PipeConnection
+    from _multiprocessing import win32
     from .util import Finalize
 
     def dump(obj, file, protocol=None):
@@ -258,6 +264,7 @@ else:
             self.pid = pid
             self.returncode = None
             self._handle = hp
+            self.sentinel = int(hp)
 
             # send information to child
             prep_data = get_preparation_data(process_obj._name)
@@ -410,6 +417,9 @@ else:
     #
     # Make (Pipe)Connection picklable
     #
+
+    # Late import because of circular import
+    from .connection import Connection, PipeConnection
 
     def reduce_connection(conn):
         if not Popen.thread_is_spawning():
