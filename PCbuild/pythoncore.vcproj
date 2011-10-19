@@ -891,6 +891,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Include\pymacro.h"
+				>
+			</File>
+			<File
 				RelativePath="..\Include\pymem.h"
 				>
 			</File>
@@ -1088,6 +1092,10 @@
 			</File>
 			<File
 				RelativePath="..\Modules\errnomodule.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Modules\faulthandler.c"
 				>
 			</File>
 			<File
