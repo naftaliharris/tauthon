@@ -177,7 +177,8 @@ def request_host(request):
 class Request:
 
     def __init__(self, url, data=None, headers={},
-                 origin_req_host=None, unverifiable=False):
+                 origin_req_host=None, unverifiable=False,
+                 method=None):
         # unwrap('<URL:type://host/path>') --> 'type://host/path'
         self.full_url = unwrap(url)
         self.full_url, self.fragment = splittag(self.full_url)
@@ -191,6 +192,7 @@ class Request:
             origin_req_host = request_host(self)
         self.origin_req_host = origin_req_host
         self.unverifiable = unverifiable
+        self.method = method
         self._parse()
 
     def _parse(self):
@@ -202,7 +204,10 @@ class Request:
             self.host = unquote(self.host)
 
     def get_method(self):
-        if self.data is not None:
+        """Return a string indicating the HTTP request method."""
+        if self.method is not None:
+            return self.method
+        elif self.data is not None:
             return "POST"
         else:
             return "GET"
@@ -825,14 +830,20 @@ class AbstractBasicAuthHandler:
             self.retried += 1
 
         if authreq:
-            mo = AbstractBasicAuthHandler.rx.search(authreq)
-            if mo:
-                scheme, quote, realm = mo.groups()
-                if scheme.lower() == 'basic':
-                    response = self.retry_http_basic_auth(host, req, realm)
-                    if response and response.code != 401:
-                        self.retried = 0
-                    return response
+            scheme = authreq.split()[0]
+            if not scheme.lower() == 'basic':
+                raise ValueError("AbstractBasicAuthHandler does not"
+                                 " support the following scheme: '%s'" %
+                                 scheme)
+            else:
+                mo = AbstractBasicAuthHandler.rx.search(authreq)
+                if mo:
+                    scheme, quote, realm = mo.groups()
+                    if scheme.lower() == 'basic':
+                        response = self.retry_http_basic_auth(host, req, realm)
+                        if response and response.code != 401:
+                            self.retried = 0
+                        return response
 
     def retry_http_basic_auth(self, host, req, realm):
         user, pw = self.passwd.find_user_password(realm, host)
@@ -918,6 +929,9 @@ class AbstractDigestAuthHandler:
             scheme = authreq.split()[0]
             if scheme.lower() == 'digest':
                 return self.retry_http_digest_auth(req, authreq)
+            elif not scheme.lower() == 'basic':
+                raise ValueError("AbstractDigestAuthHandler does not support"
+                                 " the following scheme: '%s'" % scheme)
 
     def retry_http_digest_auth(self, req, auth):
         token, challenge = auth.split(' ', 1)
@@ -1538,6 +1552,8 @@ class URLopener:
                 return getattr(self, name)(url)
             else:
                 return getattr(self, name)(url, data)
+        except HTTPError:
+            raise
         except socket.error as msg:
             raise IOError('socket error', msg).with_traceback(sys.exc_info()[2])
 
@@ -1875,7 +1891,7 @@ class URLopener:
         if encoding == 'base64':
             import base64
             # XXX is this encoding/decoding ok?
-            data = base64.decodebytes(data.encode('ascii')).decode('latin1')
+            data = base64.decodebytes(data.encode('ascii')).decode('latin-1')
         else:
             data = unquote(data)
         msg.append('Content-Length: %d' % len(data))

@@ -458,7 +458,8 @@ define in order to be compatible with the Python codec registry.
 
    .. method:: reset()
 
-      Reset the encoder to the initial state.
+      Reset the encoder to the initial state. The output is discarded: call
+      ``.encode('', final=True)`` to reset the encoder and to get the output.
 
 
 .. method:: IncrementalEncoder.getstate()
@@ -899,6 +900,15 @@ is meant to be exhaustive. Notice that spelling alternatives that only differ in
 case or use a hyphen instead of an underscore are also valid aliases; therefore,
 e.g. ``'utf-8'`` is a valid alias for the ``'utf_8'`` codec.
 
+.. impl-detail::
+
+   Some common encodings can bypass the codecs lookup machinery to
+   improve performance.  These optimization opportunities are only
+   recognized by CPython for a limited set of aliases: utf-8, utf8,
+   latin-1, latin1, iso-8859-1, mbcs (Windows only), ascii, utf-16,
+   and utf-32.  Using alternative spellings for these encodings may
+   result in slower execution.
+
 Many of the character sets support the same languages. They vary in individual
 characters (e.g. whether the EURO SIGN is supported or not), and in the
 assignment of characters to code positions. For the European languages in
@@ -1270,11 +1280,12 @@ functions can be used directly if desired.
 .. module:: encodings.mbcs
    :synopsis: Windows ANSI codepage
 
-Encode operand according to the ANSI codepage (CP_ACP). This codec only
-supports ``'strict'`` and ``'replace'`` error handlers to encode, and
-``'strict'`` and ``'ignore'`` error handlers to decode.
+Encode operand according to the ANSI codepage (CP_ACP).
 
 Availability: Windows only.
+
+.. versionchanged:: 3.3
+   Support any error handler.
 
 .. versionchanged:: 3.2
    Before 3.2, the *errors* argument was ignored; ``'replace'`` was always used
