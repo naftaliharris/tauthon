@@ -162,7 +162,6 @@ static PyObject *
 escape_encode(PyObject *self,
               PyObject *args)
 {
-    static const char *hexdigits = "0123456789abcdef";
     PyObject *str;
     Py_ssize_t size;
     Py_ssize_t newsize;
@@ -205,8 +204,8 @@ escape_encode(PyObject *self,
             else if (c < ' ' || c >= 0x7f) {
                 *p++ = '\\';
                 *p++ = 'x';
-                *p++ = hexdigits[(c & 0xf0) >> 4];
-                *p++ = hexdigits[c & 0xf];
+                *p++ = Py_hexdigits[(c & 0xf0) >> 4];
+                *p++ = Py_hexdigits[c & 0xf];
             }
             else
                 *p++ = c;
@@ -588,7 +587,7 @@ charmap_decode(PyObject *self,
     return codec_tuple(unicode, pbuf.len);
 }
 
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 
 static PyObject *
 mbcs_decode(PyObject *self,
@@ -613,7 +612,32 @@ mbcs_decode(PyObject *self,
     return codec_tuple(decoded, consumed);
 }
 
-#endif /* MS_WINDOWS */
+static PyObject *
+code_page_decode(PyObject *self,
+                 PyObject *args)
+{
+    Py_buffer pbuf;
+    const char *errors = NULL;
+    int final = 0;
+    Py_ssize_t consumed;
+    PyObject *decoded = NULL;
+    int code_page;
+
+    if (!PyArg_ParseTuple(args, "iy*|zi:code_page_decode",
+                          &code_page, &pbuf, &errors, &final))
+        return NULL;
+    consumed = pbuf.len;
+
+    decoded = PyUnicode_DecodeCodePageStateful(code_page,
+                                               pbuf.buf, pbuf.len, errors,
+                                               final ? NULL : &consumed);
+    PyBuffer_Release(&pbuf);
+    if (decoded == NULL)
+        return NULL;
+    return codec_tuple(decoded, consumed);
+}
+
+#endif /* HAVE_MBCS */
 
 /* --- Encoder ------------------------------------------------------------ */
 
@@ -700,12 +724,10 @@ utf_8_encode(PyObject *self,
         return NULL;
 
     str = PyUnicode_FromObject(str);
-    if (str == NULL)
+    if (str == NULL || PyUnicode_READY(str) == -1)
         return NULL;
-    v = codec_tuple(PyUnicode_EncodeUTF8(PyUnicode_AS_UNICODE(str),
-                                         PyUnicode_GET_SIZE(str),
-                                         errors),
-                    PyUnicode_GET_SIZE(str));
+    v = codec_tuple(PyUnicode_AsEncodedString(str, "utf-8", errors),
+                    PyUnicode_GET_LENGTH(str));
     Py_DECREF(str);
     return v;
 }
@@ -989,7 +1011,7 @@ charmap_build(PyObject *self, PyObject *args)
     return PyUnicode_BuildEncodingMap(map);
 }
 
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 
 static PyObject *
 mbcs_encode(PyObject *self,
@@ -1014,7 +1036,30 @@ mbcs_encode(PyObject *self,
     return v;
 }
 
-#endif /* MS_WINDOWS */
+static PyObject *
+code_page_encode(PyObject *self,
+                 PyObject *args)
+{
+    PyObject *str, *v;
+    const char *errors = NULL;
+    int code_page;
+
+    if (!PyArg_ParseTuple(args, "iO|z:code_page_encode",
+                          &code_page, &str, &errors))
+        return NULL;
+
+    str = PyUnicode_FromObject(str);
+    if (str == NULL)
+        return NULL;
+    v = codec_tuple(PyUnicode_EncodeCodePage(code_page,
+                                             str,
+                                             errors),
+                    PyUnicode_GET_LENGTH(str));
+    Py_DECREF(str);
+    return v;
+}
+
+#endif /* HAVE_MBCS */
 
 /* --- Error handler registry --------------------------------------------- */
 
@@ -1101,9 +1146,11 @@ static PyMethodDef _codecs_functions[] = {
     {"charmap_decode",          charmap_decode,                 METH_VARARGS},
     {"charmap_build",           charmap_build,                  METH_VARARGS},
     {"readbuffer_encode",       readbuffer_encode,              METH_VARARGS},
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
     {"mbcs_encode",             mbcs_encode,                    METH_VARARGS},
     {"mbcs_decode",             mbcs_decode,                    METH_VARARGS},
+    {"code_page_encode",        code_page_encode,               METH_VARARGS},
+    {"code_page_decode",        code_page_decode,               METH_VARARGS},
 #endif
     {"register_error",          register_error,                 METH_VARARGS,
         register_error__doc__},
