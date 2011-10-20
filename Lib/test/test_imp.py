@@ -58,6 +58,12 @@ class ImportTests(unittest.TestCase):
             with imp.find_module('module_' + mod, self.test_path)[0] as fd:
                 self.assertEqual(fd.encoding, encoding)
 
+        path = [os.path.dirname(__file__)]
+        self.assertRaisesRegex(SyntaxError,
+            r"Non-UTF-8 code starting with '\\xf6'"
+            r" in file .*badsyntax_pep3120.py",
+            imp.find_module, 'badsyntax_pep3120', path)
+
     def test_issue1267(self):
         for mod, encoding, _ in self.test_strings:
             fp, filename, info  = imp.find_module('module_' + mod,
@@ -215,6 +221,10 @@ class PEP3147Tests(unittest.TestCase):
         self.assertEqual(
             imp.cache_from_source('/foo/bar/baz/qux.py', True),
             '/foo/bar/baz/__pycache__/qux.{}.pyc'.format(self.tag))
+        # Directory with a dot, filename without dot
+        self.assertEqual(
+            imp.cache_from_source('/foo.bar/file', True),
+            '/foo.bar/__pycache__/file{}.pyc'.format(self.tag))
 
     def test_cache_from_source_optimized(self):
         # Given the path to a .py file, return the path to its PEP 3147
@@ -314,8 +324,7 @@ class PEP3147Tests(unittest.TestCase):
             shutil.rmtree('pep3147')
         self.addCleanup(cleanup)
         # Touch the __init__.py file.
-        with open('pep3147/__init__.py', 'w'):
-            pass
+        support.create_empty_file('pep3147/__init__.py')
         m = __import__('pep3147')
         # Ensure we load the pyc file.
         support.forget('pep3147')
