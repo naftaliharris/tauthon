@@ -63,7 +63,7 @@ from _ssl import OPENSSL_VERSION_NUMBER, OPENSSL_VERSION_INFO, OPENSSL_VERSION
 from _ssl import _SSLContext, SSLError
 from _ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
 from _ssl import OP_ALL, OP_NO_SSLv2, OP_NO_SSLv3, OP_NO_TLSv1
-from _ssl import RAND_status, RAND_egd, RAND_add
+from _ssl import RAND_status, RAND_egd, RAND_add, RAND_bytes, RAND_pseudo_bytes
 from _ssl import (
     SSL_ERROR_ZERO_RETURN,
     SSL_ERROR_WANT_READ,
@@ -76,7 +76,8 @@ from _ssl import (
     SSL_ERROR_INVALID_ERROR_CODE,
     )
 from _ssl import HAS_SNI
-from _ssl import PROTOCOL_SSLv3, PROTOCOL_SSLv23, PROTOCOL_TLSv1
+from _ssl import (PROTOCOL_SSLv3, PROTOCOL_SSLv23,
+                  PROTOCOL_TLSv1)
 from _ssl import _OPENSSL_API_VERSION
 
 _PROTOCOL_NAMES = {
@@ -93,11 +94,15 @@ else:
 
 from socket import getnameinfo as _getnameinfo
 from socket import error as socket_error
-from socket import socket, AF_INET, SOCK_STREAM
+from socket import socket, AF_INET, SOCK_STREAM, create_connection
 import base64        # for DER-to-PEM translation
 import traceback
 import errno
 
+if _ssl.HAS_TLS_UNIQUE:
+    CHANNEL_BINDING_TYPES = ['tls-unique']
+else:
+    CHANNEL_BINDING_TYPES = []
 
 class CertificateError(ValueError):
     pass
@@ -350,6 +355,12 @@ class SSLSocket(socket):
         else:
             return socket.sendto(self, data, flags_or_addr, addr)
 
+    def sendmsg(self, *args, **kwargs):
+        # Ensure programs don't send data unencrypted if they try to
+        # use this method.
+        raise NotImplementedError("sendmsg not allowed on instances of %s" %
+                                  self.__class__)
+
     def sendall(self, data, flags=0):
         self._checkClosed()
         if self._sslobj:
@@ -407,6 +418,14 @@ class SSLSocket(socket):
                              self.__class__)
         else:
             return socket.recvfrom_into(self, buffer, nbytes, flags)
+
+    def recvmsg(self, *args, **kwargs):
+        raise NotImplementedError("recvmsg not allowed on instances of %s" %
+                                  self.__class__)
+
+    def recvmsg_into(self, *args, **kwargs):
+        raise NotImplementedError("recvmsg_into not allowed on instances of "
+                                  "%s" % self.__class__)
 
     def pending(self):
         self._checkClosed()
@@ -494,6 +513,21 @@ class SSLSocket(socket):
                               self.do_handshake_on_connect),
                 addr)
 
+    def get_channel_binding(self, cb_type="tls-unique"):
+        """Get channel binding data for current connection.  Raise ValueError
+        if the requested `cb_type` is not supported.  Return bytes of the data
+        or None if the data is not available (e.g. before the handshake).
+        """
+        if cb_type not in CHANNEL_BINDING_TYPES:
+            raise ValueError("Unsupported channel binding type")
+        if cb_type != "tls-unique":
+            raise NotImplementedError(
+                            "{0} channel binding type not implemented"
+                            .format(cb_type))
+        if self._sslobj is None:
+            return None
+        return self._sslobj.tls_unique_cb()
+
     def __del__(self):
         # sys.stderr.write("__del__ on %s\n" % repr(self))
         self._real_close()
@@ -558,9 +592,9 @@ def get_server_certificate(addr, ssl_version=PROTOCOL_SSLv3, ca_certs=None):
         cert_reqs = CERT_REQUIRED
     else:
         cert_reqs = CERT_NONE
-    s = wrap_socket(socket(), ssl_version=ssl_version,
+    s = create_connection(addr)
+    s = wrap_socket(s, ssl_version=ssl_version,
                     cert_reqs=cert_reqs, ca_certs=ca_certs)
-    s.connect(addr)
     dercert = s.getpeercert(True)
     s.close()
     return DER_cert_to_PEM_cert(dercert)
