@@ -137,7 +137,7 @@ instantiated directly, but always through the module-level function
 
        Stack (most recent call last):
 
-   This mimics the `Traceback (most recent call last):` which is used when
+   This mimics the ``Traceback (most recent call last):`` which is used when
    displaying exception frames.
 
    The third keyword argument is *extra* which can be used to pass a
@@ -189,6 +189,9 @@ instantiated directly, but always through the module-level function
    Logs a message with level :const:`WARNING` on this logger. The arguments are
    interpreted as for :meth:`debug`.
 
+   .. note:: There is an obsolete method ``warn`` which is functionally
+      identical to ``warning``. As ``warn`` is deprecated, please do not use
+      it - use ``warning`` instead.
 
 .. method:: Logger.error(msg, *args, **kwargs)
 
@@ -460,6 +463,19 @@ The useful mapping keys in a :class:`LogRecord` are given in the section on
       :func:`time.gmtime`. To change it for all formatters, for example if you
       want all logging times to be shown in GMT, set the ``converter``
       attribute in the ``Formatter`` class.
+
+      .. versionchanged:: 3.3
+         Previously, the default ISO 8601 format was hard-coded as in this
+         example: ``2010-09-06 22:38:15,292`` where the part before the comma is
+         handled by a strptime format string (``'%Y-%m-%d %H:%M:%S'``), and the
+         part after the comma is a millisecond value. Because strptime does not
+         have a format placeholder for milliseconds, the millisecond value is
+         appended using another format string, ``'%s,%03d'`` – and both of these
+         format strings have been hardcoded into this method. With the change,
+         these strings are defined as class-level attributes which can be
+         overridden at the instance level when desired. The names of the
+         attributes are ``default_time_format`` (for the strptime format string)
+         and ``default_msec_format`` (for appending the millisecond value).
 
    .. method:: formatException(exc_info)
 
@@ -820,7 +836,7 @@ functions.
 
        Stack (most recent call last):
 
-   This mimics the `Traceback (most recent call last):` which is used when
+   This mimics the ``Traceback (most recent call last):`` which is used when
    displaying exception frames.
 
    The third optional keyword argument is *extra* which can be used to pass a
@@ -867,8 +883,12 @@ functions.
 
 .. function:: warning(msg, *args, **kwargs)
 
-   Logs a message with level :const:`WARNING` on the root logger. The arguments are
-   interpreted as for :func:`debug`.
+   Logs a message with level :const:`WARNING` on the root logger. The arguments
+   are interpreted as for :func:`debug`.
+
+   .. note:: There is an obsolete function ``warn`` which is functionally
+      identical to ``warning``. As ``warn`` is deprecated, please do not use
+      it - use ``warning`` instead.
 
 
 .. function:: error(msg, *args, **kwargs)
@@ -993,11 +1013,26 @@ functions.
    | ``stream``   | Use the specified stream to initialize the  |
    |              | StreamHandler. Note that this argument is   |
    |              | incompatible with 'filename' - if both are  |
-   |              | present, 'stream' is ignored.               |
+   |              | present, a ``ValueError`` is raised.        |
+   +--------------+---------------------------------------------+
+   | ``handlers`` | If specified, this should be an iterable of |
+   |              | already created handlers to add to the root |
+   |              | logger. Any handlers which don't already    |
+   |              | have a formatter set will be assigned the   |
+   |              | default formatter created in this function. |
+   |              | Note that this argument is incompatible     |
+   |              | with 'filename' or 'stream' - if both are   |
+   |              | present, a ``ValueError`` is raised.        |
    +--------------+---------------------------------------------+
 
    .. versionchanged:: 3.2
       The ``style`` argument was added.
+
+   .. versionchanged:: 3.3
+      The ``handlers`` argument was added. Additional checks were added to
+      catch situations where incompatible arguments are specified (e.g.
+      ``handlers`` together with ``stream`` or ``filename``, or ``stream``
+      together with ``filename``).
 
 
 .. function:: shutdown()
@@ -1059,11 +1094,11 @@ with the :mod:`warnings` module.
    If *capture* is ``True``, warnings issued by the :mod:`warnings` module will
    be redirected to the logging system. Specifically, a warning will be
    formatted using :func:`warnings.formatwarning` and the resulting string
-   logged to a logger named 'py.warnings' with a severity of `WARNING`.
+   logged to a logger named ``'py.warnings'`` with a severity of ``'WARNING'``.
 
    If *capture* is ``False``, the redirection of warnings to the logging system
    will stop, and warnings will be redirected to their original destinations
-   (i.e. those in effect before `captureWarnings(True)` was called).
+   (i.e. those in effect before ``captureWarnings(True)`` was called).
 
 
 .. seealso::
