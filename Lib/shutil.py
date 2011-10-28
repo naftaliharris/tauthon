@@ -34,7 +34,9 @@ __all__ = ["copyfileobj", "copyfile", "copymode", "copystat", "copy", "copy2",
            "ExecError", "make_archive", "get_archive_formats",
            "register_archive_format", "unregister_archive_format",
            "get_unpack_formats", "register_unpack_format",
-           "unregister_unpack_format", "unpack_archive", "ignore_patterns"]
+           "unregister_unpack_format", "unpack_archive",
+           "ignore_patterns", "chown"]
+           # disk_usage is added later, if available on the platform
 
 class Error(EnvironmentError):
     pass
@@ -266,7 +268,7 @@ def rmtree(path, ignore_errors=False, onerror=None):
     names = []
     try:
         names = os.listdir(path)
-    except os.error as err:
+    except os.error:
         onerror(os.listdir, path, sys.exc_info())
     for name in names:
         fullname = os.path.join(path, name)
@@ -279,7 +281,7 @@ def rmtree(path, ignore_errors=False, onerror=None):
         else:
             try:
                 os.remove(fullname)
-            except os.error as err:
+            except os.error:
                 onerror(os.remove, fullname, sys.exc_info())
     try:
         os.rmdir(path)
@@ -322,7 +324,7 @@ def move(src, dst):
             raise Error("Destination path '%s' already exists" % real_dst)
     try:
         os.rename(src, real_dst)
-    except OSError as exc:
+    except OSError:
         if os.path.isdir(src):
             if _destinsrc(src, dst):
                 raise Error("Cannot move a directory '%s' into itself '%s'." % (src, dst))
@@ -389,7 +391,7 @@ def _make_tarball(base_name, base_dir, compress="gzip", verbose=0, dry_run=0,
         compress_ext['bzip2'] = '.bz2'
 
     # flags for compression program, each element of list will be an argument
-    if compress is not None and compress not in compress_ext.keys():
+    if compress is not None and compress not in compress_ext:
         raise ValueError("bad value for 'compress', or compression format not "
                          "supported : {0}".format(compress))
 
@@ -495,7 +497,7 @@ _ARCHIVE_FORMATS = {
     'gztar': (_make_tarball, [('compress', 'gzip')], "gzip'ed tar-file"),
     'bztar': (_make_tarball, [('compress', 'bzip2')], "bzip2'ed tar-file"),
     'tar':   (_make_tarball, [('compress', None)], "uncompressed tar file"),
-    'zip':   (_make_zipfile, [],"ZIP file")
+    'zip':   (_make_zipfile, [], "ZIP file")
     }
 
 if _BZ2_SUPPORTED:
@@ -528,7 +530,7 @@ def register_archive_format(name, function, extra_args=None, description=''):
     if not isinstance(extra_args, (tuple, list)):
         raise TypeError('extra_args needs to be a sequence')
     for element in extra_args:
-        if not isinstance(element, (tuple, list)) or len(element) !=2 :
+        if not isinstance(element, (tuple, list)) or len(element) !=2:
             raise TypeError('extra_args elements are : (arg_name, value)')
 
     _ARCHIVE_FORMATS[name] = (function, extra_args, description)
@@ -680,7 +682,7 @@ def _unpack_zipfile(filename, extract_dir):
             if not name.endswith('/'):
                 # file
                 data = zip.read(info.filename)
-                f = open(target,'wb')
+                f = open(target, 'wb')
                 try:
                     f.write(data)
                 finally:
@@ -754,3 +756,69 @@ def unpack_archive(filename, extract_dir=None, format=None):
         func = _UNPACK_FORMATS[format][1]
         kwargs = dict(_UNPACK_FORMATS[format][2])
         func(filename, extract_dir, **kwargs)
+
+
+if hasattr(os, 'statvfs'):
+
+    __all__.append('disk_usage')
+    _ntuple_diskusage = collections.namedtuple('usage', 'total used free')
+
+    def disk_usage(path):
+        """Return disk usage statistics about the given path.
+
+        Returned valus is a named tuple with attributes 'total', 'used' and
+        'free', which are the amount of total, used and free space, in bytes.
+        """
+        st = os.statvfs(path)
+        free = st.f_bavail * st.f_frsize
+        total = st.f_blocks * st.f_frsize
+        used = (st.f_blocks - st.f_bfree) * st.f_frsize
+        return _ntuple_diskusage(total, used, free)
+
+elif os.name == 'nt':
+
+    import nt
+    __all__.append('disk_usage')
+    _ntuple_diskusage = collections.namedtuple('usage', 'total used free')
+
+    def disk_usage(path):
+        """Return disk usage statistics about the given path.
+
+        Returned valus is a named tuple with attributes 'total', 'used' and
+        'free', which are the amount of total, used and free space, in bytes.
+        """
+        total, free = nt._getdiskusage(path)
+        used = total - free
+        return _ntuple_diskusage(total, used, free)
+
+
+def chown(path, user=None, group=None):
+    """Change owner user and group of the given path.
+
+    user and group can be the uid/gid or the user/group names, and in that case,
+    they are converted to their respective uid/gid.
+    """
+
+    if user is None and group is None:
+        raise ValueError("user and/or group must be set")
+
+    _user = user
+    _group = group
+
+    # -1 means don't change it
+    if user is None:
+        _user = -1
+    # user can either be an int (the uid) or a string (the system username)
+    elif isinstance(user, str):
+        _user = _get_uid(user)
+        if _user is None:
+            raise LookupError("no such user: {!r}".format(user))
+
+    if group is None:
+        _group = -1
+    elif not isinstance(group, int):
+        _group = _get_gid(group)
+        if _group is None:
+            raise LookupError("no such group: {!r}".format(group))
+
+    os.chown(path, _user, _group)
