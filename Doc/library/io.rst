@@ -33,6 +33,10 @@ giving a :class:`str` object to the ``write()`` method of a binary stream
 will raise a ``TypeError``.  So will giving a :class:`bytes` object to the
 ``write()`` method of a text stream.
 
+.. versionchanged:: 3.3
+   Operations defined in this module used to raise :exc:`IOError`, which is
+   now an alias of :exc:`OSError`.
+
 
 Text I/O
 ^^^^^^^^
@@ -109,21 +113,13 @@ High-level Module Interface
 
 .. exception:: BlockingIOError
 
-   Error raised when blocking would occur on a non-blocking stream.  It inherits
-   :exc:`IOError`.
-
-   In addition to those of :exc:`IOError`, :exc:`BlockingIOError` has one
-   attribute:
-
-   .. attribute:: characters_written
-
-      An integer containing the number of characters written to the stream
-      before it blocked.
+   This is a compatibility alias for the builtin :exc:`BlockingIOError`
+   exception.
 
 
 .. exception:: UnsupportedOperation
 
-   An exception inheriting :exc:`IOError` and :exc:`ValueError` that is raised
+   An exception inheriting :exc:`OSError` and :exc:`ValueError` that is raised
    when an unsupported operation is called on a stream.
 
 
@@ -202,8 +198,8 @@ I/O Base Classes
    Even though :class:`IOBase` does not declare :meth:`read`, :meth:`readinto`,
    or :meth:`write` because their signatures will vary, implementations and
    clients should consider those methods part of the interface.  Also,
-   implementations may raise a :exc:`IOError` when operations they do not
-   support are called.
+   implementations may raise a :exc:`ValueError` (or :exc:`UnsupportedOperation`)
+   when operations they do not support are called.
 
    The basic type used for binary data read from or written to a file is
    :class:`bytes`.  :class:`bytearray`\s are accepted too, and in some cases
@@ -211,7 +207,7 @@ I/O Base Classes
    :class:`str` data.
 
    Note that calling any method (even inquiries) on a closed stream is
-   undefined.  Implementations may raise :exc:`IOError` in this case.
+   undefined.  Implementations may raise :exc:`ValueError` in this case.
 
    IOBase (and its subclasses) support the iterator protocol, meaning that an
    :class:`IOBase` object can be iterated over yielding the lines in a stream.
@@ -244,7 +240,7 @@ I/O Base Classes
    .. method:: fileno()
 
       Return the underlying file descriptor (an integer) of the stream if it
-      exists.  An :exc:`IOError` is raised if the IO object does not use a file
+      exists.  An :exc:`OSError` is raised if the IO object does not use a file
       descriptor.
 
    .. method:: flush()
@@ -260,7 +256,7 @@ I/O Base Classes
    .. method:: readable()
 
       Return ``True`` if the stream can be read from.  If False, :meth:`read`
-      will raise :exc:`IOError`.
+      will raise :exc:`OSError`.
 
    .. method:: readline(limit=-1)
 
@@ -298,7 +294,7 @@ I/O Base Classes
    .. method:: seekable()
 
       Return ``True`` if the stream supports random access.  If ``False``,
-      :meth:`seek`, :meth:`tell` and :meth:`truncate` will raise :exc:`IOError`.
+      :meth:`seek`, :meth:`tell` and :meth:`truncate` will raise :exc:`OSError`.
 
    .. method:: tell()
 
@@ -316,7 +312,7 @@ I/O Base Classes
    .. method:: writable()
 
       Return ``True`` if the stream supports writing.  If ``False``,
-      :meth:`write` and :meth:`truncate` will raise :exc:`IOError`.
+      :meth:`write` and :meth:`truncate` will raise :exc:`OSError`.
 
    .. method:: writelines(lines)
 
@@ -450,7 +446,7 @@ I/O Base Classes
 
       Write the given bytes or bytearray object, *b* and return the number
       of bytes written (never less than ``len(b)``, since if the write fails
-      an :exc:`IOError` will be raised).  Depending on the actual
+      an :exc:`OSError` will be raised).  Depending on the actual
       implementation, these bytes may be readily written to the underlying
       stream, or held in a buffer for performance and latency reasons.
 
@@ -710,7 +706,8 @@ Text I/O
       written.
 
 
-.. class:: TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False)
+.. class:: TextIOWrapper(buffer, encoding=None, errors=None, newline=None, \
+                         line_buffering=False, write_through=False)
 
    A buffered text stream over a :class:`BufferedIOBase` binary stream.
    It inherits :class:`TextIOBase`.
@@ -740,6 +737,13 @@ Text I/O
 
    If *line_buffering* is ``True``, :meth:`flush` is implied when a call to
    write contains a newline character.
+
+   If *write_through* is ``True``, calls to :meth:`write` are guaranteed
+   not to be buffered: any data written on the :class:`TextIOWrapper`
+   object is immediately handled to its underlying binary *buffer*.
+
+   .. versionchanged:: 3.3
+      The *write_through* argument has been added.
 
    :class:`TextIOWrapper` provides one attribute in addition to those of
    :class:`TextIOBase` and its parents:
