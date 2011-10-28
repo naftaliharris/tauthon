@@ -452,6 +452,15 @@ supports sending logging messages to a remote or local Unix syslog.
          behaviour) but can be set to ``False`` on a ``SysLogHandler`` instance
          in order for that instance to *not* append the NUL terminator.
 
+      .. versionchanged:: 3.3
+         (See: :issue:`12419`.) In earlier versions, there was no facility for
+         an "ident" or "tag" prefix to identify the source of the message. This
+         can now be specified using a class-level attribute, defaulting to
+         ``""`` to preserve existing behaviour, but which can be overridden on
+         a ``SysLogHandler`` instance in order for that instance to prepend
+         the ident to every message handled. Note that the provided ident must
+         be text, not bytes, and is prepended to the message exactly as is.
+
    .. method:: encodePriority(facility, priority)
 
       Encodes the facility and priority into an integer. You can pass in strings
@@ -858,6 +867,15 @@ possible, while any potentially slow operations (such as sending an email via
       This asks the thread to terminate, and then waits for it to do so.
       Note that if you don't call this before your application exits, there
       may be some records still left on the queue, which won't be processed.
+
+   .. method:: enqueue_sentinel()
+
+      Writes a sentinel to the queue to tell the listener to quit. This
+      implementation uses ``put_nowait()``.  You may want to override this
+      method if you want to use timeouts or work with custom queue
+      implementations.
+
+      .. versionadded:: 3.3
 
 
 .. seealso::
