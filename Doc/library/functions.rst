@@ -152,10 +152,6 @@ are always available.  They are listed here in alphabetical order.
    1,114,111 (0x10FFFF in base 16).  :exc:`ValueError` will be raised if *i* is
    outside that range.
 
-   Note that on narrow Unicode builds, the result is a string of
-   length two for *i* greater than 65,535 (0xFFFF in hexadecimal).
-
-
 
 .. function:: classmethod(function)
 
@@ -783,7 +779,7 @@ are always available.  They are listed here in alphabetical order.
 .. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True)
 
    Open *file* and return a corresponding stream.  If the file cannot be opened,
-   an :exc:`IOError` is raised.
+   an :exc:`OSError` is raised.
 
    *file* is either a string or bytes object giving the pathname (absolute or
    relative to the current working directory) of the file to be opened or
@@ -912,6 +908,9 @@ are always available.  They are listed here in alphabetical order.
    (where :func:`open` is declared), :mod:`os`, :mod:`os.path`, :mod:`tempfile`,
    and :mod:`shutil`.
 
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
+
 
 .. XXX works for bytes too, but should it?
 .. function:: ord(c)
@@ -921,9 +920,6 @@ are always available.  They are listed here in alphabetical order.
    point of that character.  For example, ``ord('a')`` returns the integer ``97``
    and ``ord('\u2020')`` returns ``8224``.  This is the inverse of :func:`chr`.
 
-   On wide Unicode builds, if the argument length is not one, a
-   :exc:`TypeError` will be raised.  On narrow Unicode builds, strings
-   of length two are accepted when they form a UTF-16 surrogate pair.
 
 .. function:: pow(x, y[, z])
 
@@ -1074,6 +1070,13 @@ are always available.  They are listed here in alphabetical order.
       >>> r[-1]
       18
 
+   Testing range objects for equality with ``==`` and ``!=`` compares
+   them as sequences.  That is, two range objects are considered equal if
+   they represent the same sequence of values.  (Note that two range
+   objects that compare equal might have different :attr:`start`,
+   :attr:`stop` and :attr:`step` attributes, for example ``range(0) ==
+   range(2, 1, 3)`` or ``range(0, 3, 2) == range(0, 4, 2)``.)
+
    Ranges containing absolute values larger than :data:`sys.maxsize` are permitted
    but some features (such as :func:`len`) will raise :exc:`OverflowError`.
 
@@ -1082,6 +1085,11 @@ are always available.  They are listed here in alphabetical order.
       Support slicing and negative indices.
       Test integers for membership in constant time instead of iterating
       through all items.
+
+   .. versionchanged:: 3.3
+      Define '==' and '!=' to compare range objects based on the
+      sequence of values they define (instead of comparing based on
+      object identity).
 
 
 .. function:: repr(object)
