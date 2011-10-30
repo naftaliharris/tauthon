@@ -6,6 +6,9 @@
 #include "node.h"
 #include "code.h"
 
+#include "asdl.h"
+#include "ast.h"
+
 #include <ctype.h>
 
 #ifdef HAVE_LANGINFO_H
@@ -18,19 +21,19 @@
    Don't forget to modify PyUnicode_DecodeFSDefault() if you touch any of the
    values for Py_FileSystemDefaultEncoding!
 */
-#if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
+#ifdef HAVE_MBCS
 const char *Py_FileSystemDefaultEncoding = "mbcs";
 int Py_HasFileSystemDefaultEncoding = 1;
 #elif defined(__APPLE__)
 const char *Py_FileSystemDefaultEncoding = "utf-8";
 int Py_HasFileSystemDefaultEncoding = 1;
-#elif defined(HAVE_LANGINFO_H) && defined(CODESET)
+#else
 const char *Py_FileSystemDefaultEncoding = NULL; /* set by initfsencoding() */
 int Py_HasFileSystemDefaultEncoding = 0;
-#else
-const char *Py_FileSystemDefaultEncoding = "utf-8";
-int Py_HasFileSystemDefaultEncoding = 1;
 #endif
+
+_Py_IDENTIFIER(fileno);
+_Py_IDENTIFIER(flush);
 
 static PyObject *
 builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
@@ -39,6 +42,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *cls = NULL;
     Py_ssize_t nargs;
     int isclass;
+    _Py_IDENTIFIER(__prepare__);
 
     assert(args != NULL);
     if (!PyTuple_Check(args)) {
@@ -99,6 +103,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         Py_INCREF(meta);
         isclass = 1;  /* meta is really a class */
     }
+
     if (isclass) {
         /* meta is really a class, so check for a more derived
            metaclass, or possible metaclass conflicts: */
@@ -118,7 +123,7 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     }
     /* else: meta is not a class, so we cannot do the metaclass
        calculation, so we will use the explicitly given object as it is */
-    prep = PyObject_GetAttrString(meta, "__prepare__");
+    prep = _PyObject_GetAttrId(meta, &PyId___prepare__);
     if (prep == NULL) {
         if (PyErr_ExceptionMatches(PyExc_AttributeError)) {
             PyErr_Clear();
@@ -181,17 +186,14 @@ builtin___import__(PyObject *self, PyObject *args, PyObject *kwds)
 {
     static char *kwlist[] = {"name", "globals", "locals", "fromlist",
                              "level", 0};
-    char *name;
-    PyObject *globals = NULL;
-    PyObject *locals = NULL;
-    PyObject *fromlist = NULL;
+    PyObject *name, *globals = NULL, *locals = NULL, *fromlist = NULL;
     int level = -1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|OOOi:__import__",
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "U|OOOi:__import__",
                     kwlist, &name, &globals, &locals, &fromlist, &level))
         return NULL;
-    return PyImport_ImportModuleLevel(name, globals, locals,
-                                      fromlist, level);
+    return PyImport_ImportModuleLevelObject(name, globals, locals,
+                                            fromlist, level);
 }
 
 PyDoc_STRVAR(import_doc,
@@ -537,8 +539,8 @@ source_as_string(PyObject *cmd, char *funcname, char *what, PyCompilerFlags *cf)
 
     if (PyUnicode_Check(cmd)) {
         cf->cf_flags |= PyCF_IGNORE_COOKIE;
-        cmd = _PyUnicode_AsDefaultEncodedString(cmd, NULL);
-        if (cmd == NULL)
+        str = PyUnicode_AsUTF8AndSize(cmd, &size);
+        if (str == NULL)
             return NULL;
     }
     else if (!PyObject_CheckReadBuffer(cmd)) {
@@ -547,9 +549,10 @@ source_as_string(PyObject *cmd, char *funcname, char *what, PyCompilerFlags *cf)
           funcname, what);
         return NULL;
     }
-    if (PyObject_AsReadBuffer(cmd, (const void **)&str, &size) < 0) {
+    else if (PyObject_AsReadBuffer(cmd, (const void **)&str, &size) < 0) {
         return NULL;
     }
+
     if (strlen(str) != size) {
         PyErr_SetString(PyExc_TypeError,
                         "source code string cannot contain null bytes");
@@ -633,6 +636,10 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
             arena = PyArena_New();
             mod = PyAST_obj2mod(cmd, arena, mode);
             if (mod == NULL) {
+                PyArena_Free(arena);
+                goto error;
+            }
+            if (!PyAST_Validate(mod)) {
                 PyArena_Free(arena);
                 goto error;
             }
@@ -791,7 +798,6 @@ builtin_exec(PyObject *self, PyObject *args)
 {
     PyObject *v;
     PyObject *prog, *globals = Py_None, *locals = Py_None;
-    int plain = 0;
 
     if (!PyArg_UnpackTuple(args, "exec", 1, 3, &prog, &globals, &locals))
         return NULL;
@@ -800,7 +806,6 @@ builtin_exec(PyObject *self, PyObject *args)
         globals = PyEval_GetGlobals();
         if (locals == Py_None) {
             locals = PyEval_GetLocals();
-            plain = 1;
         }
         if (!globals || !locals) {
             PyErr_SetString(PyExc_SystemError,
@@ -1422,24 +1427,13 @@ builtin_ord(PyObject *self, PyObject* obj)
         }
     }
     else if (PyUnicode_Check(obj)) {
-        size = PyUnicode_GET_SIZE(obj);
+        if (PyUnicode_READY(obj) == -1)
+            return NULL;
+        size = PyUnicode_GET_LENGTH(obj);
         if (size == 1) {
-            ord = (long)*PyUnicode_AS_UNICODE(obj);
+            ord = (long)PyUnicode_READ_CHAR(obj, 0);
             return PyLong_FromLong(ord);
         }
-#ifndef Py_UNICODE_WIDE
-        if (size == 2) {
-            /* Decode a valid surrogate pair */
-            int c0 = PyUnicode_AS_UNICODE(obj)[0];
-            int c1 = PyUnicode_AS_UNICODE(obj)[1];
-            if (0xD800 <= c0 && c0 <= 0xDBFF &&
-                0xDC00 <= c1 && c1 <= 0xDFFF) {
-                ord = ((((c0 & 0x03FF) << 10) | (c1 & 0x03FF)) +
-                       0x00010000);
-                return PyLong_FromLong(ord);
-            }
-        }
-#endif
     }
     else if (PyByteArray_Check(obj)) {
         /* XXX Hopefully this is temporary */
@@ -1604,7 +1598,7 @@ builtin_input(PyObject *self, PyObject *args)
     }
 
     /* First of all, flush stderr */
-    tmp = PyObject_CallMethod(ferr, "flush", "");
+    tmp = _PyObject_CallMethodId(ferr, &PyId_flush, "");
     if (tmp == NULL)
         PyErr_Clear();
     else
@@ -1613,7 +1607,7 @@ builtin_input(PyObject *self, PyObject *args)
     /* We should only use (GNU) readline if Python's sys.stdin and
        sys.stdout are the same as C's stdin and stdout, because we
        need to pass it those. */
-    tmp = PyObject_CallMethod(fin, "fileno", "");
+    tmp = _PyObject_CallMethodId(fin, &PyId_fileno, "");
     if (tmp == NULL) {
         PyErr_Clear();
         tty = 0;
@@ -1626,7 +1620,7 @@ builtin_input(PyObject *self, PyObject *args)
         tty = fd == fileno(stdin) && isatty(fd);
     }
     if (tty) {
-        tmp = PyObject_CallMethod(fout, "fileno", "");
+        tmp = _PyObject_CallMethodId(fout, &PyId_fileno, "");
         if (tmp == NULL)
             PyErr_Clear();
         else {
@@ -1647,8 +1641,9 @@ builtin_input(PyObject *self, PyObject *args)
         char *stdin_encoding_str;
         PyObject *result;
         size_t len;
+        _Py_IDENTIFIER(encoding);
 
-        stdin_encoding = PyObject_GetAttrString(fin, "encoding");
+        stdin_encoding = _PyObject_GetAttrId(fin, &PyId_encoding);
         if (!stdin_encoding)
             /* stdin is a text stream, so it must have an
                encoding. */
@@ -1658,7 +1653,7 @@ builtin_input(PyObject *self, PyObject *args)
             Py_DECREF(stdin_encoding);
             return NULL;
         }
-        tmp = PyObject_CallMethod(fout, "flush", "");
+        tmp = _PyObject_CallMethodId(fout, &PyId_flush, "");
         if (tmp == NULL)
             PyErr_Clear();
         else
@@ -1667,7 +1662,7 @@ builtin_input(PyObject *self, PyObject *args)
             PyObject *stringpo;
             PyObject *stdout_encoding;
             char *stdout_encoding_str;
-            stdout_encoding = PyObject_GetAttrString(fout, "encoding");
+            stdout_encoding = _PyObject_GetAttrId(fout, &PyId_encoding);
             if (stdout_encoding == NULL) {
                 Py_DECREF(stdin_encoding);
                 return NULL;
@@ -1740,7 +1735,7 @@ builtin_input(PyObject *self, PyObject *args)
         if (PyFile_WriteObject(promptarg, fout, Py_PRINT_RAW) != 0)
             return NULL;
     }
-    tmp = PyObject_CallMethod(fout, "flush", "");
+    tmp = _PyObject_CallMethodId(fout, &PyId_flush, "");
     if (tmp == NULL)
         PyErr_Clear();
     else
@@ -1822,6 +1817,7 @@ builtin_sorted(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *callable;
     static char *kwlist[] = {"iterable", "key", "reverse", 0};
     int reverse;
+    _Py_IDENTIFIER(sort);
 
     /* args 1-3 should match listsort in Objects/listobject.c */
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|Oi:sorted",
@@ -1832,7 +1828,7 @@ builtin_sorted(PyObject *self, PyObject *args, PyObject *kwds)
     if (newlist == NULL)
         return NULL;
 
-    callable = PyObject_GetAttrString(newlist, "sort");
+    callable = _PyObject_GetAttrId(newlist, &PyId_sort);
     if (callable == NULL) {
         Py_DECREF(newlist);
         return NULL;
@@ -1878,7 +1874,8 @@ builtin_vars(PyObject *self, PyObject *args)
             Py_INCREF(d);
     }
     else {
-        d = PyObject_GetAttrString(v, "__dict__");
+        _Py_IDENTIFIER(__dict__);
+        d = _PyObject_GetAttrId(v, &PyId___dict__);
         if (d == NULL) {
             PyErr_SetString(PyExc_TypeError,
                 "vars() argument must have __dict__ attribute");
@@ -1922,9 +1919,15 @@ builtin_sum(PyObject *self, PyObject *args)
             Py_DECREF(iter);
             return NULL;
         }
-        if (PyByteArray_Check(result)) {
+        if (PyBytes_Check(result)) {
             PyErr_SetString(PyExc_TypeError,
                 "sum() can't sum bytes [use b''.join(seq) instead]");
+            Py_DECREF(iter);
+            return NULL;
+        }
+        if (PyByteArray_Check(result)) {
+            PyErr_SetString(PyExc_TypeError,
+                "sum() can't sum bytearray [use b''.join(seq) instead]");
             Py_DECREF(iter);
             return NULL;
         }
