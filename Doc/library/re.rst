@@ -156,30 +156,36 @@ The special characters are:
    raw strings for all but the simplest expressions.
 
 ``[]``
-   Used to indicate a set of characters.  Characters can be listed individually, or
-   a range of characters can be indicated by giving two characters and separating
-   them by a ``'-'``.  Special characters are not active inside sets.  For example,
-   ``[akm$]`` will match any of the characters ``'a'``, ``'k'``,
-   ``'m'``, or ``'$'``; ``[a-z]`` will match any lowercase letter, and
-   ``[a-zA-Z0-9]`` matches any letter or digit.  Character classes such
-   as ``\w`` or ``\S`` (defined below) are also acceptable inside a
-   range, although the characters they match depends on whether :const:`LOCALE`
-   or  :const:`UNICODE` mode is in force.  If you want to include a
-   ``']'`` or a ``'-'`` inside a set, precede it with a backslash, or
-   place it as the first character.  The pattern ``[]]`` will match
-   ``']'``, for example.
+   Used to indicate a set of characters.  In a set:
 
-   You can match the characters not within a range by :dfn:`complementing` the set.
-   This is indicated by including a ``'^'`` as the first character of the set;
-   ``'^'`` elsewhere will simply match the ``'^'`` character.  For example,
-   ``[^5]`` will match any character except ``'5'``, and ``[^^]`` will match any
-   character except ``'^'``.
+   * Characters can be listed individually, e.g. ``[amk]`` will match ``'a'``,
+     ``'m'``, or ``'k'``.
 
-   Note that inside ``[]`` the special forms and special characters lose
-   their meanings and only the syntaxes described here are valid. For
-   example, ``+``, ``*``, ``(``, ``)``, and so on are treated as
-   literals inside ``[]``, and backreferences cannot be used inside
-   ``[]``.
+   * Ranges of characters can be indicated by giving two characters and separating
+     them by a ``'-'``, for example ``[a-z]`` will match any lowercase ASCII letter,
+     ``[0-5][0-9]`` will match all the two-digits numbers from ``00`` to ``59``, and
+     ``[0-9A-Fa-f]`` will match any hexadecimal digit.  If ``-`` is escaped (e.g.
+     ``[a\-z]``) or if it's placed as the first or last character (e.g. ``[a-]``),
+     it will match a literal ``'-'``.
+
+   * Special characters lose their special meaning inside sets.  For example,
+     ``[(+*)]`` will match any of the literal characters ``'('``, ``'+'``,
+     ``'*'``, or ``')'``.
+
+   * Character classes such as ``\w`` or ``\S`` (defined below) are also accepted
+     inside a set, although the characters they match depends on whether
+     :const:`LOCALE` or  :const:`UNICODE` mode is in force.
+
+   * Characters that are not within a range can be matched by :dfn:`complementing`
+     the set.  If the first character of the set is ``'^'``, all the characters
+     that are *not* in the set will be matched.  For example, ``[^5]`` will match
+     any character except ``'5'``, and ``[^^]`` will match any character except
+     ``'^'``.  ``^`` has no special meaning if it's not the first character in
+     the set.
+
+   * To match a literal ``']'`` inside a set, precede it with a backslash, or
+     place it at the beginning of the set.  For example, both ``[()[\]{}]`` and
+     ``[]()[{}]`` will both match a parenthesis.
 
 ``'|'``
    ``A|B``, where A and B can be arbitrary REs, creates a regular expression that
@@ -224,7 +230,7 @@ The special characters are:
    undefined.
 
 ``(?:...)``
-   A non-grouping version of regular parentheses. Matches whatever regular
+   A non-capturing version of regular parentheses.  Matches whatever regular
    expression is inside the parentheses, but the substring matched by the group
    *cannot* be retrieved after performing a match or referenced later in the
    pattern.
@@ -332,7 +338,8 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
 ``\d``
    When the :const:`UNICODE` flag is not specified, matches any decimal digit; this
    is equivalent to the set ``[0-9]``.  With :const:`UNICODE`, it will match
-   whatever is classified as a digit in the Unicode character properties database.
+   whatever is classified as a decimal digit in the Unicode character properties
+   database.
 
 ``\D``
    When the :const:`UNICODE` flag is not specified, matches any non-digit
@@ -536,7 +543,7 @@ form.
       instead.
 
 
-.. function:: split(pattern, string[, maxsplit=0])
+.. function:: split(pattern, string[, maxsplit=0, flags=0])
 
    Split *string* by the occurrences of *pattern*.  If capturing parentheses are
    used in *pattern*, then the text of all groups in the pattern are also returned
@@ -551,6 +558,8 @@ form.
       ['Words', ', ', 'words', ', ', 'words', '.', '']
       >>> re.split('\W+', 'Words, words, words.', 1)
       ['Words', 'words, words.']
+      >>> re.split('[a-f]+', '0a3B9', flags=re.IGNORECASE)
+      ['0', '3', '9']
 
    If there are capturing groups in the separator and it matches at the start of
    the string, the result will start with an empty string.  The same holds for
@@ -570,6 +579,9 @@ form.
       ['foo']
       >>> re.split("(?m)^$", "foo\n\nbar\n")
       ['foo\n\nbar\n']
+
+   .. versionchanged:: 2.7
+      Added the optional flags argument.
 
 
 .. function:: findall(pattern, string[, flags])
@@ -601,13 +613,13 @@ form.
       Added the optional flags argument.
 
 
-.. function:: sub(pattern, repl, string[, count])
+.. function:: sub(pattern, repl, string[, count, flags])
 
    Return the string obtained by replacing the leftmost non-overlapping occurrences
    of *pattern* in *string* by the replacement *repl*.  If the pattern isn't found,
    *string* is returned unchanged.  *repl* can be a string or a function; if it is
    a string, any backslash escapes in it are processed.  That is, ``\n`` is
-   converted to a single newline character, ``\r`` is converted to a linefeed, and
+   converted to a single newline character, ``\r`` is converted to a carriage return, and
    so forth.  Unknown escapes such as ``\j`` are left alone.  Backreferences, such
    as ``\6``, are replaced with the substring matched by group 6 in the pattern.
    For example:
@@ -626,10 +638,10 @@ form.
       ...     else: return '-'
       >>> re.sub('-{1,2}', dashrepl, 'pro----gram-files')
       'pro--gram files'
+      >>> re.sub(r'\sAND\s', ' & ', 'Baked Beans And Spam', flags=re.IGNORECASE)
+      'Baked Beans & Spam'
 
-   The pattern may be a string or an RE object; if you need to specify regular
-   expression flags, you must use a RE object, or use embedded modifiers in a
-   pattern; for example, ``sub("(?i)b+", "x", "bbbb BBBB")`` returns ``'x x'``.
+   The pattern may be a string or an RE object.
 
    The optional argument *count* is the maximum number of pattern occurrences to be
    replaced; *count* must be a non-negative integer.  If omitted or zero, all
@@ -646,11 +658,17 @@ form.
    character ``'0'``.  The backreference ``\g<0>`` substitutes in the entire
    substring matched by the RE.
 
+   .. versionchanged:: 2.7
+      Added the optional flags argument.
 
-.. function:: subn(pattern, repl, string[, count])
+
+.. function:: subn(pattern, repl, string[, count, flags])
 
    Perform the same operation as :func:`sub`, but return a tuple ``(new_string,
    number_of_subs_made)``.
+
+   .. versionchanged:: 2.7
+      Added the optional flags argument.
 
 
 .. function:: escape(string)

@@ -56,7 +56,7 @@ doesn't match the first.
     ...     return tokens1 == tokens2
     ...
 
-There are some standard formattig practises that are easy to get right.
+There are some standard formatting practices that are easy to get right.
 
     >>> roundtrip("if x == 1:\\n"
     ...           "    print x\\n")
@@ -493,13 +493,13 @@ Two string literals on the same line
     True
 
 Test roundtrip on random python modules.
-pass the '-ucompiler' option to process the full directory.
+pass the '-ucpu' option to process the full directory.
 
     >>>
     >>> tempdir = os.path.dirname(f) or os.curdir
     >>> testfiles = glob.glob(os.path.join(tempdir, "test*.py"))
 
-    >>> if not test_support.is_resource_enabled("compiler"):
+    >>> if not test_support.is_resource_enabled("cpu"):
     ...     testfiles = random.sample(testfiles, 10)
     ...
     >>> for testfile in testfiles:
@@ -508,11 +508,28 @@ pass the '-ucompiler' option to process the full directory.
     ...         break
     ... else: True
     True
+
+Evil tabs
+    >>> dump_tokens("def f():\\n\\tif x\\n        \\tpass")
+    NAME       'def'         (1, 0) (1, 3)
+    NAME       'f'           (1, 4) (1, 5)
+    OP         '('           (1, 5) (1, 6)
+    OP         ')'           (1, 6) (1, 7)
+    OP         ':'           (1, 7) (1, 8)
+    NEWLINE    '\\n'          (1, 8) (1, 9)
+    INDENT     '\\t'          (2, 0) (2, 1)
+    NAME       'if'          (2, 1) (2, 3)
+    NAME       'x'           (2, 4) (2, 5)
+    NEWLINE    '\\n'          (2, 5) (2, 6)
+    INDENT     '        \\t'  (3, 0) (3, 9)
+    NAME       'pass'        (3, 9) (3, 13)
+    DEDENT     ''            (4, 0) (4, 0)
+    DEDENT     ''            (4, 0) (4, 0)
 """
 
 
 from test import test_support
-from tokenize import (tokenize, untokenize, generate_tokens, NUMBER, NAME, OP,
+from tokenize import (untokenize, generate_tokens, NUMBER, NAME, OP,
                      STRING, ENDMARKER, tok_name)
 from StringIO import StringIO
 import os

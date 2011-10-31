@@ -54,29 +54,24 @@ def bug1333982(x=[]):
 
 dis_bug1333982 = """\
  %-4d         0 LOAD_CONST               1 (0)
-              3 JUMP_IF_TRUE            41 (to 47)
-              6 POP_TOP
-              7 LOAD_GLOBAL              0 (AssertionError)
-             10 BUILD_LIST               0
-             13 DUP_TOP
-             14 STORE_FAST               1 (_[1])
-             17 LOAD_FAST                0 (x)
-             20 GET_ITER
-        >>   21 FOR_ITER                13 (to 37)
-             24 STORE_FAST               2 (s)
-             27 LOAD_FAST                1 (_[1])
-             30 LOAD_FAST                2 (s)
-             33 LIST_APPEND
-             34 JUMP_ABSOLUTE           21
-        >>   37 DELETE_FAST              1 (_[1])
+              3 POP_JUMP_IF_TRUE        41
+              6 LOAD_GLOBAL              0 (AssertionError)
+              9 BUILD_LIST               0
+             12 LOAD_FAST                0 (x)
+             15 GET_ITER
+        >>   16 FOR_ITER                12 (to 31)
+             19 STORE_FAST               1 (s)
+             22 LOAD_FAST                1 (s)
+             25 LIST_APPEND              2
+             28 JUMP_ABSOLUTE           16
 
- %-4d        40 LOAD_CONST               2 (1)
-             43 BINARY_ADD
-             44 RAISE_VARARGS            2
-        >>   47 POP_TOP
+ %-4d   >>   31 LOAD_CONST               2 (1)
+             34 BINARY_ADD
+             35 CALL_FUNCTION            1
+             38 RAISE_VARARGS            1
 
- %-4d        48 LOAD_CONST               0 (None)
-             51 RETURN_VALUE
+ %-4d   >>   41 LOAD_CONST               0 (None)
+             44 RETURN_VALUE
 """%(bug1333982.func_code.co_firstlineno + 1,
      bug1333982.func_code.co_firstlineno + 2,
      bug1333982.func_code.co_firstlineno + 3)
@@ -109,8 +104,8 @@ class DisTests(unittest.TestCase):
 
     def test_opmap(self):
         self.assertEqual(dis.opmap["STOP_CODE"], 0)
-        self.assertEqual(dis.opmap["LOAD_CONST"] in dis.hasconst, True)
-        self.assertEqual(dis.opmap["STORE_NAME"] in dis.hasname, True)
+        self.assertIn(dis.opmap["LOAD_CONST"], dis.hasconst)
+        self.assertIn(dis.opmap["STORE_NAME"], dis.hasname)
 
     def test_opname(self):
         self.assertEqual(dis.opname[dis.opmap["LOAD_FAST"]], "LOAD_FAST")

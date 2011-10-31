@@ -9,9 +9,12 @@
 
 import unittest
 from test import test_support
+import os
+from os import path
+from time import sleep
 
-# use this form so that the test is skipped when startfile is not available:
-from os import startfile, path
+startfile = test_support.get_attribute(os, 'startfile')
+
 
 class TestCase(unittest.TestCase):
     def test_nonexisting(self):
@@ -24,11 +27,16 @@ class TestCase(unittest.TestCase):
         empty = path.join(path.dirname(__file__), "empty.vbs")
         startfile(empty)
         startfile(empty, "open")
+        # Give the child process some time to exit before we finish.
+        # Otherwise the cleanup code will not be able to delete the cwd,
+        # because it is still in use.
+        sleep(0.1)
 
     def test_empty_u(self):
         empty = path.join(path.dirname(__file__), "empty.vbs")
         startfile(unicode(empty, "mbcs"))
         startfile(unicode(empty, "mbcs"), "open")
+        sleep(0.1)
 
 def test_main():
     test_support.run_unittest(TestCase)

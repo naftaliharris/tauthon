@@ -20,11 +20,37 @@ static PyMemberDef frame_memberlist[] = {
     {"f_builtins",      T_OBJECT,       OFF(f_builtins),RO},
     {"f_globals",       T_OBJECT,       OFF(f_globals), RO},
     {"f_lasti",         T_INT,          OFF(f_lasti),   RO},
-    {"f_exc_type",      T_OBJECT,       OFF(f_exc_type)},
-    {"f_exc_value",     T_OBJECT,       OFF(f_exc_value)},
-    {"f_exc_traceback", T_OBJECT,       OFF(f_exc_traceback)},
     {NULL}      /* Sentinel */
 };
+
+#define WARN_GET_SET(NAME) \
+static PyObject * frame_get_ ## NAME(PyFrameObject *f) { \
+    if (PyErr_WarnPy3k(#NAME " has been removed in 3.x", 2) < 0) \
+        return NULL; \
+    if (f->NAME) { \
+        Py_INCREF(f->NAME); \
+        return f->NAME; \
+    } \
+    Py_RETURN_NONE;     \
+} \
+static int frame_set_ ## NAME(PyFrameObject *f, PyObject *new) { \
+    if (PyErr_WarnPy3k(#NAME " has been removed in 3.x", 2) < 0) \
+        return -1; \
+    if (f->NAME) { \
+        Py_CLEAR(f->NAME); \
+    } \
+    if (new == Py_None) \
+        new = NULL; \
+    Py_XINCREF(new); \
+    f->NAME = new; \
+    return 0; \
+}
+
+
+WARN_GET_SET(f_exc_traceback)
+WARN_GET_SET(f_exc_type)
+WARN_GET_SET(f_exc_value)
+
 
 static PyObject *
 frame_getlocals(PyFrameObject *f, void *closure)
@@ -34,17 +60,19 @@ frame_getlocals(PyFrameObject *f, void *closure)
     return f->f_locals;
 }
 
+int
+PyFrame_GetLineNumber(PyFrameObject *f)
+{
+    if (f->f_trace)
+        return f->f_lineno;
+    else
+        return PyCode_Addr2Line(f->f_code, f->f_lasti);
+}
+
 static PyObject *
 frame_getlineno(PyFrameObject *f, void *closure)
 {
-    int lineno;
-
-    if (f->f_trace)
-        lineno = f->f_lineno;
-    else
-        lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
-    return PyInt_FromLong(lineno);
+    return PyInt_FromLong(PyFrame_GetLineNumber(f));
 }
 
 /* Setter for f_lineno - you can set f_lineno from within a trace function in
@@ -86,7 +114,6 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
     int in_finally[CO_MAXBLOCKS];       /* (ditto) */
     int blockstack_top = 0;             /* (ditto) */
     unsigned char setup_op = 0;         /* (ditto) */
-    char *tmp;
 
     /* f_lineno must be an integer. */
     if (!PyInt_Check(p_new_lineno)) {
@@ -100,7 +127,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
     if (!f->f_trace)
     {
         PyErr_Format(PyExc_ValueError,
-                     "f_lineno can only be set by a trace function");
+                     "f_lineno can only be set by a"
+                     " line trace function");
         return -1;
     }
 
@@ -112,22 +140,28 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
                      new_lineno);
         return -1;
     }
-
-    /* Find the bytecode offset for the start of the given line, or the
-     * first code-owning line after it. */
-    PyString_AsStringAndSize(f->f_code->co_lnotab,
-                             &tmp, &lnotab_len);
-    lnotab = (unsigned char *) tmp;
-    addr = 0;
-    line = f->f_code->co_firstlineno;
-    new_lasti = -1;
-    for (offset = 0; offset < lnotab_len; offset += 2) {
-        addr += lnotab[offset];
-        line += lnotab[offset+1];
-        if (line >= new_lineno) {
-            new_lasti = addr;
-            new_lineno = line;
-            break;
+    else if (new_lineno == f->f_code->co_firstlineno) {
+        new_lasti = 0;
+        new_lineno = f->f_code->co_firstlineno;
+    }
+    else {
+        /* Find the bytecode offset for the start of the given
+         * line, or the first code-owning line after it. */
+        char *tmp;
+        PyString_AsStringAndSize(f->f_code->co_lnotab,
+                                 &tmp, &lnotab_len);
+        lnotab = (unsigned char *) tmp;
+        addr = 0;
+        line = f->f_code->co_firstlineno;
+        new_lasti = -1;
+        for (offset = 0; offset < lnotab_len; offset += 2) {
+            addr += lnotab[offset];
+            line += lnotab[offset+1];
+            if (line >= new_lineno) {
+                new_lasti = addr;
+                new_lineno = line;
+                break;
+            }
         }
     }
 
@@ -328,16 +362,14 @@ frame_gettrace(PyFrameObject *f, void *closure)
 static int
 frame_settrace(PyFrameObject *f, PyObject* v, void *closure)
 {
+    PyObject* old_value;
+
     /* We rely on f_lineno being accurate when f_trace is set. */
+    f->f_lineno = PyFrame_GetLineNumber(f);
 
-    PyObject* old_value = f->f_trace;
-
+    old_value = f->f_trace;
     Py_XINCREF(v);
     f->f_trace = v;
-
-    if (v != NULL)
-        f->f_lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
     Py_XDECREF(old_value);
 
     return 0;
@@ -355,6 +387,12 @@ static PyGetSetDef frame_getsetlist[] = {
                     (setter)frame_setlineno, NULL},
     {"f_trace",         (getter)frame_gettrace, (setter)frame_settrace, NULL},
     {"f_restricted",(getter)frame_getrestricted,NULL, NULL},
+    {"f_exc_traceback", (getter)frame_get_f_exc_traceback,
+                    (setter)frame_set_f_exc_traceback, NULL},
+    {"f_exc_type",  (getter)frame_get_f_exc_type,
+                    (setter)frame_set_f_exc_type, NULL},
+    {"f_exc_value", (getter)frame_get_f_exc_value,
+                    (setter)frame_set_f_exc_value, NULL},
     {0}
 };
 

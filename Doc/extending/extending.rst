@@ -89,10 +89,8 @@ example, the single expression ``"ls -l"``) to the arguments passed to the C
 function.  The C function always has two arguments, conventionally named *self*
 and *args*.
 
-The *self* argument is only used when the C function implements a built-in
-method, not a function. In the example, *self* will always be a *NULL* pointer,
-since we are defining a function, not a method.  (This is done so that the
-interpreter doesn't have to understand two different types of C functions.)
+The *self* argument points to the module object for module-level functions;
+for a method it would point to the object instance.
 
 The *args* argument will be a pointer to a Python tuple object containing the
 arguments.  Each item of the tuple corresponds to an argument in the call's
@@ -391,12 +389,7 @@ source distribution.
 
 A more substantial example module is included in the Python source distribution
 as :file:`Modules/xxmodule.c`.  This file may be used as a  template or simply
-read as an example.  The :program:`modulator.py` script included in the source
-distribution or Windows install provides  a simple graphical user interface for
-declaring the functions and objects which a module should implement, and can
-generate a template which can be filled in.  The script lives in the
-:file:`Tools/modulator/` directory; see the :file:`README` file there for more
-information.
+read as an example.
 
 
 .. _compilation:
@@ -1084,7 +1077,7 @@ already if the symbol ``__cplusplus`` is defined (all recent C++ compilers
 define this symbol).
 
 
-.. _using-cobjects:
+.. _using-capsules:
 
 Providing a C API for an Extension Module
 =========================================
@@ -1120,23 +1113,40 @@ avoid name clashes with other extension modules (as discussed in section
 other extension modules must be exported in a different way.
 
 Python provides a special mechanism to pass C-level information (pointers) from
-one extension module to another one: CObjects. A CObject is a Python data type
-which stores a pointer (:ctype:`void \*`).  CObjects can only be created and
+one extension module to another one: Capsules. A Capsule is a Python data type
+which stores a pointer (:ctype:`void \*`).  Capsules can only be created and
 accessed via their C API, but they can be passed around like any other Python
 object. In particular,  they can be assigned to a name in an extension module's
 namespace. Other extension modules can then import this module, retrieve the
-value of this name, and then retrieve the pointer from the CObject.
+value of this name, and then retrieve the pointer from the Capsule.
 
-There are many ways in which CObjects can be used to export the C API of an
-extension module. Each name could get its own CObject, or all C API pointers
-could be stored in an array whose address is published in a CObject. And the
+There are many ways in which Capsules can be used to export the C API of an
+extension module. Each function could get its own Capsule, or all C API pointers
+could be stored in an array whose address is published in a Capsule. And the
 various tasks of storing and retrieving the pointers can be distributed in
 different ways between the module providing the code and the client modules.
+
+Whichever method you choose, it's important to name your Capsules properly.
+The function :cfunc:`PyCapsule_New` takes a name parameter
+(:ctype:`const char \*`); you're permitted to pass in a *NULL* name, but
+we strongly encourage you to specify a name.  Properly named Capsules provide
+a degree of runtime type-safety; there is no feasible way to tell one unnamed
+Capsule from another.
+
+In particular, Capsules used to expose C APIs should be given a name following
+this convention::
+
+    modulename.attributename
+
+The convenience function :cfunc:`PyCapsule_Import` makes it easy to
+load a C API provided via a Capsule, but only if the Capsule's name
+matches this convention.  This behavior gives C API users a high degree
+of certainty that the Capsule they load contains the correct C API.
 
 The following example demonstrates an approach that puts most of the burden on
 the writer of the exporting module, which is appropriate for commonly used
 library modules. It stores all C API pointers (just one in the example!) in an
-array of :ctype:`void` pointers which becomes the value of a CObject. The header
+array of :ctype:`void` pointers which becomes the value of a Capsule. The header
 file corresponding to the module provides a macro that takes care of importing
 the module and retrieving its C API pointers; client modules only have to call
 this macro before accessing the C API.
@@ -1198,8 +1208,8 @@ function must take care of initializing the C API pointer array::
        /* Initialize the C API pointer array */
        PySpam_API[PySpam_System_NUM] = (void *)PySpam_System;
 
-       /* Create a CObject containing the API pointer array's address */
-       c_api_object = PyCObject_FromVoidPtr((void *)PySpam_API, NULL);
+       /* Create a Capsule containing the API pointer array's address */
+       c_api_object = PyCapsule_New((void *)PySpam_API, "spam._C_API", NULL);
 
        if (c_api_object != NULL)
            PyModule_AddObject(m, "_C_API", c_api_object);
@@ -1241,28 +1251,14 @@ like this::
    #define PySpam_System \
     (*(PySpam_System_RETURN (*)PySpam_System_PROTO) PySpam_API[PySpam_System_NUM])
 
-   /* Return -1 and set exception on error, 0 on success. */
+   /* Return -1 on error, 0 on success.
+    * PyCapsule_Import will set an exception if there's an error.
+    */
    static int
    import_spam(void)
    {
-       PyObject *c_api_object;
-       PyObject *module;
-
-       module = PyImport_ImportModule("spam");
-       if (module == NULL)
-           return -1;
-
-       c_api_object = PyObject_GetAttrString(module, "_C_API");
-       if (c_api_object == NULL) {
-           Py_DECREF(module);
-           return -1;
-       }
-       if (PyCObject_Check(c_api_object))
-           PySpam_API = (void **)PyCObject_AsVoidPtr(c_api_object);
-
-       Py_DECREF(c_api_object);
-       Py_DECREF(module);
-       return 0;
+       PySpam_API = (void **)PyCapsule_Import("spam._C_API", 0);
+       return (PySpam_API != NULL) ? 0 : -1;
    }
 
    #endif
@@ -1294,11 +1290,11 @@ The main disadvantage of this approach is that the file :file:`spammodule.h` is
 rather complicated. However, the basic structure is the same for each function
 that is exported, so it has to be learned only once.
 
-Finally it should be mentioned that CObjects offer additional functionality,
+Finally it should be mentioned that Capsules offer additional functionality,
 which is especially useful for memory allocation and deallocation of the pointer
-stored in a CObject. The details are described in the Python/C API Reference
-Manual in the section :ref:`cobjects` and in the implementation of CObjects (files
-:file:`Include/cobject.h` and :file:`Objects/cobject.c` in the Python source
+stored in a Capsule. The details are described in the Python/C API Reference
+Manual in the section :ref:`capsules` and in the implementation of Capsules (files
+:file:`Include/pycapsule.h` and :file:`Objects/pycapsule.c` in the Python source
 code distribution).
 
 .. rubric:: Footnotes

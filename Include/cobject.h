@@ -1,3 +1,29 @@
+/*
+   CObjects are marked Pending Deprecation as of Python 2.7.
+   The full schedule for 2.x is as follows:
+     - CObjects are marked Pending Deprecation in Python 2.7.
+     - CObjects will be marked Deprecated in Python 2.8
+       (if there is one).
+     - CObjects will be removed in Python 2.9 (if there is one).
+
+   Additionally, for the Python 3.x series:
+     - CObjects were marked Deprecated in Python 3.1.
+     - CObjects will be removed in Python 3.2.
+
+   You should switch all use of CObjects to capsules.  Capsules
+   have a safer and more consistent API.  For more information,
+   see Include/pycapsule.h, or read the "Capsules" topic in
+   the "Python/C API Reference Manual".
+
+   Python 2.7 no longer uses CObjects itself; all objects which
+   were formerly CObjects are now capsules.  Note that this change
+   does not by itself break binary compatibility with extensions
+   built for previous versions of Python--PyCObject_AsVoidPtr()
+   has been changed to also understand capsules.
+
+*/
+
+/* original file header comment follows: */
 
 /* C objects to be exported from one extension module to another.
  

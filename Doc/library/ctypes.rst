@@ -220,6 +220,8 @@ Fundamental data types
 +----------------------+----------------------------------------+----------------------------+
 | ctypes type          | C type                                 | Python type                |
 +======================+========================================+============================+
+| :class:`c_bool`      | :ctype:`_Bool`                         | bool (1)                   |
++----------------------+----------------------------------------+----------------------------+
 | :class:`c_char`      | :ctype:`char`                          | 1-character string         |
 +----------------------+----------------------------------------+----------------------------+
 | :class:`c_wchar`     | :ctype:`wchar_t`                       | 1-character unicode string |
@@ -257,6 +259,9 @@ Fundamental data types
 +----------------------+----------------------------------------+----------------------------+
 | :class:`c_void_p`    | :ctype:`void *`                        | int/long or ``None``       |
 +----------------------+----------------------------------------+----------------------------+
+
+(1)
+   The constructor accepts any object with a truth value.
 
 All these types can be created by calling them with an optional initializer of
 the correct type and value::
@@ -864,10 +869,10 @@ later::
 
    struct cell; /* forward declaration */
 
-   struct {
+   struct cell {
        char *name;
        struct cell *next;
-   } cell;
+   };
 
 The straightforward translation into ctypes code would be this, but it does not
 work::
@@ -1995,7 +2000,7 @@ Utility functions
 
 .. function:: string_at(address[, size])
 
-   This function returns the string starting at memory address address. If size
+   This function returns the string starting at memory address *address*. If size
    is specified, it is used as size, otherwise the string is assumed to be
    zero-terminated.
 
@@ -2246,6 +2251,13 @@ These are the fundamental ctypes data types:
 .. class:: c_size_t
 
    Represents the C :ctype:`size_t` datatype.
+
+
+.. class:: c_ssize_t
+
+   Represents the C :ctype:`ssize_t` datatype.
+
+   .. versionadded:: 2.7
 
 
 .. class:: c_ubyte

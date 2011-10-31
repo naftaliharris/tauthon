@@ -2,10 +2,11 @@
 
 .. _bufferobjects:
 
-Buffer Objects
---------------
+Buffers and Memoryview Objects
+------------------------------
 
 .. sectionauthor:: Greg Stein <gstein@lyra.org>
+.. sectionauthor:: Benjamin Peterson
 
 
 .. index::
@@ -265,20 +266,6 @@ Buffer related functions
    :cdata:`~Py_buffer.format`.
 
 
-.. cfunction:: int PyObject_CopyToObject(PyObject *obj, void *buf, Py_ssize_t len, char fortran)
-
-   Copy *len* bytes of data pointed to by the contiguous chunk of memory
-   pointed to by *buf* into the buffer exported by obj.  The buffer must of
-   course be writable.  Return 0 on success and return -1 and raise an error
-   on failure.  If the object does not have a writable buffer, then an error
-   is raised.  If *fortran* is ``'F'``, then if the object is
-   multi-dimensional, then the data will be copied into the array in
-   Fortran-style (first dimension varies the fastest).  If *fortran* is
-   ``'C'``, then the data will be copied into the array in C-style (last
-   dimension varies the fastest).  If *fortran* is ``'A'``, then it does not
-   matter and the copy will be made in whatever way is more efficient.
-
-
 .. cfunction:: int PyBuffer_IsContiguous(Py_buffer *view, char fortran)
 
    Return 1 if the memory defined by the *view* is C-style (*fortran* is
@@ -289,7 +276,7 @@ Buffer related functions
 .. cfunction:: void PyBuffer_FillContiguousStrides(int ndim, Py_ssize_t *shape, Py_ssize_t *strides, Py_ssize_t itemsize, char fortran)
 
    Fill the *strides* array with byte-strides of a contiguous (C-style if
-   *fortran* is ``'C'`` or Fortran-style if *fortran* is ``'F'`` array of the
+   *fortran* is ``'C'`` or Fortran-style if *fortran* is ``'F'``) array of the
    given shape with the given number of bytes per element.
 
 
@@ -300,12 +287,56 @@ Buffer related functions
    length.  Return 0 on success and -1 (with raising an error) on error.
 
 
+MemoryView objects
+==================
+
+.. versionadded:: 2.7
+
+A :class:`memoryview` object exposes the new C level buffer interface as a
+Python object which can then be passed around like any other object.
+
+.. cfunction:: PyObject *PyMemoryView_FromObject(PyObject *obj)
+
+   Create a memoryview object from an object that defines the new buffer
+   interface.
+
+
+.. cfunction:: PyObject *PyMemoryView_FromBuffer(Py_buffer *view)
+
+   Create a memoryview object wrapping the given buffer-info structure *view*.
+   The memoryview object then owns the buffer, which means you shouldn't
+   try to release it yourself: it will be released on deallocation of the
+   memoryview object.
+
+
+.. cfunction:: PyObject *PyMemoryView_GetContiguous(PyObject *obj, int buffertype, char order)
+
+   Create a memoryview object to a contiguous chunk of memory (in either
+   'C' or 'F'ortran *order*) from an object that defines the buffer
+   interface. If memory is contiguous, the memoryview object points to the
+   original memory. Otherwise copy is made and the memoryview points to a
+   new bytes object.
+
+
+.. cfunction:: int PyMemoryView_Check(PyObject *obj)
+
+   Return true if the object *obj* is a memoryview object.  It is not
+   currently allowed to create subclasses of :class:`memoryview`.
+
+
+.. cfunction:: Py_buffer *PyMemoryView_GET_BUFFER(PyObject *obj)
+
+   Return a pointer to the buffer-info structure wrapped by the given
+   object.  The object **must** be a memoryview instance; this macro doesn't
+   check its type, you must do it yourself or you will risk crashes.
+
+
 Old-style buffer objects
 ========================
 
 .. index:: single: PyBufferProcs
 
-More information on the buffer interface is provided in the section
+More information on the old buffer interface is provided in the section
 :ref:`buffer-structs`, under the description for :ctype:`PyBufferProcs`.
 
 A "buffer object" is defined in the :file:`bufferobject.h` header (included by

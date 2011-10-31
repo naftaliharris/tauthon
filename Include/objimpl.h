@@ -108,6 +108,13 @@ PyAPI_FUNC(void) _PyObject_DebugFree(void *p);
 PyAPI_FUNC(void) _PyObject_DebugDumpAddress(const void *p);
 PyAPI_FUNC(void) _PyObject_DebugCheckAddress(const void *p);
 PyAPI_FUNC(void) _PyObject_DebugMallocStats(void);
+PyAPI_FUNC(void *) _PyObject_DebugMallocApi(char api, size_t nbytes);
+PyAPI_FUNC(void *) _PyObject_DebugReallocApi(char api, void *p, size_t nbytes);
+PyAPI_FUNC(void) _PyObject_DebugFreeApi(char api, void *p);
+PyAPI_FUNC(void) _PyObject_DebugCheckAddressApi(char api, const void *p);
+PyAPI_FUNC(void *) _PyMem_DebugMalloc(size_t nbytes);
+PyAPI_FUNC(void *) _PyMem_DebugRealloc(void *p, size_t nbytes);
+PyAPI_FUNC(void) _PyMem_DebugFree(void *p);
 #define PyObject_MALLOC         _PyObject_DebugMalloc
 #define PyObject_Malloc         _PyObject_DebugMalloc
 #define PyObject_REALLOC        _PyObject_DebugRealloc
@@ -284,6 +291,17 @@ extern PyGC_Head *_PyGC_generation0;
     g->gc.gc_next->gc.gc_prev = g->gc.gc_prev; \
     g->gc.gc_next = NULL; \
     } while (0);
+
+/* True if the object is currently tracked by the GC. */
+#define _PyObject_GC_IS_TRACKED(o) \
+    ((_Py_AS_GC(o))->gc.gc_refs != _PyGC_REFS_UNTRACKED)
+
+/* True if the object may be tracked by the GC in the future, or already is.
+   This can be useful to implement some optimizations. */
+#define _PyObject_GC_MAY_BE_TRACKED(obj) \
+    (PyObject_IS_GC(obj) && \
+        (!PyTuple_CheckExact(obj) || _PyObject_GC_IS_TRACKED(obj)))
+
 
 PyAPI_FUNC(PyObject *) _PyObject_GC_Malloc(size_t);
 PyAPI_FUNC(PyObject *) _PyObject_GC_New(PyTypeObject *);

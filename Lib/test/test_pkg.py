@@ -51,9 +51,10 @@ class Test(unittest.TestCase):
 
     def tearDown(self):
         sys.path[:] = self.syspath
-        cleanout(self.root)
+        if self.root: # Only clean if the test was actually run
+            cleanout(self.root)
 
-        # delete all modules concerning the tested hiearchy
+        # delete all modules concerning the tested hierarchy
         if self.pkgname:
             modules = [name for name in sys.modules
                        if self.pkgname in name.split('.')]
@@ -101,9 +102,6 @@ class Test(unittest.TestCase):
         ]
         self.mkhier(hier)
 
-        import t2
-        self.assertEqual(t2.__doc__, "doc for t2")
-
         import t2.sub
         import t2.sub.subsub
         self.assertEqual(t2.__name__, "t2")
@@ -126,7 +124,7 @@ class Test(unittest.TestCase):
         self.assertEqual(subsub.__name__, "t2.sub.subsub")
         self.assertEqual(sub.subsub.__name__, "t2.sub.subsub")
         for name in ['spam', 'sub', 'subsub', 't2']:
-            self.failUnless(locals()["name"], "Failed to import %s" % name)
+            self.assertTrue(locals()["name"], "Failed to import %s" % name)
 
         import t2.sub
         import t2.sub.subsub
@@ -136,7 +134,7 @@ class Test(unittest.TestCase):
 
         s = """
             from t2 import *
-            self.failUnless(dir(), ['self', 'sub'])
+            self.assertTrue(dir(), ['self', 'sub'])
             """
         self.run_code(s)
 
@@ -254,26 +252,37 @@ class Test(unittest.TestCase):
         self.assertEqual(fixdir(dir(tas)),
                          ['__doc__', '__file__', '__name__',
                           '__package__', '__path__'])
-        self.failIf(t7)
+        self.assertFalse(t7)
         from t7 import sub as subpar
         self.assertEqual(fixdir(dir(subpar)),
                          ['__doc__', '__file__', '__name__',
                           '__package__', '__path__'])
-        self.failIf(t7)
-        self.failIf(sub)
+        self.assertFalse(t7)
+        self.assertFalse(sub)
         from t7.sub import subsub as subsubsub
         self.assertEqual(fixdir(dir(subsubsub)),
                          ['__doc__', '__file__', '__name__',
                          '__package__', '__path__', 'spam'])
-        self.failIf(t7)
-        self.failIf(sub)
-        self.failIf(subsub)
+        self.assertFalse(t7)
+        self.assertFalse(sub)
+        self.assertFalse(subsub)
         from t7.sub.subsub import spam as ham
         self.assertEqual(ham, 1)
-        self.failIf(t7)
-        self.failIf(sub)
-        self.failIf(subsub)
+        self.assertFalse(t7)
+        self.assertFalse(sub)
+        self.assertFalse(subsub)
 
+    @unittest.skipIf(sys.flags.optimize >= 2,
+                     "Docstrings are omitted with -O2 and above")
+    def test_8(self):
+        hier = [
+                ("t8", None),
+                ("t8 __init__"+os.extsep+"py", "'doc for t8'"),
+               ]
+        self.mkhier(hier)
+
+        import t8
+        self.assertEqual(t8.__doc__, "doc for t8")
 
 def test_main():
     test_support.run_unittest(__name__)

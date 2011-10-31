@@ -1,4 +1,3 @@
-
 :mod:`timeit` --- Measure execution time of small code snippets
 ===============================================================
 
@@ -11,6 +10,10 @@
 .. index::
    single: Benchmarking
    single: Performance
+
+**Source code:** :source:`Lib/timeit.py`
+
+--------------
 
 This module provides a simple way to time small bits of Python code. It has both
 command line as well as callable interfaces.  It avoids a number of common traps
@@ -125,27 +128,36 @@ When called as a program from the command line, the following form is used::
 
    python -m timeit [-n N] [-r N] [-s S] [-t] [-c] [-h] [statement ...]
 
-where the following options are understood:
+Where the following options are understood:
 
--n N/:option:`--number=N`
+.. program:: timeit
+
+.. cmdoption:: -n N, --number=N
+
    how many times to execute 'statement'
 
--r N/:option:`--repeat=N`
+.. cmdoption:: -r N, --repeat=N
+
    how many times to repeat the timer (default 3)
 
--s S/:option:`--setup=S`
-   statement to be executed once initially (default ``'pass'``)
+.. cmdoption:: -s S, --setup=S
 
--t/:option:`--time`
+   statement to be executed once initially (default ``pass``)
+
+.. cmdoption:: -t, --time
+
    use :func:`time.time` (default on all platforms but Windows)
 
--c/:option:`--clock`
+.. cmdoption:: -c, --clock
+
    use :func:`time.clock` (default on Windows)
 
--v/:option:`--verbose`
+.. cmdoption:: -v, --verbose
+
    print raw timing results; repeat for more digits precision
 
--h/:option:`--help`
+.. cmdoption:: -h, --help
+
    print a short usage message and exit
 
 A multi-line statement may be given by specifying each line as a separate
@@ -186,13 +198,13 @@ interface) that compare the cost of using :func:`hasattr` vs.
 :keyword:`try`/:keyword:`except` to test for missing and present object
 attributes. ::
 
-   % timeit.py 'try:' '  str.__nonzero__' 'except AttributeError:' '  pass'
+   $ python -m timeit 'try:' '  str.__nonzero__' 'except AttributeError:' '  pass'
    100000 loops, best of 3: 15.7 usec per loop
-   % timeit.py 'if hasattr(str, "__nonzero__"): pass'
+   $ python -m timeit 'if hasattr(str, "__nonzero__"): pass'
    100000 loops, best of 3: 4.26 usec per loop
-   % timeit.py 'try:' '  int.__nonzero__' 'except AttributeError:' '  pass'
+   $ python -m timeit 'try:' '  int.__nonzero__' 'except AttributeError:' '  pass'
    1000000 loops, best of 3: 1.43 usec per loop
-   % timeit.py 'if hasattr(int, "__nonzero__"): pass'
+   $ python -m timeit 'if hasattr(int, "__nonzero__"): pass'
    100000 loops, best of 3: 2.23 usec per loop
 
 ::
@@ -233,12 +245,12 @@ To give the :mod:`timeit` module access to functions you define, you can pass a
 ``setup`` parameter which contains an import statement::
 
    def test():
-       "Stupid test function"
+       """Stupid test function"""
        L = []
        for i in range(100):
            L.append(i)
 
-   if __name__=='__main__':
+   if __name__ == '__main__':
        from timeit import Timer
        t = Timer("test()", "from __main__ import test")
        print t.timeit()

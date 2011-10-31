@@ -1,4 +1,3 @@
-
 :mod:`smtplib` --- SMTP protocol client
 =======================================
 
@@ -10,6 +9,10 @@
 .. index::
    pair: SMTP; protocol
    single: Simple Mail Transfer Protocol
+
+**Source code:** :source:`Lib/smtplib.py`
+
+--------------
 
 The :mod:`smtplib` module defines an SMTP client session object that can be used
 to send mail to any Internet machine with an SMTP or ESMTP listener daemon.  For
@@ -48,8 +51,7 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    connection attempt (if not specified, the global default timeout setting
    will be used).
 
-   .. versionchanged:: 2.6
-      *timeout* was added.
+   .. versionadded:: 2.6
 
 
 .. class:: LMTP([host[, port[, local_hostname]]])
@@ -298,9 +300,9 @@ An :class:`SMTP` instance has the following methods:
    and ESMTP options suppressed.
 
    This method will return normally if the mail is accepted for at least one
-   recipient. Otherwise it will throw an exception.  That is, if this method does
-   not throw an exception, then someone should get your mail. If this method does
-   not throw an exception, it returns a dictionary, with one entry for each
+   recipient. Otherwise it will raise an exception.  That is, if this method does
+   not raise an exception, then someone should get your mail. If this method does
+   not raise an exception, it returns a dictionary, with one entry for each
    recipient that was refused.  Each entry contains a tuple of the SMTP error code
    and the accompanying error message sent by the server.
 

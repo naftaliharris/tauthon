@@ -1,10 +1,13 @@
-
 :mod:`UserDict` --- Class wrapper for dictionary objects
 ========================================================
 
 .. module:: UserDict
    :synopsis: Class wrapper for dictionary objects.
 
+
+**Source code:** :source:`Lib/UserDict.py`
+
+--------------
 
 The module defines a mixin,  :class:`DictMixin`, defining all dictionary methods
 for classes that already have a minimum mapping interface.  This greatly

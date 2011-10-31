@@ -18,6 +18,18 @@
 #ifndef THREAD_STACK_SIZE
 #define THREAD_STACK_SIZE       0       /* use default stack size */
 #endif
+
+#if (defined(__APPLE__) || defined(__FreeBSD__)) && defined(THREAD_STACK_SIZE) && THREAD_STACK_SIZE == 0
+   /* The default stack size for new threads on OSX is small enough that
+    * we'll get hard crashes instead of 'maximum recursion depth exceeded'
+    * exceptions.
+    *
+    * The default stack size below is the minimal stack size where a
+    * simple recursive function doesn't cause a hard crash.
+    */
+#undef  THREAD_STACK_SIZE
+#define THREAD_STACK_SIZE       0x400000
+#endif
 /* for safety, ensure a viable minimum stacksize */
 #define THREAD_STACK_MIN        0x8000  /* 32kB */
 #else  /* !_POSIX_THREAD_ATTR_STACKSIZE */
@@ -225,54 +237,14 @@ PyThread_get_thread_ident(void)
 #endif
 }
 
-static void
-do_PyThread_exit_thread(int no_cleanup)
-{
-    dprintf(("PyThread_exit_thread called\n"));
-    if (!initialized) {
-        if (no_cleanup)
-            _exit(0);
-        else
-            exit(0);
-    }
-}
-
 void
 PyThread_exit_thread(void)
 {
-    do_PyThread_exit_thread(0);
+    dprintf(("PyThread_exit_thread called\n"));
+    if (!initialized) {
+        exit(0);
+    }
 }
-
-void
-PyThread__exit_thread(void)
-{
-    do_PyThread_exit_thread(1);
-}
-
-#ifndef NO_EXIT_PROG
-static void
-do_PyThread_exit_prog(int status, int no_cleanup)
-{
-    dprintf(("PyThread_exit_prog(%d) called\n", status));
-    if (!initialized)
-        if (no_cleanup)
-            _exit(status);
-        else
-            exit(status);
-}
-
-void
-PyThread_exit_prog(int status)
-{
-    do_PyThread_exit_prog(status, 0);
-}
-
-void
-PyThread__exit_prog(int status)
-{
-    do_PyThread_exit_prog(status, 1);
-}
-#endif /* NO_EXIT_PROG */
 
 #ifdef USE_SEMAPHORES
 

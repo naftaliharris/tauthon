@@ -471,7 +471,7 @@ multibytecodec_encode(MultibyteCodec *codec,
     MultibyteEncodeBuffer buf;
     Py_ssize_t finalsize, r = 0;
 
-    if (datalen == 0)
+    if (datalen == 0 && !(flags & MBENC_RESET))
         return PyString_FromString("");
 
     buf.excobj = NULL;
@@ -506,7 +506,7 @@ multibytecodec_encode(MultibyteCodec *codec,
             break;
     }
 
-    if (codec->encreset != NULL)
+    if (codec->encreset != NULL && (flags & MBENC_RESET))
         for (;;) {
             Py_ssize_t outleft;
 
@@ -776,8 +776,8 @@ encoder_encode_stateful(MultibyteStatefulEncoderContext *ctx,
     inbuf_end = inbuf + datalen;
 
     r = multibytecodec_encode(ctx->codec, &ctx->state,
-                    (const Py_UNICODE **)&inbuf,
-                    datalen, ctx->errors, final ? MBENC_FLUSH : 0);
+                    (const Py_UNICODE **)&inbuf, datalen,
+                    ctx->errors, final ? MBENC_FLUSH | MBENC_RESET : 0);
     if (r == NULL) {
         /* recover the original pending buffer */
         if (origpending > 0)
@@ -1774,12 +1774,12 @@ __create_codec(PyObject *ignore, PyObject *arg)
     MultibyteCodecObject *self;
     MultibyteCodec *codec;
 
-    if (!PyCObject_Check(arg)) {
+    if (!PyCapsule_IsValid(arg, PyMultibyteCodec_CAPSULE_NAME)) {
         PyErr_SetString(PyExc_ValueError, "argument type invalid");
         return NULL;
     }
 
-    codec = PyCObject_AsVoidPtr(arg);
+    codec = PyCapsule_GetPointer(arg, PyMultibyteCodec_CAPSULE_NAME);
     if (codec->codecinit != NULL && codec->codecinit(codec->config) != 0)
         return NULL;
 

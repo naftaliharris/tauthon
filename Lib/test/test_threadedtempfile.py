@@ -16,11 +16,10 @@ provoking a 2.0 failure under Linux.
 NUM_THREADS = 20
 FILES_PER_THREAD = 50
 
-import thread # If this fails, we can't test this module
-import threading
 import tempfile
 
-from test.test_support import threading_setup, threading_cleanup, run_unittest
+from test.test_support import threading_setup, threading_cleanup, run_unittest, import_module
+threading = import_module('threading')
 import unittest
 import StringIO
 from traceback import print_exc
@@ -69,8 +68,8 @@ class ThreadedTempFileTest(unittest.TestCase):
 
         msg = "Errors: errors %d ok %d\n%s" % (len(errors), ok,
             '\n'.join(errors))
-        self.assertEquals(errors, [], msg)
-        self.assertEquals(ok, NUM_THREADS * FILES_PER_THREAD)
+        self.assertEqual(errors, [], msg)
+        self.assertEqual(ok, NUM_THREADS * FILES_PER_THREAD)
 
 def test_main():
     run_unittest(ThreadedTempFileTest)

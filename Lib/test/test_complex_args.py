@@ -109,7 +109,7 @@ class ComplexArgsTestCase(unittest.TestCase):
 
 
 def test_main():
-    with test_support._check_py3k_warnings(
+    with test_support.check_py3k_warnings(
             ("tuple parameter unpacking has been removed", SyntaxWarning),
             ("parenthesized argument names are invalid", SyntaxWarning)):
         test_support.run_unittest(ComplexArgsTestCase)

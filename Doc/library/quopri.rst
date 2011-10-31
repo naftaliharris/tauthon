@@ -1,4 +1,3 @@
-
 :mod:`quopri` --- Encode and decode MIME quoted-printable data
 ==============================================================
 
@@ -10,6 +9,10 @@
    pair: quoted-printable; encoding
    single: MIME; quoted-printable encoding
 
+**Source code:** :source:`Lib/quopri.py`
+
+--------------
+
 This module performs quoted-printable transport encoding and decoding, as
 defined in :rfc:`1521`: "MIME (Multipurpose Internet Mail Extensions) Part One:
 Mechanisms for Specifying and Describing the Format of Internet Message Bodies".
@@ -17,7 +20,6 @@ The quoted-printable encoding is designed for data where there are relatively
 few nonprintable characters; the base64 encoding scheme available via the
 :mod:`base64` module is more compact if there are many such characters, as when
 sending a graphics file.
-
 
 .. function:: decode(input, output[,header])
 

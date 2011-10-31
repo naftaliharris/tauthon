@@ -264,7 +264,7 @@ used for the deployment of WSGI applications.
 
    * `FastCGI, SCGI, and Apache: Background and Future
      <http://www.vmunix.com/mark/blog/archives/2006/01/02/fastcgi-scgi-and-apache-background-and-future/>`_
-     is a discussion on why the concept of FastCGI and SCGI is better that that
+     is a discussion on why the concept of FastCGI and SCGI is better than that
      of mod_python.
 
 
@@ -530,7 +530,7 @@ Popular template engines include:
 
 .. seealso::
 
-   There are many template engines competing for attention, becuase it is
+   There are many template engines competing for attention, because it is
    pretty easy to create them in Python.  The page `Templating
    <http://wiki.python.org/moin/Templating>`_ in the wiki lists a big,
    ever-growing number of these.  The three listed above are considered "second

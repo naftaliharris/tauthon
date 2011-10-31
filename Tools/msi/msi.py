@@ -1,12 +1,13 @@
 # Python MSI Generator
 # (C) 2003 Martin v. Loewis
 # See "FOO" in comments refers to MSDN sections with the title FOO.
-import msilib, schema, sequence, os, glob, time, re, shutil
+import msilib, schema, sequence, os, glob, time, re, shutil, zipfile
 from msilib import Feature, CAB, Directory, Dialog, Binary, add_data
 import uisample
 from win32com.client import constants
 from distutils.spawn import find_executable
 from uuids import product_codes
+import tempfile
 
 # Settings can be overridden in config.py below
 # 0 for official python.org releases
@@ -28,6 +29,10 @@ have_tcl = True
 PCBUILD="PCbuild"
 # msvcrt version
 MSVCR = "90"
+# Name of certificate in default store to sign MSI with
+certname = None
+# Make a zip file containing the PDB files for this build?
+pdbzip = True
 
 try:
     from config import *
@@ -111,14 +116,18 @@ pythondll_uuid = {
     "24":"{9B81E618-2301-4035-AC77-75D9ABEB7301}",
     "25":"{2e41b118-38bd-4c1b-a840-6977efd1b911}",
     "26":"{34ebecac-f046-4e1c-b0e3-9bac3cdaacfa}",
+    "27":"{4fe21c76-1760-437b-a2f2-99909130a175}",
     } [major+minor]
 
 # Compute the name that Sphinx gives to the docfile
 docfile = ""
-if micro:
-    docfile = str(micro)
+if int(micro):
+    docfile = micro
 if level < 0xf:
-    docfile += '%x%s' % (level, serial)
+    if level == 0xC:
+        docfile += "rc%s" % (serial,)
+    else:
+        docfile += '%x%s' % (level, serial)
 docfile = 'python%s%s%s.chm' % (major, minor, docfile)
 
 # Build the mingw import library, libpythonXY.a
@@ -167,7 +176,7 @@ mingw_lib = os.path.join(srcdir, PCBUILD, "libpython%s%s.a" % (major, minor))
 
 have_mingw = build_mingw_lib(lib_file, def_file, dll_file, mingw_lib)
 
-# Determine the target architechture
+# Determine the target architecture
 dll_path = os.path.join(srcdir, PCBUILD, dll_file)
 msilib.set_arch_from_file(dll_path)
 if msilib.pe_type(dll_path) != msilib.pe_type("msisupport.dll"):
@@ -214,7 +223,8 @@ def build_database():
     # schema represents the installer 2.0 database schema.
     # sequence is the set of standard sequences
     # (ui/execute, admin/advt/install)
-    db = msilib.init_database("python-%s%s.msi" % (full_current_version, msilib.arch_ext),
+    msiname = "python-%s%s.msi" % (full_current_version, msilib.arch_ext)
+    db = msilib.init_database(msiname,
                   schema, ProductName="Python "+full_current_version+productsuffix,
                   ProductCode=product_code,
                   ProductVersion=current_version,
@@ -237,7 +247,7 @@ def build_database():
                               ("ProductLine", "Python%s%s" % (major, minor)),
                              ])
     db.Commit()
-    return db
+    return db, msiname
 
 def remove_old_versions(db):
     "Fill the upgrade table."
@@ -398,7 +408,7 @@ def add_ui(db):
               ("VerdanaRed9", "Verdana", 9, 255, 0),
              ])
 
-    compileargs = r'-Wi "[TARGETDIR]Lib\compileall.py" -f -x "bad_coding|badsyntax|site-packages|py3_|py2_test_grammar" "[TARGETDIR]Lib"'
+    compileargs = r'-Wi "[TARGETDIR]Lib\compileall.py" -f -x "bad_coding|badsyntax|site-packages|py3_" "[TARGETDIR]Lib"'
     lib2to3args = r'-c "import lib2to3.pygram, lib2to3.patcomp;lib2to3.patcomp.PatternCompiler()"'
     # See "CustomAction Table"
     add_data(db, "CustomAction", [
@@ -495,9 +505,9 @@ def add_ui(db):
       "    would still be Python for DOS.")
 
     c = exit_dialog.text("warning", 135, 200, 220, 40, 0x30003,
-            "{\\VerdanaRed9}Warning: Python 2.5.x is the last "
-            "Python release for Windows 9x.")
-    c.condition("Hide", "NOT Version9X")
+            "{\\VerdanaRed9}Warning: Python 3.3.0 is the last "
+            "Python release for Windows 2000.")
+    c.condition("Hide", "VersionNT > 500")
 
     exit_dialog.text("Description", 135, 235, 220, 20, 0x30003,
                "Click the Finish button to exit the Installer.")
@@ -1001,8 +1011,6 @@ def add_files(db):
             lib.add_file("audiotest.au")
             lib.add_file("cfgparser.1")
             lib.add_file("sgml_input.html")
-            lib.add_file("test.xml")
-            lib.add_file("test.xml.out")
             lib.add_file("testtar.tar")
             lib.add_file("test_difflib_expect.html")
             lib.add_file("check_soundcard.vbs")
@@ -1011,10 +1019,14 @@ def add_files(db):
             lib.glob("*.uue")
             lib.glob("*.pem")
             lib.glob("*.pck")
-            lib.add_file("readme.txt", src="README")
             lib.add_file("zipdir.zip")
+        if dir=='tests' and parent.physical=='distutils':
+            lib.add_file("Setup.sample")
         if dir=='decimaltestdata':
             lib.glob("*.decTest")
+        if dir=='xmltestdata':
+            lib.glob("*.xml")
+            lib.add_file("test.xml.out")
         if dir=='output':
             lib.glob("test_*")
         if dir=='idlelib':
@@ -1187,10 +1199,10 @@ def add_registry(db):
     if have_tcl:
         tcl_verbs=[
              ("py.IDLE", -1, pat % (testprefix, "", ewi), "",
-              r'"[TARGETDIR]pythonw.exe" "[TARGETDIR]Lib\idlelib\idle.pyw" -n -e "%1"',
+              r'"[TARGETDIR]pythonw.exe" "[TARGETDIR]Lib\idlelib\idle.pyw" -e "%1"',
               "REGISTRY.tcl"),
              ("pyw.IDLE", -1, pat % (testprefix, "NoCon", ewi), "",
-              r'"[TARGETDIR]pythonw.exe" "[TARGETDIR]Lib\idlelib\idle.pyw" -n -e "%1"',
+              r'"[TARGETDIR]pythonw.exe" "[TARGETDIR]Lib\idlelib\idle.pyw" -e "%1"',
               "REGISTRY.tcl"),
         ]
     add_data(db, "Registry",
@@ -1289,7 +1301,17 @@ def add_registry(db):
               ])
     db.Commit()
 
-db = build_database()
+def build_pdbzip():
+    pdbexclude = ['kill_python.pdb', 'make_buildinfo.pdb',
+                  'make_versioninfo.pdb']
+    path = "python-%s%s-pdb.zip" % (full_current_version, msilib.arch_ext)
+    pdbzip = zipfile.ZipFile(path, 'w')
+    for f in glob.glob1(os.path.join(srcdir, PCBUILD), "*.pdb"):
+        if f not in pdbexclude and not f.endswith('_d.pdb'):
+            pdbzip.write(os.path.join(srcdir, PCBUILD, f), f)
+    pdbzip.close()
+
+db,msiname = build_database()
 try:
     add_features(db)
     add_ui(db)
@@ -1299,3 +1321,78 @@ try:
     db.Commit()
 finally:
     del db
+
+# Merge CRT into MSI file. This requires the database to be closed.
+mod_dir = os.path.join(os.environ["ProgramFiles"], "Common Files", "Merge Modules")
+if msilib.Win64:
+    modules = ["Microsoft_VC90_CRT_x86_x64.msm", "policy_9_0_Microsoft_VC90_CRT_x86_x64.msm"]
+else:
+    modules = ["Microsoft_VC90_CRT_x86.msm","policy_9_0_Microsoft_VC90_CRT_x86.msm"]
+
+for i, n in enumerate(modules):
+    modules[i] = os.path.join(mod_dir, n)
+
+def merge(msi, feature, rootdir, modules):
+    cab_and_filecount = []
+    # Step 1: Merge databases, extract cabfiles
+    m = msilib.MakeMerge2()
+    m.OpenLog("merge.log")
+    m.OpenDatabase(msi)
+    for module in modules:
+        print module
+        m.OpenModule(module,0)
+        m.Merge(feature, rootdir)
+        print "Errors:"
+        for e in m.Errors:
+            print e.Type, e.ModuleTable, e.DatabaseTable
+            print "   Modkeys:",
+            for s in e.ModuleKeys: print s,
+            print
+            print "   DBKeys:",
+            for s in e.DatabaseKeys: print s,
+            print
+        cabname = tempfile.mktemp(suffix=".cab")
+        m.ExtractCAB(cabname)
+        cab_and_filecount.append((cabname, len(m.ModuleFiles)))
+        m.CloseModule()
+    m.CloseDatabase(True)
+    m.CloseLog()
+
+    # Step 2: Add CAB files
+    i = msilib.MakeInstaller()
+    db = i.OpenDatabase(msi, constants.msiOpenDatabaseModeTransact)
+
+    v = db.OpenView("SELECT LastSequence FROM Media")
+    v.Execute(None)
+    maxmedia = -1
+    while 1:
+        r = v.Fetch()
+        if not r: break
+        seq = r.IntegerData(1)
+        if seq > maxmedia:
+            maxmedia = seq
+    print "Start of Media", maxmedia
+
+    for cabname, count in cab_and_filecount:
+        stream = "merged%d" % maxmedia
+        msilib.add_data(db, "Media",
+                [(maxmedia+1, maxmedia+count, None, "#"+stream, None, None)])
+        msilib.add_stream(db, stream,  cabname)
+        os.unlink(cabname)
+        maxmedia += count
+    # The merge module sets ALLUSERS to 1 in the property table.
+    # This is undesired; delete that
+    v = db.OpenView("DELETE FROM Property WHERE Property='ALLUSERS'")
+    v.Execute(None)
+    v.Close()
+    db.Commit()
+
+merge(msiname, "SharedCRT", "TARGETDIR", modules)
+
+# certname (from config.py) should be (a substring of)
+# the certificate subject, e.g. "Python Software Foundation"
+if certname:
+    os.system('signtool sign /n "%s" /t http://timestamp.verisign.com/scripts/timestamp.dll %s' % (certname, msiname))
+
+if pdbzip:
+    build_pdbzip()

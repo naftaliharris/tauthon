@@ -1,7 +1,7 @@
 """Miscellaneous bsddb module test cases
 """
 
-import os
+import os, sys
 import unittest
 
 from test_all import db, dbshelve, hashopen, test_support, get_new_environment_path, get_new_database_path
@@ -9,6 +9,13 @@ from test_all import db, dbshelve, hashopen, test_support, get_new_environment_p
 #----------------------------------------------------------------------
 
 class MiscTestCase(unittest.TestCase):
+    if sys.version_info < (2, 4) :
+        def assertTrue(self, expr, msg=None):
+            self.failUnless(expr, msg=msg)
+
+        def assertFalse(self, expr, msg=None):
+            self.failIf(expr, msg=msg)
+
     def setUp(self):
         self.filename = get_new_database_path()
         self.homeDir = get_new_environment_path()
@@ -25,9 +32,8 @@ class MiscTestCase(unittest.TestCase):
     def test02_db_home(self):
         env = db.DBEnv()
         # check for crash fixed when db_home is used before open()
-        self.assert_(env.db_home is None)
+        self.assertTrue(env.db_home is None)
         env.open(self.homeDir, db.DB_CREATE)
-        import sys
         if sys.version_info[0] < 3 :
             self.assertEqual(self.homeDir, env.db_home)
         else :
@@ -37,7 +43,7 @@ class MiscTestCase(unittest.TestCase):
         db = hashopen(self.filename)
         db.close()
         rp = repr(db)
-        self.assertEquals(rp, "{}")
+        self.assertEqual(rp, "{}")
 
     def test04_repr_db(self) :
         db = hashopen(self.filename)
@@ -48,7 +54,7 @@ class MiscTestCase(unittest.TestCase):
         db.close()
         db = hashopen(self.filename)
         rp = repr(db)
-        self.assertEquals(rp, repr(d))
+        self.assertEqual(rp, repr(d))
         db.close()
 
     # http://sourceforge.net/tracker/index.php?func=detail&aid=1708868&group_id=13900&atid=313900
@@ -117,6 +123,19 @@ class MiscTestCase(unittest.TestCase):
         finally:
             db1.close()
             test_support.unlink(self.filename)
+
+
+    def test08_ExceptionTypes(self) :
+        self.assertTrue(issubclass(db.DBError, Exception))
+        for i, j in db.__dict__.items() :
+            if i.startswith("DB") and i.endswith("Error") :
+                self.assertTrue(issubclass(j, db.DBError), msg=i)
+                if i not in ("DBKeyEmptyError", "DBNotFoundError") :
+                    self.assertFalse(issubclass(j, KeyError), msg=i)
+
+        # This two exceptions have two bases
+        self.assertTrue(issubclass(db.DBKeyEmptyError, KeyError))
+        self.assertTrue(issubclass(db.DBNotFoundError, KeyError))
 
 
 #----------------------------------------------------------------------

@@ -9,6 +9,10 @@
 
 .. versionadded:: 2.3
 
+**Source code:** :source:`Lib/platform.py`
+
+--------------
+
 .. note::
 
    Specific platforms listed alphabetically, with Linux included in the Unix
@@ -37,6 +41,16 @@ Cross Platform
    This is available on most if not all Unix  platforms and some non-Unix platforms
    and then only if the executable points to the Python interpreter.  Reasonable
    defaults are used when the above needs are not met.
+
+   .. note::
+
+      On Mac OS X (and perhaps other platforms), executable files may be
+      universal files containing multiple architectures.
+
+      To get at the "64-bitness" of the current interpreter, it is more
+      reliable to query the :attr:`sys.maxsize` attribute::
+
+         is_64bits = sys.maxsize > 2**32
 
 
 .. function:: machine()
@@ -98,7 +112,7 @@ Cross Platform
 .. function:: python_implementation()
 
    Returns a string identifying the Python implementation. Possible return values
-   are: 'CPython', 'IronPython', 'Jython'.
+   are: 'CPython', 'IronPython', 'Jython', 'PyPy'.
 
    .. versionadded:: 2.6
 
@@ -194,7 +208,7 @@ Windows Platform
 
    .. note::
 
-      Note: this function works best with Mark Hammond's
+      This function works best with Mark Hammond's
       :mod:`win32all` package installed, but also on Python 2.3 and
       later (support for this was added in Python 2.6). It obviously
       only runs on Win32 compatible platforms.
@@ -222,9 +236,6 @@ Mac OS Platform
 
    Entries which cannot be determined are set to ``''``.  All tuple entries are
    strings.
-
-   Documentation for the underlying :cfunc:`gestalt` API is available online at
-   http://www.rgaros.nl/gestalt/.
 
 
 Unix Platforms

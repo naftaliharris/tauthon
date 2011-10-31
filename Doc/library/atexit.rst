@@ -1,4 +1,3 @@
-
 :mod:`atexit` --- Exit handlers
 ===============================
 
@@ -10,13 +9,19 @@
 
 .. versionadded:: 2.0
 
+**Source code:** :source:`Lib/atexit.py`
+
+--------------
+
 The :mod:`atexit` module defines a single function to register cleanup
 functions.  Functions thus registered are automatically executed upon normal
-interpreter termination.
+interpreter termination.  The order in which the functions are called is not
+defined; if you have cleanup operations that depend on each other, you should
+wrap them in a function and register that one.  This keeps :mod:`atexit` simple.
 
 Note: the functions registered via this module are not called when the program
-is killed by a signal, when a Python fatal internal error is detected, or when
-:func:`os._exit` is called.
+is killed by a signal not handled by Python, when a Python fatal internal error
+is detected, or when :func:`os._exit` is called.
 
 .. index:: single: exitfunc (in sys)
 

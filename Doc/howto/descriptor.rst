@@ -42,7 +42,7 @@ classes (a class is new style if it inherits from :class:`object` or
 
 Descriptors are a powerful, general purpose protocol.  They are the mechanism
 behind properties, methods, static methods, class methods, and :func:`super()`.
-They are used used throughout Python itself to implement the new style classes
+They are used throughout Python itself to implement the new style classes
 introduced in version 2.2.  Descriptors simplify the underlying C-code and offer
 a flexible set of new tools for everyday Python programs.
 
@@ -296,7 +296,7 @@ Running the interpreter shows how the function descriptor works in practice::
     <bound method D.f of <__main__.D object at 0x00B18C90>>
 
 The output suggests that bound and unbound methods are two different types.
-While they could have been implemented that way, the actual C implemention of
+While they could have been implemented that way, the actual C implementation of
 :ctype:`PyMethod_Type` in
 `Objects/classobject.c <http://svn.python.org/view/python/trunk/Objects/classobject.c?view=markup>`_
 is a single object with two different representations depending on whether the

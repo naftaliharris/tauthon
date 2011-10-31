@@ -21,9 +21,11 @@ PyAPI_FUNC(PyObject *) PyLong_FromDouble(double);
 PyAPI_FUNC(PyObject *) PyLong_FromSize_t(size_t);
 PyAPI_FUNC(PyObject *) PyLong_FromSsize_t(Py_ssize_t);
 PyAPI_FUNC(long) PyLong_AsLong(PyObject *);
+PyAPI_FUNC(long) PyLong_AsLongAndOverflow(PyObject *, int *);
 PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLong(PyObject *);
 PyAPI_FUNC(unsigned long) PyLong_AsUnsignedLongMask(PyObject *);
 PyAPI_FUNC(Py_ssize_t) PyLong_AsSsize_t(PyObject *);
+PyAPI_FUNC(PyObject *) PyLong_GetInfo(void);
 
 /* For use by intobject.c only */
 #define _PyLong_AsSsize_t PyLong_AsSsize_t
@@ -31,13 +33,13 @@ PyAPI_FUNC(Py_ssize_t) PyLong_AsSsize_t(PyObject *);
 #define _PyLong_FromSsize_t PyLong_FromSsize_t
 PyAPI_DATA(int) _PyLong_DigitValue[256];
 
-/* _PyLong_AsScaledDouble returns a double x and an exponent e such that
-   the true value is approximately equal to x * 2**(SHIFT*e).  e is >= 0.
-   x is 0.0 if and only if the input is 0 (in which case, e and x are both
-   zeroes).  Overflow is impossible.  Note that the exponent returned must
-   be multiplied by SHIFT!  There may not be enough room in an int to store
-   e*SHIFT directly. */
-PyAPI_FUNC(double) _PyLong_AsScaledDouble(PyObject *vv, int *e);
+/* _PyLong_Frexp returns a double x and an exponent e such that the
+   true value is approximately equal to x * 2**e.  e is >= 0.  x is
+   0.0 if and only if the input is 0 (in which case, e and x are both
+   zeroes); otherwise, 0.5 <= abs(x) < 1.0.  On overflow, which is
+   possible if the number of bits doesn't fit into a Py_ssize_t, sets
+   OverflowError and returns -1.0 for x, 0 for e. */
+PyAPI_FUNC(double) _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e);
 
 PyAPI_FUNC(double) PyLong_AsDouble(PyObject *);
 PyAPI_FUNC(PyObject *) PyLong_FromVoidPtr(void *);
@@ -49,6 +51,7 @@ PyAPI_FUNC(PyObject *) PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG);
 PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLong(PyObject *);
 PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLong(PyObject *);
 PyAPI_FUNC(unsigned PY_LONG_LONG) PyLong_AsUnsignedLongLongMask(PyObject *);
+PyAPI_FUNC(PY_LONG_LONG) PyLong_AsLongLongAndOverflow(PyObject *, int *);
 #endif /* HAVE_LONG_LONG */
 
 PyAPI_FUNC(PyObject *) PyLong_FromString(char *, char **, int);

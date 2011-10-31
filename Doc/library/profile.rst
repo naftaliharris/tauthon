@@ -1,4 +1,3 @@
-
 .. _profile:
 
 ********************
@@ -10,6 +9,9 @@ The Python Profilers
 .. module:: profile
    :synopsis: Python source profiler.
 
+**Source code:** :source:`Lib/profile.py` and :source:`Lib/pstats.py`
+
+--------------
 
 .. _profiler-introduction:
 
@@ -596,7 +598,7 @@ The resulting profiler will then call :func:`your_time_func`.
    integers, you can also invoke the class constructor with a second argument
    specifying the real duration of one unit of time.  For example, if
    :func:`your_integer_time_func` returns times measured in thousands of seconds,
-   you would constuct the :class:`Profile` instance as follows::
+   you would construct the :class:`Profile` instance as follows::
 
       pr = profile.Profile(your_integer_time_func, 0.001)
 

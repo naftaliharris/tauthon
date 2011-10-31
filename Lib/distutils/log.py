@@ -1,7 +1,5 @@
 """A simple log mechanism styled after PEP 282."""
 
-# This module should be kept compatible with Python 2.1.
-
 # The class here is styled after PEP 282 so that it could later be
 # replaced with a standard Python logging implementation.
 
@@ -19,14 +17,18 @@ class Log:
         self.threshold = threshold
 
     def _log(self, level, msg, args):
+        if level not in (DEBUG, INFO, WARN, ERROR, FATAL):
+            raise ValueError('%s wrong log level' % str(level))
+
         if level >= self.threshold:
-            if not args:
-                # msg may contain a '%'. If args is empty,
-                # don't even try to string-format
-                print msg
+            if args:
+                msg = msg % args
+            if level in (WARN, ERROR, FATAL):
+                stream = sys.stderr
             else:
-                print msg % args
-            sys.stdout.flush()
+                stream = sys.stdout
+            stream.write('%s\n' % msg)
+            stream.flush()
 
     def log(self, level, msg, *args):
         self._log(level, msg, args)

@@ -41,8 +41,8 @@ included in your code by the following line::
    #include "Python.h"
 
 This implies inclusion of the following standard headers: ``<stdio.h>``,
-``<string.h>``, ``<errno.h>``, ``<limits.h>``, and ``<stdlib.h>`` (if
-available).
+``<string.h>``, ``<errno.h>``, ``<limits.h>``, ``<assert.h>`` and ``<stdlib.h>``
+(if available).
 
 .. note::
 
@@ -361,15 +361,16 @@ traceback.
 
 .. index:: single: PyErr_Occurred()
 
-For C programmers, however, error checking always has to be explicit.   All
-functions in the Python/C API can raise exceptions, unless an  explicit claim is
-made otherwise in a function's documentation.  In  general, when a function
-encounters an error, it sets an exception,  discards any object references that
-it owns, and returns an  error indicator --- usually *NULL* or ``-1``.  A few
-functions  return a Boolean true/false result, with false indicating an error.
-Very few functions return no explicit error indicator or have an  ambiguous
-return value, and require explicit testing for errors with
-:cfunc:`PyErr_Occurred`.
+For C programmers, however, error checking always has to be explicit.  All
+functions in the Python/C API can raise exceptions, unless an explicit claim is
+made otherwise in a function's documentation.  In general, when a function
+encounters an error, it sets an exception, discards any object references that
+it owns, and returns an error indicator.  If not documented otherwise, this
+indicator is either *NULL* or ``-1``, depending on the function's return type.
+A few functions return a Boolean true/false result, with false indicating an
+error.  Very few functions return no explicit error indicator or have an
+ambiguous return value, and require explicit testing for errors with
+:cfunc:`PyErr_Occurred`.  These exceptions are always explicitly documented.
 
 .. index::
    single: PyErr_SetString()
@@ -524,12 +525,12 @@ the table of loaded modules, and creates the fundamental modules
 :mod:`__builtin__`, :mod:`__main__`, :mod:`sys`, and :mod:`exceptions`.  It also
 initializes the module search path (``sys.path``).
 
-.. index:: single: PySys_SetArgv()
+.. index:: single: PySys_SetArgvEx()
 
 :cfunc:`Py_Initialize` does not set the "script argument list"  (``sys.argv``).
-If this variable is needed by Python code that  will be executed later, it must
-be set explicitly with a call to  ``PySys_SetArgv(argc, argv)`` subsequent to
-the call to :cfunc:`Py_Initialize`.
+If this variable is needed by Python code that will be executed later, it must
+be set explicitly with a call to  ``PySys_SetArgvEx(argc, argv, updatepath)``
+after the call to :cfunc:`Py_Initialize`.
 
 On most systems (in particular, on Unix and Windows, although the details are
 slightly different), :cfunc:`Py_Initialize` calculates the module search path
@@ -593,8 +594,8 @@ frequently-used builds will be described in the remainder of this section.
 
 Compiling the interpreter with the :cmacro:`Py_DEBUG` macro defined produces
 what is generally meant by "a debug build" of Python. :cmacro:`Py_DEBUG` is
-enabled in the Unix build by adding :option:`--with-pydebug` to the
-:file:`configure` command.  It is also implied by the presence of the
+enabled in the Unix build by adding ``--with-pydebug`` to the
+:file:`./configure` command.  It is also implied by the presence of the
 not-Python-specific :cmacro:`_DEBUG` macro.  When :cmacro:`Py_DEBUG` is enabled
 in the Unix build, compiler optimization is disabled.
 

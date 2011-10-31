@@ -3,8 +3,20 @@
 import unittest
 import os
 from test import test_support
+
+# Skip this test if the _tkinter module wasn't built.
+_tkinter = test_support.import_module('_tkinter')
+
 from Tkinter import Tcl
 from _tkinter import TclError
+
+
+class TkinterTest(unittest.TestCase):
+
+    def testFlattenLen(self):
+        # flatten(<object with no length>)
+        self.assertRaises(TypeError, _tkinter._flatten, True)
+
 
 class TclTest(unittest.TestCase):
 
@@ -115,41 +127,6 @@ class TclTest(unittest.TestCase):
         tcl = self.interp
         self.assertRaises(TclError,tcl.eval,'package require DNE')
 
-    def testLoadTk(self):
-        import os
-        if 'DISPLAY' not in os.environ:
-            # skipping test of clean upgradeability
-            return
-        tcl = Tcl()
-        self.assertRaises(TclError,tcl.winfo_geometry)
-        tcl.loadtk()
-        self.assertEqual('1x1+0+0', tcl.winfo_geometry())
-        tcl.destroy()
-
-    def testLoadTkFailure(self):
-        import os
-        old_display = None
-        import sys
-        if sys.platform.startswith(('win', 'darwin', 'cygwin')):
-            return  # no failure possible on windows?
-        if 'DISPLAY' in os.environ:
-            old_display = os.environ['DISPLAY']
-            del os.environ['DISPLAY']
-            # on some platforms, deleting environment variables
-            # doesn't actually carry through to the process level
-            # because they don't support unsetenv
-            # If that's the case, abort.
-            display = os.popen('echo $DISPLAY').read().strip()
-            if display:
-                return
-        try:
-            tcl = Tcl()
-            self.assertRaises(TclError, tcl.winfo_geometry)
-            self.assertRaises(TclError, tcl.loadtk)
-        finally:
-            if old_display is not None:
-                os.environ['DISPLAY'] = old_display
-
     def testLoadWithUNC(self):
         import sys
         if sys.platform != 'win32':
@@ -170,13 +147,14 @@ class TclTest(unittest.TestCase):
             env.unset("TCL_LIBRARY")
             f = os.popen('%s -c "import Tkinter; print Tkinter"' % (unc_name,))
 
-        self.assert_('Tkinter.py' in f.read())
+        self.assertTrue('Tkinter.py' in f.read())
         # exit code must be zero
         self.assertEqual(f.close(), None)
 
 
+
 def test_main():
-    test_support.run_unittest(TclTest)
+    test_support.run_unittest(TclTest, TkinterTest)
 
 if __name__ == "__main__":
     test_main()

@@ -378,7 +378,7 @@ zipimporter_get_filename(PyObject *obj, PyObject *args)
     char *fullname, *modpath;
     int ispackage;
 
-    if (!PyArg_ParseTuple(args, "s:zipimporter._get_filename",
+    if (!PyArg_ParseTuple(args, "s:zipimporter.get_filename",
                          &fullname))
     return NULL;
 
@@ -553,7 +553,7 @@ contain the module, but has no source for it.");
 
 
 PyDoc_STRVAR(doc_get_filename,
-"_get_filename(fullname) -> filename string.\n\
+"get_filename(fullname) -> filename string.\n\
 \n\
 Return the filename for the specified module.");
 
@@ -568,7 +568,7 @@ static PyMethodDef zipimporter_methods[] = {
      doc_get_code},
     {"get_source", zipimporter_get_source, METH_VARARGS,
      doc_get_source},
-    {"_get_filename", zipimporter_get_filename, METH_VARARGS,
+    {"get_filename", zipimporter_get_filename, METH_VARARGS,
      doc_get_filename},
     {"is_package", zipimporter_is_package, METH_VARARGS,
      doc_is_package},
@@ -798,35 +798,33 @@ error:
 
 /* Return the zlib.decompress function object, or NULL if zlib couldn't
    be imported. The function is cached when found, so subsequent calls
-   don't import zlib again. Returns a *borrowed* reference.
-   XXX This makes zlib.decompress immortal. */
+   don't import zlib again. */
 static PyObject *
 get_decompress_func(void)
 {
-    static PyObject *decompress = NULL;
+    static int importing_zlib = 0;
+    PyObject *zlib;
+    PyObject *decompress;
 
-    if (decompress == NULL) {
-        PyObject *zlib;
-        static int importing_zlib = 0;
-
-        if (importing_zlib != 0)
-            /* Someone has a zlib.py[co] in their Zip file;
-               let's avoid a stack overflow. */
-            return NULL;
-        importing_zlib = 1;
-        zlib = PyImport_ImportModuleNoBlock("zlib");
-        importing_zlib = 0;
-        if (zlib != NULL) {
-            decompress = PyObject_GetAttrString(zlib,
-                                                "decompress");
-            Py_DECREF(zlib);
-        }
-        else
-            PyErr_Clear();
-        if (Py_VerboseFlag)
-            PySys_WriteStderr("# zipimport: zlib %s\n",
-                zlib != NULL ? "available": "UNAVAILABLE");
+    if (importing_zlib != 0)
+        /* Someone has a zlib.py[co] in their Zip file;
+           let's avoid a stack overflow. */
+        return NULL;
+    importing_zlib = 1;
+    zlib = PyImport_ImportModuleNoBlock("zlib");
+    importing_zlib = 0;
+    if (zlib != NULL) {
+        decompress = PyObject_GetAttrString(zlib,
+                                            "decompress");
+        Py_DECREF(zlib);
     }
+    else {
+        PyErr_Clear();
+        decompress = NULL;
+    }
+    if (Py_VerboseFlag)
+        PySys_WriteStderr("# zipimport: zlib %s\n",
+            zlib != NULL ? "available": "UNAVAILABLE");
     return decompress;
 }
 
@@ -911,6 +909,7 @@ get_data(char *archive, PyObject *toc_entry)
         goto error;
     }
     data = PyObject_CallFunction(decompress, "Oi", raw_data, -15);
+    Py_DECREF(decompress);
 error:
     Py_DECREF(raw_data);
     return data;
@@ -1053,7 +1052,7 @@ parse_dostime(int dostime, int dosdate)
 }
 
 /* Given a path to a .pyc or .pyo file in the archive, return the
-   modifictaion time of the matching .py file, or 0 if no source
+   modification time of the matching .py file, or 0 if no source
    is available. */
 static time_t
 get_mtime_of_source(ZipImporter *self, char *path)
@@ -1106,7 +1105,7 @@ get_code_from_data(ZipImporter *self, int ispackage, int isbytecode,
     return code;
 }
 
-/* Get the code object assoiciated with the module specified by
+/* Get the code object associated with the module specified by
    'fullname'. */
 static PyObject *
 get_module_code(ZipImporter *self, char *fullname,

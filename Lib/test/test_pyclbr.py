@@ -37,7 +37,7 @@ class PyclbrTest(TestCase):
         ''' succeed iff hasattr(obj,attr) or attr in ignore. '''
         if attr in ignore: return
         if not hasattr(obj, attr): print "???", attr
-        self.failUnless(hasattr(obj, attr),
+        self.assertTrue(hasattr(obj, attr),
                         'expected hasattr(%r, %r)' % (obj, attr))
 
 
@@ -46,7 +46,7 @@ class PyclbrTest(TestCase):
         if key in ignore: return
         if key not in obj:
             print >>sys.stderr, "***", key
-        self.assertTrue(key in obj)
+        self.assertIn(key, obj)
 
     def assertEqualsOrIgnored(self, a, b, ignore):
         ''' succeed iff a == b or a in ignore or b in ignore '''
@@ -94,12 +94,12 @@ class PyclbrTest(TestCase):
             self.assertHasattr(module, name, ignore)
             py_item = getattr(module, name)
             if isinstance(value, pyclbr.Function):
-                self.assert_(isinstance(py_item, (FunctionType, BuiltinFunctionType)))
+                self.assertIsInstance(py_item, (FunctionType, BuiltinFunctionType))
                 if py_item.__module__ != moduleName:
                     continue   # skip functions that came from somewhere else
-                self.assertEquals(py_item.__module__, value.module)
+                self.assertEqual(py_item.__module__, value.module)
             else:
-                self.failUnless(isinstance(py_item, (ClassType, type)))
+                self.assertIsInstance(py_item, (ClassType, type))
                 if py_item.__module__ != moduleName:
                     continue   # skip classes that came from somewhere else
 
@@ -126,7 +126,7 @@ class PyclbrTest(TestCase):
 
                 try:
                     self.assertListEq(foundMethods, actualMethods, ignore)
-                    self.assertEquals(py_item.__module__, value.module)
+                    self.assertEqual(py_item.__module__, value.module)
 
                     self.assertEqualsOrIgnored(py_item.__name__, value.name,
                                                ignore)
@@ -150,7 +150,7 @@ class PyclbrTest(TestCase):
 
     def test_easy(self):
         self.checkModule('pyclbr')
-        self.checkModule('doctest')
+        self.checkModule('doctest', ignore=("DocTestCase",))
         # Silence Py3k warning
         rfc822 = import_module('rfc822', deprecated=True)
         self.checkModule('rfc822', rfc822)

@@ -1,10 +1,10 @@
-import sys, unittest, struct, math
+import sys, unittest, struct, math, ctypes
 from binascii import hexlify
 
 from ctypes import *
 
 def bin(s):
-    return hexlify(buffer(s)).upper()
+    return hexlify(memoryview(s)).upper()
 
 # Each *simple* type that supports different byte orders has an
 # __ctype_be__ attribute that specifies the same type in BIG ENDIAN
@@ -23,131 +23,131 @@ class Test(unittest.TestCase):
 
     def test_endian_short(self):
         if sys.byteorder == "little":
-            self.failUnless(c_short.__ctype_le__ is c_short)
-            self.failUnless(c_short.__ctype_be__.__ctype_le__ is c_short)
+            self.assertTrue(c_short.__ctype_le__ is c_short)
+            self.assertTrue(c_short.__ctype_be__.__ctype_le__ is c_short)
         else:
-            self.failUnless(c_short.__ctype_be__ is c_short)
-            self.failUnless(c_short.__ctype_le__.__ctype_be__ is c_short)
+            self.assertTrue(c_short.__ctype_be__ is c_short)
+            self.assertTrue(c_short.__ctype_le__.__ctype_be__ is c_short)
         s = c_short.__ctype_be__(0x1234)
-        self.failUnlessEqual(bin(struct.pack(">h", 0x1234)), "1234")
-        self.failUnlessEqual(bin(s), "1234")
-        self.failUnlessEqual(s.value, 0x1234)
+        self.assertEqual(bin(struct.pack(">h", 0x1234)), "1234")
+        self.assertEqual(bin(s), "1234")
+        self.assertEqual(s.value, 0x1234)
 
         s = c_short.__ctype_le__(0x1234)
-        self.failUnlessEqual(bin(struct.pack("<h", 0x1234)), "3412")
-        self.failUnlessEqual(bin(s), "3412")
-        self.failUnlessEqual(s.value, 0x1234)
+        self.assertEqual(bin(struct.pack("<h", 0x1234)), "3412")
+        self.assertEqual(bin(s), "3412")
+        self.assertEqual(s.value, 0x1234)
 
         s = c_ushort.__ctype_be__(0x1234)
-        self.failUnlessEqual(bin(struct.pack(">h", 0x1234)), "1234")
-        self.failUnlessEqual(bin(s), "1234")
-        self.failUnlessEqual(s.value, 0x1234)
+        self.assertEqual(bin(struct.pack(">h", 0x1234)), "1234")
+        self.assertEqual(bin(s), "1234")
+        self.assertEqual(s.value, 0x1234)
 
         s = c_ushort.__ctype_le__(0x1234)
-        self.failUnlessEqual(bin(struct.pack("<h", 0x1234)), "3412")
-        self.failUnlessEqual(bin(s), "3412")
-        self.failUnlessEqual(s.value, 0x1234)
+        self.assertEqual(bin(struct.pack("<h", 0x1234)), "3412")
+        self.assertEqual(bin(s), "3412")
+        self.assertEqual(s.value, 0x1234)
 
     def test_endian_int(self):
         if sys.byteorder == "little":
-            self.failUnless(c_int.__ctype_le__ is c_int)
-            self.failUnless(c_int.__ctype_be__.__ctype_le__ is c_int)
+            self.assertTrue(c_int.__ctype_le__ is c_int)
+            self.assertTrue(c_int.__ctype_be__.__ctype_le__ is c_int)
         else:
-            self.failUnless(c_int.__ctype_be__ is c_int)
-            self.failUnless(c_int.__ctype_le__.__ctype_be__ is c_int)
+            self.assertTrue(c_int.__ctype_be__ is c_int)
+            self.assertTrue(c_int.__ctype_le__.__ctype_be__ is c_int)
 
         s = c_int.__ctype_be__(0x12345678)
-        self.failUnlessEqual(bin(struct.pack(">i", 0x12345678)), "12345678")
-        self.failUnlessEqual(bin(s), "12345678")
-        self.failUnlessEqual(s.value, 0x12345678)
+        self.assertEqual(bin(struct.pack(">i", 0x12345678)), "12345678")
+        self.assertEqual(bin(s), "12345678")
+        self.assertEqual(s.value, 0x12345678)
 
         s = c_int.__ctype_le__(0x12345678)
-        self.failUnlessEqual(bin(struct.pack("<i", 0x12345678)), "78563412")
-        self.failUnlessEqual(bin(s), "78563412")
-        self.failUnlessEqual(s.value, 0x12345678)
+        self.assertEqual(bin(struct.pack("<i", 0x12345678)), "78563412")
+        self.assertEqual(bin(s), "78563412")
+        self.assertEqual(s.value, 0x12345678)
 
         s = c_uint.__ctype_be__(0x12345678)
-        self.failUnlessEqual(bin(struct.pack(">I", 0x12345678)), "12345678")
-        self.failUnlessEqual(bin(s), "12345678")
-        self.failUnlessEqual(s.value, 0x12345678)
+        self.assertEqual(bin(struct.pack(">I", 0x12345678)), "12345678")
+        self.assertEqual(bin(s), "12345678")
+        self.assertEqual(s.value, 0x12345678)
 
         s = c_uint.__ctype_le__(0x12345678)
-        self.failUnlessEqual(bin(struct.pack("<I", 0x12345678)), "78563412")
-        self.failUnlessEqual(bin(s), "78563412")
-        self.failUnlessEqual(s.value, 0x12345678)
+        self.assertEqual(bin(struct.pack("<I", 0x12345678)), "78563412")
+        self.assertEqual(bin(s), "78563412")
+        self.assertEqual(s.value, 0x12345678)
 
     def test_endian_longlong(self):
         if sys.byteorder == "little":
-            self.failUnless(c_longlong.__ctype_le__ is c_longlong)
-            self.failUnless(c_longlong.__ctype_be__.__ctype_le__ is c_longlong)
+            self.assertTrue(c_longlong.__ctype_le__ is c_longlong)
+            self.assertTrue(c_longlong.__ctype_be__.__ctype_le__ is c_longlong)
         else:
-            self.failUnless(c_longlong.__ctype_be__ is c_longlong)
-            self.failUnless(c_longlong.__ctype_le__.__ctype_be__ is c_longlong)
+            self.assertTrue(c_longlong.__ctype_be__ is c_longlong)
+            self.assertTrue(c_longlong.__ctype_le__.__ctype_be__ is c_longlong)
 
         s = c_longlong.__ctype_be__(0x1234567890ABCDEF)
-        self.failUnlessEqual(bin(struct.pack(">q", 0x1234567890ABCDEF)), "1234567890ABCDEF")
-        self.failUnlessEqual(bin(s), "1234567890ABCDEF")
-        self.failUnlessEqual(s.value, 0x1234567890ABCDEF)
+        self.assertEqual(bin(struct.pack(">q", 0x1234567890ABCDEF)), "1234567890ABCDEF")
+        self.assertEqual(bin(s), "1234567890ABCDEF")
+        self.assertEqual(s.value, 0x1234567890ABCDEF)
 
         s = c_longlong.__ctype_le__(0x1234567890ABCDEF)
-        self.failUnlessEqual(bin(struct.pack("<q", 0x1234567890ABCDEF)), "EFCDAB9078563412")
-        self.failUnlessEqual(bin(s), "EFCDAB9078563412")
-        self.failUnlessEqual(s.value, 0x1234567890ABCDEF)
+        self.assertEqual(bin(struct.pack("<q", 0x1234567890ABCDEF)), "EFCDAB9078563412")
+        self.assertEqual(bin(s), "EFCDAB9078563412")
+        self.assertEqual(s.value, 0x1234567890ABCDEF)
 
         s = c_ulonglong.__ctype_be__(0x1234567890ABCDEF)
-        self.failUnlessEqual(bin(struct.pack(">Q", 0x1234567890ABCDEF)), "1234567890ABCDEF")
-        self.failUnlessEqual(bin(s), "1234567890ABCDEF")
-        self.failUnlessEqual(s.value, 0x1234567890ABCDEF)
+        self.assertEqual(bin(struct.pack(">Q", 0x1234567890ABCDEF)), "1234567890ABCDEF")
+        self.assertEqual(bin(s), "1234567890ABCDEF")
+        self.assertEqual(s.value, 0x1234567890ABCDEF)
 
         s = c_ulonglong.__ctype_le__(0x1234567890ABCDEF)
-        self.failUnlessEqual(bin(struct.pack("<Q", 0x1234567890ABCDEF)), "EFCDAB9078563412")
-        self.failUnlessEqual(bin(s), "EFCDAB9078563412")
-        self.failUnlessEqual(s.value, 0x1234567890ABCDEF)
+        self.assertEqual(bin(struct.pack("<Q", 0x1234567890ABCDEF)), "EFCDAB9078563412")
+        self.assertEqual(bin(s), "EFCDAB9078563412")
+        self.assertEqual(s.value, 0x1234567890ABCDEF)
 
     def test_endian_float(self):
         if sys.byteorder == "little":
-            self.failUnless(c_float.__ctype_le__ is c_float)
-            self.failUnless(c_float.__ctype_be__.__ctype_le__ is c_float)
+            self.assertTrue(c_float.__ctype_le__ is c_float)
+            self.assertTrue(c_float.__ctype_be__.__ctype_le__ is c_float)
         else:
-            self.failUnless(c_float.__ctype_be__ is c_float)
-            self.failUnless(c_float.__ctype_le__.__ctype_be__ is c_float)
+            self.assertTrue(c_float.__ctype_be__ is c_float)
+            self.assertTrue(c_float.__ctype_le__.__ctype_be__ is c_float)
         s = c_float(math.pi)
-        self.failUnlessEqual(bin(struct.pack("f", math.pi)), bin(s))
+        self.assertEqual(bin(struct.pack("f", math.pi)), bin(s))
         # Hm, what's the precision of a float compared to a double?
-        self.failUnlessAlmostEqual(s.value, math.pi, 6)
+        self.assertAlmostEqual(s.value, math.pi, 6)
         s = c_float.__ctype_le__(math.pi)
-        self.failUnlessAlmostEqual(s.value, math.pi, 6)
-        self.failUnlessEqual(bin(struct.pack("<f", math.pi)), bin(s))
+        self.assertAlmostEqual(s.value, math.pi, 6)
+        self.assertEqual(bin(struct.pack("<f", math.pi)), bin(s))
         s = c_float.__ctype_be__(math.pi)
-        self.failUnlessAlmostEqual(s.value, math.pi, 6)
-        self.failUnlessEqual(bin(struct.pack(">f", math.pi)), bin(s))
+        self.assertAlmostEqual(s.value, math.pi, 6)
+        self.assertEqual(bin(struct.pack(">f", math.pi)), bin(s))
 
     def test_endian_double(self):
         if sys.byteorder == "little":
-            self.failUnless(c_double.__ctype_le__ is c_double)
-            self.failUnless(c_double.__ctype_be__.__ctype_le__ is c_double)
+            self.assertTrue(c_double.__ctype_le__ is c_double)
+            self.assertTrue(c_double.__ctype_be__.__ctype_le__ is c_double)
         else:
-            self.failUnless(c_double.__ctype_be__ is c_double)
-            self.failUnless(c_double.__ctype_le__.__ctype_be__ is c_double)
+            self.assertTrue(c_double.__ctype_be__ is c_double)
+            self.assertTrue(c_double.__ctype_le__.__ctype_be__ is c_double)
         s = c_double(math.pi)
-        self.failUnlessEqual(s.value, math.pi)
-        self.failUnlessEqual(bin(struct.pack("d", math.pi)), bin(s))
+        self.assertEqual(s.value, math.pi)
+        self.assertEqual(bin(struct.pack("d", math.pi)), bin(s))
         s = c_double.__ctype_le__(math.pi)
-        self.failUnlessEqual(s.value, math.pi)
-        self.failUnlessEqual(bin(struct.pack("<d", math.pi)), bin(s))
+        self.assertEqual(s.value, math.pi)
+        self.assertEqual(bin(struct.pack("<d", math.pi)), bin(s))
         s = c_double.__ctype_be__(math.pi)
-        self.failUnlessEqual(s.value, math.pi)
-        self.failUnlessEqual(bin(struct.pack(">d", math.pi)), bin(s))
+        self.assertEqual(s.value, math.pi)
+        self.assertEqual(bin(struct.pack(">d", math.pi)), bin(s))
 
     def test_endian_other(self):
-        self.failUnless(c_byte.__ctype_le__ is c_byte)
-        self.failUnless(c_byte.__ctype_be__ is c_byte)
+        self.assertTrue(c_byte.__ctype_le__ is c_byte)
+        self.assertTrue(c_byte.__ctype_be__ is c_byte)
 
-        self.failUnless(c_ubyte.__ctype_le__ is c_ubyte)
-        self.failUnless(c_ubyte.__ctype_be__ is c_ubyte)
+        self.assertTrue(c_ubyte.__ctype_le__ is c_ubyte)
+        self.assertTrue(c_ubyte.__ctype_be__ is c_ubyte)
 
-        self.failUnless(c_char.__ctype_le__ is c_char)
-        self.failUnless(c_char.__ctype_be__ is c_char)
+        self.assertTrue(c_char.__ctype_le__ is c_char)
+        self.assertTrue(c_char.__ctype_be__ is c_char)
 
     def test_struct_fields_1(self):
         if sys.byteorder == "little":
@@ -185,18 +185,32 @@ class Test(unittest.TestCase):
             self.assertRaises(TypeError, setattr, T, "_fields_", [("x", typ)])
 
     def test_struct_struct(self):
-        # Nested structures with different byte order not (yet) supported
-        if sys.byteorder == "little":
-            base = BigEndianStructure
-        else:
-            base = LittleEndianStructure
+        # nested structures with different byteorders
 
-        class T(Structure):
-            _fields_ = [("a", c_int),
-                        ("b", c_int)]
-        class S(base):
-            pass
-        self.assertRaises(TypeError, setattr, S, "_fields_", [("s", T)])
+        # create nested structures with given byteorders and set memory to data
+
+        for nested, data in (
+            (BigEndianStructure, b'\0\0\0\1\0\0\0\2'),
+            (LittleEndianStructure, b'\1\0\0\0\2\0\0\0'),
+        ):
+            for parent in (
+                BigEndianStructure,
+                LittleEndianStructure,
+                Structure,
+            ):
+                class NestedStructure(nested):
+                    _fields_ = [("x", c_uint32),
+                                ("y", c_uint32)]
+
+                class TestStructure(parent):
+                    _fields_ = [("point", NestedStructure)]
+
+                self.assertEqual(len(data), sizeof(TestStructure))
+                ptr = POINTER(TestStructure)
+                s = cast(data, ptr)[0]
+                del ctypes._pointer_type_cache[TestStructure]
+                self.assertEqual(s.point.x, 1)
+                self.assertEqual(s.point.y, 2)
 
     def test_struct_fields_2(self):
         # standard packing in struct uses no alignment.
@@ -219,7 +233,7 @@ class Test(unittest.TestCase):
 
         s1 = S(0x12, 0x1234, 0x12345678, 3.14)
         s2 = struct.pack(fmt, 0x12, 0x1234, 0x12345678, 3.14)
-        self.failUnlessEqual(bin(s1), bin(s2))
+        self.assertEqual(bin(s1), bin(s2))
 
     def test_unaligned_nonnative_struct_fields(self):
         if sys.byteorder == "little":
@@ -247,7 +261,7 @@ class Test(unittest.TestCase):
         s1.i = 0x12345678
         s1.d = 3.14
         s2 = struct.pack(fmt, 0x12, 0x1234, 0x12345678, 3.14)
-        self.failUnlessEqual(bin(s1), bin(s2))
+        self.assertEqual(bin(s1), bin(s2))
 
     def test_unaligned_native_struct_fields(self):
         if sys.byteorder == "little":
@@ -274,7 +288,7 @@ class Test(unittest.TestCase):
         s1.i = 0x12345678
         s1.d = 3.14
         s2 = struct.pack(fmt, 0x12, 0x1234, 0x12345678, 3.14)
-        self.failUnlessEqual(bin(s1), bin(s2))
+        self.assertEqual(bin(s1), bin(s2))
 
 if __name__ == "__main__":
     unittest.main()

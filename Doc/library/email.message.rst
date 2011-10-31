@@ -133,8 +133,22 @@ Here are the methods of the :class:`Message` class:
       string naming a character set, or ``None``.  If it is a string, it will
       be converted to a :class:`~email.charset.Charset` instance.  If *charset*
       is ``None``, the ``charset`` parameter will be removed from the
-      :mailheader:`Content-Type` header. Anything else will generate a
-      :exc:`TypeError`.
+      :mailheader:`Content-Type` header (the message will not be otherwise
+      modified).  Anything else will generate a :exc:`TypeError`.
+
+      If there is no existing :mailheader:`MIME-Version` header one will be
+      added.  If there is no existing :mailheader:`Content-Type` header, one
+      will be added with a value of :mimetype:`text/plain`.  Whether the
+      :mailheader:`Content-Type` header already exists or not, its ``charset``
+      parameter will be set to *charset.output_charset*.   If
+      *charset.input_charset* and *charset.output_charset* differ, the payload
+      will be re-encoded to the *output_charset*.  If there is no existing
+      :mailheader:`Content-Transfer-Encoding` header, then the payload will be
+      transfer-encoded, if needed, using the specified
+      :class:`~email.charset.Charset`, and a header with the appropriate value
+      will be added.  If a :mailheader:`Content-Transfer-Encoding` header
+      already exists, the payload is assumed to already be correctly encoded
+      using that :mailheader:`Content-Transfer-Encoding` and is not modified.
 
       The message will be assumed to be of type :mimetype:`text/\*`, with the
       payload either in unicode or encoded with *charset.input_charset*.
@@ -266,7 +280,12 @@ Here are the methods of the :class:`Message` class:
       taken as the parameter name, with underscores converted to dashes (since
       dashes are illegal in Python identifiers).  Normally, the parameter will
       be added as ``key="value"`` unless the value is ``None``, in which case
-      only the key will be added.
+      only the key will be added.  If the value contains non-ASCII characters,
+      it must be specified as a three tuple in the format
+      ``(CHARSET, LANGUAGE, VALUE)``, where ``CHARSET`` is a string naming the
+      charset to be used to encode the value, ``LANGUAGE`` can usually be set
+      to ``None`` or the empty string (see :RFC:`2231` for other possibilities),
+      and ``VALUE`` is the string value containing non-ASCII code points.
 
       Here's an example::
 
@@ -275,6 +294,15 @@ Here are the methods of the :class:`Message` class:
       This will add a header that looks like ::
 
          Content-Disposition: attachment; filename="bud.gif"
+
+      An example with non-ASCII characters::
+
+         msg.add_header('Content-Disposition', 'attachment',
+                        filename=('iso-8859-1', '', 'Fußballer.ppt'))
+
+      Which produces ::
+
+         Content-Disposition: attachment; filename*="iso-8859-1''Fu%DFballer.ppt"
 
 
    .. method:: replace_header(_name, _value)
@@ -380,7 +408,7 @@ Here are the methods of the :class:`Message` class:
       :rfc:`2231`, you can collapse the parameter value by calling
       :func:`email.utils.collapse_rfc2231_value`, passing in the return value
       from :meth:`get_param`.  This will return a suitably decoded Unicode
-      string whn the value is a tuple, or the original string unquoted if it
+      string when the value is a tuple, or the original string unquoted if it
       isn't.  For example::
 
          rawparam = msg.get_param('foo')
@@ -448,9 +476,10 @@ Here are the methods of the :class:`Message` class:
       Return the value of the ``filename`` parameter of the
       :mailheader:`Content-Disposition` header of the message.  If the header
       does not have a ``filename`` parameter, this method falls back to looking
-      for the ``name`` parameter.  If neither is found, or the header is
-      missing, then *failobj* is returned.  The returned string will always be
-      unquoted as per :func:`email.utils.unquote`.
+      for the ``name`` parameter on the :mailheader:`Content-Type` header.  If
+      neither is found, or the header is missing, then *failobj* is returned.
+      The returned string will always be unquoted as per
+      :func:`email.utils.unquote`.
 
 
    .. method:: get_boundary([failobj])

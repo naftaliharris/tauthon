@@ -3,7 +3,33 @@
 #
 # multiprocessing/pool.py
 #
-# Copyright (c) 2007-2008, R Oudkerk --- see COPYING.txt
+# Copyright (c) 2006-2008, R Oudkerk
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+# 3. Neither the name of author nor the names of any contributors may be
+#    used to endorse or promote products derived from this software
+#    without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
 #
 
 __all__ = ['Pool']
@@ -42,7 +68,8 @@ def mapstar(args):
 # Code run by worker processes
 #
 
-def worker(inqueue, outqueue, initializer=None, initargs=()):
+def worker(inqueue, outqueue, initializer=None, initargs=(), maxtasks=None):
+    assert maxtasks is None or (type(maxtasks) == int and maxtasks > 0)
     put = outqueue.put
     get = inqueue.get
     if hasattr(inqueue, '_writer'):
@@ -52,7 +79,8 @@ def worker(inqueue, outqueue, initializer=None, initargs=()):
     if initializer is not None:
         initializer(*initargs)
 
-    while 1:
+    completed = 0
+    while maxtasks is None or (maxtasks and completed < maxtasks):
         try:
             task = get()
         except (EOFError, IOError):
@@ -69,6 +97,8 @@ def worker(inqueue, outqueue, initializer=None, initargs=()):
         except Exception, e:
             result = (False, e)
         put((job, i, result))
+        completed += 1
+    debug('worker exiting after %d tasks' % completed)
 
 #
 # Class representing a process pool
@@ -80,28 +110,39 @@ class Pool(object):
     '''
     Process = Process
 
-    def __init__(self, processes=None, initializer=None, initargs=()):
+    def __init__(self, processes=None, initializer=None, initargs=(),
+                 maxtasksperchild=None):
         self._setup_queues()
         self._taskqueue = Queue.Queue()
         self._cache = {}
         self._state = RUN
+        self._maxtasksperchild = maxtasksperchild
+        self._initializer = initializer
+        self._initargs = initargs
 
         if processes is None:
             try:
                 processes = cpu_count()
             except NotImplementedError:
                 processes = 1
+        if processes < 1:
+            raise ValueError("Number of processes must be at least 1")
 
+        if initializer is not None and not hasattr(initializer, '__call__'):
+            raise TypeError('initializer must be a callable')
+
+        self._processes = processes
         self._pool = []
-        for i in range(processes):
-            w = self.Process(
-                target=worker,
-                args=(self._inqueue, self._outqueue, initializer, initargs)
-                )
-            self._pool.append(w)
-            w.name = w.name.replace('Process', 'PoolWorker')
-            w.daemon = True
-            w.start()
+        self._repopulate_pool()
+
+        self._worker_handler = threading.Thread(
+            target=Pool._handle_workers,
+            args=(self, )
+            )
+        self._worker_handler.daemon = True
+        self._worker_handler._state = RUN
+        self._worker_handler.start()
+
 
         self._task_handler = threading.Thread(
             target=Pool._handle_tasks,
@@ -122,9 +163,47 @@ class Pool(object):
         self._terminate = Finalize(
             self, self._terminate_pool,
             args=(self._taskqueue, self._inqueue, self._outqueue, self._pool,
-                  self._task_handler, self._result_handler, self._cache),
+                  self._worker_handler, self._task_handler,
+                  self._result_handler, self._cache),
             exitpriority=15
             )
+
+    def _join_exited_workers(self):
+        """Cleanup after any worker processes which have exited due to reaching
+        their specified lifetime.  Returns True if any workers were cleaned up.
+        """
+        cleaned = False
+        for i in reversed(range(len(self._pool))):
+            worker = self._pool[i]
+            if worker.exitcode is not None:
+                # worker exited
+                debug('cleaning up worker %d' % i)
+                worker.join()
+                cleaned = True
+                del self._pool[i]
+        return cleaned
+
+    def _repopulate_pool(self):
+        """Bring the number of pool processes up to the specified number,
+        for use after reaping workers which have exited.
+        """
+        for i in range(self._processes - len(self._pool)):
+            w = self.Process(target=worker,
+                             args=(self._inqueue, self._outqueue,
+                                   self._initializer,
+                                   self._initargs, self._maxtasksperchild)
+                            )
+            self._pool.append(w)
+            w.name = w.name.replace('Process', 'PoolWorker')
+            w.daemon = True
+            w.start()
+            debug('added worker')
+
+    def _maintain_pool(self):
+        """Clean up any exited workers and start replacements for them.
+        """
+        if self._join_exited_workers():
+            self._repopulate_pool()
 
     def _setup_queues(self):
         from .queues import SimpleQueue
@@ -204,12 +283,27 @@ class Pool(object):
             chunksize, extra = divmod(len(iterable), len(self._pool) * 4)
             if extra:
                 chunksize += 1
+        if len(iterable) == 0:
+            chunksize = 0
 
         task_batches = Pool._get_tasks(func, iterable, chunksize)
         result = MapResult(self._cache, chunksize, len(iterable), callback)
         self._taskqueue.put((((result._job, i, mapstar, (x,), {})
                               for i, x in enumerate(task_batches)), None))
         return result
+
+    @staticmethod
+    def _handle_workers(pool):
+        thread = threading.current_thread()
+
+        # Keep maintaining workers until the cache gets drained, unless the pool
+        # is terminated.
+        while thread._state == RUN or (pool._cache and thread._state != TERMINATE):
+            pool._maintain_pool()
+            time.sleep(0.1)
+        # send sentinel to stop workers
+        pool._taskqueue.put(None)
+        debug('worker handler exiting')
 
     @staticmethod
     def _handle_tasks(taskqueue, put, outqueue, pool):
@@ -326,16 +420,18 @@ class Pool(object):
         debug('closing pool')
         if self._state == RUN:
             self._state = CLOSE
-            self._taskqueue.put(None)
+            self._worker_handler._state = CLOSE
 
     def terminate(self):
         debug('terminating pool')
         self._state = TERMINATE
+        self._worker_handler._state = TERMINATE
         self._terminate()
 
     def join(self):
         debug('joining pool')
         assert self._state in (CLOSE, TERMINATE)
+        self._worker_handler.join()
         self._task_handler.join()
         self._result_handler.join()
         for p in self._pool:
@@ -352,12 +448,12 @@ class Pool(object):
 
     @classmethod
     def _terminate_pool(cls, taskqueue, inqueue, outqueue, pool,
-                        task_handler, result_handler, cache):
+                        worker_handler, task_handler, result_handler, cache):
         # this is guaranteed to only be called once
         debug('finalizing pool')
 
+        worker_handler._state = TERMINATE
         task_handler._state = TERMINATE
-        taskqueue.put(None)                 # sentinel
 
         debug('helping task handler/workers to finish')
         cls._help_stuff_finish(inqueue, task_handler, len(pool))
@@ -367,10 +463,17 @@ class Pool(object):
         result_handler._state = TERMINATE
         outqueue.put(None)                  # sentinel
 
+        # We must wait for the worker handler to exit before terminating
+        # workers because we don't want workers to be restarted behind our back.
+        debug('joining worker handler')
+        worker_handler.join()
+
+        # Terminate workers which haven't already finished.
         if pool and hasattr(pool[0], 'terminate'):
             debug('terminating workers')
             for p in pool:
-                p.terminate()
+                if p.exitcode is None:
+                    p.terminate()
 
         debug('joining task handler')
         task_handler.join(1e100)
@@ -381,7 +484,10 @@ class Pool(object):
         if pool and hasattr(pool[0], 'terminate'):
             debug('joining pool workers')
             for p in pool:
-                p.join()
+                if p.is_alive():
+                    # worker has not yet exited
+                    debug('cleaning up worker %d' % p.pid)
+                    p.join()
 
 #
 # Class whose instances are returned by `Pool.apply_async()`

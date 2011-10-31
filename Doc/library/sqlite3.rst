@@ -83,7 +83,7 @@ This example uses the iterator form::
    >>> for row in c:
    ...    print row
    ...
-   (u'2006-01-05', u'BUY', u'RHAT', 100, 35.140000000000001)
+   (u'2006-01-05', u'BUY', u'RHAT', 100, 35.14)
    (u'2006-03-28', u'BUY', u'IBM', 1000, 45.0)
    (u'2006-04-06', u'SELL', u'IBM', 500, 53.0)
    (u'2006-04-05', u'BUY', u'MSOFT', 1000, 72.0)
@@ -138,7 +138,7 @@ Module functions and constants
    first blank for the column name: the column name would simply be "x".
 
 
-.. function:: connect(database[, timeout, isolation_level, detect_types, factory])
+.. function:: connect(database[, timeout, detect_types, isolation_level, check_same_thread, factory, cached_statements])
 
    Opens a connection to the SQLite database file *database*. You can use
    ``":memory:"`` to open a database connection to a database that resides in RAM
@@ -240,7 +240,7 @@ Connection Objects
 .. method:: Connection.commit()
 
    This method commits the current transaction. If you don't call this method,
-   anything you did since the last call to ``commit()`` is not visible from from
+   anything you did since the last call to ``commit()`` is not visible from
    other database connections. If you wonder why you don't see the data you've
    written to the database, please check you didn't forget to call this method.
 
@@ -258,22 +258,21 @@ Connection Objects
 .. method:: Connection.execute(sql, [parameters])
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`execute<Cursor.execute>` method with the parameters given.
+   calling the cursor method, then calls the cursor's :meth:`execute
+   <Cursor.execute>` method with the parameters given.
 
 
 .. method:: Connection.executemany(sql, [parameters])
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`executemany<Cursor.executemany>` method with the parameters given.
+   calling the cursor method, then calls the cursor's :meth:`executemany
+   <Cursor.executemany>` method with the parameters given.
 
 .. method:: Connection.executescript(sql_script)
 
    This is a nonstandard shortcut that creates an intermediate cursor object by
-   calling the cursor method, then calls the cursor's
-   :meth:`executescript<Cursor.executescript>` method with the parameters
-   given.
+   calling the cursor method, then calls the cursor's :meth:`executescript
+   <Cursor.executescript>` method with the parameters given.
 
 
 .. method:: Connection.create_function(name, num_params, func)
@@ -368,6 +367,29 @@ Connection Objects
    method with :const:`None` for *handler*.
 
 
+.. method:: Connection.enable_load_extension(enabled)
+
+   .. versionadded:: 2.7
+
+   This routine allows/disallows the SQLite engine to load SQLite extensions
+   from shared libraries.  SQLite extensions can define new functions,
+   aggregates or whole new virtual table implementations.  One well-known
+   extension is the fulltext-search extension distributed with SQLite.
+
+   .. literalinclude:: ../includes/sqlite3/load_extension.py
+
+   Loadable extensions are disabled by default. See [#f1]_
+
+.. method:: Connection.load_extension(path)
+
+   .. versionadded:: 2.7
+
+   This routine loads a SQLite extension from a shared library.  You have to
+   enable extension loading with :meth:`enable_load_extension` before you can
+   use this routine.
+
+   Loadable extensions are disabled by default. See [#f1]_
+
 .. attribute:: Connection.row_factory
 
    You can change this attribute to a callable that accepts the cursor and the
@@ -441,7 +463,7 @@ Cursor Objects
 
 .. class:: Cursor
 
-   A SQLite database cursor has the following attributes and methods:
+   A :class:`Cursor` instance has the following attributes and methods.
 
 .. method:: Cursor.execute(sql, [parameters])
 
@@ -582,42 +604,42 @@ Row Objects
 
 Let's assume we initialize a table as in the example given above::
 
-    conn = sqlite3.connect(":memory:")
-    c = conn.cursor()
-    c.execute('''create table stocks
-    (date text, trans text, symbol text,
-     qty real, price real)''')
-    c.execute("""insert into stocks
-              values ('2006-01-05','BUY','RHAT',100,35.14)""")
-    conn.commit()
-    c.close()
+   conn = sqlite3.connect(":memory:")
+   c = conn.cursor()
+   c.execute('''create table stocks
+   (date text, trans text, symbol text,
+    qty real, price real)''')
+   c.execute("""insert into stocks
+             values ('2006-01-05','BUY','RHAT',100,35.14)""")
+   conn.commit()
+   c.close()
 
 Now we plug :class:`Row` in::
 
-    >>> conn.row_factory = sqlite3.Row
-    >>> c = conn.cursor()
-    >>> c.execute('select * from stocks')
-    <sqlite3.Cursor object at 0x7f4e7dd8fa80>
-    >>> r = c.fetchone()
-    >>> type(r)
-    <type 'sqlite3.Row'>
-    >>> r
-    (u'2006-01-05', u'BUY', u'RHAT', 100.0, 35.140000000000001)
-    >>> len(r)
-    5
-    >>> r[2]
-    u'RHAT'
-    >>> r.keys()
-    ['date', 'trans', 'symbol', 'qty', 'price']
-    >>> r['qty']
-    100.0
-    >>> for member in r: print member
-    ...
-    2006-01-05
-    BUY
-    RHAT
-    100.0
-    35.14
+   >>> conn.row_factory = sqlite3.Row
+   >>> c = conn.cursor()
+   >>> c.execute('select * from stocks')
+   <sqlite3.Cursor object at 0x7f4e7dd8fa80>
+   >>> r = c.fetchone()
+   >>> type(r)
+   <type 'sqlite3.Row'>
+   >>> r
+   (u'2006-01-05', u'BUY', u'RHAT', 100.0, 35.14)
+   >>> len(r)
+   5
+   >>> r[2]
+   u'RHAT'
+   >>> r.keys()
+   ['date', 'trans', 'symbol', 'qty', 'price']
+   >>> r['qty']
+   100.0
+   >>> for member in r: print member
+   ...
+   2006-01-05
+   BUY
+   RHAT
+   100.0
+   35.14
 
 
 .. _sqlite3-types:
@@ -861,3 +883,26 @@ exception, the transaction is rolled back; otherwise, the transaction is
 committed:
 
 .. literalinclude:: ../includes/sqlite3/ctx_manager.py
+
+
+Common issues
+-------------
+
+Multithreading
+^^^^^^^^^^^^^^
+
+Older SQLite versions had issues with sharing connections between threads.
+That's why the Python module disallows sharing connections and cursors between
+threads. If you still try to do so, you will get an exception at runtime.
+
+The only exception is calling the :meth:`~Connection.interrupt` method, which
+only makes sense to call from a different thread.
+
+.. rubric:: Footnotes
+
+.. [#f1] The sqlite3 module is not built with loadable extension support by
+   default, because some platforms (notably Mac OS X) have SQLite libraries
+   which are compiled without this feature. To get loadable extension support,
+   you must modify setup.py and remove the line that sets
+   SQLITE_OMIT_LOAD_EXTENSION.
+

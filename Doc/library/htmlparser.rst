@@ -8,8 +8,8 @@
 .. note::
 
    The :mod:`HTMLParser` module has been renamed to :mod:`html.parser` in Python
-   3.0.  The :term:`2to3` tool will automatically adapt imports when converting
-   your sources to 3.0.
+   3.  The :term:`2to3` tool will automatically adapt imports when converting
+   your sources to Python 3.
 
 
 .. versionadded:: 2.2
@@ -17,6 +17,10 @@
 .. index::
    single: HTML
    single: XHTML
+
+**Source code:** :source:`Lib/HTMLParser.py`
+
+--------------
 
 This module defines a class :class:`HTMLParser` which serves as the basis for
 parsing text files formatted in HTML (HyperText Mark-up Language) and XHTML.
@@ -105,9 +109,9 @@ An exception is defined as well:
 .. method:: HTMLParser.handle_startendtag(tag, attrs)
 
    Similar to :meth:`handle_starttag`, but called when the parser encounters an
-   XHTML-style empty tag (``<a .../>``).  This method may be overridden by
+   XHTML-style empty tag (``<img ... />``).  This method may be overridden by
    subclasses which require this particular lexical information; the default
-   implementation simple calls :meth:`handle_starttag` and :meth:`handle_endtag`.
+   implementation simply calls :meth:`handle_starttag` and :meth:`handle_endtag`.
 
 
 .. method:: HTMLParser.handle_endtag(tag)
@@ -158,7 +162,7 @@ An exception is defined as well:
 
    Method called when an unrecognized SGML declaration is read by the parser.
    The *data* parameter will be the entire contents of the declaration inside
-   the ``<!...>`` markup.  It is sometimes useful to be be overridden by a
+   the ``<!...>`` markup.  It is sometimes useful to be overridden by a
    derived class; the base class implementation throws an :exc:`HTMLParseError`.
 
 
@@ -182,16 +186,21 @@ An exception is defined as well:
 Example HTML Parser Application
 -------------------------------
 
-As a basic example, below is a very basic HTML parser that uses the
-:class:`HTMLParser` class to print out tags as they are encountered::
+As a basic example, below is a simple HTML parser that uses the
+:class:`HTMLParser` class to print out start tags, end tags and data
+as they are encountered::
 
    from HTMLParser import HTMLParser
 
    class MyHTMLParser(HTMLParser):
-
        def handle_starttag(self, tag, attrs):
-           print "Encountered the beginning of a %s tag" % tag
-
+           print "Encountered a start tag:", tag
        def handle_endtag(self, tag):
-           print "Encountered the end of a %s tag" % tag
+           print "Encountered  an end tag:", tag
+       def handle_data(self, data):
+           print "Encountered   some data:", data
 
+
+   parser = MyHTMLParser()
+   parser.feed('<html><head><title>Test</title></head>'
+               '<body><h1>Parse me!</h1></body></html>')

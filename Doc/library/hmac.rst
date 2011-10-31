@@ -1,4 +1,3 @@
-
 :mod:`hmac` --- Keyed-Hashing for Message Authentication
 ========================================================
 
@@ -10,6 +9,10 @@
 
 .. versionadded:: 2.2
 
+**Source code:** :source:`Lib/hmac.py`
+
+--------------
+
 This module implements the HMAC algorithm as described by :rfc:`2104`.
 
 
@@ -19,10 +22,6 @@ This module implements the HMAC algorithm as described by :rfc:`2104`.
    is made. *digestmod* is the digest constructor or module for the HMAC object to
    use. It defaults to  the :func:`hashlib.md5` constructor.
 
-   .. note::
-
-      The md5 hash has known weaknesses but remains the default for backwards
-      compatibility. Choose a better one for your application.
 
 An HMAC object has the following methods:
 

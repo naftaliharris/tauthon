@@ -29,6 +29,7 @@ import urllib
 import BaseHTTPServer
 import SimpleHTTPServer
 import select
+import copy
 
 
 class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
@@ -70,27 +71,23 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             return SimpleHTTPServer.SimpleHTTPRequestHandler.send_head(self)
 
     def is_cgi(self):
-        """Test whether self.path corresponds to a CGI script,
-        and return a boolean.
+        """Test whether self.path corresponds to a CGI script.
 
-        This function sets self.cgi_info to a tuple (dir, rest)
-        when it returns True, where dir is the directory part before
-        the CGI script name.  Note that rest begins with a
-        slash if it is not empty.
+        Returns True and updates the cgi_info attribute to the tuple
+        (dir, rest) if self.path requires running a CGI script.
+        Returns False otherwise.
 
-        The default implementation tests whether the path
-        begins with one of the strings in the list
-        self.cgi_directories (and the next character is a '/'
-        or the end of the string).
+        If any exception is raised, the caller should assume that
+        self.path was rejected as invalid and act accordingly.
+
+        The default implementation tests whether the normalized url
+        path begins with one of the strings in self.cgi_directories
+        (and the next character is a '/' or the end of the string).
         """
-
-        path = self.path
-
-        for x in self.cgi_directories:
-            i = len(x)
-            if path[:i] == x and (not path[i:] or path[i] == '/'):
-                self.cgi_info = path[:i], path[i+1:]
-                return True
+        splitpath = _url_collapse_path_split(self.path)
+        if splitpath[0] in self.cgi_directories:
+            self.cgi_info = splitpath
+            return True
         return False
 
     cgi_directories = ['/cgi-bin', '/htbin']
@@ -158,7 +155,7 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
 
         # Reference: http://hoohoo.ncsa.uiuc.edu/cgi/env.html
         # XXX Much of the following could be prepared ahead of time!
-        env = {}
+        env = copy.deepcopy(os.environ)
         env['SERVER_SOFTWARE'] = self.version_string()
         env['SERVER_NAME'] = self.server.server_name
         env['GATEWAY_INTERFACE'] = 'CGI/1.1'
@@ -220,7 +217,6 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
         for k in ('QUERY_STRING', 'REMOTE_HOST', 'CONTENT_LENGTH',
                   'HTTP_USER_AGENT', 'HTTP_COOKIE', 'HTTP_REFERER'):
             env.setdefault(k, "")
-        os.environ.update(env)
 
         self.send_response(200, "Script output follows")
 
@@ -252,7 +248,7 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
                     pass
                 os.dup2(self.rfile.fileno(), 0)
                 os.dup2(self.wfile.fileno(), 1)
-                os.execve(scriptfile, args, os.environ)
+                os.execve(scriptfile, args, env)
             except:
                 self.server.handle_error(self.request, self.client_address)
                 os._exit(127)
@@ -278,7 +274,8 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             p = subprocess.Popen(cmdline,
                                  stdin = subprocess.PIPE,
                                  stdout = subprocess.PIPE,
-                                 stderr = subprocess.PIPE
+                                 stderr = subprocess.PIPE,
+                                 env = env
                                 )
             if self.command.lower() == "post" and nbytes > 0:
                 data = self.rfile.read(nbytes)
@@ -292,11 +289,53 @@ class CGIHTTPRequestHandler(SimpleHTTPServer.SimpleHTTPRequestHandler):
             self.wfile.write(stdout)
             if stderr:
                 self.log_error('%s', stderr)
+            p.stderr.close()
+            p.stdout.close()
             status = p.returncode
             if status:
                 self.log_error("CGI script exit status %#x", status)
             else:
                 self.log_message("CGI script exited OK")
+
+
+# TODO(gregory.p.smith): Move this into an appropriate library.
+def _url_collapse_path_split(path):
+    """
+    Given a URL path, remove extra '/'s and '.' path elements and collapse
+    any '..' references.
+
+    Implements something akin to RFC-2396 5.2 step 6 to parse relative paths.
+
+    Returns: A tuple of (head, tail) where tail is everything after the final /
+    and head is everything before it.  Head will always start with a '/' and,
+    if it contains anything else, never have a trailing '/'.
+
+    Raises: IndexError if too many '..' occur within the path.
+    """
+    # Similar to os.path.split(os.path.normpath(path)) but specific to URL
+    # path semantics rather than local operating system semantics.
+    path_parts = []
+    for part in path.split('/'):
+        if part == '.':
+            path_parts.append('')
+        else:
+            path_parts.append(part)
+    # Filter out blank non trailing parts before consuming the '..'.
+    path_parts = [part for part in path_parts[:-1] if part] + path_parts[-1:]
+    if path_parts:
+        tail_part = path_parts.pop()
+    else:
+        tail_part = ''
+    head_parts = []
+    for part in path_parts:
+        if part == '..':
+            head_parts.pop()
+        else:
+            head_parts.append(part)
+    if tail_part and tail_part == '..':
+        head_parts.pop()
+        tail_part = ''
+    return ('/' + '/'.join(head_parts), tail_part)
 
 
 nobody = None

@@ -170,7 +170,8 @@ There are three built-in functions that are very useful when used with lists:
 ``filter(function, sequence)`` returns a sequence consisting of those items from
 the sequence for which ``function(item)`` is true. If *sequence* is a
 :class:`string` or :class:`tuple`, the result will be of the same type;
-otherwise, it is always a :class:`list`. For example, to compute some primes::
+otherwise, it is always a :class:`list`. For example, to compute a sequence of
+numbers not divisible by 2 and 3::
 
    >>> def f(x): return x % 2 != 0 and x % 3 != 0
    ...
@@ -481,8 +482,8 @@ using a non-existent key.
 
 The :meth:`keys` method of a dictionary object returns a list of all the keys
 used in the dictionary, in arbitrary order (if you want it sorted, just apply
-the :meth:`sort` method to the list of keys).  To check whether a single key is
-in the dictionary, use the :keyword:`in` keyword.
+the :func:`sorted` function to it).  To check whether a single key is in the
+dictionary, use the :keyword:`in` keyword.
 
 Here is a small example using a dictionary::
 
