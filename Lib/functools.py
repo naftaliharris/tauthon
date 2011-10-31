@@ -114,13 +114,22 @@ def cmp_to_key(mycmp):
         __hash__ = None
     return K
 
+try:
+    from _functools import cmp_to_key
+except ImportError:
+    pass
+
 _CacheInfo = namedtuple("CacheInfo", "hits misses maxsize currsize")
 
-def lru_cache(maxsize=100):
+def lru_cache(maxsize=100, typed=False):
     """Least-recently-used cache decorator.
 
     If *maxsize* is set to None, the LRU features are disabled and the cache
     can grow without bound.
+
+    If *typed* is True, arguments of different types will be cached separately.
+    For example, f(3.0) and f(3) will be treated as distinct calls with
+    distinct results.
 
     Arguments to the cached function must be hashable.
 
@@ -137,7 +146,7 @@ def lru_cache(maxsize=100):
     # to allow the implementation to change (including a possible C version).
 
     def decorating_function(user_function,
-                tuple=tuple, sorted=sorted, len=len, KeyError=KeyError):
+            *, tuple=tuple, sorted=sorted, map=map, len=len, type=type, KeyError=KeyError):
 
         hits = misses = 0
         kwd_mark = (object(),)          # separates positional and keyword args
@@ -151,7 +160,12 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += kwd_mark + tuple(sorted(kwds.items()))
+                    sorted_items = tuple(sorted(kwds.items()))
+                    key += kwd_mark + sorted_items
+                if typed:
+                    key += tuple(map(type, args))
+                    if kwds:
+                        key += tuple(type(v) for k, v in sorted_items)
                 try:
                     result = cache[key]
                     hits += 1
@@ -172,7 +186,12 @@ def lru_cache(maxsize=100):
                 nonlocal hits, misses
                 key = args
                 if kwds:
-                    key += kwd_mark + tuple(sorted(kwds.items()))
+                    sorted_items = tuple(sorted(kwds.items()))
+                    key += kwd_mark + sorted_items
+                if typed:
+                    key += tuple(map(type, args))
+                    if kwds:
+                        key += tuple(type(v) for k, v in sorted_items)
                 with lock:
                     try:
                         result = cache[key]
