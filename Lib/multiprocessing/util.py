@@ -32,9 +32,11 @@
 # SUCH DAMAGE.
 #
 
+import functools
 import itertools
 import weakref
 import atexit
+import select
 import threading        # we want threading to install it's
                         # cleanup function before multiprocessing does
 
@@ -186,7 +188,11 @@ class Finalize(object):
 
         _finalizer_registry[self._key] = self
 
-    def __call__(self, wr=None):
+    def __call__(self, wr=None,
+                 # Need to bind these locally because the globals can have
+                 # been cleared at shutdown
+                 _finalizer_registry=_finalizer_registry,
+                 sub_debug=sub_debug):
         '''
         Run the callback unless it has already been called or cancelled
         '''
@@ -315,3 +321,18 @@ class ForkAwareLocal(threading.local):
         register_after_fork(self, lambda obj : obj.__dict__.clear())
     def __reduce__(self):
         return type(self), ()
+
+
+#
+# Automatic retry after EINTR
+#
+
+def _eintr_retry(func):
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        while True:
+            try:
+                return func(*args, **kwargs)
+            except InterruptedError:
+                continue
+    return wrapped
