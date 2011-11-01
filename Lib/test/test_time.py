@@ -20,6 +20,27 @@ class TimeTestCase(unittest.TestCase):
     def test_clock(self):
         time.clock()
 
+    @unittest.skipUnless(hasattr(time, 'clock_gettime'),
+                         'need time.clock_gettime()')
+    def test_clock_realtime(self):
+        time.clock_gettime(time.CLOCK_REALTIME)
+
+    @unittest.skipUnless(hasattr(time, 'clock_gettime'),
+                         'need time.clock_gettime()')
+    @unittest.skipUnless(hasattr(time, 'CLOCK_MONOTONIC'),
+                         'need time.CLOCK_MONOTONIC')
+    def test_clock_monotonic(self):
+        a = time.clock_gettime(time.CLOCK_MONOTONIC)
+        b = time.clock_gettime(time.CLOCK_MONOTONIC)
+        self.assertLessEqual(a, b)
+
+    @unittest.skipUnless(hasattr(time, 'clock_getres'),
+                         'need time.clock_getres()')
+    def test_clock_getres(self):
+        res = time.clock_getres(time.CLOCK_REALTIME)
+        self.assertGreater(res, 0.0)
+        self.assertLessEqual(res, 1.0)
+
     def test_conversions(self):
         self.assertEqual(time.ctime(self.t),
                          time.asctime(time.localtime(self.t)))
@@ -27,6 +48,8 @@ class TimeTestCase(unittest.TestCase):
                          int(self.t))
 
     def test_sleep(self):
+        self.assertRaises(ValueError, time.sleep, -2)
+        self.assertRaises(ValueError, time.sleep, -1)
         time.sleep(1.2)
 
     def test_strftime(self):
@@ -47,28 +70,35 @@ class TimeTestCase(unittest.TestCase):
             with self.assertRaises(ValueError):
                 time.strftime('%f')
 
-    def _bounds_checking(self, func=time.strftime):
+    def _bounds_checking(self, func):
         # Make sure that strftime() checks the bounds of the various parts
-        #of the time tuple (0 is valid for *all* values).
+        # of the time tuple (0 is valid for *all* values).
 
         # The year field is tested by other test cases above
 
         # Check month [1, 12] + zero support
+        func((1900, 0, 1, 0, 0, 0, 0, 1, -1))
+        func((1900, 12, 1, 0, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, -1, 1, 0, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 13, 1, 0, 0, 0, 0, 1, -1))
         # Check day of month [1, 31] + zero support
+        func((1900, 1, 0, 0, 0, 0, 0, 1, -1))
+        func((1900, 1, 31, 0, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, -1, 0, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 32, 0, 0, 0, 0, 1, -1))
         # Check hour [0, 23]
+        func((1900, 1, 1, 0, 0, 0, 0, 1, -1))
+        func((1900, 1, 1, 23, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, -1, 0, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, 24, 0, 0, 0, 1, -1))
         # Check minute [0, 59]
+        func((1900, 1, 1, 0, 59, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, 0, -1, 0, 0, 1, -1))
         self.assertRaises(ValueError, func,
@@ -78,15 +108,21 @@ class TimeTestCase(unittest.TestCase):
                             (1900, 1, 1, 0, 0, -1, 0, 1, -1))
         # C99 only requires allowing for one leap second, but Python's docs say
         # allow two leap seconds (0..61)
+        func((1900, 1, 1, 0, 0, 60, 0, 1, -1))
+        func((1900, 1, 1, 0, 0, 61, 0, 1, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, 0, 0, 62, 0, 1, -1))
         # No check for upper-bound day of week;
         #  value forced into range by a ``% 7`` calculation.
         # Start check at -2 since gettmarg() increments value before taking
         #  modulo.
+        self.assertEqual(func((1900, 1, 1, 0, 0, 0, -1, 1, -1)),
+                         func((1900, 1, 1, 0, 0, 0, +6, 1, -1)))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, 0, 0, 0, -2, 1, -1))
         # Check day of the year [1, 366] + zero support
+        func((1900, 1, 1, 0, 0, 0, 0, 0, -1))
+        func((1900, 1, 1, 0, 0, 0, 0, 366, -1))
         self.assertRaises(ValueError, func,
                             (1900, 1, 1, 0, 0, 0, 0, -1, -1))
         self.assertRaises(ValueError, func,
@@ -96,12 +132,13 @@ class TimeTestCase(unittest.TestCase):
         self._bounds_checking(lambda tup: time.strftime('', tup))
 
     def test_default_values_for_zero(self):
-        # Make sure that using all zeros uses the proper default values.
-        # No test for daylight savings since strftime() does not change output
-        # based on its value.
+        # Make sure that using all zeros uses the proper default
+        # values.  No test for daylight savings since strftime() does
+        # not change output based on its value and no test for year
+        # because systems vary in their support for year 0.
         expected = "2000 01 01 00 00 00 1 001"
         with support.check_warnings():
-            result = time.strftime("%Y %m %d %H %M %S %w %j", (0,)*9)
+            result = time.strftime("%Y %m %d %H %M %S %w %j", (2000,)+(0,)*8)
         self.assertEqual(expected, result)
 
     def test_strptime(self):
@@ -271,19 +308,12 @@ class TestLocale(unittest.TestCase):
 
 
 class _BaseYearTest(unittest.TestCase):
-    accept2dyear = None
-
-    def setUp(self):
-        self.saved_accept2dyear = time.accept2dyear
-        time.accept2dyear = self.accept2dyear
-
-    def tearDown(self):
-        time.accept2dyear = self.saved_accept2dyear
-
     def yearstr(self, y):
         raise NotImplementedError()
 
 class _TestAsctimeYear:
+    _format = '%d'
+
     def yearstr(self, y):
         return time.asctime((y,) + (0,) * 8).split()[-1]
 
@@ -293,8 +323,41 @@ class _TestAsctimeYear:
         self.assertEqual(self.yearstr(123456789), '123456789')
 
 class _TestStrftimeYear:
+
+    # Issue 13305:  For years < 1000, the value is not always
+    # padded to 4 digits across platforms.  The C standard
+    # assumes year >= 1900, so it does not specify the number
+    # of digits.
+
+    if time.strftime('%Y', (1,) + (0,) * 8) == '0001':
+        _format = '%04d'
+    else:
+        _format = '%d'
+
     def yearstr(self, y):
-        return time.strftime('%Y', (y,) + (0,) * 8).split()[-1]
+        return time.strftime('%Y', (y,) + (0,) * 8)
+
+    def test_4dyear(self):
+        # Check that we can return the zero padded value.
+        if self._format == '%04d':
+            self.test_year('%04d')
+        else:
+            def year4d(y):
+                return time.strftime('%4Y', (y,) + (0,) * 8)
+            self.test_year('%04d', func=year4d)
+
+class _Test4dYear(_BaseYearTest):
+    _format = '%d'
+
+    def test_year(self, fmt=None, func=None):
+        fmt = fmt or self._format
+        func = func or self.yearstr
+        self.assertEqual(func(1),    fmt % 1)
+        self.assertEqual(func(68),   fmt % 68)
+        self.assertEqual(func(69),   fmt % 69)
+        self.assertEqual(func(99),   fmt % 99)
+        self.assertEqual(func(999),  fmt % 999)
+        self.assertEqual(func(9999), fmt % 9999)
 
     def test_large_year(self):
         # Check that it doesn't crash for year > 9999
@@ -306,39 +369,13 @@ class _TestStrftimeYear:
         self.assertEqual(text, '12345')
         self.assertEqual(self.yearstr(123456789), '123456789')
 
-class _Test2dYear(_BaseYearTest):
-    accept2dyear = 1
-
-    def test_year(self):
-        with support.check_warnings():
-            self.assertEqual(self.yearstr(0), '2000')
-            self.assertEqual(self.yearstr(69), '1969')
-            self.assertEqual(self.yearstr(68), '2068')
-            self.assertEqual(self.yearstr(99), '1999')
-
-    def test_invalid(self):
-        self.assertRaises(ValueError, self.yearstr, -1)
-        self.assertRaises(ValueError, self.yearstr, 100)
-        self.assertRaises(ValueError, self.yearstr, 999)
-
-class _Test4dYear(_BaseYearTest):
-    accept2dyear = 0
-
-    def test_year(self):
-        self.assertIn(self.yearstr(1),     ('1', '0001'))
-        self.assertIn(self.yearstr(68),   ('68', '0068'))
-        self.assertIn(self.yearstr(69),   ('69', '0069'))
-        self.assertIn(self.yearstr(99),   ('99', '0099'))
-        self.assertIn(self.yearstr(999), ('999', '0999'))
-        self.assertEqual(self.yearstr(9999), '9999')
-
     def test_negative(self):
         try:
             text = self.yearstr(-1)
         except ValueError:
             # strftime() is limited to [1; 9999] with Visual Studio
             return
-        self.assertIn(text, ('-1', '-001'))
+        self.assertEqual(text, self._format % -1)
 
         self.assertEqual(self.yearstr(-1234), '-1234')
         self.assertEqual(self.yearstr(-123456), '-123456')
@@ -361,46 +398,19 @@ class _Test4dYear(_BaseYearTest):
         except OverflowError:
             pass
 
-class TestAsctimeAccept2dYear(_TestAsctimeYear, _Test2dYear):
-    pass
-
-class TestStrftimeAccept2dYear(_TestStrftimeYear, _Test2dYear):
-    pass
-
 class TestAsctime4dyear(_TestAsctimeYear, _Test4dYear):
     pass
 
 class TestStrftime4dyear(_TestStrftimeYear, _Test4dYear):
     pass
 
-class Test2dyearBool(_TestAsctimeYear, _Test2dYear):
-    accept2dyear = True
-
-class Test4dyearBool(_TestAsctimeYear, _Test4dYear):
-    accept2dyear = False
-
-class TestAccept2YearBad(_TestAsctimeYear, _BaseYearTest):
-    class X:
-        def __bool__(self):
-            raise RuntimeError('boo')
-    accept2dyear = X()
-    def test_2dyear(self):
-        pass
-    def test_invalid(self):
-        self.assertRaises(RuntimeError, self.yearstr, 200)
-
 
 def test_main():
     support.run_unittest(
         TimeTestCase,
         TestLocale,
-        TestAsctimeAccept2dYear,
-        TestStrftimeAccept2dYear,
         TestAsctime4dyear,
-        TestStrftime4dyear,
-        Test2dyearBool,
-        Test4dyearBool,
-        TestAccept2YearBad)
+        TestStrftime4dyear)
 
 if __name__ == "__main__":
     test_main()
