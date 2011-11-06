@@ -128,7 +128,9 @@ Exported functions:
 """
 
 import base64
+import sys
 import time
+from datetime import datetime
 import http.client
 from xml.parsers import expat
 import socket
@@ -142,17 +144,13 @@ except ImportError:
 # --------------------------------------------------------------------
 # Internal stuff
 
-try:
-    import datetime
-except ImportError:
-    datetime = None
-
 def escape(s):
     s = s.replace("&", "&amp;")
     s = s.replace("<", "&lt;")
     return s.replace(">", "&gt;",)
 
-__version__ = "1.0.1"
+# used in User-Agent header sent
+__version__ = sys.version[:3]
 
 # xmlrpc integer limits
 MAXINT =  2**31-1
@@ -252,21 +250,33 @@ boolean = Boolean = bool
 # Wrapper for XML-RPC DateTime values.  This converts a time value to
 # the format used by XML-RPC.
 # <p>
-# The value can be given as a string in the format
-# "yyyymmddThh:mm:ss", as a 9-item time tuple (as returned by
+# The value can be given as a datetime object, as a string in the
+# format "yyyymmddThh:mm:ss", as a 9-item time tuple (as returned by
 # time.localtime()), or an integer value (as returned by time.time()).
 # The wrapper uses time.localtime() to convert an integer to a time
 # tuple.
 #
-# @param value The time, given as an ISO 8601 string, a time
-#              tuple, or a integer time value.
+# @param value The time, given as a datetime object, an ISO 8601 string,
+#              a time tuple, or an integer time value.
+
+
+# Issue #13305: different format codes across platforms
+_day0 = datetime(1, 1, 1)
+if _day0.strftime('%Y') == '0001':      # Mac OS X
+    def _iso8601_format(value):
+        return value.strftime("%Y%m%dT%H:%M:%S")
+elif _day0.strftime('%4Y') == '0001':   # Linux
+    def _iso8601_format(value):
+        return value.strftime("%4Y%m%dT%H:%M:%S")
+else:
+    def _iso8601_format(value):
+        return value.strftime("%Y%m%dT%H:%M:%S").zfill(17)
+del _day0
+
 
 def _strftime(value):
-    if datetime:
-        if isinstance(value, datetime.datetime):
-            return "%04d%02d%02dT%02d:%02d:%02d" % (
-                value.year, value.month, value.day,
-                value.hour, value.minute, value.second)
+    if isinstance(value, datetime):
+        return _iso8601_format(value)
 
     if not isinstance(value, (tuple, time.struct_time)):
         if value == 0:
@@ -291,9 +301,9 @@ class DateTime:
         if isinstance(other, DateTime):
             s = self.value
             o = other.value
-        elif datetime and isinstance(other, datetime.datetime):
+        elif isinstance(other, datetime):
             s = self.value
-            o = other.strftime("%Y%m%dT%H:%M:%S")
+            o = _iso8601_format(other)
         elif isinstance(other, str):
             s = self.value
             o = other
@@ -361,8 +371,7 @@ def _datetime(data):
     return value
 
 def _datetime_type(data):
-    t = time.strptime(data, "%Y%m%dT%H:%M:%S")
-    return datetime.datetime(*tuple(t)[:6])
+    return datetime.strptime(data, "%Y%m%dT%H:%M:%S")
 
 ##
 # Wrapper for binary data.  This can be used to transport any kind
@@ -408,7 +417,6 @@ class Binary:
         out.write("<value><base64>\n")
         encoded = base64.encodebytes(self.data)
         out.write(encoded.decode('ascii'))
-        out.write('\n')
         out.write("</base64></value>\n")
 
 def _binary(data):
@@ -522,15 +530,6 @@ class Marshaller:
         write("<value><nil/></value>")
     dispatch[type(None)] = dump_nil
 
-    def dump_int(self, value, write):
-        # in case ints are > 32 bits
-        if value > MAXINT or value < MININT:
-            raise OverflowError("int exceeds XML-RPC limits")
-        write("<value><int>")
-        write(str(value))
-        write("</int></value>\n")
-    #dispatch[int] = dump_int
-
     def dump_bool(self, value, write):
         write("<value><boolean>")
         write(value and "1" or "0")
@@ -544,6 +543,9 @@ class Marshaller:
         write(str(int(value)))
         write("</int></value>\n")
     dispatch[int] = dump_long
+
+    # backward compatible
+    dump_int = dump_long
 
     def dump_double(self, value, write):
         write("<value><double>")
@@ -589,12 +591,11 @@ class Marshaller:
         del self.memo[i]
     dispatch[dict] = dump_struct
 
-    if datetime:
-        def dump_datetime(self, value, write):
-            write("<value><dateTime.iso8601>")
-            write(_strftime(value))
-            write("</dateTime.iso8601></value>\n")
-        dispatch[datetime.datetime] = dump_datetime
+    def dump_datetime(self, value, write):
+        write("<value><dateTime.iso8601>")
+        write(_strftime(value))
+        write("</dateTime.iso8601></value>\n")
+    dispatch[datetime] = dump_datetime
 
     def dump_instance(self, value, write):
         # check for special wrappers
@@ -637,8 +638,6 @@ class Unmarshaller:
         self._encoding = "utf-8"
         self.append = self._stack.append
         self._use_datetime = use_datetime
-        if use_datetime and not datetime:
-            raise ValueError("the datetime module is not available")
 
     def close(self):
         # return response tuple and target method
@@ -867,8 +866,6 @@ def getparser(use_datetime=False):
     Create an instance of the fastest available parser, and attach it
     to an unmarshalling object.  Return both objects.
     """
-    if use_datetime and not datetime:
-        raise ValueError("the datetime module is not available")
     if FastParser and FastUnmarshaller:
         if use_datetime:
             mkdatetime = _datetime_type
@@ -1085,7 +1082,7 @@ class Transport:
     """Handles an HTTP transaction to an XML-RPC server."""
 
     # client identifier (may be overridden)
-    user_agent = "xmlrpclib.py/%s (by www.pythonware.com)" % __version__
+    user_agent = "Python-xmlrpc/%s" % __version__
 
     #if true, we'll request gzip encoding
     accept_gzip_encoding = True
