@@ -1843,11 +1843,9 @@ PyCSimpleType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
     if (PyUnicode_Check(proto)) {
-        PyObject *v = _PyUnicode_AsDefaultEncodedString(proto, NULL);
-        if (!v)
+        proto_str = PyUnicode_AsUTF8AndSize(proto, &proto_len);
+        if (!proto_str)
             goto error;
-        proto_str = PyBytes_AS_STRING(v);
-        proto_len = PyBytes_GET_SIZE(v);
     } else {
         PyErr_SetString(PyExc_TypeError,
             "class must define a '_type_' string attribute");
@@ -3681,8 +3679,10 @@ _build_result(PyObject *result, PyObject *callargs,
             PyTuple_SET_ITEM(tup, index, v);
             index++;
         } else if (bit & outmask) {
+            _Py_IDENTIFIER(__ctypes_from_outparam__);
+
             v = PyTuple_GET_ITEM(callargs, i);
-            v = PyObject_CallMethod(v, "__ctypes_from_outparam__", NULL);
+            v = _PyObject_CallMethodId(v, &PyId___ctypes_from_outparam__, NULL);
             if (v == NULL || numretvals == 1) {
                 Py_DECREF(callargs);
                 return v;
@@ -4599,38 +4599,20 @@ static PyNumberMethods Simple_as_number = {
 static PyObject *
 Simple_repr(CDataObject *self)
 {
-    PyObject *val, *name, *args, *result;
-    static PyObject *format;
+    PyObject *val, *result;
 
     if (Py_TYPE(self)->tp_base != &Simple_Type) {
         return PyUnicode_FromFormat("<%s object at %p>",
                                    Py_TYPE(self)->tp_name, self);
     }
 
-    if (format == NULL) {
-        format = PyUnicode_InternFromString("%s(%r)");
-        if (format == NULL)
-            return NULL;
-    }
-
     val = Simple_get_value(self);
     if (val == NULL)
         return NULL;
 
-    name = PyUnicode_FromString(Py_TYPE(self)->tp_name);
-    if (name == NULL) {
-        Py_DECREF(val);
-        return NULL;
-    }
-
-    args = PyTuple_Pack(2, name, val);
-    Py_DECREF(name);
+    result = PyUnicode_FromFormat("%s(%R)",
+                                  Py_TYPE(self)->tp_name, val);
     Py_DECREF(val);
-    if (args == NULL)
-        return NULL;
-
-    result = PyUnicode_Format(format, args);
-    Py_DECREF(args);
     return result;
 }
 

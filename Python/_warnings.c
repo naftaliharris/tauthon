@@ -18,11 +18,12 @@ static int
 check_matched(PyObject *obj, PyObject *arg)
 {
     PyObject *result;
+    _Py_IDENTIFIER(match);
     int rc;
 
     if (obj == Py_None)
         return 1;
-    result = PyObject_CallMethod(obj, "match", "O", arg);
+    result = _PyObject_CallMethodId(obj, &PyId_match, "O", arg);
     if (result == NULL)
         return -1;
 
@@ -246,10 +247,11 @@ show_warning(PyObject *filename, int lineno, PyObject *text, PyObject
     PyObject *f_stderr;
     PyObject *name;
     char lineno_str[128];
+    _Py_IDENTIFIER(__name__);
 
     PyOS_snprintf(lineno_str, sizeof(lineno_str), ":%d: ", lineno);
 
-    name = PyObject_GetAttrString(category, "__name__");
+    name = _PyObject_GetAttrId(category, &PyId___name__);
     if (name == NULL)  /* XXX Can an object lack a '__name__' attribute? */
         return;
 
@@ -409,10 +411,10 @@ warn_explicit(PyObject *category, PyObject *message,
         else {
             PyObject *res;
 
-            if (!PyMethod_Check(show_fxn) && !PyFunction_Check(show_fxn)) {
+            if (!PyCallable_Check(show_fxn)) {
                 PyErr_SetString(PyExc_TypeError,
                                 "warnings.showwarning() must be set to a "
-                                "function or method");
+                                "callable");
                 Py_DECREF(show_fxn);
                 goto cleanup;
             }
@@ -497,18 +499,27 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
     /* Setup filename. */
     *filename = PyDict_GetItemString(globals, "__file__");
     if (*filename != NULL && PyUnicode_Check(*filename)) {
-        Py_ssize_t len = PyUnicode_GetSize(*filename);
-        Py_UNICODE *unicode = PyUnicode_AS_UNICODE(*filename);
+        Py_ssize_t len;
+        int kind;
+        void *data;
+
+        if (PyUnicode_READY(*filename))
+            goto handle_error;
+
+        len = PyUnicode_GetSize(*filename);
+        kind = PyUnicode_KIND(*filename);
+        data = PyUnicode_DATA(*filename);
 
         /* if filename.lower().endswith((".pyc", ".pyo")): */
         if (len >= 4 &&
-            unicode[len-4] == '.' &&
-            Py_UNICODE_TOLOWER(unicode[len-3]) == 'p' &&
-            Py_UNICODE_TOLOWER(unicode[len-2]) == 'y' &&
-            (Py_UNICODE_TOLOWER(unicode[len-1]) == 'c' ||
-                Py_UNICODE_TOLOWER(unicode[len-1]) == 'o'))
+            PyUnicode_READ(kind, data, len-4) == '.' &&
+            Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-3)) == 'p' &&
+            Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-2)) == 'y' &&
+            (Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-1)) == 'c' ||
+                Py_UNICODE_TOLOWER(PyUnicode_READ(kind, data, len-1)) == 'o'))
         {
-            *filename = PyUnicode_FromUnicode(unicode, len-1);
+            *filename = PyUnicode_Substring(*filename, 0,
+                                            PyUnicode_GET_LENGTH(*filename)-1);
             if (*filename == NULL)
                 goto handle_error;
         }
@@ -643,8 +654,9 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
 
     if (module_globals) {
-        static PyObject *get_source_name = NULL;
-        static PyObject *splitlines_name = NULL;
+        _Py_IDENTIFIER(get_source);
+        _Py_IDENTIFIER(splitlines);
+        PyObject *tmp;
         PyObject *loader;
         PyObject *module_name;
         PyObject *source;
@@ -652,16 +664,12 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
         PyObject *source_line;
         PyObject *returned;
 
-        if (get_source_name == NULL) {
-            get_source_name = PyUnicode_InternFromString("get_source");
-            if (!get_source_name)
-                return NULL;
-        }
-        if (splitlines_name == NULL) {
-            splitlines_name = PyUnicode_InternFromString("splitlines");
-            if (!splitlines_name)
-                return NULL;
-        }
+        if ((tmp = _PyUnicode_FromId(&PyId_get_source)) == NULL)
+            return NULL;
+        Py_DECREF(tmp);
+        if ((tmp = _PyUnicode_FromId(&PyId_splitlines)) == NULL)
+            return NULL;
+        Py_DECREF(tmp);
 
         /* Check/get the requisite pieces needed for the loader. */
         loader = PyDict_GetItemString(module_globals, "__loader__");
@@ -671,11 +679,11 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
             goto standard_call;
 
         /* Make sure the loader implements the optional get_source() method. */
-        if (!PyObject_HasAttrString(loader, "get_source"))
+        if (!_PyObject_HasAttrId(loader, &PyId_get_source))
                 goto standard_call;
         /* Call get_source() to get the source code. */
-        source = PyObject_CallMethodObjArgs(loader, get_source_name,
-                                                module_name, NULL);
+        source = PyObject_CallMethodObjArgs(loader, PyId_get_source.object,
+                                            module_name, NULL);
         if (!source)
             return NULL;
         else if (source == Py_None) {
@@ -684,8 +692,9 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
         }
 
         /* Split the source into lines. */
-        source_list = PyObject_CallMethodObjArgs(source, splitlines_name,
-                                                    NULL);
+        source_list = PyObject_CallMethodObjArgs(source, 
+                                                 PyId_splitlines.object,
+                                                 NULL);
         Py_DECREF(source);
         if (!source_list)
             return NULL;
