@@ -148,15 +148,6 @@ do_mklist(const char **p_format, va_list *p_va, int endchar, int n, int flags)
     return v;
 }
 
-static int
-_ustrlen(Py_UNICODE *u)
-{
-    int i = 0;
-    Py_UNICODE *v = u;
-    while (*v != 0) { i++; v++; }
-    return i;
-}
-
 static PyObject *
 do_mktuple(const char **p_format, va_list *p_va, int endchar, int n, int flags)
 {
@@ -269,7 +260,7 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
             }
             else {
                 if (n < 0)
-                    n = _ustrlen(u);
+                    n = Py_UNICODE_strlen(u);
                 v = PyUnicode_FromUnicode(u, n);
             }
             return v;
@@ -292,11 +283,6 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
         case 'C':
         {
             int i = va_arg(*p_va, int);
-            if (i < 0 || i > PyUnicode_GetMax()) {
-                PyErr_SetString(PyExc_OverflowError,
-                                "%c arg not in range(0x110000)");
-                return NULL;
-            }
             return PyUnicode_FromOrdinal(i);
         }
 

@@ -59,14 +59,25 @@ typedef int socklen_t;
 #include <bluetooth.h>
 #endif
 
+#ifdef HAVE_NET_IF_H
+# include <net/if.h>
+#endif
+
 #ifdef HAVE_NETPACKET_PACKET_H
 # include <sys/ioctl.h>
-# include <net/if.h>
 # include <netpacket/packet.h>
 #endif
 
 #ifdef HAVE_LINUX_TIPC_H
 # include <linux/tipc.h>
+#endif
+
+#ifdef HAVE_LINUX_CAN_H
+#include <linux/can.h>
+#endif
+
+#ifdef HAVE_LINUX_CAN_RAW_H
+#include <linux/can/raw.h>
 #endif
 
 #ifndef Py__SOCKET_H
@@ -122,6 +133,9 @@ typedef union sock_addr {
 #endif
 #ifdef HAVE_NETPACKET_PACKET_H
     struct sockaddr_ll ll;
+#endif
+#ifdef HAVE_LINUX_CAN_H
+    struct sockaddr_can can;
 #endif
 } sock_addr_t;
 
