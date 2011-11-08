@@ -16,6 +16,13 @@ import warnings
 import array
 from array import _array_reconstructor as array_reconstructor
 
+try:
+    # Try to determine availability of long long independently
+    # of the array module under test
+    struct.calcsize('@q')
+    have_long_long = True
+except struct.error:
+    have_long_long = False
 
 class ArraySubclass(array.array):
     pass
@@ -26,6 +33,8 @@ class ArraySubclassWithKwargs(array.array):
 
 tests = [] # list to accumulate all tests
 typecodes = "ubBhHiIlLfd"
+if have_long_long:
+    typecodes += 'qQ'
 
 class BadConstructorTest(unittest.TestCase):
 
@@ -209,10 +218,14 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(bi[1], len(a))
 
     def test_byteswap(self):
-        a = array.array(self.typecode, self.example)
+        if self.typecode == 'u':
+            example = '\U00100100'
+        else:
+            example = self.example
+        a = array.array(self.typecode, example)
         self.assertRaises(TypeError, a.byteswap, 42)
         if a.itemsize in (1, 2, 4, 8):
-            b = array.array(self.typecode, self.example)
+            b = array.array(self.typecode, example)
             b.byteswap()
             if a.itemsize==1:
                 self.assertEqual(a, b)
@@ -1002,7 +1015,7 @@ class UnicodeTest(StringTest):
     smallerexample = '\x01\u263a\x00\ufefe'
     biggerexample = '\x01\u263a\x01\ufeff'
     outside = str('\x33')
-    minitemsize = 2
+    minitemsize = 4
 
     def test_unicode(self):
         self.assertRaises(TypeError, array.array, 'b', 'foo')
@@ -1014,6 +1027,7 @@ class UnicodeTest(StringTest):
         a.fromunicode('\x11abc\xff\u1234')
         s = a.tounicode()
         self.assertEqual(s, '\xa0\xc2\u1234 \x11abc\xff\u1234')
+        self.assertEqual(a.itemsize, 4)
 
         s = '\x00="\'a\\b\x80\xff\u0000\u0001\u1234'
         a = array.array('u', s)
@@ -1204,6 +1218,18 @@ class UnsignedLongTest(UnsignedNumberTest):
     typecode = 'L'
     minitemsize = 4
 tests.append(UnsignedLongTest)
+
+@unittest.skipIf(not have_long_long, 'need long long support')
+class LongLongTest(SignedNumberTest):
+    typecode = 'q'
+    minitemsize = 8
+tests.append(LongLongTest)
+
+@unittest.skipIf(not have_long_long, 'need long long support')
+class UnsignedLongLongTest(UnsignedNumberTest):
+    typecode = 'Q'
+    minitemsize = 8
+tests.append(UnsignedLongLongTest)
 
 class FPTest(NumberTest):
     example = [-42.0, 0, 42, 1e5, -1e10]
