@@ -483,6 +483,7 @@ multibytecodec_encode(MultibyteCodec *codec,
         return PyBytes_FromStringAndSize(NULL, 0);
 
     buf.excobj = NULL;
+    buf.outobj = NULL;
     buf.inbuf = buf.inbuf_top = *data;
     buf.inbuf_end = buf.inbuf_top + datalen;
 
@@ -900,11 +901,17 @@ mbiencoder_encode(MultibyteIncrementalEncoderObject *self,
 static PyObject *
 mbiencoder_reset(MultibyteIncrementalEncoderObject *self)
 {
-    if (self->codec->decreset != NULL &&
-        self->codec->decreset(&self->state, self->codec->config) != 0)
-        return NULL;
+    /* Longest output: 4 bytes (b'\x0F\x1F(B') with ISO 2022 */
+    unsigned char buffer[4], *outbuf;
+    Py_ssize_t r;
+    if (self->codec->encreset != NULL) {
+        outbuf = buffer;
+        r = self->codec->encreset(&self->state, self->codec->config,
+                                  &outbuf, sizeof(buffer));
+        if (r != 0)
+            return NULL;
+    }
     self->pendingsize = 0;
-
     Py_RETURN_NONE;
 }
 
@@ -1572,12 +1579,13 @@ mbstreamwriter_iwrite(MultibyteStreamWriterObject *self,
                       PyObject *unistr)
 {
     PyObject *str, *wr;
+    _Py_IDENTIFIER(write);
 
     str = encoder_encode_stateful(STATEFUL_ECTX(self), unistr, 0);
     if (str == NULL)
         return -1;
 
-    wr = PyObject_CallMethod(self->stream, "write", "O", str);
+    wr = _PyObject_CallMethodId(self->stream, &PyId_write, "O", str);
     Py_DECREF(str);
     if (wr == NULL)
         return -1;
@@ -1643,7 +1651,9 @@ mbstreamwriter_reset(MultibyteStreamWriterObject *self)
     assert(PyBytes_Check(pwrt));
     if (PyBytes_Size(pwrt) > 0) {
         PyObject *wr;
-        wr = PyObject_CallMethod(self->stream, "write", "O", pwrt);
+        _Py_IDENTIFIER(write);
+
+        wr = _PyObject_CallMethodId(self->stream, &PyId_write, "O", pwrt);
         if (wr == NULL) {
             Py_DECREF(pwrt);
             return NULL;
