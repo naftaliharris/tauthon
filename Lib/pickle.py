@@ -23,8 +23,6 @@ Misc variables:
 
 """
 
-__version__ = "$Revision$"       # Code version
-
 from types import FunctionType, BuiltinFunctionType
 from copyreg import dispatch_table
 from copyreg import _extension_registry, _inverted_registry, _extension_cache
@@ -1328,7 +1326,7 @@ def _test():
     return doctest.testmod()
 
 if __name__ == "__main__":
-    import sys, argparse
+    import argparse
     parser = argparse.ArgumentParser(
         description='display contents of the pickle files')
     parser.add_argument(
