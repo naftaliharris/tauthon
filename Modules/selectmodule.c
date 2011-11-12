@@ -54,8 +54,6 @@ extern void bzero(void *, int);
 #  endif
 #endif
 
-static PyObject *SelectError;
-
 /* list of Python objects and their file descriptor */
 typedef struct {
     PyObject *obj;                           /* owned reference */
@@ -227,6 +225,11 @@ select_select(PyObject *self, PyObject *args)
                             "timeout period too long");
             return NULL;
         }
+        if (timeout < 0) {
+            PyErr_SetString(PyExc_ValueError,
+                        "timeout must be non-negative");
+            return NULL;
+        }
         seconds = (long)timeout;
         timeout = timeout - (double)seconds;
         tv.tv_sec = seconds;
@@ -269,11 +272,11 @@ select_select(PyObject *self, PyObject *args)
 
 #ifdef MS_WINDOWS
     if (n == SOCKET_ERROR) {
-        PyErr_SetExcFromWindowsErr(SelectError, WSAGetLastError());
+        PyErr_SetExcFromWindowsErr(PyExc_OSError, WSAGetLastError());
     }
 #else
     if (n < 0) {
-        PyErr_SetFromErrno(SelectError);
+        PyErr_SetFromErrno(PyExc_OSError);
     }
 #endif
     else {
@@ -420,7 +423,7 @@ poll_modify(pollObject *self, PyObject *args)
         return NULL;
     if (PyDict_GetItem(self->dict, key) == NULL) {
         errno = ENOENT;
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     value = PyLong_FromLong(events);
@@ -519,7 +522,7 @@ poll_poll(pollObject *self, PyObject *args)
     Py_END_ALLOW_THREADS
 
     if (poll_result < 0) {
-        PyErr_SetFromErrno(SelectError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
 
@@ -759,7 +762,7 @@ newPyEpoll_Object(PyTypeObject *type, int sizehint, SOCKET fd)
     }
     if (self->epfd < 0) {
         Py_DECREF(self);
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     return (PyObject *)self;
@@ -792,7 +795,7 @@ pyepoll_close(pyEpoll_Object *self)
 {
     errno = pyepoll_internal_close(self);
     if (errno < 0) {
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     Py_RETURN_NONE;
@@ -885,7 +888,7 @@ pyepoll_internal_ctl(int epfd, int op, PyObject *pfd, unsigned int events)
     }
 
     if (result < 0) {
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     Py_RETURN_NONE;
@@ -909,7 +912,7 @@ pyepoll_register(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
 PyDoc_STRVAR(pyepoll_register_doc,
 "register(fd[, eventmask]) -> None\n\
 \n\
-Registers a new fd or raises an IOError if the fd is already registered.\n\
+Registers a new fd or raises an OSError if the fd is already registered.\n\
 fd is the target file descriptor of the operation.\n\
 events is a bit set composed of the various EPOLL constants; the default\n\
 is EPOLL_IN | EPOLL_OUT | EPOLL_PRI.\n\
@@ -1008,7 +1011,7 @@ pyepoll_poll(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
     nfds = epoll_wait(self->epfd, evs, maxevents, timeout);
     Py_END_ALLOW_THREADS
     if (nfds < 0) {
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         goto error;
     }
 
@@ -1399,7 +1402,7 @@ newKqueue_Object(PyTypeObject *type, SOCKET fd)
     }
     if (self->kqfd < 0) {
         Py_DECREF(self);
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     return (PyObject *)self;
@@ -1431,7 +1434,7 @@ kqueue_queue_close(kqueue_queue_Object *self)
 {
     errno = kqueue_queue_internal_close(self);
     if (errno < 0) {
-        PyErr_SetFromErrno(PyExc_IOError);
+        PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
     Py_RETURN_NONE;
@@ -1773,9 +1776,8 @@ PyInit_select(void)
     if (m == NULL)
         return NULL;
 
-    SelectError = PyErr_NewException("select.error", NULL, NULL);
-    Py_INCREF(SelectError);
-    PyModule_AddObject(m, "error", SelectError);
+    Py_INCREF(PyExc_OSError);
+    PyModule_AddObject(m, "error", PyExc_OSError);
 
 #ifdef PIPE_BUF
 #ifdef HAVE_BROKEN_PIPE_BUF
