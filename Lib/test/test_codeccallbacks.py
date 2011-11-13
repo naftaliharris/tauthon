@@ -1,6 +1,14 @@
 import test.support, unittest
 import sys, codecs, html.entities, unicodedata
 
+try:
+    import ctypes
+except ImportError:
+    ctypes = None
+    SIZEOF_WCHAR_T = -1
+else:
+    SIZEOF_WCHAR_T = ctypes.sizeof(ctypes.c_wchar)
+
 class PosReturn:
     # this can be used for configurable callbacks
 
@@ -135,22 +143,14 @@ class CodecCallbackTest(unittest.TestCase):
     def test_backslashescape(self):
         # Does the same as the "unicode-escape" encoding, but with different
         # base encodings.
-        sin = "a\xac\u1234\u20ac\u8000"
-        if sys.maxunicode > 0xffff:
-            sin += chr(sys.maxunicode)
-        sout = b"a\\xac\\u1234\\u20ac\\u8000"
-        if sys.maxunicode > 0xffff:
-            sout += bytes("\\U%08x" % sys.maxunicode, "ascii")
+        sin = "a\xac\u1234\u20ac\u8000\U0010ffff"
+        sout = b"a\\xac\\u1234\\u20ac\\u8000\\U0010ffff"
         self.assertEqual(sin.encode("ascii", "backslashreplace"), sout)
 
-        sout = b"a\xac\\u1234\\u20ac\\u8000"
-        if sys.maxunicode > 0xffff:
-            sout += bytes("\\U%08x" % sys.maxunicode, "ascii")
+        sout = b"a\xac\\u1234\\u20ac\\u8000\\U0010ffff"
         self.assertEqual(sin.encode("latin-1", "backslashreplace"), sout)
 
-        sout = b"a\xac\\u1234\xa4\\u8000"
-        if sys.maxunicode > 0xffff:
-            sout += bytes("\\U%08x" % sys.maxunicode, "ascii")
+        sout = b"a\xac\\u1234\xa4\\u8000\\U0010ffff"
         self.assertEqual(sin.encode("iso-8859-15", "backslashreplace"), sout)
 
     def test_decoding_callbacks(self):
@@ -205,7 +205,7 @@ class CodecCallbackTest(unittest.TestCase):
             b"\x00\x00\x00\x00\x00".decode,
             "unicode-internal",
         )
-        if sys.maxunicode > 0xffff:
+        if SIZEOF_WCHAR_T == 4:
             def handler_unicodeinternal(exc):
                 if not isinstance(exc, UnicodeDecodeError):
                     raise TypeError("don't know how to handle %r" % exc)
@@ -355,7 +355,7 @@ class CodecCallbackTest(unittest.TestCase):
             ["ascii", "\uffffx", 0, 1, "ouch"],
             "'ascii' codec can't encode character '\\uffff' in position 0: ouch"
         )
-        if sys.maxunicode > 0xffff:
+        if SIZEOF_WCHAR_T == 4:
             self.check_exceptionobjectargs(
                 UnicodeEncodeError,
                 ["ascii", "\U00010000x", 0, 1, "ouch"],
@@ -390,7 +390,7 @@ class CodecCallbackTest(unittest.TestCase):
             ["g\uffffrk", 1, 2, "ouch"],
             "can't translate character '\\uffff' in position 1: ouch"
         )
-        if sys.maxunicode > 0xffff:
+        if SIZEOF_WCHAR_T == 4:
             self.check_exceptionobjectargs(
                 UnicodeTranslateError,
                 ["g\U00010000rk", 1, 2, "ouch"],
@@ -577,31 +577,30 @@ class CodecCallbackTest(unittest.TestCase):
                 UnicodeEncodeError("ascii", "\uffff", 0, 1, "ouch")),
             ("\\uffff", 1)
         )
-        # 1 on UCS-4 builds, 2 on UCS-2
-        len_wide = len("\U00010000")
-        self.assertEqual(
-            codecs.backslashreplace_errors(
-                UnicodeEncodeError("ascii", "\U00010000",
-                                   0, len_wide, "ouch")),
-            ("\\U00010000", len_wide)
-        )
-        self.assertEqual(
-            codecs.backslashreplace_errors(
-                UnicodeEncodeError("ascii", "\U0010ffff",
-                                   0, len_wide, "ouch")),
-            ("\\U0010ffff", len_wide)
-        )
-        # Lone surrogates (regardless of unicode width)
-        self.assertEqual(
-            codecs.backslashreplace_errors(
-                UnicodeEncodeError("ascii", "\ud800", 0, 1, "ouch")),
-            ("\\ud800", 1)
-        )
-        self.assertEqual(
-            codecs.backslashreplace_errors(
-                UnicodeEncodeError("ascii", "\udfff", 0, 1, "ouch")),
-            ("\\udfff", 1)
-        )
+        if SIZEOF_WCHAR_T > 0:
+            self.assertEqual(
+                codecs.backslashreplace_errors(
+                    UnicodeEncodeError("ascii", "\U00010000",
+                                       0, 1, "ouch")),
+                ("\\U00010000", 1)
+            )
+            self.assertEqual(
+                codecs.backslashreplace_errors(
+                    UnicodeEncodeError("ascii", "\U0010ffff",
+                                       0, 1, "ouch")),
+                ("\\U0010ffff", 1)
+            )
+            # Lone surrogates (regardless of unicode width)
+            self.assertEqual(
+                codecs.backslashreplace_errors(
+                    UnicodeEncodeError("ascii", "\ud800", 0, 1, "ouch")),
+                ("\\ud800", 1)
+            )
+            self.assertEqual(
+                codecs.backslashreplace_errors(
+                    UnicodeEncodeError("ascii", "\udfff", 0, 1, "ouch")),
+                ("\\udfff", 1)
+            )
 
     def test_badhandlerresults(self):
         results = ( 42, "foo", (1,2,3), ("foo", 1, 3), ("foo", None), ("foo",), ("foo", 1, 3), ("foo", None), ("foo",) )
@@ -679,7 +678,7 @@ class CodecCallbackTest(unittest.TestCase):
         # Python/codecs.c::PyCodec_XMLCharRefReplaceErrors()
         # and inline implementations
         v = (1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000)
-        if sys.maxunicode>=100000:
+        if SIZEOF_WCHAR_T == 4:
             v += (100000, 500000, 1000000)
         s = "".join([chr(x) for x in v])
         codecs.register_error("test.xmlcharrefreplace", codecs.xmlcharrefreplace_errors)

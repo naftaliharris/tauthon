@@ -105,6 +105,7 @@ import copy
 DEFAULT_ERROR_MESSAGE = """\
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
         "http://www.w3.org/TR/html4/strict.dtd">
+<html>
     <head>
         <meta http-equiv="Content-Type" content="text/html;charset=utf-8">
         <title>Error response</title>
@@ -355,6 +356,7 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
 
         """
         self.send_response_only(100)
+        self.flush_headers()
         return True
 
     def handle_one_request(self):
@@ -432,7 +434,8 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
             self.wfile.write(content.encode('UTF-8', 'replace'))
 
     def send_response(self, code, message=None):
-        """Send the response header and log the response code.
+        """Add the response header to the headers buffer and log the
+        response code.
 
         Also send two standard headers with the server software
         version and the current date.
@@ -451,16 +454,19 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
             else:
                 message = ''
         if self.request_version != 'HTTP/0.9':
-            self.wfile.write(("%s %d %s\r\n" %
-                              (self.protocol_version, code, message)).encode('latin1', 'strict'))
+            if not hasattr(self, '_headers_buffer'):
+                self._headers_buffer = []
+            self._headers_buffer.append(("%s %d %s\r\n" %
+                    (self.protocol_version, code, message)).encode(
+                        'latin-1', 'strict'))
 
     def send_header(self, keyword, value):
-        """Send a MIME header."""
+        """Send a MIME header to the headers buffer."""
         if self.request_version != 'HTTP/0.9':
             if not hasattr(self, '_headers_buffer'):
                 self._headers_buffer = []
             self._headers_buffer.append(
-                ("%s: %s\r\n" % (keyword, value)).encode('latin1', 'strict'))
+                ("%s: %s\r\n" % (keyword, value)).encode('latin-1', 'strict'))
 
         if keyword.lower() == 'connection':
             if value.lower() == 'close':
@@ -472,6 +478,10 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         """Send the blank line ending the MIME headers."""
         if self.request_version != 'HTTP/0.9':
             self._headers_buffer.append(b"\r\n")
+            self.flush_headers()
+
+    def flush_headers(self):
+        if hasattr(self, '_headers_buffer'):
             self.wfile.write(b"".join(self._headers_buffer))
             self._headers_buffer = []
 
@@ -725,10 +735,16 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         list.sort(key=lambda a: a.lower())
         r = []
         displaypath = html.escape(urllib.parse.unquote(self.path))
-        r.append('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
-        r.append("<html>\n<title>Directory listing for %s</title>\n" % displaypath)
-        r.append("<body>\n<h2>Directory listing for %s</h2>\n" % displaypath)
-        r.append("<hr>\n<ul>\n")
+        enc = sys.getfilesystemencoding()
+        title = 'Directory listing for %s' % displaypath
+        r.append('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" '
+                 '"http://www.w3.org/TR/html4/strict.dtd">')
+        r.append('<html>\n<head>')
+        r.append('<meta http-equiv="Content-Type" '
+                 'content="text/html; charset=%s">' % enc)
+        r.append('<title>%s</title>\n</head>' % title)
+        r.append('<body>\n<h1>%s</h1>' % title)
+        r.append('<hr>\n<ul>')
         for name in list:
             fullname = os.path.join(path, name)
             displayname = linkname = name
@@ -739,11 +755,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             if os.path.islink(fullname):
                 displayname = name + "@"
                 # Note: a link to a directory displays with @ and links with /
-            r.append('<li><a href="%s">%s</a>\n'
+            r.append('<li><a href="%s">%s</a></li>'
                     % (urllib.parse.quote(linkname), html.escape(displayname)))
-        r.append("</ul>\n<hr>\n</body>\n</html>\n")
-        enc = sys.getfilesystemencoding()
-        encoded = ''.join(r).encode(enc)
+        r.append('</ul>\n<hr>\n</body>\n</html>\n')
+        encoded = '\n'.join(r).encode(enc)
         f = io.BytesIO()
         f.write(encoded)
         f.seek(0)
@@ -888,11 +903,7 @@ def nobody_uid():
 
 def executable(path):
     """Test for executable file."""
-    try:
-        st = os.stat(path)
-    except os.error:
-        return False
-    return st.st_mode & 0o111 != 0
+    return os.access(path, os.X_OK)
 
 
 class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
@@ -1006,7 +1017,7 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
                             scriptname)
             return
         ispy = self.is_python(scriptname)
-        if not ispy:
+        if self.have_fork or not ispy:
             if not self.is_executable(scriptfile):
                 self.send_error(403, "CGI script is not executable (%r)" %
                                 scriptname)
@@ -1081,6 +1092,7 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
             env.setdefault(k, "")
 
         self.send_response(200, "Script output follows")
+        self.flush_headers()
 
         decoded_query = query.replace('+', ' ')
 
