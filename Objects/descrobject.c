@@ -703,34 +703,39 @@ static PyObject *
 proxy_get(proxyobject *pp, PyObject *args)
 {
     PyObject *key, *def = Py_None;
+    _Py_IDENTIFIER(get);
 
     if (!PyArg_UnpackTuple(args, "get", 1, 2, &key, &def))
         return NULL;
-    return PyObject_CallMethod(pp->dict, "get", "(OO)", key, def);
+    return _PyObject_CallMethodId(pp->dict, &PyId_get, "(OO)", key, def);
 }
 
 static PyObject *
 proxy_keys(proxyobject *pp)
 {
-    return PyObject_CallMethod(pp->dict, "keys", NULL);
+    _Py_IDENTIFIER(keys);
+    return _PyObject_CallMethodId(pp->dict, &PyId_keys, NULL);
 }
 
 static PyObject *
 proxy_values(proxyobject *pp)
 {
-    return PyObject_CallMethod(pp->dict, "values", NULL);
+    _Py_IDENTIFIER(values);
+    return _PyObject_CallMethodId(pp->dict, &PyId_values, NULL);
 }
 
 static PyObject *
 proxy_items(proxyobject *pp)
 {
-    return PyObject_CallMethod(pp->dict, "items", NULL);
+    _Py_IDENTIFIER(items);
+    return _PyObject_CallMethodId(pp->dict, &PyId_items, NULL);
 }
 
 static PyObject *
 proxy_copy(proxyobject *pp)
 {
-    return PyObject_CallMethod(pp->dict, "copy", NULL);
+    _Py_IDENTIFIER(copy);
+    return _PyObject_CallMethodId(pp->dict, &PyId_copy, NULL);
 }
 
 static PyMethodDef proxy_methods[] = {
@@ -1294,7 +1299,8 @@ property_init(PyObject *self, PyObject *args, PyObject *kwds)
 
     /* if no docstring given and the getter has one, use that one */
     if ((doc == NULL || doc == Py_None) && get != NULL) {
-        PyObject *get_doc = PyObject_GetAttrString(get, "__doc__");
+        _Py_IDENTIFIER(__doc__);
+        PyObject *get_doc = _PyObject_GetAttrId(get, &PyId___doc__);
         if (get_doc) {
             if (Py_TYPE(self) == &PyProperty_Type) {
                 Py_XDECREF(prop->prop_doc);
@@ -1305,7 +1311,7 @@ property_init(PyObject *self, PyObject *args, PyObject *kwds)
                 in dict of the subclass instance instead,
                 otherwise it gets shadowed by __doc__ in the
                 class's dict. */
-                int err = PyObject_SetAttrString(self, "__doc__", get_doc);
+                int err = _PyObject_SetAttrId(self, &PyId___doc__, get_doc);
                 Py_DECREF(get_doc);
                 if (err < 0)
                     return -1;
