@@ -25,17 +25,13 @@ To use, simply 'import logging.handlers' and log away!
 """
 
 import logging, socket, os, pickle, struct, time, re
+from codecs import BOM_UTF8
 from stat import ST_DEV, ST_INO, ST_MTIME
 import queue
 try:
     import threading
-except ImportError:
+except ImportError: #pragma: no cover
     threading = None
-
-try:
-    import codecs
-except ImportError:
-    codecs = None
 
 #
 # Some constants...
@@ -60,8 +56,6 @@ class BaseRotatingHandler(logging.FileHandler):
         """
         Use the specified filename for streamed logging
         """
-        if codecs is None:
-            encoding = None
         logging.FileHandler.__init__(self, filename, mode, encoding, delay)
         self.mode = mode
         self.encoding = encoding
@@ -77,7 +71,7 @@ class BaseRotatingHandler(logging.FileHandler):
             if self.shouldRollover(record):
                 self.doRollover()
             logging.FileHandler.emit(self, record)
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -391,7 +385,7 @@ class WatchedFileHandler(logging.FileHandler):
         """
         if not os.path.exists(self.baseFilename):
             stat = None
-            changed = 1
+            changed = True
         else:
             stat = os.stat(self.baseFilename)
             changed = (stat[ST_DEV] != self.dev) or (stat[ST_INO] != self.ino)
@@ -421,15 +415,15 @@ class SocketHandler(logging.Handler):
         """
         Initializes the handler with a specific host address and port.
 
-        The attribute 'closeOnError' is set to 1 - which means that if
-        a socket error occurs, the socket is silently closed and then
-        reopened on the next logging call.
+        When the attribute *closeOnError* is set to True - if a socket error
+        occurs, the socket is silently closed and then reopened on the next
+        logging call.
         """
         logging.Handler.__init__(self)
         self.host = host
         self.port = port
         self.sock = None
-        self.closeOnError = 0
+        self.closeOnError = False
         self.retryTime = None
         #
         # Exponential backoff parameters.
@@ -446,8 +440,12 @@ class SocketHandler(logging.Handler):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         if hasattr(s, 'settimeout'):
             s.settimeout(timeout)
-        s.connect((self.host, self.port))
-        return s
+        try:
+            s.connect((self.host, self.port))
+            return s
+        except socket.error:
+            s.close()
+            raise
 
     def createSocket(self):
         """
@@ -460,7 +458,7 @@ class SocketHandler(logging.Handler):
         # is the first time back after a disconnect, or
         # we've waited long enough.
         if self.retryTime is None:
-            attempt = 1
+            attempt = True
         else:
             attempt = (now >= self.retryTime)
         if attempt:
@@ -493,14 +491,14 @@ class SocketHandler(logging.Handler):
             try:
                 if hasattr(self.sock, "sendall"):
                     self.sock.sendall(s)
-                else:
+                else: #pragma: no cover
                     sentsofar = 0
                     left = len(s)
                     while left > 0:
                         sent = self.sock.send(s[sentsofar:])
                         sentsofar = sentsofar + sent
                         left = left - sent
-            except socket.error:
+            except socket.error: #pragma: no cover
                 self.sock.close()
                 self.sock = None  # so we can call createSocket next time
 
@@ -545,7 +543,7 @@ class SocketHandler(logging.Handler):
         try:
             s = self.makePickle(record)
             self.send(s)
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -575,7 +573,7 @@ class DatagramHandler(SocketHandler):
         Initializes the handler with a specific host address and port.
         """
         SocketHandler.__init__(self, host, port)
-        self.closeOnError = 0
+        self.closeOnError = False
 
     def makeSocket(self):
         """
@@ -716,10 +714,10 @@ class SysLogHandler(logging.Handler):
         self.socktype = socktype
 
         if isinstance(address, str):
-            self.unixsocket = 1
+            self.unixsocket = True
             self._connect_unixsocket(address)
         else:
-            self.unixsocket = 0
+            self.unixsocket = False
             self.socket = socket.socket(socket.AF_INET, socktype)
             if socktype == socket.SOCK_STREAM:
                 self.socket.connect(address)
@@ -752,8 +750,7 @@ class SysLogHandler(logging.Handler):
         """
         Closes the socket.
         """
-        if self.unixsocket:
-            self.socket.close()
+        self.socket.close()
         logging.Handler.close(self)
 
     def mapPriority(self, levelName):
@@ -766,6 +763,7 @@ class SysLogHandler(logging.Handler):
         """
         return self.priority_map.get(levelName, "warning")
 
+    ident = ''          # prepended to all messages
     append_nul = True   # some old syslog daemons expect a NUL terminator
 
     def emit(self, record):
@@ -776,6 +774,8 @@ class SysLogHandler(logging.Handler):
         exception information is present, it is NOT sent to the server.
         """
         msg = self.format(record)
+        if self.ident:
+            msg = self.ident + msg
         if self.append_nul:
             msg += '\000'
         """
@@ -787,9 +787,7 @@ class SysLogHandler(logging.Handler):
         prio = prio.encode('utf-8')
         # Message is a string. Convert to bytes as required by RFC 5424
         msg = msg.encode('utf-8')
-        if codecs:
-            msg = codecs.BOM_UTF8 + msg
-        msg = prio + msg
+        msg = prio + BOM_UTF8 + msg
         try:
             if self.unixsocket:
                 try:
@@ -801,7 +799,7 @@ class SysLogHandler(logging.Handler):
                 self.socket.sendto(msg, self.address)
             else:
                 self.socket.sendall(msg)
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -878,7 +876,7 @@ class SMTPHandler(logging.Handler):
                 smtp.login(self.username, self.password)
             smtp.sendmail(self.fromaddr, self.toaddrs, msg)
             smtp.quit()
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -965,7 +963,7 @@ class NTEventLogHandler(logging.Handler):
                 type = self.getEventType(record)
                 msg = self.format(record)
                 self._welu.ReportEvent(self.appname, id, cat, type, [msg])
-            except (KeyboardInterrupt, SystemExit):
+            except (KeyboardInterrupt, SystemExit): #pragma: no cover
                 raise
             except:
                 self.handleError(record)
@@ -1048,9 +1046,11 @@ class HTTPHandler(logging.Handler):
                 s = ('u%s:%s' % self.credentials).encode('utf-8')
                 s = 'Basic ' + base64.b64encode(s).strip()
                 h.putheader('Authorization', s)
-            h.endheaders(data if self.method == "POST" else None)
+            h.endheaders()
+            if self.method == "POST":
+                h.send(data.encode('utf-8'))
             h.getresponse()    #can't do anything with the result
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -1220,7 +1220,7 @@ class QueueHandler(logging.Handler):
         """
         try:
             self.enqueue(self.prepare(record))
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit): #pragma: no cover
             raise
         except:
             self.handleError(record)
@@ -1317,6 +1317,16 @@ if threading:
                 except queue.Empty:
                     break
 
+        def enqueue_sentinel(self):
+            """
+            This is used to enqueue the sentinel record.
+
+            The base implementation uses put_nowait. You may want to override this
+            method if you want to use timeouts or work with custom queue
+            implementations.
+            """
+            self.queue.put_nowait(self._sentinel)
+
         def stop(self):
             """
             Stop the listener.
@@ -1326,6 +1336,6 @@ if threading:
             may be some records still left on the queue, which won't be processed.
             """
             self._stop.set()
-            self.queue.put_nowait(self._sentinel)
+            self.enqueue_sentinel()
             self._thread.join()
             self._thread = None
