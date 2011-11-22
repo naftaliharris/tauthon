@@ -417,6 +417,35 @@ class MmapTests(unittest.TestCase):
             m[x] = b
             self.assertEqual(m[x], b)
 
+    def test_read_all(self):
+        m = mmap.mmap(-1, 16)
+        self.addCleanup(m.close)
+
+        # With no parameters, or None or a negative argument, reads all
+        m.write(bytes(range(16)))
+        m.seek(0)
+        self.assertEqual(m.read(), bytes(range(16)))
+        m.seek(8)
+        self.assertEqual(m.read(), bytes(range(8, 16)))
+        m.seek(16)
+        self.assertEqual(m.read(), b'')
+        m.seek(3)
+        self.assertEqual(m.read(None), bytes(range(3, 16)))
+        m.seek(4)
+        self.assertEqual(m.read(-1), bytes(range(4, 16)))
+        m.seek(5)
+        self.assertEqual(m.read(-2), bytes(range(5, 16)))
+        m.seek(9)
+        self.assertEqual(m.read(-42), bytes(range(9, 16)))
+
+    def test_read_invalid_arg(self):
+        m = mmap.mmap(-1, 16)
+        self.addCleanup(m.close)
+
+        self.assertRaises(TypeError, m.read, 'foo')
+        self.assertRaises(TypeError, m.read, 5.5)
+        self.assertRaises(TypeError, m.read, [1, 2, 3])
+
     def test_extended_getslice(self):
         # Test extended slicing by comparing with list slicing.
         s = bytes(reversed(range(256)))
@@ -534,8 +563,7 @@ class MmapTests(unittest.TestCase):
         f.close()
 
     def test_error(self):
-        self.assertTrue(issubclass(mmap.error, EnvironmentError))
-        self.assertIn("mmap.error", str(mmap.error))
+        self.assertIs(mmap.error, OSError)
 
     def test_io_methods(self):
         data = b"0123456789"
