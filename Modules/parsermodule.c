@@ -581,8 +581,10 @@ parser_do_parse(PyObject *args, PyObject *kw, char *argspec, int type)
             if (res)
                 ((PyST_Object *)res)->st_flags.cf_flags = flags & PyCF_MASK;
         }
-        else
+        else {
             PyParser_SetError(&err);
+        }
+        PyParser_ClearError(&err);
     }
     return (res);
 }
@@ -3239,10 +3241,13 @@ PyInit_parser(void)
     copyreg = PyImport_ImportModuleNoBlock("copyreg");
     if (copyreg != NULL) {
         PyObject *func, *pickler;
+        _Py_IDENTIFIER(pickle);
+        _Py_IDENTIFIER(sequence2st);
+        _Py_IDENTIFIER(_pickler);
 
-        func = PyObject_GetAttrString(copyreg, "pickle");
-        pickle_constructor = PyObject_GetAttrString(module, "sequence2st");
-        pickler = PyObject_GetAttrString(module, "_pickler");
+        func = _PyObject_GetAttrId(copyreg, &PyId_pickle);
+        pickle_constructor = _PyObject_GetAttrId(module, &PyId_sequence2st);
+        pickler = _PyObject_GetAttrId(module, &PyId__pickler);
         Py_XINCREF(pickle_constructor);
         if ((func != NULL) && (pickle_constructor != NULL)
             && (pickler != NULL)) {
