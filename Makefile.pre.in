@@ -34,7 +34,6 @@ MAINCC=		@MAINCC@
 LINKCC=		@LINKCC@
 AR=		@AR@
 RANLIB=		@RANLIB@
-SVNVERSION=	@SVNVERSION@
 SOABI=		@SOABI@
 LDVERSION=	@LDVERSION@
 HGVERSION=	@HGVERSION@
@@ -74,7 +73,7 @@ PY_CFLAGS=	$(BASECFLAGS) $(OPT) $(CONFIGURE_CFLAGS) $(CFLAGS) $(EXTRA_CFLAGS)
 # Both CPPFLAGS and LDFLAGS need to contain the shell's value for setup.py to
 # be able to build extension modules using the directories specified in the
 # environment variables
-PY_CPPFLAGS=	-I. -IInclude -I$(srcdir)/Include $(CONFIGURE_CPPFLAGS) $(CPPFLAGS)
+PY_CPPFLAGS=	-I. -I$(srcdir)/Include $(CONFIGURE_CPPFLAGS) $(CPPFLAGS)
 PY_LDFLAGS=	$(CONFIGURE_LDFLAGS) $(LDFLAGS)
 NO_AS_NEEDED=	@NO_AS_NEEDED@
 LDLAST=		@LDLAST@
@@ -240,14 +239,13 @@ POBJS=		\
 		Parser/listnode.o \
 		Parser/node.o \
 		Parser/parser.o \
-		Parser/parsetok.o \
 		Parser/bitset.o \
 		Parser/metagrammar.o \
 		Parser/firstsets.o \
 		Parser/grammar.o \
 		Parser/pgen.o
 
-PARSER_OBJS=	$(POBJS) Parser/myreadline.o Parser/tokenizer.o
+PARSER_OBJS=	$(POBJS) Parser/myreadline.o Parser/parsetok.o Parser/tokenizer.o
 
 PGOBJS=		\
 		Objects/obmalloc.o \
@@ -256,11 +254,13 @@ PGOBJS=		\
 		Python/pyctype.o \
 		Parser/tokenizer_pgen.o \
 		Parser/printgrammar.o \
+		Parser/parsetok_pgen.o \
 		Parser/pgenmain.o
 
 PARSER_HEADERS= \
-		Parser/parser.h \
-		Parser/tokenizer.h
+		$(srcdir)/Parser/parser.h \
+		$(srcdir)/Include/parsetok.h \
+		$(srcdir)/Parser/tokenizer.h
 
 PGENOBJS=	$(PGENMAIN) $(POBJS) $(PGOBJS)
 
@@ -370,7 +370,7 @@ OBJECT_OBJS=	\
 		Objects/obmalloc.o \
 		Objects/capsule.o \
 		Objects/rangeobject.o \
-                Objects/setobject.o \
+		Objects/setobject.o \
 		Objects/sliceobject.o \
 		Objects/structseq.o \
 		Objects/tupleobject.o \
@@ -396,7 +396,7 @@ LIBRARY_OBJS=	\
 
 # Default target
 all:		build_all
-build_all:	$(BUILDPYTHON) oldsharedmods sharedmods gdbhooks Modules/_testembed
+build_all:	$(BUILDPYTHON) sysconfig oldsharedmods sharedmods gdbhooks Modules/_testembed
 
 # Compile a binary with gcc profile guided optimization.
 profile-opt:
@@ -429,12 +429,15 @@ coverage:
 $(BUILDPYTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY) $(PY3LIBRARY)
 	$(LINKCC) $(PY_LDFLAGS) $(LINKFORSHARED) -o $@ Modules/python.o $(BLDLIBRARY) $(LIBS) $(MODLIBS) $(SYSLIBS) $(LDLAST)
 
-platform: $(BUILDPYTHON)
+platform: $(BUILDPYTHON) sysconfig
 	$(RUNSHARED) ./$(BUILDPYTHON) -E -c 'import sys ; from sysconfig import get_platform ; print(get_platform()+"-"+sys.version[0:3])' >platform
 
+# Generate the sysconfig build-time data
+sysconfig: $(BUILDPYTHON)
+	$(RUNSHARED) ./$(BUILDPYTHON) -SE -m sysconfig --generate-posix-vars
 
 # Build the shared modules
-sharedmods: $(BUILDPYTHON)
+sharedmods: $(BUILDPYTHON) sysconfig
 	@case $$MAKEFLAGS in \
 	*s*) $(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' OPT='$(OPT)' ./$(BUILDPYTHON) -E $(srcdir)/setup.py -q build;; \
 	*) $(RUNSHARED) CC='$(CC)' LDSHARED='$(BLDSHARED)' OPT='$(OPT)' ./$(BUILDPYTHON) -E $(srcdir)/setup.py build;; \
@@ -494,7 +497,7 @@ $(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK): \
 		-install_name $(DESTDIR)$(PYTHONFRAMEWORKINSTALLDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK) \
 		-compatibility_version $(VERSION) \
 		-current_version $(VERSION) \
-		-framework CoreFoundation $(LIBS); 
+		-framework CoreFoundation $(LIBS);
 	$(INSTALL) -d -m $(DIRMODE)  \
 		$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/Resources/English.lproj
 	$(INSTALL_DATA) $(RESSRCDIR)/Info.plist \
@@ -555,7 +558,6 @@ Modules/getbuildinfo.o: $(PARSER_OBJS) \
 		$(MODOBJS) \
 		$(srcdir)/Modules/getbuildinfo.c
 	$(CC) -c $(PY_CORE_CFLAGS) \
-	      -DSVNVERSION="\"`LC_ALL=C $(SVNVERSION)`\"" \
 	      -DHGVERSION="\"`LC_ALL=C $(HGVERSION)`\"" \
 	      -DHGTAG="\"`LC_ALL=C $(HGTAG)`\"" \
 	      -DHGBRANCH="\"`LC_ALL=C $(HGBRANCH)`\"" \
@@ -571,6 +573,9 @@ Modules/getpath.o: $(srcdir)/Modules/getpath.c Makefile
 
 Modules/python.o: $(srcdir)/Modules/python.c
 	$(MAINCC) -c $(PY_CORE_CFLAGS) -o $@ $(srcdir)/Modules/python.c
+
+Modules/_testembed.o: $(srcdir)/Modules/_testembed.c
+	$(MAINCC) -c $(PY_CORE_CFLAGS) -o $@ $(srcdir)/Modules/_testembed.c
 
 Python/dynload_shlib.o: $(srcdir)/Python/dynload_shlib.c Makefile
 	$(CC) -c $(PY_CORE_CFLAGS) \
@@ -600,6 +605,8 @@ Parser/grammar.o:	$(srcdir)/Parser/grammar.c \
 Parser/metagrammar.o:	$(srcdir)/Parser/metagrammar.c
 
 Parser/tokenizer_pgen.o:	$(srcdir)/Parser/tokenizer.c
+Parser/parsetok_pgen.o:	$(srcdir)/Parser/parsetok.c
+Parser/printgrammar.o: $(srcdir)/Parser/printgrammar.c
 
 Parser/pgenmain.o:	$(srcdir)/Include/parsetok.h
 
@@ -627,20 +634,29 @@ BYTESTR_DEPS = \
 		$(srcdir)/Objects/stringlib/eq.h \
 		$(srcdir)/Objects/stringlib/fastsearch.h \
 		$(srcdir)/Objects/stringlib/find.h \
+		$(srcdir)/Objects/stringlib/find_max_char.h \
 		$(srcdir)/Objects/stringlib/partition.h \
 		$(srcdir)/Objects/stringlib/split.h \
 		$(srcdir)/Objects/stringlib/stringdefs.h \
-		$(srcdir)/Objects/stringlib/string_format.h \
 		$(srcdir)/Objects/stringlib/transmogrify.h \
 		$(srcdir)/Objects/stringlib/unicodedefs.h \
-		$(srcdir)/Objects/stringlib/localeutil.h
+		$(srcdir)/Objects/stringlib/localeutil.h \
+		$(srcdir)/Objects/stringlib/undef.h
+
+UNICODE_DEPS = $(BYTESTR_DEPS) \
+		$(srcdir)/Objects/stringlib/asciilib.h \
+		$(srcdir)/Objects/stringlib/codecs.h \
+		$(srcdir)/Objects/stringlib/ucs1lib.h \
+		$(srcdir)/Objects/stringlib/ucs2lib.h \
+		$(srcdir)/Objects/stringlib/ucs4lib.h \
+		$(srcdir)/Objects/stringlib/unicode_format.h \
+		$(srcdir)/Objects/stringlib/unicodedefs.h
 
 Objects/bytesobject.o: $(srcdir)/Objects/bytesobject.c $(BYTESTR_DEPS)
 
 Objects/bytearrayobject.o: $(srcdir)/Objects/bytearrayobject.c $(BYTESTR_DEPS)
 
-Objects/unicodeobject.o: $(srcdir)/Objects/unicodeobject.c \
-				$(BYTESTR_DEPS)
+Objects/unicodeobject.o: $(srcdir)/Objects/unicodeobject.c $(UNICODE_DEPS)
 
 Objects/dictobject.o: $(srcdir)/Objects/stringlib/eq.h
 Objects/setobject.o: $(srcdir)/Objects/stringlib/eq.h
@@ -648,11 +664,10 @@ Objects/setobject.o: $(srcdir)/Objects/stringlib/eq.h
 $(OPCODETARGETS_H): $(OPCODETARGETGEN_FILES)
 	$(OPCODETARGETGEN) $(OPCODETARGETS_H)
 
-Python/ceval.o: $(OPCODETARGETS_H) Python/ceval_gil.h
+Python/ceval.o: $(OPCODETARGETS_H) $(srcdir)/Python/ceval_gil.h
 
 Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
-				$(BYTESTR_DEPS) \
-				$(srcdir)/Objects/stringlib/formatter.h
+				$(BYTESTR_DEPS)
 
 Objects/typeobject.o: $(srcdir)/Objects/typeslots.inc
 $(srcdir)/Objects/typeslots.inc: $(srcdir)/Include/typeslots.h $(srcdir)/Objects/typeslots.py
@@ -662,89 +677,88 @@ $(srcdir)/Objects/typeslots.inc: $(srcdir)/Include/typeslots.h $(srcdir)/Objects
 # Header files
 
 PYTHON_HEADERS= \
-		Include/Python-ast.h \
-		Include/Python.h \
-		Include/abstract.h \
-		Include/accu.h \
-		Include/asdl.h \
-		Include/ast.h \
-                Include/bltinmodule.h \
-		Include/bitset.h \
-		Include/boolobject.h \
-		Include/bytes_methods.h \
-		Include/bytearrayobject.h \
-		Include/bytesobject.h \
-		Include/cellobject.h \
-		Include/ceval.h \
-		Include/classobject.h \
-		Include/code.h \
-		Include/codecs.h \
-		Include/compile.h \
-		Include/complexobject.h \
-		Include/descrobject.h \
-		Include/dictobject.h \
-		Include/dtoa.h \
-		Include/dynamic_annotations.h \
-		Include/enumobject.h \
-		Include/errcode.h \
-		Include/eval.h \
-		Include/fileobject.h \
-		Include/fileutils.h \
-		Include/floatobject.h \
-		Include/frameobject.h \
-		Include/funcobject.h \
-		Include/genobject.h \
-		Include/import.h \
-		Include/intrcheck.h \
-		Include/iterobject.h \
-		Include/listobject.h \
-		Include/longintrepr.h \
-		Include/longobject.h \
-		Include/marshal.h \
-		Include/memoryobject.h \
-		Include/metagrammar.h \
-		Include/methodobject.h \
-		Include/modsupport.h \
-		Include/moduleobject.h \
-		Include/node.h \
-		Include/object.h \
-		Include/objimpl.h \
-		Include/opcode.h \
-		Include/osdefs.h \
-		Include/parsetok.h \
-		Include/patchlevel.h \
-		Include/pgen.h \
-		Include/pgenheaders.h \
-		Include/pyarena.h \
-		Include/pyatomic.h \
-		Include/pycapsule.h \
-		Include/pyctype.h \
-		Include/pydebug.h \
-		Include/pyerrors.h \
-		Include/pyfpe.h \
-		Include/pymath.h \
-		Include/pygetopt.h \
-		Include/pymem.h \
-		Include/pyport.h \
-		Include/pystate.h \
-		Include/pystrcmp.h \
-		Include/pystrtod.h \
-		Include/pythonrun.h \
-		Include/pythread.h \
-		Include/pytime.h \
-		Include/rangeobject.h \
-		Include/setobject.h \
-		Include/sliceobject.h \
-		Include/structmember.h \
-		Include/structseq.h \
-		Include/symtable.h \
-		Include/sysmodule.h \
-		Include/traceback.h \
-		Include/tupleobject.h \
-		Include/ucnhash.h \
-		Include/unicodeobject.h \
-		Include/warnings.h \
-		Include/weakrefobject.h \
+		$(srcdir)/Include/Python.h \
+		$(srcdir)/Include/abstract.h \
+		$(srcdir)/Include/accu.h \
+		$(srcdir)/Include/asdl.h \
+		$(srcdir)/Include/ast.h \
+		$(srcdir)/Include/bltinmodule.h \
+		$(srcdir)/Include/bitset.h \
+		$(srcdir)/Include/boolobject.h \
+		$(srcdir)/Include/bytes_methods.h \
+		$(srcdir)/Include/bytearrayobject.h \
+		$(srcdir)/Include/bytesobject.h \
+		$(srcdir)/Include/cellobject.h \
+		$(srcdir)/Include/ceval.h \
+		$(srcdir)/Include/classobject.h \
+		$(srcdir)/Include/code.h \
+		$(srcdir)/Include/codecs.h \
+		$(srcdir)/Include/compile.h \
+		$(srcdir)/Include/complexobject.h \
+		$(srcdir)/Include/descrobject.h \
+		$(srcdir)/Include/dictobject.h \
+		$(srcdir)/Include/dtoa.h \
+		$(srcdir)/Include/dynamic_annotations.h \
+		$(srcdir)/Include/enumobject.h \
+		$(srcdir)/Include/errcode.h \
+		$(srcdir)/Include/eval.h \
+		$(srcdir)/Include/fileobject.h \
+		$(srcdir)/Include/fileutils.h \
+		$(srcdir)/Include/floatobject.h \
+		$(srcdir)/Include/frameobject.h \
+		$(srcdir)/Include/funcobject.h \
+		$(srcdir)/Include/genobject.h \
+		$(srcdir)/Include/import.h \
+		$(srcdir)/Include/intrcheck.h \
+		$(srcdir)/Include/iterobject.h \
+		$(srcdir)/Include/listobject.h \
+		$(srcdir)/Include/longintrepr.h \
+		$(srcdir)/Include/longobject.h \
+		$(srcdir)/Include/marshal.h \
+		$(srcdir)/Include/memoryobject.h \
+		$(srcdir)/Include/metagrammar.h \
+		$(srcdir)/Include/methodobject.h \
+		$(srcdir)/Include/modsupport.h \
+		$(srcdir)/Include/moduleobject.h \
+		$(srcdir)/Include/node.h \
+		$(srcdir)/Include/object.h \
+		$(srcdir)/Include/objimpl.h \
+		$(srcdir)/Include/opcode.h \
+		$(srcdir)/Include/osdefs.h \
+		$(srcdir)/Include/patchlevel.h \
+		$(srcdir)/Include/pgen.h \
+		$(srcdir)/Include/pgenheaders.h \
+		$(srcdir)/Include/pyarena.h \
+		$(srcdir)/Include/pyatomic.h \
+		$(srcdir)/Include/pycapsule.h \
+		$(srcdir)/Include/pyctype.h \
+		$(srcdir)/Include/pydebug.h \
+		$(srcdir)/Include/pyerrors.h \
+		$(srcdir)/Include/pyfpe.h \
+		$(srcdir)/Include/pymath.h \
+		$(srcdir)/Include/pygetopt.h \
+		$(srcdir)/Include/pymacro.h \
+		$(srcdir)/Include/pymem.h \
+		$(srcdir)/Include/pyport.h \
+		$(srcdir)/Include/pystate.h \
+		$(srcdir)/Include/pystrcmp.h \
+		$(srcdir)/Include/pystrtod.h \
+		$(srcdir)/Include/pythonrun.h \
+		$(srcdir)/Include/pythread.h \
+		$(srcdir)/Include/pytime.h \
+		$(srcdir)/Include/rangeobject.h \
+		$(srcdir)/Include/setobject.h \
+		$(srcdir)/Include/sliceobject.h \
+		$(srcdir)/Include/structmember.h \
+		$(srcdir)/Include/structseq.h \
+		$(srcdir)/Include/symtable.h \
+		$(srcdir)/Include/sysmodule.h \
+		$(srcdir)/Include/traceback.h \
+		$(srcdir)/Include/tupleobject.h \
+		$(srcdir)/Include/ucnhash.h \
+		$(srcdir)/Include/unicodeobject.h \
+		$(srcdir)/Include/warnings.h \
+		$(srcdir)/Include/weakrefobject.h \
 		pyconfig.h \
 		$(PARSER_HEADERS)
 
@@ -753,65 +767,56 @@ $(LIBRARY_OBJS) $(MODOBJS) Modules/python.o: $(PYTHON_HEADERS)
 
 ######################################################################
 
-# Test the interpreter (twice, once without .pyc files, once with)
+TESTOPTS=	$(EXTRATESTOPTS)
+TESTPYTHON=	$(RUNSHARED) ./$(BUILDPYTHON) $(TESTPYTHONOPTS)
+TESTRUNNER=	$(TESTPYTHON) $(srcdir)/Tools/scripts/run_tests.py
+TESTTIMEOUT=	3600
+
+# Run a basic set of regression tests.
+# This excludes some tests that are particularly resource-intensive.
+test:		all platform
+		$(TESTRUNNER) $(TESTOPTS)
+
+# Run the full test suite twice - once without .pyc files, and once with.
 # In the past, we've had problems where bugs in the marshalling or
 # elsewhere caused bytecode read from .pyc files to behave differently
 # than bytecode generated directly from a .py source file.  Sometimes
-# the bytecode read from a .pyc file had the bug, somtimes the directly
+# the bytecode read from a .pyc file had the bug, sometimes the directly
 # generated bytecode.  This is sometimes a very shy bug needing a lot of
 # sample data.
-
-TESTOPTS=	-l $(EXTRATESTOPTS)
-TESTPROG=	$(srcdir)/Lib/test/regrtest.py
-TESTPYTHON=	$(RUNSHARED) ./$(BUILDPYTHON) -Wd -E -bb $(TESTPYTHONOPTS)
-test:		all platform
-		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
-		-$(TESTPYTHON) $(TESTPROG) $(TESTOPTS)
-		$(TESTPYTHON) $(TESTPROG) $(TESTOPTS)
-
 testall:	all platform
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
-		$(TESTPYTHON) $(srcdir)/Lib/compileall.py
+		$(TESTPYTHON) -E $(srcdir)/Lib/compileall.py
 		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
-		-$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
-		$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
+		-$(TESTRUNNER) -u all $(TESTOPTS)
+		$(TESTRUNNER) -u all $(TESTOPTS)
 
-#  Run the unitests for both architectures in a Universal build on OSX
-#  Must be run on an Intel box.
+# Run the test suite for both architectures in a Universal build on OSX.
+# Must be run on an Intel box.
 testuniversal:	all platform
 		if [ `arch` != 'i386' ];then \
 			echo "This can only be used on OSX/i386" ;\
 			exit 1 ;\
 		fi
-		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
-		-$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
-		$(TESTPYTHON) $(TESTPROG) -uall $(TESTOPTS)
-		$(RUNSHARED) /usr/libexec/oah/translate ./$(BUILDPYTHON) -E $(TESTPROG) -uall $(TESTOPTS)
+		$(TESTRUNNER) -u all $(TESTOPTS)
+		$(RUNSHARED) /usr/libexec/oah/translate \
+			./$(BUILDPYTHON) -E -m test -j 0 -u all $(TESTOPTS)
 
-
-# Like testall, but with a single pass only
-# run an optional script to include some information about the build environment
+# Like testall, but with only one pass and without multiple processes.
+# Run an optional script to include information about the build environment.
 buildbottest:	all platform
 		-@if which pybuildbot.identify >/dev/null 2>&1; then \
 			pybuildbot.identify "CC='$(CC)'" "CXX='$(CXX)'"; \
 		fi
-		$(TESTPYTHON) $(TESTPROG) -uall -rwW $(TESTOPTS)
+		$(TESTRUNNER) -j 1 -u all -W --timeout=$(TESTTIMEOUT) $(TESTOPTS)
 
 QUICKTESTOPTS=	$(TESTOPTS) -x test_subprocess test_io test_lib2to3 \
 		test_multibytecodec test_urllib2_localnet test_itertools \
 		test_multiprocessing test_mailbox test_socket test_poll \
-		test_select test_zipfile
+		test_select test_zipfile test_concurrent_futures
 quicktest:	all platform
-		-find $(srcdir)/Lib -name '*.py[co]' -print | xargs rm -f
-		-$(TESTPYTHON) $(TESTPROG) $(QUICKTESTOPTS)
-		$(TESTPYTHON) $(TESTPROG) $(QUICKTESTOPTS)
+		$(TESTRUNNER) $(QUICKTESTOPTS)
 
-MEMTESTOPTS=    $(QUICKTESTOPTS) -x test_dl test___all__ test_fork1 \
-		test_longexp
-memtest:	all platform
-		-rm -f $(srcdir)/Lib/test/*.py[co]
-		-$(TESTPYTHON) $(TESTPROG) $(MEMTESTOPTS)
-		$(TESTPYTHON) $(TESTPROG) $(MEMTESTOPTS)
 
 install: altinstall bininstall
 
@@ -894,6 +899,8 @@ bininstall: altbininstall
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s pydoc$(VERSION) pydoc3)
 	-rm -f $(DESTDIR)$(BINDIR)/2to3
 	(cd $(DESTDIR)$(BINDIR); $(LN) -s 2to3-$(VERSION) 2to3)
+	-rm -f $(DESTDIR)$(BINDIR)/pysetup3
+	(cd $(DESTDIR)$(BINDIR); $(LN) -s pysetup$(VERSION) pysetup3)
 
 # Install the manual page
 maninstall:
@@ -916,20 +923,72 @@ XMLLIBSUBDIRS=  xml xml/dom xml/etree xml/parsers xml/sax
 LIBSUBDIRS=	tkinter tkinter/test tkinter/test/test_tkinter \
 		tkinter/test/test_ttk site-packages test \
 		test/capath test/data \
-		test/cjkencodings test/decimaltestdata test/xmltestdata test/subprocessdata \
+		test/cjkencodings test/decimaltestdata test/xmltestdata \
+		test/subprocessdata \
 		test/tracedmodules test/encoded_modules \
-		concurrent concurrent/futures encodings \
-		email email/mime email/test email/test/data \
+		collections concurrent concurrent/futures encodings \
+		email email/mime test/test_email test/test_email/data \
 		html json test/json_tests http dbm xmlrpc \
 		sqlite3 sqlite3/test \
 		logging csv wsgiref urllib \
 		lib2to3 lib2to3/fixes lib2to3/pgen2 lib2to3/tests \
-		lib2to3/tests/data lib2to3/tests/data/fixers lib2to3/tests/data/fixers/myfixes \
+		lib2to3/tests/data lib2to3/tests/data/fixers \
+		lib2to3/tests/data/fixers/myfixes \
 		ctypes ctypes/test ctypes/macholib idlelib idlelib/Icons \
 		distutils distutils/command distutils/tests $(XMLLIBSUBDIRS) \
 		importlib importlib/test importlib/test/builtin \
 		importlib/test/extension importlib/test/frozen \
 		importlib/test/import_ importlib/test/source \
+		packaging packaging/command packaging/compiler \
+		packaging/pypi packaging/tests \
+		packaging/tests/fake_dists \
+		packaging/tests/fake_dists/babar-0.1.dist-info \
+		packaging/tests/fake_dists/bacon-0.1.egg-info \
+		packaging/tests/fake_dists/banana-0.4.egg \
+		packaging/tests/fake_dists/banana-0.4.egg/EGG-INFO \
+		packaging/tests/fake_dists/choxie-2.0.0.9 \
+		packaging/tests/fake_dists/choxie-2.0.0.9/choxie \
+		packaging/tests/fake_dists/choxie-2.0.0.9.dist-info \
+		packaging/tests/fake_dists/coconuts-aster-10.3.egg-info \
+		packaging/tests/fake_dists/grammar-1.0a4 \
+		packaging/tests/fake_dists/grammar-1.0a4.dist-info \
+		packaging/tests/fake_dists/grammar-1.0a4/grammar \
+		packaging/tests/fake_dists/towel_stuff-0.1 \
+		packaging/tests/fake_dists/towel_stuff-0.1.dist-info \
+		packaging/tests/fake_dists/towel_stuff-0.1/towel_stuff \
+		packaging/tests/fixer packaging/tests/pypiserver \
+		packaging/tests/pypiserver/downloads_with_md5 \
+		packaging/tests/pypiserver/downloads_with_md5/packages \
+		packaging/tests/pypiserver/downloads_with_md5/packages/source \
+		packaging/tests/pypiserver/downloads_with_md5/packages/source/f \
+		packaging/tests/pypiserver/downloads_with_md5/packages/source/f/foobar \
+		packaging/tests/pypiserver/downloads_with_md5/simple \
+		packaging/tests/pypiserver/downloads_with_md5/simple/badmd5 \
+		packaging/tests/pypiserver/downloads_with_md5/simple/foobar \
+		packaging/tests/pypiserver/foo_bar_baz \
+		packaging/tests/pypiserver/foo_bar_baz/simple \
+		packaging/tests/pypiserver/foo_bar_baz/simple/bar \
+		packaging/tests/pypiserver/foo_bar_baz/simple/baz \
+		packaging/tests/pypiserver/foo_bar_baz/simple/foo \
+		packaging/tests/pypiserver/project_list \
+		packaging/tests/pypiserver/project_list/simple \
+		packaging/tests/pypiserver/test_found_links \
+		packaging/tests/pypiserver/test_found_links/simple \
+		packaging/tests/pypiserver/test_found_links/simple/foobar \
+		packaging/tests/pypiserver/test_pypi_server \
+		packaging/tests/pypiserver/test_pypi_server/external \
+		packaging/tests/pypiserver/test_pypi_server/simple \
+		packaging/tests/pypiserver/with_externals \
+		packaging/tests/pypiserver/with_externals/external \
+		packaging/tests/pypiserver/with_externals/simple \
+		packaging/tests/pypiserver/with_externals/simple/foobar \
+		packaging/tests/pypiserver/with_norel_links \
+		packaging/tests/pypiserver/with_norel_links/external \
+		packaging/tests/pypiserver/with_norel_links/simple \
+		packaging/tests/pypiserver/with_norel_links/simple/foobar \
+		packaging/tests/pypiserver/with_real_externals \
+		packaging/tests/pypiserver/with_real_externals/simple \
+		packaging/tests/pypiserver/with_real_externals/simple/foobar \
 		turtledemo \
 		multiprocessing multiprocessing/dummy \
 		unittest unittest/test \
@@ -954,7 +1013,7 @@ libinstall:	build_all $(srcdir)/Lib/$(PLATDIR) $(srcdir)/Modules/xxmodule.c
 		else	true; \
 		fi; \
 	done
-	@for i in $(srcdir)/Lib/*.py $(srcdir)/Lib/*.egg-info ; \
+	@for i in $(srcdir)/Lib/*.py $(srcdir)/Lib/*.cfg ; \
 	do \
 		if test -x $$i; then \
 			$(INSTALL_SCRIPT) $$i $(DESTDIR)$(LIBDEST); \
@@ -993,6 +1052,10 @@ libinstall:	build_all $(srcdir)/Lib/$(PLATDIR) $(srcdir)/Modules/xxmodule.c
 	if test -d $(DESTDIR)$(LIBDEST)/distutils/tests; then \
 		$(INSTALL_DATA) $(srcdir)/Modules/xxmodule.c \
 			$(DESTDIR)$(LIBDEST)/distutils/tests ; \
+	fi
+	if test -d $(DESTDIR)$(LIBDEST)/packaging/tests; then \
+		$(INSTALL_DATA) $(srcdir)/Modules/xxmodule.c \
+			$(DESTDIR)$(LIBDEST)/packaging/tests ; \
 	fi
 	-PYTHONPATH=$(DESTDIR)$(LIBDEST)  $(RUNSHARED) \
 		./$(BUILDPYTHON) -Wi $(DESTDIR)$(LIBDEST)/compileall.py \
@@ -1185,7 +1248,7 @@ scriptsinstall:
 	--root=$(DESTDIR)/
 
 # Build the toplevel Makefile
-Makefile.pre: Makefile.pre.in config.status
+Makefile.pre: $(srcdir)/Makefile.pre.in config.status
 	CONFIG_FILES=Makefile.pre CONFIG_HEADERS= $(SHELL) config.status
 	$(MAKE) -f Makefile.pre Makefile
 
@@ -1289,8 +1352,7 @@ smelly: all
 # Find files with funny names
 funny:
 	find $(SUBDIRS) $(SUBDIRSTOO) \
-		-name .svn -prune \
-		-o -type d \
+		-type d \
 		-o -name '*.[chs]' \
 		-o -name '*.py' \
 		-o -name '*.pyw' \
@@ -1329,7 +1391,7 @@ patchcheck:
 Python/thread.o: @THREADHEADERS@
 
 # Declare targets that aren't real files
-.PHONY: all build_all sharedmods oldsharedmods test quicktest memtest
+.PHONY: all build_all sysconfig sharedmods oldsharedmods test quicktest
 .PHONY: install altinstall oldsharedinstall bininstall altbininstall
 .PHONY: maninstall libinstall inclinstall libainstall sharedinstall
 .PHONY: frameworkinstall frameworkinstallframework frameworkinstallstructure
