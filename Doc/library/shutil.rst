@@ -51,10 +51,13 @@ Directory and files operations
    *dst* must be the complete target file name; look at :func:`copy` for a copy that
    accepts a target directory path.  If *src* and *dst* are the same files,
    :exc:`Error` is raised.
-   The destination location must be writable; otherwise,  an :exc:`IOError` exception
+   The destination location must be writable; otherwise,  an :exc:`OSError` exception
    will be raised. If *dst* already exists, it will be replaced.   Special files
    such as character or block devices and pipes cannot be copied with this
    function.  *src* and *dst* are path names given as strings.
+
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised instead of :exc:`OSError`.
 
 
 .. function:: copymode(src, dst)
@@ -172,6 +175,29 @@ Directory and files operations
    If the destination is on the current filesystem, then :func:`os.rename` is
    used.  Otherwise, *src* is copied (using :func:`copy2`) to *dst* and then
    removed.
+
+.. function:: disk_usage(path)
+
+   Return disk usage statistics about the given path as a :term:`named tuple`
+   with the attributes *total*, *used* and *free*, which are the amount of
+   total, used and free space, in bytes.
+
+   .. versionadded:: 3.3
+
+   Availability: Unix, Windows.
+
+.. function:: chown(path, user=None, group=None)
+
+   Change owner *user* and/or *group* of the given *path*.
+
+   *user* can be a system user name or a uid; the same applies to *group*. At
+   least one argument is required.
+
+   See also :func:`os.chown`, the underlying function.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. exception:: Error
