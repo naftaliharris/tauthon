@@ -680,8 +680,8 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 static void
 debug_cycle(char *msg, PyObject *op)
 {
-    PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
-                      msg, Py_TYPE(op)->tp_name, op);
+    PySys_FormatStderr("gc: %s <%s %p>\n",
+                       msg, Py_TYPE(op)->tp_name, op);
 }
 
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
@@ -762,6 +762,8 @@ clear_freelists(void)
     (void)PyTuple_ClearFreeList();
     (void)PyUnicode_ClearFreeList();
     (void)PyFloat_ClearFreeList();
+    (void)PyList_ClearFreeList();
+    (void)PyDict_ClearFreeList();
 }
 
 static double
@@ -769,7 +771,9 @@ get_time(void)
 {
     double result = 0;
     if (tmod != NULL) {
-        PyObject *f = PyObject_CallMethod(tmod, "time", NULL);
+        _Py_IDENTIFIER(time);
+
+        PyObject *f = _PyObject_CallMethodId(tmod, &PyId_time, NULL);
         if (f == NULL) {
             PyErr_Clear();
         }
