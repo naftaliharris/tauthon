@@ -11,15 +11,15 @@
    pair: data; tabular
 
 The so-called CSV (Comma Separated Values) format is the most common import and
-export format for spreadsheets and databases.  There is no "CSV standard", so
-the format is operationally defined by the many applications which read and
-write it.  The lack of a standard means that subtle differences often exist in
-the data produced and consumed by different applications.  These differences can
-make it annoying to process CSV files from multiple sources.  Still, while the
-delimiters and quoting characters vary, the overall format is similar enough
-that it is possible to write a single module which can efficiently manipulate
-such data, hiding the details of reading and writing the data from the
-programmer.
+export format for spreadsheets and databases.  CSV format was used for many
+years prior to attempts to describe the format in a standardized way in
+:rfc:`4180`.  The lack of a well-defined standard means that subtle differences
+often exist in the data produced and consumed by different applications.  These
+differences can make it annoying to process CSV files from multiple sources.
+Still, while the delimiters and quoting characters vary, the overall format is
+similar enough that it is possible to write a single module which can
+efficiently manipulate such data, hiding the details of reading and writing the
+data from the programmer.
 
 The :mod:`csv` module implements classes to read and write tabular data in CSV
 format.  It allows programmers to say, "write this data in the format preferred
