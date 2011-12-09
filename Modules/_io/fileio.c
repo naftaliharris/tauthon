@@ -122,6 +122,7 @@ internal_close(fileio *self)
 static PyObject *
 fileio_close(fileio *self)
 {
+    _Py_IDENTIFIER(close);
     if (!self->closefd) {
         self->fd = -1;
         Py_RETURN_NONE;
@@ -137,8 +138,8 @@ fileio_close(fileio *self)
     if (errno < 0)
         return NULL;
 
-    return PyObject_CallMethod((PyObject*)&PyRawIOBase_Type,
-                               "close", "O", self);
+    return _PyObject_CallMethodId((PyObject*)&PyRawIOBase_Type,
+                                  &PyId_close, "O", self);
 }
 
 static PyObject *
@@ -211,9 +212,9 @@ static int
 fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
 {
     fileio *self = (fileio *) oself;
-    static char *kwlist[] = {"file", "mode", "closefd", NULL};
+    static char *kwlist[] = {"file", "mode", "closefd", "opener", NULL};
     const char *name = NULL;
-    PyObject *nameobj, *stringobj = NULL;
+    PyObject *nameobj, *stringobj = NULL, *opener = Py_None;
     char *mode = "r";
     char *s;
 #ifdef MS_WINDOWS
@@ -232,8 +233,9 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
             return -1;
     }
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|si:fileio",
-                                     kwlist, &nameobj, &mode, &closefd))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|siO:fileio",
+                                     kwlist, &nameobj, &mode, &closefd,
+                                     &opener))
         return -1;
 
     if (PyFloat_Check(nameobj)) {
@@ -253,9 +255,11 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
     }
 
 #ifdef MS_WINDOWS
-    if (PyUnicode_Check(nameobj))
-        widename = PyUnicode_AS_UNICODE(nameobj);
-    if (widename == NULL)
+    if (PyUnicode_Check(nameobj)) {
+        widename = PyUnicode_AsUnicode(nameobj);
+        if (widename == NULL)
+            return -1;
+    } else
 #endif
     if (fd < 0)
     {
@@ -360,19 +364,39 @@ fileio_init(PyObject *oself, PyObject *args, PyObject *kwds)
             goto error;
         }
 
-        Py_BEGIN_ALLOW_THREADS
         errno = 0;
+        if (opener == Py_None) {
+            Py_BEGIN_ALLOW_THREADS
 #ifdef MS_WINDOWS
-        if (widename != NULL)
-            self->fd = _wopen(widename, flags, 0666);
-        else
+            if (widename != NULL)
+                self->fd = _wopen(widename, flags, 0666);
+            else
 #endif
-            self->fd = open(name, flags, 0666);
-        Py_END_ALLOW_THREADS
+                self->fd = open(name, flags, 0666);
+            Py_END_ALLOW_THREADS
+        } else {
+            PyObject *fdobj = PyObject_CallFunction(
+                                  opener, "Oi", nameobj, flags);
+            if (fdobj == NULL)
+                goto error;
+            if (!PyLong_Check(fdobj)) {
+                Py_DECREF(fdobj);
+                PyErr_SetString(PyExc_TypeError,
+                        "expected integer from opener");
+                goto error;
+            }
+
+            self->fd = PyLong_AsLong(fdobj);
+            Py_DECREF(fdobj);
+            if (self->fd == -1) {
+                goto error;
+            }
+        }
+
         if (self->fd < 0) {
 #ifdef MS_WINDOWS
             if (widename != NULL)
-                PyErr_SetFromErrnoWithUnicodeFilename(PyExc_IOError, widename);
+                PyErr_SetFromErrnoWithFilenameObject(PyExc_IOError, nameobj);
             else
 #endif
                 PyErr_SetFromErrnoWithFilename(PyExc_IOError, name);
@@ -541,21 +565,25 @@ fileio_readinto(fileio *self, PyObject *args)
 }
 
 static size_t
-new_buffersize(fileio *self, size_t currentsize)
+new_buffersize(fileio *self, size_t currentsize
+#ifdef HAVE_FSTAT
+               , Py_off_t pos, Py_off_t end
+#endif
+               )
 {
 #ifdef HAVE_FSTAT
-    off_t pos, end;
-    struct stat st;
-    if (fstat(self->fd, &st) == 0) {
-        end = st.st_size;
-        pos = lseek(self->fd, 0L, SEEK_CUR);
+    if (end != (Py_off_t)-1) {
         /* Files claiming a size smaller than SMALLCHUNK may
            actually be streaming pseudo-files. In this case, we
            apply the more aggressive algorithm below.
         */
         if (end >= SMALLCHUNK && end >= pos && pos >= 0) {
             /* Add 1 so if the file were to grow we'd notice. */
-            return currentsize + end - pos + 1;
+            Py_off_t bufsize = currentsize + end - pos + 1;
+            if (bufsize < PY_SSIZE_T_MAX)
+                return (size_t)bufsize;
+            else
+                return PY_SSIZE_T_MAX;
         }
     }
 #endif
@@ -568,9 +596,14 @@ new_buffersize(fileio *self, size_t currentsize)
 static PyObject *
 fileio_readall(fileio *self)
 {
+#ifdef HAVE_FSTAT
+    struct stat st;
+    Py_off_t pos, end;
+#endif
     PyObject *result;
     Py_ssize_t total = 0;
     int n;
+    size_t newsize;
 
     if (self->fd < 0)
         return err_closed();
@@ -581,8 +614,23 @@ fileio_readall(fileio *self)
     if (result == NULL)
         return NULL;
 
+#ifdef HAVE_FSTAT
+#if defined(MS_WIN64) || defined(MS_WINDOWS)
+    pos = _lseeki64(self->fd, 0L, SEEK_CUR);
+#else
+    pos = lseek(self->fd, 0L, SEEK_CUR);
+#endif
+    if (fstat(self->fd, &st) == 0)
+        end = st.st_size;
+    else
+        end = (Py_off_t)-1;
+#endif
     while (1) {
-        size_t newsize = new_buffersize(self, total);
+#ifdef HAVE_FSTAT
+        newsize = new_buffersize(self, total, pos, end);
+#else
+        newsize = new_buffersize(self, total);
+#endif
         if (newsize > PY_SSIZE_T_MAX || newsize <= 0) {
             PyErr_SetString(PyExc_OverflowError,
                 "unbounded read returned more bytes "
@@ -621,6 +669,9 @@ fileio_readall(fileio *self)
             return NULL;
         }
         total += n;
+#ifdef HAVE_FSTAT
+        pos += n;
+#endif
     }
 
     if (PyBytes_GET_SIZE(result) > total) {
@@ -942,12 +993,13 @@ mode_string(fileio *self)
 static PyObject *
 fileio_repr(fileio *self)
 {
+    _Py_IDENTIFIER(name);
     PyObject *nameobj, *res;
 
     if (self->fd < 0)
         return PyUnicode_FromFormat("<_io.FileIO [closed]>");
 
-    nameobj = PyObject_GetAttrString((PyObject *) self, "name");
+    nameobj = _PyObject_GetAttrId((PyObject *) self, &PyId_name);
     if (nameobj == NULL) {
         if (PyErr_ExceptionMatches(PyExc_AttributeError))
             PyErr_Clear();
@@ -987,13 +1039,17 @@ fileio_getstate(fileio *self)
 
 
 PyDoc_STRVAR(fileio_doc,
-"file(name: str[, mode: str]) -> file IO object\n"
+"file(name: str[, mode: str][, opener: None]) -> file IO object\n"
 "\n"
 "Open a file.  The mode can be 'r', 'w' or 'a' for reading (default),\n"
 "writing or appending.  The file will be created if it doesn't exist\n"
 "when opened for writing or appending; it will be truncated when\n"
 "opened for writing.  Add a '+' to the mode to allow simultaneous\n"
-"reading and writing.");
+"reading and writing. A custom opener can be used by passing a\n"
+"callable as *opener*. The underlying file descriptor for the file\n"
+"object is then obtained by calling opener with (*name*, *flags*).\n"
+"*opener* must return an open file descriptor (passing os.open as\n"
+"*opener* results in functionality similar to passing None).");
 
 PyDoc_STRVAR(read_doc,
 "read(size: int) -> bytes.  read at most size bytes, returned as bytes.\n"
