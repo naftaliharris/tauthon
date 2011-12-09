@@ -211,8 +211,7 @@ cannot be read with this function.");
 static PyObject *
 msvcrt_getwch(PyObject *self, PyObject *args)
 {
-    Py_UNICODE ch;
-    Py_UNICODE u[1];
+    wchar_t ch;
 
     if (!PyArg_ParseTuple(args, ":getwch"))
         return NULL;
@@ -220,8 +219,7 @@ msvcrt_getwch(PyObject *self, PyObject *args)
     Py_BEGIN_ALLOW_THREADS
     ch = _getwch();
     Py_END_ALLOW_THREADS
-    u[0] = ch;
-    return PyUnicode_FromUnicode(u, 1);
+    return PyUnicode_FromOrdinal(ch);
 }
 
 PyDoc_STRVAR(getwch_doc,
@@ -256,8 +254,7 @@ a printable character.");
 static PyObject *
 msvcrt_getwche(PyObject *self, PyObject *args)
 {
-    Py_UNICODE ch;
-    Py_UNICODE s[1];
+    wchar_t ch;
 
     if (!PyArg_ParseTuple(args, ":getwche"))
         return NULL;
@@ -265,8 +262,7 @@ msvcrt_getwche(PyObject *self, PyObject *args)
     Py_BEGIN_ALLOW_THREADS
     ch = _getwche();
     Py_END_ALLOW_THREADS
-    s[0] = ch;
-    return PyUnicode_FromUnicode(s, 1);
+    return PyUnicode_FromOrdinal(ch);
 }
 
 PyDoc_STRVAR(getwche_doc,
