@@ -29,8 +29,6 @@
 """Read from and write to tar format archives.
 """
 
-__version__ = "$Revision$"
-
 version     = "0.9.0"
 __author__  = "Lars Gust\u00e4bel (lars@gustaebel.de)"
 __date__    = "$Date: 2011-02-25 17:42:01 +0200 (Fri, 25 Feb 2011) $"
@@ -44,7 +42,6 @@ import sys
 import os
 import shutil
 import stat
-import errno
 import time
 import struct
 import copy
@@ -635,66 +632,6 @@ class _StreamProxy(object):
         self.fileobj.close()
 # class StreamProxy
 
-class _BZ2Proxy(object):
-    """Small proxy class that enables external file object
-       support for "r:bz2" and "w:bz2" modes. This is actually
-       a workaround for a limitation in bz2 module's BZ2File
-       class which (unlike gzip.GzipFile) has no support for
-       a file object argument.
-    """
-
-    blocksize = 16 * 1024
-
-    def __init__(self, fileobj, mode):
-        self.fileobj = fileobj
-        self.mode = mode
-        self.name = getattr(self.fileobj, "name", None)
-        self.init()
-
-    def init(self):
-        import bz2
-        self.pos = 0
-        if self.mode == "r":
-            self.bz2obj = bz2.BZ2Decompressor()
-            self.fileobj.seek(0)
-            self.buf = b""
-        else:
-            self.bz2obj = bz2.BZ2Compressor()
-
-    def read(self, size):
-        x = len(self.buf)
-        while x < size:
-            raw = self.fileobj.read(self.blocksize)
-            if not raw:
-                break
-            data = self.bz2obj.decompress(raw)
-            self.buf += data
-            x += len(data)
-
-        buf = self.buf[:size]
-        self.buf = self.buf[size:]
-        self.pos += len(buf)
-        return buf
-
-    def seek(self, pos):
-        if pos < self.pos:
-            self.init()
-        self.read(pos - self.pos)
-
-    def tell(self):
-        return self.pos
-
-    def write(self, data):
-        self.pos += len(data)
-        raw = self.bz2obj.compress(data)
-        self.fileobj.write(raw)
-
-    def close(self):
-        if self.mode == "w":
-            raw = self.bz2obj.flush()
-            self.fileobj.write(raw)
-# class _BZ2Proxy
-
 #------------------------
 # Extraction file object
 #------------------------
@@ -1087,7 +1024,7 @@ class TarInfo(object):
     def create_pax_global_header(cls, pax_headers):
         """Return the object as a pax global header block sequence.
         """
-        return cls._create_pax_generic_header(pax_headers, XGLTYPE, "utf8")
+        return cls._create_pax_generic_header(pax_headers, XGLTYPE, "utf-8")
 
     def _posix_split_name(self, name):
         """Split a name longer than 100 chars into a prefix
@@ -1170,7 +1107,7 @@ class TarInfo(object):
         binary = False
         for keyword, value in pax_headers.items():
             try:
-                value.encode("utf8", "strict")
+                value.encode("utf-8", "strict")
             except UnicodeEncodeError:
                 binary = True
                 break
@@ -1181,13 +1118,13 @@ class TarInfo(object):
             records += b"21 hdrcharset=BINARY\n"
 
         for keyword, value in pax_headers.items():
-            keyword = keyword.encode("utf8")
+            keyword = keyword.encode("utf-8")
             if binary:
                 # Try to restore the original byte representation of `value'.
                 # Needless to say, that the encoding must match the string.
                 value = value.encode(encoding, "surrogateescape")
             else:
-                value = value.encode("utf8")
+                value = value.encode("utf-8")
 
             l = len(keyword) + len(value) + 3   # ' ' + '=' + '\n'
             n = p = 0
@@ -1396,7 +1333,7 @@ class TarInfo(object):
         # the translation to UTF-8 fails.
         match = re.search(br"\d+ hdrcharset=([^\n]+)\n", buf)
         if match is not None:
-            pax_headers["hdrcharset"] = match.group(1).decode("utf8")
+            pax_headers["hdrcharset"] = match.group(1).decode("utf-8")
 
         # For the time being, we don't care about anything other than "BINARY".
         # The only other value that is currently allowed by the standard is
@@ -1405,7 +1342,7 @@ class TarInfo(object):
         if hdrcharset == "BINARY":
             encoding = tarfile.encoding
         else:
-            encoding = "utf8"
+            encoding = "utf-8"
 
         # Parse pax header information. A record looks like that:
         # "%d %s=%s\n" % (length, keyword, value). length is the size
@@ -1422,20 +1359,20 @@ class TarInfo(object):
             length = int(length)
             value = buf[match.end(2) + 1:match.start(1) + length - 1]
 
-            # Normally, we could just use "utf8" as the encoding and "strict"
+            # Normally, we could just use "utf-8" as the encoding and "strict"
             # as the error handler, but we better not take the risk. For
             # example, GNU tar <= 1.23 is known to store filenames it cannot
             # translate to UTF-8 as raw strings (unfortunately without a
             # hdrcharset=BINARY header).
             # We first try the strict standard encoding, and if that fails we
             # fall back on the user's encoding and error handler.
-            keyword = self._decode_pax_field(keyword, "utf8", "utf8",
+            keyword = self._decode_pax_field(keyword, "utf-8", "utf-8",
                     tarfile.errors)
             if keyword in PAX_NAME_FIELDS:
                 value = self._decode_pax_field(value, encoding, tarfile.encoding,
                         tarfile.errors)
             else:
-                value = self._decode_pax_field(value, "utf8", "utf8",
+                value = self._decode_pax_field(value, "utf-8", "utf-8",
                         tarfile.errors)
 
             pax_headers[keyword] = value
@@ -1832,10 +1769,8 @@ class TarFile(object):
         except ImportError:
             raise CompressionError("bz2 module is not available")
 
-        if fileobj is not None:
-            fileobj = _BZ2Proxy(fileobj, mode)
-        else:
-            fileobj = bz2.BZ2File(name, mode, compresslevel=compresslevel)
+        fileobj = bz2.BZ2File(filename=name if fileobj is None else None,
+                mode=mode, fileobj=fileobj, compresslevel=compresslevel)
 
         try:
             t = cls.taropen(name, mode, fileobj, **kwargs)
@@ -2283,9 +2218,8 @@ class TarFile(object):
             # Use a safe mode for the directory, the real mode is set
             # later in _extract_member().
             os.mkdir(targetpath, 0o700)
-        except EnvironmentError as e:
-            if e.errno != errno.EEXIST:
-                raise
+        except FileExistsError:
+            pass
 
     def makefile(self, tarinfo, targetpath):
         """Make a file called targetpath.
