@@ -82,7 +82,7 @@ class UstarReadTest(ReadTest):
     def test_fileobj_iter(self):
         self.tar.extract("ustar/regtype", TEMPDIR)
         tarinfo = self.tar.getmember("ustar/regtype")
-        with open(os.path.join(TEMPDIR, "ustar/regtype"), "rU") as fobj1:
+        with open(os.path.join(TEMPDIR, "ustar/regtype"), "r") as fobj1:
             lines1 = fobj1.readlines()
         fobj2 = self.tar.extractfile(tarinfo)
         try:
@@ -222,6 +222,9 @@ class CommonReadTest(ReadTest):
 class MiscReadTest(CommonReadTest):
 
     def test_no_name_argument(self):
+        if self.mode.endswith("bz2"):
+            # BZ2File has no name attribute.
+            return
         with open(self.tarname, "rb") as fobj:
             tar = tarfile.open(fileobj=fobj, mode=self.mode)
             self.assertEqual(tar.name, os.path.abspath(fobj.name))
@@ -720,7 +723,7 @@ class GNUReadTest(LongnameTest):
         # Return True if the platform knows the st_blocks stat attribute and
         # uses st_blocks units of 512 bytes, and if the filesystem is able to
         # store holes in files.
-        if sys.platform == "linux2":
+        if sys.platform.startswith("linux"):
             # Linux evidentially has 512 byte st_blocks units.
             name = os.path.join(TEMPDIR, "sparse-test")
             with open(name, "wb") as fobj:
@@ -910,7 +913,7 @@ class WriteTest(WriteTestBase):
         try:
             for name in ("foo", "bar", "baz"):
                 name = os.path.join(tempdir, name)
-                open(name, "wb").close()
+                support.create_empty_file(name)
 
             exclude = os.path.isfile
 
@@ -937,7 +940,7 @@ class WriteTest(WriteTestBase):
         try:
             for name in ("foo", "bar", "baz"):
                 name = os.path.join(tempdir, name)
-                open(name, "wb").close()
+                support.create_empty_file(name)
 
             def filter(tarinfo):
                 if os.path.basename(tarinfo.name) == "bar":
@@ -976,7 +979,7 @@ class WriteTest(WriteTestBase):
         # and compare the stored name with the original.
         foo = os.path.join(TEMPDIR, "foo")
         if not dir:
-            open(foo, "w").close()
+            support.create_empty_file(foo)
         else:
             os.mkdir(foo)
 
@@ -1336,7 +1339,7 @@ class UstarUnicodeTest(unittest.TestCase):
         self._test_unicode_filename("utf7")
 
     def test_utf8_filename(self):
-        self._test_unicode_filename("utf8")
+        self._test_unicode_filename("utf-8")
 
     def _test_unicode_filename(self, encoding):
         tar = tarfile.open(tmpname, "w", format=self.format, encoding=encoding, errors="strict")
@@ -1415,7 +1418,7 @@ class GNUUnicodeTest(UstarUnicodeTest):
     def test_bad_pax_header(self):
         # Test for issue #8633. GNU tar <= 1.23 creates raw binary fields
         # without a hdrcharset=BINARY header.
-        for encoding, name in (("utf8", "pax/bad-pax-\udce4\udcf6\udcfc"),
+        for encoding, name in (("utf-8", "pax/bad-pax-\udce4\udcf6\udcfc"),
                 ("iso8859-1", "pax/bad-pax-\xe4\xf6\xfc"),):
             with tarfile.open(tarname, encoding=encoding, errors="surrogateescape") as tar:
                 try:
@@ -1430,7 +1433,7 @@ class PAXUnicodeTest(UstarUnicodeTest):
 
     def test_binary_header(self):
         # Test a POSIX.1-2008 compatible header with a hdrcharset=BINARY field.
-        for encoding, name in (("utf8", "pax/hdrcharset-\udce4\udcf6\udcfc"),
+        for encoding, name in (("utf-8", "pax/hdrcharset-\udce4\udcf6\udcfc"),
                 ("iso8859-1", "pax/hdrcharset-\xe4\xf6\xfc"),):
             with tarfile.open(tarname, encoding=encoding, errors="surrogateescape") as tar:
                 try:

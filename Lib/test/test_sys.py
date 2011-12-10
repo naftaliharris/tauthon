@@ -303,6 +303,7 @@ class SysModuleTest(unittest.TestCase):
             self.assertEqual(sys.getdlopenflags(), oldflags+1)
             sys.setdlopenflags(oldflags)
 
+    @test.support.refcount_test
     def test_refcount(self):
         # n here must be a global in order for this test to pass while
         # tracing with a python function.  Tracing calls PyFrame_FastToLocals
@@ -342,7 +343,7 @@ class SysModuleTest(unittest.TestCase):
     # Test sys._current_frames() in a WITH_THREADS build.
     @test.support.reap_threads
     def current_frames_with_threads(self):
-        import threading, _thread
+        import threading
         import traceback
 
         # Spawn a thread that blocks at a known place.  Then the main
@@ -356,7 +357,7 @@ class SysModuleTest(unittest.TestCase):
             g456()
 
         def g456():
-            thread_info.append(_thread.get_ident())
+            thread_info.append(threading.get_ident())
             entered_g.set()
             leave_g.wait()
 
@@ -372,7 +373,7 @@ class SysModuleTest(unittest.TestCase):
 
         d = sys._current_frames()
 
-        main_id = _thread.get_ident()
+        main_id = threading.get_ident()
         self.assertIn(main_id, d)
         self.assertIn(thread_id, d)
 
@@ -446,6 +447,7 @@ class SysModuleTest(unittest.TestCase):
 
         self.assertIsInstance(sys.maxsize, int)
         self.assertIsInstance(sys.maxunicode, int)
+        self.assertEqual(sys.maxunicode, 0x10FFFF)
         self.assertIsInstance(sys.platform, str)
         self.assertIsInstance(sys.prefix, str)
         self.assertIsInstance(sys.version, str)
@@ -472,6 +474,14 @@ class SysModuleTest(unittest.TestCase):
         self.assertIn(sys.float_repr_style, ('short', 'legacy'))
         if not sys.platform.startswith('win'):
             self.assertIsInstance(sys.abiflags, str)
+
+    @unittest.skipUnless(hasattr(sys, 'thread_info'),
+                         'Threading required for this test.')
+    def test_thread_info(self):
+        info = sys.thread_info
+        self.assertEqual(len(info), 3)
+        self.assertIn(info.name, ('nt', 'os2', 'pthread', 'solaris', None))
+        self.assertIn(info.lock, ('semaphore', 'mutex+cond', None))
 
     def test_43581(self):
         # Can't use sys.stdout, as this is a StringIO object when
@@ -500,7 +510,7 @@ class SysModuleTest(unittest.TestCase):
 
     def test_sys_flags(self):
         self.assertTrue(sys.flags)
-        attrs = ("debug", "division_warning",
+        attrs = ("debug",
                  "inspect", "interactive", "optimize", "dont_write_bytecode",
                  "no_user_site", "no_site", "ignore_environment", "verbose",
                  "bytes_warning", "quiet")
@@ -656,7 +666,7 @@ class SizeofTest(unittest.TestCase):
             return inner
         check(get_cell().__closure__[0], size(h + 'P'))
         # code
-        check(get_cell().__code__, size(h + '5i8Pi3P'))
+        check(get_cell().__code__, size(h + '5i9Pi3P'))
         # complex
         check(complex(0,1), size(h + '2d'))
         # method_descriptor (descriptor object)
@@ -720,7 +730,7 @@ class SizeofTest(unittest.TestCase):
         check(x, size(vh + '12P3i' + CO_MAXBLOCKS*'3i' + 'P' + extras*'P'))
         # function
         def func(): pass
-        check(func, size(h + '11P'))
+        check(func, size(h + '12P'))
         class c():
             @staticmethod
             def foo():
@@ -760,8 +770,8 @@ class SizeofTest(unittest.TestCase):
         check(int(PyLong_BASE), size(vh) + 2*self.longdigit)
         check(int(PyLong_BASE**2-1), size(vh) + 2*self.longdigit)
         check(int(PyLong_BASE**2), size(vh) + 3*self.longdigit)
-        # memory
-        check(memoryview(b''), size(h + 'PP2P2i7P'))
+        # memory (Py_buffer + hash value)
+        check(memoryview(b''), size(h + 'PP2P2i7P' + 'P'))
         # module
         check(unittest, size(h + '3P'))
         # None
@@ -818,19 +828,41 @@ class SizeofTest(unittest.TestCase):
         # type
         # (PyTypeObject + PyNumberMethods + PyMappingMethods +
         #  PySequenceMethods + PyBufferProcs)
-        s = size(vh + 'P2P15Pl4PP9PP11PI') + size('16Pi17P 3P 10P 2P 2P')
+        s = size(vh + 'P2P15Pl4PP9PP11PI') + size('16Pi17P 3P 10P 2P 3P')
         check(int, s)
         # class
         class newstyleclass(object): pass
         check(newstyleclass, s)
         # unicode
-        usize = len('\0'.encode('unicode-internal'))
-        samples = ['', '1'*100]
-        # we need to test for both sizes, because we don't know if the string
-        # has been cached
+        # each tuple contains a string and its expected character size
+        # don't put any static strings here, as they may contain
+        # wchar_t or UTF-8 representations
+        samples = ['1'*100, '\xff'*50,
+                   '\u0100'*40, '\uffff'*100,
+                   '\U00010000'*30, '\U0010ffff'*100]
+        asciifields = h + "PPiP"
+        compactfields = asciifields + "PPP"
+        unicodefields = compactfields + "P"
         for s in samples:
-            basicsize =  size(h + 'PPPiP') + usize * (len(s) + 1)
-            check(s, basicsize)
+            maxchar = ord(max(s))
+            if maxchar < 128:
+                L = size(asciifields) + len(s) + 1
+            elif maxchar < 256:
+                L = size(compactfields) + len(s) + 1
+            elif maxchar < 65536:
+                L = size(compactfields) + 2*(len(s) + 1)
+            else:
+                L = size(compactfields) + 4*(len(s) + 1)
+            check(s, L)
+        # verify that the UTF-8 size is accounted for
+        s = chr(0x4000)   # 4 bytes canonical representation
+        check(s, size(compactfields) + 4)
+        # compile() will trigger the generation of the UTF-8
+        # representation as a side effect
+        compile(s, "<stdin>", "eval")
+        check(s, size(compactfields) + 4 + 4)
+        # TODO: add check that forces the presence of wchar_t representation
+        # TODO: add check that forces layout of unicodefields
         # weakref
         import weakref
         check(weakref.ref(int), size(h + '2Pl2P'))
