@@ -4019,6 +4019,37 @@ class TestHelpSubparsersWithHelpOrdering(HelpTestCase):
         '''
 
 
+
+class TestHelpMetavarTypeFormatter(HelpTestCase):
+    """"""
+
+    def custom_type(string):
+        return string
+
+    parser_signature = Sig(prog='PROG', description='description',
+                           formatter_class=argparse.MetavarTypeHelpFormatter)
+    argument_signatures = [Sig('a', type=int),
+                           Sig('-b', type=custom_type),
+                           Sig('-c', type=float, metavar='SOME FLOAT')]
+    argument_group_signatures = []
+    usage = '''\
+        usage: PROG [-h] [-b custom_type] [-c SOME FLOAT] int
+        '''
+    help = usage + '''\
+
+        description
+
+        positional arguments:
+          int
+
+        optional arguments:
+          -h, --help      show this help message and exit
+          -b custom_type
+          -c SOME FLOAT
+        '''
+    version = ''
+
+
 # =====================================
 # Optional/Positional constructor tests
 # =====================================
@@ -4409,7 +4440,7 @@ class TestEncoding(TestCase):
     def _test_module_encoding(self, path):
         path, _ = os.path.splitext(path)
         path += ".py"
-        with codecs.open(path, 'r', 'utf8') as f:
+        with codecs.open(path, 'r', 'utf-8') as f:
             f.read()
 
     def test_argparse_module_encoding(self):
@@ -4450,6 +4481,67 @@ class TestArgumentTypeError(TestCase):
             self.assertEqual(expected, msg)
         else:
             self.fail()
+
+# =========================
+# MessageContentError tests
+# =========================
+
+class TestMessageContentError(TestCase):
+
+    def test_missing_argument_name_in_message(self):
+        parser = ErrorRaisingArgumentParser(prog='PROG', usage='')
+        parser.add_argument('req_pos', type=str)
+        parser.add_argument('-req_opt', type=int, required=True)
+        parser.add_argument('need_one', type=str, nargs='+')
+
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args([])
+        msg = str(cm.exception)
+        self.assertRegex(msg, 'req_pos')
+        self.assertRegex(msg, 'req_opt')
+        self.assertRegex(msg, 'need_one')
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args(['myXargument'])
+        msg = str(cm.exception)
+        self.assertNotIn(msg, 'req_pos')
+        self.assertRegex(msg, 'req_opt')
+        self.assertRegex(msg, 'need_one')
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args(['myXargument', '-req_opt=1'])
+        msg = str(cm.exception)
+        self.assertNotIn(msg, 'req_pos')
+        self.assertNotIn(msg, 'req_opt')
+        self.assertRegex(msg, 'need_one')
+
+    def test_optional_optional_not_in_message(self):
+        parser = ErrorRaisingArgumentParser(prog='PROG', usage='')
+        parser.add_argument('req_pos', type=str)
+        parser.add_argument('--req_opt', type=int, required=True)
+        parser.add_argument('--opt_opt', type=bool, nargs='?',
+                            default=True)
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args([])
+        msg = str(cm.exception)
+        self.assertRegex(msg, 'req_pos')
+        self.assertRegex(msg, 'req_opt')
+        self.assertNotIn(msg, 'opt_opt')
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args(['--req_opt=1'])
+        msg = str(cm.exception)
+        self.assertRegex(msg, 'req_pos')
+        self.assertNotIn(msg, 'req_opt')
+        self.assertNotIn(msg, 'opt_opt')
+
+    def test_optional_positional_not_in_message(self):
+        parser = ErrorRaisingArgumentParser(prog='PROG', usage='')
+        parser.add_argument('req_pos')
+        parser.add_argument('optional_positional', nargs='?', default='eggs')
+        with self.assertRaises(ArgumentParserError) as cm:
+            parser.parse_args([])
+        msg = str(cm.exception)
+        self.assertRegex(msg, 'req_pos')
+        self.assertNotIn(msg, 'optional_positional')
+
 
 # ======================
 # parse_known_args tests
