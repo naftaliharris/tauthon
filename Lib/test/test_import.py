@@ -15,7 +15,7 @@ import textwrap
 from test.support import (
     EnvironmentVarGuard, TESTFN, check_warnings, forget, is_jython,
     make_legacy_pyc, rmtree, run_unittest, swap_attr, swap_item, temp_umask,
-    unlink, unload)
+    unlink, unload, create_empty_file)
 from test import script_helper
 
 
@@ -97,24 +97,22 @@ class ImportTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'posix',
                          "test meaningful only on posix systems")
-    def test_execute_bit_not_copied(self):
-        # Issue 6070: under posix .pyc files got their execute bit set if
-        # the .py file had the execute bit set, but they aren't executable.
-        with temp_umask(0o022):
+    def test_creation_mode(self):
+        mask = 0o022
+        with temp_umask(mask):
             sys.path.insert(0, os.curdir)
             try:
                 fname = TESTFN + os.extsep + "py"
-                open(fname, 'w').close()
-                os.chmod(fname, (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH |
-                                 stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
+                create_empty_file(fname)
                 __import__(TESTFN)
                 fn = imp.cache_from_source(fname)
                 if not os.path.exists(fn):
                     self.fail("__import__ did not result in creation of "
                               "either a .pyc or .pyo file")
                 s = os.stat(fn)
-                self.assertEqual(stat.S_IMODE(s.st_mode),
-                                 stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                # Check that the umask is respected, and the executable bits
+                # aren't set.
+                self.assertEqual(stat.S_IMODE(s.st_mode), 0o666 & ~mask)
             finally:
                 del sys.path[0]
                 remove_files(TESTFN)
@@ -295,8 +293,6 @@ class ImportTests(unittest.TestCase):
             self.skipTest('path is not encodable to {}'.format(encoding))
         with self.assertRaises(ImportError) as c:
             __import__(path)
-        self.assertEqual("Import by filename is not supported.",
-                         c.exception.args[0])
 
     def test_import_in_del_does_not_crash(self):
         # Issue 4236
