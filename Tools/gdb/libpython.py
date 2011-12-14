@@ -50,6 +50,11 @@ _type_char_ptr = gdb.lookup_type('char').pointer() # char*
 _type_unsigned_char_ptr = gdb.lookup_type('unsigned char').pointer() # unsigned char*
 _type_void_ptr = gdb.lookup_type('void').pointer() # void*
 _type_size_t = gdb.lookup_type('size_t')
+_type_unsigned_short_ptr = gdb.lookup_type('unsigned short').pointer()
+_type_unsigned_int_ptr = gdb.lookup_type('unsigned int').pointer()
+
+# value computed later, see PyUnicodeObjectPtr.proxy()
+_is_pep393 = None
 
 SIZEOF_VOID_P = _type_void_ptr.sizeof
 
@@ -323,7 +328,6 @@ class PyObjectPtr(object):
 
         name_map = {'bool': PyBoolObjectPtr,
                     'classobj': PyClassObjectPtr,
-                    'instance': PyInstanceObjectPtr,
                     'NoneType': PyNoneStructPtr,
                     'frame': PyFrameObjectPtr,
                     'set' : PySetObjectPtr,
@@ -397,7 +401,7 @@ class ProxyAlreadyVisited(object):
 
 
 def _write_instance_repr(out, visited, name, pyop_attrdict, address):
-    '''Shared code for use by old-style and new-style classes:
+    '''Shared code for use by all classes:
     write a representation to file-like object "out"'''
     out.write('<')
     out.write(name)
@@ -476,7 +480,7 @@ class HeapTypeObjectPtr(PyObjectPtr):
 
     def proxyval(self, visited):
         '''
-        Support for new-style classes.
+        Support for classes.
 
         Currently we just locate the dictionary using a transliteration to
         python of _PyObject_GetDictPtr, ignoring descriptors
@@ -493,7 +497,7 @@ class HeapTypeObjectPtr(PyObjectPtr):
             attr_dict = {}
         tp_name = self.safe_tp_name()
 
-        # New-style class:
+        # Class:
         return InstanceProxy(tp_name, attr_dict, long(self._gdbval))
 
     def write_repr(self, out, visited):
@@ -664,44 +668,6 @@ class PyDictObjectPtr(PyObjectPtr):
             out.write(': ')
             pyop_value.write_repr(out, visited)
         out.write('}')
-
-class PyInstanceObjectPtr(PyObjectPtr):
-    _typename = 'PyInstanceObject'
-
-    def proxyval(self, visited):
-        # Guard against infinite loops:
-        if self.as_address() in visited:
-            return ProxyAlreadyVisited('<...>')
-        visited.add(self.as_address())
-
-        # Get name of class:
-        in_class = self.pyop_field('in_class')
-        cl_name = in_class.pyop_field('cl_name').proxyval(visited)
-
-        # Get dictionary of instance attributes:
-        in_dict = self.pyop_field('in_dict').proxyval(visited)
-
-        # Old-style class:
-        return InstanceProxy(cl_name, in_dict, long(self._gdbval))
-
-    def write_repr(self, out, visited):
-        # Guard against infinite loops:
-        if self.as_address() in visited:
-            out.write('<...>')
-            return
-        visited.add(self.as_address())
-
-        # Old-style class:
-
-        # Get name of class:
-        in_class = self.pyop_field('in_class')
-        cl_name = in_class.pyop_field('cl_name').proxyval(visited)
-
-        # Get dictionary of instance attributes:
-        pyop_in_dict = self.pyop_field('in_dict')
-
-        _write_instance_repr(out, visited,
-                             cl_name, pyop_in_dict, self.as_address())
 
 class PyListObjectPtr(PyObjectPtr):
     _typename = 'PyListObject'
@@ -1119,15 +1085,46 @@ class PyUnicodeObjectPtr(PyObjectPtr):
         return _type_Py_UNICODE.sizeof
 
     def proxyval(self, visited):
-        # From unicodeobject.h:
-        #     Py_ssize_t length;  /* Length of raw Unicode data in buffer */
-        #     Py_UNICODE *str;    /* Raw Unicode buffer */
-        field_length = long(self.field('length'))
-        field_str = self.field('str')
+        global _is_pep393
+        if _is_pep393 is None:
+            fields = gdb.lookup_type('PyUnicodeObject').target().fields()
+            _is_pep393 = 'data' in [f.name for f in fields]
+        if _is_pep393:
+            # Python 3.3 and newer
+            may_have_surrogates = False
+            compact = self.field('_base')
+            ascii = compact['_base']
+            state = ascii['state']
+            is_compact_ascii = (int(state['ascii']) and int(state['compact']))
+            if not int(state['ready']):
+                # string is not ready
+                field_length = long(compact['wstr_length'])
+                may_have_surrogates = True
+                field_str = ascii['wstr']
+            else:
+                field_length = long(ascii['length'])
+                if is_compact_ascii:
+                    field_str = ascii.address + 1
+                elif int(state['compact']):
+                    field_str = compact.address + 1
+                else:
+                    field_str = self.field('data')['any']
+                repr_kind = int(state['kind'])
+                if repr_kind == 1:
+                    field_str = field_str.cast(_type_unsigned_char_ptr)
+                elif repr_kind == 2:
+                    field_str = field_str.cast(_type_unsigned_short_ptr)
+                elif repr_kind == 4:
+                    field_str = field_str.cast(_type_unsigned_int_ptr)
+        else:
+            # Python 3.2 and earlier
+            field_length = long(self.field('length'))
+            field_str = self.field('str')
+            may_have_surrogates = self.char_width() == 2
 
         # Gather a list of ints from the Py_UNICODE array; these are either
-        # UCS-2 or UCS-4 code points:
-        if self.char_width() > 2:
+        # UCS-1, UCS-2 or UCS-4 code points:
+        if not may_have_surrogates:
             Py_UNICODEs = [int(field_str[i]) for i in safe_range(field_length)]
         else:
             # A more elaborate routine if sizeof(Py_UNICODE) is 2 in the
