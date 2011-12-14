@@ -179,19 +179,29 @@ of which this module provides three different variants:
 
    .. method:: send_response(code, message=None)
 
-      Sends a response header and logs the accepted request. The HTTP response
-      line is sent, followed by *Server* and *Date* headers. The values for
-      these two headers are picked up from the :meth:`version_string` and
-      :meth:`date_time_string` methods, respectively.
+      Adds a response header to the headers buffer and logs the accepted
+      request. The HTTP response line is written to the internal buffer,
+      followed by *Server* and *Date* headers. The values for these two headers
+      are picked up from the :meth:`version_string` and
+      :meth:`date_time_string` methods, respectively. If the server does not
+      intend to send any other headers using the :meth:`send_header` method,
+      then :meth:`send_response` should be followed by a :meth:`end_headers`
+      call.
+
+      .. versionchanged:: 3.3
+         Headers are stored to an internal buffer and :meth:`end_headers`
+         needs to be called explicitly.
+
 
    .. method:: send_header(keyword, value)
 
-      Stores the HTTP header to an internal buffer which will be written to the
-      output stream when :meth:`end_headers` method is invoked.
-      *keyword* should specify the header keyword, with *value*
-      specifying its value.
+      Adds the HTTP header to an internal buffer which will be written to the
+      output stream when either :meth:`end_headers` or :meth:`flush_headers` is
+      invoked. *keyword* should specify the header keyword, with *value*
+      specifying its value. Note that, after the send_header calls are done,
+      :meth:`end_headers` MUST BE called in order to complete the operation.
 
-      .. versionchanged:: 3.2 Storing the headers in an internal buffer
+      .. versionchanged:: 3.2 Headers are stored in an internal buffer.
 
 
    .. method:: send_response_only(code, message=None)
@@ -205,10 +215,19 @@ of which this module provides three different variants:
 
    .. method:: end_headers()
 
-      Write the buffered HTTP headers to the output stream and send a blank
-      line, indicating the end of the HTTP headers in the response.
+      Adds a blank line
+      (indicating the end of the HTTP headers in the response)
+      to the headers buffer and calls :meth:`flush_headers()`.
 
-      .. versionchanged:: 3.2 Writing the buffered headers to the output stream.
+      .. versionchanged:: 3.2
+         The buffered headers are written to the output stream.
+
+   .. method:: flush_headers()
+
+      Finally send the headers to the output stream and flush the internal
+      headers buffer.
+
+      .. versionadded:: 3.3
 
    .. method:: log_request(code='-', size='-')
 
@@ -299,7 +318,7 @@ of which this module provides three different variants:
       response if the :func:`listdir` fails.
 
       If the request was mapped to a file, it is opened and the contents are
-      returned.  Any :exc:`IOError` exception in opening the requested file is
+      returned.  Any :exc:`OSError` exception in opening the requested file is
       mapped to a ``404``, ``'File not found'`` error. Otherwise, the content
       type is guessed by calling the :meth:`guess_type` method, which in turn
       uses the *extensions_map* variable.

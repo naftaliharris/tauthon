@@ -18,16 +18,21 @@
 
 #ifdef WITH_THREAD
 #include "pythread.h"
+#define PySSL_BEGIN_ALLOW_THREADS_S(save) \
+    do { if (_ssl_locks_count>0) { (save) = PyEval_SaveThread(); } } while (0)
+#define PySSL_END_ALLOW_THREADS_S(save) \
+    do { if (_ssl_locks_count>0) { PyEval_RestoreThread(save); } } while (0)
 #define PySSL_BEGIN_ALLOW_THREADS { \
             PyThreadState *_save = NULL;  \
-            if (_ssl_locks_count>0) {_save = PyEval_SaveThread();}
-#define PySSL_BLOCK_THREADS     if (_ssl_locks_count>0){PyEval_RestoreThread(_save)};
-#define PySSL_UNBLOCK_THREADS   if (_ssl_locks_count>0){_save = PyEval_SaveThread()};
-#define PySSL_END_ALLOW_THREADS if (_ssl_locks_count>0){PyEval_RestoreThread(_save);} \
-         }
+            PySSL_BEGIN_ALLOW_THREADS_S(_save);
+#define PySSL_BLOCK_THREADS     PySSL_END_ALLOW_THREADS_S(_save);
+#define PySSL_UNBLOCK_THREADS   PySSL_BEGIN_ALLOW_THREADS_S(_save);
+#define PySSL_END_ALLOW_THREADS PySSL_END_ALLOW_THREADS_S(_save); }
 
 #else   /* no WITH_THREAD */
 
+#define PySSL_BEGIN_ALLOW_THREADS_S(save)
+#define PySSL_END_ALLOW_THREADS_S(save)
 #define PySSL_BEGIN_ALLOW_THREADS
 #define PySSL_BLOCK_THREADS
 #define PySSL_UNBLOCK_THREADS
@@ -94,6 +99,11 @@ static PySocketModule_APIObject PySocketModule;
 
 /* SSL error object */
 static PyObject *PySSLErrorObject;
+static PyObject *PySSLZeroReturnErrorObject;
+static PyObject *PySSLWantReadErrorObject;
+static PyObject *PySSLWantWriteErrorObject;
+static PyObject *PySSLSyscallErrorObject;
+static PyObject *PySSLEOFErrorObject;
 
 #ifdef WITH_THREAD
 
@@ -124,6 +134,17 @@ static unsigned int _ssl_locks_count = 0;
 # undef HAVE_SSL_CTX_CLEAR_OPTIONS
 #endif
 
+/* In case of 'tls-unique' it will be 12 bytes for TLS, 36 bytes for
+ * older SSL, but let's be safe */
+#define PySSL_CB_MAXLEN 128
+
+/* SSL_get_finished got added to OpenSSL in 0.9.5 */
+#if OPENSSL_VERSION_NUMBER >= 0x0090500fL
+# define HAVE_OPENSSL_FINISHED 1
+#else
+# define HAVE_OPENSSL_FINISHED 0
+#endif
+
 typedef struct {
     PyObject_HEAD
     SSL_CTX *ctx;
@@ -135,6 +156,7 @@ typedef struct {
     SSL *ssl;
     X509 *peer_cert;
     int shutdown_seen_zero;
+    enum py_ssl_server_or_client socket_type;
 } PySSLSocket;
 
 static PyTypeObject PySSLContext_Type;
@@ -174,6 +196,7 @@ static PyObject *
 PySSL_SetError(PySSLSocket *obj, int ret, char *filename, int lineno)
 {
     PyObject *v;
+    PyObject *type = PySSLErrorObject;
     char buf[2048];
     char *errstr;
     int err;
@@ -186,15 +209,18 @@ PySSL_SetError(PySSLSocket *obj, int ret, char *filename, int lineno)
 
         switch (err) {
         case SSL_ERROR_ZERO_RETURN:
-            errstr = "TLS/SSL connection has been closed";
+            errstr = "TLS/SSL connection has been closed (EOF)";
+            type = PySSLZeroReturnErrorObject;
             p = PY_SSL_ERROR_ZERO_RETURN;
             break;
         case SSL_ERROR_WANT_READ:
             errstr = "The operation did not complete (read)";
+            type = PySSLWantReadErrorObject;
             p = PY_SSL_ERROR_WANT_READ;
             break;
         case SSL_ERROR_WANT_WRITE:
             p = PY_SSL_ERROR_WANT_WRITE;
+            type = PySSLWantWriteErrorObject;
             errstr = "The operation did not complete (write)";
             break;
         case SSL_ERROR_WANT_X509_LOOKUP:
@@ -213,6 +239,7 @@ PySSL_SetError(PySSLSocket *obj, int ret, char *filename, int lineno)
                   = (PySocketSockObject *) PyWeakref_GetObject(obj->Socket);
                 if (ret == 0 || (((PyObject *)s) == Py_None)) {
                     p = PY_SSL_ERROR_EOF;
+                    type = PySSLEOFErrorObject;
                     errstr = "EOF occurred in violation of protocol";
                 } else if (ret == -1) {
                     /* underlying BIO reported an I/O error */
@@ -223,6 +250,7 @@ PySSL_SetError(PySSLSocket *obj, int ret, char *filename, int lineno)
                     return v;
                 } else { /* possible? */
                     p = PY_SSL_ERROR_SYSCALL;
+                    type = PySSLSyscallErrorObject;
                     errstr = "Some I/O error occurred";
                 }
             } else {
@@ -255,7 +283,7 @@ PySSL_SetError(PySSLSocket *obj, int ret, char *filename, int lineno)
     ERR_clear_error();
     v = Py_BuildValue("(is)", p, buf);
     if (v != NULL) {
-        PyErr_SetObject(PySSLErrorObject, v);
+        PyErr_SetObject(type, v);
         Py_DECREF(v);
     }
     return NULL;
@@ -328,6 +356,7 @@ newPySSLSocket(SSL_CTX *ctx, PySocketSockObject *sock,
         SSL_set_accept_state(self->ssl);
     PySSL_END_ALLOW_THREADS
 
+    self->socket_type = socket_type;
     self->Socket = PyWeakref_NewRef((PyObject *) sock, NULL);
     return self;
 }
@@ -356,7 +385,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLSocket *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -1091,7 +1119,6 @@ static PyObject *PySSL_SSLwrite(PySSLSocket *self, PyObject *args)
         goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         len = SSL_write(self->ssl, buf.buf, buf.len);
         err = SSL_get_error(self->ssl, len);
@@ -1227,7 +1254,6 @@ static PyObject *PySSL_SSLread(PySSLSocket *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, mem, len);
         err = SSL_get_error(self->ssl, count);
@@ -1379,6 +1405,41 @@ PyDoc_STRVAR(PySSL_SSLshutdown_doc,
 Does the SSL shutdown handshake with the remote end, and returns\n\
 the underlying socket object.");
 
+#if HAVE_OPENSSL_FINISHED
+static PyObject *
+PySSL_tls_unique_cb(PySSLSocket *self)
+{
+    PyObject *retval = NULL;
+    char buf[PySSL_CB_MAXLEN];
+    int len;
+
+    if (SSL_session_reused(self->ssl) ^ !self->socket_type) {
+        /* if session is resumed XOR we are the client */
+        len = SSL_get_finished(self->ssl, buf, PySSL_CB_MAXLEN);
+    }
+    else {
+        /* if a new session XOR we are the server */
+        len = SSL_get_peer_finished(self->ssl, buf, PySSL_CB_MAXLEN);
+    }
+
+    /* It cannot be negative in current OpenSSL version as of July 2011 */
+    assert(len >= 0);
+    if (len == 0)
+        Py_RETURN_NONE;
+
+    retval = PyBytes_FromStringAndSize(buf, len);
+
+    return retval;
+}
+
+PyDoc_STRVAR(PySSL_tls_unique_cb_doc,
+"tls_unique_cb() -> bytes\n\
+\n\
+Returns the 'tls-unique' channel binding data, as defined by RFC 5929.\n\
+\n\
+If the TLS handshake is not yet complete, None is returned");
+
+#endif /* HAVE_OPENSSL_FINISHED */
 
 static PyMethodDef PySSLMethods[] = {
     {"do_handshake", (PyCFunction)PySSL_SSLdo_handshake, METH_NOARGS},
@@ -1393,6 +1454,10 @@ static PyMethodDef PySSLMethods[] = {
     {"cipher", (PyCFunction)PySSL_cipher, METH_NOARGS},
     {"shutdown", (PyCFunction)PySSL_SSLshutdown, METH_NOARGS,
      PySSL_SSLshutdown_doc},
+#if HAVE_OPENSSL_FINISHED
+    {"tls_unique_cb", (PyCFunction)PySSL_tls_unique_cb, METH_NOARGS,
+     PySSL_tls_unique_cb_doc},
+#endif
     {NULL, NULL}
 };
 
@@ -1585,19 +1650,118 @@ set_options(PySSLContext *self, PyObject *arg, void *c)
     return 0;
 }
 
+typedef struct {
+    PyThreadState *thread_state;
+    PyObject *callable;
+    char *password;
+    Py_ssize_t size;
+    int error;
+} _PySSLPasswordInfo;
+
+static int
+_pwinfo_set(_PySSLPasswordInfo *pw_info, PyObject* password,
+            const char *bad_type_error)
+{
+    /* Set the password and size fields of a _PySSLPasswordInfo struct
+       from a unicode, bytes, or byte array object.
+       The password field will be dynamically allocated and must be freed
+       by the caller */
+    PyObject *password_bytes = NULL;
+    const char *data = NULL;
+    Py_ssize_t size;
+
+    if (PyUnicode_Check(password)) {
+        password_bytes = PyUnicode_AsEncodedString(password, NULL, NULL);
+        if (!password_bytes) {
+            goto error;
+        }
+        data = PyBytes_AS_STRING(password_bytes);
+        size = PyBytes_GET_SIZE(password_bytes);
+    } else if (PyBytes_Check(password)) {
+        data = PyBytes_AS_STRING(password);
+        size = PyBytes_GET_SIZE(password);
+    } else if (PyByteArray_Check(password)) {
+        data = PyByteArray_AS_STRING(password);
+        size = PyByteArray_GET_SIZE(password);
+    } else {
+        PyErr_SetString(PyExc_TypeError, bad_type_error);
+        goto error;
+    }
+
+    free(pw_info->password);
+    pw_info->password = malloc(size);
+    if (!pw_info->password) {
+        PyErr_SetString(PyExc_MemoryError,
+                        "unable to allocate password buffer");
+        goto error;
+    }
+    memcpy(pw_info->password, data, size);
+    pw_info->size = size;
+
+    Py_XDECREF(password_bytes);
+    return 1;
+
+error:
+    Py_XDECREF(password_bytes);
+    return 0;
+}
+
+static int
+_password_callback(char *buf, int size, int rwflag, void *userdata)
+{
+    _PySSLPasswordInfo *pw_info = (_PySSLPasswordInfo*) userdata;
+    PyObject *fn_ret = NULL;
+
+    PySSL_END_ALLOW_THREADS_S(pw_info->thread_state);
+
+    if (pw_info->callable) {
+        fn_ret = PyObject_CallFunctionObjArgs(pw_info->callable, NULL);
+        if (!fn_ret) {
+            /* TODO: It would be nice to move _ctypes_add_traceback() into the
+               core python API, so we could use it to add a frame here */
+            goto error;
+        }
+
+        if (!_pwinfo_set(pw_info, fn_ret,
+                         "password callback must return a string")) {
+            goto error;
+        }
+        Py_CLEAR(fn_ret);
+    }
+
+    if (pw_info->size > size) {
+        PyErr_Format(PyExc_ValueError,
+                     "password cannot be longer than %d bytes", size);
+        goto error;
+    }
+
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info->thread_state);
+    memcpy(buf, pw_info->password, pw_info->size);
+    return pw_info->size;
+
+error:
+    Py_XDECREF(fn_ret);
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info->thread_state);
+    pw_info->error = 1;
+    return -1;
+}
+
 static PyObject *
 load_cert_chain(PySSLContext *self, PyObject *args, PyObject *kwds)
 {
-    char *kwlist[] = {"certfile", "keyfile", NULL};
-    PyObject *certfile, *keyfile = NULL;
+    char *kwlist[] = {"certfile", "keyfile", "password", NULL};
+    PyObject *certfile, *keyfile = NULL, *password = NULL;
     PyObject *certfile_bytes = NULL, *keyfile_bytes = NULL;
+    pem_password_cb *orig_passwd_cb = self->ctx->default_passwd_callback;
+    void *orig_passwd_userdata = self->ctx->default_passwd_callback_userdata;
+    _PySSLPasswordInfo pw_info = { NULL, NULL, NULL, 0, 0 };
     int r;
 
     errno = 0;
     ERR_clear_error();
     if (!PyArg_ParseTupleAndKeywords(args, kwds,
-        "O|O:load_cert_chain", kwlist,
-        &certfile, &keyfile))
+        "O|OO:load_cert_chain", kwlist,
+        &certfile, &keyfile, &password))
         return NULL;
     if (keyfile == Py_None)
         keyfile = NULL;
@@ -1611,12 +1775,26 @@ load_cert_chain(PySSLContext *self, PyObject *args, PyObject *kwds)
                         "keyfile should be a valid filesystem path");
         goto error;
     }
-    PySSL_BEGIN_ALLOW_THREADS
+    if (password && password != Py_None) {
+        if (PyCallable_Check(password)) {
+            pw_info.callable = password;
+        } else if (!_pwinfo_set(&pw_info, password,
+                                "password should be a string or callable")) {
+            goto error;
+        }
+        SSL_CTX_set_default_passwd_cb(self->ctx, _password_callback);
+        SSL_CTX_set_default_passwd_cb_userdata(self->ctx, &pw_info);
+    }
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info.thread_state);
     r = SSL_CTX_use_certificate_chain_file(self->ctx,
         PyBytes_AS_STRING(certfile_bytes));
-    PySSL_END_ALLOW_THREADS
+    PySSL_END_ALLOW_THREADS_S(pw_info.thread_state);
     if (r != 1) {
-        if (errno != 0) {
+        if (pw_info.error) {
+            ERR_clear_error();
+            /* the password callback has already set the error information */
+        }
+        else if (errno != 0) {
             ERR_clear_error();
             PyErr_SetFromErrno(PyExc_IOError);
         }
@@ -1625,33 +1803,43 @@ load_cert_chain(PySSLContext *self, PyObject *args, PyObject *kwds)
         }
         goto error;
     }
-    PySSL_BEGIN_ALLOW_THREADS
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info.thread_state);
     r = SSL_CTX_use_PrivateKey_file(self->ctx,
         PyBytes_AS_STRING(keyfile ? keyfile_bytes : certfile_bytes),
         SSL_FILETYPE_PEM);
-    PySSL_END_ALLOW_THREADS
-    Py_XDECREF(keyfile_bytes);
-    Py_XDECREF(certfile_bytes);
+    PySSL_END_ALLOW_THREADS_S(pw_info.thread_state);
+    Py_CLEAR(keyfile_bytes);
+    Py_CLEAR(certfile_bytes);
     if (r != 1) {
-        if (errno != 0) {
+        if (pw_info.error) {
+            ERR_clear_error();
+            /* the password callback has already set the error information */
+        }
+        else if (errno != 0) {
             ERR_clear_error();
             PyErr_SetFromErrno(PyExc_IOError);
         }
         else {
             _setSSLError(NULL, 0, __FILE__, __LINE__);
         }
-        return NULL;
+        goto error;
     }
-    PySSL_BEGIN_ALLOW_THREADS
+    PySSL_BEGIN_ALLOW_THREADS_S(pw_info.thread_state);
     r = SSL_CTX_check_private_key(self->ctx);
-    PySSL_END_ALLOW_THREADS
+    PySSL_END_ALLOW_THREADS_S(pw_info.thread_state);
     if (r != 1) {
         _setSSLError(NULL, 0, __FILE__, __LINE__);
-        return NULL;
+        goto error;
     }
+    SSL_CTX_set_default_passwd_cb(self->ctx, orig_passwd_cb);
+    SSL_CTX_set_default_passwd_cb_userdata(self->ctx, orig_passwd_userdata);
+    free(pw_info.password);
     Py_RETURN_NONE;
 
 error:
+    SSL_CTX_set_default_passwd_cb(self->ctx, orig_passwd_cb);
+    SSL_CTX_set_default_passwd_cb_userdata(self->ctx, orig_passwd_userdata);
+    free(pw_info.password);
     Py_XDECREF(keyfile_bytes);
     Py_XDECREF(certfile_bytes);
     return NULL;
@@ -1889,6 +2077,69 @@ Mix string into the OpenSSL PRNG state.  entropy (a float) is a lower\n\
 bound on the entropy contained in string.  See RFC 1750.");
 
 static PyObject *
+PySSL_RAND(int len, int pseudo)
+{
+    int ok;
+    PyObject *bytes;
+    unsigned long err;
+    const char *errstr;
+    PyObject *v;
+
+    bytes = PyBytes_FromStringAndSize(NULL, len);
+    if (bytes == NULL)
+        return NULL;
+    if (pseudo) {
+        ok = RAND_pseudo_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 0 || ok == 1)
+            return Py_BuildValue("NO", bytes, ok == 1 ? Py_True : Py_False);
+    }
+    else {
+        ok = RAND_bytes((unsigned char*)PyBytes_AS_STRING(bytes), len);
+        if (ok == 1)
+            return bytes;
+    }
+    Py_DECREF(bytes);
+
+    err = ERR_get_error();
+    errstr = ERR_reason_error_string(err);
+    v = Py_BuildValue("(ks)", err, errstr);
+    if (v != NULL) {
+        PyErr_SetObject(PySSLErrorObject, v);
+        Py_DECREF(v);
+    }
+    return NULL;
+}
+
+static PyObject *
+PySSL_RAND_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 0);
+}
+
+PyDoc_STRVAR(PySSL_RAND_bytes_doc,
+"RAND_bytes(n) -> bytes\n\
+\n\
+Generate n cryptographically strong pseudo-random bytes.");
+
+static PyObject *
+PySSL_RAND_pseudo_bytes(PyObject *self, PyObject *args)
+{
+    int len;
+    if (!PyArg_ParseTuple(args, "i:RAND_pseudo_bytes", &len))
+        return NULL;
+    return PySSL_RAND(len, 1);
+}
+
+PyDoc_STRVAR(PySSL_RAND_pseudo_bytes_doc,
+"RAND_pseudo_bytes(n) -> (bytes, is_cryptographic)\n\
+\n\
+Generate n pseudo-random bytes. is_cryptographic is True if the bytes\
+generated are cryptographically strong.");
+
+static PyObject *
 PySSL_RAND_status(PyObject *self)
 {
     return PyLong_FromLong(RAND_status());
@@ -1941,6 +2192,10 @@ static PyMethodDef PySSL_methods[] = {
 #ifdef HAVE_OPENSSL_RAND
     {"RAND_add",            PySSL_RAND_add, METH_VARARGS,
      PySSL_RAND_add_doc},
+    {"RAND_bytes",          PySSL_RAND_bytes, METH_VARARGS,
+     PySSL_RAND_bytes_doc},
+    {"RAND_pseudo_bytes",   PySSL_RAND_pseudo_bytes, METH_VARARGS,
+     PySSL_RAND_pseudo_bytes_doc},
     {"RAND_egd",            PySSL_RAND_egd, METH_VARARGS,
      PySSL_RAND_egd_doc},
     {"RAND_status",         (PyCFunction)PySSL_RAND_status, METH_NOARGS,
@@ -2054,6 +2309,27 @@ parse_openssl_version(unsigned long libver,
     *major = libver & 0xFF;
 }
 
+PyDoc_STRVAR(SSLError_doc,
+"An error occurred in the SSL implementation.");
+
+PyDoc_STRVAR(SSLZeroReturnError_doc,
+"SSL/TLS session closed cleanly.");
+
+PyDoc_STRVAR(SSLWantReadError_doc,
+"Non-blocking SSL socket needs to read more data\n"
+"before the requested operation can be completed.");
+
+PyDoc_STRVAR(SSLWantWriteError_doc,
+"Non-blocking SSL socket needs to write more data\n"
+"before the requested operation can be completed.");
+
+PyDoc_STRVAR(SSLSyscallError_doc,
+"System error when attempting SSL operation.");
+
+PyDoc_STRVAR(SSLEOFError_doc,
+"SSL/TLS connection terminated abruptly.");
+
+
 PyMODINIT_FUNC
 PyInit__ssl(void)
 {
@@ -2090,12 +2366,39 @@ PyInit__ssl(void)
     OpenSSL_add_all_algorithms();
 
     /* Add symbols to module dict */
-    PySSLErrorObject = PyErr_NewException("ssl.SSLError",
-                                          PySocketModule.error,
-                                          NULL);
+    PySSLErrorObject = PyErr_NewExceptionWithDoc("ssl.SSLError",
+                                                 SSLError_doc,
+                                                 PyExc_OSError,
+                                                 NULL);
     if (PySSLErrorObject == NULL)
         return NULL;
-    if (PyDict_SetItemString(d, "SSLError", PySSLErrorObject) != 0)
+    PySSLZeroReturnErrorObject = PyErr_NewExceptionWithDoc(
+        "ssl.SSLZeroReturnError", SSLZeroReturnError_doc,
+        PySSLErrorObject, NULL);
+    PySSLWantReadErrorObject = PyErr_NewExceptionWithDoc(
+        "ssl.SSLWantReadError", SSLWantReadError_doc,
+        PySSLErrorObject, NULL);
+    PySSLWantWriteErrorObject = PyErr_NewExceptionWithDoc(
+        "ssl.SSLWantWriteError", SSLWantWriteError_doc,
+        PySSLErrorObject, NULL);
+    PySSLSyscallErrorObject = PyErr_NewExceptionWithDoc(
+        "ssl.SSLSyscallError", SSLSyscallError_doc,
+        PySSLErrorObject, NULL);
+    PySSLEOFErrorObject = PyErr_NewExceptionWithDoc(
+        "ssl.SSLEOFError", SSLEOFError_doc,
+        PySSLErrorObject, NULL);
+    if (PySSLZeroReturnErrorObject == NULL
+        || PySSLWantReadErrorObject == NULL
+        || PySSLWantWriteErrorObject == NULL
+        || PySSLSyscallErrorObject == NULL
+        || PySSLEOFErrorObject == NULL)
+        return NULL;
+    if (PyDict_SetItemString(d, "SSLError", PySSLErrorObject) != 0
+        || PyDict_SetItemString(d, "SSLZeroReturnError", PySSLZeroReturnErrorObject) != 0
+        || PyDict_SetItemString(d, "SSLWantReadError", PySSLWantReadErrorObject) != 0
+        || PyDict_SetItemString(d, "SSLWantWriteError", PySSLWantWriteErrorObject) != 0
+        || PyDict_SetItemString(d, "SSLSyscallError", PySSLSyscallErrorObject) != 0
+        || PyDict_SetItemString(d, "SSLEOFError", PySSLEOFErrorObject) != 0)
         return NULL;
     if (PyDict_SetItemString(d, "_SSLContext",
                              (PyObject *)&PySSLContext_Type) != 0)
@@ -2155,6 +2458,14 @@ PyInit__ssl(void)
 #endif
     Py_INCREF(r);
     PyModule_AddObject(m, "HAS_SNI", r);
+
+#if HAVE_OPENSSL_FINISHED
+    r = Py_True;
+#else
+    r = Py_False;
+#endif
+    Py_INCREF(r);
+    PyModule_AddObject(m, "HAS_TLS_UNIQUE", r);
 
     /* OpenSSL version */
     /* SSLeay() gives us the version of the library linked against,
