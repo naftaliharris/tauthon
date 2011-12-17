@@ -418,7 +418,7 @@ typedef struct _heaptypeobject {
                                       a given operator (e.g. __getitem__).
                                       see add_operators() in typeobject.c . */
     PyBufferProcs as_buffer;
-    PyObject *ht_name, *ht_slots;
+    PyObject *ht_name, *ht_slots, *ht_qualname;
     /* here are optional user slots, followed by the members. */
 } PyHeapTypeObject;
 
@@ -455,6 +455,7 @@ PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
 PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 
 /* Generic operations on objects */
+struct _Py_Identifier;
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(int) PyObject_Print(PyObject *, FILE *, int);
 PyAPI_FUNC(void) _Py_BreakPoint(void);
@@ -472,6 +473,10 @@ PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *);
 PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
+PyAPI_FUNC(int) _PyObject_IsAbstract(PyObject *);
+PyAPI_FUNC(PyObject *) _PyObject_GetAttrId(PyObject *, struct _Py_Identifier *);
+PyAPI_FUNC(int) _PyObject_SetAttrId(PyObject *, struct _Py_Identifier *, PyObject *);
+PyAPI_FUNC(int) _PyObject_HasAttrId(PyObject *, struct _Py_Identifier *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *);
 #endif
@@ -515,6 +520,7 @@ PyAPI_FUNC(void) Py_ReprLeave(PyObject *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(Py_hash_t) _Py_HashDouble(double);
 PyAPI_FUNC(Py_hash_t) _Py_HashPointer(void*);
+PyAPI_FUNC(Py_hash_t) _Py_HashBytes(unsigned char*, Py_ssize_t);
 #endif
 
 /* Helper for passing objects to printf and the like */
@@ -792,6 +798,10 @@ not implemented for a given type combination.
 */
 PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
 #define Py_NotImplemented (&_Py_NotImplementedStruct)
+
+/* Macro for returning Py_NotImplemented from a function */
+#define Py_RETURN_NOTIMPLEMENTED \
+    return Py_INCREF(Py_NotImplemented), Py_NotImplemented
 
 /* Rich comparison opcodes */
 #define Py_LT 0
