@@ -37,7 +37,7 @@ NOTE:
    running a Python core buildbot test slave; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python32_d.dll, python_d.exe, parser_d.pyd, and so on. Both
+their name:  python33_d.dll, python_d.exe, parser_d.pyd, and so on. Both
 the build and rt batch files accept a -d option for debug builds.
 
 The 32bit builds end up in the solution folder PCbuild while the x64 builds
@@ -112,9 +112,9 @@ _tkinter
     pre-built Tcl/Tk in either ..\..\tcltk for 32-bit or ..\..\tcltk64 for
     64-bit (relative to this directory).  See below for instructions to build
     Tcl/Tk. 
-bz2
-    Python wrapper for the libbz2 compression library.  Homepage
-        http://sources.redhat.com/bzip2/
+_bz2
+    Python wrapper for the libbzip2 compression library.  Homepage
+        http://www.bzip.org/
     Download the source from the python.org copy into the dist
     directory:
 
@@ -133,6 +133,12 @@ bz2
 
     All of this managed to build libbz2.lib in 
     bzip2-1.0.5\$platform-$configuration\, which the Python project links in.
+_lzma
+    Python wrapper for the liblzma compression library.
+
+    Download the pre-built Windows binaries from http://tukaani.org/xz/, and
+    extract to ..\xz-5.0.3. If you are using a more recent version of liblzma,
+    it will be necessary to rename the directory from xz-<VERSION> to xz-5.0.3.
 
 _ssl
     Python wrapper for the secure sockets library.
