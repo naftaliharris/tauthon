@@ -1,25 +1,23 @@
-"""Tests for sysconfig."""
-
 import unittest
 import sys
 import os
 import subprocess
 import shutil
-from copy import copy, deepcopy
+from copy import copy
 
 from test.support import (run_unittest, TESTFN, unlink,
                           captured_stdout, skip_unless_symlink)
 
 import sysconfig
 from sysconfig import (get_paths, get_platform, get_config_vars,
-                       get_path, get_path_names, _INSTALL_SCHEMES,
+                       get_path, get_path_names, _SCHEMES,
                        _get_default_scheme, _expand_vars,
                        get_scheme_names, get_config_var, _main)
+
 
 class TestSysConfig(unittest.TestCase):
 
     def setUp(self):
-        """Make a copy of sys.path"""
         super(TestSysConfig, self).setUp()
         self.sys_path = sys.path[:]
         # patching os.uname
@@ -39,10 +37,15 @@ class TestSysConfig(unittest.TestCase):
         self.isabs = os.path.isabs
         self.splitdrive = os.path.splitdrive
         self._config_vars = copy(sysconfig._CONFIG_VARS)
-        self.old_environ = deepcopy(os.environ)
+        self._added_envvars = []
+        self._changed_envvars = []
+        for var in ('MACOSX_DEPLOYMENT_TARGET', 'PATH'):
+            if var in os.environ:
+                self._changed_envvars.append((var, os.environ[var]))
+            else:
+                self._added_envvars.append(var)
 
     def tearDown(self):
-        """Restore sys.path"""
         sys.path[:] = self.sys_path
         self._cleanup_testfn()
         if self.uname is not None:
@@ -57,13 +60,10 @@ class TestSysConfig(unittest.TestCase):
         os.path.isabs = self.isabs
         os.path.splitdrive = self.splitdrive
         sysconfig._CONFIG_VARS = copy(self._config_vars)
-        for key, value in self.old_environ.items():
-            if os.environ.get(key) != value:
-                os.environ[key] = value
-
-        for key in list(os.environ.keys()):
-            if key not in self.old_environ:
-                del os.environ[key]
+        for var, value in self._changed_envvars:
+            os.environ[var] = value
+        for var in self._added_envvars:
+            os.environ.pop(var, None)
 
         super(TestSysConfig, self).tearDown()
 
@@ -81,27 +81,25 @@ class TestSysConfig(unittest.TestCase):
             shutil.rmtree(path)
 
     def test_get_path_names(self):
-        self.assertEqual(get_path_names(), sysconfig._SCHEME_KEYS)
+        self.assertEqual(get_path_names(), _SCHEMES.options('posix_prefix'))
 
     def test_get_paths(self):
         scheme = get_paths()
         default_scheme = _get_default_scheme()
         wanted = _expand_vars(default_scheme, None)
-        wanted = list(wanted.items())
-        wanted.sort()
-        scheme = list(scheme.items())
-        scheme.sort()
+        wanted = sorted(wanted.items())
+        scheme = sorted(scheme.items())
         self.assertEqual(scheme, wanted)
 
     def test_get_path(self):
-        # xxx make real tests here
-        for scheme in _INSTALL_SCHEMES:
-            for name in _INSTALL_SCHEMES[scheme]:
+        # XXX make real tests here
+        for scheme in _SCHEMES:
+            for name in _SCHEMES[scheme]:
                 res = get_path(name, scheme)
 
     def test_get_config_vars(self):
         cvars = get_config_vars()
-        self.assertTrue(isinstance(cvars, dict))
+        self.assertIsInstance(cvars, dict)
         self.assertTrue(cvars)
 
     def test_get_platform(self):
@@ -135,8 +133,6 @@ class TestSysConfig(unittest.TestCase):
                    ('Darwin Kernel Version 8.11.1: '
                     'Wed Oct 10 18:23:28 PDT 2007; '
                     'root:xnu-792.25.20~1/RELEASE_I386'), 'PowerPC'))
-
-
         get_config_vars()['MACOSX_DEPLOYMENT_TARGET'] = '10.3'
 
         get_config_vars()['CFLAGS'] = ('-fno-strict-aliasing -DNDEBUG -g '
@@ -150,7 +146,6 @@ class TestSysConfig(unittest.TestCase):
             self.assertEqual(get_platform(), 'macosx-10.3-ppc64')
         finally:
             sys.maxsize = maxint
-
 
         self._set_uname(('Darwin', 'macziade', '8.11.1',
                    ('Darwin Kernel Version 8.11.1: '
@@ -209,9 +204,9 @@ class TestSysConfig(unittest.TestCase):
             get_config_vars()['CFLAGS'] = ('-arch %s -isysroot '
                                            '/Developer/SDKs/MacOSX10.4u.sdk  '
                                            '-fno-strict-aliasing -fno-common '
-                                           '-dynamic -DNDEBUG -g -O3'%(arch,))
+                                           '-dynamic -DNDEBUG -g -O3' % arch)
 
-            self.assertEqual(get_platform(), 'macosx-10.4-%s'%(arch,))
+            self.assertEqual(get_platform(), 'macosx-10.4-%s' % arch)
 
         # linux debian sarge
         os.name = 'posix'
@@ -239,8 +234,8 @@ class TestSysConfig(unittest.TestCase):
         # On Windows, the EXE needs to know where pythonXY.dll is at so we have
         # to add the directory to the path.
         if sys.platform == "win32":
-            os.environ["Path"] = "{};{}".format(
-                os.path.dirname(sys.executable), os.environ["Path"])
+            os.environ["PATH"] = "{};{}".format(
+                os.path.dirname(sys.executable), os.environ["PATH"])
 
         # Issue 7880
         def get(python):
@@ -286,7 +281,6 @@ class TestSysConfig(unittest.TestCase):
 
         self.assertIn(ldflags, ldshared)
 
-
     @unittest.skipUnless(sys.platform == "darwin", "test only relevant on MacOSX")
     def test_platform_in_subprocess(self):
         my_platform = sysconfig.get_platform()
@@ -312,28 +306,29 @@ class TestSysConfig(unittest.TestCase):
         self.assertEqual(status, 0)
         self.assertEqual(my_platform, test_platform)
 
-
         # Test with MACOSX_DEPLOYMENT_TARGET in the environment, and
         # using a value that is unlikely to be the default one.
         env = os.environ.copy()
         env['MACOSX_DEPLOYMENT_TARGET'] = '10.1'
 
-        p = subprocess.Popen([
-                sys.executable, '-c',
-                'import sysconfig; print(sysconfig.get_platform())',
-            ],
-            stdout=subprocess.PIPE,
-            stderr=open('/dev/null'),
-            env=env)
-        test_platform = p.communicate()[0].strip()
-        test_platform = test_platform.decode('utf-8')
-        status = p.wait()
+        with open('/dev/null') as dev_null:
+            p = subprocess.Popen([
+                    sys.executable, '-c',
+                    'import sysconfig; print(sysconfig.get_platform())',
+                ],
+                stdout=subprocess.PIPE,
+                stderr=dev_null,
+                env=env)
+            test_platform = p.communicate()[0].strip()
+            test_platform = test_platform.decode('utf-8')
+            status = p.wait()
 
-        self.assertEqual(status, 0)
-        self.assertEqual(my_platform, test_platform)
+            self.assertEqual(status, 0)
+            self.assertEqual(my_platform, test_platform)
 
 
 class MakefileTests(unittest.TestCase):
+
     @unittest.skipIf(sys.platform.startswith('win'),
                      'Test is not Windows compatible')
     def test_get_makefile_filename(self):
