@@ -458,7 +458,8 @@ define in order to be compatible with the Python codec registry.
 
    .. method:: reset()
 
-      Reset the encoder to the initial state.
+      Reset the encoder to the initial state. The output is discarded: call
+      ``.encode('', final=True)`` to reset the encoder and to get the output.
 
 
 .. method:: IncrementalEncoder.getstate()
@@ -786,11 +787,9 @@ methods and attributes from the underlying stream.
 Encodings and Unicode
 ---------------------
 
-Strings are stored internally as sequences of codepoints (to be precise
-as :c:type:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
-via ``--without-wide-unicode`` or ``--with-wide-unicode``, with the
-former being the default) :c:type:`Py_UNICODE` is either a 16-bit or 32-bit data
-type. Once a string object is used outside of CPU and memory, CPU endianness
+Strings are stored internally as sequences of codepoints in range ``0 - 10FFFF``
+(see :pep:`393` for more details about the implementation).
+Once a string object is used outside of CPU and memory, CPU endianness
 and how these arrays are stored as bytes become an issue.  Transforming a
 string object into a sequence of bytes is called encoding and recreating the
 string object from the sequence of bytes is known as decoding.  There are many
@@ -901,6 +900,15 @@ is meant to be exhaustive. Notice that spelling alternatives that only differ in
 case or use a hyphen instead of an underscore are also valid aliases; therefore,
 e.g. ``'utf-8'`` is a valid alias for the ``'utf_8'`` codec.
 
+.. impl-detail::
+
+   Some common encodings can bypass the codecs lookup machinery to
+   improve performance.  These optimization opportunities are only
+   recognized by CPython for a limited set of aliases: utf-8, utf8,
+   latin-1, latin1, iso-8859-1, mbcs (Windows only), ascii, utf-16,
+   and utf-32.  Using alternative spellings for these encodings may
+   result in slower execution.
+
 Many of the character sets support the same languages. They vary in individual
 characters (e.g. whether the EURO SIGN is supported or not), and in the
 assignment of characters to code positions. For the European languages in
@@ -1002,6 +1010,11 @@ particular, the following variants typically exist:
 | cp1257          | windows-1257                   | Baltic languages               |
 +-----------------+--------------------------------+--------------------------------+
 | cp1258          | windows-1258                   | Vietnamese                     |
++-----------------+--------------------------------+--------------------------------+
+| cp65001         |                                | Windows only: Windows UTF-8    |
+|                 |                                | (``CP_UTF8``)                  |
+|                 |                                |                                |
+|                 |                                | .. versionadded:: 3.3          |
 +-----------------+--------------------------------+--------------------------------+
 | euc_jp          | eucjp, ujis, u-jis             | Japanese                       |
 +-----------------+--------------------------------+--------------------------------+
@@ -1160,6 +1173,8 @@ particular, the following variants typically exist:
 | unicode_internal   |         | Return the internal       |
 |                    |         | representation of the     |
 |                    |         | operand                   |
+|                    |         |                           |
+|                    |         | .. deprecated:: 3.3       |
 +--------------------+---------+---------------------------+
 
 The following codecs provide bytes-to-bytes mappings.
@@ -1272,11 +1287,12 @@ functions can be used directly if desired.
 .. module:: encodings.mbcs
    :synopsis: Windows ANSI codepage
 
-Encode operand according to the ANSI codepage (CP_ACP). This codec only
-supports ``'strict'`` and ``'replace'`` error handlers to encode, and
-``'strict'`` and ``'ignore'`` error handlers to decode.
+Encode operand according to the ANSI codepage (CP_ACP).
 
 Availability: Windows only.
+
+.. versionchanged:: 3.3
+   Support any error handler.
 
 .. versionchanged:: 3.2
    Before 3.2, the *errors* argument was ignored; ``'replace'`` was always used
