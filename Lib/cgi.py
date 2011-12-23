@@ -76,7 +76,7 @@ def initlog(*allargs):
     send an error message).
 
     """
-    global logfp, log
+    global log, logfile, logfp
     if logfile and not logfp:
         try:
             logfp = open(logfile, "a")
@@ -95,6 +95,15 @@ def dolog(fmt, *args):
 def nolog(*allargs):
     """Dummy function, assigned to log when logging is disabled."""
     pass
+
+def closelog():
+    """Close the log file."""
+    global log, logfile, logfp
+    logfile = ''
+    if logfp:
+        logfp.close()
+        logfp = None
+    log = initlog
 
 log = initlog           # The current logging function
 
@@ -1003,7 +1012,7 @@ environment as well.  Here are some common variable names:
 def escape(s, quote=None):
     """Deprecated API."""
     warn("cgi.escape is deprecated, use html.escape instead",
-         PendingDeprecationWarning, stacklevel=2)
+         DeprecationWarning, stacklevel=2)
     s = s.replace("&", "&amp;") # Must be done first!
     s = s.replace("<", "&lt;")
     s = s.replace(">", "&gt;")
