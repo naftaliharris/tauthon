@@ -34,7 +34,7 @@ Glossary
       subclasses, which are classes that don't inherit from a class but are
       still recognized by :func:`isinstance` and :func:`issubclass`; see the
       :mod:`abc` module documentation.  Python comes with many built-in ABCs for
-      data structures (in the :mod:`collections` module), numbers (in the
+      data structures (in the :mod:`collections.abc` module), numbers (in the
       :mod:`numbers` module), streams (in the :mod:`io` module), import finders
       and loaders (in the :mod:`importlib.abc` module).  You can create your own
       ABCs with the :mod:`abc` module.
@@ -434,8 +434,8 @@ Glossary
 
    mapping
       A container object that supports arbitrary key lookups and implements the
-      methods specified in the :class:`~collections.Mapping` or
-      :class:`~collections.MutableMapping`
+      methods specified in the :class:`~collections.abc.Mapping` or
+      :class:`~collections.abc.MutableMapping`
       :ref:`abstract base classes <collections-abstract-base-classes>`.  Examples
       include :class:`dict`, :class:`collections.defaultdict`,
       :class:`collections.OrderedDict` and :class:`collections.Counter`.
@@ -544,6 +544,24 @@ Glossary
          for piece in food:
              print(piece)
 
+   qualified name
+      A dotted name showing the "path" from a module's global scope to a
+      class, function or method defined in that module, as defined in
+      :pep:`3155`.  For top-level functions and classes, the qualified name
+      is the same as the object's name::
+
+         >>> class C:
+         ...     class D:
+         ...         def meth(self):
+         ...             pass
+         ...
+         >>> C.__qualname__
+         'C'
+         >>> C.D.__qualname__
+         'C.D'
+         >>> C.D.meth.__qualname__
+         'C.D.meth'
+
    reference count
       The number of references to an object.  When the reference count of an
       object drops to zero, it is deallocated.  Reference counting is
@@ -585,6 +603,14 @@ Glossary
       A statement is part of a suite (a "block" of code).  A statement is either
       an :term:`expression` or a one of several constructs with a keyword, such
       as :keyword:`if`, :keyword:`while` or :keyword:`for`.
+
+   struct sequence
+      A tuple with named elements. Struct sequences expose an interface similar
+      to :term:`named tuple` in that elements can either be accessed either by
+      index or as an attribute. However, they do not have any of the named tuple
+      methods like :meth:`~collections.somenamedtuple._make` or
+      :meth:`~collections.somenamedtuple._asdict`. Examples of struct sequences
+      include :data:`sys.float_info` and the return value of :func:`os.stat`.
 
    triple-quoted string
       A string which is bound by three instances of either a quotation mark
