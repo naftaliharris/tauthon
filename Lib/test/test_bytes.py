@@ -188,24 +188,26 @@ class BaseBytesTest(unittest.TestCase):
 
     def test_encoding(self):
         sample = "Hello world\n\u1234\u5678\u9abc"
-        for enc in ("utf8", "utf16"):
+        for enc in ("utf-8", "utf-16"):
             b = self.type2test(sample, enc)
             self.assertEqual(b, self.type2test(sample.encode(enc)))
-        self.assertRaises(UnicodeEncodeError, self.type2test, sample, "latin1")
-        b = self.type2test(sample, "latin1", "ignore")
+        self.assertRaises(UnicodeEncodeError, self.type2test, sample, "latin-1")
+        b = self.type2test(sample, "latin-1", "ignore")
         self.assertEqual(b, self.type2test(sample[:-3], "utf-8"))
 
     def test_decode(self):
         sample = "Hello world\n\u1234\u5678\u9abc\def0\def0"
-        for enc in ("utf8", "utf16"):
+        for enc in ("utf-8", "utf-16"):
             b = self.type2test(sample, enc)
             self.assertEqual(b.decode(enc), sample)
         sample = "Hello world\n\x80\x81\xfe\xff"
-        b = self.type2test(sample, "latin1")
-        self.assertRaises(UnicodeDecodeError, b.decode, "utf8")
-        self.assertEqual(b.decode("utf8", "ignore"), "Hello world\n")
-        self.assertEqual(b.decode(errors="ignore", encoding="utf8"),
+        b = self.type2test(sample, "latin-1")
+        self.assertRaises(UnicodeDecodeError, b.decode, "utf-8")
+        self.assertEqual(b.decode("utf-8", "ignore"), "Hello world\n")
+        self.assertEqual(b.decode(errors="ignore", encoding="utf-8"),
                          "Hello world\n")
+        # Default encoding is utf-8
+        self.assertEqual(self.type2test(b'\xe2\x98\x83').decode(), '\u2603')
 
     def test_from_int(self):
         b = self.type2test(0)
@@ -291,9 +293,26 @@ class BaseBytesTest(unittest.TestCase):
 
     def test_count(self):
         b = self.type2test(b'mississippi')
+        i = 105
+        p = 112
+        w = 119
+
         self.assertEqual(b.count(b'i'), 4)
         self.assertEqual(b.count(b'ss'), 2)
         self.assertEqual(b.count(b'w'), 0)
+
+        self.assertEqual(b.count(i), 4)
+        self.assertEqual(b.count(w), 0)
+
+        self.assertEqual(b.count(b'i', 6), 2)
+        self.assertEqual(b.count(b'p', 6), 2)
+        self.assertEqual(b.count(b'i', 1, 3), 1)
+        self.assertEqual(b.count(b'p', 7, 9), 1)
+
+        self.assertEqual(b.count(i, 6), 2)
+        self.assertEqual(b.count(p, 6), 2)
+        self.assertEqual(b.count(i, 1, 3), 1)
+        self.assertEqual(b.count(p, 7, 9), 1)
 
     def test_startswith(self):
         b = self.type2test(b'hello')
@@ -325,35 +344,86 @@ class BaseBytesTest(unittest.TestCase):
 
     def test_find(self):
         b = self.type2test(b'mississippi')
+        i = 105
+        w = 119
+
         self.assertEqual(b.find(b'ss'), 2)
-        self.assertEqual(b.find(b'ss', 3), 5)
-        self.assertEqual(b.find(b'ss', 1, 7), 2)
-        self.assertEqual(b.find(b'ss', 1, 3), -1)
         self.assertEqual(b.find(b'w'), -1)
         self.assertEqual(b.find(b'mississippian'), -1)
 
+        self.assertEqual(b.find(i), 1)
+        self.assertEqual(b.find(w), -1)
+
+        self.assertEqual(b.find(b'ss', 3), 5)
+        self.assertEqual(b.find(b'ss', 1, 7), 2)
+        self.assertEqual(b.find(b'ss', 1, 3), -1)
+
+        self.assertEqual(b.find(i, 6), 7)
+        self.assertEqual(b.find(i, 1, 3), 1)
+        self.assertEqual(b.find(w, 1, 3), -1)
+
+        for index in (-1, 256, sys.maxsize + 1):
+            self.assertRaisesRegex(
+                ValueError, r'byte must be in range\(0, 256\)',
+                b.find, index)
+
     def test_rfind(self):
         b = self.type2test(b'mississippi')
+        i = 105
+        w = 119
+
         self.assertEqual(b.rfind(b'ss'), 5)
-        self.assertEqual(b.rfind(b'ss', 3), 5)
-        self.assertEqual(b.rfind(b'ss', 0, 6), 2)
         self.assertEqual(b.rfind(b'w'), -1)
         self.assertEqual(b.rfind(b'mississippian'), -1)
 
+        self.assertEqual(b.rfind(i), 10)
+        self.assertEqual(b.rfind(w), -1)
+
+        self.assertEqual(b.rfind(b'ss', 3), 5)
+        self.assertEqual(b.rfind(b'ss', 0, 6), 2)
+
+        self.assertEqual(b.rfind(i, 1, 3), 1)
+        self.assertEqual(b.rfind(i, 3, 9), 7)
+        self.assertEqual(b.rfind(w, 1, 3), -1)
+
     def test_index(self):
-        b = self.type2test(b'world')
-        self.assertEqual(b.index(b'w'), 0)
-        self.assertEqual(b.index(b'orl'), 1)
-        self.assertRaises(ValueError, b.index, b'worm')
-        self.assertRaises(ValueError, b.index, b'ldo')
+        b = self.type2test(b'mississippi')
+        i = 105
+        w = 119
+
+        self.assertEqual(b.index(b'ss'), 2)
+        self.assertRaises(ValueError, b.index, b'w')
+        self.assertRaises(ValueError, b.index, b'mississippian')
+
+        self.assertEqual(b.index(i), 1)
+        self.assertRaises(ValueError, b.index, w)
+
+        self.assertEqual(b.index(b'ss', 3), 5)
+        self.assertEqual(b.index(b'ss', 1, 7), 2)
+        self.assertRaises(ValueError, b.index, b'ss', 1, 3)
+
+        self.assertEqual(b.index(i, 6), 7)
+        self.assertEqual(b.index(i, 1, 3), 1)
+        self.assertRaises(ValueError, b.index, w, 1, 3)
 
     def test_rindex(self):
-        # XXX could be more rigorous
-        b = self.type2test(b'world')
-        self.assertEqual(b.rindex(b'w'), 0)
-        self.assertEqual(b.rindex(b'orl'), 1)
-        self.assertRaises(ValueError, b.rindex, b'worm')
-        self.assertRaises(ValueError, b.rindex, b'ldo')
+        b = self.type2test(b'mississippi')
+        i = 105
+        w = 119
+
+        self.assertEqual(b.rindex(b'ss'), 5)
+        self.assertRaises(ValueError, b.rindex, b'w')
+        self.assertRaises(ValueError, b.rindex, b'mississippian')
+
+        self.assertEqual(b.rindex(i), 10)
+        self.assertRaises(ValueError, b.rindex, w)
+
+        self.assertEqual(b.rindex(b'ss', 3), 5)
+        self.assertEqual(b.rindex(b'ss', 0, 6), 2)
+
+        self.assertEqual(b.rindex(i, 1, 3), 1)
+        self.assertEqual(b.rindex(i, 3, 9), 7)
+        self.assertRaises(ValueError, b.rindex, w, 1, 3)
 
     def test_replace(self):
         b = self.type2test(b'mississippi')
@@ -473,6 +543,27 @@ class BaseBytesTest(unittest.TestCase):
         self.assertRaises(TypeError, self.type2test(b'abc').lstrip, 'b')
         self.assertRaises(TypeError, self.type2test(b'abc').rstrip, 'b')
 
+    def test_center(self):
+        # Fill character can be either bytes or bytearray (issue 12380)
+        b = self.type2test(b'abc')
+        for fill_type in (bytes, bytearray):
+            self.assertEqual(b.center(7, fill_type(b'-')),
+                             self.type2test(b'--abc--'))
+
+    def test_ljust(self):
+        # Fill character can be either bytes or bytearray (issue 12380)
+        b = self.type2test(b'abc')
+        for fill_type in (bytes, bytearray):
+            self.assertEqual(b.ljust(7, fill_type(b'-')),
+                             self.type2test(b'abc----'))
+
+    def test_rjust(self):
+        # Fill character can be either bytes or bytearray (issue 12380)
+        b = self.type2test(b'abc')
+        for fill_type in (bytes, bytearray):
+            self.assertEqual(b.rjust(7, fill_type(b'-')),
+                             self.type2test(b'----abc'))
+
     def test_ord(self):
         b = self.type2test(b'\0A\x7f\x80\xff')
         self.assertEqual([ord(b[i:i+1]) for i in range(len(b))],
@@ -528,6 +619,14 @@ class BaseBytesTest(unittest.TestCase):
         self.assertEqual(True, b.startswith(l, -2, None))
         self.assertEqual(True, b.startswith(h, None, -2))
         self.assertEqual(False, b.startswith(x, None, None))
+
+    def test_integer_arguments_out_of_byte_range(self):
+        b = self.type2test(b'hello')
+
+        for method in (b.count, b.find, b.index, b.rfind, b.rindex):
+            self.assertRaises(ValueError, method, -1)
+            self.assertRaises(ValueError, method, 256)
+            self.assertRaises(ValueError, method, 9999)
 
     def test_find_etc_raise_correct_error_messages(self):
         # issue 11828
@@ -633,6 +732,39 @@ class ByteArrayTest(BaseBytesTest):
         b = bytearray()
         b.reverse()
         self.assertFalse(b)
+
+    def test_clear(self):
+        b = bytearray(b'python')
+        b.clear()
+        self.assertEqual(b, b'')
+
+        b = bytearray(b'')
+        b.clear()
+        self.assertEqual(b, b'')
+
+        b = bytearray(b'')
+        b.append(ord('r'))
+        b.clear()
+        b.append(ord('p'))
+        self.assertEqual(b, b'p')
+
+    def test_copy(self):
+        b = bytearray(b'abc')
+        bb = b.copy()
+        self.assertEqual(bb, b'abc')
+
+        b = bytearray(b'')
+        bb = b.copy()
+        self.assertEqual(bb, b'')
+
+        # test that it's indeed a copy and not a reference
+        b = bytearray(b'abc')
+        bb = b.copy()
+        self.assertEqual(b, bb)
+        self.assertIsNot(b, bb)
+        bb.append(ord('d'))
+        self.assertEqual(bb, b'abcd')
+        self.assertEqual(b, b'abc')
 
     def test_regexps(self):
         def by(s):
@@ -1105,9 +1237,11 @@ class FixedStringTest(test.string_tests.BaseTest):
 
 class ByteArrayAsStringTest(FixedStringTest):
     type2test = bytearray
+    contains_bytes = True
 
 class BytesAsStringTest(FixedStringTest):
     type2test = bytes
+    contains_bytes = True
 
 
 class SubclassTest(unittest.TestCase):

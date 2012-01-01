@@ -179,9 +179,6 @@ PyAPI_FUNC(const char *) Py_GetCopyright(void);
 PyAPI_FUNC(const char *) Py_GetCompiler(void);
 PyAPI_FUNC(const char *) Py_GetBuildInfo(void);
 #ifndef Py_LIMITED_API
-PyAPI_FUNC(const char *) _Py_svnversion(void);
-PyAPI_FUNC(const char *) Py_SubversionRevision(void);
-PyAPI_FUNC(const char *) Py_SubversionShortBranch(void);
 PyAPI_FUNC(const char *) _Py_hgidentifier(void);
 PyAPI_FUNC(const char *) _Py_hgversion(void);
 #endif
@@ -214,6 +211,7 @@ PyAPI_FUNC(void) PyByteArray_Fini(void);
 PyAPI_FUNC(void) PyFloat_Fini(void);
 PyAPI_FUNC(void) PyOS_FiniInterrupts(void);
 PyAPI_FUNC(void) _PyGC_Fini(void);
+PyAPI_FUNC(void) PySlice_Fini(void);
 
 PyAPI_DATA(PyThreadState *) _Py_Finalizing;
 #endif
