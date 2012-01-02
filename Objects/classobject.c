@@ -14,6 +14,8 @@ static int numfree = 0;
 #define PyMethod_MAXFREELIST 256
 #endif
 
+_Py_IDENTIFIER(__name__);
+
 PyObject *
 PyMethod_Function(PyObject *im)
 {
@@ -190,8 +192,7 @@ method_richcompare(PyObject *self, PyObject *other, int op)
         !PyMethod_Check(self) ||
         !PyMethod_Check(other))
     {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        Py_RETURN_NOTIMPLEMENTED;
     }
     a = (PyMethodObject *)self;
     b = (PyMethodObject *)other;
@@ -227,7 +228,7 @@ method_repr(PyMethodObject *a)
         return NULL;
     }
 
-    funcname = PyObject_GetAttrString(func, "__name__");
+    funcname = _PyObject_GetAttrId(func, &PyId___name__);
     if (funcname == NULL) {
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;
@@ -241,7 +242,7 @@ method_repr(PyMethodObject *a)
     if (klass == NULL)
         klassname = NULL;
     else {
-        klassname = PyObject_GetAttrString(klass, "__name__");
+        klassname = _PyObject_GetAttrId(klass, &PyId___name__);
         if (klassname == NULL) {
             if (!PyErr_ExceptionMatches(PyExc_AttributeError))
                 return NULL;
@@ -516,8 +517,7 @@ instancemethod_richcompare(PyObject *self, PyObject *other, int op)
         !PyInstanceMethod_Check(self) ||
         !PyInstanceMethod_Check(other))
     {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        Py_RETURN_NOTIMPLEMENTED;
     }
     a = (PyInstanceMethodObject *)self;
     b = (PyInstanceMethodObject *)other;
@@ -544,7 +544,7 @@ instancemethod_repr(PyObject *self)
         return NULL;
     }
 
-    funcname = PyObject_GetAttrString(func, "__name__");
+    funcname = _PyObject_GetAttrId(func, &PyId___name__);
     if (funcname == NULL) {
         if (!PyErr_ExceptionMatches(PyExc_AttributeError))
             return NULL;

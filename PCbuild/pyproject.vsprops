@@ -38,7 +38,7 @@
 	/>
 	<UserMacro
 		Name="PyDllName"
-		Value="python32"
+		Value="python33"
 	/>
 	<UserMacro
 		Name="PythonExe"
@@ -55,6 +55,10 @@
 	<UserMacro
 		Name="bz2Dir"
 		Value="$(externalsDir)\bzip2-1.0.5"
+	/>
+	<UserMacro
+		Name="lzmaDir"
+		Value="$(externalsDir)\xz-5.0.3"
 	/>
 	<UserMacro
 		Name="opensslDir"
