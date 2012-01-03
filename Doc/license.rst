@@ -106,7 +106,18 @@ been GPL-compatible; the table below summarizes the various releases.
 +----------------+--------------+------------+------------+-----------------+
 | 3.1.1          | 3.1          | 2009       | PSF        | yes             |
 +----------------+--------------+------------+------------+-----------------+
-
+| 3.1.2          | 3.1.1        | 2010       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.1.3          | 3.1.2        | 2010       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.1.4          | 3.1.3        | 2011       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.2            | 3.1          | 2011       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.2.1          | 3.2          | 2011       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.2.2          | 3.2.1        | 2011       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
 
 .. note::
 
@@ -135,7 +146,7 @@ Terms and conditions for accessing or otherwise using Python
    analyze, test, perform and/or display publicly, prepare derivative works,
    distribute, and otherwise use Python |release| alone or in any derivative
    version, provided, however, that PSF's License Agreement and PSF's notice of
-   copyright, i.e., "Copyright © 2001-2010 Python Software Foundation; All Rights
+   copyright, i.e., "Copyright © 2001-2012 Python Software Foundation; All Rights
    Reserved" are retained in Python |release| alone or in any derivative version
    prepared by Licensee.
 
@@ -812,7 +823,7 @@ expat
 -----
 
 The :mod:`pyexpat` extension is built using an included copy of the expat
-sources unless the build is configured :option:`--with-system-expat`::
+sources unless the build is configured ``--with-system-expat``::
 
   Copyright (c) 1998, 1999, 2000 Thai Open Source Software Center Ltd
                                  and Clark Cooper
@@ -841,7 +852,7 @@ libffi
 ------
 
 The :mod:`_ctypes` extension is built using an included copy of the libffi
-sources unless the build is configured :option:`--with-system-libffi`::
+sources unless the build is configured ``--with-system-libffi``::
 
    Copyright (c) 1996-2008  Red Hat, Inc and others.
 
@@ -870,10 +881,10 @@ zlib
 ----
 
 The :mod:`zlib` extension is built using an included copy of the zlib
-sources unless the zlib version found on the system is too old to be
+sources if the zlib version found on the system is too old to be
 used for the build::
 
-  Copyright (C) 1995-2010 Jean-loup Gailly and Mark Adler
+  Copyright (C) 1995-2011 Jean-loup Gailly and Mark Adler
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages

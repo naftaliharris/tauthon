@@ -25,10 +25,10 @@ your topic of interest will usually find something helpful.
 Where is the math.py (socket.py, regex.py, etc.) source file?
 -------------------------------------------------------------
 
-If you can't find a source file for a module it may be a builtin or dynamically
-loaded module implemented in C, C++ or other compiled language.  In this case
-you may not have the source file or it may be something like mathmodule.c,
-somewhere in a C source directory (not on the Python Path).
+If you can't find a source file for a module it may be a built-in or
+dynamically loaded module implemented in C, C++ or other compiled language.
+In this case you may not have the source file or it may be something like
+mathmodule.c, somewhere in a C source directory (not on the Python Path).
 
 There are (at least) three kinds of modules in Python:
 
@@ -285,11 +285,15 @@ queue as there are threads.
 How do I parcel out work among a bunch of worker threads?
 ---------------------------------------------------------
 
-Use the :mod:`queue` module to create a queue containing a list of jobs.  The
-:class:`~queue.Queue` class maintains a list of objects with ``.put(obj)`` to
-add an item to the queue and ``.get()`` to return an item.  The class will take
-care of the locking necessary to ensure that each job is handed out exactly
-once.
+The easiest way is to use the new :mod:`concurrent.futures` module,
+especially the :mod:`~concurrent.futures.ThreadPoolExecutor` class.
+
+Or, if you want fine control over the dispatching algorithm, you can write
+your own logic manually.  Use the :mod:`queue` module to create a queue
+containing a list of jobs.  The :class:`~queue.Queue` class maintains a
+list of objects with ``.put(obj)`` to add an item to the queue and ``.get()``
+to return an item.  The class will take care of the locking necessary to
+ensure that each job is handed out exactly once.
 
 Here's a trivial example::
 
@@ -352,7 +356,7 @@ provides a featureful interface.
 What kinds of global value mutation are thread-safe?
 ----------------------------------------------------
 
-A global interpreter lock (GIL) is used internally to ensure that only one
+A :term:`global interpreter lock` (GIL) is used internally to ensure that only one
 thread runs in the Python VM at a time.  In general, Python offers to switch
 among threads only between bytecode instructions; how frequently it switches can
 be set via :func:`sys.setswitchinterval`.  Each bytecode instruction and
@@ -361,7 +365,7 @@ therefore atomic from the point of view of a Python program.
 
 In theory, this means an exact accounting requires an exact understanding of the
 PVM bytecode implementation.  In practice, it means that operations on shared
-variables of builtin data types (ints, lists, dicts, etc) that "look atomic"
+variables of built-in data types (ints, lists, dicts, etc) that "look atomic"
 really are.
 
 For example, the following operations are all atomic (L, L1, L2 are lists, D,
@@ -395,32 +399,34 @@ lists.  When in doubt, use a mutex!
 Can't we get rid of the Global Interpreter Lock?
 ------------------------------------------------
 
-.. XXX mention multiprocessing
 .. XXX link to dbeazley's talk about GIL?
 
-The Global Interpreter Lock (GIL) is often seen as a hindrance to Python's
+The :term:`global interpreter lock` (GIL) is often seen as a hindrance to Python's
 deployment on high-end multiprocessor server machines, because a multi-threaded
 Python program effectively only uses one CPU, due to the insistence that
 (almost) all Python code can only run while the GIL is held.
 
 Back in the days of Python 1.5, Greg Stein actually implemented a comprehensive
 patch set (the "free threading" patches) that removed the GIL and replaced it
-with fine-grained locking.  Unfortunately, even on Windows (where locks are very
-efficient) this ran ordinary Python code about twice as slow as the interpreter
-using the GIL.  On Linux the performance loss was even worse because pthread
-locks aren't as efficient.
-
-Since then, the idea of getting rid of the GIL has occasionally come up but
-nobody has found a way to deal with the expected slowdown, and users who don't
-use threads would not be happy if their code ran at half at the speed.  Greg's
-free threading patch set has not been kept up-to-date for later Python versions.
+with fine-grained locking.  Adam Olsen recently did a similar experiment
+in his `python-safethread <http://code.google.com/p/python-safethread/>`_
+project.  Unfortunately, both experiments exhibited a sharp drop in single-thread
+performance (at least 30% slower), due to the amount of fine-grained locking
+necessary to compensate for the removal of the GIL.
 
 This doesn't mean that you can't make good use of Python on multi-CPU machines!
 You just have to be creative with dividing the work up between multiple
-*processes* rather than multiple *threads*.  Judicious use of C extensions will
-also help; if you use a C extension to perform a time-consuming task, the
-extension can release the GIL while the thread of execution is in the C code and
-allow other threads to get some work done.
+*processes* rather than multiple *threads*.  The
+:class:`~concurrent.futures.ProcessPoolExecutor` class in the new
+:mod:`concurrent.futures` module provides an easy way of doing so; the
+:mod:`multiprocessing` module provides a lower-level API in case you want
+more control over dispatching of tasks.
+
+Judicious use of C extensions will also help; if you use a C extension to
+perform a time-consuming task, the extension can release the GIL while the
+thread of execution is in the C code and allow other threads to get some work
+done.  Some standard library modules such as :mod:`zlib` and :mod:`hashlib`
+already do this.
 
 It has been suggested that the GIL should be a per-interpreter-state lock rather
 than truly global; interpreters then wouldn't be able to share objects.
@@ -511,9 +517,9 @@ I can't seem to use os.read() on a pipe created with os.popen(); why?
 
 :func:`os.read` is a low-level function which takes a file descriptor, a small
 integer representing the opened file.  :func:`os.popen` creates a high-level
-file object, the same type returned by the builtin :func:`open` function.  Thus,
-to read n bytes from a pipe p created with :func:`os.popen`, you need to use
-``p.read(n)``.
+file object, the same type returned by the built-in :func:`open` function.
+Thus, to read n bytes from a pipe p created with :func:`os.popen`, you need to
+use ``p.read(n)``.
 
 
 .. XXX update to use subprocess. See the :ref:`subprocess-replacements` section.
@@ -751,7 +757,8 @@ some sample code::
 How do I avoid blocking in the connect() method of a socket?
 ------------------------------------------------------------
 
-The select module is commonly used to help with asynchronous I/O on sockets.
+The :mod:`select` module is commonly used to help with asynchronous I/O on
+sockets.
 
 To prevent the TCP connect from blocking, you can set the socket to non-blocking
 mode.  Then when you do the ``connect()``, you will either connect immediately
@@ -764,6 +771,12 @@ You can use the ``connect_ex()`` method to avoid creating an exception.  It will
 just return the errno value.  To poll, you can call ``connect_ex()`` again later
 -- ``0`` or ``errno.EISCONN`` indicate that you're connected -- or you can pass this
 socket to select to check if it's writable.
+
+.. note::
+   The :mod:`asyncore` module presents a framework-like approach to the problem
+   of writing non-blocking networking code.
+   The third-party `Twisted <http://twistedmatrix.com/>`_ library is
+   a popular and feature-rich alternative.
 
 
 Databases
@@ -799,52 +812,6 @@ fancy things like store instances or handle shared references properly, it does
 run extremely fast.  For example loading a half megabyte of data may take less
 than a third of a second.  This often beats doing something more complex and
 general such as using gdbm with pickle/shelve.
-
-
-If my program crashes with a bsddb (or anydbm) database open, it gets corrupted. How come?
-------------------------------------------------------------------------------------------
-
-.. XXX move this FAQ entry elsewhere?
-
-.. note::
-
-   The bsddb module is now available as a standalone package `pybsddb
-   <http://www.jcea.es/programacion/pybsddb.htm>`_.
-
-Databases opened for write access with the bsddb module (and often by the anydbm
-module, since it will preferentially use bsddb) must explicitly be closed using
-the ``.close()`` method of the database.  The underlying library caches database
-contents which need to be converted to on-disk form and written.
-
-If you have initialized a new bsddb database but not written anything to it
-before the program crashes, you will often wind up with a zero-length file and
-encounter an exception the next time the file is opened.
-
-
-I tried to open Berkeley DB file, but bsddb produces bsddb.error: (22, 'Invalid argument'). Help! How can I restore my data?
-----------------------------------------------------------------------------------------------------------------------------
-
-.. XXX move this FAQ entry elsewhere?
-
-.. note::
-
-   The bsddb module is now available as a standalone package `pybsddb
-   <http://www.jcea.es/programacion/pybsddb.htm>`_.
-
-Don't panic! Your data is probably intact. The most frequent cause for the error
-is that you tried to open an earlier Berkeley DB file with a later version of
-the Berkeley DB library.
-
-Many Linux systems now have all three versions of Berkeley DB available.  If you
-are migrating from version 1 to a newer version use db_dump185 to dump a plain
-text version of the database.  If you are migrating from version 2 to version 3
-use db2_dump to create a plain text version of the database.  In either case,
-use db_load to create a new native database for the latest version installed on
-your computer.  If you have version 3 of Berkeley DB installed, you should be
-able to use db2_load to create a native version 2 database.
-
-You should move away from Berkeley DB version 1 files because the hash file code
-contains known bugs that can corrupt your data.
 
 
 Mathematics and Numerics

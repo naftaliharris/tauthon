@@ -299,20 +299,20 @@ class _Pickler:
             f(self, obj) # Call unbound method with explicit self
             return
 
-        # Check for a class with a custom metaclass; treat as regular class
-        try:
-            issc = issubclass(t, type)
-        except TypeError: # t is not a class (old Boost; see SF #502085)
-            issc = 0
-        if issc:
-            self.save_global(obj)
-            return
-
         # Check copyreg.dispatch_table
         reduce = dispatch_table.get(t)
         if reduce:
             rv = reduce(obj)
         else:
+            # Check for a class with a custom metaclass; treat as regular class
+            try:
+                issc = issubclass(t, type)
+            except TypeError: # t is not a class (old Boost; see SF #502085)
+                issc = False
+            if issc:
+                self.save_global(obj)
+                return
+
             # Check for a __reduce_ex__ method, fall back to __reduce__
             reduce = getattr(obj, "__reduce_ex__", None)
             if reduce:
@@ -364,7 +364,7 @@ class _Pickler:
             raise PicklingError("args from save_reduce() should be a tuple")
 
         # Assert that func is callable
-        if not hasattr(func, '__call__'):
+        if not callable(func):
             raise PicklingError("func from save_reduce() should be callable")
 
         save = self.save
@@ -487,7 +487,11 @@ class _Pickler:
 
     def save_bytes(self, obj, pack=struct.pack):
         if self.proto < 3:
-            self.save_reduce(bytes, (list(obj),), obj=obj)
+            if len(obj) == 0:
+                self.save_reduce(bytes, (), obj=obj)
+            else:
+                self.save_reduce(codecs.encode,
+                                 (str(obj, 'latin1'), 'latin1'), obj=obj)
             return
         n = len(obj)
         if n < 256:
@@ -1156,16 +1160,22 @@ class _Unpickler:
 
     def load_put(self):
         i = int(self.readline()[:-1])
+        if i < 0:
+            raise ValueError("negative PUT argument")
         self.memo[i] = self.stack[-1]
     dispatch[PUT[0]] = load_put
 
     def load_binput(self):
         i = self.read(1)[0]
+        if i < 0:
+            raise ValueError("negative BINPUT argument")
         self.memo[i] = self.stack[-1]
     dispatch[BINPUT[0]] = load_binput
 
     def load_long_binput(self):
         i = mloads(b'i' + self.read(4))
+        if i < 0:
+            raise ValueError("negative LONG_BINPUT argument")
         self.memo[i] = self.stack[-1]
     dispatch[LONG_BINPUT[0]] = load_long_binput
 
@@ -1235,9 +1245,7 @@ class _Unpickler:
         raise _Stop(value)
     dispatch[STOP[0]] = load_stop
 
-# Encode/decode longs in linear time.
-
-import binascii as _binascii
+# Encode/decode longs.
 
 def encode_long(x):
     r"""Encode a long to a two's complement little-endian binary string.
@@ -1260,50 +1268,14 @@ def encode_long(x):
     b'\x7f'
     >>>
     """
-
     if x == 0:
         return b''
-    if x > 0:
-        ashex = hex(x)
-        assert ashex.startswith("0x")
-        njunkchars = 2 + ashex.endswith('L')
-        nibbles = len(ashex) - njunkchars
-        if nibbles & 1:
-            # need an even # of nibbles for unhexlify
-            ashex = "0x0" + ashex[2:]
-        elif int(ashex[2], 16) >= 8:
-            # "looks negative", so need a byte of sign bits
-            ashex = "0x00" + ashex[2:]
-    else:
-        # Build the 256's-complement:  (1L << nbytes) + x.  The trick is
-        # to find the number of bytes in linear time (although that should
-        # really be a constant-time task).
-        ashex = hex(-x)
-        assert ashex.startswith("0x")
-        njunkchars = 2 + ashex.endswith('L')
-        nibbles = len(ashex) - njunkchars
-        if nibbles & 1:
-            # Extend to a full byte.
-            nibbles += 1
-        nbits = nibbles * 4
-        x += 1 << nbits
-        assert x > 0
-        ashex = hex(x)
-        njunkchars = 2 + ashex.endswith('L')
-        newnibbles = len(ashex) - njunkchars
-        if newnibbles < nibbles:
-            ashex = "0x" + "0" * (nibbles - newnibbles) + ashex[2:]
-        if int(ashex[2], 16) < 8:
-            # "looks positive", so need a byte of sign bits
-            ashex = "0xff" + ashex[2:]
-
-    if ashex.endswith('L'):
-        ashex = ashex[2:-1]
-    else:
-        ashex = ashex[2:]
-    assert len(ashex) & 1 == 0, (x, ashex)
-    binary = _binascii.unhexlify(ashex)
-    return bytes(binary[::-1])
+    nbytes = (x.bit_length() >> 3) + 1
+    result = x.to_bytes(nbytes, byteorder='little', signed=True)
+    if x < 0 and nbytes > 1:
+        if result[-1] == 0xff and (result[-2] & 0x80) != 0:
+            result = result[:-1]
+    return result
 
 def decode_long(data):
     r"""Decode a long from a two's complement little-endian binary string.
@@ -1323,21 +1295,7 @@ def decode_long(data):
     >>> decode_long(b"\x7f")
     127
     """
-
-    nbytes = len(data)
-    if nbytes == 0:
-        return 0
-    ashex = _binascii.hexlify(data[::-1])
-    n = int(ashex, 16) # quadratic time before Python 2.3; linear now
-    if data[-1] >= 0x80:
-        n -= 1 << (nbytes * 8)
-    return n
-
-# Use the faster _pickle if possible
-try:
-    from _pickle import *
-except ImportError:
-    Pickler, Unpickler = _Pickler, _Unpickler
+    return int.from_bytes(data, byteorder='little', signed=True)
 
 # Shorthands
 
@@ -1362,10 +1320,38 @@ def loads(s, *, fix_imports=True, encoding="ASCII", errors="strict"):
     return Unpickler(file, fix_imports=fix_imports,
                      encoding=encoding, errors=errors).load()
 
+# Use the faster _pickle if possible
+try:
+    from _pickle import *
+except ImportError:
+    Pickler, Unpickler = _Pickler, _Unpickler
+
 # Doctest
 def _test():
     import doctest
     return doctest.testmod()
 
 if __name__ == "__main__":
-    _test()
+    import sys, argparse
+    parser = argparse.ArgumentParser(
+        description='display contents of the pickle files')
+    parser.add_argument(
+        'pickle_file', type=argparse.FileType('br'),
+        nargs='*', help='the pickle file')
+    parser.add_argument(
+        '-t', '--test', action='store_true',
+        help='run self-test suite')
+    parser.add_argument(
+        '-v', action='store_true',
+        help='run verbosely; only affects self-test run')
+    args = parser.parse_args()
+    if args.test:
+        _test()
+    else:
+        if not args.pickle_file:
+            parser.print_help()
+        else:
+            import pprint
+            for f in args.pickle_file:
+                obj = load(f)
+                pprint.pprint(obj)

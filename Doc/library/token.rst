@@ -5,6 +5,9 @@
    :synopsis: Constants representing terminal nodes of the parse tree.
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/token.py`
+
+--------------
 
 This module provides constants which represent the numeric values of leaf nodes
 of the parse tree (terminal tokens).  Refer to the file :file:`Grammar/Grammar`
@@ -65,7 +68,6 @@ The token constants are:
           EQUAL
           DOT
           PERCENT
-          BACKQUOTE
           LBRACE
           RBRACE
           EQEQUAL
@@ -91,6 +93,8 @@ The token constants are:
           DOUBLESLASH
           DOUBLESLASHEQUAL
           AT
+          RARROW
+          ELLIPSIS
           OP
           ERRORTOKEN
           N_TOKENS

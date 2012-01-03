@@ -2,8 +2,6 @@
 
 Implements the Distutils 'build_scripts' command."""
 
-__revision__ = "$Id$"
-
 import os, re
 from stat import ST_MODE
 from distutils import sysconfig
@@ -11,7 +9,6 @@ from distutils.core import Command
 from distutils.dep_util import newer
 from distutils.util import convert_path, Mixin2to3
 from distutils import log
-import sys
 import tokenize
 
 # check if Python is called on the first line with this expression
@@ -106,8 +103,7 @@ class build_scripts(Command):
                             sysconfig.get_config_var("BINDIR"),
                            "python%s%s" % (sysconfig.get_config_var("VERSION"),
                                            sysconfig.get_config_var("EXE")))
-                    executable = executable.encode(sys.getfilesystemencoding(),
-                                                   'surrogateescape')
+                    executable = os.fsencode(executable)
                     shebang = b"#!" + executable + post_interp + b"\n"
                     # Python parser starts to read a script using UTF-8 until
                     # it gets a #coding:xxx cookie. The shebang has to be the

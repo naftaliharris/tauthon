@@ -1,11 +1,19 @@
-:mod:`optparse` --- More powerful command line option parser
-============================================================
+:mod:`optparse` --- Parser for command line options
+===================================================
 
 .. module:: optparse
-   :synopsis: More convenient, flexible, and powerful command-line parsing library.
+   :synopsis: Command-line option parsing library.
+   :deprecated:
 .. moduleauthor:: Greg Ward <gward@python.net>
 .. sectionauthor:: Greg Ward <gward@python.net>
 
+.. deprecated:: 3.2
+  The :mod:`optparse` module is deprecated and will not be developed further;
+  development will continue with the :mod:`argparse` module.
+
+**Source code:** :source:`Lib/optparse.py`
+
+--------------
 
 :mod:`optparse` is a more convenient, flexible, and powerful library for parsing
 command-line options than the old :mod:`getopt` module.  :mod:`optparse` uses a
@@ -599,8 +607,8 @@ This would result in the following help output:
 
        -g                  Group option.
 
-A bit more complete example might invole using more than one group: still
-extendind the previous example::
+A bit more complete example might involve using more than one group: still
+extending the previous example::
 
     group = OptionGroup(parser, "Dangerous Options",
                         "Caution: use these options at your own risk.  "
@@ -647,8 +655,9 @@ option groups is:
 
 .. method:: OptionParser.get_option_group(opt_str)
 
-   Return, if defined, the :class:`OptionGroup` that has the title or the long
-   description equals to *opt_str*
+   Return the :class:`OptionGroup` to which the short or long option
+   string *opt_str* (e.g. ``'-o'`` or ``'--option'``) belongs. If
+   there's no such :class:`OptionGroup`, return ``None``.
 
 .. _optparse-printing-version-string:
 

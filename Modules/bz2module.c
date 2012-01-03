@@ -218,25 +218,14 @@ Util_CatchBZ2Error(int bzerror)
 #define SMALLCHUNK BUFSIZ
 #endif
 
-#if SIZEOF_INT < 4
-#define BIGCHUNK  (512 * 32)
-#else
-#define BIGCHUNK  (512 * 1024)
-#endif
-
 /* This is a hacked version of Python's fileobject.c:new_buffersize(). */
 static size_t
 Util_NewBufferSize(size_t currentsize)
 {
-    if (currentsize > SMALLCHUNK) {
-        /* Keep doubling until we reach BIGCHUNK;
-           then keep adding BIGCHUNK. */
-        if (currentsize <= BIGCHUNK)
-            return currentsize + currentsize;
-        else
-            return currentsize + BIGCHUNK;
-    }
-    return currentsize + SMALLCHUNK;
+    /* Expand the buffer by an amount proportional to the current size,
+       giving us amortized linear-time behavior. Use a less-than-double
+       growth factor to avoid excessive allocation. */
+    return currentsize + (currentsize >> 3) + 6;
 }
 
 /* This is a hacked version of Python's fileobject.c:get_line(). */
@@ -1206,10 +1195,7 @@ BZ2File_init(BZ2FileObject *self, PyObject *args, PyObject *kwargs)
                                      &compresslevel))
         return -1;
 
-    if (PyBytes_Check(name_obj))
-        name = PyBytes_AsString(name_obj);
-    else
-        name = PyByteArray_AsString(name_obj);
+    name = PyBytes_AsString(name_obj);
     if (compresslevel < 1 || compresslevel > 9) {
         PyErr_SetString(PyExc_ValueError,
                         "compresslevel must be between 1 and 9");

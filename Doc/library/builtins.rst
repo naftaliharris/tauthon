@@ -7,7 +7,9 @@
 
 This module provides direct access to all 'built-in' identifiers of Python; for
 example, ``builtins.open`` is the full name for the built-in function
-:func:`open`.  See chapter :ref:`builtin`.
+:func:`open`.  See :ref:`built-in-funcs` and :ref:`built-in-consts` for
+documentation.
+
 
 This module is not normally accessed explicitly by most applications, but can be
 useful in modules that provide objects with the same name as a built-in value,
@@ -34,6 +36,6 @@ that wants to implement an :func:`open` function that wraps the built-in
 
 As an implementation detail, most modules have the name ``__builtins__`` made
 available as part of their globals.  The value of ``__builtins__`` is normally
-either this module or the value of this modules's :attr:`__dict__` attribute.
+either this module or the value of this module's :attr:`__dict__` attribute.
 Since this is an implementation detail, it may not be used by alternate
 implementations of Python.

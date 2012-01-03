@@ -129,6 +129,7 @@ newossobject(PyObject *arg)
     }
 
     if (ioctl(fd, SNDCTL_DSP_GETFMTS, &afmts) == -1) {
+        close(fd);
         PyErr_SetFromErrnoWithFilename(PyExc_IOError, devicename);
         return NULL;
     }
@@ -425,6 +426,11 @@ oss_writeall(oss_audio_t *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "y#:write", &cp, &size))
         return NULL;
 
+    if (!_PyIsSelectable_fd(self->fd)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "file descriptor out of range for select");
+        return NULL;
+    }
     /* use select to wait for audio device to be available */
     FD_ZERO(&write_set_fds);
     FD_SET(self->fd, &write_set_fds);
@@ -467,6 +473,23 @@ oss_close(oss_audio_t *self, PyObject *unused)
     }
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+static PyObject *
+oss_self(PyObject *self, PyObject *unused)
+{
+    Py_INCREF(self);
+    return self;
+}
+
+static PyObject * 
+oss_exit(PyObject *self, PyObject *unused)
+{
+    PyObject *ret = PyObject_CallMethod(self, "close", NULL);
+    if (!ret)
+        return NULL;
+    Py_DECREF(ret);
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -782,6 +805,10 @@ static PyMethodDef oss_methods[] = {
     /* Aliases for backwards compatibility */
     { "flush",          (PyCFunction)oss_sync, METH_VARARGS },
 
+    /* Support for the context manager protocol */
+    { "__enter__",      oss_self, METH_NOARGS },
+    { "__exit__",       oss_exit, METH_VARARGS },
+
     { NULL,             NULL}           /* sentinel */
 };
 
@@ -789,6 +816,10 @@ static PyMethodDef oss_mixer_methods[] = {
     /* Regular file method - OSS mixers are ioctl-only interface */
     { "close",          (PyCFunction)oss_mixer_close, METH_NOARGS },
     { "fileno",         (PyCFunction)oss_mixer_fileno, METH_NOARGS },
+
+    /* Support for the context manager protocol */
+    { "__enter__",      oss_self, METH_NOARGS },
+    { "__exit__",       oss_exit, METH_VARARGS },
 
     /* Simple ioctl wrappers */
     { "controls",       (PyCFunction)oss_mixer_controls, METH_VARARGS },

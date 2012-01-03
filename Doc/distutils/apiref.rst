@@ -31,8 +31,9 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    +====================+================================+=============================================================+
    | *name*             | The name of the package        | a string                                                    |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *version*          | The version number of the      | See :mod:`distutils.version`                                |
-   |                    | package                        |                                                             |
+   | *version*          | The version number of the      | a string                                                    |
+   |                    | package; see                   |                                                             |
+   |                    | :mod:`distutils.version`       |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *description*      | A single line describing the   | a string                                                    |
    |                    | package                        |                                                             |
@@ -49,14 +50,14 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    |                    | maintainer, if different from  |                                                             |
    |                    | the author                     |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *maintainer_email* | The email address of the       |                                                             |
+   | *maintainer_email* | The email address of the       | a string                                                    |
    |                    | current maintainer, if         |                                                             |
    |                    | different from the author      |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *url*              | A URL for the package          | a URL                                                       |
+   | *url*              | A URL for the package          | a string                                                    |
    |                    | (homepage)                     |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *download_url*     | A URL to download the package  | a URL                                                       |
+   | *download_url*     | A URL to download the package  | a string                                                    |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *packages*         | A list of Python packages that | a list of strings                                           |
    |                    | distutils will manipulate      |                                                             |
@@ -68,14 +69,13 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    |                    | files to be built and          |                                                             |
    |                    | installed                      |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *ext_modules*      | A list of Python extensions to | A list of  instances of                                     |
+   | *ext_modules*      | A list of Python extensions to | a list of instances of                                      |
    |                    | be built                       | :class:`distutils.core.Extension`                           |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *classifiers*      | A list of categories for the   | The list of available                                       |
-   |                    | package                        | categorizations is at                                       |
-   |                    |                                | http://pypi.python.org/pypi?:action=list_classifiers.       |
+   | *classifiers*      | A list of categories for the   | a list of strings; valid classifiers are listed on `PyPI    |
+   |                    | package                        | <http://pypi.python.org/pypi?:action=list_classifiers>`_.   |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *distclass*        | the :class:`Distribution`      | A subclass of                                               |
+   | *distclass*        | the :class:`Distribution`      | a subclass of                                               |
    |                    | class to use                   | :class:`distutils.core.Distribution`                        |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *script_name*      | The name of the setup.py       | a string                                                    |
@@ -85,15 +85,15 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    | *script_args*      | Arguments to supply to the     | a list of strings                                           |
    |                    | setup script                   |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *options*          | default options for the setup  | a string                                                    |
+   | *options*          | default options for the setup  | a dictionary                                                |
    |                    | script                         |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *license*          | The license for the package    | a string                                                    |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *keywords*         | Descriptive meta-data, see     |                                                             |
+   | *keywords*         | Descriptive meta-data, see     | a list of strings or a comma-separated string               |
    |                    | :pep:`314`                     |                                                             |
    +--------------------+--------------------------------+-------------------------------------------------------------+
-   | *platforms*        |                                |                                                             |
+   | *platforms*        |                                | a list of strings or a comma-separated string               |
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | *cmdclass*         | A mapping of command names to  | a dictionary                                                |
    |                    | :class:`Command` subclasses    |                                                             |
@@ -165,13 +165,13 @@ the full reference.
    +------------------------+--------------------------------+---------------------------+
    | argument name          | value                          | type                      |
    +========================+================================+===========================+
-   | *name*                 | the full name of the           | string                    |
+   | *name*                 | the full name of the           | a string                  |
    |                        | extension, including any       |                           |
    |                        | packages --- ie. *not* a       |                           |
    |                        | filename or pathname, but      |                           |
    |                        | Python dotted name             |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *sources*              | list of source filenames,      | string                    |
+   | *sources*              | list of source filenames,      | a list of strings         |
    |                        | relative to the distribution   |                           |
    |                        | root (where the setup script   |                           |
    |                        | lives), in Unix form (slash-   |                           |
@@ -184,12 +184,12 @@ the full reference.
    |                        | as source for a Python         |                           |
    |                        | extension.                     |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *include_dirs*         | list of directories to search  | string                    |
+   | *include_dirs*         | list of directories to search  | a list of strings         |
    |                        | for C/C++ header files (in     |                           |
    |                        | Unix form for portability)     |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *define_macros*        | list of macros to define; each | (string, string) tuple or |
-   |                        | macro is defined using a       | (name, ``None``)          |
+   | *define_macros*        | list of macros to define; each | a list of tuples          |
+   |                        | macro is defined using a       |                           |
    |                        | 2-tuple ``(name, value)``,     |                           |
    |                        | where *value* is               |                           |
    |                        | either the string to define it |                           |
@@ -200,31 +200,31 @@ the full reference.
    |                        | on Unix C compiler command     |                           |
    |                        | line)                          |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *undef_macros*         | list of macros to undefine     | string                    |
+   | *undef_macros*         | list of macros to undefine     | a list of strings         |
    |                        | explicitly                     |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *library_dirs*         | list of directories to search  | string                    |
+   | *library_dirs*         | list of directories to search  | a list of strings         |
    |                        | for C/C++ libraries at link    |                           |
    |                        | time                           |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *libraries*            | list of library names (not     | string                    |
+   | *libraries*            | list of library names (not     | a list of strings         |
    |                        | filenames or paths) to link    |                           |
    |                        | against                        |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *runtime_library_dirs* | list of directories to search  | string                    |
+   | *runtime_library_dirs* | list of directories to search  | a list of strings         |
    |                        | for C/C++ libraries at run     |                           |
    |                        | time (for shared extensions,   |                           |
    |                        | this is when the extension is  |                           |
    |                        | loaded)                        |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *extra_objects*        | list of extra files to link    | string                    |
+   | *extra_objects*        | list of extra files to link    | a list of strings         |
    |                        | with (eg. object files not     |                           |
    |                        | implied by 'sources', static   |                           |
    |                        | library that must be           |                           |
    |                        | explicitly specified, binary   |                           |
    |                        | resource files, etc.)          |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *extra_compile_args*   | any extra platform- and        | string                    |
+   | *extra_compile_args*   | any extra platform- and        | a list of strings         |
    |                        | compiler-specific information  |                           |
    |                        | to use when compiling the      |                           |
    |                        | source files in 'sources'. For |                           |
@@ -235,7 +235,7 @@ the full reference.
    |                        | for other platforms it could   |                           |
    |                        | be anything.                   |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *extra_link_args*      | any extra platform- and        | string                    |
+   | *extra_link_args*      | any extra platform- and        | a list of strings         |
    |                        | compiler-specific information  |                           |
    |                        | to use when linking object     |                           |
    |                        | files together to create the   |                           |
@@ -244,7 +244,7 @@ the full reference.
    |                        | Similar interpretation as for  |                           |
    |                        | 'extra_compile_args'.          |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *export_symbols*       | list of symbols to be exported | string                    |
+   | *export_symbols*       | list of symbols to be exported | a list of strings         |
    |                        | from a shared extension. Not   |                           |
    |                        | used on all platforms, and not |                           |
    |                        | generally necessary for Python |                           |
@@ -252,14 +252,19 @@ the full reference.
    |                        | export exactly one symbol:     |                           |
    |                        | ``init`` + extension_name.     |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *depends*              | list of files that the         | string                    |
+   | *depends*              | list of files that the         | a list of strings         |
    |                        | extension depends on           |                           |
    +------------------------+--------------------------------+---------------------------+
-   | *language*             | extension language (i.e.       | string                    |
+   | *language*             | extension language (i.e.       | a string                  |
    |                        | ``'c'``, ``'c++'``,            |                           |
    |                        | ``'objc'``). Will be detected  |                           |
    |                        | from the source extensions if  |                           |
    |                        | not provided.                  |                           |
+   +------------------------+--------------------------------+---------------------------+
+   | *optional*             | specifies that a build failure | a boolean                 |
+   |                        | in the extension should not    |                           |
+   |                        | abort the build process, but   |                           |
+   |                        | simply skip the extension.     |                           |
    +------------------------+--------------------------------+---------------------------+
 
 
@@ -1199,9 +1204,9 @@ other utility module.
 .. function:: byte_compile(py_files[, optimize=0, force=0, prefix=None, base_dir=None, verbose=1, dry_run=0, direct=None])
 
    Byte-compile a collection of Python source files to either :file:`.pyc` or
-   :file:`.pyo` files in the same directory.  *py_files* is a list of files to
-   compile; any files that don't end in :file:`.py` are silently skipped.
-   *optimize* must be one of the following:
+   :file:`.pyo` files in a :file:`__pycache__` subdirectory (see :pep:`3147`).
+   *py_files* is a list of files to compile; any files that don't end in
+   :file:`.py` are silently skipped.  *optimize* must be one of the following:
 
    * ``0`` - don't optimize (generate :file:`.pyc`)
    * ``1`` - normal optimization (like ``python -O``)
@@ -1225,6 +1230,11 @@ other utility module.
    use direct compilation or not (see the source for details).  The *direct* flag
    is used by the script generated in indirect mode; unless you know what you're
    doing, leave it set to ``None``.
+
+   .. versionchanged:: 3.2.3
+      Create ``.pyc`` or ``.pyo`` files with an :func:`import magic tag
+      <imp.get_tag>` in their name, in a :file:`__pycache__` subdirectory
+      instead of files without tag in the current directory.
 
 
 .. function:: rfc822_escape(header)
@@ -1311,8 +1321,7 @@ provides the following additional features:
   the "negative alias" of :option:`--verbose`, then :option:`--quiet` on the
   command line sets *verbose* to false.
 
-.. XXX Should be replaced with :mod:`optparse`.
-
+.. XXX Should be replaced with optparse
 
 .. function:: fancy_getopt(options, negative_opt, object, args)
 
@@ -1736,7 +1745,7 @@ Subclasses of :class:`Command` must define the following methods.
    Set final values for all the options that this command supports. This is
    always called as late as possible, ie.  after any option assignments from the
    command-line or from other commands have been done.  Thus, this is the place
-   to to code option dependencies: if *foo* depends on *bar*, then it is safe to
+   to code option dependencies: if *foo* depends on *bar*, then it is safe to
    set *foo* from *bar* as long as *foo* still has the same value it was
    assigned in :meth:`initialize_options`.
 
@@ -1815,7 +1824,7 @@ Subclasses of :class:`Command` must define the following methods.
 .. module:: distutils.command.bdist_msi
    :synopsis: Build a binary distribution as a Windows MSI file
 
-.. class:: bdist_msi(Command)
+.. class:: bdist_msi
 
    Builds a `Windows Installer`_ (.msi) binary package.
 
@@ -1894,9 +1903,9 @@ Subclasses of :class:`Command` must define the following methods.
    :synopsis: Build the .py/.pyc files of a package
 
 
-.. class:: build_py(Command)
+.. class:: build_py
 
-.. class:: build_py_2to3(build_py)
+.. class:: build_py_2to3
 
    Alternative implementation of build_py which also runs the
    2to3 conversion library on each .py file that is going to be

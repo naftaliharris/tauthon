@@ -2,8 +2,6 @@
 
 #include "Python.h"
 #include "frameobject.h"
-#include "genobject.h"
-#include "ceval.h"
 #include "structmember.h"
 #include "opcode.h"
 
@@ -102,6 +100,17 @@ gen_send_ex(PyGenObject *gen, PyObject *arg, int exc)
 
     if (!result || f->f_stacktop == NULL) {
         /* generator can't be rerun, so release the frame */
+        /* first clean reference cycle through stored exception traceback */
+        PyObject *t, *v, *tb;
+        t = f->f_exc_type;
+        v = f->f_exc_value;
+        tb = f->f_exc_traceback;
+        f->f_exc_type = NULL;
+        f->f_exc_value = NULL;
+        f->f_exc_traceback = NULL;
+        Py_XDECREF(t);
+        Py_XDECREF(v);
+        Py_XDECREF(tb);
         Py_DECREF(f);
         gen->gi_frame = NULL;
     }
@@ -223,8 +232,9 @@ gen_throw(PyGenObject *gen, PyObject *args)
 
     /* First, check the traceback argument, replacing None with
        NULL. */
-    if (tb == Py_None)
+    if (tb == Py_None) {
         tb = NULL;
+    }
     else if (tb != NULL && !PyTraceBack_Check(tb)) {
         PyErr_SetString(PyExc_TypeError,
             "throw() third argument must be a traceback object");
@@ -235,9 +245,8 @@ gen_throw(PyGenObject *gen, PyObject *args)
     Py_XINCREF(val);
     Py_XINCREF(tb);
 
-    if (PyExceptionClass_Check(typ)) {
+    if (PyExceptionClass_Check(typ))
         PyErr_NormalizeException(&typ, &val, &tb);
-    }
 
     else if (PyExceptionInstance_Check(typ)) {
         /* Raising an instance.  The value should be a dummy. */
@@ -252,6 +261,10 @@ gen_throw(PyGenObject *gen, PyObject *args)
             val = typ;
             typ = PyExceptionInstance_Class(typ);
             Py_INCREF(typ);
+
+            if (tb == NULL)
+                /* Returns NULL if there's no traceback */
+                tb = PyException_GetTraceback(val);
         }
     }
     else {

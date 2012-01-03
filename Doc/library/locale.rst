@@ -22,19 +22,19 @@ The :mod:`locale` module defines the following exception and functions:
 
 .. exception:: Error
 
-   Exception raised when :func:`setlocale` fails.
+   Exception raised when the locale passed to :func:`setlocale` is not
+   recognized.
 
 
 .. function:: setlocale(category, locale=None)
 
-   If *locale* is specified, it may be a string, a tuple of the form ``(language
-   code, encoding)``, or ``None``. If it is a tuple, it is converted to a string
-   using the locale aliasing engine.  If *locale* is given and not ``None``,
-   :func:`setlocale` modifies the locale setting for the *category*.  The available
-   categories are listed in the data description below.  The value is the name of a
-   locale.  An empty string specifies the user's default settings. If the
-   modification of the locale fails, the exception :exc:`Error` is raised.  If
-   successful, the new locale setting is returned.
+   If *locale* is given and not ``None``, :func:`setlocale` modifies the locale
+   setting for the *category*. The available categories are listed in the data
+   description below. *locale* may be a string, or an iterable of two strings
+   (language code and encoding). If it's an iterable, it's converted to a locale
+   name using the locale aliasing engine. An empty string specifies the user's
+   default settings. If the modification of the locale fails, the exception
+   :exc:`Error` is raised. If successful, the new locale setting is returned.
 
    If *locale* is omitted or ``None``, the current setting for *category* is
    returned.
@@ -215,7 +215,7 @@ The :mod:`locale` module defines the following exception and functions:
 
       .. note::
 
-         The expression is in the syntax suitable for the :cfunc:`regex` function
+         The expression is in the syntax suitable for the :c:func:`regex` function
          from the C library, which might differ from the syntax used in :mod:`re`.
 
    .. data:: NOEXPR
@@ -535,7 +535,7 @@ catalogs, and the C library's search algorithms for locating message catalogs.
 Python applications should normally find no need to invoke these functions, and
 should use :mod:`gettext` instead.  A known exception to this rule are
 applications that link with additional C libraries which internally invoke
-:cfunc:`gettext` or :func:`dcgettext`.  For these applications, it may be
+:c:func:`gettext` or :func:`dcgettext`.  For these applications, it may be
 necessary to bind the text domain, so that the libraries can properly locate
 their message catalogs.
 

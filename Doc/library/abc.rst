@@ -7,8 +7,12 @@
 .. sectionauthor:: Georg Brandl
 .. much of the content adapted from docstrings
 
-This module provides the infrastructure for defining an :term:`abstract base
-class` (ABCs) in Python, as outlined in :pep:`3119`; see the PEP for why this
+**Source code:** :source:`Lib/abc.py`
+
+--------------
+
+This module provides the infrastructure for defining :term:`abstract base
+classes <abstract base class>` (ABCs) in Python, as outlined in :pep:`3119`; see the PEP for why this
 was added to Python. (See also :pep:`3141` and the :mod:`numbers` module
 regarding a type hierarchy for numbers based on ABCs.)
 
@@ -122,7 +126,7 @@ This module provides the following class:
 
 It also provides the following decorators:
 
-.. function:: abstractmethod(function)
+.. decorator:: abstractmethod(function)
 
    A decorator indicating abstract methods.
 
@@ -155,6 +159,36 @@ It also provides the following decorators:
       overrides it.  This could be useful as an end-point for a
       super-call in a framework that uses cooperative
       multiple-inheritance.
+
+
+.. decorator:: abstractclassmethod(function)
+
+   A subclass of the built-in :func:`classmethod`, indicating an abstract
+   classmethod. Otherwise it is similar to :func:`abstractmethod`.
+
+   Usage::
+
+      class C(metaclass=ABCMeta):
+          @abstractclassmethod
+          def my_abstract_classmethod(cls, ...):
+              ...
+
+   .. versionadded:: 3.2
+
+
+.. decorator:: abstractstaticmethod(function)
+
+   A subclass of the built-in :func:`staticmethod`, indicating an abstract
+   staticmethod. Otherwise it is similar to :func:`abstractmethod`.
+
+   Usage::
+
+      class C(metaclass=ABCMeta):
+          @abstractstaticmethod
+          def my_abstract_staticmethod(...):
+              ...
+
+   .. versionadded:: 3.2
 
 
 .. function:: abstractproperty(fget=None, fset=None, fdel=None, doc=None)

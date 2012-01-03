@@ -81,33 +81,11 @@ Support was also added for third-party tools like `PyYAML <http://pyyaml.org/>`_
       PEP written by Armin Ronacher and Raymond Hettinger.  Implementation
       written by Raymond Hettinger.
 
-Since an ordered dictionary remembers its insertion order, it can be used
-in conjuction with sorting to make a sorted dictionary::
-
-    >>> # regular unsorted dictionary
-    >>> d = {'banana': 3, 'apple':4, 'pear': 1, 'orange': 2}
-
-    >>> # dictionary sorted by key
-    >>> OrderedDict(sorted(d.items(), key=lambda t: t[0]))
-    OrderedDict([('apple', 4), ('banana', 3), ('orange', 2), ('pear', 1)])
-
-    >>> # dictionary sorted by value
-    >>> OrderedDict(sorted(d.items(), key=lambda t: t[1]))
-    OrderedDict([('pear', 1), ('orange', 2), ('banana', 3), ('apple', 4)])
-
-    >>> # dictionary sorted by length of the key string
-    >>> OrderedDict(sorted(d.items(), key=lambda t: len(t[0])))
-    OrderedDict([('pear', 1), ('apple', 4), ('orange', 2), ('banana', 3)])
-
-The new sorted dictionaries maintain their sort order when entries
-are deleted.  But when new keys are added, the keys are appended
-to the end and the sort is not maintained.
-
 
 PEP 378: Format Specifier for Thousands Separator
 =================================================
 
-The builtin :func:`format` function and the :meth:`str.format` method use
+The built-in :func:`format` function and the :meth:`str.format` method use
 a mini-language that now includes a simple, non-locale aware way to format
 a number with a thousands separator.  That provides a way to humanize a
 program's output, improving its professional appearance and readability::
@@ -519,21 +497,21 @@ Changes to Python's build process and to the C API include:
 
   (Contributed by Mark Dickinson; :issue:`4258`.)
 
-* The :cfunc:`PyLong_AsUnsignedLongLong()` function now handles a negative
+* The :c:func:`PyLong_AsUnsignedLongLong()` function now handles a negative
   *pylong* by raising :exc:`OverflowError` instead of :exc:`TypeError`.
 
   (Contributed by Mark Dickinson and Lisandro Dalcrin; :issue:`5175`.)
 
-* Deprecated :cfunc:`PyNumber_Int`.  Use :cfunc:`PyNumber_Long` instead.
+* Deprecated :c:func:`PyNumber_Int`.  Use :c:func:`PyNumber_Long` instead.
 
   (Contributed by Mark Dickinson; :issue:`4910`.)
 
-* Added a new :cfunc:`PyOS_string_to_double` function to replace the
-  deprecated functions :cfunc:`PyOS_ascii_strtod` and :cfunc:`PyOS_ascii_atof`.
+* Added a new :c:func:`PyOS_string_to_double` function to replace the
+  deprecated functions :c:func:`PyOS_ascii_strtod` and :c:func:`PyOS_ascii_atof`.
 
   (Contributed by Mark Dickinson; :issue:`5914`.)
 
-* Added :ctype:`PyCapsule` as a replacement for the :ctype:`PyCObject` API.
+* Added :c:type:`PyCapsule` as a replacement for the :c:type:`PyCObject` API.
   The principal difference is that the new type has a well defined interface
   for passing typing safety information and a less complicated signature
   for calling a destructor.  The old type had a problematic API and is now

@@ -42,7 +42,7 @@ class ArrayTestCase(unittest.TestCase):
 
         CharArray = ARRAY(c_char, 3)
 
-        ca = CharArray("a", "b", "c")
+        ca = CharArray(b"a", b"b", b"c")
 
         # Should this work? It doesn't:
         # CharArray("abc")
@@ -89,7 +89,7 @@ class ArrayTestCase(unittest.TestCase):
 
     def test_from_address(self):
         # Failed with 0.9.8, reported by JUrner
-        p = create_string_buffer("foo")
+        p = create_string_buffer(b"foo")
         sz = (c_char * 3).from_address(addressof(p))
         self.assertEqual(sz[:], b"foo")
         self.assertEqual(sz[::], b"foo")
@@ -126,6 +126,58 @@ class ArrayTestCase(unittest.TestCase):
         t1 = my_int * 1
         t2 = my_int * 1
         self.assertTrue(t1 is t2)
+
+    def test_subclass(self):
+        class T(Array):
+            _type_ = c_int
+            _length_ = 13
+        class U(T):
+            pass
+        class V(U):
+            pass
+        class W(V):
+            pass
+        class X(T):
+            _type_ = c_short
+        class Y(T):
+            _length_ = 187
+
+        for c in [T, U, V, W]:
+            self.assertEqual(c._type_, c_int)
+            self.assertEqual(c._length_, 13)
+            self.assertEqual(c()._type_, c_int)
+            self.assertEqual(c()._length_, 13)
+
+        self.assertEqual(X._type_, c_short)
+        self.assertEqual(X._length_, 13)
+        self.assertEqual(X()._type_, c_short)
+        self.assertEqual(X()._length_, 13)
+
+        self.assertEqual(Y._type_, c_int)
+        self.assertEqual(Y._length_, 187)
+        self.assertEqual(Y()._type_, c_int)
+        self.assertEqual(Y()._length_, 187)
+
+    def test_bad_subclass(self):
+        import sys
+
+        with self.assertRaises(AttributeError):
+            class T(Array):
+                pass
+        with self.assertRaises(AttributeError):
+            class T(Array):
+                _type_ = c_int
+        with self.assertRaises(AttributeError):
+            class T(Array):
+                _length_ = 13
+        with self.assertRaises(OverflowError):
+            class T(Array):
+                _type_ = c_int
+                _length_ = sys.maxsize * 2
+        with self.assertRaises(AttributeError):
+            class T(Array):
+                _type_ = c_int
+                _length_ = 1.87
 
 if __name__ == '__main__':
     unittest.main()

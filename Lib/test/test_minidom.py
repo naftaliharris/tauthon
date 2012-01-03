@@ -1,9 +1,7 @@
 # test for xml.dom.minidom
 
-import os
-import sys
 import pickle
-from test.support import verbose, run_unittest
+from test.support import verbose, run_unittest, findfile
 import unittest
 
 import xml.dom
@@ -14,12 +12,8 @@ from xml.dom.minidom import parse, Node, Document, parseString
 from xml.dom.minidom import getDOMImplementation
 
 
-if __name__ == "__main__":
-    base = sys.argv[0]
-else:
-    base = __file__
-tstfile = os.path.join(os.path.dirname(base), "test.xml")
-del base
+tstfile = findfile("test.xml", subdir="xmltestdata")
+
 
 # The tests of DocumentType importing use these helpers to construct
 # the documents to work with, since not all DOM builders actually
@@ -59,9 +53,10 @@ class MinidomTest(unittest.TestCase):
         self.confirm(t == s, "looking for %s, found %s" % (repr(s), repr(t)))
 
     def testParseFromFile(self):
-        dom = parse(open(tstfile))
-        dom.unlink()
-        self.confirm(isinstance(dom, Document))
+        with open(tstfile) as file:
+            dom = parse(file)
+            dom.unlink()
+            self.confirm(isinstance(dom, Document))
 
     def testGetElementsByTagName(self):
         dom = parse(tstfile)
@@ -214,7 +209,14 @@ class MinidomTest(unittest.TestCase):
 
     def testUnlink(self):
         dom = parse(tstfile)
+        self.assertTrue(dom.childNodes)
         dom.unlink()
+        self.assertFalse(dom.childNodes)
+
+    def testContext(self):
+        with parse(tstfile) as dom:
+            self.assertTrue(dom.childNodes)
+        self.assertFalse(dom.childNodes)
 
     def testElement(self):
         dom = Document()
@@ -418,7 +420,7 @@ class MinidomTest(unittest.TestCase):
         string1 = repr(el)
         string2 = str(el)
         self.confirm(string1 == string2)
-        self.confirm(string1.find("slash:abc") != -1)
+        self.confirm("slash:abc" in string1)
         dom.unlink()
 
     def testAttributeRepr(self):
@@ -443,6 +445,40 @@ class MinidomTest(unittest.TestCase):
         domstr = dom.toprettyxml(newl="\r\n")
         dom.unlink()
         self.confirm(domstr == str.replace("\n", "\r\n"))
+
+    def test_toprettyxml_with_text_nodes(self):
+        # see issue #4147, text nodes are not indented
+        decl = '<?xml version="1.0" ?>\n'
+        self.assertEqual(parseString('<B>A</B>').toprettyxml(),
+                         decl + '<B>A</B>\n')
+        self.assertEqual(parseString('<C>A<B>A</B></C>').toprettyxml(),
+                         decl + '<C>\n\tA\n\t<B>A</B>\n</C>\n')
+        self.assertEqual(parseString('<C><B>A</B>A</C>').toprettyxml(),
+                         decl + '<C>\n\t<B>A</B>\n\tA\n</C>\n')
+        self.assertEqual(parseString('<C><B>A</B><B>A</B></C>').toprettyxml(),
+                         decl + '<C>\n\t<B>A</B>\n\t<B>A</B>\n</C>\n')
+        self.assertEqual(parseString('<C><B>A</B>A<B>A</B></C>').toprettyxml(),
+                         decl + '<C>\n\t<B>A</B>\n\tA\n\t<B>A</B>\n</C>\n')
+
+    def test_toprettyxml_with_adjacent_text_nodes(self):
+        # see issue #4147, adjacent text nodes are indented normally
+        dom = Document()
+        elem = dom.createElement('elem')
+        elem.appendChild(dom.createTextNode('TEXT'))
+        elem.appendChild(dom.createTextNode('TEXT'))
+        dom.appendChild(elem)
+        decl = '<?xml version="1.0" ?>\n'
+        self.assertEqual(dom.toprettyxml(),
+                         decl + '<elem>\n\tTEXT\n\tTEXT\n</elem>\n')
+
+    def test_toprettyxml_preserves_content_of_text_node(self):
+        # see issue #4147
+        for str in ('<B>A</B>', '<A><B>C</B></A>'):
+            dom = parseString(str)
+            dom2 = parseString(dom.toprettyxml())
+            self.assertEqual(
+                dom.getElementsByTagName('B')[0].childNodes[0].toxml(),
+                dom2.getElementsByTagName('B')[0].childNodes[0].toxml())
 
     def testProcessingInstruction(self):
         dom = parseString('<e><?mypi \t\n data \t\n ?></e>')
@@ -930,12 +966,20 @@ class MinidomTest(unittest.TestCase):
         doc.unlink()
 
 
+    def testBug0777884(self):
+        doc = parseString("<o>text</o>")
+        text = doc.documentElement.childNodes[0]
+        self.assertEqual(text.nodeType, Node.TEXT_NODE)
+        # Should run quietly, doing nothing.
+        text.normalize()
+        doc.unlink()
+
     def testBug1433694(self):
         doc = parseString("<o><i/>t</o>")
         node = doc.documentElement
         node.childNodes[1].nodeValue = ""
         node.normalize()
-        self.confirm(node.childNodes[-1].nextSibling == None,
+        self.confirm(node.childNodes[-1].nextSibling is None,
                      "Final child's .nextSibling should be None")
 
     def testSiblings(self):
@@ -1435,12 +1479,13 @@ class MinidomTest(unittest.TestCase):
                 self.confirm(len(n1.entities) == len(n2.entities)
                         and len(n1.notations) == len(n2.notations))
                 for i in range(len(n1.notations)):
+                    # XXX this loop body doesn't seem to be executed?
                     no1 = n1.notations.item(i)
                     no2 = n1.notations.item(i)
                     self.confirm(no1.name == no2.name
                             and no1.publicId == no2.publicId
                             and no1.systemId == no2.systemId)
-                    statck.append((no1, no2))
+                    stack.append((no1, no2))
                 for i in range(len(n1.entities)):
                     e1 = n1.entities.item(i)
                     e2 = n2.entities.item(i)

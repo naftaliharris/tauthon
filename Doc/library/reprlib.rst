@@ -1,11 +1,13 @@
 :mod:`reprlib` --- Alternate :func:`repr` implementation
 ========================================================
 
-
 .. module:: reprlib
    :synopsis: Alternate repr() implementation with size limits.
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/reprlib.py`
+
+--------------
 
 The :mod:`reprlib` module provides a means for producing object representations
 with limits on the size of the resulting strings. This is used in the Python
@@ -35,13 +37,36 @@ This module provides a class, an instance, and a function:
    similar to that returned by the built-in function of the same name, but with
    limits on most sizes.
 
+In addition to size-limiting tools, the module also provides a decorator for
+detecting recursive calls to :meth:`__repr__` and substituting a placeholder
+string instead.
+
+.. decorator:: recursive_repr(fillvalue="...")
+
+   Decorator for :meth:`__repr__` methods to detect recursive calls within the
+   same thread.  If a recursive call is made, the *fillvalue* is returned,
+   otherwise, the usual :meth:`__repr__` call is made.  For example:
+
+        >>> class MyList(list):
+        ...     @recursive_repr()
+        ...      def __repr__(self):
+        ...          return '<' + '|'.join(map(repr, self)) + '>'
+        ...
+        >>> m = MyList('abc')
+        >>> m.append(m)
+        >>> m.append('x')
+        >>> print(m)
+        <'a'|'b'|'c'|...|'x'>
+
+   .. versionadded:: 3.2
+
 
 .. _repr-objects:
 
 Repr Objects
 ------------
 
-:class:`Repr` instances provide several members which can be used to provide
+:class:`Repr` instances provide several attributes which can be used to provide
 size limits for the representations of different object types,  and methods
 which format specific object types.
 
