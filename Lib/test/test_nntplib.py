@@ -1,4 +1,5 @@
 import io
+import socket
 import datetime
 import textwrap
 import unittest
@@ -250,6 +251,26 @@ class NetworkedNNTPTestsMixin:
             # Need to use a closure so that meth remains bound to its current
             # value
             setattr(cls, name, wrap_meth(meth))
+
+    def test_with_statement(self):
+        def is_connected():
+            if not hasattr(server, 'file'):
+                return False
+            try:
+                server.help()
+            except (socket.error, EOFError):
+                return False
+            return True
+
+        with self.NNTP_CLASS(self.NNTP_HOST, timeout=TIMEOUT, usenetrc=False) as server:
+            self.assertTrue(is_connected())
+            self.assertTrue(server.help())
+        self.assertFalse(is_connected())
+
+        with self.NNTP_CLASS(self.NNTP_HOST, timeout=TIMEOUT, usenetrc=False) as server:
+            server.quit()
+        self.assertFalse(is_connected())
+
 
 NetworkedNNTPTestsMixin.wrap_methods()
 
@@ -812,7 +833,7 @@ class NNTPv1v2TestsMixin:
 
     def _check_article_body(self, lines):
         self.assertEqual(len(lines), 4)
-        self.assertEqual(lines[-1].decode('utf8'), "-- Signed by André.")
+        self.assertEqual(lines[-1].decode('utf-8'), "-- Signed by André.")
         self.assertEqual(lines[-2], b"")
         self.assertEqual(lines[-3], b".Here is a dot-starting line.")
         self.assertEqual(lines[-4], b"This is just a test article.")
@@ -1011,12 +1032,12 @@ class NNTPv1v2TestsMixin:
         self.assertEqual(resp, success_resp)
         # With an iterable of terminated lines
         def iterlines(b):
-            return iter(b.splitlines(True))
+            return iter(b.splitlines(keepends=True))
         resp = self._check_post_ihave_sub(func, *args, file_factory=iterlines)
         self.assertEqual(resp, success_resp)
         # With an iterable of non-terminated lines
         def iterlines(b):
-            return iter(b.splitlines(False))
+            return iter(b.splitlines(keepends=False))
         resp = self._check_post_ihave_sub(func, *args, file_factory=iterlines)
         self.assertEqual(resp, success_resp)
 
