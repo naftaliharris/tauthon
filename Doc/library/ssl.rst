@@ -53,9 +53,53 @@ Functions, Constants, and Exceptions
    (currently provided by the OpenSSL library).  This signifies some
    problem in the higher-level encryption and authentication layer that's
    superimposed on the underlying network connection.  This error
-   is a subtype of :exc:`socket.error`, which in turn is a subtype of
-   :exc:`IOError`.  The error code and message of :exc:`SSLError` instances
-   are provided by the OpenSSL library.
+   is a subtype of :exc:`OSError`.  The error code and message of
+   :exc:`SSLError` instances are provided by the OpenSSL library.
+
+   .. versionchanged:: 3.3
+      :exc:`SSLError` used to be a subtype of :exc:`socket.error`.
+
+.. exception:: SSLZeroReturnError
+
+   A subclass of :exc:`SSLError` raised when trying to read or write and
+   the SSL connection has been closed cleanly.  Note that this doesn't
+   mean that the underlying transport (read TCP) has been closed.
+
+   .. versionadded:: 3.3
+
+.. exception:: SSLWantReadError
+
+   A subclass of :exc:`SSLError` raised by a :ref:`non-blocking SSL socket
+   <ssl-nonblocking>` when trying to read or write data, but more data needs
+   to be received on the underlying TCP transport before the request can be
+   fulfilled.
+
+   .. versionadded:: 3.3
+
+.. exception:: SSLWantWriteError
+
+   A subclass of :exc:`SSLError` raised by a :ref:`non-blocking SSL socket
+   <ssl-nonblocking>` when trying to read or write data, but more data needs
+   to be sent on the underlying TCP transport before the request can be
+   fulfilled.
+
+   .. versionadded:: 3.3
+
+.. exception:: SSLSyscallError
+
+   A subclass of :exc:`SSLError` raised when a system error was encountered
+   while trying to fulfill an operation on a SSL socket.  Unfortunately,
+   there is no easy way to inspect the original errno number.
+
+   .. versionadded:: 3.3
+
+.. exception:: SSLEOFError
+
+   A subclass of :exc:`SSLError` raised when the SSL connection has been
+   terminated abruptly.  Generally, you shouldn't try to reuse the underlying
+   transport when this error is encountered.
+
+   .. versionadded:: 3.3
 
 .. exception:: CertificateError
 
@@ -162,6 +206,35 @@ instead.
 Random generation
 ^^^^^^^^^^^^^^^^^
 
+.. function:: RAND_bytes(num)
+
+   Returns *num* cryptographically strong pseudo-random bytes. Raises an
+   :class:`SSLError` if the PRNG has not been seeded with enough data or if the
+   operation is not supported by the current RAND method. :func:`RAND_status`
+   can be used to check the status of the PRNG and :func:`RAND_add` can be used
+   to seed the PRNG.
+
+   Read the Wikipedia article, `Cryptographically secure pseudorandom number
+   generator (CSPRNG)
+   <http://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator>`_,
+   to get the requirements of a cryptographically generator.
+
+   .. versionadded:: 3.3
+
+.. function:: RAND_pseudo_bytes(num)
+
+   Returns (bytes, is_cryptographic): bytes are *num* pseudo-random bytes,
+   is_cryptographic is True if the bytes generated are cryptographically
+   strong. Raises an :class:`SSLError` if the operation is not supported by the
+   current RAND method.
+
+   Generated pseudo-random byte sequences will be unique if they are of
+   sufficient length, but are not necessarily unpredictable. They can be used
+   for non-cryptographic purposes and for certain purposes in cryptographic
+   protocols, but usually not for key generation etc.
+
+   .. versionadded:: 3.3
+
 .. function:: RAND_status()
 
    Returns True if the SSL pseudo-random number generator has been seeded with
@@ -171,7 +244,7 @@ Random generation
 
 .. function:: RAND_egd(path)
 
-   If you are running an entropy-gathering daemon (EGD) somewhere, and ``path``
+   If you are running an entropy-gathering daemon (EGD) somewhere, and *path*
    is the pathname of a socket connection open to it, this will read 256 bytes
    of randomness from the socket, and add it to the SSL pseudo-random number
    generator to increase the security of generated secret keys.  This is
@@ -182,8 +255,8 @@ Random generation
 
 .. function:: RAND_add(bytes, entropy)
 
-   Mixes the given ``bytes`` into the SSL pseudo-random number generator.  The
-   parameter ``entropy`` (a float) is a lower bound on the entropy contained in
+   Mixes the given *bytes* into the SSL pseudo-random number generator.  The
+   parameter *entropy* (a float) is a lower bound on the entropy contained in
    string (so you can always use :const:`0.0`).  See :rfc:`1750` for more
    information on sources of entropy.
 
@@ -238,6 +311,9 @@ Certificate handling
    same format as used for the same parameter in :func:`wrap_socket`.  The call
    will attempt to validate the server certificate against that set of root
    certificates, and will fail if the validation attempt fails.
+
+   .. versionchanged:: 3.3
+      This function is now IPv6-compatible.
 
 .. function:: DER_cert_to_PEM_cert(DER_cert_bytes)
 
@@ -345,6 +421,46 @@ Constants
 
    .. versionadded:: 3.2
 
+.. data:: OP_CIPHER_SERVER_PREFERENCE
+
+   Use the server's cipher ordering preference, rather than the client's.
+   This option has no effect on client sockets and SSLv2 server sockets.
+
+   .. versionadded:: 3.3
+
+.. data:: OP_SINGLE_DH_USE
+
+   Prevents re-use of the same DH key for distinct SSL sessions.  This
+   improves forward secrecy but requires more computational resources.
+   This option only applies to server sockets.
+
+   .. versionadded:: 3.3
+
+.. data:: OP_SINGLE_ECDH_USE
+
+   Prevents re-use of the same ECDH key for distinct SSL sessions.  This
+   improves forward secrecy but requires more computational resources.
+   This option only applies to server sockets.
+
+   .. versionadded:: 3.3
+
+.. data:: OP_NO_COMPRESSION
+
+   Disable compression on the SSL channel.  This is useful if the application
+   protocol supports its own compression scheme.
+
+   This option is only available with OpenSSL 1.0.0 and later.
+
+   .. versionadded:: 3.3
+
+.. data:: HAS_ECDH
+
+   Whether the OpenSSL library has built-in support for Elliptic Curve-based
+   Diffie-Hellman key exchange.  This should be true unless the feature was
+   explicitly disabled by the distributor.
+
+   .. versionadded:: 3.3
+
 .. data:: HAS_SNI
 
    Whether the OpenSSL library has built-in support for the *Server Name
@@ -353,6 +469,13 @@ Constants
    :meth:`SSLContext.wrap_socket`.
 
    .. versionadded:: 3.2
+
+.. data:: CHANNEL_BINDING_TYPES
+
+   List of supported TLS channel binding types.  Strings in this list
+   can be used as arguments to :meth:`SSLSocket.get_channel_binding`.
+
+   .. versionadded:: 3.3
 
 .. data:: OPENSSL_VERSION
 
@@ -463,6 +586,28 @@ SSL sockets also have the following additional methods and attributes:
    version of the SSL protocol that defines its use, and the number of secret
    bits being used.  If no connection has been established, returns ``None``.
 
+.. method:: SSLSocket.compression()
+
+   Return the compression algorithm being used as a string, or ``None``
+   if the connection isn't compressed.
+
+   If the higher-level protocol supports its own compression mechanism,
+   you can use :data:`OP_NO_COMPRESSION` to disable SSL-level compression.
+
+   .. versionadded:: 3.3
+
+.. method:: SSLSocket.get_channel_binding(cb_type="tls-unique")
+
+   Get channel binding data for current connection, as a bytes object.  Returns
+   ``None`` if not connected or the handshake has not been completed.
+
+   The *cb_type* parameter allow selection of the desired channel binding
+   type. Valid channel binding types are listed in the
+   :data:`CHANNEL_BINDING_TYPES` list.  Currently only the 'tls-unique' channel
+   binding, defined by :rfc:`5929`, is supported.  :exc:`ValueError` will be
+   raised if an unsupported channel binding type is requested.
+
+   .. versionadded:: 3.3
 
 .. method:: SSLSocket.unwrap()
 
@@ -502,7 +647,7 @@ to speed up repeated connections from the same clients.
 
 :class:`SSLContext` objects have the following methods and attributes:
 
-.. method:: SSLContext.load_cert_chain(certfile, keyfile=None)
+.. method:: SSLContext.load_cert_chain(certfile, keyfile=None, password=None)
 
    Load a private key and the corresponding certificate.  The *certfile*
    string must be the path to a single file in PEM format containing the
@@ -513,8 +658,24 @@ to speed up repeated connections from the same clients.
    :ref:`ssl-certificates` for more information on how the certificate
    is stored in the *certfile*.
 
+   The *password* argument may be a function to call to get the password for
+   decrypting the private key.  It will only be called if the private key is
+   encrypted and a password is necessary.  It will be called with no arguments,
+   and it should return a string, bytes, or bytearray.  If the return value is
+   a string it will be encoded as UTF-8 before using it to decrypt the key.
+   Alternatively a string, bytes, or bytearray value may be supplied directly
+   as the *password* argument.  It will be ignored if the private key is not
+   encrypted and no password is needed.
+
+   If the *password* argument is not specified and a password is required,
+   OpenSSL's built-in password prompting mechanism will be used to
+   interactively prompt the user for a password.
+
    An :class:`SSLError` is raised if the private key doesn't
    match with the certificate.
+
+   .. versionchanged:: 3.3
+      New optional argument *password*.
 
 .. method:: SSLContext.load_verify_locations(cafile=None, capath=None)
 
@@ -553,6 +714,38 @@ to speed up repeated connections from the same clients.
    .. note::
       when connected, the :meth:`SSLSocket.cipher` method of SSL sockets will
       give the currently selected cipher.
+
+.. method:: SSLContext.load_dh_params(dhfile)
+
+   Load the key generation parameters for Diffie-Helman (DH) key exchange.
+   Using DH key exchange improves forward secrecy at the expense of
+   computational resources (both on the server and on the client).
+   The *dhfile* parameter should be the path to a file containing DH
+   parameters in PEM format.
+
+   This setting doesn't apply to client sockets.  You can also use the
+   :data:`OP_SINGLE_DH_USE` option to further improve security.
+
+   .. versionadded:: 3.3
+
+.. method:: SSLContext.set_ecdh_curve(curve_name)
+
+   Set the curve name for Elliptic Curve-based Diffie-Hellman (ECDH) key
+   exchange.  ECDH is significantly faster than regular DH while arguably
+   as secure.  The *curve_name* parameter should be a string describing
+   a well-known elliptic curve, for example ``prime256v1`` for a widely
+   supported curve.
+
+   This setting doesn't apply to client sockets.  You can also use the
+   :data:`OP_SINGLE_ECDH_USE` option to further improve security.
+
+   This method is not available if :data:`HAS_ECDH` is False.
+
+   .. versionadded:: 3.3
+
+   .. seealso::
+      `SSL/TLS & Perfect Forward Secrecy <http://vincent.bernat.im/en/blog/2011-ssl-perfect-forward-secrecy.html>`_
+         Vincent Bernat.
 
 .. method:: SSLContext.wrap_socket(sock, server_side=False, \
       do_handshake_on_connect=True, suppress_ragged_eofs=True, \
@@ -933,13 +1126,10 @@ to be aware of:
         try:
             sock.do_handshake()
             break
-        except ssl.SSLError as err:
-            if err.args[0] == ssl.SSL_ERROR_WANT_READ:
-                select.select([sock], [], [])
-            elif err.args[0] == ssl.SSL_ERROR_WANT_WRITE:
-                select.select([], [sock], [])
-            else:
-                raise
+        except ssl.SSLWantReadError:
+            select.select([sock], [], [])
+        except ssl.SSLWantWriteError:
+            select.select([], [sock], [])
 
 
 .. _ssl-security:

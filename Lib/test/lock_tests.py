@@ -4,7 +4,7 @@ Various tests for synchronization primitives.
 
 import sys
 import time
-from _thread import start_new_thread, get_ident, TIMEOUT_MAX
+from _thread import start_new_thread, TIMEOUT_MAX
 import threading
 import unittest
 
@@ -31,7 +31,7 @@ class Bunch(object):
         self.finished = []
         self._can_exit = not wait_before_exit
         def task():
-            tid = get_ident()
+            tid = threading.get_ident()
             self.started.append(tid)
             try:
                 f()
@@ -247,6 +247,7 @@ class RLockTests(BaseLockTests):
         # Cannot release an unacquired lock
         lock = self.locktype()
         self.assertRaises(RuntimeError, lock.release)
+        self.assertRaises(RuntimeError, lock._release_save)
         lock.acquire()
         lock.acquire()
         lock.release()
@@ -254,6 +255,7 @@ class RLockTests(BaseLockTests):
         lock.release()
         lock.release()
         self.assertRaises(RuntimeError, lock.release)
+        self.assertRaises(RuntimeError, lock._release_save)
 
     def test_different_thread(self):
         # Cannot release from a different thread
