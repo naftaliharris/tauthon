@@ -4,10 +4,11 @@ import pickle
 import pickletools
 import sys
 import copyreg
+import weakref
 from http.cookies import SimpleCookie
 
 from test.support import (
-    TestFailed, TESTFN, run_with_locale,
+    TestFailed, TESTFN, run_with_locale, no_tracing,
     _2G, _4G, bigmemtest,
     )
 
@@ -18,7 +19,7 @@ from pickle import bytes_types
 # kind of outer loop.
 protocols = range(pickle.HIGHEST_PROTOCOL + 1)
 
-character_size = 4 if sys.maxunicode > 0xFFFF else 2
+ascii_char_size = 1
 
 
 # Return True if opcode code appears in the pickle, else False.
@@ -875,6 +876,25 @@ class AbstractPickleTests(unittest.TestCase):
                 self.assertEqual(B(x), B(y), detail)
                 self.assertEqual(x.__dict__, y.__dict__, detail)
 
+    def test_newobj_proxies(self):
+        # NEWOBJ should use the __class__ rather than the raw type
+        classes = myclasses[:]
+        # Cannot create weakproxies to these classes
+        for c in (MyInt, MyTuple):
+            classes.remove(c)
+        for proto in protocols:
+            for C in classes:
+                B = C.__base__
+                x = C(C.sample)
+                x.foo = 42
+                p = weakref.proxy(x)
+                s = self.dumps(p, proto)
+                y = self.loads(s)
+                self.assertEqual(type(y), type(x))  # rather than type(p)
+                detail = (proto, C, B, x, y, type(y))
+                self.assertEqual(B(x), B(y), detail)
+                self.assertEqual(x.__dict__, y.__dict__, detail)
+
     # Register a type with copyreg, with extension code extcode.  Pickle
     # an object of that type.  Check that the resulting pickle uses opcode
     # (EXT[124]) under proto 2, and not in proto 1.
@@ -1035,13 +1055,13 @@ class AbstractPickleTests(unittest.TestCase):
             y = self.loads(s)
             self.assertEqual(y._reduce_called, 1)
 
+    @no_tracing
     def test_bad_getattr(self):
         x = BadGetattr()
         for proto in 0, 1:
             self.assertRaises(RuntimeError, self.dumps, x, proto)
         # protocol 2 don't raise a RuntimeError.
         d = self.dumps(x, 2)
-        self.assertRaises(RuntimeError, self.loads, d)
 
     def test_reduce_bad_iterator(self):
         # Issue4176: crash when 4th and 5th items of __reduce__()
@@ -1131,6 +1151,15 @@ class AbstractPickleTests(unittest.TestCase):
         empty = self.loads(b'\x80\x03U\x00q\x00.', encoding='koi8-r')
         self.assertEqual(empty, '')
 
+    def test_int_pickling_efficiency(self):
+        # Test compacity of int representation (see issue #12744)
+        for proto in protocols:
+            sizes = [len(self.dumps(2**n, proto)) for n in range(70)]
+            # the size function is monotonic
+            self.assertEqual(sorted(sizes), sizes)
+            if proto >= 2:
+                self.assertLessEqual(sizes[-1], 14)
+
     def check_negative_32b_binXXX(self, dumped):
         if sys.maxsize > 2**32:
             self.skipTest("test is only meaningful on 32-bit builds")
@@ -1212,7 +1241,7 @@ class BigmemPickleTests(unittest.TestCase):
     # All protocols use 1-byte per printable ASCII character; we add another
     # byte because the encoded form has to be copied into the internal buffer.
 
-    @bigmemtest(size=_2G, memuse=2 + character_size, dry_run=False)
+    @bigmemtest(size=_2G, memuse=2 + ascii_char_size, dry_run=False)
     def test_huge_str_32b(self, size):
         data = "abcd" * (size // 4)
         try:
@@ -1229,7 +1258,7 @@ class BigmemPickleTests(unittest.TestCase):
     # BINUNICODE (protocols 1, 2 and 3) cannot carry more than
     # 2**32 - 1 bytes of utf-8 encoded unicode.
 
-    @bigmemtest(size=_4G, memuse=1 + character_size, dry_run=False)
+    @bigmemtest(size=_4G, memuse=1 + ascii_char_size, dry_run=False)
     def test_huge_str_64b(self, size):
         data = "a" * size
         try:
