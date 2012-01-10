@@ -40,9 +40,23 @@ Socket families
 Depending on the system and the build options, various socket families
 are supported by this module.
 
-Socket addresses are represented as follows:
+The address format required by a particular socket object is automatically
+selected based on the address family specified when the socket object was
+created.  Socket addresses are represented as follows:
 
-- A single string is used for the :const:`AF_UNIX` address family.
+- The address of an :const:`AF_UNIX` socket bound to a file system node
+  is represented as a string, using the file system encoding and the
+  ``'surrogateescape'`` error handler (see :pep:`383`).  An address in
+  Linux's abstract namespace is returned as a :class:`bytes` object with
+  an initial null byte; note that sockets in this namespace can
+  communicate with normal file system sockets, so programs intended to
+  run on Linux may need to deal with both types of address.  A string or
+  :class:`bytes` object can be used for either type of address when
+  passing it as an argument.
+
+   .. versionchanged:: 3.3
+      Previously, :const:`AF_UNIX` socket paths were assumed to use UTF-8
+      encoding.
 
 - A pair ``(host, port)`` is used for the :const:`AF_INET` address family,
   where *host* is a string representing either a hostname in Internet domain
@@ -80,6 +94,11 @@ Socket addresses are represented as follows:
     If *addr_type* is :const:`TIPC_ADDR_ID`, then *v1* is the node, *v2* is the
     reference, and *v3* should be set to 0.
 
+- A tuple ``(interface, )`` is used for the :const:`AF_CAN` address family,
+  where *interface* is a string representing a network interface name like
+  ``'can0'``. The network interface name ``''`` can be used to receive packets
+  from all network interfaces of this family.
+
 - Certain other address families (:const:`AF_BLUETOOTH`, :const:`AF_PACKET`)
   support specific representations.
 
@@ -99,8 +118,9 @@ resolution and/or the host configuration.  For deterministic behavior use a
 numeric address in *host* portion.
 
 All errors raise exceptions.  The normal exceptions for invalid argument types
-and out-of-memory conditions can be raised; errors related to socket or address
-semantics raise :exc:`socket.error` or one of its subclasses.
+and out-of-memory conditions can be raised; starting from Python 3.3, errors
+related to socket or address semantics raise :exc:`OSError` or one of its
+subclasses (they used to raise :exc:`socket.error`).
 
 Non-blocking mode is supported through :meth:`~socket.setblocking`.  A
 generalization of this based on timeouts is supported through
@@ -115,20 +135,15 @@ The module :mod:`socket` exports the following constants and functions:
 
 .. exception:: error
 
-   .. index:: module: errno
+   A deprecated alias of :exc:`OSError`.
 
-   A subclass of :exc:`IOError`, this exception is raised for socket-related
-   errors.  It is recommended that you inspect its ``errno`` attribute to
-   discriminate between different kinds of errors.
-
-   .. seealso::
-      The :mod:`errno` module contains symbolic names for the error codes
-      defined by the underlying operating system.
+   .. versionchanged:: 3.3
+      Following :pep:`3151`, this class was made an alias of :exc:`OSError`.
 
 
 .. exception:: herror
 
-   A subclass of :exc:`socket.error`, this exception is raised for
+   A subclass of :exc:`OSError`, this exception is raised for
    address-related errors, i.e. for functions that use *h_errno* in the POSIX
    C API, including :func:`gethostbyname_ex` and :func:`gethostbyaddr`.
    The accompanying value is a pair ``(h_errno, string)`` representing an
@@ -136,10 +151,12 @@ The module :mod:`socket` exports the following constants and functions:
    *string* represents the description of *h_errno*, as returned by the
    :c:func:`hstrerror` C function.
 
+   .. versionchanged:: 3.3
+      This class was made a subclass of :exc:`OSError`.
 
 .. exception:: gaierror
 
-   A subclass of :exc:`socket.error`, this exception is raised for
+   A subclass of :exc:`OSError`, this exception is raised for
    address-related errors by :func:`getaddrinfo` and :func:`getnameinfo`.
    The accompanying value is a pair ``(error, string)`` representing an error
    returned by a library call.  *string* represents the description of
@@ -147,15 +164,19 @@ The module :mod:`socket` exports the following constants and functions:
    numeric *error* value will match one of the :const:`EAI_\*` constants
    defined in this module.
 
+   .. versionchanged:: 3.3
+      This class was made a subclass of :exc:`OSError`.
 
 .. exception:: timeout
 
-   A subclass of :exc:`socket.error`, this exception is raised when a timeout
+   A subclass of :exc:`OSError`, this exception is raised when a timeout
    occurs on a socket which has had timeouts enabled via a prior call to
    :meth:`~socket.settimeout` (or implicitly through
    :func:`~socket.setdefaulttimeout`).  The accompanying value is a string
    whose value is currently always "timed out".
 
+   .. versionchanged:: 3.3
+      This class was made a subclass of :exc:`OSError`.
 
 .. data:: AF_UNIX
           AF_INET
@@ -198,6 +219,7 @@ The module :mod:`socket` exports the following constants and functions:
           SOMAXCONN
           MSG_*
           SOL_*
+          SCM_*
           IPPROTO_*
           IPPORT_*
           INADDR_*
@@ -214,6 +236,32 @@ The module :mod:`socket` exports the following constants and functions:
    methods of socket objects.  In most cases, only those symbols that are defined
    in the Unix header files are defined; for a few symbols, default values are
    provided.
+
+.. data:: AF_CAN
+          PF_CAN
+          SOL_CAN_*
+          CAN_*
+
+   Many constants of these forms, documented in the Linux documentation, are
+   also defined in the socket module.
+
+   Availability: Linux >= 2.6.25.
+
+   .. versionadded:: 3.3
+
+
+.. data:: AF_RDS
+          PF_RDS
+          SOL_RDS
+          RDS_*
+
+   Many constants of these forms, documented in the Linux documentation, are
+   also defined in the socket module.
+
+   Availability: Linux >= 2.6.30.
+
+   .. versionadded:: 3.3
+
 
 .. data:: SIO_*
           RCVALL_*
@@ -386,10 +434,15 @@ The module :mod:`socket` exports the following constants and functions:
 
    Create a new socket using the given address family, socket type and protocol
    number.  The address family should be :const:`AF_INET` (the default),
-   :const:`AF_INET6` or :const:`AF_UNIX`.  The socket type should be
-   :const:`SOCK_STREAM` (the default), :const:`SOCK_DGRAM` or perhaps one of the
-   other ``SOCK_`` constants.  The protocol number is usually zero and may be
-   omitted in that case.
+   :const:`AF_INET6`, :const:`AF_UNIX`, :const:`AF_CAN` or :const:`AF_RDS`. The
+   socket type should be :const:`SOCK_STREAM` (the default),
+   :const:`SOCK_DGRAM`, :const:`SOCK_RAW` or perhaps one of the other ``SOCK_``
+   constants. The protocol number is usually zero and may be omitted in that
+   case or :const:`CAN_RAW` in case the address family is :const:`AF_CAN`.
+
+   .. versionchanged:: 3.3
+      The AF_CAN family was added.
+      The AF_RDS family was added.
 
 
 .. function:: socketpair([family[, type[, proto]]])
@@ -457,7 +510,7 @@ The module :mod:`socket` exports the following constants and functions:
    Unix manual page :manpage:`inet(3)` for details.
 
    If the IPv4 address string passed to this function is invalid,
-   :exc:`socket.error` will be raised. Note that exactly what is valid depends on
+   :exc:`OSError` will be raised. Note that exactly what is valid depends on
    the underlying C implementation of :c:func:`inet_aton`.
 
    :func:`inet_aton` does not support IPv6, and :func:`inet_pton` should be used
@@ -474,7 +527,7 @@ The module :mod:`socket` exports the following constants and functions:
    argument.
 
    If the byte sequence passed to this function is not exactly 4 bytes in
-   length, :exc:`socket.error` will be raised. :func:`inet_ntoa` does not
+   length, :exc:`OSError` will be raised. :func:`inet_ntoa` does not
    support IPv6, and :func:`inet_ntop` should be used instead for IPv4/v6 dual
    stack support.
 
@@ -488,7 +541,7 @@ The module :mod:`socket` exports the following constants and functions:
 
    Supported values for *address_family* are currently :const:`AF_INET` and
    :const:`AF_INET6`. If the IP address string *ip_string* is invalid,
-   :exc:`socket.error` will be raised. Note that exactly what is valid depends on
+   :exc:`OSError` will be raised. Note that exactly what is valid depends on
    both the value of *address_family* and the underlying implementation of
    :c:func:`inet_pton`.
 
@@ -506,9 +559,52 @@ The module :mod:`socket` exports the following constants and functions:
    Supported values for *address_family* are currently :const:`AF_INET` and
    :const:`AF_INET6`. If the string *packed_ip* is not the correct length for the
    specified address family, :exc:`ValueError` will be raised.  A
-   :exc:`socket.error` is raised for errors from the call to :func:`inet_ntop`.
+   :exc:`OSError` is raised for errors from the call to :func:`inet_ntop`.
 
    Availability: Unix (maybe not all platforms).
+
+
+..
+   XXX: Are sendmsg(), recvmsg() and CMSG_*() available on any
+   non-Unix platforms?  The old (obsolete?) 4.2BSD form of the
+   interface, in which struct msghdr has no msg_control or
+   msg_controllen members, is not currently supported.
+
+.. function:: CMSG_LEN(length)
+
+   Return the total length, without trailing padding, of an ancillary
+   data item with associated data of the given *length*.  This value
+   can often be used as the buffer size for :meth:`~socket.recvmsg` to
+   receive a single item of ancillary data, but :rfc:`3542` requires
+   portable applications to use :func:`CMSG_SPACE` and thus include
+   space for padding, even when the item will be the last in the
+   buffer.  Raises :exc:`OverflowError` if *length* is outside the
+   permissible range of values.
+
+   Availability: most Unix platforms, possibly others.
+
+   .. versionadded:: 3.3
+
+
+.. function:: CMSG_SPACE(length)
+
+   Return the buffer size needed for :meth:`~socket.recvmsg` to
+   receive an ancillary data item with associated data of the given
+   *length*, along with any trailing padding.  The buffer space needed
+   to receive multiple items is the sum of the :func:`CMSG_SPACE`
+   values for their associated data lengths.  Raises
+   :exc:`OverflowError` if *length* is outside the permissible range
+   of values.
+
+   Note that some systems might support ancillary data without
+   providing this function.  Also note that setting the buffer size
+   using the results of this function may not precisely limit the
+   amount of ancillary data that can be received, since additional
+   data may be able to fit into the padding area.
+
+   Availability: most Unix platforms, possibly others.
+
+   .. versionadded:: 3.3
 
 
 .. function:: getdefaulttimeout()
@@ -524,6 +620,49 @@ The module :mod:`socket` exports the following constants and functions:
    the socket module is first imported, the default is ``None``.  See
    :meth:`~socket.settimeout` for possible values and their respective
    meanings.
+
+
+.. function:: sethostname(name)
+
+   Set the machine's hostname to *name*.  This will raise a
+   :exc:`OSError` if you don't have enough rights.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_nameindex()
+
+   Return a list of network interface information
+   (index int, name string) tuples.
+   :exc:`OSError` if the system call fails.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_nametoindex(if_name)
+
+   Return a network interface index number corresponding to an
+   interface name.
+   :exc:`OSError` if no interface with the given name exists.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: if_indextoname(if_index)
+
+   Return a network interface name corresponding to a
+   interface index number.
+   :exc:`OSError` if no interface with the given index exists.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. data:: SocketType
@@ -699,6 +838,109 @@ correspond to Unix system calls applicable to sockets.
    to zero. (The format of *address* depends on the address family --- see above.)
 
 
+.. method:: socket.recvmsg(bufsize[, ancbufsize[, flags]])
+
+   Receive normal data (up to *bufsize* bytes) and ancillary data from
+   the socket.  The *ancbufsize* argument sets the size in bytes of
+   the internal buffer used to receive the ancillary data; it defaults
+   to 0, meaning that no ancillary data will be received.  Appropriate
+   buffer sizes for ancillary data can be calculated using
+   :func:`CMSG_SPACE` or :func:`CMSG_LEN`, and items which do not fit
+   into the buffer might be truncated or discarded.  The *flags*
+   argument defaults to 0 and has the same meaning as for
+   :meth:`recv`.
+
+   The return value is a 4-tuple: ``(data, ancdata, msg_flags,
+   address)``.  The *data* item is a :class:`bytes` object holding the
+   non-ancillary data received.  The *ancdata* item is a list of zero
+   or more tuples ``(cmsg_level, cmsg_type, cmsg_data)`` representing
+   the ancillary data (control messages) received: *cmsg_level* and
+   *cmsg_type* are integers specifying the protocol level and
+   protocol-specific type respectively, and *cmsg_data* is a
+   :class:`bytes` object holding the associated data.  The *msg_flags*
+   item is the bitwise OR of various flags indicating conditions on
+   the received message; see your system documentation for details.
+   If the receiving socket is unconnected, *address* is the address of
+   the sending socket, if available; otherwise, its value is
+   unspecified.
+
+   On some systems, :meth:`sendmsg` and :meth:`recvmsg` can be used to
+   pass file descriptors between processes over an :const:`AF_UNIX`
+   socket.  When this facility is used (it is often restricted to
+   :const:`SOCK_STREAM` sockets), :meth:`recvmsg` will return, in its
+   ancillary data, items of the form ``(socket.SOL_SOCKET,
+   socket.SCM_RIGHTS, fds)``, where *fds* is a :class:`bytes` object
+   representing the new file descriptors as a binary array of the
+   native C :c:type:`int` type.  If :meth:`recvmsg` raises an
+   exception after the system call returns, it will first attempt to
+   close any file descriptors received via this mechanism.
+
+   Some systems do not indicate the truncated length of ancillary data
+   items which have been only partially received.  If an item appears
+   to extend beyond the end of the buffer, :meth:`recvmsg` will issue
+   a :exc:`RuntimeWarning`, and will return the part of it which is
+   inside the buffer provided it has not been truncated before the
+   start of its associated data.
+
+   On systems which support the :const:`SCM_RIGHTS` mechanism, the
+   following function will receive up to *maxfds* file descriptors,
+   returning the message data and a list containing the descriptors
+   (while ignoring unexpected conditions such as unrelated control
+   messages being received).  See also :meth:`sendmsg`. ::
+
+      import socket, array
+
+      def recv_fds(sock, msglen, maxfds):
+          fds = array.array("i")   # Array of ints
+          msg, ancdata, flags, addr = sock.recvmsg(msglen, socket.CMSG_LEN(maxfds * fds.itemsize))
+          for cmsg_level, cmsg_type, cmsg_data in ancdata:
+              if (cmsg_level == socket.SOL_SOCKET and cmsg_type == socket.SCM_RIGHTS):
+                  # Append data, ignoring any truncated integers at the end.
+                  fds.fromstring(cmsg_data[:len(cmsg_data) - (len(cmsg_data) % fds.itemsize)])
+          return msg, list(fds)
+
+   Availability: most Unix platforms, possibly others.
+
+   .. versionadded:: 3.3
+
+
+.. method:: socket.recvmsg_into(buffers[, ancbufsize[, flags]])
+
+   Receive normal data and ancillary data from the socket, behaving as
+   :meth:`recvmsg` would, but scatter the non-ancillary data into a
+   series of buffers instead of returning a new bytes object.  The
+   *buffers* argument must be an iterable of objects that export
+   writable buffers (e.g. :class:`bytearray` objects); these will be
+   filled with successive chunks of the non-ancillary data until it
+   has all been written or there are no more buffers.  The operating
+   system may set a limit (:func:`~os.sysconf` value ``SC_IOV_MAX``)
+   on the number of buffers that can be used.  The *ancbufsize* and
+   *flags* arguments have the same meaning as for :meth:`recvmsg`.
+
+   The return value is a 4-tuple: ``(nbytes, ancdata, msg_flags,
+   address)``, where *nbytes* is the total number of bytes of
+   non-ancillary data written into the buffers, and *ancdata*,
+   *msg_flags* and *address* are the same as for :meth:`recvmsg`.
+
+   Example::
+
+      >>> import socket
+      >>> s1, s2 = socket.socketpair()
+      >>> b1 = bytearray(b'----')
+      >>> b2 = bytearray(b'0123456789')
+      >>> b3 = bytearray(b'--------------')
+      >>> s1.send(b'Mary had a little lamb')
+      22
+      >>> s2.recvmsg_into([b1, memoryview(b2)[2:9], b3])
+      (22, [], 0, None)
+      >>> [b1, b2, b3]
+      [bytearray(b'Mary'), bytearray(b'01 had a 9'), bytearray(b'little lamb---')]
+
+   Availability: most Unix platforms, possibly others.
+
+   .. versionadded:: 3.3
+
+
 .. method:: socket.recvfrom_into(buffer[, nbytes[, flags]])
 
    Receive data from the socket, writing it into *buffer* instead of creating a
@@ -744,6 +986,41 @@ correspond to Unix system calls applicable to sockets.
    argument has the same meaning as for :meth:`recv` above.  Return the number of
    bytes sent. (The format of *address* depends on the address family --- see
    above.)
+
+
+.. method:: socket.sendmsg(buffers[, ancdata[, flags[, address]]])
+
+   Send normal and ancillary data to the socket, gathering the
+   non-ancillary data from a series of buffers and concatenating it
+   into a single message.  The *buffers* argument specifies the
+   non-ancillary data as an iterable of buffer-compatible objects
+   (e.g. :class:`bytes` objects); the operating system may set a limit
+   (:func:`~os.sysconf` value ``SC_IOV_MAX``) on the number of buffers
+   that can be used.  The *ancdata* argument specifies the ancillary
+   data (control messages) as an iterable of zero or more tuples
+   ``(cmsg_level, cmsg_type, cmsg_data)``, where *cmsg_level* and
+   *cmsg_type* are integers specifying the protocol level and
+   protocol-specific type respectively, and *cmsg_data* is a
+   buffer-compatible object holding the associated data.  Note that
+   some systems (in particular, systems without :func:`CMSG_SPACE`)
+   might support sending only one control message per call.  The
+   *flags* argument defaults to 0 and has the same meaning as for
+   :meth:`send`.  If *address* is supplied and not ``None``, it sets a
+   destination address for the message.  The return value is the
+   number of bytes of non-ancillary data sent.
+
+   The following function sends the list of file descriptors *fds*
+   over an :const:`AF_UNIX` socket, on systems which support the
+   :const:`SCM_RIGHTS` mechanism.  See also :meth:`recvmsg`. ::
+
+      import socket, array
+
+      def send_fds(sock, msg, fds):
+          return sock.sendmsg([msg], [(socket.SOL_SOCKET, socket.SCM_RIGHTS, array.array("i", fds))])
+
+   Availability: most Unix platforms, possibly others.
+
+   .. versionadded:: 3.3
 
 
 .. method:: socket.setblocking(flag)
@@ -934,13 +1211,13 @@ sends traffic to the first one connected successfully. ::
        af, socktype, proto, canonname, sa = res
        try:
            s = socket.socket(af, socktype, proto)
-       except socket.error as msg:
+       except OSError as msg:
            s = None
            continue
        try:
            s.bind(sa)
            s.listen(1)
-       except socket.error as msg:
+       except OSError as msg:
            s.close()
            s = None
            continue
@@ -969,12 +1246,12 @@ sends traffic to the first one connected successfully. ::
        af, socktype, proto, canonname, sa = res
        try:
            s = socket.socket(af, socktype, proto)
-       except socket.error as msg:
+       except OSError as msg:
            s = None
            continue
        try:
            s.connect(sa)
-       except socket.error as msg:
+       except OSError as msg:
            s.close()
            s = None
            continue
@@ -988,7 +1265,7 @@ sends traffic to the first one connected successfully. ::
    print('Received', repr(data))
 
 
-The last example shows how to write a very simple network sniffer with raw
+The next example shows how to write a very simple network sniffer with raw
 sockets on Windows. The example requires administrator privileges to modify
 the interface::
 
@@ -1013,11 +1290,51 @@ the interface::
    # disabled promiscuous mode
    s.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
 
+The last example shows how to use the socket interface to communicate to a CAN
+network. This example might require special priviledge::
+
+   import socket
+   import struct
+
+
+   # CAN frame packing/unpacking (see `struct can_frame` in <linux/can.h>)
+
+   can_frame_fmt = "=IB3x8s"
+   can_frame_size = struct.calcsize(can_frame_fmt)
+
+   def build_can_frame(can_id, data):
+       can_dlc = len(data)
+       data = data.ljust(8, b'\x00')
+       return struct.pack(can_frame_fmt, can_id, can_dlc, data)
+
+   def dissect_can_frame(frame):
+       can_id, can_dlc, data = struct.unpack(can_frame_fmt, frame)
+       return (can_id, can_dlc, data[:can_dlc])
+
+
+   # create a raw socket and bind it to the `vcan0` interface
+   s = socket.socket(socket.AF_CAN, socket.SOCK_RAW, socket.CAN_RAW)
+   s.bind(('vcan0',))
+
+   while True:
+       cf, addr = s.recvfrom(can_frame_size)
+
+       print('Received: can_id=%x, can_dlc=%x, data=%s' % dissect_can_frame(cf))
+
+       try:
+           s.send(cf)
+       except OSError:
+           print('Error sending CAN frame')
+
+       try:
+           s.send(build_can_frame(0x01, b'\x01\x02\x03'))
+       except OSError:
+           print('Error sending CAN frame')
 
 Running an example several times with too small delay between executions, could
 lead to this error::
 
-   socket.error: [Errno 98] Address already in use
+   OSError: [Errno 98] Address already in use
 
 This is because the previous execution has left the socket in a ``TIME_WAIT``
 state, and can't be immediately reused.
