@@ -7,7 +7,7 @@ work. One should use importlib as the public-facing version of this module.
 
 """
 
-# Injected modules are '_warnings', 'imp', 'sys', 'marshal', 'errno', '_io',
+# Injected modules are '_warnings', 'imp', 'sys', 'marshal', '_io',
 # and '_os' (a.k.a. 'posix', 'nt' or 'os2').
 # Injected attribute is path_sep.
 #
@@ -80,9 +80,38 @@ def _path_absolute(path):
             return _path_join(_os.getcwd(), path)
 
 
+def _write_atomic(path, data):
+    """Best-effort function to write data to a path atomically.
+    Be prepared to handle a FileExistsError if concurrent writing of the
+    temporary file is attempted."""
+    # Renaming should be atomic on most platforms (including Windows).
+    # Under Windows, the limitation is that we can't rename() to an existing
+    # path, while POSIX will overwrite it. But here we don't really care
+    # if there is a glimpse of time during which the final pyc file doesn't
+    # exist.
+    # id() is used to generate a pseudo-random filename.
+    path_tmp = '{}.{}'.format(path, id(path))
+    fd = _os.open(path_tmp, _os.O_EXCL | _os.O_CREAT | _os.O_WRONLY, 0o666)
+    try:
+        with _io.FileIO(fd, 'wb') as file:
+            file.write(data)
+        try:
+            _os.rename(path_tmp, path)
+        except FileExistsError:
+            # Windows (if we had access to MoveFileEx, we could overwrite)
+            _os.unlink(path)
+            _os.rename(path_tmp, path)
+    except OSError:
+        try:
+            _os.unlink(path_tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _wrap(new, old):
     """Simple substitute for functools.wraps."""
-    for replace in ['__module__', '__name__', '__doc__']:
+    for replace in ['__module__', '__name__', '__qualname__', '__doc__']:
         setattr(new, replace, getattr(old, replace))
     new.__dict__.update(old.__dict__)
 
@@ -240,7 +269,7 @@ class BuiltinImporter:
     @classmethod
     @_requires_builtin
     def is_package(cls, fullname):
-        """Return None as built-in module are never packages."""
+        """Return None as built-in modules are never packages."""
         return False
 
 
@@ -404,6 +433,7 @@ class SourceLoader(_LoaderBasics):
                     else:
                         found = marshal.loads(bytes_data)
                         if isinstance(found, code_type):
+                            imp._fix_co_filename(found, source_path)
                             return found
                         else:
                             msg = "Non-code object in {}"
@@ -479,28 +509,19 @@ class _SourceFileLoader(_FileLoader, SourceLoader):
             parent = _path_join(parent, part)
             try:
                 _os.mkdir(parent)
-            except OSError as exc:
+            except FileExistsError:
                 # Probably another Python process already created the dir.
-                if exc.errno == errno.EEXIST:
-                    continue
-                else:
-                    raise
-            except IOError as exc:
+                continue
+            except PermissionError:
                 # If can't get proper access, then just forget about writing
                 # the data.
-                if exc.errno == errno.EACCES:
-                    return
-                else:
-                    raise
-        try:
-            with _io.FileIO(path, 'wb') as file:
-                file.write(data)
-        except IOError as exc:
-            # Don't worry if you can't write bytecode.
-            if exc.errno == errno.EACCES:
                 return
-            else:
-                raise
+        try:
+            _write_atomic(path, data)
+        except (PermissionError, FileExistsError):
+            # Don't worry if you can't write bytecode or someone is writing
+            # it at the same time.
+            pass
 
 
 class _SourcelessFileLoader(_FileLoader, _LoaderBasics):
@@ -758,14 +779,14 @@ class _ImportLockContext:
 
 _IMPLICIT_META_PATH = [BuiltinImporter, FrozenImporter, _DefaultPathFinder]
 
-_ERR_MSG = 'No module named {}'
+_ERR_MSG = 'No module named {!r}'
 
 def _gcd_import(name, package=None, level=0):
     """Import and return the module based on its name, the package the call is
     being made from, and the level adjustment.
 
     This function represents the greatest common denominator of functionality
-    between import_module and __import__. This includes settting __package__ if
+    between import_module and __import__. This includes setting __package__ if
     the loader did not.
 
     """
@@ -857,7 +878,7 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
         module = _gcd_import(name)
     else:
         # __package__ is not guaranteed to be defined or could be set to None
-        # to represent that it's proper value is unknown
+        # to represent that its proper value is unknown
         package = globals.get('__package__')
         if package is None:
             package = globals['__name__']
