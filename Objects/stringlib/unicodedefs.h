@@ -6,7 +6,10 @@
    compiled as unicode. */
 #define STRINGLIB_IS_UNICODE     1
 
+#define FASTSEARCH               fastsearch
+#define STRINGLIB(F)             stringlib_##F
 #define STRINGLIB_OBJECT         PyUnicodeObject
+#define STRINGLIB_SIZEOF_CHAR    Py_UNICODE_SIZE
 #define STRINGLIB_CHAR           Py_UNICODE
 #define STRINGLIB_TYPE_NAME      "unicode"
 #define STRINGLIB_PARSE_CODE     "U"
@@ -15,9 +18,6 @@
 #define STRINGLIB_ISLINEBREAK    BLOOM_LINEBREAK
 #define STRINGLIB_ISDECIMAL      Py_UNICODE_ISDECIMAL
 #define STRINGLIB_TODECIMAL      Py_UNICODE_TODECIMAL
-#define STRINGLIB_TOUPPER        Py_UNICODE_TOUPPER
-#define STRINGLIB_TOLOWER        Py_UNICODE_TOLOWER
-#define STRINGLIB_FILL           Py_UNICODE_FILL
 #define STRINGLIB_STR            PyUnicode_AS_UNICODE
 #define STRINGLIB_LEN            PyUnicode_GET_SIZE
 #define STRINGLIB_NEW            PyUnicode_FromUnicode

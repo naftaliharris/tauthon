@@ -237,7 +237,8 @@ PyObject_AsCharBuffer(PyObject *obj,
     pb = obj->ob_type->tp_as_buffer;
     if (pb == NULL || pb->bf_getbuffer == NULL) {
         PyErr_SetString(PyExc_TypeError,
-                        "expected an object with the buffer interface");
+                        "expected bytes, bytearray "
+                        "or buffer compatible object");
         return -1;
     }
     if ((*pb->bf_getbuffer)(obj, &view, PyBUF_SIMPLE)) return -1;
@@ -331,7 +332,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 {
     if (!PyObject_CheckBuffer(obj)) {
         PyErr_Format(PyExc_TypeError,
-                     "'%100s' does not support the buffer interface",
+                     "'%.100s' does not support the buffer interface",
                      Py_TYPE(obj)->tp_name);
         return -1;
     }
@@ -700,7 +701,7 @@ PyObject_Format(PyObject *obj, PyObject *format_spec)
 
     /* If no format_spec is provided, use an empty string */
     if (format_spec == NULL) {
-        empty = PyUnicode_FromUnicode(NULL, 0);
+        empty = PyUnicode_New(0, 0);
         format_spec = empty;
     }
 
@@ -792,8 +793,7 @@ binary_op1(PyObject *v, PyObject *w, const int op_slot)
             return x;
         Py_DECREF(x); /* can't do it */
     }
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static PyObject *
@@ -1379,9 +1379,7 @@ PyNumber_Long(PyObject *o)
                                 PyBytes_GET_SIZE(o));
     if (PyUnicode_Check(o))
         /* The above check is done in PyLong_FromUnicode(). */
-        return PyLong_FromUnicode(PyUnicode_AS_UNICODE(o),
-                                  PyUnicode_GET_SIZE(o),
-                                  10);
+        return PyLong_FromUnicodeObject(o, 10);
     if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
         return long_from_string(buffer, buffer_len);
 
@@ -1986,7 +1984,7 @@ PySequence_Index(PyObject *s, PyObject *o)
 int
 PyMapping_Check(PyObject *o)
 {
-    return      o && o->ob_type->tp_as_mapping &&
+    return o && o->ob_type->tp_as_mapping &&
         o->ob_type->tp_as_mapping->mp_subscript;
 }
 
@@ -2084,10 +2082,11 @@ PyMapping_Keys(PyObject *o)
 {
     PyObject *keys;
     PyObject *fast;
+    _Py_IDENTIFIER(keys);
 
     if (PyDict_CheckExact(o))
         return PyDict_Keys(o);
-    keys = PyObject_CallMethod(o, "keys", NULL);
+    keys = _PyObject_CallMethodId(o, &PyId_keys, NULL);
     if (keys == NULL)
         return NULL;
     fast = PySequence_Fast(keys, "o.keys() are not iterable");
@@ -2100,10 +2099,11 @@ PyMapping_Items(PyObject *o)
 {
     PyObject *items;
     PyObject *fast;
+    _Py_IDENTIFIER(items);
 
     if (PyDict_CheckExact(o))
         return PyDict_Items(o);
-    items = PyObject_CallMethod(o, "items", NULL);
+    items = _PyObject_CallMethodId(o, &PyId_items, NULL);
     if (items == NULL)
         return NULL;
     fast = PySequence_Fast(items, "o.items() are not iterable");
@@ -2116,10 +2116,11 @@ PyMapping_Values(PyObject *o)
 {
     PyObject *values;
     PyObject *fast;
+    _Py_IDENTIFIER(values);
 
     if (PyDict_CheckExact(o))
         return PyDict_Values(o);
-    values = PyObject_CallMethod(o, "values", NULL);
+    values = _PyObject_CallMethodId(o, &PyId_values, NULL);
     if (values == NULL)
         return NULL;
     fast = PySequence_Fast(values, "o.values() are not iterable");
@@ -2225,22 +2226,11 @@ _PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
     return call_function_tail(callable, args);
 }
 
-PyObject *
-PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+static PyObject*
+callmethod(PyObject* func, char *format, va_list va, int is_size_t)
 {
-    va_list va;
-    PyObject *args;
-    PyObject *func = NULL;
     PyObject *retval = NULL;
-
-    if (o == NULL || name == NULL)
-        return null_error();
-
-    func = PyObject_GetAttrString(o, name);
-    if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
-        return 0;
-    }
+    PyObject *args;
 
     if (!PyCallable_Check(func)) {
         type_error("attribute of type '%.200s' is not callable", func);
@@ -2248,9 +2238,10 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
     }
 
     if (format && *format) {
-        va_start(va, format);
-        args = Py_VaBuildValue(format, va);
-        va_end(va);
+        if (is_size_t)
+            args = _Py_VaBuildValue_SizeT(format, va);
+        else
+            args = Py_VaBuildValue(format, va);
     }
     else
         args = PyTuple_New(0);
@@ -2261,6 +2252,49 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
     /* args gets consumed in call_function_tail */
     Py_XDECREF(func);
 
+    return retval;
+}
+
+PyObject *
+PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = PyObject_GetAttrString(o, name);
+    if (func == NULL) {
+        return 0;
+    }
+
+    va_start(va, format);
+    retval = callmethod(func, format, va, 0);
+    va_end(va);
+    return retval;
+}
+
+PyObject *
+_PyObject_CallMethodId(PyObject *o, _Py_Identifier *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = _PyObject_GetAttrId(o, name);
+    if (func == NULL) {
+        PyErr_SetString(PyExc_AttributeError, name->string);
+        return 0;
+    }
+
+    va_start(va, format);
+    retval = callmethod(func, format, va, 0);
+    va_end(va);
     return retval;
 }
 
@@ -2268,41 +2302,42 @@ PyObject *
 _PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
 {
     va_list va;
-    PyObject *args;
     PyObject *func = NULL;
-    PyObject *retval = NULL;
+    PyObject *retval;
 
     if (o == NULL || name == NULL)
         return null_error();
 
     func = PyObject_GetAttrString(o, name);
     if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
         return 0;
     }
-
-    if (!PyCallable_Check(func)) {
-        type_error("attribute of type '%.200s' is not callable", func);
-        goto exit;
-    }
-
-    if (format && *format) {
-        va_start(va, format);
-        args = _Py_VaBuildValue_SizeT(format, va);
-        va_end(va);
-    }
-    else
-        args = PyTuple_New(0);
-
-    retval = call_function_tail(func, args);
-
-  exit:
-    /* args gets consumed in call_function_tail */
-    Py_XDECREF(func);
-
+    va_start(va, format);
+    retval = callmethod(func, format, va, 1);
+    va_end(va);
     return retval;
 }
 
+PyObject *
+_PyObject_CallMethodId_SizeT(PyObject *o, _Py_Identifier *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = _PyObject_GetAttrId(o, name);
+    if (func == NULL) {
+        PyErr_SetString(PyExc_AttributeError, name->string);
+        return NULL;
+    }
+    va_start(va, format);
+    retval = callmethod(func, format, va, 1);
+    va_end(va);
+    return retval;
+}
 
 static PyObject *
 objargs_mktuple(va_list va)

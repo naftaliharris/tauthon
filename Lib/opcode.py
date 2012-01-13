@@ -43,7 +43,6 @@ def jabs_op(name, op):
 # Instruction opcodes for compiled code
 # Blank lines correspond to available opcodes
 
-def_op('STOP_CODE', 0)
 def_op('POP_TOP', 1)
 def_op('ROT_TWO', 2)
 def_op('ROT_THREE', 3)
@@ -88,6 +87,7 @@ def_op('STORE_LOCALS', 69)
 
 def_op('PRINT_EXPR', 70)
 def_op('LOAD_BUILD_CLASS', 71)
+def_op('YIELD_FROM', 72)
 
 def_op('INPLACE_LSHIFT', 75)
 def_op('INPLACE_RSHIFT', 76)

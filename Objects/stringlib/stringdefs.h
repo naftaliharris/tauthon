@@ -6,7 +6,10 @@
    compiled as unicode. */
 #define STRINGLIB_IS_UNICODE     0
 
+#define FASTSEARCH fastsearch
+#define STRINGLIB(F) stringlib_##F
 #define STRINGLIB_OBJECT         PyBytesObject
+#define STRINGLIB_SIZEOF_CHAR    1
 #define STRINGLIB_CHAR           char
 #define STRINGLIB_TYPE_NAME      "string"
 #define STRINGLIB_PARSE_CODE     "S"
@@ -15,9 +18,6 @@
 #define STRINGLIB_ISLINEBREAK(x) ((x == '\n') || (x == '\r'))
 #define STRINGLIB_ISDECIMAL(x)   ((x >= '0') && (x <= '9'))
 #define STRINGLIB_TODECIMAL(x)   (STRINGLIB_ISDECIMAL(x) ? (x - '0') : -1)
-#define STRINGLIB_TOUPPER        Py_TOUPPER
-#define STRINGLIB_TOLOWER        Py_TOLOWER
-#define STRINGLIB_FILL           memset
 #define STRINGLIB_STR            PyBytes_AS_STRING
 #define STRINGLIB_LEN            PyBytes_GET_SIZE
 #define STRINGLIB_NEW            PyBytes_FromStringAndSize
