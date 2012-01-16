@@ -15,6 +15,10 @@ interpreter.
 The principal built-in types are numerics, sequences, mappings, classes,
 instances and exceptions.
 
+Some collection classes are mutable.  The methods that add, subtract, or
+rearrange their members in place, and don't return a specific item, never return
+the collection instance itself but ``None``.
+
 Some operations are supported by several object types; in particular,
 practically all objects can be compared, tested for truth value, and converted
 to a string (with the :func:`repr` function or the slightly different
@@ -998,6 +1002,14 @@ functions based on regular expressions.
    rest lowercased.
 
 
+.. method:: str.casefold()
+
+   Return a casefolded copy of the string. Casefolded strings may be used for
+   caseless matching. For example, ``"MASSE".casefold() == "maße".casefold()``.
+
+   .. versionadded:: 3.3
+
+
 .. method:: str.center(width[, fillchar])
 
    Return centered in a string of length *width*. Padding is done using the
@@ -1356,7 +1368,8 @@ functions based on regular expressions.
 .. method:: str.swapcase()
 
    Return a copy of the string with uppercase characters converted to lowercase and
-   vice versa.
+   vice versa. Note that it is not necessarily true that
+   ``s.swapcase().swapcase() == s``.
 
 
 .. method:: str.title()
@@ -1667,6 +1680,8 @@ Note that while lists allow their items to be of any type, bytearray object
    single: append() (sequence method)
    single: extend() (sequence method)
    single: count() (sequence method)
+   single: clear() (sequence method)
+   single: copy() (sequence method)
    single: index() (sequence method)
    single: insert() (sequence method)
    single: pop() (sequence method)
@@ -1697,6 +1712,12 @@ Note that while lists allow their items to be of any type, bytearray object
 +------------------------------+--------------------------------+---------------------+
 | ``s.extend(x)``              | same as ``s[len(s):len(s)] =   | \(2)                |
 |                              | x``                            |                     |
++------------------------------+--------------------------------+---------------------+
+| ``s.clear()``                | remove all items from ``s``    |                     |
+|                              |                                |                     |
++------------------------------+--------------------------------+---------------------+
+| ``s.copy()``                 | return a shallow copy of ``s`` |                     |
+|                              |                                |                     |
 +------------------------------+--------------------------------+---------------------+
 | ``s.count(x)``               | return number of *i*'s for     |                     |
 |                              | which ``s[i] == x``            |                     |
@@ -1776,6 +1797,9 @@ Notes:
 (8)
    :meth:`sort` is not supported by :class:`bytearray` objects.
 
+    .. versionadded:: 3.3
+       :meth:`clear` and :meth:`!copy` methods.
+
 
 .. _bytes-methods:
 
@@ -1792,6 +1816,12 @@ the objects to strings, they have a :func:`decode` method.
 
 Wherever one of these methods needs to interpret the bytes as characters
 (e.g. the :func:`is...` methods), the ASCII character set is assumed.
+
+.. versionadded:: 3.3
+   The functions :func:`count`, :func:`find`, :func:`index`,
+   :func:`rfind` and :func:`rindex` have additional semantics compared to
+   the corresponding string functions: They also accept an integer in
+   range 0 to 255 (a byte) as their first argument.
 
 .. note::
 
@@ -2383,6 +2413,19 @@ copying.  Memory is generally interpreted as simple bytes.
 
    Notice how the size of the memoryview object cannot be changed.
 
+   Memoryviews of hashable (read-only) types are also hashable and their
+   hash value matches the corresponding bytes object::
+
+      >>> v = memoryview(b'abcefg')
+      >>> hash(v) == hash(b'abcefg')
+      True
+      >>> hash(v[2:4]) == hash(b'ce')
+      True
+
+   .. versionchanged:: 3.3
+      Memoryview objects are now hashable.
+
+
    :class:`memoryview` has several methods:
 
    .. method:: tobytes()
@@ -2698,7 +2741,7 @@ The Null Object
 
 This object is returned by functions that don't explicitly return a value.  It
 supports no special operations.  There is exactly one null object, named
-``None`` (a built-in name).
+``None`` (a built-in name).  ``type(None)()`` produces the same singleton.
 
 It is written as ``None``.
 
@@ -2710,7 +2753,8 @@ The Ellipsis Object
 
 This object is commonly used by slicing (see :ref:`slicings`).  It supports no
 special operations.  There is exactly one ellipsis object, named
-:const:`Ellipsis` (a built-in name).
+:const:`Ellipsis` (a built-in name).  ``type(Ellipsis)()`` produces the
+:const:`Ellipsis` singleton.
 
 It is written as ``Ellipsis`` or ``...``.
 
@@ -2722,7 +2766,8 @@ The NotImplemented Object
 
 This object is returned from comparisons and binary operations when they are
 asked to operate on types they don't support. See :ref:`comparisons` for more
-information.
+information.  There is exactly one ``NotImplemented`` object.
+``type(NotImplemented)()`` produces the singleton instance.
 
 It is written as ``NotImplemented``.
 
@@ -2786,6 +2831,13 @@ types, where they are relevant.  Some of these are not reported by the
 .. attribute:: class.__name__
 
    The name of the class or type.
+
+
+.. attribute:: class.__qualname__
+
+   The :term:`qualified name` of the class or type.
+
+   .. versionadded:: 3.3
 
 
 .. attribute:: class.__mro__
