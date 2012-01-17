@@ -24,6 +24,8 @@ alist = [{'astring': 'foo@bar.baz.spam',
           'ashortlong': 2,
           'anotherlist': ['.zyx.41'],
           'abase64': xmlrpclib.Binary(b"my dog has fleas"),
+          'b64bytes': b"my dog has fleas",
+          'b64bytearray': bytearray(b"my dog has fleas"),
           'boolean': False,
           'unicode': '\u4000\u6000\u8000',
           'ukey\u4000': 'regular value',
@@ -44,27 +46,54 @@ class XMLRPCTestCase(unittest.TestCase):
     def test_dump_bare_datetime(self):
         # This checks that an unwrapped datetime.date object can be handled
         # by the marshalling code.  This can't be done via test_dump_load()
-        # since with use_datetime set to 1 the unmarshaller would create
+        # since with use_builtin_types set to 1 the unmarshaller would create
         # datetime objects for the 'datetime[123]' keys as well
         dt = datetime.datetime(2005, 2, 10, 11, 41, 23)
+        self.assertEqual(dt, xmlrpclib.DateTime('20050210T11:41:23'))
         s = xmlrpclib.dumps((dt,))
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=1)
-        self.assertEqual(newdt, dt)
-        self.assertEqual(m, None)
 
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=0)
-        self.assertEqual(newdt, xmlrpclib.DateTime('20050210T11:41:23'))
+        result, m = xmlrpclib.loads(s, use_builtin_types=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_builtin_types=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_datetime=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_datetime=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
+
 
     def test_datetime_before_1900(self):
         # same as before but with a date before 1900
         dt = datetime.datetime(1,  2, 10, 11, 41, 23)
+        self.assertEqual(dt, xmlrpclib.DateTime('00010210T11:41:23'))
         s = xmlrpclib.dumps((dt,))
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=1)
-        self.assertEqual(newdt, dt)
-        self.assertEqual(m, None)
 
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=0)
-        self.assertEqual(newdt, xmlrpclib.DateTime('00010210T11:41:23'))
+        result, m = xmlrpclib.loads(s, use_builtin_types=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_builtin_types=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
 
     def test_bug_1164912 (self):
         d = xmlrpclib.DateTime()
@@ -133,15 +162,31 @@ class XMLRPCTestCase(unittest.TestCase):
                           xmlrpclib.loads(strg)[0][0])
         self.assertRaises(TypeError, xmlrpclib.dumps, (arg1,))
 
+    def test_dump_bytes(self):
+        sample = b"my dog has fleas"
+        self.assertEqual(sample, xmlrpclib.Binary(sample))
+        for type_ in bytes, bytearray, xmlrpclib.Binary:
+            value = type_(sample)
+            s = xmlrpclib.dumps((value,))
+
+            result, m = xmlrpclib.loads(s, use_builtin_types=True)
+            (newvalue,) = result
+            self.assertEqual(newvalue, sample)
+            self.assertIs(type(newvalue), bytes)
+            self.assertIsNone(m)
+
+            result, m = xmlrpclib.loads(s, use_builtin_types=False)
+            (newvalue,) = result
+            self.assertEqual(newvalue, sample)
+            self.assertIs(type(newvalue), xmlrpclib.Binary)
+            self.assertIsNone(m)
+
     def test_get_host_info(self):
         # see bug #3613, this raised a TypeError
         transp = xmlrpc.client.Transport()
         self.assertEqual(transp.get_host_info("user@host.tld"),
                           ('host.tld',
                            [('Authorization', 'Basic dXNlcg==')], {}))
-
-    def test_dump_bytes(self):
-        self.assertRaises(TypeError, xmlrpclib.dumps, (b"my dog has fleas",))
 
     def test_ssl_presence(self):
         try:
@@ -978,10 +1023,44 @@ class CGIHandlerTestCase(unittest.TestCase):
             len(content))
 
 
+class UseBuiltinTypesTestCase(unittest.TestCase):
+
+    def test_use_builtin_types(self):
+        # SimpleXMLRPCDispatcher.__init__ accepts use_builtin_types, which
+        # makes all dispatch of binary data as bytes instances, and all
+        # dispatch of datetime argument as datetime.datetime instances.
+        self.log = []
+        expected_bytes = b"my dog has fleas"
+        expected_date = datetime.datetime(2008, 5, 26, 18, 25, 12)
+        marshaled = xmlrpclib.dumps((expected_bytes, expected_date), 'foobar')
+        def foobar(*args):
+            self.log.extend(args)
+        handler = xmlrpc.server.SimpleXMLRPCDispatcher(
+            allow_none=True, encoding=None, use_builtin_types=True)
+        handler.register_function(foobar)
+        handler._marshaled_dispatch(marshaled)
+        self.assertEqual(len(self.log), 2)
+        mybytes, mydate = self.log
+        self.assertEqual(self.log, [expected_bytes, expected_date])
+        self.assertIs(type(mydate), datetime.datetime)
+        self.assertIs(type(mybytes), bytes)
+
+    def test_cgihandler_has_use_builtin_types_flag(self):
+        handler = xmlrpc.server.CGIXMLRPCRequestHandler(use_builtin_types=True)
+        self.assertTrue(handler.use_builtin_types)
+
+    def test_xmlrpcserver_has_use_builtin_types_flag(self):
+        server = xmlrpc.server.SimpleXMLRPCServer(("localhost", 0),
+            use_builtin_types=True)
+        server.server_close()
+        self.assertTrue(server.use_builtin_types)
+
+
 @support.reap_threads
 def test_main():
     xmlrpc_tests = [XMLRPCTestCase, HelperTestCase, DateTimeTestCase,
          BinaryTestCase, FaultTestCase]
+    xmlrpc_tests.append(UseBuiltinTypesTestCase)
     xmlrpc_tests.append(SimpleServerTestCase)
     xmlrpc_tests.append(KeepaliveServerTestCase1)
     xmlrpc_tests.append(KeepaliveServerTestCase2)
