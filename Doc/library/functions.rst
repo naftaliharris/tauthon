@@ -152,10 +152,6 @@ are always available.  They are listed here in alphabetical order.
    1,114,111 (0x10FFFF in base 16).  :exc:`ValueError` will be raised if *i* is
    outside that range.
 
-   Note that on narrow Unicode builds, the result is a string of
-   length two for *i* greater than 65,535 (0xFFFF in hexadecimal).
-
-
 
 .. function:: classmethod(function)
 
@@ -780,10 +776,10 @@ are always available.  They are listed here in alphabetical order.
    :meth:`__index__` method that returns an integer.
 
 
-.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True)
+.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)
 
    Open *file* and return a corresponding stream.  If the file cannot be opened,
-   an :exc:`IOError` is raised.
+   an :exc:`OSError` is raised.
 
    *file* is either a string or bytes object giving the pathname (absolute or
    relative to the current working directory) of the file to be opened or
@@ -887,6 +883,15 @@ are always available.  They are listed here in alphabetical order.
    closed.  If a filename is given *closefd* has no effect and must be ``True``
    (the default).
 
+   A custom opener can be used by passing a callable as *opener*. The underlying
+   file descriptor for the file object is then obtained by calling *opener* with
+   (*file*, *flags*). *opener* must return an open file descriptor (passing
+   :mod:`os.open` as *opener* results in functionality similar to passing
+   ``None``).
+
+   .. versionchanged:: 3.3
+      The *opener* parameter was added.
+
    The type of file object returned by the :func:`open` function depends on the
    mode.  When :func:`open` is used to open a file in a text mode (``'w'``,
    ``'r'``, ``'wt'``, ``'rt'``, etc.), it returns a subclass of
@@ -912,6 +917,9 @@ are always available.  They are listed here in alphabetical order.
    (where :func:`open` is declared), :mod:`os`, :mod:`os.path`, :mod:`tempfile`,
    and :mod:`shutil`.
 
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
+
 
 .. XXX works for bytes too, but should it?
 .. function:: ord(c)
@@ -921,9 +929,6 @@ are always available.  They are listed here in alphabetical order.
    point of that character.  For example, ``ord('a')`` returns the integer ``97``
    and ``ord('\u2020')`` returns ``8224``.  This is the inverse of :func:`chr`.
 
-   On wide Unicode builds, if the argument length is not one, a
-   :exc:`TypeError` will be raised.  On narrow Unicode builds, strings
-   of length two are accepted when they form a UTF-16 surrogate pair.
 
 .. function:: pow(x, y[, z])
 
@@ -941,7 +946,7 @@ are always available.  They are listed here in alphabetical order.
    must be of integer types, and *y* must be non-negative.
 
 
-.. function:: print([object, ...], *, sep=' ', end='\\n', file=sys.stdout)
+.. function:: print([object, ...], *, sep=' ', end='\\n', file=sys.stdout, flush=False)
 
    Print *object*\(s) to the stream *file*, separated by *sep* and followed by
    *end*.  *sep*, *end* and *file*, if present, must be given as keyword
@@ -954,9 +959,12 @@ are always available.  They are listed here in alphabetical order.
    *end*.
 
    The *file* argument must be an object with a ``write(string)`` method; if it
-   is not present or ``None``, :data:`sys.stdout` will be used. Output buffering
-   is determined by *file*. Use ``file.flush()`` to ensure, for instance,
-   immediate appearance on a screen.
+   is not present or ``None``, :data:`sys.stdout` will be used.  Whether output
+   is buffered is usually determined by *file*, but if the  *flush* keyword
+   argument is true, the stream is forcibly flushed.
+
+   .. versionchanged:: 3.3
+      Added the *flush* keyword argument.
 
 
 .. function:: property(fget=None, fset=None, fdel=None, doc=None)
@@ -1039,7 +1047,9 @@ are always available.  They are listed here in alphabetical order.
    ...]``.  If *step* is positive, the last element is the largest ``start + i *
    step`` less than *stop*; if *step* is negative, the last element is the
    smallest ``start + i * step`` greater than *stop*.  *step* must not be zero
-   (or else :exc:`ValueError` is raised).  Example:
+   (or else :exc:`ValueError` is raised).  Range objects have read-only data
+   attributes :attr:`start`, :attr:`stop` and :attr:`step` which return the
+   argument values (or their default).  Example:
 
       >>> list(range(10))
       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -1076,6 +1086,13 @@ are always available.  They are listed here in alphabetical order.
       >>> r[-1]
       18
 
+   Testing range objects for equality with ``==`` and ``!=`` compares
+   them as sequences.  That is, two range objects are considered equal if
+   they represent the same sequence of values.  (Note that two range
+   objects that compare equal might have different :attr:`start`,
+   :attr:`stop` and :attr:`step` attributes, for example ``range(0) ==
+   range(2, 1, 3)`` or ``range(0, 3, 2) == range(0, 4, 2)``.)
+
    Ranges containing absolute values larger than :data:`sys.maxsize` are permitted
    but some features (such as :func:`len`) will raise :exc:`OverflowError`.
 
@@ -1084,6 +1101,14 @@ are always available.  They are listed here in alphabetical order.
       Support slicing and negative indices.
       Test integers for membership in constant time instead of iterating
       through all items.
+
+   .. versionchanged:: 3.3
+      Define '==' and '!=' to compare range objects based on the
+      sequence of values they define (instead of comparing based on
+      object identity).
+
+   .. versionadded:: 3.3
+      The :attr:`start`, :attr:`stop` and :attr:`step` attributes.
 
 
 .. function:: repr(object)
