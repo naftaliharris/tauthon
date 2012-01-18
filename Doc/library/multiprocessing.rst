@@ -297,7 +297,7 @@ The :mod:`multiprocessing` package mostly replicates the API of the
 :class:`Process` and exceptions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. class:: Process([group[, target[, name[, args[, kwargs]]]]])
+.. class:: Process([group[, target[, name[, args[, kwargs]]]]], *, daemon=None)
 
    Process objects represent activity that is run in a separate process. The
    :class:`Process` class has equivalents of all the methods of
@@ -312,12 +312,18 @@ The :mod:`multiprocessing` package mostly replicates the API of the
    :sub:`1`,N\ :sub:`2`,...,N\ :sub:`k` is a sequence of integers whose length
    is determined by the *generation* of the process.  *args* is the argument
    tuple for the target invocation.  *kwargs* is a dictionary of keyword
-   arguments for the target invocation.  By default, no arguments are passed to
-   *target*.
+   arguments for the target invocation.  If provided, the keyword-only *daemon* argument
+   sets the process :attr:`daemon` flag to ``True`` or ``False``.  If ``None``
+   (the default), this flag will be inherited from the creating process.
+
+   By default, no arguments are passed to *target*.
 
    If a subclass overrides the constructor, it must make sure it invokes the
    base class constructor (:meth:`Process.__init__`) before doing anything else
    to the process.
+
+   .. versionchanged:: 3.3
+      Added the *daemon* argument.
 
    .. method:: run()
 
@@ -337,10 +343,9 @@ The :mod:`multiprocessing` package mostly replicates the API of the
 
    .. method:: join([timeout])
 
-      Block the calling thread until the process whose :meth:`join` method is
-      called terminates or until the optional timeout occurs.
-
-      If *timeout* is ``None`` then there is no timeout.
+      If the optional argument *timeout* is ``None`` (the default), the method
+      blocks until the process whose :meth:`join` method is called terminates.
+      If *timeout* is a positive number, it blocks at most *timeout* seconds.
 
       A process can be joined many times.
 
@@ -404,6 +409,20 @@ The :mod:`multiprocessing` package mostly replicates the API of the
       setting :attr:`authkey` to another byte string.
 
       See :ref:`multiprocessing-auth-keys`.
+
+   .. attribute:: sentinel
+
+      A numeric handle of a system object which will become "ready" when
+      the process ends.
+
+      On Windows, this is an OS handle usable with the ``WaitForSingleObject``
+      and ``WaitForMultipleObjects`` family of API calls.  On Unix, this is
+      a file descriptor usable with primitives from the :mod:`select` module.
+
+      You can use this value if you want to wait on several events at once.
+      Otherwise calling :meth:`join()` is simpler.
+
+      .. versionadded:: 3.3
 
    .. method:: terminate()
 
@@ -767,8 +786,13 @@ Connection objects are usually created using :func:`Pipe` -- see also
       to receive and the other end has closed.
 
       If *maxlength* is specified and the message is longer than *maxlength*
-      then :exc:`IOError` is raised and the connection will no longer be
+      then :exc:`OSError` is raised and the connection will no longer be
       readable.
+
+      .. versionchanged:: 3.3
+         This function used to raise a :exc:`IOError`, which is now an
+         alias of :exc:`OSError`.
+
 
    .. method:: recv_bytes_into(buffer[, offset])
 
@@ -1647,6 +1671,24 @@ with the :class:`Pool` class.
       The same as :meth:`imap` except that the ordering of the results from the
       returned iterator should be considered arbitrary.  (Only when there is
       only one worker process is the order guaranteed to be "correct".)
+
+   .. method:: starmap(func, iterable[, chunksize])
+
+      Like :meth:`map` except that the elements of the `iterable` are expected
+      to be iterables that are unpacked as arguments.
+
+      Hence an `iterable` of `[(1,2), (3, 4)]` results in `[func(1,2),
+      func(3,4)]`.
+
+      .. versionadded:: 3.3
+
+   .. method:: starmap_async(func, iterable[, chunksize[, callback[, error_back]]])
+
+      A combination of :meth:`starmap` and :meth:`map_async` that iterates over
+      `iterable` of iterables and calls `func` with the iterables unpacked.
+      Returns a result object.
+
+      .. versionadded:: 3.3
 
    .. method:: close()
 

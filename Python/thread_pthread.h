@@ -144,7 +144,7 @@ typedef struct {
  * Initialization.
  */
 
-#ifdef _HAVE_BSDI
+#if defined(_HAVE_BSDI)
 static
 void _noop(void)
 {
@@ -240,8 +240,7 @@ PyThread_start_new_thread(void (*func)(void *), void *arg)
    hosed" because:
      - It does not guarantee the promise that a non-zero integer is returned.
      - The cast to long is inherently unsafe.
-     - It is not clear that the 'volatile' (for AIX?) and ugly casting in the
-       latter return statement (for Alpha OSF/1) are any longer necessary.
+     - It is not clear that the 'volatile' (for AIX?) are any longer necessary.
 */
 long
 PyThread_get_thread_ident(void)
@@ -249,13 +248,8 @@ PyThread_get_thread_ident(void)
     volatile pthread_t threadid;
     if (!initialized)
         PyThread_init_thread();
-    /* Jump through some hoops for Alpha OSF/1 */
     threadid = pthread_self();
-#if SIZEOF_PTHREAD_T <= SIZEOF_LONG
     return (long) threadid;
-#else
-    return (long) *(long *) &threadid;
-#endif
 }
 
 void
