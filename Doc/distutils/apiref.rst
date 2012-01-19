@@ -160,7 +160,7 @@ the full reference.
 .. class:: Extension
 
    The Extension class describes a single C or C++extension module in a setup
-   script. It accepts the following keyword arguments in its constructor
+   script. It accepts the following keyword arguments in its constructor:
 
    +------------------------+--------------------------------+---------------------------+
    | argument name          | value                          | type                      |
@@ -1162,12 +1162,11 @@ other utility module.
 
 .. function:: grok_environment_error(exc[, prefix='error: '])
 
-   Generate a useful error message from an :exc:`EnvironmentError`  (:exc:`IOError`
-   or :exc:`OSError`) exception object.   Handles Python 1.5.1 and later styles,
-   and does what it can to deal with  exception objects that don't have a filename
-   (which happens when the error  is due to a two-file operation, such as
-   :func:`rename` or  :func:`link`).  Returns the error message as a string
-   prefixed  with *prefix*.
+   Generate a useful error message from an :exc:`OSError` exception object.
+   Handles Python 1.5.1 and later styles, and does what it can to deal with
+   exception objects that don't have a filename (which happens when the error
+   is due to a two-file operation, such as :func:`rename` or :func:`link`).
+   Returns the error message as a string prefixed with *prefix*.
 
 
 .. function:: split_quoted(s)
