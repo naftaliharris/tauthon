@@ -767,8 +767,9 @@ static PyObject *
 deque_reduce(dequeobject *deque)
 {
     PyObject *dict, *result, *aslist;
+    _Py_IDENTIFIER(__dict__);
 
-    dict = PyObject_GetAttrString((PyObject *)deque, "__dict__");
+    dict = _PyObject_GetAttrId((PyObject *)deque, &PyId___dict__);
     if (dict == NULL)
         PyErr_Clear();
     aslist = PySequence_List((PyObject *)deque);
@@ -832,8 +833,7 @@ deque_richcompare(PyObject *v, PyObject *w, int op)
 
     if (!PyObject_TypeCheck(v, &deque_type) ||
         !PyObject_TypeCheck(w, &deque_type)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        Py_RETURN_NOTIMPLEMENTED;
     }
 
     /* Shortcuts */
@@ -1335,13 +1335,15 @@ defdict_reduce(defdictobject *dd)
     PyObject *items;
     PyObject *iter;
     PyObject *result;
+    _Py_IDENTIFIER(items);
+
     if (dd->default_factory == NULL || dd->default_factory == Py_None)
         args = PyTuple_New(0);
     else
         args = PyTuple_Pack(1, dd->default_factory);
     if (args == NULL)
         return NULL;
-    items = PyObject_CallMethod((PyObject *)dd, "items", "()");
+    items = _PyObject_CallMethodId((PyObject *)dd, &PyId_items, "()");
     if (items == NULL) {
         Py_DECREF(args);
         return NULL;
@@ -1552,12 +1554,8 @@ _count_elements(PyObject *self, PyObject *args)
     if (PyDict_CheckExact(mapping)) {
         while (1) {
             key = PyIter_Next(it);
-            if (key == NULL) {
-                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-                    PyErr_Clear();
-                else
-                    break;
-            }
+            if (key == NULL)
+                break;
             oldval = PyDict_GetItem(mapping, key);
             if (oldval == NULL) {
                 if (PyDict_SetItem(mapping, key, one) == -1)
@@ -1575,12 +1573,8 @@ _count_elements(PyObject *self, PyObject *args)
     } else {
         while (1) {
             key = PyIter_Next(it);
-            if (key == NULL) {
-                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-                    PyErr_Clear();
-                else
-                    break;
-            }
+            if (key == NULL)
+                break;
             oldval = PyObject_GetItem(mapping, key);
             if (oldval == NULL) {
                 if (!PyErr_Occurred() || !PyErr_ExceptionMatches(PyExc_KeyError))
