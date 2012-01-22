@@ -31,12 +31,6 @@ class CmdLineTest(unittest.TestCase):
         self.verify_valid_flag('-O')
         self.verify_valid_flag('-OO')
 
-    def test_q(self):
-        self.verify_valid_flag('-Qold')
-        self.verify_valid_flag('-Qnew')
-        self.verify_valid_flag('-Qwarn')
-        self.verify_valid_flag('-Qwarnall')
-
     def test_site_flag(self):
         self.verify_valid_flag('-S')
 
@@ -151,7 +145,7 @@ class CmdLineTest(unittest.TestCase):
     @unittest.skipUnless(sys.platform == 'darwin', 'test specific to Mac OS X')
     def test_osx_utf8(self):
         def check_output(text):
-            decoded = text.decode('utf8', 'surrogateescape')
+            decoded = text.decode('utf-8', 'surrogateescape')
             expected = ascii(decoded).encode('ascii') + b'\n'
 
             env = os.environ.copy()
@@ -223,7 +217,7 @@ class CmdLineTest(unittest.TestCase):
         self.assertIn(path2.encode('ascii'), out)
 
     def test_displayhook_unencodable(self):
-        for encoding in ('ascii', 'latin1', 'utf8'):
+        for encoding in ('ascii', 'latin-1', 'utf-8'):
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = encoding
             p = subprocess.Popen(
@@ -282,7 +276,7 @@ class CmdLineTest(unittest.TestCase):
         rc, out, err = assert_python_ok('-c', code)
         self.assertEqual(b'', out)
         self.assertRegex(err.decode('ascii', 'ignore'),
-                         'Exception IOError: .* ignored')
+                         'Exception OSError: .* ignored')
 
     def test_closed_stdout(self):
         # Issue #13444: if stdout has been explicitly closed, we should
