@@ -13,6 +13,17 @@ except ImportError:
     mmap = None
 
 
+class VersionTestCase(unittest.TestCase):
+
+    def test_library_version(self):
+        # Test that the major version of the actual library in use matches the
+        # major version that we were compiled against. We can't guarantee that
+        # the minor versions will match (even on the machine on which the module
+        # was compiled), and the API is stable between minor versions, so
+        # testing only the major verions avoids spurious failures.
+        self.assertEqual(zlib.ZLIB_RUNTIME_VERSION[0], zlib.ZLIB_VERSION[0])
+
+
 class ChecksumTestCase(unittest.TestCase):
     # checksum test cases
     def test_crc32start(self):
@@ -447,6 +458,26 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         y += dco.flush()
         self.assertEqual(y, b'foo')
 
+    def test_decompress_eof(self):
+        x = b'x\x9cK\xcb\xcf\x07\x00\x02\x82\x01E'  # 'foo'
+        dco = zlib.decompressobj()
+        self.assertFalse(dco.eof)
+        dco.decompress(x[:-5])
+        self.assertFalse(dco.eof)
+        dco.decompress(x[-5:])
+        self.assertTrue(dco.eof)
+        dco.flush()
+        self.assertTrue(dco.eof)
+
+    def test_decompress_eof_incomplete_stream(self):
+        x = b'x\x9cK\xcb\xcf\x07\x00\x02\x82\x01E'  # 'foo'
+        dco = zlib.decompressobj()
+        self.assertFalse(dco.eof)
+        dco.decompress(x[:-5])
+        self.assertFalse(dco.eof)
+        dco.flush()
+        self.assertFalse(dco.eof)
+
     if hasattr(zlib.compressobj(), "copy"):
         def test_compresscopy(self):
             # Test copying a compression object
@@ -627,6 +658,7 @@ LAERTES
 
 def test_main():
     support.run_unittest(
+        VersionTestCase,
         ChecksumTestCase,
         ChecksumBigBufferTestCase,
         ExceptionTestCase,
