@@ -18,8 +18,8 @@ order.  This documentation doesn't attempt to cover all of the permutations;
 consult the zlib manual at http://www.zlib.net/manual.html for authoritative
 information.
 
-For reading and writing ``.gz`` files see the :mod:`gzip` module. For
-other archive formats, see the :mod:`bz2`, :mod:`zipfile`, and
+For reading and writing ``.gz`` files see the :mod:`gzip` module. For other
+related file formats, see the :mod:`bz2`, :mod:`lzma`, :mod:`zipfile`, and
 :mod:`tarfile` modules.
 
 The available exception and functions in this module are:
@@ -122,6 +122,7 @@ The available exception and functions in this module are:
    won't fit into memory at once.  The *wbits* parameter controls the size of the
    window buffer.
 
+
 Compression objects support the following methods:
 
 
@@ -152,7 +153,7 @@ Compression objects support the following methods:
    compress a set of data that share a common initial prefix.
 
 
-Decompression objects support the following methods, and two attributes:
+Decompression objects support the following methods and attributes:
 
 
 .. attribute:: Decompress.unused_data
@@ -162,13 +163,6 @@ Decompression objects support the following methods, and two attributes:
    available.  If the whole bytestring turned out to contain compressed data, this is
    ``b""``, an empty bytes object.
 
-   The only way to determine where a bytestring of compressed data ends is by actually
-   decompressing it.  This means that when compressed data is contained part of a
-   larger file, you can only find the end of it by reading data and feeding it
-   followed by some non-empty bytestring into a decompression object's
-   :meth:`decompress` method until the :attr:`unused_data` attribute is no longer
-   empty.
-
 
 .. attribute:: Decompress.unconsumed_tail
 
@@ -177,6 +171,17 @@ Decompression objects support the following methods, and two attributes:
    buffer.  This data has not yet been seen by the zlib machinery, so you must feed
    it (possibly with further data concatenated to it) back to a subsequent
    :meth:`decompress` method call in order to get correct output.
+
+
+.. attribute:: Decompress.eof
+
+   A boolean indicating whether the end of the compressed data stream has been
+   reached.
+
+   This makes it possible to distinguish between a properly-formed compressed
+   stream, and an incomplete or truncated one.
+
+   .. versionadded:: 3.3
 
 
 .. method:: Decompress.decompress(data[, max_length])
@@ -211,6 +216,24 @@ Decompression objects support the following methods, and two attributes:
    Returns a copy of the decompression object.  This can be used to save the state
    of the decompressor midway through the data stream in order to speed up random
    seeks into the stream at a future point.
+
+
+Information about the version of the zlib library in use is available through
+the following constants:
+
+
+.. data:: ZLIB_VERSION
+
+   The version string of the zlib library that was used for building the module.
+   This may be different from the zlib library actually used at runtime, which
+   is available as :const:`ZLIB_RUNTIME_VERSION`.
+
+
+.. data:: ZLIB_RUNTIME_VERSION
+
+   The version string of the zlib library actually loaded by the interpreter.
+
+   .. versionadded:: 3.3
 
 
 .. seealso::
