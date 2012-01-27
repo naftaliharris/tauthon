@@ -23,8 +23,8 @@ It's not really a tutorial - you'll still have work to do in getting things
 working. It doesn't cover the fine points (and there are a lot of them), but I
 hope it will give you enough background to begin using them decently.
 
-I'm only going to talk about INET sockets, but they account for at least 99% of
-the sockets in use. And I'll only talk about STREAM sockets - unless you really
+I'm only going to talk about INET (i.e. IPv4) sockets, but they account for at least 99% of
+the sockets in use. And I'll only talk about STREAM (i.e. TCP) sockets - unless you really
 know what you're doing (in which case this HOWTO isn't for you!), you'll get
 better behavior and performance from a STREAM socket than anything else. I will
 try to clear up the mystery of what a socket is, as well as some hints on how to
@@ -206,10 +206,10 @@ length message::
                totalsent = totalsent + sent
 
        def myreceive(self):
-           msg = ''
+           msg = b''
            while len(msg) < MSGLEN:
                chunk = self.sock.recv(MSGLEN-len(msg))
-               if chunk == '':
+               if chunk == b'':
                    raise RuntimeError("socket connection broken")
                msg = msg + chunk
            return msg
@@ -369,12 +369,6 @@ have created a new socket to ``connect`` to someone else, put it in the
 potential_writers list. If it shows up in the writable list, you have a decent
 chance that it has connected.
 
-One very nasty problem with ``select``: if somewhere in those input lists of
-sockets is one which has died a nasty death, the ``select`` will fail. You then
-need to loop through every single damn socket in all those lists and do a
-``select([sock],[],[],0)`` until you find the bad one. That timeout of 0 means
-it won't take long, but it's ugly.
-
 Actually, ``select`` can be handy even with blocking sockets. It's one way of
 determining whether you will block - the socket returns as readable when there's
 something in the buffers.  However, this still doesn't help with the problem of
@@ -384,26 +378,6 @@ determining whether the other end is done, or just busy with something else.
 files. Don't try this on Windows. On Windows, ``select`` works with sockets
 only. Also note that in C, many of the more advanced socket options are done
 differently on Windows. In fact, on Windows I usually use threads (which work
-very, very well) with my sockets. Face it, if you want any kind of performance,
-your code will look very different on Windows than on Unix.
+very, very well) with my sockets.
 
-
-Performance
------------
-
-There's no question that the fastest sockets code uses non-blocking sockets and
-select to multiplex them. You can put together something that will saturate a
-LAN connection without putting any strain on the CPU.
-
-The trouble is that an app written this way can't do much of anything else -
-it needs to be ready to shuffle bytes around at all times. Assuming that your
-app is actually supposed to do something more than that, threading is the
-optimal solution, (and using non-blocking sockets will be faster than using
-blocking sockets).
-
-Finally, remember that even though blocking sockets are somewhat slower than
-non-blocking, in many cases they are the "right" solution. After all, if your
-app is driven by the data it receives over a socket, there's not much sense in
-complicating the logic just so your app can wait on ``select`` instead of
-``recv``.
 
