@@ -462,6 +462,91 @@ deque_rotate(dequeobject *deque, PyObject *args)
 PyDoc_STRVAR(rotate_doc,
 "Rotate the deque n steps to the right (default n=1).  If n is negative, rotates left.");
 
+static PyObject *
+deque_reverse(dequeobject *deque, PyObject *unused)
+{
+    block *leftblock = deque->leftblock;
+    block *rightblock = deque->rightblock;
+    Py_ssize_t leftindex = deque->leftindex;
+    Py_ssize_t rightindex = deque->rightindex;
+    Py_ssize_t n = (deque->len)/2;
+    Py_ssize_t i;
+    PyObject *tmp;
+
+    for (i=0 ; i<n ; i++) {
+        /* Validate that pointers haven't met in the middle */
+        assert(leftblock != rightblock || leftindex < rightindex);
+
+        /* Swap */
+        tmp = leftblock->data[leftindex];
+        leftblock->data[leftindex] = rightblock->data[rightindex];
+        rightblock->data[rightindex] = tmp;
+
+        /* Advance left block/index pair */
+        leftindex++;
+        if (leftindex == BLOCKLEN) {
+            if (leftblock->rightlink == NULL)
+                break;
+            leftblock = leftblock->rightlink;
+            leftindex = 0;
+        }
+
+        /* Step backwards with the right block/index pair */
+        rightindex--;
+        if (rightindex == -1) {
+            if (rightblock->leftlink == NULL)
+                break;
+            rightblock = rightblock->leftlink;
+            rightindex = BLOCKLEN - 1;
+        }
+    }
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(reverse_doc,
+"D.reverse() -- reverse *IN PLACE*");
+
+static PyObject *
+deque_count(dequeobject *deque, PyObject *v)
+{
+    block *leftblock = deque->leftblock;
+    Py_ssize_t leftindex = deque->leftindex;
+    Py_ssize_t n = deque->len;
+    Py_ssize_t i;
+    Py_ssize_t count = 0;
+    PyObject *item;
+    long start_state = deque->state;
+    int cmp;
+
+    for (i=0 ; i<n ; i++) {
+        item = leftblock->data[leftindex];
+        cmp = PyObject_RichCompareBool(item, v, Py_EQ);
+        if (cmp > 0)
+            count++;
+        else if (cmp < 0)
+            return NULL;
+
+        if (start_state != deque->state) {
+            PyErr_SetString(PyExc_RuntimeError,
+                            "deque mutated during iteration");
+            return NULL;
+        }
+
+        /* Advance left block/index pair */
+        leftindex++;
+        if (leftindex == BLOCKLEN) {
+            if (leftblock->rightlink == NULL)  /* can occur when i==n-1 */
+                break;
+            leftblock = leftblock->rightlink;
+            leftindex = 0;
+        }
+    }
+    return PyLong_FromSsize_t(count);
+}
+
+PyDoc_STRVAR(count_doc,
+"D.count(value) -> integer -- return number of occurrences of value");
+
 static Py_ssize_t
 deque_len(dequeobject *deque)
 {
@@ -891,6 +976,8 @@ static PyMethodDef deque_methods[] = {
         METH_NOARGS,             clear_doc},
     {"__copy__",                (PyCFunction)deque_copy,
         METH_NOARGS,             copy_doc},
+    {"count",                   (PyCFunction)deque_count,
+        METH_O,                         count_doc},
     {"extend",                  (PyCFunction)deque_extend,
         METH_O,                  extend_doc},
     {"extendleft",              (PyCFunction)deque_extendleft,
@@ -905,6 +992,8 @@ static PyMethodDef deque_methods[] = {
         METH_O,                  remove_doc},
     {"__reversed__",            (PyCFunction)deque_reviter,
         METH_NOARGS,             reversed_doc},
+    {"reverse",                 (PyCFunction)deque_reverse,
+        METH_NOARGS,             reverse_doc},
     {"rotate",                  (PyCFunction)deque_rotate,
         METH_VARARGS,           rotate_doc},
     {NULL,              NULL}   /* sentinel */
@@ -930,24 +1019,24 @@ static PyTypeObject deque_type = {
     0,                                  /* tp_as_number */
     &deque_as_sequence,                 /* tp_as_sequence */
     0,                                  /* tp_as_mapping */
-    (hashfunc)PyObject_HashNotImplemented,      /* tp_hash */
+    PyObject_HashNotImplemented,        /* tp_hash */
     0,                                  /* tp_call */
     0,                                  /* tp_str */
     PyObject_GenericGetAttr,            /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
-                                    /* tp_flags */
+                                        /* tp_flags */
     deque_doc,                          /* tp_doc */
     (traverseproc)deque_traverse,       /* tp_traverse */
     (inquiry)deque_clear,               /* tp_clear */
     (richcmpfunc)deque_richcompare,     /* tp_richcompare */
-    offsetof(dequeobject, weakreflist),         /* tp_weaklistoffset*/
+    offsetof(dequeobject, weakreflist), /* tp_weaklistoffset*/
     (getiterfunc)deque_iter,            /* tp_iter */
     0,                                  /* tp_iternext */
     deque_methods,                      /* tp_methods */
     0,                                  /* tp_members */
-    deque_getset,       /* tp_getset */
+    deque_getset,                       /* tp_getset */
     0,                                  /* tp_base */
     0,                                  /* tp_dict */
     0,                                  /* tp_descr_get */
@@ -1432,6 +1521,95 @@ static PyTypeObject defdict_type = {
     PyObject_GC_Del,                    /* tp_free */
 };
 
+/* helper function for Counter  *********************************************/
+
+PyDoc_STRVAR(_count_elements_doc,
+"_count_elements(mapping, iterable) -> None\n\
+\n\
+Count elements in the iterable, updating the mappping");
+
+static PyObject *
+_count_elements(PyObject *self, PyObject *args)
+{
+    PyObject *it, *iterable, *mapping, *oldval;
+    PyObject *newval = NULL;
+    PyObject *key = NULL;
+    PyObject *one = NULL;
+
+    if (!PyArg_UnpackTuple(args, "_count_elements", 2, 2, &mapping, &iterable))
+        return NULL;
+
+    it = PyObject_GetIter(iterable);
+    if (it == NULL)
+        return NULL;
+
+    one = PyLong_FromLong(1);
+    if (one == NULL) {
+        Py_DECREF(it);
+        return NULL;
+    }
+
+    if (PyDict_CheckExact(mapping)) {
+        while (1) {
+            key = PyIter_Next(it);
+            if (key == NULL) {
+                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
+                    PyErr_Clear();
+                else
+                    break;
+            }
+            oldval = PyDict_GetItem(mapping, key);
+            if (oldval == NULL) {
+                if (PyDict_SetItem(mapping, key, one) == -1)
+                    break;
+            } else {
+                newval = PyNumber_Add(oldval, one);
+                if (newval == NULL)
+                    break;
+                if (PyDict_SetItem(mapping, key, newval) == -1)
+                    break;
+                Py_CLEAR(newval);
+            }
+            Py_DECREF(key);
+        }
+    } else {
+        while (1) {
+            key = PyIter_Next(it);
+            if (key == NULL) {
+                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
+                    PyErr_Clear();
+                else
+                    break;
+            }
+            oldval = PyObject_GetItem(mapping, key);
+            if (oldval == NULL) {
+                if (!PyErr_Occurred() || !PyErr_ExceptionMatches(PyExc_KeyError))
+                    break;
+                PyErr_Clear();
+                Py_INCREF(one);
+                newval = one;
+            } else {
+                newval = PyNumber_Add(oldval, one);
+                Py_DECREF(oldval);
+                if (newval == NULL)
+                    break;
+            }
+            if (PyObject_SetItem(mapping, key, newval) == -1)
+                break;
+            Py_CLEAR(newval);
+            Py_DECREF(key);
+        }
+    }
+
+    Py_DECREF(it);
+    Py_XDECREF(key);
+    Py_XDECREF(newval);
+    Py_DECREF(one);
+    if (PyErr_Occurred())
+        return NULL;
+    Py_RETURN_NONE;
+}
+
 /* module level code ********************************************************/
 
 PyDoc_STRVAR(module_doc,
@@ -1440,13 +1618,17 @@ PyDoc_STRVAR(module_doc,
 - defaultdict:  dict subclass with a default value factory\n\
 ");
 
+static struct PyMethodDef module_functions[] = {
+    {"_count_elements", _count_elements,    METH_VARARGS,   _count_elements_doc},
+    {NULL,       NULL}          /* sentinel */
+};
 
 static struct PyModuleDef _collectionsmodule = {
     PyModuleDef_HEAD_INIT,
     "_collections",
     module_doc,
     -1,
-    NULL,
+    module_functions,
     NULL,
     NULL,
     NULL,

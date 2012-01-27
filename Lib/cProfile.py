@@ -1,10 +1,10 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 """Python interface for the 'lsprof' profiler.
    Compatible with the 'profile' module.
 """
 
-__all__ = ["run", "runctx", "help", "Profile"]
+__all__ = ["run", "runctx", "Profile"]
 
 import _lsprof
 
@@ -55,11 +55,6 @@ def runctx(statement, globals, locals, filename=None, sort=-1):
         else:
             result = prof.print_stats(sort)
     return result
-
-# Backwards compatibility.
-def help():
-    print("Documentation for the profile/cProfile modules can be found ")
-    print("in the Python Library Reference, section 'The Python Profiler'.")
 
 # ____________________________________________________________
 

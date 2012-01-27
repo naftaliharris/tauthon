@@ -12,7 +12,8 @@ import contextlib
 import shutil
 import zipfile
 
-from test.support import strip_python_stderr
+from imp import source_from_cache
+from test.support import make_legacy_pyc, strip_python_stderr
 
 # Executing the interpreter in a subprocess
 def _assert_python(expected_success, *args, **env_vars):
@@ -89,6 +90,27 @@ def make_script(script_dir, script_basename, source):
     script_file.write(source)
     script_file.close()
     return script_name
+
+def make_zip_script(zip_dir, zip_basename, script_name, name_in_zip=None):
+    zip_filename = zip_basename+os.extsep+'zip'
+    zip_name = os.path.join(zip_dir, zip_filename)
+    zip_file = zipfile.ZipFile(zip_name, 'w')
+    if name_in_zip is None:
+        parts = script_name.split(os.sep)
+        if len(parts) >= 2 and parts[-2] == '__pycache__':
+            legacy_pyc = make_legacy_pyc(source_from_cache(script_name))
+            name_in_zip = os.path.basename(legacy_pyc)
+            script_name = legacy_pyc
+        else:
+            name_in_zip = os.path.basename(script_name)
+    zip_file.write(script_name, name_in_zip)
+    zip_file.close()
+    #if test.support.verbose:
+    #    zip_file = zipfile.ZipFile(zip_name, 'r')
+    #    print 'Contents of %r:' % zip_name
+    #    zip_file.printdir()
+    #    zip_file.close()
+    return zip_name, os.path.join(zip_name, name_in_zip)
 
 def make_pkg(pkg_dir, init_source=''):
     os.mkdir(pkg_dir)

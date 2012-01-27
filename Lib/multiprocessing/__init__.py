@@ -9,7 +9,7 @@
 # wrapper for 'threading'.
 #
 # Try calling `multiprocessing.doc.main()` to read the html
-# documentation in in a webbrowser.
+# documentation in a webbrowser.
 #
 #
 # Copyright (c) 2006-2008, R Oudkerk
@@ -223,12 +223,12 @@ def JoinableQueue(maxsize=0):
     from multiprocessing.queues import JoinableQueue
     return JoinableQueue(maxsize)
 
-def Pool(processes=None, initializer=None, initargs=()):
+def Pool(processes=None, initializer=None, initargs=(), maxtasksperchild=None):
     '''
     Returns a process pool object
     '''
     from multiprocessing.pool import Pool
-    return Pool(processes, initializer, initargs)
+    return Pool(processes, initializer, initargs, maxtasksperchild)
 
 def RawValue(typecode_or_type, *args):
     '''

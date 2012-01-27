@@ -1,6 +1,4 @@
-# $Id$
-#
-#  Copyright (C) 2005-2007   Gregory P. Smith (greg@krypto.org)
+#  Copyright (C) 2005-2010   Gregory P. Smith (greg@krypto.org)
 #  Licensed to PSF under a Contributor Agreement.
 #
 
@@ -15,8 +13,9 @@ than using new(name):
 
 md5(), sha1(), sha224(), sha256(), sha384(), and sha512()
 
-More algorithms may be available on your platform but the above are
-guaranteed to exist.
+More algorithms may be available on your platform but the above are guaranteed
+to exist.  See the algorithms_guaranteed and algorithms_available attributes
+to find out what algorithm names can be passed to new().
 
 NOTE: If you want the adler32 or crc32 hash functions they are available in
 the zlib module.
@@ -53,30 +52,55 @@ More condensed:
 
 """
 
+# This tuple and __get_builtin_constructor() must be modified if a new
+# always available algorithm is added.
+__always_supported = ('md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512')
+
+algorithms_guaranteed = set(__always_supported)
+algorithms_available = set(__always_supported)
+
+__all__ = __always_supported + ('new', 'algorithms_guaranteed',
+                                'algorithms_available')
+
 
 def __get_builtin_constructor(name):
-    if name in ('SHA1', 'sha1'):
-        import _sha1
-        return _sha1.sha1
-    elif name in ('MD5', 'md5'):
-        import _md5
-        return _md5.md5
-    elif name in ('SHA256', 'sha256', 'SHA224', 'sha224'):
-        import _sha256
-        bs = name[3:]
-        if bs == '256':
-            return _sha256.sha256
-        elif bs == '224':
-            return _sha256.sha224
-    elif name in ('SHA512', 'sha512', 'SHA384', 'sha384'):
-        import _sha512
-        bs = name[3:]
-        if bs == '512':
-            return _sha512.sha512
-        elif bs == '384':
-            return _sha512.sha384
+    try:
+        if name in ('SHA1', 'sha1'):
+            import _sha1
+            return _sha1.sha1
+        elif name in ('MD5', 'md5'):
+            import _md5
+            return _md5.md5
+        elif name in ('SHA256', 'sha256', 'SHA224', 'sha224'):
+            import _sha256
+            bs = name[3:]
+            if bs == '256':
+                return _sha256.sha256
+            elif bs == '224':
+                return _sha256.sha224
+        elif name in ('SHA512', 'sha512', 'SHA384', 'sha384'):
+            import _sha512
+            bs = name[3:]
+            if bs == '512':
+                return _sha512.sha512
+            elif bs == '384':
+                return _sha512.sha384
+    except ImportError:
+        pass  # no extension module, this hash is unsupported.
 
-    raise ValueError("unsupported hash type")
+    raise ValueError('unsupported hash type %s' % name)
+
+
+def __get_openssl_constructor(name):
+    try:
+        f = getattr(_hashlib, 'openssl_' + name)
+        # Allow the C module to raise ValueError.  The function will be
+        # defined but the hash not actually available thanks to OpenSSL.
+        f()
+        # Use the C function directly (very fast)
+        return f
+    except (AttributeError, ValueError):
+        return __get_builtin_constructor(name)
 
 
 def __py_new(name, data=b''):
@@ -102,39 +126,23 @@ def __hash_new(name, data=b''):
 
 try:
     import _hashlib
-    # use the wrapper of the C implementation
     new = __hash_new
-
-    for opensslFuncName in filter(lambda n: n.startswith('openssl_'), dir(_hashlib)):
-        funcName = opensslFuncName[len('openssl_'):]
-        try:
-            # try them all, some may not work due to the OpenSSL
-            # version not supporting that algorithm.
-            f = getattr(_hashlib, opensslFuncName)
-            f()
-            # Use the C function directly (very fast)
-            exec(funcName + ' = f')
-        except ValueError:
-            try:
-                # Use the builtin implementation directly (fast)
-                exec(funcName + ' = __get_builtin_constructor(funcName)')
-            except ValueError:
-                # this one has no builtin implementation, don't define it
-                pass
-    # clean up our locals
-    del f
-    del opensslFuncName
-    del funcName
-
+    __get_hash = __get_openssl_constructor
+    algorithms_available = algorithms_available.union(
+            _hashlib.openssl_md_meth_names)
 except ImportError:
-    # We don't have the _hashlib OpenSSL module?
-    # use the built in legacy interfaces via a wrapper function
     new = __py_new
+    __get_hash = __get_builtin_constructor
 
-    # lookup the C function to use directly for the named constructors
-    md5 = __get_builtin_constructor('md5')
-    sha1 = __get_builtin_constructor('sha1')
-    sha224 = __get_builtin_constructor('sha224')
-    sha256 = __get_builtin_constructor('sha256')
-    sha384 = __get_builtin_constructor('sha384')
-    sha512 = __get_builtin_constructor('sha512')
+for __func_name in __always_supported:
+    # try them all, some may not work due to the OpenSSL
+    # version not supporting that algorithm.
+    try:
+        globals()[__func_name] = __get_hash(__func_name)
+    except ValueError:
+        import logging
+        logging.exception('code for hash %s was not found.', __func_name)
+
+# Cleanup locals()
+del __always_supported, __func_name, __get_hash
+del __py_new, __hash_new, __get_openssl_constructor

@@ -53,7 +53,8 @@ class TestPkg(unittest.TestCase):
     def tearDown(self):
         sys.path[:] = self.syspath
         support.modules_cleanup(*self.modules_before)
-        cleanout(self.root)
+        if self.root: # Only clean if the test was actually run
+            cleanout(self.root)
 
         # delete all modules concerning the tested hierarchy
         if self.pkgname:
@@ -102,9 +103,6 @@ class TestPkg(unittest.TestCase):
          ("t2 sub subsub __init__.py", "spam = 1"),
         ]
         self.mkhier(hier)
-
-        import t2
-        self.assertEqual(t2.__doc__, "doc for t2")
 
         import t2.sub
         import t2.sub.subsub
@@ -198,14 +196,14 @@ class TestPkg(unittest.TestCase):
 
         import t5
         self.assertEqual(fixdir(dir(t5)),
-                         ['__doc__', '__file__', '__name__',
+                         ['__cached__', '__doc__', '__file__', '__name__',
                           '__package__', '__path__', 'foo', 'string', 't5'])
         self.assertEqual(fixdir(dir(t5.foo)),
-                         ['__doc__', '__file__', '__name__', '__package__',
-                          'string'])
+                         ['__cached__', '__doc__', '__file__', '__name__',
+                          '__package__', 'string'])
         self.assertEqual(fixdir(dir(t5.string)),
-                         ['__doc__', '__file__', '__name__','__package__',
-                          'spam'])
+                         ['__cached__', '__doc__', '__file__', '__name__',
+                          '__package__', 'spam'])
 
     def test_6(self):
         hier = [
@@ -220,13 +218,13 @@ class TestPkg(unittest.TestCase):
 
         import t6
         self.assertEqual(fixdir(dir(t6)),
-                         ['__all__', '__doc__', '__file__',
+                         ['__all__', '__cached__', '__doc__', '__file__',
                           '__name__', '__package__', '__path__'])
         s = """
             import t6
             from t6 import *
             self.assertEqual(fixdir(dir(t6)),
-                             ['__all__', '__doc__', '__file__',
+                             ['__all__', '__cached__', '__doc__', '__file__',
                               '__name__', '__package__', '__path__',
                               'eggs', 'ham', 'spam'])
             self.assertEqual(dir(), ['eggs', 'ham', 'self', 'spam', 't6'])
@@ -254,18 +252,18 @@ class TestPkg(unittest.TestCase):
         t7, sub, subsub = None, None, None
         import t7 as tas
         self.assertEqual(fixdir(dir(tas)),
-                         ['__doc__', '__file__', '__name__',
+                         ['__cached__', '__doc__', '__file__', '__name__',
                           '__package__', '__path__'])
         self.assertFalse(t7)
         from t7 import sub as subpar
         self.assertEqual(fixdir(dir(subpar)),
-                         ['__doc__', '__file__', '__name__',
+                         ['__cached__', '__doc__', '__file__', '__name__',
                           '__package__', '__path__'])
         self.assertFalse(t7)
         self.assertFalse(sub)
         from t7.sub import subsub as subsubsub
         self.assertEqual(fixdir(dir(subsubsub)),
-                         ['__doc__', '__file__', '__name__',
+                         ['__cached__', '__doc__', '__file__', '__name__',
                          '__package__', '__path__', 'spam'])
         self.assertFalse(t7)
         self.assertFalse(sub)
@@ -276,6 +274,17 @@ class TestPkg(unittest.TestCase):
         self.assertFalse(sub)
         self.assertFalse(subsub)
 
+    @unittest.skipIf(sys.flags.optimize >= 2,
+                     "Docstrings are omitted with -O2 and above")
+    def test_8(self):
+        hier = [
+                ("t8", None),
+                ("t8 __init__"+os.extsep+"py", "'doc for t8'"),
+               ]
+        self.mkhier(hier)
+
+        import t8
+        self.assertEqual(t8.__doc__, "doc for t8")
 
 def test_main():
     support.run_unittest(__name__)

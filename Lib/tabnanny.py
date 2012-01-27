@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 """The Tab Nanny despises ambiguous indentation.  She knows no mercy.
 
@@ -93,11 +93,8 @@ def check(file):
                 check(fullname)
         return
 
-    with open(file, 'rb') as f:
-        encoding, lines = tokenize.detect_encoding(f.readline)
-
     try:
-        f = open(file, encoding=encoding)
+        f = tokenize.open(file)
     except IOError as msg:
         errprint("%r: I/O Error: %s" % (file, msg))
         return
@@ -267,7 +264,7 @@ class Whitespace:
         return a
 
 def format_witnesses(w):
-    firsts = map(lambda tup: str(tup[0]), w)
+    firsts = (str(tup[0]) for tup in w)
     prefix = "at tab size"
     if len(w) > 1:
         prefix = prefix + "s"

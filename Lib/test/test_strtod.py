@@ -2,11 +2,14 @@
 # introduced in Python 2.7 and 3.1.
 
 import random
-import struct
 import unittest
 import re
 import sys
 import test.support
+
+if getattr(sys, 'float_repr_style', '') != 'short':
+    raise unittest.SkipTest('correctly-rounded string->float conversions '
+                            'not available on this system')
 
 # Correctly rounded str -> float in pure Python, for comparison.
 
@@ -19,6 +22,8 @@ strtod_parser = re.compile(r"""    # A numeric string consists of:
     \Z
 """, re.VERBOSE | re.IGNORECASE).match
 
+# Pure Python version of correctly rounded string->float conversion.
+# Avoids any use of floating-point by returning the result as a hex string.
 def strtod(s, mant_dig=53, min_exp = -1021, max_exp = 1024):
     """Convert a finite decimal string to a hex string representing an
     IEEE 754 binary64 float.  Return 'inf' or '-inf' on overflow.
@@ -78,8 +83,6 @@ def strtod(s, mant_dig=53, min_exp = -1021, max_exp = 1024):
 
 TEST_SIZE = 10
 
-@unittest.skipUnless(getattr(sys, 'float_repr_style', '') == 'short',
-                     "applies only when using short float repr style")
 class StrtodTests(unittest.TestCase):
     def check_strtod(self, s):
         """Compare the result of Python's builtin correctly rounded
@@ -257,6 +260,10 @@ class StrtodTests(unittest.TestCase):
             '18487398785991994634182916638542680759613590482273e-357',
             '32002864200581033134358724675198044527469366773928e-358',
             '94393431193180696942841837085033647913224148539854e-358',
+            '73608278998966969345824653500136787876436005957953e-358',
+            '64774478836417299491718435234611299336288082136054e-358',
+            '13704940134126574534878641876947980878824688451169e-357',
+            '46697445774047060960624497964425416610480524760471e-358',
             # failing case for bug introduced by METD in r77451 (attempted
             # fix for issue 7632, bug 2), and fixed in r77482.
             '28639097178261763178489759107321392745108491825303e-311',
@@ -380,6 +387,13 @@ class StrtodTests(unittest.TestCase):
             '999999999999999944488848768742172978818416595458984375e-54',
             '9999999999999999444888487687421729788184165954589843749999999e-54',
             '9999999999999999444888487687421729788184165954589843750000001e-54',
+            # Value found by Rick Regan that gives a result of 2**-968
+            # under Gay's dtoa.c (as of Nov 04, 2010);  since fixed.
+            # (Fixed some time ago in Python's dtoa.c.)
+            '0.0000000000000000000000000000000000000000100000000' #...
+            '000000000576129113423785429971690421191214034235435' #...
+            '087147763178149762956868991692289869941246658073194' #...
+            '51982237978882039897143840789794921875',
             ]
         for s in test_strings:
             self.check_strtod(s)

@@ -132,8 +132,6 @@ static PyTypeObject Simple_Type;
 /* a callable object used for unpickling */
 static PyObject *_unpickle;
 
-char *_ctypes_conversion_encoding = NULL;
-char *_ctypes_conversion_errors = NULL;
 
 
 /****************************************************************/
@@ -1096,15 +1094,9 @@ CharArray_set_value(CDataObject *self, PyObject *value)
         return -1;
     }
 
-    if (PyUnicode_Check(value)) {
-        value = PyUnicode_AsEncodedString(value,
-                                          _ctypes_conversion_encoding,
-                                          _ctypes_conversion_errors);
-        if (!value)
-            return -1;
-    } else if (!PyBytes_Check(value)) {
+    if (!PyBytes_Check(value)) {
         PyErr_Format(PyExc_TypeError,
-                     "str/bytes expected instead of %s instance",
+                     "bytes expected instead of %s instance",
                      Py_TYPE(value)->tp_name);
         return -1;
     } else
@@ -1156,13 +1148,7 @@ WCharArray_set_value(CDataObject *self, PyObject *value)
                         "can't delete attribute");
         return -1;
     }
-    if (PyBytes_Check(value)) {
-        value = PyUnicode_FromEncodedObject(value,
-                                            _ctypes_conversion_encoding,
-                                            _ctypes_conversion_errors);
-        if (!value)
-            return -1;
-    } else if (!PyUnicode_Check(value)) {
+    if (!PyUnicode_Check(value)) {
         PyErr_Format(PyExc_TypeError,
                         "unicode string expected instead of %s instance",
                         Py_TYPE(value)->tp_name);
@@ -1175,7 +1161,7 @@ WCharArray_set_value(CDataObject *self, PyObject *value)
         result = -1;
         goto done;
     }
-    result = PyUnicode_AsWideChar((PyUnicodeObject *)value,
+    result = PyUnicode_AsWideChar(value,
                                   (wchar_t *)self->b_ptr,
                                   self->b_size/sizeof(wchar_t));
     if (result >= 0 && (size_t)result < self->b_size/sizeof(wchar_t))
@@ -1270,49 +1256,57 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     PyTypeObject *result;
     StgDictObject *stgdict;
     StgDictObject *itemdict;
-    PyObject *proto;
-    PyObject *typedict;
+    PyObject *length_attr, *type_attr;
     long length;
     int overflow;
     Py_ssize_t itemsize, itemalign;
     char buf[32];
 
-    typedict = PyTuple_GetItem(args, 2);
-    if (!typedict)
+    /* create the new instance (which is a class,
+       since we are a metatype!) */
+    result = (PyTypeObject *)PyType_Type.tp_new(type, args, kwds);
+    if (result == NULL)
         return NULL;
 
-    proto = PyDict_GetItemString(typedict, "_length_"); /* Borrowed ref */
-    if (!proto || !PyLong_Check(proto)) {
+    /* Initialize these variables to NULL so that we can simplify error
+       handling by using Py_XDECREF.  */
+    stgdict = NULL;
+    type_attr = NULL;
+
+    length_attr = PyObject_GetAttrString((PyObject *)result, "_length_");
+    if (!length_attr || !PyLong_Check(length_attr)) {
         PyErr_SetString(PyExc_AttributeError,
                         "class must define a '_length_' attribute, "
                         "which must be a positive integer");
-        return NULL;
+        Py_XDECREF(length_attr);
+        goto error;
     }
-    length = PyLong_AsLongAndOverflow(proto, &overflow);
+    length = PyLong_AsLongAndOverflow(length_attr, &overflow);
     if (overflow) {
         PyErr_SetString(PyExc_OverflowError,
                         "The '_length_' attribute is too large");
-        return NULL;
+        Py_DECREF(length_attr);
+        goto error;
     }
+    Py_DECREF(length_attr);
 
-    proto = PyDict_GetItemString(typedict, "_type_"); /* Borrowed ref */
-    if (!proto) {
+    type_attr = PyObject_GetAttrString((PyObject *)result, "_type_");
+    if (!type_attr) {
         PyErr_SetString(PyExc_AttributeError,
                         "class must define a '_type_' attribute");
-        return NULL;
+        goto error;
     }
 
     stgdict = (StgDictObject *)PyObject_CallObject(
         (PyObject *)&PyCStgDict_Type, NULL);
     if (!stgdict)
-        return NULL;
+        goto error;
 
-    itemdict = PyType_stgdict(proto);
+    itemdict = PyType_stgdict(type_attr);
     if (!itemdict) {
         PyErr_SetString(PyExc_TypeError,
                         "_type_ must have storage info");
-        Py_DECREF((PyObject *)stgdict);
-        return NULL;
+        goto error;
     }
 
     assert(itemdict->format);
@@ -1323,16 +1317,12 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         sprintf(buf, "(%ld)", length);
         stgdict->format = _ctypes_alloc_format_string(buf, itemdict->format);
     }
-    if (stgdict->format == NULL) {
-        Py_DECREF((PyObject *)stgdict);
-        return NULL;
-    }
+    if (stgdict->format == NULL)
+        goto error;
     stgdict->ndim = itemdict->ndim + 1;
     stgdict->shape = PyMem_Malloc(sizeof(Py_ssize_t *) * stgdict->ndim);
-    if (stgdict->shape == NULL) {
-        Py_DECREF((PyObject *)stgdict);
-        return NULL;
-    }
+    if (stgdict->shape == NULL)
+        goto error;
     stgdict->shape[0] = length;
     memmove(&stgdict->shape[1], itemdict->shape,
         sizeof(Py_ssize_t) * (stgdict->ndim - 1));
@@ -1341,7 +1331,7 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (length * itemsize < 0) {
         PyErr_SetString(PyExc_OverflowError,
                         "array too large");
-        return NULL;
+        goto error;
     }
 
     itemalign = itemdict->align;
@@ -1352,26 +1342,16 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     stgdict->size = itemsize * length;
     stgdict->align = itemalign;
     stgdict->length = length;
-    Py_INCREF(proto);
-    stgdict->proto = proto;
+    stgdict->proto = type_attr;
 
     stgdict->paramfunc = &PyCArrayType_paramfunc;
 
     /* Arrays are passed as pointers to function calls. */
     stgdict->ffi_type_pointer = ffi_type_pointer;
 
-    /* create the new instance (which is a class,
-       since we are a metatype!) */
-    result = (PyTypeObject *)PyType_Type.tp_new(type, args, kwds);
-    if (result == NULL)
-        return NULL;
-
     /* replace the class dict by our updated spam dict */
-    if (-1 == PyDict_Update((PyObject *)stgdict, result->tp_dict)) {
-        Py_DECREF(result);
-        Py_DECREF((PyObject *)stgdict);
-        return NULL;
-    }
+    if (-1 == PyDict_Update((PyObject *)stgdict, result->tp_dict))
+        goto error;
     Py_DECREF(result->tp_dict);
     result->tp_dict = (PyObject *)stgdict;
 
@@ -1380,15 +1360,20 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     */
     if (itemdict->getfunc == _ctypes_get_fielddesc("c")->getfunc) {
         if (-1 == add_getset(result, CharArray_getsets))
-            return NULL;
+            goto error;
 #ifdef CTYPES_UNICODE
     } else if (itemdict->getfunc == _ctypes_get_fielddesc("u")->getfunc) {
         if (-1 == add_getset(result, WCharArray_getsets))
-            return NULL;
+            goto error;
 #endif
     }
 
     return (PyObject *)result;
+error:
+    Py_XDECREF((PyObject*)stgdict);
+    Py_XDECREF(type_attr);
+    Py_DECREF(result);
+    return NULL;
 }
 
 PyTypeObject PyCArrayType_Type = {
@@ -1521,7 +1506,7 @@ c_char_p_from_param(PyObject *type, PyObject *value)
         Py_INCREF(Py_None);
         return Py_None;
     }
-    if (PyBytes_Check(value) || PyUnicode_Check(value)) {
+    if (PyBytes_Check(value)) {
         PyCArgObject *parg;
         struct fielddesc *fd = _ctypes_get_fielddesc("z");
 
@@ -2502,8 +2487,10 @@ static int PyCData_NewGetBuffer(PyObject *_self, Py_buffer *view, int flags)
     view->ndim = dict->ndim;
     view->shape = dict->shape;
     view->itemsize = self->b_size;
-    for (i = 0; i < view->ndim; ++i) {
-        view->itemsize /= dict->shape[i];
+    if (view->itemsize) {
+        for (i = 0; i < view->ndim; ++i) {
+            view->itemsize /= dict->shape[i];
+        }
     }
     view->strides = NULL;
     view->suboffsets = NULL;
@@ -2519,7 +2506,7 @@ static PyBufferProcs PyCData_as_buffer = {
 /*
  * CData objects are mutable, so they cannot be hashable!
  */
-static long
+static Py_hash_t
 PyCData_nohash(PyObject *self)
 {
     PyErr_SetString(PyExc_TypeError, "unhashable type");
@@ -3398,7 +3385,7 @@ PyCFuncPtr_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     self->callable = callable;
 
     self->thunk = thunk;
-    *(void **)self->b_ptr = (void *)thunk->pcl;
+    *(void **)self->b_ptr = (void *)thunk->pcl_exec;
 
     Py_INCREF((PyObject *)thunk); /* for KeepRef */
     if (-1 == KeepRef((CDataObject *)self, 0, (PyObject *)thunk)) {
@@ -3970,14 +3957,14 @@ PyTypeObject PyCFuncPtr_Type = {
 
   Returns -1 on error, or the index of next argument on success.
  */
-static int
+static Py_ssize_t
 _init_pos_args(PyObject *self, PyTypeObject *type,
                PyObject *args, PyObject *kwds,
-               int index)
+               Py_ssize_t index)
 {
     StgDictObject *dict;
     PyObject *fields;
-    int i;
+    Py_ssize_t i;
 
     if (PyType_stgdict((PyObject *)type->tp_base)) {
         index = _init_pos_args(self, type->tp_base,
@@ -4219,7 +4206,7 @@ Array_subscript(PyObject *_self, PyObject *item)
         PyObject *np;
         Py_ssize_t start, stop, step, slicelen, cur, i;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
+        if (PySlice_GetIndicesEx(item,
                                  self->b_length, &start, &stop,
                                  &step, &slicelen) < 0) {
             return NULL;
@@ -4353,7 +4340,7 @@ Array_ass_subscript(PyObject *_self, PyObject *item, PyObject *value)
     else if (PySlice_Check(item)) {
         Py_ssize_t start, stop, step, slicelen, otherlen, i, cur;
 
-        if (PySlice_GetIndicesEx((PySliceObject *)item,
+        if (PySlice_GetIndicesEx(item,
                                  self->b_length, &start, &stop,
                                  &step, &slicelen) < 0) {
             return -1;
@@ -4487,6 +4474,7 @@ PyCArrayType_from_ctype(PyObject *itemtype, Py_ssize_t length)
     if (!PyType_Check(itemtype)) {
         PyErr_SetString(PyExc_TypeError,
                         "Expected a type object");
+        Py_DECREF(key);
         return NULL;
     }
 #ifdef MS_WIN64
@@ -4498,7 +4486,7 @@ PyCArrayType_from_ctype(PyObject *itemtype, Py_ssize_t length)
 #endif
 
     result = PyObject_CallFunction((PyObject *)&PyCArrayType_Type,
-                                   "U(O){s:n,s:O}",
+                                   "s(O){s:n,s:O}",
                                    name,
                                    &PyCArray_Type,
                                    "_length_",

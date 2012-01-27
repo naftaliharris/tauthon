@@ -225,10 +225,11 @@ class FileInput:
             raise ValueError("FileInput opening mode must be one of "
                              "'r', 'rU', 'U' and 'rb'")
         self._mode = mode
-        if inplace and openhook:
-            raise ValueError("FileInput cannot use an opening hook in inplace mode")
-        elif openhook and not hasattr(openhook, '__call__'):
-            raise ValueError("FileInput openhook must be callable")
+        if openhook:
+            if inplace:
+                raise ValueError("FileInput cannot use an opening hook in inplace mode")
+            if not callable(openhook):
+                raise ValueError("FileInput openhook must be callable")
         self._openhook = openhook
 
     def __del__(self):
@@ -237,6 +238,12 @@ class FileInput:
     def close(self):
         self.nextfile()
         self._files = ()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        self.close()
 
     def __iter__(self):
         return self
