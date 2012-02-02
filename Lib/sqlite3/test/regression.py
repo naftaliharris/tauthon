@@ -1,4 +1,4 @@
-#-*- coding: ISO-8859-1 -*-
+#-*- coding: iso-8859-1 -*-
 # pysqlite2/test/regression.py: pysqlite regression tests
 #
 # Copyright (C) 2006-2010 Gerhard Häring <gh@ghaering.de>
@@ -280,6 +280,28 @@ class RegressionTests(unittest.TestCase):
         self.assertRaises(sqlite.ProgrammingError, self.con.create_collation,
             # Lone surrogate cannot be encoded to the default encoding (utf8)
             "\uDC80", collation_cb)
+
+    def CheckRecursiveCursorUse(self):
+        """
+        http://bugs.python.org/issue10811
+
+        Recursively using a cursor, such as when reusing it from a generator led to segfaults.
+        Now we catch recursive cursor usage and raise a ProgrammingError.
+        """
+        con = sqlite.connect(":memory:")
+
+        cur = con.cursor()
+        cur.execute("create table a (bar)")
+        cur.execute("create table b (baz)")
+
+        def foo():
+            cur.execute("insert into a (bar) values (?)", (1,))
+            yield 1
+
+        with self.assertRaises(sqlite.ProgrammingError):
+            cur.executemany("insert into b (baz) values (?)",
+                            ((i,) for i in foo()))
+
 
 def suite():
     regression_suite = unittest.makeSuite(RegressionTests, "Check")

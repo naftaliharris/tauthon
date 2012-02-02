@@ -265,9 +265,9 @@ PyComplex_ImagAsDouble(PyObject *op)
 static PyObject *
 try_complex_special_method(PyObject *op) {
     PyObject *f;
-    static PyObject *complexstr;
+    _Py_IDENTIFIER(__complex__);
 
-    f = _PyObject_LookupSpecial(op, "__complex__", &complexstr);
+    f = _PyObject_LookupSpecial(op, &PyId___complex__);
     if (f) {
         PyObject *res = PyObject_CallFunctionObjArgs(f, NULL);
         Py_DECREF(f);
@@ -330,12 +330,10 @@ complex_repr(PyComplexObject *v)
     int precision = 0;
     char format_code = 'r';
     PyObject *result = NULL;
-    Py_ssize_t len;
 
     /* If these are non-NULL, they'll need to be freed. */
     char *pre = NULL;
     char *im = NULL;
-    char *buf = NULL;
 
     /* These do not need to be freed. re is either an alias
        for pre or a pointer to a constant.  lead and tail
@@ -374,20 +372,10 @@ complex_repr(PyComplexObject *v)
         lead = "(";
         tail = ")";
     }
-    /* Alloc the final buffer. Add one for the "j" in the format string,
-       and one for the trailing zero byte. */
-    len = strlen(lead) + strlen(re) + strlen(im) + strlen(tail) + 2;
-    buf = PyMem_Malloc(len);
-    if (!buf) {
-        PyErr_NoMemory();
-        goto done;
-    }
-    PyOS_snprintf(buf, len, "%s%s%sj%s", lead, re, im, tail);
-    result = PyUnicode_FromString(buf);
+    result = PyUnicode_FromFormat("%s%s%sj%s", lead, re, im, tail);
   done:
     PyMem_Free(im);
     PyMem_Free(pre);
-    PyMem_Free(buf);
 
     return result;
 }
@@ -662,8 +650,7 @@ complex_richcompare(PyObject *v, PyObject *w, int op)
     return res;
 
 Unimplemented:
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static PyObject *
@@ -715,9 +702,8 @@ complex__format__(PyObject* self, PyObject* args)
 
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
     return NULL;
-    return _PyComplex_FormatAdvanced(self,
-                                     PyUnicode_AS_UNICODE(format_spec),
-                                     PyUnicode_GET_SIZE(format_spec));
+    return _PyComplex_FormatAdvanced(self, format_spec, 0,
+                                     PyUnicode_GET_LENGTH(format_spec));
 }
 
 #if 0
@@ -768,20 +754,10 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
     Py_ssize_t len;
 
     if (PyUnicode_Check(v)) {
-        Py_ssize_t i, buflen = PyUnicode_GET_SIZE(v);
-        Py_UNICODE *bufptr;
-        s_buffer = PyUnicode_TransformDecimalToASCII(
-            PyUnicode_AS_UNICODE(v), buflen);
+        s_buffer = _PyUnicode_TransformDecimalAndSpaceToASCII(v);
         if (s_buffer == NULL)
             return NULL;
-        /* Replace non-ASCII whitespace with ' ' */
-        bufptr = PyUnicode_AS_UNICODE(s_buffer);
-        for (i = 0; i < buflen; i++) {
-            Py_UNICODE ch = bufptr[i];
-            if (ch > 127 && Py_UNICODE_ISSPACE(ch))
-                bufptr[i] = ' ';
-        }
-        s = _PyUnicode_AsStringAndSize(s_buffer, &len);
+        s = PyUnicode_AsUTF8AndSize(s_buffer, &len);
         if (s == NULL)
             goto error;
     }
