@@ -117,6 +117,35 @@ typedef struct {
 #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
 
+/********************* String Literals ****************************************/
+/* This structure helps managing static strings. The basic usage goes like this:
+   Instead of doing
+
+       r = PyObject_CallMethod(o, "foo", "args", ...);
+
+   do
+
+       _Py_IDENTIFIER(foo);
+       ...
+       r = _PyObject_CallMethodId(o, &PyId_foo, "args", ...);
+
+   PyId_foo is a static variable, either on block level or file level. On first
+   usage, the string "foo" is interned, and the structures are linked. On interpreter
+   shutdown, all strings are released (through _PyUnicode_ClearStaticStrings).
+
+   Alternatively, _Py_static_string allows to choose the variable name.
+   _PyUnicode_FromId returns a borrowed reference to the interned string.
+   _PyObject_{Get,Set,Has}AttrId are __getattr__ versions using _Py_Identifier*.
+*/
+typedef struct _Py_Identifier {
+    struct _Py_Identifier *next;
+    const char* string;
+    PyObject *object;
+} _Py_Identifier;
+
+#define _Py_static_string(varname, value)  static _Py_Identifier varname = { 0, value, 0 }
+#define _Py_IDENTIFIER(varname) _Py_static_string(PyId_##varname, #varname)
+
 /*
 Type objects contain a string containing the type name (to help somewhat
 in debugging), the allocation parameters (see PyObject_New() and
@@ -418,7 +447,7 @@ typedef struct _heaptypeobject {
                                       a given operator (e.g. __getitem__).
                                       see add_operators() in typeobject.c . */
     PyBufferProcs as_buffer;
-    PyObject *ht_name, *ht_slots;
+    PyObject *ht_name, *ht_slots, *ht_qualname;
     /* here are optional user slots, followed by the members. */
 } PyHeapTypeObject;
 
@@ -448,13 +477,14 @@ PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
                                                PyObject *, PyObject *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *);
-PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, char *, PyObject **);
+PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, _Py_Identifier *);
 PyAPI_FUNC(PyTypeObject *) _PyType_CalculateMetaclass(PyTypeObject *, PyObject *);
 #endif
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
 PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 
 /* Generic operations on objects */
+struct _Py_Identifier;
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(int) PyObject_Print(PyObject *, FILE *, int);
 PyAPI_FUNC(void) _Py_BreakPoint(void);
@@ -472,6 +502,10 @@ PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *);
 PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
+PyAPI_FUNC(int) _PyObject_IsAbstract(PyObject *);
+PyAPI_FUNC(PyObject *) _PyObject_GetAttrId(PyObject *, struct _Py_Identifier *);
+PyAPI_FUNC(int) _PyObject_SetAttrId(PyObject *, struct _Py_Identifier *, PyObject *);
+PyAPI_FUNC(int) _PyObject_HasAttrId(PyObject *, struct _Py_Identifier *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *);
 #endif
@@ -515,6 +549,7 @@ PyAPI_FUNC(void) Py_ReprLeave(PyObject *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(Py_hash_t) _Py_HashDouble(double);
 PyAPI_FUNC(Py_hash_t) _Py_HashPointer(void*);
+PyAPI_FUNC(Py_hash_t) _Py_HashBytes(unsigned char*, Py_ssize_t);
 #endif
 
 /* Helper for passing objects to printf and the like */
@@ -792,6 +827,10 @@ not implemented for a given type combination.
 */
 PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
 #define Py_NotImplemented (&_Py_NotImplementedStruct)
+
+/* Macro for returning Py_NotImplemented from a function */
+#define Py_RETURN_NOTIMPLEMENTED \
+    return Py_INCREF(Py_NotImplemented), Py_NotImplemented
 
 /* Rich comparison opcodes */
 #define Py_LT 0
