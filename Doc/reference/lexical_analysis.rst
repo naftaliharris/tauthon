@@ -412,7 +412,7 @@ String literals are described by the following lexical definitions:
 
 .. productionlist::
    bytesliteral: `bytesprefix`(`shortbytes` | `longbytes`)
-   bytesprefix: "b" | "B" | "br" | "Br" | "bR" | "BR"
+   bytesprefix: "b" | "B" | "br" | "Br" | "bR" | "BR" | "rb" | "rB" | "Rb" | "RB"
    shortbytes: "'" `shortbytesitem`* "'" | '"' `shortbytesitem`* '"'
    longbytes: "'''" `longbytesitem`* "'''" | '"""' `longbytesitem`* '"""'
    shortbytesitem: `shortbyteschar` | `bytesescapeseq`
@@ -445,6 +445,10 @@ Both string and bytes literals may optionally be prefixed with a letter ``'r'``
 or ``'R'``; such strings are called :dfn:`raw strings` and treat backslashes as
 literal characters.  As a result, in string literals, ``'\U'`` and ``'\u'``
 escapes in raw strings are not treated specially.
+
+   .. versionadded:: 3.3
+      The ``'rb'`` prefix of raw bytes literals has been added as a synonym
+      of ``'br'``.
 
 In triple-quoted strings, unescaped newlines and quotes are allowed (and are
 retained), except that three unescaped quotes in a row terminate the string.  (A
@@ -492,13 +496,13 @@ Escape sequences only recognized in string literals are:
 +-----------------+---------------------------------+-------+
 | Escape Sequence | Meaning                         | Notes |
 +=================+=================================+=======+
-| ``\N{name}``    | Character named *name* in the   |       |
+| ``\N{name}``    | Character named *name* in the   | \(4)  |
 |                 | Unicode database                |       |
 +-----------------+---------------------------------+-------+
-| ``\uxxxx``      | Character with 16-bit hex value | \(4)  |
+| ``\uxxxx``      | Character with 16-bit hex value | \(5)  |
 |                 | *xxxx*                          |       |
 +-----------------+---------------------------------+-------+
-| ``\Uxxxxxxxx``  | Character with 32-bit hex value | \(5)  |
+| ``\Uxxxxxxxx``  | Character with 32-bit hex value | \(6)  |
 |                 | *xxxxxxxx*                      |       |
 +-----------------+---------------------------------+-------+
 
@@ -516,10 +520,14 @@ Notes:
    with the given value.
 
 (4)
+   .. versionchanged:: 3.3
+      Support for name aliases [#]_ has been added.
+
+(5)
    Individual code units which form parts of a surrogate pair can be encoded using
    this escape sequence.  Exactly four hex digits are required.
 
-(5)
+(6)
    Any Unicode character can be encoded this way, but characters outside the Basic
    Multilingual Plane (BMP) will be encoded using a surrogate pair if Python is
    compiled to use 16-bit code units (the default).  Exactly eight hex digits
@@ -706,3 +714,8 @@ The following printing ASCII characters are not used in Python.  Their
 occurrence outside string literals and comments is an unconditional error::
 
    $       ?       `
+
+
+.. rubric:: Footnotes
+
+.. [#] http://www.unicode.org/Public/6.0.0/ucd/NameAliases.txt
