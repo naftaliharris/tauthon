@@ -27,34 +27,43 @@ static PyTypeObject moduledef_type = {
 
 
 PyObject *
-PyModule_New(const char *name)
+PyModule_NewObject(PyObject *name)
 {
     PyModuleObject *m;
-    PyObject *nameobj;
     m = PyObject_GC_New(PyModuleObject, &PyModule_Type);
     if (m == NULL)
         return NULL;
     m->md_def = NULL;
     m->md_state = NULL;
-    nameobj = PyUnicode_FromString(name);
     m->md_dict = PyDict_New();
-    if (m->md_dict == NULL || nameobj == NULL)
+    if (m->md_dict == NULL)
         goto fail;
-    if (PyDict_SetItemString(m->md_dict, "__name__", nameobj) != 0)
+    if (PyDict_SetItemString(m->md_dict, "__name__", name) != 0)
         goto fail;
     if (PyDict_SetItemString(m->md_dict, "__doc__", Py_None) != 0)
         goto fail;
     if (PyDict_SetItemString(m->md_dict, "__package__", Py_None) != 0)
         goto fail;
-    Py_DECREF(nameobj);
     PyObject_GC_Track(m);
     return (PyObject *)m;
 
  fail:
-    Py_XDECREF(nameobj);
     Py_DECREF(m);
     return NULL;
 }
+
+PyObject *
+PyModule_New(const char *name)
+{
+    PyObject *nameobj, *module;
+    nameobj = PyUnicode_FromString(name);
+    if (nameobj == NULL)
+        return NULL;
+    module = PyModule_NewObject(nameobj);
+    Py_DECREF(nameobj);
+    return module;
+}
+
 
 PyObject *
 PyModule_Create2(struct PyModuleDef* module, int module_api_version)
@@ -169,24 +178,35 @@ PyModule_GetDict(PyObject *m)
     return d;
 }
 
-const char *
-PyModule_GetName(PyObject *m)
+PyObject*
+PyModule_GetNameObject(PyObject *m)
 {
     PyObject *d;
-    PyObject *nameobj;
+    PyObject *name;
     if (!PyModule_Check(m)) {
         PyErr_BadArgument();
         return NULL;
     }
     d = ((PyModuleObject *)m)->md_dict;
     if (d == NULL ||
-        (nameobj = PyDict_GetItemString(d, "__name__")) == NULL ||
-        !PyUnicode_Check(nameobj))
+        (name = PyDict_GetItemString(d, "__name__")) == NULL ||
+        !PyUnicode_Check(name))
     {
         PyErr_SetString(PyExc_SystemError, "nameless module");
         return NULL;
     }
-    return _PyUnicode_AsString(nameobj);
+    Py_INCREF(name);
+    return name;
+}
+
+const char *
+PyModule_GetName(PyObject *m)
+{
+    PyObject *name = PyModule_GetNameObject(m);
+    if (name == NULL)
+        return NULL;
+    Py_DECREF(name);   /* module dict has still a reference */
+    return _PyUnicode_AsString(name);
 }
 
 PyObject*
@@ -219,7 +239,7 @@ PyModule_GetFilename(PyObject *m)
     if (fileobj == NULL)
         return NULL;
     utf8 = _PyUnicode_AsString(fileobj);
-    Py_DECREF(fileobj);
+    Py_DECREF(fileobj);   /* module dict has still a reference */
     return utf8;
 }
 
@@ -265,8 +285,8 @@ _PyModule_Clear(PyObject *m)
     pos = 0;
     while (PyDict_Next(d, &pos, &key, &value)) {
         if (value != Py_None && PyUnicode_Check(key)) {
-            Py_UNICODE *u = PyUnicode_AS_UNICODE(key);
-            if (u[0] == '_' && u[1] != '_') {
+            if (PyUnicode_READ_CHAR(key, 0) == '_' && 
+                PyUnicode_READ_CHAR(key, 1) != '_') {
                 if (Py_VerboseFlag > 1) {
                     const char *s = _PyUnicode_AsString(key);
                     if (s != NULL)
@@ -283,9 +303,8 @@ _PyModule_Clear(PyObject *m)
     pos = 0;
     while (PyDict_Next(d, &pos, &key, &value)) {
         if (value != Py_None && PyUnicode_Check(key)) {
-            Py_UNICODE *u = PyUnicode_AS_UNICODE(key);
-            if (u[0] != '_'
-                || PyUnicode_CompareWithASCIIString(key, "__builtins__") != 0)
+            if (PyUnicode_READ_CHAR(key, 0) != '_' ||
+                PyUnicode_CompareWithASCIIString(key, "__builtins__") != 0)
             {
                 if (Py_VerboseFlag > 1) {
                     const char *s = _PyUnicode_AsString(key);
@@ -347,21 +366,25 @@ module_dealloc(PyModuleObject *m)
 static PyObject *
 module_repr(PyModuleObject *m)
 {
-    const char *name;
-    PyObject *filename, *repr;
+    PyObject *name, *filename, *repr;
 
-    name = PyModule_GetName((PyObject *)m);
+    name = PyModule_GetNameObject((PyObject *)m);
     if (name == NULL) {
         PyErr_Clear();
-        name = "?";
+        name = PyUnicode_FromStringAndSize("?", 1);
+        if (name == NULL)
+            return NULL;
     }
     filename = PyModule_GetFilenameObject((PyObject *)m);
     if (filename == NULL) {
         PyErr_Clear();
-        return PyUnicode_FromFormat("<module '%s' (built-in)>", name);
+        repr = PyUnicode_FromFormat("<module %R (built-in)>", name);
     }
-    repr = PyUnicode_FromFormat("<module '%s' from '%U'>", name, filename);
-    Py_DECREF(filename);
+    else {
+        repr = PyUnicode_FromFormat("<module %R from %R>", name, filename);
+        Py_DECREF(filename);
+    }
+    Py_DECREF(name);
     return repr;
 }
 
@@ -388,6 +411,35 @@ module_clear(PyModuleObject *m)
     Py_CLEAR(m->md_dict);
     return 0;
 }
+
+static PyObject *
+module_dir(PyObject *self, PyObject *args)
+{
+    _Py_IDENTIFIER(__dict__);
+    PyObject *result = NULL;
+    PyObject *dict = _PyObject_GetAttrId(self, &PyId___dict__);
+
+    if (dict != NULL) {
+        if (PyDict_Check(dict))
+            result = PyDict_Keys(dict);
+        else {
+            const char *name = PyModule_GetName(self);
+            if (name)
+                PyErr_Format(PyExc_TypeError,
+                             "%.200s.__dict__ is not a dictionary",
+                             name);
+        }
+    }
+
+    Py_XDECREF(dict);
+    return result;
+}
+
+static PyMethodDef module_methods[] = {
+    {"__dir__", module_dir, METH_NOARGS,
+     PyDoc_STR("__dir__() -> list\nspecialized dir() implementation")},
+    {0}
+};
 
 
 PyDoc_STRVAR(module_doc,
@@ -425,7 +477,7 @@ PyTypeObject PyModule_Type = {
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
-    0,                                          /* tp_methods */
+    module_methods,                             /* tp_methods */
     module_members,                             /* tp_members */
     0,                                          /* tp_getset */
     0,                                          /* tp_base */
