@@ -466,11 +466,32 @@ Core and Builtins
 Library
 -------
 
-- Issue #13845: time.time() now uses GetSystemTimeAsFileTime() instead of
-  ftime() to have a resolution of 100 ns instead of 1 ms (the clock accuracy is
-  between 0.5 ms and 15 ms).
+- Issue #13921: Undocument and clean up sqlite3.OptimizedUnicode,
+  which is obsolete in Python 3.x. It's now aliased to str for
+  backwards compatibility.
+
+- When '' is a path (e.g. in sys.path), make sure __file__ uses the current
+  working directory instead of '' in importlib.
+
+- Issue #13609: Add two functions to query the terminal size:
+  os.get_terminal_size (low level) and shutil.get_terminal_size (high level).
+  Patch by Zbigniew Jędrzejewski-Szmek.
+
+- Issue #13845: On Windows, time.time() now uses GetSystemTimeAsFileTime()
+  instead of ftime() to have a resolution of 100 ns instead of 1 ms (the clock
+  accuracy is between 0.5 ms and 15 ms).
 
 - Issue #13846: Add time.monotonic(), monotonic clock.
+
+- Issue #8184: multiprocessing: On Windows, don't set SO_REUSEADDR on
+  Connection sockets, and set FILE_FLAG_FIRST_PIPE_INSTANCE on named pipes, to
+  make sure two listeners can't bind to the same socket/pipe (or any existing
+  socket/pipe).
+
+- Issue #9021: Add an introduction to the copy module documentation.
+
+- Issue #6005: Examples in the socket library documentation use sendall, where
+  relevant, instead send method.
 
 - Issue #10811: Fix recursive usage of cursors. Instead of crashing,
   raise a ProgrammingError now.

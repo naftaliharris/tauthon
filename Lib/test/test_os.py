@@ -1840,6 +1840,50 @@ class Win32DeprecatedBytesAPI(unittest.TestCase):
                               os.symlink, filename, filename)
 
 
+@unittest.skipUnless(hasattr(os, 'get_terminal_size'), "requires os.get_terminal_size")
+class TermsizeTests(unittest.TestCase):
+    def test_does_not_crash(self):
+        """Check if get_terminal_size() returns a meaningful value.
+
+        There's no easy portable way to actually check the size of the
+        terminal, so let's check if it returns something sensible instead.
+        """
+        try:
+            size = os.get_terminal_size()
+        except OSError as e:
+            if sys.platform == "win32" or e.errno in (errno.EINVAL, errno.ENOTTY):
+                # Under win32 a generic OSError can be thrown if the
+                # handle cannot be retrieved
+                self.skipTest("failed to query terminal size")
+            raise
+
+        self.assertGreaterEqual(size.columns, 0)
+        self.assertGreaterEqual(size.lines, 0)
+
+    def test_stty_match(self):
+        """Check if stty returns the same results
+
+        stty actually tests stdin, so get_terminal_size is invoked on
+        stdin explicitly. If stty succeeded, then get_terminal_size()
+        should work too.
+        """
+        try:
+            size = subprocess.check_output(['stty', 'size']).decode().split()
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            self.skipTest("stty invocation failed")
+        expected = (int(size[1]), int(size[0])) # reversed order
+
+        try:
+            actual = os.get_terminal_size(sys.__stdin__.fileno())
+        except OSError as e:
+            if sys.platform == "win32" or e.errno in (errno.EINVAL, errno.ENOTTY):
+                # Under win32 a generic OSError can be thrown if the
+                # handle cannot be retrieved
+                self.skipTest("failed to query terminal size")
+            raise
+        self.assertEqual(expected, actual)
+
+
 @support.reap_threads
 def test_main():
     support.run_unittest(
@@ -1866,6 +1910,7 @@ def test_main():
         ProgramPriorityTests,
         ExtendedAttributeTests,
         Win32DeprecatedBytesAPI,
+        TermsizeTests,
     )
 
 if __name__ == "__main__":
