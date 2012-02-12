@@ -1,0 +1,950 @@
+****************************
+  What's New In Python 3.3
+****************************
+
+:Author: Raymond Hettinger
+:Release: |release|
+:Date: |today|
+
+.. Rules for maintenance:
+
+   * Anyone can add text to this document.  Do not spend very much time
+   on the wording of your changes, because your text will probably
+   get rewritten to some degree.
+
+   * The maintainer will go through Misc/NEWS periodically and add
+   changes; it's therefore more important to add your changes to
+   Misc/NEWS than to this file.
+
+   * This is not a complete list of every single change; completeness
+   is the purpose of Misc/NEWS.  Some changes I consider too small
+   or esoteric to include.  If such a change is added to the text,
+   I'll just remove it.  (This is another reason you shouldn't spend
+   too much time on writing your addition.)
+
+   * If you want to draw your new text to the attention of the
+   maintainer, add 'XXX' to the beginning of the paragraph or
+   section.
+
+   * It's OK to just add a fragmentary note about a change.  For
+   example: "XXX Describe the transmogrify() function added to the
+   socket module."  The maintainer will research the change and
+   write the necessary text.
+
+   * You can comment out your additions if you like, but it's not
+   necessary (especially when a final release is some months away).
+
+   * Credit the author of a patch or bugfix.   Just the name is
+   sufficient; the e-mail address isn't necessary.
+
+   * It's helpful to add the bug/patch number as a comment:
+
+   XXX Describe the transmogrify() function added to the socket
+   module.
+   (Contributed by P.Y. Developer in :issue:`12345`.)
+
+   This saves the maintainer the effort of going through the Mercurial log
+   when researching a change.
+
+This article explains the new features in Python 3.3, compared to 3.2.
+
+
+.. _pep-393:
+
+PEP 393: Flexible String Representation
+=======================================
+
+The Unicode string type is changed to support multiple internal
+representations, depending on the character with the largest Unicode ordinal
+(1, 2, or 4 bytes) in the represented string.  This allows a space-efficient
+representation in common cases, but gives access to full UCS-4 on all
+systems.  For compatibility with existing APIs, several representations may
+exist in parallel; over time, this compatibility should be phased out.
+
+On the Python side, there should be no downside to this change.
+
+On the C API side, PEP 393 is fully backward compatible.  The legacy API
+should remain available at least five years.  Applications using the legacy
+API will not fully benefit of the memory reduction, or - worse - may use
+a bit more memory, because Python may have to maintain two versions of each
+string (in the legacy format and in the new efficient storage).
+
+Functionality
+-------------
+
+Changes introduced by :pep:`393` are the following:
+
+* Python now always supports the full range of Unicode codepoints, including
+  non-BMP ones (i.e. from ``U+0000`` to ``U+10FFFF``).  The distinction between
+  narrow and wide builds no longer exists and Python now behaves like a wide
+  build, even under Windows.
+
+* With the death of narrow builds, the problems specific to narrow builds have
+  also been fixed, for example:
+
+  * :func:`len` now always returns 1 for non-BMP characters,
+    so ``len('\U0010FFFF') == 1``;
+
+  * surrogate pairs are not recombined in string literals,
+    so ``'\uDBFF\uDFFF' != '\U0010FFFF'``;
+
+  * indexing or slicing non-BMP characters returns the expected value,
+    so ``'\U0010FFFF'[0]`` now returns ``'\U0010FFFF'`` and not ``'\uDBFF'``;
+
+  * all other functions in the standard library now correctly handle
+    non-BMP codepoints.
+
+* The value of :data:`sys.maxunicode` is now always ``1114111`` (``0x10FFFF``
+  in hexadecimal).  The :c:func:`PyUnicode_GetMax` function still returns
+  either ``0xFFFF`` or ``0x10FFFF`` for backward compatibility, and it should
+  not be used with the new Unicode API (see :issue:`13054`).
+
+* The :file:`./configure` flag ``--with-wide-unicode`` has been removed.
+
+Performance and resource usage
+------------------------------
+
+The storage of Unicode strings now depends on the highest codepoint in the string:
+
+* pure ASCII and Latin1 strings (``U+0000-U+00FF``) use 1 byte per codepoint;
+
+* BMP strings (``U+0000-U+FFFF``) use 2 bytes per codepoint;
+
+* non-BMP strings (``U+10000-U+10FFFF``) use 4 bytes per codepoint.
+
+The net effect is that for most applications, memory usage of string storage
+should decrease significantly - especially compared to former wide unicode
+builds - as, in many cases, strings will be pure ASCII even in international
+contexts (because many strings store non-human language data, such as XML
+fragments, HTTP headers, JSON-encoded data, etc.).  We also hope that it
+will, for the same reasons, increase CPU cache efficiency on non-trivial
+applications.
+
+.. The memory usage of Python 3.3 is two to three times smaller than Python 3.2,
+   and a little bit better than Python 2.7, on a `Django benchmark
+   <http://mail.python.org/pipermail/python-dev/2011-September/113714.html>`_.
+   XXX The result should be moved in the PEP and a link to the PEP should
+   be added here.
+
+
+PEP 3151: Reworking the OS and IO exception hierarchy
+=====================================================
+
+:pep:`3151` - Reworking the OS and IO exception hierarchy
+ PEP written and implemented by Antoine Pitrou.
+
+The hierarchy of exceptions raised by operating system errors is now both
+simplified and finer-grained.
+
+You don't have to worry anymore about choosing the appropriate exception
+type between :exc:`OSError`, :exc:`IOError`, :exc:`EnvironmentError`,
+:exc:`WindowsError`, :exc:`mmap.error`, :exc:`socket.error` or
+:exc:`select.error`.  All these exception types are now only one:
+:exc:`OSError`.  The other names are kept as aliases for compatibility
+reasons.
+
+Also, it is now easier to catch a specific error condition.  Instead of
+inspecting the ``errno`` attribute (or ``args[0]``) for a particular
+constant from the :mod:`errno` module, you can catch the adequate
+:exc:`OSError` subclass.  The available subclasses are the following:
+
+* :exc:`BlockingIOError`
+* :exc:`ChildProcessError`
+* :exc:`ConnectionError`
+* :exc:`FileExistsError`
+* :exc:`FileNotFoundError`
+* :exc:`InterruptedError`
+* :exc:`IsADirectoryError`
+* :exc:`NotADirectoryError`
+* :exc:`PermissionError`
+* :exc:`ProcessLookupError`
+* :exc:`TimeoutError`
+
+And the :exc:`ConnectionError` itself has finer-grained subclasses:
+
+* :exc:`BrokenPipeError`
+* :exc:`ConnectionAbortedError`
+* :exc:`ConnectionRefusedError`
+* :exc:`ConnectionResetError`
+
+Thanks to the new exceptions, common usages of the :mod:`errno` can now be
+avoided.  For example, the following code written for Python 3.2::
+
+    from errno import ENOENT, EACCES, EPERM
+
+    try:
+        with open("document.txt") as f:
+            content = f.read()
+    except IOError as err:
+        if err.errno == ENOENT:
+            print("document.txt file is missing")
+        elif err.errno in (EACCES, EPERM):
+            print("You are not allowed to read document.txt")
+        else:
+            raise
+
+can now be written without the :mod:`errno` import and without manual
+inspection of exception attributes::
+
+    try:
+        with open("document.txt") as f:
+            content = f.read()
+    except FileNotFoundError:
+        print("document.txt file is missing")
+    except PermissionError:
+        print("You are not allowed to read document.txt")
+
+
+PEP 380: Syntax for Delegating to a Subgenerator
+================================================
+
+PEP 380 adds the ``yield from`` expression, allowing a generator to delegate
+part of its operations to another generator. This allows a section of code
+containing 'yield' to be factored out and placed in another generator.
+Additionally, the subgenerator is allowed to return with a value, and the
+value is made available to the delegating generator.
+While designed primarily for use in delegating to a subgenerator, the ``yield
+from`` expression actually allows delegation to arbitrary subiterators.
+
+(Implementation by Greg Ewing, integrated into 3.3 by Renaud Blanch, Ryan
+Kelly and Nick Coghlan, documentation by Zbigniew Jędrzejewski-Szmek and
+Nick Coghlan)
+
+
+PEP 3155: Qualified name for classes and functions
+==================================================
+
+:pep:`3155` - Qualified name for classes and functions
+ PEP written and implemented by Antoine Pitrou.
+
+Functions and class objects have a new ``__qualname__`` attribute representing
+the "path" from the module top-level to their definition.  For global functions
+and classes, this is the same as ``__name__``.  For other functions and classes,
+it provides better information about where they were actually defined, and
+how they might be accessible from the global scope.
+
+Example with (non-bound) methods::
+
+   >>> class C:
+   ...     def meth(self):
+   ...         pass
+   >>> C.meth.__name__
+   'meth'
+   >>> C.meth.__qualname__
+   'C.meth'
+
+Example with nested classes::
+
+   >>> class C:
+   ...     class D:
+   ...         def meth(self):
+   ...             pass
+   ...
+   >>> C.D.__name__
+   'D'
+   >>> C.D.__qualname__
+   'C.D'
+   >>> C.D.meth.__name__
+   'meth'
+   >>> C.D.meth.__qualname__
+   'C.D.meth'
+
+Example with nested functions::
+
+   >>> def outer():
+   ...     def inner():
+   ...         pass
+   ...     return inner
+   ...
+   >>> outer().__name__
+   'inner'
+   >>> outer().__qualname__
+   'outer.<locals>.inner'
+
+The string representation of those objects is also changed to include the
+new, more precise information::
+
+   >>> str(C.D)
+   "<class '__main__.C.D'>"
+   >>> str(C.D.meth)
+   '<function C.D.meth at 0x7f46b9fe31e0>'
+
+
+Other Language Changes
+======================
+
+Some smaller changes made to the core Python language are:
+
+* Added support for Unicode name aliases and named sequences.
+  Both :func:`unicodedata.lookup()` and ``'\N{...}'`` now resolve name aliases,
+  and :func:`unicodedata.lookup()` resolves named sequences too.
+
+  (Contributed by Ezio Melotti in :issue:`12753`)
+
+* Equality comparisons on :func:`range` objects now return a result reflecting
+  the equality of the underlying sequences generated by those range objects.
+
+  (:issue:`13201`)
+
+* The ``count()``, ``find()``, ``rfind()``, ``index()`` and ``rindex()``
+  methods of :class:`bytes` and :class:`bytearray` objects now accept an
+  integer between 0 and 255 as their first argument.
+
+  (:issue:`12170`)
+
+* Memoryview objects are now hashable when the underlying object is hashable.
+
+  (Contributed by Antoine Pitrou in :issue:`13411`)
+
+
+New and Improved Modules
+========================
+
+abc
+---
+
+Improved support for abstract base classes containing descriptors composed with
+abstract methods. The recommended approach to declaring abstract descriptors is
+now to provide :attr:`__isabstractmethod__` as a dynamically updated
+property. The built-in descriptors have been updated accordingly.
+
+  * :class:`abc.abstractproperty` has been deprecated, use :class:`property`
+    with :func:`abc.abstractmethod` instead.
+  * :class:`abc.abstractclassmethod` has been deprecated, use
+    :class:`classmethod` with :func:`abc.abstractmethod` instead.
+  * :class:`abc.abstractstaticmethod` has been deprecated, use
+    :class:`staticmethod` with :func:`abc.abstractmethod` instead.
+
+(Contributed by Darren Dale in :issue:`11610`)
+
+array
+-----
+
+The :mod:`array` module supports the :c:type:`long long` type using ``q`` and
+``Q`` type codes.
+
+(Contributed by Oren Tirosh and Hirokazu Yamamoto in :issue:`1172711`)
+
+
+bz2
+---
+
+The :mod:`bz2` module has been rewritten from scratch. In the process, several
+new features have been added:
+
+* :class:`bz2.BZ2File` can now read from and write to arbitrary file-like
+  objects, by means of its constructor's *fileobj* argument.
+
+  (Contributed by Nadeem Vawda in :issue:`5863`)
+
+* :class:`bz2.BZ2File` and :func:`bz2.decompress` can now decompress
+  multi-stream inputs (such as those produced by the :program:`pbzip2` tool).
+  :class:`bz2.BZ2File` can now also be used to create this type of file, using
+  the ``'a'`` (append) mode.
+
+  (Contributed by Nir Aides in :issue:`1625`)
+
+* :class:`bz2.BZ2File` now implements all of the :class:`io.BufferedIOBase` API,
+  except for the :meth:`detach` and :meth:`truncate` methods.
+
+
+codecs
+------
+
+The :mod:`~encodings.mbcs` codec has been rewritten to handle correctly
+``replace`` and ``ignore`` error handlers on all Windows versions.  The
+:mod:`~encodings.mbcs` codec now supports all error handlers, instead of only
+``replace`` to encode and ``ignore`` to decode.
+
+A new Windows-only codec has been added: ``cp65001`` (:issue:`13216`). It is the
+Windows code page 65001 (Windows UTF-8, ``CP_UTF8``).  For example, it is used
+by ``sys.stdout`` if the console output code page is set to cp65001 (e.g., using
+``chcp 65001`` command).
+
+Multibyte CJK decoders now resynchronize faster.  They only ignore the first
+byte of an invalid byte sequence. For example, ``b'\xff\n'.decode('gb2312',
+'replace')`` now returns a ``\n`` after the replacement character.
+
+(:issue:`12016`)
+
+Incremental CJK codec encoders are no longer reset at each call to their
+encode() methods. For example::
+
+    $ ./python -q
+    >>> import codecs
+    >>> encoder = codecs.getincrementalencoder('hz')('strict')
+    >>> b''.join(encoder.encode(x) for x in '\u52ff\u65bd\u65bc\u4eba\u3002 Bye.')
+    b'~{NpJ)l6HK!#~} Bye.'
+
+This example gives ``b'~{Np~}~{J)~}~{l6~}~{HK~}~{!#~} Bye.'`` with older Python
+versions.
+
+(:issue:`12100`)
+
+The ``unicode_internal`` codec has been deprecated.
+
+crypt
+-----
+
+Addition of salt and modular crypt format and the :func:`~crypt.mksalt`
+function to the :mod:`crypt` module.
+
+(:issue:`10924`)
+
+curses
+------
+
+ * If the :mod:`curses` module is linked to the ncursesw library, use Unicode
+   functions when Unicode strings or characters are passed (e.g.
+   :c:func:`waddwstr`), and bytes functions otherwise (e.g. :c:func:`waddstr`).
+ * Use the locale encoding instead of ``utf-8`` to encode Unicode strings.
+ * :class:`curses.window` has a new :attr:`curses.window.encoding` attribute.
+ * The :class:`curses.window` class has a new :meth:`~curses.window.get_wch`
+   method to get a wide character
+ * The :mod:`curses` module has a new :meth:`~curses.unget_wch` function to
+   push a wide character so the next :meth:`~curses.window.get_wch` will return
+   it
+
+(Contributed by Iñigo Serna in :issue:`6755`)
+
+faulthandler
+------------
+
+New module: :mod:`faulthandler`.
+
+ * :envvar:`PYTHONFAULTHANDLER`
+ * :option:`-X` ``faulthandler``
+
+ftplib
+------
+
+The :class:`~ftplib.FTP_TLS` class now provides a new
+:func:`~ftplib.FTP_TLS.ccc` function to revert control channel back to
+plaintext.  This can be useful to take advantage of firewalls that know how to
+handle NAT with non-secure FTP without opening fixed ports.
+
+(Contributed by Giampaolo Rodolà in :issue:`12139`)
+
+
+imaplib
+-------
+
+The :class:`~imaplib.IMAP4_SSL` constructor now accepts an SSLContext
+parameter to control parameters of the secure channel.
+
+(Contributed by Sijin Joseph in :issue:`8808`)
+
+
+io
+--
+
+The :func:`~io.open` function has a new ``'x'`` mode that can be used to
+exclusively create a new file, and raise a :exc:`FileExistsError` if the file
+already exists. It is based on the C11 'x' mode to fopen().
+
+(Contributed by David Townshend in :issue:`12760`)
+
+
+lzma
+----
+
+The newly-added :mod:`lzma` module provides data compression and decompression
+using the LZMA algorithm, including support for the ``.xz`` and ``.lzma``
+file formats.
+
+(Contributed by Nadeem Vawda and Per Øyvind Karlsen in :issue:`6715`)
+
+
+math
+----
+
+The :mod:`math` module has a new function:
+
+  * :func:`~math.log2`: return the base-2 logarithm of *x*
+    (Written by Mark Dickinson in :issue:`11888`).
+
+
+nntplib
+-------
+
+The :class:`nntplib.NNTP` class now supports the context manager protocol to
+unconditionally consume :exc:`socket.error` exceptions and to close the NNTP
+connection when done::
+
+  >>> from nntplib import NNTP
+  >>> with NNTP('news.gmane.org') as n:
+  ...     n.group('gmane.comp.python.committers')
+  ...
+  ('211 1755 1 1755 gmane.comp.python.committers', 1755, 1, 1755, 'gmane.comp.python.committers')
+  >>>
+
+(Contributed by Giampaolo Rodolà in :issue:`9795`)
+
+
+os
+--
+
+* The :mod:`os` module has a new :func:`~os.pipe2` function that makes it
+  possible to create a pipe with :data:`~os.O_CLOEXEC` or
+  :data:`~os.O_NONBLOCK` flags set atomically. This is especially useful to
+  avoid race conditions in multi-threaded programs.
+
+* The :mod:`os` module has a new :func:`~os.sendfile` function which provides
+  an efficent "zero-copy" way for copying data from one file (or socket)
+  descriptor to another. The phrase "zero-copy" refers to the fact that all of
+  the copying of data between the two descriptors is done entirely by the
+  kernel, with no copying of data into userspace buffers. :func:`~os.sendfile`
+  can be used to efficiently copy data from a file on disk to a network socket,
+  e.g. for downloading a file.
+
+  (Patch submitted by Ross Lagerwall and Giampaolo Rodolà in :issue:`10882`.)
+
+* The :mod:`os` module has two new functions: :func:`~os.getpriority` and
+  :func:`~os.setpriority`. They can be used to get or set process
+  niceness/priority in a fashion similar to :func:`os.nice` but extended to all
+  processes instead of just the current one.
+
+  (Patch submitted by Giampaolo Rodolà in :issue:`10784`.)
+
+* The :mod:`os` module has a new :func:`~os.fwalk` function similar to
+  :func:`~os.walk` except that it also yields file descriptors referring to the
+  directories visited. This is especially useful to avoid symlink races.
+
+* "at" functions (:issue:`4761`):
+
+  * :func:`~os.faccessat`
+  * :func:`~os.fchmodat`
+  * :func:`~os.fchownat`
+  * :func:`~os.fstatat`
+  * :func:`~os.futimesat`
+  * :func:`~os.linkat`
+  * :func:`~os.mkdirat`
+  * :func:`~os.mkfifoat`
+  * :func:`~os.mknodat`
+  * :func:`~os.openat`
+  * :func:`~os.readlinkat`
+  * :func:`~os.renameat`
+  * :func:`~os.symlinkat`
+  * :func:`~os.unlinkat`
+  * :func:`~os.utimensat`
+
+* extended attributes (:issue:`12720`):
+
+  * :func:`~os.fgetxattr`
+  * :func:`~os.flistxattr`
+  * :func:`~os.fremovexattr`
+  * :func:`~os.fsetxattr`
+  * :func:`~os.getxattr`
+  * :func:`~os.lgetxattr`
+  * :func:`~os.listxattr`
+  * :func:`~os.llistxattr`
+  * :func:`~os.lremovexattr`
+  * :func:`~os.lsetxattr`
+  * :func:`~os.removexattr`
+  * :func:`~os.setxattr`
+
+* Scheduler functions (:issue:`12655`):
+
+  * :func:`~os.sched_get_priority_max`
+  * :func:`~os.sched_get_priority_min`
+  * :func:`~os.sched_getaffinity`
+  * :func:`~os.sched_getparam`
+  * :func:`~os.sched_getscheduler`
+  * :func:`~os.sched_rr_get_interval`
+  * :func:`~os.sched_setaffinity`
+  * :func:`~os.sched_setparam`
+  * :func:`~os.sched_setscheduler`
+  * :func:`~os.sched_yield`
+
+* Add some extra posix functions to the os module (:issue:`10812`):
+
+  * :func:`~os.fexecve`
+  * :func:`~os.futimens`
+  * :func:`~os.futimes`
+  * :func:`~os.lockf`
+  * :func:`~os.lutimes`
+  * :func:`~os.posix_fadvise`
+  * :func:`~os.posix_fallocate`
+  * :func:`~os.pread`
+  * :func:`~os.pwrite`
+  * :func:`~os.readv`
+  * :func:`~os.sync`
+  * :func:`~os.truncate`
+  * :func:`~os.waitid`
+  * :func:`~os.writev`
+
+* Other new functions:
+
+  * :func:`~os.flistdir` (:issue:`10755`)
+  * :func:`~os.getgrouplist` (:issue:`9344`)
+
+
+packaging
+---------
+
+:mod:`distutils` has undergone additions and refactoring under a new name,
+:mod:`packaging`, to allow developers to break backward compatibility.
+:mod:`distutils` is still provided in the standard library, but users are
+encouraged to transition to :mod:`packaging`.  For older versions of Python, a
+backport compatible with 2.4+ and 3.1+ will be made available on PyPI under the
+name :mod:`distutils2`.
+
+.. TODO add examples and howto to the packaging docs and link to them
+
+
+pydoc
+-----
+
+The Tk GUI and the :func:`~pydoc.serve` function have been removed from the
+:mod:`pydoc` module: ``pydoc -g`` and :func:`~pydoc.serve` have been deprecated
+in Python 3.2.
+
+
+sched
+-----
+
+* :meth:`~sched.scheduler.run` now accepts a *blocking* parameter which when
+  set to False makes the method execute the scheduled events due to expire
+  soonest (if any) and then return immediately.
+  This is useful in case you want to use the :class:`~sched.scheduler` in
+  non-blocking applications.  (Contributed by Giampaolo Rodolà in :issue:`13449`)
+
+* :class:`~sched.scheduler` class can now be safely used in multi-threaded
+  environments.  (Contributed by Josiah Carlson and Giampaolo Rodolà in
+  :issue:`8684`)
+
+* *timefunc* and *delayfunct* parameters of :class:`~sched.scheduler` class
+  constructor are now optional and defaults to :func:`time.time` and
+  :func:`time.sleep` respectively.  (Contributed by Chris Clark in
+  :issue:`13245`)
+
+* :meth:`~sched.scheduler.enter` and :meth:`~sched.scheduler.enterabs`
+  *argument* parameter is now optional.  (Contributed by Chris Clark in
+  :issue:`13245`)
+
+* :meth:`~sched.scheduler.enter` and :meth:`~sched.scheduler.enterabs`
+  now accept a *kwargs* parameter.  (Contributed by Chris Clark in
+  :issue:`13245`)
+
+
+shutil
+------
+
+* The :mod:`shutil` module has these new fuctions:
+
+  * :func:`~shutil.disk_usage`: provides total, used and free disk space
+    statistics. (Contributed by Giampaolo Rodolà in :issue:`12442`)
+  * :func:`~shutil.chown`: allows one to change user and/or group of the given
+    path also specifying the user/group names and not only their numeric
+    ids. (Contributed by Sandro Tosi in :issue:`12191`)
+
+
+signal
+------
+
+* The :mod:`signal` module has new functions:
+
+  * :func:`~signal.pthread_sigmask`: fetch and/or change the signal mask of the
+    calling thread (Contributed by Jean-Paul Calderone in :issue:`8407`) ;
+  * :func:`~signal.pthread_kill`: send a signal to a thread ;
+  * :func:`~signal.sigpending`: examine pending functions ;
+  * :func:`~signal.sigwait`: wait a signal.
+  * :func:`~signal.sigwaitinfo`: wait for a signal, returning detailed
+    information about it.
+  * :func:`~signal.sigtimedwait`: like :func:`~signal.sigwaitinfo` but with a
+    timeout.
+
+* The signal handler writes the signal number as a single byte instead of
+  a nul byte into the wakeup file descriptor. So it is possible to wait more
+  than one signal and know which signals were raised.
+
+* :func:`signal.signal` and :func:`signal.siginterrupt` raise an OSError,
+  instead of a RuntimeError: OSError has an errno attribute.
+
+smtplib
+-------
+
+The :class:`~smtplib.SMTP_SSL` constructor and the :meth:`~smtplib.SMTP.starttls`
+method now accept an SSLContext parameter to control parameters of the secure
+channel.
+
+(Contributed by Kasun Herath in :issue:`8809`)
+
+
+socket
+------
+
+* The :class:`~socket.socket` class now exposes additional methods to process
+  ancillary data when supported by the underlying platform:
+
+  * :func:`~socket.socket.sendmsg`
+  * :func:`~socket.socket.recvmsg`
+  * :func:`~socket.socket.recvmsg_into`
+
+  (Contributed by David Watson in :issue:`6560`, based on an earlier patch by
+  Heiko Wundram)
+
+* The :class:`~socket.socket` class now supports the PF_CAN protocol family
+  (http://en.wikipedia.org/wiki/Socketcan), on Linux
+  (http://lwn.net/Articles/253425).
+
+  (Contributed by Matthias Fuchs, updated by Tiago Gonçalves in :issue:`10141`)
+
+* The :class:`~socket.socket` class now supports the PF_RDS protocol family
+  (http://en.wikipedia.org/wiki/Reliable_Datagram_Sockets and
+  http://oss.oracle.com/projects/rds/).
+
+
+ssl
+---
+
+* The :mod:`ssl` module has two new random generation functions:
+
+  * :func:`~ssl.RAND_bytes`: generate cryptographically strong
+    pseudo-random bytes.
+  * :func:`~ssl.RAND_pseudo_bytes`: generate pseudo-random bytes.
+
+  (Contributed by Victor Stinner in :issue:`12049`)
+
+* The :mod:`ssl` module now exposes a finer-grained exception hierarchy
+  in order to make it easier to inspect the various kinds of errors.
+
+  (Contributed by Antoine Pitrou in :issue:`11183`)
+
+* :meth:`~ssl.SSLContext.load_cert_chain` now accepts a *password* argument
+  to be used if the private key is encrypted.
+
+  (Contributed by Adam Simpkins in :issue:`12803`)
+
+* Diffie-Hellman key exchange, both regular and Elliptic Curve-based, is
+  now supported through the :meth:`~ssl.SSLContext.load_dh_params` and
+  :meth:`~ssl.SSLContext.set_ecdh_curve` methods.
+
+  (Contributed by Antoine Pitrou in :issue:`13626` and :issue:`13627`)
+
+* SSL sockets have a new :meth:`~ssl.SSLSocket.get_channel_binding` method
+  allowing the implementation of certain authentication mechanisms such as
+  SCRAM-SHA-1-PLUS.
+
+  (Contributed by Jacek Konieczny in :issue:`12551`)
+
+* You can query the SSL compression algorithm used by an SSL socket, thanks
+  to its new :meth:`~ssl.SSLSocket.compression` method.
+
+  (Contributed by Antoine Pitrou in :issue:`13634`)
+
+
+sys
+---
+
+* The :mod:`sys` module has a new :data:`~sys.thread_info` :term:`struct
+  sequence` holding informations about the thread implementation.
+
+  (:issue:`11223`)
+
+
+time
+----
+
+The :mod:`time` module has new functions:
+
+* :func:`~time.clock_getres` and :func:`~time.clock_gettime` functions and
+  ``CLOCK_xxx`` constants.
+* :func:`~time.monotonic`: monotonic clock.
+* :func:`~time.wallclock`.
+
+(Contributed by Victor Stinner in :issue:`10278`)
+
+
+urllib
+------
+
+The :class:`~urllib.request.Request` class, now accepts a *method* argument
+used by :meth:`~urllib.request.Request.get_method` to determine what HTTP method
+should be used.  For example, this will send a ``'HEAD'`` request::
+
+   >>> urlopen(Request('http://www.python.org', method='HEAD'))
+
+(:issue:`1673007`)
+
+
+Optimizations
+=============
+
+Major performance enhancements have been added:
+
+* Thanks to the :pep:`393`, some operations on Unicode strings has been optimized:
+
+  * the memory footprint is divided by 2 to 4 depending on the text
+  * encode an ASCII string to UTF-8 doesn't need to encode characters anymore,
+    the UTF-8 representation is shared with the ASCII representation
+  * the UTF-8 encoder has been optimized
+  * repeating a single ASCII letter and getting a substring of a ASCII strings
+    is 4 times faster
+
+
+Build and C API Changes
+=======================
+
+Changes to Python's build process and to the C API include:
+
+* The :pep:`393` added new Unicode types, macros and functions:
+
+  * High-level API:
+
+    * :c:func:`PyUnicode_CopyCharacters`
+    * :c:func:`PyUnicode_FindChar`
+    * :c:func:`PyUnicode_GetLength`, :c:macro:`PyUnicode_GET_LENGTH`
+    * :c:func:`PyUnicode_New`
+    * :c:func:`PyUnicode_Substring`
+    * :c:func:`PyUnicode_ReadChar`, :c:func:`PyUnicode_WriteChar`
+
+  * Low-level API:
+
+    * :c:type:`Py_UCS1`, :c:type:`Py_UCS2`, :c:type:`Py_UCS4` types
+    * :c:type:`PyASCIIObject` and :c:type:`PyCompactUnicodeObject` structures
+    * :c:macro:`PyUnicode_READY`
+    * :c:func:`PyUnicode_FromKindAndData`
+    * :c:func:`PyUnicode_AsUCS4`, :c:func:`PyUnicode_AsUCS4Copy`
+    * :c:macro:`PyUnicode_DATA`, :c:macro:`PyUnicode_1BYTE_DATA`,
+      :c:macro:`PyUnicode_2BYTE_DATA`, :c:macro:`PyUnicode_4BYTE_DATA`
+    * :c:macro:`PyUnicode_KIND` with :c:type:`PyUnicode_Kind` enum:
+      :c:data:`PyUnicode_WCHAR_KIND`, :c:data:`PyUnicode_1BYTE_KIND`,
+      :c:data:`PyUnicode_2BYTE_KIND`, :c:data:`PyUnicode_4BYTE_KIND`
+    * :c:macro:`PyUnicode_READ`, :c:macro:`PyUnicode_READ_CHAR`, :c:macro:`PyUnicode_WRITE`
+    * :c:macro:`PyUnicode_MAX_CHAR_VALUE`
+
+
+
+Deprecated
+==========
+
+Unsupported Operating Systems
+-----------------------------
+
+OS/2 and VMS are no longer supported due to the lack of a maintainer.
+
+Windows 2000 and Windows platforms which set ``COMSPEC`` to ``command.com``
+are no longer supported due to maintenance burden.
+
+
+Deprecated Python modules, functions and methods
+------------------------------------------------
+
+* The :mod:`packaging` module replaces the :mod:`distutils` module
+* The ``unicode_internal`` codec has been deprecated because of the
+  :pep:`393`, use UTF-8, UTF-16 (``utf-16-le`` or ``utf-16-be``), or UTF-32
+  (``utf-32-le`` or ``utf-32-be``)
+* :meth:`ftplib.FTP.nlst` and :meth:`ftplib.FTP.dir`: use
+  :meth:`ftplib.FTP.mlsd`
+* :func:`platform.popen`: use the :mod:`subprocess` module. Check especially
+  the :ref:`subprocess-replacements` section.
+* :issue:`13374`: The Windows bytes API has been deprecated in the :mod:`os`
+  module. Use Unicode filenames, instead of bytes filenames, to not depend on
+  the ANSI code page anymore and to support any filename.
+
+
+Deprecated functions and types of the C API
+-------------------------------------------
+
+The :c:type:`Py_UNICODE` has been deprecated by the :pep:`393` and will be
+removed in Python 4. All functions using this type are deprecated:
+
+Unicode functions and methods using :c:type:`Py_UNICODE` and
+:c:type:`Py_UNICODE*` types:
+
+ * :c:macro:`PyUnicode_FromUnicode`: use :c:func:`PyUnicode_FromWideChar` or
+   :c:func:`PyUnicode_FromKindAndData`
+ * :c:macro:`PyUnicode_AS_UNICODE`, :c:func:`PyUnicode_AsUnicode`,
+   :c:func:`PyUnicode_AsUnicodeAndSize`: use :c:func:`PyUnicode_AsWideCharString`
+ * :c:macro:`PyUnicode_AS_DATA`: use :c:macro:`PyUnicode_DATA` with
+   :c:macro:`PyUnicode_READ` and :c:macro:`PyUnicode_WRITE`
+ * :c:macro:`PyUnicode_GET_SIZE`, :c:func:`PyUnicode_GetSize`: use
+   :c:macro:`PyUnicode_GET_LENGTH` or :c:func:`PyUnicode_GetLength`
+ * :c:macro:`PyUnicode_GET_DATA_SIZE`: use
+   ``PyUnicode_GET_LENGTH(str) * PyUnicode_KIND(str)`` (only work on ready
+   strings)
+ * :c:func:`PyUnicode_AsUnicodeCopy`: use :c:func:`PyUnicode_AsUCS4Copy` or
+   :c:func:`PyUnicode_AsWideCharString`
+ * :c:func:`PyUnicode_GetMax`
+
+
+Functions and macros manipulating Py_UNICODE* strings:
+
+ * :c:macro:`Py_UNICODE_strlen`: use :c:func:`PyUnicode_GetLength` or
+   :c:macro:`PyUnicode_GET_LENGTH`
+ * :c:macro:`Py_UNICODE_strcat`: use :c:func:`PyUnicode_CopyCharacters` or
+   :c:func:`PyUnicode_FromFormat`
+ * :c:macro:`Py_UNICODE_strcpy`, :c:macro:`Py_UNICODE_strncpy`,
+   :c:macro:`Py_UNICODE_COPY`: use :c:func:`PyUnicode_CopyCharacters` or
+   :c:func:`PyUnicode_Substring`
+ * :c:macro:`Py_UNICODE_strcmp`: use :c:func:`PyUnicode_Compare`
+ * :c:macro:`Py_UNICODE_strncmp`: use :c:func:`PyUnicode_Tailmatch`
+ * :c:macro:`Py_UNICODE_strchr`, :c:macro:`Py_UNICODE_strrchr`: use
+   :c:func:`PyUnicode_FindChar`
+ * :c:macro:`Py_UNICODE_FILL`: use :c:func:`PyUnicode_Fill`
+ * :c:macro:`Py_UNICODE_MATCH`
+
+Encoders:
+
+ * :c:func:`PyUnicode_Encode`: use :c:func:`PyUnicode_AsEncodedObject`
+ * :c:func:`PyUnicode_EncodeUTF7`
+ * :c:func:`PyUnicode_EncodeUTF8`: use :c:func:`PyUnicode_AsUTF8` or
+   :c:func:`PyUnicode_AsUTF8String`
+ * :c:func:`PyUnicode_EncodeUTF32`
+ * :c:func:`PyUnicode_EncodeUTF16`
+ * :c:func:`PyUnicode_EncodeUnicodeEscape:` use
+   :c:func:`PyUnicode_AsUnicodeEscapeString`
+ * :c:func:`PyUnicode_EncodeRawUnicodeEscape:` use
+   :c:func:`PyUnicode_AsRawUnicodeEscapeString`
+ * :c:func:`PyUnicode_EncodeLatin1`: use :c:func:`PyUnicode_AsLatin1String`
+ * :c:func:`PyUnicode_EncodeASCII`: use :c:func:`PyUnicode_AsASCIIString`
+ * :c:func:`PyUnicode_EncodeCharmap`
+ * :c:func:`PyUnicode_TranslateCharmap`
+ * :c:func:`PyUnicode_EncodeMBCS`: use :c:func:`PyUnicode_AsMBCSString` or
+   :c:func:`PyUnicode_EncodeCodePage` (with ``CP_ACP`` code_page)
+ * :c:func:`PyUnicode_EncodeDecimal`,
+   :c:func:`PyUnicode_TransformDecimalToASCII`
+
+
+Porting to Python 3.3
+=====================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+Porting Python code
+-------------------
+
+* :issue:`12326`: On Linux, sys.platform doesn't contain the major version
+  anymore. It is now always 'linux', instead of 'linux2' or 'linux3' depending
+  on the Linux version used to build Python. Replace sys.platform == 'linux2'
+  with sys.platform.startswith('linux'), or directly sys.platform == 'linux' if
+  you don't need to support older Python versions.
+
+Porting C code
+--------------
+
+* Due to :ref:`PEP 393 <pep-393>`, the :c:type:`Py_UNICODE` type and all
+  functions using this type are deprecated (but will stay available for
+  at least five years).  If you were using low-level Unicode APIs to
+  construct and access unicode objects and you want to benefit of the
+  memory footprint reduction provided by the PEP 393, you have to convert
+  your code to the new :doc:`Unicode API <../c-api/unicode>`.
+
+  However, if you only have been using high-level functions such as
+  :c:func:`PyUnicode_Concat()`, :c:func:`PyUnicode_Join` or
+  :c:func:`PyUnicode_FromFormat()`, your code will automatically take
+  advantage of the new unicode representations.
+
+Other issues
+------------
+
+.. Issue #11591: When :program:`python` was started with :option:`-S`,
+   ``import site`` will not add site-specific paths to the module search
+   paths.  In previous versions, it did.  See changeset for doc changes in
+   various files.  Contributed by Carl Meyer with editions by Éric Araujo.
+
+.. Issue #10998: the -Q command-line flag and related artifacts have been
+   removed.  Code checking sys.flags.division_warning will need updating.
+   Contributed by Éric Araujo.
