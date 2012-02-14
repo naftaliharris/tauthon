@@ -22,82 +22,17 @@ __all__ = ['__import__', 'import_module']
 
 from . import _bootstrap
 
-import os
-import re
-import tokenize
+
+# To simplify imports in test code
+_w_long = _bootstrap._w_long
+_r_long = _bootstrap._r_long
+
 
 # Bootstrap help #####################################################
+import imp
+import sys
 
-def _case_ok(directory, check):
-    """Check if the directory contains something matching 'check'.
-
-    No check is done if the file/directory exists or not.
-
-    """
-    if 'PYTHONCASEOK' in os.environ:
-        return True
-    elif check in os.listdir(directory if directory else os.getcwd()):
-        return True
-    return False
-
-
-def _w_long(x):
-    """Convert a 32-bit integer to little-endian.
-
-    XXX Temporary until marshal's long functions are exposed.
-
-    """
-    x = int(x)
-    int_bytes = []
-    int_bytes.append(x & 0xFF)
-    int_bytes.append((x >> 8) & 0xFF)
-    int_bytes.append((x >> 16) & 0xFF)
-    int_bytes.append((x >> 24) & 0xFF)
-    return bytearray(int_bytes)
-
-
-def _r_long(int_bytes):
-    """Convert 4 bytes in little-endian to an integer.
-
-    XXX Temporary until marshal's long function are exposed.
-
-    """
-    x = int_bytes[0]
-    x |= int_bytes[1] << 8
-    x |= int_bytes[2] << 16
-    x |= int_bytes[3] << 24
-    return x
-
-
-# Required built-in modules.
-try:
-    import posix as _os
-except ImportError:
-    try:
-        import nt as _os
-    except ImportError:
-        try:
-            import os2 as _os
-        except ImportError:
-            raise ImportError('posix, nt, or os2 module required for importlib')
-_bootstrap._os = _os
-import imp, sys, marshal, errno, _io
-_bootstrap.imp = imp
-_bootstrap.sys = sys
-_bootstrap.marshal = marshal
-_bootstrap.errno = errno
-_bootstrap._io = _io
-import _warnings
-_bootstrap._warnings = _warnings
-
-
-from os import sep
-# For os.path.join replacement; pull from Include/osdefs.h:SEP .
-_bootstrap.path_sep = sep
-
-_bootstrap._case_ok = _case_ok
-marshal._w_long = _w_long
-marshal._r_long = _r_long
+_bootstrap._setup(sys, imp)
 
 
 # Public API #########################################################
