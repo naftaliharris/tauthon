@@ -138,7 +138,7 @@ def addpackage(sitedir, name, known_paths):
         reset = 0
     fullname = os.path.join(sitedir, name)
     try:
-        f = open(fullname, "rU")
+        f = open(fullname, "r")
     except IOError:
         return
     with f:
@@ -154,7 +154,7 @@ def addpackage(sitedir, name, known_paths):
                 if not dircase in known_paths and os.path.exists(dir):
                     sys.path.append(dir)
                     known_paths.add(dircase)
-            except Exception as err:
+            except Exception:
                 print("Error processing line {:d} of {}:\n".format(n+1, fullname),
                       file=sys.stderr)
                 for record in traceback.format_exception(*sys.exc_info()):
@@ -241,7 +241,6 @@ def getusersitepackages():
         return USER_SITE
 
     from sysconfig import get_path
-    import os
 
     if sys.platform == 'darwin':
         from sysconfig import get_config_var
@@ -385,7 +384,7 @@ class _Printer(object):
             for filename in self.__files:
                 filename = os.path.join(dir, filename)
                 try:
-                    fp = open(filename, "rU")
+                    fp = open(filename, "r")
                     data = fp.read()
                     fp.close()
                     break
@@ -508,6 +507,11 @@ def execusercustomize():
 
 
 def main():
+    """Add standard site-specific directories to the module search path.
+
+    This function is called automatically when this module is imported,
+    unless the python interpreter was started with the -S flag.
+    """
     global ENABLE_USER_SITE
 
     abs_paths()
@@ -526,7 +530,10 @@ def main():
     if ENABLE_USER_SITE:
         execusercustomize()
 
-main()
+# Prevent edition of sys.path when python was started with -S and
+# site is imported later.
+if not sys.flags.no_site:
+    main()
 
 def _script():
     help = """\
