@@ -1834,18 +1834,9 @@ class ContextAPItests(unittest.TestCase):
         # only, the attribute should be gettable/settable via both
         # `clamp` and `_clamp`; in Python 3.3, `_clamp` should be
         # removed.
-        c = Context(clamp = 0)
-        self.assertEqual(c.clamp, 0)
-
-        with check_warnings(("", DeprecationWarning)):
-            c._clamp = 1
-        self.assertEqual(c.clamp, 1)
-        with check_warnings(("", DeprecationWarning)):
-            self.assertEqual(c._clamp, 1)
-        c.clamp = 0
-        self.assertEqual(c.clamp, 0)
-        with check_warnings(("", DeprecationWarning)):
-            self.assertEqual(c._clamp, 0)
+        c = Context()
+        with self.assertRaises(AttributeError):
+            clamp_value = c._clamp
 
     def test_abs(self):
         c = Context()
@@ -1969,6 +1960,17 @@ class ContextAPItests(unittest.TestCase):
         self.assertRaises(TypeError, c.fma, '2', 3, 4)
         self.assertRaises(TypeError, c.fma, 2, '3', 4)
         self.assertRaises(TypeError, c.fma, 2, 3, '4')
+
+        # Issue 12079 for Context.fma ...
+        self.assertRaises(TypeError, c.fma,
+                          Decimal('Infinity'), Decimal(0), "not a decimal")
+        self.assertRaises(TypeError, c.fma,
+                          Decimal(1), Decimal('snan'), 1.222)
+        # ... and for Decimal.fma.
+        self.assertRaises(TypeError, Decimal('Infinity').fma,
+                          Decimal(0), "not a decimal")
+        self.assertRaises(TypeError, Decimal(1).fma,
+                          Decimal('snan'), 1.222)
 
     def test_is_finite(self):
         c = Context()
