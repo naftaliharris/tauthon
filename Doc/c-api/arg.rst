@@ -146,7 +146,7 @@ Unless otherwise stated, buffers are not NUL-terminated.
    Like ``u#``, but the Python object may also be ``None``, in which case the
    :c:type:`Py_UNICODE` pointer is set to *NULL*.
 
-``U`` (:class:`str`) [PyUnicodeObject \*]
+``U`` (:class:`str`) [PyObject \*]
    Requires that the Python object is a Unicode object, without attempting
    any conversion.  Raises :exc:`TypeError` if the object is not a Unicode
    object.  The C variable may also be declared as :c:type:`PyObject\*`.
@@ -260,9 +260,11 @@ Numbers
 ``n`` (:class:`int`) [Py_ssize_t]
    Convert a Python integer to a C :c:type:`Py_ssize_t`.
 
-``c`` (:class:`bytes` of length 1) [char]
-   Convert a Python byte, represented as a :class:`bytes` object of length 1,
-   to a C :c:type:`char`.
+``c`` (:class:`bytes` or :class:`bytearray` of length 1) [char]
+   Convert a Python byte, represented as a :class:`bytes` or
+   :class:`bytearray` object of length 1, to a C :c:type:`char`.
+
+   .. versionchanged:: 3.3 Allow :class:`bytearray` objects
 
 ``C`` (:class:`str` of length 1) [int]
    Convert a Python character, represented as a :class:`str` object of
