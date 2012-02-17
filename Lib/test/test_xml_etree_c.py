@@ -5,7 +5,7 @@ from test.support import import_fresh_module
 import unittest
 
 cET = import_fresh_module('xml.etree.ElementTree', fresh=['_elementtree'])
-cET_alias = import_fresh_module('xml.etree.cElementTree', fresh=['_elementtree'])
+cET_alias = import_fresh_module('xml.etree.cElementTree', fresh=['_elementtree', 'xml.etree'])
 
 
 # cElementTree specific tests
@@ -46,6 +46,15 @@ class MiscTests(unittest.TestCase):
         finally:
             data = None
 
+@unittest.skipUnless(cET, 'requires _elementtree')
+class TestAcceleratorImported(unittest.TestCase):
+    # Test that the C accelerator was imported, as expected
+    def test_correct_import_cET(self):
+        self.assertEqual(cET.Element.__module__, '_elementtree')
+
+    def test_correct_import_cET_alias(self):
+        self.assertEqual(cET_alias.Element.__module__, '_elementtree')
+
 
 def test_main():
     from test import test_xml_etree, test_xml_etree_c
@@ -53,7 +62,7 @@ def test_main():
     # Run the tests specific to the C implementation
     support.run_doctest(test_xml_etree_c, verbosity=True)
 
-    support.run_unittest(MiscTests)
+    support.run_unittest(MiscTests, TestAcceleratorImported)
 
     # Run the same test suite as the Python module
     test_xml_etree.test_main(module=cET)

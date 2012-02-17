@@ -466,6 +466,13 @@ Core and Builtins
 Library
 -------
 
+- Issue #13961: Move importlib over to using os.replace() for atomic renaming.
+
+- Do away with ambiguous level values (as suggested by PEP 328) in
+  importlib.__import__() by raising ValueError when level < 0.
+
+- Issue #2489: pty.spawn could consume 100% cpu when it encountered an EOF.
+
 - Issue #13014: Fix a possible reference leak in SSLSocket.getpeercert().
 
 - Issue #13777: Add PF_SYSTEM sockets on OS X.
@@ -2256,8 +2263,8 @@ C-API
 Documentation
 -------------
 
-- Issue #13491: Fix many errors in sqlite3 documentation. Initial
-  patch by Johannes Vogel.
+- Issues #13491 and #13995: Fix many errors in sqlite3 documentation.
+  Initial patch for #13491 by Johannes Vogel.
 
 - Issue #13402: Document absoluteness of sys.executable.
 

@@ -1352,7 +1352,6 @@ def xinclude():
     r"""
     Basic inclusion example (XInclude C.1)
 
-    >>> from xml.etree import ElementTree as ET
     >>> from xml.etree import ElementInclude
 
     >>> document = xinclude_loader("C1.xml")
@@ -1882,12 +1881,7 @@ class CleanContext(object):
 
     def __enter__(self):
         from xml.etree import ElementPath
-        if hasattr(ET, '_namespace_map'):
-            self._nsmap = ET._namespace_map
-        else:
-            # when testing the cElementTree alias
-            from xml.etree.ElementTree import _namespace_map
-            self._nsmap = _namespace_map
+        self._nsmap = ET.register_namespace._namespace_map
         # Copy the default namespace mapping
         self._nsmap_copy = self._nsmap.copy()
         # Copy the path cache (should be empty)
@@ -1904,11 +1898,19 @@ class CleanContext(object):
         self.checkwarnings.__exit__(*args)
 
 
+class TestAcceleratorNotImported(unittest.TestCase):
+    # Test that the C accelerator was not imported for pyET
+    def test_correct_import_pyET(self):
+        self.assertEqual(pyET.Element.__module__, 'xml.etree.ElementTree')
+
+
 def test_main(module=pyET):
     from test import test_xml_etree
 
     # The same doctests are used for both the Python and the C implementations
     test_xml_etree.ET = module
+
+    support.run_unittest(TestAcceleratorNotImported)
 
     # XXX the C module should give the same warnings as the Python module
     with CleanContext(quiet=(module is not pyET)):
