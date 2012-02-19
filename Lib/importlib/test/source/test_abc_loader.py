@@ -40,8 +40,10 @@ class SourceLoaderMock(SourceOnlyLoaderMock):
     def __init__(self, path, magic=imp.get_magic()):
         super().__init__(path)
         self.bytecode_path = imp.cache_from_source(self.path)
+        self.source_size = len(self.source)
         data = bytearray(magic)
-        data.extend(marshal._w_long(self.source_mtime))
+        data.extend(importlib._w_long(self.source_mtime))
+        data.extend(importlib._w_long(self.source_size))
         code_object = compile(self.source, self.path, 'exec',
                                 dont_inherit=True)
         data.extend(marshal.dumps(code_object))
@@ -56,9 +58,9 @@ class SourceLoaderMock(SourceOnlyLoaderMock):
         else:
             raise IOError
 
-    def path_mtime(self, path):
+    def path_stats(self, path):
         assert path == self.path
-        return self.source_mtime
+        return {'mtime': self.source_mtime, 'size': self.source_size}
 
     def set_data(self, path, data):
         self.written[path] = bytes(data)
@@ -102,7 +104,7 @@ class PyLoaderMock(abc.PyLoader):
             warnings.simplefilter("always")
             path = super().get_filename(name)
             assert len(w) == 1
-            assert issubclass(w[0].category, PendingDeprecationWarning)
+            assert issubclass(w[0].category, DeprecationWarning)
             return path
 
 
@@ -198,7 +200,7 @@ class PyPycLoaderMock(abc.PyPycLoader, PyLoaderMock):
             warnings.simplefilter("always")
             code_object = super().get_code(name)
             assert len(w) == 1
-            assert issubclass(w[0].category, PendingDeprecationWarning)
+            assert issubclass(w[0].category, DeprecationWarning)
             return code_object
 
 class PyLoaderTests(testing_abc.LoaderTests):
@@ -656,7 +658,8 @@ class SourceLoaderBytecodeTests(SourceLoaderTestHarness):
         if bytecode_written:
             self.assertIn(self.cached, self.loader.written)
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(self.loader.source_mtime))
+            data.extend(importlib._w_long(self.loader.source_mtime))
+            data.extend(importlib._w_long(self.loader.source_size))
             data.extend(marshal.dumps(code_object))
             self.assertEqual(self.loader.written[self.cached], bytes(data))
 
@@ -847,7 +850,7 @@ class AbstractMethodImplTests(unittest.TestCase):
         # Required abstractmethods.
         self.raises_NotImplementedError(ins, 'get_filename', 'get_data')
         # Optional abstractmethods.
-        self.raises_NotImplementedError(ins,'path_mtime', 'set_data')
+        self.raises_NotImplementedError(ins,'path_stats', 'set_data')
 
     def test_PyLoader(self):
         self.raises_NotImplementedError(self.PyLoader(), 'source_path',
