@@ -180,6 +180,24 @@ show_alloc(void)
 }
 #endif
 
+/* Debug statistic to count GC tracking of dicts */
+#ifdef SHOW_TRACK_COUNT
+static Py_ssize_t count_untracked = 0;
+static Py_ssize_t count_tracked = 0;
+
+static void
+show_track(void)
+{
+    fprintf(stderr, "Dicts created: %" PY_FORMAT_SIZE_T "d\n",
+        count_tracked + count_untracked);
+    fprintf(stderr, "Dicts tracked by the GC: %" PY_FORMAT_SIZE_T
+        "d\n", count_tracked);
+    fprintf(stderr, "%.2f%% dict tracking rate\n\n",
+        (100.0*count_tracked/(count_untracked+count_tracked)));
+}
+#endif
+
+
 /* Initialization macros.
    There are two ways to create a dict:  PyDict_New() is the main C API
    function, and the tp_new slot maps to dict_new().  In the latter case we
@@ -233,6 +251,9 @@ PyDict_New(void)
 #ifdef SHOW_ALLOC_COUNT
         Py_AtExit(show_alloc);
 #endif
+#ifdef SHOW_TRACK_COUNT
+        Py_AtExit(show_track);
+#endif
     }
     if (numfree) {
         mp = free_list[--numfree];
@@ -262,10 +283,12 @@ PyDict_New(void)
 #endif
     }
     mp->ma_lookup = lookdict_string;
+#ifdef SHOW_TRACK_COUNT
+    count_untracked++;
+#endif
 #ifdef SHOW_CONVERSION_COUNTS
     ++created;
 #endif
-    _PyObject_GC_TRACK(mp);
     return (PyObject *)mp;
 }
 
@@ -433,6 +456,53 @@ lookdict_string(PyDictObject *mp, PyObject *key, register long hash)
     return 0;
 }
 
+#ifdef SHOW_TRACK_COUNT
+#define INCREASE_TRACK_COUNT \
+    (count_tracked++, count_untracked--);
+#define DECREASE_TRACK_COUNT \
+    (count_tracked--, count_untracked++);
+#else
+#define INCREASE_TRACK_COUNT
+#define DECREASE_TRACK_COUNT
+#endif
+
+#define MAINTAIN_TRACKING(mp, key, value) \
+    do { \
+        if (!_PyObject_GC_IS_TRACKED(mp)) { \
+            if (_PyObject_GC_MAY_BE_TRACKED(key) || \
+                _PyObject_GC_MAY_BE_TRACKED(value)) { \
+                _PyObject_GC_TRACK(mp); \
+                INCREASE_TRACK_COUNT \
+            } \
+        } \
+    } while(0)
+
+void
+_PyDict_MaybeUntrack(PyObject *op)
+{
+    PyDictObject *mp;
+    PyObject *value;
+    Py_ssize_t mask, i;
+    PyDictEntry *ep;
+
+    if (!PyDict_CheckExact(op) || !_PyObject_GC_IS_TRACKED(op))
+        return;
+
+    mp = (PyDictObject *) op;
+    ep = mp->ma_table;
+    mask = mp->ma_mask;
+    for (i = 0; i <= mask; i++) {
+        if ((value = ep[i].me_value) == NULL)
+            continue;
+        if (_PyObject_GC_MAY_BE_TRACKED(value) ||
+            _PyObject_GC_MAY_BE_TRACKED(ep[i].me_key))
+            return;
+    }
+    DECREASE_TRACK_COUNT
+    _PyObject_GC_UNTRACK(op);
+}
+
+
 /*
 Internal routine to insert a new item into the table.
 Used both by the internal resize routine and by the public insert routine.
@@ -453,6 +523,7 @@ insertdict(register PyDictObject *mp, PyObject *key, long hash, PyObject *value)
         Py_DECREF(value);
         return -1;
     }
+    MAINTAIN_TRACKING(mp, key, value);
     if (ep->me_value != NULL) {
         old_value = ep->me_value;
         ep->me_value = value;
@@ -492,6 +563,7 @@ insertdict_clean(register PyDictObject *mp, PyObject *key, long hash,
     PyDictEntry *ep0 = mp->ma_table;
     register PyDictEntry *ep;
 
+    MAINTAIN_TRACKING(mp, key, value);
     i = hash & mask;
     ep = &ep0[i];
     for (perturb = hash; ep->me_key != NULL; perturb >>= PERTURB_SHIFT) {
@@ -640,9 +712,11 @@ PyDict_GetItem(PyObject *op, PyObject *key)
         }
     }
 
-    /* We can arrive here with a NULL tstate during initialization:
-       try running "python -Wi" for an example related to string
-       interning.  Let's just hope that no exception occurs then... */
+    /* We can arrive here with a NULL tstate during initialization: try
+       running "python -Wi" for an example related to string interning.
+       Let's just hope that no exception occurs then...  This must be
+       _PyThreadState_Current and not PyThreadState_GET() because in debug
+       mode, the latter complains if tstate is NULL. */
     tstate = _PyThreadState_Current;
     if (tstate != NULL && tstate->curexc_type != NULL) {
         /* preserve the existing exception */
@@ -1081,15 +1155,19 @@ dict_subscript(PyDictObject *mp, register PyObject *key)
     if (v == NULL) {
         if (!PyDict_CheckExact(mp)) {
             /* Look up __missing__ method if we're a subclass. */
-            PyObject *missing;
+            PyObject *missing, *res;
             static PyObject *missing_str = NULL;
-            if (missing_str == NULL)
-                missing_str =
-                  PyString_InternFromString("__missing__");
-            missing = _PyType_Lookup(Py_TYPE(mp), missing_str);
-            if (missing != NULL)
-                return PyObject_CallFunctionObjArgs(missing,
-                    (PyObject *)mp, key, NULL);
+            missing = _PyObject_LookupSpecial((PyObject *)mp,
+                                              "__missing__",
+                                              &missing_str);
+            if (missing != NULL) {
+                res = PyObject_CallFunctionObjArgs(missing,
+                                                   key, NULL);
+                Py_DECREF(missing);
+                return res;
+            }
+            else if (PyErr_Occurred())
+                return NULL;
         }
         set_key_error(key);
         return NULL;
@@ -1257,14 +1335,18 @@ dict_fromkeys(PyObject *cls, PyObject *args)
         PyObject *key;
         long hash;
 
-        if (dictresize(mp, Py_SIZE(seq)))
+        if (dictresize(mp, Py_SIZE(seq))) {
+            Py_DECREF(d);
             return NULL;
+        }
 
         while (_PyDict_Next(seq, &pos, &key, &oldvalue, &hash)) {
             Py_INCREF(key);
             Py_INCREF(value);
-            if (insertdict(mp, key, hash, value))
+            if (insertdict(mp, key, hash, value)) {
+                Py_DECREF(d);
                 return NULL;
+            }
         }
         return d;
     }
@@ -1275,14 +1357,18 @@ dict_fromkeys(PyObject *cls, PyObject *args)
         PyObject *key;
         long hash;
 
-        if (dictresize(mp, PySet_GET_SIZE(seq)))
+        if (dictresize(mp, PySet_GET_SIZE(seq))) {
+            Py_DECREF(d);
             return NULL;
+        }
 
         while (_PySet_NextEntry(seq, &pos, &key, &hash)) {
             Py_INCREF(key);
             Py_INCREF(value);
-            if (insertdict(mp, key, hash, value))
+            if (insertdict(mp, key, hash, value)) {
+                Py_DECREF(d);
                 return NULL;
+            }
         }
         return d;
     }
@@ -1902,8 +1988,7 @@ dict_pop(PyDictObject *mp, PyObject *args)
             Py_INCREF(deflt);
             return deflt;
         }
-        PyErr_SetString(PyExc_KeyError,
-                        "pop(): dictionary is empty");
+        set_key_error(key);
         return NULL;
     }
     if (!PyString_CheckExact(key) ||
@@ -2082,9 +2167,9 @@ PyDoc_STRVAR(values__doc__,
 "D.values() -> list of D's values");
 
 PyDoc_STRVAR(update__doc__,
-"D.update(E, **F) -> None.  Update D from dict/iterable E and F.\n"
-"If E has a .keys() method, does:     for k in E: D[k] = E[k]\n\
-If E lacks .keys() method, does:     for (k, v) in E: D[k] = v\n\
+"D.update([E, ]**F) -> None.  Update D from dict/iterable E and F.\n"
+"If E present and has a .keys() method, does:     for k in E: D[k] = E[k]\n\
+If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v\n\
 In either case, this is followed by: for k in F: D[k] = F[k]");
 
 PyDoc_STRVAR(fromkeys__doc__,
@@ -2105,6 +2190,18 @@ PyDoc_STRVAR(itervalues__doc__,
 
 PyDoc_STRVAR(iteritems__doc__,
 "D.iteritems() -> an iterator over the (key, value) items of D");
+
+/* Forward */
+static PyObject *dictkeys_new(PyObject *);
+static PyObject *dictitems_new(PyObject *);
+static PyObject *dictvalues_new(PyObject *);
+
+PyDoc_STRVAR(viewkeys__doc__,
+             "D.viewkeys() -> a set-like object providing a view on D's keys");
+PyDoc_STRVAR(viewitems__doc__,
+             "D.viewitems() -> a set-like object providing a view on D's items");
+PyDoc_STRVAR(viewvalues__doc__,
+             "D.viewvalues() -> an object providing a view on D's values");
 
 static PyMethodDef mapp_methods[] = {
     {"__contains__",(PyCFunction)dict_contains,         METH_O | METH_COEXIST,
@@ -2129,6 +2226,12 @@ static PyMethodDef mapp_methods[] = {
      items__doc__},
     {"values",          (PyCFunction)dict_values,       METH_NOARGS,
      values__doc__},
+    {"viewkeys",        (PyCFunction)dictkeys_new,      METH_NOARGS,
+     viewkeys__doc__},
+    {"viewitems",       (PyCFunction)dictitems_new,     METH_NOARGS,
+     viewitems__doc__},
+    {"viewvalues",      (PyCFunction)dictvalues_new,    METH_NOARGS,
+     viewvalues__doc__},
     {"update",          (PyCFunction)dict_update,       METH_VARARGS | METH_KEYWORDS,
      update__doc__},
     {"fromkeys",        (PyCFunction)dict_fromkeys,     METH_VARARGS | METH_CLASS,
@@ -2202,8 +2305,17 @@ dict_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         assert(d->ma_table == NULL && d->ma_fill == 0 && d->ma_used == 0);
         INIT_NONZERO_DICT_SLOTS(d);
         d->ma_lookup = lookdict_string;
+        /* The object has been implicitly tracked by tp_alloc */
+        if (type == &PyDict_Type)
+            _PyObject_GC_UNTRACK(d);
 #ifdef SHOW_CONVERSION_COUNTS
         ++created;
+#endif
+#ifdef SHOW_TRACK_COUNT
+        if (_PyObject_GC_IS_TRACKED(d))
+            count_tracked++;
+        else
+            count_untracked++;
 #endif
     }
     return self;
@@ -2613,3 +2725,494 @@ PyTypeObject PyDictIterItem_Type = {
     dictiter_methods,                           /* tp_methods */
     0,
 };
+
+/***********************************************/
+/* View objects for keys(), items(), values(). */
+/***********************************************/
+
+/* The instance lay-out is the same for all three; but the type differs. */
+
+typedef struct {
+    PyObject_HEAD
+    PyDictObject *dv_dict;
+} dictviewobject;
+
+
+static void
+dictview_dealloc(dictviewobject *dv)
+{
+    Py_XDECREF(dv->dv_dict);
+    PyObject_GC_Del(dv);
+}
+
+static int
+dictview_traverse(dictviewobject *dv, visitproc visit, void *arg)
+{
+    Py_VISIT(dv->dv_dict);
+    return 0;
+}
+
+static Py_ssize_t
+dictview_len(dictviewobject *dv)
+{
+    Py_ssize_t len = 0;
+    if (dv->dv_dict != NULL)
+        len = dv->dv_dict->ma_used;
+    return len;
+}
+
+static PyObject *
+dictview_new(PyObject *dict, PyTypeObject *type)
+{
+    dictviewobject *dv;
+    if (dict == NULL) {
+        PyErr_BadInternalCall();
+        return NULL;
+    }
+    if (!PyDict_Check(dict)) {
+        /* XXX Get rid of this restriction later */
+        PyErr_Format(PyExc_TypeError,
+                     "%s() requires a dict argument, not '%s'",
+                     type->tp_name, dict->ob_type->tp_name);
+        return NULL;
+    }
+    dv = PyObject_GC_New(dictviewobject, type);
+    if (dv == NULL)
+        return NULL;
+    Py_INCREF(dict);
+    dv->dv_dict = (PyDictObject *)dict;
+    _PyObject_GC_TRACK(dv);
+    return (PyObject *)dv;
+}
+
+/* TODO(guido): The views objects are not complete:
+
+ * support more set operations
+ * support arbitrary mappings?
+   - either these should be static or exported in dictobject.h
+   - if public then they should probably be in builtins
+*/
+
+/* Return 1 if self is a subset of other, iterating over self;
+   0 if not; -1 if an error occurred. */
+static int
+all_contained_in(PyObject *self, PyObject *other)
+{
+    PyObject *iter = PyObject_GetIter(self);
+    int ok = 1;
+
+    if (iter == NULL)
+        return -1;
+    for (;;) {
+        PyObject *next = PyIter_Next(iter);
+        if (next == NULL) {
+            if (PyErr_Occurred())
+                ok = -1;
+            break;
+        }
+        ok = PySequence_Contains(other, next);
+        Py_DECREF(next);
+        if (ok <= 0)
+            break;
+    }
+    Py_DECREF(iter);
+    return ok;
+}
+
+static PyObject *
+dictview_richcompare(PyObject *self, PyObject *other, int op)
+{
+    Py_ssize_t len_self, len_other;
+    int ok;
+    PyObject *result;
+
+    assert(self != NULL);
+    assert(PyDictViewSet_Check(self));
+    assert(other != NULL);
+
+    if (!PyAnySet_Check(other) && !PyDictViewSet_Check(other)) {
+        Py_INCREF(Py_NotImplemented);
+        return Py_NotImplemented;
+    }
+
+    len_self = PyObject_Size(self);
+    if (len_self < 0)
+        return NULL;
+    len_other = PyObject_Size(other);
+    if (len_other < 0)
+        return NULL;
+
+    ok = 0;
+    switch(op) {
+
+    case Py_NE:
+    case Py_EQ:
+        if (len_self == len_other)
+            ok = all_contained_in(self, other);
+        if (op == Py_NE && ok >= 0)
+            ok = !ok;
+        break;
+
+    case Py_LT:
+        if (len_self < len_other)
+            ok = all_contained_in(self, other);
+        break;
+
+      case Py_LE:
+          if (len_self <= len_other)
+              ok = all_contained_in(self, other);
+          break;
+
+    case Py_GT:
+        if (len_self > len_other)
+            ok = all_contained_in(other, self);
+        break;
+
+    case Py_GE:
+        if (len_self >= len_other)
+            ok = all_contained_in(other, self);
+        break;
+
+    }
+    if (ok < 0)
+        return NULL;
+    result = ok ? Py_True : Py_False;
+    Py_INCREF(result);
+    return result;
+}
+
+static PyObject *
+dictview_repr(dictviewobject *dv)
+{
+    PyObject *seq;
+    PyObject *seq_str;
+    PyObject *result;
+
+    seq = PySequence_List((PyObject *)dv);
+    if (seq == NULL)
+        return NULL;
+
+    seq_str = PyObject_Repr(seq);
+    result = PyString_FromFormat("%s(%s)", Py_TYPE(dv)->tp_name,
+                                 PyString_AS_STRING(seq_str));
+    Py_DECREF(seq_str);
+    Py_DECREF(seq);
+    return result;
+}
+
+/*** dict_keys ***/
+
+static PyObject *
+dictkeys_iter(dictviewobject *dv)
+{
+    if (dv->dv_dict == NULL) {
+        Py_RETURN_NONE;
+    }
+    return dictiter_new(dv->dv_dict, &PyDictIterKey_Type);
+}
+
+static int
+dictkeys_contains(dictviewobject *dv, PyObject *obj)
+{
+    if (dv->dv_dict == NULL)
+        return 0;
+    return PyDict_Contains((PyObject *)dv->dv_dict, obj);
+}
+
+static PySequenceMethods dictkeys_as_sequence = {
+    (lenfunc)dictview_len,              /* sq_length */
+    0,                                  /* sq_concat */
+    0,                                  /* sq_repeat */
+    0,                                  /* sq_item */
+    0,                                  /* sq_slice */
+    0,                                  /* sq_ass_item */
+    0,                                  /* sq_ass_slice */
+    (objobjproc)dictkeys_contains,      /* sq_contains */
+};
+
+static PyObject*
+dictviews_sub(PyObject* self, PyObject *other)
+{
+    PyObject *result = PySet_New(self);
+    PyObject *tmp;
+    if (result == NULL)
+        return NULL;
+
+    tmp = PyObject_CallMethod(result, "difference_update", "O", other);
+    if (tmp == NULL) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    Py_DECREF(tmp);
+    return result;
+}
+
+static PyObject*
+dictviews_and(PyObject* self, PyObject *other)
+{
+    PyObject *result = PySet_New(self);
+    PyObject *tmp;
+    if (result == NULL)
+        return NULL;
+
+    tmp = PyObject_CallMethod(result, "intersection_update", "O", other);
+    if (tmp == NULL) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    Py_DECREF(tmp);
+    return result;
+}
+
+static PyObject*
+dictviews_or(PyObject* self, PyObject *other)
+{
+    PyObject *result = PySet_New(self);
+    PyObject *tmp;
+    if (result == NULL)
+        return NULL;
+
+    tmp = PyObject_CallMethod(result, "update", "O", other);
+    if (tmp == NULL) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    Py_DECREF(tmp);
+    return result;
+}
+
+static PyObject*
+dictviews_xor(PyObject* self, PyObject *other)
+{
+    PyObject *result = PySet_New(self);
+    PyObject *tmp;
+    if (result == NULL)
+        return NULL;
+
+    tmp = PyObject_CallMethod(result, "symmetric_difference_update", "O",
+                              other);
+    if (tmp == NULL) {
+        Py_DECREF(result);
+        return NULL;
+    }
+
+    Py_DECREF(tmp);
+    return result;
+}
+
+static PyNumberMethods dictviews_as_number = {
+    0,                                  /*nb_add*/
+    (binaryfunc)dictviews_sub,          /*nb_subtract*/
+    0,                                  /*nb_multiply*/
+    0,                                  /*nb_divide*/
+    0,                                  /*nb_remainder*/
+    0,                                  /*nb_divmod*/
+    0,                                  /*nb_power*/
+    0,                                  /*nb_negative*/
+    0,                                  /*nb_positive*/
+    0,                                  /*nb_absolute*/
+    0,                                  /*nb_nonzero*/
+    0,                                  /*nb_invert*/
+    0,                                  /*nb_lshift*/
+    0,                                  /*nb_rshift*/
+    (binaryfunc)dictviews_and,          /*nb_and*/
+    (binaryfunc)dictviews_xor,          /*nb_xor*/
+    (binaryfunc)dictviews_or,           /*nb_or*/
+};
+
+static PyMethodDef dictkeys_methods[] = {
+    {NULL,              NULL}           /* sentinel */
+};
+
+PyTypeObject PyDictKeys_Type = {
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    "dict_keys",                                /* tp_name */
+    sizeof(dictviewobject),                     /* tp_basicsize */
+    0,                                          /* tp_itemsize */
+    /* methods */
+    (destructor)dictview_dealloc,               /* tp_dealloc */
+    0,                                          /* tp_print */
+    0,                                          /* tp_getattr */
+    0,                                          /* tp_setattr */
+    0,                                          /* tp_reserved */
+    (reprfunc)dictview_repr,                    /* tp_repr */
+    &dictviews_as_number,                       /* tp_as_number */
+    &dictkeys_as_sequence,                      /* tp_as_sequence */
+    0,                                          /* tp_as_mapping */
+    0,                                          /* tp_hash */
+    0,                                          /* tp_call */
+    0,                                          /* tp_str */
+    PyObject_GenericGetAttr,                    /* tp_getattro */
+    0,                                          /* tp_setattro */
+    0,                                          /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
+        Py_TPFLAGS_CHECKTYPES,                  /* tp_flags */
+    0,                                          /* tp_doc */
+    (traverseproc)dictview_traverse,            /* tp_traverse */
+    0,                                          /* tp_clear */
+    dictview_richcompare,                       /* tp_richcompare */
+    0,                                          /* tp_weaklistoffset */
+    (getiterfunc)dictkeys_iter,                 /* tp_iter */
+    0,                                          /* tp_iternext */
+    dictkeys_methods,                           /* tp_methods */
+    0,
+};
+
+static PyObject *
+dictkeys_new(PyObject *dict)
+{
+    return dictview_new(dict, &PyDictKeys_Type);
+}
+
+/*** dict_items ***/
+
+static PyObject *
+dictitems_iter(dictviewobject *dv)
+{
+    if (dv->dv_dict == NULL) {
+        Py_RETURN_NONE;
+    }
+    return dictiter_new(dv->dv_dict, &PyDictIterItem_Type);
+}
+
+static int
+dictitems_contains(dictviewobject *dv, PyObject *obj)
+{
+    PyObject *key, *value, *found;
+    if (dv->dv_dict == NULL)
+        return 0;
+    if (!PyTuple_Check(obj) || PyTuple_GET_SIZE(obj) != 2)
+        return 0;
+    key = PyTuple_GET_ITEM(obj, 0);
+    value = PyTuple_GET_ITEM(obj, 1);
+    found = PyDict_GetItem((PyObject *)dv->dv_dict, key);
+    if (found == NULL) {
+        if (PyErr_Occurred())
+            return -1;
+        return 0;
+    }
+    return PyObject_RichCompareBool(value, found, Py_EQ);
+}
+
+static PySequenceMethods dictitems_as_sequence = {
+    (lenfunc)dictview_len,              /* sq_length */
+    0,                                  /* sq_concat */
+    0,                                  /* sq_repeat */
+    0,                                  /* sq_item */
+    0,                                  /* sq_slice */
+    0,                                  /* sq_ass_item */
+    0,                                  /* sq_ass_slice */
+    (objobjproc)dictitems_contains,     /* sq_contains */
+};
+
+static PyMethodDef dictitems_methods[] = {
+    {NULL,              NULL}           /* sentinel */
+};
+
+PyTypeObject PyDictItems_Type = {
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    "dict_items",                               /* tp_name */
+    sizeof(dictviewobject),                     /* tp_basicsize */
+    0,                                          /* tp_itemsize */
+    /* methods */
+    (destructor)dictview_dealloc,               /* tp_dealloc */
+    0,                                          /* tp_print */
+    0,                                          /* tp_getattr */
+    0,                                          /* tp_setattr */
+    0,                                          /* tp_reserved */
+    (reprfunc)dictview_repr,                    /* tp_repr */
+    &dictviews_as_number,                       /* tp_as_number */
+    &dictitems_as_sequence,                     /* tp_as_sequence */
+    0,                                          /* tp_as_mapping */
+    0,                                          /* tp_hash */
+    0,                                          /* tp_call */
+    0,                                          /* tp_str */
+    PyObject_GenericGetAttr,                    /* tp_getattro */
+    0,                                          /* tp_setattro */
+    0,                                          /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
+        Py_TPFLAGS_CHECKTYPES,                  /* tp_flags */
+    0,                                          /* tp_doc */
+    (traverseproc)dictview_traverse,            /* tp_traverse */
+    0,                                          /* tp_clear */
+    dictview_richcompare,                       /* tp_richcompare */
+    0,                                          /* tp_weaklistoffset */
+    (getiterfunc)dictitems_iter,                /* tp_iter */
+    0,                                          /* tp_iternext */
+    dictitems_methods,                          /* tp_methods */
+    0,
+};
+
+static PyObject *
+dictitems_new(PyObject *dict)
+{
+    return dictview_new(dict, &PyDictItems_Type);
+}
+
+/*** dict_values ***/
+
+static PyObject *
+dictvalues_iter(dictviewobject *dv)
+{
+    if (dv->dv_dict == NULL) {
+        Py_RETURN_NONE;
+    }
+    return dictiter_new(dv->dv_dict, &PyDictIterValue_Type);
+}
+
+static PySequenceMethods dictvalues_as_sequence = {
+    (lenfunc)dictview_len,              /* sq_length */
+    0,                                  /* sq_concat */
+    0,                                  /* sq_repeat */
+    0,                                  /* sq_item */
+    0,                                  /* sq_slice */
+    0,                                  /* sq_ass_item */
+    0,                                  /* sq_ass_slice */
+    (objobjproc)0,                      /* sq_contains */
+};
+
+static PyMethodDef dictvalues_methods[] = {
+    {NULL,              NULL}           /* sentinel */
+};
+
+PyTypeObject PyDictValues_Type = {
+    PyVarObject_HEAD_INIT(&PyType_Type, 0)
+    "dict_values",                              /* tp_name */
+    sizeof(dictviewobject),                     /* tp_basicsize */
+    0,                                          /* tp_itemsize */
+    /* methods */
+    (destructor)dictview_dealloc,               /* tp_dealloc */
+    0,                                          /* tp_print */
+    0,                                          /* tp_getattr */
+    0,                                          /* tp_setattr */
+    0,                                          /* tp_reserved */
+    (reprfunc)dictview_repr,                    /* tp_repr */
+    0,                                          /* tp_as_number */
+    &dictvalues_as_sequence,                    /* tp_as_sequence */
+    0,                                          /* tp_as_mapping */
+    0,                                          /* tp_hash */
+    0,                                          /* tp_call */
+    0,                                          /* tp_str */
+    PyObject_GenericGetAttr,                    /* tp_getattro */
+    0,                                          /* tp_setattro */
+    0,                                          /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
+    0,                                          /* tp_doc */
+    (traverseproc)dictview_traverse,            /* tp_traverse */
+    0,                                          /* tp_clear */
+    0,                                          /* tp_richcompare */
+    0,                                          /* tp_weaklistoffset */
+    (getiterfunc)dictvalues_iter,               /* tp_iter */
+    0,                                          /* tp_iternext */
+    dictvalues_methods,                         /* tp_methods */
+    0,
+};
+
+static PyObject *
+dictvalues_new(PyObject *dict)
+{
+    return dictview_new(dict, &PyDictValues_Type);
+}

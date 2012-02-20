@@ -139,22 +139,33 @@ _PyArg_VaParse_SizeT(PyObject *args, char *format, va_list va)
 
 /* Handle cleanup of allocated memory in case of exception */
 
+#define GETARGS_CAPSULE_NAME_CLEANUP_PTR "getargs.cleanup_ptr"
+#define GETARGS_CAPSULE_NAME_CLEANUP_BUFFER "getargs.cleanup_buffer"
+
 static void
-cleanup_ptr(void *ptr)
+cleanup_ptr(PyObject *self)
 {
-    PyMem_FREE(ptr);
+    void *ptr = PyCapsule_GetPointer(self, GETARGS_CAPSULE_NAME_CLEANUP_PTR);
+    if (ptr) {
+      PyMem_FREE(ptr);
+    }
 }
 
 static void
-cleanup_buffer(void *ptr)
+cleanup_buffer(PyObject *self)
 {
-    PyBuffer_Release((Py_buffer *) ptr);
+    Py_buffer *ptr = (Py_buffer *)PyCapsule_GetPointer(self, GETARGS_CAPSULE_NAME_CLEANUP_BUFFER);
+    if (ptr) {
+        PyBuffer_Release(ptr);
+    }
 }
 
 static int
-addcleanup(void *ptr, PyObject **freelist, void (*destr)(void *))
+addcleanup(void *ptr, PyObject **freelist, PyCapsule_Destructor destr)
 {
     PyObject *cobj;
+    const char *name;
+
     if (!*freelist) {
         *freelist = PyList_New(0);
         if (!*freelist) {
@@ -162,7 +173,15 @@ addcleanup(void *ptr, PyObject **freelist, void (*destr)(void *))
             return -1;
         }
     }
-    cobj = PyCObject_FromVoidPtr(ptr, destr);
+
+    if (destr == cleanup_ptr) {
+        name = GETARGS_CAPSULE_NAME_CLEANUP_PTR;
+    } else if (destr == cleanup_buffer) {
+        name = GETARGS_CAPSULE_NAME_CLEANUP_BUFFER;
+    } else {
+        return -1;
+    }
+    cobj = PyCapsule_New(ptr, name, destr);
     if (!cobj) {
         destr(ptr);
         return -1;
@@ -183,8 +202,7 @@ cleanreturn(int retval, PyObject *freelist)
            don't get called. */
         Py_ssize_t len = PyList_GET_SIZE(freelist), i;
         for (i = 0; i < len; i++)
-            ((PyCObject *) PyList_GET_ITEM(freelist, i))
-                ->destructor = NULL;
+            PyCapsule_SetDestructor(PyList_GET_ITEM(freelist, i), NULL);
     }
     Py_XDECREF(freelist);
     return retval;
@@ -328,7 +346,7 @@ vgetargs1(PyObject *args, const char *format, va_list *p_va, int flags)
                           flags, levels, msgbuf,
                           sizeof(msgbuf), &freelist);
         if (msg) {
-            seterror(i+1, msg, levels, fname, message);
+            seterror(i+1, msg, levels, fname, msg);
             return cleanreturn(0, freelist);
         }
     }
@@ -526,12 +544,26 @@ converterr(const char *expected, PyObject *arg, char *msgbuf, size_t bufsize)
 /* explicitly check for float arguments when integers are expected.  For now
  * signal a warning.  Returns true if an exception was raised. */
 static int
-float_argument_error(PyObject *arg)
+float_argument_warning(PyObject *arg)
 {
     if (PyFloat_Check(arg) &&
         PyErr_Warn(PyExc_DeprecationWarning,
                    "integer argument expected, got float" ))
         return 1;
+    else
+        return 0;
+}
+
+/* explicitly check for float arguments when integers are expected.  Raises
+   TypeError and returns true for float arguments. */
+static int
+float_argument_error(PyObject *arg)
+{
+    if (PyFloat_Check(arg)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "integer argument expected, got float");
+        return 1;
+    }
     else
         return 0;
 }
@@ -553,7 +585,17 @@ convertsimple(PyObject *arg, const char **p_format, va_list *p_va, int flags,
 #define FETCH_SIZE      int *q=NULL;Py_ssize_t *q2=NULL;\
     if (flags & FLAG_SIZE_T) q2=va_arg(*p_va, Py_ssize_t*); \
     else q=va_arg(*p_va, int*);
-#define STORE_SIZE(s)   if (flags & FLAG_SIZE_T) *q2=s; else *q=s;
+#define STORE_SIZE(s)   \
+    if (flags & FLAG_SIZE_T) \
+        *q2=s; \
+    else { \
+        if (INT_MAX < s) { \
+            PyErr_SetString(PyExc_OverflowError, \
+                "size does not fit in an int"); \
+            return converterr("", arg, msgbuf, bufsize); \
+        } \
+        *q=s; \
+    }
 #define BUFFER_LEN      ((flags & FLAG_SIZE_T) ? *q2:*q)
 
     const char *format = *p_format;
@@ -719,7 +761,10 @@ convertsimple(PyObject *arg, const char **p_format, va_list *p_va, int flags,
 #ifdef HAVE_LONG_LONG
     case 'L': {/* PY_LONG_LONG */
         PY_LONG_LONG *p = va_arg( *p_va, PY_LONG_LONG * );
-        PY_LONG_LONG ival = PyLong_AsLongLong( arg );
+        PY_LONG_LONG ival;
+        if (float_argument_warning(arg))
+            return converterr("long<L>", arg, msgbuf, bufsize);
+        ival = PyLong_AsLongLong(arg);
         if (ival == (PY_LONG_LONG)-1 && PyErr_Occurred() ) {
             return converterr("long<L>", arg, msgbuf, bufsize);
         } else {
@@ -949,10 +994,11 @@ convertsimple(PyObject *arg, const char **p_format, va_list *p_va, int flags,
             if (*format == '#') {
                 FETCH_SIZE;
                 assert(0); /* XXX redundant with if-case */
-                if (arg == Py_None)
-                    *q = 0;
-                else
-                    *q = PyString_Size(arg);
+                if (arg == Py_None) {
+                    STORE_SIZE(0);
+                } else {
+                    STORE_SIZE(PyString_Size(arg));
+                }
                 format++;
             }
             else if (*p != NULL &&
@@ -1732,16 +1778,6 @@ skipitem(const char **p_format, va_list *p_va, int flags)
                 (void) va_arg(*p_va, PyTypeObject*);
                 (void) va_arg(*p_va, PyObject **);
             }
-#if 0
-/* I don't know what this is for */
-            else if (*format == '?') {
-                inquiry pred = va_arg(*p_va, inquiry);
-                format++;
-                if ((*pred)(arg)) {
-                    (void) va_arg(*p_va, PyObject **);
-                }
-            }
-#endif
             else if (*format == '&') {
                 typedef int (*converter)(PyObject *, void *);
                 (void) va_arg(*p_va, converter);

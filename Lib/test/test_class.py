@@ -350,6 +350,19 @@ class ClassTests(unittest.TestCase):
         AllTests.__delslice__ = delslice
 
 
+    @test_support.cpython_only
+    def testDelItem(self):
+        class A:
+            ok = False
+            def __delitem__(self, key):
+                self.ok = True
+        a = A()
+        # Subtle: we need to call PySequence_SetItem, not PyMapping_SetItem.
+        from _testcapi import sequence_delitem
+        sequence_delitem(a, 2)
+        self.assertTrue(a.ok)
+
+
     def testUnaryOps(self):
         testme = AllTests()
 
@@ -475,7 +488,7 @@ class ClassTests(unittest.TestCase):
         del testme
         import gc
         gc.collect()
-        self.assertEquals(["crab people, crab people"], x)
+        self.assertEqual(["crab people, crab people"], x)
 
     def testBadTypeReturned(self):
         # return values of some method are type-checked
@@ -507,14 +520,14 @@ class ClassTests(unittest.TestCase):
 
         callLst[:] = []
         as_int = int(mixIntAndLong)
-        self.assertEquals(type(as_int), long)
-        self.assertEquals(as_int, 42L)
+        self.assertEqual(type(as_int), long)
+        self.assertEqual(as_int, 42L)
         self.assertCallStack([('__int__', (mixIntAndLong,))])
 
         callLst[:] = []
         as_long = long(mixIntAndLong)
-        self.assertEquals(type(as_long), int)
-        self.assertEquals(as_long, 64)
+        self.assertEqual(type(as_long), long)
+        self.assertEqual(as_long, 64)
         self.assertCallStack([('__long__', (mixIntAndLong,))])
 
     def testHashStuff(self):
@@ -599,24 +612,24 @@ class ClassTests(unittest.TestCase):
 
         a1 = A(1)
         a2 = A(2)
-        self.assertEquals(a1.f, a1.f)
-        self.assertNotEquals(a1.f, a2.f)
-        self.assertNotEquals(a1.f, a1.g)
-        self.assertEquals(a1.f, A(1).f)
-        self.assertEquals(hash(a1.f), hash(a1.f))
-        self.assertEquals(hash(a1.f), hash(A(1).f))
+        self.assertEqual(a1.f, a1.f)
+        self.assertNotEqual(a1.f, a2.f)
+        self.assertNotEqual(a1.f, a1.g)
+        self.assertEqual(a1.f, A(1).f)
+        self.assertEqual(hash(a1.f), hash(a1.f))
+        self.assertEqual(hash(a1.f), hash(A(1).f))
 
-        self.assertNotEquals(A.f, a1.f)
-        self.assertNotEquals(A.f, A.g)
-        self.assertEquals(B.f, A.f)
-        self.assertEquals(hash(B.f), hash(A.f))
+        self.assertNotEqual(A.f, a1.f)
+        self.assertNotEqual(A.f, A.g)
+        self.assertEqual(B.f, A.f)
+        self.assertEqual(hash(B.f), hash(A.f))
 
         # the following triggers a SystemError in 2.4
         a = A(hash(A.f.im_func)^(-1))
         hash(a.f)
 
 def test_main():
-    with test_support._check_py3k_warnings(
+    with test_support.check_py3k_warnings(
             (".+__(get|set|del)slice__ has been removed", DeprecationWarning),
             ("classic int division", DeprecationWarning),
             ("<> not supported", DeprecationWarning)):

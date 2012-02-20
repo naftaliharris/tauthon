@@ -76,6 +76,11 @@ def get_platform ():
         if release[0] >= "5":           # SunOS 5 == Solaris 2
             osname = "solaris"
             release = "%d.%s" % (int(release[0]) - 3, release[2:])
+            # We can't use "platform.architecture()[0]" because a
+            # bootstrap problem. We use a dict to get an error
+            # if some suspicious happens.
+            bitness = {2147483647:"32bit", 9223372036854775807:"64bit"}
+            machine += ".%s" % bitness[sys.maxint]
         # fall through to standard osname-release-machine representation
     elif osname[:4] == "irix":              # could be "irix64"!
         return "%s-%s" % (osname, release)
@@ -97,9 +102,7 @@ def get_platform ():
         from distutils.sysconfig import get_config_vars
         cfgvars = get_config_vars()
 
-        macver = os.environ.get('MACOSX_DEPLOYMENT_TARGET')
-        if not macver:
-            macver = cfgvars.get('MACOSX_DEPLOYMENT_TARGET')
+        macver = cfgvars.get('MACOSX_DEPLOYMENT_TARGET')
 
         if 1:
             # Always calculate the release of the running machine,
@@ -116,13 +119,15 @@ def get_platform ():
                 # behaviour.
                 pass
             else:
-                m = re.search(
-                        r'<key>ProductUserVisibleVersion</key>\s*' +
-                        r'<string>(.*?)</string>', f.read())
-                f.close()
-                if m is not None:
-                    macrelease = '.'.join(m.group(1).split('.')[:2])
-                # else: fall back to the default behaviour
+                try:
+                    m = re.search(
+                            r'<key>ProductUserVisibleVersion</key>\s*' +
+                            r'<string>(.*?)</string>', f.read())
+                    if m is not None:
+                        macrelease = '.'.join(m.group(1).split('.')[:2])
+                    # else: fall back to the default behaviour
+                finally:
+                    f.close()
 
         if not macver:
             macver = macrelease
@@ -233,15 +238,6 @@ def change_root (new_root, pathname):
         if path[0] == os.sep:
             path = path[1:]
         return os.path.join(new_root, path)
-
-    elif os.name == 'mac':
-        if not os.path.isabs(pathname):
-            return os.path.join(new_root, pathname)
-        else:
-            # Chop off volume name from start of path
-            elements = string.split(pathname, ":", 1)
-            pathname = ":" + elements[1]
-            return os.path.join(new_root, pathname)
 
     else:
         raise DistutilsPlatformError, \

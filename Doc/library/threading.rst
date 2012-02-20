@@ -4,6 +4,9 @@
 .. module:: threading
    :synopsis: Higher-level threading interface.
 
+**Source code:** :source:`Lib/threading.py`
+
+--------------
 
 This module constructs higher-level threading interfaces on top of the  lower
 level :mod:`thread` module.
@@ -26,6 +29,16 @@ The :mod:`dummy_threading` module is provided for situations where
    Starting with Python 2.5, several Thread methods raise :exc:`RuntimeError`
    instead of :exc:`AssertionError` if called erroneously.
 
+.. impl-detail::
+
+   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
+   can execute Python code at once (even though certain performance-oriented
+   libraries might overcome this limitation).
+   If you want your application to make better of use of the computational
+   resources of multi-core machines, you are advised to use
+   :mod:`multiprocessing`. However, threading is still an appropriate model
+   if you want to run multiple I/O-bound tasks simultaneously.
+
 
 This module defines the following functions and objects:
 
@@ -42,6 +55,8 @@ This module defines the following functions and objects:
    A factory function that returns a new condition variable object. A condition
    variable allows one or more threads to wait until they are notified by another
    thread.
+
+   See :ref:`condition-objects`.
 
 
 .. function:: current_thread()
@@ -69,6 +84,8 @@ This module defines the following functions and objects:
    with the :meth:`clear` method.  The :meth:`wait` method blocks until the flag
    is true.
 
+   See :ref:`event-objects`.
+
 
 .. class:: local
 
@@ -93,6 +110,8 @@ This module defines the following functions and objects:
    acquired it, subsequent attempts to acquire it block, until it is released; any
    thread may release it.
 
+   See :ref:`lock-objects`.
+
 
 .. function:: RLock()
 
@@ -100,6 +119,8 @@ This module defines the following functions and objects:
    must be released by the thread that acquired it. Once a thread has acquired a
    reentrant lock, the same thread may acquire it again without blocking; the
    thread must release it once for each time it has acquired it.
+
+   See :ref:`rlock-objects`.
 
 
 .. function:: Semaphore([value])
@@ -110,6 +131,8 @@ This module defines the following functions and objects:
    :meth:`acquire` calls, plus an initial value. The :meth:`acquire` method blocks
    if necessary until it can return without making the counter negative.  If not
    given, *value* defaults to 1.
+
+   See :ref:`semaphore-objects`.
 
 
 .. function:: BoundedSemaphore([value])
@@ -122,14 +145,20 @@ This module defines the following functions and objects:
 
 
 .. class:: Thread
+   :noindex:
 
    A class that represents a thread of control.  This class can be safely
    subclassed in a limited fashion.
 
+   See :ref:`thread-objects`.
+
 
 .. class:: Timer
+   :noindex:
 
    A thread that executes a function after a specified interval has passed.
+
+   See :ref:`timer-objects`.
 
 
 .. function:: settrace(func)
@@ -259,7 +288,7 @@ impossible to detect the termination of alien threads.
       It must be called at most once per thread object.  It arranges for the
       object's :meth:`run` method to be invoked in a separate thread of control.
 
-      This method will raise a :exc:`RuntimeException` if called more than once
+      This method will raise a :exc:`RuntimeError` if called more than once
       on the same thread object.
 
    .. method:: run()
@@ -368,7 +397,7 @@ and may vary across implementations.
 All methods are executed atomically.
 
 
-.. method:: Lock.acquire([blocking=1])
+.. method:: Lock.acquire([blocking])
 
    Acquire a lock, blocking or non-blocking.
 
@@ -544,20 +573,21 @@ needs to wake up one consumer thread.
       interface is then used to restore the recursion level when the lock is
       reacquired.
 
-   .. method:: notify()
+   .. method:: notify(n=1)
 
-      Wake up a thread waiting on this condition, if any.  If the calling thread
-      has not acquired the lock when this method is called, a
+      By default, wake up one thread waiting on this condition, if any.  If the
+      calling thread has not acquired the lock when this method is called, a
       :exc:`RuntimeError` is raised.
 
-      This method wakes up one of the threads waiting for the condition
-      variable, if any are waiting; it is a no-op if no threads are waiting.
+      This method wakes up at most *n* of the threads waiting for the condition
+      variable; it is a no-op if no threads are waiting.
 
-      The current implementation wakes up exactly one thread, if any are
-      waiting.  However, it's not safe to rely on this behavior.  A future,
-      optimized implementation may occasionally wake up more than one thread.
+      The current implementation wakes up exactly *n* threads, if at least *n*
+      threads are waiting.  However, it's not safe to rely on this behavior.
+      A future, optimized implementation may occasionally wake up more than
+      *n* threads.
 
-      Note: the awakened thread does not actually return from its :meth:`wait`
+      Note: an awakened thread does not actually return from its :meth:`wait`
       call until it can reacquire the lock.  Since :meth:`notify` does not
       release the lock, its caller should.
 
@@ -624,9 +654,9 @@ waiting until some other thread calls :meth:`release`.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Semaphores are often used to guard resources with limited capacity, for example,
-a database server.  In any situation where the size of the resource size is
-fixed, you should use a bounded semaphore.  Before spawning any worker threads,
-your main thread would initialize the semaphore::
+a database server.  In any situation where the size of the resource is fixed,
+you should use a bounded semaphore.  Before spawning any worker threads, your
+main thread would initialize the semaphore::
 
    maxconnections = 5
    ...
@@ -693,7 +723,11 @@ An event object manages an internal flag that can be set to true with the
       floating point number specifying a timeout for the operation in seconds
       (or fractions thereof).
 
-      This method always returns ``None``.
+      This method returns the internal flag on exit, so it will always return
+      ``True`` except if a timeout is given and the operation times out.
+
+      .. versionchanged:: 2.7
+         Previously, the method always returned ``None``.
 
 
 .. _timer-objects:
@@ -757,9 +791,9 @@ Currently, :class:`Lock`, :class:`RLock`, :class:`Condition`,
 Importing in threaded code
 --------------------------
 
-While the import machinery is thread safe, there are two key
-restrictions on threaded imports due to inherent limitations in the way
-that thread safety is provided:
+While the import machinery is thread-safe, there are two key restrictions on
+threaded imports due to inherent limitations in the way that thread-safety is
+provided:
 
 * Firstly, other than in the main module, an import should not have the
   side effect of spawning a new thread and then waiting for that thread in

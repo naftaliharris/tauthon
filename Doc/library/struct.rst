@@ -22,8 +22,8 @@ structs and the intended conversion to/from Python values.
    alignment is taken into account when unpacking.  This behavior is chosen so
    that the bytes of a packed struct correspond exactly to the layout in memory
    of the corresponding C struct.  To handle platform-independent data formats
-   or omit implicit pad bytes, use `standard` size and alignment instead of
-   `native` size and alignment: see :ref:`struct-alignment` for details.
+   or omit implicit pad bytes, use ``standard`` size and alignment instead of
+   ``native`` size and alignment: see :ref:`struct-alignment` for details.
 
 Functions and Exceptions
 ------------------------
@@ -162,69 +162,85 @@ is, when the format string starts with one of ``'<'``, ``'>'``, ``'!'`` or
 ``'='``.  When using native size, the size of the packed value is
 platform-dependent.
 
-+--------+-------------------------+--------------------+----------------+------------+
-| Format | C Type                  | Python type        | Standard size  | Notes      |
-+========+=========================+====================+================+============+
-| ``x``  | pad byte                | no value           |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``c``  | :ctype:`char`           | string of length 1 | 1              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``b``  | :ctype:`signed char`    | integer            | 1              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``B``  | :ctype:`unsigned char`  | integer            | 1              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``?``  | :ctype:`_Bool`          | bool               | 1              | \(1)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``h``  | :ctype:`short`          | integer            | 2              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``H``  | :ctype:`unsigned short` | integer            | 2              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``i``  | :ctype:`int`            | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``I``  | :ctype:`unsigned int`   | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``l``  | :ctype:`long`           | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``L``  | :ctype:`unsigned long`  | integer            | 4              |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``q``  | :ctype:`long long`      | integer            | 8              | \(2)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``Q``  | :ctype:`unsigned long   | integer            | 8              | \(2)       |
-|        | long`                   |                    |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``f``  | :ctype:`float`          | float              | 4              | \(3)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``d``  | :ctype:`double`         | float              | 8              | \(3)       |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``s``  | :ctype:`char[]`         | string             |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``p``  | :ctype:`char[]`         | string             |                |            |
-+--------+-------------------------+--------------------+----------------+------------+
-| ``P``  | :ctype:`void \*`        | integer            |                | \(4)       |
-+--------+-------------------------+--------------------+----------------+------------+
++--------+--------------------------+--------------------+----------------+------------+
+| Format | C Type                   | Python type        | Standard size  | Notes      |
++========+==========================+====================+================+============+
+| ``x``  | pad byte                 | no value           |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``c``  | :c:type:`char`           | string of length 1 | 1              |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``b``  | :c:type:`signed char`    | integer            | 1              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``B``  | :c:type:`unsigned char`  | integer            | 1              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``?``  | :c:type:`_Bool`          | bool               | 1              | \(1)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``h``  | :c:type:`short`          | integer            | 2              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``H``  | :c:type:`unsigned short` | integer            | 2              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``i``  | :c:type:`int`            | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``I``  | :c:type:`unsigned int`   | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``l``  | :c:type:`long`           | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``L``  | :c:type:`unsigned long`  | integer            | 4              | \(3)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``q``  | :c:type:`long long`      | integer            | 8              | \(2), \(3) |
++--------+--------------------------+--------------------+----------------+------------+
+| ``Q``  | :c:type:`unsigned long   | integer            | 8              | \(2), \(3) |
+|        | long`                    |                    |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``f``  | :c:type:`float`          | float              | 4              | \(4)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``d``  | :c:type:`double`         | float              | 8              | \(4)       |
++--------+--------------------------+--------------------+----------------+------------+
+| ``s``  | :c:type:`char[]`         | string             |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``p``  | :c:type:`char[]`         | string             |                |            |
++--------+--------------------------+--------------------+----------------+------------+
+| ``P``  | :c:type:`void \*`        | integer            |                | \(5), \(3) |
++--------+--------------------------+--------------------+----------------+------------+
 
 Notes:
 
 (1)
-   The ``'?'`` conversion code corresponds to the :ctype:`_Bool` type defined by
-   C99. If this type is not available, it is simulated using a :ctype:`char`. In
+   The ``'?'`` conversion code corresponds to the :c:type:`_Bool` type defined by
+   C99. If this type is not available, it is simulated using a :c:type:`char`. In
    standard mode, it is always represented by one byte.
 
    .. versionadded:: 2.6
 
 (2)
    The ``'q'`` and ``'Q'`` conversion codes are available in native mode only if
-   the platform C compiler supports C :ctype:`long long`, or, on Windows,
-   :ctype:`__int64`.  They are always available in standard modes.
+   the platform C compiler supports C :c:type:`long long`, or, on Windows,
+   :c:type:`__int64`.  They are always available in standard modes.
 
    .. versionadded:: 2.2
 
 (3)
+   When attempting to pack a non-integer using any of the integer conversion
+   codes, if the non-integer has a :meth:`__index__` method then that method is
+   called to convert the argument to an integer before packing.  If no
+   :meth:`__index__` method exists, or the call to :meth:`__index__` raises
+   :exc:`TypeError`, then the :meth:`__int__` method is tried.  However, the use
+   of :meth:`__int__` is deprecated, and will raise :exc:`DeprecationWarning`.
+
+   .. versionchanged:: 2.7
+      Use of the :meth:`__index__` method for non-integers is new in 2.7.
+
+   .. versionchanged:: 2.7
+      Prior to version 2.7, not all integer conversion codes would use the
+      :meth:`__int__` method to convert, and :exc:`DeprecationWarning` was
+      raised only for float arguments.
+
+(4)
    For the ``'f'`` and ``'d'`` conversion codes, the packed representation uses
    the IEEE 754 binary32 (for ``'f'``) or binary64 (for ``'d'``) format,
    regardless of the floating-point format used by the platform.
 
-(4)
+(5)
    The ``'P'`` format character is only available for the native byte ordering
    (selected as the default or with the ``'@'`` byte order character). The byte
    order character ``'='`` chooses to use little- or big-endian ordering based
@@ -241,20 +257,21 @@ not contain whitespace though.
 For the ``'s'`` format character, the count is interpreted as the size of the
 string, not a repeat count like for the other format characters; for example,
 ``'10s'`` means a single 10-byte string, while ``'10c'`` means 10 characters.
-For packing, the string is truncated or padded with null bytes as appropriate to
-make it fit. For unpacking, the resulting string always has exactly the
-specified number of bytes.  As a special case, ``'0s'`` means a single, empty
-string (while ``'0c'`` means 0 characters).
+If a count is not given, it defaults to 1.  For packing, the string is
+truncated or padded with null bytes as appropriate to make it fit. For
+unpacking, the resulting string always has exactly the specified number of
+bytes.  As a special case, ``'0s'`` means a single, empty string (while
+``'0c'`` means 0 characters).
 
 The ``'p'`` format character encodes a "Pascal string", meaning a short
-variable-length string stored in a fixed number of bytes. The count is the total
-number of bytes stored.  The first byte stored is the length of the string, or
-255, whichever is smaller.  The bytes of the string follow.  If the string
-passed in to :func:`pack` is too long (longer than the count minus 1), only the
-leading count-1 bytes of the string are stored.  If the string is shorter than
-count-1, it is padded with null bytes so that exactly count bytes in all are
-used.  Note that for :func:`unpack`, the ``'p'`` format character consumes count
-bytes, but that the string returned can never contain more than 255 characters.
+variable-length string stored in a *fixed number of bytes*, given by the count.
+The first byte stored is the length of the string, or 255, whichever is smaller.
+The bytes of the string follow.  If the string passed in to :func:`pack` is too
+long (longer than the count minus 1), only the leading ``count-1`` bytes of the
+string are stored.  If the string is shorter than ``count-1``, it is padded with
+null bytes so that exactly count bytes in all are used.  Note that for
+:func:`unpack`, the ``'p'`` format character consumes count bytes, but that the
+string returned can never contain more than 255 characters.
 
 For the ``'P'`` format character, the return value is a Python integer or long
 integer, depending on the size needed to hold a pointer when it has been cast to
@@ -298,7 +315,7 @@ the result in a named tuple::
 
     >>> from collections import namedtuple
     >>> Student = namedtuple('Student', 'name serialnum school gradelevel')
-    >>> Student._make(unpack('<10sHHb', s))
+    >>> Student._make(unpack('<10sHHb', record))
     Student(name='raymond   ', serialnum=4658, school=264, gradelevel=8)
 
 The ordering of format characters may have an impact on size since the padding

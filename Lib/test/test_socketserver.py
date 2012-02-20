@@ -3,21 +3,21 @@ Test suite for SocketServer.py.
 """
 
 import contextlib
-import errno
 import imp
 import os
 import select
 import signal
 import socket
 import tempfile
-import threading
-import time
 import unittest
 import SocketServer
 
 import test.test_support
-from test.test_support import reap_children, verbose, TestSkipped
-from test.test_support import TESTFN as TEST_FILE
+from test.test_support import reap_children, reap_threads, verbose
+try:
+    import threading
+except ImportError:
+    threading = None
 
 test.test_support.requires("network")
 
@@ -57,15 +57,16 @@ def simple_subprocess(testcase):
         os._exit(72)
     yield None
     pid2, status = os.waitpid(pid, 0)
-    testcase.assertEquals(pid2, pid)
-    testcase.assertEquals(72 << 8, status)
+    testcase.assertEqual(pid2, pid)
+    testcase.assertEqual(72 << 8, status)
 
 
+@unittest.skipUnless(threading, 'Threading required for this test.')
 class SocketServerTest(unittest.TestCase):
     """Test all socket servers."""
 
     def setUp(self):
-        signal_alarm(20)  # Kill deadlocks after 20 seconds.
+        signal_alarm(60)  # Kill deadlocks after 60 seconds.
         self.port_seed = 0
         self.test_files = []
 
@@ -119,9 +120,10 @@ class SocketServerTest(unittest.TestCase):
 
         if verbose: print "creating server"
         server = MyServer(addr, MyHandler)
-        self.assertEquals(server.server_address, server.socket.getsockname())
+        self.assertEqual(server.server_address, server.socket.getsockname())
         return server
 
+    @reap_threads
     def run_server(self, svrcls, hdlrbase, testfunc):
         server = self.make_server(self.pickaddr(svrcls.address_family),
                                   svrcls, hdlrbase)
@@ -158,7 +160,7 @@ class SocketServerTest(unittest.TestCase):
         while data and '\n' not in buf:
             data = receive(s, 100)
             buf += data
-        self.assertEquals(buf, TEST_STR)
+        self.assertEqual(buf, TEST_STR)
         s.close()
 
     def dgram_examine(self, proto, addr):
@@ -168,7 +170,7 @@ class SocketServerTest(unittest.TestCase):
         while data and '\n' not in buf:
             data = receive(s, 100)
             buf += data
-        self.assertEquals(buf, TEST_STR)
+        self.assertEqual(buf, TEST_STR)
         s.close()
 
     def test_TCPServer(self):
@@ -243,6 +245,7 @@ class SocketServerTest(unittest.TestCase):
     #                             SocketServer.DatagramRequestHandler,
     #                             self.dgram_examine)
 
+    @reap_threads
     def test_shutdown(self):
         # Issue #2302: shutdown() should always succeed in making an
         # other thread leave serve_forever().
@@ -271,10 +274,9 @@ class SocketServerTest(unittest.TestCase):
 def test_main():
     if imp.lock_held():
         # If the import lock is held, the threads will hang
-        raise TestSkipped("can't run when import lock is held")
+        raise unittest.SkipTest("can't run when import lock is held")
 
     test.test_support.run_unittest(SocketServerTest)
 
 if __name__ == "__main__":
     test_main()
-    signal_alarm(3)  # Shutdown shouldn't take more than 3 seconds.

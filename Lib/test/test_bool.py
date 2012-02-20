@@ -7,12 +7,6 @@ import os
 
 class BoolTest(unittest.TestCase):
 
-    def assertIs(self, a, b):
-        self.assert_(a is b)
-
-    def assertIsNot(self, a, b):
-        self.assert_(a is not b)
-
     def test_subclass(self):
         try:
             class C(bool):
@@ -50,6 +44,18 @@ class BoolTest(unittest.TestCase):
         self.assertIsNot(int(False), False)
         self.assertEqual(int(True), 1)
         self.assertIsNot(int(True), True)
+
+    def test_float(self):
+        self.assertEqual(float(False), 0.0)
+        self.assertIsNot(float(False), False)
+        self.assertEqual(float(True), 1.0)
+        self.assertIsNot(float(True), True)
+
+    def test_long(self):
+        self.assertEqual(long(False), 0L)
+        self.assertIsNot(long(False), False)
+        self.assertEqual(long(True), 1L)
+        self.assertIsNot(long(True), True)
 
     def test_math(self):
         self.assertEqual(+False, 0)
@@ -163,14 +169,19 @@ class BoolTest(unittest.TestCase):
         self.assertIs(bool(""), False)
         self.assertIs(bool(), False)
 
+    def test_format(self):
+        self.assertEqual("%d" % False, "0")
+        self.assertEqual("%d" % True, "1")
+        self.assertEqual("%x" % False, "0")
+        self.assertEqual("%x" % True, "1")
+
     def test_hasattr(self):
         self.assertIs(hasattr([], "append"), True)
         self.assertIs(hasattr([], "wobble"), False)
 
     def test_callable(self):
-        with test_support._check_py3k_warnings():
-            self.assertIs(callable(len), True)
-            self.assertIs(callable(1), False)
+        self.assertIs(callable(len), True)
+        self.assertIs(callable(1), False)
 
     def test_isinstance(self):
         self.assertIs(isinstance(True, bool), True)
@@ -187,7 +198,7 @@ class BoolTest(unittest.TestCase):
     def test_haskey(self):
         self.assertIs(1 in {}, False)
         self.assertIs(1 in {1:1}, True)
-        with test_support._check_py3k_warnings():
+        with test_support.check_py3k_warnings():
             self.assertIs({}.has_key(1), False)
             self.assertIs({1:1}.has_key(1), True)
 
@@ -237,15 +248,15 @@ class BoolTest(unittest.TestCase):
 
     def test_boolean(self):
         self.assertEqual(True & 1, 1)
-        self.assert_(not isinstance(True & 1, bool))
+        self.assertNotIsInstance(True & 1, bool)
         self.assertIs(True & True, True)
 
         self.assertEqual(True | 1, 1)
-        self.assert_(not isinstance(True | 1, bool))
+        self.assertNotIsInstance(True | 1, bool)
         self.assertIs(True | True, True)
 
         self.assertEqual(True ^ 1, 0)
-        self.assert_(not isinstance(True ^ 1, bool))
+        self.assertNotIsInstance(True ^ 1, bool)
         self.assertIs(True ^ True, False)
 
     def test_fileclosed(self):
@@ -257,12 +268,19 @@ class BoolTest(unittest.TestCase):
         finally:
             os.remove(test_support.TESTFN)
 
+    def test_types(self):
+        # types are always true.
+        for t in [bool, complex, dict, file, float, int, list, long, object,
+                  set, str, tuple, type]:
+            self.assertIs(bool(t), True)
+
     def test_operator(self):
         import operator
         self.assertIs(operator.truth(0), False)
         self.assertIs(operator.truth(1), True)
-        self.assertIs(operator.isCallable(0), False)
-        self.assertIs(operator.isCallable(len), True)
+        with test_support.check_py3k_warnings():
+            self.assertIs(operator.isCallable(0), False)
+            self.assertIs(operator.isCallable(len), True)
         self.assertIs(operator.isNumberType(None), False)
         self.assertIs(operator.isNumberType(0), True)
         self.assertIs(operator.not_(1), False)

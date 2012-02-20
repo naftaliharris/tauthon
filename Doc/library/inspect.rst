@@ -1,4 +1,3 @@
-
 :mod:`inspect` --- Inspect live objects
 =======================================
 
@@ -9,6 +8,10 @@
 
 
 .. versionadded:: 2.1
+
+**Source code:** :source:`Lib/inspect.py`
+
+--------------
 
 The :mod:`inspect` module provides several useful functions to help get
 information about live objects such as modules, classes, methods, functions,
@@ -234,14 +237,14 @@ Note:
 
    Return a tuple of values that describe how Python will interpret the file
    identified by *path* if it is a module, or ``None`` if it would not be
-   identified as a module.  The return tuple is ``(name, suffix, mode, mtype)``,
-   where *name* is the name of the module without the name of any enclosing
-   package, *suffix* is the trailing part of the file name (which may not be a
-   dot-delimited extension), *mode* is the :func:`open` mode that would be used
-   (``'r'`` or ``'rb'``), and *mtype* is an integer giving the type of the
-   module.  *mtype* will have a value which can be compared to the constants
-   defined in the :mod:`imp` module; see the documentation for that module for
-   more information on module types.
+   identified as a module.  The return tuple is ``(name, suffix, mode,
+   module_type)``, where *name* is the name of the module without the name of
+   any enclosing package, *suffix* is the trailing part of the file name (which
+   may not be a dot-delimited extension), *mode* is the :func:`open` mode that
+   would be used (``'r'`` or ``'rb'``), and *module_type* is an integer giving
+   the type of the module.  *module_type* will have a value which can be
+   compared to the constants defined in the :mod:`imp` module; see the
+   documentation for that module for more information on module types.
 
    .. versionchanged:: 2.6
       Returns a :term:`named tuple` ``ModuleInfo(name, suffix, mode,
@@ -263,17 +266,20 @@ Note:
 
 .. function:: isclass(object)
 
-   Return true if the object is a class.
+   Return true if the object is a class, whether built-in or created in Python
+   code.
 
 
 .. function:: ismethod(object)
 
-   Return true if the object is a method.
+   Return true if the object is a bound method written in Python.
 
 
 .. function:: isfunction(object)
 
-   Return true if the object is a Python function or unnamed (:term:`lambda`) function.
+   Return true if the object is a Python function, which includes functions
+   created by a :term:`lambda` expression.
+
 
 .. function:: isgeneratorfunction(object)
 
@@ -281,11 +287,13 @@ Note:
 
    .. versionadded:: 2.6
 
+
 .. function:: isgenerator(object)
 
    Return true if the object is a generator.
 
    .. versionadded:: 2.6
+
 
 .. function:: istraceback(object)
 
@@ -304,12 +312,13 @@ Note:
 
 .. function:: isbuiltin(object)
 
-   Return true if the object is a built-in function.
+   Return true if the object is a built-in function or a bound built-in method.
 
 
 .. function:: isroutine(object)
 
    Return true if the object is a user-defined or built-in function or method.
+
 
 .. function:: isabstract(object)
 
@@ -320,8 +329,9 @@ Note:
 
 .. function:: ismethoddescriptor(object)
 
-   Return true if the object is a method descriptor, but not if :func:`ismethod`
-   or :func:`isclass` or :func:`isfunction` are true.
+   Return true if the object is a method descriptor, but not if
+   :func:`ismethod`, :func:`isclass`, :func:`isfunction` or :func:`isbuiltin`
+   are true.
 
    This is new as of Python 2.2, and, for example, is true of
    ``int.__add__``. An object passing this test has a :attr:`__get__` attribute
@@ -356,7 +366,7 @@ Note:
    .. impl-detail::
 
       getsets are attributes defined in extension modules via
-      :ctype:`PyGetSetDef` structures.  For Python implementations without such
+      :c:type:`PyGetSetDef` structures.  For Python implementations without such
       types, this method will always return ``False``.
 
    .. versionadded:: 2.5
@@ -369,7 +379,7 @@ Note:
    .. impl-detail::
 
       Member descriptors are attributes defined in extension modules via
-      :ctype:`PyMemberDef` structures.  For Python implementations without such
+      :c:type:`PyMemberDef` structures.  For Python implementations without such
       types, this method will always return ``False``.
 
    .. versionadded:: 2.5
@@ -457,12 +467,13 @@ Classes and functions
 
 .. function:: getargspec(func)
 
-   Get the names and default values of a Python function's arguments. A tuple of four
-   things is returned: ``(args, varargs, varkw, defaults)``. *args* is a list of
-   the argument names (it may contain nested lists). *varargs* and *varkw* are the
-   names of the ``*`` and ``**`` arguments or ``None``. *defaults* is a tuple of
-   default argument values or None if there are no default arguments; if this tuple
-   has *n* elements, they correspond to the last *n* elements listed in *args*.
+   Get the names and default values of a Python function's arguments. A tuple of
+   four things is returned: ``(args, varargs, keywords, defaults)``. *args* is a
+   list of the argument names (it may contain nested lists). *varargs* and
+   *keywords* are the names of the ``*`` and ``**`` arguments or
+   ``None``. *defaults* is a tuple of default argument values or None if there
+   are no default arguments; if this tuple has *n* elements, they correspond to
+   the last *n* elements listed in *args*.
 
    .. versionchanged:: 2.6
       Returns a :term:`named tuple` ``ArgSpec(args, varargs, keywords,
@@ -471,11 +482,11 @@ Classes and functions
 
 .. function:: getargvalues(frame)
 
-   Get information about arguments passed into a particular frame. A tuple of four
-   things is returned: ``(args, varargs, varkw, locals)``. *args* is a list of the
-   argument names (it may contain nested lists). *varargs* and *varkw* are the
-   names of the ``*`` and ``**`` arguments or ``None``. *locals* is the locals
-   dictionary of the given frame.
+   Get information about arguments passed into a particular frame. A tuple of
+   four things is returned: ``(args, varargs, keywords, locals)``. *args* is a
+   list of the argument names (it may contain nested lists). *varargs* and
+   *keywords* are the names of the ``*`` and ``**`` arguments or ``None``.
+   *locals* is the locals dictionary of the given frame.
 
    .. versionchanged:: 2.6
       Returns a :term:`named tuple` ``ArgInfo(args, varargs, keywords,
@@ -502,6 +513,32 @@ Classes and functions
    order.  No class appears more than once in this tuple. Note that the method
    resolution order depends on cls's type.  Unless a very peculiar user-defined
    metatype is in use, cls will be the first element of the tuple.
+
+
+.. function:: getcallargs(func[, *args][, **kwds])
+
+   Bind the *args* and *kwds* to the argument names of the Python function or
+   method *func*, as if it was called with them. For bound methods, bind also the
+   first argument (typically named ``self``) to the associated instance. A dict
+   is returned, mapping the argument names (including the names of the ``*`` and
+   ``**`` arguments, if any) to their values from *args* and *kwds*. In case of
+   invoking *func* incorrectly, i.e. whenever ``func(*args, **kwds)`` would raise
+   an exception because of incompatible signature, an exception of the same type
+   and the same or similar message is raised. For example::
+
+    >>> from inspect import getcallargs
+    >>> def f(a, b=1, *pos, **named):
+    ...     pass
+    >>> getcallargs(f, 1, 2, 3)
+    {'a': 1, 'named': {}, 'b': 2, 'pos': (3,)}
+    >>> getcallargs(f, a=2, x=4)
+    {'a': 2, 'named': {'x': 4}, 'b': 1, 'pos': ()}
+    >>> getcallargs(f)
+    Traceback (most recent call last):
+    ...
+    TypeError: f() takes at least 1 argument (0 given)
+
+   .. versionadded:: 2.7
 
 
 .. _inspect-stack:

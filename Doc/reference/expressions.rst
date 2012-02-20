@@ -65,7 +65,7 @@ atoms is:
 .. productionlist::
    atom: `identifier` | `literal` | `enclosure`
    enclosure: `parenth_form` | `list_display`
-            : | `generator_expression` | `dict_display`
+            : | `generator_expression` | `dict_display` | `set_display`
             : | `string_conversion` | `yield_atom`
 
 
@@ -206,44 +206,66 @@ block, nesting from left to right, and evaluating the expression to produce a
 list element each time the innermost block is reached [#]_.
 
 
+.. _comprehensions:
+
+Displays for sets and dictionaries
+----------------------------------
+
+For constructing a set or a dictionary Python provides special syntax
+called "displays", each of them in two flavors:
+
+* either the container contents are listed explicitly, or
+
+* they are computed via a set of looping and filtering instructions, called a
+  :dfn:`comprehension`.
+
+Common syntax elements for comprehensions are:
+
+.. productionlist::
+   comprehension: `expression` `comp_for`
+   comp_for: "for" `target_list` "in" `or_test` [`comp_iter`]
+   comp_iter: `comp_for` | `comp_if`
+   comp_if: "if" `expression_nocond` [`comp_iter`]
+
+The comprehension consists of a single expression followed by at least one
+:keyword:`for` clause and zero or more :keyword:`for` or :keyword:`if` clauses.
+In this case, the elements of the new container are those that would be produced
+by considering each of the :keyword:`for` or :keyword:`if` clauses a block,
+nesting from left to right, and evaluating the expression to produce an element
+each time the innermost block is reached.
+
+Note that the comprehension is executed in a separate scope, so names assigned
+to in the target list don't "leak" in the enclosing scope.
+
+
 .. _genexpr:
 
 Generator expressions
 ---------------------
 
 .. index:: pair: generator; expression
+           object: generator
 
 A generator expression is a compact generator notation in parentheses:
 
 .. productionlist::
-   generator_expression: "(" `expression` `genexpr_for` ")"
-   genexpr_for: "for" `target_list` "in" `or_test` [`genexpr_iter`]
-   genexpr_iter: `genexpr_for` | `genexpr_if`
-   genexpr_if: "if" `old_expression` [`genexpr_iter`]
+   generator_expression: "(" `expression` `comp_for` ")"
 
-.. index:: object: generator
+A generator expression yields a new generator object.  Its syntax is the same as
+for comprehensions, except that it is enclosed in parentheses instead of
+brackets or curly braces.
 
-A generator expression yields a new generator object.  It consists of a single
-expression followed by at least one :keyword:`for` clause and zero or more
-:keyword:`for` or :keyword:`if` clauses.  The iterating values of the new
-generator are those that would be produced by considering each of the
-:keyword:`for` or :keyword:`if` clauses a block, nesting from left to right, and
-evaluating the expression to yield a value that is reached the innermost block
-for each iteration.
-
-Variables used in the generator expression are evaluated lazily in a separate
-scope when the :meth:`next` method is called for the generator object (in the
-same fashion as for normal generators).  However, the :keyword:`in` expression
-of the leftmost :keyword:`for` clause is immediately evaluated in the current
-scope so that an error produced by it can be seen before any other possible
+Variables used in the generator expression are evaluated lazily when the
+:meth:`__next__` method is called for generator object (in the same fashion as
+normal generators).  However, the leftmost :keyword:`for` clause is immediately
+evaluated, so that an error produced by it can be seen before any other possible
 error in the code that handles the generator expression.  Subsequent
-:keyword:`for` and :keyword:`if` clauses cannot be evaluated immediately since
-they may depend on the previous :keyword:`for` loop.  For example:
-``(x*y for x in range(10) for y in bar(x))``.
+:keyword:`for` clauses cannot be evaluated immediately since they may depend on
+the previous :keyword:`for` loop. For example: ``(x*y for x in range(10) for y
+in bar(x))``.
 
-The parentheses can be omitted on calls with only one argument. See section
+The parentheses can be omitted on calls with only one argument.  See section
 :ref:`calls` for the detail.
-
 
 .. _dict:
 
@@ -251,35 +273,63 @@ Dictionary displays
 -------------------
 
 .. index:: pair: dictionary; display
-
-.. index::
-   single: key
-   single: datum
-   single: key/datum pair
+           key, datum, key/datum pair
+           object: dictionary
 
 A dictionary display is a possibly empty series of key/datum pairs enclosed in
 curly braces:
 
 .. productionlist::
-   dict_display: "{" [`key_datum_list`] "}"
+   dict_display: "{" [`key_datum_list` | `dict_comprehension`] "}"
    key_datum_list: `key_datum` ("," `key_datum`)* [","]
    key_datum: `expression` ":" `expression`
-
-.. index:: object: dictionary
+   dict_comprehension: `expression` ":" `expression` `comp_for`
 
 A dictionary display yields a new dictionary object.
 
-The key/datum pairs are evaluated from left to right to define the entries of
-the dictionary: each key object is used as a key into the dictionary to store
-the corresponding datum.
+If a comma-separated sequence of key/datum pairs is given, they are evaluated
+from left to right to define the entries of the dictionary: each key object is
+used as a key into the dictionary to store the corresponding datum.  This means
+that you can specify the same key multiple times in the key/datum list, and the
+final dictionary's value for that key will be the last one given.
+
+A dict comprehension, in contrast to list and set comprehensions, needs two
+expressions separated with a colon followed by the usual "for" and "if" clauses.
+When the comprehension is run, the resulting key and value elements are inserted
+in the new dictionary in the order they are produced.
 
 .. index:: pair: immutable; object
+           hashable
 
 Restrictions on the types of the key values are listed earlier in section
 :ref:`types`.  (To summarize, the key type should be :term:`hashable`, which excludes
 all mutable objects.)  Clashes between duplicate keys are not detected; the last
 datum (textually rightmost in the display) stored for a given key value
 prevails.
+
+
+.. _set:
+
+Set displays
+------------
+
+.. index:: pair: set; display
+           object: set
+
+A set display is denoted by curly braces and distinguishable from dictionary
+displays by the lack of colons separating keys and values:
+
+.. productionlist::
+   set_display: "{" (`expression_list` | `comprehension`) "}"
+
+A set display yields a new mutable set object, the contents being specified by
+either a sequence of expressions or a comprehension.  When a comma-separated
+list of expressions is supplied, its elements are evaluated from left to right
+and added to the set object.  When a comprehension is supplied, the set is
+constructed from the elements resulting from the comprehension.
+
+An empty set cannot be constructed with ``{}``; this literal constructs an empty
+dictionary.
 
 
 .. _string-conversions:
@@ -297,7 +347,7 @@ A string conversion is an expression list enclosed in reverse (a.k.a. backward)
 quotes:
 
 .. productionlist::
-   string_conversion: "'" `expression_list` "'"
+   string_conversion: "`" `expression_list` "`"
 
 A string conversion evaluates the contained expression list and converts the
 resulting object into a string according to rules specific to its type.
@@ -367,7 +417,7 @@ All of this makes generator functions quite similar to coroutines; they yield
 multiple times, they have more than one entry point and their execution can be
 suspended.  The only difference is that a generator function cannot control
 where should the execution continue after it yields; the control is always
-transfered to the generator's caller.
+transferred to the generator's caller.
 
 .. index:: object: generator
 
@@ -669,7 +719,7 @@ the call.
    An implementation may provide built-in functions whose positional parameters
    do not have names, even if they are 'named' for the purpose of documentation,
    and which therefore cannot be supplied by keyword.  In CPython, this is the
-   case for functions implemented in C that use :cfunc:`PyArg_ParseTuple` to
+   case for functions implemented in C that use :c:func:`PyArg_ParseTuple` to
    parse their arguments.
 
 If there are more positional arguments than there are formal parameter slots, a
@@ -685,12 +735,15 @@ dictionary containing the excess keyword arguments (using the keywords as keys
 and the argument values as corresponding values), or a (new) empty dictionary if
 there were no excess keyword arguments.
 
+.. index::
+   single: *; in function calls
+
 If the syntax ``*expression`` appears in the function call, ``expression`` must
-evaluate to a sequence.  Elements from this sequence are treated as if they were
-additional positional arguments; if there are positional arguments *x1*,...,
-*xN*, and ``expression`` evaluates to a sequence *y1*, ..., *yM*, this is
-equivalent to a call with M+N positional arguments *x1*, ..., *xN*, *y1*, ...,
-*yM*.
+evaluate to an iterable.  Elements from this iterable are treated as if they
+were additional positional arguments; if there are positional arguments
+*x1*, ..., *xN*, and ``expression`` evaluates to a sequence *y1*, ..., *yM*, this
+is equivalent to a call with M+N positional arguments *x1*, ..., *xN*, *y1*,
+..., *yM*.
 
 A consequence of this is that although the ``*expression`` syntax may appear
 *after* some keyword arguments, it is processed *before* the keyword arguments
@@ -710,6 +763,9 @@ A consequence of this is that although the ``*expression`` syntax may appear
 
 It is unusual for both keyword arguments and the ``*expression`` syntax to be
 used in the same call, so in practice this confusion does not arise.
+
+.. index::
+   single: **; in function calls
 
 If the syntax ``**expression`` appears in the function call, ``expression`` must
 evaluate to a mapping, the contents of which are treated as additional keyword
@@ -950,6 +1006,11 @@ A right shift by *n* bits is defined as division by ``pow(2, n)``.  A left shift
 by *n* bits is defined as multiplication with ``pow(2, n)``.  Negative shift
 counts raise a :exc:`ValueError` exception.
 
+.. note::
+
+   In the current implementation, the right-hand operand is required
+   to be at most :attr:`sys.maxsize`.  If the right-hand operand is larger than
+   :attr:`sys.maxsize` an :exc:`OverflowError` exception is raised.
 
 .. _bitwise:
 
@@ -987,9 +1048,9 @@ must be plain or long integers.  The arguments are converted to a common type.
 
 .. _comparisons:
 .. _is:
-.. _isnot:
+.. _is not:
 .. _in:
-.. _notin:
+.. _not in:
 
 Comparisons
 ===========
@@ -1312,6 +1373,7 @@ groups from right to left).
 | ``+``, ``-``                                  | Addition and subtraction            |
 +-----------------------------------------------+-------------------------------------+
 | ``*``, ``/``, ``//``, ``%``                   | Multiplication, division, remainder |
+|                                               | [#]_                                |
 +-----------------------------------------------+-------------------------------------+
 | ``+x``, ``-x``, ``~x``                        | Positive, negative, bitwise NOT     |
 +-----------------------------------------------+-------------------------------------+
@@ -1336,8 +1398,8 @@ groups from right to left).
    true numerically due to roundoff.  For example, and assuming a platform on which
    a Python float is an IEEE 754 double-precision number, in order that ``-1e-100 %
    1e100`` have the same sign as ``1e100``, the computed result is ``-1e-100 +
-   1e100``, which is numerically exactly equal to ``1e100``.  Function :func:`fmod`
-   in the :mod:`math` module returns a result whose sign matches the sign of the
+   1e100``, which is numerically exactly equal to ``1e100``.  The function
+   :func:`math.fmod` returns a result whose sign matches the sign of the
    first argument instead, and so returns ``-1e-100`` in this case. Which approach
    is more appropriate depends on the application.
 
@@ -1366,6 +1428,9 @@ groups from right to left).
    descriptors, you may notice seemingly unusual behaviour in certain uses of
    the :keyword:`is` operator, like those involving comparisons between instance
    methods, or constants.  Check their documentation for more info.
+
+.. [#] The ``%`` operator is also used for string formatting; the same
+   precedence applies.
 
 .. [#] The power operator ``**`` binds less tightly than an arithmetic or
    bitwise unary operator on its right, that is, ``2**-1`` is ``0.5``.

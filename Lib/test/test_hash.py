@@ -35,6 +35,7 @@ class HashEqualityTestCase(unittest.TestCase):
         self.same_hash(int(-2**63), long(-2**63), float(-2**63))
         self.same_hash(int(1-2**63), long(1-2**63))
         self.same_hash(int(2**63-1), long(2**63-1))
+        self.same_hash(long(2**63), float(2**63))
 
     def test_coerced_floats(self):
         self.same_hash(long(1.23e300), float(1.23e300))
@@ -104,11 +105,11 @@ class HashInheritanceTestCase(unittest.TestCase):
         objects = (self.default_expected +
                    self.fixed_expected)
         for obj in objects:
-            self.assert_(isinstance(obj, Hashable), repr(obj))
+            self.assertIsInstance(obj, Hashable)
 
     def test_not_hashable(self):
         for obj in self.error_expected:
-            self.assertFalse(isinstance(obj, Hashable), repr(obj))
+            self.assertNotIsInstance(obj, Hashable)
 
 
 # Issue #4701: Check that some builtin types are correctly hashable

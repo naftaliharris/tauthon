@@ -6,17 +6,23 @@
 .. moduleauthor:: Kevin O'Connor
 .. sectionauthor:: Guido van Rossum <guido@python.org>
 .. sectionauthor:: François Pinard
+.. sectionauthor:: Raymond Hettinger
 
 .. versionadded:: 2.3
+
+**Source code:** :source:`Lib/heapq.py`
+
+--------------
 
 This module provides an implementation of the heap queue algorithm, also known
 as the priority queue algorithm.
 
-Heaps are arrays for which ``heap[k] <= heap[2*k+1]`` and ``heap[k] <=
-heap[2*k+2]`` for all *k*, counting elements from zero.  For the sake of
-comparison, non-existing elements are considered to be infinite.  The
-interesting property of a heap is that ``heap[0]`` is always its smallest
-element.
+Heaps are binary trees for which every parent node has a value less than or
+equal to any of its children.  This implementation uses arrays for which
+``heap[k] <= heap[2*k+1]`` and ``heap[k] <= heap[2*k+2]`` for all *k*, counting
+elements from zero.  For the sake of comparison, non-existing elements are
+considered to be infinite.  The interesting property of a heap is that its
+smallest element is always the root, ``heap[0]``.
 
 The API below differs from textbook heap algorithms in two aspects: (a) We use
 zero-based indexing.  This makes the relationship between the index for a node
@@ -62,45 +68,16 @@ The following functions are provided:
 
    Pop and return the smallest item from the *heap*, and also push the new *item*.
    The heap size doesn't change. If the heap is empty, :exc:`IndexError` is raised.
-   This is more efficient than :func:`heappop` followed by  :func:`heappush`, and
-   can be more appropriate when using a fixed-size heap.  Note that the value
-   returned may be larger than *item*!  That constrains reasonable uses of this
-   routine unless written as part of a conditional replacement::
 
-      if item > heap[0]:
-          item = heapreplace(heap, item)
+   This one step operation is more efficient than a :func:`heappop` followed by
+   :func:`heappush` and can be more appropriate when using a fixed-size heap.
+   The pop/push combination always returns an element from the heap and replaces
+   it with *item*.
 
-Example of use:
-
-   >>> from heapq import heappush, heappop
-   >>> heap = []
-   >>> data = [1, 3, 5, 7, 9, 2, 4, 6, 8, 0]
-   >>> for item in data:
-   ...     heappush(heap, item)
-   ...
-   >>> ordered = []
-   >>> while heap:
-   ...     ordered.append(heappop(heap))
-   ...
-   >>> print ordered
-   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-   >>> data.sort()
-   >>> print data == ordered
-   True
-
-Using a heap to insert items at the correct place in a priority queue:
-
-   >>> heap = []
-   >>> data = [(1, 'J'), (4, 'N'), (3, 'H'), (2, 'O')]
-   >>> for item in data:
-   ...     heappush(heap, item)
-   ...
-   >>> while heap:
-   ...     print heappop(heap)[1]
-   J
-   O
-   H
-   N
+   The value returned may be larger than the *item* added.  If that isn't
+   desired, consider using :func:`heappushpop` instead.  Its push/pop
+   combination returns the smaller of the two values, leaving the larger value
+   on the heap.
 
 
 The module also offers three general purpose functions based on heaps.
@@ -151,11 +128,99 @@ values, it is more efficient to use the :func:`sorted` function.  Also, when
 functions.
 
 
+Basic Examples
+--------------
+
+A `heapsort <http://en.wikipedia.org/wiki/Heapsort>`_ can be implemented by
+pushing all values onto a heap and then popping off the smallest values one at a
+time::
+
+   >>> def heapsort(iterable):
+   ...     'Equivalent to sorted(iterable)'
+   ...     h = []
+   ...     for value in iterable:
+   ...         heappush(h, value)
+   ...     return [heappop(h) for i in range(len(h))]
+   ...
+   >>> heapsort([1, 3, 5, 7, 9, 2, 4, 6, 8, 0])
+   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+Heap elements can be tuples.  This is useful for assigning comparison values
+(such as task priorities) alongside the main record being tracked::
+
+    >>> h = []
+    >>> heappush(h, (5, 'write code'))
+    >>> heappush(h, (7, 'release product'))
+    >>> heappush(h, (1, 'write spec'))
+    >>> heappush(h, (3, 'create tests'))
+    >>> heappop(h)
+    (1, 'write spec')
+
+
+Priority Queue Implementation Notes
+-----------------------------------
+
+A `priority queue <http://en.wikipedia.org/wiki/Priority_queue>`_ is common use
+for a heap, and it presents several implementation challenges:
+
+* Sort stability:  how do you get two tasks with equal priorities to be returned
+  in the order they were originally added?
+
+* In the future with Python 3, tuple comparison breaks for (priority, task)
+  pairs if the priorities are equal and the tasks do not have a default
+  comparison order.
+
+* If the priority of a task changes, how do you move it to a new position in
+  the heap?
+
+* Or if a pending task needs to be deleted, how do you find it and remove it
+  from the queue?
+
+A solution to the first two challenges is to store entries as 3-element list
+including the priority, an entry count, and the task.  The entry count serves as
+a tie-breaker so that two tasks with the same priority are returned in the order
+they were added. And since no two entry counts are the same, the tuple
+comparison will never attempt to directly compare two tasks.
+
+The remaining challenges revolve around finding a pending task and making
+changes to its priority or removing it entirely.  Finding a task can be done
+with a dictionary pointing to an entry in the queue.
+
+Removing the entry or changing its priority is more difficult because it would
+break the heap structure invariants.  So, a possible solution is to mark the
+existing entry as removed and add a new entry with the revised priority::
+
+    pq = []                         # list of entries arranged in a heap
+    entry_finder = {}               # mapping of tasks to entries
+    REMOVED = '<removed-task>'      # placeholder for a removed task
+    counter = itertools.count()     # unique sequence count
+
+    def add_task(task, priority=0):
+        'Add a new task or update the priority of an existing task'
+        if task in entry_finder:
+            remove_task(task)
+        count = next(counter)
+        entry = [priority, count, task]
+        entry_finder[task] = entry
+        heappush(pq, entry)
+
+    def remove_task(task):
+        'Mark an existing task as REMOVED.  Raise KeyError if not found.'
+        entry = entry_finder.pop(task)
+        entry[-1] = REMOVED
+
+    def pop_task():
+        'Remove and return the lowest priority task. Raise KeyError if empty.'
+        while pq:
+            priority, count, task = heappop(pq)
+            if task is not REMOVED:
+                del entry_finder[task]
+                return task
+        raise KeyError('pop from an empty priority queue')
+
+
 Theory
 ------
-
-(This explanation is due to François Pinard.  The Python code for this module
-was contributed by Kevin O'Connor.)
 
 Heaps are arrays for which ``a[k] <= a[2*k+1]`` and ``a[k] <= a[2*k+2]`` for all
 *k*, counting elements from 0.  For the sake of comparison, non-existing

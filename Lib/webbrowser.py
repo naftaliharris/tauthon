@@ -55,7 +55,7 @@ def get(using=None):
 # It is recommended one does "import webbrowser" and uses webbrowser.open(url)
 # instead of "from webbrowser import *".
 
-def open(url, new=0, autoraise=1):
+def open(url, new=0, autoraise=True):
     for name in _tryorder:
         browser = get(name)
         if browser.open(url, new, autoraise):
@@ -144,7 +144,7 @@ class BaseBrowser(object):
         self.name = name
         self.basename = name
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         raise NotImplementedError
 
     def open_new(self, url):
@@ -168,7 +168,7 @@ class GenericBrowser(BaseBrowser):
             self.args = name[1:]
         self.basename = os.path.basename(self.name)
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         cmdline = [self.name] + [arg.replace("%s", url)
                                  for arg in self.args]
         try:
@@ -185,7 +185,7 @@ class BackgroundBrowser(GenericBrowser):
     """Class for all browsers which are to be started in the
        background."""
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         cmdline = [self.name] + [arg.replace("%s", url)
                                  for arg in self.args]
         try:
@@ -216,7 +216,7 @@ class UnixBrowser(BaseBrowser):
         raise_opt = []
         if remote and self.raise_opts:
             # use autoraise argument only for remote invocation
-            autoraise = int(bool(autoraise))
+            autoraise = int(autoraise)
             opt = self.raise_opts[autoraise]
             if opt: raise_opt = [opt]
 
@@ -237,7 +237,7 @@ class UnixBrowser(BaseBrowser):
                              stdout=(self.redirect_stdout and inout or None),
                              stderr=inout, preexec_fn=setsid)
         if remote:
-            # wait five secons. If the subprocess is not finished, the
+            # wait five seconds. If the subprocess is not finished, the
             # remote invocation has (hopefully) started a new instance.
             time.sleep(1)
             rc = p.poll()
@@ -256,7 +256,7 @@ class UnixBrowser(BaseBrowser):
         else:
             return not p.wait()
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         if new == 0:
             action = self.remote_action
         elif new == 1:
@@ -285,12 +285,10 @@ class Mozilla(UnixBrowser):
     """Launcher class for Mozilla/Netscape browsers."""
 
     raise_opts = ["-noraise", "-raise"]
-
     remote_args = ['-remote', 'openURL(%s%action)']
     remote_action = ""
     remote_action_newwin = ",new-window"
     remote_action_newtab = ",new-tab"
-
     background = True
 
 Netscape = Mozilla
@@ -303,15 +301,13 @@ class Galeon(UnixBrowser):
     remote_args = ['%action', '%s']
     remote_action = "-n"
     remote_action_newwin = "-w"
-
     background = True
 
 
 class Opera(UnixBrowser):
     "Launcher class for Opera browser."
 
-    raise_opts = ["", "-raise"]
-
+    raise_opts = ["-noraise", ""]
     remote_args = ['-remote', 'openURL(%s%action)']
     remote_action = ""
     remote_action_newwin = ",new-window"
@@ -340,7 +336,7 @@ class Konqueror(BaseBrowser):
     for more information on the Konqueror remote-control interface.
     """
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         # XXX Currently I know no way to prevent KFM from opening a new win.
         if new == 2:
             action = "newTab"
@@ -428,7 +424,7 @@ class Grail(BaseBrowser):
         s.close()
         return 1
 
-    def open(self, url, new=0, autoraise=1):
+    def open(self, url, new=0, autoraise=True):
         if new:
             ok = self._remote("LOADNEW " + url)
         else:
@@ -511,7 +507,7 @@ if os.environ.get("TERM"):
 
 if sys.platform[:3] == "win":
     class WindowsDefault(BaseBrowser):
-        def open(self, url, new=0, autoraise=1):
+        def open(self, url, new=0, autoraise=True):
             try:
                 os.startfile(url)
             except WindowsError:
@@ -539,18 +535,6 @@ if sys.platform[:3] == "win":
 # Platform support for MacOS
 #
 
-try:
-    import ic
-except ImportError:
-    pass
-else:
-    class InternetConfig(BaseBrowser):
-        def open(self, url, new=0, autoraise=1):
-            ic.launchurl(url)
-            return True # Any way to get status?
-
-    register("internet-config", InternetConfig, update_tryorder=-1)
-
 if sys.platform == 'darwin':
     # Adapted from patch submitted to SourceForge by Steven J. Burr
     class MacOSX(BaseBrowser):
@@ -566,7 +550,7 @@ if sys.platform == 'darwin':
         def __init__(self, name):
             self.name = name
 
-        def open(self, url, new=0, autoraise=1):
+        def open(self, url, new=0, autoraise=True):
             assert "'" not in url
             # hack for local urls
             if not ':' in url:
@@ -599,9 +583,35 @@ if sys.platform == 'darwin':
             rc = osapipe.close()
             return not rc
 
+    class MacOSXOSAScript(BaseBrowser):
+        def __init__(self, name):
+            self._name = name
+
+        def open(self, url, new=0, autoraise=True):
+            if self._name == 'default':
+                script = 'open location "%s"' % url.replace('"', '%22') # opens in default browser
+            else:
+                script = '''
+                   tell application "%s"
+                       activate
+                       open location "%s"
+                   end
+                   '''%(self._name, url.replace('"', '%22'))
+
+            osapipe = os.popen("osascript", "w")
+            if osapipe is None:
+                return False
+
+            osapipe.write(script)
+            rc = osapipe.close()
+            return not rc
+
+
     # Don't clear _tryorder or _browsers since OS X can use above Unix support
     # (but we prefer using the OS X specific stuff)
-    register("MacOSX", None, MacOSX('default'), -1)
+    register("safari", None, MacOSXOSAScript('safari'), -1)
+    register("firefox", None, MacOSXOSAScript('firefox'), -1)
+    register("MacOSX", None, MacOSXOSAScript('default'), -1)
 
 
 #

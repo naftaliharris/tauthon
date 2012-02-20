@@ -171,7 +171,7 @@ tick of the interpreter's mainloop using highly optimized C implementations.
 Thus to get the same effect as::
 
    L2 = []
-   for i in range[3]:
+   for i in range(3):
        L2.append(L1[i])
 
 it is much shorter and far faster to use ::
@@ -944,7 +944,7 @@ Is there an equivalent to Perl's chomp() for removing trailing newlines from str
 -------------------------------------------------------------------------------------
 
 Starting with Python 2.2, you can use ``S.rstrip("\r\n")`` to remove all
-occurences of any line terminator from the end of the string ``S`` without
+occurrences of any line terminator from the end of the string ``S`` without
 removing other trailing whitespace.  If the string ``S`` represents more than
 one line, with several empty lines at the end, the line terminators for all the
 blank lines will be removed::
@@ -979,8 +979,8 @@ and then convert decimal strings to numeric values using :func:`int` or
 :func:`float`.  ``split()`` supports an optional "sep" parameter which is useful
 if the line uses something other than whitespace as a separator.
 
-For more complicated input parsing, regular expressions more powerful than C's
-:cfunc:`sscanf` and better suited for the task.
+For more complicated input parsing, regular expressions are more powerful
+than C's :c:func:`sscanf` and better suited for the task.
 
 
 What does 'UnicodeError: ASCII [decoding,encoding] error: ordinal not in range(128)' mean?

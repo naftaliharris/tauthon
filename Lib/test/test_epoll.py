@@ -21,23 +21,22 @@
 """
 Tests for epoll wrapper.
 """
-import os
 import socket
 import errno
 import time
 import select
-import tempfile
 import unittest
 
 from test import test_support
 if not hasattr(select, "epoll"):
-    raise test_support.TestSkipped("test works only on Linux 2.6")
+    raise unittest.SkipTest("test works only on Linux 2.6")
 
 try:
     select.epoll()
 except IOError, e:
     if e.errno == errno.ENOSYS:
-        raise test_support.TestSkipped("kernel doesn't support epoll()")
+        raise unittest.SkipTest("kernel doesn't support epoll()")
+    raise
 
 class TestEPoll(unittest.TestCase):
 
@@ -58,7 +57,7 @@ class TestEPoll(unittest.TestCase):
         try:
             client.connect(('127.0.0.1', self.serverSocket.getsockname()[1]))
         except socket.error, e:
-            self.assertEquals(e.args[0], errno.EINPROGRESS)
+            self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             raise AssertionError("Connect should have raised EINPROGRESS")
         server, addr = self.serverSocket.accept()
@@ -71,10 +70,10 @@ class TestEPoll(unittest.TestCase):
             ep = select.epoll(16)
         except OSError, e:
             raise AssertionError(str(e))
-        self.assert_(ep.fileno() > 0, ep.fileno())
-        self.assert_(not ep.closed)
+        self.assertTrue(ep.fileno() > 0, ep.fileno())
+        self.assertTrue(not ep.closed)
         ep.close()
-        self.assert_(ep.closed)
+        self.assertTrue(ep.closed)
         self.assertRaises(ValueError, ep.fileno)
 
     def test_badcreate(self):
@@ -141,7 +140,7 @@ class TestEPoll(unittest.TestCase):
         try:
             ep2.poll(1, 4)
         except IOError, e:
-            self.failUnlessEqual(e.args[0], errno.EBADF, e)
+            self.assertEqual(e.args[0], errno.EBADF, e)
         else:
             self.fail("epoll on closed fd didn't raise EBADF")
 
@@ -157,20 +156,20 @@ class TestEPoll(unittest.TestCase):
         now = time.time()
         events = ep.poll(1, 4)
         then = time.time()
-        self.failIf(then - now > 0.1, then - now)
+        self.assertFalse(then - now > 0.1, then - now)
 
         events.sort()
         expected = [(client.fileno(), select.EPOLLOUT),
                     (server.fileno(), select.EPOLLOUT)]
         expected.sort()
 
-        self.assertEquals(events, expected)
-        self.failIf(then - now > 0.01, then - now)
+        self.assertEqual(events, expected)
+        self.assertFalse(then - now > 0.01, then - now)
 
         now = time.time()
         events = ep.poll(timeout=2.1, maxevents=4)
         then = time.time()
-        self.failIf(events)
+        self.assertFalse(events)
 
         client.send("Hello!")
         server.send("world!!!")
@@ -178,24 +177,24 @@ class TestEPoll(unittest.TestCase):
         now = time.time()
         events = ep.poll(1, 4)
         then = time.time()
-        self.failIf(then - now > 0.01)
+        self.assertFalse(then - now > 0.01)
 
         events.sort()
         expected = [(client.fileno(), select.EPOLLIN | select.EPOLLOUT),
                     (server.fileno(), select.EPOLLIN | select.EPOLLOUT)]
         expected.sort()
 
-        self.assertEquals(events, expected)
+        self.assertEqual(events, expected)
 
         ep.unregister(client.fileno())
         ep.modify(server.fileno(), select.EPOLLOUT)
         now = time.time()
         events = ep.poll(1, 4)
         then = time.time()
-        self.failIf(then - now > 0.01)
+        self.assertFalse(then - now > 0.01)
 
         expected = [(server.fileno(), select.EPOLLOUT)]
-        self.assertEquals(events, expected)
+        self.assertEqual(events, expected)
 
     def test_errors(self):
         self.assertRaises(ValueError, select.epoll, -2)
@@ -211,7 +210,7 @@ class TestEPoll(unittest.TestCase):
         now = time.time()
         events = ep.poll(1, 4)
         then = time.time()
-        self.failIf(then - now > 0.01)
+        self.assertFalse(then - now > 0.01)
 
         server.close()
         ep.unregister(fd)

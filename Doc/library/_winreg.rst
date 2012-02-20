@@ -65,6 +65,34 @@ This module offers the following functions:
    :exc:`WindowsError` exception is raised.
 
 
+.. function:: CreateKeyEx(key, sub_key[, res[, sam]])
+
+   Creates or opens the specified key, returning a
+   :ref:`handle object <handle-object>`.
+
+   *key* is an already open key, or one of the predefined
+   :ref:`HKEY_* constants <hkey-constants>`.
+
+   *sub_key* is a string that names the key this method opens or creates.
+
+   *res* is a reserved integer, and must be zero. The default is zero.
+
+   *sam* is an integer that specifies an access mask that describes the desired
+   security access for the key.  Default is :const:`KEY_ALL_ACCESS`.  See
+   :ref:`Access Rights <access-rights>` for other allowed values.
+
+
+   If *key* is one of the predefined keys, *sub_key* may be ``None``. In that
+   case, the handle returned is the same key handle passed in to the function.
+
+   If the key already exists, this function opens the existing key.
+
+   The return value is the handle of the opened key. If the function fails, a
+   :exc:`WindowsError` exception is raised.
+
+.. versionadded:: 2.7
+
+
 .. function:: DeleteKey(key, sub_key)
 
    Deletes the specified key.
@@ -72,13 +100,47 @@ This module offers the following functions:
    *key* is an already open key, or any one of the predefined
    :ref:`HKEY_* constants <hkey-constants>`.
 
-   *sub_key* is a string that must be a subkey of the key  identified by the *key*
-   parameter.  This value must not be  ``None``, and the key may not have subkeys.
+   *sub_key* is a string that must be a subkey of the key identified by the *key*
+   parameter.  This value must not be ``None``, and the key may not have subkeys.
 
    *This method can not delete keys with subkeys.*
 
    If the method succeeds, the entire key, including all of its values, is removed.
    If the method fails, a :exc:`WindowsError` exception is raised.
+
+
+.. function:: DeleteKeyEx(key, sub_key[, sam[, res]])
+
+   Deletes the specified key.
+
+   .. note::
+      The :func:`DeleteKeyEx` function is implemented with the RegDeleteKeyEx
+      Windows API function, which is specific to 64-bit versions of Windows.
+      See the `RegDeleteKeyEx documentation
+      <http://msdn.microsoft.com/en-us/library/ms724847%28VS.85%29.aspx>`__.
+
+   *key* is an already open key, or any one of the predefined
+   :ref:`HKEY_* constants <hkey-constants>`.
+
+   *sub_key* is a string that must be a subkey of the key identified by the
+   *key* parameter. This value must not be ``None``, and the key may not have
+   subkeys.
+
+   *res* is a reserved integer, and must be zero. The default is zero.
+
+   *sam* is an integer that specifies an access mask that describes the desired
+   security access for the key.  Default is :const:`KEY_WOW64_64KEY`.  See
+   :ref:`Access Rights <access-rights>` for other allowed values.
+
+
+   *This method can not delete keys with subkeys.*
+
+   If the method succeeds, the entire key, including all of its values, is
+   removed. If the method fails, a :exc:`WindowsError` exception is raised.
+
+   On unsupported Windows versions, :exc:`NotImplementedError` is raised.
+
+.. versionadded:: 2.7
 
 
 .. function:: DeleteValue(key, value)
@@ -183,7 +245,7 @@ This module offers the following functions:
    A call to :func:`LoadKey` fails if the calling process does not have the
    :const:`SE_RESTORE_PRIVILEGE` privilege.  Note that privileges are different
    from permissions -- see the `RegLoadKey documentation
-   <http://msdn.microsoft.com/en-us/library/ms724889%28v=VS.85%29.aspx>`_ for
+   <http://msdn.microsoft.com/en-us/library/ms724889%28v=VS.85%29.aspx>`__ for
    more details.
 
    If *key* is a handle returned by :func:`ConnectRegistry`, then the path
