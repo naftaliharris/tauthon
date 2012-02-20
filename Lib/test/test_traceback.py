@@ -5,7 +5,7 @@ from io import StringIO
 import sys
 import unittest
 import re
-from test.support import run_unittest, is_jython, Error, captured_output
+from test.support import run_unittest, Error, captured_output
 from test.support import TESTFN, unlink
 
 import traceback
@@ -29,10 +29,6 @@ class SyntaxTracebackCases(unittest.TestCase):
     def syntax_error_with_caret_2(self):
         compile("1 +\n", "?", "exec")
 
-    def syntax_error_without_caret(self):
-        # XXX why doesn't compile raise the same traceback?
-        import test.badsyntax_nocaret
-
     def syntax_error_bad_indentation(self):
         compile("def spam():\n  print(1)\n print(2)", "?", "exec")
 
@@ -41,30 +37,27 @@ class SyntaxTracebackCases(unittest.TestCase):
                                         SyntaxError)
         self.assertEqual(len(err), 4)
         self.assertTrue(err[1].strip() == "return x!")
-        self.assertTrue("^" in err[2]) # third line has caret
+        self.assertIn("^", err[2]) # third line has caret
         self.assertEqual(err[1].find("!"), err[2].find("^")) # in the right place
 
         err = self.get_exception_format(self.syntax_error_with_caret_2,
                                         SyntaxError)
-        self.assertTrue("^" in err[2]) # third line has caret
+        self.assertIn("^", err[2]) # third line has caret
         self.assertTrue(err[2].count('\n') == 1) # and no additional newline
         self.assertTrue(err[1].find("+") == err[2].find("^")) # in the right place
 
     def test_nocaret(self):
-        if is_jython:
-            # jython adds a caret in this case (why shouldn't it?)
-            return
-        err = self.get_exception_format(self.syntax_error_without_caret,
-                                        SyntaxError)
+        exc = SyntaxError("error", ("x.py", 23, None, "bad syntax"))
+        err = traceback.format_exception_only(SyntaxError, exc)
         self.assertEqual(len(err), 3)
-        self.assertTrue(err[1].strip() == "[x for x in x] = x")
+        self.assertEqual(err[1].strip(), "bad syntax")
 
     def test_bad_indentation(self):
         err = self.get_exception_format(self.syntax_error_bad_indentation,
                                         IndentationError)
         self.assertEqual(len(err), 4)
         self.assertEqual(err[1].strip(), "print(2)")
-        self.assertTrue("^" in err[2])
+        self.assertIn("^", err[2])
         self.assertEqual(err[1].find(")"), err[2].find("^"))
 
     def test_base_exception(self):
@@ -131,7 +124,7 @@ class SyntaxTracebackCases(unittest.TestCase):
             err_line = "raise RuntimeError('{0}')".format(message_ascii)
             err_msg = "RuntimeError: {0}".format(message_ascii)
 
-            self.assertTrue(("line %s" % lineno) in stdout[1],
+            self.assertIn(("line %s" % lineno), stdout[1],
                 "Invalid line number: {0!r} instead of {1}".format(
                     stdout[1], lineno))
             self.assertTrue(stdout[2].endswith(err_line),
@@ -210,7 +203,7 @@ class BaseExceptionReportingTests:
     def check_zero_div(self, msg):
         lines = msg.splitlines()
         self.assertTrue(lines[-3].startswith('  File'))
-        self.assertTrue('1/0 # In zero_div' in lines[-2], lines[-2])
+        self.assertIn('1/0 # In zero_div', lines[-2])
         self.assertTrue(lines[-1].startswith('ZeroDivisionError'), lines[-1])
 
     def test_simple(self):
@@ -222,7 +215,7 @@ class BaseExceptionReportingTests:
         self.assertEqual(len(lines), 4)
         self.assertTrue(lines[0].startswith('Traceback'))
         self.assertTrue(lines[1].startswith('  File'))
-        self.assertTrue('1/0 # Marker' in lines[2])
+        self.assertIn('1/0 # Marker', lines[2])
         self.assertTrue(lines[3].startswith('ZeroDivisionError'))
 
     def test_cause(self):
@@ -237,7 +230,7 @@ class BaseExceptionReportingTests:
         self.assertEqual(len(blocks), 3)
         self.assertEqual(blocks[1], cause_message)
         self.check_zero_div(blocks[0])
-        self.assertTrue('inner_raise() # Marker' in blocks[2])
+        self.assertIn('inner_raise() # Marker', blocks[2])
 
     def test_context(self):
         def inner_raise():
@@ -251,7 +244,7 @@ class BaseExceptionReportingTests:
         self.assertEqual(len(blocks), 3)
         self.assertEqual(blocks[1], context_message)
         self.check_zero_div(blocks[0])
-        self.assertTrue('inner_raise() # Marker' in blocks[2])
+        self.assertIn('inner_raise() # Marker', blocks[2])
 
     def test_cause_and_context(self):
         # When both a cause and a context are set, only the cause should be
@@ -289,11 +282,11 @@ class BaseExceptionReportingTests:
         self.assertEqual(len(blocks), 3)
         self.assertEqual(blocks[1], cause_message)
         # The first block is the KeyError raised from the ZeroDivisionError
-        self.assertTrue('raise KeyError from e' in blocks[0])
-        self.assertTrue('1/0' not in blocks[0])
+        self.assertIn('raise KeyError from e', blocks[0])
+        self.assertNotIn('1/0', blocks[0])
         # The second block (apart from the boundary) is the ZeroDivisionError
         # re-raised from the KeyError
-        self.assertTrue('inner_raise() # Marker' in blocks[2])
+        self.assertIn('inner_raise() # Marker', blocks[2])
         self.check_zero_div(blocks[2])
 
     def test_syntax_error_offset_at_eol(self):

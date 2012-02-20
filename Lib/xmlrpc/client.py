@@ -85,11 +85,6 @@
 # OF THIS SOFTWARE.
 # --------------------------------------------------------------------
 
-#
-# things to look into some day:
-
-# TODO: sort out True/False/boolean issues for Python 2.3
-
 """
 An XML-RPC client interface for Python.
 
@@ -120,8 +115,7 @@ Exported classes:
 
 Exported constants:
 
-  True
-  False
+  (none)
 
 Exported functions:
 
@@ -133,9 +127,17 @@ Exported functions:
                  name (None if not present).
 """
 
-import re, time, operator
+import base64
+import time
 import http.client
 from xml.parsers import expat
+import socket
+import errno
+from io import BytesIO
+try:
+    import gzip
+except ImportError:
+    gzip = None #python can be built without zlib/gzip support
 
 # --------------------------------------------------------------------
 # Internal stuff
@@ -145,23 +147,10 @@ try:
 except ImportError:
     datetime = None
 
-def _decode(data, encoding, is8bit=re.compile("[\x80-\xff]").search):
-    # decode non-ascii string (if possible)
-    if encoding and is8bit(data):
-        data = str(data, encoding)
-    return data
-
 def escape(s):
     s = s.replace("&", "&amp;")
     s = s.replace("<", "&lt;")
     return s.replace(">", "&gt;",)
-
-def _stringify(string):
-    # convert to 7-bit ascii if possible
-    try:
-        return string.decode("ascii")
-    except (UnicodeError, TypeError, AttributeError):
-        return string
 
 __version__ = "1.0.1"
 
@@ -236,7 +225,7 @@ class ResponseError(Error):
 ##
 # Indicates an XML-RPC fault response package.  This exception is
 # raised by the unmarshalling layer, if the XML-RPC response contains
-# a fault string.  This exception can also used as a class, to
+# a fault string.  This exception can also be used as a class, to
 # generate a fault XML-RPC message.
 #
 # @param faultCode The XML-RPC fault code.
@@ -249,10 +238,7 @@ class Fault(Error):
         self.faultCode = faultCode
         self.faultString = faultString
     def __repr__(self):
-        return (
-            "<Fault %s: %s>" %
-            (self.faultCode, repr(self.faultString))
-            )
+        return "<Fault %s: %r>" % (self.faultCode, self.faultString)
 
 # --------------------------------------------------------------------
 # Special values
@@ -308,7 +294,7 @@ class DateTime:
         elif datetime and isinstance(other, datetime.datetime):
             s = self.value
             o = other.strftime("%Y%m%dT%H:%M:%S")
-        elif isinstance(other, (str, unicode)):
+        elif isinstance(other, str):
             s = self.value
             o = other
         elif hasattr(other, "timetuple"):
@@ -358,7 +344,7 @@ class DateTime:
         return self.value
 
     def __repr__(self):
-        return "<DateTime %s at %x>" % (repr(self.value), id(self))
+        return "<DateTime %r at %x>" % (self.value, id(self))
 
     def decode(self, data):
         self.value = str(data).strip()
@@ -383,9 +369,6 @@ def _datetime_type(data):
 # of binary data over XML-RPC, using BASE64 encoding.
 #
 # @param data An 8-bit string containing arbitrary data.
-
-import base64
-import io
 
 class Binary:
     """Wrapper for binary data."""
@@ -520,9 +503,7 @@ class Marshaller:
             f = self.dispatch[type(value)]
         except KeyError:
             # check if this object can be marshalled as a structure
-            try:
-                value.__dict__
-            except:
+            if not hasattr(value, '__dict__'):
                 raise TypeError("cannot marshal %s objects" % type(value))
             # check if this class is a sub-class of a basic type,
             # because we don't know how to marshal these types
@@ -569,12 +550,6 @@ class Marshaller:
         write(repr(value))
         write("</double></value>\n")
     dispatch[float] = dump_double
-
-    def dump_string(self, value, write, escape=escape):
-        write("<value><string>")
-        write(escape(value))
-        write("</string></value>\n")
-    dispatch[bytes] = dump_string
 
     def dump_unicode(self, value, write, escape=escape):
         write("<value><string>")
@@ -748,8 +723,8 @@ class Unmarshaller:
 
     def end_string(self, data):
         if self._encoding:
-            data = _decode(data, self._encoding)
-        self.append(_stringify(data))
+            data = data.decode(self._encoding)
+        self.append(data)
         self._value = 0
     dispatch["string"] = end_string
     dispatch["name"] = end_string # struct keys are always strings
@@ -767,7 +742,7 @@ class Unmarshaller:
         dict = {}
         items = self._stack[mark:]
         for i in range(0, len(items), 2):
-            dict[_stringify(items[i])] = items[i+1]
+            dict[items[i]] = items[i+1]
         self._stack[mark:] = [dict]
         self._value = 0
     dispatch["struct"] = end_struct
@@ -804,7 +779,7 @@ class Unmarshaller:
 
     def end_methodName(self, data):
         if self._encoding:
-            data = _decode(data, self._encoding)
+            data = data.decode(self._encoding)
         self._methodname = data
         self._type = "methodName" # no params
     dispatch["methodName"] = end_methodName
@@ -1013,6 +988,78 @@ def loads(data, use_datetime=False):
     p.close()
     return u.close(), u.getmethodname()
 
+##
+# Encode a string using the gzip content encoding such as specified by the
+# Content-Encoding: gzip
+# in the HTTP header, as described in RFC 1952
+#
+# @param data the unencoded data
+# @return the encoded data
+
+def gzip_encode(data):
+    """data -> gzip encoded data
+
+    Encode data using the gzip content encoding as described in RFC 1952
+    """
+    if not gzip:
+        raise NotImplementedError
+    f = BytesIO()
+    gzf = gzip.GzipFile(mode="wb", fileobj=f, compresslevel=1)
+    gzf.write(data)
+    gzf.close()
+    encoded = f.getvalue()
+    f.close()
+    return encoded
+
+##
+# Decode a string using the gzip content encoding such as specified by the
+# Content-Encoding: gzip
+# in the HTTP header, as described in RFC 1952
+#
+# @param data The encoded data
+# @return the unencoded data
+# @raises ValueError if data is not correctly coded.
+
+def gzip_decode(data):
+    """gzip encoded data -> unencoded data
+
+    Decode data using the gzip content encoding as described in RFC 1952
+    """
+    if not gzip:
+        raise NotImplementedError
+    f = BytesIO(data)
+    gzf = gzip.GzipFile(mode="rb", fileobj=f)
+    try:
+        decoded = gzf.read()
+    except IOError:
+        raise ValueError("invalid data")
+    f.close()
+    gzf.close()
+    return decoded
+
+##
+# Return a decoded file-like object for the gzip encoding
+# as described in RFC 1952.
+#
+# @param response A stream supporting a read() method
+# @return a file-like object that the decoded data can be read() from
+
+class GzipDecodedResponse(gzip.GzipFile if gzip else object):
+    """a file-like object to decode a response encoded with the gzip
+    method, as described in RFC 1952.
+    """
+    def __init__(self, response):
+        #response doesn't support tell() and read(), required by
+        #GzipFile
+        if not gzip:
+            raise NotImplementedError
+        self.io = BytesIO(response.read())
+        gzip.GzipFile.__init__(self, mode="rb", fileobj=self.io)
+
+    def close(self):
+        gzip.GzipFile.close(self)
+        self.io.close()
+
 
 # --------------------------------------------------------------------
 # request dispatcher
@@ -1040,11 +1087,22 @@ class Transport:
     # client identifier (may be overridden)
     user_agent = "xmlrpclib.py/%s (by www.pythonware.com)" % __version__
 
+    #if true, we'll request gzip encoding
+    accept_gzip_encoding = True
+
+    # if positive, encode request using gzip if it exceeds this threshold
+    # note that many server will get confused, so only use it if you know
+    # that they can decode such a request
+    encode_threshold = None #None = don't encode
+
     def __init__(self, use_datetime=False):
         self._use_datetime = use_datetime
+        self._connection = (None, None)
+        self._extra_headers = []
 
     ##
     # Send a complete request, and parse the response.
+    # Retry request if a cached connection has disconnected.
     #
     # @param host Target host.
     # @param handler Target PRC handler.
@@ -1053,21 +1111,44 @@ class Transport:
     # @return Parsed response.
 
     def request(self, host, handler, request_body, verbose=False):
+        #retry request once if cached connection has gone cold
+        for i in (0, 1):
+            try:
+                return self.single_request(host, handler, request_body, verbose)
+            except socket.error as e:
+                if i or e.errno not in (errno.ECONNRESET, errno.ECONNABORTED, errno.EPIPE):
+                    raise
+            except http.client.BadStatusLine: #close after we sent request
+                if i:
+                    raise
+
+    def single_request(self, host, handler, request_body, verbose=False):
         # issue XML-RPC request
+        try:
+            http_conn = self.send_request(host, handler, request_body, verbose)
+            resp = http_conn.getresponse()
+            if resp.status == 200:
+                self.verbose = verbose
+                return self.parse_response(resp)
 
-        http_conn = self.send_request(host, handler, request_body, verbose)
-        resp = http_conn.getresponse()
+        except Fault:
+            raise
+        except Exception:
+            #All unexpected errors leave connection in
+            # a strange state, so we clear it.
+            self.close()
+            raise
 
-        if resp.status != 200:
-            raise ProtocolError(
-                host + handler,
-                resp.status, resp.reason,
-                dict(resp.getheaders())
-                )
+        #We got an error response.
+        #Discard any response data and raise exception
+        if resp.getheader("content-length", ""):
+            resp.read()
+        raise ProtocolError(
+            host + handler,
+            resp.status, resp.reason,
+            dict(resp.getheaders())
+            )
 
-        self.verbose = verbose
-
-        return self.parse_response(resp)
 
     ##
     # Create parser.
@@ -1098,7 +1179,6 @@ class Transport:
         auth, host = urllib.parse.splituser(host)
 
         if auth:
-            import base64
             auth = urllib.parse.unquote_to_bytes(auth)
             auth = base64.encodebytes(auth).decode("utf-8")
             auth = "".join(auth.split()) # get rid of whitespace
@@ -1106,7 +1186,7 @@ class Transport:
                 ("Authorization", "Basic " + auth)
                 ]
         else:
-            extra_headers = None
+            extra_headers = []
 
         return host, extra_headers, x509
 
@@ -1117,9 +1197,23 @@ class Transport:
     # @return An HTTPConnection object
 
     def make_connection(self, host):
+        #return an existing connection if possible.  This allows
+        #HTTP/1.1 keep-alive.
+        if self._connection and host == self._connection[0]:
+            return self._connection[1]
         # create a HTTP connection object from a host descriptor
-        host, extra_headers, x509 = self.get_host_info(host)
+        chost, self._extra_headers, x509 = self.get_host_info(host)
+        self._connection = host, http.client.HTTPConnection(chost)
+        return self._connection[1]
 
+    ##
+    # Clear any cached connection object.
+    # Used in the event of socket errors.
+    #
+    def close(self):
+        if self._connection[1]:
+            self._connection[1].close()
+            self._connection = (None, None)
 
     ##
     # Send HTTP request.
@@ -1131,18 +1225,49 @@ class Transport:
     # @return An HTTPConnection.
 
     def send_request(self, host, handler, request_body, debug):
-        host, extra_headers, x509 = self.get_host_info(host)
-        connection = http.client.HTTPConnection(host)
+        connection = self.make_connection(host)
+        headers = self._extra_headers[:]
         if debug:
             connection.set_debuglevel(1)
-        headers = {}
-        if extra_headers:
-            for key, val in extra_headers:
-                headers[key] = val
-        headers["Content-Type"] = "text/xml"
-        headers["User-Agent"] = self.user_agent
-        connection.request("POST", handler, request_body, headers)
+        if self.accept_gzip_encoding and gzip:
+            connection.putrequest("POST", handler, skip_accept_encoding=True)
+            headers.append(("Accept-Encoding", "gzip"))
+        else:
+            connection.putrequest("POST", handler)
+        headers.append(("Content-Type", "text/xml"))
+        headers.append(("User-Agent", self.user_agent))
+        self.send_headers(connection, headers)
+        self.send_content(connection, request_body)
         return connection
+
+    ##
+    # Send request headers.
+    # This function provides a useful hook for subclassing
+    #
+    # @param connection httpConnection.
+    # @param headers list of key,value pairs for HTTP headers
+
+    def send_headers(self, connection, headers):
+        for key, val in headers:
+            connection.putheader(key, val)
+
+    ##
+    # Send request body.
+    # This function provides a useful hook for subclassing
+    #
+    # @param connection httpConnection.
+    # @param request_body XML-RPC request body.
+
+    def send_content(self, connection, request_body):
+        #optionally encode the request
+        if (self.encode_threshold is not None and
+            self.encode_threshold < len(request_body) and
+            gzip):
+            connection.putheader("Content-Encoding", "gzip")
+            request_body = gzip_encode(request_body)
+
+        connection.putheader("Content-Length", str(len(request_body)))
+        connection.endheaders(request_body)
 
     ##
     # Parse response.
@@ -1150,20 +1275,29 @@ class Transport:
     # @param file Stream.
     # @return Response tuple and target method.
 
-    def parse_response(self, file):
-        # read response from input file/socket, and parse it
+    def parse_response(self, response):
+        # read response data from httpresponse, and parse it
+        # Check for new http response object, otherwise it is a file object.
+        if hasattr(response, 'getheader'):
+            if response.getheader("Content-Encoding", "") == "gzip":
+                stream = GzipDecodedResponse(response)
+            else:
+                stream = response
+        else:
+            stream = response
 
         p, u = self.getparser()
 
         while 1:
-            response = file.read(1024)
-            if not response:
+            data = stream.read(1024)
+            if not data:
                 break
             if self.verbose:
-                print("body:", repr(response))
-            p.feed(response)
+                print("body:", repr(data))
+            p.feed(data)
 
-        file.close()
+        if stream is not response:
+            stream.close()
         p.close()
 
         return u.close()
@@ -1176,24 +1310,19 @@ class SafeTransport(Transport):
 
     # FIXME: mostly untested
 
-    def send_request(self, host, handler, request_body, debug):
-        import socket
+    def make_connection(self, host):
+        if self._connection and host == self._connection[0]:
+            return self._connection[1]
+
         if not hasattr(http.client, "HTTPSConnection"):
             raise NotImplementedError(
-                "your version of http.client doesn't support HTTPS")
-
-        host, extra_headers, x509 = self.get_host_info(host)
-        connection = http.client.HTTPSConnection(host, None, **(x509 or {}))
-        if debug:
-            connection.set_debuglevel(1)
-        headers = {}
-        if extra_headers:
-            for key, val in extra_headers:
-                headers[key] = val
-        headers["Content-Type"] = "text/xml"
-        headers["User-Agent"] = self.user_agent
-        connection.request("POST", handler, request_body, headers)
-        return connection
+            "your version of http.client doesn't support HTTPS")
+        # create a HTTPS connection object from a host descriptor
+        # host may be a string, or a (host, x509-dict) tuple
+        chost, self._extra_headers, x509 = self.get_host_info(host)
+        self._connection = host, http.client.HTTPSConnection(chost,
+            None, **(x509 or {}))
+        return self._connection[1]
 
 ##
 # Standard server proxy.  This class establishes a virtual connection
@@ -1258,6 +1387,9 @@ class ServerProxy:
         self.__verbose = verbose
         self.__allow_none = allow_none
 
+    def __close(self):
+        self.__transport.close()
+
     def __request(self, methodname, params):
         # call a method on the remote server
 
@@ -1290,6 +1422,16 @@ class ServerProxy:
 
     # note: to call a remote object with an non-standard name, use
     # result getattr(server, "strange-python-name")(args)
+
+    def __call__(self, attr):
+        """A workaround to get special attributes on the ServerProxy
+           without interfering with the magic __getattr__
+        """
+        if attr == "close":
+            return self.__close
+        elif attr == "transport":
+            return self.__transport
+        raise AttributeError("Attribute %r not found" % (attr,))
 
 # compatibility
 

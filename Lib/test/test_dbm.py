@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 """Test script for the dbm.open function based on testdumbdbm.py"""
 
 import os
@@ -101,7 +101,7 @@ class AnyDBMTestCase(unittest.TestCase):
         self.init_db()
         f = dbm.open(_fname, 'r')
         key = "a".encode("ascii")
-        assert(key in f)
+        self.assertIn(key, f)
         assert(f[key] == b"Python:")
         f.close()
 
@@ -131,7 +131,7 @@ class WhichDBTestCase(unittest.TestCase):
             name = module.__name__
             if name == 'dbm.dumb':
                 continue   # whichdb can't support dbm.dumb
-            test.support.unlink(_fname)
+            delete_files()
             f = module.open(_fname, 'c')
             f.close()
             self.assertEqual(name, dbm.whichdb(_fname))
@@ -139,7 +139,7 @@ class WhichDBTestCase(unittest.TestCase):
             f = module.open(_fname, 'w')
             f[b"1"] = b"1"
             # and test that we can find it
-            self.assertTrue(b"1" in f)
+            self.assertIn(b"1", f)
             # and read it
             self.assertTrue(f[b"1"] == b"1")
             f.close()
@@ -162,9 +162,9 @@ class WhichDBTestCase(unittest.TestCase):
             self.d[k] = v
         self.assertEqual(sorted(self.d.keys()), sorted(k for (k, v) in a))
         for k, v in a:
-            self.assertTrue(k in self.d)
+            self.assertIn(k, self.d)
             self.assertEqual(self.d[k], v)
-        self.assertTrue(b'xxx' not in self.d)
+        self.assertNotIn(b'xxx', self.d)
         self.assertRaises(KeyError, lambda: self.d[b'xxx'])
         self.d.close()
 

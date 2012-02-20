@@ -21,12 +21,10 @@
 """
 Tests for epoll wrapper.
 """
-import os
 import socket
 import errno
 import time
 import select
-import tempfile
 import unittest
 
 from test import support
@@ -38,6 +36,7 @@ try:
 except IOError as e:
     if e.errno == errno.ENOSYS:
         raise unittest.SkipTest("kernel doesn't support epoll()")
+    raise
 
 class TestEPoll(unittest.TestCase):
 

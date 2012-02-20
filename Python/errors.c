@@ -130,9 +130,14 @@ PyErr_SetString(PyObject *exception, const char *string)
 PyObject *
 PyErr_Occurred(void)
 {
-    PyThreadState *tstate = PyThreadState_GET();
+    /* If there is no thread state, PyThreadState_GET calls
+       Py_FatalError, which calls PyErr_Occurred.  To avoid the
+       resulting infinite loop, we inline PyThreadState_GET here and
+       treat no thread as no error. */
+    PyThreadState *tstate =
+        ((PyThreadState*)_Py_atomic_load_relaxed(&_PyThreadState_Current));
 
-    return tstate->curexc_type;
+    return tstate == NULL ? NULL : tstate->curexc_type;
 }
 
 
@@ -338,25 +343,17 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
     PyObject *message;
     PyObject *v;
     int i = errno;
-#ifdef PLAN9
-    char errbuf[ERRMAX];
-#else
 #ifndef MS_WINDOWS
     char *s;
 #else
     WCHAR *s_buf = NULL;
 #endif /* Unix/Windows */
-#endif /* PLAN 9*/
 
 #ifdef EINTR
     if (i == EINTR && PyErr_CheckSignals())
         return NULL;
 #endif
 
-#ifdef PLAN9
-    rerrstr(errbuf, sizeof errbuf);
-    message = PyUnicode_DecodeUTF8(errbuf, strlen(errbuf), "ignore");
-#else
 #ifndef MS_WINDOWS
     if (i == 0)
         s = "Error"; /* Sometimes errno didn't get set */
@@ -403,7 +400,6 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
         }
     }
 #endif /* Unix/Windows */
-#endif /* PLAN 9*/
 
     if (message == NULL)
     {
@@ -433,7 +429,7 @@ PyErr_SetFromErrnoWithFilenameObject(PyObject *exc, PyObject *filenameObject)
 PyObject *
 PyErr_SetFromErrnoWithFilename(PyObject *exc, const char *filename)
 {
-    PyObject *name = filename ? PyUnicode_FromString(filename) : NULL;
+    PyObject *name = filename ? PyUnicode_DecodeFSDefault(filename) : NULL;
     PyObject *result = PyErr_SetFromErrnoWithFilenameObject(exc, name);
     Py_XDECREF(name);
     return result;
@@ -519,7 +515,7 @@ PyObject *PyErr_SetExcFromWindowsErrWithFilename(
     int ierr,
     const char *filename)
 {
-    PyObject *name = filename ? PyUnicode_FromString(filename) : NULL;
+    PyObject *name = filename ? PyUnicode_DecodeFSDefault(filename) : NULL;
     PyObject *ret = PyErr_SetExcFromWindowsErrWithFilenameObject(exc,
                                                                  ierr,
                                                                  name);
@@ -556,7 +552,7 @@ PyObject *PyErr_SetFromWindowsErrWithFilename(
     int ierr,
     const char *filename)
 {
-    PyObject *name = filename ? PyUnicode_FromString(filename) : NULL;
+    PyObject *name = filename ? PyUnicode_DecodeFSDefault(filename) : NULL;
     PyObject *result = PyErr_SetExcFromWindowsErrWithFilenameObject(
                                                   PyExc_WindowsError,
                                                   ierr, name);
@@ -661,7 +657,7 @@ PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
             goto failure;
     }
     /* Create a real new-style class. */
-    result = PyObject_CallFunction((PyObject *)&PyType_Type, "UOO",
+    result = PyObject_CallFunction((PyObject *)&PyType_Type, "sOO",
                                    dot+1, bases, dict);
   failure:
     Py_XDECREF(bases);
@@ -670,6 +666,41 @@ PyErr_NewException(const char *name, PyObject *base, PyObject *dict)
     Py_XDECREF(modulename);
     return result;
 }
+
+
+/* Create an exception with docstring */
+PyObject *
+PyErr_NewExceptionWithDoc(const char *name, const char *doc,
+                          PyObject *base, PyObject *dict)
+{
+    int result;
+    PyObject *ret = NULL;
+    PyObject *mydict = NULL; /* points to the dict only if we create it */
+    PyObject *docobj;
+
+    if (dict == NULL) {
+        dict = mydict = PyDict_New();
+        if (dict == NULL) {
+            return NULL;
+        }
+    }
+
+    if (doc != NULL) {
+        docobj = PyUnicode_FromString(doc);
+        if (docobj == NULL)
+            goto failure;
+        result = PyDict_SetItemString(dict, "__doc__", docobj);
+        Py_DECREF(docobj);
+        if (result < 0)
+            goto failure;
+    }
+
+    ret = PyErr_NewException(name, base, dict);
+  failure:
+    Py_XDECREF(mydict);
+    return ret;
+}
+
 
 /* Call when an exception has occurred but there is no way for Python
    to handle it.  Examples: exception in __del__ or during GC. */
@@ -714,8 +745,10 @@ PyErr_WriteUnraisable(PyObject *obj)
             }
             Py_XDECREF(moduleName);
         }
-        PyFile_WriteString(" in ", f);
-        PyFile_WriteObject(obj, f, 0);
+        if (obj) {
+            PyFile_WriteString(" in ", f);
+            PyFile_WriteObject(obj, f, 0);
+        }
         PyFile_WriteString(" ignored\n", f);
         PyErr_Clear(); /* Just in case */
     }
@@ -727,12 +760,18 @@ PyErr_WriteUnraisable(PyObject *obj)
 extern PyObject *PyModule_GetWarningsModule(void);
 
 
+void
+PyErr_SyntaxLocation(const char *filename, int lineno) {
+    PyErr_SyntaxLocationEx(filename, lineno, -1);
+}
+
+
 /* Set file and line information for the current exception.
    If the exception is not a SyntaxError, also sets additional attributes
    to make printing of exceptions believe it is a syntax error. */
 
 void
-PyErr_SyntaxLocation(const char *filename, int lineno)
+PyErr_SyntaxLocationEx(const char *filename, int lineno, int col_offset)
 {
     PyObject *exc, *v, *tb, *tmp;
 
@@ -749,8 +788,18 @@ PyErr_SyntaxLocation(const char *filename, int lineno)
             PyErr_Clear();
         Py_DECREF(tmp);
     }
+    if (col_offset >= 0) {
+        tmp = PyLong_FromLong(col_offset);
+        if (tmp == NULL)
+            PyErr_Clear();
+        else {
+            if (PyObject_SetAttrString(v, "offset", tmp))
+                PyErr_Clear();
+            Py_DECREF(tmp);
+        }
+    }
     if (filename != NULL) {
-        tmp = PyUnicode_FromString(filename);
+        tmp = PyUnicode_DecodeFSDefault(filename);
         if (tmp == NULL)
             PyErr_Clear();
         else {

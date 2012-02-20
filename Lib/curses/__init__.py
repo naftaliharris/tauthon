@@ -10,8 +10,6 @@ the package, and perhaps a particular module inside it.
 
 """
 
-__revision__ = "$Id$"
-
 from _curses import *
 from curses.wrapper import wrapper
 import os as _os
@@ -56,4 +54,4 @@ def start_color():
 try:
     has_key
 except NameError:
-    from has_key import has_key
+    from .has_key import has_key

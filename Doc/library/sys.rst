@@ -10,6 +10,13 @@ interpreter and to functions that interact strongly with the interpreter. It is
 always available.
 
 
+.. data:: abiflags
+
+   On POSIX systems where Python is build with the standard ``configure``
+   script, this contains the ABI flags as specified by :pep:`3149`.
+
+   .. versionadded:: 3.2
+
 .. data:: argv
 
    The list of command line arguments passed to a Python script. ``argv[0]`` is the
@@ -27,18 +34,6 @@ always available.
    An indicator of the native byte order.  This will have the value ``'big'`` on
    big-endian (most-significant byte first) platforms, and ``'little'`` on
    little-endian (least-significant byte first) platforms.
-
-
-.. data:: subversion
-
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
 
 
 .. data:: builtin_module_names
@@ -92,12 +87,47 @@ always available.
 
 .. function:: displayhook(value)
 
-   If *value* is not ``None``, this function prints it to ``sys.stdout``, and saves
-   it in ``builtins._``.
+   If *value* is not ``None``, this function prints ``repr(value)`` to
+   ``sys.stdout``, and saves *value* in ``builtins._``. If ``repr(value)`` is
+   not encodable to ``sys.stdout.encoding`` with ``sys.stdout.errors`` error
+   handler (which is probably ``'strict'``), encode it to
+   ``sys.stdout.encoding`` with ``'backslashreplace'`` error handler.
 
    ``sys.displayhook`` is called on the result of evaluating an :term:`expression`
    entered in an interactive Python session.  The display of these values can be
    customized by assigning another one-argument function to ``sys.displayhook``.
+
+   Pseudo-code::
+
+       def displayhook(value):
+           if value is None:
+               return
+           # Set '_' to None to avoid recursion
+           builtins._ = None
+           text = repr(value)
+           try:
+               sys.stdout.write(text)
+           except UnicodeEncodeError:
+               bytes = text.encode(sys.stdout.encoding, 'backslashreplace')
+               if hasattr(sys.stdout, 'buffer'):
+                   sys.stdout.buffer.write(bytes)
+               else:
+                   text = bytes.decode(sys.stdout.encoding, 'strict')
+                   sys.stdout.write(text)
+           sys.stdout.write("\n")
+           builtins._ = value
+
+   .. versionchanged:: 3.2
+      Use ``'backslashreplace'`` error handler on :exc:`UnicodeEncodeError`.
+
+
+.. data:: dont_write_bytecode
+
+   If this is true, Python won't try to write ``.pyc`` or ``.pyo`` files on the
+   import of source modules.  This value is initially set to ``True`` or
+   ``False`` depending on the :option:`-B` command line option and the
+   :envvar:`PYTHONDONTWRITEBYTECODE` environment variable, but you can set it
+   yourself to control bytecode file generation.
 
 
 .. function:: excepthook(type, value, traceback)
@@ -164,16 +194,18 @@ always available.
    Python files are installed; by default, this is also ``'/usr/local'``.  This can
    be set at build time with the ``--exec-prefix`` argument to the
    :program:`configure` script.  Specifically, all configuration files (e.g. the
-   :file:`pyconfig.h` header file) are installed in the directory ``exec_prefix +
-   '/lib/pythonversion/config'``, and shared library modules are installed in
-   ``exec_prefix + '/lib/pythonversion/lib-dynload'``, where *version* is equal to
-   ``version[:3]``.
+   :file:`pyconfig.h` header file) are installed in the directory
+   :file:`{exec_prefix}/lib/python{X.Y}/config', and shared library modules are
+   installed in :file:`{exec_prefix}/lib/python{X.Y}/lib-dynload`, where *X.Y*
+   is the version number of Python, for example ``3.2``.
 
 
 .. data:: executable
 
-   A string giving the name of the executable binary for the Python interpreter, on
-   systems where this makes sense.
+   A string giving the absolute path of the executable binary for the Python
+   interpreter, on systems where this makes sense. If Python is unable to retrieve
+   the real path to its executable, :data:`sys.executable` will be an empty string
+   or ``None``.
 
 
 .. function:: exit([arg])
@@ -220,10 +252,14 @@ always available.
    :const:`ignore_environment`   :option:`-E`
    :const:`verbose`              :option:`-v`
    :const:`bytes_warning`        :option:`-b`
+   :const:`quiet`                :option:`-q`
    :const:`hash_randomization`   :option:`-R`
    ============================= =============================
 
-   .. versionadded:: 3.1.5
+   .. versionchanged:: 3.2
+      Added ``quiet`` attribute for the new :option:`-q` flag.
+
+   .. versionadded:: 3.2.3
       The ``hash_randomization`` attribute.
 
 
@@ -266,8 +302,12 @@ always available.
    +---------------------+----------------+--------------------------------------------------+
    | :const:`radix`      | FLT_RADIX      | radix of exponent representation                 |
    +---------------------+----------------+--------------------------------------------------+
-   | :const:`rounds`     | FLT_ROUNDS     | constant representing rounding mode              |
-   |                     |                | used for arithmetic operations                   |
+   | :const:`rounds`     | FLT_ROUNDS     | integer constant representing the rounding mode  |
+   |                     |                | used for arithmetic operations.  This reflects   |
+   |                     |                | the value of the system FLT_ROUNDS macro at      |
+   |                     |                | interpreter startup time.  See section 5.2.4.2.2 |
+   |                     |                | of the C99 standard for an explanation of the    |
+   |                     |                | possible values and their meanings.              |
    +---------------------+----------------+--------------------------------------------------+
 
    The attribute :attr:`sys.float_info.dig` needs further explanation.  If
@@ -307,6 +347,9 @@ always available.
 
    Return the interpreter's "check interval"; see :func:`setcheckinterval`.
 
+   .. deprecated:: 3.2
+      Use :func:`getswitchinterval` instead.
+
 
 .. function:: getdefaultencoding()
 
@@ -316,22 +359,20 @@ always available.
 
 .. function:: getdlopenflags()
 
-   Return the current value of the flags that are used for :cfunc:`dlopen` calls.
+   Return the current value of the flags that are used for :c:func:`dlopen` calls.
    The flag constants are defined in the :mod:`ctypes` and :mod:`DLFCN` modules.
    Availability: Unix.
 
 
 .. function:: getfilesystemencoding()
 
-   Return the name of the encoding used to convert Unicode filenames into system
-   file names, or ``None`` if the system default encoding is used. The result value
-   depends on the operating system:
+   Return the name of the encoding used to convert Unicode filenames into
+   system file names. The result value depends on the operating system:
 
    * On Mac OS X, the encoding is ``'utf-8'``.
 
    * On Unix, the encoding is the user's preference according to the result of
-     nl_langinfo(CODESET), or ``None`` if the ``nl_langinfo(CODESET)``
-     failed.
+     nl_langinfo(CODESET), or ``'utf-8'`` if ``nl_langinfo(CODESET)`` failed.
 
    * On Windows NT+, file names are Unicode natively, so no conversion is
      performed. :func:`getfilesystemencoding` still returns ``'mbcs'``, as
@@ -340,6 +381,10 @@ always available.
      used as file names.
 
    * On Windows 9x, the encoding is ``'mbcs'``.
+
+   .. versionchanged:: 3.2
+      On Unix, use ``'utf-8'`` instead of ``None`` if ``nl_langinfo(CODESET)``
+      failed. :func:`getfilesystemencoding` result cannot be ``None``.
 
 
 .. function:: getrefcount(object)
@@ -370,6 +415,17 @@ always available.
    :func:`getsizeof` calls the object's ``__sizeof__`` method and adds an
    additional garbage collector overhead if the object is managed by the garbage
    collector.
+
+   See `recursive sizeof recipe <http://code.activestate.com/recipes/577504>`_
+   for an example of using :func:`getsizeof` recursively to find the size of
+   containers and all their contents.
+
+.. function:: getswitchinterval()
+
+   Return the interpreter's "thread switch interval"; see
+   :func:`setswitchinterval`.
+
+   .. versionadded:: 3.2
 
 
 .. function:: _getframe([depth])
@@ -412,9 +468,15 @@ always available.
 
 .. function:: getwindowsversion()
 
-   Return a tuple containing five components, describing the Windows version
-   currently running.  The elements are *major*, *minor*, *build*, *platform*, and
-   *text*.  *text* contains a string while all other values are integers.
+   Return a named tuple describing the Windows version
+   currently running.  The named elements are *major*, *minor*,
+   *build*, *platform*, *service_pack*, *service_pack_minor*,
+   *service_pack_major*, *suite_mask*, and *product_type*.
+   *service_pack* contains a string while all other values are
+   integers. The components can also be accessed by name, so
+   ``sys.getwindowsversion()[0]`` is equivalent to
+   ``sys.getwindowsversion().major``. For compatibility with prior
+   versions, only the first 5 elements are retrievable by indexing.
 
    *platform* may be one of the following values:
 
@@ -430,10 +492,53 @@ always available.
    | :const:`3 (VER_PLATFORM_WIN32_CE)`      | Windows CE              |
    +-----------------------------------------+-------------------------+
 
-   This function wraps the Win32 :cfunc:`GetVersionEx` function; see the Microsoft
-   documentation for more information about these fields.
+   *product_type* may be one of the following values:
+
+   +---------------------------------------+---------------------------------+
+   | Constant                              | Meaning                         |
+   +=======================================+=================================+
+   | :const:`1 (VER_NT_WORKSTATION)`       | The system is a workstation.    |
+   +---------------------------------------+---------------------------------+
+   | :const:`2 (VER_NT_DOMAIN_CONTROLLER)` | The system is a domain          |
+   |                                       | controller.                     |
+   +---------------------------------------+---------------------------------+
+   | :const:`3 (VER_NT_SERVER)`            | The system is a server, but not |
+   |                                       | a domain controller.            |
+   +---------------------------------------+---------------------------------+
+
+
+   This function wraps the Win32 :c:func:`GetVersionEx` function; see the
+   Microsoft documentation on :c:func:`OSVERSIONINFOEX` for more information
+   about these fields.
 
    Availability: Windows.
+
+   .. versionchanged:: 3.2
+      Changed to a named tuple and added *service_pack_minor*,
+      *service_pack_major*, *suite_mask*, and *product_type*.
+
+
+.. data:: hash_info
+
+   A structseq giving parameters of the numeric hash implementation.  For
+   more details about hashing of numeric types, see :ref:`numeric-hash`.
+
+   +---------------------+--------------------------------------------------+
+   | attribute           | explanation                                      |
+   +=====================+==================================================+
+   | :const:`width`      | width in bits used for hash values               |
+   +---------------------+--------------------------------------------------+
+   | :const:`modulus`    | prime modulus P used for numeric hash scheme     |
+   +---------------------+--------------------------------------------------+
+   | :const:`inf`        | hash value returned for a positive infinity      |
+   +---------------------+--------------------------------------------------+
+   | :const:`nan`        | hash value returned for a nan                    |
+   +---------------------+--------------------------------------------------+
+   | :const:`imag`       | multiplier used for the imaginary part of a      |
+   |                     | complex number                                   |
+   +---------------------+--------------------------------------------------+
+
+   .. versionadded:: 3.2
 
 
 .. data:: hexversion
@@ -529,7 +634,7 @@ always available.
 
 .. data:: maxsize
 
-   An integer giving the maximum value a variable of type :ctype:`Py_ssize_t` can
+   An integer giving the maximum value a variable of type :c:type:`Py_ssize_t` can
    take.  It's usually ``2**31 - 1`` on a 32-bit platform and ``2**63 - 1`` on a
    64-bit platform.
 
@@ -548,7 +653,7 @@ always available.
     imported. The :meth:`find_module` method is called at least with the
     absolute name of the module being imported. If the module to be imported is
     contained in package then the parent package's :attr:`__path__` attribute
-    is passed in as a second argument. The method returns :keyword:`None` if
+    is passed in as a second argument. The method returns ``None`` if
     the module cannot be found, else returns a :term:`loader`.
 
     :data:`sys.meta_path` is searched before any implicit default finders or
@@ -601,7 +706,7 @@ always available.
     A dictionary acting as a cache for :term:`finder` objects. The keys are
     paths that have been passed to :data:`sys.path_hooks` and the values are
     the finders that are found. If a path is a valid file system path but no
-    explicit finder is found on :data:`sys.path_hooks` then :keyword:`None` is
+    explicit finder is found on :data:`sys.path_hooks` then ``None`` is
     stored to represent the implicit default finder should be used. If the path
     is not an existing path then :class:`imp.NullImporter` is set.
 
@@ -613,22 +718,43 @@ always available.
    This string contains a platform identifier that can be used to append
    platform-specific components to :data:`sys.path`, for instance.
 
-   For Unix systems, this is the lowercased OS name as returned by ``uname -s``
-   with the first part of the version as returned by ``uname -r`` appended,
-   e.g. ``'sunos5'`` or ``'linux2'``, *at the time when Python was built*.
+   For most Unix systems, this is the lowercased OS name as returned by ``uname
+   -s`` with the first part of the version as returned by ``uname -r`` appended,
+   e.g. ``'sunos5'``, *at the time when Python was built*.  Unless you want to
+   test for a specific system version, it is therefore recommended to use the
+   following idiom::
+
+      if sys.platform.startswith('freebsd'):
+          # FreeBSD-specific code here...
+      elif sys.platform.startswith('linux'):
+          # Linux-specific code here...
+
+   .. versionchanged:: 3.2.2
+      Since lots of code check for ``sys.platform == 'linux2'``, and there is
+      no essential change between Linux 2.x and 3.x, ``sys.platform`` is always
+      set to ``'linux2'``, even on Linux 3.x.  In Python 3.3 and later, the
+      value will always be set to ``'linux'``, so it is recommended to always
+      use the ``startswith`` idiom presented above.
+
    For other systems, the values are:
 
-   ================ ===========================
-   System           :data:`platform` value
-   ================ ===========================
-   Windows          ``'win32'``
-   Windows/Cygwin   ``'cygwin'``
-   Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
-   AtheOS           ``'atheos'``
-   ================ ===========================
+   ====================== ===========================
+   System                 :data:`platform` value
+   ====================== ===========================
+   Linux (2.x *and* 3.x)  ``'linux2'``
+   Windows                ``'win32'``
+   Windows/Cygwin         ``'cygwin'``
+   Mac OS X               ``'darwin'``
+   OS/2                   ``'os2'``
+   OS/2 EMX               ``'os2emx'``
+   ====================== ===========================
 
+   .. seealso::
+      :attr:`os.name` has a coarser granularity.  :func:`os.uname` gives
+      system-dependent version information.
+
+      The :mod:`platform` module provides detailed checks for the
+      system's identity.
 
 .. data:: prefix
 
@@ -636,10 +762,10 @@ always available.
    independent Python files are installed; by default, this is the string
    ``'/usr/local'``.  This can be set at build time with the ``--prefix``
    argument to the :program:`configure` script.  The main collection of Python
-   library modules is installed in the directory ``prefix + '/lib/pythonversion'``
+   library modules is installed in the directory :file:`{prefix}/lib/python{X.Y}``
    while the platform independent header files (all except :file:`pyconfig.h`) are
-   stored in ``prefix + '/include/pythonversion'``, where *version* is equal to
-   ``version[:3]``.
+   stored in :file:`{prefix}/include/python{X.Y}``, where *X.Y* is the version
+   number of Python, for example ``3.2``.
 
 
 .. data:: ps1
@@ -657,15 +783,6 @@ always available.
    implement a dynamic prompt.
 
 
-.. data:: dont_write_bytecode
-
-   If this is true, Python won't try to write ``.pyc`` or ``.pyo`` files on the
-   import of source modules.  This value is initially set to ``True`` or ``False``
-   depending on the ``-B`` command line option and the ``PYTHONDONTWRITEBYTECODE``
-   environment variable, but you can set it yourself to control bytecode file
-   generation.
-
-
 .. function:: setcheckinterval(interval)
 
    Set the interpreter's "check interval".  This integer value determines how often
@@ -675,22 +792,15 @@ always available.
    performance for programs using threads.  Setting it to a value ``<=`` 0 checks
    every virtual instruction, maximizing responsiveness as well as overhead.
 
-
-.. function:: setdefaultencoding(name)
-
-   Set the current default string encoding used by the Unicode implementation.  If
-   *name* does not match any available encoding, :exc:`LookupError` is raised.
-   This function is only intended to be used by the :mod:`site` module
-   implementation and, where needed, by :mod:`sitecustomize`.  Once used by the
-   :mod:`site` module, it is removed from the :mod:`sys` module's namespace.
-
-   .. Note that :mod:`site` is not imported if the :option:`-S` option is passed
-      to the interpreter, in which case this function will remain available.
+   .. deprecated:: 3.2
+      This function doesn't have an effect anymore, as the internal logic for
+      thread switching and asynchronous tasks has been rewritten.  Use
+      :func:`setswitchinterval` instead.
 
 
 .. function:: setdlopenflags(n)
 
-   Set the flags used by the interpreter for :cfunc:`dlopen` calls, such as when
+   Set the flags used by the interpreter for :c:func:`dlopen` calls, such as when
    the interpreter loads extension modules.  Among other things, this will enable a
    lazy resolving of symbols when importing a module, if called as
    ``sys.setdlopenflags(0)``.  To share symbols across extension modules, call as
@@ -699,15 +809,6 @@ always available.
    module. If :mod:`DLFCN` is not available, it can be generated from
    :file:`/usr/include/dlfcn.h` using the :program:`h2py` script. Availability:
    Unix.
-
-.. function:: setfilesystemencoding(enc)
-
-   Set the encoding used when converting Python strings to file names to *enc*.
-   By default, Python tries to determine the encoding it should use automatically
-   on Unix; on Windows, it avoids such conversion completely. This function can
-   be used when Python's determination of the encoding needs to be overwritten,
-   e.g. when not all file names on disk can be decoded using the encoding that
-   Python had chosen.
 
 .. function:: setprofile(profilefunc)
 
@@ -733,9 +834,22 @@ always available.
    Python.
 
    The highest possible limit is platform-dependent.  A user may need to set the
-   limit higher when she has a program that requires deep recursion and a platform
+   limit higher when they have a program that requires deep recursion and a platform
    that supports a higher limit.  This should be done with care, because a too-high
    limit can lead to a crash.
+
+
+.. function:: setswitchinterval(interval)
+
+   Set the interpreter's thread switch interval (in seconds).  This floating-point
+   value determines the ideal duration of the "timeslices" allocated to
+   concurrently running Python threads.  Please note that the actual value
+   can be higher, especially if long-running internal functions or methods
+   are used.  Also, which thread becomes scheduled at the end of the interval
+   is the operating system's decision.  The interpreter doesn't have its
+   own scheduler.
+
+   .. versionadded:: 3.2
 
 
 .. function:: settrace(tracefunc)
@@ -770,9 +884,11 @@ always available.
       specifies the local trace function.
 
    ``'line'``
-      The interpreter is about to execute a new line of code (sometimes multiple
-      line events on one line exist).  The local trace function is called; *arg*
-      is ``None``; the return value specifies the new local trace function.
+      The interpreter is about to execute a new line of code or re-execute the
+      condition of a loop.  The local trace function is called; *arg* is
+      ``None``; the return value specifies the new local trace function.  See
+      :file:`Objects/lnotab_notes.txt` for a detailed explanation of how this
+      works.
 
    ``'return'``
       A function (or other code block) is about to return.  The local trace
@@ -815,36 +931,51 @@ always available.
    available only if Python was compiled with ``--with-tsc``. To understand
    the output of this dump, read :file:`Python/ceval.c` in the Python sources.
 
+   .. impl-detail::
+      This function is intimately bound to CPython implementation details and
+      thus not likely to be implemented elsewhere.
+
 
 .. data:: stdin
           stdout
           stderr
 
-   :term:`File objects <file object>` corresponding to the interpreter's standard
-   input, output and error streams.  ``stdin`` is used for all interpreter input
-   except for scripts but including calls to :func:`input`.  ``stdout`` is used
-   for the output of :func:`print` and :term:`expression` statements and for the
-   prompts of :func:`input`. The interpreter's own prompts
-   and (almost all of) its error messages go to ``stderr``.  ``stdout`` and
-   ``stderr`` needn't be built-in file objects: any object is acceptable as long
-   as it has a :meth:`write` method that takes a string argument.  (Changing these
-   objects doesn't affect the standard I/O streams of processes executed by
-   :func:`os.popen`, :func:`os.system` or the :func:`exec\*` family of functions in
-   the :mod:`os` module.)
+   :term:`File objects <file object>` used by the interpreter for standard
+   input, output and errors:
 
-   The standard streams are in text mode by default.  To write or read binary
-   data to these, use the underlying binary buffer.  For example, to write bytes
-   to :data:`stdout`, use ``sys.stdout.buffer.write(b'abc')``.  Using
-   :meth:`io.TextIOBase.detach` streams can be made binary by default.  This
+   * ``stdin`` is used for all interactive input (including calls to
+     :func:`input`);
+   * ``stdout`` is used for the output of :func:`print` and :term:`expression`
+     statements and for the prompts of :func:`input`;
+   * The interpreter's own prompts and its error messages go to ``stderr``.
+
+   By default, these streams are regular text streams as returned by the
+   :func:`open` function.  Their parameters are chosen as follows:
+
+   * The character encoding is platform-dependent.  Under Windows, if the stream
+     is interactive (that is, if its :meth:`isatty` method returns True), the
+     console codepage is used, otherwise the ANSI code page.  Under other
+     platforms, the locale encoding is used (see :meth:`locale.getpreferredencoding`).
+
+     Under all platforms though, you can override this value by setting the
+     :envvar:`PYTHONIOENCODING` environment variable.
+
+   * When interactive, standard streams are line-buffered.  Otherwise, they
+     are block-buffered like regular text files.  You can override this
+     value with the :option:`-u` command-line option.
+
+   To write or read binary data from/to the standard streams, use the
+   underlying binary :data:`~io.TextIOBase.buffer`.  For example, to write
+   bytes to :data:`stdout`, use ``sys.stdout.buffer.write(b'abc')``.  Using
+   :meth:`io.TextIOBase.detach`, streams can be made binary by default.  This
    function sets :data:`stdin` and :data:`stdout` to binary::
 
       def make_streams_binary():
           sys.stdin = sys.stdin.detach()
           sys.stdout = sys.stdout.detach()
 
-   Note that the streams can be replaced with objects (like
-   :class:`io.StringIO`) that do not support the
-   :attr:`~io.BufferedIOBase.buffer` attribute or the
+   Note that the streams may be replaced with objects (like :class:`io.StringIO`)
+   that do not support the :attr:`~io.BufferedIOBase.buffer` attribute or the
    :meth:`~io.BufferedIOBase.detach` method and can raise :exc:`AttributeError`
    or :exc:`io.UnsupportedOperation`.
 
@@ -868,6 +999,24 @@ always available.
        original values ``__stdin__``, ``__stdout__`` and ``__stderr__`` can be
        None. It is usually the case for Windows GUI apps that aren't connected
        to a console and Python apps started with :program:`pythonw`.
+
+
+.. data:: subversion
+
+   A triple (repo, branch, version) representing the Subversion information of the
+   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
+   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
+   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
+   was built from a Subversion checkout; it contains the revision number (range)
+   and possibly a trailing 'M' if there were local modifications. If the tree was
+   exported (or svnversion was not available), it is the revision of
+   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
+
+   .. deprecated:: 3.2.1
+      Python is now `developed <http://docs.python.org/devguide/>`_ using
+      Mercurial.  In recent Python 3.2 bugfix releases, :data:`subversion`
+      therefore contains placeholder information.  It is removed in Python
+      3.3.
 
 
 .. data:: tracebacklimit
@@ -920,6 +1069,30 @@ always available.
    first three characters of :const:`version`.  It is provided in the :mod:`sys`
    module for informational purposes; modifying this value has no effect on the
    registry keys used by Python. Availability: Windows.
+
+
+.. data:: _xoptions
+
+   A dictionary of the various implementation-specific flags passed through
+   the :option:`-X` command-line option.  Option names are either mapped to
+   their values, if given explicitly, or to :const:`True`.  Example::
+
+      $ ./python -Xa=b -Xc
+      Python 3.2a3+ (py3k, Oct 16 2010, 20:14:50)
+      [GCC 4.4.3] on linux2
+      Type "help", "copyright", "credits" or "license" for more information.
+      >>> import sys
+      >>> sys._xoptions
+      {'a': 'b', 'c': True}
+
+   .. impl-detail::
+
+      This is a CPython-specific way of accessing options passed through
+      :option:`-X`.  Other implementations may export them through other
+      means, or not at all.
+
+   .. versionadded:: 3.2
+
 
 .. rubric:: Citations
 

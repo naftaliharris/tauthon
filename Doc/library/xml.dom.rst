@@ -686,18 +686,27 @@ Attr Objects
 
 .. attribute:: Attr.name
 
-   The attribute name.  In a namespace-using document it may have colons in it.
+   The attribute name.
+   In a namespace-using document it may include a colon.
 
 
 .. attribute:: Attr.localName
 
-   The part of the name following the colon if there is one, else the entire name.
+   The part of the name following the colon if there is one, else the
+   entire name.
    This is a read-only attribute.
 
 
 .. attribute:: Attr.prefix
 
-   The part of the name preceding the colon if there is one, else the empty string.
+   The part of the name preceding the colon if there is one, else the
+   empty string.
+
+
+.. attribute:: Attr.value
+
+   The text value of the attribute.  This is a synonym for the
+   :attr:`nodeValue` attribute.
 
 
 .. _dom-attributelist-objects:
@@ -960,29 +969,24 @@ Python.
 Type Mapping
 ^^^^^^^^^^^^
 
-The primitive IDL types used in the DOM specification are mapped to Python types
+The IDL types used in the DOM specification are mapped to Python types
 according to the following table.
 
 +------------------+-------------------------------------------+
 | IDL Type         | Python Type                               |
 +==================+===========================================+
-| ``boolean``      | ``IntegerType`` (with a value of ``0`` or |
-|                  | ``1``)                                    |
+| ``boolean``      | ``bool`` or ``int``                       |
 +------------------+-------------------------------------------+
-| ``int``          | ``IntegerType``                           |
+| ``int``          | ``int``                                   |
 +------------------+-------------------------------------------+
-| ``long int``     | ``IntegerType``                           |
+| ``long int``     | ``int``                                   |
 +------------------+-------------------------------------------+
-| ``unsigned int`` | ``IntegerType``                           |
+| ``unsigned int`` | ``int``                                   |
 +------------------+-------------------------------------------+
-
-Additionally, the :class:`DOMString` defined in the recommendation is mapped to
-a bytes or string object.  Applications should be able to handle
-Unicode whenever a string is returned from the DOM.
-
-The IDL ``null`` value is mapped to ``None``, which may be accepted or
-provided by the implementation whenever ``null`` is allowed by the API.
-
+| ``DOMString``    | ``str`` or ``bytes``                      |
++------------------+-------------------------------------------+
+| ``null``         | ``None``                                  |
++------------------+-------------------------------------------+
 
 .. _dom-accessor-methods:
 

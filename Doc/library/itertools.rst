@@ -46,6 +46,7 @@ Iterator            Arguments               Results                             
 ====================    ============================    =================================================   =============================================================
 Iterator                Arguments                       Results                                             Example
 ====================    ============================    =================================================   =============================================================
+:func:`accumulate`      p                               p0, p0+p1, p0+p1+p2, ...                            ``accumulate([1,2,3,4,5]) --> 1 3 6 10 15``
 :func:`chain`           p, q, ...                       p0, p1, ... plast, q0, q1, ...                      ``chain('ABC', 'DEF') --> A B C D E F``
 :func:`compress`        data, selectors                 (d[0] if s[0]), (d[1] if s[1]), ...                 ``compress('ABCDEF', [1,0,1,0,1,1]) --> A C E F``
 :func:`dropwhile`       pred, seq                       seq[n], seq[n+1], starting when pred fails          ``dropwhile(lambda x: x<5, [1,4,6,4,1]) --> 6 4 1``
@@ -83,6 +84,22 @@ The following module functions all construct and return iterators. Some provide
 streams of infinite length, so they should only be accessed by functions or
 loops that truncate the stream.
 
+.. function:: accumulate(iterable)
+
+    Make an iterator that returns accumulated sums. Elements may be any addable
+    type including :class:`Decimal` or :class:`Fraction`.  Equivalent to::
+
+        def accumulate(iterable):
+            'Return running totals'
+            # accumulate([1,2,3,4,5]) --> 1 3 6 10 15
+            it = iter(iterable)
+            total = next(it)
+            yield total
+            for element in it:
+                total = total + element
+                yield total
+
+    .. versionadded:: 3.2
 
 .. function:: chain(*iterables)
 
@@ -402,7 +419,7 @@ loops that truncate the stream.
             if r > n:
                 return
             indices = list(range(n))
-            cycles = range(n, n-r, -1)
+            cycles = list(range(n, n-r, -1))
             yield tuple(pool[i] for i in indices[:r])
             while n:
                 for i in reversed(range(r)):
@@ -479,6 +496,11 @@ loops that truncate the stream.
               for i in range(times):
                   yield object
 
+   A common use for *repeat* is to supply a stream of constant values to *map*
+   or *zip*::
+
+      >>> list(map(pow, range(10), repeat(2)))
+      [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
 
 .. function:: starmap(function, iterable)
 
@@ -540,16 +562,25 @@ loops that truncate the stream.
    iterables are of uneven length, missing values are filled-in with *fillvalue*.
    Iteration continues until the longest iterable is exhausted.  Equivalent to::
 
-      def zip_longest(*args, fillvalue=None):
+      class ZipExhausted(Exception):
+          pass
+
+      def zip_longest(*args, **kwds):
           # zip_longest('ABCD', 'xy', fillvalue='-') --> Ax By C- D-
-          def sentinel(counter = ([fillvalue]*(len(args)-1)).pop):
-              yield counter()         # yields the fillvalue, or raises IndexError
+          fillvalue = kwds.get('fillvalue')
+          counter = len(args) - 1
+          def sentinel():
+              nonlocal counter
+              if not counter:
+                  raise ZipExhausted
+              counter -= 1
+              yield fillvalue
           fillers = repeat(fillvalue)
-          iters = [chain(it, sentinel(), fillers) for it in args]
+          iterators = [chain(it, sentinel(), fillers) for it in args]
           try:
-              for tup in zip(*iters):
-                  yield tup
-          except IndexError:
+              while iterators:
+                  yield tuple(map(next, iterators))
+          except ZipExhausted:
               pass
 
    If one of the iterables is potentially infinite, then the :func:`zip_longest`
@@ -560,8 +591,8 @@ loops that truncate the stream.
 
 .. _itertools-recipes:
 
-Recipes
--------
+Itertools Recipes
+-----------------
 
 This section shows recipes for creating an extended toolset using the existing
 itertools as building blocks.
@@ -652,6 +683,12 @@ which incur interpreter overhead.
            except StopIteration:
                pending -= 1
                nexts = cycle(islice(nexts, pending))
+
+   def partition(pred, iterable):
+       'Use a predicate to partition entries into false entries and true entries'
+       # partition(is_odd, range(10)) --> 0 2 4 6 8   and  1 3 5 7 9
+       t1, t2 = tee(iterable)
+       return filterfalse(pred, t1), filter(pred, t2)
 
    def powerset(iterable):
        "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
