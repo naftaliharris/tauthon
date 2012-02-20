@@ -70,7 +70,7 @@
    helps if you have lots of leaf nodes with attributes). */
 
 /* Also note that pymalloc always allocates blocks in multiples of
-   eight bytes.  For the current version of cElementTree, this means
+   eight bytes.  For the current C version of ElementTree, this means
    that the number of children should be an even number, at least on
    32-bit platforms. */
 
@@ -94,25 +94,6 @@ do { memory -= size; printf("%8d - %s\n", memory, comment); } while (0)
 #define LOCAL(type) static type
 #endif
 
-/* compatibility macros */
-#if (PY_VERSION_HEX < 0x02060000)
-#define Py_REFCNT(ob) (((PyObject*)(ob))->ob_refcnt)
-#define Py_TYPE(ob) (((PyObject*)(ob))->ob_type)
-#endif
-
-#if (PY_VERSION_HEX < 0x02050000)
-typedef int Py_ssize_t;
-#define lenfunc inquiry
-#endif
-
-#if (PY_VERSION_HEX < 0x02040000)
-#define PyDict_CheckExact PyDict_Check
-
-#if !defined(Py_RETURN_NONE)
-#define Py_RETURN_NONE return Py_INCREF(Py_None), Py_None
-#endif
-#endif
-
 /* macros used to store 'join' flags in string object pointers.  note
    that all use of text and tail as object pointers must be wrapped in
    JOIN_OBJ.  see comments in the ElementObject definition for more
@@ -123,7 +104,6 @@ typedef int Py_ssize_t;
 
 /* glue functions (see the init function for details) */
 static PyObject* elementtree_parseerror_obj;
-static PyObject* elementtree_copyelement_obj;
 static PyObject* elementtree_deepcopy_obj;
 static PyObject* elementtree_iter_obj;
 static PyObject* elementtree_itertext_obj;
@@ -226,7 +206,7 @@ typedef struct {
     PyObject* *children;
 
     PyObject* _children[STATIC_CHILDREN];
-    
+
 } ElementObjectExtra;
 
 typedef struct {
@@ -354,14 +334,14 @@ element_resize(ElementObject* self, int extra)
         /* use Python 2.4's list growth strategy */
         size = (size >> 3) + (size < 9 ? 3 : 6) + size;
         /* Coverity CID #182 size_error: Allocating 1 bytes to pointer "children"
-         * which needs at least 4 bytes. 
-         * Although it's a false alarm always assume at least one child to 
+         * which needs at least 4 bytes.
+         * Although it's a false alarm always assume at least one child to
          * be safe.
          */
         size = size ? size : 1;
         if (self->extra->children != self->extra->_children) {
             /* Coverity CID #182 size_error: Allocating 1 bytes to pointer
-             * "children", which needs at least 4 bytes. Although it's a 
+             * "children", which needs at least 4 bytes. Although it's a
              * false alarm always assume at least one child to be safe.
              */
             children = PyObject_Realloc(self->extra->children,
@@ -606,7 +586,7 @@ element_copy(ElementObject* self, PyObject* args)
     Py_INCREF(JOIN_OBJ(element->tail));
 
     if (self->extra) {
-        
+
         if (element_resize(element, self->extra->length) < 0) {
             Py_DECREF(element);
             return NULL;
@@ -618,7 +598,7 @@ element_copy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-        
+
     }
 
     return (PyObject*) element;
@@ -661,7 +641,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
 
     if (!element)
         return NULL;
-    
+
     text = deepcopy(JOIN_OBJ(self->text), memo);
     if (!text)
         goto error;
@@ -675,7 +655,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
     element->tail = JOIN_SET(tail, JOIN_GET(self->tail));
 
     if (self->extra) {
-        
+
         if (element_resize(element, self->extra->length) < 0)
             goto error;
 
@@ -689,7 +669,7 @@ element_deepcopy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-        
+
     }
 
     /* add object to memo dictionary (so deepcopy won't visit it again) */
@@ -723,13 +703,16 @@ checkpath(PyObject* tag)
     (ch == '/' || ch == '*' || ch == '[' || ch == '@' || ch == '.')
 
     if (PyUnicode_Check(tag)) {
-        Py_UNICODE *p = PyUnicode_AS_UNICODE(tag);
-        for (i = 0; i < PyUnicode_GET_SIZE(tag); i++) {
-            if (p[i] == '{')
+        const Py_ssize_t len = PyUnicode_GET_LENGTH(tag);
+        void *data = PyUnicode_DATA(tag);
+        unsigned int kind = PyUnicode_KIND(tag);
+        for (i = 0; i < len; i++) {
+            Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+            if (ch == '{')
                 check = 0;
-            else if (p[i] == '}')
+            else if (ch == '}')
                 check = 1;
-            else if (check && PATHCHAR(p[i]))
+            else if (check && PATHCHAR(ch))
                 return 1;
         }
         return 0;
@@ -787,20 +770,22 @@ static PyObject*
 element_find(ElementObject* self, PyObject* args)
 {
     int i;
-
     PyObject* tag;
     PyObject* namespaces = Py_None;
+
     if (!PyArg_ParseTuple(args, "O|O:find", &tag, &namespaces))
         return NULL;
 
-    if (checkpath(tag) || namespaces != Py_None)
-        return PyObject_CallMethod(
-            elementpath_obj, "find", "OOO", self, tag, namespaces
+    if (checkpath(tag) || namespaces != Py_None) {
+        _Py_IDENTIFIER(find);
+        return _PyObject_CallMethodId(
+            elementpath_obj, &PyId_find, "OOO", self, tag, namespaces
             );
+    }
 
     if (!self->extra)
         Py_RETURN_NONE;
-        
+
     for (i = 0; i < self->extra->length; i++) {
         PyObject* item = self->extra->children[i];
         if (Element_CheckExact(item) &&
@@ -817,16 +802,17 @@ static PyObject*
 element_findtext(ElementObject* self, PyObject* args)
 {
     int i;
-
     PyObject* tag;
     PyObject* default_value = Py_None;
     PyObject* namespaces = Py_None;
+    _Py_IDENTIFIER(findtext);
+
     if (!PyArg_ParseTuple(args, "O|OO:findtext", &tag, &default_value, &namespaces))
         return NULL;
 
     if (checkpath(tag) || namespaces != Py_None)
-        return PyObject_CallMethod(
-            elementpath_obj, "findtext", "OOOO", self, tag, default_value, namespaces
+        return _PyObject_CallMethodId(
+            elementpath_obj, &PyId_findtext, "OOOO", self, tag, default_value, namespaces
             );
 
     if (!self->extra) {
@@ -855,16 +841,18 @@ element_findall(ElementObject* self, PyObject* args)
 {
     int i;
     PyObject* out;
-
     PyObject* tag;
     PyObject* namespaces = Py_None;
+
     if (!PyArg_ParseTuple(args, "O|O:findall", &tag, &namespaces))
         return NULL;
 
-    if (checkpath(tag) || namespaces != Py_None)
-        return PyObject_CallMethod(
-            elementpath_obj, "findall", "OOO", self, tag, namespaces
+    if (checkpath(tag) || namespaces != Py_None) {
+        _Py_IDENTIFIER(findall);
+        return _PyObject_CallMethodId(
+            elementpath_obj, &PyId_findall, "OOO", self, tag, namespaces
             );
+    }
 
     out = PyList_New(0);
     if (!out)
@@ -892,11 +880,13 @@ element_iterfind(ElementObject* self, PyObject* args)
 {
     PyObject* tag;
     PyObject* namespaces = Py_None;
+    _Py_IDENTIFIER(iterfind);
+
     if (!PyArg_ParseTuple(args, "O|O:iterfind", &tag, &namespaces))
         return NULL;
 
-    return PyObject_CallMethod(
-        elementpath_obj, "iterfind", "OOO", self, tag, namespaces
+    return _PyObject_CallMethodId(
+        elementpath_obj, &PyId_iterfind, "OOO", self, tag, namespaces
         );
 }
 
@@ -953,7 +943,7 @@ static PyObject*
 element_iter(ElementObject* self, PyObject* args)
 {
     PyObject* result;
-    
+
     PyObject* tag = Py_None;
     if (!PyArg_ParseTuple(args, "|O:iter", &tag))
         return NULL;
@@ -985,7 +975,7 @@ static PyObject*
 element_itertext(ElementObject* self, PyObject* args)
 {
     PyObject* result;
-    
+
     if (!PyArg_ParseTuple(args, ":itertext"))
         return NULL;
 
@@ -1118,31 +1108,6 @@ element_makeelement(PyObject* self, PyObject* args, PyObject* kw)
 }
 
 static PyObject*
-element_reduce(ElementObject* self, PyObject* args)
-{
-    if (!PyArg_ParseTuple(args, ":__reduce__"))
-        return NULL;
-
-    /* Hack alert: This method is used to work around a __copy__
-       problem on certain 2.3 and 2.4 versions.  To save time and
-       simplify the code, we create the copy in here, and use a dummy
-       copyelement helper to trick the copy module into doing the
-       right thing. */
-
-    if (!elementtree_copyelement_obj) {
-        PyErr_SetString(
-            PyExc_RuntimeError,
-            "copyelement helper not found"
-            );
-        return NULL;
-    }
-
-    return Py_BuildValue(
-        "O(N)", elementtree_copyelement_obj, element_copy(self, args)
-        );
-}
-
-static PyObject*
 element_remove(ElementObject* self, PyObject* args)
 {
     int i;
@@ -1250,13 +1215,8 @@ element_subscr(PyObject* self_, PyObject* item)
 {
     ElementObject* self = (ElementObject*) self_;
 
-#if (PY_VERSION_HEX < 0x02050000)
-    if (PyInt_Check(item) || PyLong_Check(item)) {
-        long i = PyInt_AsLong(item);
-#else
     if (PyIndex_Check(item)) {
         Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-#endif
 
         if (i == -1 && PyErr_Occurred()) {
             return NULL;
@@ -1307,13 +1267,8 @@ element_ass_subscr(PyObject* self_, PyObject* item, PyObject* value)
 {
     ElementObject* self = (ElementObject*) self_;
 
-#if (PY_VERSION_HEX < 0x02050000)
-    if (PyInt_Check(item) || PyLong_Check(item)) {
-        long i = PyInt_AsLong(item);
-#else
     if (PyIndex_Check(item)) {
         Py_ssize_t i = PyNumber_AsSsize_t(item, PyExc_IndexError);
-#endif
 
         if (i == -1 && PyErr_Occurred()) {
             return -1;
@@ -1354,13 +1309,8 @@ element_ass_subscr(PyObject* self_, PyObject* item, PyObject* value)
         if (step !=  1 && newlen != slicelen)
         {
             PyErr_Format(PyExc_ValueError,
-#if (PY_VERSION_HEX < 0x02050000)
-                "attempt to assign sequence of size %d "
-                "to extended slice of size %d",
-#else
                 "attempt to assign sequence of size %zd "
                 "to extended slice of size %zd",
-#endif
                 newlen, slicelen
                 );
             return -1;
@@ -1460,18 +1410,6 @@ static PyMethodDef element_methods[] = {
     {"__copy__", (PyCFunction) element_copy, METH_VARARGS},
     {"__deepcopy__", (PyCFunction) element_deepcopy, METH_VARARGS},
 
-    /* Some 2.3 and 2.4 versions do not handle the __copy__ method on
-       C objects correctly, so we have to fake it using a __reduce__-
-       based hack (see the element_reduce implementation above for
-       details). */
-
-    /* The behaviour has been changed in 2.3.5 and 2.4.1, so we're
-       using a runtime test to figure out if we need to fake things
-       or now (see the init code below).  The following entry is
-       enabled only if the hack is needed. */
-
-    {"!__reduce__", (PyCFunction) element_reduce, METH_VARARGS},
-
     {NULL, NULL}
 };
 
@@ -1483,7 +1421,7 @@ element_getattro(ElementObject* self, PyObject* nameobj)
 
     if (PyUnicode_Check(nameobj))
         name = _PyUnicode_AsString(nameobj);
-    
+
     if (name == NULL)
         return NULL;
 
@@ -2113,7 +2051,7 @@ makeuniversal(XMLParserObject* self, const char* string)
             Py_INCREF(key);
             tag = key;
         }
-        
+
         /* decode universal name */
         p = PyBytes_AS_STRING(tag);
         value = PyUnicode_DecodeUTF8(p, size, "strict");
@@ -2138,13 +2076,15 @@ makeuniversal(XMLParserObject* self, const char* string)
 static void
 expat_set_error(const char* message, int line, int column)
 {
-    PyObject *error;
-    PyObject *position;
-    char buffer[256];
+    PyObject *errmsg, *error, *position;
 
-    sprintf(buffer, "%.100s: line %d, column %d", message, line, column);
+    errmsg = PyUnicode_FromFormat("%s: line %d, column %d",
+                                  message, line, column);
+    if (errmsg == NULL)
+        return;
 
-    error = PyObject_CallFunction(elementtree_parseerror_obj, "s", buffer);
+    error = PyObject_CallFunction(elementtree_parseerror_obj, "O", errmsg);
+    Py_DECREF(errmsg);
     if (!error)
         return;
 
@@ -2399,29 +2339,33 @@ expat_unknown_encoding_handler(XMLParserObject *self, const XML_Char *name,
                                XML_Encoding *info)
 {
     PyObject* u;
-    Py_UNICODE* p;
     unsigned char s[256];
     int i;
+    void *data;
+    unsigned int kind;
 
     memset(info, 0, sizeof(XML_Encoding));
 
     for (i = 0; i < 256; i++)
         s[i] = i;
-    
+
     u = PyUnicode_Decode((char*) s, 256, name, "replace");
     if (!u)
         return XML_STATUS_ERROR;
+    if (PyUnicode_READY(u))
+        return XML_STATUS_ERROR;
 
-    if (PyUnicode_GET_SIZE(u) != 256) {
+    if (PyUnicode_GET_LENGTH(u) != 256) {
         Py_DECREF(u);
         return XML_STATUS_ERROR;
     }
 
-    p = PyUnicode_AS_UNICODE(u);
-
+    kind = PyUnicode_KIND(u);
+    data = PyUnicode_DATA(u);
     for (i = 0; i < 256; i++) {
-        if (p[i] != Py_UNICODE_REPLACEMENT_CHARACTER)
-            info->map[i] = p[i];
+        Py_UCS4 ch = PyUnicode_READ(kind, data, i);
+        if (ch != Py_UNICODE_REPLACEMENT_CHARACTER)
+            info->map[i] = ch;
         else
             info->map[i] = -1;
     }
@@ -2466,7 +2410,7 @@ xmlparser(PyObject* self_, PyObject* args, PyObject* kw)
         PyObject_Del(self);
         return NULL;
     }
-     
+
     self->names = PyDict_New();
     if (!self->names) {
         PyObject_Del(self->entity);
@@ -2645,7 +2589,7 @@ xmlparser_parse(XMLParserObject* self, PyObject* args)
     reader = PyObject_GetAttrString(fileobj, "read");
     if (!reader)
         return NULL;
-    
+
     /* read from open file object */
     for (;;) {
 
@@ -2705,7 +2649,7 @@ xmlparser_setevents(XMLParserObject* self, PyObject* args)
     if (!TreeBuilder_CheckExact(self->target)) {
         PyErr_SetString(
             PyExc_TypeError,
-            "event handling only supported for cElementTree.Treebuilder "
+            "event handling only supported for ElementTree.TreeBuilder "
             "targets"
             );
         return NULL;
@@ -2796,7 +2740,7 @@ static PyMethodDef xmlparser_methods[] = {
     {NULL, NULL}
 };
 
-static PyObject*  
+static PyObject*
 xmlparser_getattro(XMLParserObject* self, PyObject* nameobj)
 {
     if (PyUnicode_Check(nameobj)) {
@@ -2862,7 +2806,6 @@ static PyMethodDef _functions[] = {
     {"TreeBuilder", (PyCFunction) treebuilder, METH_VARARGS},
 #if defined(USE_EXPAT)
     {"XMLParser", (PyCFunction) xmlparser, METH_VARARGS|METH_KEYWORDS},
-    {"XMLTreeBuilder", (PyCFunction) xmlparser, METH_VARARGS|METH_KEYWORDS},
 #endif
     {NULL, NULL}
 };
@@ -2917,54 +2860,8 @@ PyInit__elementtree(void)
 
     bootstrap = (
 
-        "from copy import copy, deepcopy\n"
-
-        "try:\n"
-        "  from xml.etree import ElementTree\n"
-        "except ImportError:\n"
-        "  import ElementTree\n"
-        "ET = ElementTree\n"
-        "del ElementTree\n"
-
-        "import _elementtree as cElementTree\n"
-
-        "try:\n" /* check if copy works as is */
-        "  copy(cElementTree.Element('x'))\n"
-        "except:\n"
-        "  def copyelement(elem):\n"
-        "    return elem\n"
-
-        "class CommentProxy:\n"
-        " def __call__(self, text=None):\n"
-        "  element = cElementTree.Element(ET.Comment)\n"
-        "  element.text = text\n"
-        "  return element\n"
-        " def __eq__(self, other):\n"
-        "  return ET.Comment == other\n"
-        "cElementTree.Comment = CommentProxy()\n"
-
-        "class ElementTree(ET.ElementTree):\n" /* public */
-        "  def parse(self, source, parser=None):\n"
-        "    close_source = False\n"
-        "    if not hasattr(source, 'read'):\n"
-        "      source = open(source, 'rb')\n"
-        "      close_source = True\n"
-        "    try:\n"
-        "      if parser is not None:\n"
-        "        while 1:\n"
-        "          data = source.read(65536)\n"
-        "          if not data:\n"
-        "            break\n"
-        "          parser.feed(data)\n"
-        "        self._root = parser.close()\n"
-        "      else:\n" 
-        "        parser = cElementTree.XMLParser()\n"
-        "        self._root = parser._parse(source)\n"
-        "      return self._root\n"
-        "    finally:\n"
-        "      if close_source:\n"
-        "        source.close()\n"
-        "cElementTree.ElementTree = ElementTree\n"
+        "from copy import deepcopy\n"
+        "from xml.etree import ElementPath\n"
 
         "def iter(node, tag=None):\n" /* helper */
         "  if tag == '*':\n"
@@ -2984,123 +2881,12 @@ PyInit__elementtree(void)
         "    if e.tail:\n"
         "      yield e.tail\n"
 
-        "def parse(source, parser=None):\n" /* public */
-        "  tree = ElementTree()\n"
-        "  tree.parse(source, parser)\n"
-        "  return tree\n"
-        "cElementTree.parse = parse\n"
-
-        "class iterparse:\n"
-        " root = None\n"
-        " def __init__(self, file, events=None):\n"
-        "  self._close_file = False\n"
-        "  if not hasattr(file, 'read'):\n"
-        "    file = open(file, 'rb')\n"
-        "    self._close_file = True\n"
-        "  self._file = file\n"
-        "  self._events = []\n"
-        "  self._index = 0\n"
-        "  self._error = None\n"
-        "  self.root = self._root = None\n"
-        "  b = cElementTree.TreeBuilder()\n"
-        "  self._parser = cElementTree.XMLParser(b)\n"
-        "  self._parser._setevents(self._events, events)\n"
-        " def __next__(self):\n"
-        "  while 1:\n"
-        "    try:\n"
-        "      item = self._events[self._index]\n"
-        "      self._index += 1\n"
-        "      return item\n"
-        "    except IndexError:\n"
-        "      pass\n"
-        "    if self._error:\n"
-        "      e = self._error\n"
-        "      self._error = None\n"
-        "      raise e\n"
-        "    if self._parser is None:\n"
-        "      self.root = self._root\n"
-        "      if self._close_file:\n"
-        "        self._file.close()\n"
-        "      raise StopIteration\n"
-        "    # load event buffer\n"
-        "    del self._events[:]\n"
-        "    self._index = 0\n"
-        "    data = self._file.read(16384)\n"
-        "    if data:\n"
-        "      try:\n"
-        "        self._parser.feed(data)\n"
-        "      except SyntaxError as exc:\n"
-        "        self._error = exc\n"
-        "    else:\n"
-        "      self._root = self._parser.close()\n"
-        "      self._parser = None\n"
-        " def __iter__(self):\n"
-        "  return self\n"
-        "cElementTree.iterparse = iterparse\n"
-
-        "class PIProxy:\n"
-        " def __call__(self, target, text=None):\n"
-        "  element = cElementTree.Element(ET.PI)\n"
-        "  element.text = target\n"
-        "  if text:\n"
-        "    element.text = element.text + ' ' + text\n"
-        "  return element\n"
-        " def __eq__(self, other):\n"
-        "  return ET.PI == other\n"
-        "cElementTree.PI = cElementTree.ProcessingInstruction = PIProxy()\n"
-
-        "def XML(text):\n" /* public */
-        "  parser = cElementTree.XMLParser()\n"
-        "  parser.feed(text)\n"
-        "  return parser.close()\n"
-        "cElementTree.XML = cElementTree.fromstring = XML\n"
-
-        "def XMLID(text):\n" /* public */
-        "  tree = XML(text)\n"
-        "  ids = {}\n"
-        "  for elem in tree.iter():\n"
-        "    id = elem.get('id')\n"
-        "    if id:\n"
-        "      ids[id] = elem\n"
-        "  return tree, ids\n"
-        "cElementTree.XMLID = XMLID\n"
-
-        "try:\n"
-        " register_namespace = ET.register_namespace\n"
-        "except AttributeError:\n"
-        " def register_namespace(prefix, uri):\n"
-        "  ET._namespace_map[uri] = prefix\n"
-        "cElementTree.register_namespace = register_namespace\n"
-
-        "cElementTree.dump = ET.dump\n"
-        "cElementTree.ElementPath = ElementPath = ET.ElementPath\n"
-        "cElementTree.iselement = ET.iselement\n"
-        "cElementTree.QName = ET.QName\n"
-        "cElementTree.tostring = ET.tostring\n"
-        "cElementTree.fromstringlist = ET.fromstringlist\n"
-        "cElementTree.tostringlist = ET.tostringlist\n"
-        "cElementTree.VERSION = '" VERSION "'\n"
-        "cElementTree.__version__ = '" VERSION "'\n"
-
        );
 
     if (!PyRun_String(bootstrap, Py_file_input, g, NULL))
         return NULL;
 
     elementpath_obj = PyDict_GetItemString(g, "ElementPath");
-
-    elementtree_copyelement_obj = PyDict_GetItemString(g, "copyelement");
-    if (elementtree_copyelement_obj) {
-        /* reduce hack needed; enable reduce method */
-        PyMethodDef* mp;
-        for (mp = element_methods; mp->ml_name; mp++)
-            if (mp->ml_meth == (PyCFunction) element_reduce) {
-                mp->ml_name = "__reduce__";
-                break;
-            }
-    } else
-        PyErr_Clear();
-
     elementtree_deepcopy_obj = PyDict_GetItemString(g, "deepcopy");
     elementtree_iter_obj = PyDict_GetItemString(g, "iter");
     elementtree_itertext_obj = PyDict_GetItemString(g, "itertext");
@@ -3120,7 +2906,7 @@ PyInit__elementtree(void)
 #endif
 
     elementtree_parseerror_obj = PyErr_NewException(
-        "cElementTree.ParseError", PyExc_SyntaxError, NULL
+        "xml.etree.ElementTree.ParseError", PyExc_SyntaxError, NULL
         );
     Py_INCREF(elementtree_parseerror_obj);
     PyModule_AddObject(m, "ParseError", elementtree_parseerror_obj);
