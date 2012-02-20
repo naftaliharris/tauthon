@@ -123,7 +123,20 @@ class SourceLoader(_bootstrap.SourceLoader, ResourceLoader, ExecutionLoader):
 
     def path_mtime(self, path):
         """Return the (int) modification time for the path (str)."""
-        raise NotImplementedError
+        if self.path_stats.__func__ is SourceLoader.path_stats:
+            raise NotImplementedError
+        return int(self.path_stats(path)['mtime'])
+
+    def path_stats(self, path):
+        """Return a metadata dict for the source pointed to by the path (str).
+        Possible keys:
+        - 'mtime' (mandatory) is the numeric timestamp of last source
+          code modification;
+        - 'size' (optional) is the size in bytes of the source code.
+        """
+        if self.path_mtime.__func__ is SourceLoader.path_mtime:
+            raise NotImplementedError
+        return {'mtime': self.path_mtime(path)}
 
     def set_data(self, path, data):
         """Write the bytes to the path (if possible).
@@ -195,7 +208,7 @@ class PyLoader(SourceLoader):
                             "use SourceLoader instead. "
                             "See the importlib documentation on how to be "
                             "compatible with Python 3.1 onwards.",
-                        PendingDeprecationWarning)
+                        DeprecationWarning)
         path = self.source_path(fullname)
         if path is None:
             raise ImportError
@@ -234,7 +247,7 @@ class PyPycLoader(PyLoader):
                             "removal in Python 3.4; use SourceLoader instead. "
                             "If Python 3.1 compatibility is required, see the "
                             "latest documentation for PyLoader.",
-                        PendingDeprecationWarning)
+                        DeprecationWarning)
         source_timestamp = self.source_mtime(fullname)
         # Try to use bytecode if it is available.
         bytecode_path = self.bytecode_path(fullname)
@@ -247,7 +260,7 @@ class PyPycLoader(PyLoader):
                 raw_timestamp = data[4:8]
                 if len(raw_timestamp) < 4:
                     raise EOFError("bad timestamp in {}".format(fullname))
-                pyc_timestamp = marshal._r_long(raw_timestamp)
+                pyc_timestamp = _bootstrap._r_long(raw_timestamp)
                 bytecode = data[8:]
                 # Verify that the magic number is valid.
                 if imp.get_magic() != magic:
@@ -279,7 +292,7 @@ class PyPycLoader(PyLoader):
         # Generate bytecode and write it out.
         if not sys.dont_write_bytecode:
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(source_timestamp))
+            data.extend(_bootstrap._w_long(source_timestamp))
             data.extend(marshal.dumps(code_object))
             self.write_bytecode(fullname, data)
         return code_object

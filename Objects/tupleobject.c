@@ -86,7 +86,7 @@ PyTuple_New(register Py_ssize_t size)
         {
             return PyErr_NoMemory();
         }
-        nbytes += sizeof(PyTupleObject) - sizeof(PyObject *);
+        /* nbytes += sizeof(PyTupleObject) - sizeof(PyObject *); */
 
         op = PyObject_GC_NewVar(PyTupleObject, &PyTuple_Type, size);
         if (op == NULL)
@@ -312,11 +312,12 @@ error:
 static Py_hash_t
 tuplehash(PyTupleObject *v)
 {
-    register Py_hash_t x, y;
+    register Py_uhash_t x;
+    register Py_hash_t y;
     register Py_ssize_t len = Py_SIZE(v);
     register PyObject **p;
-    Py_hash_t mult = _PyHASH_MULTIPLIER;
-    x = 0x345678L;
+    Py_uhash_t mult = _PyHASH_MULTIPLIER;
+    x = 0x345678;
     p = v->ob_item;
     while (--len >= 0) {
         y = PyObject_Hash(*p++);
@@ -327,7 +328,7 @@ tuplehash(PyTupleObject *v)
         mult += (Py_hash_t)(82520L + len + len);
     }
     x += 97531L;
-    if (x == -1)
+    if (x == (Py_uhash_t)-1)
         x = -2;
     return x;
 }
@@ -543,10 +544,8 @@ tuplerichcompare(PyObject *v, PyObject *w, int op)
     Py_ssize_t i;
     Py_ssize_t vlen, wlen;
 
-    if (!PyTuple_Check(v) || !PyTuple_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PyTuple_Check(v) || !PyTuple_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     vt = (PyTupleObject *)v;
     wt = (PyTupleObject *)w;
