@@ -3,9 +3,6 @@
    Adapted to unittest format and expanded scope by Raymond Hettinger
 """
 import os, sys
-import copy
-import bsddb
-import dbhash # Just so we know it's imported
 import unittest
 from test import test_support
 
@@ -46,8 +43,8 @@ class TestBSDDB(unittest.TestCase):
     def test_change(self):
         self.f['r'] = 'discovered'
         self.assertEqual(self.f['r'], 'discovered')
-        self.assert_('r' in self.f.keys())
-        self.assert_('discovered' in self.f.values())
+        self.assertIn('r', self.f.keys())
+        self.assertIn('discovered', self.f.values())
 
     def test_close_and_reopen(self):
         if self.fname is None:
@@ -179,7 +176,7 @@ class TestBSDDB(unittest.TestCase):
 
     def test_first_while_deleting(self):
         # Test for bug 1725856
-        self.assert_(len(self.d) >= 2, "test requires >=2 items")
+        self.assertTrue(len(self.d) >= 2, "test requires >=2 items")
         for _ in self.d:
             key = self.f.first()[0]
             del self.f[key]
@@ -187,7 +184,7 @@ class TestBSDDB(unittest.TestCase):
 
     def test_last_while_deleting(self):
         # Test for bug 1725856's evil twin
-        self.assert_(len(self.d) >= 2, "test requires >=2 items")
+        self.assertTrue(len(self.d) >= 2, "test requires >=2 items")
         for _ in self.d:
             key = self.f.last()[0]
             del self.f[key]
@@ -198,13 +195,13 @@ class TestBSDDB(unittest.TestCase):
 
     def test_contains(self):
         for k in self.d:
-            self.assert_(k in self.f)
-        self.assert_('not here' not in self.f)
+            self.assertIn(k, self.f)
+        self.assertNotIn('not here', self.f)
 
     def test_has_key(self):
         for k in self.d:
-            self.assert_(self.f.has_key(k))
-        self.assert_(not self.f.has_key('not here'))
+            self.assertTrue(self.f.has_key(k))
+        self.assertTrue(not self.f.has_key('not here'))
 
     def test_clear(self):
         self.f.clear()
@@ -256,11 +253,11 @@ class TestBSDDB(unittest.TestCase):
             if debug: print "K"
 
         # test the legacy cursor interface mixed with writes
-        self.assert_(self.f.first()[0] in self.d)
+        self.assertIn(self.f.first()[0], self.d)
         k = self.f.next()[0]
-        self.assert_(k in self.d)
+        self.assertIn(k, self.d)
         self.f[k] = "be gone with ye deadlocks"
-        self.assert_(self.f[k], "be gone with ye deadlocks")
+        self.assertTrue(self.f[k], "be gone with ye deadlocks")
 
     def test_for_cursor_memleak(self):
         # do the bsddb._DBWithCursor iterator internals leak cursors?
@@ -278,21 +275,21 @@ class TestBSDDB(unittest.TestCase):
 
         self.assertEqual(nc1, nc2)
         self.assertEqual(nc1, nc4)
-        self.assert_(nc3 == nc1+1)
+        self.assertTrue(nc3 == nc1+1)
 
     def test_popitem(self):
         k, v = self.f.popitem()
-        self.assert_(k in self.d)
-        self.assert_(v in self.d.values())
-        self.assert_(k not in self.f)
+        self.assertIn(k, self.d)
+        self.assertIn(v, self.d.values())
+        self.assertNotIn(k, self.f)
         self.assertEqual(len(self.d)-1, len(self.f))
 
     def test_pop(self):
         k = 'w'
         v = self.f.pop(k)
         self.assertEqual(v, self.d[k])
-        self.assert_(k not in self.f)
-        self.assert_(v not in self.f.values())
+        self.assertNotIn(k, self.f)
+        self.assertNotIn(v, self.f.values())
         self.assertEqual(len(self.d)-1, len(self.f))
 
     def test_get(self):

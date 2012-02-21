@@ -237,7 +237,7 @@ $(OUT)%$O: %.c
 
 # Output file names
 PYTHON_VER=	2.6
-PYTHON_LIB=	python26
+PYTHON_LIB=	python27
 PYTHON.LIB=	$(PYTHON_LIB)_s$A
 PYTHON.IMPLIB=	$(PYTHON_LIB)$A
 ifeq ($(EXEOMF),yes)
@@ -351,7 +351,6 @@ SRC.PYTHON=	$(addprefix $(TOP), \
 		Python/getargs.c \
 		Python/getcompiler.c \
 		Python/getcopyright.c \
-		Python/getmtime.c \
 		Python/getplatform.c \
 		Python/getversion.c \
 		Python/graminit.c \
@@ -363,6 +362,7 @@ SRC.PYTHON=	$(addprefix $(TOP), \
 		Python/mystrtoul.c \
 		Python/peephole.c \
 		Python/pyarena.c \
+		Python/pyctype.c \
 		Python/pyfpe.c \
 		Python/pymath.c \
 		Python/pystate.c \
@@ -384,6 +384,7 @@ SRC.OBJECT=	$(addprefix $(TOP), \
 		Objects/bytes_methods.c \
 		Objects/cellobject.c \
 		Objects/classobject.c \
+		Objects/capsule.c \
 		Objects/cobject.c \
 		Objects/codeobject.c \
 		Objects/complexobject.c \

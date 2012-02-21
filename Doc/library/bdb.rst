@@ -4,6 +4,10 @@
 .. module:: bdb
    :synopsis: Debugger framework.
 
+**Source code:** :source:`Lib/bdb.py`
+
+--------------
+
 The :mod:`bdb` module handles basic debugger functions, like setting breakpoints
 or managing execution via the debugger.
 
@@ -108,7 +112,7 @@ The :mod:`bdb` module also defines two classes:
       * ``"exception"``: An exception has occurred.
       * ``"c_call"``: A C function is about to be called.
       * ``"c_return"``: A C function has returned.
-      * ``"c_exception"``: A C function has thrown an exception.
+      * ``"c_exception"``: A C function has raised an exception.
 
       For the Python events, specialized functions (see below) are called.  For
       the C events, no action is taken.
@@ -342,12 +346,10 @@ Finally, the module defines the following functions:
 .. function:: effective(file, line, frame)
 
    Determine if there is an effective (active) breakpoint at this line of code.
-   Return breakpoint number or 0 if none.
-
-   Called only if we know there is a breakpoint at this location.  Returns the
-   breakpoint that was triggered and a flag that indicates if it is ok to delete
-   a temporary breakpoint.
+   Return a tuple of the breakpoint and a boolean that indicates if it is ok
+   to delete a temporary breakpoint.  Return ``(None, None)`` if there is no
+   matching breakpoint.
 
 .. function:: set_trace()
 
-   Starts debugging with a :class:`Bdb` instance from caller's frame.
+   Start debugging with a :class:`Bdb` instance from caller's frame.

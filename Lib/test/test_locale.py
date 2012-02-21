@@ -1,4 +1,4 @@
-from test.test_support import run_unittest, verbose, TestSkipped
+from test.test_support import run_unittest, verbose
 import unittest
 import locale
 import sys
@@ -16,7 +16,7 @@ def get_enUS_locale():
             # The locale test work fine on OSX 10.6, I (ronaldoussoren)
             # haven't had time yet to verify if tests work on OSX 10.5
             # (10.4 is known to be bad)
-            raise TestSkipped("Locale support on MacOSX is minimal")
+            raise unittest.SkipTest("Locale support on MacOSX is minimal")
     if sys.platform.startswith("win"):
         tlocs = ("En", "English")
     else:
@@ -29,7 +29,7 @@ def get_enUS_locale():
             continue
         break
     else:
-        raise TestSkipped(
+        raise unittest.SkipTest(
             "Test locale not supported (tried %s)" % (', '.join(tlocs)))
     enUS_locale = tloc
     locale.setlocale(locale.LC_NUMERIC, oldlocale)
@@ -227,6 +227,38 @@ class EnUSNumberFormatting(BaseFormattingTest):
                 (self.sep, self.sep))
 
 
+class TestFormatPatternArg(unittest.TestCase):
+    # Test handling of pattern argument of format
+
+    def test_onlyOnePattern(self):
+        # Issue 2522: accept exactly one % pattern, and no extra chars.
+        self.assertRaises(ValueError, locale.format, "%f\n", 'foo')
+        self.assertRaises(ValueError, locale.format, "%f\r", 'foo')
+        self.assertRaises(ValueError, locale.format, "%f\r\n", 'foo')
+        self.assertRaises(ValueError, locale.format, " %f", 'foo')
+        self.assertRaises(ValueError, locale.format, "%fg", 'foo')
+        self.assertRaises(ValueError, locale.format, "%^g", 'foo')
+        self.assertRaises(ValueError, locale.format, "%f%%", 'foo')
+
+
+class TestLocaleFormatString(unittest.TestCase):
+    """General tests on locale.format_string"""
+
+    def test_percent_escape(self):
+        self.assertEqual(locale.format_string('%f%%', 1.0), '%f%%' % 1.0)
+        self.assertEqual(locale.format_string('%d %f%%d', (1, 1.0)),
+            '%d %f%%d' % (1, 1.0))
+        self.assertEqual(locale.format_string('%(foo)s %%d', {'foo': 'bar'}),
+            ('%(foo)s %%d' % {'foo': 'bar'}))
+
+    def test_mapping(self):
+        self.assertEqual(locale.format_string('%(foo)s bing.', {'foo': 'bar'}),
+            ('%(foo)s bing.' % {'foo': 'bar'}))
+        self.assertEqual(locale.format_string('%(foo)s', {'foo': 'bar'}),
+            ('%(foo)s' % {'foo': 'bar'}))
+
+
+
 class TestNumberFormatting(BaseLocalizedTest, EnUSNumberFormatting):
     # Test number formatting with a real English locale.
 
@@ -353,18 +385,49 @@ class TestMiscellaneous(unittest.TestCase):
             # test crasher from bug #3303
             self.assertRaises(TypeError, locale.strcoll, u"a", None)
 
+    def test_setlocale_category(self):
+        locale.setlocale(locale.LC_ALL)
+        locale.setlocale(locale.LC_TIME)
+        locale.setlocale(locale.LC_CTYPE)
+        locale.setlocale(locale.LC_COLLATE)
+        locale.setlocale(locale.LC_MONETARY)
+        locale.setlocale(locale.LC_NUMERIC)
+
+        # crasher from bug #7419
+        self.assertRaises(locale.Error, locale.setlocale, 12345)
+
+    def test_getsetlocale_issue1813(self):
+        # Issue #1813: setting and getting the locale under a Turkish locale
+        oldlocale = locale.getlocale()
+        self.addCleanup(locale.setlocale, locale.LC_CTYPE, oldlocale)
+        try:
+            locale.setlocale(locale.LC_CTYPE, 'tr_TR')
+        except locale.Error:
+            # Unsupported locale on this system
+            self.skipTest('test needs Turkish locale')
+        loc = locale.getlocale()
+        locale.setlocale(locale.LC_CTYPE, loc)
+        self.assertEqual(loc, locale.getlocale())
+
+    def test_normalize_issue12752(self):
+        # Issue #1813 caused a regression where locale.normalize() would no
+        # longer accept unicode strings.
+        self.assertEqual(locale.normalize(u'en_US'), 'en_US.ISO8859-1')
+
 
 def test_main():
     tests = [
         TestMiscellaneous,
+        TestFormatPatternArg,
+        TestLocaleFormatString,
         TestEnUSNumberFormatting,
         TestCNumberFormatting,
         TestFrFRNumberFormatting,
     ]
-    # TestSkipped can't be raised inside unittests, handle it manually instead
+    # SkipTest can't be raised inside unittests, handle it manually instead
     try:
         get_enUS_locale()
-    except TestSkipped as e:
+    except unittest.SkipTest as e:
         if verbose:
             print "Some tests will be disabled: %s" % e
     else:

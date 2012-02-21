@@ -1,5 +1,3 @@
-.. _tarfile-mod:
-
 :mod:`tarfile` --- Read and write tar archive files
 ===================================================
 
@@ -12,6 +10,9 @@
 .. moduleauthor:: Lars Gustäbel <lars@gustaebel.de>
 .. sectionauthor:: Lars Gustäbel <lars@gustaebel.de>
 
+**Source code:** :source:`Lib/tarfile.py`
+
+--------------
 
 The :mod:`tarfile` module makes it possible to read and write tar
 archives, including those using gzip or bz2 compression.
@@ -234,6 +235,14 @@ a header block followed by data blocks. It is possible to store a file in a tar
 archive several times. Each archive member is represented by a :class:`TarInfo`
 object, see :ref:`tarinfo-objects` for details.
 
+A :class:`TarFile` object can be used as a context manager in a :keyword:`with`
+statement. It will automatically be closed when the block is completed. Please
+note that in the event of an exception an archive opened for writing will not
+be finalized; only the internally used file object will be closed. See the
+:ref:`tar-examples` section for a use case.
+
+.. versionadded:: 2.7
+   Added support for the context manager protocol.
 
 .. class:: TarFile(name=None, mode='r', fileobj=None, format=DEFAULT_FORMAT, tarinfo=TarInfo, dereference=False, ignore_zeros=False, encoding=ENCODING, errors=None, pax_headers=None, debug=0, errorlevel=0)
 
@@ -389,7 +398,7 @@ object, see :ref:`tarinfo-objects` for details.
       and :meth:`close`, and also supports iteration over its lines.
 
 
-.. method:: TarFile.add(name, arcname=None, recursive=True, exclude=None)
+.. method:: TarFile.add(name, arcname=None, recursive=True, exclude=None, filter=None)
 
    Add the file *name* to the archive. *name* may be any type of file (directory,
    fifo, symbolic link, etc.). If given, *arcname* specifies an alternative name
@@ -397,10 +406,23 @@ object, see :ref:`tarinfo-objects` for details.
    can be avoided by setting *recursive* to :const:`False`. If *exclude* is given
    it must be a function that takes one filename argument and returns a boolean
    value. Depending on this value the respective file is either excluded
-   (:const:`True`) or added (:const:`False`).
+   (:const:`True`) or added (:const:`False`). If *filter* is specified it must
+   be a function that takes a :class:`TarInfo` object argument and returns the
+   changed :class:`TarInfo` object. If it instead returns :const:`None` the :class:`TarInfo`
+   object will be excluded from the archive. See :ref:`tar-examples` for an
+   example.
 
    .. versionchanged:: 2.6
       Added the *exclude* parameter.
+
+   .. versionchanged:: 2.7
+      Added the *filter* parameter.
+
+   .. deprecated:: 2.7
+      The *exclude* parameter is deprecated, please use the *filter* parameter
+      instead.  For maximum portability, *filter* should be used as a keyword
+      argument rather than as a positional argument so that code won't be
+      affected when *exclude* is ultimately removed.
 
 
 .. method:: TarFile.addfile(tarinfo, fileobj=None)
@@ -639,6 +661,13 @@ How to create an uncompressed tar archive from a list of filenames::
        tar.add(name)
    tar.close()
 
+The same example using the :keyword:`with` statement::
+
+    import tarfile
+    with tarfile.open("sample.tar", "w") as tar:
+        for name in ["foo", "bar", "quux"]:
+            tar.add(name)
+
 How to read a gzip compressed tar archive and display some member information::
 
    import tarfile
@@ -652,6 +681,18 @@ How to read a gzip compressed tar archive and display some member information::
        else:
            print "something else."
    tar.close()
+
+How to create an archive and reset the user information using the *filter*
+parameter in :meth:`TarFile.add`::
+
+    import tarfile
+    def reset(tarinfo):
+        tarinfo.uid = tarinfo.gid = 0
+        tarinfo.uname = tarinfo.gname = "root"
+        return tarinfo
+    tar = tarfile.open("sample.tar.gz", "w:gz")
+    tar.add("foo", filter=reset)
+    tar.close()
 
 
 .. _tar-formats:

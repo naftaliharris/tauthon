@@ -6,6 +6,9 @@
 .. moduleauthor:: Guido van Rossum <guido@python.org>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/fileinput.py`
+
+--------------
 
 This module implements a helper class and functions to quickly write a
 loop over standard input or a list of files. If you just want to read or

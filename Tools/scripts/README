@@ -4,6 +4,7 @@ dutree or lll) are also generally useful UNIX tools.
 
 See also the Demo/scripts directory!
 
+analyze_dxp.py		Analyzes the result of sys.getdxp()
 byext.py		Print lines/words/chars stats of files by extension
 byteyears.py		Print product of a file's size and age
 checkappend.py		Search for multi-argument .append() calls
@@ -18,7 +19,8 @@ db2pickle.py		Dump a database file to a pickle
 diff.py			Print file diffs in context, unified, or ndiff formats
 dutree.py		Format du(1) output as a tree sorted by size
 eptags.py		Create Emacs TAGS file for Python modules
-finddiv.py		A grep-like tool that looks for division operators.
+find_recursionlimit.py  Find the maximum recursion limit on this machine 
+finddiv.py		A grep-like tool that looks for division operators
 findlinksto.py		Recursively find symbolic links to a given path prefix
 findnocoding.py		Find source files which need an encoding declaration
 fixcid.py		Massive identifier substitution on C source files
@@ -27,8 +29,8 @@ fixheader.py		Add some cpp magic to a C include file
 fixnotice.py		Fix the copyright notice in source files
 fixps.py		Fix Python scripts' first line (if #!)
 ftpmirror.py		FTP mirror script
-google.py		Open a webbrowser with Google.
-gprof2html.py		Transform gprof(1) output into useful HTML.
+google.py		Open a webbrowser with Google
+gprof2html.py		Transform gprof(1) output into useful HTML
 h2py.py			Translate #define's into Python assignments
 hotshotmain.py		Main program to run script under control of hotshot
 idle			Main program to start IDLE
@@ -55,9 +57,10 @@ pysource.py		Find Python source files
 redemo.py		Basic regular expression demonstration facility
 reindent.py		Change .py files to use 4-space indents.
 rgrep.py		Reverse grep through a file (useful for big logfiles)
-setup.py		Install all scripts listed here.
+serve.py		Small wsgiref-based web server, used in make serve in Doc
+setup.py		Install all scripts listed here
 suff.py			Sort a list of files by suffix
-svneol.py		Sets svn:eol-style on all files in directory.
+svneol.py		Sets svn:eol-style on all files in directory
 texcheck.py             Validate Python LaTeX formatting (Raymond Hettinger)
 texi2html.py		Convert GNU texinfo files into HTML
 treesync.py		Synchronize source trees (very ideosyncratic)

@@ -1,9 +1,9 @@
 import re
-
+import sys
 
 # Write the config.c file
 
-never = ['marshal', '__main__', '__builtin__', 'sys', 'exceptions']
+never = ['marshal', '__main__', '__builtin__', 'sys', 'exceptions', '_warnings']
 
 def makeconfig(infp, outfp, modules, with_ifdef=0):
     m1 = re.compile('-- ADDMODULE MARKER 1 --')
@@ -38,7 +38,6 @@ def makeconfig(infp, outfp, modules, with_ifdef=0):
 # Test program.
 
 def test():
-    import sys
     if not sys.argv[3:]:
         print 'usage: python makeconfig.py config.c.in outputfile',
         print 'modulename ...'
