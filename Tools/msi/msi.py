@@ -119,6 +119,7 @@ pythondll_uuid = {
     "30":"{6953bc3b-6768-4291-8410-7914ce6e2ca8}",
     "31":"{4afcba0b-13e4-47c3-bebe-477428b46913}",
     "32":"{3ff95315-1096-4d31-bd86-601d5438ad5e}",
+    "33":"{f7581ca4-d368-4eea-8f82-d48c64c4f047}",
     } [major+minor]
 
 # Compute the name that Sphinx gives to the docfile
@@ -1011,7 +1012,7 @@ def add_files(db):
         # package READMEs if present
         lib.glob("README")
         if dir=='Lib':
-            lib.add_file('wsgiref.egg-info')
+            lib.add_file("sysconfig.cfg")
         if dir=='test' and parent.physical=='Lib':
             lib.add_file("185test.db")
             lib.add_file("audiotest.au")
@@ -1047,7 +1048,7 @@ def add_files(db):
         if dir=="Icons":
             lib.glob("*.gif")
             lib.add_file("idle.icns")
-        if dir=="command" and parent.physical=="distutils":
+        if dir=="command" and parent.physical in ("distutils", "packaging"):
             lib.glob("wininst*.exe")
             lib.add_file("command_template")
         if dir=="lib2to3":
@@ -1059,14 +1060,14 @@ def add_files(db):
             lib.add_file("turtle.cfg")
         if dir=="pydoc_data":
             lib.add_file("_pydoc.css")
-        if dir=="data" and parent.physical=="test" and parent.basedir.physical=="email":
+        if dir=="data" and parent.physical=="test_email":
             # This should contain all non-.svn files listed in subversion
             for f in os.listdir(lib.absolute):
                 if f.endswith(".txt") or f==".svn":continue
                 if f.endswith(".au") or f.endswith(".gif"):
                     lib.add_file(f)
                 else:
-                    print("WARNING: New file %s in email/test/data" % f)
+                    print("WARNING: New file %s in test/test_email/data" % f)
         for f in os.listdir(lib.absolute):
             if os.path.isdir(os.path.join(lib.absolute, f)):
                 pydirs.append((lib, f))
@@ -1158,6 +1159,8 @@ def add_files(db):
             lib.add_file("README.txt", src="README")
         if f == 'Scripts':
             lib.add_file("2to3.py", src="2to3")
+            lib.add_file("pydoc3.py", src="pydoc3")
+            lib.add_file("pysetup3.py", src="pysetup3")
             if have_tcl:
                 lib.start_component("pydocgui.pyw", tcltk, keyfile="pydocgui.pyw")
                 lib.add_file("pydocgui.pyw")
