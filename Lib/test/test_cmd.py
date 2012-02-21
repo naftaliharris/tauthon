@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Test script for the 'cmd' module
 Original by Michael Schneider
@@ -7,10 +7,10 @@ Original by Michael Schneider
 
 import cmd
 import sys
-import trace
 import re
 import unittest
 import io
+from test import support
 
 class samplecmdclass(cmd.Cmd):
     """
@@ -61,15 +61,17 @@ class samplecmdclass(cmd.Cmd):
     >>> mycmd.completenames("12")
     []
     >>> mycmd.completenames("help")
-    ['help', 'help']
+    ['help']
 
     Test for the function complete_help():
     >>> mycmd.complete_help("a")
     ['add']
     >>> mycmd.complete_help("he")
-    ['help', 'help']
+    ['help']
     >>> mycmd.complete_help("12")
     []
+    >>> sorted(mycmd.complete_help(""))
+    ['add', 'exit', 'help', 'shell']
 
     Test for the function do_help():
     >>> mycmd.do_help("testet")
@@ -82,11 +84,11 @@ class samplecmdclass(cmd.Cmd):
     <BLANKLINE>
     Documented commands (type help <topic>):
     ========================================
-    add
+    add  help
     <BLANKLINE>
     Undocumented commands:
     ======================
-    exit  help  shell
+    exit  shell
     <BLANKLINE>
 
     Test for the function print_topics():
@@ -123,11 +125,11 @@ class samplecmdclass(cmd.Cmd):
     <BLANKLINE>
     Documented commands (type help <topic>):
     ========================================
-    add
+    add  help
     <BLANKLINE>
     Undocumented commands:
     ======================
-    exit  help  shell
+    exit  shell
     <BLANKLINE>
     help text for add
     Hello from postloop
@@ -145,7 +147,7 @@ class samplecmdclass(cmd.Cmd):
     def complete_command(self):
         print("complete command")
 
-    def do_shell(self):
+    def do_shell(self, s):
         pass
 
     def do_add(self, s):
@@ -178,6 +180,14 @@ class TestAlternateInput(unittest.TestCase):
         def do_EOF(self, args):
             return True
 
+
+    class simplecmd2(simplecmd):
+
+        def do_EOF(self, args):
+            print('*** Unknown syntax: EOF', file=self.stdout)
+            return True
+
+
     def test_file_with_missing_final_nl(self):
         input = io.StringIO("print test\nprint test2")
         output = io.StringIO()
@@ -190,12 +200,34 @@ class TestAlternateInput(unittest.TestCase):
              "(Cmd) "))
 
 
+    def test_input_reset_at_EOF(self):
+        input = io.StringIO("print test\nprint test2")
+        output = io.StringIO()
+        cmd = self.simplecmd2(stdin=input, stdout=output)
+        cmd.use_rawinput = False
+        cmd.cmdloop()
+        self.assertMultiLineEqual(output.getvalue(),
+            ("(Cmd) test\n"
+             "(Cmd) test2\n"
+             "(Cmd) *** Unknown syntax: EOF\n"))
+        input = io.StringIO("print \n\n")
+        output = io.StringIO()
+        cmd.stdin = input
+        cmd.stdout = output
+        cmd.cmdloop()
+        self.assertMultiLineEqual(output.getvalue(),
+            ("(Cmd) \n"
+             "(Cmd) \n"
+             "(Cmd) *** Unknown syntax: EOF\n"))
+
+
 def test_main(verbose=None):
-    from test import support, test_cmd
+    from test import test_cmd
     support.run_doctest(test_cmd, verbose)
     support.run_unittest(TestAlternateInput)
 
 def test_coverage(coverdir):
+    trace = support.import_module('trace')
     tracer=trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix,],
                         trace=0, count=1)
     tracer.run('reload(cmd);test_main()')
@@ -206,5 +238,7 @@ def test_coverage(coverdir):
 if __name__ == "__main__":
     if "-c" in sys.argv:
         test_coverage('/tmp/cmd.cover')
+    elif "-i" in sys.argv:
+        samplecmdclass().cmdloop()
     else:
         test_main()

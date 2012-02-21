@@ -1,10 +1,11 @@
 import imp
 import os
 import os.path
+import shutil
 import sys
 import unittest
 from test import support
-
+import importlib
 
 class LockTests(unittest.TestCase):
 
@@ -41,26 +42,40 @@ class LockTests(unittest.TestCase):
                             "RuntimeError")
 
 class ImportTests(unittest.TestCase):
+    def setUp(self):
+        mod = importlib.import_module('test.encoded_modules')
+        self.test_strings = mod.test_strings
+        self.test_path = mod.__path__
+
+    def test_import_encoded_module(self):
+        for modname, encoding, teststr in self.test_strings:
+            mod = importlib.import_module('test.encoded_modules.'
+                                          'module_' + modname)
+            self.assertEqual(teststr, mod.test)
 
     def test_find_module_encoding(self):
-        fd = imp.find_module("heapq")[0]
-        self.assertEqual(fd.encoding, "iso-8859-1")
+        for mod, encoding, _ in self.test_strings:
+            with imp.find_module('module_' + mod, self.test_path)[0] as fd:
+                self.assertEqual(fd.encoding, encoding)
 
     def test_issue1267(self):
-        fp, filename, info  = imp.find_module("pydoc")
-        self.assertNotEqual(fp, None)
-        self.assertEqual(fp.encoding, "iso-8859-1")
-        self.assertEqual(fp.tell(), 0)
-        self.assertEqual(fp.readline(), '#!/usr/bin/env python\n')
-        fp.close()
+        for mod, encoding, _ in self.test_strings:
+            fp, filename, info  = imp.find_module('module_' + mod,
+                                                  self.test_path)
+            with fp:
+                self.assertNotEqual(fp, None)
+                self.assertEqual(fp.encoding, encoding)
+                self.assertEqual(fp.tell(), 0)
+                self.assertEqual(fp.readline(), '# test %s encoding\n'
+                                 % encoding)
 
         fp, filename, info = imp.find_module("tokenize")
-        self.assertNotEqual(fp, None)
-        self.assertEqual(fp.encoding, "utf-8")
-        self.assertEqual(fp.tell(), 0)
-        self.assertEqual(fp.readline(),
-                         '"""Tokenization help for Python programs.\n')
-        fp.close()
+        with fp:
+            self.assertNotEqual(fp, None)
+            self.assertEqual(fp.encoding, "utf-8")
+            self.assertEqual(fp.tell(), 0)
+            self.assertEqual(fp.readline(),
+                             '"""Tokenization help for Python programs.\n')
 
     def test_issue3594(self):
         temp_mod_name = 'test_imp_helper'
@@ -86,7 +101,6 @@ class ImportTests(unittest.TestCase):
 
         # the return encoding could be uppercase or None
         fs_encoding = sys.getfilesystemencoding()
-        fs_encoding = fs_encoding.lower() if fs_encoding else 'ascii'
 
         # covers utf-8 and Windows ANSI code pages
         # one non-space symbol from every page
@@ -126,20 +140,21 @@ class ImportTests(unittest.TestCase):
             with open(temp_mod_name + '.py', 'w') as file:
                 file.write('a = 1\n')
             file, filename, info = imp.find_module(temp_mod_name)
-            self.assertIsNotNone(file)
-            self.assertTrue(filename[:-3].endswith(temp_mod_name))
-            self.assertEqual(info[0], '.py')
-            self.assertEqual(info[1], 'U')
-            self.assertEqual(info[2], imp.PY_SOURCE)
+            with file:
+                self.assertIsNotNone(file)
+                self.assertTrue(filename[:-3].endswith(temp_mod_name))
+                self.assertEqual(info[0], '.py')
+                self.assertEqual(info[1], 'U')
+                self.assertEqual(info[2], imp.PY_SOURCE)
 
-            mod = imp.load_module(temp_mod_name, file, filename, info)
-            self.assertEqual(mod.a, 1)
-            file.close()
+                mod = imp.load_module(temp_mod_name, file, filename, info)
+                self.assertEqual(mod.a, 1)
 
             mod = imp.load_source(temp_mod_name, temp_mod_name + '.py')
             self.assertEqual(mod.a, 1)
 
-            mod = imp.load_compiled(temp_mod_name, temp_mod_name + '.pyc')
+            mod = imp.load_compiled(
+                temp_mod_name, imp.cache_from_source(temp_mod_name + '.py'))
             self.assertEqual(mod.a, 1)
 
             if not os.path.exists(test_package_name):
@@ -155,20 +170,179 @@ class ImportTests(unittest.TestCase):
                 support.unlink(init_file_name + ext)
             support.rmtree(test_package_name)
 
+    def test_issue9319(self):
+        path = os.path.dirname(__file__)
+        self.assertRaises(SyntaxError,
+                          imp.find_module, "badsyntax_pep3120", [path])
 
-    def test_reload(self):
-        import marshal
-        imp.reload(marshal)
-        import string
-        imp.reload(string)
-        ## import sys
-        ## self.assertRaises(ImportError, reload, sys)
+
+class ReloadTests(unittest.TestCase):
+
+    """Very basic tests to make sure that imp.reload() operates just like
+    reload()."""
+
+    def test_source(self):
+        # XXX (ncoghlan): It would be nice to use test.support.CleanImport
+        # here, but that breaks because the os module registers some
+        # handlers in copy_reg on import. Since CleanImport doesn't
+        # revert that registration, the module is left in a broken
+        # state after reversion. Reinitialising the module contents
+        # and just reverting os.environ to its previous state is an OK
+        # workaround
+        with support.EnvironmentVarGuard():
+            import os
+            imp.reload(os)
+
+    def test_extension(self):
+        with support.CleanImport('time'):
+            import time
+            imp.reload(time)
+
+    def test_builtin(self):
+        with support.CleanImport('marshal'):
+            import marshal
+            imp.reload(marshal)
+
+
+class PEP3147Tests(unittest.TestCase):
+    """Tests of PEP 3147."""
+
+    tag = imp.get_tag()
+
+    def test_cache_from_source(self):
+        # Given the path to a .py file, return the path to its PEP 3147
+        # defined .pyc file (i.e. under __pycache__).
+        self.assertEqual(
+            imp.cache_from_source('/foo/bar/baz/qux.py', True),
+            '/foo/bar/baz/__pycache__/qux.{}.pyc'.format(self.tag))
+
+    def test_cache_from_source_optimized(self):
+        # Given the path to a .py file, return the path to its PEP 3147
+        # defined .pyo file (i.e. under __pycache__).
+        self.assertEqual(
+            imp.cache_from_source('/foo/bar/baz/qux.py', False),
+            '/foo/bar/baz/__pycache__/qux.{}.pyo'.format(self.tag))
+
+    def test_cache_from_source_cwd(self):
+        self.assertEqual(imp.cache_from_source('foo.py', True),
+                         os.sep.join(('__pycache__',
+                                      'foo.{}.pyc'.format(self.tag))))
+
+    def test_cache_from_source_override(self):
+        # When debug_override is not None, it can be any true-ish or false-ish
+        # value.
+        self.assertEqual(
+            imp.cache_from_source('/foo/bar/baz.py', []),
+            '/foo/bar/__pycache__/baz.{}.pyo'.format(self.tag))
+        self.assertEqual(
+            imp.cache_from_source('/foo/bar/baz.py', [17]),
+            '/foo/bar/__pycache__/baz.{}.pyc'.format(self.tag))
+        # However if the bool-ishness can't be determined, the exception
+        # propagates.
+        class Bearish:
+            def __bool__(self): raise RuntimeError
+        self.assertRaises(
+            RuntimeError,
+            imp.cache_from_source, '/foo/bar/baz.py', Bearish())
+
+    @unittest.skipIf(os.altsep is None,
+                     'test meaningful only where os.altsep is defined')
+    def test_altsep_cache_from_source(self):
+        # Windows path and PEP 3147.
+        self.assertEqual(
+            imp.cache_from_source('\\foo\\bar\\baz\\qux.py', True),
+            '\\foo\\bar\\baz\\__pycache__\\qux.{}.pyc'.format(self.tag))
+
+    @unittest.skipIf(os.altsep is None,
+                     'test meaningful only where os.altsep is defined')
+    def test_altsep_and_sep_cache_from_source(self):
+        # Windows path and PEP 3147 where altsep is right of sep.
+        self.assertEqual(
+            imp.cache_from_source('\\foo\\bar/baz\\qux.py', True),
+            '\\foo\\bar/baz\\__pycache__\\qux.{}.pyc'.format(self.tag))
+
+    @unittest.skipIf(os.altsep is None,
+                     'test meaningful only where os.altsep is defined')
+    def test_sep_altsep_and_sep_cache_from_source(self):
+        # Windows path and PEP 3147 where sep is right of altsep.
+        self.assertEqual(
+            imp.cache_from_source('\\foo\\bar\\baz/qux.py', True),
+            '\\foo\\bar\\baz/__pycache__/qux.{}.pyc'.format(self.tag))
+
+    def test_source_from_cache(self):
+        # Given the path to a PEP 3147 defined .pyc file, return the path to
+        # its source.  This tests the good path.
+        self.assertEqual(imp.source_from_cache(
+            '/foo/bar/baz/__pycache__/qux.{}.pyc'.format(self.tag)),
+            '/foo/bar/baz/qux.py')
+
+    def test_source_from_cache_bad_path(self):
+        # When the path to a pyc file is not in PEP 3147 format, a ValueError
+        # is raised.
+        self.assertRaises(
+            ValueError, imp.source_from_cache, '/foo/bar/bazqux.pyc')
+
+    def test_source_from_cache_no_slash(self):
+        # No slashes at all in path -> ValueError
+        self.assertRaises(
+            ValueError, imp.source_from_cache, 'foo.cpython-32.pyc')
+
+    def test_source_from_cache_too_few_dots(self):
+        # Too few dots in final path component -> ValueError
+        self.assertRaises(
+            ValueError, imp.source_from_cache, '__pycache__/foo.pyc')
+
+    def test_source_from_cache_too_many_dots(self):
+        # Too many dots in final path component -> ValueError
+        self.assertRaises(
+            ValueError, imp.source_from_cache,
+            '__pycache__/foo.cpython-32.foo.pyc')
+
+    def test_source_from_cache_no__pycache__(self):
+        # Another problem with the path -> ValueError
+        self.assertRaises(
+            ValueError, imp.source_from_cache,
+            '/foo/bar/foo.cpython-32.foo.pyc')
+
+    def test_package___file__(self):
+        # Test that a package's __file__ points to the right source directory.
+        os.mkdir('pep3147')
+        sys.path.insert(0, os.curdir)
+        def cleanup():
+            if sys.path[0] == os.curdir:
+                del sys.path[0]
+            shutil.rmtree('pep3147')
+        self.addCleanup(cleanup)
+        # Touch the __init__.py file.
+        with open('pep3147/__init__.py', 'w'):
+            pass
+        m = __import__('pep3147')
+        # Ensure we load the pyc file.
+        support.forget('pep3147')
+        m = __import__('pep3147')
+        self.assertEqual(m.__file__,
+                         os.sep.join(('.', 'pep3147', '__init__.py')))
+
+
+class NullImporterTests(unittest.TestCase):
+    @unittest.skipIf(support.TESTFN_UNENCODABLE is None,
+                     "Need an undecodeable filename")
+    def test_unencodeable(self):
+        name = support.TESTFN_UNENCODABLE
+        os.mkdir(name)
+        try:
+            self.assertRaises(ImportError, imp.NullImporter, name)
+        finally:
+            os.rmdir(name)
 
 
 def test_main():
     tests = [
         ImportTests,
-    ]
+        PEP3147Tests,
+        ReloadTests,
+        NullImporterTests,
+        ]
     try:
         import _thread
     except ImportError:

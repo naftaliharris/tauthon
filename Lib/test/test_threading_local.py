@@ -46,7 +46,7 @@ class BaseLocalTest:
         local.someothervar = None
         gc.collect()
         deadlist = [weak for weak in weaklist if weak() is None]
-        self.assertTrue(len(deadlist) in (n-1, n), (n, len(deadlist)))
+        self.assertIn(len(deadlist), (n-1, n), (n, len(deadlist)))
 
     def test_derived(self):
         # Issue 3088: if there is a threads switch inside the __init__
@@ -112,6 +112,17 @@ class BaseLocalTest:
 
         self.assertTrue(passed)
 
+    def test_arguments(self):
+        # Issue 1522237
+        class MyLocal(self._local):
+            def __init__(self, *args, **kwargs):
+                pass
+
+        MyLocal(a=1)
+        MyLocal(1)
+        self.assertRaises(TypeError, self._local, a=1)
+        self.assertRaises(TypeError, self._local, 1)
+
     def _test_one_class(self, c):
         self._failed = "No error message set or cleared."
         obj = c()
@@ -173,11 +184,6 @@ class BaseLocalTest:
             """To test that subclasses behave properly."""
         self._test_dict_attribute(LocalSubclass)
 
-
-class ThreadLocalTest(unittest.TestCase, BaseLocalTest):
-    _local = _thread._local
-
-    # Fails for the pure Python implementation
     def test_cycle_collection(self):
         class X:
             pass
@@ -189,6 +195,10 @@ class ThreadLocalTest(unittest.TestCase, BaseLocalTest):
         del x
         gc.collect()
         self.assertIs(wr(), None)
+
+
+class ThreadLocalTest(unittest.TestCase, BaseLocalTest):
+    _local = _thread._local
 
 class PyThreadingLocalTest(unittest.TestCase, BaseLocalTest):
     _local = _threading_local.local

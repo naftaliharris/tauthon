@@ -56,10 +56,6 @@ PyModule_New(const char *name)
     return NULL;
 }
 
-static char api_version_warning[] =
-"Python C API version mismatch for module %.100s:\
- This Python has API version %d, module %.100s has version %d.";
-
 PyObject *
 PyModule_Create2(struct PyModuleDef* module, int module_api_version)
 {
@@ -79,13 +75,14 @@ PyModule_Create2(struct PyModuleDef* module, int module_api_version)
         module->m_base.m_index = max_module_number;
     }
     name = module->m_name;
-    if (module_api_version != PYTHON_API_VERSION) {
-        char message[512];
-        PyOS_snprintf(message, sizeof(message),
-                      api_version_warning, name,
-                      PYTHON_API_VERSION, name,
-                      module_api_version);
-        if (PyErr_WarnEx(PyExc_RuntimeWarning, message, 1))
+    if (module_api_version != PYTHON_API_VERSION && module_api_version != PYTHON_ABI_VERSION) {
+        int err;
+        err = PyErr_WarnFormat(PyExc_RuntimeWarning, 1,
+            "Python C API version mismatch for module %.100s: "
+            "This Python has API version %d, module %.100s has version %d.",
+             name,
+             PYTHON_API_VERSION, name, module_api_version);
+        if (err)
             return NULL;
     }
     /* Make sure name is fully qualified.
@@ -192,8 +189,8 @@ PyModule_GetName(PyObject *m)
     return _PyUnicode_AsString(nameobj);
 }
 
-const char *
-PyModule_GetFilename(PyObject *m)
+PyObject*
+PyModule_GetFilenameObject(PyObject *m)
 {
     PyObject *d;
     PyObject *fileobj;
@@ -209,7 +206,21 @@ PyModule_GetFilename(PyObject *m)
         PyErr_SetString(PyExc_SystemError, "module filename missing");
         return NULL;
     }
-    return _PyUnicode_AsString(fileobj);
+    Py_INCREF(fileobj);
+    return fileobj;
+}
+
+const char *
+PyModule_GetFilename(PyObject *m)
+{
+    PyObject *fileobj;
+    char *utf8;
+    fileobj = PyModule_GetFilenameObject(m);
+    if (fileobj == NULL)
+        return NULL;
+    utf8 = _PyUnicode_AsString(fileobj);
+    Py_DECREF(fileobj);
+    return utf8;
 }
 
 PyModuleDef*
@@ -254,10 +265,15 @@ _PyModule_Clear(PyObject *m)
     pos = 0;
     while (PyDict_Next(d, &pos, &key, &value)) {
         if (value != Py_None && PyUnicode_Check(key)) {
-            const char *s = _PyUnicode_AsString(key);
-            if (s[0] == '_' && s[1] != '_') {
-                if (Py_VerboseFlag > 1)
-                    PySys_WriteStderr("#   clear[1] %s\n", s);
+            Py_UNICODE *u = PyUnicode_AS_UNICODE(key);
+            if (u[0] == '_' && u[1] != '_') {
+                if (Py_VerboseFlag > 1) {
+                    const char *s = _PyUnicode_AsString(key);
+                    if (s != NULL)
+                        PySys_WriteStderr("#   clear[1] %s\n", s);
+                    else
+                        PyErr_Clear();
+                }
                 PyDict_SetItem(d, key, Py_None);
             }
         }
@@ -267,10 +283,17 @@ _PyModule_Clear(PyObject *m)
     pos = 0;
     while (PyDict_Next(d, &pos, &key, &value)) {
         if (value != Py_None && PyUnicode_Check(key)) {
-            const char *s = _PyUnicode_AsString(key);
-            if (s[0] != '_' || strcmp(s, "__builtins__") != 0) {
-                if (Py_VerboseFlag > 1)
-                    PySys_WriteStderr("#   clear[2] %s\n", s);
+            Py_UNICODE *u = PyUnicode_AS_UNICODE(key);
+            if (u[0] != '_'
+                || PyUnicode_CompareWithASCIIString(key, "__builtins__") != 0)
+            {
+                if (Py_VerboseFlag > 1) {
+                    const char *s = _PyUnicode_AsString(key);
+                    if (s != NULL)
+                        PySys_WriteStderr("#   clear[2] %s\n", s);
+                    else
+                        PyErr_Clear();
+                }
                 PyDict_SetItem(d, key, Py_None);
             }
         }
@@ -325,19 +348,21 @@ static PyObject *
 module_repr(PyModuleObject *m)
 {
     const char *name;
-    const char *filename;
+    PyObject *filename, *repr;
 
     name = PyModule_GetName((PyObject *)m);
     if (name == NULL) {
         PyErr_Clear();
         name = "?";
     }
-    filename = PyModule_GetFilename((PyObject *)m);
+    filename = PyModule_GetFilenameObject((PyObject *)m);
     if (filename == NULL) {
         PyErr_Clear();
         return PyUnicode_FromFormat("<module '%s' (built-in)>", name);
     }
-    return PyUnicode_FromFormat("<module '%s' from '%s'>", name, filename);
+    repr = PyUnicode_FromFormat("<module '%s' from '%U'>", name, filename);
+    Py_DECREF(filename);
+    return repr;
 }
 
 static int

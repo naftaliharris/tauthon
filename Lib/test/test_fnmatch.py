@@ -3,13 +3,9 @@
 from test import support
 import unittest
 
-from fnmatch import fnmatch, fnmatchcase, _MAXCACHE, _cache, _cacheb, _purge
-
+from fnmatch import fnmatch, fnmatchcase, translate, filter
 
 class FnmatchTestCase(unittest.TestCase):
-
-    def tearDown(self):
-        _purge()
 
     def check_match(self, filename, pattern, should_match=1, fn=fnmatch):
         if should_match:
@@ -64,24 +60,29 @@ class FnmatchTestCase(unittest.TestCase):
         self.check_match(b'test\xff', b'te*\xff')
         self.check_match(b'foo\nbar', b'foo*')
 
-    def test_cache_clearing(self):
-        # check that caches do not grow too large
-        # http://bugs.python.org/issue7846
+class TranslateTestCase(unittest.TestCase):
 
-        # string pattern cache
-        for i in range(_MAXCACHE + 1):
-            fnmatch('foo', '?' * i)
+    def test_translate(self):
+        self.assertEqual(translate('*'), '.*\Z(?ms)')
+        self.assertEqual(translate('?'), '.\Z(?ms)')
+        self.assertEqual(translate('a?b*'), 'a.b.*\Z(?ms)')
+        self.assertEqual(translate('[abc]'), '[abc]\Z(?ms)')
+        self.assertEqual(translate('[]]'), '[]]\Z(?ms)')
+        self.assertEqual(translate('[!x]'), '[^x]\Z(?ms)')
+        self.assertEqual(translate('[^x]'), '[\\^x]\Z(?ms)')
+        self.assertEqual(translate('[x'), '\\[x\Z(?ms)')
 
-        self.assertLessEqual(len(_cache), _MAXCACHE)
 
-        # bytes pattern cache
-        for i in range(_MAXCACHE + 1):
-            fnmatch(b'foo', b'?' * i)
-        self.assertLessEqual(len(_cacheb), _MAXCACHE)
+class FilterTestCase(unittest.TestCase):
+
+    def test_filter(self):
+        self.assertEqual(filter(['a', 'b'], 'a'), ['a'])
 
 
 def test_main():
-    support.run_unittest(FnmatchTestCase)
+    support.run_unittest(FnmatchTestCase,
+                         TranslateTestCase,
+                         FilterTestCase)
 
 
 if __name__ == "__main__":

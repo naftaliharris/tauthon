@@ -5,13 +5,13 @@
 
 import datetime
 import os
-import struct
+import sys
 import unittest
 from test import support
 from test.script_helper import assert_python_ok
 from collections import Hashable
 
-IS_64BIT = (struct.calcsize('l') == 8)
+IS_64BIT = sys.maxsize > 2**32
 
 
 class HashEqualityTestCase(unittest.TestCase):
@@ -97,11 +97,11 @@ class HashInheritanceTestCase(unittest.TestCase):
         objects = (self.default_expected +
                    self.fixed_expected)
         for obj in objects:
-            self.assertTrue(isinstance(obj, Hashable), repr(obj))
+            self.assertIsInstance(obj, Hashable)
 
     def test_not_hashable(self):
         for obj in self.error_expected:
-            self.assertFalse(isinstance(obj, Hashable), repr(obj))
+            self.assertNotIsInstance(obj, Hashable)
 
 
 # Issue #4701: Check that some builtin types are correctly hashable

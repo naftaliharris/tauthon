@@ -213,7 +213,8 @@ BaseException_set_args(PyBaseExceptionObject *self, PyObject *val)
         return -1;
     }
     seq = PySequence_Tuple(val);
-    if (!seq) return -1;
+    if (!seq)
+        return -1;
     Py_CLEAR(self->args);
     self->args = seq;
     return 0;
@@ -252,7 +253,8 @@ BaseException_set_tb(PyBaseExceptionObject *self, PyObject *tb)
 static PyObject *
 BaseException_get_context(PyObject *self) {
     PyObject *res = PyException_GetContext(self);
-    if (res) return res;  /* new reference already returned above */
+    if (res)
+        return res;  /* new reference already returned above */
     Py_RETURN_NONE;
 }
 
@@ -278,7 +280,8 @@ BaseException_set_context(PyObject *self, PyObject *arg) {
 static PyObject *
 BaseException_get_cause(PyObject *self) {
     PyObject *res = PyException_GetCause(self);
-    if (res) return res;  /* new reference already returned above */
+    if (res)
+        return res;  /* new reference already returned above */
     Py_RETURN_NONE;
 }
 
@@ -672,7 +675,8 @@ EnvironmentError_reduce(PyEnvironmentErrorObject *self)
      * file name given to EnvironmentError. */
     if (PyTuple_GET_SIZE(args) == 2 && self->filename) {
         args = PyTuple_New(3);
-        if (!args) return NULL;
+        if (!args)
+            return NULL;
 
         tmp = PyTuple_GET_ITEM(self->args, 0);
         Py_INCREF(tmp);
@@ -894,7 +898,8 @@ SyntaxError_init(PySyntaxErrorObject *self, PyObject *args, PyObject *kwds)
     if (lenargs == 2) {
         info = PyTuple_GET_ITEM(args, 1);
         info = PySequence_Tuple(info);
-        if (!info) return -1;
+        if (!info)
+            return -1;
 
         if (PyTuple_GET_SIZE(info) != 4) {
             /* not a very good error message, but it's what Python 2.4 gives */
@@ -959,20 +964,27 @@ SyntaxError_traverse(PySyntaxErrorObject *self, visitproc visit, void *arg)
 /* This is called "my_basename" instead of just "basename" to avoid name
    conflicts with glibc; basename is already prototyped if _GNU_SOURCE is
    defined, and Python does define that. */
-static char *
-my_basename(char *name)
+static PyObject*
+my_basename(PyObject *name)
 {
-    char *cp = name;
-    char *result = name;
+    Py_UNICODE *unicode;
+    Py_ssize_t i, size, offset;
 
-    if (name == NULL)
-        return "???";
-    while (*cp != '\0') {
-        if (*cp == SEP)
-            result = cp + 1;
-        ++cp;
+    unicode = PyUnicode_AS_UNICODE(name);
+    size = PyUnicode_GET_SIZE(name);
+    offset = 0;
+    for(i=0; i < size; i++) {
+        if (unicode[i] == SEP)
+            offset = i + 1;
     }
-    return result;
+    if (offset != 0) {
+        return PyUnicode_FromUnicode(
+            PyUnicode_AS_UNICODE(name) + offset,
+            size - offset);
+    } else {
+        Py_INCREF(name);
+        return name;
+    }
 }
 
 
@@ -980,7 +992,8 @@ static PyObject *
 SyntaxError_str(PySyntaxErrorObject *self)
 {
     int have_lineno = 0;
-    char *filename = 0;
+    PyObject *filename;
+    PyObject *result;
     /* Below, we always ignore overflow errors, just printing -1.
        Still, we cannot allow an OverflowError to be raised, so
        we need to call PyLong_AsLongAndOverflow. */
@@ -990,7 +1003,11 @@ SyntaxError_str(PySyntaxErrorObject *self)
        lineno here */
 
     if (self->filename && PyUnicode_Check(self->filename)) {
-            filename = _PyUnicode_AsString(self->filename);
+        filename = my_basename(self->filename);
+        if (filename == NULL)
+            return NULL;
+    } else {
+        filename = NULL;
     }
     have_lineno = (self->lineno != NULL) && PyLong_CheckExact(self->lineno);
 
@@ -998,18 +1015,20 @@ SyntaxError_str(PySyntaxErrorObject *self)
         return PyObject_Str(self->msg ? self->msg : Py_None);
 
     if (filename && have_lineno)
-        return PyUnicode_FromFormat("%S (%s, line %ld)",
+        result = PyUnicode_FromFormat("%S (%U, line %ld)",
                    self->msg ? self->msg : Py_None,
-                   my_basename(filename),
+                   filename,
                    PyLong_AsLongAndOverflow(self->lineno, &overflow));
     else if (filename)
-        return PyUnicode_FromFormat("%S (%s)",
+        result = PyUnicode_FromFormat("%S (%U)",
                    self->msg ? self->msg : Py_None,
-                   my_basename(filename));
+                   filename);
     else /* only have_lineno */
-        return PyUnicode_FromFormat("%S (line %ld)",
+        result = PyUnicode_FromFormat("%S (line %ld)",
                    self->msg ? self->msg : Py_None,
                    PyLong_AsLongAndOverflow(self->lineno, &overflow));
+    Py_XDECREF(filename);
+    return result;
 }
 
 static PyMemberDef SyntaxError_members[] = {
@@ -1496,7 +1515,7 @@ PyUnicodeEncodeError_Create(
     const char *encoding, const Py_UNICODE *object, Py_ssize_t length,
     Py_ssize_t start, Py_ssize_t end, const char *reason)
 {
-    return PyObject_CallFunction(PyExc_UnicodeEncodeError, "Uu#nnU",
+    return PyObject_CallFunction(PyExc_UnicodeEncodeError, "su#nns",
                                  encoding, object, length, start, end, reason);
 }
 
@@ -1608,7 +1627,7 @@ PyUnicodeDecodeError_Create(
     const char *encoding, const char *object, Py_ssize_t length,
     Py_ssize_t start, Py_ssize_t end, const char *reason)
 {
-    return PyObject_CallFunction(PyExc_UnicodeDecodeError, "Uy#nnU",
+    return PyObject_CallFunction(PyExc_UnicodeDecodeError, "sy#nns",
                                  encoding, object, length, start, end, reason);
 }
 
@@ -1922,12 +1941,20 @@ SimpleExtendsException(PyExc_Warning, UnicodeWarning,
     "Base class for warnings about Unicode related problems, mostly\n"
     "related to conversion problems.");
 
+
 /*
  *    BytesWarning extends Warning
  */
 SimpleExtendsException(PyExc_Warning, BytesWarning,
     "Base class for warnings about bytes and buffer related problems, mostly\n"
     "related to conversion from str or comparing to str.");
+
+
+/*
+ *    ResourceWarning extends Warning
+ */
+SimpleExtendsException(PyExc_Warning, ResourceWarning,
+    "Base class for warnings about resource usage.");
 
 
 
@@ -1937,10 +1964,14 @@ SimpleExtendsException(PyExc_Warning, BytesWarning,
 */
 PyObject *PyExc_RecursionErrorInst = NULL;
 
-#define PRE_INIT(TYPE) if (PyType_Ready(&_PyExc_ ## TYPE) < 0) \
-    Py_FatalError("exceptions bootstrapping error.");
+#define PRE_INIT(TYPE) \
+    if (!(_PyExc_ ## TYPE.tp_flags & Py_TPFLAGS_READY)) { \
+        if (PyType_Ready(&_PyExc_ ## TYPE) < 0) \
+            Py_FatalError("exceptions bootstrapping error."); \
+        Py_INCREF(PyExc_ ## TYPE); \
+    }
 
-#define POST_INIT(TYPE) Py_INCREF(PyExc_ ## TYPE); \
+#define POST_INIT(TYPE) \
     if (PyDict_SetItemString(bdict, # TYPE, PyExc_ ## TYPE)) \
         Py_FatalError("Module dictionary insertion problem.");
 
@@ -2004,6 +2035,7 @@ _PyExc_Init(void)
     PRE_INIT(ImportWarning)
     PRE_INIT(UnicodeWarning)
     PRE_INIT(BytesWarning)
+    PRE_INIT(ResourceWarning)
 
     bltinmod = PyImport_ImportModule("builtins");
     if (bltinmod == NULL)
@@ -2066,32 +2098,34 @@ _PyExc_Init(void)
     POST_INIT(ImportWarning)
     POST_INIT(UnicodeWarning)
     POST_INIT(BytesWarning)
+    POST_INIT(ResourceWarning)
 
     preallocate_memerrors();
 
-    PyExc_RecursionErrorInst = BaseException_new(&_PyExc_RuntimeError, NULL, NULL);
-    if (!PyExc_RecursionErrorInst)
-        Py_FatalError("Cannot pre-allocate RuntimeError instance for "
-                        "recursion errors");
-    else {
-        PyBaseExceptionObject *err_inst =
-            (PyBaseExceptionObject *)PyExc_RecursionErrorInst;
-        PyObject *args_tuple;
-        PyObject *exc_message;
-        exc_message = PyUnicode_FromString("maximum recursion depth exceeded");
-        if (!exc_message)
-            Py_FatalError("cannot allocate argument for RuntimeError "
-                            "pre-allocation");
-        args_tuple = PyTuple_Pack(1, exc_message);
-        if (!args_tuple)
-            Py_FatalError("cannot allocate tuple for RuntimeError "
-                            "pre-allocation");
-        Py_DECREF(exc_message);
-        if (BaseException_init(err_inst, args_tuple, NULL))
-            Py_FatalError("init of pre-allocated RuntimeError failed");
-        Py_DECREF(args_tuple);
+    if (!PyExc_RecursionErrorInst) {
+        PyExc_RecursionErrorInst = BaseException_new(&_PyExc_RuntimeError, NULL, NULL);
+        if (!PyExc_RecursionErrorInst)
+            Py_FatalError("Cannot pre-allocate RuntimeError instance for "
+                            "recursion errors");
+        else {
+            PyBaseExceptionObject *err_inst =
+                (PyBaseExceptionObject *)PyExc_RecursionErrorInst;
+            PyObject *args_tuple;
+            PyObject *exc_message;
+            exc_message = PyUnicode_FromString("maximum recursion depth exceeded");
+            if (!exc_message)
+                Py_FatalError("cannot allocate argument for RuntimeError "
+                                "pre-allocation");
+            args_tuple = PyTuple_Pack(1, exc_message);
+            if (!args_tuple)
+                Py_FatalError("cannot allocate tuple for RuntimeError "
+                                "pre-allocation");
+            Py_DECREF(exc_message);
+            if (BaseException_init(err_inst, args_tuple, NULL))
+                Py_FatalError("init of pre-allocated RuntimeError failed");
+            Py_DECREF(args_tuple);
+        }
     }
-
     Py_DECREF(bltinmod);
 }
 

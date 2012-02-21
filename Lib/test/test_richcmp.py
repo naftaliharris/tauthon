@@ -192,12 +192,12 @@ class MiscTest(unittest.TestCase):
 
     def test_misbehavin(self):
         class Misb:
-            def __lt__(self, other): return 0
-            def __gt__(self, other): return 0
-            def __eq__(self, other): return 0
-            def __le__(self, other): raise TestFailed("This shouldn't happen")
-            def __ge__(self, other): raise TestFailed("This shouldn't happen")
-            def __ne__(self, other): raise TestFailed("This shouldn't happen")
+            def __lt__(self_, other): return 0
+            def __gt__(self_, other): return 0
+            def __eq__(self_, other): return 0
+            def __le__(self_, other): self.fail("This shouldn't happen")
+            def __ge__(self_, other): self.fail("This shouldn't happen")
+            def __ne__(self_, other): self.fail("This shouldn't happen")
         a = Misb()
         b = Misb()
         self.assertEqual(a<b, 0)
@@ -278,9 +278,6 @@ class DictTest(unittest.TestCase):
                 self.assertRaises(TypeError, op, imag1a, imag2)
 
 class ListTest(unittest.TestCase):
-
-    def assertIs(self, a, b):
-        self.assertTrue(a is b)
 
     def test_coverage(self):
         # exercise all comparisons for lists

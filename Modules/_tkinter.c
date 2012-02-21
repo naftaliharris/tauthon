@@ -661,8 +661,8 @@ Tkapp_New(char *screenName, char *className,
     }
 
     strcpy(argv0, className);
-    if (isupper(Py_CHARMASK(argv0[0])))
-        argv0[0] = tolower(Py_CHARMASK(argv0[0]));
+    if (Py_ISUPPER(Py_CHARMASK(argv0[0])))
+        argv0[0] = Py_TOLOWER(Py_CHARMASK(argv0[0]));
     Tcl_SetVar(v->interp, "argv0", argv0, TCL_GLOBAL_ONLY);
     ckfree(argv0);
 
@@ -993,8 +993,10 @@ AsObj(PyObject *value)
         for (i = 0; i < size; i++) {
             if (inbuf[i] >= 0x10000) {
                 /* Tcl doesn't do UTF-16, yet. */
-                PyErr_SetString(PyExc_ValueError,
-                                "unsupported character");
+                PyErr_Format(PyExc_ValueError,
+                             "character U+%x is above the range "
+                             "(U+0000-U+FFFF) allowed by Tcl",
+                             inbuf[i]);
                 ckfree(FREECAST outbuf);
                 return NULL;
             }
@@ -3159,9 +3161,7 @@ PyInit__tkinter(void)
        it also helps Tcl find its encodings. */
     uexe = PyUnicode_FromWideChar(Py_GetProgramName(), -1);
     if (uexe) {
-        cexe = PyUnicode_AsEncodedString(uexe,
-                                         Py_FileSystemDefaultEncoding,
-                                         NULL);
+        cexe = PyUnicode_EncodeFSDefault(uexe);
         if (cexe)
             Tcl_FindExecutable(PyBytes_AsString(cexe));
         Py_XDECREF(cexe);

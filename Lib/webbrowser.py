@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 """Interfaces for launching and remotely controlling Web browsers."""
 # Maintained by Georg Brandl.
 
@@ -228,17 +228,11 @@ class UnixBrowser(BaseBrowser):
         else:
             # for TTY browsers, we need stdin/out
             inout = None
-        # if possible, put browser in separate process group, so
-        # keyboard interrupts don't affect browser as well as Python
-        setsid = getattr(os, 'setsid', None)
-        if not setsid:
-            setsid = getattr(os, 'setpgrp', None)
-
         p = subprocess.Popen(cmdline, close_fds=True, stdin=inout,
                              stdout=(self.redirect_stdout and inout or None),
-                             stderr=inout, preexec_fn=setsid)
+                             stderr=inout, start_new_session=True)
         if remote:
-            # wait five secons. If the subprocess is not finished, the
+            # wait five seconds. If the subprocess is not finished, the
             # remote invocation has (hopefully) started a new instance.
             time.sleep(1)
             rc = p.poll()
@@ -536,18 +530,6 @@ if sys.platform[:3] == "win":
 # Platform support for MacOS
 #
 
-try:
-    import ic
-except ImportError:
-    pass
-else:
-    class InternetConfig(BaseBrowser):
-        def open(self, url, new=0, autoraise=True):
-            ic.launchurl(url)
-            return True # Any way to get status?
-
-    register("internet-config", InternetConfig, update_tryorder=-1)
-
 if sys.platform == 'darwin':
     # Adapted from patch submitted to SourceForge by Steven J. Burr
     class MacOSX(BaseBrowser):
@@ -596,9 +578,35 @@ if sys.platform == 'darwin':
             rc = osapipe.close()
             return not rc
 
+    class MacOSXOSAScript(BaseBrowser):
+        def __init__(self, name):
+            self._name = name
+
+        def open(self, url, new=0, autoraise=True):
+            if self._name == 'default':
+                script = 'open location "%s"' % url.replace('"', '%22') # opens in default browser
+            else:
+                script = '''
+                   tell application "%s"
+                       activate
+                       open location "%s"
+                   end
+                   '''%(self._name, url.replace('"', '%22'))
+
+            osapipe = os.popen("osascript", "w")
+            if osapipe is None:
+                return False
+
+            osapipe.write(script)
+            rc = osapipe.close()
+            return not rc
+
+
     # Don't clear _tryorder or _browsers since OS X can use above Unix support
     # (but we prefer using the OS X specific stuff)
-    register("MacOSX", None, MacOSX('default'), -1)
+    register("safari", None, MacOSXOSAScript('safari'), -1)
+    register("firefox", None, MacOSXOSAScript('firefox'), -1)
+    register("MacOSX", None, MacOSXOSAScript('default'), -1)
 
 
 #

@@ -13,14 +13,15 @@
    single: character
    pair: Unicode; database
 
-This module provides access to the Unicode Character Database which defines
-character properties for all Unicode characters. The data in this database is
-based on the :file:`UnicodeData.txt` file version 5.1.0 which is publicly
-available from ftp://ftp.unicode.org/.
+This module provides access to the Unicode Character Database (UCD) which
+defines character properties for all Unicode characters. The data contained in
+this database is compiled from the `UCD version 6.0.0
+<http://www.unicode.org/Public/6.0.0/ucd>`_.
 
-The module uses the same names and symbols as defined by the UnicodeData File
-Format 5.1.0 (see http://www.unicode.org/Public/5.1.0/ucd/UCD.html).  It defines
-the following functions:
+The module uses the same names and symbols as defined by Unicode
+Standard Annex #44, `"Unicode Character Database"
+<http://www.unicode.org/reports/tr44/tr44-6.html>`_.  It defines the
+following functions:
 
 
 .. function:: lookup(name)
@@ -104,7 +105,7 @@ the following functions:
    based on the definition of canonical equivalence and compatibility equivalence.
    In Unicode, several characters can be expressed in various way. For example, the
    character U+00C7 (LATIN CAPITAL LETTER C WITH CEDILLA) can also be expressed as
-   the sequence U+0327 (COMBINING CEDILLA) U+0043 (LATIN CAPITAL LETTER C).
+   the sequence U+0043 (LATIN CAPITAL LETTER C) U+0327 (COMBINING CEDILLA).
 
    For each character, there are two normal forms: normal form C and normal form D.
    Normal form D (NFD) is also known as canonical decomposition, and translates

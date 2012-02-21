@@ -258,9 +258,8 @@ Running the ``check`` command will display some warnings::
 
 
 If you use the reStructuredText syntax in the ``long_description`` field and
-`docutils <http://docutils.sourceforge.net/>`_ is installed you can check if
-the syntax is fine with the ``check`` command, using the ``restructuredtext``
-option.
+`docutils`_  is installed you can check if the syntax is fine with the
+``check`` command, using the ``restructuredtext`` option.
 
 For example, if the :file:`setup.py` script is changed like this::
 
@@ -291,3 +290,4 @@ by using the :mod:`docutils` parser::
 .. % \section{Putting it all together}
 
 
+.. _docutils: http://docutils.sourceforge.net

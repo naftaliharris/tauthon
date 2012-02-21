@@ -88,13 +88,28 @@ PyDoc_STRVAR(ConnectRegistry_doc,
 "key is the predefined handle to connect to.\n"
 "\n"
 "The return value is the handle of the opened key.\n"
-"If the function fails, an EnvironmentError exception is raised.");
+"If the function fails, a WindowsError exception is raised.");
 
 PyDoc_STRVAR(CreateKey_doc,
 "key = CreateKey(key, sub_key) - Creates or opens the specified key.\n"
 "\n"
 "key is an already open key, or one of the predefined HKEY_* constants\n"
 "sub_key is a string that names the key this method opens or creates.\n"
+" If key is one of the predefined keys, sub_key may be None. In that case,\n"
+" the handle returned is the same key handle passed in to the function.\n"
+"\n"
+"If the key already exists, this function opens the existing key\n"
+"\n"
+"The return value is the handle of the opened key.\n"
+"If the function fails, an exception is raised.");
+
+PyDoc_STRVAR(CreateKeyEx_doc,
+"key = CreateKeyEx(key, sub_key, res, sam) - Creates or opens the specified key.\n"
+"\n"
+"key is an already open key, or one of the predefined HKEY_* constants\n"
+"sub_key is a string that names the key this method opens or creates.\n"
+"res is a reserved integer, and must be zero.  Default is zero.\n"
+"sam is an integer that specifies an access mask that describes the desired\n"
 " If key is one of the predefined keys, sub_key may be None. In that case,\n"
 " the handle returned is the same key handle passed in to the function.\n"
 "\n"
@@ -113,7 +128,22 @@ PyDoc_STRVAR(DeleteKey_doc,
 "This method can not delete keys with subkeys.\n"
 "\n"
 "If the method succeeds, the entire key, including all of its values,\n"
-"is removed.  If the method fails, an EnvironmentError exception is raised.");
+"is removed.  If the method fails, a WindowsError exception is raised.");
+
+PyDoc_STRVAR(DeleteKeyEx_doc,
+"DeleteKeyEx(key, sub_key, sam, res) - Deletes the specified key.\n"
+"\n"
+"key is an already open key, or any one of the predefined HKEY_* constants.\n"
+"sub_key is a string that must be a subkey of the key identified by the key parameter.\n"
+"res is a reserved integer, and must be zero.  Default is zero.\n"
+"sam is an integer that specifies an access mask that describes the desired\n"
+" This value must not be None, and the key may not have subkeys.\n"
+"\n"
+"This method can not delete keys with subkeys.\n"
+"\n"
+"If the method succeeds, the entire key, including all of its values,\n"
+"is removed.  If the method fails, a WindowsError exception is raised.\n"
+"On unsupported Windows versions, NotImplementedError is raised.");
 
 PyDoc_STRVAR(DeleteValue_doc,
 "DeleteValue(key, value) - Removes a named value from a registry key.\n"
@@ -128,7 +158,7 @@ PyDoc_STRVAR(EnumKey_doc,
 "index is an integer that identifies the index of the key to retrieve.\n"
 "\n"
 "The function retrieves the name of one subkey each time it is called.\n"
-"It is typically called repeatedly until an EnvironmentError exception is\n"
+"It is typically called repeatedly until a WindowsError exception is\n"
 "raised, indicating no more values are available.");
 
 PyDoc_STRVAR(EnumValue_doc,
@@ -137,7 +167,7 @@ PyDoc_STRVAR(EnumValue_doc,
 "index is an integer that identifies the index of the value to retrieve.\n"
 "\n"
 "The function retrieves the name of one subkey each time it is called.\n"
-"It is typically called repeatedly, until an EnvironmentError exception\n"
+"It is typically called repeatedly, until a WindowsError exception\n"
 "is raised, indicating no more values.\n"
 "\n"
 "The result is a tuple of 3 items:\n"
@@ -191,7 +221,7 @@ PyDoc_STRVAR(OpenKey_doc,
 " security access for the key.  Default is KEY_READ\n"
 "\n"
 "The result is a new handle to the specified key\n"
-"If the function fails, an EnvironmentError exception is raised.");
+"If the function fails, a WindowsError exception is raised.");
 
 PyDoc_STRVAR(OpenKeyEx_doc, "See OpenKey()");
 
@@ -422,7 +452,7 @@ PyHKEY_compareFunc(PyObject *ob1, PyObject *ob2)
          (pyhkey1 < pyhkey2 ? -1 : 1);
 }
 
-static long
+static Py_hash_t
 PyHKEY_hashFunc(PyObject *ob)
 {
     /* Just use the address.
@@ -735,8 +765,9 @@ Py2Reg(PyObject *value, DWORD typ, BYTE **retDataBuf, DWORD *retDataSize)
             else {
                 if (!PyUnicode_Check(value))
                     return FALSE;
-
-                *retDataSize = 2 + PyUnicode_GET_DATA_SIZE(value);
+                *retDataSize = Py_SAFE_DOWNCAST(
+                                   2 + PyUnicode_GET_DATA_SIZE(value),
+                                   size_t, DWORD);
             }
             *retDataBuf = (BYTE *)PyMem_NEW(DWORD, *retDataSize);
             if (*retDataBuf==NULL){
@@ -768,7 +799,8 @@ Py2Reg(PyObject *value, DWORD typ, BYTE **retDataBuf, DWORD *retDataSize)
                     t = PyList_GET_ITEM(value, j);
                     if (!PyUnicode_Check(t))
                         return FALSE;
-                    size += 2 + PyUnicode_GET_DATA_SIZE(t);
+                    size += Py_SAFE_DOWNCAST(2 + PyUnicode_GET_DATA_SIZE(t),
+                                             size_t, DWORD);
                 }
 
                 *retDataSize = size + 2;
@@ -818,7 +850,7 @@ Py2Reg(PyObject *value, DWORD typ, BYTE **retDataBuf, DWORD *retDataSize)
                     PyErr_NoMemory();
                     return FALSE;
                 }
-                *retDataSize = view.len;
+                *retDataSize = Py_SAFE_DOWNCAST(view.len, Py_ssize_t, DWORD);
                 memcpy(*retDataBuf, view.buf, view.len);
                 PyBuffer_Release(&view);
             }
@@ -957,6 +989,32 @@ PyCreateKey(PyObject *self, PyObject *args)
 }
 
 static PyObject *
+PyCreateKeyEx(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    HKEY hKey;
+    PyObject *key;
+    wchar_t *sub_key;
+    HKEY retKey;
+    int reserved = 0;
+    REGSAM access = KEY_WRITE;
+    long rc;
+
+    char *kwlist[] = {"key", "sub_key", "reserved", "access", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OZ|ii:CreateKeyEx", kwlist,
+                                     &key, &sub_key, &reserved, &access))
+        return NULL;
+    if (!PyHKEY_AsHKEY(key, &hKey, FALSE))
+        return NULL;
+
+    rc = RegCreateKeyExW(hKey, sub_key, reserved, NULL, (DWORD)NULL,
+                         access, NULL, &retKey, NULL);
+    if (rc != ERROR_SUCCESS)
+        return PyErr_SetFromWindowsErrWithFunction(rc, "CreateKeyEx");
+    return PyHKEY_FromHKEY(retKey);
+}
+
+static PyObject *
 PyDeleteKey(PyObject *self, PyObject *args)
 {
     HKEY hKey;
@@ -970,6 +1028,47 @@ PyDeleteKey(PyObject *self, PyObject *args)
     rc = RegDeleteKeyW(hKey, subKey );
     if (rc != ERROR_SUCCESS)
         return PyErr_SetFromWindowsErrWithFunction(rc, "RegDeleteKey");
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+static PyObject *
+PyDeleteKeyEx(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    HKEY hKey;
+    PyObject *key;
+    HMODULE hMod;
+    typedef LONG (WINAPI *RDKEFunc)(HKEY, const wchar_t*, REGSAM, int);
+    RDKEFunc pfn = NULL;
+    wchar_t *sub_key;
+    long rc;
+    int reserved = 0;
+    REGSAM access = KEY_WOW64_64KEY;
+
+    char *kwlist[] = {"key", "sub_key", "access", "reserved", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "Ou|ii:DeleteKeyEx", kwlist,
+                                     &key, &sub_key, &access, &reserved))
+        return NULL;
+    if (!PyHKEY_AsHKEY(key, &hKey, FALSE))
+        return NULL;
+
+    /* Only available on 64bit platforms, so we must load it
+       dynamically. */
+    hMod = GetModuleHandle("advapi32.dll");
+    if (hMod)
+        pfn = (RDKEFunc)GetProcAddress(hMod,
+                                                                   "RegDeleteKeyExW");
+    if (!pfn) {
+        PyErr_SetString(PyExc_NotImplementedError,
+                                        "not implemented on this platform");
+        return NULL;
+    }
+    Py_BEGIN_ALLOW_THREADS
+    rc = (*pfn)(hKey, sub_key, access, reserved);
+    Py_END_ALLOW_THREADS
+
+    if (rc != ERROR_SUCCESS)
+        return PyErr_SetFromWindowsErrWithFunction(rc, "RegDeleteKeyEx");
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -1036,7 +1135,7 @@ PyEnumValue(PyObject *self, PyObject *args)
     int index;
     long rc;
     wchar_t *retValueBuf;
-    wchar_t *tmpBuf;
+    BYTE *tmpBuf;
     BYTE *retDataBuf;
     DWORD retValueSize, bufValueSize;
     DWORD retDataSize, bufDataSize;
@@ -1084,7 +1183,7 @@ PyEnumValue(PyObject *self, PyObject *args)
             break;
 
         bufDataSize *= 2;
-        tmpBuf = (wchar_t *)PyMem_Realloc(retDataBuf, bufDataSize);
+        tmpBuf = (BYTE *)PyMem_Realloc(retDataBuf, bufDataSize);
         if (tmpBuf == NULL) {
             PyErr_NoMemory();
             retVal = NULL;
@@ -1187,24 +1286,26 @@ PyLoadKey(PyObject *self, PyObject *args)
 }
 
 static PyObject *
-PyOpenKey(PyObject *self, PyObject *args)
+PyOpenKey(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     HKEY hKey;
-    PyObject *obKey;
-
-    wchar_t *subKey;
-    int res = 0;
+    PyObject *key;
+    wchar_t *sub_key;
+    int reserved = 0;
     HKEY retKey;
     long rc;
-    REGSAM sam = KEY_READ;
-    if (!PyArg_ParseTuple(args, "OZ|ii:OpenKey", &obKey, &subKey,
-                          &res, &sam))
+    REGSAM access = KEY_READ;
+
+    char *kwlist[] = {"key", "sub_key", "reserved", "access", NULL};
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OZ|ii:OpenKey", kwlist,
+                                     &key, &sub_key, &reserved, &access))
         return NULL;
-    if (!PyHKEY_AsHKEY(obKey, &hKey, FALSE))
+    if (!PyHKEY_AsHKEY(key, &hKey, FALSE))
         return NULL;
 
     Py_BEGIN_ALLOW_THREADS
-    rc = RegOpenKeyExW(hKey, subKey, res, sam, &retKey);
+    rc = RegOpenKeyExW(hKey, sub_key, reserved, access, &retKey);
     Py_END_ALLOW_THREADS
     if (rc != ERROR_SUCCESS)
         return PyErr_SetFromWindowsErrWithFunction(rc, "RegOpenKeyEx");
@@ -1475,8 +1576,8 @@ PyDisableReflectionKey(PyObject *self, PyObject *args)
     if (!PyHKEY_AsHKEY(obKey, &hKey, FALSE))
         return NULL;
 
-    // Only available on 64bit platforms, so we must load it
-    // dynamically.
+    /* Only available on 64bit platforms, so we must load it
+       dynamically.*/
     hMod = GetModuleHandle("advapi32.dll");
     if (hMod)
         pfn = (RDRKFunc)GetProcAddress(hMod,
@@ -1511,8 +1612,8 @@ PyEnableReflectionKey(PyObject *self, PyObject *args)
     if (!PyHKEY_AsHKEY(obKey, &hKey, FALSE))
         return NULL;
 
-    // Only available on 64bit platforms, so we must load it
-    // dynamically.
+    /* Only available on 64bit platforms, so we must load it
+       dynamically.*/
     hMod = GetModuleHandle("advapi32.dll");
     if (hMod)
         pfn = (RERKFunc)GetProcAddress(hMod,
@@ -1548,8 +1649,8 @@ PyQueryReflectionKey(PyObject *self, PyObject *args)
     if (!PyHKEY_AsHKEY(obKey, &hKey, FALSE))
         return NULL;
 
-    // Only available on 64bit platforms, so we must load it
-    // dynamically.
+    /* Only available on 64bit platforms, so we must load it
+       dynamically.*/
     hMod = GetModuleHandle("advapi32.dll");
     if (hMod)
         pfn = (RQRKFunc)GetProcAddress(hMod,
@@ -1565,14 +1666,18 @@ PyQueryReflectionKey(PyObject *self, PyObject *args)
     if (rc != ERROR_SUCCESS)
         return PyErr_SetFromWindowsErrWithFunction(rc,
                                                    "RegQueryReflectionKey");
-    return PyBool_FromLong(rc);
+    return PyBool_FromLong(result);
 }
 
 static struct PyMethodDef winreg_methods[] = {
     {"CloseKey",         PyCloseKey,        METH_VARARGS, CloseKey_doc},
     {"ConnectRegistry",  PyConnectRegistry, METH_VARARGS, ConnectRegistry_doc},
     {"CreateKey",        PyCreateKey,       METH_VARARGS, CreateKey_doc},
+    {"CreateKeyEx",      (PyCFunction)PyCreateKeyEx,
+                         METH_VARARGS | METH_KEYWORDS, CreateKeyEx_doc},
     {"DeleteKey",        PyDeleteKey,       METH_VARARGS, DeleteKey_doc},
+    {"DeleteKeyEx",      (PyCFunction)PyDeleteKeyEx,
+                         METH_VARARGS | METH_KEYWORDS, DeleteKeyEx_doc},
     {"DeleteValue",      PyDeleteValue,     METH_VARARGS, DeleteValue_doc},
     {"DisableReflectionKey", PyDisableReflectionKey, METH_VARARGS, DisableReflectionKey_doc},
     {"EnableReflectionKey",  PyEnableReflectionKey,  METH_VARARGS, EnableReflectionKey_doc},
@@ -1582,8 +1687,10 @@ static struct PyMethodDef winreg_methods[] = {
         ExpandEnvironmentStrings_doc },
     {"FlushKey",         PyFlushKey,        METH_VARARGS, FlushKey_doc},
     {"LoadKey",          PyLoadKey,         METH_VARARGS, LoadKey_doc},
-    {"OpenKey",          PyOpenKey,         METH_VARARGS, OpenKey_doc},
-    {"OpenKeyEx",        PyOpenKey,         METH_VARARGS, OpenKeyEx_doc},
+    {"OpenKey",          (PyCFunction)PyOpenKey, METH_VARARGS | METH_KEYWORDS,
+                                                 OpenKey_doc},
+    {"OpenKeyEx",        (PyCFunction)PyOpenKey, METH_VARARGS | METH_KEYWORDS,
+                                                 OpenKeyEx_doc},
     {"QueryValue",       PyQueryValue,      METH_VARARGS, QueryValue_doc},
     {"QueryValueEx",     PyQueryValueEx,    METH_VARARGS, QueryValueEx_doc},
     {"QueryInfoKey",     PyQueryInfoKey,    METH_VARARGS, QueryInfoKey_doc},

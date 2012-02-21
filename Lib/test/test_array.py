@@ -1,21 +1,28 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 """Test the arraymodule.
    Roger E. Masse
 """
 
 import unittest
 from test import support
-from weakref import proxy
-import array, io, math
-from pickle import loads, dumps, HIGHEST_PROTOCOL
+import weakref
+import pickle
 import operator
+import io
+import math
+import struct
+import warnings
+
+import array
+from array import _array_reconstructor as array_reconstructor
+
 
 class ArraySubclass(array.array):
     pass
 
 class ArraySubclassWithKwargs(array.array):
     def __init__(self, typecode, newarg=None):
-        array.array.__init__(self, typecode)
+        array.array.__init__(self)
 
 tests = [] # list to accumulate all tests
 typecodes = "ubBhHiIlLfd"
@@ -29,6 +36,137 @@ class BadConstructorTest(unittest.TestCase):
         self.assertRaises(ValueError, array.array, 'x')
 
 tests.append(BadConstructorTest)
+
+# Machine format codes.
+#
+# Search for "enum machine_format_code" in Modules/arraymodule.c to get the
+# authoritative values.
+UNKNOWN_FORMAT = -1
+UNSIGNED_INT8 = 0
+SIGNED_INT8 = 1
+UNSIGNED_INT16_LE = 2
+UNSIGNED_INT16_BE = 3
+SIGNED_INT16_LE = 4
+SIGNED_INT16_BE = 5
+UNSIGNED_INT32_LE = 6
+UNSIGNED_INT32_BE = 7
+SIGNED_INT32_LE = 8
+SIGNED_INT32_BE = 9
+UNSIGNED_INT64_LE = 10
+UNSIGNED_INT64_BE = 11
+SIGNED_INT64_LE = 12
+SIGNED_INT64_BE = 13
+IEEE_754_FLOAT_LE = 14
+IEEE_754_FLOAT_BE = 15
+IEEE_754_DOUBLE_LE = 16
+IEEE_754_DOUBLE_BE = 17
+UTF16_LE = 18
+UTF16_BE = 19
+UTF32_LE = 20
+UTF32_BE = 21
+
+class ArrayReconstructorTest(unittest.TestCase):
+
+    def test_error(self):
+        self.assertRaises(TypeError, array_reconstructor,
+                          "", "b", 0, b"")
+        self.assertRaises(TypeError, array_reconstructor,
+                          str, "b", 0, b"")
+        self.assertRaises(TypeError, array_reconstructor,
+                          array.array, "b", '', b"")
+        self.assertRaises(TypeError, array_reconstructor,
+                          array.array, "b", 0, "")
+        self.assertRaises(ValueError, array_reconstructor,
+                          array.array, "?", 0, b"")
+        self.assertRaises(ValueError, array_reconstructor,
+                          array.array, "b", UNKNOWN_FORMAT, b"")
+        self.assertRaises(ValueError, array_reconstructor,
+                          array.array, "b", 22, b"")
+        self.assertRaises(ValueError, array_reconstructor,
+                          array.array, "d", 16, b"a")
+
+    def test_numbers(self):
+        testcases = (
+            (['B', 'H', 'I', 'L'], UNSIGNED_INT8, '=BBBB',
+             [0x80, 0x7f, 0, 0xff]),
+            (['b', 'h', 'i', 'l'], SIGNED_INT8, '=bbb',
+             [-0x80, 0x7f, 0]),
+            (['H', 'I', 'L'], UNSIGNED_INT16_LE, '<HHHH',
+             [0x8000, 0x7fff, 0, 0xffff]),
+            (['H', 'I', 'L'], UNSIGNED_INT16_BE, '>HHHH',
+             [0x8000, 0x7fff, 0, 0xffff]),
+            (['h', 'i', 'l'], SIGNED_INT16_LE, '<hhh',
+             [-0x8000, 0x7fff, 0]),
+            (['h', 'i', 'l'], SIGNED_INT16_BE, '>hhh',
+             [-0x8000, 0x7fff, 0]),
+            (['I', 'L'], UNSIGNED_INT32_LE, '<IIII',
+             [1<<31, (1<<31)-1, 0, (1<<32)-1]),
+            (['I', 'L'], UNSIGNED_INT32_BE, '>IIII',
+             [1<<31, (1<<31)-1, 0, (1<<32)-1]),
+            (['i', 'l'], SIGNED_INT32_LE, '<iii',
+             [-1<<31, (1<<31)-1, 0]),
+            (['i', 'l'], SIGNED_INT32_BE, '>iii',
+             [-1<<31, (1<<31)-1, 0]),
+            (['L'], UNSIGNED_INT64_LE, '<QQQQ',
+             [1<<31, (1<<31)-1, 0, (1<<32)-1]),
+            (['L'], UNSIGNED_INT64_BE, '>QQQQ',
+             [1<<31, (1<<31)-1, 0, (1<<32)-1]),
+            (['l'], SIGNED_INT64_LE, '<qqq',
+             [-1<<31, (1<<31)-1, 0]),
+            (['l'], SIGNED_INT64_BE, '>qqq',
+             [-1<<31, (1<<31)-1, 0]),
+            # The following tests for INT64 will raise an OverflowError
+            # when run on a 32-bit machine. The tests are simply skipped
+            # in that case.
+            (['L'], UNSIGNED_INT64_LE, '<QQQQ',
+             [1<<63, (1<<63)-1, 0, (1<<64)-1]),
+            (['L'], UNSIGNED_INT64_BE, '>QQQQ',
+             [1<<63, (1<<63)-1, 0, (1<<64)-1]),
+            (['l'], SIGNED_INT64_LE, '<qqq',
+             [-1<<63, (1<<63)-1, 0]),
+            (['l'], SIGNED_INT64_BE, '>qqq',
+             [-1<<63, (1<<63)-1, 0]),
+            (['f'], IEEE_754_FLOAT_LE, '<ffff',
+             [16711938.0, float('inf'), float('-inf'), -0.0]),
+            (['f'], IEEE_754_FLOAT_BE, '>ffff',
+             [16711938.0, float('inf'), float('-inf'), -0.0]),
+            (['d'], IEEE_754_DOUBLE_LE, '<dddd',
+             [9006104071832581.0, float('inf'), float('-inf'), -0.0]),
+            (['d'], IEEE_754_DOUBLE_BE, '>dddd',
+             [9006104071832581.0, float('inf'), float('-inf'), -0.0])
+        )
+        for testcase in testcases:
+            valid_typecodes, mformat_code, struct_fmt, values = testcase
+            arraystr = struct.pack(struct_fmt, *values)
+            for typecode in valid_typecodes:
+                try:
+                    a = array.array(typecode, values)
+                except OverflowError:
+                    continue  # Skip this test case.
+                b = array_reconstructor(
+                    array.array, typecode, mformat_code, arraystr)
+                self.assertEqual(a, b,
+                    msg="{0!r} != {1!r}; testcase={2!r}".format(a, b, testcase))
+
+    def test_unicode(self):
+        teststr = "Bonne Journ\xe9e \U0002030a\U00020347"
+        testcases = (
+            (UTF16_LE, "UTF-16-LE"),
+            (UTF16_BE, "UTF-16-BE"),
+            (UTF32_LE, "UTF-32-LE"),
+            (UTF32_BE, "UTF-32-BE")
+        )
+        for testcase in testcases:
+            mformat_code, encoding = testcase
+            a = array.array('u', teststr)
+            b = array_reconstructor(
+                array.array, 'u', mformat_code, teststr.encode(encoding))
+            self.assertEqual(a, b,
+                msg="{0!r} != {1!r}; testcase={2!r}".format(a, b, testcase))
+
+
+tests.append(ArrayReconstructorTest)
+
 
 class BaseTest(unittest.TestCase):
     # Required class attributes (provided by subclasses
@@ -64,10 +202,10 @@ class BaseTest(unittest.TestCase):
         a = array.array(self.typecode, self.example)
         self.assertRaises(TypeError, a.buffer_info, 42)
         bi = a.buffer_info()
-        self.assertTrue(isinstance(bi, tuple))
+        self.assertIsInstance(bi, tuple)
         self.assertEqual(len(bi), 2)
-        self.assertTrue(isinstance(bi[0], int))
-        self.assertTrue(isinstance(bi[1], int))
+        self.assertIsInstance(bi[0], int)
+        self.assertIsInstance(bi[1], int)
         self.assertEqual(bi[1], len(a))
 
     def test_byteswap(self):
@@ -97,31 +235,38 @@ class BaseTest(unittest.TestCase):
         self.assertNotEqual(id(a), id(b))
         self.assertEqual(a, b)
 
+    def test_reduce_ex(self):
+        a = array.array(self.typecode, self.example)
+        for protocol in range(3):
+            self.assertIs(a.__reduce_ex__(protocol)[0], array.array)
+        for protocol in range(3, pickle.HIGHEST_PROTOCOL):
+            self.assertIs(a.__reduce_ex__(protocol)[0], array_reconstructor)
+
     def test_pickle(self):
-        for protocol in range(HIGHEST_PROTOCOL + 1):
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
             a = array.array(self.typecode, self.example)
-            b = loads(dumps(a, protocol))
+            b = pickle.loads(pickle.dumps(a, protocol))
             self.assertNotEqual(id(a), id(b))
             self.assertEqual(a, b)
 
             a = ArraySubclass(self.typecode, self.example)
             a.x = 10
-            b = loads(dumps(a, protocol))
+            b = pickle.loads(pickle.dumps(a, protocol))
             self.assertNotEqual(id(a), id(b))
             self.assertEqual(a, b)
             self.assertEqual(a.x, b.x)
             self.assertEqual(type(a), type(b))
 
     def test_pickle_for_empty_array(self):
-        for protocol in range(HIGHEST_PROTOCOL + 1):
+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1):
             a = array.array(self.typecode)
-            b = loads(dumps(a, protocol))
+            b = pickle.loads(pickle.dumps(a, protocol))
             self.assertNotEqual(id(a), id(b))
             self.assertEqual(a, b)
 
             a = ArraySubclass(self.typecode)
             a.x = 10
-            b = loads(dumps(a, protocol))
+            b = pickle.loads(pickle.dumps(a, protocol))
             self.assertNotEqual(id(a), id(b))
             self.assertEqual(a, b)
             self.assertEqual(a.x, b.x)
@@ -193,6 +338,25 @@ class BaseTest(unittest.TestCase):
             f.close()
             support.unlink(support.TESTFN)
 
+    def test_filewrite(self):
+        a = array.array(self.typecode, 2*self.example)
+        f = open(support.TESTFN, 'wb')
+        try:
+            f.write(a)
+            f.close()
+            b = array.array(self.typecode)
+            f = open(support.TESTFN, 'rb')
+            b.fromfile(f, len(self.example))
+            self.assertEqual(b, array.array(self.typecode, self.example))
+            self.assertNotEqual(a, b)
+            b.fromfile(f, len(self.example))
+            self.assertEqual(a, b)
+            f.close()
+        finally:
+            if not f.closed:
+                f.close()
+            support.unlink(support.TESTFN)
+
     def test_tofromlist(self):
         a = array.array(self.typecode, 2*self.example)
         b = array.array(self.typecode)
@@ -204,15 +368,40 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(a, b)
 
     def test_tofromstring(self):
+        nb_warnings = 4
+        with warnings.catch_warnings(record=True) as r:
+            warnings.filterwarnings("always",
+                                    message=r"(to|from)string\(\) is deprecated",
+                                    category=DeprecationWarning)
+            a = array.array(self.typecode, 2*self.example)
+            b = array.array(self.typecode)
+            self.assertRaises(TypeError, a.tostring, 42)
+            self.assertRaises(TypeError, b.fromstring)
+            self.assertRaises(TypeError, b.fromstring, 42)
+            b.fromstring(a.tostring())
+            self.assertEqual(a, b)
+            if a.itemsize>1:
+                self.assertRaises(ValueError, b.fromstring, "x")
+                nb_warnings += 1
+        self.assertEqual(len(r), nb_warnings)
+
+    def test_tofrombytes(self):
         a = array.array(self.typecode, 2*self.example)
         b = array.array(self.typecode)
-        self.assertRaises(TypeError, a.tostring, 42)
-        self.assertRaises(TypeError, b.fromstring)
-        self.assertRaises(TypeError, b.fromstring, 42)
-        b.fromstring(a.tostring())
+        self.assertRaises(TypeError, a.tobytes, 42)
+        self.assertRaises(TypeError, b.frombytes)
+        self.assertRaises(TypeError, b.frombytes, 42)
+        b.frombytes(a.tobytes())
+        c = array.array(self.typecode, bytearray(a.tobytes()))
         self.assertEqual(a, b)
+        self.assertEqual(a, c)
         if a.itemsize>1:
-            self.assertRaises(ValueError, b.fromstring, "x")
+            self.assertRaises(ValueError, b.frombytes, b"x")
+
+    def test_fromarray(self):
+        a = array.array(self.typecode, self.example)
+        b = array.array(self.typecode, a)
+        self.assertEqual(a, b)
 
     def test_repr(self):
         a = array.array(self.typecode, 2*self.example)
@@ -318,6 +507,12 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(
             a,
             array.array(self.typecode)
+        )
+
+        a = 5 * array.array(self.typecode, self.example[:1])
+        self.assertEqual(
+            a,
+            array.array(self.typecode, [a[0]] * 5)
         )
 
         self.assertRaises(TypeError, a.__mul__, "bad")
@@ -735,8 +930,8 @@ class BaseTest(unittest.TestCase):
         a = array.array(self.typecode, self.example)
         m = memoryview(a)
         expected = m.tobytes()
-        self.assertEqual(a.tostring(), expected)
-        self.assertEqual(a.tostring()[0], expected[0])
+        self.assertEqual(a.tobytes(), expected)
+        self.assertEqual(a.tobytes()[0], expected[0])
         # Resizing is forbidden when there are buffer exports.
         # For issue 4509, we also check after each error that
         # the array was not modified.
@@ -750,7 +945,7 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(m.tobytes(), expected)
         self.assertRaises(BufferError, a.fromlist, a.tolist())
         self.assertEqual(m.tobytes(), expected)
-        self.assertRaises(BufferError, a.fromstring, a.tostring())
+        self.assertRaises(BufferError, a.frombytes, a.tobytes())
         self.assertEqual(m.tobytes(), expected)
         if self.typecode == 'u':
             self.assertRaises(BufferError, a.fromunicode, a.tounicode())
@@ -768,8 +963,8 @@ class BaseTest(unittest.TestCase):
 
     def test_weakref(self):
         s = array.array(self.typecode, self.example)
-        p = proxy(s)
-        self.assertEqual(p.tostring(), s.tostring())
+        p = weakref.proxy(s)
+        self.assertEqual(p.tobytes(), s.tobytes())
         s = None
         self.assertRaises(ReferenceError, len, p)
 
@@ -923,6 +1118,11 @@ class NumberTest(BaseTest):
 
         self.assertRaises(AttributeError, setattr, a, "color", "blue")
 
+    def test_frombytearray(self):
+        a = array.array('b', range(10))
+        b = array.array(self.typecode, a)
+        self.assertEqual(a, b)
+
 class SignedNumberTest(NumberTest):
     example = [-1, 0, 1, 42, 0x7f]
     smallerexample = [-1, 0, 1, 42, 0x7e]
@@ -946,6 +1146,23 @@ class UnsignedNumberTest(NumberTest):
         lower = 0
         upper = int(pow(2, a.itemsize * 8)) - 1
         self.check_overflow(lower, upper)
+
+    def test_bytes_extend(self):
+        s = bytes(self.example)
+
+        a = array.array(self.typecode, self.example)
+        a.extend(s)
+        self.assertEqual(
+            a,
+            array.array(self.typecode, self.example+self.example)
+        )
+
+        a = array.array(self.typecode, self.example)
+        a.extend(bytearray(reversed(s)))
+        self.assertEqual(
+            a,
+            array.array(self.typecode, self.example+self.example[::-1])
+        )
 
 
 class ByteTest(SignedNumberTest):
@@ -1009,7 +1226,7 @@ class FPTest(NumberTest):
                 # On alphas treating the byte swapped bit patters as
                 # floats/doubles results in floating point exceptions
                 # => compare the 8bit string values instead
-                self.assertNotEqual(a.tostring(), b.tostring())
+                self.assertNotEqual(a.tobytes(), b.tobytes())
             b.byteswap()
             self.assertEqual(a, b)
 

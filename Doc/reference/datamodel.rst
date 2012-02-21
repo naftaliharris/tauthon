@@ -1157,6 +1157,14 @@ Basic customization
    .. XXX what about subclasses of string?
 
 
+.. method:: object.__bytes__(self)
+
+   .. index:: builtin: bytes
+
+   Called by :func:`bytes` to compute a byte-string representation of an
+   object. This should return a ``bytes`` object.
+
+
 .. method:: object.__format__(self, format_spec)
 
    .. index::
@@ -1218,8 +1226,7 @@ Basic customization
    Arguments to rich comparison methods are never coerced.
 
    To automatically generate ordering operations from a single root operation,
-   see the `Total Ordering recipe in the ASPN cookbook
-   <http://code.activestate.com/recipes/576529/>`_\.
+   see :func:`functools.total_ordering`.
 
 .. method:: object.__hash__(self)
 
@@ -1597,7 +1604,7 @@ attributes of *A* as they are defined within the body of the class statement.
 Once those definitions are executed, the ordered dictionary is fully populated
 and the metaclass's :meth:`__new__` method gets invoked.  That method builds
 the new type and it saves the ordered dictionary keys in an attribute
-called *members*.
+called ``members``.
 
 
 Customizing instance and subclass checks

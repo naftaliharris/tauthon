@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """Unit tests for the with statement specified in PEP 343."""
 
@@ -9,31 +9,31 @@ __email__ = "mbland at acm dot org"
 import sys
 import unittest
 from collections import deque
-from contextlib import GeneratorContextManager, contextmanager
+from contextlib import _GeneratorContextManager, contextmanager
 from test.support import run_unittest
 
 
-class MockContextManager(GeneratorContextManager):
-    def __init__(self, gen):
-        GeneratorContextManager.__init__(self, gen)
+class MockContextManager(_GeneratorContextManager):
+    def __init__(self, func, *args, **kwds):
+        super().__init__(func, *args, **kwds)
         self.enter_called = False
         self.exit_called = False
         self.exit_args = None
 
     def __enter__(self):
         self.enter_called = True
-        return GeneratorContextManager.__enter__(self)
+        return _GeneratorContextManager.__enter__(self)
 
     def __exit__(self, type, value, traceback):
         self.exit_called = True
         self.exit_args = (type, value, traceback)
-        return GeneratorContextManager.__exit__(self, type,
-                                                value, traceback)
+        return _GeneratorContextManager.__exit__(self, type,
+                                                 value, traceback)
 
 
 def mock_contextmanager(func):
     def helper(*args, **kwds):
-        return MockContextManager(func(*args, **kwds))
+        return MockContextManager(func, *args, **kwds)
     return helper
 
 
@@ -215,11 +215,17 @@ class ContextmanagerAssertionMixin(object):
     def raiseTestException(self):
         raise self.TEST_EXCEPTION
 
-    def assertAfterWithManagerInvariantsWithError(self, mock_manager):
+    def assertAfterWithManagerInvariantsWithError(self, mock_manager,
+                                                  exc_type=None):
         self.assertTrue(mock_manager.enter_called)
         self.assertTrue(mock_manager.exit_called)
-        self.assertEqual(mock_manager.exit_args[0], RuntimeError)
-        self.assertEqual(mock_manager.exit_args[1], self.TEST_EXCEPTION)
+        if exc_type is None:
+            self.assertEqual(mock_manager.exit_args[1], self.TEST_EXCEPTION)
+            exc_type = type(self.TEST_EXCEPTION)
+        self.assertEqual(mock_manager.exit_args[0], exc_type)
+        # Test the __exit__ arguments. Issue #7853
+        self.assertIsInstance(mock_manager.exit_args[1], exc_type)
+        self.assertIsNot(mock_manager.exit_args[2], None)
 
     def assertAfterWithGeneratorInvariantsWithError(self, mock_generator):
         self.assertTrue(mock_generator.yielded)
@@ -284,15 +290,6 @@ class NestedNonexceptionalTestCase(unittest.TestCase,
     def testSingleArgInlineGeneratorSyntax(self):
         with Nested(mock_contextmanager_generator()):
             pass
-
-    def testSingleArgUnbound(self):
-        mock_contextmanager = mock_contextmanager_generator()
-        mock_nested = MockNested(mock_contextmanager)
-        with mock_nested:
-            self.assertInWithManagerInvariants(mock_contextmanager)
-            self.assertInWithManagerInvariants(mock_nested)
-        self.assertAfterWithManagerInvariantsNoError(mock_contextmanager)
-        self.assertAfterWithManagerInvariantsNoError(mock_nested)
 
     def testSingleArgBoundToNonTuple(self):
         m = mock_contextmanager_generator()
@@ -365,6 +362,16 @@ class ExceptionalTestCase(ContextmanagerAssertionMixin, unittest.TestCase):
         self.assertRaises(RuntimeError, shouldThrow)
         self.assertAfterWithManagerInvariantsWithError(cm)
         self.assertAfterWithGeneratorInvariantsWithError(self.resource)
+
+    def testExceptionNormalized(self):
+        cm = mock_contextmanager_generator()
+        def shouldThrow():
+            with cm as self.resource:
+                # Note this relies on the fact that 1 // 0 produces an exception
+                # that is not normalized immediately.
+                1 // 0
+        self.assertRaises(ZeroDivisionError, shouldThrow)
+        self.assertAfterWithManagerInvariantsWithError(cm, ZeroDivisionError)
 
     def testNestedSingleStatements(self):
         mock_a = mock_contextmanager_generator()
@@ -721,6 +728,7 @@ class NestedWith(unittest.TestCase):
             body_executed = True
         self.assertTrue(a.enter_called)
         self.assertTrue(a.exit_called)
+        self.assertTrue(body_executed)
         self.assertNotEqual(a.exc_info[0], None)
 
     def testEnterReturnsTuple(self):

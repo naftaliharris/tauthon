@@ -1,9 +1,12 @@
-
 :mod:`pkgutil` --- Package extension utility
 ============================================
 
 .. module:: pkgutil
    :synopsis: Utilities for the import system.
+
+**Source code:** :source:`Lib/pkgutil.py`
+
+--------------
 
 This module provides utilities for the import system, in particular package
 support.
@@ -168,10 +171,10 @@ support.
 
    Get a resource from a package.
 
-   This is a wrapper for the PEP 302 loader :func:`get_data` API. The package
-   argument should be the name of a package, in standard module format
-   (foo.bar). The resource argument should be in the form of a relative
-   filename, using ``/`` as the path separator. The parent directory name
+   This is a wrapper for the :pep:`302` loader :func:`get_data` API.  The
+   *package* argument should be the name of a package, in standard module format
+   (``foo.bar``).  The *resource* argument should be in the form of a relative
+   filename, using ``/`` as the path separator.  The parent directory name
    ``..`` is not allowed, and nor is a rooted name (starting with a ``/``).
 
    The function returns a binary string that is the contents of the specified
@@ -183,5 +186,5 @@ support.
       d = os.path.dirname(sys.modules[package].__file__)
       data = open(os.path.join(d, resource), 'rb').read()
 
-   If the package cannot be located or loaded, or it uses a PEP 302 loader
+   If the package cannot be located or loaded, or it uses a :pep:`302` loader
    which does not support :func:`get_data`, then ``None`` is returned.

@@ -240,12 +240,19 @@ static PyObject *
 tuplerepr(PyTupleObject *v)
 {
     Py_ssize_t i, n;
-    PyObject *s, *temp;
-    PyObject *pieces, *result = NULL;
+    PyObject *s = NULL;
+    _PyAccu acc;
+    static PyObject *sep = NULL;
 
     n = Py_SIZE(v);
     if (n == 0)
         return PyUnicode_FromString("()");
+
+    if (sep == NULL) {
+        sep = PyUnicode_FromString(", ");
+        if (sep == NULL)
+            return NULL;
+    }
 
     /* While not mutable, it is still possible to end up with a cycle in a
        tuple through an object that stores itself within a tuple (and thus
@@ -256,52 +263,42 @@ tuplerepr(PyTupleObject *v)
         return i > 0 ? PyUnicode_FromString("(...)") : NULL;
     }
 
-    pieces = PyTuple_New(n);
-    if (pieces == NULL)
-        return NULL;
+    if (_PyAccu_Init(&acc))
+        goto error;
+
+    s = PyUnicode_FromString("(");
+    if (s == NULL || _PyAccu_Accumulate(&acc, s))
+        goto error;
+    Py_CLEAR(s);
 
     /* Do repr() on each element. */
     for (i = 0; i < n; ++i) {
         if (Py_EnterRecursiveCall(" while getting the repr of a tuple"))
-            goto Done;
+            goto error;
         s = PyObject_Repr(v->ob_item[i]);
         Py_LeaveRecursiveCall();
-        if (s == NULL)
-            goto Done;
-        PyTuple_SET_ITEM(pieces, i, s);
+        if (i > 0 && _PyAccu_Accumulate(&acc, sep))
+            goto error;
+        if (s == NULL || _PyAccu_Accumulate(&acc, s))
+            goto error;
+        Py_CLEAR(s);
     }
+    if (n > 1)
+        s = PyUnicode_FromString(")");
+    else
+        s = PyUnicode_FromString(",)");
+    if (s == NULL || _PyAccu_Accumulate(&acc, s))
+        goto error;
+    Py_CLEAR(s);
 
-    /* Add "()" decorations to the first and last items. */
-    assert(n > 0);
-    s = PyUnicode_FromString("(");
-    if (s == NULL)
-        goto Done;
-    temp = PyTuple_GET_ITEM(pieces, 0);
-    PyUnicode_AppendAndDel(&s, temp);
-    PyTuple_SET_ITEM(pieces, 0, s);
-    if (s == NULL)
-        goto Done;
-
-    s = PyUnicode_FromString(n == 1 ? ",)" : ")");
-    if (s == NULL)
-        goto Done;
-    temp = PyTuple_GET_ITEM(pieces, n-1);
-    PyUnicode_AppendAndDel(&temp, s);
-    PyTuple_SET_ITEM(pieces, n-1, temp);
-    if (temp == NULL)
-        goto Done;
-
-    /* Paste them all together with ", " between. */
-    s = PyUnicode_FromString(", ");
-    if (s == NULL)
-        goto Done;
-    result = PyUnicode_Join(s, pieces);
-    Py_DECREF(s);
-
-Done:
-    Py_DECREF(pieces);
     Py_ReprLeave((PyObject *)v);
-    return result;
+    return _PyAccu_Finish(&acc);
+
+error:
+    _PyAccu_Destroy(&acc);
+    Py_XDECREF(s);
+    Py_ReprLeave((PyObject *)v);
+    return NULL;
 }
 
 /* The addend 82520, was selected from the range(0, 1000000) for
@@ -312,13 +309,13 @@ Done:
      1330111, 1412633, 1165069, 1247599, 1495177, 1577699
 */
 
-static long
+static Py_hash_t
 tuplehash(PyTupleObject *v)
 {
-    register long x, y;
+    register Py_hash_t x, y;
     register Py_ssize_t len = Py_SIZE(v);
     register PyObject **p;
-    long mult = 1000003L;
+    Py_hash_t mult = _PyHASH_MULTIPLIER;
     x = 0x345678L;
     p = v->ob_item;
     while (--len >= 0) {
@@ -327,7 +324,7 @@ tuplehash(PyTupleObject *v)
             return -1;
         x = (x ^ y) * mult;
         /* the cast might truncate len; that doesn't change hash stability */
-        mult += (long)(82520L + len + len);
+        mult += (Py_hash_t)(82520L + len + len);
     }
     x += 97531L;
     if (x == -1)
@@ -689,7 +686,7 @@ tuplesubscript(PyTupleObject* self, PyObject* item)
         PyObject* it;
         PyObject **src, **dest;
 
-        if (PySlice_GetIndicesEx((PySliceObject*)item,
+        if (PySlice_GetIndicesEx(item,
                          PyTuple_GET_SIZE(self),
                          &start, &stop, &step, &slicelength) < 0) {
             return NULL;
