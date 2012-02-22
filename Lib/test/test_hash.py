@@ -113,8 +113,7 @@ class DefaultIterSeq(object):
         return self.seq[index]
 
 class HashBuiltinsTestCase(unittest.TestCase):
-    hashes_to_check = [range(10),
-                       enumerate(range(10)),
+    hashes_to_check = [enumerate(range(10)),
                        iter(DefaultIterSeq()),
                        iter(lambda: 0, 0),
                       ]
@@ -160,8 +159,8 @@ class StringlikeHashRandomizationTests(HashRandomizationTests):
         else:
             known_hash_of_obj = -1600925533
 
-        # Randomization is disabled by default:
-        self.assertEqual(self.get_hash(self.repr_), known_hash_of_obj)
+        # Randomization is enabled by default:
+        self.assertNotEqual(self.get_hash(self.repr_), known_hash_of_obj)
 
         # It can also be disabled by setting the seed to 0:
         self.assertEqual(self.get_hash(self.repr_, seed=0), known_hash_of_obj)
@@ -170,9 +169,15 @@ class StringlikeHashRandomizationTests(HashRandomizationTests):
         # test a fixed seed for the randomized hash
         # Note that all types share the same values:
         if IS_64BIT:
-            h = -4410911502303878509
+            if sys.byteorder == 'little':
+                h = -4410911502303878509
+            else:
+                h = -3570150969479994130
         else:
-            h = -206076799
+            if sys.byteorder == 'little':
+                h = -206076799
+            else:
+                h = -1024014457
         self.assertEqual(self.get_hash(self.repr_, seed=42), h)
 
 class StrHashRandomizationTests(StringlikeHashRandomizationTests):
@@ -186,6 +191,12 @@ class BytesHashRandomizationTests(StringlikeHashRandomizationTests):
 
     def test_empty_string(self):
         self.assertEqual(hash(b""), 0)
+
+class MemoryviewHashRandomizationTests(StringlikeHashRandomizationTests):
+    repr_ = "memoryview(b'abc')"
+
+    def test_empty_string(self):
+        self.assertEqual(hash(memoryview(b"")), 0)
 
 class DatetimeTests(HashRandomizationTests):
     def get_hash_command(self, repr_):
@@ -207,6 +218,7 @@ def test_main():
                          HashBuiltinsTestCase,
                          StrHashRandomizationTests,
                          BytesHashRandomizationTests,
+                         MemoryviewHashRandomizationTests,
                          DatetimeDateTests,
                          DatetimeDatetimeTests,
                          DatetimeTimeTests)

@@ -1,24 +1,507 @@
 /*
  * This file includes functions to transform a concrete syntax tree (CST) to
- * an abstract syntax tree (AST).  The main function is PyAST_FromNode().
+ * an abstract syntax tree (AST). The main function is PyAST_FromNode().
  *
  */
 #include "Python.h"
 #include "Python-ast.h"
-#include "grammar.h"
 #include "node.h"
 #include "ast.h"
 #include "token.h"
-#include "parsetok.h"
-#include "graminit.h"
 
 #include <assert.h>
+
+static int validate_stmts(asdl_seq *);
+static int validate_exprs(asdl_seq *, expr_context_ty, int);
+static int validate_nonempty_seq(asdl_seq *, const char *, const char *);
+static int validate_stmt(stmt_ty);
+static int validate_expr(expr_ty, expr_context_ty);
+
+static int
+validate_comprehension(asdl_seq *gens)
+{
+    int i;
+    if (!asdl_seq_LEN(gens)) {
+        PyErr_SetString(PyExc_ValueError, "comprehension with no generators");
+        return 0;
+    }
+    for (i = 0; i < asdl_seq_LEN(gens); i++) {
+        comprehension_ty comp = asdl_seq_GET(gens, i);
+        if (!validate_expr(comp->target, Store) ||
+            !validate_expr(comp->iter, Load) ||
+            !validate_exprs(comp->ifs, Load, 0))
+            return 0;
+    }
+    return 1;
+}
+
+static int
+validate_slice(slice_ty slice)
+{
+    switch (slice->kind) {
+    case Slice_kind:
+        return (!slice->v.Slice.lower || validate_expr(slice->v.Slice.lower, Load)) &&
+            (!slice->v.Slice.upper || validate_expr(slice->v.Slice.upper, Load)) &&
+            (!slice->v.Slice.step || validate_expr(slice->v.Slice.step, Load));
+    case ExtSlice_kind: {
+        int i;
+        if (!validate_nonempty_seq(slice->v.ExtSlice.dims, "dims", "ExtSlice"))
+            return 0;
+        for (i = 0; i < asdl_seq_LEN(slice->v.ExtSlice.dims); i++)
+            if (!validate_slice(asdl_seq_GET(slice->v.ExtSlice.dims, i)))
+                return 0;
+        return 1;
+    }
+    case Index_kind:
+        return validate_expr(slice->v.Index.value, Load);
+    default:
+        PyErr_SetString(PyExc_SystemError, "unknown slice node");
+        return 0;
+    }
+}
+
+static int
+validate_keywords(asdl_seq *keywords)
+{
+    int i;
+    for (i = 0; i < asdl_seq_LEN(keywords); i++)
+        if (!validate_expr(((keyword_ty)asdl_seq_GET(keywords, i))->value, Load))
+            return 0;
+    return 1;
+}
+
+static int
+validate_args(asdl_seq *args)
+{
+    int i;
+    for (i = 0; i < asdl_seq_LEN(args); i++) {
+        arg_ty arg = asdl_seq_GET(args, i);
+        if (arg->annotation && !validate_expr(arg->annotation, Load))
+            return 0;
+    }
+    return 1;
+}
+
+static const char *
+expr_context_name(expr_context_ty ctx)
+{
+    switch (ctx) {
+    case Load:
+        return "Load";
+    case Store:
+        return "Store";
+    case Del:
+        return "Del";
+    case AugLoad:
+        return "AugLoad";
+    case AugStore:
+        return "AugStore";
+    case Param:
+        return "Param";
+    default:
+        assert(0);
+        return "(unknown)";
+    }
+}
+
+static int
+validate_arguments(arguments_ty args)
+{
+    if (!validate_args(args->args))
+        return 0;
+    if (args->varargannotation) {
+        if (!args->vararg) {
+            PyErr_SetString(PyExc_ValueError, "varargannotation but no vararg on arguments");
+            return 0;
+        }
+        if (!validate_expr(args->varargannotation, Load))
+            return 0;
+    }
+    if (!validate_args(args->kwonlyargs))
+        return 0;
+    if (args->kwargannotation) {
+        if (!args->kwarg) {
+            PyErr_SetString(PyExc_ValueError, "kwargannotation but no kwarg on arguments");
+            return 0;
+        }
+        if (!validate_expr(args->kwargannotation, Load))
+            return 0;
+    }
+    if (asdl_seq_LEN(args->defaults) > asdl_seq_LEN(args->args)) {
+        PyErr_SetString(PyExc_ValueError, "more positional defaults than args on arguments");
+        return 0;
+    }
+    if (asdl_seq_LEN(args->kw_defaults) != asdl_seq_LEN(args->kwonlyargs)) {
+        PyErr_SetString(PyExc_ValueError, "length of kwonlyargs is not the same as "
+                        "kw_defaults on arguments");
+        return 0;
+    }
+    return validate_exprs(args->defaults, Load, 0) && validate_exprs(args->kw_defaults, Load, 1);
+}
+
+static int
+validate_expr(expr_ty exp, expr_context_ty ctx)
+{
+    int check_ctx = 1;
+    expr_context_ty actual_ctx;
+
+    /* First check expression context. */
+    switch (exp->kind) {
+    case Attribute_kind:
+        actual_ctx = exp->v.Attribute.ctx;
+        break;
+    case Subscript_kind:
+        actual_ctx = exp->v.Subscript.ctx;
+        break;
+    case Starred_kind:
+        actual_ctx = exp->v.Starred.ctx;
+        break;
+    case Name_kind:
+        actual_ctx = exp->v.Name.ctx;
+        break;
+    case List_kind:
+        actual_ctx = exp->v.List.ctx;
+        break;
+    case Tuple_kind:
+        actual_ctx = exp->v.Tuple.ctx;
+        break;
+    default:
+        if (ctx != Load) {
+            PyErr_Format(PyExc_ValueError, "expression which can't be "
+                         "assigned to in %s context", expr_context_name(ctx));
+            return 0;
+        }
+        check_ctx = 0;
+    }
+    if (check_ctx && actual_ctx != ctx) {
+        PyErr_Format(PyExc_ValueError, "expression must have %s context but has %s instead",
+                     expr_context_name(ctx), expr_context_name(actual_ctx));
+        return 0;
+    }
+
+    /* Now validate expression. */
+    switch (exp->kind) {
+    case BoolOp_kind:
+        if (asdl_seq_LEN(exp->v.BoolOp.values) < 2) {
+            PyErr_SetString(PyExc_ValueError, "BoolOp with less than 2 values");
+            return 0;
+        }
+        return validate_exprs(exp->v.BoolOp.values, Load, 0);
+    case BinOp_kind:
+        return validate_expr(exp->v.BinOp.left, Load) &&
+            validate_expr(exp->v.BinOp.right, Load);
+    case UnaryOp_kind:
+        return validate_expr(exp->v.UnaryOp.operand, Load);
+    case Lambda_kind:
+        return validate_arguments(exp->v.Lambda.args) &&
+            validate_expr(exp->v.Lambda.body, Load);
+    case IfExp_kind:
+        return validate_expr(exp->v.IfExp.test, Load) &&
+            validate_expr(exp->v.IfExp.body, Load) &&
+            validate_expr(exp->v.IfExp.orelse, Load);
+    case Dict_kind:
+        if (asdl_seq_LEN(exp->v.Dict.keys) != asdl_seq_LEN(exp->v.Dict.values)) {
+            PyErr_SetString(PyExc_ValueError,
+                            "Dict doesn't have the same number of keys as values");
+            return 0;
+        }
+        return validate_exprs(exp->v.Dict.keys, Load, 0) &&
+            validate_exprs(exp->v.Dict.values, Load, 0);
+    case Set_kind:
+        return validate_exprs(exp->v.Set.elts, Load, 0);
+#define COMP(NAME) \
+        case NAME ## _kind: \
+            return validate_comprehension(exp->v.NAME.generators) && \
+                validate_expr(exp->v.NAME.elt, Load);
+    COMP(ListComp)
+    COMP(SetComp)
+    COMP(GeneratorExp)
+#undef COMP
+    case DictComp_kind:
+        return validate_comprehension(exp->v.DictComp.generators) &&
+            validate_expr(exp->v.DictComp.key, Load) &&
+            validate_expr(exp->v.DictComp.value, Load);
+    case Yield_kind:
+        return !exp->v.Yield.value || validate_expr(exp->v.Yield.value, Load);
+    case YieldFrom_kind:
+        return !exp->v.YieldFrom.value ||
+            validate_expr(exp->v.YieldFrom.value, Load);
+    case Compare_kind:
+        if (!asdl_seq_LEN(exp->v.Compare.comparators)) {
+            PyErr_SetString(PyExc_ValueError, "Compare with no comparators");
+            return 0;
+        }
+        if (asdl_seq_LEN(exp->v.Compare.comparators) !=
+            asdl_seq_LEN(exp->v.Compare.ops)) {
+            PyErr_SetString(PyExc_ValueError, "Compare has a different number "
+                            "of comparators and operands");
+            return 0;
+        }
+        return validate_exprs(exp->v.Compare.comparators, Load, 0) &&
+            validate_expr(exp->v.Compare.left, Load);
+    case Call_kind:
+        return validate_expr(exp->v.Call.func, Load) &&
+            validate_exprs(exp->v.Call.args, Load, 0) &&
+            validate_keywords(exp->v.Call.keywords) &&
+            (!exp->v.Call.starargs || validate_expr(exp->v.Call.starargs, Load)) &&
+            (!exp->v.Call.kwargs || validate_expr(exp->v.Call.kwargs, Load));
+    case Num_kind: {
+        PyObject *n = exp->v.Num.n;
+        if (!PyLong_CheckExact(n) && !PyFloat_CheckExact(n) &&
+            !PyComplex_CheckExact(n)) {
+            PyErr_SetString(PyExc_TypeError, "non-numeric type in Num");
+            return 0;
+        }
+        return 1;
+    }
+    case Str_kind: {
+        PyObject *s = exp->v.Str.s;
+        if (!PyUnicode_CheckExact(s)) {
+            PyErr_SetString(PyExc_TypeError, "non-string type in Str");
+            return 0;
+        }
+        return 1;
+    }
+    case Bytes_kind: {
+        PyObject *b = exp->v.Bytes.s;
+        if (!PyBytes_CheckExact(b)) {
+            PyErr_SetString(PyExc_TypeError, "non-bytes type in Bytes");
+            return 0;
+        }
+        return 1;
+    }
+    case Attribute_kind:
+        return validate_expr(exp->v.Attribute.value, Load);
+    case Subscript_kind:
+        return validate_slice(exp->v.Subscript.slice) &&
+            validate_expr(exp->v.Subscript.value, Load);
+    case Starred_kind:
+        return validate_expr(exp->v.Starred.value, ctx);
+    case List_kind:
+        return validate_exprs(exp->v.List.elts, ctx, 0);
+    case Tuple_kind:
+        return validate_exprs(exp->v.Tuple.elts, ctx, 0);
+    /* These last cases don't have any checking. */
+    case Name_kind:
+    case Ellipsis_kind:
+        return 1;
+    default:
+        PyErr_SetString(PyExc_SystemError, "unexpected expression");
+        return 0;
+    }
+}
+
+static int
+validate_nonempty_seq(asdl_seq *seq, const char *what, const char *owner)
+{
+    if (asdl_seq_LEN(seq))
+        return 1;
+    PyErr_Format(PyExc_ValueError, "empty %s on %s", what, owner);
+    return 0;
+}
+
+static int
+validate_assignlist(asdl_seq *targets, expr_context_ty ctx)
+{
+    return validate_nonempty_seq(targets, "targets", ctx == Del ? "Delete" : "Assign") &&
+        validate_exprs(targets, ctx, 0);
+}
+
+static int
+validate_body(asdl_seq *body, const char *owner)
+{
+    return validate_nonempty_seq(body, "body", owner) && validate_stmts(body);
+}
+
+static int
+validate_stmt(stmt_ty stmt)
+{
+    int i;
+    switch (stmt->kind) {
+    case FunctionDef_kind:
+        return validate_body(stmt->v.FunctionDef.body, "FunctionDef") &&
+            validate_arguments(stmt->v.FunctionDef.args) &&
+            validate_exprs(stmt->v.FunctionDef.decorator_list, Load, 0) &&
+            (!stmt->v.FunctionDef.returns ||
+             validate_expr(stmt->v.FunctionDef.returns, Load));
+    case ClassDef_kind:
+        return validate_body(stmt->v.ClassDef.body, "ClassDef") &&
+            validate_exprs(stmt->v.ClassDef.bases, Load, 0) &&
+            validate_keywords(stmt->v.ClassDef.keywords) &&
+            validate_exprs(stmt->v.ClassDef.decorator_list, Load, 0) &&
+            (!stmt->v.ClassDef.starargs || validate_expr(stmt->v.ClassDef.starargs, Load)) &&
+            (!stmt->v.ClassDef.kwargs || validate_expr(stmt->v.ClassDef.kwargs, Load));
+    case Return_kind:
+        return !stmt->v.Return.value || validate_expr(stmt->v.Return.value, Load);
+    case Delete_kind:
+        return validate_assignlist(stmt->v.Delete.targets, Del);
+    case Assign_kind:
+        return validate_assignlist(stmt->v.Assign.targets, Store) &&
+            validate_expr(stmt->v.Assign.value, Load);
+    case AugAssign_kind:
+        return validate_expr(stmt->v.AugAssign.target, Store) &&
+            validate_expr(stmt->v.AugAssign.value, Load);
+    case For_kind:
+        return validate_expr(stmt->v.For.target, Store) &&
+            validate_expr(stmt->v.For.iter, Load) &&
+            validate_body(stmt->v.For.body, "For") &&
+            validate_stmts(stmt->v.For.orelse);
+    case While_kind:
+        return validate_expr(stmt->v.While.test, Load) &&
+            validate_body(stmt->v.While.body, "While") &&
+            validate_stmts(stmt->v.While.orelse);
+    case If_kind:
+        return validate_expr(stmt->v.If.test, Load) &&
+            validate_body(stmt->v.If.body, "If") &&
+            validate_stmts(stmt->v.If.orelse);
+    case With_kind:
+        if (!validate_nonempty_seq(stmt->v.With.items, "items", "With"))
+            return 0;
+        for (i = 0; i < asdl_seq_LEN(stmt->v.With.items); i++) {
+            withitem_ty item = asdl_seq_GET(stmt->v.With.items, i);
+            if (!validate_expr(item->context_expr, Load) ||
+                (item->optional_vars && !validate_expr(item->optional_vars, Store)))
+                return 0;
+        }
+        return validate_body(stmt->v.With.body, "With");
+    case Raise_kind:
+        if (stmt->v.Raise.exc) {
+            return validate_expr(stmt->v.Raise.exc, Load) &&
+                (!stmt->v.Raise.cause || validate_expr(stmt->v.Raise.cause, Load));
+        }
+        if (stmt->v.Raise.cause) {
+            PyErr_SetString(PyExc_ValueError, "Raise with cause but no exception");
+            return 0;
+        }
+        return 1;
+    case Try_kind:
+        if (!validate_body(stmt->v.Try.body, "Try"))
+            return 0;
+        if (!asdl_seq_LEN(stmt->v.Try.handlers) &&
+            !asdl_seq_LEN(stmt->v.Try.finalbody)) {
+            PyErr_SetString(PyExc_ValueError, "Try has neither except handlers nor finalbody");
+            return 0;
+        }
+        if (!asdl_seq_LEN(stmt->v.Try.handlers) &&
+            asdl_seq_LEN(stmt->v.Try.orelse)) {
+            PyErr_SetString(PyExc_ValueError, "Try has orelse but no except handlers");
+            return 0;
+        }
+        for (i = 0; i < asdl_seq_LEN(stmt->v.Try.handlers); i++) {
+            excepthandler_ty handler = asdl_seq_GET(stmt->v.Try.handlers, i);
+            if ((handler->v.ExceptHandler.type &&
+                 !validate_expr(handler->v.ExceptHandler.type, Load)) ||
+                !validate_body(handler->v.ExceptHandler.body, "ExceptHandler"))
+                return 0;
+        }
+        return (!asdl_seq_LEN(stmt->v.Try.finalbody) ||
+                validate_stmts(stmt->v.Try.finalbody)) &&
+            (!asdl_seq_LEN(stmt->v.Try.orelse) ||
+             validate_stmts(stmt->v.Try.orelse));
+    case Assert_kind:
+        return validate_expr(stmt->v.Assert.test, Load) &&
+            (!stmt->v.Assert.msg || validate_expr(stmt->v.Assert.msg, Load));
+    case Import_kind:
+        return validate_nonempty_seq(stmt->v.Import.names, "names", "Import");
+    case ImportFrom_kind:
+        if (stmt->v.ImportFrom.level < -1) {
+            PyErr_SetString(PyExc_ValueError, "ImportFrom level less than -1");
+            return 0;
+        }
+        return validate_nonempty_seq(stmt->v.ImportFrom.names, "names", "ImportFrom");
+    case Global_kind:
+        return validate_nonempty_seq(stmt->v.Global.names, "names", "Global");
+    case Nonlocal_kind:
+        return validate_nonempty_seq(stmt->v.Nonlocal.names, "names", "Nonlocal");
+    case Expr_kind:
+        return validate_expr(stmt->v.Expr.value, Load);
+    case Pass_kind:
+    case Break_kind:
+    case Continue_kind:
+        return 1;
+    default:
+        PyErr_SetString(PyExc_SystemError, "unexpected statement");
+        return 0;
+    }
+}
+
+static int
+validate_stmts(asdl_seq *seq)
+{
+    int i;
+    for (i = 0; i < asdl_seq_LEN(seq); i++) {
+        stmt_ty stmt = asdl_seq_GET(seq, i);
+        if (stmt) {
+            if (!validate_stmt(stmt))
+                return 0;
+        }
+        else {
+            PyErr_SetString(PyExc_ValueError,
+                            "None disallowed in statement list");
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int
+validate_exprs(asdl_seq *exprs, expr_context_ty ctx, int null_ok)
+{
+    int i;
+    for (i = 0; i < asdl_seq_LEN(exprs); i++) {
+        expr_ty expr = asdl_seq_GET(exprs, i);
+        if (expr) {
+            if (!validate_expr(expr, ctx))
+                return 0;
+        }
+        else if (!null_ok) {
+            PyErr_SetString(PyExc_ValueError,
+                            "None disallowed in expression list");
+            return 0;
+        }
+            
+    }
+    return 1;
+}
+
+int
+PyAST_Validate(mod_ty mod)
+{
+    int res = 0;
+
+    switch (mod->kind) {
+    case Module_kind:
+        res = validate_stmts(mod->v.Module.body);
+        break;
+    case Interactive_kind:
+        res = validate_stmts(mod->v.Interactive.body);
+        break;
+    case Expression_kind:
+        res = validate_expr(mod->v.Expression.body, Load);
+        break;
+    case Suite_kind:
+        PyErr_SetString(PyExc_ValueError, "Suite is not valid in the CPython compiler");
+        break;
+    default:
+        PyErr_SetString(PyExc_SystemError, "impossible module node");
+        res = 0;
+        break;
+    }
+    return res;
+}
+
+/* This is done here, so defines like "test" don't interfere with AST use above. */
+#include "grammar.h"
+#include "parsetok.h"
+#include "graminit.h"
 
 /* Data structure used internally */
 struct compiling {
     char *c_encoding; /* source encoding */
     PyArena *c_arena; /* arena for allocating memeory */
     const char *c_filename; /* filename */
+    PyObject *c_normalize; /* Normalization function from unicodedata. */
+    PyObject *c_normalize_args; /* Normalization argument tuple. */
 };
 
 static asdl_seq *seq_for_testlist(struct compiling *, const node *);
@@ -38,45 +521,58 @@ static PyObject *parsestr(struct compiling *, const node *n, int *bytesmode);
 static PyObject *parsestrplus(struct compiling *, const node *n,
                               int *bytesmode);
 
-#ifndef LINENO
-#define LINENO(n)       ((n)->n_lineno)
-#endif
-
 #define COMP_GENEXP   0
 #define COMP_LISTCOMP 1
 #define COMP_SETCOMP  2
 
+static int
+init_normalization(struct compiling *c)
+{
+    PyObject *m = PyImport_ImportModuleNoBlock("unicodedata");
+    if (!m)
+        return 0;
+    c->c_normalize = PyObject_GetAttrString(m, "normalize");
+    Py_DECREF(m);
+    if (!c->c_normalize)
+        return 0;
+    c->c_normalize_args = Py_BuildValue("(sN)", "NFKC", Py_None);
+    PyTuple_SET_ITEM(c->c_normalize_args, 1, NULL);
+    if (!c->c_normalize_args) {
+        Py_CLEAR(c->c_normalize);
+        return 0;
+    }
+    return 1;
+}
+
 static identifier
-new_identifier(const char* n, PyArena *arena)
+new_identifier(const char* n, struct compiling *c)
 {
     PyObject* id = PyUnicode_DecodeUTF8(n, strlen(n), NULL);
-    Py_UNICODE *u;
     if (!id)
         return NULL;
-    u = PyUnicode_AS_UNICODE(id);
+    /* PyUnicode_DecodeUTF8 should always return a ready string. */
+    assert(PyUnicode_IS_READY(id));
     /* Check whether there are non-ASCII characters in the
        identifier; if so, normalize to NFKC. */
-    for (; *u; u++) {
-        if (*u >= 128) {
-            PyObject *m = PyImport_ImportModuleNoBlock("unicodedata");
-            PyObject *id2;
-            if (!m)
-                return NULL;
-            id2 = PyObject_CallMethod(m, "normalize", "sO", "NFKC", id);
-            Py_DECREF(m);
-            if (!id2)
-                return NULL;
+    if (!PyUnicode_IS_ASCII(id)) {
+        PyObject *id2;
+        if (!c->c_normalize && !init_normalization(c)) {
             Py_DECREF(id);
-            id = id2;
-            break;
+            return NULL;
         }
+        PyTuple_SET_ITEM(c->c_normalize_args, 1, id);
+        id2 = PyObject_Call(c->c_normalize, c->c_normalize_args, NULL);
+        Py_DECREF(id);
+        if (!id2)
+            return NULL;
+        id = id2;
     }
     PyUnicode_InternInPlace(&id);
-    PyArena_AddPyObject(arena, id);
+    PyArena_AddPyObject(c->c_arena, id);
     return id;
 }
 
-#define NEW_IDENTIFIER(n) new_identifier(STR(n), c->c_arena)
+#define NEW_IDENTIFIER(n) new_identifier(STR(n), c)
 
 /* This routine provides an invalid object for the syntax error.
    The outermost routine must unpack this error and create the
@@ -226,13 +722,14 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
     stmt_ty s;
     node *ch;
     struct compiling c;
+    mod_ty res = NULL;
 
     if (flags && flags->cf_flags & PyCF_SOURCE_IS_UTF8) {
         c.c_encoding = "utf-8";
         if (TYPE(n) == encoding_decl) {
 #if 0
             ast_error(n, "encoding declaration in Unicode string");
-            goto error;
+            goto out;
 #endif
             n = CHILD(n, 0);
         }
@@ -245,13 +742,14 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
     }
     c.c_arena = arena;
     c.c_filename = filename;
+    c.c_normalize = c.c_normalize_args = NULL;
 
     k = 0;
     switch (TYPE(n)) {
         case file_input:
             stmts = asdl_seq_new(num_stmts(n), arena);
             if (!stmts)
-                return NULL;
+                goto out;
             for (i = 0; i < NCH(n) - 1; i++) {
                 ch = CHILD(n, i);
                 if (TYPE(ch) == NEWLINE)
@@ -261,7 +759,7 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
                 if (num == 1) {
                     s = ast_for_stmt(&c, ch);
                     if (!s)
-                        goto error;
+                        goto out;
                     asdl_seq_SET(stmts, k++, s);
                 }
                 else {
@@ -270,42 +768,44 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
                     for (j = 0; j < num; j++) {
                         s = ast_for_stmt(&c, CHILD(ch, j * 2));
                         if (!s)
-                            goto error;
+                            goto out;
                         asdl_seq_SET(stmts, k++, s);
                     }
                 }
             }
-            return Module(stmts, arena);
+            res = Module(stmts, arena);
+            break;
         case eval_input: {
             expr_ty testlist_ast;
 
             /* XXX Why not comp_for here? */
             testlist_ast = ast_for_testlist(&c, CHILD(n, 0));
             if (!testlist_ast)
-                goto error;
-            return Expression(testlist_ast, arena);
+                goto out;
+            res = Expression(testlist_ast, arena);
+            break;
         }
         case single_input:
             if (TYPE(CHILD(n, 0)) == NEWLINE) {
                 stmts = asdl_seq_new(1, arena);
                 if (!stmts)
-                    goto error;
+                    goto out;
                 asdl_seq_SET(stmts, 0, Pass(n->n_lineno, n->n_col_offset,
                                             arena));
                 if (!asdl_seq_GET(stmts, 0))
-                    goto error;
-                return Interactive(stmts, arena);
+                    goto out;
+                res = Interactive(stmts, arena);
             }
             else {
                 n = CHILD(n, 0);
                 num = num_stmts(n);
                 stmts = asdl_seq_new(num, arena);
                 if (!stmts)
-                    goto error;
+                    goto out;
                 if (num == 1) {
                     s = ast_for_stmt(&c, n);
                     if (!s)
-                        goto error;
+                        goto out;
                     asdl_seq_SET(stmts, 0, s);
                 }
                 else {
@@ -316,21 +816,28 @@ PyAST_FromNode(const node *n, PyCompilerFlags *flags, const char *filename,
                             break;
                         s = ast_for_stmt(&c, CHILD(n, i));
                         if (!s)
-                            goto error;
+                            goto out;
                         asdl_seq_SET(stmts, i / 2, s);
                     }
                 }
 
-                return Interactive(stmts, arena);
+                res = Interactive(stmts, arena);
             }
+            break;
         default:
             PyErr_Format(PyExc_SystemError,
                          "invalid node %d for PyAST_FromNode", TYPE(n));
-            goto error;
+            goto out;
     }
- error:
-    ast_error_finish(filename);
-    return NULL;
+ out:
+    if (c.c_normalize) {
+        Py_DECREF(c.c_normalize);
+        PyTuple_SET_ITEM(c.c_normalize_args, 1, NULL);
+        Py_DECREF(c.c_normalize_args);
+    }
+    if (!res)
+        ast_error_finish(filename);
+    return res;
 }
 
 /* Return the AST repr. of the operator represented as syntax (|, ^, etc.)
@@ -468,6 +975,7 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
             expr_name = "generator expression";
             break;
         case Yield_kind:
+        case YieldFrom_kind:
             expr_name = "yield expression";
             break;
         case ListComp_kind:
@@ -1895,12 +2403,25 @@ ast_for_expr(struct compiling *c, const node *n)
             }
             return ast_for_binop(c, n);
         case yield_expr: {
+            node *an = NULL;
+            node *en = NULL;
+            int is_from = 0;
             expr_ty exp = NULL;
-            if (NCH(n) == 2) {
-                exp = ast_for_testlist(c, CHILD(n, 1));
+            if (NCH(n) > 1)
+                an = CHILD(n, 1); /* yield_arg */
+            if (an) {
+                en = CHILD(an, NCH(an) - 1);
+                if (NCH(an) == 2) {
+                    is_from = 1;
+                    exp = ast_for_expr(c, en);
+                }
+                else
+                    exp = ast_for_testlist(c, en);
                 if (!exp)
                     return NULL;
             }
+            if (is_from)
+                return YieldFrom(exp, LINENO(n), n->n_col_offset, c->c_arena);
             return Yield(exp, LINENO(n), n->n_col_offset, c->c_arena);
         }
         case factor:
@@ -1925,7 +2446,7 @@ ast_for_call(struct compiling *c, const node *n, expr_ty func)
     /*
       arglist: (argument ',')* (argument [',']| '*' test [',' '**' test]
                | '**' test)
-      argument: [test '='] test [comp_for]        # Really [keyword '='] test
+      argument: [test '='] (test) [comp_for]        # Really [keyword '='] test
     */
 
     int i, nargs, nkeywords, ngens;
@@ -2009,13 +2530,13 @@ ast_for_call(struct compiling *c, const node *n, expr_ty func)
                  * then is very confusing.
                  */
                 if (e->kind == Lambda_kind) {
-                  ast_error(CHILD(ch, 0), "lambda cannot contain assignment");
-                  return NULL;
+                    ast_error(CHILD(ch, 0), "lambda cannot contain assignment");
+                    return NULL;
                 } else if (e->kind != Name_kind) {
-                  ast_error(CHILD(ch, 0), "keyword can't be an expression");
-                  return NULL;
+                    ast_error(CHILD(ch, 0), "keyword can't be an expression");
+                    return NULL;
                 } else if (forbidden_name(e->v.Name.id, ch, 1)) {
-                  return NULL;
+                    return NULL;
                 }
                 key = e->v.Name.id;
                 for (k = 0; k < nkeywords; k++) {
@@ -2219,7 +2740,7 @@ ast_for_flow_stmt(struct compiling *c, const node *n)
       continue_stmt: 'continue'
       return_stmt: 'return' [testlist]
       yield_stmt: yield_expr
-      yield_expr: 'yield' testlist
+      yield_expr: 'yield' testlist | 'yield' 'from' test
       raise_stmt: 'raise' [test [',' test [',' test]]]
     */
     node *ch;
@@ -2893,7 +3414,7 @@ ast_for_try_stmt(struct compiling *c, const node *n)
 {
     const int nch = NCH(n);
     int n_except = (nch - 3)/3;
-    asdl_seq *body, *orelse = NULL, *finally = NULL;
+    asdl_seq *body, *handlers = NULL, *orelse = NULL, *finally = NULL;
 
     REQ(n, try_stmt);
 
@@ -2934,9 +3455,8 @@ ast_for_try_stmt(struct compiling *c, const node *n)
 
     if (n_except > 0) {
         int i;
-        stmt_ty except_st;
         /* process except statements to create a try ... except */
-        asdl_seq *handlers = asdl_seq_new(n_except, c->c_arena);
+        handlers = asdl_seq_new(n_except, c->c_arena);
         if (handlers == NULL)
             return NULL;
 
@@ -2947,28 +3467,15 @@ ast_for_try_stmt(struct compiling *c, const node *n)
                 return NULL;
             asdl_seq_SET(handlers, i, e);
         }
-
-        except_st = TryExcept(body, handlers, orelse, LINENO(n),
-                              n->n_col_offset, c->c_arena);
-        if (!finally)
-            return except_st;
-
-        /* if a 'finally' is present too, we nest the TryExcept within a
-           TryFinally to emulate try ... except ... finally */
-        body = asdl_seq_new(1, c->c_arena);
-        if (body == NULL)
-            return NULL;
-        asdl_seq_SET(body, 0, except_st);
     }
 
-    /* must be a try ... finally (except clauses are in body, if any exist) */
-    assert(finally != NULL);
-    return TryFinally(body, finally, LINENO(n), n->n_col_offset, c->c_arena);
+    assert(finally != NULL || asdl_seq_LEN(handlers));
+    return Try(body, handlers, orelse, finally, LINENO(n), n->n_col_offset, c->c_arena);
 }
 
 /* with_item: test ['as' expr] */
-static stmt_ty
-ast_for_with_item(struct compiling *c, const node *n, asdl_seq *content)
+static withitem_ty
+ast_for_with_item(struct compiling *c, const node *n)
 {
     expr_ty context_expr, optional_vars = NULL;
 
@@ -2987,43 +3494,32 @@ ast_for_with_item(struct compiling *c, const node *n, asdl_seq *content)
         }
     }
 
-    return With(context_expr, optional_vars, content, LINENO(n),
-                n->n_col_offset, c->c_arena);
+    return withitem(context_expr, optional_vars, c->c_arena);
 }
 
 /* with_stmt: 'with' with_item (',' with_item)* ':' suite */
 static stmt_ty
 ast_for_with_stmt(struct compiling *c, const node *n)
 {
-    int i;
-    stmt_ty ret;
-    asdl_seq *inner;
+    int i, n_items;
+    asdl_seq *items, *body;
 
     REQ(n, with_stmt);
 
-    /* process the with items inside-out */
-    i = NCH(n) - 1;
-    /* the suite of the innermost with item is the suite of the with stmt */
-    inner = ast_for_suite(c, CHILD(n, i));
-    if (!inner)
-        return NULL;
-
-    for (;;) {
-        i -= 2;
-        ret = ast_for_with_item(c, CHILD(n, i), inner);
-        if (!ret)
+    n_items = (NCH(n) - 2) / 2;
+    items = asdl_seq_new(n_items, c->c_arena);
+    for (i = 1; i < NCH(n) - 2; i += 2) {
+        withitem_ty item = ast_for_with_item(c, CHILD(n, i));
+        if (!item)
             return NULL;
-        /* was this the last item? */
-        if (i == 1)
-            break;
-        /* if not, wrap the result so far in a new sequence */
-        inner = asdl_seq_new(1, c->c_arena);
-        if (!inner)
-            return NULL;
-        asdl_seq_SET(inner, 0, ret);
+        asdl_seq_SET(items, (i - 1) / 2, item);
     }
 
-    return ret;
+    body = ast_for_suite(c, CHILD(n, NCH(n) - 1));
+    if (!body)
+        return NULL;
+
+    return With(items, body, LINENO(n), n->n_col_offset, c->c_arena);
 }
 
 static stmt_ty
@@ -3207,20 +3703,14 @@ parsenumber(struct compiling *c, const char *s)
 }
 
 static PyObject *
-decode_utf8(struct compiling *c, const char **sPtr, const char *end, char* encoding)
+decode_utf8(struct compiling *c, const char **sPtr, const char *end)
 {
-    PyObject *u, *v;
     char *s, *t;
     t = s = (char *)*sPtr;
     /* while (s < end && *s != '\\') s++; */ /* inefficient for u".." */
     while (s < end && (*s & 0x80)) s++;
     *sPtr = s;
-    u = PyUnicode_DecodeUTF8(t, s - t, NULL);
-    if (u == NULL)
-        return NULL;
-    v = PyUnicode_AsEncodedString(u, encoding, NULL);
-    Py_DECREF(u);
-    return v;
+    return PyUnicode_DecodeUTF8(t, s - t, NULL);
 }
 
 static PyObject *
@@ -3232,7 +3722,6 @@ decode_unicode(struct compiling *c, const char *s, size_t len, int rawmode, cons
     const char *end;
 
     if (encoding == NULL) {
-        buf = (char *)s;
         u = NULL;
     } else {
         /* check for integer overflow */
@@ -3255,22 +3744,20 @@ decode_unicode(struct compiling *c, const char *s, size_t len, int rawmode, cons
             }
             if (*s & 0x80) { /* XXX inefficient */
                 PyObject *w;
-                char *r;
-                Py_ssize_t rn, i;
-                w = decode_utf8(c, &s, end, "utf-32-be");
+                int kind;
+                void *data;
+                Py_ssize_t len, i;
+                w = decode_utf8(c, &s, end);
                 if (w == NULL) {
                     Py_DECREF(u);
                     return NULL;
                 }
-                r = PyBytes_AS_STRING(w);
-                rn = Py_SIZE(w);
-                assert(rn % 4 == 0);
-                for (i = 0; i < rn; i += 4) {
-                    sprintf(p, "\\U%02x%02x%02x%02x",
-                            r[i + 0] & 0xFF,
-                            r[i + 1] & 0xFF,
-                            r[i + 2] & 0xFF,
-                            r[i + 3] & 0xFF);
+                kind = PyUnicode_KIND(w);
+                data = PyUnicode_DATA(w);
+                len = PyUnicode_GET_LENGTH(w);
+                for (i = 0; i < len; i++) {
+                    Py_UCS4 chr = PyUnicode_READ(kind, data, i);
+                    sprintf(p, "\\U%08x", chr);
                     p += 10;
                 }
                 /* Should be impossible to overflow */
@@ -3304,13 +3791,18 @@ parsestr(struct compiling *c, const node *n, int *bytesmode)
     int rawmode = 0;
     int need_encoding;
     if (isalpha(quote)) {
-        if (quote == 'b' || quote == 'B') {
-            quote = *++s;
-            *bytesmode = 1;
-        }
-        if (quote == 'r' || quote == 'R') {
-            quote = *++s;
-            rawmode = 1;
+        while (!*bytesmode || !rawmode) {
+            if (quote == 'b' || quote == 'B') {
+                quote = *++s;
+                *bytesmode = 1;
+            }
+            else if (quote == 'r' || quote == 'R') {
+                quote = *++s;
+                rawmode = 1;
+            }
+            else {
+                break;
+            }
         }
     }
     if (quote != '\'' && quote != '\"') {
