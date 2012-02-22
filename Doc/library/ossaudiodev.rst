@@ -17,7 +17,7 @@ the standard audio interface for Linux and recent versions of FreeBSD.
    ALSA is in the standard kernel as of 2.5.x.  Presumably if you
    use ALSA, you'll have to make sure its OSS compatibility layer
    is active to use ossaudiodev, but you're gonna need it for the vast
-   majority of Linux audio apps anyways.
+   majority of Linux audio apps anyway.
 
    Sounds like things are also complicated for other BSDs.  In response
    to my python-dev query, Thomas Wouters said:
@@ -59,7 +59,7 @@ the standard audio interface for Linux and recent versions of FreeBSD.
    what went wrong.
 
    (If :mod:`ossaudiodev` receives an error from a system call such as
-   :cfunc:`open`, :cfunc:`write`, or :cfunc:`ioctl`, it raises :exc:`IOError`.
+   :c:func:`open`, :c:func:`write`, or :c:func:`ioctl`, it raises :exc:`IOError`.
    Errors detected directly by :mod:`ossaudiodev` result in :exc:`OSSAudioError`.)
 
    (For backwards compatibility, the exception class is also available as

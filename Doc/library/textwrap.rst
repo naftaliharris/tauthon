@@ -1,4 +1,3 @@
-
 :mod:`textwrap` --- Text wrapping and filling
 =============================================
 
@@ -7,15 +6,17 @@
 .. moduleauthor:: Greg Ward <gward@python.net>
 .. sectionauthor:: Greg Ward <gward@python.net>
 
-
 .. versionadded:: 2.3
+
+**Source code:** :source:`Lib/textwrap.py`
+
+--------------
 
 The :mod:`textwrap` module provides two convenience functions, :func:`wrap` and
 :func:`fill`, as well as :class:`TextWrapper`, the class that does all the work,
 and a utility function  :func:`dedent`.  If you're just wrapping or filling one
 or two  text strings, the convenience functions should be good enough;
 otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
-
 
 .. function:: wrap(text[, width[, ...]])
 
@@ -120,6 +121,13 @@ indentation from strings that have unwanted whitespace to the left of the text.
          If :attr:`expand_tabs` is false and :attr:`replace_whitespace` is true,
          each tab character will be replaced by a single space, which is *not*
          the same as tab expansion.
+
+      .. note::
+
+         If :attr:`replace_whitespace` is false, newlines may appear in the
+         middle of a line and cause strange output. For this reason, text should
+         be split into paragraphs (using :meth:`str.splitlines` or similar)
+         which are wrapped separately.
 
 
    .. attribute:: drop_whitespace

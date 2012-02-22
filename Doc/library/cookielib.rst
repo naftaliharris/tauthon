@@ -11,10 +11,11 @@
    Python 3.0.  The :term:`2to3` tool will automatically adapt imports when
    converting your sources to 3.0.
 
-
 .. versionadded:: 2.4
 
+**Source code:** :source:`Lib/cookielib.py`
 
+--------------
 
 The :mod:`cookielib` module defines classes for automatic handling of HTTP
 cookies.  It is useful for accessing web sites that require small pieces of data
@@ -750,7 +751,7 @@ cookies (assumes Unix/Netscape convention for location of the cookies file)::
 
    import os, cookielib, urllib2
    cj = cookielib.MozillaCookieJar()
-   cj.load(os.path.join(os.environ["HOME"], ".netscape/cookies.txt"))
+   cj.load(os.path.join(os.path.expanduser("~"), ".netscape", "cookies.txt"))
    opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
    r = opener.open("http://example.com/")
 

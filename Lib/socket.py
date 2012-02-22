@@ -24,7 +24,8 @@ inet_ntoa() -- convert 32-bit packed format IP to string (123.45.67.89)
 ssl() -- secure socket layer support (only available if configured)
 socket.getdefaulttimeout() -- get the default timeout value
 socket.setdefaulttimeout() -- set the default timeout value
-create_connection() -- connects to an address, with an optional timeout
+create_connection() -- connects to an address, with an optional timeout and
+                       optional source address.
 
  [*] not available on all platforms!
 
@@ -45,6 +46,8 @@ the setsockopt() and getsockopt() methods.
 
 import _socket
 from _socket import *
+from functools import partial
+from types import MethodType
 
 try:
     import _ssl
@@ -186,7 +189,9 @@ class _socketobject(object):
         for method in _delegate_methods:
             setattr(self, method, getattr(_sock, method))
 
-    def close(self):
+    def close(self, _closedsocket=_closedsocket,
+              _delegate_methods=_delegate_methods, setattr=setattr):
+        # This function should not reference any globals. See issue #808164.
         self._sock = _closedsocket()
         dummy = self._sock._dummy
         for method in _delegate_methods:
@@ -215,11 +220,15 @@ class _socketobject(object):
     type = property(lambda self: self._sock.type, doc="the socket type")
     proto = property(lambda self: self._sock.proto, doc="the socket protocol")
 
-    _s = ("def %s(self, *args): return self._sock.%s(*args)\n\n"
-          "%s.__doc__ = _realsocket.%s.__doc__\n")
-    for _m in _socketmethods:
-        exec _s % (_m, _m, _m, _m)
-    del _m, _s
+def meth(name,self,*args):
+    return getattr(self._sock,name)(*args)
+
+for _m in _socketmethods:
+    p = partial(meth,_m)
+    p.__name__ = _m
+    p.__doc__ = getattr(_realsocket,_m).__doc__
+    m = MethodType(p,None,_socketobject)
+    setattr(_socketobject,_m,m)
 
 socket = SocketType = _socketobject
 
@@ -288,18 +297,15 @@ class _fileobject(object):
             buffer_size = max(self._rbufsize, self.default_bufsize)
             data_size = len(data)
             write_offset = 0
+            view = memoryview(data)
             try:
                 while write_offset < data_size:
-                    with warnings.catch_warnings():
-                        if sys.py3kwarning:
-                            warnings.filterwarnings("ignore", ".*buffer",
-                                                    DeprecationWarning)
-                        self._sock.sendall(buffer(data, write_offset, buffer_size))
+                    self._sock.sendall(view[write_offset:write_offset+buffer_size])
                     write_offset += buffer_size
             finally:
                 if write_offset < data_size:
                     remainder = data[write_offset:]
-                    del data  # explicit free
+                    del view, data  # explicit free
                     self._wbuf.append(remainder)
                     self._wbuf_len = len(remainder)
 
@@ -326,9 +332,6 @@ class _fileobject(object):
         if (self._wbufsize <= 1 or
             self._wbuf_len >= self._wbufsize):
             self.flush()
-
-    def _get_wbuf_len(self):
-        return self._wbuf_len
 
     def read(self, size=-1):
         # Use max, disallow tiny reads in a loop as they are very inefficient.
@@ -531,7 +534,8 @@ class _fileobject(object):
 
 _GLOBAL_DEFAULT_TIMEOUT = object()
 
-def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT):
+def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT,
+                      source_address=None):
     """Connect to *address* and return the socket object.
 
     Convenience function.  Connect to *address* (a 2-tuple ``(host,
@@ -539,11 +543,13 @@ def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT):
     *timeout* parameter will set the timeout on the socket instance
     before attempting to connect.  If no *timeout* is supplied, the
     global default timeout setting returned by :func:`getdefaulttimeout`
-    is used.
+    is used.  If *source_address* is set it must be a tuple of (host, port)
+    for the socket to bind as a source address before making the connection.
+    An host of '' or port 0 tells the OS to use the default.
     """
 
-    msg = "getaddrinfo returns an empty list"
     host, port = address
+    err = None
     for res in getaddrinfo(host, port, 0, SOCK_STREAM):
         af, socktype, proto, canonname, sa = res
         sock = None
@@ -551,11 +557,17 @@ def create_connection(address, timeout=_GLOBAL_DEFAULT_TIMEOUT):
             sock = socket(af, socktype, proto)
             if timeout is not _GLOBAL_DEFAULT_TIMEOUT:
                 sock.settimeout(timeout)
+            if source_address:
+                sock.bind(source_address)
             sock.connect(sa)
             return sock
 
-        except error, msg:
+        except error as _:
+            err = _
             if sock is not None:
                 sock.close()
 
-    raise error, msg
+    if err is not None:
+        raise err
+    else:
+        raise error("getaddrinfo returns an empty list")

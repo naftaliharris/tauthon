@@ -357,11 +357,11 @@ exactly as written here:
    assign a different object to it.
 
 .. versionchanged:: 2.5
-   Both :keyword:`as` and :keyword:`with` are only recognized when the
-   ``with_statement`` future feature has been enabled. It will always be enabled in
-   Python 2.6.  See section :ref:`with` for details.  Note that using :keyword:`as`
-   and :keyword:`with` as identifiers will always issue a warning, even when the
-   ``with_statement`` future directive is not in effect.
+   Using :keyword:`as` and :keyword:`with` as identifiers triggers a warning.  To
+   use them as keywords, enable the ``with_statement`` future feature .
+
+.. versionchanged:: 2.6
+    :keyword:`as` and :keyword:`with` are full keywords.
 
 
 .. _id-classes:
@@ -426,6 +426,7 @@ String literals are described by the following lexical definitions:
 .. productionlist::
    stringliteral: [`stringprefix`](`shortstring` | `longstring`)
    stringprefix: "r" | "u" | "ur" | "R" | "U" | "UR" | "Ur" | "uR"
+               : | "b" | "B" | "br" | "Br" | "bR" | "BR"
    shortstring: "'" `shortstringitem`* "'" | '"' `shortstringitem`* '"'
    longstring: "'''" `longstringitem`* "'''"
              : | '"""' `longstringitem`* '"""'
@@ -458,8 +459,10 @@ different rules for interpreting backslash escape sequences.  A prefix of
 ``'u'`` or ``'U'`` makes the string a Unicode string.  Unicode strings use the
 Unicode character set as defined by the Unicode Consortium and ISO 10646.  Some
 additional escape sequences, described below, are available in Unicode strings.
-The two prefix characters may be combined; in this case, ``'u'`` must appear
-before ``'r'``.
+A prefix of ``'b'`` or ``'B'`` is ignored in Python 2; it indicates that the
+literal should become a bytes literal in Python 3 (e.g. when code is
+automatically converted with 2to3).  A ``'u'`` or ``'b'`` prefix may be followed
+by an ``'r'`` prefix.
 
 In triple-quoted strings, unescaped newlines and quotes are allowed (and are
 retained), except that three unescaped quotes in a row terminate the string.  (A

@@ -16,6 +16,10 @@
 
 .. index:: module: urllib
 
+**Source code:** :source:`Lib/httplib.py`
+
+--------------
+
 This module defines classes which implement the client side of the HTTP and
 HTTPS protocols.  It is normally not used directly --- the module :mod:`urllib`
 uses it to handle URLs that use HTTP and HTTPS.
@@ -34,7 +38,7 @@ uses it to handle URLs that use HTTP and HTTPS.
 The module provides the following classes:
 
 
-.. class:: HTTPConnection(host[, port[, strict[, timeout]]])
+.. class:: HTTPConnection(host[, port[, strict[, timeout[, source_address]]]])
 
    An :class:`HTTPConnection` instance represents one transaction with an HTTP
    server.  It should be instantiated passing it a host and optional port
@@ -46,6 +50,8 @@ The module provides the following classes:
    status line.  If the optional *timeout* parameter is given, blocking
    operations (like connection attempts) will timeout after that many seconds
    (if it is not given, the global default timeout setting is used).
+   The optional *source_address* parameter may be a tuple of a (host, port)
+   to use as the source address the HTTP connection is made from.
 
    For example, the following calls all create instances that connect to the server
    at the same host and port::
@@ -60,22 +66,27 @@ The module provides the following classes:
    .. versionchanged:: 2.6
       *timeout* was added.
 
+   .. versionchanged:: 2.7
+      *source_address* was added.
 
-.. class:: HTTPSConnection(host[, port[, key_file[, cert_file[, strict[, timeout]]]]])
+
+.. class:: HTTPSConnection(host[, port[, key_file[, cert_file[, strict[, timeout[, source_address]]]]]])
 
    A subclass of :class:`HTTPConnection` that uses SSL for communication with
    secure servers.  Default port is ``443``. *key_file* is the name of a PEM
    formatted file that contains your private key. *cert_file* is a PEM formatted
    certificate chain file.
 
-   .. note::
-
-      This does not do any certificate verification.
+   .. warning::
+      This does not do any verification of the server's certificate.
 
    .. versionadded:: 2.0
 
    .. versionchanged:: 2.6
       *timeout* was added.
+
+   .. versionchanged:: 2.7
+      *source_address* was added.
 
 
 .. class:: HTTPResponse(sock[, debuglevel=0][, strict=0])
@@ -436,6 +447,17 @@ HTTPConnection Objects
    debug level is ``0``, meaning no debugging output is printed.
 
 
+.. method:: HTTPConnection.set_tunnel(host,port=None, headers=None)
+
+   Set the host and the port for HTTP Connect Tunnelling. Normally used when
+   it is required to do HTTPS Conection through a proxy server.
+
+   The headers argument should be a mapping of extra HTTP headers to send
+   with the CONNECT request.
+
+   .. versionadded:: 2.7
+
+
 .. method:: HTTPConnection.connect()
 
    Connect to the server specified when the object was created.
@@ -470,9 +492,16 @@ also send your request step by step, by using the four functions below.
    an argument.
 
 
-.. method:: HTTPConnection.endheaders()
+.. method:: HTTPConnection.endheaders(message_body=None)
 
-   Send a blank line to the server, signalling the end of the headers.
+   Send a blank line to the server, signalling the end of the headers. The
+   optional *message_body* argument can be used to pass a message body
+   associated with the request.  The message body will be sent in the same
+   packet as the message headers if it is string, otherwise it is sent in a
+   separate packet.
+
+   .. versionchanged:: 2.7
+      *message_body* was added.
 
 
 .. method:: HTTPConnection.send(data)
@@ -507,6 +536,9 @@ HTTPResponse Objects
 
    .. versionadded:: 2.4
 
+.. method:: HTTPResponse.fileno()
+
+   Returns the ``fileno`` of the underlying socket.
 
 .. attribute:: HTTPResponse.msg
 
@@ -549,9 +581,8 @@ Here is an example session that uses the ``GET`` method::
    >>> data2 = r2.read()
    >>> conn.close()
 
-Here is an example session that uses ``HEAD`` method. Note that ``HEAD`` method
-never returns any data. ::
-
+Here is an example session that uses the ``HEAD`` method.  Note that the
+``HEAD`` method never returns any data. ::
 
    >>> import httplib
    >>> conn = httplib.HTTPConnection("www.python.org")
@@ -568,14 +599,16 @@ never returns any data. ::
 Here is an example session that shows how to ``POST`` requests::
 
    >>> import httplib, urllib
-   >>> params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
+   >>> params = urllib.urlencode({'@number': 12524, '@type': 'issue', '@action': 'show'})
    >>> headers = {"Content-type": "application/x-www-form-urlencoded",
    ...            "Accept": "text/plain"}
-   >>> conn = httplib.HTTPConnection("musi-cal.mojam.com:80")
-   >>> conn.request("POST", "/cgi-bin/query", params, headers)
+   >>> conn = httplib.HTTPConnection("bugs.python.org")
+   >>> conn.request("POST", "", params, headers)
    >>> response = conn.getresponse()
    >>> print response.status, response.reason
-   200 OK
+   302 Found
    >>> data = response.read()
+   >>> data
+   'Redirecting to <a href="http://bugs.python.org/issue12524">http://bugs.python.org/issue12524</a>'
    >>> conn.close()
 

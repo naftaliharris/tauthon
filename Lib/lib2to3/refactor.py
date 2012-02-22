@@ -24,7 +24,10 @@ from itertools import chain
 
 # Local imports
 from .pgen2 import driver, tokenize, token
+from .fixer_util import find_root
 from . import pytree, pygram
+from . import btm_utils as bu
+from . import btm_matcher as bm
 
 
 def get_all_fix_names(fixer_pkg, remove_prefix=True):
@@ -170,7 +173,8 @@ class FixerError(Exception):
 
 class RefactoringTool(object):
 
-    _default_options = {"print_function" : False}
+    _default_options = {"print_function" : False,
+                        "write_unchanged_files" : False}
 
     CLASS_PREFIX = "Fix" # The prefix for fixer classes
     FILE_PREFIX = "fix_" # The prefix for modules with a fixer within
@@ -192,6 +196,10 @@ class RefactoringTool(object):
             self.grammar = pygram.python_grammar_no_print_statement
         else:
             self.grammar = pygram.python_grammar
+        # When this is True, the refactor*() methods will call write_file() for
+        # files processed even if they were not changed during refactoring. If
+        # and only if the refactor method's write parameter was True.
+        self.write_unchanged_files = self.options.get("write_unchanged_files")
         self.errors = []
         self.logger = logging.getLogger("RefactoringTool")
         self.fixer_log = []
@@ -201,10 +209,27 @@ class RefactoringTool(object):
                                     logger=self.logger)
         self.pre_order, self.post_order = self.get_fixers()
 
-        self.pre_order_heads = _get_headnode_dict(self.pre_order)
-        self.post_order_heads = _get_headnode_dict(self.post_order)
 
         self.files = []  # List of files that were or should be modified
+
+        self.BM = bm.BottomMatcher()
+        self.bmi_pre_order = [] # Bottom Matcher incompatible fixers
+        self.bmi_post_order = []
+
+        for fixer in chain(self.post_order, self.pre_order):
+            if fixer.BM_compatible:
+                self.BM.add_fixer(fixer)
+                # remove fixers that will be handled by the bottom-up
+                # matcher
+            elif fixer in self.pre_order:
+                self.bmi_pre_order.append(fixer)
+            elif fixer in self.post_order:
+                self.bmi_post_order.append(fixer)
+
+        self.bmi_pre_order_heads = _get_headnode_dict(self.bmi_pre_order)
+        self.bmi_post_order_heads = _get_headnode_dict(self.bmi_post_order)
+
+
 
     def get_fixers(self):
         """Inspects the options to load the requested patterns and handlers.
@@ -268,6 +293,7 @@ class RefactoringTool(object):
 
     def refactor(self, items, write=False, doctests_only=False):
         """Refactor a list of files and directories."""
+
         for dir_or_file in items:
             if os.path.isdir(dir_or_file):
                 self.refactor_dir(dir_or_file, write, doctests_only)
@@ -281,13 +307,14 @@ class RefactoringTool(object):
 
         Files and subdirectories starting with '.' are skipped.
         """
+        py_ext = os.extsep + "py"
         for dirpath, dirnames, filenames in os.walk(dir_name):
             self.log_debug("Descending into %s", dirpath)
             dirnames.sort()
             filenames.sort()
             for name in filenames:
-                if not name.startswith(".") and \
-                        os.path.splitext(name)[1].endswith("py"):
+                if (not name.startswith(".") and
+                    os.path.splitext(name)[1] == py_ext):
                     fullname = os.path.join(dirpath, name)
                     self.refactor_file(fullname, write, doctests_only)
             # Modify dirnames in-place to remove subdirs with leading dots
@@ -299,7 +326,7 @@ class RefactoringTool(object):
         """
         try:
             f = open(filename, "rb")
-        except IOError, err:
+        except IOError as err:
             self.log_error("Can't open %s: %s", filename, err)
             return None, None
         try:
@@ -319,13 +346,13 @@ class RefactoringTool(object):
         if doctests_only:
             self.log_debug("Refactoring doctests in %s", filename)
             output = self.refactor_docstring(input, filename)
-            if output != input:
+            if self.write_unchanged_files or output != input:
                 self.processed_file(output, filename, input, write, encoding)
             else:
                 self.log_debug("No doctest changes in %s", filename)
         else:
             tree = self.refactor_string(input, filename)
-            if tree and tree.was_changed:
+            if self.write_unchanged_files or (tree and tree.was_changed):
                 # The [:-1] is to take off the \n we added earlier
                 self.processed_file(unicode(tree)[:-1], filename,
                                     write=write, encoding=encoding)
@@ -348,7 +375,7 @@ class RefactoringTool(object):
             self.driver.grammar = pygram.python_grammar_no_print_statement
         try:
             tree = self.driver.parse_string(data)
-        except Exception, err:
+        except Exception as err:
             self.log_error("Can't parse %s: %s: %s",
                            name, err.__class__.__name__, err)
             return
@@ -364,19 +391,23 @@ class RefactoringTool(object):
         if doctests_only:
             self.log_debug("Refactoring doctests in stdin")
             output = self.refactor_docstring(input, "<stdin>")
-            if output != input:
+            if self.write_unchanged_files or output != input:
                 self.processed_file(output, "<stdin>", input)
             else:
                 self.log_debug("No doctest changes in stdin")
         else:
             tree = self.refactor_string(input, "<stdin>")
-            if tree and tree.was_changed:
+            if self.write_unchanged_files or (tree and tree.was_changed):
                 self.processed_file(unicode(tree), "<stdin>", input)
             else:
                 self.log_debug("No changes in stdin")
 
     def refactor_tree(self, tree, name):
         """Refactors a parse tree (modifying the tree in place).
+
+        For compatible patterns the bottom matcher module is
+        used. Otherwise the tree is traversed node-to-node for
+        matches.
 
         Args:
             tree: a pytree.Node instance representing the root of the tree
@@ -386,11 +417,65 @@ class RefactoringTool(object):
         Returns:
             True if the tree was modified, False otherwise.
         """
+
         for fixer in chain(self.pre_order, self.post_order):
             fixer.start_tree(tree, name)
 
-        self.traverse_by(self.pre_order_heads, tree.pre_order())
-        self.traverse_by(self.post_order_heads, tree.post_order())
+        #use traditional matching for the incompatible fixers
+        self.traverse_by(self.bmi_pre_order_heads, tree.pre_order())
+        self.traverse_by(self.bmi_post_order_heads, tree.post_order())
+
+        # obtain a set of candidate nodes
+        match_set = self.BM.run(tree.leaves())
+
+        while any(match_set.values()):
+            for fixer in self.BM.fixers:
+                if fixer in match_set and match_set[fixer]:
+                    #sort by depth; apply fixers from bottom(of the AST) to top
+                    match_set[fixer].sort(key=pytree.Base.depth, reverse=True)
+
+                    if fixer.keep_line_order:
+                        #some fixers(eg fix_imports) must be applied
+                        #with the original file's line order
+                        match_set[fixer].sort(key=pytree.Base.get_lineno)
+
+                    for node in list(match_set[fixer]):
+                        if node in match_set[fixer]:
+                            match_set[fixer].remove(node)
+
+                        try:
+                            find_root(node)
+                        except AssertionError:
+                            # this node has been cut off from a
+                            # previous transformation ; skip
+                            continue
+
+                        if node.fixers_applied and fixer in node.fixers_applied:
+                            # do not apply the same fixer again
+                            continue
+
+                        results = fixer.match(node)
+
+                        if results:
+                            new = fixer.transform(node, results)
+                            if new is not None:
+                                node.replace(new)
+                                #new.fixers_applied.append(fixer)
+                                for node in new.post_order():
+                                    # do not apply the fixer again to
+                                    # this or any subnode
+                                    if not node.fixers_applied:
+                                        node.fixers_applied = []
+                                    node.fixers_applied.append(fixer)
+
+                                # update the original match set for
+                                # the added code
+                                new_matches = self.BM.run(new.leaves())
+                                for fxr in new_matches:
+                                    if not fxr in match_set:
+                                        match_set[fxr]=[]
+
+                                    match_set[fxr].extend(new_matches[fxr])
 
         for fixer in chain(self.pre_order, self.post_order):
             fixer.finish_tree(tree, name)
@@ -422,7 +507,7 @@ class RefactoringTool(object):
     def processed_file(self, new_text, filename, old_text=None, write=False,
                        encoding=None):
         """
-        Called when a file has been refactored, and there are changes.
+        Called when a file has been refactored and there may be changes.
         """
         self.files.append(filename)
         if old_text is None:
@@ -433,7 +518,8 @@ class RefactoringTool(object):
         self.print_output(old_text, new_text, filename, equal)
         if equal:
             self.log_debug("No changes to %s", filename)
-            return
+            if not self.write_unchanged_files:
+                return
         if write:
             self.write_file(new_text, filename, old_text, encoding)
         else:
@@ -448,12 +534,12 @@ class RefactoringTool(object):
         """
         try:
             f = _open_with_encoding(filename, "w", encoding=encoding)
-        except os.error, err:
+        except os.error as err:
             self.log_error("Can't create %s: %s", filename, err)
             return
         try:
             f.write(_to_system_newlines(new_text))
-        except os.error, err:
+        except os.error as err:
             self.log_error("Can't write %s: %s", filename, err)
         finally:
             f.close()
@@ -516,8 +602,8 @@ class RefactoringTool(object):
         """
         try:
             tree = self.parse_block(block, lineno, indent)
-        except Exception, err:
-            if self.log.isEnabledFor(logging.DEBUG):
+        except Exception as err:
+            if self.logger.isEnabledFor(logging.DEBUG):
                 for line in block:
                     self.log_debug("Source: %s", line.rstrip(u"\n"))
             self.log_error("Can't parse docstring in %s line %s: %s: %s",

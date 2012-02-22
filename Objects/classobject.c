@@ -123,6 +123,7 @@ alloc_error:
     op->cl_dict = dict;
     Py_XINCREF(name);
     op->cl_name = name;
+    op->cl_weakreflist = NULL;
 
     op->cl_getattr = class_lookup(op, getattrstr, &dummy);
     op->cl_setattr = class_lookup(op, setattrstr, &dummy);
@@ -188,6 +189,8 @@ static void
 class_dealloc(PyClassObject *op)
 {
     _PyObject_GC_UNTRACK(op);
+    if (op->cl_weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) op);
     Py_DECREF(op->cl_bases);
     Py_DECREF(op->cl_dict);
     Py_XDECREF(op->cl_name);
@@ -454,7 +457,7 @@ PyTypeObject PyClass_Type = {
     (traverseproc)class_traverse,               /* tp_traverse */
     0,                                          /* tp_clear */
     0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
+    offsetof(PyClassObject, cl_weakreflist), /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     0,                                          /* tp_methods */
@@ -1218,7 +1221,7 @@ instance_ass_item(PyInstanceObject *inst, Py_ssize_t i, PyObject *item)
     if (func == NULL)
         return -1;
     if (item == NULL)
-        arg = PyInt_FromSsize_t(i);
+        arg = Py_BuildValue("(n)", i);
     else
         arg = Py_BuildValue("(nO)", i, item);
     if (arg == NULL) {
@@ -2226,10 +2229,6 @@ PyObject *
 PyMethod_New(PyObject *func, PyObject *self, PyObject *klass)
 {
     register PyMethodObject *im;
-    if (!PyCallable_Check(func)) {
-        PyErr_BadInternalCall();
-        return NULL;
-    }
     im = free_list;
     if (im != NULL) {
         free_list = (PyMethodObject *)(im->im_self);

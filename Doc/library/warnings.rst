@@ -9,13 +9,17 @@
 
 .. versionadded:: 2.1
 
+**Source code:** :source:`Lib/warnings.py`
+
+--------------
+
 Warning messages are typically issued in situations where it is useful to alert
 the user of some condition in a program, where that condition (normally) doesn't
 warrant raising an exception and terminating the program.  For example, one
 might want to issue a warning when a program uses an obsolete module.
 
 Python programmers issue warnings by calling the :func:`warn` function defined
-in this module.  (C programmers use :cfunc:`PyErr_WarnEx`; see
+in this module.  (C programmers use :c:func:`PyErr_WarnEx`; see
 :ref:`exceptionhandling` for details).
 
 Warning messages are normally written to ``sys.stderr``, but their disposition
@@ -39,6 +43,10 @@ may be overridden; the default implementation of this function formats the
 message by calling :func:`formatwarning`, which is also available for use by
 custom implementations.
 
+.. seealso::
+   :func:`logging.captureWarnings` allows you to handle all warnings with
+   the standard logging infrastructure.
+
 
 .. _warning-categories:
 
@@ -59,7 +67,7 @@ following warnings category classes are currently defined:
 | :exc:`UserWarning`               | The default category for :func:`warn`.        |
 +----------------------------------+-----------------------------------------------+
 | :exc:`DeprecationWarning`        | Base category for warnings about deprecated   |
-|                                  | features.                                     |
+|                                  | features (ignored by default).                |
 +----------------------------------+-----------------------------------------------+
 | :exc:`SyntaxWarning`             | Base category for warnings about dubious      |
 |                                  | syntactic features.                           |
@@ -88,6 +96,9 @@ because conceptually they belong to the warnings mechanism.
 User code can define additional warning categories by subclassing one of the
 standard warning categories.  A warning category must always be a subclass of
 the :exc:`Warning` class.
+
+.. versionchanged:: 2.7
+   :exc:`DeprecationWarning` is ignored by default.
 
 
 .. _warning-filter:
@@ -148,13 +159,19 @@ interpreter command line.  The interpreter saves the arguments for all
 :mod:`warnings` module parses these when it is first imported (invalid options
 are ignored, after printing a message to ``sys.stderr``).
 
-The warnings that are ignored by default may be enabled by passing :option:`-Wd`
-to the interpreter. This enables default handling for all warnings, including
-those that are normally ignored by default. This is particular useful for
-enabling ImportWarning when debugging problems importing a developed package.
-ImportWarning can also be enabled explicitly in Python code using::
 
-   warnings.simplefilter('default', ImportWarning)
+Default Warning Filters
+~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, Python installs several warning filters, which can be overridden by
+the command-line options passed to :option:`-W` and calls to
+:func:`filterwarnings`.
+
+* :exc:`PendingDeprecationWarning`, and :exc:`ImportWarning` are ignored.
+
+* :exc:`BytesWarning` is ignored unless the :option:`-b` option is given once or
+  twice; in this case this warning is either printed (``-b``) or turned into an
+  exception (``-bb``).
 
 
 .. _warning-suppress:
@@ -231,6 +248,37 @@ continues to increase after each operation, or else delete the previous
 entries from the warnings list before each new operation).
 
 
+Updating Code For New Versions of Python
+----------------------------------------
+
+Warnings that are only of interest to the developer are ignored by default. As
+such you should make sure to test your code with typically ignored warnings
+made visible. You can do this from the command-line by passing :option:`-Wd`
+to the interpreter (this is shorthand for :option:`-W default`).  This enables
+default handling for all warnings, including those that are ignored by default.
+To change what action is taken for encountered warnings you simply change what
+argument is passed to :option:`-W`, e.g. :option:`-W error`. See the
+:option:`-W` flag for more details on what is possible.
+
+To programmatically do the same as :option:`-Wd`, use::
+
+  warnings.simplefilter('default')
+
+Make sure to execute this code as soon as possible. This prevents the
+registering of what warnings have been raised from unexpectedly influencing how
+future warnings are treated.
+
+Having certain warnings ignored by default is done to prevent a user from
+seeing warnings that are only of interest to the developer. As you do not
+necessarily have control over what interpreter a user uses to run their code,
+it is possible that a new version of Python will be released between your
+release cycles.  The new interpreter release could trigger new warnings in your
+code that were not there in an older interpreter, e.g.
+:exc:`DeprecationWarning` for a module that you are using. While you as a
+developer want to be notified that your code is using a deprecated module, to a
+user this information is essentially noise and provides no benefit to them.
+
+
 .. _warning-functions:
 
 Available Functions
@@ -297,9 +345,8 @@ Available Functions
    message; if *line* is not supplied, :func:`showwarning` will
    try to read the line specified by *filename* and *lineno*.
 
-   .. versionchanged:: 2.6
-      Added the *line* argument. Implementations that lack the new argument
-      will trigger a :exc:`DeprecationWarning`.
+   .. versionchanged:: 2.7
+      The *line* argument is required to be supported.
 
 
 .. function:: formatwarning(message, category, filename, lineno[, line])

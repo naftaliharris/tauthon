@@ -61,6 +61,23 @@ Handling of compressed files is offered by the :class:`BZ2File` class.
    reading. Instances support iteration in the same way as normal :class:`file`
    instances.
 
+   :class:`BZ2File` supports the :keyword:`with` statement.
+
+   .. versionchanged:: 2.7
+      Support for the :keyword:`with` statement was added.
+
+
+   .. note::
+
+      This class does not support input files containing multiple streams (such
+      as those produced by the :program:`pbzip2` tool). When reading such an
+      input file, only the first stream will be accessible. If you require
+      support for multi-stream files, consider using the third-party
+      :mod:`bz2file` module (available from
+      `PyPI <http://pypi.python.org/pypi/bz2file>`_). This module provides a
+      backport of Python 3.3's :class:`BZ2File` class, which does support
+      multi-stream files.
+
 
    .. method:: close()
 

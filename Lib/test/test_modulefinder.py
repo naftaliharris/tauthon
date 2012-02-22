@@ -211,11 +211,17 @@ def open_file(path):
 
 def create_package(source):
     ofi = None
-    for line in source.splitlines():
-        if line.startswith(" ") or line.startswith("\t"):
-            ofi.write(line.strip() + "\n")
-        else:
-            ofi = open_file(os.path.join(TEST_DIR, line.strip()))
+    try:
+        for line in source.splitlines():
+            if line.startswith(" ") or line.startswith("\t"):
+                ofi.write(line.strip() + "\n")
+            else:
+                if ofi:
+                    ofi.close()
+                ofi = open_file(os.path.join(TEST_DIR, line.strip()))
+    finally:
+        if ofi:
+            ofi.close()
 
 class ModuleFinderTest(unittest.TestCase):
     def _do_test(self, info, report=False):
@@ -240,12 +246,12 @@ class ModuleFinderTest(unittest.TestCase):
             more = list(found - modules)
             less = list(modules - found)
             # check if we found what we expected, not more, not less
-            self.failUnlessEqual((more, less), ([], []))
+            self.assertEqual((more, less), ([], []))
 
             # check for missing and maybe missing modules
             bad, maybe = mf.any_missing_maybe()
-            self.failUnlessEqual(bad, missing)
-            self.failUnlessEqual(maybe, maybe_missing)
+            self.assertEqual(bad, missing)
+            self.assertEqual(maybe, maybe_missing)
         finally:
             distutils.dir_util.remove_tree(TEST_DIR)
 

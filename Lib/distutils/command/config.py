@@ -9,21 +9,19 @@ configure-like tasks: "try to compile this C code", or "figure out where
 this header file lives".
 """
 
-# This module should be kept compatible with Python 2.1.
-
 __revision__ = "$Id$"
 
-import sys, os, string, re
-from types import *
+import os
+import re
+
 from distutils.core import Command
 from distutils.errors import DistutilsExecError
 from distutils.sysconfig import customize_compiler
 from distutils import log
 
-LANG_EXT = {'c': '.c',
-            'c++': '.cxx'}
+LANG_EXT = {'c': '.c', 'c++': '.cxx'}
 
-class config (Command):
+class config(Command):
 
     description = "prepare to build"
 
@@ -53,12 +51,10 @@ class config (Command):
     # The three standard command methods: since the "config" command
     # does nothing by default, these are empty.
 
-    def initialize_options (self):
+    def initialize_options(self):
         self.compiler = None
         self.cc = None
         self.include_dirs = None
-        #self.define = None
-        #self.undef = None
         self.libraries = None
         self.library_dirs = None
 
@@ -70,24 +66,23 @@ class config (Command):
         # to clean at some point
         self.temp_files = []
 
-    def finalize_options (self):
+    def finalize_options(self):
         if self.include_dirs is None:
             self.include_dirs = self.distribution.include_dirs or []
-        elif type(self.include_dirs) is StringType:
-            self.include_dirs = string.split(self.include_dirs, os.pathsep)
+        elif isinstance(self.include_dirs, str):
+            self.include_dirs = self.include_dirs.split(os.pathsep)
 
         if self.libraries is None:
             self.libraries = []
-        elif type(self.libraries) is StringType:
+        elif isinstance(self.libraries, str):
             self.libraries = [self.libraries]
 
         if self.library_dirs is None:
             self.library_dirs = []
-        elif type(self.library_dirs) is StringType:
-            self.library_dirs = string.split(self.library_dirs, os.pathsep)
+        elif isinstance(self.library_dirs, str):
+            self.library_dirs = self.library_dirs.split(os.pathsep)
 
-
-    def run (self):
+    def run(self):
         pass
 
 
@@ -95,7 +90,7 @@ class config (Command):
     # loosely based on Autoconf macros of similar names.  Sub-classes
     # may use these freely.
 
-    def _check_compiler (self):
+    def _check_compiler(self):
         """Check that 'self.compiler' really is a CCompiler object;
         if not, make it one.
         """
@@ -114,7 +109,7 @@ class config (Command):
                 self.compiler.set_library_dirs(self.library_dirs)
 
 
-    def _gen_temp_sourcefile (self, body, headers, lang):
+    def _gen_temp_sourcefile(self, body, headers, lang):
         filename = "_configtest" + LANG_EXT[lang]
         file = open(filename, "w")
         if headers:
@@ -127,14 +122,14 @@ class config (Command):
         file.close()
         return filename
 
-    def _preprocess (self, body, headers, include_dirs, lang):
+    def _preprocess(self, body, headers, include_dirs, lang):
         src = self._gen_temp_sourcefile(body, headers, lang)
         out = "_configtest.i"
         self.temp_files.extend([src, out])
         self.compiler.preprocess(src, out, include_dirs=include_dirs)
         return (src, out)
 
-    def _compile (self, body, headers, include_dirs, lang):
+    def _compile(self, body, headers, include_dirs, lang):
         src = self._gen_temp_sourcefile(body, headers, lang)
         if self.dump_source:
             dump_file(src, "compiling '%s':" % src)
@@ -143,9 +138,8 @@ class config (Command):
         self.compiler.compile([src], include_dirs=include_dirs)
         return (src, obj)
 
-    def _link (self, body,
-               headers, include_dirs,
-               libraries, library_dirs, lang):
+    def _link(self, body, headers, include_dirs, libraries, library_dirs,
+              lang):
         (src, obj) = self._compile(body, headers, include_dirs, lang)
         prog = os.path.splitext(os.path.basename(src))[0]
         self.compiler.link_executable([obj], prog,
@@ -159,11 +153,11 @@ class config (Command):
 
         return (src, obj, prog)
 
-    def _clean (self, *filenames):
+    def _clean(self, *filenames):
         if not filenames:
             filenames = self.temp_files
             self.temp_files = []
-        log.info("removing: %s", string.join(filenames))
+        log.info("removing: %s", ' '.join(filenames))
         for filename in filenames:
             try:
                 os.remove(filename)
@@ -181,7 +175,7 @@ class config (Command):
 
     # XXX need access to the header search path and maybe default macros.
 
-    def try_cpp (self, body=None, headers=None, include_dirs=None, lang="c"):
+    def try_cpp(self, body=None, headers=None, include_dirs=None, lang="c"):
         """Construct a source file from 'body' (a string containing lines
         of C/C++ code) and 'headers' (a list of header files to include)
         and run it through the preprocessor.  Return true if the
@@ -199,8 +193,8 @@ class config (Command):
         self._clean()
         return ok
 
-    def search_cpp (self, pattern, body=None,
-                    headers=None, include_dirs=None, lang="c"):
+    def search_cpp(self, pattern, body=None, headers=None, include_dirs=None,
+                   lang="c"):
         """Construct a source file (just like 'try_cpp()'), run it through
         the preprocessor, and return true if any line of the output matches
         'pattern'.  'pattern' should either be a compiled regex object or a
@@ -208,11 +202,10 @@ class config (Command):
         preprocesses an empty file -- which can be useful to determine the
         symbols the preprocessor and compiler set by default.
         """
-
         self._check_compiler()
-        (src, out) = self._preprocess(body, headers, include_dirs, lang)
+        src, out = self._preprocess(body, headers, include_dirs, lang)
 
-        if type(pattern) is StringType:
+        if isinstance(pattern, str):
             pattern = re.compile(pattern)
 
         file = open(out)
@@ -229,7 +222,7 @@ class config (Command):
         self._clean()
         return match
 
-    def try_compile (self, body, headers=None, include_dirs=None, lang="c"):
+    def try_compile(self, body, headers=None, include_dirs=None, lang="c"):
         """Try to compile a source file built from 'body' and 'headers'.
         Return true on success, false otherwise.
         """
@@ -245,10 +238,8 @@ class config (Command):
         self._clean()
         return ok
 
-    def try_link (self, body,
-                  headers=None, include_dirs=None,
-                  libraries=None, library_dirs=None,
-                  lang="c"):
+    def try_link(self, body, headers=None, include_dirs=None, libraries=None,
+                 library_dirs=None, lang="c"):
         """Try to compile and link a source file, built from 'body' and
         'headers', to executable form.  Return true on success, false
         otherwise.
@@ -266,10 +257,8 @@ class config (Command):
         self._clean()
         return ok
 
-    def try_run (self, body,
-                 headers=None, include_dirs=None,
-                 libraries=None, library_dirs=None,
-                 lang="c"):
+    def try_run(self, body, headers=None, include_dirs=None, libraries=None,
+                library_dirs=None, lang="c"):
         """Try to compile, link to an executable, and run a program
         built from 'body' and 'headers'.  Return true on success, false
         otherwise.
@@ -293,10 +282,8 @@ class config (Command):
     # (these are the ones that are actually likely to be useful
     # when implementing a real-world config command!)
 
-    def check_func (self, func,
-                    headers=None, include_dirs=None,
-                    libraries=None, library_dirs=None,
-                    decl=0, call=0):
+    def check_func(self, func, headers=None, include_dirs=None,
+                   libraries=None, library_dirs=None, decl=0, call=0):
 
         """Determine if function 'func' is available by constructing a
         source file that refers to 'func', and compiles and links it.
@@ -322,15 +309,15 @@ class config (Command):
         else:
             body.append("  %s;" % func)
         body.append("}")
-        body = string.join(body, "\n") + "\n"
+        body = "\n".join(body) + "\n"
 
         return self.try_link(body, headers, include_dirs,
                              libraries, library_dirs)
 
     # check_func ()
 
-    def check_lib (self, library, library_dirs=None,
-                   headers=None, include_dirs=None, other_libraries=[]):
+    def check_lib(self, library, library_dirs=None, headers=None,
+                  include_dirs=None, other_libraries=[]):
         """Determine if 'library' is available to be linked against,
         without actually checking that any particular symbols are provided
         by it.  'headers' will be used in constructing the source file to
@@ -344,8 +331,8 @@ class config (Command):
                              headers, include_dirs,
                              [library]+other_libraries, library_dirs)
 
-    def check_header (self, header, include_dirs=None,
-                      library_dirs=None, lang="c"):
+    def check_header(self, header, include_dirs=None, library_dirs=None,
+                     lang="c"):
         """Determine if the system header file named by 'header_file'
         exists and can be found by the preprocessor; return true if so,
         false otherwise.
@@ -354,15 +341,17 @@ class config (Command):
                             include_dirs=include_dirs)
 
 
-# class config
+def dump_file(filename, head=None):
+    """Dumps a file content into log.info.
 
-
-def dump_file (filename, head=None):
+    If head is not None, will be dumped before the file content.
+    """
     if head is None:
-        print filename + ":"
+        log.info('%s' % filename)
     else:
-        print head
-
+        log.info(head)
     file = open(filename)
-    sys.stdout.write(file.read())
-    file.close()
+    try:
+        log.info(file.read())
+    finally:
+        file.close()
