@@ -37,11 +37,16 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
    complicated way on how many elements the sequences have in common; best case
    time is linear.
 
-   **Heuristic:** To speed-up matching, items that appear more than 1% of the
-   time in sequences of at least 200 items are treated as junk.  This has the
-   unfortunate side-effect of giving bad results for sequences constructed from
-   a small set of items.  An option to turn off the heuristic will be added to a
-   future version.
+   **Automatic junk heuristic:** :class:`SequenceMatcher` supports a heuristic that
+   automatically treats certain sequence items as junk. The heuristic counts how many
+   times each individual item appears in the sequence. If an item's duplicates (after
+   the first one) account for more than 1% of the sequence and the sequence is at least
+   200 items long, this item is marked as "popular" and is treated as junk for
+   the purpose of sequence matching. This heuristic can be turned off by setting
+   the ``autojunk`` argument to ``False`` when creating the :class:`SequenceMatcher`.
+
+   .. versionadded:: 2.7.1
+      The *autojunk* parameter.
 
 .. class:: Differ
 
@@ -151,8 +156,8 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
 
    The context diff format normally has a header for filenames and modification
    times.  Any or all of these may be specified using strings for *fromfile*,
-   *tofile*, *fromfiledate*, and *tofiledate*. The modification times are normally
-   expressed in the format returned by :func:`time.ctime`.  If not specified, the
+   *tofile*, *fromfiledate*, and *tofiledate*.  The modification times are normally
+   expressed in the ISO 8601 format. If not specified, the
    strings default to blanks.
 
       >>> s1 = ['bacon\n', 'eggs\n', 'ham\n', 'guido\n']
@@ -286,8 +291,8 @@ diffs. For comparing directories and files, see also, the :mod:`filecmp` module.
 
    The context diff format normally has a header for filenames and modification
    times.  Any or all of these may be specified using strings for *fromfile*,
-   *tofile*, *fromfiledate*, and *tofiledate*. The modification times are normally
-   expressed in the format returned by :func:`time.ctime`.  If not specified, the
+   *tofile*, *fromfiledate*, and *tofiledate*.  The modification times are normally
+   expressed in the ISO 8601 format. If not specified, the
    strings default to blanks.
 
       >>> s1 = ['bacon\n', 'eggs\n', 'ham\n', 'guido\n']
@@ -339,7 +344,7 @@ SequenceMatcher Objects
 The :class:`SequenceMatcher` class has this constructor:
 
 
-.. class:: SequenceMatcher([isjunk[, a[, b]]])
+.. class:: SequenceMatcher([isjunk[, a[, b[, autojunk=True]]]])
 
    Optional argument *isjunk* must be ``None`` (the default) or a one-argument
    function that takes a sequence element and returns true if and only if the
@@ -355,8 +360,13 @@ The :class:`SequenceMatcher` class has this constructor:
    The optional arguments *a* and *b* are sequences to be compared; both default to
    empty strings.  The elements of both sequences must be :term:`hashable`.
 
-   :class:`SequenceMatcher` objects have the following methods:
+   The optional argument *autojunk* can be used to disable the automatic junk
+   heuristic.
 
+   .. versionadded:: 2.7.1
+      The *autojunk* parameter.
+
+   :class:`SequenceMatcher` objects have the following methods:
 
    .. method:: set_seqs(a, b)
 
@@ -517,16 +527,11 @@ The :class:`SequenceMatcher` class has this constructor:
 
       Return an upper bound on :meth:`ratio` relatively quickly.
 
-      This isn't defined beyond that it is an upper bound on :meth:`ratio`, and
-      is faster to compute.
-
 
    .. method:: real_quick_ratio()
 
       Return an upper bound on :meth:`ratio` very quickly.
 
-      This isn't defined beyond that it is an upper bound on :meth:`ratio`, and
-      is faster to compute than either :meth:`ratio` or :meth:`quick_ratio`.
 
 The three methods that return the ratio of matching to total characters can give
 different results due to differing levels of approximation, although

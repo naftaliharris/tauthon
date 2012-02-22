@@ -23,24 +23,24 @@ The :mod:`locale` module defines the following exception and functions:
 
 .. exception:: Error
 
-   Exception raised when :func:`setlocale` fails.
+   Exception raised when the locale passed to :func:`setlocale` is not
+   recognized.
 
 
 .. function:: setlocale(category[, locale])
 
-   If *locale* is specified, it may be a string, a tuple of the form ``(language
-   code, encoding)``, or ``None``. If it is a tuple, it is converted to a string
-   using the locale aliasing engine.  If *locale* is given and not ``None``,
-   :func:`setlocale` modifies the locale setting for the *category*.  The available
-   categories are listed in the data description below.  The value is the name of a
-   locale.  An empty string specifies the user's default settings. If the
-   modification of the locale fails, the exception :exc:`Error` is raised.  If
-   successful, the new locale setting is returned.
+   If *locale* is given and not ``None``, :func:`setlocale` modifies the locale
+   setting for the *category*. The available categories are listed in the data
+   description below. *locale* may be a string, or an iterable of two strings
+   (language code and encoding). If it's an iterable, it's converted to a locale
+   name using the locale aliasing engine. An empty string specifies the user's
+   default settings. If the modification of the locale fails, the exception
+   :exc:`Error` is raised. If successful, the new locale setting is returned.
 
    If *locale* is omitted or ``None``, the current setting for *category* is
    returned.
 
-   :func:`setlocale` is not thread safe on most systems. Applications typically
+   :func:`setlocale` is not thread-safe on most systems. Applications typically
    start with a call of ::
 
       import locale
@@ -51,7 +51,7 @@ The :mod:`locale` module defines the following exception and functions:
    changed thereafter, using multithreading should not cause problems.
 
    .. versionchanged:: 2.0
-      Added support for tuple values of the *locale* parameter.
+      Added support for iterable values of the *locale* parameter.
 
 
 .. function:: localeconv()
@@ -165,7 +165,7 @@ The :mod:`locale` module defines the following exception and functions:
    .. data:: D_T_FMT
 
       Get a string that can be used as a format string for :func:`strftime` to
-      represent time and date in a locale-specific way.
+      represent date and time in a locale-specific way.
 
    .. data:: D_FMT
 
@@ -219,7 +219,7 @@ The :mod:`locale` module defines the following exception and functions:
 
       .. note::
 
-         The expression is in the syntax suitable for the :cfunc:`regex` function
+         The expression is in the syntax suitable for the :c:func:`regex` function
          from the C library, which might differ from the syntax used in :mod:`re`.
 
    .. data:: NOEXPR
@@ -250,12 +250,17 @@ The :mod:`locale` module defines the following exception and functions:
 
    .. data:: ERA_D_T_FMT
 
-      Get a format string for :func:`strftime` to represent dates and times in a
+      Get a format string for :func:`strftime` to represent date and time in a
       locale-specific era-based way.
 
    .. data:: ERA_D_FMT
 
-      Get a format string for :func:`strftime` to represent time in a
+      Get a format string for :func:`strftime` to represent a date in a
+      locale-specific era-based way.
+
+   .. data:: ERA_T_FMT
+
+      Get a format string for :func:`strftime` to represent a time in a
       locale-specific era-based way.
 
    .. data:: ALT_DIGITS
@@ -554,8 +559,8 @@ catalogs, and the C library's search algorithms for locating message catalogs.
 
 Python applications should normally find no need to invoke these functions, and
 should use :mod:`gettext` instead.  A known exception to this rule are
-applications that link use additional C libraries which internally invoke
-:cfunc:`gettext` or :func:`dcgettext`.  For these applications, it may be
+applications that link with additional C libraries which internally invoke
+:c:func:`gettext` or :func:`dcgettext`.  For these applications, it may be
 necessary to bind the text domain, so that the libraries can properly locate
 their message catalogs.
 

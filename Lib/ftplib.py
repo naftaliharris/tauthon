@@ -33,6 +33,7 @@ python ftplib.py -d localhost -l -p -l
 # Modified by Jack to work on the mac.
 # Modified by Siebren to support docstrings and PASV.
 # Modified by Phil Schwartz to add storbinary and storlines callbacks.
+# Modified by Giampaolo Rodola' to add TLS support.
 #
 
 import os
@@ -324,32 +325,39 @@ class FTP:
         if self.passiveserver:
             host, port = self.makepasv()
             conn = socket.create_connection((host, port), self.timeout)
-            if rest is not None:
-                self.sendcmd("REST %s" % rest)
-            resp = self.sendcmd(cmd)
-            # Some servers apparently send a 200 reply to
-            # a LIST or STOR command, before the 150 reply
-            # (and way before the 226 reply). This seems to
-            # be in violation of the protocol (which only allows
-            # 1xx or error messages for LIST), so we just discard
-            # this response.
-            if resp[0] == '2':
-                resp = self.getresp()
-            if resp[0] != '1':
-                raise error_reply, resp
+            try:
+                if rest is not None:
+                    self.sendcmd("REST %s" % rest)
+                resp = self.sendcmd(cmd)
+                # Some servers apparently send a 200 reply to
+                # a LIST or STOR command, before the 150 reply
+                # (and way before the 226 reply). This seems to
+                # be in violation of the protocol (which only allows
+                # 1xx or error messages for LIST), so we just discard
+                # this response.
+                if resp[0] == '2':
+                    resp = self.getresp()
+                if resp[0] != '1':
+                    raise error_reply, resp
+            except:
+                conn.close()
+                raise
         else:
             sock = self.makeport()
-            if rest is not None:
-                self.sendcmd("REST %s" % rest)
-            resp = self.sendcmd(cmd)
-            # See above.
-            if resp[0] == '2':
-                resp = self.getresp()
-            if resp[0] != '1':
-                raise error_reply, resp
-            conn, sockaddr = sock.accept()
-            if self.timeout is not _GLOBAL_DEFAULT_TIMEOUT:
-                conn.settimeout(self.timeout)
+            try:
+                if rest is not None:
+                    self.sendcmd("REST %s" % rest)
+                resp = self.sendcmd(cmd)
+                # See above.
+                if resp[0] == '2':
+                    resp = self.getresp()
+                if resp[0] != '1':
+                    raise error_reply, resp
+                conn, sockaddr = sock.accept()
+                if self.timeout is not _GLOBAL_DEFAULT_TIMEOUT:
+                    conn.settimeout(self.timeout)
+            finally:
+                sock.close()
         if resp[:3] == '150':
             # this is conditional in case we received a 125
             size = parse150(resp)
@@ -434,7 +442,7 @@ class FTP:
         conn.close()
         return self.voidresp()
 
-    def storbinary(self, cmd, fp, blocksize=8192, callback=None):
+    def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
         """Store a file in binary mode.  A new port is created for you.
 
         Args:
@@ -444,12 +452,13 @@ class FTP:
                      the connection at once.  [default: 8192]
           callback: An optional single parameter callable that is called on
                     on each block of data after it is sent.  [default: None]
+          rest: Passed to transfercmd().  [default: None]
 
         Returns:
           The response code.
         """
         self.voidcmd('TYPE I')
-        conn = self.transfercmd(cmd)
+        conn = self.transfercmd(cmd, rest)
         while 1:
             buf = fp.read(blocksize)
             if not buf: break
@@ -573,10 +582,185 @@ class FTP:
 
     def close(self):
         '''Close the connection without assuming anything about it.'''
-        if self.file:
+        if self.file is not None:
             self.file.close()
+        if self.sock is not None:
             self.sock.close()
-            self.file = self.sock = None
+        self.file = self.sock = None
+
+try:
+    import ssl
+except ImportError:
+    pass
+else:
+    class FTP_TLS(FTP):
+        '''A FTP subclass which adds TLS support to FTP as described
+        in RFC-4217.
+
+        Connect as usual to port 21 implicitly securing the FTP control
+        connection before authenticating.
+
+        Securing the data connection requires user to explicitly ask
+        for it by calling prot_p() method.
+
+        Usage example:
+        >>> from ftplib import FTP_TLS
+        >>> ftps = FTP_TLS('ftp.python.org')
+        >>> ftps.login()  # login anonymously previously securing control channel
+        '230 Guest login ok, access restrictions apply.'
+        >>> ftps.prot_p()  # switch to secure data connection
+        '200 Protection level set to P'
+        >>> ftps.retrlines('LIST')  # list directory content securely
+        total 9
+        drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 .
+        drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 ..
+        drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 bin
+        drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 etc
+        d-wxrwxr-x   2 ftp      wheel        1024 Sep  5 13:43 incoming
+        drwxr-xr-x   2 root     wheel        1024 Nov 17  1993 lib
+        drwxr-xr-x   6 1094     wheel        1024 Sep 13 19:07 pub
+        drwxr-xr-x   3 root     wheel        1024 Jan  3  1994 usr
+        -rw-r--r--   1 root     root          312 Aug  1  1994 welcome.msg
+        '226 Transfer complete.'
+        >>> ftps.quit()
+        '221 Goodbye.'
+        >>>
+        '''
+        ssl_version = ssl.PROTOCOL_TLSv1
+
+        def __init__(self, host='', user='', passwd='', acct='', keyfile=None,
+                     certfile=None, timeout=_GLOBAL_DEFAULT_TIMEOUT):
+            self.keyfile = keyfile
+            self.certfile = certfile
+            self._prot_p = False
+            FTP.__init__(self, host, user, passwd, acct, timeout)
+
+        def login(self, user='', passwd='', acct='', secure=True):
+            if secure and not isinstance(self.sock, ssl.SSLSocket):
+                self.auth()
+            return FTP.login(self, user, passwd, acct)
+
+        def auth(self):
+            '''Set up secure control connection by using TLS/SSL.'''
+            if isinstance(self.sock, ssl.SSLSocket):
+                raise ValueError("Already using TLS")
+            if self.ssl_version == ssl.PROTOCOL_TLSv1:
+                resp = self.voidcmd('AUTH TLS')
+            else:
+                resp = self.voidcmd('AUTH SSL')
+            self.sock = ssl.wrap_socket(self.sock, self.keyfile, self.certfile,
+                                        ssl_version=self.ssl_version)
+            self.file = self.sock.makefile(mode='rb')
+            return resp
+
+        def prot_p(self):
+            '''Set up secure data connection.'''
+            # PROT defines whether or not the data channel is to be protected.
+            # Though RFC-2228 defines four possible protection levels,
+            # RFC-4217 only recommends two, Clear and Private.
+            # Clear (PROT C) means that no security is to be used on the
+            # data-channel, Private (PROT P) means that the data-channel
+            # should be protected by TLS.
+            # PBSZ command MUST still be issued, but must have a parameter of
+            # '0' to indicate that no buffering is taking place and the data
+            # connection should not be encapsulated.
+            self.voidcmd('PBSZ 0')
+            resp = self.voidcmd('PROT P')
+            self._prot_p = True
+            return resp
+
+        def prot_c(self):
+            '''Set up clear text data connection.'''
+            resp = self.voidcmd('PROT C')
+            self._prot_p = False
+            return resp
+
+        # --- Overridden FTP methods
+
+        def ntransfercmd(self, cmd, rest=None):
+            conn, size = FTP.ntransfercmd(self, cmd, rest)
+            if self._prot_p:
+                conn = ssl.wrap_socket(conn, self.keyfile, self.certfile,
+                                       ssl_version=self.ssl_version)
+            return conn, size
+
+        def retrbinary(self, cmd, callback, blocksize=8192, rest=None):
+            self.voidcmd('TYPE I')
+            conn = self.transfercmd(cmd, rest)
+            try:
+                while 1:
+                    data = conn.recv(blocksize)
+                    if not data:
+                        break
+                    callback(data)
+                # shutdown ssl layer
+                if isinstance(conn, ssl.SSLSocket):
+                    conn.unwrap()
+            finally:
+                conn.close()
+            return self.voidresp()
+
+        def retrlines(self, cmd, callback = None):
+            if callback is None: callback = print_line
+            resp = self.sendcmd('TYPE A')
+            conn = self.transfercmd(cmd)
+            fp = conn.makefile('rb')
+            try:
+                while 1:
+                    line = fp.readline()
+                    if self.debugging > 2: print '*retr*', repr(line)
+                    if not line:
+                        break
+                    if line[-2:] == CRLF:
+                        line = line[:-2]
+                    elif line[-1:] == '\n':
+                        line = line[:-1]
+                    callback(line)
+                # shutdown ssl layer
+                if isinstance(conn, ssl.SSLSocket):
+                    conn.unwrap()
+            finally:
+                fp.close()
+                conn.close()
+            return self.voidresp()
+
+        def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
+            self.voidcmd('TYPE I')
+            conn = self.transfercmd(cmd, rest)
+            try:
+                while 1:
+                    buf = fp.read(blocksize)
+                    if not buf: break
+                    conn.sendall(buf)
+                    if callback: callback(buf)
+                # shutdown ssl layer
+                if isinstance(conn, ssl.SSLSocket):
+                    conn.unwrap()
+            finally:
+                conn.close()
+            return self.voidresp()
+
+        def storlines(self, cmd, fp, callback=None):
+            self.voidcmd('TYPE A')
+            conn = self.transfercmd(cmd)
+            try:
+                while 1:
+                    buf = fp.readline()
+                    if not buf: break
+                    if buf[-2:] != CRLF:
+                        if buf[-1] in CRLF: buf = buf[:-1]
+                        buf = buf + CRLF
+                    conn.sendall(buf)
+                    if callback: callback(buf)
+                # shutdown ssl layer
+                if isinstance(conn, ssl.SSLSocket):
+                    conn.unwrap()
+            finally:
+                conn.close()
+            return self.voidresp()
+
+    __all__.append('FTP_TLS')
+    all_errors = (Error, IOError, EOFError, ssl.SSLError)
 
 
 _150_re = None

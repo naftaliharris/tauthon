@@ -1523,7 +1523,7 @@ delta_to_microseconds(PyDateTime_Delta *self)
         goto Done;
     Py_DECREF(x1);
     Py_DECREF(x2);
-    x1 = x2 = NULL;
+    x2 = NULL;
 
     /* x3 has days+seconds in seconds */
     x1 = PyNumber_Multiply(x3, us_per_second);          /* us */
@@ -1737,13 +1737,14 @@ delta_subtract(PyObject *left, PyObject *right)
 
     if (PyDelta_Check(left) && PyDelta_Check(right)) {
         /* delta - delta */
-        PyObject *minus_right = PyNumber_Negative(right);
-        if (minus_right) {
-            result = delta_add(left, minus_right);
-            Py_DECREF(minus_right);
-        }
-        else
-            result = NULL;
+        /* The C-level additions can't overflow because of the
+         * invariant bounds.
+         */
+        int days = GET_TD_DAYS(left) - GET_TD_DAYS(right);
+        int seconds = GET_TD_SECONDS(left) - GET_TD_SECONDS(right);
+        int microseconds = GET_TD_MICROSECONDS(left) -
+                           GET_TD_MICROSECONDS(right);
+        result = new_delta(days, seconds, microseconds, 1);
     }
 
     if (result == Py_NotImplemented)
@@ -2097,6 +2098,30 @@ delta_getstate(PyDateTime_Delta *self)
 }
 
 static PyObject *
+delta_total_seconds(PyObject *self)
+{
+    PyObject *total_seconds;
+    PyObject *total_microseconds;
+    PyObject *one_million;
+
+    total_microseconds = delta_to_microseconds((PyDateTime_Delta *)self);
+    if (total_microseconds == NULL)
+        return NULL;
+
+    one_million = PyLong_FromLong(1000000L);
+    if (one_million == NULL) {
+        Py_DECREF(total_microseconds);
+        return NULL;
+    }
+
+    total_seconds = PyNumber_TrueDivide(total_microseconds, one_million);
+
+    Py_DECREF(total_microseconds);
+    Py_DECREF(one_million);
+    return total_seconds;
+}
+
+static PyObject *
 delta_reduce(PyDateTime_Delta* self)
 {
     return Py_BuildValue("ON", Py_TYPE(self), delta_getstate(self));
@@ -2118,7 +2143,10 @@ static PyMemberDef delta_members[] = {
 };
 
 static PyMethodDef delta_methods[] = {
-    {"__reduce__", (PyCFunction)delta_reduce,     METH_NOARGS,
+    {"total_seconds", (PyCFunction)delta_total_seconds, METH_NOARGS,
+     PyDoc_STR("Total seconds in the duration.")},
+
+    {"__reduce__", (PyCFunction)delta_reduce, METH_NOARGS,
      PyDoc_STR("__reduce__() -> (cls, state)")},
 
     {NULL,      NULL},
@@ -3944,7 +3972,7 @@ datetime_strptime(PyObject *cls, PyObject *args)
             else
                 good_timetuple = 0;
             /* follow that up with a little dose of microseconds */
-            if (PyInt_Check(frac))
+            if (good_timetuple && PyInt_Check(frac))
                 ia[6] = PyInt_AsLong(frac);
             else
                 good_timetuple = 0;
@@ -4848,8 +4876,7 @@ initdatetime(void)
     Py_INCREF(&PyDateTime_TZInfoType);
     PyModule_AddObject(m, "tzinfo", (PyObject *) &PyDateTime_TZInfoType);
 
-    x = PyCObject_FromVoidPtrAndDesc(&CAPI, (void*) DATETIME_API_MAGIC,
-        NULL);
+    x = PyCapsule_New(&CAPI, PyDateTime_CAPSULE_NAME, NULL);
     if (x == NULL)
         return;
     PyModule_AddObject(m, "datetime_CAPI", x);

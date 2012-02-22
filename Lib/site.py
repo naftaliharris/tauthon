@@ -61,19 +61,27 @@ ImportError exception, it is silently ignored.
 import sys
 import os
 import __builtin__
+import traceback
 
 # Prefixes for site-packages; add additional prefixes like /usr/local here
 PREFIXES = [sys.prefix, sys.exec_prefix]
 # Enable per user site-packages directory
 # set it to False to disable the feature or True to force the feature
 ENABLE_USER_SITE = None
+
 # for distutils.commands.install
+# These values are initialized by the getuserbase() and getusersitepackages()
+# functions, through the main() function when Python starts.
 USER_SITE = None
 USER_BASE = None
 
 
 def makepath(*paths):
-    dir = os.path.abspath(os.path.join(*paths))
+    dir = os.path.join(*paths)
+    try:
+        dir = os.path.abspath(dir)
+    except OSError:
+        pass
     return dir, os.path.normcase(dir)
 
 
@@ -84,8 +92,8 @@ def abs__file__():
             continue   # don't mess with a PEP 302-supplied __file__
         try:
             m.__file__ = os.path.abspath(m.__file__)
-        except AttributeError:
-            continue
+        except (AttributeError, OSError):
+            pass
 
 
 def removeduppaths():
@@ -111,11 +119,11 @@ def removeduppaths():
 def addbuilddir():
     """Append ./build/lib.<platform> in case we're running in the build dir
     (especially for Guido :-)"""
-    from distutils.util import get_platform
+    from sysconfig import get_platform
     s = "build/lib.%s-%.3s" % (get_platform(), sys.version)
     if hasattr(sys, 'gettotalrefcount'):
         s += '-pydebug'
-    s = os.path.join(os.path.dirname(sys.path[-1]), s)
+    s = os.path.join(os.path.dirname(sys.path.pop()), s)
     sys.path.append(s)
 
 
@@ -148,17 +156,26 @@ def addpackage(sitedir, name, known_paths):
     except IOError:
         return
     with f:
-        for line in f:
+        for n, line in enumerate(f):
             if line.startswith("#"):
                 continue
-            if line.startswith(("import ", "import\t")):
-                exec line
-                continue
-            line = line.rstrip()
-            dir, dircase = makepath(sitedir, line)
-            if not dircase in known_paths and os.path.exists(dir):
-                sys.path.append(dir)
-                known_paths.add(dircase)
+            try:
+                if line.startswith(("import ", "import\t")):
+                    exec line
+                    continue
+                line = line.rstrip()
+                dir, dircase = makepath(sitedir, line)
+                if not dircase in known_paths and os.path.exists(dir):
+                    sys.path.append(dir)
+                    known_paths.add(dircase)
+            except Exception as err:
+                print >>sys.stderr, "Error processing line {:d} of {}:\n".format(
+                    n+1, fullname)
+                for record in traceback.format_exception(*sys.exc_info()):
+                    for line in record.splitlines():
+                        print >>sys.stderr, '  '+line
+                print >>sys.stderr, "\nRemainder of file ignored"
+                break
     if reset:
         known_paths = None
     return known_paths
@@ -212,83 +229,102 @@ def check_enableusersite():
 
     return True
 
+def getuserbase():
+    """Returns the `user base` directory path.
+
+    The `user base` directory can be used to store data. If the global
+    variable ``USER_BASE`` is not initialized yet, this function will also set
+    it.
+    """
+    global USER_BASE
+    if USER_BASE is not None:
+        return USER_BASE
+    from sysconfig import get_config_var
+    USER_BASE = get_config_var('userbase')
+    return USER_BASE
+
+def getusersitepackages():
+    """Returns the user-specific site-packages directory path.
+
+    If the global variable ``USER_SITE`` is not initialized yet, this
+    function will also set it.
+    """
+    global USER_SITE
+    user_base = getuserbase() # this will also set USER_BASE
+
+    if USER_SITE is not None:
+        return USER_SITE
+
+    from sysconfig import get_path
+    import os
+
+    if sys.platform == 'darwin':
+        from sysconfig import get_config_var
+        if get_config_var('PYTHONFRAMEWORK'):
+            USER_SITE = get_path('purelib', 'osx_framework_user')
+            return USER_SITE
+
+    USER_SITE = get_path('purelib', '%s_user' % os.name)
+    return USER_SITE
 
 def addusersitepackages(known_paths):
     """Add a per user site-package to sys.path
 
     Each user has its own python directory with site-packages in the
     home directory.
-
-    USER_BASE is the root directory for all Python versions
-
-    USER_SITE is the user specific site-packages directory
-
-    USER_SITE/.. can be used for data.
     """
-    global USER_BASE, USER_SITE, ENABLE_USER_SITE
-    env_base = os.environ.get("PYTHONUSERBASE", None)
+    # get the per user site-package path
+    # this call will also make sure USER_BASE and USER_SITE are set
+    user_site = getusersitepackages()
 
-    def joinuser(*args):
-        return os.path.expanduser(os.path.join(*args))
-
-    #if sys.platform in ('os2emx', 'riscos'):
-    #    # Don't know what to put here
-    #    USER_BASE = ''
-    #    USER_SITE = ''
-    if os.name == "nt":
-        base = os.environ.get("APPDATA") or "~"
-        USER_BASE = env_base if env_base else joinuser(base, "Python")
-        USER_SITE = os.path.join(USER_BASE,
-                                 "Python" + sys.version[0] + sys.version[2],
-                                 "site-packages")
-    else:
-        USER_BASE = env_base if env_base else joinuser("~", ".local")
-        USER_SITE = os.path.join(USER_BASE, "lib",
-                                 "python" + sys.version[:3],
-                                 "site-packages")
-
-    if ENABLE_USER_SITE and os.path.isdir(USER_SITE):
-        addsitedir(USER_SITE, known_paths)
+    if ENABLE_USER_SITE and os.path.isdir(user_site):
+        addsitedir(user_site, known_paths)
     return known_paths
 
+def getsitepackages():
+    """Returns a list containing all global site-packages directories
+    (and possibly site-python).
 
-def addsitepackages(known_paths):
-    """Add site-packages (and possibly site-python) to sys.path"""
-    sitedirs = []
-    seen = []
+    For each directory present in the global ``PREFIXES``, this function
+    will find its `site-packages` subdirectory depending on the system
+    environment, and will return a list of full paths.
+    """
+    sitepackages = []
+    seen = set()
 
     for prefix in PREFIXES:
         if not prefix or prefix in seen:
             continue
-        seen.append(prefix)
+        seen.add(prefix)
 
         if sys.platform in ('os2emx', 'riscos'):
-            sitedirs.append(os.path.join(prefix, "Lib", "site-packages"))
+            sitepackages.append(os.path.join(prefix, "Lib", "site-packages"))
         elif os.sep == '/':
-            sitedirs.append(os.path.join(prefix, "lib",
+            sitepackages.append(os.path.join(prefix, "lib",
                                         "python" + sys.version[:3],
                                         "site-packages"))
-            sitedirs.append(os.path.join(prefix, "lib", "site-python"))
+            sitepackages.append(os.path.join(prefix, "lib", "site-python"))
         else:
-            sitedirs.append(prefix)
-            sitedirs.append(os.path.join(prefix, "lib", "site-packages"))
-
+            sitepackages.append(prefix)
+            sitepackages.append(os.path.join(prefix, "lib", "site-packages"))
         if sys.platform == "darwin":
             # for framework builds *only* we add the standard Apple
-            # locations. Currently only per-user, but /Library and
-            # /Network/Library could be added too
-            if 'Python.framework' in prefix:
-                sitedirs.append(
-                    os.path.expanduser(
-                        os.path.join("~", "Library", "Python",
-                                     sys.version[:3], "site-packages")))
+            # locations.
+            from sysconfig import get_config_var
+            framework = get_config_var("PYTHONFRAMEWORK")
+            if framework:
+                sitepackages.append(
+                        os.path.join("/Library", framework,
+                            sys.version[:3], "site-packages"))
+    return sitepackages
 
-    for sitedir in sitedirs:
+def addsitepackages(known_paths):
+    """Add site-packages (and possibly site-python) to sys.path"""
+    for sitedir in getsitepackages():
         if os.path.isdir(sitedir):
             addsitedir(sitedir, known_paths)
 
     return known_paths
-
 
 def setBEGINLIBPATH():
     """The OS/2 EMX port has optional extension modules that do double duty
@@ -308,8 +344,10 @@ def setBEGINLIBPATH():
 
 
 def setquit():
-    """Define new built-ins 'quit' and 'exit'.
-    These are simply strings that display a hint on how to exit.
+    """Define new builtins 'quit' and 'exit'.
+
+    These are objects which make the interpreter exit when called.
+    The repr of each object contains a hint at how it works.
 
     """
     if os.sep == ':':
@@ -416,7 +454,7 @@ def setcopyright():
 
 
 class _Helper(object):
-    """Define the built-in 'help'.
+    """Define the builtin 'help'.
     This is a wrapper around pydoc.help (with a twist).
 
     """

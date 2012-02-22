@@ -224,25 +224,14 @@ Util_CatchBZ2Error(int bzerror)
 #define SMALLCHUNK BUFSIZ
 #endif
 
-#if SIZEOF_INT < 4
-#define BIGCHUNK  (512 * 32)
-#else
-#define BIGCHUNK  (512 * 1024)
-#endif
-
 /* This is a hacked version of Python's fileobject.c:new_buffersize(). */
 static size_t
 Util_NewBufferSize(size_t currentsize)
 {
-    if (currentsize > SMALLCHUNK) {
-        /* Keep doubling until we reach BIGCHUNK;
-           then keep adding BIGCHUNK. */
-        if (currentsize <= BIGCHUNK)
-            return currentsize + currentsize;
-        else
-            return currentsize + BIGCHUNK;
-    }
-    return currentsize + SMALLCHUNK;
+    /* Expand the buffer by an amount proportional to the current size,
+       giving us amortized linear-time behavior. Use a less-than-double
+       growth factor to avoid excessive allocation. */
+    return currentsize + (currentsize >> 3) + 6;
 }
 
 /* This is a hacked version of Python's fileobject.c:get_line(). */
@@ -1234,6 +1223,36 @@ BZ2File_close(BZ2FileObject *self)
     return ret;
 }
 
+PyDoc_STRVAR(BZ2File_enter_doc,
+"__enter__() -> self.");
+
+static PyObject *
+BZ2File_enter(BZ2FileObject *self)
+{
+    if (self->mode == MODE_CLOSED) {
+        PyErr_SetString(PyExc_ValueError,
+            "I/O operation on closed file");
+        return NULL;
+    }
+    Py_INCREF(self);
+    return (PyObject *) self;
+}
+
+PyDoc_STRVAR(BZ2File_exit_doc,
+"__exit__(*excinfo) -> None.  Closes the file.");
+
+static PyObject *
+BZ2File_exit(BZ2FileObject *self, PyObject *args)
+{
+    PyObject *ret = PyObject_CallMethod((PyObject *) self, "close", NULL);
+    if (!ret)
+        /* If error occurred, pass through */
+        return NULL;
+    Py_DECREF(ret);
+    Py_RETURN_NONE;
+}
+
+
 static PyObject *BZ2File_getiter(BZ2FileObject *self);
 
 static PyMethodDef BZ2File_methods[] = {
@@ -1246,6 +1265,8 @@ static PyMethodDef BZ2File_methods[] = {
     {"seek", (PyCFunction)BZ2File_seek, METH_VARARGS, BZ2File_seek__doc__},
     {"tell", (PyCFunction)BZ2File_tell, METH_NOARGS, BZ2File_tell__doc__},
     {"close", (PyCFunction)BZ2File_close, METH_NOARGS, BZ2File_close__doc__},
+    {"__enter__", (PyCFunction)BZ2File_enter, METH_NOARGS, BZ2File_enter_doc},
+    {"__exit__", (PyCFunction)BZ2File_exit, METH_VARARGS, BZ2File_exit_doc},
     {NULL,              NULL}           /* sentinel */
 };
 
@@ -2288,9 +2309,12 @@ initbz2(void)
 {
     PyObject *m;
 
-    Py_TYPE(&BZ2File_Type) = &PyType_Type;
-    Py_TYPE(&BZ2Comp_Type) = &PyType_Type;
-    Py_TYPE(&BZ2Decomp_Type) = &PyType_Type;
+    if (PyType_Ready(&BZ2File_Type) < 0)
+        return;
+    if (PyType_Ready(&BZ2Comp_Type) < 0)
+        return;
+    if (PyType_Ready(&BZ2Decomp_Type) < 0)
+        return;
 
     m = Py_InitModule3("bz2", bz2_methods, bz2__doc__);
     if (m == NULL)

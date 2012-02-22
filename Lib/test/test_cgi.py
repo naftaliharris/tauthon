@@ -1,10 +1,9 @@
-from test.test_support import run_unittest, check_warnings, _check_py3k_warnings
+from test.test_support import run_unittest, check_warnings
 import cgi
 import os
 import sys
 import tempfile
 import unittest
-from StringIO import StringIO
 
 class HackedSysModule:
     # The regression test will have real values in sys.argv, which
@@ -115,7 +114,7 @@ def gen_result(data, environ):
 
     result = {}
     for k, v in dict(form).items():
-        result[k] = type(v) is list and form.getlist(k) or v.value
+        result[k] = isinstance(v, list) and form.getlist(k) or v.value
 
     return result
 
@@ -133,23 +132,23 @@ class CgiTests(unittest.TestCase):
             fcd = cgi.FormContentDict(env)
             sd = cgi.SvFormContentDict(env)
             fs = cgi.FieldStorage(environ=env)
-            if type(expect) == type({}):
+            if isinstance(expect, dict):
                 # test dict interface
                 self.assertEqual(len(expect), len(fcd))
-                self.assertEqual(sorted(expect.keys()), sorted(fcd.keys()))
-                self.assertEqual(sorted(expect.values()), sorted(fcd.values()))
-                self.assertEqual(sorted(expect.items()), sorted(fcd.items()))
+                self.assertItemsEqual(expect.keys(), fcd.keys())
+                self.assertItemsEqual(expect.values(), fcd.values())
+                self.assertItemsEqual(expect.items(), fcd.items())
                 self.assertEqual(fcd.get("nonexistent field", "default"), "default")
                 self.assertEqual(len(sd), len(fs))
-                self.assertEqual(sorted(sd.keys()), sorted(fs.keys()))
+                self.assertItemsEqual(sd.keys(), fs.keys())
                 self.assertEqual(fs.getvalue("nonexistent field", "default"), "default")
                 # test individual fields
                 for key in expect.keys():
                     expect_val = expect[key]
-                    self.assert_(fcd.has_key(key))
-                    self.assertEqual(sorted(fcd[key]), sorted(expect[key]))
+                    self.assertTrue(fcd.has_key(key))
+                    self.assertItemsEqual(fcd[key], expect[key])
                     self.assertEqual(fcd.get(key, "default"), fcd[key])
-                    self.assert_(fs.has_key(key))
+                    self.assertTrue(fs.has_key(key))
                     if len(expect_val) > 1:
                         single_value = 0
                     else:
@@ -157,18 +156,18 @@ class CgiTests(unittest.TestCase):
                     try:
                         val = sd[key]
                     except IndexError:
-                        self.failIf(single_value)
+                        self.assertFalse(single_value)
                         self.assertEqual(fs.getvalue(key), expect_val)
                     else:
-                        self.assert_(single_value)
+                        self.assertTrue(single_value)
                         self.assertEqual(val, expect_val[0])
                         self.assertEqual(fs.getvalue(key), expect_val[0])
-                    self.assertEqual(sorted(sd.getlist(key)), sorted(expect_val))
+                    self.assertItemsEqual(sd.getlist(key), expect_val)
                     if single_value:
-                        self.assertEqual(sorted(sd.values()),
-                                         first_elts(sorted(expect.values())))
-                        self.assertEqual(sorted(sd.items()),
-                                         first_second_elts(sorted(expect.items())))
+                        self.assertItemsEqual(sd.values(),
+                                                first_elts(expect.values()))
+                        self.assertItemsEqual(sd.items(),
+                                                first_second_elts(expect.items()))
 
     def test_weird_formcontentdict(self):
         # Test the weird FormContentDict classes
@@ -179,8 +178,7 @@ class CgiTests(unittest.TestCase):
             self.assertEqual(d[k], v)
         for k, v in d.items():
             self.assertEqual(expect[k], v)
-        with _check_py3k_warnings():
-            self.assertEqual(sorted(expect.values()), sorted(d.values()))
+        self.assertItemsEqual(expect.values(), d.values())
 
     def test_log(self):
         cgi.log("Testing")
@@ -227,7 +225,7 @@ class CgiTests(unittest.TestCase):
         # if we're not chunking properly, readline is only called twice
         # (by read_binary); if we are chunking properly, it will be called 5 times
         # as long as the chunksize is 1 << 16.
-        self.assert_(f.numcalls > 2)
+        self.assertTrue(f.numcalls > 2)
 
     def test_fieldstorage_multipart(self):
         #Test basic FieldStorage multipart parsing
@@ -253,7 +251,7 @@ Content-Disposition: form-data; name="submit"
 -----------------------------721837373350705526688164684--
 """
         fs = cgi.FieldStorage(fp=StringIO(postdata), environ=env)
-        self.assertEquals(len(fs.list), 4)
+        self.assertEqual(len(fs.list), 4)
         expect = [{'name':'id', 'filename':None, 'value':'1234'},
                   {'name':'title', 'filename':None, 'value':''},
                   {'name':'file', 'filename':'test.txt','value':'Testing 123.\n'},
@@ -261,7 +259,7 @@ Content-Disposition: form-data; name="submit"
         for x in range(len(fs.list)):
             for k, exp in expect[x].items():
                 got = getattr(fs.list[x], k)
-                self.assertEquals(got, exp)
+                self.assertEqual(got, exp)
 
     _qs_result = {
         'key1': 'value1',
@@ -341,14 +339,16 @@ this is the content of the fake file
         self.assertEqual(result, v)
 
     def test_deprecated_parse_qs(self):
-        with check_warnings():
-            # this func is moved to urlparse, this is just a sanity check
+        # this func is moved to urlparse, this is just a sanity check
+        with check_warnings(('cgi.parse_qs is deprecated, use urlparse.'
+                             'parse_qs instead', PendingDeprecationWarning)):
             self.assertEqual({'a': ['A1'], 'B': ['B3'], 'b': ['B2']},
                              cgi.parse_qs('a=A1&b=B2&B=B3'))
 
     def test_deprecated_parse_qsl(self):
-        with check_warnings():
-            # this func is moved to urlparse, this is just a sanity check
+        # this func is moved to urlparse, this is just a sanity check
+        with check_warnings(('cgi.parse_qsl is deprecated, use urlparse.'
+                             'parse_qsl instead', PendingDeprecationWarning)):
             self.assertEqual([('a', 'A1'), ('b', 'B2'), ('B', 'B3')],
                              cgi.parse_qsl('a=A1&b=B2&B=B3'))
 
@@ -377,6 +377,9 @@ this is the content of the fake file
         self.assertEqual(
             cgi.parse_header('attachment; filename="strange;name";size=123;'),
             ("attachment", {"filename": "strange;name", "size": "123"}))
+        self.assertEqual(
+            cgi.parse_header('form-data; name="files"; filename="fo\\"o;bar"'),
+            ("form-data", {"name": "files", "filename": 'fo"o;bar'}))
 
 
 def test_main():

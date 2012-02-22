@@ -1,7 +1,8 @@
 Building Python using VC++ 6.0 or 5.0
 -------------------------------------
 This directory is used to build Python for Win32 platforms, e.g. Windows
-2000 and XP.  It requires Microsoft Visual C++ 6.x or 5.x.
+2000 and XP.  It requires Microsoft Visual C++ 6.x or 5.x and Platform
+SDK February 2003 Edition (Core SDK).
 (For other Windows platforms and compilers, see ../readme.txt.)
 
 All you need to do is open the workspace "pcbuild.dsw" in MSVC++, select
@@ -11,7 +12,7 @@ and build the projects.
 The proper order to build subprojects:
 
 1) pythoncore (this builds the main Python DLL and library files,
-               python26.{dll, lib} in Release mode)
+               python27.{dll, lib} in Release mode)
 
 2) python (this builds the main Python executable,
            python.exe in Release mode)
@@ -22,7 +23,7 @@ The proper order to build subprojects:
    to the subsystems they implement; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python26_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
+their name:  python27_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
 
 SUBPROJECTS
 -----------
@@ -39,7 +40,6 @@ pythonw
     pythonw.exe, a variant of python.exe that doesn't pop up a DOS box
 _msi
     _msi.c. You need to install Windows Installer SDK to build this module.
-    http://www.microsoft.com/msdownload/platformsdk/sdkupdate/psdk-full.htm
 _socket
     socketmodule.c
 _testcapi
@@ -202,21 +202,27 @@ _ssl
     Get the latest source code for OpenSSL from
         http://www.openssl.org
 
-    You (probably) don't want the "engine" code.  For example, get
-        openssl-0.9.8g.tar.gz
-    not
-        openssl-engine-0.9.8g.tar.gz
+    You (probably) don't want the "engine" code.  For example, don't get
+        openssl-engine-0.9.6g.tar.gz
 
     Unpack into the "dist" directory, retaining the folder name from
     the archive - for example, the latest stable OpenSSL will install as
-        dist/openssl-0.9.8g
+        dist/openssl-1.0.0a
 
     You can (theoretically) use any version of OpenSSL you like - the
     build process will automatically select the latest version.
 
-    You must also install ActivePerl from
-        http://www.activestate.com/Products/ActivePerl/
-    as this is used by the OpenSSL build process.  Complain to them <wink>.
+    You can install the NASM assembler from
+        http://www.nasm.us/
+    for x86 builds.  Put nasmw.exe anywhere in your PATH.
+    Note: recent releases of nasm only have nasm.exe. Just rename it to 
+    nasmw.exe.
+
+    You can also install ActivePerl from
+        http://www.activestate.com/activeperl/
+    if you like to use the official sources instead of the files from 
+    python's subversion repository. The svn version contains pre-build
+    makefiles and assembly files.
 
     The MSVC project simply invokes PC/VC6/build_ssl.py to perform
     the build.  This Python script locates and builds your OpenSSL

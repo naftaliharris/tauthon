@@ -14,6 +14,10 @@
 
 .. versionadded:: 2.2
 
+**Source code:** :source:`Lib/SimpleXMLRPCServer.py`
+
+--------------
+
 The :mod:`SimpleXMLRPCServer` module provides a basic server framework for
 XML-RPC servers written in Python.  Servers can either be free standing, using
 :class:`SimpleXMLRPCServer`, or embedded in a CGI environment, using
@@ -132,6 +136,15 @@ alone XML-RPC servers.
    considered valid. The default value is ``('/', '/RPC2')``.
 
    .. versionadded:: 2.5
+
+.. attribute:: SimpleXMLRPCRequestHandler.encode_threshold
+
+   If this attribute is not ``None``, responses larger than this value
+   will be encoded using the *gzip* transfer encoding, if permitted by
+   the client.  The default is ``1400`` which corresponds roughly
+   to a single TCP packet.
+
+   .. versionadded:: 2.7
 
 .. _simplexmlrpcserver-example:
 

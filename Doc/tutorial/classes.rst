@@ -4,25 +4,26 @@
 Classes
 *******
 
-Python's class mechanism adds classes to the language with a minimum of new
-syntax and semantics.  It is a mixture of the class mechanisms found in C++ and
-Modula-3.  As is true for modules, classes in Python do not put an absolute
-barrier between definition and user, but rather rely on the politeness of the
-user not to "break into the definition."  The most important features of classes
-are retained with full power, however: the class inheritance mechanism allows
+Compared with other programming languages, Python's class mechanism adds classes
+with a minimum of new syntax and semantics.  It is a mixture of the class
+mechanisms found in C++ and Modula-3.  Python classes provide all the standard
+features of Object Oriented Programming: the class inheritance mechanism allows
 multiple base classes, a derived class can override any methods of its base
 class or classes, and a method can call the method of a base class with the same
-name.  Objects can contain an arbitrary amount of data.
+name.  Objects can contain arbitrary amounts and kinds of data.  As is true for
+modules, classes partake of the dynamic nature of Python: they are created at
+runtime, and can be modified further after creation.
 
-In C++ terminology, all class members (including the data members) are *public*,
-and all member functions are *virtual*.  As in Modula-3, there are no shorthands
-for referencing the object's members from its methods: the method function is
-declared with an explicit first argument representing the object, which is
-provided implicitly by the call.  As in Smalltalk, classes themselves are
-objects.  This provides semantics for importing and renaming.  Unlike C++ and
-Modula-3, built-in types can be used as base classes for extension by the user.
-Also, like in C++, most built-in operators with special syntax (arithmetic
-operators, subscripting etc.) can be redefined for class instances.
+In C++ terminology, normally class members (including the data members) are
+*public* (except see below :ref:`tut-private`), and all member functions are
+*virtual*.  As in Modula-3, there are no shorthands for referencing the object's
+members from its methods: the method function is declared with an explicit first
+argument representing the object, which is provided implicitly by the call.  As
+in Smalltalk, classes themselves are objects.  This provides semantics for
+importing and renaming.  Unlike C++ and Modula-3, built-in types can be used as
+base classes for extension by the user.  Also, like in C++, most built-in
+operators with special syntax (arithmetic operators, subscripting etc.) can be
+redefined for class instances.
 
 (Lacking universally accepted terminology to talk about classes, I will make
 occasional use of Smalltalk and C++ terms.  I would use Modula-3 terms, since
@@ -408,8 +409,8 @@ argument::
            self.add(x)
 
 Methods may reference global names in the same way as ordinary functions.  The
-global scope associated with a method is the module containing the class
-definition.  (The class itself is never used as a global scope.)  While one
+global scope associated with a method is the module containing its
+definition.  (A class is never used as a global scope.)  While one
 rarely encounters a good reason for using global data in a method, there are
 many legitimate uses of the global scope: for one thing, functions and modules
 imported into the global scope can be used by methods, as well as functions and
@@ -517,7 +518,7 @@ other multiple-inheritance languages as call-next-method and is more powerful
 than the super call found in single-inheritance languages.
 
 With new-style classes, dynamic ordering is necessary because all  cases of
-multiple inheritance exhibit one or more diamond relationships (where one at
+multiple inheritance exhibit one or more diamond relationships (where at
 least one of the parent classes can be accessed through multiple paths from the
 bottommost class).  For example, all new-style classes inherit from
 :class:`object`, so any case of multiple inheritance provides more than one path
@@ -537,7 +538,7 @@ Private Variables
 =================
 
 "Private" instance variables that cannot be accessed except from inside an
-object, don't exist in Python.  However, there is a convention that is followed
+object don't exist in Python.  However, there is a convention that is followed
 by most Python code: a name prefixed with an underscore (e.g. ``_spam``) should
 be treated as a non-public part of the API (whether it is a function, a method
 or a data member).  It should be considered an implementation detail and subject
@@ -551,6 +552,28 @@ is textually replaced with ``_classname__spam``, where ``classname`` is the
 current class name with leading underscore(s) stripped.  This mangling is done
 without regard to the syntactic position of the identifier, as long as it
 occurs within the definition of a class.
+
+Name mangling is helpful for letting subclasses override methods without
+breaking intraclass method calls.  For example::
+
+   class Mapping:
+       def __init__(self, iterable):
+           self.items_list = []
+           self.__update(iterable)
+
+       def update(self, iterable):
+           for item in iterable:
+               self.items_list.append(item)
+
+       __update = update   # private copy of original update() method
+
+   class MappingSubclass(Mapping):
+
+       def update(self, keys, values):
+           # provides new signature for update()
+           # but does not break __init__()
+           for item in zip(keys, values):
+               self.items_list.append(item)
 
 Note that the mangling rules are designed mostly to avoid accidents; it still is
 possible to access or modify a variable that is considered private.  This can
@@ -686,7 +709,6 @@ This example shows how it all works::
    >>> it.next()
    'c'
    >>> it.next()
-
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
        it.next()
@@ -698,7 +720,7 @@ returns an object with a :meth:`next` method.  If the class defines
 :meth:`next`, then :meth:`__iter__` can just return ``self``::
 
    class Reverse:
-       "Iterator for looping over a sequence backwards"
+       """Iterator for looping over a sequence backwards."""
        def __init__(self, data):
            self.data = data
            self.index = len(data)
@@ -709,6 +731,8 @@ returns an object with a :meth:`next` method.  If the class defines
                raise StopIteration
            self.index = self.index - 1
            return self.data[self.index]
+
+::
 
    >>> rev = Reverse('spam')
    >>> iter(rev)
@@ -737,6 +761,8 @@ easy to create::
    def reverse(data):
        for index in range(len(data)-1, -1, -1):
            yield data[index]
+
+::
 
    >>> for char in reverse('golf'):
    ...     print char

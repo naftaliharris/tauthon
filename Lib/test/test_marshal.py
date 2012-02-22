@@ -129,7 +129,7 @@ class StringTestCase(unittest.TestCase):
 
     def test_buffer(self):
         for s in ["", "Andrè Previn", "abc", " "*10000]:
-            with test_support._check_py3k_warnings(("buffer.. not supported",
+            with test_support.check_py3k_warnings(("buffer.. not supported",
                                                      DeprecationWarning)):
                 b = buffer(s)
             new = marshal.loads(marshal.dumps(b))
@@ -191,7 +191,7 @@ class ContainerTestCase(unittest.TestCase):
             t = constructor(self.d.keys())
             new = marshal.loads(marshal.dumps(t))
             self.assertEqual(t, new)
-            self.assert_(isinstance(new, constructor))
+            self.assertTrue(isinstance(new, constructor))
             self.assertNotEqual(id(t), id(new))
             marshal.dump(t, file(test_support.TESTFN, "wb"))
             new = marshal.load(file(test_support.TESTFN, "rb"))
@@ -210,8 +210,8 @@ class BugsTestCase(unittest.TestCase):
 
     def test_version_argument(self):
         # Python 2.4.0 crashes for any call to marshal.dumps(x, y)
-        self.assertEquals(marshal.loads(marshal.dumps(5, 0)), 5)
-        self.assertEquals(marshal.loads(marshal.dumps(5, 1)), 5)
+        self.assertEqual(marshal.loads(marshal.dumps(5, 0)), 5)
+        self.assertEqual(marshal.loads(marshal.dumps(5, 1)), 5)
 
     def test_fuzz(self):
         # simple test that it's at least not *totally* trivial to
@@ -252,7 +252,7 @@ class BugsTestCase(unittest.TestCase):
         #   >>> type(loads(dumps(Int())))
         #   <type 'int'>
         for typ in (int, long, float, complex, tuple, list, dict, set, frozenset):
-            # Note: str and unicode sublclasses are not tested because they get handled
+            # Note: str and unicode subclasses are not tested because they get handled
             # by marshal's routines for objects supporting the buffer API.
             subtyp = type('subtyp', (typ,), {})
             self.assertRaises(ValueError, marshal.dumps, subtyp())

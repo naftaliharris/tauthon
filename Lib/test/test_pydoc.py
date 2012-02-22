@@ -1,16 +1,18 @@
-import sys
 import os
-import os.path
+import sys
 import difflib
-import subprocess
+import __builtin__
 import re
 import pydoc
 import inspect
+import keyword
 import unittest
 import xml.etree
 import test.test_support
-from contextlib import contextmanager
-from test.test_support import TESTFN, forget, rmtree, EnvironmentVarGuard
+from collections import namedtuple
+from test.script_helper import assert_python_ok
+from test.test_support import (
+    TESTFN, rmtree, reap_children, captured_stdout)
 
 from test import pydoc_mod
 
@@ -173,14 +175,15 @@ missing_pattern = "no Python documentation found for '%s'"
 # output pattern for module with bad imports
 badimport_pattern = "problem in %s - <type 'exceptions.ImportError'>: No module named %s"
 
-def run_pydoc(module_name, *args):
+def run_pydoc(module_name, *args, **env):
     """
     Runs pydoc on the specified module. Returns the stripped
     output of pydoc.
     """
-    cmd = [sys.executable, pydoc.__file__, " ".join(args), module_name]
-    output = subprocess.Popen(cmd, stdout=subprocess.PIPE).stdout.read()
-    return output.strip()
+    args = args + (module_name,)
+    # do not write bytecode files to avoid caching errors
+    rc, out, err = assert_python_ok('-B', pydoc.__file__, *args, **env)
+    return out.strip()
 
 def get_pydoc_html(module):
     "Returns pydoc generated output as html"
@@ -216,6 +219,8 @@ def print_diffs(text1, text2):
 
 class PyDocDocTest(unittest.TestCase):
 
+    @unittest.skipIf(sys.flags.optimize >= 2,
+                     "Docstrings are omitted with -O2 and above")
     def test_html_doc(self):
         result, doc_loc = get_pydoc_html(pydoc_mod)
         mod_file = inspect.getabsfile(pydoc_mod)
@@ -229,6 +234,8 @@ class PyDocDocTest(unittest.TestCase):
             print_diffs(expected_html, result)
             self.fail("outputs are not equal, see diff above")
 
+    @unittest.skipIf(sys.flags.optimize >= 2,
+                     "Docstrings are omitted with -O2 and above")
     def test_text_doc(self):
         result, doc_loc = get_pydoc_text(pydoc_mod)
         expected_text = expected_text_pattern % \
@@ -248,43 +255,6 @@ class PyDocDocTest(unittest.TestCase):
         expected = missing_pattern % missing_module
         self.assertEqual(expected, result,
             "documentation for missing module found")
-
-    def test_badimport(self):
-        # This tests the fix for issue 5230, where if pydoc found the module
-        # but the module had an internal import error pydoc would report no doc
-        # found.
-        modname = 'testmod_xyzzy'
-        testpairs = (
-            ('i_am_not_here', 'i_am_not_here'),
-            ('test.i_am_not_here_either', 'i_am_not_here_either'),
-            ('test.i_am_not_here.neither_am_i', 'i_am_not_here.neither_am_i'),
-            ('i_am_not_here.{0}'.format(modname), 'i_am_not_here.{0}'.format(modname)),
-            ('test.{0}'.format(modname), modname),
-            )
-
-        @contextmanager
-        def newdirinpath(dir):
-            os.mkdir(dir)
-            sys.path.insert(0, dir)
-            yield
-            sys.path.pop(0)
-            rmtree(dir)
-
-        with newdirinpath(TESTFN):
-            with EnvironmentVarGuard() as env:
-                env.set('PYTHONPATH', TESTFN)
-                fullmodname = os.path.join(TESTFN, modname)
-                sourcefn = fullmodname + os.extsep + "py"
-                for importstring, expectedinmsg in testpairs:
-                    f = open(sourcefn, 'w')
-                    f.write("import {0}\n".format(importstring))
-                    f.close()
-                    try:
-                        result = run_pydoc(modname)
-                    finally:
-                        forget(modname)
-                    expected = badimport_pattern % (modname, expectedinmsg)
-                    self.assertEqual(expected, result)
 
     def test_input_strip(self):
         missing_module = " test.i_am_not_here "
@@ -308,13 +278,62 @@ class PyDocDocTest(unittest.TestCase):
                          "<type 'exceptions.Exception'>")
 
 
+class PydocImportTest(unittest.TestCase):
+
+    def setUp(self):
+        self.test_dir = os.mkdir(TESTFN)
+        self.addCleanup(rmtree, TESTFN)
+
+    def test_badimport(self):
+        # This tests the fix for issue 5230, where if pydoc found the module
+        # but the module had an internal import error pydoc would report no doc
+        # found.
+        modname = 'testmod_xyzzy'
+        testpairs = (
+            ('i_am_not_here', 'i_am_not_here'),
+            ('test.i_am_not_here_either', 'i_am_not_here_either'),
+            ('test.i_am_not_here.neither_am_i', 'i_am_not_here.neither_am_i'),
+            ('i_am_not_here.{}'.format(modname),
+             'i_am_not_here.{}'.format(modname)),
+            ('test.{}'.format(modname), modname),
+            )
+
+        sourcefn = os.path.join(TESTFN, modname) + os.extsep + "py"
+        for importstring, expectedinmsg in testpairs:
+            with open(sourcefn, 'w') as f:
+                f.write("import {}\n".format(importstring))
+            result = run_pydoc(modname, PYTHONPATH=TESTFN)
+            expected = badimport_pattern % (modname, expectedinmsg)
+            self.assertEqual(expected, result)
+
+    def test_apropos_with_bad_package(self):
+        # Issue 7425 - pydoc -k failed when bad package on path
+        pkgdir = os.path.join(TESTFN, "syntaxerr")
+        os.mkdir(pkgdir)
+        badsyntax = os.path.join(pkgdir, "__init__") + os.extsep + "py"
+        with open(badsyntax, 'w') as f:
+            f.write("invalid python syntax = $1\n")
+        result = run_pydoc('zqwykjv', '-k', PYTHONPATH=TESTFN)
+        self.assertEqual('', result)
+
+    def test_apropos_with_unreadable_dir(self):
+        # Issue 7367 - pydoc -k failed when unreadable dir on path
+        self.unreadable_dir = os.path.join(TESTFN, "unreadable")
+        os.mkdir(self.unreadable_dir, 0)
+        self.addCleanup(os.rmdir, self.unreadable_dir)
+        # Note, on Windows the directory appears to be still
+        #   readable so this is not really testing the issue there
+        result = run_pydoc('zqwykjv', '-k', PYTHONPATH=TESTFN)
+        self.assertEqual('', result)
+
+
 class TestDescriptions(unittest.TestCase):
 
     def test_module(self):
         # Check that pydocfodder module can be described
         from test import pydocfodder
         doc = pydoc.render_doc(pydocfodder)
-        self.assert_("pydocfodder" in doc)
+        self.assertIn("pydocfodder", doc)
 
     def test_classic_class(self):
         class C: "Classic class"
@@ -322,7 +341,7 @@ class TestDescriptions(unittest.TestCase):
         self.assertEqual(pydoc.describe(C), 'class C')
         self.assertEqual(pydoc.describe(c), 'instance of C')
         expected = 'instance of C in module %s' % __name__
-        self.assert_(expected in pydoc.render_doc(c))
+        self.assertIn(expected, pydoc.render_doc(c))
 
     def test_class(self):
         class C(object): "New-style class"
@@ -331,12 +350,49 @@ class TestDescriptions(unittest.TestCase):
         self.assertEqual(pydoc.describe(C), 'class C')
         self.assertEqual(pydoc.describe(c), 'C')
         expected = 'C in module %s object' % __name__
-        self.assert_(expected in pydoc.render_doc(c))
+        self.assertIn(expected, pydoc.render_doc(c))
+
+    def test_namedtuple_public_underscore(self):
+        NT = namedtuple('NT', ['abc', 'def'], rename=True)
+        with captured_stdout() as help_io:
+            help(NT)
+        helptext = help_io.getvalue()
+        self.assertIn('_1', helptext)
+        self.assertIn('_replace', helptext)
+        self.assertIn('_asdict', helptext)
+
+
+class TestHelper(unittest.TestCase):
+    def test_keywords(self):
+        self.assertEqual(sorted(pydoc.Helper.keywords),
+                         sorted(keyword.kwlist))
+
+    def test_builtin(self):
+        for name in ('str', 'str.translate', '__builtin__.str',
+                     '__builtin__.str.translate'):
+            # test low-level function
+            self.assertIsNotNone(pydoc.locate(name))
+            # test high-level function
+            try:
+                pydoc.render_doc(name)
+            except ImportError:
+                self.fail('finding the doc of {!r} failed'.format(o))
+
+        for name in ('not__builtin__', 'strrr', 'strr.translate',
+                     'str.trrrranslate', '__builtin__.strrr',
+                     '__builtin__.str.trrranslate'):
+            self.assertIsNone(pydoc.locate(name))
+            self.assertRaises(ImportError, pydoc.render_doc, name)
 
 
 def test_main():
-    test.test_support.run_unittest(PyDocDocTest,
-                                   TestDescriptions)
+    try:
+        test.test_support.run_unittest(PyDocDocTest,
+                                       PydocImportTest,
+                                       TestDescriptions,
+                                       TestHelper)
+    finally:
+        reap_children()
 
 if __name__ == "__main__":
     test_main()

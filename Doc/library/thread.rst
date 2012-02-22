@@ -112,6 +112,7 @@ It defines the following constant and functions:
 
    .. versionadded:: 2.5
 
+
 Lock objects have the following methods:
 
 

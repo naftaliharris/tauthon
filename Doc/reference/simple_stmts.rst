@@ -121,9 +121,6 @@ Assignment of an object to a target list is recursively defined as follows.
 * If the target list is a comma-separated list of targets: The object must be an
   iterable with the same number of items as there are targets in the target list,
   and the items are assigned, from left to right, to the corresponding targets.
-  (This rule is relaxed as of Python 1.5; in earlier versions, the object had to
-  be a tuple.  Since strings are sequences, an assignment like ``a, b = "xy"`` is
-  now legal as long as the string has the right length.)
 
 Assignment of an object to a single target is recursively defined as follows.
 
@@ -355,7 +352,7 @@ The :keyword:`del` statement
    del_stmt: "del" `target_list`
 
 Deletion is recursively defined very similar to the way assignment is defined.
-Rather that spelling it out in full details, here are some hints.
+Rather than spelling it out in full details, here are some hints.
 
 Deletion of a target list recursively deletes each target, from left to right.
 
@@ -709,7 +706,7 @@ within a package (as denoted by the existence of a dot in the name), then a
 second argument to :meth:`find_module` is given as the value of the
 :attr:`__path__` attribute from the parent package (everything up to the last
 dot in the name of the module being imported). If a finder can find the module
-it returns a :term:`loader` (discussed later) or returns :keyword:`None`.
+it returns a :term:`loader` (discussed later) or returns ``None``.
 
 .. index::
     single: sys.path_hooks
@@ -736,11 +733,11 @@ finder cached then :data:`sys.path_hooks` is searched by calling each object in
 the list with a single argument of the path, returning a finder or raises
 :exc:`ImportError`. If a finder is returned then it is cached in
 :data:`sys.path_importer_cache` and then used for that path entry. If no finder
-can be found but the path exists then a value of :keyword:`None` is
+can be found but the path exists then a value of ``None`` is
 stored in :data:`sys.path_importer_cache` to signify that an implicit,
 file-based finder that handles modules stored as individual files should be
 used for that path. If the path does not exist then a finder which always
-returns :keyword:`None` is placed in the cache for the path.
+returns `None`` is placed in the cache for the path.
 
 .. index::
     single: loader
@@ -836,15 +833,11 @@ leading dot means the current package where the module making the import
 exists. Two dots means up one package level. Three dots is up two levels, etc.
 So if you execute ``from . import mod`` from a module in the ``pkg`` package
 then you will end up importing ``pkg.mod``. If you execute ``from ..subpkg2
-imprt mod`` from within ``pkg.subpkg1`` you will import ``pkg.subpkg2.mod``.
+import mod`` from within ``pkg.subpkg1`` you will import ``pkg.subpkg2.mod``.
 The specification for relative imports is contained within :pep:`328`.
 
-
-.. index:: builtin: __import__
-
-The built-in function :func:`__import__` is provided to support applications
-that determine which modules need to be loaded dynamically; refer to
-:ref:`built-in-funcs` for additional information.
+:func:`importlib.import_module` is provided to support applications that
+determine which modules need to be loaded dynamically.
 
 
 .. _future:
