@@ -85,11 +85,11 @@ if full_current_version is None:
     full_current_version = current_version
 
 extensions = [
-    'bz2.pyd',
     'pyexpat.pyd',
     'select.pyd',
     'unicodedata.pyd',
     'winsound.pyd',
+    '_bz2.pyd',
     '_elementtree.pyd',
     '_socket.pyd',
     '_ssl.pyd',
@@ -100,7 +100,8 @@ extensions = [
     '_ctypes_test.pyd',
     '_sqlite3.pyd',
     '_hashlib.pyd',
-    '_multiprocessing.pyd'
+    '_multiprocessing.pyd',
+    '_lzma.pyd'
 ]
 
 # Well-known component UUIDs
@@ -119,6 +120,7 @@ pythondll_uuid = {
     "30":"{6953bc3b-6768-4291-8410-7914ce6e2ca8}",
     "31":"{4afcba0b-13e4-47c3-bebe-477428b46913}",
     "32":"{3ff95315-1096-4d31-bd86-601d5438ad5e}",
+    "33":"{f7581ca4-d368-4eea-8f82-d48c64c4f047}",
     } [major+minor]
 
 # Compute the name that Sphinx gives to the docfile
@@ -911,6 +913,21 @@ class PyDirectory(Directory):
             print "Warning: Unpackaged files in %s" % self.absolute
             print self.unpackaged_files
 
+
+def inside_test(dir):
+    if dir.physical in ('test', 'tests'):
+        return True
+    if dir.basedir:
+        return inside_test(dir.basedir)
+    return False
+
+def in_packaging_tests(dir):
+    if dir.physical == 'tests' and dir.basedir.physical == 'packaging':
+        return True
+    if dir.basedir:
+        return in_packaging_tests(dir.basedir)
+    return False
+
 # See "File Table", "Component Table", "Directory Table",
 # "FeatureComponents Table"
 def add_files(db):
@@ -986,11 +1003,7 @@ def add_files(db):
             if not have_tcl:
                 continue
             tcltk.set_current()
-        elif dir in ['test', 'tests', 'data', 'output']:
-            # test: Lib, Lib/email, Lib/ctypes, Lib/sqlite3
-            # tests: Lib/distutils
-            # data: Lib/email/test
-            # output: Lib/test
+        elif dir in ('test', 'tests') or inside_test(parent):
             testsuite.set_current()
         elif not have_ctypes and dir == "ctypes":
             continue
@@ -1011,7 +1024,7 @@ def add_files(db):
         # package READMEs if present
         lib.glob("README")
         if dir=='Lib':
-            lib.add_file('wsgiref.egg-info')
+            lib.add_file("sysconfig.cfg")
         if dir=='test' and parent.physical=='Lib':
             lib.add_file("185test.db")
             lib.add_file("audiotest.au")
@@ -1027,6 +1040,7 @@ def add_files(db):
             lib.glob("cfgparser.*")
             lib.add_file("zip_cp437_header.zip")
             lib.add_file("zipdir.zip")
+            lib.add_file("mime.types")
         if dir=='capath':
             lib.glob("*.0")
         if dir=='tests' and parent.physical=='distutils':
@@ -1047,7 +1061,7 @@ def add_files(db):
         if dir=="Icons":
             lib.glob("*.gif")
             lib.add_file("idle.icns")
-        if dir=="command" and parent.physical=="distutils":
+        if dir=="command" and parent.physical in ("distutils", "packaging"):
             lib.glob("wininst*.exe")
             lib.add_file("command_template")
         if dir=="lib2to3":
@@ -1059,14 +1073,37 @@ def add_files(db):
             lib.add_file("turtle.cfg")
         if dir=="pydoc_data":
             lib.add_file("_pydoc.css")
-        if dir=="data" and parent.physical=="test" and parent.basedir.physical=="email":
+        if dir.endswith('.dist-info'):
+            lib.add_file('INSTALLER')
+            lib.add_file('REQUESTED')
+            lib.add_file('RECORD')
+            lib.add_file('METADATA')
+            lib.glob('RESOURCES')
+        if dir.endswith('.egg-info') or dir == 'EGG-INFO':
+            lib.add_file('PKG-INFO')
+        if in_packaging_tests(parent):
+            lib.glob('*.html')
+            lib.glob('*.tar.gz')
+        if dir=='fake_dists':
+            # cannot use glob since there are also egg-info directories here
+            lib.add_file('cheese-2.0.2.egg-info')
+            lib.add_file('nut-funkyversion.egg-info')
+            lib.add_file('strawberry-0.6.egg')
+            lib.add_file('truffles-5.0.egg-info')
+            lib.add_file('babar.cfg')
+            lib.add_file('babar.png')
+        if dir=="data" and parent.physical=="test_email":
             # This should contain all non-.svn files listed in subversion
             for f in os.listdir(lib.absolute):
                 if f.endswith(".txt") or f==".svn":continue
                 if f.endswith(".au") or f.endswith(".gif"):
                     lib.add_file(f)
                 else:
-                    print("WARNING: New file %s in email/test/data" % f)
+                    print("WARNING: New file %s in test/test_email/data" % f)
+        if dir=='tests' and parent.physical == 'packaging':
+            lib.add_file('SETUPTOOLS-PKG-INFO2')
+            lib.add_file('SETUPTOOLS-PKG-INFO')
+            lib.add_file('PKG-INFO')
         for f in os.listdir(lib.absolute):
             if os.path.isdir(os.path.join(lib.absolute, f)):
                 pydirs.append((lib, f))
@@ -1158,6 +1195,8 @@ def add_files(db):
             lib.add_file("README.txt", src="README")
         if f == 'Scripts':
             lib.add_file("2to3.py", src="2to3")
+            lib.add_file("pydoc3.py", src="pydoc3")
+            lib.add_file("pysetup3.py", src="pysetup3")
             if have_tcl:
                 lib.start_component("pydocgui.pyw", tcltk, keyfile="pydocgui.pyw")
                 lib.add_file("pydocgui.pyw")
