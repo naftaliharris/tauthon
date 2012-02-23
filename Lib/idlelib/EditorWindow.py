@@ -3,7 +3,6 @@ import os
 import re
 import string
 import imp
-from itertools import count
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -51,7 +50,62 @@ def _find_module(fullname, path=None):
             path = module.__path__
         except AttributeError:
             raise ImportError('No source for module ' + module.__name__)
+    if descr[2] != imp.PY_SOURCE:
+        # If all of the above fails and didn't raise an exception,fallback
+        # to a straight import which can find __init__.py in a package.
+        m = __import__(fullname)
+        try:
+            filename = m.__file__
+        except AttributeError:
+            pass
+        else:
+            file = None
+            descr = os.path.splitext(filename)[1], None, imp.PY_SOURCE
     return file, filename, descr
+
+
+class HelpDialog(object):
+
+    def __init__(self):
+        self.parent = None      # parent of help window
+        self.dlg = None         # the help window iteself
+
+    def display(self, parent, near=None):
+        """ Display the help dialog.
+
+            parent - parent widget for the help window
+
+            near - a Toplevel widget (e.g. EditorWindow or PyShell)
+                   to use as a reference for placing the help window
+        """
+        if self.dlg is None:
+            self.show_dialog(parent)
+        if near:
+            self.nearwindow(near)
+
+    def show_dialog(self, parent):
+        self.parent = parent
+        fn=os.path.join(os.path.abspath(os.path.dirname(__file__)),'help.txt')
+        self.dlg = dlg = textView.view_file(parent,'Help',fn, modal=False)
+        dlg.bind('<Destroy>', self.destroy, '+')
+
+    def nearwindow(self, near):
+        # Place the help dialog near the window specified by parent.
+        # Note - this may not reposition the window in Metacity
+        #  if "/apps/metacity/general/disable_workarounds" is enabled
+        dlg = self.dlg
+        geom = (near.winfo_rootx() + 10, near.winfo_rooty() + 10)
+        dlg.withdraw()
+        dlg.geometry("=+%d+%d" % geom)
+        dlg.deiconify()
+        dlg.lift()
+
+    def destroy(self, ev=None):
+        self.dlg = None
+        self.parent = None
+
+helpDialog = HelpDialog()  # singleton instance
+
 
 class EditorWindow(object):
     from idlelib.Percolator import Percolator
@@ -385,7 +439,7 @@ class EditorWindow(object):
             underline, label = prepstr(label)
             menudict[name] = menu = Menu(mbar, name=name)
             mbar.add_cascade(label=label, menu=menu, underline=underline)
-        if macosxSupport.runningAsOSXApp():
+        if macosxSupport.isCarbonAquaTk(self.root):
             # Insert the application menu
             menudict['application'] = menu = Menu(mbar, name='apple')
             mbar.add_cascade(label='IDLE', menu=menu)
@@ -443,8 +497,11 @@ class EditorWindow(object):
         configDialog.ConfigDialog(self.top,'Settings')
 
     def help_dialog(self, event=None):
-        fn=os.path.join(os.path.abspath(os.path.dirname(__file__)),'help.txt')
-        textView.view_file(self.top,'Help',fn)
+        if self.root:
+            parent = self.root
+        else:
+            parent = self.top
+        helpDialog.display(parent, near=self.top)
 
     def python_docs(self, event=None):
         if sys.platform[:3] == 'win':
@@ -789,18 +846,23 @@ class EditorWindow(object):
         rf_list = [path for path in rf_list if path not in bad_paths]
         ulchars = "1234567890ABCDEFGHIJK"
         rf_list = rf_list[0:len(ulchars)]
-        rf_file = open(self.recent_files_path, 'w',
-                        encoding='utf_8', errors='replace')
         try:
-            rf_file.writelines(rf_list)
-        finally:
-            rf_file.close()
+            with open(self.recent_files_path, 'w',
+                        encoding='utf_8', errors='replace') as rf_file:
+                rf_file.writelines(rf_list)
+        except IOError as err:
+            if not getattr(self.root, "recentfilelist_error_displayed", False):
+                self.root.recentfilelist_error_displayed = True
+                tkMessageBox.showerror(title='IDLE Error',
+                    message='Unable to update Recent Files list:\n%s'
+                        % str(err),
+                    parent=self.text)
         # for each edit window instance, construct the recent files menu
         for instance in self.top.instance_dict:
             menu = instance.recent_files_menu
             menu.delete(1, END)  # clear, and rebuild:
-            for i, file in zip(count(), rf_list):
-                file_name = file[0:-1]  # zap \n
+            for i, file_name in enumerate(rf_list):
+                file_name = file_name.rstrip()  # zap \n
                 # make unicode string to display non-ASCII chars correctly
                 ufile_name = self._filename_to_unicode(file_name)
                 callback = instance.__recent_file_callback(file_name)
@@ -1119,7 +1181,10 @@ class EditorWindow(object):
         assert have > 0
         want = ((have - 1) // self.indentwidth) * self.indentwidth
         # Debug prompt is multilined....
-        last_line_of_prompt = sys.ps1.split('\n')[-1]
+        if self.context_use_ps1:
+            last_line_of_prompt = sys.ps1.split('\n')[-1]
+        else:
+            last_line_of_prompt = ''
         ncharsdeleted = 0
         while 1:
             if chars == last_line_of_prompt:
@@ -1544,7 +1609,12 @@ keynames = {
 
 def get_accelerator(keydefs, eventname):
     keylist = keydefs.get(eventname)
-    if not keylist:
+    # issue10940: temporary workaround to prevent hang with OS X Cocoa Tk 8.5
+    # if not keylist:
+    if (not keylist) or (macosxSupport.runningAsOSXApp() and eventname in {
+                            "<<open-module>>",
+                            "<<goto-line>>",
+                            "<<change-indentwidth>>"}):
         return ""
     s = keylist[0]
     s = re.sub(r"-[a-z]\b", lambda m: m.group().upper(), s)

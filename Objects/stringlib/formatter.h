@@ -32,7 +32,7 @@ unknown_presentation_type(STRINGLIB_CHAR presentation_type,
         PyErr_Format(PyExc_ValueError,
                      "Unknown format code '%c' "
                      "for object of type '%.200s'",
-                     presentation_type,
+                     (char)presentation_type,
                      type_name);
 #if STRINGLIB_IS_UNICODE
     else
@@ -41,6 +41,24 @@ unknown_presentation_type(STRINGLIB_CHAR presentation_type,
                      "for object of type '%.200s'",
                      (unsigned int)presentation_type,
                      type_name);
+#endif
+}
+
+static void
+invalid_comma_type(STRINGLIB_CHAR presentation_type)
+{
+#if STRINGLIB_IS_UNICODE
+    /* See comment in unknown_presentation_type */
+    if (presentation_type > 32 && presentation_type < 128)
+#endif
+        PyErr_Format(PyExc_ValueError,
+                     "Cannot specify ',' with '%c'.",
+                     (char)presentation_type);
+#if STRINGLIB_IS_UNICODE
+    else
+        PyErr_Format(PyExc_ValueError,
+                     "Cannot specify ',' with '\\x%x'.",
+                     (unsigned int)presentation_type);
 #endif
 }
 
@@ -277,8 +295,7 @@ parse_internal_render_format_spec(STRINGLIB_CHAR *format_spec,
             /* These are allowed. See PEP 378.*/
             break;
         default:
-            PyErr_Format(PyExc_ValueError,
-                         "Cannot specify ',' with '%c'.", format->type);
+            invalid_comma_type(format->type);
             return 0;
         }
     }
@@ -632,8 +649,8 @@ get_locale_info(int type, LocaleInfo *locale_info)
     case LT_DEFAULT_LOCALE:
         locale_info->decimal_point = ".";
         locale_info->thousands_sep = ",";
-        locale_info->grouping = "\3"; /* Group every 3 characters,
-                                         trailing 0 means repeat
+        locale_info->grouping = "\3"; /* Group every 3 characters.  The
+                                         (implicit) trailing 0 means repeat
                                          infinitely. */
         break;
     case LT_NO_LOCALE:
@@ -755,14 +772,6 @@ format_int_or_long_internal(PyObject *value, const InternalFormatSpec *format,
         if (format->sign != '\0') {
             PyErr_SetString(PyExc_ValueError,
                             "Sign not allowed with integer"
-                            " format specifier 'c'");
-            goto done;
-        }
-
-        /* Error to specify a comma. */
-        if (format->thousands_separators) {
-            PyErr_SetString(PyExc_ValueError,
-                            "Thousands separators not allowed with integer"
                             " format specifier 'c'");
             goto done;
         }
@@ -932,33 +941,22 @@ format_float_internal(PyObject *value,
        from a hard-code pseudo-locale */
     LocaleInfo locale;
 
-    /* Alternate is not allowed on floats. */
-    if (format->alternate) {
-        PyErr_SetString(PyExc_ValueError,
-                        "Alternate form (#) not allowed in float format "
-                        "specifier");
-        goto done;
-    }
+    if (format->alternate)
+        flags |= Py_DTSF_ALT;
 
     if (type == '\0') {
-        /* Omitted type specifier. This is like 'g' but with at least one
-           digit after the decimal point, and different default precision.*/
-        type = 'g';
-        default_precision = PyFloat_STR_PRECISION;
+        /* Omitted type specifier.  Behaves in the same way as repr(x)
+           and str(x) if no precision is given, else like 'g', but with
+           at least one digit after the decimal point. */
         flags |= Py_DTSF_ADD_DOT_0;
+        type = 'r';
+        default_precision = 0;
     }
 
     if (type == 'n')
         /* 'n' is the same as 'g', except for the locale used to
            format the result. We take care of that later. */
         type = 'g';
-
-#if PY_VERSION_HEX < 0x0301000
-    /* 'F' is the same as 'f', per the PEP */
-    /* This is no longer the case in 3.x */
-    if (type == 'F')
-        type = 'f';
-#endif
 
     val = PyFloat_AsDouble(value);
     if (val == -1.0 && PyErr_Occurred())
@@ -972,12 +970,8 @@ format_float_internal(PyObject *value,
 
     if (precision < 0)
         precision = default_precision;
-
-#if PY_VERSION_HEX < 0x03010000
-    /* 3.1 no longer converts large 'f' to 'g'. */
-    if ((type == 'f' || type == 'F') && fabs(val) >= 1e50)
+    else if (type == 'r')
         type = 'g';
-#endif
 
     /* Cast "type", because if we're in unicode we need to pass a
        8-bit char. This is safe, because we've restricted what "type"
@@ -1105,15 +1099,7 @@ format_complex_internal(PyObject *value,
        from a hard-code pseudo-locale */
     LocaleInfo locale;
 
-    /* Alternate is not allowed on complex. */
-    if (format->alternate) {
-        PyErr_SetString(PyExc_ValueError,
-                        "Alternate form (#) not allowed in complex format "
-                        "specifier");
-        goto done;
-    }
-
-    /* Neither is zero pading. */
+    /* Zero padding is not allowed. */
     if (format->fill_char == '0') {
         PyErr_SetString(PyExc_ValueError,
                         "Zero padding is not allowed in complex format "
@@ -1136,10 +1122,13 @@ format_complex_internal(PyObject *value,
     if (im == -1.0 && PyErr_Occurred())
         goto done;
 
+    if (format->alternate)
+        flags |= Py_DTSF_ALT;
+
     if (type == '\0') {
         /* Omitted type specifier. Should be like str(self). */
-        type = 'g';
-        default_precision = PyFloat_STR_PRECISION;
+        type = 'r';
+        default_precision = 0;
         if (re == 0.0 && copysign(1.0, re) == 1.0)
             skip_re = 1;
         else
@@ -1151,15 +1140,10 @@ format_complex_internal(PyObject *value,
            format the result. We take care of that later. */
         type = 'g';
 
-#if PY_VERSION_HEX < 0x03010000
-    /* This is no longer the case in 3.x */
-    /* 'F' is the same as 'f', per the PEP */
-    if (type == 'F')
-        type = 'f';
-#endif
-
     if (precision < 0)
         precision = default_precision;
+    else if (type == 'r')
+        type = 'g';
 
     /* Cast "type", because if we're in unicode we need to pass a
        8-bit char. This is safe, because we've restricted what "type"

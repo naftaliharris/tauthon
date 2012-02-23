@@ -54,7 +54,7 @@ following values are considered false:
 
 * instances of user-defined classes, if the class defines a :meth:`__bool__` or
   :meth:`__len__` method, when that method returns the integer zero or
-  :class:`bool` value ``False``. [#]_
+  :class:`bool` value ``False``. [1]_
 
 .. index:: single: true
 
@@ -168,8 +168,9 @@ Objects of different types, except different numeric types, never compare equal.
 Furthermore, some types (for example, function objects) support only a degenerate
 notion of comparison where any two objects of that type are unequal.  The ``<``,
 ``<=``, ``>`` and ``>=`` operators will raise a :exc:`TypeError` exception when
-any operand is a complex number, the objects are of different types that cannot
-be compared, or other cases where there is no defined ordering.
+comparing a complex number with another built-in numeric type, when the objects
+are of different types that cannot be compared, or in other cases where there is
+no defined ordering.
 
 .. index::
    single: __eq__() (instance method)
@@ -196,8 +197,8 @@ exception.
    operator: in
    operator: not in
 
-Two more operations with the same syntactic priority, ``in`` and ``not in``, are
-supported only by sequence types (below).
+Two more operations with the same syntactic priority, :keyword:`in` and
+:keyword:`not in`, are supported only by sequence types (below).
 
 
 .. _typesnumeric:
@@ -216,7 +217,7 @@ Numeric Types --- :class:`int`, :class:`float`, :class:`complex`
 There are three distinct numeric types: :dfn:`integers`, :dfn:`floating
 point numbers`, and :dfn:`complex numbers`.  In addition, Booleans are a
 subtype of integers.  Integers have unlimited precision.  Floating point
-numbers are usually implemented using :ctype:`double` in C; information
+numbers are usually implemented using :c:type:`double` in C; information
 about the precision and internal representation of floating point
 numbers for the machine on which your program is running is available
 in :data:`sys.float_info`.  Complex numbers have a real and imaginary
@@ -260,7 +261,7 @@ Python fully supports mixed arithmetic: when a binary arithmetic operator has
 operands of different numeric types, the operand with the "narrower" type is
 widened to that of the other, where integer is narrower than floating point,
 which is narrower than complex.  Comparisons between numbers of mixed type use
-the same rule. [#]_ The constructors :func:`int`, :func:`float`, and
+the same rule. [2]_ The constructors :func:`int`, :func:`float`, and
 :func:`complex` can be used to produce numbers of a specific type.
 
 All numeric types (except complex) support the following operations, sorted by
@@ -378,12 +379,12 @@ modules.
 
 .. _bitstring-ops:
 
-Bit-string Operations on Integer Types
+Bitwise Operations on Integer Types
 --------------------------------------
 
 .. index::
    triple: operations on; integer; types
-   pair: bit-string; operations
+   pair: bitwise; operations
    pair: shifting; operations
    pair: masking; operations
    operator: ^
@@ -391,15 +392,15 @@ Bit-string Operations on Integer Types
    operator: <<
    operator: >>
 
-Integers support additional operations that make sense only for bit-strings.
-Negative numbers are treated as their 2's complement value (this assumes a
-sufficiently large number of bits that no overflow occurs during the operation).
+Bitwise operations only make sense for integers.  Negative numbers are treated
+as their 2's complement value (this assumes a sufficiently large number of bits
+that no overflow occurs during the operation).
 
 The priorities of the binary bitwise operations are all lower than the numeric
 operations and higher than the comparisons; the unary operation ``~`` has the
 same priority as the other unary numeric operations (``+`` and ``-``).
 
-This table lists the bit-string operations sorted in ascending priority
+This table lists the bitwise operations sorted in ascending priority
 (operations in the same box have the same priority):
 
 +------------+--------------------------------+----------+
@@ -466,6 +467,69 @@ class`. In addition, it provides one more method:
             return len(s)       # len('100101') --> 6
 
     .. versionadded:: 3.1
+
+.. method:: int.to_bytes(length, byteorder, \*, signed=False)
+
+    Return an array of bytes representing an integer.
+
+        >>> (1024).to_bytes(2, byteorder='big')
+        b'\x04\x00'
+        >>> (1024).to_bytes(10, byteorder='big')
+        b'\x00\x00\x00\x00\x00\x00\x00\x00\x04\x00'
+        >>> (-1024).to_bytes(10, byteorder='big', signed=True)
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xfc\x00'
+        >>> x = 1000
+        >>> x.to_bytes((x.bit_length() // 8) + 1, byteorder='little')
+        b'\xe8\x03'
+
+    The integer is represented using *length* bytes.  An :exc:`OverflowError`
+    is raised if the integer is not representable with the given number of
+    bytes.
+
+    The *byteorder* argument determines the byte order used to represent the
+    integer.  If *byteorder* is ``"big"``, the most significant byte is at the
+    beginning of the byte array.  If *byteorder* is ``"little"``, the most
+    significant byte is at the end of the byte array.  To request the native
+    byte order of the host system, use :data:`sys.byteorder` as the byte order
+    value.
+
+    The *signed* argument determines whether two's complement is used to
+    represent the integer.  If *signed* is ``False`` and a negative integer is
+    given, an :exc:`OverflowError` is raised. The default value for *signed*
+    is ``False``.
+
+    .. versionadded:: 3.2
+
+.. classmethod:: int.from_bytes(bytes, byteorder, \*, signed=False)
+
+    Return the integer represented by the given array of bytes.
+
+        >>> int.from_bytes(b'\x00\x10', byteorder='big')
+        16
+        >>> int.from_bytes(b'\x00\x10', byteorder='little')
+        4096
+        >>> int.from_bytes(b'\xfc\x00', byteorder='big', signed=True)
+        -1024
+        >>> int.from_bytes(b'\xfc\x00', byteorder='big', signed=False)
+        64512
+        >>> int.from_bytes([255, 0, 0], byteorder='big')
+        16711680
+
+    The argument *bytes* must either support the buffer protocol or be an
+    iterable producing bytes. :class:`bytes` and :class:`bytearray` are
+    examples of built-in objects that support the buffer protocol.
+
+    The *byteorder* argument determines the byte order used to represent the
+    integer.  If *byteorder* is ``"big"``, the most significant byte is at the
+    beginning of the byte array.  If *byteorder* is ``"little"``, the most
+    significant byte is at the end of the byte array.  To request the native
+    byte order of the host system, use :data:`sys.byteorder` as the byte order
+    value.
+
+    The *signed* argument indicates whether two's complement is used to
+    represent the integer.
+
+    .. versionadded:: 3.2
 
 
 Additional Methods on Float
@@ -551,6 +615,109 @@ hexadecimal string representing the same number::
    >>> float.hex(3740.0)
    '0x1.d380000000000p+11'
 
+
+.. _numeric-hash:
+
+Hashing of numeric types
+------------------------
+
+For numbers ``x`` and ``y``, possibly of different types, it's a requirement
+that ``hash(x) == hash(y)`` whenever ``x == y`` (see the :meth:`__hash__`
+method documentation for more details).  For ease of implementation and
+efficiency across a variety of numeric types (including :class:`int`,
+:class:`float`, :class:`decimal.Decimal` and :class:`fractions.Fraction`)
+Python's hash for numeric types is based on a single mathematical function
+that's defined for any rational number, and hence applies to all instances of
+:class:`int` and :class:`fraction.Fraction`, and all finite instances of
+:class:`float` and :class:`decimal.Decimal`.  Essentially, this function is
+given by reduction modulo ``P`` for a fixed prime ``P``.  The value of ``P`` is
+made available to Python as the :attr:`modulus` attribute of
+:data:`sys.hash_info`.
+
+.. impl-detail::
+
+   Currently, the prime used is ``P = 2**31 - 1`` on machines with 32-bit C
+   longs and ``P = 2**61 - 1`` on machines with 64-bit C longs.
+
+Here are the rules in detail:
+
+ - If ``x = m / n`` is a nonnegative rational number and ``n`` is not divisible
+   by ``P``, define ``hash(x)`` as ``m * invmod(n, P) % P``, where ``invmod(n,
+   P)`` gives the inverse of ``n`` modulo ``P``.
+
+ - If ``x = m / n`` is a nonnegative rational number and ``n`` is
+   divisible by ``P`` (but ``m`` is not) then ``n`` has no inverse
+   modulo ``P`` and the rule above doesn't apply; in this case define
+   ``hash(x)`` to be the constant value ``sys.hash_info.inf``.
+
+ - If ``x = m / n`` is a negative rational number define ``hash(x)``
+   as ``-hash(-x)``.  If the resulting hash is ``-1``, replace it with
+   ``-2``.
+
+ - The particular values ``sys.hash_info.inf``, ``-sys.hash_info.inf``
+   and ``sys.hash_info.nan`` are used as hash values for positive
+   infinity, negative infinity, or nans (respectively).  (All hashable
+   nans have the same hash value.)
+
+ - For a :class:`complex` number ``z``, the hash values of the real
+   and imaginary parts are combined by computing ``hash(z.real) +
+   sys.hash_info.imag * hash(z.imag)``, reduced modulo
+   ``2**sys.hash_info.width`` so that it lies in
+   ``range(-2**(sys.hash_info.width - 1), 2**(sys.hash_info.width -
+   1))``.  Again, if the result is ``-1``, it's replaced with ``-2``.
+
+
+To clarify the above rules, here's some example Python code,
+equivalent to the builtin hash, for computing the hash of a rational
+number, :class:`float`, or :class:`complex`::
+
+
+   import sys, math
+
+   def hash_fraction(m, n):
+       """Compute the hash of a rational number m / n.
+
+       Assumes m and n are integers, with n positive.
+       Equivalent to hash(fractions.Fraction(m, n)).
+
+       """
+       P = sys.hash_info.modulus
+       # Remove common factors of P.  (Unnecessary if m and n already coprime.)
+       while m % P == n % P == 0:
+           m, n = m // P, n // P
+
+       if n % P == 0:
+           hash_ = sys.hash_info.inf
+       else:
+           # Fermat's Little Theorem: pow(n, P-1, P) is 1, so
+           # pow(n, P-2, P) gives the inverse of n modulo P.
+           hash_ = (abs(m) % P) * pow(n, P - 2, P) % P
+       if m < 0:
+           hash_ = -hash_
+       if hash_ == -1:
+           hash_ = -2
+       return hash_
+
+   def hash_float(x):
+       """Compute the hash of a float x."""
+
+       if math.isnan(x):
+           return sys.hash_info.nan
+       elif math.isinf(x):
+           return sys.hash_info.inf if x > 0 else -sys.hash_info.inf
+       else:
+           return hash_fraction(*x.as_integer_ratio())
+
+   def hash_complex(z):
+       """Compute the hash of a complex number z."""
+
+       hash_ = hash_float(z.real) + sys.hash_info.imag * hash_float(z.imag)
+       # do a signed reduction modulo 2**sys.hash_info.width
+       M = 2**(sys.hash_info.width - 1)
+       hash_ = (hash_ & (M - 1)) - (hash & M)
+       if hash_ == -1:
+           hash_ == -2
+       return hash_
 
 .. _typeiter:
 
@@ -657,22 +824,20 @@ constructor, :func:`bytes`, and from literals; use a ``b`` prefix with normal
 string syntax: ``b'xyzzy'``.  To construct byte arrays, use the
 :func:`bytearray` function.
 
-.. warning::
+While string objects are sequences of characters (represented by strings of
+length 1), bytes and bytearray objects are sequences of *integers* (between 0
+and 255), representing the ASCII value of single bytes.  That means that for
+a bytes or bytearray object *b*, ``b[0]`` will be an integer, while
+``b[0:1]`` will be a bytes or bytearray object of length 1.  The
+representation of bytes objects uses the literal format (``b'...'``) since it
+is generally more useful than e.g. ``bytes([50, 19, 100])``.  You can always
+convert a bytes object into a list of integers using ``list(b)``.
 
-   While string objects are sequences of characters (represented by strings of
-   length 1), bytes and bytearray objects are sequences of *integers* (between 0
-   and 255), representing the ASCII value of single bytes.  That means that for
-   a bytes or bytearray object *b*, ``b[0]`` will be an integer, while
-   ``b[0:1]`` will be a bytes or bytearray object of length 1.  The
-   representation of bytes objects uses the literal format (``b'...'``) since it
-   is generally more useful than e.g. ``bytes([50, 19, 100])``.  You can always
-   convert a bytes object into a list of integers using ``list(b)``.
-
-   Also, while in previous Python versions, byte strings and Unicode strings
-   could be exchanged for each other rather freely (barring encoding issues),
-   strings and bytes are now completely separate concepts.  There's no implicit
-   en-/decoding if you pass an object of the wrong type.  A string always
-   compares unequal to a bytes or bytearray object.
+Also, while in previous Python versions, byte strings and Unicode strings
+could be exchanged for each other rather freely (barring encoding issues),
+strings and bytes are now completely separate concepts.  There's no implicit
+en-/decoding if you pass an object of the wrong type.  A string always
+compares unequal to a bytes or bytearray object.
 
 Lists are constructed with square brackets, separating items with commas: ``[a,
 b, c]``.  Tuples are constructed by the comma operator (not within square
@@ -681,17 +846,17 @@ the enclosing parentheses, such as ``a, b, c`` or ``()``.  A single item tuple
 must have a trailing comma, such as ``(d,)``.
 
 Objects of type range are created using the :func:`range` function.  They don't
-support slicing, concatenation or repetition, and using ``in``, ``not in``,
-:func:`min` or :func:`max` on them is inefficient.
+support concatenation or repetition, and using :func:`min` or :func:`max` on
+them is inefficient.
 
 Most sequence types support the following operations.  The ``in`` and ``not in``
 operations have the same priorities as the comparison operations.  The ``+`` and
 ``*`` operations have the same priority as the corresponding numeric operations.
-[#]_ Additional methods are provided for :ref:`typesseq-mutable`.
+[3]_ Additional methods are provided for :ref:`typesseq-mutable`.
 
 This table lists the sequence operations sorted in ascending priority
 (operations in the same box have the same priority).  In the table, *s* and *t*
-are sequences of the same type; *n*, *i* and *j* are integers:
+are sequences of the same type; *n*, *i*, *j* and *k* are integers.
 
 +------------------+--------------------------------+----------+
 | Operation        | Result                         | Notes    |
@@ -708,7 +873,7 @@ are sequences of the same type; *n*, *i* and *j* are integers:
 | ``s * n, n * s`` | *n* shallow copies of *s*      | \(2)     |
 |                  | concatenated                   |          |
 +------------------+--------------------------------+----------+
-| ``s[i]``         | *i*'th item of *s*, origin 0   | \(3)     |
+| ``s[i]``         | *i*\ th item of *s*, origin 0  | \(3)     |
 +------------------+--------------------------------+----------+
 | ``s[i:j]``       | slice of *s* from *i* to *j*   | (3)(4)   |
 +------------------+--------------------------------+----------+
@@ -799,15 +964,18 @@ Notes:
    If *k* is ``None``, it is treated like ``1``.
 
 (6)
-   .. impl-detail::
+   Concatenating immutable strings always results in a new object.  This means
+   that building up a string by repeated concatenation will have a quadratic
+   runtime cost in the total string length.  To get a linear runtime cost,
+   you must switch to one of the alternatives below:
 
-      If *s* and *t* are both strings, some Python implementations such as
-      CPython can usually perform an in-place optimization for assignments of
-      the form ``s = s + t`` or ``s += t``.  When applicable, this optimization
-      makes quadratic run-time much less likely.  This optimization is both
-      version and implementation dependent.  For performance sensitive code, it
-      is preferable to use the :meth:`str.join` method which assures consistent
-      linear concatenation performance across versions and implementations.
+   * if concatenating :class:`str` objects, you can build a list and use
+     :meth:`str.join` at the end;
+
+   * if concatenating :class:`bytes` objects, you can similarly use
+     :meth:`bytes.join`, or you can do in-place concatenation with a
+     :class:`bytearray` object.  :class:`bytearray` objects are mutable and
+     have an efficient overallocation mechanism.
 
 
 .. _string-methods:
@@ -817,11 +985,10 @@ String Methods
 
 .. index:: pair: string; methods
 
-String objects support the methods listed below.  Note that none of these
-methods take keyword arguments.
+String objects support the methods listed below.
 
-In addition, Python's strings support the sequence type methods described in
-the :ref:`typesseq` section. To output formatted strings, see the
+In addition, Python's strings support the sequence type methods described in the
+:ref:`typesseq` section. To output formatted strings, see the
 :ref:`string-formatting` section. Also, see the :mod:`re` module for string
 functions based on regular expressions.
 
@@ -844,12 +1011,12 @@ functions based on regular expressions.
    interpreted as in slice notation.
 
 
-.. method:: str.encode([encoding[, errors]])
+.. method:: str.encode(encoding="utf-8", errors="strict")
 
-   Return an encoded version of the string as a bytes object.  Default encoding
-   is the current default string encoding.  *errors* may be given to set a
-   different error handling scheme.  The default for *errors* is ``'strict'``,
-   meaning that encoding errors raise a :exc:`UnicodeError`.  Other possible
+   Return an encoded version of the string as a bytes object. Default encoding
+   is ``'utf-8'``. *errors* may be given to set a different error handling scheme.
+   The default for *errors* is ``'strict'``, meaning that encoding errors raise
+   a :exc:`UnicodeError`. Other possible
    values are ``'ignore'``, ``'replace'``, ``'xmlcharrefreplace'``,
    ``'backslashreplace'`` and any other name registered via
    :func:`codecs.register_error`, see section :ref:`codec-base-classes`. For a
@@ -869,7 +1036,7 @@ functions based on regular expressions.
 
 .. method:: str.expandtabs([tabsize])
 
-   Return a copy of the string where all tab characters are replaced by one or
+   Return a copy of the string where all tab characters are replaced by zero or
    more spaces, depending on the current column and the given tab size.  The
    column number is reset to zero after each newline occurring in the string.
    If *tabsize* is not given, a tab size of ``8`` characters is assumed.  This
@@ -895,18 +1062,34 @@ functions based on regular expressions.
 
 .. method:: str.format(*args, **kwargs)
 
-   Perform a string formatting operation.  The *format_string* argument can
-   contain literal text or replacement fields delimited by braces ``{}``.  Each
-   replacement field contains either the numeric index of a positional argument,
-   or the name of a keyword argument.  Returns a copy of *format_string* where
-   each replacement field is replaced with the string value of the corresponding
-   argument.
+   Perform a string formatting operation.  The string on which this method is
+   called can contain literal text or replacement fields delimited by braces
+   ``{}``.  Each replacement field contains either the numeric index of a
+   positional argument, or the name of a keyword argument.  Returns a copy of
+   the string where each replacement field is replaced with the string value of
+   the corresponding argument.
 
       >>> "The sum of 1 + 2 is {0}".format(1+2)
       'The sum of 1 + 2 is 3'
 
    See :ref:`formatstrings` for a description of the various formatting options
    that can be specified in format strings.
+
+
+.. method:: str.format_map(mapping)
+
+   Similar to ``str.format(**mapping)``, except that ``mapping`` is
+   used directly and not copied to a :class:`dict` .  This is useful
+   if for example ``mapping`` is a dict subclass:
+
+   >>> class Default(dict):
+   ...     def __missing__(self, key):
+   ...         return key
+   ...
+   >>> '{name} was born in {country}'.format_map(Default(name='Guido'))
+   'Guido was born in country'
+
+   .. versionadded:: 3.2
 
 
 .. method:: str.index(sub[, start[, end]])
@@ -937,7 +1120,7 @@ functions based on regular expressions.
    characters and there is at least one character, false
    otherwise. Decimal characters are those from general category "Nd". This category
    includes digit characters, and all characters
-   that that can be used to form decimal-radix numbers, e.g. U+0660,
+   that can be used to form decimal-radix numbers, e.g. U+0660,
    ARABIC-INDIC DIGIT ZERO.
 
 
@@ -957,10 +1140,8 @@ functions based on regular expressions.
 
 .. method:: str.islower()
 
-   Return true if all cased characters in the string are lowercase and there is at
-   least one cased character, false otherwise.  Cased characters are those with
-   general category property being one of "Lu", "Ll", or "Lt" and lowercase characters
-   are those with general category property "Ll".
+   Return true if all cased characters [4]_ in the string are lowercase and
+   there is at least one cased character, false otherwise.
 
 
 .. method:: str.isnumeric()
@@ -1000,17 +1181,15 @@ functions based on regular expressions.
 
 .. method:: str.isupper()
 
-   Return true if all cased characters in the string are uppercase and there is at
-   least one cased character, false otherwise. Cased characters are those with
-   general category property being one of "Lu", "Ll", or "Lt" and uppercase characters
-   are those with general category property "Lu".
+   Return true if all cased characters [4]_ in the string are uppercase and
+   there is at least one cased character, false otherwise.
 
 
 .. method:: str.join(iterable)
 
    Return a string which is the concatenation of the strings in the
    :term:`iterable` *iterable*.  A :exc:`TypeError` will be raised if there are
-   any non-string values in *seq*, including :class:`bytes` objects.  The
+   any non-string values in *iterable*, including :class:`bytes` objects.  The
    separator between elements is the string providing this method.
 
 
@@ -1018,12 +1197,13 @@ functions based on regular expressions.
 
    Return the string left justified in a string of length *width*. Padding is done
    using the specified *fillchar* (default is a space).  The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
 
 .. method:: str.lower()
 
-   Return a copy of the string converted to lowercase.
+   Return a copy of the string with all the cased characters [4]_ converted to
+   lowercase.
 
 
 .. method:: str.lstrip([chars])
@@ -1086,7 +1266,7 @@ functions based on regular expressions.
 
    Return the string right justified in a string of length *width*. Padding is done
    using the specified *fillchar* (default is a space). The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
 
 .. method:: str.rpartition(sep)
@@ -1224,14 +1404,17 @@ functions based on regular expressions.
 
 .. method:: str.upper()
 
-   Return a copy of the string converted to uppercase.
+   Return a copy of the string with all the cased characters [4]_ converted to
+   uppercase.  Note that ``str.upper().isupper()`` might be ``False`` if ``s``
+   contains uncased characters or if the Unicode category of the resulting
+   character(s) is not "Lu" (Letter, uppercase), but e.g. "Lt" (Letter, titlecase).
 
 
 .. method:: str.zfill(width)
 
    Return the numeric string left filled with zeros in a string of length
    *width*.  A sign prefix is handled correctly.  The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
 
 
@@ -1261,10 +1444,10 @@ String objects have one unique built-in operation: the ``%`` operator (modulo).
 This is also known as the string *formatting* or *interpolation* operator.
 Given ``format % values`` (where *format* is a string), ``%`` conversion
 specifications in *format* are replaced with zero or more elements of *values*.
-The effect is similar to the using :cfunc:`sprintf` in the C language.
+The effect is similar to the using :c:func:`sprintf` in the C language.
 
 If *format* requires a single argument, *values* may be a single non-tuple
-object. [#]_  Otherwise, *values* must be a tuple with exactly the number of
+object. [5]_  Otherwise, *values* must be a tuple with exactly the number of
 items specified by the format string, or a single mapping object (for example, a
 dictionary).
 
@@ -1284,7 +1467,7 @@ components, which must occur in this order:
    object to convert comes after the minimum field width and optional precision.
 
 #. Precision (optional), given as a ``'.'`` (dot) followed by the precision.  If
-   specified as ``'*'`` (an asterisk), the actual width is read from the next
+   specified as ``'*'`` (an asterisk), the actual precision is read from the next
    element of the tuple in *values*, and the value to convert comes after the
    precision.
 
@@ -1366,8 +1549,11 @@ The conversion types are:
 | ``'r'``    | String (converts any Python object using            | \(5)  |
 |            | :func:`repr`).                                      |       |
 +------------+-----------------------------------------------------+-------+
-| ``'s'``    | String (converts any Python object using            |       |
+| ``'s'``    | String (converts any Python object using            | \(5)  |
 |            | :func:`str`).                                       |       |
++------------+-----------------------------------------------------+-------+
+| ``'a'``    | String (converts any Python object using            | \(5)  |
+|            | :func:`ascii`).                                     |       |
 +------------+-----------------------------------------------------+-------+
 | ``'%'``    | No argument is converted, results in a ``'%'``      |       |
 |            | character in the result.                            |       |
@@ -1401,7 +1587,7 @@ Notes:
    decimal point and defaults to 6.
 
 (5)
-   The precision determines the maximal number of characters used.
+   If precision is ``N``, the output is truncated to ``N`` characters.
 
 
 (7)
@@ -1434,11 +1620,23 @@ Range Type
 The :class:`range` type is an immutable sequence which is commonly used for
 looping.  The advantage of the :class:`range` type is that an :class:`range`
 object will always take the same amount of memory, no matter the size of the
-range it represents.  There are no consistent performance advantages.
+range it represents.
 
-Range objects have very little behavior: they only support indexing, iteration,
-and the :func:`len` function.
+Range objects have relatively little behavior: they support indexing, contains,
+iteration, the :func:`len` function, and the following methods:
 
+.. method:: range.count(x)
+
+   Return the number of *i*'s for which ``s[i] == x``.
+
+    .. versionadded:: 3.2
+
+.. method:: range.index(x)
+
+   Return the smallest *i* such that ``s[i] == x``.  Raises
+   :exc:`ValueError` when *x* is not in the range.
+
+    .. versionadded:: 3.2
 
 .. _typesseq-mutable:
 
@@ -1556,6 +1754,9 @@ Notes:
 
    *key* specifies a function of one argument that is used to extract a comparison
    key from each list element: ``key=str.lower``.  The default value is ``None``.
+   Use :func:`functools.cmp_to_key` to convert an
+   old-style *cmp* function to a *key* function.
+
 
    *reverse* is a boolean value.  If set to ``True``, then the list elements are
    sorted as if each comparison were reversed.
@@ -1607,16 +1808,19 @@ Wherever one of these methods needs to interpret the bytes as characters
       b = a.replace(b"a", b"f")
 
 
-.. method:: bytes.decode([encoding[, errors]])
-            bytearray.decode([encoding[, errors]])
+.. method:: bytes.decode(encoding="utf-8", errors="strict")
+            bytearray.decode(encoding="utf-8", errors="strict")
 
-   Return a string decoded from the given bytes.  Default encoding is the
-   current default string encoding.  *errors* may be given to set a different
+   Return a string decoded from the given bytes.  Default encoding is
+   ``'utf-8'``. *errors* may be given to set a different
    error handling scheme.  The default for *errors* is ``'strict'``, meaning
    that encoding errors raise a :exc:`UnicodeError`.  Other possible values are
    ``'ignore'``, ``'replace'`` and any other name registered via
    :func:`codecs.register_error`, see section :ref:`codec-base-classes`. For a
    list of possible encodings, see section :ref:`standard-encodings`.
+
+   .. versionchanged:: 3.1
+      Added support for keyword arguments.
 
 
 The bytes and bytearray types have an additional class method:
@@ -1938,8 +2142,20 @@ pairs within braces, for example: ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098:
       returned or raised by the ``__missing__(key)`` call if the key is not
       present. No other operations or methods invoke :meth:`__missing__`. If
       :meth:`__missing__` is not defined, :exc:`KeyError` is raised.
-      :meth:`__missing__` must be a method; it cannot be an instance variable. For
-      an example, see :class:`collections.defaultdict`.
+      :meth:`__missing__` must be a method; it cannot be an instance variable::
+
+          >>> class Counter(dict):
+          ...     def __missing__(self, key):
+          ...         return 0
+          >>> c = Counter()
+          >>> c['red']
+          0
+          >>> c['red'] += 1
+          >>> c['red']
+          1
+
+      See :class:`collections.Counter` for a complete implementation including
+      other methods helpful for accumulating and managing tallies.
 
    .. describe:: d[key] = value
 
@@ -2076,7 +2292,6 @@ since the entries are generally not unique.)  For set-like views, all of the
 operations defined for the abstract base class :class:`collections.Set` are
 available (for example, ``==``, ``<``, or ``^``).
 
-
 An example of dictionary view usage::
 
    >>> dishes = {'eggs': 2, 'sausage': 1, 'bacon': 1, 'spam': 500}
@@ -2106,13 +2321,13 @@ An example of dictionary view usage::
    >>> keys & {'eggs', 'bacon', 'salad'}
    {'bacon'}
    >>> keys ^ {'sausage', 'juice'}
-   {'juice', 'eggs', 'bacon', 'spam'}
+   {'juice', 'sausage', 'bacon', 'spam'}
 
 
 .. _typememoryview:
 
-memoryview Types
-================
+memoryview type
+===============
 
 :class:`memoryview` objects allow Python code to access the internal data
 of an object that supports the :ref:`buffer protocol <bufferobjects>` without
@@ -2160,15 +2375,15 @@ copying.  Memory is generally interpreted as simple bytes.
       bytearray(b'zbcefg')
       >>> v[1:4] = b'123'
       >>> data
-      bytearray(b'a123fg')
+      bytearray(b'z123fg')
       >>> v[2] = b'spam'
       Traceback (most recent call last):
-      File "<stdin>", line 1, in <module>
+        File "<stdin>", line 1, in <module>
       ValueError: cannot modify size of memoryview object
 
    Notice how the size of the memoryview object cannot be changed.
 
-   :class:`memoryview` has two methods:
+   :class:`memoryview` has several methods:
 
    .. method:: tobytes()
 
@@ -2187,6 +2402,39 @@ copying.  Memory is generally interpreted as simple bytes.
 
          >>> memoryview(b'abc').tolist()
          [97, 98, 99]
+
+   .. method:: release()
+
+      Release the underlying buffer exposed by the memoryview object.  Many
+      objects take special actions when a view is held on them (for example,
+      a :class:`bytearray` would temporarily forbid resizing); therefore,
+      calling release() is handy to remove these restrictions (and free any
+      dangling resources) as soon as possible.
+
+      After this method has been called, any further operation on the view
+      raises a :class:`ValueError` (except :meth:`release()` itself which can
+      be called multiple times)::
+
+         >>> m = memoryview(b'abc')
+         >>> m.release()
+         >>> m[0]
+         Traceback (most recent call last):
+           File "<stdin>", line 1, in <module>
+         ValueError: operation forbidden on released memoryview object
+
+      The context management protocol can be used for a similar effect,
+      using the ``with`` statement::
+
+         >>> with memoryview(b'abc') as m:
+         ...     m[0]
+         ...
+         b'a'
+         >>> m[0]
+         Traceback (most recent call last):
+           File "<stdin>", line 1, in <module>
+         ValueError: operation forbidden on released memoryview object
+
+      .. versionadded:: 3.2
 
    There are also several readonly attributes available:
 
@@ -2325,7 +2573,7 @@ statement is not, strictly speaking, an operation on a module object; ``import
 foo`` does not require a module object named *foo* to exist, rather it requires
 an (external) *definition* for a module named *foo* somewhere.)
 
-A special member of every module is :attr:`__dict__`. This is the dictionary
+A special attribute of every module is :attr:`__dict__`. This is the dictionary
 containing the module's symbol table. Modifying this dictionary will actually
 change the module's symbol table, but direct assignment to the :attr:`__dict__`
 attribute is not possible (you can write ``m.__dict__['a'] = 1``, which defines
@@ -2467,6 +2715,20 @@ special operations.  There is exactly one ellipsis object, named
 It is written as ``Ellipsis`` or ``...``.
 
 
+.. _bltin-notimplemented-object:
+
+The NotImplemented Object
+-------------------------
+
+This object is returned from comparisons and binary operations when they are
+asked to operate on types they don't support. See :ref:`comparisons` for more
+information.
+
+It is written as ``NotImplemented``.
+
+
+.. _bltin-boolean-values:
+
 Boolean Values
 --------------
 
@@ -2474,9 +2736,9 @@ Boolean values are the two constant objects ``False`` and ``True``.  They are
 used to represent truth values (although other values can also be considered
 false or true).  In numeric contexts (for example when used as the argument to
 an arithmetic operator), they behave like the integers 0 and 1, respectively.
-The built-in function :func:`bool` can be used to cast any value to a Boolean,
-if the value can be interpreted as a truth value (see section Truth Value
-Testing above).
+The built-in function :func:`bool` can be used to convert any value to a
+Boolean, if the value can be interpreted as a truth value (see section
+:ref:`truth` above).
 
 .. index::
    single: False
@@ -2526,8 +2788,6 @@ types, where they are relevant.  Some of these are not reported by the
    The name of the class or type.
 
 
-The following attributes are only supported by :term:`new-style class`\ es.
-
 .. attribute:: class.__mro__
 
    This attribute is a tuple of classes that are considered when looking for
@@ -2543,23 +2803,26 @@ The following attributes are only supported by :term:`new-style class`\ es.
 
 .. method:: class.__subclasses__
 
-   Each new-style class keeps a list of weak references to its immediate
-   subclasses.  This method returns a list of all those references still alive.
+   Each class keeps a list of weak references to its immediate subclasses.  This
+   method returns a list of all those references still alive.
    Example::
 
       >>> int.__subclasses__()
-      [<type 'bool'>]
+      [<class 'bool'>]
 
 
 .. rubric:: Footnotes
 
-.. [#] Additional information on these special methods may be found in the Python
+.. [1] Additional information on these special methods may be found in the Python
    Reference Manual (:ref:`customization`).
 
-.. [#] As a consequence, the list ``[1, 2]`` is considered equal to ``[1.0, 2.0]``, and
+.. [2] As a consequence, the list ``[1, 2]`` is considered equal to ``[1.0, 2.0]``, and
    similarly for tuples.
 
-.. [#] They must have since the parser can't tell the type of the operands.
+.. [3] They must have since the parser can't tell the type of the operands.
 
-.. [#] To format only a tuple you should therefore provide a singleton tuple whose only
+.. [4] Cased characters are those with general category property being one of
+   "Lu" (Letter, uppercase), "Ll" (Letter, lowercase), or "Lt" (Letter, titlecase).
+
+.. [5] To format only a tuple you should therefore provide a singleton tuple whose only
    element is the tuple to be formatted.

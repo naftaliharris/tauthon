@@ -3,6 +3,8 @@ import test.support
 import unittest
 import test.test_set
 import random
+import collections
+import itertools
 
 # list, tuple and dict subclasses that do or don't overwrite __repr__
 class list2(list):
@@ -195,6 +197,20 @@ class QueryTestCase(unittest.TestCase):
         self.assertEqual(pprint.pformat({"xy\tab\n": (3,), 5: [[]], (): {}}),
             r"{5: [[]], 'xy\tab\n': (3,), (): {}}")
 
+    def test_ordered_dict(self):
+        words = 'the quick brown fox jumped over a lazy dog'.split()
+        d = collections.OrderedDict(zip(words, itertools.count()))
+        self.assertEqual(pprint.pformat(d),
+"""\
+{'the': 0,
+ 'quick': 1,
+ 'brown': 2,
+ 'fox': 3,
+ 'jumped': 4,
+ 'over': 5,
+ 'a': 6,
+ 'lazy': 7,
+ 'dog': 8}""")
     def test_subclassing(self):
         o = {'names with spaces': 'should be presented using repr()',
              'others.should.not.be': 'like.this'}
@@ -203,7 +219,29 @@ class QueryTestCase(unittest.TestCase):
  others.should.not.be: like.this}"""
         self.assertEqual(DottedPrettyPrinter().pformat(o), exp)
 
+    @test.support.cpython_only
     def test_set_reprs(self):
+        # This test creates a complex arrangement of frozensets and
+        # compares the pretty-printed repr against a string hard-coded in
+        # the test.  The hard-coded repr depends on the sort order of
+        # frozensets.
+        #
+        # However, as the docs point out: "Since sets only define
+        # partial ordering (subset relationships), the output of the
+        # list.sort() method is undefined for lists of sets."
+        #
+        # In a nutshell, the test assumes frozenset({0}) will always
+        # sort before frozenset({1}), but:
+        #
+        # >>> frozenset({0}) < frozenset({1})
+        # False
+        # >>> frozenset({1}) < frozenset({0})
+        # False
+        #
+        # Consequently, this test is fragile and
+        # implementation-dependent.  Small changes to Python's sort
+        # algorithm cause the test to fail when it should pass.
+
         self.assertEqual(pprint.pformat(set()), 'set()')
         self.assertEqual(pprint.pformat(set(range(3))), '{0, 1, 2}')
         self.assertEqual(pprint.pformat(frozenset()), 'frozenset()')

@@ -22,7 +22,7 @@ Conditional compilation
 =======================
 
 The easiest way to compile only some code for 3.0 is to check if
-:cmacro:`PY_MAJOR_VERSION` is greater than or equal to 3. ::
+:c:macro:`PY_MAJOR_VERSION` is greater than or equal to 3. ::
 
    #if PY_MAJOR_VERSION >= 3
    #define IS_PY3K
@@ -47,12 +47,12 @@ Python 3.0's :func:`str` (``PyString_*`` functions in C) type is equivalent to
 2.x's :func:`unicode` (``PyUnicode_*``).  The old 8-bit string type has become
 :func:`bytes`.  Python 2.6 and later provide a compatibility header,
 :file:`bytesobject.h`, mapping ``PyBytes`` names to ``PyString`` ones.  For best
-compatibility with 3.0, :ctype:`PyUnicode` should be used for textual data and
-:ctype:`PyBytes` for binary data.  It's also important to remember that
-:ctype:`PyBytes` and :ctype:`PyUnicode` in 3.0 are not interchangeable like
-:ctype:`PyString` and :ctype:`PyUnicode` are in 2.x.  The following example
-shows best practices with regards to :ctype:`PyUnicode`, :ctype:`PyString`,
-and :ctype:`PyBytes`. ::
+compatibility with 3.0, :c:type:`PyUnicode` should be used for textual data and
+:c:type:`PyBytes` for binary data.  It's also important to remember that
+:c:type:`PyBytes` and :c:type:`PyUnicode` in 3.0 are not interchangeable like
+:c:type:`PyString` and :c:type:`PyUnicode` are in 2.x.  The following example
+shows best practices with regards to :c:type:`PyUnicode`, :c:type:`PyString`,
+and :c:type:`PyBytes`. ::
 
    #include "stdlib.h"
    #include "Python.h"
@@ -120,7 +120,7 @@ can also be used in some cases. ::
 Module initialization and state
 ===============================
 
-Python 3.0 has a revamped extension module initialization system.  (See PEP
+Python 3.0 has a revamped extension module initialization system.  (See
 :pep:`3121`.)  Instead of storing module state in globals, they should be stored
 in an interpreter specific structure.  Creating modules that act correctly in
 both 2.x and 3.0 is tricky.  The following simple example demonstrates how. ::

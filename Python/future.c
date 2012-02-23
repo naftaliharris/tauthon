@@ -4,7 +4,6 @@
 #include "token.h"
 #include "graminit.h"
 #include "code.h"
-#include "compile.h"
 #include "symtable.h"
 
 #define UNDEFINED_FUTURE_FEATURE "future feature %.100s is not defined"
@@ -44,12 +43,12 @@ future_check_features(PyFutureFeatures *ff, stmt_ty s, const char *filename)
         } else if (strcmp(feature, "braces") == 0) {
             PyErr_SetString(PyExc_SyntaxError,
                             "not a chance");
-            PyErr_SyntaxLocation(filename, s->lineno);
+            PyErr_SyntaxLocationEx(filename, s->lineno, s->col_offset);
             return 0;
         } else {
             PyErr_Format(PyExc_SyntaxError,
                          UNDEFINED_FUTURE_FEATURE, feature);
-            PyErr_SyntaxLocation(filename, s->lineno);
+            PyErr_SyntaxLocationEx(filename, s->lineno, s->col_offset);
             return 0;
         }
     }
@@ -98,8 +97,7 @@ future_parse(PyFutureFeatures *ff, mod_ty mod, const char *filename)
                 if (done) {
                     PyErr_SetString(PyExc_SyntaxError,
                                     ERR_LATE_FUTURE);
-                    PyErr_SyntaxLocation(filename,
-                                         s->lineno);
+                    PyErr_SyntaxLocationEx(filename, s->lineno, s->col_offset);
                     return 0;
                 }
                 if (!future_check_features(ff, s, filename))

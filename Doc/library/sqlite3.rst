@@ -90,7 +90,7 @@ This example uses the iterator form::
 
 .. seealso::
 
-   http://www.pysqlite.org
+   http://code.google.com/p/pysqlite/
       The pysqlite web page -- sqlite3 is developed externally under the name
       "pysqlite".
 
@@ -227,6 +227,12 @@ Connection Objects
    one of "DEFERRED", "IMMEDIATE" or "EXCLUSIVE". See section
    :ref:`sqlite3-controlling-transactions` for a more detailed explanation.
 
+.. attribute:: Connection.in_transaction
+
+   :const:`True` if a transaction is active (there are uncommitted changes),
+   :const:`False` otherwise.  Read-only attribute.
+
+   .. versionadded:: 3.2
 
 .. method:: Connection.cursor([cursorClass])
 
@@ -237,7 +243,7 @@ Connection Objects
 .. method:: Connection.commit()
 
    This method commits the current transaction. If you don't call this method,
-   anything you did since the last call to ``commit()`` is not visible from from
+   anything you did since the last call to ``commit()`` is not visible from
    other database connections. If you wonder why you don't see the data you've
    written to the database, please check you didn't forget to call this method.
 
@@ -363,6 +369,29 @@ Connection Objects
    method with :const:`None` for *handler*.
 
 
+.. method:: Connection.enable_load_extension(enabled)
+
+   This routine allows/disallows the SQLite engine to load SQLite extensions
+   from shared libraries.  SQLite extensions can define new functions,
+   aggregates or whole new virtual table implementations.  One well-known
+   extension is the fulltext-search extension distributed with SQLite.
+
+   .. versionadded:: 3.2
+
+   .. literalinclude:: ../includes/sqlite3/load_extension.py
+
+   Loadable extensions are disabled by default. See [#f1]_.
+
+.. method:: Connection.load_extension(path)
+
+   This routine loads a SQLite extension from a shared library.  You have to
+   enable extension loading with :meth:`enable_load_extension` before you can
+   use this routine.
+
+   .. versionadded:: 3.2
+
+   Loadable extensions are disabled by default. See [#f1]_.
+
 .. attribute:: Connection.row_factory
 
    You can change this attribute to a callable that accepts the cursor and the
@@ -443,13 +472,9 @@ Cursor Objects
    kinds of placeholders: question marks (qmark style) and named placeholders
    (named style).
 
-   This example shows how to use parameters with qmark style:
+   Here's an example of both styles:
 
    .. literalinclude:: ../includes/sqlite3/execute_1.py
-
-   This example shows how to use the named style:
-
-   .. literalinclude:: ../includes/sqlite3/execute_2.py
 
    :meth:`execute` will only execute a single SQL statement. If you try to execute
    more than one statement with it, it will raise a Warning. Use
@@ -518,18 +543,17 @@ Cursor Objects
    attribute, the database engine's own support for the determination of "rows
    affected"/"rows selected" is quirky.
 
-   For ``DELETE`` statements, SQLite reports :attr:`rowcount` as 0 if you make a
-   ``DELETE FROM table`` without any condition.
-
    For :meth:`executemany` statements, the number of modifications are summed up
    into :attr:`rowcount`.
 
    As required by the Python DB API Spec, the :attr:`rowcount` attribute "is -1 in
    case no ``executeXX()`` has been performed on the cursor or the rowcount of the
-   last operation is not determinable by the interface".
+   last operation is not determinable by the interface". This includes ``SELECT``
+   statements because we cannot determine the number of rows a query produced
+   until all rows were fetched.
 
-   This includes ``SELECT`` statements because we cannot determine the number of
-   rows a query produced until all rows were fetched.
+   With SQLite versions before 3.6.5, :attr:`rowcount` is set to 0 if
+   you make a ``DELETE FROM table`` without any condition.
 
 .. attribute:: Cursor.lastrowid
 
@@ -570,43 +594,43 @@ Row Objects
 
 Let's assume we initialize a table as in the example given above::
 
-    conn = sqlite3.connect(":memory:")
-    c = conn.cursor()
-    c.execute('''create table stocks
-    (date text, trans text, symbol text,
-     qty real, price real)''')
-    c.execute("""insert into stocks
-              values ('2006-01-05','BUY','RHAT',100,35.14)""")
-    conn.commit()
-    c.close()
+   conn = sqlite3.connect(":memory:")
+   c = conn.cursor()
+   c.execute('''create table stocks
+   (date text, trans text, symbol text,
+    qty real, price real)''')
+   c.execute("""insert into stocks
+             values ('2006-01-05','BUY','RHAT',100,35.14)""")
+   conn.commit()
+   c.close()
 
 Now we plug :class:`Row` in::
 
-    >>> conn.row_factory = sqlite3.Row
-    >>> c = conn.cursor()
-    >>> c.execute('select * from stocks')
-    <sqlite3.Cursor object at 0x7f4e7dd8fa80>
-    >>> r = c.fetchone()
-    >>> type(r)
-    <class 'sqlite3.Row'>
-    >>> tuple(r)
-    ('2006-01-05', 'BUY', 'RHAT', 100.0, 35.14)
-    >>> len(r)
-    5
-    >>> r[2]
-    'RHAT'
-    >>> r.keys()
-    ['date', 'trans', 'symbol', 'qty', 'price']
-    >>> r['qty']
-    100.0
-    >>> for member in r:
-    ...     print(member)
-    ...
-    2006-01-05
-    BUY
-    RHAT
-    100.0
-    35.14
+   >>> conn.row_factory = sqlite3.Row
+   >>> c = conn.cursor()
+   >>> c.execute('select * from stocks')
+   <sqlite3.Cursor object at 0x7f4e7dd8fa80>
+   >>> r = c.fetchone()
+   >>> type(r)
+   <class 'sqlite3.Row'>
+   >>> tuple(r)
+   ('2006-01-05', 'BUY', 'RHAT', 100.0, 35.14)
+   >>> len(r)
+   5
+   >>> r[2]
+   'RHAT'
+   >>> r.keys()
+   ['date', 'trans', 'symbol', 'qty', 'price']
+   >>> r['qty']
+   100.0
+   >>> for member in r:
+   ...     print(member)
+   ...
+   2006-01-05
+   BUY
+   RHAT
+   100.0
+   35.14
 
 
 .. _sqlite3-types:
@@ -732,7 +756,7 @@ and constructs a :class:`Point` object from it.
 ::
 
    def convert_point(s):
-       x, y = map(float, s.split(";"))
+       x, y = map(float, s.split(b";"))
        return Point(x, y)
 
 Now you need to make the :mod:`sqlite3` module know that what you select from
@@ -785,7 +809,8 @@ So if you are within a transaction and issue a command like ``CREATE TABLE
 before executing that command. There are two reasons for doing that. The first
 is that some of these commands don't work within transactions. The other reason
 is that sqlite3 needs to keep track of the transaction state (if a transaction
-is active or not).
+is active or not).  The current transaction state is exposed through the
+:attr:`Connection.in_transaction` attribute of the connection object.
 
 You can control which kind of ``BEGIN`` statements sqlite3 implicitly executes
 (or none at all) via the *isolation_level* parameter to the :func:`connect`
@@ -852,3 +877,11 @@ threads. If you still try to do so, you will get an exception at runtime.
 
 The only exception is calling the :meth:`~Connection.interrupt` method, which
 only makes sense to call from a different thread.
+
+.. rubric:: Footnotes
+
+.. [#f1] The sqlite3 module is not built with loadable extension support by
+   default, because some platforms (notably Mac OS X) have SQLite
+   libraries which are compiled without this feature. To get loadable
+   extension support, you must pass --enable-loadable-sqlite-extensions to
+   configure.

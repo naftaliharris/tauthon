@@ -1,12 +1,20 @@
 """Verify that warnings are issued for global statements following use."""
 
-from test.support import run_unittest, check_syntax_error
+from test.support import run_unittest, check_syntax_error, check_warnings
 import unittest
-
 import warnings
-warnings.filterwarnings("error", module="<test string>")
+
 
 class GlobalTests(unittest.TestCase):
+
+    def setUp(self):
+        self._warnings_manager = check_warnings()
+        self._warnings_manager.__enter__()
+        warnings.filterwarnings("error", module="<test string>")
+
+    def tearDown(self):
+        self._warnings_manager.__exit__(None, None, None)
+
 
     def test1(self):
         prog_text_1 = """\
@@ -45,7 +53,9 @@ x = 2
 
 
 def test_main():
-    run_unittest(GlobalTests)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("error", module="<test string>")
+        run_unittest(GlobalTests)
 
 if __name__ == "__main__":
     test_main()

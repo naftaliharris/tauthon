@@ -40,7 +40,7 @@ class PyclbrTest(TestCase):
         if key in ignore: return
         if key not in obj:
             print("***",key, file=sys.stderr)
-        self.assertTrue(key in obj, "%r in %r" % (key, obj))
+        self.assertIn(key, obj)
 
     def assertEqualsOrIgnored(self, a, b, ignore):
         ''' succeed iff a == b or a in ignore or b in ignore '''
@@ -84,12 +84,12 @@ class PyclbrTest(TestCase):
             self.assertHasattr(module, name, ignore)
             py_item = getattr(module, name)
             if isinstance(value, pyclbr.Function):
-                self.assertTrue(isinstance(py_item, (FunctionType, BuiltinFunctionType)))
+                self.assertIsInstance(py_item, (FunctionType, BuiltinFunctionType))
                 if py_item.__module__ != moduleName:
                     continue   # skip functions that came from somewhere else
                 self.assertEqual(py_item.__module__, value.module)
             else:
-                self.assertTrue(isinstance(py_item, type))
+                self.assertIsInstance(py_item, type)
                 if py_item.__module__ != moduleName:
                     continue   # skip classes that came from somewhere else
 
@@ -141,7 +141,8 @@ class PyclbrTest(TestCase):
     def test_easy(self):
         self.checkModule('pyclbr')
         self.checkModule('ast')
-        self.checkModule('doctest', ignore=("TestResults", "_SpoofOut"))
+        self.checkModule('doctest', ignore=("TestResults", "_SpoofOut",
+                                            "DocTestCase"))
         self.checkModule('difflib', ignore=("Match",))
 
     def test_decorators(self):

@@ -1,5 +1,5 @@
 import macpath
-from test import support
+from test import support, test_genericpath
 import unittest
 
 
@@ -26,42 +26,25 @@ class MacPathTestCase(unittest.TestCase):
         self.assertFalse(isabs(b":foo:bar"))
         self.assertFalse(isabs(b":foo:bar:"))
 
-
-    def test_commonprefix(self):
-        commonprefix = macpath.commonprefix
-        self.assertTrue(commonprefix(["home:swenson:spam", "home:swen:spam"])
-                     == "home:swen")
-        self.assertTrue(commonprefix([":home:swen:spam", ":home:swen:eggs"])
-                     == ":home:swen:")
-        self.assertTrue(commonprefix([":home:swen:spam", ":home:swen:spam"])
-                     == ":home:swen:spam")
-
-        self.assertTrue(commonprefix([b"home:swenson:spam", b"home:swen:spam"])
-                     == b"home:swen")
-        self.assertTrue(commonprefix([b":home:swen:spam", b":home:swen:eggs"])
-                     == b":home:swen:")
-        self.assertTrue(commonprefix([b":home:swen:spam", b":home:swen:spam"])
-                     == b":home:swen:spam")
-
     def test_split(self):
         split = macpath.split
         self.assertEqual(split("foo:bar"),
-                         ('foo:', 'bar'))
+                          ('foo:', 'bar'))
         self.assertEqual(split("conky:mountpoint:foo:bar"),
-                         ('conky:mountpoint:foo', 'bar'))
+                          ('conky:mountpoint:foo', 'bar'))
 
         self.assertEqual(split(":"), ('', ''))
         self.assertEqual(split(":conky:mountpoint:"),
-                         (':conky:mountpoint', ''))
+                          (':conky:mountpoint', ''))
 
         self.assertEqual(split(b"foo:bar"),
-                         (b'foo:', b'bar'))
+                          (b'foo:', b'bar'))
         self.assertEqual(split(b"conky:mountpoint:foo:bar"),
-                         (b'conky:mountpoint:foo', b'bar'))
+                          (b'conky:mountpoint:foo', b'bar'))
 
         self.assertEqual(split(b":"), (b'', b''))
         self.assertEqual(split(b":conky:mountpoint:"),
-                         (b':conky:mountpoint', b''))
+                          (b':conky:mountpoint', b''))
 
     def test_join(self):
         join = macpath.join
@@ -76,14 +59,6 @@ class MacPathTestCase(unittest.TestCase):
         self.assertEqual(join(b'a:b', b'c'), b'a:b:c')
         self.assertEqual(join(b'a:b', b':c'), b'a:b:c')
         self.assertEqual(join(b'a', b':b', b':c'), b':a:b:c')
-
-    def test_splitdrive(self):
-        splitdrive = macpath.splitdrive
-        self.assertEqual(splitdrive("foo:bar"), ('', 'foo:bar'))
-        self.assertEqual(splitdrive(":foo:bar"), ('', ':foo:bar'))
-
-        self.assertEqual(splitdrive(b"foo:bar"), (b'', b'foo:bar'))
-        self.assertEqual(splitdrive(b":foo:bar"), (b'', b':foo:bar'))
 
     def test_splitext(self):
         splitext = macpath.splitext
@@ -139,8 +114,13 @@ class MacPathTestCase(unittest.TestCase):
         self.assertEqual(normpath(b"a:"), b"a:")
         self.assertEqual(normpath(b"a:b:"), b"a:b")
 
+
+class MacCommonTest(test_genericpath.CommonTest):
+    pathmodule = macpath
+
+
 def test_main():
-    support.run_unittest(MacPathTestCase)
+    support.run_unittest(MacPathTestCase, MacCommonTest)
 
 
 if __name__ == "__main__":
