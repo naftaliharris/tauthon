@@ -53,6 +53,7 @@ acquire_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds)
     _PyTime_timeval curtime;
     _PyTime_timeval endtime;
 
+
     if (microseconds > 0) {
         _PyTime_gettimeofday(&endtime);
         endtime.tv_sec += microseconds / (1000 * 1000);
@@ -75,7 +76,7 @@ acquire_timed(PyThread_type_lock lock, PY_TIMEOUT_T microseconds)
 
             /* If we're using a timeout, recompute the timeout after processing
              * signals, since those can take time.  */
-            if (microseconds >= 0) {
+            if (microseconds > 0) {
                 _PyTime_gettimeofday(&curtime);
                 microseconds = ((endtime.tv_sec - curtime.tv_sec) * 1000000 +
                                 (endtime.tv_usec - curtime.tv_usec));
@@ -412,6 +413,12 @@ rlock_release_save(rlockobject *self)
 {
     long owner;
     unsigned long count;
+
+    if (self->rlock_count == 0) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "cannot release un-acquired lock");
+        return NULL;
+    }
 
     owner = self->rlock_owner;
     count = self->rlock_count;
@@ -1222,11 +1229,9 @@ the suggested approach in the absence of more specific information).");
 
 static PyMethodDef thread_methods[] = {
     {"start_new_thread",        (PyCFunction)thread_PyThread_start_new_thread,
-                            METH_VARARGS,
-                            start_new_doc},
+     METH_VARARGS, start_new_doc},
     {"start_new",               (PyCFunction)thread_PyThread_start_new_thread,
-                            METH_VARARGS,
-                            start_new_doc},
+     METH_VARARGS, start_new_doc},
     {"allocate_lock",           (PyCFunction)thread_PyThread_allocate_lock,
      METH_NOARGS, allocate_doc},
     {"allocate",                (PyCFunction)thread_PyThread_allocate_lock,
@@ -1242,8 +1247,7 @@ static PyMethodDef thread_methods[] = {
     {"_count",                  (PyCFunction)thread__count,
      METH_NOARGS, _count_doc},
     {"stack_size",              (PyCFunction)thread_stack_size,
-                            METH_VARARGS,
-                            stack_size_doc},
+     METH_VARARGS, stack_size_doc},
     {NULL,                      NULL}           /* sentinel */
 };
 
@@ -1307,7 +1311,9 @@ PyInit__thread(void)
 
     /* Add a symbolic constant */
     d = PyModule_GetDict(m);
-    ThreadError = PyErr_NewException("_thread.error", NULL, NULL);
+    ThreadError = PyExc_RuntimeError;
+    Py_INCREF(ThreadError);
+
     PyDict_SetItemString(d, "error", ThreadError);
     Locktype.tp_doc = lock_doc;
     Py_INCREF(&Locktype);
