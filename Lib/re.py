@@ -207,7 +207,7 @@ def compile(pattern, flags=0):
 
 def purge():
     "Clear the regular expression caches"
-    _compile_typed.cache_clear()
+    _compile.cache_clear()
     _compile_repl.cache_clear()
 
 def template(pattern, flags=0):
@@ -215,12 +215,14 @@ def template(pattern, flags=0):
     return _compile(pattern, flags|T)
 
 _alphanum_str = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+    "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
 _alphanum_bytes = frozenset(
-    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+    b"_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
 
 def escape(pattern):
-    "Escape all non-alphanumeric characters in pattern."
+    """
+    Escape all the characters in pattern except ASCII letters, numbers and '_'.
+    """
     if isinstance(pattern, str):
         alphanum = _alphanum_str
         s = list(pattern)
@@ -251,11 +253,8 @@ def escape(pattern):
 
 _pattern_type = type(sre_compile.compile("", 0))
 
+@functools.lru_cache(maxsize=500, typed=True)
 def _compile(pattern, flags):
-    return _compile_typed(type(pattern), pattern, flags)
-
-@functools.lru_cache(maxsize=500)
-def _compile_typed(text_bytes_type, pattern, flags):
     # internal: compile pattern
     if isinstance(pattern, _pattern_type):
         if flags:
