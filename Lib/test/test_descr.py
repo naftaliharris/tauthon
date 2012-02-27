@@ -652,19 +652,19 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         class A(metaclass=AMeta):
             pass
         self.assertEqual(['AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
 
         class B(metaclass=BMeta):
             pass
         # BMeta.__new__ calls AMeta.__new__ with super:
         self.assertEqual(['BMeta', 'AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
 
         class C(A, B):
             pass
         # The most derived metaclass is BMeta:
         self.assertEqual(['BMeta', 'AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         # BMeta.__prepare__ should've been called:
         self.assertIn('BMeta_was_here', C.__dict__)
 
@@ -672,20 +672,20 @@ class ClassPropertiesAndMethods(unittest.TestCase):
         class C2(B, A):
             pass
         self.assertEqual(['BMeta', 'AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertIn('BMeta_was_here', C2.__dict__)
 
         # Check correct metaclass calculation when a metaclass is declared:
         class D(C, metaclass=type):
             pass
         self.assertEqual(['BMeta', 'AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertIn('BMeta_was_here', D.__dict__)
 
         class E(C, metaclass=AMeta):
             pass
         self.assertEqual(['BMeta', 'AMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertIn('BMeta_was_here', E.__dict__)
 
         # Special case: the given metaclass isn't a class,
@@ -727,33 +727,33 @@ class ClassPropertiesAndMethods(unittest.TestCase):
             pass
         self.assertIs(ANotMeta, type(A))
         self.assertEqual(['ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
         self.assertEqual(['ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
 
         class B(metaclass=BNotMeta):
             pass
         self.assertIs(BNotMeta, type(B))
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
 
         class C(A, B):
             pass
         self.assertIs(BNotMeta, type(C))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
 
         class C2(B, A):
             pass
         self.assertIs(BNotMeta, type(C2))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
 
         # This is a TypeError, because of a metaclass conflict:
         # BNotMeta is neither a subclass, nor a superclass of type
@@ -765,25 +765,25 @@ class ClassPropertiesAndMethods(unittest.TestCase):
             pass
         self.assertIs(BNotMeta, type(E))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
 
         class F(object(), C):
             pass
         self.assertIs(BNotMeta, type(F))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
 
         class F2(C, object()):
             pass
         self.assertIs(BNotMeta, type(F2))
         self.assertEqual(['BNotMeta', 'ANotMeta'], new_calls)
-        new_calls[:] = []
+        new_calls.clear()
         self.assertEqual(['BNotMeta', 'ANotMeta'], prepare_calls)
-        prepare_calls[:] = []
+        prepare_calls.clear()
 
         # TypeError: BNotMeta is neither a
         # subclass, nor a superclass of int
@@ -1443,6 +1443,14 @@ order (MRO) for bases """
         else:
             self.fail("classmethod shouldn't accept keyword args")
 
+        cm = classmethod(f)
+        self.assertEqual(cm.__dict__, {})
+        cm.x = 42
+        self.assertEqual(cm.x, 42)
+        self.assertEqual(cm.__dict__, {"x" : 42})
+        del cm.x
+        self.assertFalse(hasattr(cm, "x"))
+
     @support.impl_detail("the module 'xxsubtype' is internal")
     def test_classmethods_in_c(self):
         # Testing C-based class methods...
@@ -1474,6 +1482,13 @@ order (MRO) for bases """
         self.assertEqual(d.goo(1), (1,))
         self.assertEqual(d.foo(1), (d, 1))
         self.assertEqual(D.foo(d, 1), (d, 1))
+        sm = staticmethod(None)
+        self.assertEqual(sm.__dict__, {})
+        sm.x = 42
+        self.assertEqual(sm.x, 42)
+        self.assertEqual(sm.__dict__, {"x" : 42})
+        del sm.x
+        self.assertFalse(hasattr(sm, "x"))
 
     @support.impl_detail("the module 'xxsubtype' is internal")
     def test_staticmethods_in_c(self):
@@ -1799,12 +1814,7 @@ order (MRO) for bases """
             for attr, obj in env.items():
                 setattr(X, attr, obj)
             setattr(X, name, ErrDescr())
-            try:
-                runner(X())
-            except MyException:
-                pass
-            else:
-                self.fail("{0!r} didn't raise".format(name))
+            self.assertRaises(MyException, runner, X())
 
     def test_specials(self):
         # Testing special operators...
@@ -2241,9 +2251,6 @@ order (MRO) for bases """
         # Two essentially featureless objects, just inheriting stuff from
         # object.
         self.assertEqual(dir(NotImplemented), dir(Ellipsis))
-        if support.check_impl_detail():
-            # None differs in PyPy: it has a __nonzero__
-            self.assertEqual(dir(None), dir(Ellipsis))
 
         # Nasty test case for proxied objects
         class Wrapper(object):
@@ -4429,6 +4436,55 @@ order (MRO) for bases """
         foo = Foo()
         str(foo)
 
+    def test_slot_shadows_class_variable(self):
+        with self.assertRaises(ValueError) as cm:
+            class X:
+                __slots__ = ["foo"]
+                foo = None
+        m = str(cm.exception)
+        self.assertEqual("'foo' in __slots__ conflicts with class variable", m)
+
+    def test_set_doc(self):
+        class X:
+            "elephant"
+        X.__doc__ = "banana"
+        self.assertEqual(X.__doc__, "banana")
+        with self.assertRaises(TypeError) as cm:
+            type(list).__dict__["__doc__"].__set__(list, "blah")
+        self.assertIn("can't set list.__doc__", str(cm.exception))
+        with self.assertRaises(TypeError) as cm:
+            type(X).__dict__["__doc__"].__delete__(X)
+        self.assertIn("can't delete X.__doc__", str(cm.exception))
+        self.assertEqual(X.__doc__, "banana")
+
+    def test_qualname(self):
+        descriptors = [str.lower, complex.real, float.real, int.__add__]
+        types = ['method', 'member', 'getset', 'wrapper']
+
+        # make sure we have an example of each type of descriptor
+        for d, n in zip(descriptors, types):
+            self.assertEqual(type(d).__name__, n + '_descriptor')
+
+        for d in descriptors:
+            qualname = d.__objclass__.__qualname__ + '.' + d.__name__
+            self.assertEqual(d.__qualname__, qualname)
+
+        self.assertEqual(str.lower.__qualname__, 'str.lower')
+        self.assertEqual(complex.real.__qualname__, 'complex.real')
+        self.assertEqual(float.real.__qualname__, 'float.real')
+        self.assertEqual(int.__add__.__qualname__, 'int.__add__')
+
+    def test_qualname_dict(self):
+        ns = {'__qualname__': 'some.name'}
+        tp = type('Foo', (), ns)
+        self.assertEqual(tp.__qualname__, 'some.name')
+        self.assertEqual(tp.__dict__['__qualname__'], 'some.name')
+        self.assertEqual(ns, {'__qualname__': 'some.name'})
+
+        ns = {'__qualname__': 1}
+        self.assertRaises(TypeError, type, 'Foo', (), ns)
+
+
 class DictProxyTests(unittest.TestCase):
     def setUp(self):
         class C(object):
@@ -4436,6 +4492,8 @@ class DictProxyTests(unittest.TestCase):
                 pass
         self.C = C
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_keys(self):
         # Testing dict-proxy keys...
         it = self.C.__dict__.keys()
@@ -4443,15 +4501,19 @@ class DictProxyTests(unittest.TestCase):
         keys = list(it)
         keys.sort()
         self.assertEqual(keys, ['__dict__', '__doc__', '__module__',
-            '__weakref__', 'meth'])
+                                '__qualname__', '__weakref__', 'meth'])
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_values(self):
         # Testing dict-proxy values...
         it = self.C.__dict__.values()
         self.assertNotIsInstance(it, list)
         values = list(it)
-        self.assertEqual(len(values), 5)
+        self.assertEqual(len(values), 6)
 
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                        'trace function introduces __local__')
     def test_iter_items(self):
         # Testing dict-proxy iteritems...
         it = self.C.__dict__.items()
@@ -4459,7 +4521,7 @@ class DictProxyTests(unittest.TestCase):
         keys = [item[0] for item in it]
         keys.sort()
         self.assertEqual(keys, ['__dict__', '__doc__', '__module__',
-            '__weakref__', 'meth'])
+                                '__qualname__', '__weakref__', 'meth'])
 
     def test_dict_type_with_metaclass(self):
         # Testing type of __dict__ when metaclass set...
@@ -4473,19 +4535,14 @@ class DictProxyTests(unittest.TestCase):
         self.assertEqual(type(C.__dict__), type(B.__dict__))
 
     def test_repr(self):
-        # Testing dict_proxy.__repr__
-        def sorted_dict_repr(repr_):
-            # Given the repr of a dict, sort the keys
-            assert repr_.startswith('{')
-            assert repr_.endswith('}')
-            kvs = repr_[1:-1].split(', ')
-            return '{' + ', '.join(sorted(kvs)) + '}'
-        dict_ = {k: v for k, v in self.C.__dict__.items()}
-        repr_ = repr(self.C.__dict__)
-        self.assertTrue(repr_.startswith('dict_proxy('))
-        self.assertTrue(repr_.endswith(')'))
-        self.assertEqual(sorted_dict_repr(repr_[len('dict_proxy('):-len(')')]),
-                         sorted_dict_repr('{!r}'.format(dict_)))
+        # Testing dict_proxy.__repr__.
+        # We can't blindly compare with the repr of another dict as ordering
+        # of keys and values is arbitrary and may differ.
+        r = repr(self.C.__dict__)
+        self.assertTrue(r.startswith('dict_proxy('), r)
+        self.assertTrue(r.endswith(')'), r)
+        for k, v in self.C.__dict__.items():
+            self.assertIn('{!r}: {!r}'.format(k, v), r)
 
 
 class PTypesLongInitTest(unittest.TestCase):

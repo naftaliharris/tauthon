@@ -598,6 +598,17 @@ The module :mod:`curses` defines the following functions:
       Only one *ch* can be pushed before :meth:`getch` is called.
 
 
+.. function:: unget_wch(ch)
+
+   Push *ch* so the next :meth:`get_wch` will return it.
+
+   .. note::
+
+      Only one *ch* can be pushed before :meth:`get_wch` is called.
+
+   .. versionadded:: 3.3
+
+
 .. function:: ungetmouse(id, x, y, z, bstate)
 
    Push a :const:`KEY_MOUSE` event onto the input queue, associating the given
@@ -642,7 +653,7 @@ Window Objects
 --------------
 
 Window objects, as returned by :func:`initscr` and :func:`newwin` above, have
-the following methods:
+the following methods and attributes:
 
 
 .. method:: window.addch([y, x,] ch[, attr])
@@ -823,6 +834,16 @@ the following methods:
    event.
 
 
+.. attribute:: window.encoding
+
+   Encoding used to encode method arguments (Unicode strings and characters).
+   The encoding attribute is inherited from by parent window when a subwindow
+   is created, for example with :meth:`window.subwin`. By default, the locale
+   encoding is used (see :func:`locale.getpreferredencoding`).
+
+   .. versionadded:: 3.3
+
+
 .. method:: window.erase()
 
    Clear the window.
@@ -844,6 +865,14 @@ the following methods:
    range: function keys, keypad keys and so on return numbers higher than 256. In
    no-delay mode, -1 is returned if there is no input, else :func:`getch` waits
    until a key is pressed.
+
+
+.. method:: window.get_wch([y, x])
+
+   Get a wide character. Like :meth:`getch`, but the integer returned is the
+   Unicode code point for the key pressed, so it can be passed to :func:`chr`.
+
+   .. versionadded:: 3.3
 
 
 .. method:: window.getkey([y, x])
