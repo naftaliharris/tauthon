@@ -7,9 +7,10 @@ work. One should use importlib as the public-facing version of this module.
 
 """
 
-# Injected modules are '_warnings', 'imp', 'sys', 'marshal', 'errno', '_io',
+# Injected modules are '_warnings', 'imp', 'sys', 'marshal', '_io',
 # and '_os' (a.k.a. 'posix', 'nt' or 'os2').
 # Injected attribute is path_sep.
+# Most injection is handled by _setup().
 #
 # When editing this code be aware that code executed at import time CANNOT
 # reference any injected objects! This includes not only global code but also
@@ -18,11 +19,57 @@ work. One should use importlib as the public-facing version of this module.
 
 # Bootstrap-related code ######################################################
 
+CASE_INSENSITIVE_PLATFORMS = 'win', 'cygwin', 'darwin'
+
+
+def _make_relax_case():
+    if any(map(sys.platform.startswith, CASE_INSENSITIVE_PLATFORMS)):
+        def _relax_case():
+            """True if filenames must be checked case-insensitively."""
+            return b'PYTHONCASEOK' in _os.environ
+    else:
+        def _relax_case():
+            """True if filenames must be checked case-insensitively."""
+            return False
+    return _relax_case
+
+
+# TODO: Expose from marshal
+def _w_long(x):
+    """Convert a 32-bit integer to little-endian.
+
+    XXX Temporary until marshal's long functions are exposed.
+
+    """
+    x = int(x)
+    int_bytes = []
+    int_bytes.append(x & 0xFF)
+    int_bytes.append((x >> 8) & 0xFF)
+    int_bytes.append((x >> 16) & 0xFF)
+    int_bytes.append((x >> 24) & 0xFF)
+    return bytearray(int_bytes)
+
+
+# TODO: Expose from marshal
+def _r_long(int_bytes):
+    """Convert 4 bytes in little-endian to an integer.
+
+    XXX Temporary until marshal's long function are exposed.
+
+    """
+    x = int_bytes[0]
+    x |= int_bytes[1] << 8
+    x |= int_bytes[2] << 16
+    x |= int_bytes[3] << 24
+    return x
+
+
+
 # XXX Could also expose Modules/getpath.c:joinpath()
 def _path_join(*args):
     """Replacement for os.path.join."""
     return path_sep.join(x[:-len(path_sep)] if x.endswith(path_sep) else x
-                            for x in args if x)
+                         for x in args if x)
 
 
 def _path_exists(path):
@@ -80,10 +127,32 @@ def _path_absolute(path):
             return _path_join(_os.getcwd(), path)
 
 
+def _write_atomic(path, data):
+    """Best-effort function to write data to a path atomically.
+    Be prepared to handle a FileExistsError if concurrent writing of the
+    temporary file is attempted."""
+    # id() is used to generate a pseudo-random filename.
+    path_tmp = '{}.{}'.format(path, id(path))
+    fd = _os.open(path_tmp, _os.O_EXCL | _os.O_CREAT | _os.O_WRONLY, 0o666)
+    try:
+        # We first write data to a temporary file, and then use os.replace() to
+        # perform an atomic rename.
+        with _io.FileIO(fd, 'wb') as file:
+            file.write(data)
+        _os.replace(path_tmp, path)
+    except OSError:
+        try:
+            _os.unlink(path_tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _wrap(new, old):
     """Simple substitute for functools.wraps."""
-    for replace in ['__module__', '__name__', '__doc__']:
-        setattr(new, replace, getattr(old, replace))
+    for replace in ['__module__', '__name__', '__qualname__', '__doc__']:
+        if hasattr(old, replace):
+            setattr(new, replace, getattr(old, replace))
     new.__dict__.update(old.__dict__)
 
 
@@ -91,28 +160,40 @@ code_type = type(_wrap.__code__)
 
 # Finder/loader utility code ##################################################
 
+_cache_refresh = 0
+
+def invalidate_caches():
+    """Invalidate importlib's internal caches.
+
+    Calling this function may be needed if some modules are installed while
+    your program is running and you expect the program to notice the changes.
+    """
+    global _cache_refresh
+    _cache_refresh += 1
+
+
 def set_package(fxn):
     """Set __package__ on the returned module."""
-    def wrapper(*args, **kwargs):
+    def set_package_wrapper(*args, **kwargs):
         module = fxn(*args, **kwargs)
         if not hasattr(module, '__package__') or module.__package__ is None:
             module.__package__ = module.__name__
             if not hasattr(module, '__path__'):
                 module.__package__ = module.__package__.rpartition('.')[0]
         return module
-    _wrap(wrapper, fxn)
-    return wrapper
+    _wrap(set_package_wrapper, fxn)
+    return set_package_wrapper
 
 
 def set_loader(fxn):
     """Set __loader__ on the returned module."""
-    def wrapper(self, *args, **kwargs):
+    def set_loader_wrapper(self, *args, **kwargs):
         module = fxn(self, *args, **kwargs)
         if not hasattr(module, '__loader__'):
             module.__loader__ = self
         return module
-    _wrap(wrapper, fxn)
-    return wrapper
+    _wrap(set_loader_wrapper, fxn)
+    return set_loader_wrapper
 
 
 def module_for_loader(fxn):
@@ -128,7 +209,7 @@ def module_for_loader(fxn):
     the second argument.
 
     """
-    def decorated(self, fullname, *args, **kwargs):
+    def module_for_loader_wrapper(self, fullname, *args, **kwargs):
         module = sys.modules.get(fullname)
         is_reload = bool(module)
         if not is_reload:
@@ -143,8 +224,8 @@ def module_for_loader(fxn):
             if not is_reload:
                 del sys.modules[fullname]
             raise
-    _wrap(decorated, fxn)
-    return decorated
+    _wrap(module_for_loader_wrapper, fxn)
+    return module_for_loader_wrapper
 
 
 def _check_name(method):
@@ -155,32 +236,32 @@ def _check_name(method):
     compared against. If the comparison fails then ImportError is raised.
 
     """
-    def inner(self, name, *args, **kwargs):
+    def _check_name_wrapper(self, name, *args, **kwargs):
         if self._name != name:
             raise ImportError("loader cannot handle %s" % name)
         return method(self, name, *args, **kwargs)
-    _wrap(inner, method)
-    return inner
+    _wrap(_check_name_wrapper, method)
+    return _check_name_wrapper
 
 
 def _requires_builtin(fxn):
     """Decorator to verify the named module is built-in."""
-    def wrapper(self, fullname):
+    def _requires_builtin_wrapper(self, fullname):
         if fullname not in sys.builtin_module_names:
             raise ImportError("{0} is not a built-in module".format(fullname))
         return fxn(self, fullname)
-    _wrap(wrapper, fxn)
-    return wrapper
+    _wrap(_requires_builtin_wrapper, fxn)
+    return _requires_builtin_wrapper
 
 
 def _requires_frozen(fxn):
     """Decorator to verify the named module is frozen."""
-    def wrapper(self, fullname):
+    def _requires_frozen_wrapper(self, fullname):
         if not imp.is_frozen(fullname):
             raise ImportError("{0} is not a frozen module".format(fullname))
         return fxn(self, fullname)
-    _wrap(wrapper, fxn)
-    return wrapper
+    _wrap(_requires_frozen_wrapper, fxn)
+    return _requires_frozen_wrapper
 
 
 def _suffix_list(suffix_type):
@@ -240,7 +321,7 @@ class BuiltinImporter:
     @classmethod
     @_requires_builtin
     def is_package(cls, fullname):
-        """Return None as built-in module are never packages."""
+        """Return None as built-in modules are never packages."""
         return False
 
 
@@ -302,25 +383,42 @@ class _LoaderBasics:
         filename = self.get_filename(fullname).rpartition(path_sep)[2]
         return filename.rsplit('.', 1)[0] == '__init__'
 
-    def _bytes_from_bytecode(self, fullname, data, source_mtime):
+    def _bytes_from_bytecode(self, fullname, data, source_stats):
         """Return the marshalled bytes from bytecode, verifying the magic
-        number and timestamp along the way.
+        number, timestamp and source size along the way.
 
-        If source_mtime is None then skip the timestamp check.
+        If source_stats is None then skip the timestamp check.
 
         """
         magic = data[:4]
         raw_timestamp = data[4:8]
+        raw_size = data[8:12]
         if len(magic) != 4 or magic != imp.get_magic():
             raise ImportError("bad magic number in {}".format(fullname))
         elif len(raw_timestamp) != 4:
             raise EOFError("bad timestamp in {}".format(fullname))
-        elif source_mtime is not None:
-            if marshal._r_long(raw_timestamp) != source_mtime:
-                raise ImportError("bytecode is stale for {}".format(fullname))
+        elif len(raw_size) != 4:
+            raise EOFError("bad size in {}".format(fullname))
+        if source_stats is not None:
+            try:
+                source_mtime = int(source_stats['mtime'])
+            except KeyError:
+                pass
+            else:
+                if _r_long(raw_timestamp) != source_mtime:
+                    raise ImportError(
+                        "bytecode is stale for {}".format(fullname))
+            try:
+                source_size = source_stats['size'] & 0xFFFFFFFF
+            except KeyError:
+                pass
+            else:
+                if _r_long(raw_size) != source_size:
+                    raise ImportError(
+                        "bytecode is stale for {}".format(fullname))
         # Can't return the code object as errors from marshal loading need to
         # propagate even when source is available.
-        return data[8:]
+        return data[12:]
 
     @module_for_loader
     def _load_module(self, module, *, sourceless=False):
@@ -348,11 +446,20 @@ class SourceLoader(_LoaderBasics):
     def path_mtime(self, path):
         """Optional method that returns the modification time (an int) for the
         specified path, where path is a str.
-
-        Implementing this method allows the loader to read bytecode files.
-
         """
         raise NotImplementedError
+
+    def path_stats(self, path):
+        """Optional method returning a metadata dict for the specified path
+        to by the path (str).
+        Possible keys:
+        - 'mtime' (mandatory) is the numeric timestamp of last source
+          code modification;
+        - 'size' (optional) is the size in bytes of the source code.
+
+        Implementing this method allows the loader to read bytecode files.
+        """
+        return {'mtime': self.path_mtime(path)}
 
     def set_data(self, path, data):
         """Optional method which writes data (bytes) to a file path (a str).
@@ -378,7 +485,7 @@ class SourceLoader(_LoaderBasics):
     def get_code(self, fullname):
         """Concrete implementation of InspectLoader.get_code.
 
-        Reading of bytecode requires path_mtime to be implemented. To write
+        Reading of bytecode requires path_stats to be implemented. To write
         bytecode, set_data must also be implemented.
 
         """
@@ -387,10 +494,11 @@ class SourceLoader(_LoaderBasics):
         source_mtime = None
         if bytecode_path is not None:
             try:
-                source_mtime = self.path_mtime(source_path)
+                st = self.path_stats(source_path)
             except NotImplementedError:
                 pass
             else:
+                source_mtime = int(st['mtime'])
                 try:
                     data = self.get_data(bytecode_path)
                 except IOError:
@@ -398,12 +506,13 @@ class SourceLoader(_LoaderBasics):
                 else:
                     try:
                         bytes_data = self._bytes_from_bytecode(fullname, data,
-                                                               source_mtime)
+                                                               st)
                     except (ImportError, EOFError):
                         pass
                     else:
                         found = marshal.loads(bytes_data)
                         if isinstance(found, code_type):
+                            imp._fix_co_filename(found, source_path)
                             return found
                         else:
                             msg = "Non-code object in {}"
@@ -412,12 +521,13 @@ class SourceLoader(_LoaderBasics):
         code_object = compile(source_bytes, source_path, 'exec',
                                 dont_inherit=True)
         if (not sys.dont_write_bytecode and bytecode_path is not None and
-                source_mtime is not None):
+            source_mtime is not None):
             # If e.g. Jython ever implements imp.cache_from_source to have
             # their own cached file format, this block of code will most likely
             # throw an exception.
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(source_mtime))
+            data.extend(_w_long(source_mtime))
+            data.extend(_w_long(len(source_bytes)))
             data.extend(marshal.dumps(code_object))
             try:
                 self.set_data(bytecode_path, data)
@@ -462,9 +572,10 @@ class _SourceFileLoader(_FileLoader, SourceLoader):
 
     """Concrete implementation of SourceLoader using the file system."""
 
-    def path_mtime(self, path):
-        """Return the modification time for the path."""
-        return int(_os.stat(path).st_mtime)
+    def path_stats(self, path):
+        """Return the metadat for the path."""
+        st = _os.stat(path)
+        return {'mtime': st.st_mtime, 'size': st.st_size}
 
     def set_data(self, path, data):
         """Write bytes data to a file."""
@@ -479,28 +590,19 @@ class _SourceFileLoader(_FileLoader, SourceLoader):
             parent = _path_join(parent, part)
             try:
                 _os.mkdir(parent)
-            except OSError as exc:
+            except FileExistsError:
                 # Probably another Python process already created the dir.
-                if exc.errno == errno.EEXIST:
-                    continue
-                else:
-                    raise
-            except IOError as exc:
+                continue
+            except PermissionError:
                 # If can't get proper access, then just forget about writing
                 # the data.
-                if exc.errno == errno.EACCES:
-                    return
-                else:
-                    raise
-        try:
-            with _io.FileIO(path, 'wb') as file:
-                file.write(data)
-        except IOError as exc:
-            # Don't worry if you can't write bytecode.
-            if exc.errno == errno.EACCES:
                 return
-            else:
-                raise
+        try:
+            _write_atomic(path, data)
+        except (PermissionError, FileExistsError):
+            # Don't worry if you can't write bytecode or someone is writing
+            # it at the same time.
+            pass
 
 
 class _SourcelessFileLoader(_FileLoader, _LoaderBasics):
@@ -608,6 +710,8 @@ class PathFinder:
         the default hook, for which ImportError is raised.
 
         """
+        if path == '':
+            path = '.'
         try:
             finder = sys.path_importer_cache[path]
         except KeyError:
@@ -659,28 +763,58 @@ class _FileFinder:
                                 for suffix in detail.suffixes)
         self.packages = packages
         self.modules = modules
-        self.path = path
+        # Base (directory) path
+        self.path = path or '.'
+        self._path_mtime = -1
+        self._path_cache = set()
+        self._relaxed_path_cache = set()
+        self._cache_refresh = 0
 
     def find_module(self, fullname):
         """Try to find a loader for the specified module."""
         tail_module = fullname.rpartition('.')[2]
-        base_path = _path_join(self.path, tail_module)
-        if _path_isdir(base_path) and _case_ok(self.path, tail_module):
-            for suffix, loader in self.packages:
-                init_filename = '__init__' + suffix
-                full_path = _path_join(base_path, init_filename)
-                if (_path_isfile(full_path) and
-                        _case_ok(base_path, init_filename)):
-                    return loader(fullname, full_path)
-            else:
-                msg = "Not importing directory {}: missing __init__"
-                _warnings.warn(msg.format(base_path), ImportWarning)
+        try:
+            mtime = _os.stat(self.path).st_mtime
+        except OSError:
+            mtime = -1
+        if mtime != self._path_mtime or _cache_refresh != self._cache_refresh:
+            self._fill_cache()
+            self._path_mtime = mtime
+            self._cache_refresh = _cache_refresh
+        # tail_module keeps the original casing, for __file__ and friends
+        if _relax_case():
+            cache = self._relaxed_path_cache
+            cache_module = tail_module.lower()
+        else:
+            cache = self._path_cache
+            cache_module = tail_module
+        if cache_module in cache:
+            base_path = _path_join(self.path, tail_module)
+            if _path_isdir(base_path):
+                for suffix, loader in self.packages:
+                    init_filename = '__init__' + suffix
+                    full_path = _path_join(base_path, init_filename)
+                    if _path_isfile(full_path):
+                        return loader(fullname, full_path)
+                else:
+                    msg = "Not importing directory {}: missing __init__"
+                    _warnings.warn(msg.format(base_path), ImportWarning)
         for suffix, loader in self.modules:
-            mod_filename = tail_module + suffix
-            full_path = _path_join(self.path, mod_filename)
-            if _path_isfile(full_path) and _case_ok(self.path, mod_filename):
-                return loader(fullname, full_path)
+            if cache_module + suffix in cache:
+                full_path = _path_join(self.path, tail_module + suffix)
+                if _path_isfile(full_path):
+                    return loader(fullname, full_path)
         return None
+
+    def _fill_cache(self):
+        """Fill the cache of potential modules and packages for this directory."""
+        path = self.path
+        contents = _os.listdir(path)
+        # We store two cached versions, to handle runtime changes of the
+        # PYTHONCASEOK environment variable.
+        self._path_cache = set(contents)
+        self._relaxed_path_cache = set(fn.lower() for fn in contents)
+
 
 class _SourceFinderDetails:
 
@@ -756,40 +890,100 @@ class _ImportLockContext:
         imp.release_lock()
 
 
-_IMPLICIT_META_PATH = [BuiltinImporter, FrozenImporter, _DefaultPathFinder]
+def _resolve_name(name, package, level):
+    """Resolve a relative module name to an absolute one."""
+    bits = package.rsplit('.', level - 1)
+    if len(bits) < level:
+        raise ValueError('attempted relative import beyond top-level package')
+    base = bits[0]
+    return '{0}.{1}'.format(base, name) if name else base
 
-_ERR_MSG = 'No module named {}'
 
-def _gcd_import(name, package=None, level=0):
-    """Import and return the module based on its name, the package the call is
-    being made from, and the level adjustment.
+def _find_module(name, path):
+    """Find a module's loader."""
+    meta_path = sys.meta_path + _IMPLICIT_META_PATH
+    for finder in meta_path:
+        loader = finder.find_module(name, path)
+        if loader is not None:
+            # The parent import may have already imported this module.
+            if name not in sys.modules:
+                return loader
+            else:
+                return sys.modules[name].__loader__
+    else:
+        return None
 
-    This function represents the greatest common denominator of functionality
-    between import_module and __import__. This includes settting __package__ if
-    the loader did not.
 
-    """
+def _sanity_check(name, package, level):
+    """Verify arguments are "sane"."""
+    if not isinstance(name, str):
+        raise TypeError("module name must be str, not {}".format(type(name)))
+    if level < 0:
+        raise ValueError('level must be >= 0')
     if package:
-        if not hasattr(package, 'rindex'):
-            raise ValueError("__package__ not set to a string")
+        if not isinstance(package, str):
+            raise TypeError("__package__ not set to a string")
         elif package not in sys.modules:
             msg = ("Parent module {0!r} not loaded, cannot perform relative "
                    "import")
             raise SystemError(msg.format(package))
     if not name and level == 0:
         raise ValueError("Empty module name")
+
+
+_IMPLICIT_META_PATH = [BuiltinImporter, FrozenImporter, _DefaultPathFinder]
+
+_ERR_MSG = 'No module named {!r}'
+
+def _find_and_load(name, import_):
+    """Find and load the module."""
+    path = None
+    parent = name.rpartition('.')[0]
+    if parent:
+        if parent not in sys.modules:
+            import_(parent)
+        # Backwards-compatibility; be nicer to skip the dict lookup.
+        parent_module = sys.modules[parent]
+        try:
+            path = parent_module.__path__
+        except AttributeError:
+            msg = (_ERR_MSG + '; {} is not a package').format(name, parent)
+            raise ImportError(msg)
+    loader = _find_module(name, path)
+    if loader is None:
+        raise ImportError(_ERR_MSG.format(name))
+    elif name not in sys.modules:
+        # The parent import may have already imported this module.
+        loader.load_module(name)
+    # Backwards-compatibility; be nicer to skip the dict lookup.
+    module = sys.modules[name]
+    if parent:
+        # Set the module as an attribute on its parent.
+        parent_module = sys.modules[parent]
+        setattr(parent_module, name.rpartition('.')[2], module)
+    # Set __package__ if the loader did not.
+    if not hasattr(module, '__package__') or module.__package__ is None:
+        try:
+            module.__package__ = module.__name__
+            if not hasattr(module, '__path__'):
+                module.__package__ = module.__package__.rpartition('.')[0]
+        except AttributeError:
+            pass
+    return module
+
+
+def _gcd_import(name, package=None, level=0):
+    """Import and return the module based on its name, the package the call is
+    being made from, and the level adjustment.
+
+    This function represents the greatest common denominator of functionality
+    between import_module and __import__. This includes setting __package__ if
+    the loader did not.
+
+    """
+    _sanity_check(name, package, level)
     if level > 0:
-        dot = len(package)
-        for x in range(level, 1, -1):
-            try:
-                dot = package.rindex('.', 0, dot)
-            except ValueError:
-                raise ValueError("attempted relative import beyond "
-                                 "top-level package")
-        if name:
-            name = "{0}.{1}".format(package[:dot], name)
-        else:
-            name = package[:dot]
+        name = _resolve_name(name, package, level)
     with _ImportLockContext():
         try:
             module = sys.modules[name]
@@ -799,45 +993,46 @@ def _gcd_import(name, package=None, level=0):
                 raise ImportError(message)
             return module
         except KeyError:
-            pass
-        parent = name.rpartition('.')[0]
-        path = None
-        if parent:
-            if parent not in sys.modules:
-                _gcd_import(parent)
-            # Backwards-compatibility; be nicer to skip the dict lookup.
-            parent_module = sys.modules[parent]
+            pass  # Don't want to chain the exception
+        return _find_and_load(name, _gcd_import)
+
+
+def _handle_fromlist(module, fromlist, import_):
+    """Figure out what __import__ should return.
+
+    The import_ parameter is a callable which takes the name of module to
+    import. It is required to decouple the function from assuming importlib's
+    import implementation is desired.
+
+    """
+    # The hell that is fromlist ...
+    # If a package was imported, try to import stuff from fromlist.
+    if hasattr(module, '__path__'):
+        if '*' in fromlist and hasattr(module, '__all__'):
+            fromlist = list(fromlist)
+            fromlist.remove('*')
+            fromlist.extend(module.__all__)
+        for x in (y for y in fromlist if not hasattr(module, y)):
             try:
-                path = parent_module.__path__
-            except AttributeError:
-                msg = (_ERR_MSG + '; {} is not a package').format(name, parent)
-                raise ImportError(msg)
-        meta_path = sys.meta_path + _IMPLICIT_META_PATH
-        for finder in meta_path:
-            loader = finder.find_module(name, path)
-            if loader is not None:
-                # The parent import may have already imported this module.
-                if name not in sys.modules:
-                    loader.load_module(name)
-                break
-        else:
-            raise ImportError(_ERR_MSG.format(name))
-        # Backwards-compatibility; be nicer to skip the dict lookup.
-        module = sys.modules[name]
-        if parent:
-            # Set the module as an attribute on its parent.
-            setattr(parent_module, name.rpartition('.')[2], module)
-        # Set __package__ if the loader did not.
-        if not hasattr(module, '__package__') or module.__package__ is None:
-            # Watch out for what comes out of sys.modules to not be a module,
-            # e.g. an int.
-            try:
-                module.__package__ = module.__name__
-                if not hasattr(module, '__path__'):
-                    module.__package__ = module.__package__.rpartition('.')[0]
-            except AttributeError:
+                import_('{0}.{1}'.format(module.__name__, x))
+            except ImportError:
                 pass
-        return module
+    return module
+
+
+def _calc___package__(globals):
+    """Calculate what __package__ should be.
+
+    __package__ is not guaranteed to be defined or could be set to None
+    to represent that its proper value is unknown.
+
+    """
+    package = globals.get('__package__')
+    if package is None:
+        package = globals['__name__']
+        if '__path__' not in globals:
+            package = package.rpartition('.')[0]
+    return package
 
 
 def __import__(name, globals={}, locals={}, fromlist=[], level=0):
@@ -851,20 +1046,11 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
     import (e.g. ``from ..pkg import mod`` would have a 'level' of 2).
 
     """
-    if not hasattr(name, 'rpartition'):
-        raise TypeError("module name must be str, not {}".format(type(name)))
     if level == 0:
         module = _gcd_import(name)
     else:
-        # __package__ is not guaranteed to be defined or could be set to None
-        # to represent that it's proper value is unknown
-        package = globals.get('__package__')
-        if package is None:
-            package = globals['__name__']
-            if '__path__' not in globals:
-                package = package.rpartition('.')[0]
+        package = _calc___package__(globals)
         module = _gcd_import(name, package, level)
-    # The hell that is fromlist ...
     if not fromlist:
         # Return up to the first dot in 'name'. This is complicated by the fact
         # that 'name' may be relative.
@@ -876,15 +1062,62 @@ def __import__(name, globals={}, locals={}, fromlist=[], level=0):
             cut_off = len(name) - len(name.partition('.')[0])
             return sys.modules[module.__name__[:-cut_off]]
     else:
-        # If a package was imported, try to import stuff from fromlist.
-        if hasattr(module, '__path__'):
-            if '*' in fromlist and hasattr(module, '__all__'):
-                fromlist = list(fromlist)
-                fromlist.remove('*')
-                fromlist.extend(module.__all__)
-            for x in (y for y in fromlist if not hasattr(module,y)):
-                try:
-                    _gcd_import('{0}.{1}'.format(module.__name__, x))
-                except ImportError:
-                    pass
-        return module
+        return _handle_fromlist(module, fromlist, _gcd_import)
+
+
+def _setup(sys_module, imp_module):
+    """Setup importlib by importing needed built-in modules and injecting them
+    into the global namespace.
+
+    As sys is needed for sys.modules access and imp is needed to load built-in
+    modules, those two modules must be explicitly passed in.
+
+    """
+    global imp, sys
+    imp = imp_module
+    sys = sys_module
+
+    for module in (imp, sys):
+        if not hasattr(module, '__loader__'):
+            module.__loader__ = BuiltinImporter
+
+    self_module = sys.modules[__name__]
+    for builtin_name in ('_io', '_warnings', 'builtins', 'marshal'):
+        if builtin_name not in sys.modules:
+            builtin_module = BuiltinImporter.load_module(builtin_name)
+        else:
+            builtin_module = sys.modules[builtin_name]
+        setattr(self_module, builtin_name, builtin_module)
+
+    for builtin_os, path_sep in [('posix', '/'), ('nt', '\\'), ('os2', '\\')]:
+        if builtin_os in sys.modules:
+            os_module = sys.modules[builtin_os]
+            break
+        else:
+            try:
+                os_module = BuiltinImporter.load_module(builtin_os)
+                # TODO: rip out os2 code after 3.3 is released as per PEP 11
+                if builtin_os == 'os2' and 'EMX GCC' in sys.version:
+                    path_sep = '/'
+                break
+            except ImportError:
+                continue
+    else:
+        raise ImportError('importlib requires posix or nt')
+    setattr(self_module, '_os', os_module)
+    setattr(self_module, 'path_sep', path_sep)
+    # Constants
+    setattr(self_module, '_relax_case', _make_relax_case())
+
+
+def _install(sys_module, imp_module):
+    """Install importlib as the implementation of import.
+
+    It is assumed that imp and sys have been imported and injected into the
+    global namespace for the module prior to calling this function.
+
+    """
+    _setup(sys_module, imp_module)
+    orig_import = builtins.__import__
+    builtins.__import__ = __import__
+    builtins.__original_import__ = orig_import
