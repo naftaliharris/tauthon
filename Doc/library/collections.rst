@@ -12,7 +12,7 @@
    import itertools
    __name__ = '<doctest>'
 
-**Source code:** :source:`Lib/collections.py` and :source:`Lib/_abcoll.py`
+**Source code:** :source:`Lib/collections/__init__.py`
 
 --------------
 
@@ -23,6 +23,7 @@ Python's general purpose built-in containers, :class:`dict`, :class:`list`,
 =====================   ====================================================================
 :func:`namedtuple`      factory function for creating tuple subclasses with named fields
 :class:`deque`          list-like container with fast appends and pops on either end
+:class:`ChainMap`       dict-like class for creating a single view of multiple mappings
 :class:`Counter`        dict subclass for counting hashable objects
 :class:`OrderedDict`    dict subclass that remembers the order entries were added
 :class:`defaultdict`    dict subclass that calls a factory function to supply missing values
@@ -31,11 +32,124 @@ Python's general purpose built-in containers, :class:`dict`, :class:`list`,
 :class:`UserString`     wrapper around string objects for easier string subclassing
 =====================   ====================================================================
 
-In addition to the concrete container classes, the collections module provides
-:ref:`abstract base classes <collections-abstract-base-classes>` that can be
-used to test whether a class provides a particular interface, for example,
-whether it is hashable or a mapping.
+.. versionchanged:: 3.3
+   Moved :ref:`collections-abstract-base-classes` to the :mod:`collections.abc` module.
+   For backwards compatibility, they continue to be visible in this module
+   as well.
 
+
+:class:`ChainMap` objects
+-------------------------
+
+A :class:`ChainMap` class is provided for quickly linking a number of mappings
+so they can be treated as a single unit.  It is often much faster than creating
+a new dictionary and running multiple :meth:`~dict.update` calls.
+
+The class can be used to simulate nested scopes and is useful in templating.
+
+.. class:: ChainMap(*maps)
+
+   A :class:`ChainMap` groups multiple dicts or other mappings together to
+   create a single, updateable view.  If no *maps* are specified, a single empty
+   dictionary is provided so that a new chain always has at least one mapping.
+
+   The underlying mappings are stored in a list.  That list is public and can
+   accessed or updated using the *maps* attribute.  There is no other state.
+
+   Lookups search the underlying mappings successively until a key is found.  In
+   contrast, writes, updates, and deletions only operate on the first mapping.
+
+   A :class:`ChainMap` incorporates the underlying mappings by reference.  So, if
+   one of the underlying mappings gets updated, those changes will be reflected
+   in :class:`ChainMap`.
+
+   All of the usual dictionary methods are supported.  In addition, there is a
+   *maps* attribute, a method for creating new subcontexts, and a property for
+   accessing all but the first mapping:
+
+   .. attribute:: maps
+
+      A user updateable list of mappings.  The list is ordered from
+      first-searched to last-searched.  It is the only stored state and can
+      be modified to change which mappings are searched.  The list should
+      always contain at least one mapping.
+
+   .. method:: new_child()
+
+      Returns a new :class:`ChainMap` containing a new :class:`dict` followed by
+      all of the maps in the current instance.  A call to ``d.new_child()`` is
+      equivalent to: ``ChainMap({}, *d.maps)``.  This method is used for
+      creating subcontexts that can be updated without altering values in any
+      of the parent mappings.
+
+   .. method:: parents()
+
+      Returns a new :class:`ChainMap` containing all of the maps in the current
+      instance except the first one.  This is useful for skipping the first map
+      in the search.  The use-cases are similar to those for the
+      :keyword:`nonlocal` keyword used in :term:`nested scopes <nested scope>`.
+      The use-cases also parallel those for the builtin :func:`super` function.
+      A reference to  ``d.parents`` is equivalent to: ``ChainMap(*d.maps[1:])``.
+
+  .. versionadded:: 3.3
+
+  Example of simulating Python's internal lookup chain::
+
+     import builtins
+     pylookup = ChainMap(locals(), globals(), vars(builtins))
+
+  Example of letting user specified values take precedence over environment
+  variables which in turn take precedence over default values::
+
+     import os, argparse
+     defaults = {'color': 'red', 'user': guest}
+     parser = argparse.ArgumentParser()
+     parser.add_argument('-u', '--user')
+     parser.add_argument('-c', '--color')
+     user_specified = vars(parser.parse_args())
+     combined = ChainMap(user_specified, os.environ, defaults)
+
+  Example patterns for using the :class:`ChainMap` class to simulate nested
+  contexts::
+
+    c = ChainMap()          Create root context
+    d = c.new_child()       Create nested child context
+    e = c.new_child()       Child of c, independent from d
+    e.maps[0]               Current context dictionary -- like Python's locals()
+    e.maps[-1]              Root context -- like Python's globals()
+    e.parents               Enclosing context chain -- like Python's nonlocals
+
+    d['x']                  Get first key in the chain of contexts
+    d['x'] = 1              Set value in current context
+    del['x']                Delete from current context
+    list(d)                 All nested values
+    k in d                  Check all nested values
+    len(d)                  Number of nested values
+    d.items()               All nested items
+    dict(d)                 Flatten into a regular dictionary
+
+  .. seealso::
+
+     * The `MultiContext class
+       <http://svn.enthought.com/svn/enthought/CodeTools/trunk/enthought/contexts/multi_context.py>`_
+       in the Enthought `CodeTools package
+       <https://github.com/enthought/codetools>`_ has options to support
+       writing to any mapping in the chain.
+
+     * Django's `Context class
+       <http://code.djangoproject.com/browser/django/trunk/django/template/context.py>`_
+       for templating is a read-only chain of mappings.  It also features
+       pushing and popping of contexts similar to the
+       :meth:`~collections.ChainMap.new_child` method and the
+       :meth:`~collections.ChainMap.parents` property.
+
+     * The `Nested Contexts recipe
+       <http://code.activestate.com/recipes/577434/>`_ has options to control
+       whether writes and other mutations apply only to the first mapping or to
+       any mapping in the chain.
+
+     * A `greatly simplified read-only version of Chainmap
+       <http://code.activestate.com/recipes/305268/>`_.
 
 :class:`Counter` objects
 ------------------------
@@ -149,7 +263,7 @@ Common patterns for working with :class:`Counter` objects::
     c.items()                       # convert to a list of (elem, cnt) pairs
     Counter(dict(list_of_pairs))    # convert from a list of (elem, cnt) pairs
     c.most_common()[:-n:-1]         # n least common elements
-    c += Counter()                  # remove zero and negative counts
+    +c                              # remove zero and negative counts
 
 Several mathematical operations are provided for combining :class:`Counter`
 objects to produce multisets (counters that have counts greater than zero).
@@ -168,6 +282,18 @@ counts, but the output will exclude results with counts of zero or less.
     Counter({'a': 1, 'b': 1})
     >>> c | d                       # union:  max(c[x], d[x])
     Counter({'a': 3, 'b': 2})
+
+Unary addition and substraction are shortcuts for adding an empty counter
+or subtracting from an empty counter.
+
+    >>> c = Counter(a=2, b=-4)
+    >>> +c
+    Counter({'a': 2})
+    >>> -c
+    Counter({'b': 4})
+
+.. versionadded:: 3.3
+   Added support for unary plus, unary minus, and in-place multiset operations.
 
 .. note::
 
@@ -398,7 +524,8 @@ in Unix::
 
    def tail(filename, n=10):
        'Return the last n lines of a file'
-       return deque(open(filename), n)
+       with open(filename) as f:
+           return deque(f, n)
 
 Another approach to using deques is to maintain a sequence of recently
 added elements by appending to the right and popping to the left::
@@ -550,7 +677,7 @@ Setting the :attr:`default_factory` to :class:`set` makes the
    ...     d[k].add(v)
    ...
    >>> list(d.items())
-   [('blue', set([2, 4])), ('red', set([1, 3]))]
+   [('blue', {2, 4}), ('red', {1, 3})]
 
 
 :func:`namedtuple` Factory Function for Tuples with Named Fields
@@ -583,7 +710,9 @@ they add the ability to access fields by name instead of position index.
    converted to ``['abc', '_1', 'ghi', '_3']``, eliminating the keyword
    ``def`` and the duplicate fieldname ``abc``.
 
-   If *verbose* is true, the class definition is printed just before being built.
+   If *verbose* is true, the class definition is printed after it is
+   built.  This option is outdated; instead, it is simpler to print the
+   :attr:`_source` attribute.
 
    Named tuple instances do not have per-instance dictionaries, so they are
    lightweight and require no more memory than regular tuples.
@@ -597,53 +726,6 @@ they add the ability to access fields by name instead of position index.
 
    >>> # Basic example
    >>> Point = namedtuple('Point', ['x', 'y'])
-   >>> p = Point(x=10, y=11)
-
-   >>> # Example using the verbose option to print the class definition
-   >>> Point = namedtuple('Point', 'x y', verbose=True)
-   class Point(tuple):
-           'Point(x, y)'
-   <BLANKLINE>
-           __slots__ = ()
-   <BLANKLINE>
-           _fields = ('x', 'y')
-   <BLANKLINE>
-           def __new__(_cls, x, y):
-               'Create a new instance of Point(x, y)'
-               return _tuple.__new__(_cls, (x, y))
-   <BLANKLINE>
-           @classmethod
-           def _make(cls, iterable, new=tuple.__new__, len=len):
-               'Make a new Point object from a sequence or iterable'
-               result = new(cls, iterable)
-               if len(result) != 2:
-                   raise TypeError('Expected 2 arguments, got %d' % len(result))
-               return result
-   <BLANKLINE>
-           def __repr__(self):
-               'Return a nicely formatted representation string'
-               return self.__class__.__name__ + '(x=%r, y=%r)' % self
-   <BLANKLINE>
-           def _asdict(self):
-               'Return a new OrderedDict which maps field names to their values'
-               return OrderedDict(zip(self._fields, self))
-   <BLANKLINE>
-           __dict__ = property(_asdict)
-   <BLANKLINE>
-           def _replace(_self, **kwds):
-               'Return a new Point object replacing specified fields with new values'
-               result = _self._make(map(kwds.pop, ('x', 'y'), _self))
-               if kwds:
-                   raise ValueError('Got unexpected field names: %r' % list(kwds.keys()))
-               return result
-   <BLANKLINE>
-           def __getnewargs__(self):
-               'Return self as a plain tuple.   Used by copy and pickle.'
-               return tuple(self)
-   <BLANKLINE>
-           x = _property(_itemgetter(0), doc='Alias for field number 0')
-           y = _property(_itemgetter(1), doc='Alias for field number 1')
-
    >>> p = Point(11, y=22)     # instantiate with positional or keyword arguments
    >>> p[0] + p[1]             # indexable like the plain tuple (11, 22)
    33
@@ -672,7 +754,7 @@ by the :mod:`csv` or :mod:`sqlite3` modules::
        print(emp.name, emp.title)
 
 In addition to the methods inherited from tuples, named tuples support
-three additional methods and one attribute.  To prevent conflicts with
+three additional methods and two attributes.  To prevent conflicts with
 field names, the method and attribute names start with an underscore.
 
 .. classmethod:: somenamedtuple._make(iterable)
@@ -709,6 +791,15 @@ field names, the method and attribute names start with an underscore.
 
       >>> for partnum, record in inventory.items():
       ...     inventory[partnum] = record._replace(price=newprices[partnum], timestamp=time.now())
+
+.. attribute:: somenamedtuple._source
+
+   A string with the pure Python source code used to create the named
+   tuple class.  The source makes the named tuple self-documenting.
+   It can be printed, executed using :func:`exec`, or saved to a file
+   and imported.
+
+   .. versionadded:: 3.3
 
 .. attribute:: somenamedtuple._fields
 
@@ -758,7 +849,6 @@ a fixed-width print format:
 The subclass shown above sets ``__slots__`` to an empty tuple.  This helps
 keep memory requirements low by preventing the creation of instance dictionaries.
 
-
 Subclassing is not useful for adding new, stored fields.  Instead, simply
 create a new named tuple type from the :attr:`_fields` attribute:
 
@@ -770,6 +860,7 @@ customize a prototype instance:
     >>> Account = namedtuple('Account', 'owner balance transaction_count')
     >>> default_account = Account('<owner name>', 0.0, 0)
     >>> johns_account = default_account._replace(owner='John')
+    >>> janes_account = default_account._replace(owner='Jane')
 
 Enumerated constants can be implemented with named tuples, but it is simpler
 and more efficient to use a simple class declaration:
@@ -988,161 +1079,3 @@ attribute.
    be an instance of :class:`bytes`, :class:`str`, :class:`UserString` (or a
    subclass) or an arbitrary sequence which can be converted into a string using
    the built-in :func:`str` function.
-
-
-.. _collections-abstract-base-classes:
-
-ABCs - abstract base classes
-----------------------------
-
-The collections module offers the following :term:`ABCs <abstract base class>`:
-
-=========================  =====================  ======================  ====================================================
-ABC                        Inherits from          Abstract Methods        Mixin Methods
-=========================  =====================  ======================  ====================================================
-:class:`Container`                                ``__contains__``
-:class:`Hashable`                                 ``__hash__``
-:class:`Iterable`                                 ``__iter__``
-:class:`Iterator`          :class:`Iterable`      ``__next__``            ``__iter__``
-:class:`Sized`                                    ``__len__``
-:class:`Callable`                                 ``__call__``
-
-:class:`Sequence`          :class:`Sized`,        ``__getitem__``         ``__contains__``, ``__iter__``, ``__reversed__``,
-                           :class:`Iterable`,                             ``index``, and ``count``
-                           :class:`Container`
-
-:class:`MutableSequence`   :class:`Sequence`      ``__setitem__``,        Inherited :class:`Sequence` methods and
-                                                  ``__delitem__``,        ``append``, ``reverse``, ``extend``, ``pop``,
-                                                  ``insert``              ``remove``, and ``__iadd__``
-
-:class:`Set`               :class:`Sized`,                                ``__le__``, ``__lt__``, ``__eq__``, ``__ne__``,
-                           :class:`Iterable`,                             ``__gt__``, ``__ge__``, ``__and__``, ``__or__``,
-                           :class:`Container`                             ``__sub__``, ``__xor__``, and ``isdisjoint``
-
-:class:`MutableSet`        :class:`Set`           ``add``,                Inherited :class:`Set` methods and
-                                                  ``discard``             ``clear``, ``pop``, ``remove``, ``__ior__``,
-                                                                          ``__iand__``, ``__ixor__``, and ``__isub__``
-
-:class:`Mapping`           :class:`Sized`,        ``__getitem__``         ``__contains__``, ``keys``, ``items``, ``values``,
-                           :class:`Iterable`,                             ``get``, ``__eq__``, and ``__ne__``
-                           :class:`Container`
-
-:class:`MutableMapping`    :class:`Mapping`       ``__setitem__``,        Inherited :class:`Mapping` methods and
-                                                  ``__delitem__``         ``pop``, ``popitem``, ``clear``, ``update``,
-                                                                          and ``setdefault``
-
-
-:class:`MappingView`       :class:`Sized`                                 ``__len__``
-:class:`ItemsView`         :class:`MappingView`,                          ``__contains__``,
-                           :class:`Set`                                   ``__iter__``
-:class:`KeysView`          :class:`MappingView`,                          ``__contains__``,
-                           :class:`Set`                                   ``__iter__``
-:class:`ValuesView`        :class:`MappingView`                           ``__contains__``, ``__iter__``
-=========================  =====================  ======================  ====================================================
-
-
-.. class:: Container
-           Hashable
-           Sized
-           Callable
-
-   ABCs for classes that provide respectively the methods :meth:`__contains__`,
-   :meth:`__hash__`, :meth:`__len__`, and :meth:`__call__`.
-
-.. class:: Iterable
-
-   ABC for classes that provide the :meth:`__iter__` method.
-   See also the definition of :term:`iterable`.
-
-.. class:: Iterator
-
-   ABC for classes that provide the :meth:`__iter__` and :meth:`next` methods.
-   See also the definition of :term:`iterator`.
-
-.. class:: Sequence
-           MutableSequence
-
-   ABCs for read-only and mutable :term:`sequences <sequence>`.
-
-.. class:: Set
-           MutableSet
-
-   ABCs for read-only and mutable sets.
-
-.. class:: Mapping
-           MutableMapping
-
-   ABCs for read-only and mutable :term:`mappings <mapping>`.
-
-.. class:: MappingView
-           ItemsView
-           KeysView
-           ValuesView
-
-   ABCs for mapping, items, keys, and values :term:`views <view>`.
-
-
-These ABCs allow us to ask classes or instances if they provide
-particular functionality, for example::
-
-    size = None
-    if isinstance(myvar, collections.Sized):
-        size = len(myvar)
-
-Several of the ABCs are also useful as mixins that make it easier to develop
-classes supporting container APIs.  For example, to write a class supporting
-the full :class:`Set` API, it only necessary to supply the three underlying
-abstract methods: :meth:`__contains__`, :meth:`__iter__`, and :meth:`__len__`.
-The ABC supplies the remaining methods such as :meth:`__and__` and
-:meth:`isdisjoint` ::
-
-    class ListBasedSet(collections.Set):
-         ''' Alternate set implementation favoring space over speed
-             and not requiring the set elements to be hashable. '''
-         def __init__(self, iterable):
-             self.elements = lst = []
-             for value in iterable:
-                 if value not in lst:
-                     lst.append(value)
-         def __iter__(self):
-             return iter(self.elements)
-         def __contains__(self, value):
-             return value in self.elements
-         def __len__(self):
-             return len(self.elements)
-
-    s1 = ListBasedSet('abcdef')
-    s2 = ListBasedSet('defghi')
-    overlap = s1 & s2            # The __and__() method is supported automatically
-
-Notes on using :class:`Set` and :class:`MutableSet` as a mixin:
-
-(1)
-   Since some set operations create new sets, the default mixin methods need
-   a way to create new instances from an iterable. The class constructor is
-   assumed to have a signature in the form ``ClassName(iterable)``.
-   That assumption is factored-out to an internal classmethod called
-   :meth:`_from_iterable` which calls ``cls(iterable)`` to produce a new set.
-   If the :class:`Set` mixin is being used in a class with a different
-   constructor signature, you will need to override :meth:`_from_iterable`
-   with a classmethod that can construct new instances from
-   an iterable argument.
-
-(2)
-   To override the comparisons (presumably for speed, as the
-   semantics are fixed), redefine :meth:`__le__` and
-   then the other operations will automatically follow suit.
-
-(3)
-   The :class:`Set` mixin provides a :meth:`_hash` method to compute a hash value
-   for the set; however, :meth:`__hash__` is not defined because not all sets
-   are hashable or immutable.  To add set hashabilty using mixins,
-   inherit from both :meth:`Set` and :meth:`Hashable`, then define
-   ``__hash__ = Set._hash``.
-
-.. seealso::
-
-   * `OrderedSet recipe <http://code.activestate.com/recipes/576694/>`_ for an
-     example built on :class:`MutableSet`.
-
-   * For more about ABCs, see the :mod:`abc` module and :pep:`3119`.
