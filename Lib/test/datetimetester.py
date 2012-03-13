@@ -977,7 +977,7 @@ class TestDate(HarmlessMixedComparison, unittest.TestCase):
         # exempt such platforms (provided they return reasonable
         # results!).
         for insane in -1e200, 1e200:
-            self.assertRaises(ValueError, self.theclass.fromtimestamp,
+            self.assertRaises(OverflowError, self.theclass.fromtimestamp,
                               insane)
 
     def test_today(self):
@@ -1289,12 +1289,18 @@ class TestDate(HarmlessMixedComparison, unittest.TestCase):
         self.assertTrue(self.theclass.min)
         self.assertTrue(self.theclass.max)
 
-    def test_strftime_out_of_range(self):
-        # For nasty technical reasons, we can't handle years before 1000.
-        cls = self.theclass
-        self.assertEqual(cls(1000, 1, 1).strftime("%Y"), "1000")
-        for y in 1, 49, 51, 99, 100, 999:
-            self.assertRaises(ValueError, cls(y, 1, 1).strftime, "%Y")
+    def test_strftime_y2k(self):
+        for y in (1, 49, 70, 99, 100, 999, 1000, 1970):
+            d = self.theclass(y, 1, 1)
+            # Issue 13305:  For years < 1000, the value is not always
+            # padded to 4 digits across platforms.  The C standard
+            # assumes year >= 1900, so it does not specify the number
+            # of digits.
+            if d.strftime("%Y") != '%04d' % y:
+                # Year 42 returns '42', not padded
+                self.assertEqual(d.strftime("%Y"), '%d' % y)
+                # '0042' is obtained anyway
+                self.assertEqual(d.strftime("%4Y"), '%04d' % y)
 
     def test_replace(self):
         cls = self.theclass
@@ -1730,12 +1736,32 @@ class TestDateTime(TestDate):
         self.verify_field_equality(expected, got)
 
     def test_microsecond_rounding(self):
-        # Test whether fromtimestamp "rounds up" floats that are less
-        # than 1/2 microsecond smaller than an integer.
         for fts in [self.theclass.fromtimestamp,
                     self.theclass.utcfromtimestamp]:
-            self.assertEqual(fts(0.9999999), fts(1))
-            self.assertEqual(fts(0.99999949).microsecond, 999999)
+            zero = fts(0)
+            self.assertEqual(zero.second, 0)
+            self.assertEqual(zero.microsecond, 0)
+            minus_one = fts(-1e-6)
+            self.assertEqual(minus_one.second, 59)
+            self.assertEqual(minus_one.microsecond, 999999)
+
+            t = fts(-1e-8)
+            self.assertEqual(t, minus_one)
+            t = fts(-9e-7)
+            self.assertEqual(t, minus_one)
+            t = fts(-1e-7)
+            self.assertEqual(t, minus_one)
+
+            t = fts(1e-7)
+            self.assertEqual(t, zero)
+            t = fts(9e-7)
+            self.assertEqual(t, zero)
+            t = fts(0.99999949)
+            self.assertEqual(t.second, 0)
+            self.assertEqual(t.microsecond, 999999)
+            t = fts(0.9999999)
+            self.assertEqual(t.second, 0)
+            self.assertEqual(t.microsecond, 999999)
 
     def test_insane_fromtimestamp(self):
         # It's possible that some platform maps time_t to double,
@@ -1743,7 +1769,7 @@ class TestDateTime(TestDate):
         # exempt such platforms (provided they return reasonable
         # results!).
         for insane in -1e200, 1e200:
-            self.assertRaises(ValueError, self.theclass.fromtimestamp,
+            self.assertRaises(OverflowError, self.theclass.fromtimestamp,
                               insane)
 
     def test_insane_utcfromtimestamp(self):
@@ -1752,7 +1778,7 @@ class TestDateTime(TestDate):
         # exempt such platforms (provided they return reasonable
         # results!).
         for insane in -1e200, 1e200:
-            self.assertRaises(ValueError, self.theclass.utcfromtimestamp,
+            self.assertRaises(OverflowError, self.theclass.utcfromtimestamp,
                               insane)
     @unittest.skipIf(sys.platform == "win32", "Windows doesn't accept negative timestamps")
     def test_negative_float_fromtimestamp(self):

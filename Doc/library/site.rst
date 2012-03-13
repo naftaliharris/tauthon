@@ -16,7 +16,14 @@ import can be suppressed using the interpreter's :option:`-S` option.
 .. index:: triple: module; search; path
 
 Importing this module will append site-specific paths to the module search path
-and add a few builtins.
+and add a few builtins, unless :option:`-S` was used.  In that case, this module
+can be safely imported with no automatic modifications to the module search path
+or additions to the builtins.  To explicitly trigger the usual site-specific
+additions, call the :func:`site.main` function.
+
+.. versionchanged:: 3.3
+   Importing the module used to trigger paths manipulation even when using
+   :option:`-S`.
 
 .. index::
    pair: site-python; directory
@@ -127,10 +134,21 @@ empty, and the path manipulations are skipped; however the import of
    :func:`getuserbase` hasn't been called yet.  Default value is
    :file:`~/.local` for UNIX and Mac OS X non-framework builds,
    :file:`~/Library/Python/{X.Y}` for Mac framework builds, and
-   :file:`{%APPDATA%}\\Python` for Windows.  This value is used by Distutils to
+   :file:`{%APPDATA%}\\Python` for Windows.  This value is used by Packaging to
    compute the installation directories for scripts, data files, Python modules,
-   etc. for the :ref:`user installation scheme <inst-alt-install-user>`.  See
-   also :envvar:`PYTHONUSERBASE`.
+   etc. for the :ref:`user installation scheme <packaging-alt-install-user>`.
+   See also :envvar:`PYTHONUSERBASE`.
+
+
+.. function:: main()
+
+   Adds all the standard site-specific directories to the module search
+   path.  This function is called automatically when this module is imported,
+   unless the :program:`python` interpreter was started with the :option:`-S`
+   flag.
+
+   .. versionchanged:: 3.3
+      This function used to be called unconditionnally.
 
 
 .. function:: addsitedir(sitedir, known_paths=None)
