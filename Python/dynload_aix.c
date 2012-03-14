@@ -28,7 +28,6 @@ typedef struct Module {
 
 const struct filedescr _PyImport_DynLoadFiletab[] = {
     {".so", "rb", C_EXTENSION},
-    {"module.so", "rb", C_EXTENSION},
     {0, 0}
 };
 
@@ -129,7 +128,6 @@ aix_loaderror(const char *pathname)
         {L_ERROR_ERRNO,                 NULL}
     };
 
-#define LOAD_ERRTAB_LEN (sizeof(load_errtab)/sizeof(load_errtab[0]))
 #define ERRBUF_APPEND(s) strncat(errbuf, s, sizeof(errbuf)-strlen(errbuf)-1)
 
     PyOS_snprintf(errbuf, sizeof(errbuf), "from module %.200s ", pathname);
@@ -140,7 +138,7 @@ aix_loaderror(const char *pathname)
     }
     for(i = 0; message[i] && *message[i]; i++) {
         int nerr = atoi(message[i]);
-        for (j=0; j<LOAD_ERRTAB_LEN ; j++) {
+        for (j=0; j < Py_ARRAY_LENGTH(load_errtab); j++) {
             if (nerr == load_errtab[j].errNo && load_errtab[j].errstr)
             ERRBUF_APPEND(load_errtab[j].errstr);
         }
@@ -154,7 +152,7 @@ aix_loaderror(const char *pathname)
 }
 
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
+dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;

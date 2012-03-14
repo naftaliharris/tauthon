@@ -132,7 +132,7 @@ The :mod:`urllib.request` module defines the following functions:
 
 The following classes are provided:
 
-.. class:: Request(url, data=None, headers={}, origin_req_host=None, unverifiable=False)
+.. class:: Request(url, data=None, headers={}, origin_req_host=None, unverifiable=False, method=None)
 
    This class is an abstraction of a URL request.
 
@@ -140,8 +140,8 @@ The following classes are provided:
 
    *data* may be a string specifying additional data to send to the
    server, or ``None`` if no such data is needed.  Currently HTTP
-   requests are the only ones that use *data*; the HTTP request will
-   be a POST instead of a GET when the *data* parameter is provided.
+   requests are the only ones that use *data*, in order to choose between
+   ``'GET'`` and ``'POST'`` when *method* is not specified.
    *data* should be a buffer in the standard
    :mimetype:`application/x-www-form-urlencoded` format.  The
    :func:`urllib.parse.urlencode` function takes a mapping or sequence
@@ -157,8 +157,8 @@ The following classes are provided:
    :mod:`urllib`'s default user agent string is
    ``"Python-urllib/2.6"`` (on Python 2.6).
 
-   The final two arguments are only of interest for correct handling
-   of third-party HTTP cookies:
+   The following two arguments, *origin_req_host* and *unverifiable*,
+   are only of interest for correct handling of third-party HTTP cookies:
 
    *origin_req_host* should be the request-host of the origin
    transaction, as defined by :rfc:`2965`.  It defaults to
@@ -174,6 +174,13 @@ The following classes are provided:
    approve.  For example, if the request is for an image in an HTML
    document, and the user had no option to approve the automatic
    fetching of the image, this should be true.
+
+   *method* should be a string that indicates the HTTP request method that
+   will be used (e.g. ``'HEAD'``).  Its value is stored in the
+   :attr:`~Request.method` attribute and is used by :meth:`get_method()`.
+
+   .. versionchanged:: 3.3
+    :attr:`Request.method` argument is added to the Request class.
 
 
 .. class:: OpenerDirector()
@@ -240,10 +247,11 @@ The following classes are provided:
 
 .. class:: HTTPBasicAuthHandler(password_mgr=None)
 
-   Handle authentication with the remote host. *password_mgr*, if given, should be
-   something that is compatible with :class:`HTTPPasswordMgr`; refer to section
-   :ref:`http-password-mgr` for information on the interface that must be
-   supported.
+   Handle authentication with the remote host. *password_mgr*, if given, should
+   be something that is compatible with :class:`HTTPPasswordMgr`; refer to
+   section :ref:`http-password-mgr` for information on the interface that must
+   be supported. HTTPBasicAuthHandler will raise a :exc:`ValueError` when
+   presented with a wrong Authentication scheme.
 
 
 .. class:: ProxyBasicAuthHandler(password_mgr=None)
@@ -265,10 +273,19 @@ The following classes are provided:
 
 .. class:: HTTPDigestAuthHandler(password_mgr=None)
 
-   Handle authentication with the remote host. *password_mgr*, if given, should be
-   something that is compatible with :class:`HTTPPasswordMgr`; refer to section
-   :ref:`http-password-mgr` for information on the interface that must be
-   supported.
+   Handle authentication with the remote host. *password_mgr*, if given, should
+   be something that is compatible with :class:`HTTPPasswordMgr`; refer to
+   section :ref:`http-password-mgr` for information on the interface that must
+   be supported. When both Digest Authentication Handler and Basic
+   Authentication Handler are both added, Digest Authentication is always tried
+   first. If the Digest Authentication returns a 40x response again, it is sent
+   to Basic Authentication handler to Handle.  This Handler method will raise a
+   :exc:`ValueError` when presented with an authentication scheme other than
+   Digest or Basic.
+
+   .. versionchanged:: 3.3
+      Raise :exc:`ValueError` on unsupported Authentication Scheme.
+
 
 
 .. class:: ProxyDigestAuthHandler(password_mgr=None)
@@ -359,6 +376,15 @@ request.
    boolean, indicates whether the request is unverifiable as defined
    by RFC 2965.
 
+.. attribute:: Request.method
+
+   The HTTP request method to use.  This value is used by
+   :meth:`~Request.get_method` to override the computed HTTP request
+   method that would otherwise be returned.  This attribute is initialized with
+   the value of the *method* argument passed to the constructor.
+
+   .. versionadded:: 3.3
+
 .. method:: Request.add_data(data)
 
    Set the :class:`Request` data to *data*.  This is ignored by all handlers except
@@ -368,8 +394,13 @@ request.
 
 .. method:: Request.get_method()
 
-   Return a string indicating the HTTP request method.  This is only meaningful for
-   HTTP requests, and currently always returns ``'GET'`` or ``'POST'``.
+   Return a string indicating the HTTP request method.  If
+   :attr:`Request.method` is not ``None``, return its value, otherwise return
+   ``'GET'`` if :attr:`Request.data` is ``None``, or ``'POST'`` if it's not.
+   This is only meaningful for HTTP requests.
+
+   .. versionchanged:: 3.3
+      get_method now looks at the value of :attr:`Request.method`.
 
 
 .. method:: Request.has_data()
@@ -1101,16 +1132,14 @@ The following functions and classes are ported from the Python 2 module
 ``urllib`` (as opposed to ``urllib2``).  They might become deprecated at
 some point in the future.
 
-
 .. function:: urlretrieve(url, filename=None, reporthook=None, data=None)
 
-   Copy a network object denoted by a URL to a local file, if necessary. If the URL
-   points to a local file, or a valid cached copy of the object exists, the object
-   is not copied.  Return a tuple ``(filename, headers)`` where *filename* is the
+   Copy a network object denoted by a URL to a local file. If the URL
+   points to a local file, the object will not be copied unless filename is supplied.
+   Return a tuple ``(filename, headers)`` where *filename* is the
    local file name under which the object can be found, and *headers* is whatever
    the :meth:`info` method of the object returned by :func:`urlopen` returned (for
-   a remote object, possibly cached). Exceptions are the same as for
-   :func:`urlopen`.
+   a remote object). Exceptions are the same as for :func:`urlopen`.
 
    The second argument, if present, specifies the file location to copy to (if
    absent, the location will be a tempfile with a generated name). The third
@@ -1121,11 +1150,18 @@ some point in the future.
    third argument may be ``-1`` on older FTP servers which do not return a file
    size in response to a retrieval request.
 
+   The following example illustrates the most common usage scenario::
+
+      >>> import urllib.request
+      >>> local_filename, headers = urllib.request.urlretrieve('http://python.org/')
+      >>> html = open(local_filename)
+      >>> html.close()
+
    If the *url* uses the :file:`http:` scheme identifier, the optional *data*
-   argument may be given to specify a ``POST`` request (normally the request type
-   is ``GET``).  The *data* argument must in standard
-   :mimetype:`application/x-www-form-urlencoded` format; see the :func:`urlencode`
-   function below.
+   argument may be given to specify a ``POST`` request (normally the request
+   type is ``GET``).  The *data* argument must in standard
+   :mimetype:`application/x-www-form-urlencoded` format; see the
+   :func:`urlencode` function below.
 
    :func:`urlretrieve` will raise :exc:`ContentTooShortError` when it detects that
    the amount of data available  was less than the expected amount (which is the
@@ -1133,20 +1169,20 @@ some point in the future.
    the  download is interrupted.
 
    The *Content-Length* is treated as a lower bound: if there's more data  to read,
-   :func:`urlretrieve` reads more data, but if less data is available,  it raises
-   the exception.
+   urlretrieve reads more data, but if less data is available,  it raises the
+   exception.
 
    You can still retrieve the downloaded data in this case, it is stored  in the
    :attr:`content` attribute of the exception instance.
 
-   If no *Content-Length* header was supplied, :func:`urlretrieve` can not check
-   the size of the data it has downloaded, and just returns it.  In this case
-   you just have to assume that the download was successful.
+   If no *Content-Length* header was supplied, urlretrieve can not check the size
+   of the data it has downloaded, and just returns it.  In this case you just have
+   to assume that the download was successful.
 
 .. function:: urlcleanup()
 
-   Clear the cache that may have been built up by previous calls to
-   :func:`urlretrieve`.
+   Cleans up temporary files that may have been left behind by previous
+   calls to :func:`urlretrieve`.
 
 .. class:: URLopener(proxies=None, **x509)
 
@@ -1170,7 +1206,7 @@ some point in the future.
    *key_file* and *cert_file* are supported to provide an  SSL key and certificate;
    both are needed to support client authentication.
 
-   :class:`URLopener` objects will raise an :exc:`IOError` exception if the server
+   :class:`URLopener` objects will raise an :exc:`OSError` exception if the server
    returns an error code.
 
     .. method:: open(fullurl, data=None)
