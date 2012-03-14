@@ -3,10 +3,12 @@
 
 """Fraction, infinite-precision, real numbers."""
 
+from decimal import Decimal
 import math
 import numbers
 import operator
 import re
+import sys
 
 __all__ = ['Fraction', 'gcd']
 
@@ -22,6 +24,12 @@ def gcd(a, b):
         a, b = b, a%b
     return a
 
+# Constants related to the hash implementation;  hash(x) is based
+# on the reduction of x modulo the prime _PyHASH_MODULUS.
+_PyHASH_MODULUS = sys.hash_info.modulus
+# Value to be used for rationals that reduce to infinity modulo
+# _PyHASH_MODULUS.
+_PyHASH_INF = sys.hash_info.inf
 
 _RATIONAL_FORMAT = re.compile(r"""
     \A\s*                      # optional whitespace at the start, then
@@ -41,13 +49,21 @@ _RATIONAL_FORMAT = re.compile(r"""
 class Fraction(numbers.Rational):
     """This class implements rational numbers.
 
-    Fraction(8, 6) will produce a rational number equivalent to
-    4/3. Both arguments must be Integral. The numerator defaults to 0
-    and the denominator defaults to 1 so that Fraction(3) == 3 and
-    Fraction() == 0.
+    In the two-argument form of the constructor, Fraction(8, 6) will
+    produce a rational number equivalent to 4/3. Both arguments must
+    be Rational. The numerator defaults to 0 and the denominator
+    defaults to 1 so that Fraction(3) == 3 and Fraction() == 0.
 
-    Fraction can also be constructed from strings of the form
-    '[-+]?[0-9]+((/|.)[0-9]+)?', optionally surrounded by spaces.
+    Fractions can also be constructed from:
+
+      - numeric strings similar to those accepted by the
+        float constructor (for example, '-2.3' or '1e10')
+
+      - strings of the form '123/456'
+
+      - float and Decimal instances
+
+      - other Rational instances (including integers)
 
     """
 
@@ -57,8 +73,32 @@ class Fraction(numbers.Rational):
     def __new__(cls, numerator=0, denominator=None):
         """Constructs a Rational.
 
-        Takes a string like '3/2' or '1.5', another Rational, or a
-        numerator/denominator pair.
+        Takes a string like '3/2' or '1.5', another Rational instance, a
+        numerator/denominator pair, or a float.
+
+        Examples
+        --------
+
+        >>> Fraction(10, -8)
+        Fraction(-5, 4)
+        >>> Fraction(Fraction(1, 7), 5)
+        Fraction(1, 35)
+        >>> Fraction(Fraction(1, 7), Fraction(2, 3))
+        Fraction(3, 14)
+        >>> Fraction('314')
+        Fraction(314, 1)
+        >>> Fraction('-35/4')
+        Fraction(-35, 4)
+        >>> Fraction('3.1415') # conversion from numeric string
+        Fraction(6283, 2000)
+        >>> Fraction('-47e-2') # string may include a decimal exponent
+        Fraction(-47, 100)
+        >>> Fraction(1.47)  # direct construction from float (exact conversion)
+        Fraction(6620291452234629, 4503599627370496)
+        >>> Fraction(2.25)
+        Fraction(9, 4)
+        >>> Fraction(Decimal('1.47'))
+        Fraction(147, 100)
 
         """
         self = super(Fraction, cls).__new__(cls)
@@ -67,6 +107,19 @@ class Fraction(numbers.Rational):
             if isinstance(numerator, numbers.Rational):
                 self._numerator = numerator.numerator
                 self._denominator = numerator.denominator
+                return self
+
+            elif isinstance(numerator, float):
+                # Exact conversion from float
+                value = Fraction.from_float(numerator)
+                self._numerator = value._numerator
+                self._denominator = value._denominator
+                return self
+
+            elif isinstance(numerator, Decimal):
+                value = Fraction.from_decimal(numerator)
+                self._numerator = value._numerator
+                self._denominator = value._denominator
                 return self
 
             elif isinstance(numerator, str):
@@ -475,23 +528,26 @@ class Fraction(numbers.Rational):
             return Fraction(round(self / shift) * shift)
 
     def __hash__(self):
-        """hash(self)
+        """hash(self)"""
 
-        Tricky because values that are exactly representable as a
-        float must have the same hash as that float.
-
-        """
         # XXX since this method is expensive, consider caching the result
-        if self._denominator == 1:
-            # Get integers right.
-            return hash(self._numerator)
-        # Expensive check, but definitely correct.
-        if self == float(self):
-            return hash(float(self))
+
+        # In order to make sure that the hash of a Fraction agrees
+        # with the hash of a numerically equal integer, float or
+        # Decimal instance, we follow the rules for numeric hashes
+        # outlined in the documentation.  (See library docs, 'Built-in
+        # Types').
+
+        # dinv is the inverse of self._denominator modulo the prime
+        # _PyHASH_MODULUS, or 0 if self._denominator is divisible by
+        # _PyHASH_MODULUS.
+        dinv = pow(self._denominator, _PyHASH_MODULUS - 2, _PyHASH_MODULUS)
+        if not dinv:
+            hash_ = _PyHASH_INF
         else:
-            # Use tuple's hash to avoid a high collision rate on
-            # simple fractions.
-            return hash((self._numerator, self._denominator))
+            hash_ = abs(self._numerator) * dinv % _PyHASH_MODULUS
+        result = hash_ if self >= 0 else -hash_
+        return -2 if result == -1 else result
 
     def __eq__(a, b):
         """a == b"""
@@ -526,8 +582,6 @@ class Fraction(numbers.Rational):
         if isinstance(other, numbers.Rational):
             return op(self._numerator * other.denominator,
                       self._denominator * other.numerator)
-        if isinstance(other, numbers.Complex) and other.imag == 0:
-            other = other.real
         if isinstance(other, float):
             if math.isnan(other) or math.isinf(other):
                 return op(0.0, other)

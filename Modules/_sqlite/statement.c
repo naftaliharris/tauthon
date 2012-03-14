@@ -1,6 +1,6 @@
 /* statement.c - the statement type
  *
- * Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard HÃ¤ring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -129,8 +129,11 @@ int pysqlite_statement_bind_parameter(pysqlite_Statement* self, int pos, PyObjec
             rc = sqlite3_bind_double(self->st, pos, PyFloat_AsDouble(parameter));
             break;
         case TYPE_UNICODE:
-            string = _PyUnicode_AsString(parameter);
-            rc = sqlite3_bind_text(self->st, pos, string, -1, SQLITE_TRANSIENT);
+            string = _PyUnicode_AsStringAndSize(parameter, &buflen);
+            if (string != NULL)
+                rc = sqlite3_bind_text(self->st, pos, string, buflen, SQLITE_TRANSIENT);
+            else
+                rc = -1;
             break;
         case TYPE_BUFFER:
             if (PyObject_AsCharBuffer(parameter, &buffer, &buflen) == 0) {

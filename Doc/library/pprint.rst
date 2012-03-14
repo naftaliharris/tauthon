@@ -1,4 +1,3 @@
-
 :mod:`pprint` --- Data pretty printer
 =====================================
 
@@ -7,6 +6,9 @@
 .. moduleauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/pprint.py`
+
+--------------
 
 The :mod:`pprint` module provides a capability to "pretty-print" arbitrary
 Python data structures in a form which can be used as input to the interpreter.
@@ -27,7 +29,7 @@ The :mod:`pprint` module defines one class:
 .. First the implementation class:
 
 
-.. class:: PrettyPrinter(...)
+.. class:: PrettyPrinter(indent=1, width=80, depth=None, stream=None)
 
    Construct a :class:`PrettyPrinter` instance.  This constructor understands
    several keyword parameters.  An output stream may be set using the *stream*
@@ -62,21 +64,20 @@ The :mod:`pprint` module defines one class:
       >>> pp.pprint(tup)
       ('spam', ('eggs', ('lumberjack', ('knights', ('ni', ('dead', (...)))))))
 
+
 The :class:`PrettyPrinter` class supports several derivative functions:
 
-.. Now the derivative functions:
-
-.. function:: pformat(object[, indent[, width[, depth]]])
+.. function:: pformat(object, indent=1, width=80, depth=None)
 
    Return the formatted representation of *object* as a string.  *indent*, *width*
    and *depth* will be passed to the :class:`PrettyPrinter` constructor as
    formatting parameters.
 
 
-.. function:: pprint(object[, stream[, indent[, width[, depth]]]])
+.. function:: pprint(object, stream=None, indent=1, width=80, depth=None)
 
    Prints the formatted representation of *object* on *stream*, followed by a
-   newline.  If *stream* is omitted, ``sys.stdout`` is used.  This may be used
+   newline.  If *stream* is ``None``, ``sys.stdout`` is used.  This may be used
    in the interactive interpreter instead of the :func:`print` function for
    inspecting values (you can even reassign ``print = pprint.pprint`` for use
    within a scope).  *indent*, *width* and *depth* will be passed to the

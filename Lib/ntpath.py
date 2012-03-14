@@ -16,7 +16,8 @@ __all__ = ["normcase","isabs","join","splitdrive","split","splitext",
            "getatime","getctime", "islink","exists","lexists","isdir","isfile",
            "ismount", "expanduser","expandvars","normpath","abspath",
            "splitunc","curdir","pardir","sep","pathsep","defpath","altsep",
-           "extsep","devnull","realpath","supports_unicode_filenames","relpath"]
+           "extsep","devnull","realpath","supports_unicode_filenames","relpath",
+           "samefile", "sameopenfile",]
 
 # strings representing various path-related bits and pieces
 # These are primarily for export; internally, they are hardcoded.
@@ -84,6 +85,9 @@ def normcase(s):
     """Normalize case of pathname.
 
     Makes all characters lowercase and all slashes into backslashes."""
+    if not isinstance(s, (bytes, str)):
+        raise TypeError("normcase() argument must be str or bytes, "
+                        "not '{}'".format(s.__class__.__name__))
     return s.replace(_get_altsep(s), _get_sep(s)).lower()
 
 
@@ -239,7 +243,7 @@ def splitunc(p):
     """
     import warnings
     warnings.warn("ntpath.splitunc is deprecated, use ntpath.splitdrive instead",
-                  PendingDeprecationWarning)
+                  DeprecationWarning)
     sep = _get_sep(p)
     if not p[1:2]:
         return p[:0], p # Drive letter present
@@ -312,16 +316,28 @@ def dirname(p):
     return split(p)[0]
 
 # Is a path a symbolic link?
-# This will always return false on systems where posix.lstat doesn't exist.
+# This will always return false on systems where os.lstat doesn't exist.
 
 def islink(path):
-    """Test for symbolic link.
-    On WindowsNT/95 and OS/2 always returns false
+    """Test whether a path is a symbolic link.
+    This will always return false for Windows prior to 6.0
+    and for OS/2.
     """
-    return False
+    try:
+        st = os.lstat(path)
+    except (os.error, AttributeError):
+        return False
+    return stat.S_ISLNK(st.st_mode)
 
-# alias exists to lexists
-lexists = exists
+# Being true for dangling symbolic links is also useful.
+
+def lexists(path):
+    """Test whether a path exists.  Returns True for broken symbolic links"""
+    try:
+        st = os.lstat(path)
+    except (os.error, WindowsError):
+        return False
+    return True
 
 # Is a path a mount point?  Either a root (with or without drive letter)
 # or an UNC path with at most a / or \ after the mount point.
@@ -622,3 +638,48 @@ def relpath(path, start=curdir):
     if not rel_list:
         return _get_dot(path)
     return join(*rel_list)
+
+
+# determine if two files are in fact the same file
+try:
+    # GetFinalPathNameByHandle is available starting with Windows 6.0.
+    # Windows XP and non-Windows OS'es will mock _getfinalpathname.
+    if sys.getwindowsversion()[:2] >= (6, 0):
+        from nt import _getfinalpathname
+    else:
+        raise ImportError
+except (AttributeError, ImportError):
+    # On Windows XP and earlier, two files are the same if their absolute
+    # pathnames are the same.
+    # Non-Windows operating systems fake this method with an XP
+    # approximation.
+    def _getfinalpathname(f):
+        return normcase(abspath(f))
+
+def samefile(f1, f2):
+    "Test whether two pathnames reference the same actual file"
+    return _getfinalpathname(f1) == _getfinalpathname(f2)
+
+
+try:
+    from nt import _getfileinformation
+except ImportError:
+    # On other operating systems, just return the fd and see that
+    # it compares equal in sameopenfile.
+    def _getfileinformation(fd):
+        return fd
+
+def sameopenfile(f1, f2):
+    """Test whether two file objects reference the same file"""
+    return _getfileinformation(f1) == _getfileinformation(f2)
+
+
+try:
+    # The genericpath.isdir implementation uses os.stat and checks the mode
+    # attribute to tell whether or not the path is a directory.
+    # This is overkill on Windows - just pass the path to GetFileAttributes
+    # and check the attribute from there.
+    from nt import _isdir as isdir
+except ImportError:
+    # Use genericpath.isdir as imported above.
+    pass

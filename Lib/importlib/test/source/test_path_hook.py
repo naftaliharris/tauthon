@@ -8,10 +8,13 @@ class PathHookTest(unittest.TestCase):
     """Test the path hook for source."""
 
     def test_success(self):
-        # XXX Only work on existing directories?
         with source_util.create_modules('dummy') as mapping:
-            self.assertTrue(hasattr(_bootstrap._FileFinder(mapping['.root']),
+            self.assertTrue(hasattr(_bootstrap._file_path_hook(mapping['.root']),
                                  'find_module'))
+
+    def test_empty_string(self):
+        # The empty string represents the cwd.
+        self.assertTrue(hasattr(_bootstrap._file_path_hook(''), 'find_module'))
 
 
 def test_main():

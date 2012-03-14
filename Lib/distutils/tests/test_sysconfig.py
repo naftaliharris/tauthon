@@ -83,7 +83,7 @@ class SysconfigTestCase(support.EnvironGuard,
             fd.close()
         d = sysconfig.parse_makefile(self.makefile)
         self.assertEqual(d, {'CONFIG_ARGS': "'--arg1=optarg1' 'ENV=LIB'",
-                              'OTHER': 'foo'})
+                             'OTHER': 'foo'})
 
     def test_parse_makefile_literal_dollar(self):
         self.makefile = TESTFN
@@ -96,6 +96,15 @@ class SysconfigTestCase(support.EnvironGuard,
         d = sysconfig.parse_makefile(self.makefile)
         self.assertEqual(d, {'CONFIG_ARGS': r"'--arg1=optarg1' 'ENV=\$LIB'",
                              'OTHER': 'foo'})
+
+
+    def test_sysconfig_module(self):
+        import sysconfig as global_sysconfig
+        self.assertEqual(global_sysconfig.get_config_var('CFLAGS'), sysconfig.get_config_var('CFLAGS'))
+        self.assertEqual(global_sysconfig.get_config_var('LDFLAGS'), sysconfig.get_config_var('LDFLAGS'))
+        self.assertEqual(global_sysconfig.get_config_var('LDSHARED'),sysconfig.get_config_var('LDSHARED'))
+        self.assertEqual(global_sysconfig.get_config_var('CC'), sysconfig.get_config_var('CC'))
+
 
 
 def test_suite():

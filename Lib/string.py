@@ -14,6 +14,8 @@ printable -- a string containing all ASCII characters considered printable
 
 """
 
+import _string
+
 # Some strings for ctype-style character classification
 whitespace = ' \t\n\r\v\f'
 ascii_lowercase = 'abcdefghijklmnopqrstuvwxyz'
@@ -40,28 +42,6 @@ def capwords(s, sep=None):
 
     """
     return (sep or ' ').join(x.capitalize() for x in s.split(sep))
-
-
-# Construct a translation map for bytes.translate
-def maketrans(frm: bytes, to: bytes) -> bytes:
-    """maketrans(frm, to) -> bytes
-
-    Return a translation table (a bytes object of length 256)
-    suitable for use in bytes.translate where each byte in frm is
-    mapped to the byte at the same position in to.
-    The strings frm and to must be of the same length.
-    """
-    import warnings
-    warnings.warn("string.maketrans is deprecated, use bytes.maketrans instead",
-                  DeprecationWarning, 2)
-    if len(frm) != len(to):
-        raise ValueError("maketrans arguments must have same length")
-    if not (isinstance(frm, bytes) and isinstance(to, bytes)):
-        raise TypeError("maketrans arguments must be bytes objects")
-    L = bytearray(range(256))
-    for i, c in enumerate(frm):
-        L[c] = to[i]
-    return bytes(L)
 
 
 ####################################################################
@@ -103,7 +83,7 @@ class _TemplateMetaclass(type):
                 'delim' : _re.escape(cls.delimiter),
                 'id'    : cls.idpattern,
                 }
-        cls.pattern = _re.compile(pattern, _re.IGNORECASE | _re.VERBOSE)
+        cls.pattern = _re.compile(pattern, cls.flags | _re.VERBOSE)
 
 
 class Template(metaclass=_TemplateMetaclass):
@@ -111,6 +91,7 @@ class Template(metaclass=_TemplateMetaclass):
 
     delimiter = '$'
     idpattern = r'[_a-z][_a-z0-9]*'
+    flags = _re.IGNORECASE
 
     def __init__(self, template):
         self.template = template
@@ -166,24 +147,18 @@ class Template(metaclass=_TemplateMetaclass):
             mapping = args[0]
         # Helper function for .sub()
         def convert(mo):
-            named = mo.group('named')
+            named = mo.group('named') or mo.group('braced')
             if named is not None:
                 try:
                     # We use this idiom instead of str() because the latter
                     # will fail if val is a Unicode containing non-ASCII
                     return '%s' % (mapping[named],)
                 except KeyError:
-                    return self.delimiter + named
-            braced = mo.group('braced')
-            if braced is not None:
-                try:
-                    return '%s' % (mapping[braced],)
-                except KeyError:
-                    return self.delimiter + '{' + braced + '}'
+                    return mo.group()
             if mo.group('escaped') is not None:
                 return self.delimiter
             if mo.group('invalid') is not None:
-                return self.delimiter
+                return mo.group()
             raise ValueError('Unrecognized named group in pattern',
                              self.pattern)
         return self.pattern.sub(convert, self.template)
@@ -195,10 +170,10 @@ class Template(metaclass=_TemplateMetaclass):
 # see PEP 3101 for details and purpose of this class
 
 # The hard parts are reused from the C implementation.  They're exposed as "_"
-# prefixed methods of str and unicode.
+# prefixed methods of str.
 
-# The overall parser is implemented in str._formatter_parser.
-# The field name parser is implemented in str._formatter_field_name_split
+# The overall parser is implemented in _string.formatter_parser.
+# The field name parser is implemented in _string.formatter_field_name_split
 
 class Formatter:
     def format(self, format_string, *args, **kwargs):
@@ -267,7 +242,7 @@ class Formatter:
             return str(value)
         elif conversion is None:
             return value
-        raise ValueError("Unknown converion specifier {0!s}".format(conversion))
+        raise ValueError("Unknown conversion specifier {0!s}".format(conversion))
 
 
     # returns an iterable that contains tuples of the form:
@@ -278,7 +253,7 @@ class Formatter:
     # if field_name is not None, it is looked up, formatted
     #  with format_spec and conversion and then used
     def parse(self, format_string):
-        return format_string._formatter_parser()
+        return _string.formatter_parser(format_string)
 
 
     # given a field_name, find the object it references.
@@ -287,7 +262,7 @@ class Formatter:
     #  used_args:    a set of which args have been used
     #  args, kwargs: as passed in to vformat
     def get_field(self, field_name, args, kwargs):
-        first, rest = field_name._formatter_field_name_split()
+        first, rest = _string.formatter_field_name_split(field_name)
 
         obj = self.get_value(first, args, kwargs)
 

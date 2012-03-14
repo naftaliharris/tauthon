@@ -1,5 +1,3 @@
-# -*- coding: latin-1 -*-
-
 """Heap queue algorithm (a.k.a. priority queue).
 
 Heaps are arrays for which a[k] <= a[2*k+1] and a[k] <= a[2*k+2] for
@@ -34,7 +32,7 @@ maintains the heap invariant!
 
 __about__ = """Heap queues
 
-[explanation by François Pinard]
+[explanation by FranÃ§ois Pinard]
 
 Heaps are arrays for which a[k] <= a[2*k+1] and a[k] <= a[2*k+2] for
 all k, counting elements from 0.  For the sake of comparison,
@@ -187,6 +185,8 @@ def nlargest(n, iterable):
 
     Equivalent to:  sorted(iterable, reverse=True)[:n]
     """
+    if n < 0:
+        return []
     it = iter(iterable)
     result = list(islice(it, n))
     if not result:
@@ -203,6 +203,8 @@ def nsmallest(n, iterable):
 
     Equivalent to:  sorted(iterable)[:n]
     """
+    if n < 0:
+        return []
     if hasattr(iterable, '__len__') and n * 10 <= len(iterable):
         # For smaller values of n, the bisect method is faster than a minheap.
         # It is also memory efficient, consuming only n elements of space.
@@ -214,11 +216,10 @@ def nsmallest(n, iterable):
         pop = result.pop
         los = result[-1]    # los --> Largest of the nsmallest
         for elem in it:
-            if los <= elem:
-                continue
-            insort(result, elem)
-            pop()
-            los = result[-1]
+            if elem < los:
+                insort(result, elem)
+                pop()
+                los = result[-1]
         return result
     # An alternative approach manifests the whole iterable in memory but
     # saves comparisons by heapifying all at once.  Also, saves time

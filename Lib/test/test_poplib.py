@@ -4,7 +4,6 @@
 # a real test suite
 
 import poplib
-import threading
 import asyncore
 import asynchat
 import socket
@@ -14,6 +13,7 @@ import errno
 
 from unittest import TestCase
 from test import support as test_support
+threading = test_support.import_module('threading')
 
 HOST = test_support.HOST
 PORT = 0
@@ -122,6 +122,7 @@ class DummyPOP3Server(asyncore.dispatcher, threading.Thread):
         self.active = False
         self.active_lock = threading.Lock()
         self.host, self.port = self.socket.getsockname()[:2]
+        self.handler_instance = None
 
     def start(self):
         assert not self.active
@@ -143,10 +144,8 @@ class DummyPOP3Server(asyncore.dispatcher, threading.Thread):
         self.active = False
         self.join()
 
-    def handle_accept(self):
-        conn, addr = self.accept()
-        self.handler = self.handler(conn)
-        self.close()
+    def handle_accepted(self, conn, addr):
+        self.handler_instance = self.handler(conn)
 
     def handle_connect(self):
         self.close()
@@ -285,7 +284,24 @@ if hasattr(poplib, 'POP3_SSL'):
             self.client = poplib.POP3_SSL(self.server.host, self.server.port)
 
         def test__all__(self):
-            self.assertTrue('POP3_SSL' in poplib.__all__)
+            self.assertIn('POP3_SSL', poplib.__all__)
+
+        def test_context(self):
+            ctx = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, keyfile=CERTFILE, context=ctx)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, certfile=CERTFILE, context=ctx)
+            self.assertRaises(ValueError, poplib.POP3_SSL, self.server.host,
+                              self.server.port, keyfile=CERTFILE,
+                              certfile=CERTFILE, context=ctx)
+
+            self.client.quit()
+            self.client = poplib.POP3_SSL(self.server.host, self.server.port,
+                                          context=ctx)
+            self.assertIsInstance(self.client.sock, ssl.SSLSocket)
+            self.assertIs(self.client.sock.context, ctx)
+            self.assertTrue(self.client.noop().startswith(b'+OK'))
 
 
 class TestTimeouts(TestCase):
@@ -293,32 +309,34 @@ class TestTimeouts(TestCase):
     def setUp(self):
         self.evt = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(3)
+        self.sock.settimeout(60)  # Safety net. Look issue 11812
         self.port = test_support.bind_port(self.sock)
-        threading.Thread(target=self.server, args=(self.evt,self.sock)).start()
-        time.sleep(.1)
+        self.thread = threading.Thread(target=self.server, args=(self.evt,self.sock))
+        self.thread.setDaemon(True)
+        self.thread.start()
+        self.evt.wait()
 
     def tearDown(self):
-        self.evt.wait()
+        self.thread.join()
+        del self.thread  # Clear out any dangling Thread objects.
 
     def server(self, evt, serv):
         serv.listen(5)
+        evt.set()
         try:
             conn, addr = serv.accept()
-        except socket.timeout:
-            pass
-        else:
             conn.send(b"+ Hola mundo\n")
             conn.close()
+        except socket.timeout:
+            pass
         finally:
             serv.close()
-            evt.set()
 
     def testTimeoutDefault(self):
         self.assertTrue(socket.getdefaulttimeout() is None)
         socket.setdefaulttimeout(30)
         try:
-            pop = poplib.POP3("localhost", self.port)
+            pop = poplib.POP3(HOST, self.port)
         finally:
             socket.setdefaulttimeout(None)
         self.assertEqual(pop.sock.gettimeout(), 30)
@@ -335,7 +353,7 @@ class TestTimeouts(TestCase):
         pop.sock.close()
 
     def testTimeoutValue(self):
-        pop = poplib.POP3("localhost", self.port, timeout=30)
+        pop = poplib.POP3(HOST, self.port, timeout=30)
         self.assertEqual(pop.sock.gettimeout(), 30)
         pop.sock.close()
 

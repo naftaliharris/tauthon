@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
     ast
     ~~~
@@ -41,8 +40,8 @@ def literal_eval(node_or_string):
     """
     Safely evaluate an expression node or a string containing a Python
     expression.  The string or node provided may only consist of the following
-    Python literal structures: strings, numbers, tuples, lists, dicts, booleans,
-    and None.
+    Python literal structures: strings, bytes, numbers, tuples, lists, dicts,
+    sets, booleans, and None.
     """
     _safe_names = {'None': None, 'True': True, 'False': False}
     if isinstance(node_or_string, str):
@@ -50,7 +49,7 @@ def literal_eval(node_or_string):
     if isinstance(node_or_string, Expression):
         node_or_string = node_or_string.body
     def _convert(node):
-        if isinstance(node, Str):
+        if isinstance(node, (Str, Bytes)):
             return node.s
         elif isinstance(node, Num):
             return node.n
@@ -58,25 +57,33 @@ def literal_eval(node_or_string):
             return tuple(map(_convert, node.elts))
         elif isinstance(node, List):
             return list(map(_convert, node.elts))
+        elif isinstance(node, Set):
+            return set(map(_convert, node.elts))
         elif isinstance(node, Dict):
             return dict((_convert(k), _convert(v)) for k, v
                         in zip(node.keys, node.values))
         elif isinstance(node, Name):
             if node.id in _safe_names:
                 return _safe_names[node.id]
+        elif isinstance(node, UnaryOp) and \
+             isinstance(node.op, (UAdd, USub)) and \
+             isinstance(node.operand, (Num, UnaryOp, BinOp)):
+            operand = _convert(node.operand)
+            if isinstance(node.op, UAdd):
+                return + operand
+            else:
+                return - operand
         elif isinstance(node, BinOp) and \
              isinstance(node.op, (Add, Sub)) and \
-             isinstance(node.right, Num) and \
-             isinstance(node.right.n, complex) and \
-             isinstance(node.left, Num) and \
-             isinstance(node.left.n, (int, float)):
-            left = node.left.n
-            right = node.right.n
+             isinstance(node.right, (Num, UnaryOp, BinOp)) and \
+             isinstance(node.left, (Num, UnaryOp, BinOp)):
+            left = _convert(node.left)
+            right = _convert(node.right)
             if isinstance(node.op, Add):
                 return left + right
             else:
                 return left - right
-        raise ValueError('malformed string')
+        raise ValueError('malformed node or string: ' + repr(node))
     return _convert(node_or_string)
 
 

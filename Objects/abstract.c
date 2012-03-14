@@ -693,48 +693,37 @@ PyBuffer_Release(Py_buffer *view)
 PyObject *
 PyObject_Format(PyObject *obj, PyObject *format_spec)
 {
-    static PyObject * str__format__ = NULL;
     PyObject *meth;
     PyObject *empty = NULL;
     PyObject *result = NULL;
-
-    /* Initialize cached value */
-    if (str__format__ == NULL) {
-    /* Initialize static variable needed by _PyType_Lookup */
-    str__format__ = PyUnicode_FromString("__format__");
-    if (str__format__ == NULL)
-        goto done;
-    }
+    static PyObject *format_cache = NULL;
 
     /* If no format_spec is provided, use an empty string */
     if (format_spec == NULL) {
-    empty = PyUnicode_FromUnicode(NULL, 0);
-    format_spec = empty;
+        empty = PyUnicode_FromUnicode(NULL, 0);
+        format_spec = empty;
     }
-
-    /* Make sure the type is initialized.  float gets initialized late */
-    if (Py_TYPE(obj)->tp_dict == NULL)
-    if (PyType_Ready(Py_TYPE(obj)) < 0)
-        goto done;
 
     /* Find the (unbound!) __format__ method (a borrowed reference) */
-    meth = _PyType_Lookup(Py_TYPE(obj), str__format__);
+    meth = _PyObject_LookupSpecial(obj, "__format__", &format_cache);
     if (meth == NULL) {
-    PyErr_Format(PyExc_TypeError,
-        "Type %.100s doesn't define __format__",
-        Py_TYPE(obj)->tp_name);
+        if (!PyErr_Occurred())
+            PyErr_Format(PyExc_TypeError,
+                         "Type %.100s doesn't define __format__",
+                         Py_TYPE(obj)->tp_name);
         goto done;
     }
 
-    /* And call it, binding it to the value */
-    result = PyObject_CallFunctionObjArgs(meth, obj, format_spec, NULL);
+    /* And call it. */
+    result = PyObject_CallFunctionObjArgs(meth, format_spec, NULL);
+    Py_DECREF(meth);
 
     if (result && !PyUnicode_Check(result)) {
-    PyErr_SetString(PyExc_TypeError,
-        "__format__ method did not return string");
-    Py_DECREF(result);
-    result = NULL;
-    goto done;
+        PyErr_SetString(PyExc_TypeError,
+                        "__format__ method did not return string");
+        Py_DECREF(result);
+        result = NULL;
+        goto done;
     }
 
 done:
@@ -1453,7 +1442,7 @@ PyNumber_ToBase(PyObject *n, int base)
 int
 PySequence_Check(PyObject *s)
 {
-    if (PyObject_IsInstance(s, (PyObject *)&PyDict_Type))
+    if (PyDict_Check(s))
         return 0;
     return s != NULL && s->ob_type->tp_as_sequence &&
         s->ob_type->tp_as_sequence->sq_item != NULL;
@@ -2322,15 +2311,7 @@ objargs_mktuple(va_list va)
     va_list countva;
     PyObject *result, *tmp;
 
-#ifdef VA_LIST_IS_ARRAY
-    memcpy(countva, va, sizeof(va_list));
-#else
-#ifdef __va_copy
-    __va_copy(countva, va);
-#else
-    countva = va;
-#endif
-#endif
+        Py_VA_COPY(countva, va);
 
     while (((PyObject *)va_arg(countva, PyObject *)) != NULL)
         ++n;
@@ -2519,7 +2500,10 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
         if (retval == 0) {
             PyObject *c = PyObject_GetAttr(inst, __class__);
             if (c == NULL) {
-                PyErr_Clear();
+                if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                    PyErr_Clear();
+                else
+                    retval = -1;
             }
             else {
                 if (c != (PyObject *)(inst->ob_type) &&
@@ -2537,8 +2521,10 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
             return -1;
         icls = PyObject_GetAttr(inst, __class__);
         if (icls == NULL) {
-            PyErr_Clear();
-            retval = 0;
+            if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                PyErr_Clear();
+            else
+                retval = -1;
         }
         else {
             retval = abstract_issubclass(icls, cls);
@@ -2720,4 +2706,67 @@ PyIter_Next(PyObject *iter)
         PyErr_ExceptionMatches(PyExc_StopIteration))
         PyErr_Clear();
     return result;
+}
+
+
+/*
+ * Flatten a sequence of bytes() objects into a C array of
+ * NULL terminated string pointers with a NULL char* terminating the array.
+ * (ie: an argv or env list)
+ *
+ * Memory allocated for the returned list is allocated using malloc() and MUST
+ * be freed by the caller using a free() loop or _Py_FreeCharPArray().
+ */
+char *const *
+_PySequence_BytesToCharpArray(PyObject* self)
+{
+    char **array;
+    Py_ssize_t i, argc;
+    PyObject *item = NULL;
+
+    argc = PySequence_Size(self);
+    if (argc == -1)
+        return NULL;
+
+    array = malloc((argc + 1) * sizeof(char *));
+    if (array == NULL) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+    for (i = 0; i < argc; ++i) {
+        char *data;
+        item = PySequence_GetItem(self, i);
+        data = PyBytes_AsString(item);
+        if (data == NULL) {
+            /* NULL terminate before freeing. */
+            array[i] = NULL;
+            goto fail;
+        }
+        array[i] = strdup(data);
+        if (!array[i]) {
+            PyErr_NoMemory();
+            goto fail;
+        }
+        Py_DECREF(item);
+    }
+    array[argc] = NULL;
+
+    return array;
+
+fail:
+    Py_XDECREF(item);
+    _Py_FreeCharPArray(array);
+    return NULL;
+}
+
+
+/* Free's a NULL terminated char** array of C strings. */
+void
+_Py_FreeCharPArray(char *const array[])
+{
+    Py_ssize_t i;
+    for (i = 0; array[i] != NULL; ++i) {
+        free(array[i]);
+    }
+    free((void*)array);
 }

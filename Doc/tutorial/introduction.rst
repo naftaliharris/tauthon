@@ -483,6 +483,12 @@ concatenated and so on::
    >>> 3*a[:3] + ['Boo!']
    ['spam', 'eggs', 100, 'spam', 'eggs', 100, 'spam', 'eggs', 100, 'Boo!']
 
+All slice operations return a new list containing the requested elements.  This
+means that the following slice returns a shallow copy of the list *a*::
+
+   >>> a[:]
+   ['spam', 'eggs', 100, 1234]
+
 Unlike strings, which are *immutable*, it is possible to change individual
 elements of a list::
 
@@ -587,13 +593,13 @@ This example introduces several new features.
   and ``!=`` (not equal to).
 
 * The *body* of the loop is *indented*: indentation is Python's way of grouping
-  statements.  Python does not (yet!) provide an intelligent input line editing
-  facility, so you have to type a tab or space(s) for each indented line.  In
-  practice you will prepare more complicated input for Python with a text editor;
-  most text editors have an auto-indent facility.  When a compound statement is
-  entered interactively, it must be followed by a blank line to indicate
-  completion (since the parser cannot guess when you have typed the last line).
-  Note that each line within a basic block must be indented by the same amount.
+  statements.  At the interactive prompt, you have to type a tab or space(s) for
+  each indented line.  In practice you will prepare more complicated input
+  for Python with a text editor; all decent text editors have an auto-indent
+  facility.  When a compound statement is entered interactively, it must be
+  followed by a blank line to indicate completion (since the parser cannot
+  guess when you have typed the last line).  Note that each line within a basic
+  block must be indented by the same amount.
 
 * The :func:`print` function writes the value of the expression(s) it is
   given.  It differs from just writing the expression you want to write (as we did

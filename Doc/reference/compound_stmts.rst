@@ -310,8 +310,9 @@ not handled, the exception is temporarily saved. The :keyword:`finally` clause
 is executed.  If there is a saved exception, it is re-raised at the end of the
 :keyword:`finally` clause. If the :keyword:`finally` clause raises another
 exception or executes a :keyword:`return` or :keyword:`break` statement, the
-saved exception is lost.  The exception information is not available to the
-program during execution of the :keyword:`finally` clause.
+saved exception is set as the context of the new exception.  The exception
+information is not available to the program during execution of the
+:keyword:`finally` clause.
 
 .. index::
    statement: return
@@ -352,6 +353,8 @@ The execution of the :keyword:`with` statement with one "item" proceeds as follo
 #. The context expression (the expression given in the :token:`with_item`) is
    evaluated to obtain a context manager.
 
+#. The context manager's :meth:`__exit__` is loaded for later use.
+
 #. The context manager's :meth:`__enter__` method is invoked.
 
 #. If a target was included in the :keyword:`with` statement, the return value
@@ -361,9 +364,9 @@ The execution of the :keyword:`with` statement with one "item" proceeds as follo
 
       The :keyword:`with` statement guarantees that if the :meth:`__enter__`
       method returns without an error, then :meth:`__exit__` will always be
-      called.  Thus, if an error occurs during the assignment to the target
-      list, it will be treated the same as an error occurring within the suite
-      would be.  See step 5 below.
+      called. Thus, if an error occurs during the assignment to the target list,
+      it will be treated the same as an error occurring within the suite would
+      be. See step 6 below.
 
 #. The suite is executed.
 
@@ -425,7 +428,7 @@ A function definition defines a user-defined function object (see section
 .. productionlist::
    funcdef: [`decorators`] "def" `funcname` "(" [`parameter_list`] ")" ["->" `expression`] ":" `suite`
    decorators: `decorator`+
-   decorator: "@" `dotted_name` ["(" [`argument_list` [","]] ")"] NEWLINE
+   decorator: "@" `dotted_name` ["(" [`parameter_list` [","]] ")"] NEWLINE
    dotted_name: `identifier` ("." `identifier`)*
    parameter_list: (`defparameter` ",")*
                  : (  "*" [`parameter`] ("," `defparameter`)*
@@ -476,7 +479,7 @@ value --- this is a syntactic restriction that is not expressed by the grammar.
 
 **Default parameter values are evaluated when the function definition is
 executed.** This means that the expression is evaluated once, when the function
-is defined, and that that same "pre-computed" value is used for each call.  This
+is defined, and that the same "pre-computed" value is used for each call.  This
 is especially important to understand when a default parameter is a mutable
 object, such as a list or a dictionary: if the function modifies the object
 (e.g. by appending an item to a list), the default value is in effect modified.
@@ -532,6 +535,11 @@ returned or passed around.  Free variables used in the nested function can
 access the local variables of the function containing the def.  See section
 :ref:`naming` for details.
 
+.. seealso::
+
+   :pep:`3107` - Function Annotations
+      The original specification for function annotations.
+
 
 .. _class:
 
@@ -552,7 +560,7 @@ A class definition defines a class object (see section :ref:`types`):
 
 .. productionlist::
    classdef: [`decorators`] "class" `classname` [`inheritance`] ":" `suite`
-   inheritance: "(" [`argument_list` [","] | `comprehension`] ")"
+   inheritance: "(" [`parameter_list`] ")"
    classname: `identifier`
 
 A class definition is an executable statement.  The inheritance list usually
@@ -613,8 +621,9 @@ can be used to create instance variables with different implementation details.
 
 .. rubric:: Footnotes
 
-.. [#] The exception is propagated to the invocation stack only if there is no
-   :keyword:`finally` clause that negates the exception.
+.. [#] The exception is propagated to the invocation stack unless
+   there is a :keyword:`finally` clause which happens to raise another
+   exception. That new exception causes the old one to be lost.
 
 .. [#] Currently, control "flows off the end" except in the case of an exception
    or the execution of a :keyword:`return`, :keyword:`continue`, or

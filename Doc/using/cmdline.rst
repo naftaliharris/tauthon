@@ -1,5 +1,8 @@
 .. highlightlang:: none
 
+.. ATTENTION: You probably should update Misc/python.man, too, if you modify
+.. this file.
+
 .. _using-on-general:
 
 Command line and environment
@@ -21,7 +24,7 @@ Command line
 
 When invoking Python, you may specify any of these options::
 
-    python [-bBdEhiORsSuvVWx?] [-c command | -m module-name | script | - ] [args]
+    python [-bBdEhiORqsSuvVWx?] [-c command | -m module-name | script | - ] [args]
 
 The most common use case is, of course, a simple invocation of a script::
 
@@ -92,8 +95,9 @@ source.
       file is not available.
 
    If this option is given, the first element of :data:`sys.argv` will be the
-   full path to the module file. As with the :option:`-c` option, the current
-   directory will be added to the start of :data:`sys.path`.
+   full path to the module file (while the module file is being located, the
+   first element will be set to ``"-m"``). As with the :option:`-c` option,
+   the current directory will be added to the start of :data:`sys.path`.
 
    Many standard library modules contain code that is invoked on their execution
    as a script.  An example is the :mod:`timeit` module::
@@ -110,6 +114,7 @@ source.
 
    .. versionchanged:: 3.1
       Supply the package name to run a ``__main__`` submodule.
+
 
 .. describe:: -
 
@@ -215,6 +220,13 @@ Miscellaneous options
    Discard docstrings in addition to the :option:`-O` optimizations.
 
 
+.. cmdoption:: -q
+
+   Don't display the copyright and version messages even in interactive mode.
+
+   .. versionadded:: 3.2
+
+
 .. cmdoption:: -R
 
    Turn on hash randomization, so that the :meth:`__hash__` values of str, bytes
@@ -235,12 +247,13 @@ Miscellaneous options
 
    See also :envvar:`PYTHONHASHSEED`.
 
-   .. versionadded:: 3.1.5
+   .. versionadded:: 3.2.3
 
 
 .. cmdoption:: -s
 
-   Don't add user site directory to sys.path
+   Don't add the :data:`user site-packages directory <site.USER_SITE>` to
+   :data:`sys.path`.
 
    .. seealso::
 
@@ -257,7 +270,8 @@ Miscellaneous options
 
    Force the binary layer of the stdin, stdout and stderr streams (which is
    available as their ``buffer`` attribute) to be unbuffered.  The text I/O
-   layer will still be line-buffered.
+   layer will still be line-buffered if writing to the console, or
+   block-buffered if redirected to a non-interactive file.
 
    See also :envvar:`PYTHONUNBUFFERED`.
 
@@ -317,7 +331,7 @@ Miscellaneous options
    the remaining fields.  Empty fields match all values; trailing empty fields
    may be omitted.  The *message* field matches the start of the warning message
    printed; this match is case-insensitive.  The *category* field matches the
-   warning category.  This must be a class name; the match test whether the
+   warning category.  This must be a class name; the match tests whether the
    actual warning category of the message is a subclass of the specified warning
    category.  The full class name must be given.  The *module* field matches the
    (fully-qualified) module name; this match is case-sensitive.  The *line*
@@ -329,6 +343,8 @@ Miscellaneous options
 
       :pep:`230` -- Warning framework
 
+      :envvar:`PYTHONWARNINGS`
+
 
 .. cmdoption:: -x
 
@@ -336,6 +352,16 @@ Miscellaneous options
    ``#!cmd``.  This is intended for a DOS specific hack only.
 
    .. note:: The line numbers in error messages will be off by one.
+
+
+.. cmdoption:: -X
+
+   Reserved for various implementation-specific options.  CPython currently
+   defines none of them, but allows to pass arbitrary values and retrieve
+   them through the :data:`sys._xoptions` dictionary.
+
+   .. versionchanged:: 3.2
+      It is now allowed to pass :option:`-X` with CPython.
 
 
 Options you shouldn't use
@@ -346,11 +372,6 @@ Options you shouldn't use
    Reserved for use by Jython_.
 
 .. _Jython: http://jython.org
-
-.. cmdoption:: -X
-
-    Reserved for alternative implementations of Python to use for their own
-    purposes.
 
 
 .. _using-on-envvars:
@@ -451,13 +472,14 @@ These environment variables influence Python's behavior.
 .. envvar:: PYTHONCASEOK
 
    If this is set, Python ignores case in :keyword:`import` statements.  This
-   only works on Windows.
+   only works on Windows, OS X, and OS/2.
 
 
 .. envvar:: PYTHONDONTWRITEBYTECODE
 
    If this is set, Python won't try to write ``.pyc`` or ``.pyo`` files on the
-   import of source modules.
+   import of source modules.  This is equivalent to specifying the :option:`-B`
+   option.
 
 
 .. envvar:: PYTHONHASHSEED
@@ -478,14 +500,15 @@ These environment variables influence Python's behavior.
    the value 0 will lead to the same hash values as when hash randomization is
    disabled.
 
-   .. versionadded:: 3.1.5
+   .. versionadded:: 3.2.3
 
 
 .. envvar:: PYTHONIOENCODING
 
-   Overrides the encoding used for stdin/stdout/stderr, in the syntax
-   ``encodingname:errorhandler``.  The ``:errorhandler`` part is optional and
-   has the same meaning as in :func:`str.encode`.
+   If this is set before running the interpreter, it overrides the encoding used
+   for stdin/stdout/stderr, in the syntax ``encodingname:errorhandler``. The
+   ``:errorhandler`` part is optional and has the same meaning as in
+   :func:`str.encode`.
 
    For stderr, the ``:errorhandler`` part is ignored; the handler will always be
    ``'backslashreplace'``.
@@ -493,7 +516,8 @@ These environment variables influence Python's behavior.
 
 .. envvar:: PYTHONNOUSERSITE
 
-   If this is set, Python won't add the user site directory to sys.path
+   If this is set, Python won't add the :data:`user site-packages directory
+   <site.USER_SITE>` to :data:`sys.path`.
 
    .. seealso::
 
@@ -502,7 +526,10 @@ These environment variables influence Python's behavior.
 
 .. envvar:: PYTHONUSERBASE
 
-   Sets the base directory for the user site directory
+   Defines the :data:`user base directory <site.USER_BASE>`, which is used to
+   compute the path of the :data:`user site-packages directory <site.USER_SITE>`
+   and :ref:`Distutils installation paths <inst-alt-install-user>` for ``python
+   setup.py install --user``.
 
    .. seealso::
 
@@ -515,12 +542,18 @@ These environment variables influence Python's behavior.
    value instead of the value got through the C runtime.  Only works on
    Mac OS X.
 
+.. envvar:: PYTHONWARNINGS
+
+   This is equivalent to the :option:`-W` option. If set to a comma
+   separated string, it is equivalent to specifying :option:`-W` multiple
+   times.
+
 
 Debug-mode variables
 ~~~~~~~~~~~~~~~~~~~~
 
 Setting these variables only has an effect in a debug build of Python, that is,
-if Python was configured with the :option:`--with-pydebug` build option.
+if Python was configured with the ``--with-pydebug`` build option.
 
 .. envvar:: PYTHONTHREADDEBUG
 

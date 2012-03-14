@@ -13,7 +13,7 @@ class LoaderTests(abc.LoaderTests):
 
     def load_module(self, fullname):
         loader = _bootstrap._ExtensionFileLoader(ext_util.NAME,
-                                                ext_util.FILEPATH, False)
+                                                ext_util.FILEPATH)
         return loader.load_module(fullname)
 
     def test_module(self):
@@ -46,7 +46,8 @@ class LoaderTests(abc.LoaderTests):
         pass
 
     def test_unloadable(self):
-        self.assertRaises(ImportError, self.load_module, 'asdfjkl;')
+        with self.assertRaises(ImportError):
+            self.load_module('asdfjkl;')
 
 
 def test_main():

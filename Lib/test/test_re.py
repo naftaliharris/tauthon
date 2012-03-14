@@ -1,7 +1,7 @@
-from test.support import verbose, run_unittest
+from test.support import verbose, run_unittest, gc_collect
+import io
 import re
 from re import Scanner
-import os
 import sys
 import string
 import traceback
@@ -16,6 +16,17 @@ from weakref import proxy
 import unittest
 
 class ReTests(unittest.TestCase):
+
+    def test_keep_buffer(self):
+        # See bug 14212
+        b = bytearray(b'x')
+        it = re.finditer(b'a', b)
+        with self.assertRaises(BufferError):
+            b.extend(b'x'*400)
+        list(it)
+        del it
+        gc_collect()
+        b.extend(b'x'*400)
 
     def test_weakref(self):
         s = 'QabbbcR'
@@ -356,6 +367,32 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.search(r"\d\D\w\W\s\S",
                                    "1aa! a", re.UNICODE).group(0), "1aa! a")
 
+    def test_string_boundaries(self):
+        # See http://bugs.python.org/issue10713
+        self.assertEqual(re.search(r"\b(abc)\b", "abc").group(1),
+                         "abc")
+        # There's a word boundary at the start of a string.
+        self.assertTrue(re.match(r"\b", "abc"))
+        # A non-empty string includes a non-boundary zero-length match.
+        self.assertTrue(re.search(r"\B", "abc"))
+        # There is no non-boundary match at the start of a string.
+        self.assertFalse(re.match(r"\B", "abc"))
+        # However, an empty string contains no word boundaries, and also no
+        # non-boundaries.
+        self.assertEqual(re.search(r"\B", ""), None)
+        # This one is questionable and different from the perlre behaviour,
+        # but describes current behavior.
+        self.assertEqual(re.search(r"\b", ""), None)
+        # A single word-character string has two boundaries, but no
+        # non-boundary gaps.
+        self.assertEqual(len(re.findall(r"\b", "a")), 2)
+        self.assertEqual(len(re.findall(r"\B", "a")), 0)
+        # If there are no words, there are no boundaries
+        self.assertEqual(len(re.findall(r"\b", " ")), 0)
+        self.assertEqual(len(re.findall(r"\b", "   ")), 0)
+        # Can match around the whitespace.
+        self.assertEqual(len(re.findall(r"\B", " ")), 2)
+
     def test_bigcharset(self):
         self.assertEqual(re.match("([\u2222\u2223])",
                                   "\u2222").group(1), "\u2222")
@@ -639,6 +676,27 @@ class ReTests(unittest.TestCase):
         self.assertEqual(next(iter).span(), (4, 4))
         self.assertRaises(StopIteration, next, iter)
 
+    def test_bug_6561(self):
+        # '\d' should match characters in Unicode category 'Nd'
+        # (Number, Decimal Digit), but not those in 'Nl' (Number,
+        # Letter) or 'No' (Number, Other).
+        decimal_digits = [
+            '\u0037', # '\N{DIGIT SEVEN}', category 'Nd'
+            '\u0e58', # '\N{THAI DIGIT SIX}', category 'Nd'
+            '\uff10', # '\N{FULLWIDTH DIGIT ZERO}', category 'Nd'
+            ]
+        for x in decimal_digits:
+            self.assertEqual(re.match('^\d$', x).group(0), x)
+
+        not_decimal_digits = [
+            '\u2165', # '\N{ROMAN NUMERAL SIX}', category 'Nl'
+            '\u3039', # '\N{HANGZHOU NUMERAL TWENTY}', category 'Nl'
+            '\u2082', # '\N{SUBSCRIPT TWO}', category 'No'
+            '\u32b4', # '\N{CIRCLED NUMBER THIRTY NINE}', category 'No'
+            ]
+        for x in not_decimal_digits:
+            self.assertIsNone(re.match('^\d$', x))
+
     def test_empty_array(self):
         # SF buf 1647541
         import array
@@ -760,8 +818,18 @@ class ReTests(unittest.TestCase):
         self.assertRaises(OverflowError, _sre.compile, "abc", 0, [long_overflow])
         self.assertRaises(TypeError, _sre.compile, {}, 0, [])
 
+    def test_compile(self):
+        # Test return value when given string and pattern as parameter
+        pattern = re.compile('random pattern')
+        self.assertIsInstance(pattern, re._pattern_type)
+        same_pattern = re.compile(pattern)
+        self.assertIsInstance(same_pattern, re._pattern_type)
+        self.assertIs(same_pattern, pattern)
+        # Test behaviour when not given a string or pattern as parameter
+        self.assertRaises(TypeError, re.compile, 0)
+
 def run_re_tests():
-    from test.re_tests import benchmarks, tests, SUCCEED, FAIL, SYNTAX_ERROR
+    from test.re_tests import tests, SUCCEED, FAIL, SYNTAX_ERROR
     if verbose:
         print('Running re_tests test suite')
     else:
@@ -886,6 +954,7 @@ def run_re_tests():
                 result = obj.search(s)
                 if result is None:
                     print('=== Fails on unicode-sensitive match', t)
+
 
 def test_main():
     run_unittest(ReTests)
