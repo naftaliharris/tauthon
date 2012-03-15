@@ -114,6 +114,34 @@ static const struct filedescr _PyImport_StandardFiletab[] = {
 };
 #endif
 
+#ifdef MS_WINDOWS
+int isdir(char *path) {
+    DWORD rv;
+    /* see issue1293 and issue3677:
+     * stat() on Windows doesn't recognise paths like
+     * "e:\\shared\\" and "\\\\whiterab-c2znlh\\shared" as dirs.
+     * Also reference issue6727:
+     * stat() on Windows is broken and doesn't resolve symlinks properly.
+     */
+    rv = GetFileAttributesA(path);
+    return rv != INVALID_FILE_ATTRIBUTES && rv & FILE_ATTRIBUTE_DIRECTORY;
+}
+#else
+#ifdef HAVE_STAT
+int isdir(char *path) {
+    struct stat statbuf;
+    return stat(path, &statbuf) == 0 && S_ISDIR(statbuf.st_mode);
+}
+#else
+#ifdef RISCOS
+/* with RISCOS, isdir is in unixstuff */
+#else
+int isdir(char *path) {
+    return 0;
+}
+#endif /* RISCOS */
+#endif /* HAVE_STAT */
+#endif /* MS_WINDOWS */
 
 /* Initialize things */
 
@@ -1204,9 +1232,6 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
     char *filemode;
     FILE *fp = NULL;
     PyObject *path_hooks, *path_importer_cache;
-#ifndef RISCOS
-    struct stat statbuf;
-#endif
     static struct filedescr fd_frozen = {"", "", PY_FROZEN};
     static struct filedescr fd_builtin = {"", "", C_BUILTIN};
     static struct filedescr fd_package = {"", "", PKG_DIRECTORY};
@@ -1392,9 +1417,7 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
 
         /* Check for package import (buf holds a directory name,
            and there's an __init__ module in that directory */
-#ifdef HAVE_STAT
-        if (stat(buf, &statbuf) == 0 &&         /* it exists */
-            S_ISDIR(statbuf.st_mode) &&         /* it's a directory */
+        if (isdir(buf) &&         /* it's an existing directory */
             case_ok(buf, len, namelen, name)) { /* case matches */
             if (find_init_module(buf)) { /* and has __init__.py */
                 Py_XDECREF(copy);
@@ -1412,28 +1435,6 @@ find_module(char *fullname, char *subname, PyObject *path, char *buf,
                 }
             }
         }
-#else
-        /* XXX How are you going to test for directories? */
-#ifdef RISCOS
-        if (isdir(buf) &&
-            case_ok(buf, len, namelen, name)) {
-            if (find_init_module(buf)) {
-                Py_XDECREF(copy);
-                return &fd_package;
-            }
-            else {
-                char warnstr[MAXPATHLEN+80];
-                sprintf(warnstr, "Not importing directory "
-                    "'%.*s': missing __init__.py",
-                    MAXPATHLEN, buf);
-                if (PyErr_Warn(PyExc_ImportWarning,
-                               warnstr)) {
-                    Py_XDECREF(copy);
-                    return NULL;
-                }
-        }
-#endif
-#endif
 #if defined(PYOS_OS2)
         /* take a snapshot of the module spec for restoration
          * after the 8 character DLL hackery
@@ -3199,49 +3200,11 @@ NullImporter_init(NullImporter *self, PyObject *args, PyObject *kwds)
         PyErr_SetString(PyExc_ImportError, "empty pathname");
         return -1;
     } else {
-#ifndef RISCOS
-#ifndef MS_WINDOWS
-        struct stat statbuf;
-        int rv;
-
-        rv = stat(path, &statbuf);
-        if (rv == 0) {
-            /* it exists */
-            if (S_ISDIR(statbuf.st_mode)) {
-                /* it's a directory */
-                PyErr_SetString(PyExc_ImportError,
-                                "existing directory");
-                return -1;
-            }
+        if(isdir(path)) {
+            PyErr_SetString(PyExc_ImportError,
+                            "existing directory");
+            return -1;
         }
-#else /* MS_WINDOWS */
-        DWORD rv;
-        /* see issue1293 and issue3677:
-         * stat() on Windows doesn't recognise paths like
-         * "e:\\shared\\" and "\\\\whiterab-c2znlh\\shared" as dirs.
-         */
-        rv = GetFileAttributesA(path);
-        if (rv != INVALID_FILE_ATTRIBUTES) {
-            /* it exists */
-            if (rv & FILE_ATTRIBUTE_DIRECTORY) {
-                /* it's a directory */
-                PyErr_SetString(PyExc_ImportError,
-                                "existing directory");
-                return -1;
-            }
-        }
-#endif
-#else /* RISCOS */
-        if (object_exists(path)) {
-            /* it exists */
-            if (isdir(path)) {
-                /* it's a directory */
-                PyErr_SetString(PyExc_ImportError,
-                                "existing directory");
-                return -1;
-            }
-        }
-#endif
     }
     return 0;
 }
