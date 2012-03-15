@@ -15,11 +15,6 @@
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 
-#ifdef _OSF_SOURCE
-/* OSF1 5.1 doesn't make this available with XOPEN_SOURCE_EXTENDED defined */
-extern int finite(double);
-#endif
-
 /* Special free list
 
    Since some Python programs can spend much of their time allocating
@@ -179,25 +174,14 @@ PyFloat_FromString(PyObject *v)
     PyObject *result = NULL;
 
     if (PyUnicode_Check(v)) {
-        Py_ssize_t i, buflen = PyUnicode_GET_SIZE(v);
-        Py_UNICODE *bufptr;
-        s_buffer = PyUnicode_TransformDecimalToASCII(
-            PyUnicode_AS_UNICODE(v), buflen);
+        s_buffer = _PyUnicode_TransformDecimalAndSpaceToASCII(v);
         if (s_buffer == NULL)
             return NULL;
-        /* Replace non-ASCII whitespace with ' ' */
-        bufptr = PyUnicode_AS_UNICODE(s_buffer);
-        for (i = 0; i < buflen; i++) {
-            Py_UNICODE ch = bufptr[i];
-            if (ch > 127 && Py_UNICODE_ISSPACE(ch))
-                bufptr[i] = ' ';
-        }
-        s = _PyUnicode_AsStringAndSize(s_buffer, &len);
+        s = PyUnicode_AsUTF8AndSize(s_buffer, &len);
         if (s == NULL) {
             Py_DECREF(s_buffer);
             return NULL;
         }
-        last = s + len;
     }
     else if (PyObject_AsCharBuffer(v, &s, &len)) {
         PyErr_SetString(PyExc_TypeError,
@@ -523,8 +507,7 @@ float_richcompare(PyObject *v, PyObject *w, int op)
     return PyBool_FromLong(r);
 
  Unimplemented:
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static Py_hash_t
@@ -1080,7 +1063,7 @@ static char
 char_from_hex(int x)
 {
     assert(0 <= x && x < 16);
-    return "0123456789abcdef"[x];
+    return Py_hexdigits[x];
 }
 
 static int
@@ -1753,9 +1736,8 @@ float__format__(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
-    return _PyFloat_FormatAdvanced(self,
-                                   PyUnicode_AS_UNICODE(format_spec),
-                                   PyUnicode_GET_SIZE(format_spec));
+    return _PyFloat_FormatAdvanced(self, format_spec, 0,
+                                   PyUnicode_GET_LENGTH(format_spec));
 }
 
 PyDoc_STRVAR(float__format__doc,
@@ -2251,7 +2233,7 @@ _PyFloat_Pack8(double x, unsigned char *p, int le)
 
         /* Eighth byte */
         *p = flo & 0xFF;
-        p += incr;
+        /* p += incr; */
 
         /* Done */
         return 0;
