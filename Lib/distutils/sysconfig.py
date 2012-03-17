@@ -25,7 +25,7 @@ EXEC_PREFIX = os.path.normpath(sys.exec_prefix)
 # Path to the base directory of the project. On Windows the binary may
 # live in project/PCBuild9.  If we're dealing with an x64 Windows build,
 # it'll live in project/PCbuild/amd64.
-project_base = os.path.dirname(os.path.realpath(sys.executable))
+project_base = os.path.dirname(os.path.abspath(sys.executable))
 if os.name == "nt" and "pcbuild" in project_base[-8:].lower():
     project_base = os.path.abspath(os.path.join(project_base, os.path.pardir))
 # PC/VS7.1
@@ -74,7 +74,7 @@ def get_python_inc(plat_specific=0, prefix=None):
 
     if os.name == "posix":
         if python_build:
-            buildir = os.path.dirname(os.path.realpath(sys.executable))
+            buildir = os.path.dirname(sys.executable)
             if plat_specific:
                 # python.h is located in the buildir
                 inc_dir = buildir
@@ -88,11 +88,6 @@ def get_python_inc(plat_specific=0, prefix=None):
         return os.path.join(prefix, "include", "python" + get_python_version())
     elif os.name == "nt":
         return os.path.join(prefix, "include")
-    elif os.name == "mac":
-        if plat_specific:
-            return os.path.join(prefix, "Mac", "Include")
-        else:
-            return os.path.join(prefix, "Include")
     elif os.name == "os2":
         return os.path.join(prefix, "Include")
     else:
@@ -135,18 +130,6 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
             else:
                 return os.path.join(prefix, "Lib", "site-packages")
 
-    elif os.name == "mac":
-        if plat_specific:
-            if standard_lib:
-                return os.path.join(prefix, "Lib", "lib-dynload")
-            else:
-                return os.path.join(prefix, "Lib", "site-packages")
-        else:
-            if standard_lib:
-                return os.path.join(prefix, "Lib")
-            else:
-                return os.path.join(prefix, "Lib", "site-packages")
-
     elif os.name == "os2":
         if standard_lib:
             return os.path.join(prefix, "Lib")
@@ -158,6 +141,7 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
             "I don't know where Python installs its library "
             "on platform '%s'" % os.name)
 
+_USE_CLANG = None
 
 def customize_compiler(compiler):
     """Do any platform-specific customization of a CCompiler instance.
@@ -166,12 +150,43 @@ def customize_compiler(compiler):
     varies across Unices and is stored in Python's Makefile.
     """
     if compiler.compiler_type == "unix":
-        (cc, cxx, opt, cflags, ccshared, ldshared, so_ext) = \
+        (cc, cxx, opt, cflags, ccshared, ldshared, so_ext, ar, ar_flags) = \
             get_config_vars('CC', 'CXX', 'OPT', 'CFLAGS',
-                            'CCSHARED', 'LDSHARED', 'SO')
+                            'CCSHARED', 'LDSHARED', 'SO', 'AR',
+                            'ARFLAGS')
 
+        newcc = None
         if 'CC' in os.environ:
-            cc = os.environ['CC']
+            newcc = os.environ['CC']
+        elif sys.platform == 'darwin' and cc == 'gcc-4.2':
+            # Issue #13590:
+            #       Since Apple removed gcc-4.2 in Xcode 4.2, we can no
+            #       longer assume it is available for extension module builds.
+            #       If Python was built with gcc-4.2, check first to see if
+            #       it is available on this system; if not, try to use clang
+            #       instead unless the caller explicitly set CC.
+            global _USE_CLANG
+            if _USE_CLANG is None:
+                from distutils import log
+                from subprocess import Popen, PIPE
+                p = Popen("! type gcc-4.2 && type clang && exit 2",
+                                shell=True, stdout=PIPE, stderr=PIPE)
+                p.wait()
+                if p.returncode == 2:
+                    _USE_CLANG = True
+                    log.warn("gcc-4.2 not found, using clang instead")
+                else:
+                    _USE_CLANG = False
+            if _USE_CLANG:
+                newcc = 'clang'
+        if newcc:
+            # On OS X, if CC is overridden, use that as the default
+            #       command for LDSHARED as well
+            if (sys.platform == 'darwin'
+                    and 'LDSHARED' not in os.environ
+                    and ldshared.startswith(cc)):
+                ldshared = newcc + ldshared[len(cc):]
+            cc = newcc
         if 'CXX' in os.environ:
             cxx = os.environ['CXX']
         if 'LDSHARED' in os.environ:
@@ -189,6 +204,12 @@ def customize_compiler(compiler):
             cpp = cpp + ' ' + os.environ['CPPFLAGS']
             cflags = cflags + ' ' + os.environ['CPPFLAGS']
             ldshared = ldshared + ' ' + os.environ['CPPFLAGS']
+        if 'AR' in os.environ:
+            ar = os.environ['AR']
+        if 'ARFLAGS' in os.environ:
+            archiver = ar + ' ' + os.environ['ARFLAGS']
+        else:
+            archiver = ar + ' ' + ar_flags
 
         cc_cmd = cc + ' ' + cflags
         compiler.set_executables(
@@ -197,7 +218,8 @@ def customize_compiler(compiler):
             compiler_so=cc_cmd + ' ' + ccshared,
             compiler_cxx=cxx,
             linker_so=ldshared,
-            linker_exe=cc)
+            linker_exe=cc,
+            archiver=archiver)
 
         compiler.shared_lib_extension = so_ext
 
@@ -222,8 +244,7 @@ def get_config_h_filename():
 def get_makefile_filename():
     """Return full pathname of installed Makefile from the Python build."""
     if python_build:
-        return os.path.join(os.path.dirname(os.path.realpath(sys.executable)),
-                            "Makefile")
+        return os.path.join(os.path.dirname(sys.executable), "Makefile")
     lib_dir = get_python_lib(plat_specific=1, standard_lib=1)
     return os.path.join(lib_dir, "config", "Makefile")
 
@@ -336,6 +357,11 @@ def parse_makefile(fn, g=None):
 
     fp.close()
 
+    # strip spurious spaces
+    for k, v in done.items():
+        if isinstance(v, str):
+            done[k] = v.strip()
+
     # save the results in the global dictionary
     g.update(done)
     return g
@@ -393,21 +419,6 @@ def _init_posix():
 
         raise DistutilsPlatformError(my_msg)
 
-    # On MacOSX we need to check the setting of the environment variable
-    # MACOSX_DEPLOYMENT_TARGET: configure bases some choices on it so
-    # it needs to be compatible.
-    # If it isn't set we set it to the configure-time value
-    if sys.platform == 'darwin' and 'MACOSX_DEPLOYMENT_TARGET' in g:
-        cfg_target = g['MACOSX_DEPLOYMENT_TARGET']
-        cur_target = os.getenv('MACOSX_DEPLOYMENT_TARGET', '')
-        if cur_target == '':
-            cur_target = cfg_target
-            os.putenv('MACOSX_DEPLOYMENT_TARGET', cfg_target)
-        elif map(int, cfg_target.split('.')) > map(int, cur_target.split('.')):
-            my_msg = ('$MACOSX_DEPLOYMENT_TARGET mismatch: now "%s" but "%s" during configure'
-                % (cur_target, cfg_target))
-            raise DistutilsPlatformError(my_msg)
-
     # On AIX, there are wrong paths to the linker scripts in the Makefile
     # -- these paths are relative to the Python source, but when installed
     # the scripts are in another directory.
@@ -460,34 +471,8 @@ def _init_nt():
     g['SO'] = '.pyd'
     g['EXE'] = ".exe"
     g['VERSION'] = get_python_version().replace(".", "")
-    g['BINDIR'] = os.path.dirname(os.path.realpath(sys.executable))
+    g['BINDIR'] = os.path.dirname(os.path.abspath(sys.executable))
 
-    global _config_vars
-    _config_vars = g
-
-
-def _init_mac():
-    """Initialize the module as appropriate for Macintosh systems"""
-    g = {}
-    # set basic install directories
-    g['LIBDEST'] = get_python_lib(plat_specific=0, standard_lib=1)
-    g['BINLIBDEST'] = get_python_lib(plat_specific=1, standard_lib=1)
-
-    # XXX hmmm.. a normal install puts include files here
-    g['INCLUDEPY'] = get_python_inc(plat_specific=0)
-
-    import MacOS
-    if not hasattr(MacOS, 'runtimemodel'):
-        g['SO'] = '.ppc.slb'
-    else:
-        g['SO'] = '.%s.slb' % MacOS.runtimemodel
-
-    # XXX are these used anywhere?
-    g['install_lib'] = os.path.join(EXEC_PREFIX, "Lib")
-    g['install_platlib'] = os.path.join(EXEC_PREFIX, "Mac", "Lib")
-
-    # These are used by the extension module build
-    g['srcdir'] = ':'
     global _config_vars
     _config_vars = g
 

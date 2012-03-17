@@ -333,11 +333,15 @@ allows common :keyword:`try`...\ :keyword:`except`...\ :keyword:`finally` usage
 patterns to be encapsulated for convenient reuse.
 
 .. productionlist::
-   with_stmt: "with" `expression` ["as" `target`] ":" `suite`
+   with_stmt: "with" with_item ("," with_item)* ":" `suite`
+   with_item: `expression` ["as" `target`]
 
-The execution of the :keyword:`with` statement proceeds as follows:
+The execution of the :keyword:`with` statement with one "item" proceeds as follows:
 
-#. The context expression is evaluated to obtain a context manager.
+#. The context expression (the expression given in the :token:`with_item`) is
+   evaluated to obtain a context manager.
+
+#. The context manager's :meth:`__exit__` is loaded for later use.
 
 #. The context manager's :meth:`__enter__` method is invoked.
 
@@ -349,7 +353,7 @@ The execution of the :keyword:`with` statement proceeds as follows:
       The :keyword:`with` statement guarantees that if the :meth:`__enter__` method
       returns without an error, then :meth:`__exit__` will always be called. Thus, if
       an error occurs during the assignment to the target list, it will be treated the
-      same as an error occurring within the suite would be. See step 5 below.
+      same as an error occurring within the suite would be. See step 6 below.
 
 #. The suite is executed.
 
@@ -367,11 +371,26 @@ The execution of the :keyword:`with` statement proceeds as follows:
    from :meth:`__exit__` is ignored, and execution proceeds at the normal location
    for the kind of exit that was taken.
 
+With more than one item, the context managers are processed as if multiple
+:keyword:`with` statements were nested::
+
+   with A() as a, B() as b:
+       suite
+
+is equivalent to ::
+
+   with A() as a:
+       with B() as b:
+           suite
+
 .. note::
 
    In Python 2.5, the :keyword:`with` statement is only allowed when the
    ``with_statement`` feature has been enabled.  It is always enabled in
    Python 2.6.
+
+.. versionchanged:: 2.7
+   Support for multiple context expressions.
 
 .. seealso::
 
@@ -451,7 +470,7 @@ value --- this is a syntactic restriction that is not expressed by the grammar.
 
 **Default parameter values are evaluated when the function definition is
 executed.**  This means that the expression is evaluated once, when the function
-is defined, and that that same "pre-computed" value is used for each call.  This
+is defined, and that the same "pre-computed" value is used for each call.  This
 is especially important to understand when a default parameter is a mutable
 object, such as a list or a dictionary: if the function modifies the object
 (e.g. by appending an item to a list), the default value is in effect modified.
@@ -543,8 +562,9 @@ which is then bound to the class name.
 
 .. rubric:: Footnotes
 
-.. [#] The exception is propagated to the invocation stack only if there is no
-   :keyword:`finally` clause that negates the exception.
+.. [#] The exception is propagated to the invocation stack unless
+   there is a :keyword:`finally` clause which happens to raise another
+   exception. That new exception causes the old one to be lost.
 
 .. [#] Currently, control "flows off the end" except in the case of an exception or the
    execution of a :keyword:`return`, :keyword:`continue`, or :keyword:`break`

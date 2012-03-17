@@ -903,7 +903,6 @@ whichmodule(PyObject *global, PyObject *global_name)
        like this rule. jlf
     */
     if (!j) {
-        j=1;
         name=__main___str;
     }
 
@@ -1170,14 +1169,29 @@ save_float(Picklerobject *self, PyObject *args)
             return -1;
     }
     else {
-        char c_str[250];
-        c_str[0] = FLOAT;
-        PyOS_ascii_formatd(c_str + 1, sizeof(c_str) - 2, "%.17g", x);
-        /* Extend the formatted string with a newline character */
-        strcat(c_str, "\n");
+        int result = -1;
+        char *buf = NULL;
+        char op = FLOAT;
 
-        if (self->write_func(self, c_str, strlen(c_str)) < 0)
-            return -1;
+        if (self->write_func(self, &op, 1) < 0)
+            goto done;
+
+        buf = PyOS_double_to_string(x, 'g', 17, 0, NULL);
+        if (!buf) {
+            PyErr_NoMemory();
+            goto done;
+        }
+
+        if (self->write_func(self, buf, strlen(buf)) < 0)
+            goto done;
+
+        if (self->write_func(self, "\n", 1) < 0)
+            goto done;
+
+        result = 0;
+done:
+        PyMem_Free(buf);
+        return result;
     }
 
     return 0;
@@ -1219,9 +1233,6 @@ save_string(Picklerobject *self, PyObject *args, int doput)
     else {
         int i;
         char c_str[5];
-
-        if ((size = PyString_Size(args)) < 0)
-            return -1;
 
         if (size < 256) {
             c_str[0] = SHORT_BINSTRING;
@@ -1865,13 +1876,74 @@ BatchFailed:
     return -1;
 }
 
+/* This is a variant of batch_dict() above that specializes for dicts, with no
+ * support for dict subclasses. Like batch_dict(), we batch up chunks of
+ *     MARK key value ... key value SETITEMS
+ * opcode sequences.  Calling code should have arranged to first create an
+ * empty dict, or dict-like object, for the SETITEMS to operate on.
+ * Returns 0 on success, -1 on error.
+ *
+ * Note that this currently doesn't work for protocol 0.
+ */
+static int
+batch_dict_exact(Picklerobject *self, PyObject *obj)
+{
+    PyObject *key = NULL, *value = NULL;
+    int i;
+    Py_ssize_t dict_size, ppos = 0;
+
+    static char setitem = SETITEM;
+    static char setitems = SETITEMS;
+
+    assert(obj != NULL);
+    assert(self->proto > 0);
+
+    dict_size = PyDict_Size(obj);
+
+    /* Special-case len(d) == 1 to save space. */
+    if (dict_size == 1) {
+        PyDict_Next(obj, &ppos, &key, &value);
+        if (save(self, key, 0) < 0)
+            return -1;
+        if (save(self, value, 0) < 0)
+            return -1;
+        if (self->write_func(self, &setitem, 1) < 0)
+            return -1;
+        return 0;
+    }
+
+    /* Write in batches of BATCHSIZE. */
+    do {
+        i = 0;
+        if (self->write_func(self, &MARKv, 1) < 0)
+            return -1;
+        while (PyDict_Next(obj, &ppos, &key, &value)) {
+            if (save(self, key, 0) < 0)
+                return -1;
+            if (save(self, value, 0) < 0)
+                return -1;
+            if (++i == BATCHSIZE)
+                break;
+        }
+        if (self->write_func(self, &setitems, 1) < 0)
+            return -1;
+        if (PyDict_Size(obj) != dict_size) {
+            PyErr_Format(
+                PyExc_RuntimeError,
+                "dictionary changed size during iteration");
+            return -1;
+        }
+
+    } while (i == BATCHSIZE);
+    return 0;
+}
+
 static int
 save_dict(Picklerobject *self, PyObject *args)
 {
     int res = -1;
     char s[3];
     int len;
-    PyObject *iter;
 
     if (self->fast && !fast_save_enter(self, args))
         goto finally;
@@ -1903,15 +1975,23 @@ save_dict(Picklerobject *self, PyObject *args)
         goto finally;
 
     /* Materialize the dict items. */
-    iter = PyObject_CallMethod(args, "iteritems", "()");
-    if (iter == NULL)
-        goto finally;
-    if (Py_EnterRecursiveCall(" while pickling an object") == 0)
-    {
-        res = batch_dict(self, iter);
-        Py_LeaveRecursiveCall();
+    if (PyDict_CheckExact(args) && self->proto > 0) {
+        /* We can take certain shortcuts if we know this is a dict and
+           not a dict subclass. */
+        if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+            res = batch_dict_exact(self, args);
+            Py_LeaveRecursiveCall();
+        }
+    } else {
+        PyObject *iter = PyObject_CallMethod(args, "iteritems", "()");
+        if (iter == NULL)
+            goto finally;
+        if (Py_EnterRecursiveCall(" while pickling an object") == 0) {
+            res = batch_dict(self, iter);
+            Py_LeaveRecursiveCall();
+        }
+        Py_DECREF(iter);
     }
-    Py_DECREF(iter);
 
   finally:
     if (self->fast && !fast_save_leave(self, args))
@@ -2617,11 +2697,6 @@ save(Picklerobject *self, PyObject *args, int pers_save)
         }
     }
 
-    if (PyType_IsSubtype(type, &PyType_Type)) {
-        res = save_global(self, args, NULL);
-        goto finally;
-    }
-
     /* Get a reduction callable, and call it.  This may come from
      * copy_reg.dispatch_table, the object's __reduce_ex__ method,
      * or the object's __reduce__ method.
@@ -2637,6 +2712,11 @@ save(Picklerobject *self, PyObject *args, int pers_save)
         }
     }
     else {
+        if (PyType_IsSubtype(type, &PyType_Type)) {
+            res = save_global(self, args, NULL);
+            goto finally;
+        }
+
         /* Check for a __reduce_ex__ method. */
         __reduce__ = PyObject_GetAttr(args, __reduce_ex___str);
         if (__reduce__ != NULL) {
@@ -3468,11 +3548,11 @@ load_float(Unpicklerobject *self)
     if (len < 2) return bad_readline();
     if (!( s=pystrndup(s,len)))  return -1;
 
-    errno = 0;
-    d = PyOS_ascii_strtod(s, &endptr);
+    d = PyOS_string_to_double(s, &endptr, PyExc_OverflowError);
 
-    if ((errno == ERANGE && !(fabs(d) <= 1.0)) ||
-        (endptr[0] != '\n') || (endptr[1] != '\0')) {
+    if (d == -1.0 && PyErr_Occurred()) {
+        goto finally;
+    } else if ((endptr[0] != '\n') || (endptr[1] != '\0')) {
         PyErr_SetString(PyExc_ValueError,
                         "could not convert string to float");
         goto finally;
@@ -4477,8 +4557,16 @@ load_build(Unpicklerobject *self)
 
         i = 0;
         while (PyDict_Next(state, &i, &d_key, &d_value)) {
-            if (PyObject_SetItem(dict, d_key, d_value) < 0)
+            /* normally the keys for instance attributes are
+               interned.  we should try to do that here. */
+            Py_INCREF(d_key);
+            if (PyString_CheckExact(d_key))
+                PyString_InternInPlace(&d_key);
+            if (PyObject_SetItem(dict, d_key, d_value) < 0) {
+                Py_DECREF(d_key);
                 goto finally;
+            }
+            Py_DECREF(d_key);
         }
         Py_DECREF(dict);
     }
@@ -4971,6 +5059,33 @@ noload_extension(Unpicklerobject *self, int nbytes)
     return 0;
 }
 
+static int
+noload_append(Unpicklerobject *self)
+{
+    return Pdata_clear(self->stack, self->stack->length - 1);
+}
+
+static int
+noload_appends(Unpicklerobject *self)
+{
+    int i;
+    if ((i = marker(self)) < 0) return -1;
+    return Pdata_clear(self->stack, i);
+}
+
+static int
+noload_setitem(Unpicklerobject *self)
+{
+    return Pdata_clear(self->stack, self->stack->length - 2);
+}
+
+static int
+noload_setitems(Unpicklerobject *self)
+{
+    int i;
+    if ((i = marker(self)) < 0) return -1;
+    return Pdata_clear(self->stack, i);
+}
 
 static PyObject *
 noload(Unpicklerobject *self)
@@ -5129,12 +5244,12 @@ noload(Unpicklerobject *self)
             continue;
 
         case APPEND:
-            if (load_append(self) < 0)
+            if (noload_append(self) < 0)
                 break;
             continue;
 
         case APPENDS:
-            if (load_appends(self) < 0)
+            if (noload_appends(self) < 0)
                 break;
             continue;
 
@@ -5209,12 +5324,12 @@ noload(Unpicklerobject *self)
             continue;
 
         case SETITEM:
-            if (load_setitem(self) < 0)
+            if (noload_setitem(self) < 0)
                 break;
             continue;
 
         case SETITEMS:
-            if (load_setitems(self) < 0)
+            if (noload_setitems(self) < 0)
                 break;
             continue;
 

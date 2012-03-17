@@ -23,11 +23,13 @@ class CompilerTest(unittest.TestCase):
         # to generate some kind of code for it.
 
         next_time = time.time() + _PRINT_WORKING_MSG_INTERVAL
-        libdir = os.path.dirname(unittest.__file__)
+        # warning: if 'os' or 'test_support' are moved in some other dir,
+        # they should be changed here.
+        libdir = os.path.dirname(os.__file__)
         testdir = os.path.dirname(test.test_support.__file__)
 
-        for dir in [libdir, testdir]:
-            for basename in os.listdir(dir):
+        for dir in [testdir]:
+            for basename in "test_os.py",:
                 # Print still working message since this test can be really slow
                 if next_time <= time.time():
                     next_time = time.time() + _PRINT_WORKING_MSG_INTERVAL
@@ -79,19 +81,19 @@ class CompilerTest(unittest.TestCase):
                              "<string>", "exec")
         dct = {}
         exec c in dct
-        self.assertEquals(dct.get('e'), 1)
-        self.assertEquals(dct.get('f'), 1)
+        self.assertEqual(dct.get('e'), 1)
+        self.assertEqual(dct.get('f'), 1)
 
     def testDefaultArgs(self):
         self.assertRaises(SyntaxError, compiler.parse, "def foo(a=1, b): pass")
 
     def testDocstrings(self):
         c = compiler.compile('"doc"', '<string>', 'exec')
-        self.assert_('__doc__' in c.co_names)
+        self.assertIn('__doc__', c.co_names)
         c = compiler.compile('def f():\n "doc"', '<string>', 'exec')
         g = {}
         exec c in g
-        self.assertEquals(g['f'].__doc__, "doc")
+        self.assertEqual(g['f'].__doc__, "doc")
 
     def testLineNo(self):
         # Test that all nodes except Module have a correct lineno attribute.
@@ -110,16 +112,16 @@ class CompilerTest(unittest.TestCase):
 
     def _check_lineno(self, node):
         if not node.__class__ in NOLINENO:
-            self.assert_(isinstance(node.lineno, int),
+            self.assertIsInstance(node.lineno, int,
                 "lineno=%s on %s" % (node.lineno, node.__class__))
-            self.assert_(node.lineno > 0,
+            self.assertTrue(node.lineno > 0,
                 "lineno=%s on %s" % (node.lineno, node.__class__))
         for child in node.getChildNodes():
             self.check_lineno(child)
 
     def testFlatten(self):
-        self.assertEquals(flatten([1, [2]]), [1, 2])
-        self.assertEquals(flatten((1, (2,))), [1, 2])
+        self.assertEqual(flatten([1, [2]]), [1, 2])
+        self.assertEqual(flatten((1, (2,))), [1, 2])
 
     def testNestedScope(self):
         c = compiler.compile('def g():\n'
@@ -131,14 +133,44 @@ class CompilerTest(unittest.TestCase):
                              'exec')
         dct = {}
         exec c in dct
-        self.assertEquals(dct.get('result'), 3)
+        self.assertEqual(dct.get('result'), 3)
 
     def testGenExp(self):
         c = compiler.compile('list((i,j) for i in range(3) if i < 3'
                              '           for j in range(4) if j > 2)',
                              '<string>',
                              'eval')
-        self.assertEquals(eval(c), [(0, 3), (1, 3), (2, 3)])
+        self.assertEqual(eval(c), [(0, 3), (1, 3), (2, 3)])
+
+    def testSetLiteral(self):
+        c = compiler.compile('{1, 2, 3}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1,2,3})
+        c = compiler.compile('{1, 2, 3,}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1,2,3})
+
+    def testDictLiteral(self):
+        c = compiler.compile('{1:2, 2:3, 3:4}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1:2, 2:3, 3:4})
+        c = compiler.compile('{1:2, 2:3, 3:4,}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1:2, 2:3, 3:4})
+
+    def testSetComp(self):
+        c = compiler.compile('{x for x in range(1, 4)}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1, 2, 3})
+        c = compiler.compile('{x * y for x in range(3) if x != 0'
+                             '       for y in range(4) if y != 0}',
+                             '<string>',
+                             'eval')
+        self.assertEqual(eval(c), {1, 2, 3, 4, 6})
+
+    def testDictComp(self):
+        c = compiler.compile('{x:x+1 for x in range(1, 4)}', '<string>', 'eval')
+        self.assertEqual(eval(c), {1:2, 2:3, 3:4})
+        c = compiler.compile('{(x, y) : y for x in range(2) if x != 0'
+                             '            for y in range(3) if y != 0}',
+                             '<string>',
+                             'eval')
+        self.assertEqual(eval(c), {(1, 2): 2, (1, 1): 1})
 
     def testWith(self):
         # SF bug 1638243
@@ -151,7 +183,7 @@ class CompilerTest(unittest.TestCase):
                              'exec' )
         dct = {'TrivialContext': TrivialContext}
         exec c in dct
-        self.assertEquals(dct.get('result'), 1)
+        self.assertEqual(dct.get('result'), 1)
 
     def testWithAss(self):
         c = compiler.compile('from __future__ import with_statement\n'
@@ -163,8 +195,36 @@ class CompilerTest(unittest.TestCase):
                              'exec' )
         dct = {'TrivialContext': TrivialContext}
         exec c in dct
-        self.assertEquals(dct.get('result'), 1)
+        self.assertEqual(dct.get('result'), 1)
 
+    def testWithMult(self):
+        events = []
+        class Ctx:
+            def __init__(self, n):
+                self.n = n
+            def __enter__(self):
+                events.append(self.n)
+            def __exit__(self, *args):
+                pass
+        c = compiler.compile('from __future__ import with_statement\n'
+                             'def f():\n'
+                             '    with Ctx(1) as tc, Ctx(2) as tc2:\n'
+                             '        return 1\n'
+                             'result = f()',
+                             '<string>',
+                             'exec' )
+        dct = {'Ctx': Ctx}
+        exec c in dct
+        self.assertEqual(dct.get('result'), 1)
+        self.assertEqual(events, [1, 2])
+
+    def testGlobal(self):
+        code = compiler.compile('global x\nx=1', '<string>', 'exec')
+        d1 = {'__builtins__': {}}
+        d2 = {}
+        exec code in d1, d2
+        # x should be in the globals dict
+        self.assertEqual(d1.get('x'), 1)
 
     def testPrintFunction(self):
         c = compiler.compile('from __future__ import print_function\n'
@@ -174,14 +234,14 @@ class CompilerTest(unittest.TestCase):
                              'exec' )
         dct = {'output': StringIO()}
         exec c in dct
-        self.assertEquals(dct['output'].getvalue(), 'a**b++')
+        self.assertEqual(dct['output'].getvalue(), 'a**b++')
 
     def _testErrEnc(self, src, text, offset):
         try:
             compile(src, "", "exec")
         except SyntaxError, e:
-            self.assertEquals(e.offset, offset)
-            self.assertEquals(e.text, text)
+            self.assertEqual(e.offset, offset)
+            self.assertEqual(e.text, text)
 
     def testSourceCodeEncodingsError(self):
         # Test SyntaxError with encoding definition
@@ -220,6 +280,9 @@ l[0]
 l[3:4]
 d = {'a': 2}
 d = {}
+d = {x: y for x, y in zip(range(5), range(5,10))}
+s = {x for x in range(10)}
+s = {1}
 t = ()
 t = (1, 2)
 l = []
@@ -247,7 +310,7 @@ from math import *
 
 def test_main():
     global TEST_ALL
-    TEST_ALL = test.test_support.is_resource_enabled("compiler")
+    TEST_ALL = test.test_support.is_resource_enabled("cpu")
     test.test_support.run_unittest(CompilerTest)
 
 if __name__ == "__main__":

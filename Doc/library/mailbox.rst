@@ -459,7 +459,7 @@ Maildir, mbox, MH, Babyl, and MMDF.
                unlock()
 
       Three locking mechanisms are used---dot locking and, if available, the
-      :cfunc:`flock` and :cfunc:`lockf` system calls.
+      :c:func:`flock` and :c:func:`lockf` system calls.
 
 
 .. seealso::
@@ -573,7 +573,7 @@ Maildir, mbox, MH, Babyl, and MMDF.
                unlock()
 
       Three locking mechanisms are used---dot locking and, if available, the
-      :cfunc:`flock` and :cfunc:`lockf` system calls. For MH mailboxes, locking
+      :c:func:`flock` and :c:func:`lockf` system calls. For MH mailboxes, locking
       the mailbox means locking the :file:`.mh_sequences` file and, only for the
       duration of any operations that affect them, locking individual message
       files.
@@ -671,7 +671,7 @@ Maildir, mbox, MH, Babyl, and MMDF.
                unlock()
 
       Three locking mechanisms are used---dot locking and, if available, the
-      :cfunc:`flock` and :cfunc:`lockf` system calls.
+      :c:func:`flock` and :c:func:`lockf` system calls.
 
 
 .. seealso::
@@ -722,7 +722,7 @@ Maildir, mbox, MH, Babyl, and MMDF.
                unlock()
 
       Three locking mechanisms are used---dot locking and, if available, the
-      :cfunc:`flock` and :cfunc:`lockf` system calls.
+      :c:func:`flock` and :c:func:`lockf` system calls.
 
 
 .. seealso::
@@ -765,7 +765,7 @@ Maildir, mbox, MH, Babyl, and MMDF.
    There is no requirement that :class:`Message` instances be used to represent
    messages retrieved using :class:`Mailbox` instances. In some situations, the
    time and memory required to generate :class:`Message` representations might
-   not not acceptable. For such situations, :class:`Mailbox` instances also
+   not be acceptable. For such situations, :class:`Mailbox` instances also
    offer string and file-like representations, and a custom message factory may
    be specified when a :class:`Mailbox` instance is initialized.
 

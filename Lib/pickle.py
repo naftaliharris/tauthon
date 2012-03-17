@@ -24,7 +24,7 @@ Misc variables:
 
 """
 
-__version__ = "$Revision$"       # Code version
+__version__ = "$Revision: 72223 $"       # Code version
 
 from types import *
 from copy_reg import dispatch_table
@@ -286,20 +286,20 @@ class Pickler:
             f(self, obj) # Call unbound method with explicit self
             return
 
-        # Check for a class with a custom metaclass; treat as regular class
-        try:
-            issc = issubclass(t, TypeType)
-        except TypeError: # t is not a class (old Boost; see SF #502085)
-            issc = 0
-        if issc:
-            self.save_global(obj)
-            return
-
         # Check copy_reg.dispatch_table
         reduce = dispatch_table.get(t)
         if reduce:
             rv = reduce(obj)
         else:
+            # Check for a class with a custom metaclass; treat as regular class
+            try:
+                issc = issubclass(t, TypeType)
+            except TypeError: # t is not a class (old Boost; see SF #502085)
+                issc = 0
+            if issc:
+                self.save_global(obj)
+                return
+
             # Check for a __reduce_ex__ method, fall back to __reduce__
             reduce = getattr(obj, "__reduce_ex__", None)
             if reduce:
@@ -501,7 +501,7 @@ class Pickler:
         self.memoize(obj)
     dispatch[UnicodeType] = save_unicode
 
-    if StringType == UnicodeType:
+    if StringType is UnicodeType:
         # This is true for Jython
         def save_string(self, obj, pack=struct.pack):
             unicode = obj.isunicode()
@@ -1221,7 +1221,15 @@ class Unpickler:
             state, slotstate = state
         if state:
             try:
-                inst.__dict__.update(state)
+                d = inst.__dict__
+                try:
+                    for k, v in state.iteritems():
+                        d[intern(k)] = v
+                # keys in state don't have to be strings
+                # don't blow up, but don't go out of our way
+                except TypeError:
+                    d.update(state)
+
             except RuntimeError:
                 # XXX In restricted execution, the instance's __dict__
                 # is not accessible.  Use the old way of unpickling

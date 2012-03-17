@@ -4,6 +4,7 @@ import unittest
 import StringIO
 import cStringIO
 import types
+import array
 from test import test_support
 
 
@@ -87,7 +88,7 @@ class TestGenericStringIO(unittest.TestCase):
 
     def test_iterator(self):
         eq = self.assertEqual
-        unless = self.failUnless
+        unless = self.assertTrue
         eq(iter(self._fp), self._fp)
         # Does this object support the iteration protocol?
         unless(hasattr(self._fp, '__iter__'))
@@ -99,6 +100,10 @@ class TestGenericStringIO(unittest.TestCase):
         eq(i, 5)
         self._fp.close()
         self.assertRaises(ValueError, self._fp.next)
+
+    def test_getvalue(self):
+        self._fp.close()
+        self.assertRaises(ValueError, self._fp.getvalue)
 
 class TestStringIO(TestGenericStringIO):
     MODULE = StringIO
@@ -123,6 +128,34 @@ class TestStringIO(TestGenericStringIO):
 class TestcStringIO(TestGenericStringIO):
     MODULE = cStringIO
 
+    def test_array_support(self):
+        # Issue #1730114: cStringIO should accept array objects
+        a = array.array('B', [0,1,2])
+        f = self.MODULE.StringIO(a)
+        self.assertEqual(f.getvalue(), '\x00\x01\x02')
+
+    def test_unicode(self):
+
+        if not test_support.have_unicode: return
+
+        # The cStringIO module converts Unicode strings to character
+        # strings when writing them to cStringIO objects.
+        # Check that this works.
+
+        f = self.MODULE.StringIO()
+        f.write(u'abcde')
+        s = f.getvalue()
+        self.assertEqual(s, 'abcde')
+        self.assertEqual(type(s), str)
+
+        f = self.MODULE.StringIO(u'abcde')
+        s = f.getvalue()
+        self.assertEqual(s, 'abcde')
+        self.assertEqual(type(s), str)
+
+        self.assertRaises(UnicodeEncodeError, self.MODULE.StringIO, u'\xf4')
+
+
 import sys
 if sys.platform.startswith('java'):
     # Jython doesn't have a buffer object, so we just do a useless
@@ -138,7 +171,7 @@ class TestBuffercStringIO(TestcStringIO):
 
 def test_main():
     test_support.run_unittest(TestStringIO, TestcStringIO)
-    with test_support._check_py3k_warnings(("buffer.. not supported",
+    with test_support.check_py3k_warnings(("buffer.. not supported",
                                              DeprecationWarning)):
         test_support.run_unittest(TestBufferStringIO, TestBuffercStringIO)
 

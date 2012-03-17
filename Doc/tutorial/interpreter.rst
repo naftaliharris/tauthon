@@ -22,11 +22,11 @@ guru or system administrator.  (E.g., :file:`/usr/local/python` is a popular
 alternative location.)
 
 On Windows machines, the Python installation is usually placed in
-:file:`C:\\Python26`, though you can change this when you're running the
+:file:`C:\\Python27`, though you can change this when you're running the
 installer.  To add this directory to your path,  you can type the following
 command into the command prompt in a DOS box::
 
-   set path=%path%;C:\python26
+   set path=%path%;C:\python27
 
 Typing an end-of-file character (:kbd:`Control-D` on Unix, :kbd:`Control-Z` on
 Windows) at the primary prompt causes the interpreter to exit with a zero exit
@@ -58,18 +58,9 @@ Some Python modules are also useful as scripts.  These can be invoked using
 ``python -m module [arg] ...``, which executes the source file for *module* as
 if you had spelled out its full name on the command line.
 
-Note that there is a difference between ``python file`` and ``python <file``.
-In the latter case, input requests from the program, such as calls to
-:func:`input` and :func:`raw_input`, are satisfied from *file*.  Since this file
-has already been read until the end by the parser before the program starts
-executing, the program will encounter end-of-file immediately.  In the former
-case (which is usually what you want) they are satisfied from whatever file or
-device is connected to standard input of the Python interpreter.
-
 When a script file is used, it is sometimes useful to be able to run the script
 and enter interactive mode afterwards.  This can be done by passing :option:`-i`
-before the script.  (This does not work if the script is read from standard
-input, for the same reason as explained in the previous paragraph.)
+before the script.
 
 
 .. _tut-argpassing:
@@ -78,8 +69,9 @@ Argument Passing
 ----------------
 
 When known to the interpreter, the script name and additional arguments
-thereafter are passed to the script in the variable ``sys.argv``, which is a
-list of strings.  Its length is at least one; when no script and no arguments
+thereafter are turned into a list of strings and assigned to the ``argv``
+variable in the ``sys`` module.  You can access this list by executing ``import
+sys``.  The length of the list is at least one; when no script and no arguments
 are given, ``sys.argv[0]`` is an empty string.  When the script name is given as
 ``'-'`` (meaning  standard input), ``sys.argv[0]`` is set to ``'-'``.  When
 :option:`-c` *command* is used, ``sys.argv[0]`` is set to ``'-c'``.  When
@@ -102,7 +94,7 @@ prints a welcome message stating its version number and a copyright notice
 before printing the first prompt::
 
    python
-   Python 2.6 (#1, Feb 28 2007, 00:02:06)
+   Python 2.7 (#1, Feb 28 2010, 00:02:06)
    Type "help", "copyright", "credits" or "license" for more information.
    >>>
 
@@ -172,6 +164,8 @@ a double-click on a Python file will run it as a script.  The extension can
 also be ``.pyw``, in that case, the console window that normally appears is
 suppressed.
 
+
+.. _tut-source-encoding:
 
 Source Code Encoding
 --------------------
@@ -247,7 +241,29 @@ the startup file in a script, you must do this explicitly in the script::
        execfile(filename)
 
 
+.. _tut-customize:
+
+The Customization Modules
+-------------------------
+
+Python provides two hooks to let you customize it: :mod:`sitecustomize` and
+:mod:`usercustomize`.  To see how it works, you need first to find the location
+of your user site-packages directory.  Start Python and run this code:
+
+   >>> import site
+   >>> site.getusersitepackages()
+   '/home/user/.local/lib/python3.2/site-packages'
+
+Now you can create a file named :file:`usercustomize.py` in that directory and
+put anything you want in it.  It will affect every invocation of Python, unless
+it is started with the :option:`-s` option to disable the automatic import.
+
+:mod:`sitecustomize` works in the same way, but is typically created by an
+administrator of the computer in the global site-packages directory, and is
+imported before :mod:`usercustomize`.  See the documentation of the :mod:`site`
+module for more details.
+
+
 .. rubric:: Footnotes
 
 .. [#] A problem with the GNU Readline package may prevent this.
-

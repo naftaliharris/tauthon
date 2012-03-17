@@ -59,9 +59,9 @@ PyAPI_FUNC(void) PyMem_Free(void *);
 /* Macros. */
 #ifdef PYMALLOC_DEBUG
 /* Redirect all memory operations to Python's debugging allocator. */
-#define PyMem_MALLOC		PyObject_MALLOC
-#define PyMem_REALLOC		PyObject_REALLOC
-#define PyMem_FREE		PyObject_FREE
+#define PyMem_MALLOC		_PyMem_DebugMalloc
+#define PyMem_REALLOC		_PyMem_DebugRealloc
+#define PyMem_FREE		_PyMem_DebugFree
 
 #else	/* ! PYMALLOC_DEBUG */
 
@@ -71,9 +71,9 @@ PyAPI_FUNC(void) PyMem_Free(void *);
    pymalloc. To solve these problems, allocate an extra byte. */
 /* Returns NULL to indicate error if a negative size or size larger than
    Py_ssize_t can represent is supplied.  Helps prevents security holes. */
-#define PyMem_MALLOC(n)		(((n) < 0 || (n) > PY_SSIZE_T_MAX) ? NULL \
+#define PyMem_MALLOC(n)		((size_t)(n) > (size_t)PY_SSIZE_T_MAX ? NULL \
 				: malloc((n) ? (n) : 1))
-#define PyMem_REALLOC(p, n)	(((n) < 0 || (n) > PY_SSIZE_T_MAX) ? NULL \
+#define PyMem_REALLOC(p, n)	((size_t)(n) > (size_t)PY_SSIZE_T_MAX  ? NULL \
 				: realloc((p), (n) ? (n) : 1))
 #define PyMem_FREE		free
 

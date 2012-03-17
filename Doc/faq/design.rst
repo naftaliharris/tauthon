@@ -28,7 +28,7 @@ coding-style conflicts.  In C there are many different ways to place the braces.
 If you're used to reading and writing code that uses one style, you will feel at
 least slightly uneasy when reading (or being required to write) another style.
 
-Many coding styles place begin/end brackets on a line by themself.  This makes
+Many coding styles place begin/end brackets on a line by themselves.  This makes
 programs considerably longer and wastes valuable screen space, making it harder
 to get a good overview of a program.  Ideally, a function should fit on one
 screen (say, 20-30 lines).  20 lines of Python can do a lot more work than 20
@@ -75,9 +75,9 @@ necessary to make ``eval(repr(f)) == f`` true for any float f.  The ``str()``
 function prints fewer digits and this often results in the more sensible number
 that was probably intended::
 
-   >>> 0.2
-   0.20000000000000001
-   >>> print 0.2
+   >>> 1.1 - 0.9
+   0.20000000000000007
+   >>> print 1.1 - 0.9
    0.2
 
 One of the consequences of this is that it is error-prone to compare the result
@@ -297,8 +297,9 @@ use the ``join()`` function from the string module, which allows you to write ::
 How fast are exceptions?
 ------------------------
 
-A try/except block is extremely efficient.  Actually catching an exception is
-expensive.  In versions of Python prior to 2.0 it was common to use this idiom::
+A try/except block is extremely efficient if no exceptions are raised.  Actually
+catching an exception is expensive.  In versions of Python prior to 2.0 it was
+common to use this idiom::
 
    try:
        value = mydict[key]
@@ -309,11 +310,10 @@ expensive.  In versions of Python prior to 2.0 it was common to use this idiom::
 This only made sense when you expected the dict to have the key almost all the
 time.  If that wasn't the case, you coded it like this::
 
-   if mydict.has_key(key):
+   if key in mydict:
        value = mydict[key]
    else:
-       mydict[key] = getvalue(key)
-       value = mydict[key]
+       value = mydict[key] = getvalue(key)
 
 .. note::
 
@@ -684,7 +684,7 @@ construction of large programs.
 Python 2.6 adds an :mod:`abc` module that lets you define Abstract Base Classes
 (ABCs).  You can then use :func:`isinstance` and :func:`issubclass` to check
 whether an instance or a class implements a particular ABC.  The
-:mod:`collections` modules defines a set of useful ABCs such as
+:mod:`collections` module defines a set of useful ABCs such as
 :class:`Iterable`, :class:`Container`, and :class:`MutableMapping`.
 
 For Python, many of the advantages of interface specifications can be obtained

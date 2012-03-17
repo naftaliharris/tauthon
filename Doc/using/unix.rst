@@ -1,4 +1,4 @@
-.. highlightlang:: none
+.. highlightlang:: sh
 
 .. _using-on-unix:
 
@@ -26,11 +26,11 @@ following links:
 
 .. seealso::
 
-   http://www.linux.com/articles/60383
+   http://www.debian.org/doc/manuals/maint-guide/first.en.html
       for Debian users
    http://linuxmafia.com/pub/linux/suse-linux-internals/chapter35.html
       for OpenSuse users
-   http://docs.fedoraproject.org/drafts/rpm-guide-en/ch-creating-rpms.html
+   http://docs.fedoraproject.org/en-US/Fedora_Draft_Documentation/0.1/html/RPM_Guide/ch-creating-rpms.html
       for Fedora users
    http://www.slackbook.org/html/package-management-making-packages.html
       for Slackware users
@@ -55,8 +55,8 @@ On FreeBSD and OpenBSD
 On OpenSolaris
 --------------
 
-To install the newest Python versions on OpenSolaris, install blastwave
-(http://www.blastwave.org/howto.html) and type "pkg_get -i python" at the
+To install the newest Python versions on OpenSolaris, install `blastwave
+<http://www.blastwave.org/howto.html>`_ and type ``pkg_get -i python`` at the
 prompt.
 
 
@@ -65,17 +65,18 @@ Building Python
 
 If you want to compile CPython yourself, first thing you should do is get the
 `source <http://python.org/download/source/>`_. You can download either the
-latest release's source or just grab a fresh `checkout
-<http://www.python.org/dev/faq/#how-do-i-get-a-checkout-of-the-repository-read-only-and-read-write>`_.
+latest release's source or just grab a fresh `clone
+<http://docs.python.org/devguide/setup#getting-the-source-code>`_.  (If you want
+to contribute patches, you will need a clone.)
 
-The build process consists the usual ::
+The build process consists in the usual ::
 
    ./configure
    make
    make install
 
 invocations. Configuration options and caveats for specific Unix platforms are
-extensively documented in the :file:`README` file in the root of the Python
+extensively documented in the :source:`README` file in the root of the Python
 source tree.
 
 .. warning::

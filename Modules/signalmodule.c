@@ -7,12 +7,18 @@
 #include "intrcheck.h"
 
 #ifdef MS_WINDOWS
+#include <Windows.h>
+#ifdef HAVE_PROCESS_H
 #include <process.h>
 #endif
+#endif
 
+#ifdef HAVE_SIGNAL_H
 #include <signal.h>
-
+#endif
+#ifdef HAVE_SYS_STAT_H
 #include <sys/stat.h>
+#endif
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
@@ -161,43 +167,57 @@ checksignals_witharg(void * unused)
 }
 
 static void
+trip_signal(int sig_num)
+{
+    Handlers[sig_num].tripped = 1;
+    if (is_tripped)
+        return;
+    /* Set is_tripped after setting .tripped, as it gets
+       cleared in PyErr_CheckSignals() before .tripped. */
+    is_tripped = 1;
+    Py_AddPendingCall(checksignals_witharg, NULL);
+    if (wakeup_fd != -1)
+        write(wakeup_fd, "\0", 1);
+}
+
+static void
 signal_handler(int sig_num)
 {
-#ifdef WITH_THREAD
-#ifdef WITH_PTH
+    int save_errno = errno;
+
+#if defined(WITH_THREAD) && defined(WITH_PTH)
     if (PyThread_get_thread_ident() != main_thread) {
         pth_raise(*(pth_t *) main_thread, sig_num);
-        return;
     }
+    else
 #endif
-    /* See NOTES section above */
-    if (getpid() == main_pid) {
-#endif
-        Handlers[sig_num].tripped = 1;
-        /* Set is_tripped after setting .tripped, as it gets
-           cleared in PyErr_CheckSignals() before .tripped. */
-        is_tripped = 1;
-        Py_AddPendingCall(checksignals_witharg, NULL);
-        if (wakeup_fd != -1)
-            write(wakeup_fd, "\0", 1);
+    {
 #ifdef WITH_THREAD
-    }
+    /* See NOTES section above */
+    if (getpid() == main_pid)
 #endif
-#ifdef SIGCHLD
-    if (sig_num == SIGCHLD) {
-        /* To avoid infinite recursion, this signal remains
-           reset until explicit re-instated.
-           Don't clear the 'func' field as it is our pointer
-           to the Python handler... */
-        return;
+    {
+        trip_signal(sig_num);
     }
-#endif
+
 #ifndef HAVE_SIGACTION
+#ifdef SIGCHLD
+    /* To avoid infinite recursion, this signal remains
+       reset until explicit re-instated.
+       Don't clear the 'func' field as it is our pointer
+       to the Python handler... */
+    if (sig_num != SIGCHLD)
+#endif
     /* If the handler was not set up with sigaction, reinstall it.  See
      * Python/pythonrun.c for the implementation of PyOS_setsig which
      * makes this true.  See also issue8354. */
     PyOS_setsig(sig_num, signal_handler);
 #endif
+    }
+
+    /* Issue #10311: asynchronously executing signal handlers should not
+       mutate errno under the feet of unsuspecting C code. */
+    errno = save_errno;
 }
 
 
@@ -251,6 +271,25 @@ signal_signal(PyObject *self, PyObject *args)
     void (*func)(int);
     if (!PyArg_ParseTuple(args, "iO:signal", &sig_num, &obj))
         return NULL;
+#ifdef MS_WINDOWS
+    /* Validate that sig_num is one of the allowable signals */
+    switch (sig_num) {
+        case SIGABRT: break;
+#ifdef SIGBREAK
+        /* Issue #10003: SIGBREAK is not documented as permitted, but works
+           and corresponds to CTRL_BREAK_EVENT. */
+        case SIGBREAK: break;
+#endif
+        case SIGFPE: break;
+        case SIGILL: break;
+        case SIGINT: break;
+        case SIGSEGV: break;
+        case SIGTERM: break;
+        default:
+            PyErr_SetString(PyExc_ValueError, "invalid signal value");
+            return NULL;
+    }
+#endif
 #ifdef WITH_THREAD
     if (PyThread_get_thread_ident() != main_thread) {
         PyErr_SetString(PyExc_ValueError,
@@ -793,6 +832,18 @@ initsignal(void)
     PyDict_SetItemString(d, "ItimerError", ItimerError);
 #endif
 
+#ifdef CTRL_C_EVENT
+    x = PyInt_FromLong(CTRL_C_EVENT);
+    PyDict_SetItemString(d, "CTRL_C_EVENT", x);
+    Py_DECREF(x);
+#endif
+
+#ifdef CTRL_BREAK_EVENT
+    x = PyInt_FromLong(CTRL_BREAK_EVENT);
+    PyDict_SetItemString(d, "CTRL_BREAK_EVENT", x);
+    Py_DECREF(x);
+#endif
+
     if (!PyErr_Occurred())
         return;
 
@@ -845,7 +896,7 @@ PyErr_CheckSignals(void)
 #endif
 
     /*
-     * The is_stripped variable is meant to speed up the calls to
+     * The is_tripped variable is meant to speed up the calls to
      * PyErr_CheckSignals (both directly or via pending calls) when no
      * signal has arrived. This variable is set to 1 when a signal arrives
      * and it is set to 0 here, when we know some signals arrived. This way
@@ -891,9 +942,7 @@ PyErr_CheckSignals(void)
 void
 PyErr_SetInterrupt(void)
 {
-    is_tripped = 1;
-    Handlers[SIGINT].tripped = 1;
-    Py_AddPendingCall((int (*)(void *))PyErr_CheckSignals, NULL);
+    trip_signal(SIGINT);
 }
 
 void
@@ -927,10 +976,12 @@ void
 PyOS_AfterFork(void)
 {
 #ifdef WITH_THREAD
+    /* PyThread_ReInitTLS() must be called early, to make sure that the TLS API
+     * can be called safely. */
+    PyThread_ReInitTLS();
     PyEval_ReInitThreads();
     main_thread = PyThread_get_thread_ident();
     main_pid = getpid();
     _PyImport_ReInitLock();
-    PyThread_ReInitTLS();
 #endif
 }

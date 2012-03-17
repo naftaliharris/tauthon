@@ -1,4 +1,3 @@
-
 :mod:`xml.dom.minidom` --- Lightweight DOM implementation
 =========================================================
 
@@ -11,9 +10,21 @@
 
 .. versionadded:: 2.0
 
+**Source code:** :source:`Lib/xml/dom/minidom.py`
+
+--------------
+
 :mod:`xml.dom.minidom` is a light-weight implementation of the Document Object
 Model interface.  It is intended to be simpler than the full DOM and also
 significantly smaller.
+
+.. note::
+
+   The :mod:`xml.dom.minidom` module provides an implementation of the W3C-DOM,
+   with an API similar to that in other programming languages.  Users who are
+   unfamiliar with the W3C-DOM interface or who would like to write less code
+   for processing XML files should consider using the
+   :mod:`xml.etree.ElementTree` module instead.
 
 DOM applications typically start by parsing some XML into a DOM.  With
 :mod:`xml.dom.minidom`, this is done through the parse functions::
@@ -118,13 +129,16 @@ module documentation.  This section lists the differences between the API and
    to discard children of that node.
 
 
-.. method:: Node.writexml(writer[, indent=""[, addindent=""[, newl=""[, encoding=""]]]])
+.. method:: Node.writexml(writer[, indent=""[, addindent=""[, newl=""]]])
 
    Write XML to the writer object.  The writer should have a :meth:`write` method
    which matches that of the file object interface.  The *indent* parameter is the
    indentation of the current node.  The *addindent* parameter is the incremental
    indentation to use for subnodes of the current one.  The *newl* parameter
    specifies the string to use to terminate newlines.
+
+   For the :class:`Document` node, an additional keyword argument *encoding* can
+   be used to specify the encoding field of the XML header.
 
    .. versionchanged:: 2.1
       The optional keyword parameters *indent*, *addindent*, and *newl* were added to

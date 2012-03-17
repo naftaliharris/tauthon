@@ -63,7 +63,7 @@ following values are considered false:
 
 * instances of user-defined classes, if the class defines a :meth:`__nonzero__`
   or :meth:`__len__` method, when that method returns the integer zero or
-  :class:`bool` value ``False``. [#]_
+  :class:`bool` value ``False``. [1]_
 
 .. index:: single: true
 
@@ -224,18 +224,20 @@ Numeric Types --- :class:`int`, :class:`float`, :class:`long`, :class:`complex`
    pair: C; language
 
 There are four distinct numeric types: :dfn:`plain integers`, :dfn:`long
-integers`,  :dfn:`floating point numbers`, and :dfn:`complex numbers`. In
+integers`, :dfn:`floating point numbers`, and :dfn:`complex numbers`. In
 addition, Booleans are a subtype of plain integers. Plain integers (also just
-called :dfn:`integers`) are implemented using :ctype:`long` in C, which gives
+called :dfn:`integers`) are implemented using :c:type:`long` in C, which gives
 them at least 32 bits of precision (``sys.maxint`` is always set to the maximum
 plain integer value for the current platform, the minimum value is
-``-sys.maxint - 1``).  Long integers have unlimited precision. Floating point
-numbers are implemented using :ctype:`double` in C. All bets on their precision
-are off unless you happen to know the machine you are working with.
-
-Complex numbers have a real and imaginary part, which are each implemented using
-:ctype:`double` in C.  To extract these parts from a complex number *z*, use
-``z.real`` and ``z.imag``.
+``-sys.maxint - 1``).  Long integers have unlimited precision.  Floating point
+numbers are usually implemented using :c:type:`double` in C; information about
+the precision and internal representation of floating point numbers for the
+machine on which your program is running is available in
+:data:`sys.float_info`.  Complex numbers have a real and imaginary part, which
+are each a floating point number.  To extract these parts from a complex number
+*z*, use ``z.real`` and ``z.imag``. (The standard library includes additional
+numeric types, :mod:`fractions` that hold rationals, and :mod:`decimal` that
+hold floating-point numbers with user-definable precision.)
 
 .. index::
    pair: numeric; literals
@@ -275,7 +277,7 @@ Python fully supports mixed arithmetic: when a binary arithmetic operator has
 operands of different numeric types, the operand with the "narrower" type is
 widened to that of the other, where plain integer is narrower than long integer
 is narrower than floating point is narrower than complex. Comparisons between
-numbers of mixed type use the same rule. [#]_ The constructors :func:`int`,
+numbers of mixed type use the same rule. [2]_ The constructors :func:`int`,
 :func:`long`, :func:`float`, and :func:`complex` can be used to produce numbers
 of a specific type.
 
@@ -358,10 +360,10 @@ Notes:
    See :ref:`built-in-funcs` for a full description.
 
 (4)
-   Complex floor division operator, modulo operator, and :func:`divmod`.
-
    .. deprecated:: 2.3
-      Instead convert to float using :func:`abs` if appropriate.
+      The floor division operator, the modulo operator, and the :func:`divmod`
+      function are no longer defined for complex numbers.  Instead, convert to
+      a floating point number using the :func:`abs` function if appropriate.
 
 (5)
    Also referred to as integer division.  The resultant value is a whole integer,
@@ -399,12 +401,12 @@ All :class:`numbers.Real` types (:class:`int`, :class:`long`, and
 
 .. _bitstring-ops:
 
-Bit-string Operations on Integer Types
+Bitwise Operations on Integer Types
 --------------------------------------
 
 .. index::
    triple: operations on; integer; types
-   pair: bit-string; operations
+   pair: bitwise; operations
    pair: shifting; operations
    pair: masking; operations
    operator: ^
@@ -412,16 +414,16 @@ Bit-string Operations on Integer Types
    operator: <<
    operator: >>
 
-Plain and long integer types support additional operations that make sense only
-for bit-strings.  Negative numbers are treated as their 2's complement value
-(for long integers, this assumes a sufficiently large number of bits that no
-overflow occurs during the operation).
+Bitwise operations only make sense for integers.  Negative numbers are treated
+as their 2's complement value (this assumes a sufficiently large number of bits
+that no overflow occurs during the operation).
 
 The priorities of the binary bitwise operations are all lower than the numeric
 operations and higher than the comparisons; the unary operation ``~`` has the
 same priority as the other unary numeric operations (``+`` and ``-``).
 
-This table lists the bit-string operations sorted in ascending priority:
+This table lists the bitwise operations sorted in ascending priority
+(operations in the same box have the same priority):
 
 +------------+--------------------------------+----------+
 | Operation  | Result                         | Notes    |
@@ -455,19 +457,66 @@ Notes:
    A right shift by *n* bits is equivalent to division by ``pow(2, n)``.
 
 
+Additional Methods on Integer Types
+-----------------------------------
+
+The integer types implement the :class:`numbers.Integral` :term:`abstract base
+class`. In addition, they provide one more method:
+
+.. method:: int.bit_length()
+.. method:: long.bit_length()
+
+    Return the number of bits necessary to represent an integer in binary,
+    excluding the sign and leading zeros::
+
+        >>> n = -37
+        >>> bin(n)
+        '-0b100101'
+        >>> n.bit_length()
+        6
+
+    More precisely, if ``x`` is nonzero, then ``x.bit_length()`` is the
+    unique positive integer ``k`` such that ``2**(k-1) <= abs(x) < 2**k``.
+    Equivalently, when ``abs(x)`` is small enough to have a correctly
+    rounded logarithm, then ``k = 1 + int(log(abs(x), 2))``.
+    If ``x`` is zero, then ``x.bit_length()`` returns ``0``.
+
+    Equivalent to::
+
+        def bit_length(self):
+            s = bin(self)       # binary representation:  bin(-37) --> '-0b100101'
+            s = s.lstrip('-0b') # remove leading zeros and minus sign
+            return len(s)       # len('100101') --> 6
+
+    .. versionadded:: 2.7
+
+
 Additional Methods on Float
 ---------------------------
 
-The float type has some additional methods.
+The float type implements the :class:`numbers.Real` :term:`abstract base
+class`. float also has the following additional methods.
 
 .. method:: float.as_integer_ratio()
 
-    Return a pair of integers whose ratio is exactly equal to the
-    original float and with a positive denominator.  Raises
-    :exc:`OverflowError` on infinities and a :exc:`ValueError` on
-    NaNs.
+   Return a pair of integers whose ratio is exactly equal to the
+   original float and with a positive denominator.  Raises
+   :exc:`OverflowError` on infinities and a :exc:`ValueError` on
+   NaNs.
 
-    .. versionadded:: 2.6
+   .. versionadded:: 2.6
+
+.. method:: float.is_integer()
+
+   Return ``True`` if the float instance is finite with integral
+   value, and ``False`` otherwise::
+
+      >>> (-2.0).is_integer()
+      True
+      >>> (3.2).is_integer()
+      False
+
+   .. versionadded:: 2.6
 
 Two methods support conversion to
 and from hexadecimal strings.  Since Python's floats are stored
@@ -614,11 +663,11 @@ yield expression <yieldexpr>`.
 
 .. _typesseq:
 
-Sequence Types --- :class:`str`, :class:`unicode`, :class:`list`, :class:`tuple`, :class:`buffer`, :class:`xrange`
-==================================================================================================================
+Sequence Types --- :class:`str`, :class:`unicode`, :class:`list`, :class:`tuple`, :class:`bytearray`, :class:`buffer`, :class:`xrange`
+======================================================================================================================================
 
-There are six sequence types: strings, Unicode strings, lists, tuples, buffers,
-and xrange objects.
+There are seven sequence types: strings, Unicode strings, lists, tuples,
+bytearrays, buffers, and xrange objects.
 
 For other containers see the built in :class:`dict` and :class:`set` classes,
 and the :mod:`collections` module.
@@ -630,6 +679,7 @@ and the :mod:`collections` module.
    object: Unicode
    object: tuple
    object: list
+   object: bytearray
    object: buffer
    object: xrange
 
@@ -645,6 +695,8 @@ brackets), with or without enclosing parentheses, but an empty tuple
 must have the enclosing parentheses, such as ``a, b, c`` or ``()``.  A
 single item tuple must have a trailing comma, such as ``(d,)``.
 
+Bytearray objects are created with the built-in function :func:`bytearray`.
+
 Buffer objects are not directly supported by Python syntax, but can be created
 by calling the built-in function :func:`buffer`.  They don't support
 concatenation or repetition.
@@ -657,7 +709,7 @@ support slicing, concatenation or repetition, and using ``in``, ``not in``,
 Most sequence types support the following operations.  The ``in`` and ``not in``
 operations have the same priorities as the comparison operations.  The ``+`` and
 ``*`` operations have the same priority as the corresponding numeric operations.
-[#]_ Additional methods are provided for :ref:`typesseq-mutable`.
+[3]_ Additional methods are provided for :ref:`typesseq-mutable`.
 
 This table lists the sequence operations sorted in ascending priority
 (operations in the same box have the same priority).  In the table, *s* and *t*
@@ -678,7 +730,7 @@ are sequences of the same type; *n*, *i* and *j* are integers:
 | ``s * n, n * s`` | *n* shallow copies of *s*      | \(2)     |
 |                  | concatenated                   |          |
 +------------------+--------------------------------+----------+
-| ``s[i]``         | *i*'th item of *s*, origin 0   | \(3)     |
+| ``s[i]``         | *i*\ th item of *s*, origin 0  | \(3)     |
 +------------------+--------------------------------+----------+
 | ``s[i:j]``       | slice of *s* from *i* to *j*   | (3)(4)   |
 +------------------+--------------------------------+----------+
@@ -690,6 +742,12 @@ are sequences of the same type; *n*, *i* and *j* are integers:
 | ``min(s)``       | smallest item of *s*           |          |
 +------------------+--------------------------------+----------+
 | ``max(s)``       | largest item of *s*            |          |
++------------------+--------------------------------+----------+
+| ``s.index(i)``   | index of the first occurence   |          |
+|                  | of *i* in *s*                  |          |
++------------------+--------------------------------+----------+
+| ``s.count(i)``   | total number of occurences of  |          |
+|                  | *i* in *s*                     |          |
 +------------------+--------------------------------+----------+
 
 Sequence types also support comparisons. In particular, tuples and lists
@@ -788,8 +846,9 @@ String Methods
 
 .. index:: pair: string; methods
 
-Below are listed the string methods which both 8-bit strings and Unicode objects
-support. Note that none of these methods take keyword arguments.
+Below are listed the string methods which both 8-bit strings and
+Unicode objects support.  Some of them are also available on :class:`bytearray`
+objects.
 
 In addition, Python's strings support the sequence type methods
 described in the :ref:`typesseq` section. To output formatted strings
@@ -835,6 +894,8 @@ string functions based on regular expressions.
    .. versionchanged:: 2.3
       Support for other error handling schemes added.
 
+   .. versionchanged:: 2.7
+      Support for keyword arguments added.
 
 .. method:: str.encode([encoding[,errors]])
 
@@ -853,6 +914,8 @@ string functions based on regular expressions.
       Support for ``'xmlcharrefreplace'`` and ``'backslashreplace'`` and other error
       handling schemes added.
 
+   .. versionchanged:: 2.7
+      Support for keyword arguments added.
 
 .. method:: str.endswith(suffix[, start[, end]])
 
@@ -880,6 +943,15 @@ string functions based on regular expressions.
    that *sub* is contained in the slice ``s[start:end]``.  Optional arguments
    *start* and *end* are interpreted as in slice notation.  Return ``-1`` if
    *sub* is not found.
+
+   .. note::
+
+      The :meth:`~str.find` method should be used only if you need to know the
+      position of *sub*.  To check if *sub* is a substring or not, use the
+      :keyword:`in` operator::
+
+         >>> 'Py' in 'Python'
+         True
 
 
 .. method:: str.format(*args, **kwargs)
@@ -935,7 +1007,7 @@ string functions based on regular expressions.
 
 .. method:: str.islower()
 
-   Return true if all cased characters in the string are lowercase and there is at
+   Return true if all cased characters [4]_ in the string are lowercase and there is at
    least one cased character, false otherwise.
 
    For 8-bit strings, this method is locale-dependent.
@@ -960,7 +1032,7 @@ string functions based on regular expressions.
 
 .. method:: str.isupper()
 
-   Return true if all cased characters in the string are uppercase and there is at
+   Return true if all cased characters [4]_ in the string are uppercase and there is at
    least one cased character, false otherwise.
 
    For 8-bit strings, this method is locale-dependent.
@@ -977,7 +1049,7 @@ string functions based on regular expressions.
 
    Return the string left justified in a string of length *width*. Padding is done
    using the specified *fillchar* (default is a space).  The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
    .. versionchanged:: 2.4
       Support for the *fillchar* argument.
@@ -985,7 +1057,8 @@ string functions based on regular expressions.
 
 .. method:: str.lower()
 
-   Return a copy of the string converted to lowercase.
+   Return a copy of the string with all the cased characters [4]_ converted to
+   lowercase.
 
    For 8-bit strings, this method is locale-dependent.
 
@@ -1040,7 +1113,7 @@ string functions based on regular expressions.
 
    Return the string right justified in a string of length *width*. Padding is done
    using the specified *fillchar* (default is a space). The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
    .. versionchanged:: 2.4
       Support for the *fillchar* argument.
@@ -1208,7 +1281,10 @@ string functions based on regular expressions.
 
 .. method:: str.upper()
 
-   Return a copy of the string converted to uppercase.
+   Return a copy of the string with all the cased characters [4]_ converted to
+   uppercase.  Note that ``str.upper().isupper()`` might be ``False`` if ``s``
+   contains uncased characters or if the Unicode category of the resulting
+   character(s) is not "Lu" (Letter, uppercase), but e.g. "Lt" (Letter, titlecase).
 
    For 8-bit strings, this method is locale-dependent.
 
@@ -1217,7 +1293,7 @@ string functions based on regular expressions.
 
    Return the numeric string left filled with zeros in a string of length
    *width*.  A sign prefix is handled correctly.  The original string is
-   returned if *width* is less than ``len(s)``.
+   returned if *width* is less than or equal to ``len(s)``.
 
 
    .. versionadded:: 2.2.2
@@ -1235,7 +1311,7 @@ The following methods are present only on unicode objects:
 
    Return ``True`` if there are only decimal characters in S, ``False``
    otherwise. Decimal characters include digit characters, and all characters
-   that that can be used to form decimal-radix numbers, e.g. U+0660,
+   that can be used to form decimal-radix numbers, e.g. U+0660,
    ARABIC-INDIC DIGIT ZERO.
 
 
@@ -1259,12 +1335,12 @@ operator (modulo).  This is also known as the string *formatting* or
 *interpolation* operator.  Given ``format % values`` (where *format* is a string
 or Unicode object), ``%`` conversion specifications in *format* are replaced
 with zero or more elements of *values*.  The effect is similar to the using
-:cfunc:`sprintf` in the C language.  If *format* is a Unicode object, or if any
+:c:func:`sprintf` in the C language.  If *format* is a Unicode object, or if any
 of the objects being converted using the ``%s`` conversion are Unicode objects,
 the result will also be a Unicode object.
 
 If *format* requires a single argument, *values* may be a single non-tuple
-object. [#]_  Otherwise, *values* must be a tuple with exactly the number of
+object. [5]_  Otherwise, *values* must be a tuple with exactly the number of
 items specified by the format string, or a single mapping object (for example, a
 dictionary).
 
@@ -1297,8 +1373,8 @@ formats in the string *must* include a parenthesised mapping key into that
 dictionary inserted immediately after the ``'%'`` character. The mapping key
 selects the value to be formatted from the mapping.  For example:
 
-   >>> print '%(language)s has %(#)03d quote types.' % \
-   ...       {'language': "Python", "#": 2}
+   >>> print '%(language)s has %(number)03d quote types.' % \
+   ...       {"language": "Python", "number": 2}
    Python has 002 quote types.
 
 In this case no ``*`` specifiers may occur in a format (since they require a
@@ -1419,9 +1495,9 @@ that ``'\0'`` is the end of the string.
 
 .. XXX Examples?
 
-For safety reasons, floating point precisions are clipped to 50; ``%f``
-conversions for numbers whose absolute value is over 1e50 are replaced by ``%g``
-conversions. [#]_  All other errors raise exceptions.
+.. versionchanged:: 2.7
+   ``%f`` conversions for numbers whose absolute value is over 1e50 are no
+   longer replaced by ``%g`` conversions.
 
 .. index::
    module: string
@@ -1456,11 +1532,29 @@ Mutable Sequence Types
    triple: mutable; sequence; types
    object: list
 
-List objects support additional operations that allow in-place modification of
-the object. Other mutable sequence types (when added to the language) should
-also support these operations. Strings and tuples are immutable sequence types:
-such objects cannot be modified once created. The following operations are
-defined on mutable sequence types (where *x* is an arbitrary object):
+List and :class:`bytearray` objects support additional operations that allow
+in-place modification of the object. Other mutable sequence types (when added
+to the language) should also support these operations. Strings and tuples
+are immutable sequence types: such objects cannot be modified once created.
+The following operations are defined on mutable sequence types (where *x* is
+an arbitrary object):
+
+.. index::
+   triple: operations on; sequence; types
+   triple: operations on; list; type
+   pair: subscript; assignment
+   pair: slice; assignment
+   pair: extended slice; assignment
+   statement: del
+   single: append() (list method)
+   single: extend() (list method)
+   single: count() (list method)
+   single: index() (list method)
+   single: insert() (list method)
+   single: pop() (list method)
+   single: remove() (list method)
+   single: reverse() (list method)
+   single: sort() (list method)
 
 +------------------------------+--------------------------------+---------------------+
 | Operation                    | Result                         | Notes               |
@@ -1506,23 +1600,6 @@ defined on mutable sequence types (where *x* is an arbitrary object):
 | ``s.sort([cmp[, key[,        | sort the items of *s* in place | (7)(8)(9)(10)       |
 | reverse]]])``                |                                |                     |
 +------------------------------+--------------------------------+---------------------+
-
-.. index::
-   triple: operations on; sequence; types
-   triple: operations on; list; type
-   pair: subscript; assignment
-   pair: slice; assignment
-   pair: extended slice; assignment
-   statement: del
-   single: append() (list method)
-   single: extend() (list method)
-   single: count() (list method)
-   single: index() (list method)
-   single: insert() (list method)
-   single: pop() (list method)
-   single: remove() (list method)
-   single: reverse() (list method)
-   single: sort() (list method)
 
 Notes:
 
@@ -1584,7 +1661,8 @@ Notes:
    In general, the *key* and *reverse* conversion processes are much faster than
    specifying an equivalent *cmp* function.  This is because *cmp* is called
    multiple times for each list element while *key* and *reverse* touch each
-   element only once.
+   element only once.  Use :func:`functools.cmp_to_key` to convert an
+   old-style *cmp* function to a *key* function.
 
    .. versionchanged:: 2.3
       Support for ``None`` as an equivalent to omitting *cmp* was added.
@@ -1634,9 +1712,13 @@ There are currently two built-in set types, :class:`set` and :class:`frozenset`.
 The :class:`set` type is mutable --- the contents can be changed using methods
 like :meth:`add` and :meth:`remove`.  Since it is mutable, it has no hash value
 and cannot be used as either a dictionary key or as an element of another set.
-The :class:`frozenset` type is immutable and :term:`hashable` --- its contents cannot be
-altered after it is created; it can therefore be used as a dictionary key or as
-an element of another set.
+The :class:`frozenset` type is immutable and :term:`hashable` --- its contents
+cannot be altered after it is created; it can therefore be used as a dictionary
+key or as an element of another set.
+
+As of Python 2.7, non-empty sets (not frozensets) can be created by placing a
+comma-separated list of elements within braces, for example: ``{'jack',
+'sjoerd'}``, in addition to the :class:`set` constructor.
 
 The constructors for both classes work the same:
 
@@ -1879,15 +1961,12 @@ pairs within braces, for example: ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098:
    values are added as items to the dictionary. If a key is specified both in the
    positional argument and as a keyword argument, the value associated with the
    keyword is retained in the dictionary. For example, these all return a
-   dictionary equal to ``{"one": 2, "two": 3}``:
+   dictionary equal to ``{"one": 1, "two": 2}``:
 
-   * ``dict(one=2, two=3)``
-
-   * ``dict({'one': 2, 'two': 3})``
-
-   * ``dict(zip(('one', 'two'), (2, 3)))``
-
-   * ``dict([['two', 3], ['one', 2]])``
+   * ``dict(one=1, two=2)``
+   * ``dict({'one': 1, 'two': 2})``
+   * ``dict(zip(('one', 'two'), (1, 2)))``
+   * ``dict([['two', 2], ['one', 1]])``
 
    The first example only works for keys that are valid Python
    identifiers; the others work with any valid keys.
@@ -2059,7 +2138,7 @@ pairs within braces, for example: ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098:
       existing keys.  Return ``None``.
 
       :func:`update` accepts either another dictionary object or an iterable of
-      key/value pairs (as a tuple or other iterable of length two).  If keyword
+      key/value pairs (as tuples or other iterables of length two).  If keyword
       arguments are specified, the dictionary is then updated with those
       key/value pairs: ``d.update(red=1, blue=2)``.
 
@@ -2071,6 +2150,121 @@ pairs within braces, for example: ``{'jack': 4098, 'sjoerd': 4127}`` or ``{4098:
 
       Return a copy of the dictionary's list of values.  See the note for
       :meth:`dict.items`.
+
+   .. method:: viewitems()
+
+      Return a new view of the dictionary's items (``(key, value)`` pairs).  See
+      below for documentation of view objects.
+
+      .. versionadded:: 2.7
+
+   .. method:: viewkeys()
+
+      Return a new view of the dictionary's keys.  See below for documentation of
+      view objects.
+
+      .. versionadded:: 2.7
+
+   .. method:: viewvalues()
+
+      Return a new view of the dictionary's values.  See below for documentation of
+      view objects.
+
+      .. versionadded:: 2.7
+
+
+.. _dict-views:
+
+Dictionary view objects
+-----------------------
+
+The objects returned by :meth:`dict.viewkeys`, :meth:`dict.viewvalues` and
+:meth:`dict.viewitems` are *view objects*.  They provide a dynamic view on the
+dictionary's entries, which means that when the dictionary changes, the view
+reflects these changes.
+
+Dictionary views can be iterated over to yield their respective data, and
+support membership tests:
+
+.. describe:: len(dictview)
+
+   Return the number of entries in the dictionary.
+
+.. describe:: iter(dictview)
+
+   Return an iterator over the keys, values or items (represented as tuples of
+   ``(key, value)``) in the dictionary.
+
+   Keys and values are iterated over in an arbitrary order which is non-random,
+   varies across Python implementations, and depends on the dictionary's history
+   of insertions and deletions. If keys, values and items views are iterated
+   over with no intervening modifications to the dictionary, the order of items
+   will directly correspond.  This allows the creation of ``(value, key)`` pairs
+   using :func:`zip`: ``pairs = zip(d.values(), d.keys())``.  Another way to
+   create the same list is ``pairs = [(v, k) for (k, v) in d.items()]``.
+
+   Iterating views while adding or deleting entries in the dictionary may raise
+   a :exc:`RuntimeError` or fail to iterate over all entries.
+
+.. describe:: x in dictview
+
+   Return ``True`` if *x* is in the underlying dictionary's keys, values or
+   items (in the latter case, *x* should be a ``(key, value)`` tuple).
+
+
+Keys views are set-like since their entries are unique and hashable.  If all
+values are hashable, so that (key, value) pairs are unique and hashable, then
+the items view is also set-like.  (Values views are not treated as set-like
+since the entries are generally not unique.)  Then these set operations are
+available ("other" refers either to another view or a set):
+
+.. describe:: dictview & other
+
+   Return the intersection of the dictview and the other object as a new set.
+
+.. describe:: dictview | other
+
+   Return the union of the dictview and the other object as a new set.
+
+.. describe:: dictview - other
+
+   Return the difference between the dictview and the other object (all elements
+   in *dictview* that aren't in *other*) as a new set.
+
+.. describe:: dictview ^ other
+
+   Return the symmetric difference (all elements either in *dictview* or
+   *other*, but not in both) of the dictview and the other object as a new set.
+
+
+An example of dictionary view usage::
+
+   >>> dishes = {'eggs': 2, 'sausage': 1, 'bacon': 1, 'spam': 500}
+   >>> keys = dishes.viewkeys()
+   >>> values = dishes.viewvalues()
+
+   >>> # iteration
+   >>> n = 0
+   >>> for val in values:
+   ...     n += val
+   >>> print(n)
+   504
+
+   >>> # keys and values are iterated over in the same order
+   >>> list(keys)
+   ['eggs', 'bacon', 'sausage', 'spam']
+   >>> list(values)
+   [2, 1, 1, 500]
+
+   >>> # view objects are dynamic and reflect dict changes
+   >>> del dishes['eggs']
+   >>> del dishes['sausage']
+   >>> list(keys)
+   ['spam', 'bacon']
+
+   >>> # set operations
+   >>> keys & {'eggs', 'bacon', 'salad'}
+   {'bacon'}
 
 
 .. _bltin-file-objects:
@@ -2137,7 +2331,7 @@ Files have the following methods:
 
 .. method:: file.flush()
 
-   Flush the internal buffer, like ``stdio``'s :cfunc:`fflush`.  This may be a
+   Flush the internal buffer, like ``stdio``'s :c:func:`fflush`.  This may be a
    no-op on some file-like objects.
 
    .. note::
@@ -2178,12 +2372,12 @@ Files have the following methods:
    A file object is its own iterator, for example ``iter(f)`` returns *f* (unless
    *f* is closed).  When a file is used as an iterator, typically in a
    :keyword:`for` loop (for example, ``for line in f: print line``), the
-   :meth:`.next` method is called repeatedly.  This method returns the next input
+   :meth:`~file.next` method is called repeatedly.  This method returns the next input
    line, or raises :exc:`StopIteration` when EOF is hit when the file is open for
    reading (behavior is undefined when the file is open for writing).  In order to
    make a :keyword:`for` loop the most efficient way of looping over the lines of a
-   file (a very common operation), the :meth:`next` method uses a hidden read-ahead
-   buffer.  As a consequence of using a read-ahead buffer, combining :meth:`.next`
+   file (a very common operation), the :meth:`~file.next` method uses a hidden read-ahead
+   buffer.  As a consequence of using a read-ahead buffer, combining :meth:`~file.next`
    with other file methods (like :meth:`readline`) does not work right.  However,
    using :meth:`seek` to reposition the file to an absolute position will flush the
    read-ahead buffer.
@@ -2198,28 +2392,29 @@ Files have the following methods:
    all data until EOF is reached.  The bytes are returned as a string object.  An
    empty string is returned when EOF is encountered immediately.  (For certain
    files, like ttys, it makes sense to continue reading after an EOF is hit.)  Note
-   that this method may call the underlying C function :cfunc:`fread` more than
+   that this method may call the underlying C function :c:func:`fread` more than
    once in an effort to acquire as close to *size* bytes as possible. Also note
    that when in non-blocking mode, less data than was requested may be
    returned, even if no *size* parameter was given.
 
    .. note::
       This function is simply a wrapper for the underlying
-      :cfunc:`fread` C function, and will behave the same in corner cases,
+      :c:func:`fread` C function, and will behave the same in corner cases,
       such as whether the EOF value is cached.
 
 
 .. method:: file.readline([size])
 
-   Read one entire line from the file.  A trailing newline character is kept in the
-   string (but may be absent when a file ends with an incomplete line). [#]_  If
-   the *size* argument is present and non-negative, it is a maximum byte count
-   (including the trailing newline) and an incomplete line may be returned. An
-   empty string is returned *only* when EOF is encountered immediately.
+   Read one entire line from the file.  A trailing newline character is kept in
+   the string (but may be absent when a file ends with an incomplete line). [6]_
+   If the *size* argument is present and non-negative, it is a maximum byte
+   count (including the trailing newline) and an incomplete line may be
+   returned. When *size* is not 0, an empty string is returned *only* when EOF
+   is encountered immediately.
 
    .. note::
 
-      Unlike ``stdio``'s :cfunc:`fgets`, the returned string contains null characters
+      Unlike ``stdio``'s :c:func:`fgets`, the returned string contains null characters
       (``'\0'``) if they occurred in the input.
 
 
@@ -2245,7 +2440,7 @@ Files have the following methods:
 
 .. method:: file.seek(offset[, whence])
 
-   Set the file's current position, like ``stdio``'s :cfunc:`fseek`. The *whence*
+   Set the file's current position, like ``stdio``'s :c:func:`fseek`. The *whence*
    argument is optional and defaults to  ``os.SEEK_SET`` or ``0`` (absolute file
    positioning); other values are ``os.SEEK_CUR`` or ``1`` (seek relative to the
    current position) and ``os.SEEK_END`` or ``2``  (seek relative to the file's
@@ -2270,11 +2465,11 @@ Files have the following methods:
 
 .. method:: file.tell()
 
-   Return the file's current position, like ``stdio``'s :cfunc:`ftell`.
+   Return the file's current position, like ``stdio``'s :c:func:`ftell`.
 
    .. note::
 
-      On Windows, :meth:`tell` can return illegal values (after an :cfunc:`fgets`)
+      On Windows, :meth:`tell` can return illegal values (after an :c:func:`fgets`)
       when reading files with Unix-style line-endings. Use binary mode (``'rb'``) to
       circumvent this problem.
 
@@ -2357,14 +2552,14 @@ the particular object.
 
 .. attribute:: file.newlines
 
-   If Python was built with the :option:`--with-universal-newlines` option to
-   :program:`configure` (the default) this read-only attribute exists, and for
-   files opened in universal newline read mode it keeps track of the types of
-   newlines encountered while reading the file. The values it can take are
-   ``'\r'``, ``'\n'``, ``'\r\n'``, ``None`` (unknown, no newlines read yet) or a
-   tuple containing all the newline types seen, to indicate that multiple newline
-   conventions were encountered. For files not opened in universal newline read
-   mode the value of this attribute will be ``None``.
+   If Python was built with universal newlines enabled (the default) this
+   read-only attribute exists, and for files opened in universal newline read
+   mode it keeps track of the types of newlines encountered while reading the
+   file. The values it can take are ``'\r'``, ``'\n'``, ``'\r\n'``, ``None``
+   (unknown, no newlines read yet) or a tuple containing all the newline types
+   seen, to indicate that multiple newline conventions were encountered. For
+   files not opened in universal newline read mode the value of this attribute
+   will be ``None``.
 
 
 .. attribute:: file.softspace
@@ -2382,6 +2577,117 @@ the particular object.
       This attribute is not used to control the :keyword:`print` statement, but to
       allow the implementation of :keyword:`print` to keep track of its internal
       state.
+
+
+.. _typememoryview:
+
+memoryview type
+===============
+
+.. versionadded:: 2.7
+
+:class:`memoryview` objects allow Python code to access the internal data
+of an object that supports the buffer protocol without copying.  Memory
+is generally interpreted as simple bytes.
+
+.. class:: memoryview(obj)
+
+   Create a :class:`memoryview` that references *obj*.  *obj* must support the
+   buffer protocol.  Built-in objects that support the buffer protocol include
+   :class:`str` and :class:`bytearray` (but not :class:`unicode`).
+
+   A :class:`memoryview` has the notion of an *element*, which is the
+   atomic memory unit handled by the originating object *obj*.  For many
+   simple types such as :class:`str` and :class:`bytearray`, an element
+   is a single byte, but other third-party types may expose larger elements.
+
+   ``len(view)`` returns the total number of elements in the memoryview,
+   *view*.  The :class:`~memoryview.itemsize` attribute will give you the
+   number of bytes in a single element.
+
+   A :class:`memoryview` supports slicing to expose its data.  Taking a single
+   index will return a single element as a :class:`str` object.  Full
+   slicing will result in a subview::
+
+      >>> v = memoryview('abcefg')
+      >>> v[1]
+      'b'
+      >>> v[-1]
+      'g'
+      >>> v[1:4]
+      <memory at 0x77ab28>
+      >>> v[1:4].tobytes()
+      'bce'
+
+   If the object the memoryview is over supports changing its data, the
+   memoryview supports slice assignment::
+
+      >>> data = bytearray('abcefg')
+      >>> v = memoryview(data)
+      >>> v.readonly
+      False
+      >>> v[0] = 'z'
+      >>> data
+      bytearray(b'zbcefg')
+      >>> v[1:4] = '123'
+      >>> data
+      bytearray(b'z123fg')
+      >>> v[2] = 'spam'
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: cannot modify size of memoryview object
+
+   Notice how the size of the memoryview object cannot be changed.
+
+   :class:`memoryview` has two methods:
+
+   .. method:: tobytes()
+
+      Return the data in the buffer as a bytestring (an object of class
+      :class:`str`). ::
+
+         >>> m = memoryview("abc")
+         >>> m.tobytes()
+         'abc'
+
+   .. method:: tolist()
+
+      Return the data in the buffer as a list of integers. ::
+
+         >>> memoryview("abc").tolist()
+         [97, 98, 99]
+
+   There are also several readonly attributes available:
+
+   .. attribute:: format
+
+      A string containing the format (in :mod:`struct` module style) for each
+      element in the view.  This defaults to ``'B'``, a simple bytestring.
+
+   .. attribute:: itemsize
+
+      The size in bytes of each element of the memoryview.
+
+   .. attribute:: shape
+
+      A tuple of integers the length of :attr:`ndim` giving the shape of the
+      memory as a N-dimensional array.
+
+   .. attribute:: ndim
+
+      An integer indicating how many dimensions of a multi-dimensional array the
+      memory represents.
+
+   .. attribute:: strides
+
+      A tuple of integers the length of :attr:`ndim` giving the size in bytes to
+      access each element for each dimension of the array.
+
+   .. attribute:: readonly
+
+      A bool indicating whether the memory is read only.
+
+   .. memoryview.suboffsets isn't documented because it only seems useful for C
 
 
 .. _typecontextmanager:
@@ -2485,7 +2791,7 @@ statement is not, strictly speaking, an operation on a module object; ``import
 foo`` does not require a module object named *foo* to exist, rather it requires
 an (external) *definition* for a module named *foo* somewhere.)
 
-A special member of every module is :attr:`__dict__`. This is the dictionary
+A special attribute of every module is :attr:`__dict__`. This is the dictionary
 containing the module's symbol table. Modifying this dictionary will actually
 change the module's symbol table, but direct assignment to the :attr:`__dict__`
 attribute is not possible (you can write ``m.__dict__['a'] = 1``, which defines
@@ -2628,7 +2934,18 @@ This object is used by extended slice notation (see :ref:`slicings`).  It
 supports no special operations.  There is exactly one ellipsis object, named
 :const:`Ellipsis` (a built-in name).
 
-It is written as ``Ellipsis``.
+It is written as ``Ellipsis``.  When in a subscript, it can also be written as
+``...``, for example ``seq[...]``.
+
+
+The NotImplemented Object
+-------------------------
+
+This object is returned from comparisons and binary operations when they are
+asked to operate on types they don't support. See :ref:`comparisons` for more
+information.
+
+It is written as ``NotImplemented``.
 
 
 Boolean Values
@@ -2638,9 +2955,9 @@ Boolean values are the two constant objects ``False`` and ``True``.  They are
 used to represent truth values (although other values can also be considered
 false or true).  In numeric contexts (for example when used as the argument to
 an arithmetic operator), they behave like the integers 0 and 1, respectively.
-The built-in function :func:`bool` can be used to cast any value to a Boolean,
-if the value can be interpreted as a truth value (see section Truth Value
-Testing above).
+The built-in function :func:`bool` can be used to convert any value to a
+Boolean, if the value can be interpreted as a truth value (see section
+:ref:`truth` above).
 
 .. index::
    single: False
@@ -2731,22 +3048,21 @@ The following attributes are only supported by :term:`new-style class`\ es.
 
 .. rubric:: Footnotes
 
-.. [#] Additional information on these special methods may be found in the Python
+.. [1] Additional information on these special methods may be found in the Python
    Reference Manual (:ref:`customization`).
 
-.. [#] As a consequence, the list ``[1, 2]`` is considered equal to ``[1.0, 2.0]``, and
+.. [2] As a consequence, the list ``[1, 2]`` is considered equal to ``[1.0, 2.0]``, and
    similarly for tuples.
 
-.. [#] They must have since the parser can't tell the type of the operands.
+.. [3] They must have since the parser can't tell the type of the operands.
 
-.. [#] To format only a tuple you should therefore provide a singleton tuple whose only
+.. [4] Cased characters are those with general category property being one of
+   "Lu" (Letter, uppercase), "Ll" (Letter, lowercase), or "Lt" (Letter, titlecase).
+
+.. [5] To format only a tuple you should therefore provide a singleton tuple whose only
    element is the tuple to be formatted.
 
-.. [#] These numbers are fairly arbitrary.  They are intended to avoid printing endless
-   strings of meaningless digits without hampering correct use and without having
-   to know the exact precision of floating point values on a particular machine.
-
-.. [#] The advantage of leaving the newline on is that returning an empty string is
+.. [6] The advantage of leaving the newline on is that returning an empty string is
    then an unambiguous EOF indication.  It is also possible (in cases where it
    might matter, for example, if you want to make an exact copy of a file while
    scanning its lines) to tell whether the last line of a file ended in a newline

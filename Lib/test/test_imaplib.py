@@ -7,13 +7,10 @@ threading = support.import_module('threading')
 from contextlib import contextmanager
 import imaplib
 import os.path
-import select
-import socket
 import SocketServer
-import sys
 import time
 
-from test_support import verbose
+from test_support import reap_threads, verbose, transient_internet
 import unittest
 
 try:
@@ -57,19 +54,10 @@ else:
 
     IMAP4_SSL = None
 
-class TimeoutStreamRequestHandler(SocketServer.StreamRequestHandler):
+
+class SimpleIMAPHandler(SocketServer.StreamRequestHandler):
 
     timeout = 1
-
-    def setup(self):
-        self.connection = self.request
-        if self.timeout is not None:
-            self.connection.settimeout(self.timeout)
-        self.rfile = self.connection.makefile('rb', self.rbufsize)
-        self.wfile = self.connection.makefile('wb', self.wbufsize)
-
-
-class SimpleIMAPHandler(TimeoutStreamRequestHandler):
 
     def _send(self, message):
         if verbose: print "SENT:", message.strip()
@@ -111,6 +99,7 @@ class SimpleIMAPHandler(TimeoutStreamRequestHandler):
         self._send('* CAPABILITY IMAP4rev1\r\n')
         self._send('%s OK CAPABILITY completed\r\n' % (tag,))
 
+
 class BaseThreadedNetworkedTests(unittest.TestCase):
 
     def make_server(self, addr, hdlr):
@@ -123,7 +112,7 @@ class BaseThreadedNetworkedTests(unittest.TestCase):
 
         if verbose: print "creating server"
         server = MyServer(addr, hdlr)
-        self.assertEquals(server.server_address, server.socket.getsockname())
+        self.assertEqual(server.server_address, server.socket.getsockname())
 
         if verbose:
             print "server created"
@@ -157,24 +146,24 @@ class BaseThreadedNetworkedTests(unittest.TestCase):
         finally:
             self.reap_server(server, thread)
 
+    @reap_threads
     def test_connect(self):
         with self.reaped_server(SimpleIMAPHandler) as server:
             client = self.imap_class(*server.server_address)
             client.shutdown()
 
+    @reap_threads
     def test_issue5949(self):
 
-        class EOFHandler(TimeoutStreamRequestHandler):
+        class EOFHandler(SocketServer.StreamRequestHandler):
             def handle(self):
                 # EOF without sending a complete welcome message.
                 self.wfile.write('* OK')
-                # explicitly shutdown.  socket.close() merely releases
-                # the socket and waits for GC to perform the actual close.
-                self.request.shutdown(socket.SHUT_WR)
 
         with self.reaped_server(EOFHandler) as server:
             self.assertRaises(imaplib.IMAP4.abort,
                               self.imap_class, *server.server_address)
+
 
 class ThreadedNetworkedTests(BaseThreadedNetworkedTests):
 
@@ -182,10 +171,50 @@ class ThreadedNetworkedTests(BaseThreadedNetworkedTests):
     imap_class = imaplib.IMAP4
 
 
+@unittest.skipUnless(ssl, "SSL not available")
 class ThreadedNetworkedTestsSSL(BaseThreadedNetworkedTests):
 
     server_class = SecureTCPServer
     imap_class = IMAP4_SSL
+
+
+class RemoteIMAPTest(unittest.TestCase):
+    host = 'cyrus.andrew.cmu.edu'
+    port = 143
+    username = 'anonymous'
+    password = 'pass'
+    imap_class = imaplib.IMAP4
+
+    def setUp(self):
+        with transient_internet(self.host):
+            self.server = self.imap_class(self.host, self.port)
+
+    def tearDown(self):
+        if self.server is not None:
+            self.server.logout()
+
+    def test_logincapa(self):
+        self.assertTrue('LOGINDISABLED' in self.server.capabilities)
+
+    def test_anonlogin(self):
+        self.assertTrue('AUTH=ANONYMOUS' in self.server.capabilities)
+        rs = self.server.login(self.username, self.password)
+        self.assertEqual(rs[0], 'OK')
+
+    def test_logout(self):
+        rs = self.server.logout()
+        self.server = None
+        self.assertEqual(rs[0], 'BYE')
+
+
+@unittest.skipUnless(ssl, "SSL not available")
+class RemoteIMAP_SSLTest(RemoteIMAPTest):
+    port = 993
+    imap_class = IMAP4_SSL
+
+    def test_logincapa(self):
+        self.assertFalse('LOGINDISABLED' in self.server.capabilities)
+        self.assertTrue('AUTH=PLAIN' in self.server.capabilities)
 
 
 def test_main():
@@ -198,14 +227,13 @@ def test_main():
                                     "keycert.pem")
             if not os.path.exists(CERTFILE):
                 raise support.TestFailed("Can't read certificate files!")
-            tests.append(ThreadedNetworkedTestsSSL)
-        tests.append(ThreadedNetworkedTests)
-
-    threadinfo = support.threading_setup()
+        tests.extend([
+            ThreadedNetworkedTests, ThreadedNetworkedTestsSSL,
+            RemoteIMAPTest, RemoteIMAP_SSLTest,
+        ])
 
     support.run_unittest(*tests)
 
-    support.threading_cleanup(*threadinfo)
 
 if __name__ == "__main__":
     support.use_resources = ['network']

@@ -1,4 +1,4 @@
-:mod:`queue` --- A synchronized queue class
+:mod:`Queue` --- A synchronized queue class
 ===========================================
 
 .. module:: Queue
@@ -9,6 +9,9 @@
    :term:`2to3` tool will automatically adapt imports when converting your
    sources to 3.0.
 
+**Source code:** :source:`Lib/Queue.py`
+
+--------------
 
 The :mod:`Queue` module implements multi-producer, multi-consumer queues.
 It is especially useful in threaded programming when information must be
@@ -183,7 +186,7 @@ Example of how to wait for enqueued tasks to be completed::
    q = Queue()
    for i in range(num_worker_threads):
         t = Thread(target=worker)
-        t.setDaemon(True)
+        t.daemon = True
         t.start()
 
    for item in source():

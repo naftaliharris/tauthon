@@ -40,10 +40,11 @@ static int
 my_fgets(char *buf, int len, FILE *fp)
 {
     char *p;
-    for (;;) {
+    while (1) {
         if (PyOS_InputHook != NULL)
             (void)(PyOS_InputHook)();
         errno = 0;
+        clearerr(fp);
         p = fgets(buf, len, fp);
         if (p != NULL)
             return 0; /* No error */
@@ -77,6 +78,7 @@ my_fgets(char *buf, int len, FILE *fp)
         }
 #endif /* MS_WINDOWS */
         if (feof(fp)) {
+            clearerr(fp);
             return -1; /* EOF */
         }
 #ifdef EINTR
@@ -89,9 +91,10 @@ my_fgets(char *buf, int len, FILE *fp)
 #ifdef WITH_THREAD
             PyEval_SaveThread();
 #endif
-            if (s < 0) {
-                return 1;
-            }
+            if (s < 0)
+                    return 1;
+	    /* try again */
+            continue;
         }
 #endif
         if (PyOS_InterruptOccurred()) {

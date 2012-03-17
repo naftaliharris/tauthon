@@ -95,7 +95,7 @@ works its magic::
    $
 
 There's no output!  That's normal, and it means all the examples worked.  Pass
-:option:`-v` to the script, and :mod:`doctest` prints a detailed log of what
+``-v`` to the script, and :mod:`doctest` prints a detailed log of what
 it's trying, and prints a summary at the end::
 
    $ python example.py -v
@@ -163,7 +163,7 @@ example(s) and the cause(s) of the failure(s) are printed to stdout, and the
 final line of output is ``***Test Failed*** N failures.``, where *N* is the
 number of examples that failed.
 
-Run it with the :option:`-v` switch instead::
+Run it with the ``-v`` switch instead::
 
    python M.py -v
 
@@ -172,7 +172,7 @@ with assorted summaries at the end.
 
 You can force verbose mode by passing ``verbose=True`` to :func:`testmod`, or
 prohibit it by passing ``verbose=False``.  In either of those cases,
-``sys.argv`` is not examined by :func:`testmod` (so passing :option:`-v` or not
+``sys.argv`` is not examined by :func:`testmod` (so passing ``-v`` or not
 has no effect).
 
 Since Python 2.6, there is also a command line shortcut for running
@@ -242,7 +242,7 @@ See section :ref:`doctest-basic-api` for a description of the optional arguments
 that can be used to tell it to look for files in other locations.
 
 Like :func:`testmod`, :func:`testfile`'s verbosity can be set with the
-:option:`-v` command-line switch or with the optional keyword argument
+``-v`` command-line switch or with the optional keyword argument
 *verbose*.
 
 Since Python 2.6, there is also a command line shortcut for running
@@ -331,7 +331,7 @@ The fine print:
   blank line, put ``<BLANKLINE>`` in your doctest example each place a blank line
   is expected.
 
-  .. versionchanged:: 2.4
+  .. versionadded:: 2.4
      ``<BLANKLINE>`` was added; there was no way to use expected output containing
      empty lines in previous versions.
 
@@ -446,6 +446,9 @@ multi-line detail::
 The last three lines (starting with :exc:`ValueError`) are compared against the
 exception's type and detail, and the rest are ignored.
 
+.. versionchanged:: 2.4
+   Previous versions were unable to handle multi-line exception details.
+
 Best practice is to omit the traceback stack, unless it adds significant
 documentation value to the example.  So the last example is probably better as::
 
@@ -477,8 +480,9 @@ Some details you should read once, but won't need to remember:
   with an alphanumeric is taken to be the start of the exception detail.  Of
   course this does the right thing for genuine tracebacks.
 
-* When the :const:`IGNORE_EXCEPTION_DETAIL` doctest option is is specified,
-  everything following the leftmost colon is ignored.
+* When the :const:`IGNORE_EXCEPTION_DETAIL` doctest option is specified,
+  everything following the leftmost colon and any module information in the
+  exception name is ignored.
 
 * The interactive shell omits the traceback header line for some
   :exc:`SyntaxError`\ s.  But doctest uses the traceback header line to
@@ -505,10 +509,6 @@ Some details you should read once, but won't need to remember:
          1 1
          ^
      SyntaxError: invalid syntax
-
-.. versionchanged:: 2.4
-   The ability to handle a multi-line exception detail, and the
-   :const:`IGNORE_EXCEPTION_DETAIL` doctest option, were added.
 
 
 .. _doctest-options:
@@ -572,20 +572,38 @@ doctest decides whether actual output matches an example's expected output:
    exception raised is ``ValueError: 3*14``, but will fail, e.g., if
    :exc:`TypeError` is raised.
 
-   Note that a similar effect can be obtained using :const:`ELLIPSIS`, and
-   :const:`IGNORE_EXCEPTION_DETAIL` may go away when Python releases prior to 2.4
-   become uninteresting.  Until then, :const:`IGNORE_EXCEPTION_DETAIL` is the only
-   clear way to write a doctest that doesn't care about the exception detail yet
-   continues to pass under Python releases prior to 2.4 (doctest directives appear
-   to be comments to them).  For example, ::
+   It will also ignore the module name used in Python 3 doctest reports. Hence
+   both these variations will work regardless of whether the test is run under
+   Python 2.7 or Python 3.2 (or later versions):
+
+      >>> raise CustomError('message') #doctest: +IGNORE_EXCEPTION_DETAIL
+      Traceback (most recent call last):
+      CustomError: message
+
+      >>> raise CustomError('message') #doctest: +IGNORE_EXCEPTION_DETAIL
+      Traceback (most recent call last):
+      my_module.CustomError: message
+
+   Note that :const:`ELLIPSIS` can also be used to ignore the
+   details of the exception message, but such a test may still fail based
+   on whether or not the module details are printed as part of the
+   exception name. Using :const:`IGNORE_EXCEPTION_DETAIL` and the details
+   from Python 2.3 is also the only clear way to write a doctest that doesn't
+   care about the exception detail yet continues to pass under Python 2.3 or
+   earlier (those releases do not support doctest directives and ignore them
+   as irrelevant comments). For example, ::
 
       >>> (1, 2)[3] = 'moo' #doctest: +IGNORE_EXCEPTION_DETAIL
       Traceback (most recent call last):
         File "<stdin>", line 1, in ?
       TypeError: object doesn't support item assignment
 
-   passes under Python 2.4 and Python 2.3.  The detail changed in 2.4, to say "does
-   not" instead of "doesn't".
+   passes under Python 2.3 and later Python versions, even though the detail
+   changed in Python 2.4 to say "does not" instead of "doesn't".
+
+   .. versionchanged:: 2.7
+      :const:`IGNORE_EXCEPTION_DETAIL` now also ignores any information
+      relating to the module containing the exception under test
 
 
 .. data:: SKIP
@@ -597,6 +615,8 @@ doctest decides whether actual output matches an example's expected output:
    depend on resources which would be unavailable to the test driver.
 
    The SKIP flag can also be used for temporarily "commenting out" examples.
+
+.. versionadded:: 2.5
 
 
 .. data:: COMPARISON_FLAGS
@@ -700,17 +720,13 @@ usually the only meaningful choice.  However, option flags can also be passed to
 functions that run doctests, establishing different defaults.  In such cases,
 disabling an option via ``-`` in a directive can be useful.
 
-.. versionchanged:: 2.4
-   Constants :const:`DONT_ACCEPT_BLANKLINE`, :const:`NORMALIZE_WHITESPACE`,
+.. versionadded:: 2.4
+   Doctest directives and the associated constants
+   :const:`DONT_ACCEPT_BLANKLINE`, :const:`NORMALIZE_WHITESPACE`,
    :const:`ELLIPSIS`, :const:`IGNORE_EXCEPTION_DETAIL`, :const:`REPORT_UDIFF`,
    :const:`REPORT_CDIFF`, :const:`REPORT_NDIFF`,
    :const:`REPORT_ONLY_FIRST_FAILURE`, :const:`COMPARISON_FLAGS` and
-   :const:`REPORTING_FLAGS` were added; by default ``<BLANKLINE>`` in expected
-   output matches an empty line in actual output; and doctest directives were
-   added.
-
-.. versionchanged:: 2.5
-   Constant :const:`SKIP` was added.
+   :const:`REPORTING_FLAGS` were added.
 
 There's also a way to register new option flag names, although this isn't useful
 unless you intend to extend :mod:`doctest` internals via subclassing:
@@ -956,18 +972,17 @@ serious Python testing frameworks build on the :mod:`unittest` module, which
 supplies many flexible ways to combine tests from multiple sources.  So, in
 Python 2.4, :mod:`doctest`'s :class:`Tester` class is deprecated, and
 :mod:`doctest` provides two functions that can be used to create :mod:`unittest`
-test suites from modules and text files containing doctests.  These test suites
-can then be run using :mod:`unittest` test runners::
+test suites from modules and text files containing doctests.  To integrate with
+:mod:`unittest` test discovery, include a :func:`load_tests` function in your
+test module::
 
    import unittest
    import doctest
-   import my_module_with_doctests, and_another
+   import my_module_with_doctests
 
-   suite = unittest.TestSuite()
-   for mod in my_module_with_doctests, and_another:
-       suite.addTest(doctest.DocTestSuite(mod))
-   runner = unittest.TextTestRunner()
-   runner.run(suite)
+   def load_tests(loader, tests, ignore):
+       tests.addTests(doctest.DocTestSuite(my_module_with_doctests))
+       return tests
 
 There are two main functions for creating :class:`unittest.TestSuite` instances
 from text files and modules with doctests:
@@ -1184,12 +1199,11 @@ DocTest Objects
 .. class:: DocTest(examples, globs, name, filename, lineno, docstring)
 
    A collection of doctest examples that should be run in a single namespace.  The
-   constructor arguments are used to initialize the member variables of the same
-   names.
+   constructor arguments are used to initialize the attributes of the same names.
 
    .. versionadded:: 2.4
 
-   :class:`DocTest` defines the following member variables.  They are initialized by
+   :class:`DocTest` defines the following attributes.  They are initialized by
    the constructor, and should not be modified directly.
 
 
@@ -1242,12 +1256,12 @@ Example Objects
 .. class:: Example(source, want[, exc_msg][, lineno][, indent][, options])
 
    A single interactive example, consisting of a Python statement and its expected
-   output.  The constructor arguments are used to initialize the member variables
-   of the same names.
+   output.  The constructor arguments are used to initialize the attributes of the
+   same names.
 
    .. versionadded:: 2.4
 
-   :class:`Example` defines the following member variables.  They are initialized by
+   :class:`Example` defines the following attributes.  They are initialized by
    the constructor, and should not be modified directly.
 
 
@@ -1438,7 +1452,7 @@ DocTestRunner objects
    verbosity.  If *verbose* is ``True``, then information is printed about each
    example, as it is run.  If *verbose* is ``False``, then only failures are
    printed.  If *verbose* is unspecified, or ``None``, then verbose output is used
-   iff the command-line switch :option:`-v` is used.
+   iff the command-line switch ``-v`` is used.
 
    The optional keyword argument *optionflags* can be used to control how the test
    runner compares expected output to actual output, and how it displays failures.
@@ -1753,11 +1767,11 @@ There are two exceptions that may be raised by :class:`DebugRunner` instances:
 
 .. exception:: DocTestFailure(test, example, got)
 
-   An exception thrown by :class:`DocTestRunner` to signal that a doctest example's
+   An exception raised by :class:`DocTestRunner` to signal that a doctest example's
    actual output did not match its expected output. The constructor arguments are
-   used to initialize the member variables of the same names.
+   used to initialize the attributes of the same names.
 
-:exc:`DocTestFailure` defines the following member variables:
+:exc:`DocTestFailure` defines the following attributes:
 
 
 .. attribute:: DocTestFailure.test
@@ -1777,11 +1791,11 @@ There are two exceptions that may be raised by :class:`DebugRunner` instances:
 
 .. exception:: UnexpectedException(test, example, exc_info)
 
-   An exception thrown by :class:`DocTestRunner` to signal that a doctest example
-   raised an unexpected exception.  The constructor arguments are used to
-   initialize the member variables of the same names.
+   An exception raised by :class:`DocTestRunner` to signal that a doctest
+   example raised an unexpected exception.  The constructor arguments are used
+   to initialize the attributes of the same names.
 
-:exc:`UnexpectedException` defines the following member variables:
+:exc:`UnexpectedException` defines the following attributes:
 
 
 .. attribute:: UnexpectedException.test

@@ -10,15 +10,15 @@ import unittest
 
 from test import test_support
 if not hasattr(select, "kqueue"):
-    raise test_support.TestSkipped("test works only on BSD")
+    raise unittest.SkipTest("test works only on BSD")
 
 class TestKQueue(unittest.TestCase):
     def test_create_queue(self):
         kq = select.kqueue()
-        self.assert_(kq.fileno() > 0, kq.fileno())
-        self.assert_(not kq.closed)
+        self.assertTrue(kq.fileno() > 0, kq.fileno())
+        self.assertTrue(not kq.closed)
         kq.close()
-        self.assert_(kq.closed)
+        self.assertTrue(kq.closed)
         self.assertRaises(ValueError, kq.fileno)
 
     def test_create_event(self):
@@ -34,8 +34,8 @@ class TestKQueue(unittest.TestCase):
         self.assertEqual(ev, ev)
         self.assertNotEqual(ev, other)
         self.assertEqual(cmp(ev, other), -1)
-        self.assert_(ev < other)
-        self.assert_(other >= ev)
+        self.assertTrue(ev < other)
+        self.assertTrue(other >= ev)
         self.assertRaises(TypeError, cmp, ev, None)
         self.assertRaises(TypeError, cmp, ev, 1)
         self.assertRaises(TypeError, cmp, ev, "ev")
@@ -70,6 +70,17 @@ class TestKQueue(unittest.TestCase):
         self.assertEqual(ev, ev)
         self.assertNotEqual(ev, other)
 
+        bignum = sys.maxsize * 2 + 1
+        ev = select.kevent(bignum, 1, 2, 3, sys.maxsize, bignum)
+        self.assertEqual(ev.ident, bignum)
+        self.assertEqual(ev.filter, 1)
+        self.assertEqual(ev.flags, 2)
+        self.assertEqual(ev.fflags, 3)
+        self.assertEqual(ev.data, sys.maxsize)
+        self.assertEqual(ev.udata, bignum)
+        self.assertEqual(ev, ev)
+        self.assertNotEqual(ev, other)
+
     def test_queue_event(self):
         serverSocket = socket.socket()
         serverSocket.bind(('127.0.0.1', 0))
@@ -79,7 +90,7 @@ class TestKQueue(unittest.TestCase):
         try:
             client.connect(('127.0.0.1', serverSocket.getsockname()[1]))
         except socket.error, e:
-            self.assertEquals(e.args[0], errno.EINPROGRESS)
+            self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             #raise AssertionError("Connect should have raised EINPROGRESS")
             pass # FreeBSD doesn't raise an exception here
@@ -113,7 +124,7 @@ class TestKQueue(unittest.TestCase):
         events = kq.control(None, 4, 1)
         events = [(e.ident, e.filter, e.flags) for e in events]
         events.sort()
-        self.assertEquals(events, [
+        self.assertEqual(events, [
             (client.fileno(), select.KQ_FILTER_WRITE, flags),
             (server.fileno(), select.KQ_FILTER_WRITE, flags)])
 
@@ -132,7 +143,7 @@ class TestKQueue(unittest.TestCase):
         events = [(e.ident, e.filter, e.flags) for e in events]
         events.sort()
 
-        self.assertEquals(events, [
+        self.assertEqual(events, [
             (client.fileno(), select.KQ_FILTER_WRITE, flags),
             (client.fileno(), select.KQ_FILTER_READ, flags),
             (server.fileno(), select.KQ_FILTER_WRITE, flags),
@@ -155,7 +166,7 @@ class TestKQueue(unittest.TestCase):
         events = kq.control([], 4, 0.99)
         events = [(e.ident, e.filter, e.flags) for e in events]
         events.sort()
-        self.assertEquals(events, [
+        self.assertEqual(events, [
             (server.fileno(), select.KQ_FILTER_WRITE, flags)])
 
         client.close()
@@ -172,7 +183,7 @@ class TestKQueue(unittest.TestCase):
         r = kq.control([event1, event2], 1, 1)
         self.assertTrue(r)
         self.assertFalse(r[0].flags & select.KQ_EV_ERROR)
-        self.assertEquals(b.recv(r[0].data), b'foo')
+        self.assertEqual(b.recv(r[0].data), b'foo')
 
         a.close()
         b.close()

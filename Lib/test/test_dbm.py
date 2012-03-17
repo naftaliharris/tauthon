@@ -1,6 +1,6 @@
 from test import test_support
 import unittest
-import dbm
+dbm = test_support.import_module('dbm')
 
 class DbmTestCase(unittest.TestCase):
 
@@ -21,9 +21,9 @@ class DbmTestCase(unittest.TestCase):
             self.d[k] = v
         self.assertEqual(sorted(self.d.keys()), sorted(k for (k, v) in a))
         for k, v in a:
-            self.assert_(k in self.d)
+            self.assertIn(k, self.d)
             self.assertEqual(self.d[k], v)
-        self.assert_('xxx' not in self.d)
+        self.assertNotIn('xxx', self.d)
         self.assertRaises(KeyError, lambda: self.d['xxx'])
         self.d.close()
 

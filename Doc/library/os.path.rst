@@ -196,10 +196,11 @@ write files see :func:`open`, and for accessing the filesystem see the
    path, all previous components (on Windows, including the previous drive letter,
    if there was one) are thrown away, and joining continues.  The return value is
    the concatenation of *path1*, and optionally *path2*, etc., with exactly one
-   directory separator (``os.sep``) inserted between components, unless *path2* is
-   empty.  Note that on Windows, since there is a current directory for each drive,
-   ``os.path.join("c:", "foo")`` represents a path relative to the current
-   directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
+   directory separator (``os.sep``) following each non-empty part except the last.
+   (This means that an empty last part will result in a path that ends with a
+   separator.)  Note that on Windows, since there is a current directory for
+   each drive, ``os.path.join("c:", "foo")`` represents a path relative to the
+   current directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
 
 
 .. function:: normcase(path)
@@ -268,14 +269,14 @@ write files see :func:`open`, and for accessing the filesystem see the
 
 .. function:: split(path)
 
-   Split the pathname *path* into a pair, ``(head, tail)`` where *tail* is the last
-   pathname component and *head* is everything leading up to that.  The *tail* part
-   will never contain a slash; if *path* ends in a slash, *tail* will be empty.  If
-   there is no slash in *path*, *head* will be empty.  If *path* is empty, both
-   *head* and *tail* are empty.  Trailing slashes are stripped from *head* unless
-   it is the root (one or more slashes only).  In nearly all cases, ``join(head,
-   tail)`` equals *path* (the only exception being when there were multiple slashes
-   separating *head* from *tail*).
+   Split the pathname *path* into a pair, ``(head, tail)`` where *tail* is the
+   last pathname component and *head* is everything leading up to that.  The
+   *tail* part will never contain a slash; if *path* ends in a slash, *tail*
+   will be empty.  If there is no slash in *path*, *head* will be empty.  If
+   *path* is empty, both *head* and *tail* are empty.  Trailing slashes are
+   stripped from *head* unless it is the root (one or more slashes only).  In
+   all cases, ``join(head, tail)`` returns a path to the same location as *path*
+   (but the strings may differ).
 
 
 .. function:: splitdrive(path)
@@ -337,8 +338,7 @@ write files see :func:`open`, and for accessing the filesystem see the
 .. data:: supports_unicode_filenames
 
    True if arbitrary Unicode strings can be used as file names (within limitations
-   imposed by the file system), and if :func:`os.listdir` returns Unicode strings
-   for a Unicode argument.
+   imposed by the file system).
 
    .. versionadded:: 2.3
 

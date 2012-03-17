@@ -47,17 +47,17 @@ class CookieTests(unittest.TestCase):
 
         self.assertEqual(C.output(['path']),
             'Set-Cookie: Customer="WILE_E_COYOTE"; Path=/acme')
-        self.assertEqual(C.js_output(), """
+        self.assertEqual(C.js_output(), r"""
         <script type="text/javascript">
         <!-- begin hiding
-        document.cookie = "Customer="WILE_E_COYOTE"; Path=/acme; Version=1";
+        document.cookie = "Customer=\"WILE_E_COYOTE\"; Path=/acme; Version=1";
         // end hiding -->
         </script>
         """)
-        self.assertEqual(C.js_output(['path']), """
+        self.assertEqual(C.js_output(['path']), r"""
         <script type="text/javascript">
         <!-- begin hiding
-        document.cookie = "Customer="WILE_E_COYOTE"; Path=/acme";
+        document.cookie = "Customer=\"WILE_E_COYOTE\"; Path=/acme";
         // end hiding -->
         </script>
         """)
@@ -71,6 +71,14 @@ class CookieTests(unittest.TestCase):
         C.load('Customer="W"; expires=Wed, 01-Jan-98 00:00:00 GMT')
         self.assertEqual(C['Customer']['expires'],
                          'Wed, 01-Jan-98 00:00:00 GMT')
+
+    def test_extended_encode(self):
+        # Issue 9824: some browsers don't follow the standard; we now
+        # encode , and ; to keep them from tripping up.
+        C = Cookie.SimpleCookie()
+        C['val'] = "some,funky;stuff"
+        self.assertEqual(C.output(['val']),
+            'Set-Cookie: val="some\\054funky\\073stuff"')
 
     def test_quoted_meta(self):
         # Try cookie with quoted meta-data

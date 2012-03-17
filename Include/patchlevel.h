@@ -6,7 +6,7 @@
    defined(PY_MAJOR_VERSION).
 
    When the major or minor version changes, the VERSION variable in
-   configure.in must also be changed.
+   configure.ac must also be changed.
 
    There is also (independent) API version information in modsupport.h.
 */
@@ -21,17 +21,18 @@
 /* Version parsed out into numeric values */
 /*--start constants--*/
 #define PY_MAJOR_VERSION	2
-#define PY_MINOR_VERSION	6
-#define PY_MICRO_VERSION	8
+#define PY_MINOR_VERSION	7
+#define PY_MICRO_VERSION	3
 #define PY_RELEASE_LEVEL	PY_RELEASE_LEVEL_GAMMA
 #define PY_RELEASE_SERIAL	2
 
 /* Version as a string */
-#define PY_VERSION      	"2.6.8rc2"
+#define PY_VERSION      	"2.7.3rc2"
 /*--end constants--*/
 
-/* Subversion Revision number of this file (not of the repository) */
-#define PY_PATCHLEVEL_REVISION  "$Revision$"
+/* Subversion Revision number of this file (not of the repository). Empty
+   since Mercurial migration. */
+#define PY_PATCHLEVEL_REVISION  ""
 
 /* Version as a single 4-byte hex number, e.g. 0x010502B2 == 1.5.2b2.
    Use this for numeric comparisons, e.g. #if PY_VERSION_HEX >= ... */

@@ -107,7 +107,7 @@ appearance of the main window and priority for the new process.
 (Windows only)
 
 
-This module also defines two shortcut functions:
+This module also defines some shortcut functions:
 
 call(*popenargs, **kwargs):
     Run command with arguments.  Wait for command to complete, then
@@ -127,6 +127,18 @@ check_call(*popenargs, **kwargs):
 
     check_call(["ls", "-l"])
 
+check_output(*popenargs, **kwargs):
+    Run command with arguments and return its output as a byte string.
+
+    If the exit code was non-zero it raises a CalledProcessError.  The
+    CalledProcessError object will have the return code in the returncode
+    attribute and output in the output attribute.
+
+    The arguments are the same as for the Popen constructor.  Example:
+
+    output = check_output(["ls", "-l", "/dev/null"])
+
+
 Exceptions
 ----------
 Exceptions raised in the child process, before the new program has
@@ -141,8 +153,8 @@ should prepare for OSErrors.
 
 A ValueError will be raised if Popen is called with invalid arguments.
 
-check_call() will raise CalledProcessError, if the called process
-returns a non-zero return code.
+check_call() and check_output() will raise CalledProcessError, if the
+called process returns a non-zero return code.
 
 
 Security
@@ -337,7 +349,7 @@ Return code handling translates as follows:
 pipe = os.popen("cmd", 'w')
 ...
 rc = pipe.close()
-if rc != None and rc % 256:
+if rc is not None and rc % 256:
     print "There were some errors"
 ==>
 process = Popen("cmd", 'w', shell=True, stdin=PIPE)
@@ -384,21 +396,24 @@ import types
 import traceback
 import gc
 import signal
+import errno
 
 # Exception classes used by this module.
 class CalledProcessError(Exception):
-    """This exception is raised when a process run by check_call() returns
-    a non-zero exit status.  The exit status will be stored in the
-    returncode attribute."""
-    def __init__(self, returncode, cmd):
+    """This exception is raised when a process run by check_call() or
+    check_output() returns a non-zero exit status.
+    The exit status will be stored in the returncode attribute;
+    check_output() will also store the output in the output attribute.
+    """
+    def __init__(self, returncode, cmd, output=None):
         self.returncode = returncode
         self.cmd = cmd
+        self.output = output
     def __str__(self):
         return "Command '%s' returned non-zero exit status %d" % (self.cmd, self.returncode)
 
 
 if mswindows:
-    from _subprocess import CREATE_NEW_CONSOLE
     import threading
     import msvcrt
     import _subprocess
@@ -412,32 +427,40 @@ if mswindows:
         error = IOError
 else:
     import select
-    import errno
+    _has_poll = hasattr(select, 'poll')
     import fcntl
     import pickle
 
-__all__ = ["Popen", "PIPE", "STDOUT", "call", "check_call", "CalledProcessError"]
+    # When select or poll has indicated that the file is writable,
+    # we can write up to _PIPE_BUF bytes without risk of blocking.
+    # POSIX defines PIPE_BUF as >= 512.
+    _PIPE_BUF = getattr(select, 'PIPE_BUF', 512)
+
+
+__all__ = ["Popen", "PIPE", "STDOUT", "call", "check_call",
+           "check_output", "CalledProcessError"]
 
 if mswindows:
-    __all__.append("CREATE_NEW_CONSOLE")
+    from _subprocess import (CREATE_NEW_CONSOLE, CREATE_NEW_PROCESS_GROUP,
+                             STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+                             STD_ERROR_HANDLE, SW_HIDE,
+                             STARTF_USESTDHANDLES, STARTF_USESHOWWINDOW)
+
+    __all__.extend(["CREATE_NEW_CONSOLE", "CREATE_NEW_PROCESS_GROUP",
+                    "STD_INPUT_HANDLE", "STD_OUTPUT_HANDLE",
+                    "STD_ERROR_HANDLE", "SW_HIDE",
+                    "STARTF_USESTDHANDLES", "STARTF_USESHOWWINDOW"])
 try:
     MAXFD = os.sysconf("SC_OPEN_MAX")
 except:
     MAXFD = 256
-
-# True/False does not exist on 2.2.0
-#try:
-#    False
-#except NameError:
-#    False = 0
-#    True = 1
 
 _active = []
 
 def _cleanup():
     for inst in _active[:]:
         res = inst._internal_poll(_deadstate=sys.maxint)
-        if res is not None and res >= 0:
+        if res is not None:
             try:
                 _active.remove(inst)
             except ValueError:
@@ -453,7 +476,7 @@ def _eintr_retry_call(func, *args):
     while True:
         try:
             return func(*args)
-        except OSError, e:
+        except (OSError, IOError) as e:
             if e.errno == errno.EINTR:
                 continue
             raise
@@ -481,12 +504,45 @@ def check_call(*popenargs, **kwargs):
     check_call(["ls", "-l"])
     """
     retcode = call(*popenargs, **kwargs)
-    cmd = kwargs.get("args")
-    if cmd is None:
-        cmd = popenargs[0]
     if retcode:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = popenargs[0]
         raise CalledProcessError(retcode, cmd)
-    return retcode
+    return 0
+
+
+def check_output(*popenargs, **kwargs):
+    r"""Run command with arguments and return its output as a byte string.
+
+    If the exit code was non-zero it raises a CalledProcessError.  The
+    CalledProcessError object will have the return code in the returncode
+    attribute and output in the output attribute.
+
+    The arguments are the same as for the Popen constructor.  Example:
+
+    >>> check_output(["ls", "-l", "/dev/null"])
+    'crw-rw-rw- 1 root root 1, 3 Oct 18  2007 /dev/null\n'
+
+    The stdout argument is not allowed as it is used internally.
+    To capture standard error in the result, use stderr=STDOUT.
+
+    >>> check_output(["/bin/sh", "-c",
+    ...               "ls -l non_existent_file ; exit 0"],
+    ...              stderr=STDOUT)
+    'ls: non_existent_file: No such file or directory\n'
+    """
+    if 'stdout' in kwargs:
+        raise ValueError('stdout argument not allowed, it will be overridden.')
+    process = Popen(stdout=PIPE, *popenargs, **kwargs)
+    output, unused_err = process.communicate()
+    retcode = process.poll()
+    if retcode:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = popenargs[0]
+        raise CalledProcessError(retcode, cmd, output=output)
+    return output
 
 
 def list2cmdline(seq):
@@ -651,7 +707,10 @@ class Popen(object):
 
 
     def __del__(self, _maxint=sys.maxint, _active=_active):
-        if not self._child_created:
+        # If __init__ hasn't had a chance to execute (e.g. if it
+        # was passed an undeclared keyword argument), we don't
+        # have a _child_created attribute at all.
+        if not getattr(self, '_child_created', False):
             # We didn't get to successfully create a child process.
             return
         # In case the child hasn't been waited on, check if it's done.
@@ -677,13 +736,17 @@ class Popen(object):
             stderr = None
             if self.stdin:
                 if input:
-                    self.stdin.write(input)
+                    try:
+                        self.stdin.write(input)
+                    except IOError as e:
+                        if e.errno != errno.EPIPE and e.errno != errno.EINVAL:
+                            raise
                 self.stdin.close()
             elif self.stdout:
-                stdout = self.stdout.read()
+                stdout = _eintr_retry_call(self.stdout.read)
                 self.stdout.close()
             elif self.stderr:
-                stderr = self.stderr.read()
+                stderr = _eintr_retry_call(self.stderr.read)
                 self.stderr.close()
             self.wait()
             return (stdout, stderr)
@@ -700,7 +763,7 @@ class Popen(object):
         # Windows methods
         #
         def _get_handles(self, stdin, stdout, stderr):
-            """Construct and return tupel with IO objects:
+            """Construct and return tuple with IO objects:
             p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite
             """
             if stdin is None and stdout is None and stderr is None:
@@ -804,8 +867,8 @@ class Popen(object):
                 startupinfo.dwFlags |= _subprocess.STARTF_USESHOWWINDOW
                 startupinfo.wShowWindow = _subprocess.SW_HIDE
                 comspec = os.environ.get("COMSPEC", "cmd.exe")
-                args = comspec + " /c " + args
-                if (_subprocess.GetVersion() >= 0x80000000L or
+                args = '{} /c "{}"'.format (comspec, args)
+                if (_subprocess.GetVersion() >= 0x80000000 or
                         os.path.basename(comspec).lower() == "command.com"):
                     # Win9x, or using command.com on NT. We need to
                     # use the w9xpopen intermediate program. For more
@@ -834,29 +897,28 @@ class Popen(object):
             except pywintypes.error, e:
                 # Translate pywintypes.error to WindowsError, which is
                 # a subclass of OSError.  FIXME: We should really
-                # translate errno using _sys_errlist (or simliar), but
+                # translate errno using _sys_errlist (or similar), but
                 # how can this be done from Python?
                 raise WindowsError(*e.args)
+            finally:
+                # Child is launched. Close the parent's copy of those pipe
+                # handles that only the child should have open.  You need
+                # to make sure that no handles to the write end of the
+                # output pipe are maintained in this process or else the
+                # pipe will not close when the child process exits and the
+                # ReadFile will hang.
+                if p2cread is not None:
+                    p2cread.Close()
+                if c2pwrite is not None:
+                    c2pwrite.Close()
+                if errwrite is not None:
+                    errwrite.Close()
 
             # Retain the process handle, but close the thread handle
             self._child_created = True
             self._handle = hp
             self.pid = pid
             ht.Close()
-
-            # Child is launched. Close the parent's copy of those pipe
-            # handles that only the child should have open.  You need
-            # to make sure that no handles to the write end of the
-            # output pipe are maintained in this process or else the
-            # pipe will not close when the child process exits and the
-            # ReadFile will hang.
-            if p2cread is not None:
-                p2cread.Close()
-            if c2pwrite is not None:
-                c2pwrite.Close()
-            if errwrite is not None:
-                errwrite.Close()
-
 
         def _internal_poll(self, _deadstate=None,
                 _WaitForSingleObject=_subprocess.WaitForSingleObject,
@@ -908,7 +970,11 @@ class Popen(object):
 
             if self.stdin:
                 if input is not None:
-                    self.stdin.write(input)
+                    try:
+                        self.stdin.write(input)
+                    except IOError as e:
+                        if e.errno != errno.EPIPE:
+                            raise
                 self.stdin.close()
 
             if self.stdout:
@@ -940,13 +1006,27 @@ class Popen(object):
             """
             if sig == signal.SIGTERM:
                 self.terminate()
+            elif sig == signal.CTRL_C_EVENT:
+                os.kill(self.pid, signal.CTRL_C_EVENT)
+            elif sig == signal.CTRL_BREAK_EVENT:
+                os.kill(self.pid, signal.CTRL_BREAK_EVENT)
             else:
-                raise ValueError("Only SIGTERM is supported on Windows")
+                raise ValueError("Unsupported signal: {}".format(sig))
 
         def terminate(self):
             """Terminates the process
             """
-            _subprocess.TerminateProcess(self._handle, 1)
+            try:
+                _subprocess.TerminateProcess(self._handle, 1)
+            except OSError as e:
+                # ERROR_ACCESS_DENIED (winerror 5) is received when the
+                # process already died.
+                if e.winerror != 5:
+                    raise
+                rc = _subprocess.GetExitCodeProcess(self._handle)
+                if rc == _subprocess.STILL_ACTIVE:
+                    raise
+                self.returncode = rc
 
         kill = terminate
 
@@ -955,7 +1035,7 @@ class Popen(object):
         # POSIX methods
         #
         def _get_handles(self, stdin, stdout, stderr):
-            """Construct and return tupel with IO objects:
+            """Construct and return tuple with IO objects:
             p2cread, p2cwrite, c2pread, c2pwrite, errread, errwrite
             """
             p2cread, p2cwrite = None, None
@@ -965,7 +1045,7 @@ class Popen(object):
             if stdin is None:
                 pass
             elif stdin == PIPE:
-                p2cread, p2cwrite = os.pipe()
+                p2cread, p2cwrite = self.pipe_cloexec()
             elif isinstance(stdin, int):
                 p2cread = stdin
             else:
@@ -975,7 +1055,7 @@ class Popen(object):
             if stdout is None:
                 pass
             elif stdout == PIPE:
-                c2pread, c2pwrite = os.pipe()
+                c2pread, c2pwrite = self.pipe_cloexec()
             elif isinstance(stdout, int):
                 c2pwrite = stdout
             else:
@@ -985,7 +1065,7 @@ class Popen(object):
             if stderr is None:
                 pass
             elif stderr == PIPE:
-                errread, errwrite = os.pipe()
+                errread, errwrite = self.pipe_cloexec()
             elif stderr == STDOUT:
                 errwrite = c2pwrite
             elif isinstance(stderr, int):
@@ -999,19 +1079,43 @@ class Popen(object):
                     errread, errwrite)
 
 
-        def _set_cloexec_flag(self, fd):
+        def _set_cloexec_flag(self, fd, cloexec=True):
             try:
                 cloexec_flag = fcntl.FD_CLOEXEC
             except AttributeError:
                 cloexec_flag = 1
 
             old = fcntl.fcntl(fd, fcntl.F_GETFD)
-            fcntl.fcntl(fd, fcntl.F_SETFD, old | cloexec_flag)
+            if cloexec:
+                fcntl.fcntl(fd, fcntl.F_SETFD, old | cloexec_flag)
+            else:
+                fcntl.fcntl(fd, fcntl.F_SETFD, old & ~cloexec_flag)
+
+
+        def pipe_cloexec(self):
+            """Create a pipe with FDs set CLOEXEC."""
+            # Pipes' FDs are set CLOEXEC by default because we don't want them
+            # to be inherited by other subprocesses: the CLOEXEC flag is removed
+            # from the child's FDs by _dup2(), between fork() and exec().
+            # This is not atomic: we would need the pipe2() syscall for that.
+            r, w = os.pipe()
+            self._set_cloexec_flag(r)
+            self._set_cloexec_flag(w)
+            return r, w
 
 
         def _close_fds(self, but):
-            os.closerange(3, but)
-            os.closerange(but + 1, MAXFD)
+            if hasattr(os, 'closerange'):
+                os.closerange(3, but)
+                os.closerange(but + 1, MAXFD)
+            else:
+                for i in xrange(3, MAXFD):
+                    if i == but:
+                        continue
+                    try:
+                        os.close(i)
+                    except:
+                        pass
 
 
         def _execute_child(self, args, executable, preexec_fn, close_fds,
@@ -1038,11 +1142,9 @@ class Popen(object):
             # For transferring possible exec failure from child to parent
             # The first char specifies the exception type: 0 means
             # OSError, 1 means some other error.
-            errpipe_read, errpipe_write = os.pipe()
+            errpipe_read, errpipe_write = self.pipe_cloexec()
             try:
                 try:
-                    self._set_cloexec_flag(errpipe_write)
-
                     gc_was_enabled = gc.isenabled()
                     # Disable gc to avoid bug where gc -> file_dealloc ->
                     # write to stderr -> hang.  http://bugs.python.org/issue1336
@@ -1066,22 +1168,34 @@ class Popen(object):
                                 os.close(errread)
                             os.close(errpipe_read)
 
-                            # Dup fds for child
-                            if p2cread is not None:
-                                os.dup2(p2cread, 0)
-                            if c2pwrite is not None:
-                                os.dup2(c2pwrite, 1)
-                            if errwrite is not None:
-                                os.dup2(errwrite, 2)
+                            # When duping fds, if there arises a situation
+                            # where one of the fds is either 0, 1 or 2, it
+                            # is possible that it is overwritten (#12607).
+                            if c2pwrite == 0:
+                                c2pwrite = os.dup(c2pwrite)
+                            if errwrite == 0 or errwrite == 1:
+                                errwrite = os.dup(errwrite)
 
-                            # Close pipe fds.  Make sure we don't close the same
-                            # fd more than once, or standard fds.
-                            if p2cread is not None and p2cread not in (0,):
-                                os.close(p2cread)
-                            if c2pwrite is not None and c2pwrite not in (p2cread, 1):
-                                os.close(c2pwrite)
-                            if errwrite is not None and errwrite not in (p2cread, c2pwrite, 2):
-                                os.close(errwrite)
+                            # Dup fds for child
+                            def _dup2(a, b):
+                                # dup2() removes the CLOEXEC flag but
+                                # we must do it ourselves if dup2()
+                                # would be a no-op (issue #10806).
+                                if a == b:
+                                    self._set_cloexec_flag(a, False)
+                                elif a is not None:
+                                    os.dup2(a, b)
+                            _dup2(p2cread, 0)
+                            _dup2(c2pwrite, 1)
+                            _dup2(errwrite, 2)
+
+                            # Close pipe fds.  Make sure we don't close the
+                            # same fd more than once, or standard fds.
+                            closed = { None }
+                            for fd in [p2cread, c2pwrite, errwrite]:
+                                if fd not in closed and fd > 2:
+                                    os.close(fd)
+                                    closed.add(fd)
 
                             # Close all other fds, if asked for
                             if close_fds:
@@ -1133,7 +1247,11 @@ class Popen(object):
                 os.close(errpipe_read)
 
             if data != "":
-                _eintr_retry_call(os.waitpid, self.pid, 0)
+                try:
+                    _eintr_retry_call(os.waitpid, self.pid, 0)
+                except OSError as e:
+                    if e.errno != errno.ECHILD:
+                        raise
                 child_exception = pickle.loads(data)
                 for fd in (p2cwrite, c2pread, errread):
                     if fd is not None:
@@ -1179,65 +1297,31 @@ class Popen(object):
             """Wait for child process to terminate.  Returns returncode
             attribute."""
             if self.returncode is None:
-                pid, sts = _eintr_retry_call(os.waitpid, self.pid, 0)
+                try:
+                    pid, sts = _eintr_retry_call(os.waitpid, self.pid, 0)
+                except OSError as e:
+                    if e.errno != errno.ECHILD:
+                        raise
+                    # This happens if SIGCLD is set to be ignored or waiting
+                    # for child processes has otherwise been disabled for our
+                    # process.  This child is dead, we can't get the status.
+                    sts = 0
                 self._handle_exitstatus(sts)
             return self.returncode
 
 
         def _communicate(self, input):
-            read_set = []
-            write_set = []
-            stdout = None # Return
-            stderr = None # Return
-
             if self.stdin:
                 # Flush stdio buffer.  This might block, if the user has
                 # been writing to .stdin in an uncontrolled fashion.
                 self.stdin.flush()
-                if input:
-                    write_set.append(self.stdin)
-                else:
+                if not input:
                     self.stdin.close()
-            if self.stdout:
-                read_set.append(self.stdout)
-                stdout = []
-            if self.stderr:
-                read_set.append(self.stderr)
-                stderr = []
 
-            input_offset = 0
-            while read_set or write_set:
-                try:
-                    rlist, wlist, xlist = select.select(read_set, write_set, [])
-                except select.error, e:
-                    if e.args[0] == errno.EINTR:
-                        continue
-                    raise
-
-                if self.stdin in wlist:
-                    # When select has indicated that the file is writable,
-                    # we can write up to PIPE_BUF bytes without risk
-                    # blocking.  POSIX defines PIPE_BUF >= 512
-                    chunk = input[input_offset : input_offset + 512]
-                    bytes_written = os.write(self.stdin.fileno(), chunk)
-                    input_offset += bytes_written
-                    if input_offset >= len(input):
-                        self.stdin.close()
-                        write_set.remove(self.stdin)
-
-                if self.stdout in rlist:
-                    data = os.read(self.stdout.fileno(), 1024)
-                    if data == "":
-                        self.stdout.close()
-                        read_set.remove(self.stdout)
-                    stdout.append(data)
-
-                if self.stderr in rlist:
-                    data = os.read(self.stderr.fileno(), 1024)
-                    if data == "":
-                        self.stderr.close()
-                        read_set.remove(self.stderr)
-                    stderr.append(data)
+            if _has_poll:
+                stdout, stderr = self._communicate_with_poll(input)
+            else:
+                stdout, stderr = self._communicate_with_select(input)
 
             # All data exchanged.  Translate lists into strings.
             if stdout is not None:
@@ -1257,6 +1341,125 @@ class Popen(object):
 
             self.wait()
             return (stdout, stderr)
+
+
+        def _communicate_with_poll(self, input):
+            stdout = None # Return
+            stderr = None # Return
+            fd2file = {}
+            fd2output = {}
+
+            poller = select.poll()
+            def register_and_append(file_obj, eventmask):
+                poller.register(file_obj.fileno(), eventmask)
+                fd2file[file_obj.fileno()] = file_obj
+
+            def close_unregister_and_remove(fd):
+                poller.unregister(fd)
+                fd2file[fd].close()
+                fd2file.pop(fd)
+
+            if self.stdin and input:
+                register_and_append(self.stdin, select.POLLOUT)
+
+            select_POLLIN_POLLPRI = select.POLLIN | select.POLLPRI
+            if self.stdout:
+                register_and_append(self.stdout, select_POLLIN_POLLPRI)
+                fd2output[self.stdout.fileno()] = stdout = []
+            if self.stderr:
+                register_and_append(self.stderr, select_POLLIN_POLLPRI)
+                fd2output[self.stderr.fileno()] = stderr = []
+
+            input_offset = 0
+            while fd2file:
+                try:
+                    ready = poller.poll()
+                except select.error, e:
+                    if e.args[0] == errno.EINTR:
+                        continue
+                    raise
+
+                for fd, mode in ready:
+                    if mode & select.POLLOUT:
+                        chunk = input[input_offset : input_offset + _PIPE_BUF]
+                        try:
+                            input_offset += os.write(fd, chunk)
+                        except OSError as e:
+                            if e.errno == errno.EPIPE:
+                                close_unregister_and_remove(fd)
+                            else:
+                                raise
+                        else:
+                            if input_offset >= len(input):
+                                close_unregister_and_remove(fd)
+                    elif mode & select_POLLIN_POLLPRI:
+                        data = os.read(fd, 4096)
+                        if not data:
+                            close_unregister_and_remove(fd)
+                        fd2output[fd].append(data)
+                    else:
+                        # Ignore hang up or errors.
+                        close_unregister_and_remove(fd)
+
+            return (stdout, stderr)
+
+
+        def _communicate_with_select(self, input):
+            read_set = []
+            write_set = []
+            stdout = None # Return
+            stderr = None # Return
+
+            if self.stdin and input:
+                write_set.append(self.stdin)
+            if self.stdout:
+                read_set.append(self.stdout)
+                stdout = []
+            if self.stderr:
+                read_set.append(self.stderr)
+                stderr = []
+
+            input_offset = 0
+            while read_set or write_set:
+                try:
+                    rlist, wlist, xlist = select.select(read_set, write_set, [])
+                except select.error, e:
+                    if e.args[0] == errno.EINTR:
+                        continue
+                    raise
+
+                if self.stdin in wlist:
+                    chunk = input[input_offset : input_offset + _PIPE_BUF]
+                    try:
+                        bytes_written = os.write(self.stdin.fileno(), chunk)
+                    except OSError as e:
+                        if e.errno == errno.EPIPE:
+                            self.stdin.close()
+                            write_set.remove(self.stdin)
+                        else:
+                            raise
+                    else:
+                        input_offset += bytes_written
+                        if input_offset >= len(input):
+                            self.stdin.close()
+                            write_set.remove(self.stdin)
+
+                if self.stdout in rlist:
+                    data = os.read(self.stdout.fileno(), 1024)
+                    if data == "":
+                        self.stdout.close()
+                        read_set.remove(self.stdout)
+                    stdout.append(data)
+
+                if self.stderr in rlist:
+                    data = os.read(self.stderr.fileno(), 1024)
+                    if data == "":
+                        self.stderr.close()
+                        read_set.remove(self.stderr)
+                    stderr.append(data)
+
+            return (stdout, stderr)
+
 
         def send_signal(self, sig):
             """Send a signal to the process

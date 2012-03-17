@@ -1,19 +1,22 @@
-:mod:`ssl` --- SSL wrapper for socket objects
-=============================================
+:mod:`ssl` --- TLS/SSL wrapper for socket objects
+=================================================
 
 .. module:: ssl
-   :synopsis: SSL wrapper for socket objects
+   :synopsis: TLS/SSL wrapper for socket objects
 
 .. moduleauthor:: Bill Janssen <bill.janssen@gmail.com>
-
-.. versionadded:: 2.6
-
 .. sectionauthor::  Bill Janssen <bill.janssen@gmail.com>
 
 
 .. index:: single: OpenSSL; (use in module ssl)
 
 .. index:: TLS, SSL, Transport Layer Security, Secure Sockets Layer
+
+.. versionadded:: 2.6
+
+**Source code:** :source:`Lib/ssl.py`
+
+--------------
 
 This module provides access to Transport Layer Security (often known as "Secure
 Sockets Layer") encryption and peer authentication facilities for network
@@ -50,7 +53,7 @@ Functions, Constants, and Exceptions
    is a subtype of :exc:`socket.error`, which in turn is a subtype of
    :exc:`IOError`.
 
-.. function:: wrap_socket (sock, keyfile=None, certfile=None, server_side=False, cert_reqs=CERT_NONE, ssl_version={see docs}, ca_certs=None, do_handshake_on_connect=True, suppress_ragged_eofs=True)
+.. function:: wrap_socket (sock, keyfile=None, certfile=None, server_side=False, cert_reqs=CERT_NONE, ssl_version={see docs}, ca_certs=None, do_handshake_on_connect=True, suppress_ragged_eofs=True, ciphers=None)
 
    Takes an instance ``sock`` of :class:`socket.socket`, and returns an instance
    of :class:`ssl.SSLSocket`, a subtype of :class:`socket.socket`, which wraps
@@ -100,9 +103,8 @@ Functions, Constants, and Exceptions
    The parameter ``ssl_version`` specifies which version of the SSL protocol to
    use.  Typically, the server chooses a particular protocol version, and the
    client must adapt to the server's choice.  Most of the versions are not
-   interoperable with the other versions.  If not specified, for client-side
-   operation, the default SSL version is SSLv3; for server-side operation,
-   SSLv23.  These version selections provide the most compatibility with other
+   interoperable with the other versions.  If not specified, the default is
+   :data:`PROTOCOL_SSLv23`; it provides the most compatibility with other
    versions.
 
    Here's a table showing which versions in a client (down the side) can connect
@@ -113,14 +115,26 @@ Functions, Constants, and Exceptions
        ========================  =========  =========  ==========  =========
         *client* / **server**    **SSLv2**  **SSLv3**  **SSLv23**  **TLSv1**
        ------------------------  ---------  ---------  ----------  ---------
-        *SSLv2*                    yes        no         yes*        no
-        *SSLv3*                    yes        yes        yes         no
+        *SSLv2*                    yes        no         yes         no
+        *SSLv3*                    no         yes        yes         no
         *SSLv23*                   yes        no         yes         no
         *TLSv1*                    no         no         yes         yes
        ========================  =========  =========  ==========  =========
 
-   In some older versions of OpenSSL (for instance, 0.9.7l on OS X 10.4), an
-   SSLv2 client could not connect to an SSLv23 server.
+   .. note::
+
+      Which connections succeed will vary depending on the version of
+      OpenSSL.  For instance, in some older versions of OpenSSL (such
+      as 0.9.7l on OS X 10.4), an SSLv2 client could not connect to an
+      SSLv23 server.  Another example: beginning with OpenSSL 1.0.0,
+      an SSLv23 client will not actually attempt SSLv2 connections
+      unless you explicitly enable SSLv2 ciphers; for example, you
+      might specify ``"ALL"`` or ``"SSLv2"`` as the *ciphers* parameter
+      to enable them.
+
+   The *ciphers* parameter sets the available ciphers for this SSL object.
+   It should be a string in the `OpenSSL cipher list format
+   <http://www.openssl.org/docs/apps/ciphers.html#CIPHER_LIST_FORMAT>`_.
 
    The parameter ``do_handshake_on_connect`` specifies whether to do the SSL
    handshake automatically after doing a :meth:`socket.connect`, or whether the
@@ -134,6 +148,9 @@ Functions, Constants, and Exceptions
    of the connection.  If specified as :const:`True` (the default), it returns a
    normal EOF in response to unexpected EOF errors raised from the underlying
    socket; if :const:`False`, it will raise the exceptions back to the caller.
+
+   .. versionchanged:: 2.7
+      New optional argument *ciphers*.
 
 .. function:: RAND_status()
 
@@ -222,6 +239,9 @@ Functions, Constants, and Exceptions
 
    Selects SSL version 2 as the channel encryption protocol.
 
+   This protocol is not available if OpenSSL is compiled with OPENSSL_NO_SSL2
+   flag.
+
    .. warning::
 
       SSL version 2 is insecure.  Its use is highly discouraged.
@@ -243,6 +263,36 @@ Functions, Constants, and Exceptions
    Selects TLS version 1 as the channel encryption protocol.  This is the most
    modern version, and probably the best choice for maximum protection, if both
    sides can speak it.
+
+.. data:: OPENSSL_VERSION
+
+   The version string of the OpenSSL library loaded by the interpreter::
+
+    >>> ssl.OPENSSL_VERSION
+    'OpenSSL 0.9.8k 25 Mar 2009'
+
+   .. versionadded:: 2.7
+
+.. data:: OPENSSL_VERSION_INFO
+
+   A tuple of five integers representing version information about the
+   OpenSSL library::
+
+    >>> ssl.OPENSSL_VERSION_INFO
+    (0, 9, 8, 11, 15)
+
+   .. versionadded:: 2.7
+
+.. data:: OPENSSL_VERSION_NUMBER
+
+   The raw version number of the OpenSSL library, as a single integer::
+
+    >>> ssl.OPENSSL_VERSION_NUMBER
+    9470143L
+    >>> hex(ssl.OPENSSL_VERSION_NUMBER)
+    '0x9080bfL'
+
+   .. versionadded:: 2.7
 
 
 SSLSocket Objects
@@ -460,11 +510,11 @@ To test for the presence of SSL support in a Python installation, user code
 should use the following idiom::
 
    try:
-      import ssl
+       import ssl
    except ImportError:
-      pass
+       pass
    else:
-      [ do something that requires SSL support ]
+       ... # do something that requires SSL support
 
 Client-side operation
 ^^^^^^^^^^^^^^^^^^^^^
@@ -537,29 +587,31 @@ the other end, and use :func:`wrap_socket` to create a server-side SSL context
 for it::
 
    while True:
-      newsocket, fromaddr = bindsocket.accept()
-      connstream = ssl.wrap_socket(newsocket,
-                                   server_side=True,
-                                   certfile="mycertfile",
-                                   keyfile="mykeyfile",
-                                   ssl_version=ssl.PROTOCOL_TLSv1)
-      deal_with_client(connstream)
+       newsocket, fromaddr = bindsocket.accept()
+       connstream = ssl.wrap_socket(newsocket,
+                                    server_side=True,
+                                    certfile="mycertfile",
+                                    keyfile="mykeyfile",
+                                    ssl_version=ssl.PROTOCOL_TLSv1)
+       try:
+           deal_with_client(connstream)
+       finally:
+           connstream.shutdown(socket.SHUT_RDWR)
+           connstream.close()
 
 Then you'd read data from the ``connstream`` and do something with it till you
 are finished with the client (or the client is finished with you)::
 
    def deal_with_client(connstream):
-
-      data = connstream.read()
-      # null data means the client is finished with us
-      while data:
-         if not do_something(connstream, data):
-            # we'll assume do_something returns False
-            # when we're finished with client
-            break
-         data = connstream.read()
-      # finished with client
-      connstream.close()
+       data = connstream.read()
+       # null data means the client is finished with us
+       while data:
+           if not do_something(connstream, data):
+               # we'll assume do_something returns False
+               # when we're finished with client
+               break
+           data = connstream.read()
+       # finished with client
 
 And go back to listening for new client connections.
 
@@ -569,8 +621,8 @@ And go back to listening for new client connections.
    Class :class:`socket.socket`
             Documentation of underlying :mod:`socket` class
 
-   `Introducing SSL and Certificates using OpenSSL <http://old.pseudonym.org/ssl/wwwj-index.html>`_
-       Frederick J. Hirsch
+   `TLS (Transport Layer Security) and SSL (Secure Socket Layer) <http://www3.rad.com/networks/applications/secure/tls.htm>`_
+      Debby Koren
 
    `RFC 1422: Privacy Enhancement for Internet Electronic Mail: Part II: Certificate-Based Key Management <http://www.ietf.org/rfc/rfc1422>`_
        Steve Kent

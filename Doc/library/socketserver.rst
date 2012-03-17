@@ -1,4 +1,3 @@
-
 :mod:`SocketServer` --- A framework for network servers
 =======================================================
 
@@ -11,6 +10,9 @@
    Python 3.0.  The :term:`2to3` tool will automatically adapt imports when
    converting your sources to 3.0.
 
+**Source code:** :source:`Lib/SocketServer.py`
+
+--------------
 
 The :mod:`SocketServer` module simplifies the task of writing network servers.
 
@@ -85,7 +87,7 @@ a threading UDP server class is created as follows::
    class ThreadingUDPServer(ThreadingMixIn, UDPServer): pass
 
 The mix-in class must come first, since it overrides a method defined in
-:class:`UDPServer`.  Setting the various member variables also changes the
+:class:`UDPServer`.  Setting the various attributes also change the
 behavior of the underlying server mechanism.
 
 To implement a service, you must derive a class from :class:`BaseRequestHandler`
@@ -156,13 +158,14 @@ Server Objects
 
 .. method:: BaseServer.serve_forever(poll_interval=0.5)
 
-   Handle requests until an explicit :meth:`shutdown` request.  Polls for
-   shutdown every *poll_interval* seconds.
+   Handle requests until an explicit :meth:`shutdown` request.
+   Poll for shutdown every *poll_interval* seconds. Ignores :attr:`self.timeout`.
+   If you need to do periodic tasks, do them in another thread.
 
 
 .. method:: BaseServer.shutdown()
 
-   Tells the :meth:`serve_forever` loop to stop and waits until it does.
+   Tell the :meth:`serve_forever` loop to stop and wait until it does.
 
    .. versionadded:: 2.6
 
@@ -354,10 +357,10 @@ This is the server side::
        def handle(self):
            # self.request is the TCP socket connected to the client
            self.data = self.request.recv(1024).strip()
-           print "%s wrote:" % self.client_address[0]
+           print "{} wrote:".format(self.client_address[0])
            print self.data
            # just send back the same data, but upper-cased
-           self.request.send(self.data.upper())
+           self.request.sendall(self.data.upper())
 
    if __name__ == "__main__":
        HOST, PORT = "localhost", 9999
@@ -378,7 +381,7 @@ objects that simplify communication by providing the standard file interface)::
            # self.rfile is a file-like object created by the handler;
            # we can now use e.g. readline() instead of raw recv() calls
            self.data = self.rfile.readline().strip()
-           print "%s wrote:" % self.client_address[0]
+           print "{} wrote:".format(self.client_address[0])
            print self.data
            # Likewise, self.wfile is a file-like object used to write back
            # to the client
@@ -387,7 +390,7 @@ objects that simplify communication by providing the standard file interface)::
 The difference is that the ``readline()`` call in the second handler will call
 ``recv()`` multiple times until it encounters a newline character, while the
 single ``recv()`` call in the first handler will just return what has been sent
-from the client in one ``send()`` call.
+from the client in one ``sendall()`` call.
 
 
 This is the client side::
@@ -401,16 +404,18 @@ This is the client side::
    # Create a socket (SOCK_STREAM means a TCP socket)
    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-   # Connect to server and send data
-   sock.connect((HOST, PORT))
-   sock.send(data + "\n")
+   try:
+       # Connect to server and send data
+       sock.connect((HOST, PORT))
+       sock.sendall(data + "\n")
 
-   # Receive data from the server and shut down
-   received = sock.recv(1024)
-   sock.close()
+       # Receive data from the server and shut down
+       received = sock.recv(1024)
+   finally:
+       sock.close()
 
-   print "Sent:     %s" % data
-   print "Received: %s" % received
+   print "Sent:     {}".format(data)
+   print "Received: {}".format(received)
 
 
 The output of the example should look something like this:
@@ -451,7 +456,7 @@ This is the server side::
        def handle(self):
            data = self.request[0].strip()
            socket = self.request[1]
-           print "%s wrote:" % self.client_address[0]
+           print "{} wrote:".format(self.client_address[0])
            print data
            socket.sendto(data.upper(), self.client_address)
 
@@ -476,8 +481,8 @@ This is the client side::
    sock.sendto(data + "\n", (HOST, PORT))
    received = sock.recv(1024)
 
-   print "Sent:     %s" % data
-   print "Received: %s" % received
+   print "Sent:     {}".format(data)
+   print "Received: {}".format(received)
 
 The output of the example should look exactly like for the TCP server example.
 
@@ -498,9 +503,9 @@ An example for the :class:`ThreadingMixIn` class::
 
        def handle(self):
            data = self.request.recv(1024)
-           cur_thread = threading.currentThread()
-           response = "%s: %s" % (cur_thread.getName(), data)
-           self.request.send(response)
+           cur_thread = threading.current_thread()
+           response = "{}: {}".format(cur_thread.name, data)
+           self.request.sendall(response)
 
    class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
        pass
@@ -508,10 +513,12 @@ An example for the :class:`ThreadingMixIn` class::
    def client(ip, port, message):
        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
        sock.connect((ip, port))
-       sock.send(message)
-       response = sock.recv(1024)
-       print "Received: %s" % response
-       sock.close()
+       try:
+           sock.sendall(message)
+           response = sock.recv(1024)
+           print "Received: {}".format(response)
+       finally:
+           sock.close()
 
    if __name__ == "__main__":
        # Port 0 means to select an arbitrary unused port
@@ -524,15 +531,16 @@ An example for the :class:`ThreadingMixIn` class::
        # more thread for each request
        server_thread = threading.Thread(target=server.serve_forever)
        # Exit the server thread when the main thread terminates
-       server_thread.setDaemon(True)
+       server_thread.daemon = True
        server_thread.start()
-       print "Server loop running in thread:", server_thread.getName()
+       print "Server loop running in thread:", server_thread.name
 
        client(ip, port, "Hello World 1")
        client(ip, port, "Hello World 2")
        client(ip, port, "Hello World 3")
 
        server.shutdown()
+
 
 The output of the example should look something like this::
 
