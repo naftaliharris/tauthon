@@ -379,13 +379,40 @@ class DictTest(unittest.TestCase):
         x.fail = True
         self.assertRaises(Exc, d.pop, x)
 
-    def test_mutatingiteration(self):
+    def test_mutating_iteration(self):
         # changing dict size during iteration
         d = {}
         d[1] = 1
         with self.assertRaises(RuntimeError):
             for i in d:
                 d[i+1] = 1
+
+    def test_mutating_lookup(self):
+        # changing dict during a lookup
+        class NastyKey:
+            mutate_dict = None
+
+            def __init__(self, value):
+                self.value = value
+
+            def __hash__(self):
+                # hash collision!
+                return 1
+
+            def __eq__(self, other):
+                if NastyKey.mutate_dict:
+                    mydict, key = NastyKey.mutate_dict
+                    NastyKey.mutate_dict = None
+                    del mydict[key]
+                return self.value == other.value
+
+        key1 = NastyKey(1)
+        key2 = NastyKey(2)
+        d = {key1: 1}
+        NastyKey.mutate_dict = (d, key1)
+        with self.assertRaisesRegex(RuntimeError,
+                                    'dictionary changed size during lookup'):
+            d[key2] = 2
 
     def test_repr(self):
         d = {}
