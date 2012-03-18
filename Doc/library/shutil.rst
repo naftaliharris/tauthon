@@ -47,45 +47,69 @@ Directory and files operations
    be copied.
 
 
-.. function:: copyfile(src, dst)
+.. function:: copyfile(src, dst[, symlinks=False])
 
    Copy the contents (no metadata) of the file named *src* to a file named
    *dst*.  *dst* must be the complete target file name; look at
    :func:`shutil.copy` for a copy that accepts a target directory path.  If
    *src* and *dst* are the same files, :exc:`Error` is raised.
-   The destination location must be writable; otherwise,  an :exc:`IOError` exception
+
+   The destination location must be writable; otherwise,  an :exc:`OSError` exception
    will be raised. If *dst* already exists, it will be replaced.   Special files
    such as character or block devices and pipes cannot be copied with this
    function.  *src* and *dst* are path names given as strings.
 
+   If *symlinks* is true and *src* is a symbolic link, a new symbolic link will
+   be created instead of copying the file *src* points to.
 
-.. function:: copymode(src, dst)
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised instead of :exc:`OSError`.
+      Added *symlinks* argument.
+
+
+.. function:: copymode(src, dst[, symlinks=False])
 
    Copy the permission bits from *src* to *dst*.  The file contents, owner, and
-   group are unaffected.  *src* and *dst* are path names given as strings.
+   group are unaffected.  *src* and *dst* are path names given as strings.  If
+   *symlinks* is true, *src* a symbolic link and the operating system supports
+   modes for symbolic links (for example BSD-based ones), the mode of the link
+   will be copied.
 
+   .. versionchanged:: 3.3
+      Added *symlinks* argument.
 
-.. function:: copystat(src, dst)
+.. function:: copystat(src, dst[, symlinks=False])
 
    Copy the permission bits, last access time, last modification time, and flags
    from *src* to *dst*.  The file contents, owner, and group are unaffected.  *src*
-   and *dst* are path names given as strings.
+   and *dst* are path names given as strings.  If *src* and *dst* are both
+   symbolic links and *symlinks* true, the stats of the link will be copied as
+   far as the platform allows.
 
+   .. versionchanged:: 3.3
+      Added *symlinks* argument.
 
-.. function:: copy(src, dst)
+.. function:: copy(src, dst[, symlinks=False]))
 
    Copy the file *src* to the file or directory *dst*.  If *dst* is a directory, a
    file with the same basename as *src*  is created (or overwritten) in the
    directory specified.  Permission bits are copied.  *src* and *dst* are path
-   names given as strings.
+   names given as strings.  If *symlinks* is true, symbolic links won't be
+   followed but recreated instead -- this resembles GNU's :program:`cp -P`.
 
+   .. versionchanged:: 3.3
+      Added *symlinks* argument.
 
-.. function:: copy2(src, dst)
+.. function:: copy2(src, dst[, symlinks=False])
 
    Similar to :func:`shutil.copy`, but metadata is copied as well -- in fact,
    this is just :func:`shutil.copy` followed by :func:`copystat`.  This is
-   similar to the Unix command :program:`cp -p`.
+   similar to the Unix command :program:`cp -p`.  If *symlinks* is true,
+   symbolic links won't be followed but recreated instead -- this resembles
+   GNU's :program:`cp -P`.
 
+   .. versionchanged:: 3.3
+      Added *symlinks* argument.
 
 .. function:: ignore_patterns(\*patterns)
 
@@ -103,9 +127,9 @@ Directory and files operations
    :func:`shutil.copy2`.
 
    If *symlinks* is true, symbolic links in the source tree are represented as
-   symbolic links in the new tree, but the metadata of the original links is NOT
-   copied; if false or omitted, the contents and metadata of the linked files
-   are copied to the new tree.
+   symbolic links in the new tree and the metadata of the original links will
+   be copied as far as the platform allows; if false or omitted, the contents
+   and metadata of the linked files are copied to the new tree.
 
    When *symlinks* is false, if the file pointed by the symlink doesn't
    exist, a exception will be added in the list of errors raised in
@@ -129,7 +153,7 @@ Directory and files operations
    If *copy_function* is given, it must be a callable that will be used to copy
    each file. It will be called with the source path and the destination path
    as arguments. By default, :func:`shutil.copy2` is used, but any function
-   that supports the same signature (like :func:`copy`) can be used.
+   that supports the same signature (like :func:`shutil.copy`) can be used.
 
    .. versionchanged:: 3.2
       Added the *copy_function* argument to be able to provide a custom copy
@@ -138,6 +162,9 @@ Directory and files operations
    .. versionchanged:: 3.2
       Added the *ignore_dangling_symlinks* argument to silent dangling symlinks
       errors when *symlinks* is false.
+
+   .. versionchanged:: 3.3
+      Copy metadata when *symlinks* is false.
 
 
 .. function:: rmtree(path, ignore_errors=False, onerror=None)
@@ -173,7 +200,35 @@ Directory and files operations
 
    If the destination is on the current filesystem, then :func:`os.rename` is
    used.  Otherwise, *src* is copied (using :func:`shutil.copy2`) to *dst* and
-   then removed.
+   then removed. In case of symlinks, a new symlink pointing to the target of
+   *src* will be created in or as *dst* and *src* will be removed.
+
+   .. versionchanged:: 3.3
+      Added explicit symlink handling for foreign filesystems, thus adapting
+      it to the behavior of GNU's :program:`mv`.
+
+.. function:: disk_usage(path)
+
+   Return disk usage statistics about the given path as a :term:`named tuple`
+   with the attributes *total*, *used* and *free*, which are the amount of
+   total, used and free space, in bytes.
+
+   .. versionadded:: 3.3
+
+   Availability: Unix, Windows.
+
+.. function:: chown(path, user=None, group=None)
+
+   Change owner *user* and/or *group* of the given *path*.
+
+   *user* can be a system user name or a uid; the same applies to *group*. At
+   least one argument is required.
+
+   See also :func:`os.chown`, the underlying function.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. exception:: Error
@@ -406,3 +461,36 @@ The resulting archive contains::
     -rw------- tarek/staff    1675 2008-06-09 13:26:54 ./id_rsa
     -rw-r--r-- tarek/staff     397 2008-06-09 13:26:54 ./id_rsa.pub
     -rw-r--r-- tarek/staff   37192 2010-02-06 18:23:10 ./known_hosts
+
+
+Querying the size of the output terminal
+----------------------------------------
+
+.. versionadded:: 3.3
+
+.. function:: get_terminal_size(fallback=(columns, lines))
+
+   Get the size of the terminal window.
+
+   For each of the two dimensions, the environment variable, ``COLUMNS``
+   and ``LINES`` respectively, is checked. If the variable is defined and
+   the value is a positive integer, it is used.
+
+   When ``COLUMNS`` or ``LINES`` is not defined, which is the common case,
+   the terminal connected to :data:`sys.__stdout__` is queried
+   by invoking :func:`os.get_terminal_size`.
+
+   If the terminal size cannot be successfully queried, either because
+   the system doesn't support querying, or because we are not
+   connected to a terminal, the value given in ``fallback`` parameter
+   is used. ``fallback`` defaults to ``(80, 24)`` which is the default
+   size used by many terminal emulators.
+
+   The value returned is a named tuple of type :class:`os.terminal_size`.
+
+   See also: The Single UNIX Specification, Version 2,
+   `Other Environment Variables`_.
+
+.. _`Other Environment Variables`:
+   http://pubs.opengroup.org/onlinepubs/7908799/xbd/envvar.html#tag_002_003
+

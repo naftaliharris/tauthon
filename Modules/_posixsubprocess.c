@@ -47,7 +47,9 @@ static int
 _enable_gc(PyObject *gc_module)
 {
     PyObject *result;
-    result = PyObject_CallMethod(gc_module, "enable", NULL);
+    _Py_IDENTIFIER(enable);
+
+    result = _PyObject_CallMethodId(gc_module, &PyId_enable, NULL);
     if (result == NULL)
         return 1;
     Py_DECREF(result);
@@ -78,7 +80,7 @@ _pos_int_from_ascii(char *name)
  * that properly supports /dev/fd.
  */
 static int
-_is_fdescfs_mounted_on_dev_fd()
+_is_fdescfs_mounted_on_dev_fd(void)
 {
     struct stat dev_stat;
     struct stat dev_fd_stat;
@@ -202,7 +204,18 @@ _close_open_fd_range_safe(int start_fd, int end_fd, PyObject* py_fds_to_keep)
     int fd_dir_fd;
     if (start_fd >= end_fd)
         return;
-        fd_dir_fd = open(FD_DIR, O_RDONLY | O_CLOEXEC, 0);
+#ifdef O_CLOEXEC
+    fd_dir_fd = open(FD_DIR, O_RDONLY | O_CLOEXEC, 0);
+#else
+    fd_dir_fd = open(FD_DIR, O_RDONLY, 0);
+#ifdef FD_CLOEXEC
+    {
+        int old = fcntl(fd_dir_fd, F_GETFD);
+        if (old != -1)
+            fcntl(fd_dir_fd, F_SETFD, old | FD_CLOEXEC);
+    }
+#endif
+#endif
     if (fd_dir_fd == -1) {
         /* No way to get a list of open fds. */
         _close_fds_by_brute_force(start_fd, end_fd, py_fds_to_keep);
@@ -523,10 +536,13 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
     /* We need to call gc.disable() when we'll be calling preexec_fn */
     if (preexec_fn != Py_None) {
         PyObject *result;
+        _Py_IDENTIFIER(isenabled);
+        _Py_IDENTIFIER(disable);
+        
         gc_module = PyImport_ImportModule("gc");
         if (gc_module == NULL)
             return NULL;
-        result = PyObject_CallMethod(gc_module, "isenabled", NULL);
+        result = _PyObject_CallMethodId(gc_module, &PyId_isenabled, NULL);
         if (result == NULL) {
             Py_DECREF(gc_module);
             return NULL;
@@ -537,7 +553,7 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
             Py_DECREF(gc_module);
             return NULL;
         }
-        result = PyObject_CallMethod(gc_module, "disable", NULL);
+        result = _PyObject_CallMethodId(gc_module, &PyId_disable, NULL);
         if (result == NULL) {
             Py_DECREF(gc_module);
             return NULL;
