@@ -1,4 +1,4 @@
-# Copyright 2001-2010 by Vinay Sajip. All Rights Reserved.
+# Copyright 2001-2012 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -16,10 +16,9 @@
 
 """
 Additional handlers for the logging package for Python. The core package is
-based on PEP 282 and comments thereto in comp.lang.python, and influenced by
-Apache's log4j system.
+based on PEP 282 and comments thereto in comp.lang.python.
 
-Copyright (C) 2001-2010 Vinay Sajip. All Rights Reserved.
+Copyright (C) 2001-2012 Vinay Sajip. All Rights Reserved.
 
 To use, simply 'import logging.handlers' and log away!
 """
@@ -271,9 +270,10 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
                         dstAtRollover = time.localtime(newRolloverAt)[-1]
                         if dstNow != dstAtRollover:
                             if not dstNow:  # DST kicks in before next rollover, so we need to deduct an hour
-                                newRolloverAt = newRolloverAt - 3600
+                                addend = -3600
                             else:           # DST bows out before next rollover, so we need to add an hour
-                                newRolloverAt = newRolloverAt + 3600
+                                addend = 3600
+                            newRolloverAt += addend
                     result = newRolloverAt
         return result
 
@@ -324,11 +324,20 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
             self.stream.close()
             self.stream = None
         # get the time that this sequence started at and make it a TimeTuple
+        currentTime = int(time.time())
+        dstNow = time.localtime(currentTime)[-1]
         t = self.rolloverAt - self.interval
         if self.utc:
             timeTuple = time.gmtime(t)
         else:
             timeTuple = time.localtime(t)
+            dstThen = timeTuple[-1]
+            if dstNow != dstThen:
+                if dstNow:
+                    addend = 3600
+                else:
+                    addend = -3600
+                timeTuple = time.localtime(t + addend)
         dfn = self.baseFilename + "." + time.strftime(self.suffix, timeTuple)
         if os.path.exists(dfn):
             os.remove(dfn)
@@ -338,19 +347,18 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
                 os.remove(s)
         self.mode = 'w'
         self.stream = self._open()
-        currentTime = int(time.time())
         newRolloverAt = self.computeRollover(currentTime)
         while newRolloverAt <= currentTime:
             newRolloverAt = newRolloverAt + self.interval
         #If DST changes and midnight or weekly rollover, adjust for this.
         if (self.when == 'MIDNIGHT' or self.when.startswith('W')) and not self.utc:
-            dstNow = time.localtime(currentTime)[-1]
             dstAtRollover = time.localtime(newRolloverAt)[-1]
             if dstNow != dstAtRollover:
                 if not dstNow:  # DST kicks in before next rollover, so we need to deduct an hour
-                    newRolloverAt = newRolloverAt - 3600
+                    addend = -3600
                 else:           # DST bows out before next rollover, so we need to add an hour
-                    newRolloverAt = newRolloverAt + 3600
+                    addend = 3600
+                newRolloverAt += addend
         self.rolloverAt = newRolloverAt
 
 class WatchedFileHandler(logging.FileHandler):
@@ -554,10 +562,14 @@ class SocketHandler(logging.Handler):
         """
         Closes the socket.
         """
-        if self.sock:
-            self.sock.close()
-            self.sock = None
-        logging.Handler.close(self)
+        self.acquire()
+        try:
+            if self.sock:
+                self.sock.close()
+                self.sock = None
+            logging.Handler.close(self)
+        finally:
+            self.release()
 
 class DatagramHandler(SocketHandler):
     """
@@ -752,9 +764,13 @@ class SysLogHandler(logging.Handler):
         """
         Closes the socket.
         """
-        if self.unixsocket:
-            self.socket.close()
-        logging.Handler.close(self)
+        self.acquire()
+        try:
+            if self.unixsocket:
+                self.socket.close()
+            logging.Handler.close(self)
+        finally:
+            self.release()
 
     def mapPriority(self, levelName):
         """
@@ -1095,7 +1111,11 @@ class BufferingHandler(logging.Handler):
 
         This version just zaps the buffer to empty.
         """
-        self.buffer = []
+        self.acquire()
+        try:
+            self.buffer = []
+        finally:
+            self.release()
 
     def close(self):
         """
@@ -1145,18 +1165,26 @@ class MemoryHandler(BufferingHandler):
 
         The record buffer is also cleared by this operation.
         """
-        if self.target:
-            for record in self.buffer:
-                self.target.handle(record)
-            self.buffer = []
+        self.acquire()
+        try:
+            if self.target:
+                for record in self.buffer:
+                    self.target.handle(record)
+                self.buffer = []
+        finally:
+            self.release()
 
     def close(self):
         """
         Flush, set the target to None and lose the buffer.
         """
         self.flush()
-        self.target = None
-        BufferingHandler.close(self)
+        self.acquire()
+        try:
+            self.target = None
+            BufferingHandler.close(self)
+        finally:
+            self.release()
 
 
 class QueueHandler(logging.Handler):

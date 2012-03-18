@@ -2,9 +2,10 @@
 =============================================================
 
 .. module:: urllib.request
-   :synopsis: Next generation URL opening library.
+   :synopsis: Extensible library for opening URLs.
 .. moduleauthor:: Jeremy Hylton <jeremy@alum.mit.edu>
 .. sectionauthor:: Moshe Zadka <moshez@users.sourceforge.net>
+.. sectionauthor:: Senthil Kumaran <senthil@uthcode.com>
 
 
 The :mod:`urllib.request` module defines functions and classes which help in
@@ -20,16 +21,26 @@ The :mod:`urllib.request` module defines the following functions:
    Open the URL *url*, which can be either a string or a
    :class:`Request` object.
 
-   *data* may be a bytes object specifying additional data to send to the
+   *data* must be a bytes object specifying additional data to be sent to the
    server, or ``None`` if no such data is needed. *data* may also be an
    iterable object and in that case Content-Length value must be specified in
    the headers. Currently HTTP requests are the only ones that use *data*; the
    HTTP request will be a POST instead of a GET when the *data* parameter is
-   provided.  *data* should be a buffer in the standard
+   provided.
+
+   *data* should be a buffer in the standard
    :mimetype:`application/x-www-form-urlencoded` format.  The
    :func:`urllib.parse.urlencode` function takes a mapping or sequence of
-   2-tuples and returns a string in this format. urllib.request module uses
-   HTTP/1.1 and includes ``Connection:close`` header in its HTTP requests.
+   2-tuples and returns a string in this format. It should be encoded to bytes
+   before being used as the *data* parameter. The charset parameter in
+   ``Content-Type`` header may be used to specify the encoding. If charset
+   parameter is not sent with the Content-Type header, the server following the
+   HTTP 1.1 recommendation may assume that the data is encoded in ISO-8859-1
+   encoding. It is advisable to use charset parameter with encoding used in
+   ``Content-Type`` header with the :class:`Request`.
+
+   urllib.request module uses HTTP/1.1 and includes ``Connection:close`` header
+   in its HTTP requests.
 
    The optional *timeout* parameter specifies a timeout in seconds for
    blocking operations like the connection attempt (if not specified,
@@ -46,8 +57,8 @@ The :mod:`urllib.request` module defines the following functions:
       If neither *cafile* nor *capath* is specified, an HTTPS request
       will not do any verification of the server's certificate.
 
-   This function returns a file-like object with two additional methods from
-   the :mod:`urllib.response` module
+   This function returns a file-like object that works as a :term:`context manager`,
+   with two additional methods from the :mod:`urllib.response` module
 
    * :meth:`geturl` --- return the URL of the resource retrieved,
      commonly used to determine if a redirect was followed
@@ -66,9 +77,10 @@ The :mod:`urllib.request` module defines the following functions:
    are handled through the proxy when they are set.
 
    The legacy ``urllib.urlopen`` function from Python 2.6 and earlier has been
-   discontinued; :func:`urlopen` corresponds to the old ``urllib2.urlopen``.
-   Proxy handling, which was done by passing a dictionary parameter to
-   ``urllib.urlopen``, can be obtained by using :class:`ProxyHandler` objects.
+   discontinued; :func:`urllib.request.urlopen` corresponds to the old
+   ``urllib2.urlopen``.  Proxy handling, which was done by passing a dictionary
+   parameter to ``urllib.urlopen``, can be obtained by using
+   :class:`ProxyHandler` objects.
 
    .. versionchanged:: 3.2
       *cafile* and *capath* were added.
@@ -83,10 +95,11 @@ The :mod:`urllib.request` module defines the following functions:
 .. function:: install_opener(opener)
 
    Install an :class:`OpenerDirector` instance as the default global opener.
-   Installing an opener is only necessary if you want urlopen to use that opener;
-   otherwise, simply call :meth:`OpenerDirector.open` instead of :func:`urlopen`.
-   The code does not check for a real :class:`OpenerDirector`, and any class with
-   the appropriate interface will work.
+   Installing an opener is only necessary if you want urlopen to use that
+   opener; otherwise, simply call :meth:`OpenerDirector.open` instead of
+   :func:`~urllib.request.urlopen`.  The code does not check for a real
+   :class:`OpenerDirector`, and any class with the appropriate interface will
+   work.
 
 
 .. function:: build_opener([handler, ...])
@@ -138,14 +151,21 @@ The following classes are provided:
 
    *url* should be a string containing a valid URL.
 
-   *data* may be a string specifying additional data to send to the
-   server, or ``None`` if no such data is needed.  Currently HTTP
-   requests are the only ones that use *data*; the HTTP request will
-   be a POST instead of a GET when the *data* parameter is provided.
-   *data* should be a buffer in the standard
-   :mimetype:`application/x-www-form-urlencoded` format.  The
-   :func:`urllib.parse.urlencode` function takes a mapping or sequence
-   of 2-tuples and returns a string in this format.
+   *data* must be a bytes object specifying additional data to send to the
+   server, or ``None`` if no such data is needed.  Currently HTTP requests are
+   the only ones that use *data*; the HTTP request will be a POST instead of a
+   GET when the *data* parameter is provided.  *data* should be a buffer in the
+   standard :mimetype:`application/x-www-form-urlencoded` format.
+
+   The :func:`urllib.parse.urlencode` function takes a mapping or sequence of
+   2-tuples and returns a string in this format. It should be encoded to bytes
+   before being used as the *data* parameter. The charset parameter in
+   ``Content-Type`` header may be used to specify the encoding. If charset
+   parameter is not sent with the Content-Type header, the server following the
+   HTTP 1.1 recommendation may assume that the data is encoded in ISO-8859-1
+   encoding. It is advisable to use charset parameter with encoding used in
+   ``Content-Type`` header with the :class:`Request`.
+
 
    *headers* should be a dictionary, and will be treated as if
    :meth:`add_header` was called with each key and value as arguments.
@@ -156,6 +176,9 @@ The following classes are provided:
    (X11; U; Linux i686) Gecko/20071127 Firefox/2.0.0.11"``, while
    :mod:`urllib`'s default user agent string is
    ``"Python-urllib/2.6"`` (on Python 2.6).
+
+   An example of using ``Content-Type`` header with *data* argument would be
+   sending a dictionary like ``{"Content-Type":" application/x-www-form-urlencoded;charset=utf-8"}``
 
    The final two arguments are only of interest for correct handling
    of third-party HTTP cookies:
@@ -967,15 +990,23 @@ The following W3C document, http://www.w3.org/International/O-charset  , lists
 the various ways in which a (X)HTML or a XML document could have specified its
 encoding information.
 
-As python.org website uses *utf-8* encoding as specified in it's meta tag, we
-will use same for decoding the bytes object. ::
+As the python.org website uses *utf-8* encoding as specified in it's meta tag, we
+will use the same for decoding the bytes object. ::
+
+   >>> with urllib.request.urlopen('http://www.python.org/') as f:
+   ...     print(f.read(100).decode('utf-8'))
+   ...
+   <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+   "http://www.w3.org/TR/xhtml1/DTD/xhtm
+
+It is also possible to achieve the same result without using the
+:term:`context manager` approach. ::
 
    >>> import urllib.request
    >>> f = urllib.request.urlopen('http://www.python.org/')
    >>> print(f.read(100).decode('utf-8'))
    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
    "http://www.w3.org/TR/xhtml1/DTD/xhtm
-
 
 In the following example, we are sending a data-stream to the stdin of a CGI
 and reading the data it returns to us. Note that this example will only work
@@ -1045,8 +1076,9 @@ every :class:`Request`.  To change this::
    opener.open('http://www.example.com/')
 
 Also, remember that a few standard headers (:mailheader:`Content-Length`,
-:mailheader:`Content-Type` and :mailheader:`Host`) are added when the
-:class:`Request` is passed to :func:`urlopen` (or :meth:`OpenerDirector.open`).
+:mailheader:`Content-Type` without charset parameter and :mailheader:`Host`)
+are added when the :class:`Request` is passed to :func:`urlopen` (or
+:meth:`OpenerDirector.open`).
 
 .. _urllib-examples:
 
@@ -1064,9 +1096,12 @@ from urlencode is encoded to bytes before it is sent to urlopen as data::
 
    >>> import urllib.request
    >>> import urllib.parse
-   >>> params = urllib.parse.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
-   >>> params = params.encode('utf-8')
-   >>> f = urllib.request.urlopen("http://www.musi-cal.com/cgi-bin/query", params)
+   >>> data = urllib.parse.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
+   >>> data = data.encode('utf-8')
+   >>> request = urllib.request.Request("http://requestb.in/xrbl82xr")
+   >>> # adding charset parameter to the Content-Type header.
+   >>> request.add_header("Content-Type","application/x-www-form-urlencoded;charset=utf-8")
+   >>> f = urllib.request.urlopen(request, data)
    >>> print(f.read().decode('utf-8'))
 
 The following example uses an explicitly specified HTTP proxy, overriding
@@ -1114,10 +1149,10 @@ some point in the future.
    size in response to a retrieval request.
 
    If the *url* uses the :file:`http:` scheme identifier, the optional *data*
-   argument may be given to specify a ``POST`` request (normally the request type
-   is ``GET``).  The *data* argument must in standard
-   :mimetype:`application/x-www-form-urlencoded` format; see the :func:`urlencode`
-   function below.
+   argument may be given to specify a ``POST`` request (normally the request
+   type is ``GET``).  The *data* argument must be a bytes object in standard
+   :mimetype:`application/x-www-form-urlencoded` format; see the
+   :func:`urlencode` function below.
 
    :func:`urlretrieve` will raise :exc:`ContentTooShortError` when it detects that
    the amount of data available  was less than the expected amount (which is the
