@@ -217,16 +217,23 @@ show_track(void)
 static PyDictObject *free_list[PyDict_MAXFREELIST];
 static int numfree = 0;
 
-void
-PyDict_Fini(void)
+int
+PyDict_ClearFreeList(void)
 {
     PyDictObject *op;
-
+    int ret = numfree;
     while (numfree) {
         op = free_list[--numfree];
         assert(PyDict_CheckExact(op));
         PyObject_GC_Del(op);
     }
+    return ret;
+}
+
+void
+PyDict_Fini(void)
+{
+    PyDict_ClearFreeList();
 }
 
 PyObject *
@@ -340,12 +347,9 @@ lookdict(PyDictObject *mp, PyObject *key, register Py_hash_t hash)
                     return ep;
             }
             else {
-                /* The compare did major nasty stuff to the
-                 * dict:  start over.
-                 * XXX A clever adversary could prevent this
-                 * XXX from terminating.
-                 */
-                return lookdict(mp, key, hash);
+                PyErr_SetString(PyExc_RuntimeError,
+                                "dictionary changed size during lookup");
+                return NULL;
             }
         }
         freeslot = NULL;
@@ -372,12 +376,9 @@ lookdict(PyDictObject *mp, PyObject *key, register Py_hash_t hash)
                     return ep;
             }
             else {
-                /* The compare did major nasty stuff to the
-                 * dict:  start over.
-                 * XXX A clever adversary could prevent this
-                 * XXX from terminating.
-                 */
-                return lookdict(mp, key, hash);
+                PyErr_SetString(PyExc_RuntimeError,
+                                "dictionary changed size during lookup");
+                return NULL;
             }
         }
         else if (ep->me_key == dummy && freeslot == NULL)
@@ -418,7 +419,7 @@ lookdict_unicode(PyDictObject *mp, PyObject *key, register Py_hash_t hash)
         mp->ma_lookup = lookdict;
         return lookdict(mp, key, hash);
     }
-    i = hash & mask;
+    i = (size_t)hash & mask;
     ep = &ep0[i];
     if (ep->me_key == NULL || ep->me_key == key)
         return ep;
@@ -583,7 +584,7 @@ insertdict_clean(register PyDictObject *mp, PyObject *key, Py_hash_t hash,
     register PyDictEntry *ep;
 
     MAINTAIN_TRACKING(mp, key, value);
-    i = hash & mask;
+    i = (size_t)hash & mask;
     ep = &ep0[i];
     for (perturb = hash; ep->me_key != NULL; perturb >>= PERTURB_SHIFT) {
         i = (i << 2) + i + perturb + 1;
@@ -721,7 +722,7 @@ PyDict_GetItem(PyObject *op, PyObject *key)
     if (!PyDict_Check(op))
         return NULL;
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1)
+        (hash = ((PyASCIIObject *) key)->hash) == -1)
     {
         hash = PyObject_Hash(key);
         if (hash == -1) {
@@ -773,7 +774,7 @@ PyDict_GetItemWithError(PyObject *op, PyObject *key)
         return NULL;
     }
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1)
+        (hash = ((PyASCIIObject *) key)->hash) == -1)
     {
         hash = PyObject_Hash(key);
         if (hash == -1) {
@@ -844,7 +845,7 @@ PyDict_SetItem(register PyObject *op, PyObject *key, PyObject *value)
     assert(key);
     assert(value);
     if (PyUnicode_CheckExact(key)) {
-        hash = ((PyUnicodeObject *) key)->hash;
+        hash = ((PyASCIIObject *) key)->hash;
         if (hash == -1)
             hash = PyObject_Hash(key);
     }
@@ -870,7 +871,7 @@ PyDict_DelItem(PyObject *op, PyObject *key)
     }
     assert(key);
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return -1;
@@ -1150,7 +1151,7 @@ dict_subscript(PyDictObject *mp, register PyObject *key)
     PyDictEntry *ep;
     assert(mp->ma_table != NULL);
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return NULL;
@@ -1163,10 +1164,8 @@ dict_subscript(PyDictObject *mp, register PyObject *key)
         if (!PyDict_CheckExact(mp)) {
             /* Look up __missing__ method if we're a subclass. */
             PyObject *missing, *res;
-            static PyObject *missing_str = NULL;
-            missing = _PyObject_LookupSpecial((PyObject *)mp,
-                                              "__missing__",
-                                              &missing_str);
+            _Py_IDENTIFIER(__missing__);
+            missing = _PyObject_LookupSpecial((PyObject *)mp, &PyId___missing__);
             if (missing != NULL) {
                 res = PyObject_CallFunctionObjArgs(missing,
                                                    key, NULL);
@@ -1423,7 +1422,8 @@ dict_update_common(PyObject *self, PyObject *args, PyObject *kwds, char *methnam
         result = -1;
 
     else if (arg != NULL) {
-        if (PyObject_HasAttrString(arg, "keys"))
+        _Py_IDENTIFIER(keys);
+        if (_PyObject_HasAttrId(arg, &PyId_keys))
             result = PyDict_Merge(self, arg, 1);
         else
             result = PyDict_MergeFromSeq2(self, arg, 1);
@@ -1762,7 +1762,7 @@ dict_contains(register PyDictObject *mp, PyObject *key)
     PyDictEntry *ep;
 
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return NULL;
@@ -1786,7 +1786,7 @@ dict_get(register PyDictObject *mp, PyObject *args)
         return NULL;
 
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return NULL;
@@ -1815,7 +1815,7 @@ dict_setdefault(register PyDictObject *mp, PyObject *args)
         return NULL;
 
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return NULL;
@@ -1860,7 +1860,7 @@ dict_pop(PyDictObject *mp, PyObject *args)
         return NULL;
     }
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return NULL;
@@ -2069,7 +2069,7 @@ PyDict_Contains(PyObject *op, PyObject *key)
     PyDictEntry *ep;
 
     if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+        (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return -1;
@@ -2644,10 +2644,8 @@ dictview_richcompare(PyObject *self, PyObject *other, int op)
     assert(PyDictViewSet_Check(self));
     assert(other != NULL);
 
-    if (!PyAnySet_Check(other) && !PyDictViewSet_Check(other)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PyAnySet_Check(other) && !PyDictViewSet_Check(other))
+        Py_RETURN_NOTIMPLEMENTED;
 
     len_self = PyObject_Size(self);
     if (len_self < 0)
@@ -2745,10 +2743,12 @@ dictviews_sub(PyObject* self, PyObject *other)
 {
     PyObject *result = PySet_New(self);
     PyObject *tmp;
+    _Py_IDENTIFIER(difference_update);
+
     if (result == NULL)
         return NULL;
 
-    tmp = PyObject_CallMethod(result, "difference_update", "O", other);
+    tmp = _PyObject_CallMethodId(result, &PyId_difference_update, "O", other);
     if (tmp == NULL) {
         Py_DECREF(result);
         return NULL;
@@ -2763,10 +2763,12 @@ dictviews_and(PyObject* self, PyObject *other)
 {
     PyObject *result = PySet_New(self);
     PyObject *tmp;
+    _Py_IDENTIFIER(intersection_update);
+
     if (result == NULL)
         return NULL;
 
-    tmp = PyObject_CallMethod(result, "intersection_update", "O", other);
+    tmp = _PyObject_CallMethodId(result, &PyId_intersection_update, "O", other);
     if (tmp == NULL) {
         Py_DECREF(result);
         return NULL;
@@ -2781,10 +2783,12 @@ dictviews_or(PyObject* self, PyObject *other)
 {
     PyObject *result = PySet_New(self);
     PyObject *tmp;
+    _Py_IDENTIFIER(update);
+
     if (result == NULL)
         return NULL;
 
-    tmp = PyObject_CallMethod(result, "update", "O", other);
+    tmp = _PyObject_CallMethodId(result, &PyId_update, "O", other);
     if (tmp == NULL) {
         Py_DECREF(result);
         return NULL;
@@ -2799,10 +2803,12 @@ dictviews_xor(PyObject* self, PyObject *other)
 {
     PyObject *result = PySet_New(self);
     PyObject *tmp;
+    _Py_IDENTIFIER(symmetric_difference_update);
+
     if (result == NULL)
         return NULL;
 
-    tmp = PyObject_CallMethod(result, "symmetric_difference_update", "O",
+    tmp = _PyObject_CallMethodId(result, &PyId_symmetric_difference_update, "O",
                               other);
     if (tmp == NULL) {
         Py_DECREF(result);
