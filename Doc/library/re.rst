@@ -325,14 +325,19 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
    Matches the empty string, but only at the beginning or end of a word.  A word is
    defined as a sequence of alphanumeric or underscore characters, so the end of a
    word is indicated by whitespace or a non-alphanumeric, non-underscore character.
-   Note that  ``\b`` is defined as the boundary between ``\w`` and ``\W``, so the
-   precise set of characters deemed to be alphanumeric depends on the values of the
-   ``UNICODE`` and ``LOCALE`` flags.  Inside a character range, ``\b`` represents
-   the backspace character, for compatibility with Python's string literals.
+   Note that formally, ``\b`` is defined as the boundary between a ``\w`` and
+   a ``\W`` character (or vice versa), or between ``\w`` and the beginning/end
+   of the string, so the precise set of characters deemed to be alphanumeric
+   depends on the values of the ``UNICODE`` and ``LOCALE`` flags.
+   For example, ``r'\bfoo\b'`` matches ``'foo'``, ``'foo.'``, ``'(foo)'``,
+   ``'bar foo baz'`` but not ``'foobar'`` or ``'foo3'``.
+   Inside a character range, ``\b`` represents the backspace character, for compatibility with Python's string literals.
 
 ``\B``
    Matches the empty string, but only when it is *not* at the beginning or end of a
-   word.  This is just the opposite of ``\b``, so is also subject to the settings
+   word.  This means that ``r'py\B'`` matches ``'python'``, ``'py3'``, ``'py2'``,
+   but not ``'py'``, ``'py.'``, or ``'py!'``.
+   ``\B`` is just the opposite of ``\b``, so is also subject to the settings
    of ``LOCALE`` and ``UNICODE``.
 
 ``\d``
@@ -356,12 +361,12 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
    character properties database.
 
 ``\S``
-   When the :const:`LOCALE` and :const:`UNICODE` flags are not specified, matches
-   any non-whitespace character; this is equivalent to the set ``[^ \t\n\r\f\v]``
-   With :const:`LOCALE`, it will match any character not in this set, and not
-   defined as space in the current locale. If :const:`UNICODE` is set, this will
-   match anything other than ``[ \t\n\r\f\v]`` and characters marked as space in
-   the Unicode character properties database.
+   When the :const:`LOCALE` and :const:`UNICODE` flags are not specified,
+   matches any non-whitespace character; this is equivalent to the set ``[^
+   \t\n\r\f\v]`` With :const:`LOCALE`, it will match the above set plus any
+   non-space character in the current locale. If :const:`UNICODE` is set, the
+   above set ``[^ \t\n\r\f\v]`` plus the characters not marked as space in the
+   Unicode character properties database.
 
 ``\w``
    When the :const:`LOCALE` and :const:`UNICODE` flags are not specified, matches
@@ -376,11 +381,15 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
    any non-alphanumeric character; this is equivalent to the set ``[^a-zA-Z0-9_]``.
    With :const:`LOCALE`, it will match any character not in the set ``[0-9_]``, and
    not defined as alphanumeric for the current locale. If :const:`UNICODE` is set,
-   this will match anything other than ``[0-9_]`` and characters marked as
-   alphanumeric in the Unicode character properties database.
+   this will match anything other than ``[0-9_]`` plus characters classied as
+   not alphanumeric in the Unicode character properties database.
 
 ``\Z``
    Matches only at the end of the string.
+
+If both :const:`LOCALE` and :const:`UNICODE` flags are included for a
+particular sequence, then :const:`LOCALE` flag takes effect first followed by
+the :const:`UNICODE`.
 
 Most of the standard escapes supported by Python string literals are also
 accepted by the regular expression parser::
@@ -393,31 +402,6 @@ Octal escapes are included in a limited form: If the first digit is a 0, or if
 there are three octal digits, it is considered an octal escape. Otherwise, it is
 a group reference.  As for string literals, octal escapes are always at most
 three digits in length.
-
-
-.. _matching-searching:
-
-Matching vs Searching
----------------------
-
-.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
-
-
-Python offers two different primitive operations based on regular expressions:
-**match** checks for a match only at the beginning of the string, while
-**search** checks for a match anywhere in the string (this is what Perl does
-by default).
-
-Note that match may differ from search even when using a regular expression
-beginning with ``'^'``: ``'^'`` matches only at the start of the string, or in
-:const:`MULTILINE` mode also immediately following a newline.  The "match"
-operation succeeds only if the pattern matches at the start of the string
-regardless of mode, or at the starting position given by the optional *pos*
-argument regardless of whether a newline precedes it.
-
-   >>> re.match("c", "abcdef")  # No match
-   >>> re.search("c", "abcdef") # Match
-   <_sre.SRE_Match object at ...>
 
 
 .. _contents-of-module-re:
@@ -542,10 +526,11 @@ form.
    Return ``None`` if the string does not match the pattern; note that this is
    different from a zero-length match.
 
-   .. note::
+   Note that even in :const:`MULTILINE` mode, :func:`re.match` will only match
+   at the beginning of the string and not at the beginning of each line.
 
-      If you want to locate a match anywhere in *string*, use :func:`search`
-      instead.
+   If you want to locate a match anywhere in *string*, use :func:`search`
+   instead (see also :ref:`search-vs-match`).
 
 
 .. function:: split(pattern, string, maxsplit=0, flags=0)
@@ -741,15 +726,13 @@ Regular Expression Objects
       The optional *pos* and *endpos* parameters have the same meaning as for the
       :meth:`~RegexObject.search` method.
 
-      .. note::
-
-         If you want to locate a match anywhere in *string*, use
-         :meth:`~RegexObject.search` instead.
-
       >>> pattern = re.compile("o")
       >>> pattern.match("dog")      # No match as "o" is not at the start of "dog".
       >>> pattern.match("dog", 1)   # Match as "o" is the 2nd character of "dog".
       <_sre.SRE_Match object at ...>
+
+      If you want to locate a match anywhere in *string*, use
+      :meth:`~RegexObject.search` instead (see also :ref:`search-vs-match`).
 
 
    .. method:: RegexObject.split(string, maxsplit=0)
@@ -1116,37 +1099,39 @@ avoid recursion.  Thus, the above regular expression can avoid recursion by
 being recast as ``Begin [a-zA-Z0-9_ ]*?end``.  As a further benefit, such
 regular expressions will run faster than their recursive equivalents.
 
+.. _search-vs-match:
 
 search() vs. match()
 ^^^^^^^^^^^^^^^^^^^^
 
-In a nutshell, :func:`match` only attempts to match a pattern at the beginning
-of a string where :func:`search` will match a pattern anywhere in a string.
-For example:
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
-   >>> re.match("o", "dog")  # No match as "o" is not the first letter of "dog".
-   >>> re.search("o", "dog") # Match as search() looks everywhere in the string.
+Python offers two different primitive operations based on regular expressions:
+:func:`re.match` checks for a match only at the beginning of the string, while
+:func:`re.search` checks for a match anywhere in the string (this is what Perl
+does by default).
+
+For example::
+
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("c", "abcdef") # Match
    <_sre.SRE_Match object at ...>
 
-.. note::
+Regular expressions beginning with ``'^'`` can be used with :func:`search` to
+restrict the match at the beginning of the string::
 
-   The following applies only to regular expression objects like those created
-   with ``re.compile("pattern")``, not the primitives ``re.match(pattern,
-   string)`` or ``re.search(pattern, string)``.
-
-:func:`match` has an optional second parameter that gives an index in the string
-where the search is to start::
-
-   >>> pattern = re.compile("o")
-   >>> pattern.match("dog")      # No match as "o" is not at the start of "dog."
-
-   # Equivalent to the above expression as 0 is the default starting index:
-   >>> pattern.match("dog", 0)
-
-   # Match as "o" is the 2nd character of "dog" (index 0 is the first):
-   >>> pattern.match("dog", 1)
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("^c", "abcdef") # No match
+   >>> re.search("^a", "abcdef")  # Match
    <_sre.SRE_Match object at ...>
-   >>> pattern.match("dog", 2)   # No match as "o" is not the 3rd character of "dog."
+
+Note however that in :const:`MULTILINE` mode :func:`match` only matches at the
+beginning of the string, whereas using :func:`search` with a regular expression
+beginning with ``'^'`` will match at the beginning of each line.
+
+   >>> re.match('X', 'A\nB\nX', re.MULTILINE)  # No match
+   >>> re.search('^X', 'A\nB\nX', re.MULTILINE)  # Match
+   <_sre.SRE_Match object at ...>
 
 
 Making a Phonebook

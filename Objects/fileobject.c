@@ -635,11 +635,13 @@ file_dealloc(PyFileObject *f)
 static PyObject *
 file_repr(PyFileObject *f)
 {
+    PyObject *ret = NULL;
+    PyObject *name = NULL;
     if (PyUnicode_Check(f->f_name)) {
 #ifdef Py_USING_UNICODE
-        PyObject *ret = NULL;
-        PyObject *name = PyUnicode_AsUnicodeEscapeString(f->f_name);
-        const char *name_str = name ? PyString_AsString(name) : "?";
+        const char *name_str;
+        name = PyUnicode_AsUnicodeEscapeString(f->f_name);
+        name_str = name ? PyString_AsString(name) : "?";
         ret = PyString_FromFormat("<%s file u'%s', mode '%s' at %p>",
                            f->f_fp == NULL ? "closed" : "open",
                            name_str,
@@ -649,11 +651,16 @@ file_repr(PyFileObject *f)
         return ret;
 #endif
     } else {
-        return PyString_FromFormat("<%s file '%s', mode '%s' at %p>",
+        name = PyObject_Repr(f->f_name);
+        if (name == NULL)
+            return NULL;
+        ret = PyString_FromFormat("<%s file %s, mode '%s' at %p>",
                            f->f_fp == NULL ? "closed" : "open",
-                           PyString_AsString(f->f_name),
+                           PyString_AsString(name),
                            PyString_AsString(f->f_mode),
                            f);
+        Py_XDECREF(name);
+        return ret;
     }
 }
 
