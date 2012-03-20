@@ -1,6 +1,57 @@
 Python News
 +++++++++++
 
+What's New in Python 2.7.4
+==========================
+
+*Release date: XXXX-XX-XX*
+
+Core and Builtins
+-----------------
+
+- Issue #14331: Use significantly less stack space when importing modules by
+  allocating path buffers on the heap instead of the stack.
+
+- Issue #14334: Prevent in a segfault in type.__getattribute__ when it was not
+  passed strings. Also fix segfaults in the __getattribute__ and __setattr__
+  methods of old-style classes.
+
+- Issue #14161: fix the __repr__ of file objects to escape the file name.
+
+- Issue #1469629: Allow cycles through an object's __dict__ slot to be
+  collected. (For example if ``x.__dict__ is x``).
+
+- Issue #13521: dict.setdefault() now does only one lookup for the given key,
+  making it "atomic" for many purposes.  Patch by Filip Gruszczyński.
+
+Library
+-------
+
+- Issue #10484: Fix the CGIHTTPServer's PATH_INFO handling problem.
+
+- Issue #11199: Fix the with urllib which hangs on particular ftp urls.
+
+- Issue #5219: Prevent event handler cascade in IDLE.
+
+- Issue #14252: Fix subprocess.Popen.terminate() to not raise an error under
+  Windows when the child process has already exited.
+
+- Issue #14195: An issue that caused weakref.WeakSet instances to incorrectly
+  return True for a WeakSet instance 'a' in both 'a < a' and 'a > a' has been
+  fixed.
+
+- Issue #14159: Fix the len() of weak sets to return a better approximation
+  when some objects are dead or dying.  Moreover, the implementation is now
+  O(1) rather than O(n).
+
+- Issue #2945: Make the distutils upload command aware of bdist_rpm products.
+
+- Issue #13447: Add a test file to host regression tests for bugs in the
+  scripts found in the Tools directory.
+
+- Issue #6884: Fix long-standing bugs with MANIFEST.in parsing in distutils
+  on Windows.
+
 
 What's New in Python 2.7.3 release candidate 2?
 ===============================================
@@ -264,8 +315,6 @@ Library
 
 - Issues #1745761, #755670, #13357, #12629, #1200313: HTMLParser now correctly
   handles non-valid attributes, including adjacent and unquoted attributes.
-
-- Issue #13193: Fix distutils.filelist.FileList under Windows.
 
 - Issue #13373: multiprocessing.Queue.get() could sometimes block indefinitely
   when called with a timeout.  Patch by Arnaud Ysmal.
@@ -615,7 +664,8 @@ Tests
 Documentation
 -------------
 
-- Issue #13995: Fix errors in sqlite3's Cursor.rowcount documentation
+- Issues #13491 and #13995: Fix many errors in sqlite3 documentation.
+  Initial patch for #13491 by Johannes Vogel.
 
 - Issue #13402: Document absoluteness of sys.executable.
 
