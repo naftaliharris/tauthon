@@ -16,18 +16,6 @@ FTEXT, FHCRC, FEXTRA, FNAME, FCOMMENT = 1, 2, 4, 8, 16
 
 READ, WRITE = 1, 2
 
-def U32(i):
-    """Return i as an unsigned integer, assuming it fits in 32 bits.
-    If it's >= 2GB when viewed as a 32-bit unsigned int, return a long.
-    """
-    if i < 0:
-        i += 1 << 32
-    return i
-
-def LOWU32(i):
-    """Return the low-order 32 bits, as a non-negative int"""
-    return i & 0xFFFFFFFF
-
 def write32u(output, value):
     # The L format writes the bit pattern correctly whether signed
     # or unsigned.
@@ -153,7 +141,7 @@ class GzipFile(io.BufferedIOBase):
         """
 
         if mode and ('t' in mode or 'U' in mode):
-            raise IOError("Mode " + mode + " not supported")
+            raise ValueError("Invalid mode: {!r}".format(mode))
         if mode and 'b' not in mode:
             mode += 'b'
         if fileobj is None:
@@ -164,10 +152,9 @@ class GzipFile(io.BufferedIOBase):
             else:
                 filename = ''
         if mode is None:
-            if hasattr(fileobj, 'mode'): mode = fileobj.mode
-            else: mode = 'rb'
+            mode = getattr(fileobj, 'mode', 'rb')
 
-        if mode[0:1] == 'r':
+        if mode.startswith('r'):
             self.mode = READ
             # Set flag indicating start of a new member
             self._new_member = True
@@ -182,7 +169,7 @@ class GzipFile(io.BufferedIOBase):
             self.min_readsize = 100
             fileobj = _PaddedFile(fileobj)
 
-        elif mode[0:1] == 'w' or mode[0:1] == 'a':
+        elif mode.startswith(('w', 'a')):
             self.mode = WRITE
             self._init_write(filename)
             self.compress = zlib.compressobj(compresslevel,
@@ -191,7 +178,7 @@ class GzipFile(io.BufferedIOBase):
                                              zlib.DEF_MEM_LEVEL,
                                              0)
         else:
-            raise IOError("Mode " + mode + " not supported")
+            raise ValueError("Invalid mode: {!r}".format(mode))
 
         self.fileobj = fileobj
         self.offset = 0
@@ -350,6 +337,28 @@ class GzipFile(io.BufferedIOBase):
         chunk = self.extrabuf[offset: offset + size]
         self.extrasize = self.extrasize - size
 
+        self.offset += size
+        return chunk
+
+    def read1(self, size=-1):
+        self._check_closed()
+        if self.mode != READ:
+            import errno
+            raise IOError(errno.EBADF, "read1() on write-only GzipFile object")
+
+        if self.extrasize <= 0 and self.fileobj is None:
+            return b''
+
+        try:
+            self._read()
+        except EOFError:
+            pass
+        if size < 0 or size > self.extrasize:
+            size = self.extrasize
+
+        offset = self.offset - self.extrastart
+        chunk = self.extrabuf[offset: offset + size]
+        self.extrasize -= size
         self.offset += size
         return chunk
 
