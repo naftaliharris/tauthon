@@ -30,16 +30,21 @@ convenience functions for all use cases they can handle. For more advanced
 use cases, the underlying :class:`Popen` interface can be used directly.
 
 
-.. function:: call(args, *, stdin=None, stdout=None, stderr=None, shell=False)
+.. function:: call(args, *, stdin=None, stdout=None, stderr=None, shell=False, timeout=None)
 
    Run the command described by *args*.  Wait for command to complete, then
    return the :attr:`returncode` attribute.
 
    The arguments shown above are merely the most common ones, described below
-   in :ref:`frequently-used-arguments` (hence the slightly odd notation in
-   the abbreviated signature). The full function signature is the same as
-   that of the :class:`Popen` constructor - this functions passes all
-   supplied arguments directly through to that interface.
+   in :ref:`frequently-used-arguments` (hence the use of keyword-only notation
+   in the abbreviated signature). The full function signature is largely the
+   same as that of the :class:`Popen` constructor - this function passes all
+   supplied arguments other than *timeout* directly through to that interface.
+
+   The *timeout* argument is passed to :meth:`Popen.wait`. If the timeout
+   expires, the child process will be killed and then waited for again.  The
+   :exc:`TimeoutExpired` exception will be re-raised after the child process
+   has terminated.
 
    Examples::
 
@@ -62,8 +67,11 @@ use cases, the underlying :class:`Popen` interface can be used directly.
       process may block if it generates enough output to a pipe to fill up
       the OS pipe buffer.
 
+   .. versionchanged:: 3.3
+      *timeout* was added.
 
-.. function:: check_call(args, *, stdin=None, stdout=None, stderr=None, shell=False)
+
+.. function:: check_call(args, *, stdin=None, stdout=None, stderr=None, shell=False, timeout=None)
 
    Run command with arguments.  Wait for command to complete. If the return
    code was zero then return, otherwise raise :exc:`CalledProcessError`. The
@@ -71,10 +79,15 @@ use cases, the underlying :class:`Popen` interface can be used directly.
    :attr:`returncode` attribute.
 
    The arguments shown above are merely the most common ones, described below
-   in :ref:`frequently-used-arguments` (hence the slightly odd notation in
-   the abbreviated signature). The full function signature is the same as
-   that of the :class:`Popen` constructor - this functions passes all
-   supplied arguments directly through to that interface.
+   in :ref:`frequently-used-arguments` (hence the use of keyword-only notation
+   in the abbreviated signature). The full function signature is largely the
+   same as that of the :class:`Popen` constructor - this function passes all
+   supplied arguments other than *timeout* directly through to that interface.
+
+   The *timeout* argument is passed to :meth:`Popen.wait`. If the timeout
+   expires, the child process will be killed and then waited for again.  The
+   :exc:`TimeoutExpired` exception will be re-raised after the child process
+   has terminated.
 
    Examples::
 
@@ -85,8 +98,6 @@ use cases, the underlying :class:`Popen` interface can be used directly.
       Traceback (most recent call last):
          ...
       subprocess.CalledProcessError: Command 'exit 1' returned non-zero exit status 1
-
-   .. versionadded:: 2.5
 
    .. warning::
 
@@ -101,8 +112,11 @@ use cases, the underlying :class:`Popen` interface can be used directly.
       process may block if it generates enough output to a pipe to fill up
       the OS pipe buffer.
 
+   .. versionchanged:: 3.3
+      *timeout* was added.
 
-.. function:: check_output(args, *, stdin=None, stderr=None, shell=False, universal_newlines=False)
+
+.. function:: check_output(args, *, stdin=None, stderr=None, shell=False, universal_newlines=False, timeout=None)
 
    Run command with arguments and return its output as a byte string.
 
@@ -112,11 +126,17 @@ use cases, the underlying :class:`Popen` interface can be used directly.
    attribute.
 
    The arguments shown above are merely the most common ones, described below
-   in :ref:`frequently-used-arguments` (hence the slightly odd notation in
-   the abbreviated signature). The full function signature is largely the
-   same as that of the :class:`Popen` constructor, except that *stdout* is
-   not permitted as it is used internally. All other supplied arguments are
-   passed directly through to the :class:`Popen` constructor.
+   in :ref:`frequently-used-arguments` (hence the use of keyword-only notation
+   in the abbreviated signature). The full function signature is largely the
+   same as that of the :class:`Popen` constructor - this functions passes all
+   supplied arguments other than *timeout* directly through to that interface.
+   In addition, *stdout* is not permitted as an argument, as it is used
+   internally to collect the output from the subprocess.
+
+   The *timeout* argument is passed to :meth:`Popen.wait`. If the timeout
+   expires, the child process will be killed and then waited for again.  The
+   :exc:`TimeoutExpired` exception will be re-raised after the child process
+   has terminated.
 
    Examples::
 
@@ -147,7 +167,7 @@ use cases, the underlying :class:`Popen` interface can be used directly.
       ...     shell=True)
       'ls: non_existent_file: No such file or directory\n'
 
-   .. versionadded:: 2.7
+   .. versionadded:: 3.1
 
    .. warning::
 
@@ -160,6 +180,18 @@ use cases, the underlying :class:`Popen` interface can be used directly.
       Do not use ``stderr=PIPE`` with this function. As the pipe is not being
       read in the current process, the child process may block if it
       generates enough output to the pipe to fill up the OS pipe buffer.
+
+   .. versionchanged:: 3.3
+      *timeout* was added.
+
+
+.. data:: DEVNULL
+
+   Special value that can be used as the *stdin*, *stdout* or *stderr* argument
+   to :class:`Popen` and indicates that the special file :data:`os.devnull`
+   will be used.
+
+   .. versionadded:: 3.3
 
 
 .. data:: PIPE
@@ -196,13 +228,14 @@ default values. The arguments that are most commonly needed are:
 
    *stdin*, *stdout* and *stderr* specify the executed program's standard input,
    standard output and standard error file handles, respectively.  Valid values
-   are :data:`PIPE`, an existing file descriptor (a positive integer), an
-   existing file object, and ``None``.  :data:`PIPE` indicates that a new pipe
-   to the child should be created.  With the default settings of ``None``, no
-   redirection will occur; the child's file handles will be inherited from the
-   parent.  Additionally, *stderr* can be :data:`STDOUT`, which indicates that
-   the stderr data from the child process should be captured into the same file
-   handle as for stdout.
+   are :data:`PIPE`, :data:`DEVNULL`, an existing file descriptor (a positive
+   integer), an existing file object, and ``None``.  :data:`PIPE` indicates
+   that a new pipe to the child should be created.  :data:`DEVNULL` indicates
+   that the special file :data:`os.devnull` will be used.  With the default
+   settings of ``None``, no redirection will occur; the child's file handles
+   will be inherited from the parent.  Additionally, *stderr* can be
+   :data:`STDOUT`, which indicates that the stderr data from the child
+   process should be captured into the same file handle as for *stdout*.
 
    When *stdout* or *stderr* are pipes and *universal_newlines* is
    :const:`True` then the output data is assumed to be encoded as UTF-8 and
@@ -331,13 +364,14 @@ functions.
 
    *stdin*, *stdout* and *stderr* specify the executed program's standard input,
    standard output and standard error file handles, respectively.  Valid values
-   are :data:`PIPE`, an existing file descriptor (a positive integer), an
-   existing :term:`file object`, and ``None``.  :data:`PIPE` indicates that a
-   new pipe to the child should be created.  With the default settings of
-   ``None``, no redirection will occur; the child's file handles will be
-   inherited from the parent.  Additionally, *stderr* can be :data:`STDOUT`,
-   which indicates that the stderr data from the applications should be
-   captured into the same file handle as for stdout.
+   are :data:`PIPE`, :data:`DEVNULL`, an existing file descriptor (a positive
+   integer), an existing :term:`file object`, and ``None``.  :data:`PIPE`
+   indicates that a new pipe to the child should be created.  :data:`DEVNULL`
+   indicates that the special file :data:`os.devnull` will be used. With the
+   default settings of ``None``, no redirection will occur; the child's file
+   handles will be inherited from the parent.  Additionally, *stderr* can be
+   :data:`STDOUT`, which indicates that the stderr data from the applications
+   should be captured into the same file handle as for stdout.
 
    If *preexec_fn* is set to a callable object, this object will be called in the
    child process just before the child is executed.
@@ -456,6 +490,15 @@ arguments.
 :exc:`CalledProcessError` if the called process returns a non-zero return
 code.
 
+All of the functions and methods that accept a *timeout* parameter, such as
+:func:`call` and :meth:`Popen.communicate` will raise :exc:`TimeoutExpired` if
+the timeout expires before the process exits.
+
+Exceptions defined in this module all inherit from :exc:`SubprocessError`.
+
+   .. versionadded:: 3.3
+      The :exc:`SubprocessError` base class was added.
+
 
 Security
 ^^^^^^^^
@@ -479,10 +522,14 @@ Instances of the :class:`Popen` class have the following methods:
    attribute.
 
 
-.. method:: Popen.wait()
+.. method:: Popen.wait(timeout=None)
 
    Wait for child process to terminate.  Set and return :attr:`returncode`
    attribute.
+
+   If the process does not terminate after *timeout* seconds, raise a
+   :exc:`TimeoutExpired` exception.  It is safe to catch this exception and
+   retry the wait.
 
    .. warning::
 
@@ -491,13 +538,17 @@ Instances of the :class:`Popen` class have the following methods:
       a pipe such that it blocks waiting for the OS pipe buffer to
       accept more data.  Use :meth:`communicate` to avoid that.
 
+   .. versionchanged:: 3.3
+      *timeout* was added.
 
-.. method:: Popen.communicate(input=None)
+
+.. method:: Popen.communicate(input=None, timeout=None)
 
    Interact with process: Send data to stdin.  Read data from stdout and stderr,
-   until end-of-file is reached.  Wait for process to terminate. The optional
-   *input* argument should be a byte string to be sent to the child process, or
-   ``None``, if no data should be sent to the child.
+   until end-of-file is reached.  Wait for process to terminate.  The optional
+   *input* argument should be data to be sent to the child process, or
+   ``None``, if no data should be sent to the child.  The type of *input*
+   must be bytes or, if *universal_newlines* was ``True``, a string.
 
    :meth:`communicate` returns a tuple ``(stdoutdata, stderrdata)``.
 
@@ -506,10 +557,28 @@ Instances of the :class:`Popen` class have the following methods:
    ``None`` in the result tuple, you need to give ``stdout=PIPE`` and/or
    ``stderr=PIPE`` too.
 
+   If the process does not terminate after *timeout* seconds, a
+   :exc:`TimeoutExpired` exception will be raised.  Catching this exception and
+   retrying communication will not lose any output.
+
+   The child process is not killed if the timeout expires, so in order to
+   cleanup properly a well-behaved application should kill the child process and
+   finish communication::
+
+      proc = subprocess.Popen(...)
+      try:
+          outs, errs = proc.communicate(timeout=15)
+      except TimeoutExpired:
+          proc.kill()
+          outs, errs = proc.communicate()
+
    .. note::
 
       The data read is buffered in memory, so do not use this method if the data
       size is large or unlimited.
+
+   .. versionchanged:: 3.3
+      *timeout* was added.
 
 
 .. method:: Popen.send_signal(signal)
@@ -952,3 +1021,9 @@ runtime):
    backslash.  If the number of backslashes is odd, the last
    backslash escapes the next double quotation mark as
    described in rule 3.
+
+
+.. seealso::
+
+   :mod:`shlex`
+      Module which provides function to parse and escape command lines.
