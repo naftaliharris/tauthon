@@ -32,16 +32,17 @@ To create an element instance, use the :class:`Element` constructor or the
 The :class:`ElementTree` class can be used to wrap an element structure, and
 convert it from and to XML.
 
-A C implementation of this API is available as :mod:`xml.etree.cElementTree`.
-
 See http://effbot.org/zone/element-index.htm for tutorials and links to other
-docs.  Fredrik Lundh's page is also the location of the development version of
-the xml.etree.ElementTree.
+docs.
 
 .. versionchanged:: 3.2
    The ElementTree API is updated to 1.3.  For more information, see
    `Introducing ElementTree 1.3
    <http://effbot.org/zone/elementtree-13-intro.htm>`_.
+
+.. versionchanged:: 3.3
+   This module will use a fast implementation whenever available.
+   The :mod:`xml.etree.cElementTree` module is deprecated.
 
 
 .. _elementtree-functions:
@@ -200,7 +201,6 @@ Functions
 Element Objects
 ---------------
 
-
 .. class:: Element(tag, attrib={}, **extra)
 
    Element class.  This class defines the Element interface, and provides a
@@ -281,14 +281,15 @@ Element Objects
 
    .. method:: append(subelement)
 
-      Adds the element *subelement* to the end of this elements internal list
-      of subelements.
+      Adds the element *subelement* to the end of this element's internal list
+      of subelements.  Raises :exc:`TypeError` if *subelement* is not an
+      :class:`Element`.
 
 
    .. method:: extend(subelements)
 
       Appends *subelements* from a sequence object with zero or more elements.
-      Raises :exc:`AssertionError` if a subelement is not a valid object.
+      Raises :exc:`TypeError` if a subelement is not an :class:`Element`.
 
       .. versionadded:: 3.2
 
@@ -325,9 +326,10 @@ Element Objects
          Use method :meth:`Element.iter` instead.
 
 
-   .. method:: insert(index, element)
+   .. method:: insert(index, subelement)
 
-      Inserts a subelement at the given position in this element.
+      Inserts *subelement* at the given position in this element.  Raises
+      :exc:`TypeError` if *subelement* is not an :class:`Element`.
 
 
    .. method:: iter(tag=None)
@@ -645,6 +647,24 @@ This is an example of counting the maximum depth of an XML file::
     >>> parser.close()
     4
 
+Exceptions
+----------
+
+.. class:: ParseError
+
+   XML parse error, raised by the various parsing methods in this module when
+   parsing fails.  The string representation of an instance of this exception
+   will contain a user-friendly error message.  In addition, it will have
+   the following attributes available:
+
+   .. attribute:: code
+
+      A numeric error code from the expat parser. See the documentation of
+      :mod:`xml.parsers.expat` for the list of error codes and their meanings.
+
+   .. attribute:: position
+
+      A tuple of *line*, *column* numbers, specifying where the error occurred.
 
 .. rubric:: Footnotes
 

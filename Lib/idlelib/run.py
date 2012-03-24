@@ -6,6 +6,7 @@ import traceback
 import _thread as thread
 import threading
 import queue
+import builtins
 
 from idlelib import CallTips
 from idlelib import AutoComplete
@@ -37,6 +38,21 @@ else:
         s += "%s: %s\n" % (category.__name__, message)
         return s
     warnings.formatwarning = idle_formatwarning_subproc
+
+
+def handle_tk_events():
+    """Process any tk events that are ready to be dispatched if tkinter
+    has been imported, a tcl interpreter has been created and tk has been
+    loaded."""
+    tkinter = sys.modules.get('tkinter')
+    if tkinter and tkinter._default_root:
+        # tkinter has been imported, an Tcl interpreter was created and
+        # tk has been loaded.
+        root = tkinter._default_root
+        while root.tk.dooneevent(tkinter._tkinter.DONT_WAIT):
+            # Process pending events.
+            pass
+
 
 # Thread shared globals: Establish a queue between a subthread (which handles
 # the socket) and the main thread (which runs user code), plus global
@@ -93,6 +109,7 @@ def main(del_exitfunc=False):
             try:
                 seq, request = rpc.request_queue.get(block=True, timeout=0.05)
             except queue.Empty:
+                handle_tk_events()
                 continue
             method, args, kwargs = request
             ret = method(*args, **kwargs)
@@ -245,6 +262,25 @@ class MyRPCServer(rpc.RPCServer):
             thread.interrupt_main()
 
 
+def displayhook(value):
+    """Override standard display hook to use non-locale encoding"""
+    if value is None:
+        return
+    # Set '_' to None to avoid recursion
+    builtins._ = None
+    text = repr(value)
+    try:
+        sys.stdout.write(text)
+    except UnicodeEncodeError:
+        # let's use ascii while utf8-bmp codec doesn't present
+        encoding = 'ascii'
+        bytes = text.encode(encoding, 'backslashreplace')
+        text = bytes.decode(encoding, 'strict')
+        sys.stdout.write(text)
+    sys.stdout.write("\n")
+    builtins._ = value
+
+
 class MyHandler(rpc.RPCHandler):
 
     def handle(self):
@@ -254,6 +290,7 @@ class MyHandler(rpc.RPCHandler):
         sys.stdin = self.console = self.get_remote_proxy("stdin")
         sys.stdout = self.get_remote_proxy("stdout")
         sys.stderr = self.get_remote_proxy("stderr")
+        sys.displayhook = displayhook
         # page help() text to shell.
         import pydoc # import must be done here to capture i/o binding
         pydoc.pager = pydoc.plainpager
