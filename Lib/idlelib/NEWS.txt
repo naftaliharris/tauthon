@@ -1,5 +1,7 @@
-What's New in IDLE 3.2.3?
+What's New in IDLE 3.3?
 =========================
+
+- IDLE can be launched as `python -m idlelib`
 
 - Issue #14409: IDLE doesn't not execute commands from shell,
   error with default keybinding for Return. (Patch by Roger Serwy)
