@@ -1,8 +1,6 @@
 # Autodetecting setup.py script for building the Python extensions
 #
 
-__version__ = "$Revision$"
-
 import sys, os, imp, re, optparse
 from glob import glob
 import sysconfig
@@ -365,9 +363,8 @@ class PyBuildExt(build_ext):
 
     def get_platform(self):
         # Get value of sys.platform
-        for platform in ['cygwin', 'darwin', 'osf1']:
-            if sys.platform.startswith(platform):
-                return platform
+        if sys.platform.startswith('osf1'):
+            return 'osf1'
         return sys.platform
 
     def add_multiarch_paths(self):
@@ -507,11 +504,17 @@ class PyBuildExt(build_ext):
         exts.append( Extension('math',  ['mathmodule.c', '_math.c'],
                                depends=['_math.h'],
                                libraries=math_libs) )
+
+        # time libraries: librt may be needed for clock_gettime()
+        time_libs = []
+        lib = sysconfig.get_config_var('TIMEMODULE_LIB')
+        if lib:
+            time_libs.append(lib)
+
         # time operations and variables
-        exts.append( Extension('time', ['timemodule.c', '_time.c'],
-                               libraries=math_libs) )
-        exts.append( Extension('_datetime', ['_datetimemodule.c', '_time.c'],
-                               libraries=math_libs) )
+        exts.append( Extension('time', ['timemodule.c'],
+                               libraries=time_libs) )
+        exts.append( Extension('_datetime', ['_datetimemodule.c']) )
         # random number generator implemented in C
         exts.append( Extension("_random", ["_randommodule.c"]) )
         # bisect
@@ -527,6 +530,8 @@ class PyBuildExt(build_ext):
         # Python C API test module
         exts.append( Extension('_testcapi', ['_testcapimodule.c'],
                                depends=['testcapi_long.h']) )
+        # Python PEP-3118 (buffer protocol) test module
+        exts.append( Extension('_testbuffer', ['_testbuffer.c']) )
         # profiler (_lsprof is for cProfile.py)
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database
@@ -659,7 +664,7 @@ class PyBuildExt(build_ext):
             libs = ['crypt']
         else:
             libs = []
-        exts.append( Extension('crypt', ['cryptmodule.c'], libraries=libs) )
+        exts.append( Extension('_crypt', ['_cryptmodule.c'], libraries=libs) )
 
         # CSV files
         exts.append( Extension('_csv', ['_csv.c']) )
@@ -1047,10 +1052,15 @@ class PyBuildExt(build_ext):
             else:
                 sqlite_extra_link_args = ()
 
+            include_dirs = ["Modules/_sqlite"]
+            # Only include the directory where sqlite was found if it does
+            # not already exist in set include directories, otherwise you
+            # can end up with a bad search path order.
+            if sqlite_incdir not in self.compiler.include_dirs:
+                include_dirs.append(sqlite_incdir)
             exts.append(Extension('_sqlite3', sqlite_srcs,
                                   define_macros=sqlite_defines,
-                                  include_dirs=["Modules/_sqlite",
-                                                sqlite_incdir],
+                                  include_dirs=include_dirs,
                                   library_dirs=sqlite_libdir,
                                   runtime_library_dirs=sqlite_libdir,
                                   extra_link_args=sqlite_extra_link_args,
@@ -1160,14 +1170,21 @@ class PyBuildExt(build_ext):
 
         # Curses support, requiring the System V version of curses, often
         # provided by the ncurses library.
+        curses_defines = []
+        curses_includes = []
         panel_library = 'panel'
+        if curses_library == 'ncursesw':
+            curses_defines.append(('HAVE_NCURSESW', '1'))
+            curses_includes.append('/usr/include/ncursesw')
+            # Bug 1464056: If _curses.so links with ncursesw,
+            # _curses_panel.so must link with panelw.
+            panel_library = 'panelw'
+
         if curses_library.startswith('ncurses'):
-            if curses_library == 'ncursesw':
-                # Bug 1464056: If _curses.so links with ncursesw,
-                # _curses_panel.so must link with panelw.
-                panel_library = 'panelw'
             curses_libs = [curses_library]
             exts.append( Extension('_curses', ['_cursesmodule.c'],
+                                   include_dirs=curses_includes,
+                                   define_macros=curses_defines,
                                    libraries = curses_libs) )
         elif curses_library == 'curses' and platform != 'darwin':
                 # OSX has an old Berkeley curses, not good enough for
@@ -1180,6 +1197,7 @@ class PyBuildExt(build_ext):
                 curses_libs = ['curses']
 
             exts.append( Extension('_curses', ['_cursesmodule.c'],
+                                   define_macros=curses_defines,
                                    libraries = curses_libs) )
         else:
             missing.append('_curses')
@@ -1188,6 +1206,7 @@ class PyBuildExt(build_ext):
         if (module_enabled(exts, '_curses') and
             self.compiler.find_library_file(lib_dirs, panel_library)):
             exts.append( Extension('_curses_panel', ['_curses_panel.c'],
+                                   include_dirs=curses_includes,
                                    libraries = [panel_library] + curses_libs) )
         else:
             missing.append('_curses_panel')
@@ -1256,11 +1275,18 @@ class PyBuildExt(build_ext):
                 bz2_extra_link_args = ('-Wl,-search_paths_first',)
             else:
                 bz2_extra_link_args = ()
-            exts.append( Extension('bz2', ['bz2module.c'],
+            exts.append( Extension('_bz2', ['_bz2module.c'],
                                    libraries = ['bz2'],
                                    extra_link_args = bz2_extra_link_args) )
         else:
-            missing.append('bz2')
+            missing.append('_bz2')
+
+        # LZMA compression support.
+        if self.compiler.find_library_file(lib_dirs, 'lzma'):
+            exts.append( Extension('_lzma', ['_lzmamodule.c'],
+                                   libraries = ['lzma']) )
+        else:
+            missing.append('_lzma')
 
         # Interface to the Expat XML parser
         #
@@ -1316,6 +1342,9 @@ class PyBuildExt(build_ext):
             exts.append(Extension('_codecs_%s' % loc,
                                   ['cjkcodecs/_codecs_%s.c' % loc]))
 
+        # Stefan Krah's _decimal module
+        exts.append(self._decimal_ext())
+
         # Thomas Heller's _ctypes module
         self.detect_ctypes(inc_dirs, lib_dirs)
 
@@ -1353,14 +1382,11 @@ class PyBuildExt(build_ext):
         if platform == 'win32':
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
                                      '_multiprocessing/semaphore.c',
-                                     '_multiprocessing/pipe_connection.c',
-                                     '_multiprocessing/socket_connection.c',
                                      '_multiprocessing/win32_functions.c'
                                    ]
 
         else:
             multiprocessing_srcs = [ '_multiprocessing/multiprocessing.c',
-                                     '_multiprocessing/socket_connection.c'
                                    ]
             if (sysconfig.get_config_var('HAVE_SEM_OPEN') and not
                 sysconfig.get_config_var('POSIX_SEMAPHORES_NOT_ENABLED')):
@@ -1375,9 +1401,7 @@ class PyBuildExt(build_ext):
         # End multiprocessing
 
         # Platform-specific libraries
-        if (platform in ('linux2', 'freebsd4', 'freebsd5', 'freebsd6',
-                        'freebsd7', 'freebsd8')
-            or platform.startswith("gnukfreebsd")):
+        if platform.startswith(('linux', 'freebsd', 'gnukfreebsd')):
             exts.append( Extension('ossaudiodev', ['ossaudiodev.c']) )
         else:
             missing.append('ossaudiodev')
@@ -1771,6 +1795,124 @@ class PyBuildExt(build_ext):
             ext.libraries.append(ffi_lib)
             self.use_system_libffi = True
 
+    def _decimal_ext(self):
+        extra_compile_args = []
+        undef_macros=['NDEBUG']
+        if '--with-system-libmpdec' in sysconfig.get_config_var("CONFIG_ARGS"):
+            include_dirs = []
+            libraries = ['mpdec']
+            sources = ['_decimal/_decimal.c']
+            depends = ['_decimal/docstrings.h']
+        else:
+            include_dirs = ['./Modules/_decimal/libmpdec']
+            libraries = []
+            sources = [
+              '_decimal/_decimal.c',
+              '_decimal/libmpdec/basearith.c',
+              '_decimal/libmpdec/constants.c',
+              '_decimal/libmpdec/context.c',
+              '_decimal/libmpdec/convolute.c',
+              '_decimal/libmpdec/crt.c',
+              '_decimal/libmpdec/difradix2.c',
+              '_decimal/libmpdec/fnt.c',
+              '_decimal/libmpdec/fourstep.c',
+              '_decimal/libmpdec/io.c',
+              '_decimal/libmpdec/memory.c',
+              '_decimal/libmpdec/mpdecimal.c',
+              '_decimal/libmpdec/numbertheory.c',
+              '_decimal/libmpdec/sixstep.c',
+              '_decimal/libmpdec/transpose.c',
+              ]
+            depends = [
+              '_decimal/docstrings.h',
+              '_decimal/libmpdec/basearith.h',
+              '_decimal/libmpdec/bits.h',
+              '_decimal/libmpdec/constants.h',
+              '_decimal/libmpdec/convolute.h',
+              '_decimal/libmpdec/crt.h',
+              '_decimal/libmpdec/difradix2.h',
+              '_decimal/libmpdec/fnt.h',
+              '_decimal/libmpdec/fourstep.h',
+              '_decimal/libmpdec/io.h',
+              '_decimal/libmpdec/memory.h',
+              '_decimal/libmpdec/mpdecimal.h',
+              '_decimal/libmpdec/numbertheory.h',
+              '_decimal/libmpdec/sixstep.h',
+              '_decimal/libmpdec/transpose.h',
+              '_decimal/libmpdec/typearith.h',
+              '_decimal/libmpdec/umodarith.h',
+              ]
+
+        config = {
+          'x64':     [('CONFIG_64','1'), ('ASM','1')],
+          'uint128': [('CONFIG_64','1'), ('ANSI','1'), ('HAVE_UINT128_T','1')],
+          'ansi64':  [('CONFIG_64','1'), ('ANSI','1')],
+          'ppro':    [('CONFIG_32','1'), ('PPRO','1'), ('ASM','1')],
+          'ansi32':  [('CONFIG_32','1'), ('ANSI','1')],
+          'ansi-legacy': [('CONFIG_32','1'), ('ANSI','1'),
+                          ('LEGACY_COMPILER','1')],
+          'universal':   [('UNIVERSAL','1')]
+        }
+
+        platform = self.get_platform()
+        cc = sysconfig.get_config_var('CC')
+        sizeof_size_t = sysconfig.get_config_var('SIZEOF_SIZE_T')
+        machine = os.environ.get('PYTHON_DECIMAL_WITH_MACHINE')
+
+        if machine:
+            # Override automatic configuration to facilitate testing.
+            define_macros = config[machine]
+        elif platform == 'darwin':
+            # Universal here means: build with the same options Python
+            # was built with.
+            define_macros = config['universal']
+        elif sizeof_size_t == 8:
+            if sysconfig.get_config_var('HAVE_GCC_ASM_FOR_X64'):
+                define_macros = config['x64']
+            elif sysconfig.get_config_var('HAVE_GCC_UINT128_T'):
+                define_macros = config['uint128']
+            else:
+                define_macros = config['ansi64']
+        elif sizeof_size_t == 4:
+            ppro = sysconfig.get_config_var('HAVE_GCC_ASM_FOR_X87')
+            if ppro and ('gcc' in cc or 'clang' in cc) and \
+               not 'sunos' in platform:
+                # solaris: problems with register allocation.
+                # icc >= 11.0 works as well.
+                define_macros = config['ppro']
+            else:
+                define_macros = config['ansi32']
+        else:
+            raise DistutilsError("_decimal: unsupported architecture")
+
+        # Workarounds for toolchain bugs:
+        if sysconfig.get_config_var('HAVE_IPA_PURE_CONST_BUG'):
+            # Some versions of gcc miscompile inline asm:
+            # http://gcc.gnu.org/bugzilla/show_bug.cgi?id=46491
+            # http://gcc.gnu.org/ml/gcc/2010-11/msg00366.html
+            extra_compile_args.append('-fno-ipa-pure-const')
+        if sysconfig.get_config_var('HAVE_GLIBC_MEMMOVE_BUG'):
+            # _FORTIFY_SOURCE wrappers for memmove and bcopy are incorrect:
+            # http://sourceware.org/ml/libc-alpha/2010-12/msg00009.html
+            undef_macros.append('_FORTIFY_SOURCE')
+
+        # Faster version without thread local contexts:
+        if not sysconfig.get_config_var('WITH_THREAD'):
+            define_macros.append(('WITHOUT_THREADS', 1))
+
+        # Uncomment for extra functionality:
+        #define_macros.append(('EXTRA_FUNCTIONALITY', 1))
+        ext = Extension (
+            '_decimal',
+            include_dirs=include_dirs,
+            libraries=libraries,
+            define_macros=define_macros,
+            undef_macros=undef_macros,
+            extra_compile_args=extra_compile_args,
+            sources=sources,
+            depends=depends
+        )
+        return ext
 
 class PyBuildInstall(install):
     # Suppress the warning about installation into the lib_dynload
@@ -1779,6 +1921,13 @@ class PyBuildInstall(install):
     def initialize_options (self):
         install.initialize_options(self)
         self.warn_dir=0
+
+    # Customize subcommands to not install an egg-info file for Python
+    sub_commands = [('install_lib', install.has_lib),
+                    ('install_headers', install.has_headers),
+                    ('install_scripts', install.has_scripts),
+                    ('install_data', install.has_data)]
+
 
 class PyBuildInstallLib(install_lib):
     # Do exactly what install_lib does but make sure correct access modes get
@@ -1892,7 +2041,7 @@ def main():
           # check the PyBuildScripts command above, and change the links
           # created by the bininstall target in Makefile.pre.in
           scripts = ["Tools/scripts/pydoc3", "Tools/scripts/idle3",
-                     "Tools/scripts/2to3"]
+                     "Tools/scripts/2to3", "Tools/scripts/pysetup3"]
         )
 
 # --install-platlib

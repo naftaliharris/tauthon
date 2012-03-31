@@ -1,28 +1,33 @@
 # xml.etree test.  This file contains enough tests to make sure that
 # all included components work as they should.
 # Large parts are extracted from the upstream test suite.
-
-# IMPORTANT: the same doctests are run from "test_xml_etree_c" in
-# order to ensure consistency between the C implementation and the
-# Python implementation.
+#
+# PLEASE write all new tests using the standard unittest infrastructure and
+# not doctest.
+#
+# IMPORTANT: the same tests are run from "test_xml_etree_c" in order
+# to ensure consistency between the C implementation and the Python
+# implementation.
 #
 # For this purpose, the module-level "ET" symbol is temporarily
 # monkey-patched when running the "test_xml_etree_c" test suite.
 # Don't re-import "xml.etree.ElementTree" module in the docstring,
 # except if the test is specific to the Python implementation.
 
-import sys
 import html
+import io
+import sys
 import unittest
+import weakref
 
 from test import support
-from test.support import findfile
+from test.support import findfile, import_fresh_module, gc_collect
 
-from xml.etree import ElementTree as ET
+pyET = import_fresh_module('xml.etree.ElementTree', blocked=['_elementtree'])
 
 SIMPLE_XMLFILE = findfile("simple.xml", subdir="xmltestdata")
 try:
-    SIMPLE_XMLFILE.encode("utf8")
+    SIMPLE_XMLFILE.encode("utf-8")
 except UnicodeEncodeError:
     raise unittest.SkipTest("filename is not encodable to utf8")
 SIMPLE_NS_XMLFILE = findfile("simple-ns.xml", subdir="xmltestdata")
@@ -275,7 +280,7 @@ def simplefind():
     """
     Test find methods using the elementpath fallback.
 
-    >>> from xml.etree import ElementTree
+    >>> ElementTree = pyET
 
     >>> CurrentElementPath = ElementTree.ElementPath
     >>> ElementTree.ElementPath = ElementTree._SimpleElementPath()
@@ -460,17 +465,19 @@ def path_cache():
     """
     Check that the path cache behaves sanely.
 
+    >>> from xml.etree import ElementPath
+
     >>> elem = ET.XML(SAMPLE_XML)
     >>> for i in range(10): ET.ElementTree(elem).find('./'+str(i))
-    >>> cache_len_10 = len(ET.ElementPath._cache)
+    >>> cache_len_10 = len(ElementPath._cache)
     >>> for i in range(10): ET.ElementTree(elem).find('./'+str(i))
-    >>> len(ET.ElementPath._cache) == cache_len_10
+    >>> len(ElementPath._cache) == cache_len_10
     True
     >>> for i in range(20): ET.ElementTree(elem).find('./'+str(i))
-    >>> len(ET.ElementPath._cache) > cache_len_10
+    >>> len(ElementPath._cache) > cache_len_10
     True
     >>> for i in range(600): ET.ElementTree(elem).find('./'+str(i))
-    >>> len(ET.ElementPath._cache) < 500
+    >>> len(ElementPath._cache) < 500
     True
     """
 
@@ -1049,26 +1056,6 @@ def entity():
     '<document>text</document>'
     """
 
-def error(xml):
-    """
-
-    Test error handling.
-
-    >>> issubclass(ET.ParseError, SyntaxError)
-    True
-    >>> error("foo").position
-    (1, 0)
-    >>> error("<tag>&foo;</tag>").position
-    (1, 5)
-    >>> error("foobar<").position
-    (1, 6)
-
-    """
-    try:
-        ET.XML(xml)
-    except ET.ParseError:
-        return sys.exc_info()[1]
-
 def namespace():
     """
     Test namespace issues.
@@ -1256,8 +1243,8 @@ def processinginstruction():
 
     >>> ET.tostring(ET.PI('test', '<testing&>'))
     b'<?test <testing&>?>'
-    >>> ET.tostring(ET.PI('test', '<testing&>\xe3'), 'latin1')
-    b"<?xml version='1.0' encoding='latin1'?>\\n<?test <testing&>\\xe3?>"
+    >>> ET.tostring(ET.PI('test', '<testing&>\xe3'), 'latin-1')
+    b"<?xml version='1.0' encoding='latin-1'?>\\n<?test <testing&>\\xe3?>"
     """
 
 #
@@ -1340,7 +1327,7 @@ def xinclude_loader(href, parse="xml", encoding=None):
     try:
         data = XINCLUDE[href]
     except KeyError:
-        raise IOError("resource not found")
+        raise OSError("resource not found")
     if parse == "xml":
         from xml.etree.ElementTree import XML
         return XML(data)
@@ -1350,7 +1337,6 @@ def xinclude():
     r"""
     Basic inclusion example (XInclude C.1)
 
-    >>> from xml.etree import ElementTree as ET
     >>> from xml.etree import ElementInclude
 
     >>> document = xinclude_loader("C1.xml")
@@ -1405,7 +1391,7 @@ def xinclude():
     >>> document = xinclude_loader("C5.xml")
     >>> ElementInclude.include(document, xinclude_loader)
     Traceback (most recent call last):
-    IOError: resource not found
+    OSError: resource not found
     >>> # print(serialize(document)) # C5
     """
 
@@ -1612,7 +1598,7 @@ def bug_xmltoolkit55():
 
 class ExceptionFile:
     def read(self, x):
-        raise IOError
+        raise OSError
 
 def xmltoolkit60():
     """
@@ -1620,7 +1606,7 @@ def xmltoolkit60():
     Handle crash in stream source.
     >>> tree = ET.parse(ExceptionFile())
     Traceback (most recent call last):
-    IOError
+    OSError
 
     """
 
@@ -1854,6 +1840,242 @@ def check_issue10777():
 # --------------------------------------------------------------------
 
 
+class BasicElementTest(unittest.TestCase):
+    def test_augmentation_type_errors(self):
+        e = ET.Element('joe')
+        self.assertRaises(TypeError, e.append, 'b')
+        self.assertRaises(TypeError, e.extend, [ET.Element('bar'), 'foo'])
+        self.assertRaises(TypeError, e.insert, 0, 'foo')
+
+    def test_cyclic_gc(self):
+        class Dummy:
+            pass
+
+        # Test the shortest cycle: d->element->d
+        d = Dummy()
+        d.dummyref = ET.Element('joe', attr=d)
+        wref = weakref.ref(d)
+        del d
+        gc_collect()
+        self.assertIsNone(wref())
+
+        # A longer cycle: d->e->e2->d
+        e = ET.Element('joe')
+        d = Dummy()
+        d.dummyref = e
+        wref = weakref.ref(d)
+        e2 = ET.SubElement(e, 'foo', attr=d)
+        del d, e, e2
+        gc_collect()
+        self.assertIsNone(wref())
+
+
+class ElementTreeTest(unittest.TestCase):
+    def test_istype(self):
+        self.assertIsInstance(ET.ParseError, type)
+        self.assertIsInstance(ET.QName, type)
+        self.assertIsInstance(ET.ElementTree, type)
+        self.assertIsInstance(ET.Element, type)
+        # XXX issue 14128 with C ElementTree
+        # self.assertIsInstance(ET.TreeBuilder, type)
+        # self.assertIsInstance(ET.XMLParser, type)
+
+    def test_Element_subclass_trivial(self):
+        class MyElement(ET.Element):
+            pass
+
+        mye = MyElement('foo')
+        self.assertIsInstance(mye, ET.Element)
+        self.assertIsInstance(mye, MyElement)
+        self.assertEqual(mye.tag, 'foo')
+
+    def test_Element_subclass_constructor(self):
+        class MyElement(ET.Element):
+            def __init__(self, tag, attrib={}, **extra):
+                super(MyElement, self).__init__(tag + '__', attrib, **extra)
+
+        mye = MyElement('foo', {'a': 1, 'b': 2}, c=3, d=4)
+        self.assertEqual(mye.tag, 'foo__')
+        self.assertEqual(sorted(mye.items()),
+            [('a', 1), ('b', 2), ('c', 3), ('d', 4)])
+
+    def test_Element_subclass_new_method(self):
+        class MyElement(ET.Element):
+            def newmethod(self):
+                return self.tag
+
+        mye = MyElement('joe')
+        self.assertEqual(mye.newmethod(), 'joe')
+
+
+class TreeBuilderTest(unittest.TestCase):
+    sample1 = ('<!DOCTYPE html PUBLIC'
+        ' "-//W3C//DTD XHTML 1.0 Transitional//EN"'
+        ' "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">'
+        '<html>text</html>')
+
+    def test_dummy_builder(self):
+        class BaseDummyBuilder:
+            def close(self):
+                return 42
+
+        class DummyBuilder(BaseDummyBuilder):
+            data = start = end = lambda *a: None
+
+        parser = ET.XMLParser(target=DummyBuilder())
+        parser.feed(self.sample1)
+        self.assertEqual(parser.close(), 42)
+
+        parser = ET.XMLParser(target=BaseDummyBuilder())
+        parser.feed(self.sample1)
+        self.assertEqual(parser.close(), 42)
+
+        parser = ET.XMLParser(target=object())
+        parser.feed(self.sample1)
+        self.assertIsNone(parser.close())
+
+    # XXX in _elementtree, the constructor of TreeBuilder expects no
+    # arguments
+    @unittest.expectedFailure
+    def test_element_factory(self):
+        tb = ET.TreeBuilder(element_factory=lambda: ET.Element())
+
+    @unittest.expectedFailure   # XXX issue 14007 with C ElementTree
+    def test_doctype(self):
+        class DoctypeParser:
+            _doctype = None
+
+            def doctype(self, name, pubid, system):
+                self._doctype = (name, pubid, system)
+
+            def close(self):
+                return self._doctype
+
+        parser = ET.XMLParser(target=DoctypeParser())
+        parser.feed(self.sample1)
+
+        self.assertEqual(parser.close(),
+            ('html', '-//W3C//DTD XHTML 1.0 Transitional//EN',
+             'http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd'))
+
+
+class NoAcceleratorTest(unittest.TestCase):
+    # Test that the C accelerator was not imported for pyET
+    def test_correct_import_pyET(self):
+        self.assertEqual(pyET.Element.__module__, 'xml.etree.ElementTree')
+        self.assertEqual(pyET.SubElement.__module__, 'xml.etree.ElementTree')
+
+
+class ElementSlicingTest(unittest.TestCase):
+    def _elem_tags(self, elemlist):
+        return [e.tag for e in elemlist]
+
+    def _subelem_tags(self, elem):
+        return self._elem_tags(list(elem))
+
+    def _make_elem_with_children(self, numchildren):
+        """Create an Element with a tag 'a', with the given amount of children
+           named 'a0', 'a1' ... and so on.
+
+        """
+        e = ET.Element('a')
+        for i in range(numchildren):
+            ET.SubElement(e, 'a%s' % i)
+        return e
+
+    def test_getslice_single_index(self):
+        e = self._make_elem_with_children(10)
+
+        self.assertEqual(e[1].tag, 'a1')
+        self.assertEqual(e[-2].tag, 'a8')
+
+        self.assertRaises(IndexError, lambda: e[12])
+
+    def test_getslice_range(self):
+        e = self._make_elem_with_children(6)
+
+        self.assertEqual(self._elem_tags(e[3:]), ['a3', 'a4', 'a5'])
+        self.assertEqual(self._elem_tags(e[3:6]), ['a3', 'a4', 'a5'])
+        self.assertEqual(self._elem_tags(e[3:16]), ['a3', 'a4', 'a5'])
+        self.assertEqual(self._elem_tags(e[3:5]), ['a3', 'a4'])
+        self.assertEqual(self._elem_tags(e[3:-1]), ['a3', 'a4'])
+        self.assertEqual(self._elem_tags(e[:2]), ['a0', 'a1'])
+
+    def test_getslice_steps(self):
+        e = self._make_elem_with_children(10)
+
+        self.assertEqual(self._elem_tags(e[8:10:1]), ['a8', 'a9'])
+        self.assertEqual(self._elem_tags(e[::3]), ['a0', 'a3', 'a6', 'a9'])
+        self.assertEqual(self._elem_tags(e[::8]), ['a0', 'a8'])
+        self.assertEqual(self._elem_tags(e[1::8]), ['a1', 'a9'])
+
+    def test_getslice_negative_steps(self):
+        e = self._make_elem_with_children(4)
+
+        self.assertEqual(self._elem_tags(e[::-1]), ['a3', 'a2', 'a1', 'a0'])
+        self.assertEqual(self._elem_tags(e[::-2]), ['a3', 'a1'])
+
+    def test_delslice(self):
+        e = self._make_elem_with_children(4)
+        del e[0:2]
+        self.assertEqual(self._subelem_tags(e), ['a2', 'a3'])
+
+        e = self._make_elem_with_children(4)
+        del e[0:]
+        self.assertEqual(self._subelem_tags(e), [])
+
+        e = self._make_elem_with_children(4)
+        del e[::-1]
+        self.assertEqual(self._subelem_tags(e), [])
+
+        e = self._make_elem_with_children(4)
+        del e[::-2]
+        self.assertEqual(self._subelem_tags(e), ['a0', 'a2'])
+
+        e = self._make_elem_with_children(4)
+        del e[1::2]
+        self.assertEqual(self._subelem_tags(e), ['a0', 'a2'])
+
+        e = self._make_elem_with_children(2)
+        del e[::2]
+        self.assertEqual(self._subelem_tags(e), ['a1'])
+
+
+class StringIOTest(unittest.TestCase):
+    def test_read_from_stringio(self):
+        tree = ET.ElementTree()
+        stream = io.StringIO()
+        stream.write('''<?xml version="1.0"?><site></site>''')
+        stream.seek(0)
+        tree.parse(stream)
+
+        self.assertEqual(tree.getroot().tag, 'site')
+
+
+class ParseErrorTest(unittest.TestCase):
+    def test_subclass(self):
+        self.assertIsInstance(ET.ParseError(), SyntaxError)
+
+    def _get_error(self, s):
+        try:
+            ET.fromstring(s)
+        except ET.ParseError as e:
+            return e
+
+    def test_error_position(self):
+        self.assertEqual(self._get_error('foo').position, (1, 0))
+        self.assertEqual(self._get_error('<tag>&foo;</tag>').position, (1, 5))
+        self.assertEqual(self._get_error('foobar<').position, (1, 6))
+
+    def test_error_code(self):
+        import xml.parsers.expat.errors as ERRORS
+        self.assertEqual(self._get_error('foo').code,
+                ERRORS.codes[ERRORS.XML_ERROR_SYNTAX])
+
+
+# --------------------------------------------------------------------
+
+
 class CleanContext(object):
     """Provide default namespace mapping and path cache."""
     checkwarnings = None
@@ -1872,44 +2094,50 @@ class CleanContext(object):
             ("This method will be removed in future versions.  "
              "Use .+ instead.", DeprecationWarning),
             ("This method will be removed in future versions.  "
-             "Use .+ instead.", PendingDeprecationWarning),
-            # XMLParser.doctype() is deprecated.
-            ("This method of XMLParser is deprecated.  Define doctype.. "
-             "method on the TreeBuilder target.", DeprecationWarning))
+             "Use .+ instead.", PendingDeprecationWarning))
         self.checkwarnings = support.check_warnings(*deprecations, quiet=quiet)
 
     def __enter__(self):
-        from xml.etree import ElementTree
-        self._nsmap = ElementTree._namespace_map
-        self._path_cache = ElementTree.ElementPath._cache
+        from xml.etree import ElementPath
+        self._nsmap = ET.register_namespace._namespace_map
         # Copy the default namespace mapping
-        ElementTree._namespace_map = self._nsmap.copy()
+        self._nsmap_copy = self._nsmap.copy()
         # Copy the path cache (should be empty)
-        ElementTree.ElementPath._cache = self._path_cache.copy()
+        self._path_cache = ElementPath._cache
+        ElementPath._cache = self._path_cache.copy()
         self.checkwarnings.__enter__()
 
     def __exit__(self, *args):
-        from xml.etree import ElementTree
+        from xml.etree import ElementPath
         # Restore mapping and path cache
-        ElementTree._namespace_map = self._nsmap
-        ElementTree.ElementPath._cache = self._path_cache
+        self._nsmap.clear()
+        self._nsmap.update(self._nsmap_copy)
+        ElementPath._cache = self._path_cache
         self.checkwarnings.__exit__(*args)
 
 
-def test_main(module_name='xml.etree.ElementTree'):
+def test_main(module=pyET):
     from test import test_xml_etree
 
-    use_py_module = (module_name == 'xml.etree.ElementTree')
-
     # The same doctests are used for both the Python and the C implementations
-    assert test_xml_etree.ET.__name__ == module_name
+    test_xml_etree.ET = module
+
+    test_classes = [
+        ElementSlicingTest,
+        BasicElementTest,
+        StringIOTest,
+        ParseErrorTest,
+        ElementTreeTest,
+        TreeBuilderTest]
+    if module is pyET:
+        # Run the tests specific to the Python implementation
+        test_classes += [NoAcceleratorTest]
+
+    support.run_unittest(*test_classes)
 
     # XXX the C module should give the same warnings as the Python module
-    with CleanContext(quiet=not use_py_module):
+    with CleanContext(quiet=(module is not pyET)):
         support.run_doctest(test_xml_etree, verbosity=True)
-
-    # The module should not be changed by the tests
-    assert test_xml_etree.ET.__name__ == module_name
 
 if __name__ == '__main__':
     test_main()
