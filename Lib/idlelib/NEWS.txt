@@ -1,5 +1,7 @@
-What's New in IDLE 3.2.3?
+What's New in IDLE 3.3?
 =========================
+
+- IDLE can be launched as `python -m idlelib`
 
 - Issue #14409: IDLE now properly executes commands in the Shell window
   when it cannot read the normal config files on startup and
