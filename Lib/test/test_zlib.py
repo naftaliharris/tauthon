@@ -7,10 +7,16 @@ from test.support import bigmemtest, _1G, _4G
 
 zlib = support.import_module('zlib')
 
-try:
-    import mmap
-except ImportError:
-    mmap = None
+
+class VersionTestCase(unittest.TestCase):
+
+    def test_library_version(self):
+        # Test that the major version of the actual library in use matches the
+        # major version that we were compiled against. We can't guarantee that
+        # the minor versions will match (even on the machine on which the module
+        # was compiled), and the API is stable between minor versions, so
+        # testing only the major versions avoids spurious failures.
+        self.assertEqual(zlib.ZLIB_RUNTIME_VERSION[0], zlib.ZLIB_VERSION[0])
 
 
 class ChecksumTestCase(unittest.TestCase):
@@ -173,10 +179,8 @@ class CompressTestCase(BaseCompressTestCase, unittest.TestCase):
     def test_big_decompress_buffer(self, size):
         self.check_big_decompress_buffer(size, zlib.decompress)
 
-    @bigmemtest(size=_4G + 100, memuse=1)
+    @bigmemtest(size=_4G + 100, memuse=1, dry_run=False)
     def test_length_overflow(self, size):
-        if size < _4G + 100:
-            self.skipTest("not enough free memory, need at least 4 GB")
         data = b'x' * size
         try:
             self.assertRaises(OverflowError, zlib.compress, data, 1)
@@ -434,6 +438,26 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         y += dco.flush()
         self.assertEqual(y, b'foo')
 
+    def test_decompress_eof(self):
+        x = b'x\x9cK\xcb\xcf\x07\x00\x02\x82\x01E'  # 'foo'
+        dco = zlib.decompressobj()
+        self.assertFalse(dco.eof)
+        dco.decompress(x[:-5])
+        self.assertFalse(dco.eof)
+        dco.decompress(x[-5:])
+        self.assertTrue(dco.eof)
+        dco.flush()
+        self.assertTrue(dco.eof)
+
+    def test_decompress_eof_incomplete_stream(self):
+        x = b'x\x9cK\xcb\xcf\x07\x00\x02\x82\x01E'  # 'foo'
+        dco = zlib.decompressobj()
+        self.assertFalse(dco.eof)
+        dco.decompress(x[:-5])
+        self.assertFalse(dco.eof)
+        dco.flush()
+        self.assertFalse(dco.eof)
+
     if hasattr(zlib.compressobj(), "copy"):
         def test_compresscopy(self):
             # Test copying a compression object
@@ -510,10 +534,8 @@ class CompressObjectTestCase(BaseCompressTestCase, unittest.TestCase):
         decompress = lambda s: d.decompress(s) + d.flush()
         self.check_big_decompress_buffer(size, decompress)
 
-    @bigmemtest(size=_4G + 100, memuse=1)
+    @bigmemtest(size=_4G + 100, memuse=1, dry_run=False)
     def test_length_overflow(self, size):
-        if size < _4G + 100:
-            self.skipTest("not enough free memory, need at least 4 GB")
         data = b'x' * size
         c = zlib.compressobj(1)
         d = zlib.decompressobj()
@@ -614,6 +636,7 @@ LAERTES
 
 def test_main():
     support.run_unittest(
+        VersionTestCase,
         ChecksumTestCase,
         ChecksumBigBufferTestCase,
         ExceptionTestCase,
