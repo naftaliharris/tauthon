@@ -84,7 +84,7 @@ __version__ = "0.6"
 
 __all__ = ["HTTPServer", "BaseHTTPRequestHandler"]
 
-import cgi
+import html
 import email.message
 import email.parser
 import http.client
@@ -271,14 +271,11 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         self.request_version = version = self.default_request_version
         self.close_connection = 1
         requestline = str(self.raw_requestline, 'iso-8859-1')
-        if requestline[-2:] == '\r\n':
-            requestline = requestline[:-2]
-        elif requestline[-1:] == '\n':
-            requestline = requestline[:-1]
+        requestline = requestline.rstrip('\r\n')
         self.requestline = requestline
         words = requestline.split()
         if len(words) == 3:
-            [command, path, version] = words
+            command, path, version = words
             if version[:5] != 'HTTP/':
                 self.send_error(400, "Bad request version (%r)" % version)
                 return False
@@ -304,7 +301,7 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
                           "Invalid HTTP Version (%s)" % base_version_number)
                 return False
         elif len(words) == 2:
-            [command, path] = words
+            command, path = words
             self.close_connection = 1
             if command != 'GET':
                 self.send_error(400,
@@ -331,6 +328,30 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         elif (conntype.lower() == 'keep-alive' and
               self.protocol_version >= "HTTP/1.1"):
             self.close_connection = 0
+        # Examine the headers and look for an Expect directive
+        expect = self.headers.get('Expect', "")
+        if (expect.lower() == "100-continue" and
+                self.protocol_version >= "HTTP/1.1" and
+                self.request_version >= "HTTP/1.1"):
+            if not self.handle_expect_100():
+                return False
+        return True
+
+    def handle_expect_100(self):
+        """Decide what to do with an "Expect: 100-continue" header.
+
+        If the client is expecting a 100 Continue response, we must
+        respond with either a 100 Continue or a final response before
+        waiting for the request body. The default is to always respond
+        with a 100 Continue. You can behave differently (for example,
+        reject unauthorized requests) by overriding this method.
+
+        This method should either return True (possibly after sending
+        a 100 Continue response) or send an error response and return
+        False.
+
+        """
+        self.send_response_only(100)
         return True
 
     def handle_one_request(self):
@@ -341,24 +362,32 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         commands such as GET and POST.
 
         """
-        self.raw_requestline = self.rfile.readline(65537)
-        if len(self.raw_requestline) > 65536:
-            self.requestline = ''
-            self.request_version = ''
-            self.command = ''
-            self.send_error(414)
-            return
-        if not self.raw_requestline:
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestline = ''
+                self.request_version = ''
+                self.command = ''
+                self.send_error(414)
+                return
+            if not self.raw_requestline:
+                self.close_connection = 1
+                return
+            if not self.parse_request():
+                # An error code has been sent, just exit
+                return
+            mname = 'do_' + self.command
+            if not hasattr(self, mname):
+                self.send_error(501, "Unsupported method (%r)" % self.command)
+                return
+            method = getattr(self, mname)
+            method()
+            self.wfile.flush() #actually send the response if not already done.
+        except socket.timeout as e:
+            #a read or a write timed out.  Discard this connection
+            self.log_error("Request timed out: %r", e)
             self.close_connection = 1
             return
-        if not self.parse_request(): # An error code has been sent, just exit
-            return
-        mname = 'do_' + self.command
-        if not hasattr(self, mname):
-            self.send_error(501, "Unsupported method (%r)" % self.command)
-            return
-        method = getattr(self, mname)
-        method()
 
     def handle(self):
         """Handle multiple requests if necessary."""
@@ -407,6 +436,12 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
 
         """
         self.log_request(code)
+        self.send_response_only(code, message)
+        self.send_header('Server', self.version_string())
+        self.send_header('Date', self.date_time_string())
+
+    def send_response_only(self, code, message=None):
+        """Send the response header only."""
         if message is None:
             if code in self.responses:
                 message = self.responses[code][0]
@@ -414,15 +449,15 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
                 message = ''
         if self.request_version != 'HTTP/0.9':
             self.wfile.write(("%s %d %s\r\n" %
-                              (self.protocol_version, code, message)).encode('ASCII', 'strict'))
-            # print (self.protocol_version, code, message)
-        self.send_header('Server', self.version_string())
-        self.send_header('Date', self.date_time_string())
+                              (self.protocol_version, code, message)).encode('latin1', 'strict'))
 
     def send_header(self, keyword, value):
         """Send a MIME header."""
         if self.request_version != 'HTTP/0.9':
-            self.wfile.write(("%s: %s\r\n" % (keyword, value)).encode('ASCII', 'strict'))
+            if not hasattr(self, '_headers_buffer'):
+                self._headers_buffer = []
+            self._headers_buffer.append(
+                ("%s: %s\r\n" % (keyword, value)).encode('latin1', 'strict'))
 
         if keyword.lower() == 'connection':
             if value.lower() == 'close':
@@ -433,7 +468,9 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
     def end_headers(self):
         """Send the blank line ending the MIME headers."""
         if self.request_version != 'HTTP/0.9':
-            self.wfile.write(b"\r\n")
+            self._headers_buffer.append(b"\r\n")
+            self.wfile.write(b"".join(self._headers_buffer))
+            self._headers_buffer = []
 
     def log_request(self, code='-', size='-'):
         """Log an accepted request.
@@ -684,7 +721,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             return None
         list.sort(key=lambda a: a.lower())
         r = []
-        displaypath = cgi.escape(urllib.parse.unquote(self.path))
+        displaypath = html.escape(urllib.parse.unquote(self.path))
         r.append('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
         r.append("<html>\n<title>Directory listing for %s</title>\n" % displaypath)
         r.append("<body>\n<h2>Directory listing for %s</h2>\n" % displaypath)
@@ -700,7 +737,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 displayname = name + "@"
                 # Note: a link to a directory displays with @ and links with /
             r.append('<li><a href="%s">%s</a>\n'
-                    % (urllib.parse.quote(linkname), cgi.escape(displayname)))
+                    % (urllib.parse.quote(linkname), html.escape(displayname)))
         r.append("</ul>\n<hr>\n</body>\n</html>\n")
         enc = sys.getfilesystemencoding()
         encoded = ''.join(r).encode(enc)
@@ -813,7 +850,14 @@ def _url_collapse_path_split(path):
     # Filter out blank non trailing parts before consuming the '..'.
     path_parts = [part for part in path_parts[:-1] if part] + path_parts[-1:]
     if path_parts:
-        tail_part = path_parts.pop()
+        # Special case for CGI's for PATH_INFO
+        if path.startswith('/cgi-bin') or path.startswith('/htbin'):
+            tail_part = []
+            while path_parts[-1] not in ('cgi-bin','htbin'):
+                tail_part.insert(0,path_parts.pop())
+            tail_part = "/".join(tail_part)
+        else:
+            tail_part = path_parts.pop()
     else:
         tail_part = ''
     head_parts = []
@@ -842,7 +886,7 @@ def nobody_uid():
     try:
         nobody = pwd.getpwnam('nobody')[2]
     except KeyError:
-        nobody = 1 + max(map(lambda x: x[2], pwd.getpwall()))
+        nobody = 1 + max(x[2] for x in pwd.getpwall())
     return nobody
 
 

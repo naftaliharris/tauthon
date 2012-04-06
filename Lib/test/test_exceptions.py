@@ -5,9 +5,10 @@ import sys
 import unittest
 import pickle
 import weakref
+import errno
 
 from test.support import (TESTFN, unlink, run_unittest, captured_output,
-                          gc_collect)
+                          gc_collect, cpython_only)
 
 # XXX This is not really enough, each *operation* should be tested!
 
@@ -37,7 +38,7 @@ class ExceptionTests(unittest.TestCase):
         try:
             try:
                 import marshal
-                marshal.loads('')
+                marshal.loads(b'')
             except EOFError:
                 pass
         finally:
@@ -137,6 +138,7 @@ class ExceptionTests(unittest.TestCase):
         ckmsg(s, "'continue' not properly in loop")
         ckmsg("continue\n", "'continue' not properly in loop")
 
+    @cpython_only
     def testSettingException(self):
         # test that setting an exception at the C level works even if the
         # exception object can't be constructed.
@@ -319,25 +321,25 @@ class ExceptionTests(unittest.TestCase):
             tb = sys.exc_info()[2]
 
         e = BaseException().with_traceback(tb)
-        self.assertTrue(isinstance(e, BaseException))
+        self.assertIsInstance(e, BaseException)
         self.assertEqual(e.__traceback__, tb)
 
         e = IndexError(5).with_traceback(tb)
-        self.assertTrue(isinstance(e, IndexError))
+        self.assertIsInstance(e, IndexError)
         self.assertEqual(e.__traceback__, tb)
 
         class MyException(Exception):
             pass
 
         e = MyException().with_traceback(tb)
-        self.assertTrue(isinstance(e, MyException))
+        self.assertIsInstance(e, MyException)
         self.assertEqual(e.__traceback__, tb)
 
     def testInvalidTraceback(self):
         try:
             Exception().__traceback__ = 5
         except TypeError as e:
-            self.assertTrue("__traceback__ must be a traceback" in str(e))
+            self.assertIn("__traceback__ must be a traceback", str(e))
         else:
             self.fail("No exception raised")
 
@@ -413,7 +415,7 @@ class ExceptionTests(unittest.TestCase):
         except Exception as e:
             self.assertTrue(e)
             del e
-        self.assertFalse('e' in locals())
+        self.assertNotIn('e', locals())
 
     def testExceptionCleanupState(self):
         # Make sure exception state is cleaned up as soon as the except
@@ -524,6 +526,17 @@ class ExceptionTests(unittest.TestCase):
         obj = wr()
         self.assertTrue(obj is None, "%s" % obj)
 
+    def test_exception_target_in_nested_scope(self):
+        # issue 4617: This used to raise a SyntaxError
+        # "can not delete variable 'e' referenced in nested scope"
+        def print_error():
+            e
+        try:
+            something
+        except Exception as e:
+            print_error()
+            # implicit "del e" here
+
     def test_generator_leaking(self):
         # Test that generator exception state doesn't leak into the calling
         # frame
@@ -554,6 +567,33 @@ class ExceptionTests(unittest.TestCase):
             del g
             self.assertEqual(sys.exc_info()[0], TypeError)
 
+    def test_generator_leaking2(self):
+        # See issue 12475.
+        def g():
+            yield
+        try:
+            raise RuntimeError
+        except RuntimeError:
+            it = g()
+            next(it)
+        try:
+            next(it)
+        except StopIteration:
+            pass
+        self.assertEqual(sys.exc_info(), (None, None, None))
+
+    def test_generator_doesnt_retain_old_exc(self):
+        def g():
+            self.assertIsInstance(sys.exc_info()[1], RuntimeError)
+            yield
+            self.assertEqual(sys.exc_info(), (None, None, None))
+        it = g()
+        try:
+            raise RuntimeError
+        except RuntimeError:
+            next(it)
+        self.assertRaises(StopIteration, next, it)
+
     def test_generator_finalizing_and_exc_info(self):
         # See #7173
         def simple_gen():
@@ -567,6 +607,68 @@ class ExceptionTests(unittest.TestCase):
         run_gen()
         gc_collect()
         self.assertEqual(sys.exc_info(), (None, None, None))
+
+    def _check_generator_cleanup_exc_state(self, testfunc):
+        # Issue #12791: exception state is cleaned up as soon as a generator
+        # is closed (reference cycles are broken).
+        class MyException(Exception):
+            def __init__(self, obj):
+                self.obj = obj
+        class MyObj:
+            pass
+
+        def raising_gen():
+            try:
+                raise MyException(obj)
+            except MyException:
+                yield
+
+        obj = MyObj()
+        wr = weakref.ref(obj)
+        g = raising_gen()
+        next(g)
+        testfunc(g)
+        g = obj = None
+        obj = wr()
+        self.assertIs(obj, None)
+
+    def test_generator_throw_cleanup_exc_state(self):
+        def do_throw(g):
+            try:
+                g.throw(RuntimeError())
+            except RuntimeError:
+                pass
+        self._check_generator_cleanup_exc_state(do_throw)
+
+    def test_generator_close_cleanup_exc_state(self):
+        def do_close(g):
+            g.close()
+        self._check_generator_cleanup_exc_state(do_close)
+
+    def test_generator_del_cleanup_exc_state(self):
+        def do_del(g):
+            g = None
+        self._check_generator_cleanup_exc_state(do_del)
+
+    def test_generator_next_cleanup_exc_state(self):
+        def do_next(g):
+            try:
+                next(g)
+            except StopIteration:
+                pass
+            else:
+                self.fail("should have raised StopIteration")
+        self._check_generator_cleanup_exc_state(do_next)
+
+    def test_generator_send_cleanup_exc_state(self):
+        def do_send(g):
+            try:
+                g.send(None)
+            except StopIteration:
+                pass
+            else:
+                self.fail("should have raised StopIteration")
+        self._check_generator_cleanup_exc_state(do_send)
 
     def test_3114(self):
         # Bug #3114: in its destructor, MyObject retrieves a pointer to
@@ -647,7 +749,7 @@ class ExceptionTests(unittest.TestCase):
                 return sys.exc_info()
         e, v, tb = g()
         self.assertTrue(isinstance(v, RuntimeError), type(v))
-        self.assertTrue("maximum recursion depth exceeded" in str(v), str(v))
+        self.assertIn("maximum recursion depth exceeded", str(v))
 
 
     def test_MemoryError(self):
@@ -667,6 +769,46 @@ class ExceptionTests(unittest.TestCase):
         tb1 = raiseMemError()
         tb2 = raiseMemError()
         self.assertEqual(tb1, tb2)
+
+    @cpython_only
+    def test_exception_with_doc(self):
+        import _testcapi
+        doc2 = "This is a test docstring."
+        doc4 = "This is another test docstring."
+
+        self.assertRaises(SystemError, _testcapi.make_exception_with_doc,
+                          "error1")
+
+        # test basic usage of PyErr_NewException
+        error1 = _testcapi.make_exception_with_doc("_testcapi.error1")
+        self.assertIs(type(error1), type)
+        self.assertTrue(issubclass(error1, Exception))
+        self.assertIsNone(error1.__doc__)
+
+        # test with given docstring
+        error2 = _testcapi.make_exception_with_doc("_testcapi.error2", doc2)
+        self.assertEqual(error2.__doc__, doc2)
+
+        # test with explicit base (without docstring)
+        error3 = _testcapi.make_exception_with_doc("_testcapi.error3",
+                                                   base=error2)
+        self.assertTrue(issubclass(error3, error2))
+
+        # test with explicit base tuple
+        class C(object):
+            pass
+        error4 = _testcapi.make_exception_with_doc("_testcapi.error4", doc4,
+                                                   (error3, C))
+        self.assertTrue(issubclass(error4, error3))
+        self.assertTrue(issubclass(error4, C))
+        self.assertEqual(error4.__doc__, doc4)
+
+        # test with explicit dictionary
+        error5 = _testcapi.make_exception_with_doc("_testcapi.error5", "",
+                                                   error4, {'a': 1})
+        self.assertTrue(issubclass(error5, error4))
+        self.assertEqual(error5.a, 1)
+        self.assertEqual(error5.__doc__, "")
 
     def test_memory_error_cleanup(self):
         # Issue #5437: preallocated MemoryError instances should not keep
@@ -707,6 +849,13 @@ class ExceptionTests(unittest.TestCase):
         else:
             self.fail("RuntimeError not raised")
         self.assertEqual(wr(), None)
+
+    def test_errno_ENOTDIR(self):
+        # Issue #12802: "not a directory" errors are ENOTDIR even on Windows
+        with self.assertRaises(OSError) as cm:
+            os.listdir(__file__)
+        self.assertEqual(cm.exception.errno, errno.ENOTDIR, cm.exception)
+
 
 def test_main():
     run_unittest(ExceptionTests)

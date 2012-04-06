@@ -18,7 +18,7 @@ if sys.platform == "win32":
             windll.kernel32.GetProcAddress.restype = c_void_p
 
             hdll = windll.kernel32.LoadLibraryA(b"kernel32")
-            funcaddr = windll.kernel32.GetProcAddress(hdll, "GetModuleHandleA")
+            funcaddr = windll.kernel32.GetProcAddress(hdll, b"GetModuleHandleA")
 
             self.assertEqual(call_function(funcaddr, (None,)),
                                  windll.kernel32.GetModuleHandleA(None))
@@ -66,7 +66,7 @@ class CallbackTracbackTestCase(unittest.TestCase):
 
     def test_TypeErrorDivisionError(self):
         cb = CFUNCTYPE(c_int, c_char_p)(callback_func)
-        out = self.capture_stderr(cb, "spam")
+        out = self.capture_stderr(cb, b"spam")
         self.assertEqual(out.splitlines()[-1],
                              "TypeError: "
                              "unsupported operand type(s) for /: 'int' and 'bytes'")

@@ -8,9 +8,7 @@ from array import array
 from weakref import proxy
 from functools import wraps
 
-from test.support import (TESTFN, findfile, check_warnings, run_unittest,
-                          make_bad_fd)
-from collections import UserList
+from test.support import TESTFN, check_warnings, run_unittest, make_bad_fd
 
 from _io import FileIO as _FileIO
 
@@ -108,8 +106,6 @@ class AutoFileTests(unittest.TestCase):
         methods = ['fileno', 'isatty', 'read', 'readinto',
                    'seek', 'tell', 'truncate', 'write', 'seekable',
                    'readable', 'writable']
-        if sys.platform.startswith('atheos'):
-            methods.remove('truncate')
 
         self.f.close()
         self.assertTrue(self.f.closed)
@@ -309,6 +305,11 @@ class OtherFileTests(unittest.TestCase):
         finally:
             os.unlink(TESTFN)
 
+    def testConstructorHandlesNULChars(self):
+        fn_with_NUL = 'foo\0bar'
+        self.assertRaises(TypeError, _FileIO, fn_with_NUL, 'w')
+        self.assertRaises(TypeError, _FileIO, bytes(fn_with_NUL, 'ascii'), 'w')
+
     def testInvalidFd(self):
         self.assertRaises(ValueError, _FileIO, -10)
         self.assertRaises(OSError, _FileIO, make_bad_fd())
@@ -324,7 +325,7 @@ class OtherFileTests(unittest.TestCase):
         except ValueError as msg:
             if msg.args[0] != 0:
                 s = str(msg)
-                if s.find(TESTFN) != -1 or s.find(bad_mode) == -1:
+                if TESTFN in s or bad_mode not in s:
                     self.fail("bad error message for invalid mode: %s" % s)
             # if msg.args[0] == 0, we're probably on Windows where there may be
             # no obvious way to discover why open() failed.
@@ -395,7 +396,7 @@ class OtherFileTests(unittest.TestCase):
         self.assertRaises(TypeError, _FileIO, "1", 0, 0)
 
     def testWarnings(self):
-        with check_warnings() as w:
+        with check_warnings(quiet=True) as w:
             self.assertEqual(w.warnings, [])
             self.assertRaises(TypeError, _FileIO, [])
             self.assertEqual(w.warnings, [])

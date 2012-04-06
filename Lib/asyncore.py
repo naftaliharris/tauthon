@@ -50,10 +50,12 @@ import select
 import socket
 import sys
 import time
+import warnings
+
 import os
 from errno import EALREADY, EINPROGRESS, EWOULDBLOCK, ECONNRESET, EINVAL, \
-     ENOTCONN, ESHUTDOWN, EINTR, EISCONN, EBADF, ECONNABORTED, EPIPE, \
-     EAGAIN, errorcode
+     ENOTCONN, ESHUTDOWN, EINTR, EISCONN, EBADF, ECONNABORTED, EPIPE, EAGAIN, \
+     errorcode
 
 _DISCONNECTED = frozenset((ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED, EPIPE,
                            EBADF))
@@ -223,6 +225,7 @@ class dispatcher:
     debug = False
     connected = False
     accepting = False
+    connecting = False
     closing = False
     addr = None
     ignore_log_types = frozenset(['warning'])
@@ -246,7 +249,7 @@ class dispatcher:
             try:
                 self.addr = sock.getpeername()
             except socket.error as err:
-                if err.args[0] == ENOTCONN:
+                if err.args[0] in (ENOTCONN, EINVAL):
                     # To handle the case where we got an unconnected
                     # socket.
                     self.connected = False
@@ -271,6 +274,8 @@ class dispatcher:
             except TypeError:
                 status.append(repr(self.addr))
         return '<%s at %#x>' % (' '.join(status), id(self))
+
+    __str__ = __repr__
 
     def add_channel(self, map=None):
         #self.log_info('adding channel %s' % self)
@@ -338,9 +343,11 @@ class dispatcher:
 
     def connect(self, address):
         self.connected = False
+        self.connecting = True
         err = self.socket.connect_ex(address)
         if err in (EINPROGRESS, EALREADY, EWOULDBLOCK) \
         or err == EINVAL and os.name in ('nt', 'ce'):
+            self.addr = address
             return
         if err in (0, EISCONN):
             self.addr = address
@@ -369,7 +376,7 @@ class dispatcher:
         except socket.error as why:
             if why.args[0] == EWOULDBLOCK:
                 return 0
-            elif why.args[0] in (ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED):
+            elif why.args[0] in _DISCONNECTED:
                 self.handle_close()
                 return 0
             else:
@@ -387,7 +394,7 @@ class dispatcher:
                 return data
         except socket.error as why:
             # winsock sometimes throws ENOTCONN
-            if why.args[0] in [ECONNRESET, ENOTCONN, ESHUTDOWN, ECONNABORTED]:
+            if why.args[0] in _DISCONNECTED:
                 self.handle_close()
                 return b''
             else:
@@ -396,6 +403,7 @@ class dispatcher:
     def close(self):
         self.connected = False
         self.accepting = False
+        self.connecting = False
         self.del_channel()
         try:
             self.socket.close()
@@ -407,10 +415,15 @@ class dispatcher:
     # references to the underlying socket object.
     def __getattr__(self, attr):
         try:
-            return getattr(self.socket, attr)
+            retattr = getattr(self.socket, attr)
         except AttributeError:
             raise AttributeError("%s instance has no attribute '%s'"
                                  %(self.__class__.__name__, attr))
+        else:
+            msg = "%(me)s.%(attr)s is deprecated; use %(me)s.socket.%(attr)s " \
+                  "instead" % {'me' : self.__class__.__name__, 'attr' : attr}
+            warnings.warn(msg, DeprecationWarning, stacklevel=2)
+            return retattr
 
     # log and log_info may be overridden to provide more sophisticated
     # logging and warning methods. In general, log is for 'hit' logging
@@ -429,7 +442,8 @@ class dispatcher:
             # sockets that are connected
             self.handle_accept()
         elif not self.connected:
-            self.handle_connect_event()
+            if self.connecting:
+                self.handle_connect_event()
             self.handle_read()
         else:
             self.handle_read()
@@ -440,6 +454,7 @@ class dispatcher:
             raise socket.error(err, _strerror(err))
         self.handle_connect()
         self.connected = True
+        self.connecting = False
 
     def handle_write_event(self):
         if self.accepting:
@@ -448,12 +463,8 @@ class dispatcher:
             return
 
         if not self.connected:
-            #check for errors
-            err = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
-            if err != 0:
-                raise socket.error(err, _strerror(err))
-
-            self.handle_connect_event()
+            if self.connecting:
+                self.handle_connect_event()
         self.handle_write()
 
     def handle_expt_event(self):
@@ -504,7 +515,13 @@ class dispatcher:
         self.log_info('unhandled connect event', 'warning')
 
     def handle_accept(self):
-        self.log_info('unhandled accept event', 'warning')
+        pair = self.accept()
+        if pair is not None:
+            self.handle_accepted(*pair)
+
+    def handle_accepted(self, sock, addr):
+        sock.close()
+        self.log_info('unhandled accepted event', 'warning')
 
     def handle_close(self):
         self.log_info('unhandled close event', 'warning')

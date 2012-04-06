@@ -4,8 +4,6 @@ Implements the Distutils 'build_ext' command, for building extension
 modules (currently limited to C extensions, should accommodate C++
 extensions ASAP)."""
 
-__revision__ = "$Id$"
-
 import sys, os, re
 from distutils.core import Command
 from distutils.errors import *
@@ -167,8 +165,7 @@ class build_ext(Command):
         if plat_py_include != py_include:
             self.include_dirs.append(plat_py_include)
 
-        if isinstance(self.libraries, str):
-            self.libraries = [self.libraries]
+        self.ensure_string_list('libraries')
 
         # Life is easier if we're not forever checking for None, so
         # simplify these options to empty lists if unset
@@ -754,9 +751,9 @@ class build_ext(Command):
         else:
             from distutils import sysconfig
             if sysconfig.get_config_var('Py_ENABLE_SHARED'):
-                template = "python%d.%d"
-                pythonlib = (template %
-                             (sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff))
+                pythonlib = 'python{}.{}{}'.format(
+                    sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff,
+                    sys.abiflags)
                 return ext.libraries + [pythonlib]
             else:
                 return ext.libraries

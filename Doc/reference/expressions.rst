@@ -116,11 +116,11 @@ literals.  See section :ref:`literals` for details.
    triple: immutable; data; type
    pair: immutable; object
 
-With the exception of bytes literals, these all correspond to immutable data
-types, and hence the object's identity is less important than its value.
-Multiple evaluations of literals with the same value (either the same occurrence
-in the program text or a different occurrence) may obtain the same object or a
-different object with the same value.
+All literals correspond to immutable data types, and hence the object's identity
+is less important than its value.  Multiple evaluations of literals with the
+same value (either the same occurrence in the program text or a different
+occurrence) may obtain the same object or a different object with the same
+value.
 
 
 .. _parenthesized:
@@ -651,7 +651,7 @@ the call.
    An implementation may provide built-in functions whose positional parameters
    do not have names, even if they are 'named' for the purpose of documentation,
    and which therefore cannot be supplied by keyword.  In CPython, this is the
-   case for functions implemented in C that use :cfunc:`PyArg_ParseTuple` to
+   case for functions implemented in C that use :c:func:`PyArg_ParseTuple` to
    parse their arguments.
 
 If there are more positional arguments than there are formal parameter slots, a
@@ -667,12 +667,15 @@ dictionary containing the excess keyword arguments (using the keywords as keys
 and the argument values as corresponding values), or a (new) empty dictionary if
 there were no excess keyword arguments.
 
+.. index::
+   single: *; in function calls
+
 If the syntax ``*expression`` appears in the function call, ``expression`` must
-evaluate to a sequence.  Elements from this sequence are treated as if they were
-additional positional arguments; if there are positional arguments *x1*,...,
-*xN*, and ``expression`` evaluates to a sequence *y1*, ..., *yM*, this is
-equivalent to a call with M+N positional arguments *x1*, ..., *xN*, *y1*, ...,
-*yM*.
+evaluate to an iterable.  Elements from this iterable are treated as if they
+were additional positional arguments; if there are positional arguments
+*x1*, ..., *xN*, and ``expression`` evaluates to a sequence *y1*, ..., *yM*,
+this is equivalent to a call with M+N positional arguments *x1*, ..., *xN*,
+*y1*, ..., *yM*.
 
 A consequence of this is that although the ``*expression`` syntax may appear
 *after* some keyword arguments, it is processed *before* the keyword arguments
@@ -692,6 +695,9 @@ A consequence of this is that although the ``*expression`` syntax may appear
 
 It is unusual for both keyword arguments and the ``*expression`` syntax to be
 used in the same call, so in practice this confusion does not arise.
+
+.. index::
+   single: **; in function calls
 
 If the syntax ``**expression`` appears in the function call, ``expression`` must
 evaluate to a mapping, the contents of which are treated as additional keyword
@@ -921,6 +927,11 @@ the left or right by the number of bits given by the second argument.
 A right shift by *n* bits is defined as division by ``pow(2,n)``.  A left shift
 by *n* bits is defined as multiplication with ``pow(2,n)``.
 
+.. note::
+
+   In the current implementation, the right-hand operand is required
+   to be at most :attr:`sys.maxsize`.  If the right-hand operand is larger than
+   :attr:`sys.maxsize` an :exc:`OverflowError` exception is raised.
 
 .. _bitwise:
 
@@ -958,9 +969,9 @@ must be integers.
 
 .. _comparisons:
 .. _is:
-.. _isnot:
+.. _is not:
 .. _in:
-.. _notin:
+.. _not in:
 
 Comparisons
 ===========
@@ -1156,10 +1167,8 @@ not bother to return a value of the same type as its argument, so e.g., ``not
 'foo'`` yields ``False``, not ``''``.)
 
 
-Conditional Expressions
+Conditional expressions
 =======================
-
-.. versionadded:: 2.5
 
 .. index::
    pair: conditional; expression
@@ -1309,6 +1318,7 @@ groups from right to left).
 | ``(expressions...)``,                         | Binding or tuple display,           |
 | ``[expressions...]``,                         | list display,                       |
 | ``{key:datum...}``,                           | dictionary display,                 |
+| ``{expressions...}``                          | set display                         |
 +-----------------------------------------------+-------------------------------------+
 
 

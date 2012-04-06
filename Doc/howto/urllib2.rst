@@ -108,6 +108,7 @@ library. ::
               'language' : 'Python' }
 
     data = urllib.parse.urlencode(values)
+    data = data.encode('utf-8') # data should be bytes
     req = urllib.request.Request(url, data)
     response = urllib.request.urlopen(req)
     the_page = response.read()
@@ -140,7 +141,7 @@ This is done as follows::
     name=Somebody+Here&language=Python&location=Northampton
     >>> url = 'http://www.example.com/example.cgi'
     >>> full_url = url + '?' + url_values
-    >>> data = urllib.request.open(full_url)
+    >>> data = urllib.request.urlopen(full_url)
 
 Notice that the full URL is created by adding a ``?`` to the URL, followed by
 the encoded values.
@@ -172,7 +173,8 @@ Explorer [#]_. ::
               'language' : 'Python' }
     headers = { 'User-Agent' : user_agent }
 
-    data = urllib.parse.urlencode(values)
+    data  = urllib.parse.urlencode(values)
+    data = data.encode('utf-8')
     req = urllib.request.Request(url, data, headers)
     response = urllib.request.urlopen(req)
     the_page = response.read()

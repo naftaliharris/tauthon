@@ -23,10 +23,14 @@ class addbase(object):
             self.fileno = self.fp.fileno
         else:
             self.fileno = lambda: None
-        if hasattr(self.fp, "__iter__"):
-            self.__iter__ = self.fp.__iter__
-            if hasattr(self.fp, "__next__"):
-                self.__next__ = self.fp.__next__
+
+    def __iter__(self):
+        # Assigning `__iter__` to the instance doesn't work as intended
+        # because the iter builtin does something like `cls.__iter__(obj)`
+        # and thus fails to find the _bound_ method `obj.__iter__`.
+        # Returning just `self.fp` works for built-in file objects but
+        # might not work for general file-like objects.
+        return iter(self.fp)
 
     def __repr__(self):
         return '<%s at %r whose fp = %r>' % (self.__class__.__name__,
@@ -57,11 +61,11 @@ class addclosehook(addbase):
         self.hookargs = hookargs
 
     def close(self):
-        addbase.close(self)
         if self.closehook:
             self.closehook(*self.hookargs)
             self.closehook = None
             self.hookargs = None
+        addbase.close(self)
 
 class addinfo(addbase):
     """class to add an info() method to an open file."""

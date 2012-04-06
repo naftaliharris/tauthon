@@ -2,7 +2,6 @@
 /* UNIX password file access module */
 
 #include "Python.h"
-#include "structseq.h"
 
 #include <sys/types.h>
 #include <pwd.h>
@@ -49,9 +48,7 @@ static void
 sets(PyObject *v, int i, const char* val)
 {
   if (val) {
-      PyObject *o = PyUnicode_Decode(val, strlen(val),
-                                     Py_FileSystemDefaultEncoding,
-                                     "surrogateescape");
+      PyObject *o = PyUnicode_DecodeFSDefault(val);
       PyStructSequence_SET_ITEM(v, i, o);
   }
   else {
@@ -134,9 +131,7 @@ pwd_getpwnam(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "U:getpwnam", &arg))
         return NULL;
-    if ((bytes = PyUnicode_AsEncodedString(arg,
-                                           Py_FileSystemDefaultEncoding,
-                                           "surrogateescape")) == NULL)
+    if ((bytes = PyUnicode_EncodeFSDefault(arg)) == NULL)
         return NULL;
     if (PyBytes_AsStringAndSize(bytes, &name, NULL) == -1)
         goto out;

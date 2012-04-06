@@ -3,6 +3,7 @@
 /* much code borrowed from mathmodule.c */
 
 #include "Python.h"
+#include "_math.h"
 /* we need DBL_MAX, DBL_MIN, DBL_EPSILON, DBL_MANT_DIG and FLT_RADIX from
    float.h.  We assume that FLT_RADIX is either 2 or 16. */
 #include <float.h>
@@ -149,7 +150,7 @@ c_acos(Py_complex z)
         s2.imag = z.imag;
         s2 = c_sqrt(s2);
         r.real = 2.*atan2(s1.real, s2.real);
-        r.imag = asinh(s2.real*s1.imag - s2.imag*s1.real);
+        r.imag = m_asinh(s2.real*s1.imag - s2.imag*s1.real);
     }
     errno = 0;
     return r;
@@ -181,7 +182,7 @@ c_acosh(Py_complex z)
         s2.real = z.real + 1.;
         s2.imag = z.imag;
         s2 = c_sqrt(s2);
-        r.real = asinh(s1.real*s2.real + s1.imag*s2.imag);
+        r.real = m_asinh(s1.real*s2.real + s1.imag*s2.imag);
         r.imag = 2.*atan2(s1.imag, s2.real);
     }
     errno = 0;
@@ -238,7 +239,7 @@ c_asinh(Py_complex z)
         s2.real = 1.-z.imag;
         s2.imag = z.real;
         s2 = c_sqrt(s2);
-        r.real = asinh(s1.real*s2.imag-s2.real*s1.imag);
+        r.real = m_asinh(s1.real*s2.imag-s2.real*s1.imag);
         r.imag = atan2(z.imag, s1.real*s2.real-s1.imag*s2.imag);
     }
     errno = 0;
@@ -342,7 +343,7 @@ c_atanh(Py_complex z)
             errno = 0;
         }
     } else {
-        r.real = log1p(4.*z.real/((1-z.real)*(1-z.real) + ay*ay))/4.;
+        r.real = m_log1p(4.*z.real/((1-z.real)*(1-z.real) + ay*ay))/4.;
         r.imag = -atan2(-2.*z.imag, (1-z.real)*(1+z.real) - ay*ay)/2.;
         errno = 0;
     }
@@ -552,7 +553,7 @@ c_log(Py_complex z)
         if (0.71 <= h && h <= 1.73) {
             am = ax > ay ? ax : ay;  /* max(ax, ay) */
             an = ax > ay ? ay : ax;  /* min(ax, ay) */
-            r.real = log1p((am-1)*(am+1)+an*an)/2.;
+            r.real = m_log1p((am-1)*(am+1)+an*an)/2.;
         } else {
             r.real = log(h);
         }
@@ -1023,6 +1024,19 @@ PyDoc_STRVAR(cmath_rect_doc,
 Convert from polar coordinates to rectangular coordinates.");
 
 static PyObject *
+cmath_isfinite(PyObject *self, PyObject *args)
+{
+    Py_complex z;
+    if (!PyArg_ParseTuple(args, "D:isfinite", &z))
+        return NULL;
+    return PyBool_FromLong(Py_IS_FINITE(z.real) && Py_IS_FINITE(z.imag));
+}
+
+PyDoc_STRVAR(cmath_isfinite_doc,
+"isfinite(z) -> bool\n\
+Return True if both the real and imaginary parts of z are finite, else False.");
+
+static PyObject *
 cmath_isnan(PyObject *self, PyObject *args)
 {
     Py_complex z;
@@ -1064,6 +1078,7 @@ static PyMethodDef cmath_methods[] = {
     {"cos",    cmath_cos,   METH_VARARGS, c_cos_doc},
     {"cosh",   cmath_cosh,  METH_VARARGS, c_cosh_doc},
     {"exp",    cmath_exp,   METH_VARARGS, c_exp_doc},
+    {"isfinite", cmath_isfinite, METH_VARARGS, cmath_isfinite_doc},
     {"isinf",  cmath_isinf, METH_VARARGS, cmath_isinf_doc},
     {"isnan",  cmath_isnan, METH_VARARGS, cmath_isnan_doc},
     {"log",    cmath_log,   METH_VARARGS, cmath_log_doc},

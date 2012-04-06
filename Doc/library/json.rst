@@ -6,7 +6,7 @@
 .. moduleauthor:: Bob Ippolito <bob@redivi.com>
 .. sectionauthor:: Bob Ippolito <bob@redivi.com>
 
-JSON (JavaScript Object Notation) <http://json.org> is a subset of JavaScript
+`JSON (JavaScript Object Notation) <http://json.org>`_ is a subset of JavaScript
 syntax (ECMA-262 3rd edition) used as a lightweight data interchange format.
 
 :mod:`json` exposes an API familiar to users of the standard library
@@ -125,6 +125,10 @@ Basic Usage
    :class:`bytes` objects. Therefore, ``fp.write()`` must support :class:`str`
    input.
 
+   If *ensure_ascii* is ``True`` (the default), the output is guaranteed to
+   have all incoming non-ASCII characters escaped.  If *ensure_ascii* is
+   ``False``, these characters will be output as-is.
+
    If *check_circular* is ``False`` (default: ``True``), then the circular
    reference check for container types will be skipped and a circular reference
    will result in an :exc:`OverflowError` (or worse).
@@ -134,10 +138,12 @@ Basic Usage
    ``inf``, ``-inf``) in strict compliance of the JSON specification, instead of
    using the JavaScript equivalents (``NaN``, ``Infinity``, ``-Infinity``).
 
-   If *indent* is a non-negative integer, then JSON array elements and object
-   members will be pretty-printed with that indent level.  An indent level of 0,
-   or negative, will only insert newlines.  ``None`` (the default) selects the
-   most compact representation.
+   If *indent* is a non-negative integer or string, then JSON array elements and
+   object members will be pretty-printed with that indent level.  An indent level
+   of 0, negative, or ``""`` will only insert newlines.  ``None`` (the default)
+   selects the most compact representation. Using a positive integer indent
+   indents that many spaces per level.  If *indent* is a string (such at '\t'),
+   that string is used to indent each level.
 
    If *separators* is an ``(item_separator, dict_separator)`` tuple, then it
    will be used instead of the default ``(', ', ': ')`` separators.  ``(',',
@@ -162,6 +168,14 @@ Basic Usage
       so trying to serialize multiple objects with repeated calls to
       :func:`dump` using the same *fp* will result in an invalid JSON file.
 
+   .. note::
+
+      Keys in key/value pairs of JSON are always of the type :class:`str`. When
+      a dictionary is converted into JSON, all the keys of the dictionary are
+      coerced to strings. As a result of this, if a dictionary is convered
+      into JSON and then back into a dictionary, the dictionary may not equal
+      the original one. That is, ``loads(dumps(x)) != x`` if x has non-string
+      keys.
 
 .. function:: load(fp, cls=None, object_hook=None, parse_float=None, parse_int=None, parse_constant=None, object_pairs_hook=None, **kw)
 

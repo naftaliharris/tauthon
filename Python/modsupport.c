@@ -279,11 +279,9 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
             return PyFloat_FromDouble(
                 (double)va_arg(*p_va, va_double));
 
-#ifndef WITHOUT_COMPLEX
         case 'D':
             return PyComplex_FromCComplex(
                 *((Py_complex *)va_arg(*p_va, Py_complex *)));
-#endif /* WITHOUT_COMPLEX */
 
         case 'c':
         {
@@ -304,39 +302,7 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
 
         case 's':
         case 'z':
-        {
-            PyObject *v;
-            char *str = va_arg(*p_va, char *);
-            Py_ssize_t n;
-            if (**p_format == '#') {
-                ++*p_format;
-                if (flags & FLAG_SIZE_T)
-                    n = va_arg(*p_va, Py_ssize_t);
-                else
-                    n = va_arg(*p_va, int);
-            }
-            else
-                n = -1;
-            if (str == NULL) {
-                v = Py_None;
-                Py_INCREF(v);
-            }
-            else {
-                if (n < 0) {
-                    size_t m = strlen(str);
-                    if (m > PY_SSIZE_T_MAX) {
-                        PyErr_SetString(PyExc_OverflowError,
-                            "string too long for Python string");
-                        return NULL;
-                    }
-                    n = (Py_ssize_t)m;
-                }
-                v = PyUnicode_FromStringAndSize(str, n);
-            }
-            return v;
-        }
-
-        case 'U':
+        case 'U':   /* XXX deprecated alias */
         {
             PyObject *v;
             char *str = va_arg(*p_va, char *);
@@ -490,15 +456,7 @@ va_build_value(const char *format, va_list va, int flags)
     int n = countformat(f, '\0');
     va_list lva;
 
-#ifdef VA_LIST_IS_ARRAY
-    memcpy(lva, va, sizeof(va_list));
-#else
-#ifdef __va_copy
-    __va_copy(lva, va);
-#else
-    lva = va;
-#endif
-#endif
+        Py_VA_COPY(lva, va);
 
     if (n < 0)
         return NULL;

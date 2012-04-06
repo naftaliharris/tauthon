@@ -25,18 +25,15 @@ the Python interpreter to run some Python code.
 
 So if you are embedding Python, you are providing your own main program.  One of
 the things this main program has to do is initialize the Python interpreter.  At
-the very least, you have to call the function :cfunc:`Py_Initialize`.  There are
+the very least, you have to call the function :c:func:`Py_Initialize`.  There are
 optional calls to pass command line arguments to Python.  Then later you can
 call the interpreter from any part of the application.
 
 There are several different ways to call the interpreter: you can pass a string
-containing Python statements to :cfunc:`PyRun_SimpleString`, or you can pass a
+containing Python statements to :c:func:`PyRun_SimpleString`, or you can pass a
 stdio file pointer and a file name (for identification in error messages only)
-to :cfunc:`PyRun_SimpleFile`.  You can also call the lower-level operations
+to :c:func:`PyRun_SimpleFile`.  You can also call the lower-level operations
 described in the previous chapters to construct and use Python objects.
-
-A simple demo of embedding Python can be found in the directory
-:file:`Demo/embed/` of the source distribution.
 
 
 .. seealso::
@@ -69,12 +66,12 @@ perform some operation on a file. ::
    }
 
 The above code first initializes the Python interpreter with
-:cfunc:`Py_Initialize`, followed by the execution of a hard-coded Python script
-that print the date and time.  Afterwards, the :cfunc:`Py_Finalize` call shuts
+:c:func:`Py_Initialize`, followed by the execution of a hard-coded Python script
+that print the date and time.  Afterwards, the :c:func:`Py_Finalize` call shuts
 the interpreter down, followed by the end of the program.  In a real program,
 you may want to get the Python script from another source, perhaps a text-editor
 routine, a file, or a database.  Getting the Python code from a file can better
-be done by using the :cfunc:`PyRun_SimpleFile` function, which saves you the
+be done by using the :c:func:`PyRun_SimpleFile` function, which saves you the
 trouble of allocating memory space and loading the file contents.
 
 
@@ -136,8 +133,9 @@ The code to run a function defined in a Python script is:
 
 This code loads a Python script using ``argv[1]``, and calls the function named
 in ``argv[2]``.  Its integer arguments are the other values of the ``argv``
-array.  If you compile and link this program (let's call the finished executable
-:program:`call`), and use it to execute a Python script, such as::
+array.  If you :ref:`compile and link <compiling>` this program (let's call
+the finished executable :program:`call`), and use it to execute a Python
+script, such as::
 
    def multiply(a,b):
        print("Will compute", a, "times", b)
@@ -162,8 +160,8 @@ interesting part with respect to embedding Python starts with ::
    pModule = PyImport_Import(pName);
 
 After initializing the interpreter, the script is loaded using
-:cfunc:`PyImport_Import`.  This routine needs a Python string as its argument,
-which is constructed using the :cfunc:`PyString_FromString` data conversion
+:c:func:`PyImport_Import`.  This routine needs a Python string as its argument,
+which is constructed using the :c:func:`PyString_FromString` data conversion
 routine. ::
 
    pFunc = PyObject_GetAttrString(pModule, argv[2]);
@@ -175,7 +173,7 @@ routine. ::
    Py_XDECREF(pFunc);
 
 Once the script is loaded, the name we're looking for is retrieved using
-:cfunc:`PyObject_GetAttrString`.  If the name exists, and the object returned is
+:c:func:`PyObject_GetAttrString`.  If the name exists, and the object returned is
 callable, you can safely assume that it is a function.  The program then
 proceeds by constructing a tuple of arguments as normal.  The call to the Python
 function is then made with::
@@ -229,8 +227,8 @@ Python extension.  For example::
        return PyModule_Create(&EmbModule);
    }
 
-Insert the above code just above the :cfunc:`main` function. Also, insert the
-following two statements before the call to :cfunc:`Py_Initialize`::
+Insert the above code just above the :c:func:`main` function. Also, insert the
+following two statements before the call to :c:func:`Py_Initialize`::
 
    numargs = argc;
    PyImport_AppendInittab("emb", &PyInit_emb);
@@ -260,37 +258,53 @@ write the main program in C++, and use the C++ compiler to compile and link your
 program.  There is no need to recompile Python itself using C++.
 
 
-.. _link-reqs:
+.. _compiling:
 
-Linking Requirements
-====================
+Compiling and Linking under Unix-like systems
+=============================================
 
-While the :program:`configure` script shipped with the Python sources will
-correctly build Python to export the symbols needed by dynamically linked
-extensions, this is not automatically inherited by applications which embed the
-Python library statically, at least on Unix.  This is an issue when the
-application is linked to the static runtime library (:file:`libpython.a`) and
-needs to load dynamic extensions (implemented as :file:`.so` files).
+It is not necessarily trivial to find the right flags to pass to your
+compiler (and linker) in order to embed the Python interpreter into your
+application, particularly because Python needs to load library modules
+implemented as C dynamic extensions (:file:`.so` files) linked against
+it.
 
-The problem is that some entry points are defined by the Python runtime solely
-for extension modules to use.  If the embedding application does not use any of
-these entry points, some linkers will not include those entries in the symbol
-table of the finished executable.  Some additional options are needed to inform
-the linker not to remove these symbols.
+To find out the required compiler and linker flags, you can execute the
+:file:`python{X.Y}-config` script which is generated as part of the
+installation process (a :file:`python3-config` script may also be
+available).  This script has several options, of which the following will
+be directly useful to you:
 
-Determining the right options to use for any given platform can be quite
-difficult, but fortunately the Python configuration already has those values.
-To retrieve them from an installed Python interpreter, start an interactive
-interpreter and have a short session like this::
+* ``pythonX.Y-config --cflags`` will give you the recommended flags when
+  compiling::
 
-   >>> import distutils.sysconfig
-   >>> distutils.sysconfig.get_config_var('LINKFORSHARED')
+   $ /opt/bin/python3.2-config --cflags
+   -I/opt/include/python3.2m -I/opt/include/python3.2m -DNDEBUG -g -fwrapv -O3 -Wall -Wstrict-prototypes
+
+* ``pythonX.Y-config --ldflags`` will give you the recommended flags when
+  linking::
+
+   $ /opt/bin/python3.2-config --ldflags
+   -I/opt/lib/python3.2/config-3.2m -lpthread -ldl -lutil -lm -lpython3.2m -Xlinker -export-dynamic
+
+.. note::
+   To avoid confusion between several Python installations (and especially
+   between the system Python and your own compiled Python), it is recommended
+   that you use the absolute path to :file:`python{X.Y}-config`, as in the above
+   example.
+
+If this procedure doesn't work for you (it is not guaranteed to work for
+all Unix-like platforms; however, we welcome :ref:`bug reports <reporting-bugs>`)
+you will have to read your system's documentation about dynamic linking and/or
+examine Python's :file:`Makefile` (use :func:`sysconfig.get_makefile_filename`
+to find its location) and compilation
+options.  In this case, the :mod:`sysconfig` module is a useful tool to
+programmatically extract the configuration values that you will want to
+combine together::
+
+   >>> import sysconfig
+   >>> sysconfig.get_config_var('LINKFORSHARED')
    '-Xlinker -export-dynamic'
 
-.. index:: module: distutils.sysconfig
 
-The contents of the string presented will be the options that should be used.
-If the string is empty, there's no need to add any additional options.  The
-:const:`LINKFORSHARED` definition corresponds to the variable of the same name
-in Python's top-level :file:`Makefile`.
-
+.. XXX similar documentation for Windows missing

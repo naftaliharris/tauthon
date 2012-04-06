@@ -70,6 +70,12 @@ def traced_func_calling_generator():
 def traced_doubler(num):
     return num * 2
 
+def traced_caller_list_comprehension():
+    k = 10
+    mylist = [traced_doubler(i) for i in range(k)]
+    return mylist
+
+
 class TracedClass(object):
     def __init__(self, x):
         self.a = x
@@ -149,6 +155,22 @@ class TestLineCounts(unittest.TestCase):
             (self.my_py_filename, firstlineno_gen + 3): 10,
         }
         self.assertEqual(self.tracer.results().counts, expected)
+
+    def test_trace_list_comprehension(self):
+        self.tracer.runfunc(traced_caller_list_comprehension)
+
+        firstlineno_calling = get_firstlineno(traced_caller_list_comprehension)
+        firstlineno_called = get_firstlineno(traced_doubler)
+        expected = {
+            (self.my_py_filename, firstlineno_calling + 1): 1,
+            # List compehentions work differently in 3.x, so the count
+            # below changed compared to 2.x.
+            (self.my_py_filename, firstlineno_calling + 2): 12,
+            (self.my_py_filename, firstlineno_calling + 3): 1,
+            (self.my_py_filename, firstlineno_called + 1): 10,
+        }
+        self.assertEqual(self.tracer.results().counts, expected)
+
 
     def test_linear_methods(self):
         # XXX todo: later add 'static_method_linear' and 'class_method_linear'
@@ -274,10 +296,10 @@ class TestCoverage(unittest.TestCase):
             self._coverage(tracer)
         stdout = stdout.getvalue()
         self.assertTrue("pprint.py" in stdout)
-        self.assertTrue("unittest.py" in stdout)
+        self.assertTrue("case.py" in stdout)   # from unittest
         files = os.listdir(TESTFN)
         self.assertTrue("pprint.cover" in files)
-        self.assertTrue("unittest.cover" in files)
+        self.assertTrue("unittest.case.cover" in files)
 
     def test_coverage_ignore(self):
         # Ignore all files, nothing should be traced nor printed
@@ -308,9 +330,24 @@ class TestCoverage(unittest.TestCase):
             lines, cov, module = line.split()[:3]
             coverage[module] = (int(lines), int(cov[:-1]))
         # XXX This is needed to run regrtest.py as a script
-        modname = trace.fullmodname(sys.modules[modname].__file__)
+        modname = trace._fullmodname(sys.modules[modname].__file__)
         self.assertIn(modname, coverage)
         self.assertEqual(coverage[modname], (5, 100))
+
+### Tests that don't mess with sys.settrace and can be traced
+### themselves TODO: Skip tests that do mess with sys.settrace when
+### regrtest is invoked with -T option.
+class Test_Ignore(unittest.TestCase):
+    def test_ignored(self):
+        jn = os.path.join
+        ignore = trace._Ignore(['x', 'y.z'], [jn('foo', 'bar')])
+        self.assertTrue(ignore.names('x.py', 'x'))
+        self.assertFalse(ignore.names('xy.py', 'xy'))
+        self.assertFalse(ignore.names('y.py', 'y'))
+        self.assertTrue(ignore.names(jn('foo', 'bar', 'baz.py'), 'baz'))
+        self.assertFalse(ignore.names(jn('bar', 'z.py'), 'z'))
+        # Matched before.
+        self.assertTrue(ignore.names(jn('bar', 'baz.py'), 'baz'))
 
 
 def test_main():

@@ -9,11 +9,11 @@
 This module adds the ability to import Python modules (:file:`\*.py`,
 :file:`\*.py[co]`) and packages from ZIP-format archives. It is usually not
 needed to use the :mod:`zipimport` module explicitly; it is automatically used
-by the built-in :keyword:`import` mechanism for ``sys.path`` items that are paths
+by the built-in :keyword:`import` mechanism for :data:`sys.path` items that are paths
 to ZIP archives.
 
-Typically, ``sys.path`` is a list of directory names as strings.  This module
-also allows an item of ``sys.path`` to be a string naming a ZIP file archive.
+Typically, :data:`sys.path` is a list of directory names as strings.  This module
+also allows an item of :data:`sys.path` to be a string naming a ZIP file archive.
 The ZIP archive can contain a subdirectory structure to support package imports,
 and a path within the archive can be specified to only import from a
 subdirectory.  For example, the path :file:`/tmp/example.zip/lib/` would only
@@ -26,18 +26,20 @@ Any files may be present in the ZIP archive, but only files :file:`.py` and
 corresponding :file:`.pyc` or :file:`.pyo` file, meaning that if a ZIP archive
 doesn't contain :file:`.pyc` files, importing may be rather slow.
 
+ZIP archives with an archive comment are currently not supported.
+
 .. seealso::
 
    `PKZIP Application Note <http://www.pkware.com/documents/casestudies/APPNOTE.TXT>`_
       Documentation on the ZIP file format by Phil Katz, the creator of the format and
       algorithms used.
 
-   :pep:`0273` - Import Modules from Zip Archives
+   :pep:`273` - Import Modules from Zip Archives
       Written by James C. Ahlstrom, who also provided an implementation. Python 2.3
       follows the specification in PEP 273, but uses an implementation written by Just
       van Rossum that uses the import hooks described in PEP 302.
 
-   :pep:`0302` - New Import Hooks
+   :pep:`302` - New Import Hooks
       The PEP to add the import hooks that help this module work.
 
 

@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from test import support
+import array
 import marshal
 import sys
 import unittest
@@ -11,16 +12,10 @@ class HelperMixin:
         new = marshal.loads(marshal.dumps(sample, *extra))
         self.assertEqual(sample, new)
         try:
-            f = open(support.TESTFN, "wb")
-            try:
+            with open(support.TESTFN, "wb") as f:
                 marshal.dump(sample, f, *extra)
-            finally:
-                f.close()
-            f = open(support.TESTFN, "rb")
-            try:
+            with open(support.TESTFN, "rb") as f:
                 new = marshal.load(f)
-            finally:
-                f.close()
             self.assertEqual(sample, new)
         finally:
             support.unlink(support.TESTFN)
@@ -143,6 +138,27 @@ class ContainerTestCase(unittest.TestCase, HelperMixin):
         for constructor in (set, frozenset):
             self.helper(constructor(self.d.keys()))
 
+
+class BufferTestCase(unittest.TestCase, HelperMixin):
+
+    def test_bytearray(self):
+        b = bytearray(b"abc")
+        self.helper(b)
+        new = marshal.loads(marshal.dumps(b))
+        self.assertEqual(type(new), bytes)
+
+    def test_memoryview(self):
+        b = memoryview(b"abc")
+        self.helper(b)
+        new = marshal.loads(marshal.dumps(b))
+        self.assertEqual(type(new), bytes)
+
+    def test_array(self):
+        a = array.array('B', b"abc")
+        new = marshal.loads(marshal.dumps(a))
+        self.assertEqual(new, b"abc")
+
+
 class BugsTestCase(unittest.TestCase):
     def test_bug_5888452(self):
         # Simple-minded check for SF 588452: Debug build crashes
@@ -168,7 +184,7 @@ class BugsTestCase(unittest.TestCase):
                 pass
 
     def test_loads_recursion(self):
-        s = 'c' + ('X' * 4*4) + '{' * 2**20
+        s = b'c' + (b'X' * 4*4) + b'{' * 2**20
         self.assertRaises(ValueError, marshal.loads, s)
 
     def test_recursion_limit(self):
@@ -217,6 +233,35 @@ class BugsTestCase(unittest.TestCase):
         invalid_string = b'l\x02\x00\x00\x00\x00\x00\x00\x00'
         self.assertRaises(ValueError, marshal.loads, invalid_string)
 
+    def test_multiple_dumps_and_loads(self):
+        # Issue 12291: marshal.load() should be callable multiple times
+        # with interleaved data written by non-marshal code
+        # Adapted from a patch by Engelbert Gruber.
+        data = (1, 'abc', b'def', 1.0, (2, 'a', ['b', b'c']))
+        for interleaved in (b'', b'0123'):
+            ilen = len(interleaved)
+            positions = []
+            try:
+                with open(support.TESTFN, 'wb') as f:
+                    for d in data:
+                        marshal.dump(d, f)
+                        if ilen:
+                            f.write(interleaved)
+                        positions.append(f.tell())
+                with open(support.TESTFN, 'rb') as f:
+                    for i, d in enumerate(data):
+                        self.assertEqual(d, marshal.load(f))
+                        if ilen:
+                            f.read(ilen)
+                        self.assertEqual(positions[i], f.tell())
+            finally:
+                support.unlink(support.TESTFN)
+
+    def test_loads_reject_unicode_strings(self):
+        # Issue #14177: marshal.loads() should not accept unicode strings
+        unicode_string = 'T'
+        self.assertRaises(TypeError, marshal.loads, unicode_string)
+
 
 def test_main():
     support.run_unittest(IntTestCase,
@@ -225,6 +270,7 @@ def test_main():
                               CodeTestCase,
                               ContainerTestCase,
                               ExceptionTestCase,
+                              BufferTestCase,
                               BugsTestCase)
 
 if __name__ == "__main__":

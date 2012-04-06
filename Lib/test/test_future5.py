@@ -3,13 +3,13 @@ from __future__ import unicode_literals, print_function
 
 import sys
 import unittest
-from . import support
+from test import support
 
 
 class TestMultipleFeatures(unittest.TestCase):
 
     def test_unicode_literals(self):
-        self.assertTrue(isinstance("", str))
+        self.assertIsInstance("", str)
 
     def test_print_function(self):
         with support.captured_output("stderr") as s:
