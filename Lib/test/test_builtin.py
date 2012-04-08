@@ -12,8 +12,9 @@ import types
 import builtins
 import random
 import traceback
-from test.support import fcmp, TESTFN, unlink,  run_unittest, check_warnings
+from test.support import TESTFN, unlink,  run_unittest, check_warnings
 from operator import neg
+import pickle
 try:
     import pty, signal
 except ImportError:
@@ -110,7 +111,30 @@ class TestFailingIter:
     def __iter__(self):
         raise RuntimeError
 
+def filter_char(arg):
+    return ord(arg) > ord("d")
+
+def map_char(arg):
+    return chr(ord(arg)+1)
+
 class BuiltinTest(unittest.TestCase):
+    # Helper to check picklability
+    def check_iter_pickle(self, it, seq):
+        itorg = it
+        d = pickle.dumps(it)
+        it = pickle.loads(d)
+        self.assertEqual(type(itorg), type(it))
+        self.assertEqual(list(it), seq)
+
+        #test the iterator after dropping one from it
+        it = pickle.loads(d)
+        try:
+            next(it)
+        except StopIteration:
+            return
+        d = pickle.dumps(it)
+        it = pickle.loads(d)
+        self.assertEqual(list(it), seq[1:])
 
     def test_import(self):
         __import__('sys')
@@ -255,8 +279,7 @@ class BuiltinTest(unittest.TestCase):
         self.assertEqual(chr(0xff), '\xff')
         self.assertRaises(ValueError, chr, 1<<24)
         self.assertEqual(chr(sys.maxunicode),
-                         str(('\\U%08x' % (sys.maxunicode)).encode("ascii"),
-                             'unicode-escape'))
+                         str('\\U0010ffff'.encode("ascii"), 'unicode-escape'))
         self.assertRaises(TypeError, chr)
         self.assertEqual(chr(0x0000FFFF), "\U0000FFFF")
         self.assertEqual(chr(0x00010000), "\U00010000")
@@ -378,7 +401,15 @@ class BuiltinTest(unittest.TestCase):
         f = Foo()
         self.assertTrue(dir(f) == ["ga", "kan", "roo"])
 
-        # dir(obj__dir__not_list)
+        # dir(obj__dir__tuple)
+        class Foo(object):
+            def __dir__(self):
+                return ("b", "c", "a")
+        res = dir(Foo())
+        self.assertIsInstance(res, list)
+        self.assertTrue(res == ["a", "b", "c"])
+
+        # dir(obj__dir__not_sequence)
         class Foo(object):
             def __dir__(self):
                 return 7
@@ -391,6 +422,8 @@ class BuiltinTest(unittest.TestCase):
         except:
             self.assertEqual(len(dir(sys.exc_info()[2])), 4)
 
+        # test that object has a __dir__()
+        self.assertEqual(sorted([].__dir__()), dir([]))
 
     def test_divmod(self):
         self.assertEqual(divmod(12, 7), (1, 5))
@@ -400,10 +433,13 @@ class BuiltinTest(unittest.TestCase):
 
         self.assertEqual(divmod(-sys.maxsize-1, -1), (sys.maxsize+1, 0))
 
-        self.assertTrue(not fcmp(divmod(3.25, 1.0), (3.0, 0.25)))
-        self.assertTrue(not fcmp(divmod(-3.25, 1.0), (-4.0, 0.75)))
-        self.assertTrue(not fcmp(divmod(3.25, -1.0), (-4.0, -0.75)))
-        self.assertTrue(not fcmp(divmod(-3.25, -1.0), (3.0, -0.25)))
+        for num, denom, exp_result in [ (3.25, 1.0, (3.0, 0.25)),
+                                        (-3.25, 1.0, (-4.0, 0.75)),
+                                        (3.25, -1.0, (-4.0, -0.75)),
+                                        (-3.25, -1.0, (3.0, -0.25))]:
+            result = divmod(num, denom)
+            self.assertAlmostEqual(result[0], exp_result[0])
+            self.assertAlmostEqual(result[1], exp_result[1])
 
         self.assertRaises(TypeError, divmod)
 
@@ -553,6 +589,11 @@ class BuiltinTest(unittest.TestCase):
         self.assertEqual(list(filter(None, (1, 2))), [1, 2])
         self.assertEqual(list(filter(lambda x: x>=3, (1, 2, 3, 4))), [3, 4])
         self.assertRaises(TypeError, list, filter(42, (1, 2)))
+
+    def test_filter_pickle(self):
+        f1 = filter(filter_char, "abcdeabcde")
+        f2 = filter(filter_char, "abcdeabcde")
+        self.check_iter_pickle(f1, list(f2))
 
     def test_getattr(self):
         self.assertTrue(getattr(sys, 'stdout') is sys.stdout)
@@ -746,6 +787,11 @@ class BuiltinTest(unittest.TestCase):
         def badfunc(x):
             raise RuntimeError
         self.assertRaises(RuntimeError, list, map(badfunc, range(5)))
+
+    def test_map_pickle(self):
+        m1 = map(map_char, "Is this the real life?")
+        m2 = map(map_char, "Is this the real life?")
+        self.check_iter_pickle(m1, list(m2))
 
     def test_max(self):
         self.assertEqual(max('123123'), '3')
@@ -1197,6 +1243,9 @@ class BuiltinTest(unittest.TestCase):
         self.assertRaises(TypeError, sum, 42)
         self.assertRaises(TypeError, sum, ['a', 'b', 'c'])
         self.assertRaises(TypeError, sum, ['a', 'b', 'c'], '')
+        self.assertRaises(TypeError, sum, [b'a', b'c'], b'')
+        values = [bytearray(b'a'), bytearray(b'b')]
+        self.assertRaises(TypeError, sum, values, bytearray(b''))
         self.assertRaises(TypeError, sum, [[1], [2], [3]])
         self.assertRaises(TypeError, sum, [{2:3}])
         self.assertRaises(TypeError, sum, [{2:3}]*2, {2:3})
@@ -1285,6 +1334,13 @@ class BuiltinTest(unittest.TestCase):
                     return i
         self.assertRaises(ValueError, list, zip(BadSeq(), BadSeq()))
 
+    def test_zip_pickle(self):
+        a = (1, 2, 3)
+        b = (4, 5, 6)
+        t = [(1, 4), (2, 5), (3, 6)]
+        z1 = zip(a, b)
+        self.check_iter_pickle(z1, t)
+
     def test_format(self):
         # Test the basic machinery of the format() builtin.  Don't test
         #  the specifics of the various formatters
@@ -1358,14 +1414,14 @@ class BuiltinTest(unittest.TestCase):
 
         # --------------------------------------------------------------------
         # Issue #7994: object.__format__ with a non-empty format string is
-        #  pending deprecated
+        #  deprecated
         def test_deprecated_format_string(obj, fmt_str, should_raise_warning):
             with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always", PendingDeprecationWarning)
+                warnings.simplefilter("always", DeprecationWarning)
                 format(obj, fmt_str)
             if should_raise_warning:
                 self.assertEqual(len(w), 1)
-                self.assertIsInstance(w[0].message, PendingDeprecationWarning)
+                self.assertIsInstance(w[0].message, DeprecationWarning)
                 self.assertIn('object.__format__ with a non-empty format '
                               'string', str(w[0].message))
             else:
@@ -1408,6 +1464,13 @@ class BuiltinTest(unittest.TestCase):
         x = bytearray(b"abc")
         self.assertRaises(ValueError, x.translate, b"1", 1)
         self.assertRaises(TypeError, x.translate, b"1"*256, 1)
+
+    def test_construct_singletons(self):
+        for const in None, Ellipsis, NotImplemented:
+            tp = type(const)
+            self.assertIs(tp(), const)
+            self.assertRaises(TypeError, tp, 1, 2)
+            self.assertRaises(TypeError, tp, a=1, b=2)
 
 class TestSorted(unittest.TestCase):
 
