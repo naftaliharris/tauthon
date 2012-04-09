@@ -19,7 +19,7 @@ available.  They are listed here in alphabetical order.
 :func:`bytearray`    :func:`float`      :func:`list`        :func:`raw_input`  :func:`unichr`
 :func:`callable`     :func:`format`     :func:`locals`      :func:`reduce`     :func:`unicode`
 :func:`chr`          :func:`frozenset`  :func:`long`        :func:`reload`     :func:`vars`
-:func:`classmethod`  :func:`getattr`    :func:`map`         :func:`repr`       :func:`xrange`
+:func:`classmethod`  :func:`getattr`    :func:`map`         :func:`.repr`      :func:`xrange`
 :func:`cmp`          :func:`globals`    :func:`max`         :func:`reversed`   :func:`zip`
 :func:`compile`      :func:`hasattr`    :func:`memoryview`  :func:`round`      :func:`__import__`
 :func:`complex`      :func:`hash`       :func:`min`         :func:`set`        :func:`apply`
@@ -246,6 +246,13 @@ available.  They are listed here in alphabetical order.
    numeric type (including complex). If *imag* is omitted, it defaults to zero and
    the function serves as a numeric conversion function like :func:`int`,
    :func:`long` and :func:`float`.  If both arguments are omitted, returns ``0j``.
+
+   .. note::
+
+      When converting from a string, the string must not contain whitespace
+      around the central ``+`` or ``-`` operator.  For example,
+      ``complex('1+2j')`` is fine, but ``complex('1 + 2j')`` raises
+      :exc:`ValueError`.
 
    The complex type is described in :ref:`typesnumeric`.
 

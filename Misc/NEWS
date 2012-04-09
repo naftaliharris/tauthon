@@ -1,16 +1,100 @@
 Python News
 +++++++++++
 
-What's New in Python 2.7.3 final?
-=================================
+What's New in Python 2.7.4
+==========================
 
-*Release date: 2012-XX-XX*
+*Release date: XXXX-XX-XX*
+
+Core and Builtins
+-----------------
+
+- Issue #14505: Fix file descriptor leak when deallocating file objects
+  created with PyFile_FromString().
+
+- Issue #14474: Save and restore exception state in thread.start_new_thread()
+  while writing error message if the thread leaves a unhandled exception.
+
+- Issue #13019: Fix potential reference leaks in bytearray.extend().  Patch
+  by Suman Saha.
+
+- Issue #14378: Fix compiling ast.ImportFrom nodes with a "__future__" string as
+  the module name that was not interned.
+
+- Issue #14331: Use significantly less stack space when importing modules by
+  allocating path buffers on the heap instead of the stack.
+
+- Issue #14334: Prevent in a segfault in type.__getattribute__ when it was not
+  passed strings. Also fix segfaults in the __getattribute__ and __setattr__
+  methods of old-style classes.
+
+- Issue #14161: fix the __repr__ of file objects to escape the file name.
+
+- Issue #1469629: Allow cycles through an object's __dict__ slot to be
+  collected. (For example if ``x.__dict__ is x``).
+
+- Issue #13521: dict.setdefault() now does only one lookup for the given key,
+  making it "atomic" for many purposes.  Patch by Filip Gruszczyński.
+
+- Issue #10538: When using the "s*" code with PyArg_ParseTuple() to fill a
+  Py_buffer structure with data from an object supporting only the old
+  PyBuffer interface, a reference to the source objects is now properly added
+  to the Py_buffer.obj member.
 
 Library
 -------
 
+- Issue #7978: SocketServer now restarts the select() call when EINTR is
+  returned.  This avoids crashing the server loop when a signal is received.
+  Patch by Jerzy Kozera.
+
+- Issue #14409: IDLE now properly executes commands in the Shell window
+  when it cannot read the normal config files on startup and
+  has to use the built-in default key bindings.
+  There was previously a bug in one of the defaults.
+
+- Issue #10340: asyncore - properly handle EINVAL in dispatcher constructor on
+  OSX; avoid to call handle_connect in case of a disconnected socket which
+  was not meant to connect.
+
+- Issue #12757: Fix the skipping of doctests when python is run with -OO so
+  that it works in unittest's verbose mode as well as non-verbose mode.
+
+- Issue #3573: IDLE hangs when passing invalid command line args
+  (directory(ies) instead of file(s)) (Patch by Guilherme Polo)
+
+- Issue #13694: asynchronous connect in asyncore.dispatcher does not set addr
+  attribute.
+
+- Issue #10484: Fix the CGIHTTPServer's PATH_INFO handling problem.
+
+- Issue #11199: Fix the with urllib which hangs on particular ftp urls.
+
+- Issue #5219: Prevent event handler cascade in IDLE.
+
+- Issue #14252: Fix subprocess.Popen.terminate() to not raise an error under
+  Windows when the child process has already exited.
+
+- Issue #14195: An issue that caused weakref.WeakSet instances to incorrectly
+  return True for a WeakSet instance 'a' in both 'a < a' and 'a > a' has been
+  fixed.
+
+- Issue #14159: Fix the len() of weak sets to return a better approximation
+  when some objects are dead or dying.  Moreover, the implementation is now
+  O(1) rather than O(n).
+
+- Issue #2945: Make the distutils upload command aware of bdist_rpm products.
+
+- Issue #13447: Add a test file to host regression tests for bugs in the
+  scripts found in the Tools directory.
+
 - Issue #6884: Fix long-standing bugs with MANIFEST.in parsing in distutils
   on Windows.
+
+Build
+-----
+
+- Issue #14437: Fix building the _io module under Cygwin.
 
 
 What's New in Python 2.7.3 release candidate 2?
@@ -624,7 +708,8 @@ Tests
 Documentation
 -------------
 
-- Issue #13995: Fix errors in sqlite3's Cursor.rowcount documentation
+- Issues #13491 and #13995: Fix many errors in sqlite3 documentation.
+  Initial patch for #13491 by Johannes Vogel.
 
 - Issue #13402: Document absoluteness of sys.executable.
 
