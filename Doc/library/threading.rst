@@ -20,17 +20,6 @@ The :mod:`dummy_threading` module is provided for situations where
    methods and functions in this module in the Python 2.x series are still
    supported by this module.
 
-.. impl-detail::
-
-   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
-   can execute Python code at once (even though certain performance-oriented
-   libraries might overcome this limitation).
-   If you want your application to make better of use of the computational
-   resources of multi-core machines, you are advised to use
-   :mod:`multiprocessing` or :class:`concurrent.futures.ProcessPoolExecutor`.
-   However, threading is still an appropriate model if you want to run
-   multiple I/O-bound tasks simultaneously.
-
 
 This module defines the following functions and objects:
 
@@ -57,6 +46,17 @@ This module defines the following functions and objects:
    of control.  If the caller's thread of control was not created through the
    :mod:`threading` module, a dummy thread object with limited functionality is
    returned.
+
+
+.. function:: get_ident()
+
+   Return the 'thread identifier' of the current thread.  This is a nonzero
+   integer.  Its value has no direct meaning; it is intended as a magic cookie
+   to be used e.g. to index a dictionary of thread-specific data.  Thread
+   identifiers may be recycled when a thread exits and another thread is
+   created.
+
+   .. versionadded:: 3.3
 
 
 .. function:: enumerate()
@@ -174,7 +174,7 @@ This module defines the following functions and objects:
    *size* argument specifies the stack size to be used for subsequently created
    threads, and must be 0 (use platform or configured default) or a positive
    integer value of at least 32,768 (32kB). If changing the thread stack size is
-   unsupported, a :exc:`ThreadError` is raised.  If the specified stack size is
+   unsupported, a :exc:`RuntimeError` is raised.  If the specified stack size is
    invalid, a :exc:`ValueError` is raised and the stack size is unmodified.  32kB
    is currently the minimum supported stack size value to guarantee sufficient
    stack space for the interpreter itself.  Note that some platforms may have
@@ -241,7 +241,7 @@ changed through the :attr:`name` attribute.
 A thread can be flagged as a "daemon thread".  The significance of this flag is
 that the entire Python program exits when only daemon threads are left.  The
 initial value is inherited from the creating thread.  The flag can be set
-through the :attr:`daemon` property.
+through the :attr:`daemon` property or the *daemon* constructor argument.
 
 There is a "main thread" object; this corresponds to the initial thread of
 control in the Python program.  It is not a daemon thread.
@@ -254,7 +254,8 @@ daemonic, and cannot be :meth:`join`\ ed.  They are never deleted, since it is
 impossible to detect the termination of alien threads.
 
 
-.. class:: Thread(group=None, target=None, name=None, args=(), kwargs={})
+.. class:: Thread(group=None, target=None, name=None, args=(), kwargs={},
+                  verbose=None, *, daemon=None)
 
    This constructor should always be called with keyword arguments.  Arguments
    are:
@@ -273,9 +274,18 @@ impossible to detect the termination of alien threads.
    *kwargs* is a dictionary of keyword arguments for the target invocation.
    Defaults to ``{}``.
 
+   *verbose* is a flag used for debugging messages.
+
+   If not ``None``, *daemon* explicitly sets whether the thread is daemonic.
+   If ``None`` (the default), the daemonic property is inherited from the
+   current thread.
+
    If the subclass overrides the constructor, it must make sure to invoke the
    base class constructor (``Thread.__init__()``) before doing anything else to
    the thread.
+
+   .. versionchanged:: 3.3
+      Added the *daemon* argument.
 
    .. method:: start()
 
@@ -333,10 +343,10 @@ impossible to detect the termination of alien threads.
    .. attribute:: ident
 
       The 'thread identifier' of this thread or ``None`` if the thread has not
-      been started.  This is a nonzero integer.  See the
-      :func:`thread.get_ident()` function.  Thread identifiers may be recycled
-      when a thread exits and another thread is created.  The identifier is
-      available even after the thread has exited.
+      been started.  This is a nonzero integer.  See the :func:`get_ident()`
+      function.  Thread identifiers may be recycled when a thread exits and
+      another thread is created.  The identifier is available even after the
+      thread has exited.
 
    .. method:: is_alive()
 
@@ -362,6 +372,18 @@ impossible to detect the termination of alien threads.
 
       Old getter/setter API for :attr:`~Thread.daemon`; use it directly as a
       property instead.
+
+
+.. impl-detail::
+
+   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
+   can execute Python code at once (even though certain performance-oriented
+   libraries might overcome this limitation).
+   If you want your application to make better of use of the computational
+   resources of multi-core machines, you are advised to use
+   :mod:`multiprocessing` or :class:`concurrent.futures.ProcessPoolExecutor`.
+   However, threading is still an appropriate model if you want to run
+   multiple I/O-bound tasks simultaneously.
 
 
 .. _lock-objects:
@@ -430,7 +452,7 @@ All methods are executed atomically.
    are blocked waiting for the lock to become unlocked, allow exactly one of them
    to proceed.
 
-   When invoked on an unlocked lock, a :exc:`ThreadError` is raised.
+   When invoked on an unlocked lock, a :exc:`RuntimeError` is raised.
 
    There is no return value.
 
