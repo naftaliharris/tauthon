@@ -7,6 +7,26 @@ Built-in Functions
 The Python interpreter has a number of functions built into it that are always
 available.  They are listed here in alphabetical order.
 
+===================  =================  ==================  =================  ====================
+..                   ..                 Built-in Functions  ..                 ..
+===================  =================  ==================  =================  ====================
+:func:`abs`          :func:`divmod`     :func:`input`       :func:`open`       :func:`staticmethod`
+:func:`all`          :func:`enumerate`  :func:`int`         :func:`ord`        :func:`str`
+:func:`any`          :func:`eval`       :func:`isinstance`  :func:`pow`        :func:`sum`
+:func:`basestring`   :func:`execfile`   :func:`issubclass`  :func:`print`      :func:`super`
+:func:`bin`          :func:`file`       :func:`iter`        :func:`property`   :func:`tuple`
+:func:`bool`         :func:`filter`     :func:`len`         :func:`range`      :func:`type`
+:func:`bytearray`    :func:`float`      :func:`list`        :func:`raw_input`  :func:`unichr`
+:func:`callable`     :func:`format`     :func:`locals`      :func:`reduce`     :func:`unicode`
+:func:`chr`          :func:`frozenset`  :func:`long`        :func:`reload`     :func:`vars`
+:func:`classmethod`  :func:`getattr`    :func:`map`         :func:`.repr`      :func:`xrange`
+:func:`cmp`          :func:`globals`    :func:`max`         :func:`reversed`   :func:`zip`
+:func:`compile`      :func:`hasattr`    :func:`memoryview`  :func:`round`      :func:`__import__`
+:func:`complex`      :func:`hash`       :func:`min`         :func:`set`        :func:`apply`
+:func:`delattr`      :func:`help`       :func:`next`        :func:`setattr`    :func:`buffer`
+:func:`dict`         :func:`hex`        :func:`object`      :func:`slice`      :func:`coerce`
+:func:`dir`          :func:`id`         :func:`oct`         :func:`sorted`     :func:`intern`
+===================  =================  ==================  =================  ====================
 
 .. function:: abs(x)
 
@@ -76,6 +96,34 @@ available.  They are listed here in alphabetical order.
 
    .. versionchanged:: 2.3
       If no argument is given, this function returns :const:`False`.
+
+
+.. function:: bytearray([source[, encoding[, errors]]])
+
+   Return a new array of bytes.  The :class:`bytearray` type is a mutable
+   sequence of integers in the range 0 <= x < 256.  It has most of the usual
+   methods of mutable sequences, described in :ref:`typesseq-mutable`, as well
+   as most methods that the :class:`str` type has, see :ref:`string-methods`.
+
+   The optional *source* parameter can be used to initialize the array in a few
+   different ways:
+
+   * If it is a *string*, you must also give the *encoding* (and optionally,
+     *errors*) parameters; :func:`bytearray` then converts the string to
+     bytes using :meth:`str.encode`.
+
+   * If it is an *integer*, the array will have that size and will be
+     initialized with null bytes.
+
+   * If it is an object conforming to the *buffer* interface, a read-only buffer
+     of the object will be used to initialize the bytes array.
+
+   * If it is an *iterable*, it must be an iterable of integers in the range
+     ``0 <= x < 256``, which are used as the initial contents of the array.
+
+   Without an argument, an array of size 0 is created.
+
+   .. versionadded:: 2.6
 
 
 .. function:: callable(object)
@@ -173,17 +221,20 @@ available.  They are listed here in alphabetical order.
 
    .. note::
 
-      When compiling a string with multi-line code, line endings must be
-      represented by a single newline character (``'\n'``), and the input must
-      be terminated by at least one newline character.  If line endings are
-      represented by ``'\r\n'``, use :meth:`str.replace` to change them into
-      ``'\n'``.
+      When compiling a string with multi-line code in ``'single'`` or
+      ``'eval'`` mode, input must be terminated by at least one newline
+      character.  This is to facilitate detection of incomplete and complete
+      statements in the :mod:`code` module.
 
    .. versionchanged:: 2.3
       The *flags* and *dont_inherit* arguments were added.
 
    .. versionchanged:: 2.6
       Support for compiling AST objects.
+
+   .. versionchanged:: 2.7
+      Allowed use of Windows and Mac newlines.  Also input in ``'exec'`` mode
+      does not have to end in a newline anymore.
 
 
 .. function:: complex([real[, imag]])
@@ -195,6 +246,13 @@ available.  They are listed here in alphabetical order.
    numeric type (including complex). If *imag* is omitted, it defaults to zero and
    the function serves as a numeric conversion function like :func:`int`,
    :func:`long` and :func:`float`.  If both arguments are omitted, returns ``0j``.
+
+   .. note::
+
+      When converting from a string, the string must not contain whitespace
+      around the central ``+`` or ``-`` operator.  For example,
+      ``complex('1+2j')`` is fine, but ``complex('1 + 2j')`` raises
+      :exc:`ValueError`.
 
    The complex type is described in :ref:`typesnumeric`.
 
@@ -249,19 +307,18 @@ available.  They are listed here in alphabetical order.
    The resulting list is sorted alphabetically.  For example:
 
       >>> import struct
-      >>> dir()   # doctest: +SKIP
+      >>> dir()   # show the names in the module namespace
       ['__builtins__', '__doc__', '__name__', 'struct']
-      >>> dir(struct)   # doctest: +NORMALIZE_WHITESPACE
+      >>> dir(struct)   # show the names in the struct module
       ['Struct', '__builtins__', '__doc__', '__file__', '__name__',
        '__package__', '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
-      >>> class Foo(object):
-      ...     def __dir__(self):
-      ...         return ["kan", "ga", "roo"]
-      ...
-      >>> f = Foo()
-      >>> dir(f)
-      ['ga', 'kan', 'roo']
+      >>> class Shape(object):
+              def __dir__(self):
+                  return ['area', 'perimeter', 'location']
+      >>> s = Shape()
+      >>> dir(s)
+      ['area', 'perimeter', 'location']
 
    .. note::
 
@@ -293,20 +350,25 @@ available.  They are listed here in alphabetical order.
    :term:`iterator`, or some other object which supports iteration.  The
    :meth:`!next` method of the iterator returned by :func:`enumerate` returns a
    tuple containing a count (from *start* which defaults to 0) and the
-   corresponding value obtained from iterating over *iterable*.
-   :func:`enumerate` is useful for obtaining an indexed series: ``(0, seq[0])``,
-   ``(1, seq[1])``, ``(2, seq[2])``, .... For example:
+   values obtained from iterating over *sequence*::
 
-      >>> for i, season in enumerate(['Spring', 'Summer', 'Fall', 'Winter']):
-      ...     print i, season
-      0 Spring
-      1 Summer
-      2 Fall
-      3 Winter
+      >>> seasons = ['Spring', 'Summer', 'Fall', 'Winter']
+      >>> list(enumerate(seasons))
+      [(0, 'Spring'), (1, 'Summer'), (2, 'Fall'), (3, 'Winter')]
+      >>> list(enumerate(seasons, start=1))
+      [(1, 'Spring'), (2, 'Summer'), (3, 'Fall'), (4, 'Winter')]
+
+   Equivalent to::
+
+      def enumerate(sequence, start=0):
+          n = start
+          for elem in sequence:
+              yield n, elem
+              n += 1
 
    .. versionadded:: 2.3
-   .. versionadded:: 2.6
-      The *start* parameter.
+   .. versionchanged:: 2.6
+      The *start* parameter was added.
 
 
 .. function:: eval(expression[, globals[, locals]])
@@ -343,6 +405,9 @@ available.  They are listed here in alphabetical order.
    :func:`execfile` function.  The :func:`globals` and :func:`locals` functions
    returns the current global and local dictionary, respectively, which may be
    useful to pass around for use by :func:`eval` or :func:`execfile`.
+
+   See :func:`ast.literal_eval` for a function that can safely evaluate strings
+   with expressions containing only literals.
 
 
 .. function:: execfile(filename[, globals[, locals]])
@@ -462,7 +527,7 @@ available.  They are listed here in alphabetical order.
 
 .. function:: getattr(object, name[, default])
 
-   Return the value of the named attributed of *object*.  *name* must be a string.
+   Return the value of the named attribute of *object*.  *name* must be a string.
    If the string is the name of one of the object's attributes, the result is the
    value of that attribute.  For example, ``getattr(x, 'foobar')`` is equivalent to
    ``x.foobar``.  If the named attribute does not exist, *default* is returned if
@@ -527,20 +592,16 @@ available.  They are listed here in alphabetical order.
    Two objects with non-overlapping lifetimes may have the same :func:`id`
    value.
 
-   .. impl-detail:: This is the address of the object.
+   .. impl-detail:: This is the address of the object in memory.
 
 
 .. function:: input([prompt])
 
    Equivalent to ``eval(raw_input(prompt))``.
 
-   .. warning::
-
-      This function is not safe from user errors!  It expects a valid Python
-      expression as input; if the input is not syntactically valid, a
-      :exc:`SyntaxError` will be raised. Other exceptions may be raised if there is an
-      error during evaluation.  (On the other hand, sometimes this is exactly what you
-      need when writing a quick script for expert use.)
+   This function does not catch user errors. If the input is not syntactically
+   valid, a :exc:`SyntaxError` will be raised. Other exceptions may be raised if
+   there is an error during evaluation.
 
    If the :mod:`readline` module was loaded, then :func:`input` will use it to
    provide elaborate line editing and history features.
@@ -569,9 +630,11 @@ available.  They are listed here in alphabetical order.
 .. function:: isinstance(object, classinfo)
 
    Return true if the *object* argument is an instance of the *classinfo* argument,
-   or of a (direct or indirect) subclass thereof.  Also return true if *classinfo*
+   or of a (direct, indirect or :term:`virtual <abstract base class>`) subclass
+   thereof.  Also return true if *classinfo*
    is a type object (new-style class) and *object* is an object of that type or of
-   a (direct or indirect) subclass thereof.  If *object* is not a class instance or
+   a (direct, indirect or :term:`virtual <abstract base class>`) subclass
+   thereof.  If *object* is not a class instance or
    an object of the given type, the function always returns false.  If *classinfo*
    is neither a class object nor a type object, it may be a tuple of class or type
    objects, or may recursively contain other such tuples (other sequence types are
@@ -584,7 +647,8 @@ available.  They are listed here in alphabetical order.
 
 .. function:: issubclass(class, classinfo)
 
-   Return true if *class* is a subclass (direct or indirect) of *classinfo*.  A
+   Return true if *class* is a subclass (direct, indirect or :term:`virtual
+   <abstract base class>`) of *classinfo*.  A
    class is considered a subclass of itself. *classinfo* may be a tuple of class
    objects, in which case every entry in *classinfo* will be checked. In any other
    case, a :exc:`TypeError` exception is raised.
@@ -608,10 +672,10 @@ available.  They are listed here in alphabetical order.
 
    One useful application of the second form of :func:`iter` is to read lines of
    a file until a certain line is reached.  The following example reads a file
-   until ``"STOP"`` is reached: ::
+   until the :meth:`readline` method returns an empty string::
 
-      with open("mydata.txt") as fp:
-          for line in iter(fp.readline, "STOP"):
+      with open('mydata.txt') as fp:
+          for line in iter(fp.readline, ''):
               process_line(line)
 
    .. versionadded:: 2.2
@@ -689,6 +753,13 @@ available.  They are listed here in alphabetical order.
       Added support for the optional *key* argument.
 
 
+.. function:: memoryview(obj)
+   :noindex:
+
+   Return a "memory view" object created from the given argument.  See
+   :ref:`typememoryview` for more information.
+
+
 .. function:: min(iterable[, args...][key])
 
    With a single argument *iterable*, return the smallest item of a non-empty
@@ -734,15 +805,15 @@ available.  They are listed here in alphabetical order.
       Formerly only returned an unsigned literal.
 
 
-.. function:: open(filename[, mode[, bufsize]])
+.. function:: open(name[, mode[, buffering]])
 
    Open a file, returning an object of the :class:`file` type described in
    section :ref:`bltin-file-objects`.  If the file cannot be opened,
    :exc:`IOError` is raised.  When opening a file, it's preferable to use
    :func:`open` instead of invoking the :class:`file` constructor directly.
 
-   The first two arguments are the same as for ``stdio``'s :cfunc:`fopen`:
-   *filename* is the file name to be opened, and *mode* is a string indicating how
+   The first two arguments are the same as for ``stdio``'s :c:func:`fopen`:
+   *name* is the file name to be opened, and *mode* is a string indicating how
    the file is to be opened.
 
    The most commonly-used values of *mode* are ``'r'`` for reading, ``'w'`` for
@@ -763,9 +834,9 @@ available.  They are listed here in alphabetical order.
       single: buffer size, I/O
       single: I/O control; buffering
 
-   The optional *bufsize* argument specifies the file's desired buffer size: 0
+   The optional *buffering* argument specifies the file's desired buffer size: 0
    means unbuffered, 1 means line buffered, any other positive value means use a
-   buffer of (approximately) that size.  A negative *bufsize* means to use the
+   buffer of (approximately) that size.  A negative *buffering* means to use the
    system default, which is usually line buffered for tty devices and fully
    buffered for other files.  If omitted, the system default is used. [#]_
 
@@ -774,7 +845,7 @@ available.  They are listed here in alphabetical order.
    binary mode, on systems that differentiate between binary and text files; on
    systems that don't have this distinction, adding the ``'b'`` has no effect.
 
-   In addition to the standard :cfunc:`fopen` values *mode* may be ``'U'`` or
+   In addition to the standard :c:func:`fopen` values *mode* may be ``'U'`` or
    ``'rU'``.  Python is usually built with universal newline support; supplying
    ``'U'`` opens the file as a text file, but lines may be terminated by any of the
    following: the Unix end-of-line convention ``'\n'``,  the Macintosh convention
@@ -843,7 +914,9 @@ available.  They are listed here in alphabetical order.
    *end*.
 
    The *file* argument must be an object with a ``write(string)`` method; if it
-   is not present or ``None``, :data:`sys.stdout` will be used.
+   is not present or ``None``, :data:`sys.stdout` will be used.  Output buffering
+   is determined by *file*.  Use ``file.flush()`` to ensure, for instance,
+   immediate appearance on a screen.
 
    .. note::
 
@@ -989,7 +1062,19 @@ available.  They are listed here in alphabetical order.
    it is placed before the items of the iterable in the calculation, and serves as
    a default when the iterable is empty.  If *initializer* is not given and
    *iterable* contains only one item, the first item is returned.
+   Roughly equivalent to::
 
+      def reduce(function, iterable, initializer=None):
+          it = iter(iterable)
+          if initializer is None:
+              try:
+                  initializer = next(it)
+              except StopIteration:
+                  raise TypeError('reduce() of empty sequence with no initial value')
+          accum_value = initializer
+          for x in iterable:
+              accum_value = function(accum_value, x)
+          return accum_value
 
 .. function:: reload(module)
 
@@ -1088,6 +1173,14 @@ available.  They are listed here in alphabetical order.
    example, ``round(0.5)`` is ``1.0`` and ``round(-0.5)`` is ``-1.0``).
 
 
+   .. note::
+
+      The behavior of :func:`round` for floats can be surprising: for example,
+      ``round(2.675, 2)`` gives ``2.67`` instead of the expected ``2.68``.
+      This is not a bug: it's a result of the fact that most decimal fractions
+      can't be represented exactly as a float.  See :ref:`tut-fp-issues` for
+      more information.
+
 .. function:: set([iterable])
    :noindex:
 
@@ -1148,9 +1241,8 @@ available.  They are listed here in alphabetical order.
    In general, the *key* and *reverse* conversion processes are much faster
    than specifying an equivalent *cmp* function.  This is because *cmp* is
    called multiple times for each list element while *key* and *reverse* touch
-   each element only once.  To convert an old-style *cmp* function to a *key*
-   function, see the `CmpToKey recipe in the ASPN cookbook
-   <http://code.activestate.com/recipes/576653/>`_\.
+   each element only once.  Use :func:`functools.cmp_to_key` to convert an
+   old-style *cmp* function to a *key* function.
 
    For sorting examples and a brief sorting tutorial, see `Sorting HowTo
    <http://wiki.python.org/moin/HowTo/Sorting/>`_\.
@@ -1175,8 +1267,9 @@ available.  They are listed here in alphabetical order.
    It can be called either on the class (such as ``C.f()``) or on an instance (such
    as ``C().f()``).  The instance is ignored except for its class.
 
-   Static methods in Python are similar to those found in Java or C++. For a more
-   advanced concept, see :func:`classmethod` in this section.
+   Static methods in Python are similar to those found in Java or C++. Also see
+   :func:`classmethod` for a variant that is useful for creating alternate
+   class constructors.
 
    For more information on static methods, consult the documentation on the
    standard type hierarchy in :ref:`types`.
@@ -1207,10 +1300,13 @@ available.  They are listed here in alphabetical order.
 
    Sums *start* and the items of an *iterable* from left to right and returns the
    total.  *start* defaults to ``0``. The *iterable*'s items are normally numbers,
-   and are not allowed to be strings.  The fast, correct way to concatenate a
-   sequence of strings is by calling ``''.join(sequence)``. Note that
-   ``sum(range(n), m)`` is equivalent to ``reduce(operator.add, range(n), m)``
-   To add floating point values with extended precision, see :func:`math.fsum`\.
+   and the start value is not allowed to be a string.
+
+   For some use cases, there are good alternatives to :func:`sum`.
+   The preferred, fast way to concatenate a sequence of strings is by calling
+   ``''.join(sequence)``.  To add floating point values with extended precision,
+   see :func:`math.fsum`\.  To concatenate a series of iterables, consider using
+   :func:`itertools.chain`.
 
    .. versionadded:: 2.3
 
@@ -1265,6 +1361,10 @@ available.  They are listed here in alphabetical order.
    Also note that :func:`super` is not limited to use inside methods.  The two
    argument form specifies the arguments exactly and makes the appropriate
    references.
+
+   For practical suggestions on how to design cooperative classes using
+   :func:`super`, see `guide to using super()
+   <http://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
 
    .. versionadded:: 2.2
 
@@ -1365,15 +1465,17 @@ available.  They are listed here in alphabetical order.
 
 .. function:: vars([object])
 
-   Without an argument, act like :func:`locals`.
+   Return the :attr:`__dict__` attribute for a module, class, instance,
+   or any other object with a :attr:`__dict__` attribute.
 
-   With a module, class or class instance object as argument (or anything else that
-   has a :attr:`__dict__` attribute), return that attribute.
+   Objects such as modules and instances have an updateable :attr:`__dict__`
+   attribute; however, other objects may have write restrictions on their
+   :attr:`__dict__` attributes (for example, new-style classes use a
+   dictproxy to prevent direct dictionary updates).
 
-   .. note::
-
-      The returned dictionary should not be modified:
-      the effects on the corresponding symbol table are undefined. [#]_
+   Without an argument, :func:`vars` acts like :func:`locals`.  Note, the
+   locals dictionary is only useful for reads since updates to the locals
+   dictionary are ignored.
 
 
 .. function:: xrange([start,] stop[, step])
@@ -1394,8 +1496,8 @@ available.  They are listed here in alphabetical order.
       restricts all arguments to native C longs ("short" Python integers), and
       also requires that the number of elements fit in a native C long.  If a
       larger range is needed, an alternate version can be crafted using the
-      :mod:`itertools` module: ``takewhile(lambda x: x<stop, (start+i*step
-      for i in count()))``.
+      :mod:`itertools` module: ``islice(count(start, step),
+      (stop-start+step-1+2*(step<0))//step)``.
 
 
 .. function:: zip([iterable, ...])
@@ -1576,8 +1678,8 @@ bypass these functions without concerns about missing something important.
 .. [#] It is used relatively rarely so does not warrant being made into a statement.
 
 .. [#] Specifying a buffer size currently has no effect on systems that don't have
-   :cfunc:`setvbuf`.  The interface to specify the buffer size is not done using a
-   method that calls :cfunc:`setvbuf`, because that may dump core when called after
+   :c:func:`setvbuf`.  The interface to specify the buffer size is not done using a
+   method that calls :c:func:`setvbuf`, because that may dump core when called after
    any I/O has been performed, and there's no reliable way to determine whether
    this is the case.
 

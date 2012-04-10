@@ -19,9 +19,7 @@ order.  This documentation doesn't attempt to cover all of the permutations;
 consult the zlib manual at http://www.zlib.net/manual.html for authoritative
 information.
 
-For reading and writing ``.gz`` files see the :mod:`gzip` module. For
-other archive formats, see the :mod:`bz2`, :mod:`zipfile`, and
-:mod:`tarfile` modules.
+For reading and writing ``.gz`` files see the :mod:`gzip` module.
 
 The available exception and functions in this module are:
 
@@ -132,7 +130,7 @@ The available exception and functions in this module are:
    *bufsize* is the initial size of the buffer used to hold decompressed data.  If
    more space is required, the buffer size will be increased as needed, so you
    don't have to get this value exactly right; tuning it will only save a few calls
-   to :cfunc:`malloc`.  The default size is 16384.
+   to :c:func:`malloc`.  The default size is 16384.
 
 
 .. function:: decompressobj([wbits])

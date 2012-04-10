@@ -8,12 +8,23 @@ the Python distribution.
 Mac-specific arguments to configure
 ===================================
 
-* ``--enable-framework``
+* ``--enable-framework[=DIR]``
 
   If this argument is specified the build will create a Python.framework rather
   than a traditional Unix install. See the section
   _`Building and using a framework-based Python on Mac OS X` for more 
   information on frameworks.
+
+  If the optional directory argument is specified the framework it installed
+  into that directory. This can be used to install a python framework into
+  your home directory::
+
+     $ configure --enable-framework=/Users/ronald/Library/Frameworks
+     $ make && make install
+
+  This will install the framework itself in ``/Users/ronald/Library/Frameworks``,
+  the applications in a subdirectory of ``/Users/ronald/Applications`` and the
+  command-line tools in ``/Users/ronald/bin``.
 
 * ``--with-framework-name=NAME``
 
@@ -25,14 +36,14 @@ Mac-specific arguments to configure
   Create a universal binary build of of Python. This can be used with both
   regular and framework builds.
 
-  The optional argument specifies with OSX SDK should be used to perform the
+  The optional argument specifies which OSX SDK should be used to perform the
   build. This defaults to ``/Developer/SDKs/MacOSX.10.4u.sdk``, specify 
   ``/`` when building on a 10.5 system, especially when building 64-bit code.
 
   See the section _`Building and using a universal binary of Python on Mac OS X`
   for more information.
 
-* ``--with-universal-archs=VALUE``
+* ``--with-univeral-archs=VALUE``
 
   Specify the kind of universal binary that should be created. This option is 
   only valid when ``--enable-universalsdk`` is specified.
@@ -59,7 +70,7 @@ flag to configure::
   $ make
   $ make install
 
-This flag can be used a framework build of python, but also with a classic
+This flag can be used with a framework build of python, but also with a classic
 unix build. Either way you will have to build python on Mac OS X 10.4 (or later)
 with Xcode 2.1 (or later). You also have to install the 10.4u SDK when 
 installing Xcode.
@@ -88,10 +99,29 @@ values are available:
 
   * ``intel``:	  ``i386``, ``x86_64``
 
-To build a universal binary that includes a 64-bit architecture you must build
-on a system running OSX 10.5 or later. The ``all`` flavour can only be build on
+To build a universal binary that includes a 64-bit architecture, you must build
+on a system running OSX 10.5 or later. The ``all`` flavour can only be built on
 OSX 10.5.
 
+The makefile for a framework build will install ``python32`` and ``pythonw32`` 
+binaries when the universal architecures includes at least one 32-bit architecture
+(that is, for all flavours but ``64-bit``).
+
+Running a specific archicture
+.............................
+
+You can run code using a specific architecture using the ``arch`` command::
+
+   $ arch -i386 python
+
+Or to explicitly run in 32-bit mode, regardless of the machine hardware::
+
+   $ arch -i386 -ppc python
+
+NOTE: When you're using a framework install of Python this requires at least
+Python 2.7 or 3.2, in earlier versions the python (and pythonw) commands are
+wrapper tools that execute the real interpreter without ensuring that the
+real interpreter runs with the same architecture.
 
 Building and using a framework-based Python on Mac OS X.
 ========================================================
@@ -191,8 +221,8 @@ How do I create a binary distribution?
 
 Go to the directory "Mac/OSX/BuildScript". There you'll find a script 
 "build-installer.py" that does all the work. This will download and build
-a number of 3th-party libaries, configures and builds a framework Python,
-installs it, creates the installer pacakge files and then packs this in a 
+a number of 3rd-party libaries, configures and builds a framework Python,
+installs it, creates the installer package files and then packs this in a
 DMG image.
 
 The script will build a universal binary, you'll therefore have to run this
@@ -205,12 +235,31 @@ Because of the way the script locates the files it needs you have to run it
 from within the BuildScript directory. The script accepts a number of 
 command-line arguments, run it with --help for more information.
 
+Configure warnings
+==================
+
+The configure script sometimes emits warnings like the one below::
+
+   configure: WARNING: libintl.h: present but cannot be compiled
+   configure: WARNING: libintl.h:     check for missing prerequisite headers?
+   configure: WARNING: libintl.h: see the Autoconf documentation
+   configure: WARNING: libintl.h:     section "Present But Cannot Be Compiled"
+   configure: WARNING: libintl.h: proceeding with the preprocessor's result
+   configure: WARNING: libintl.h: in the future, the compiler will take precedence
+   configure: WARNING:     ## -------------------------------------- ##
+   configure: WARNING:     ## Report this to http://bugs.python.org/ ##
+   configure: WARNING:     ## -------------------------------------- ##
+
+This almost always means you are trying to build a universal binary for
+Python and have libaries in ``/usr/local`` that don't contain the required
+architectures. Temporarily move ``/usr/local`` aside to finish the build.
+
 
 Uninstalling a framework install, including the binary installer
 ================================================================
 
-Uninstalling a framework can be done by manually removing all bits that got installed,
-that's true for both installations from source and installations using the binary installer.
+Uninstalling a framework can be done by manually removing all bits that got installed.
+That's true for both installations from source and installations using the binary installer.
 Sadly enough OSX does not have a central uninstaller.
 
 The main bit of a framework install is the framework itself, installed in

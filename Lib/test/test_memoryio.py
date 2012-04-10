@@ -4,22 +4,65 @@ BytesIO -- for bytes
 """
 
 from __future__ import unicode_literals
+from __future__ import print_function
 
 import unittest
-from test import test_support
+from test import test_support as support
 
 import io
-import sys
-import array
+import _pyio as pyio
+import pickle
 
-try:
-    import _bytesio
-    has_c_implementation = True
-except ImportError:
-    has_c_implementation = False
+class MemorySeekTestMixin:
+
+    def testInit(self):
+        buf = self.buftype("1234567890")
+        bytesIo = self.ioclass(buf)
+
+    def testRead(self):
+        buf = self.buftype("1234567890")
+        bytesIo = self.ioclass(buf)
+
+        self.assertEqual(buf[:1], bytesIo.read(1))
+        self.assertEqual(buf[1:5], bytesIo.read(4))
+        self.assertEqual(buf[5:], bytesIo.read(900))
+        self.assertEqual(self.EOF, bytesIo.read())
+
+    def testReadNoArgs(self):
+        buf = self.buftype("1234567890")
+        bytesIo = self.ioclass(buf)
+
+        self.assertEqual(buf, bytesIo.read())
+        self.assertEqual(self.EOF, bytesIo.read())
+
+    def testSeek(self):
+        buf = self.buftype("1234567890")
+        bytesIo = self.ioclass(buf)
+
+        bytesIo.read(5)
+        bytesIo.seek(0)
+        self.assertEqual(buf, bytesIo.read())
+
+        bytesIo.seek(3)
+        self.assertEqual(buf[3:], bytesIo.read())
+        self.assertRaises(TypeError, bytesIo.seek, 0.0)
+
+    def testTell(self):
+        buf = self.buftype("1234567890")
+        bytesIo = self.ioclass(buf)
+
+        self.assertEqual(0, bytesIo.tell())
+        bytesIo.seek(5)
+        self.assertEqual(5, bytesIo.tell())
+        bytesIo.seek(10000)
+        self.assertEqual(10000, bytesIo.tell())
 
 
 class MemoryTestMixin:
+
+    def test_detach(self):
+        buf = self.ioclass()
+        self.assertRaises(self.UnsupportedOperation, buf.detach)
 
     def write_ops(self, f, t):
         self.assertEqual(f.write(t("blah.")), 5)
@@ -157,7 +200,7 @@ class MemoryTestMixin:
         self.assertEqual(memio.readline(), self.EOF)
         memio.seek(0)
         self.assertEqual(type(memio.readline()), type(buf))
-        self.assertEqual(memio.readline(None), buf)
+        self.assertEqual(memio.readline(), buf)
         self.assertRaises(TypeError, memio.readline, '')
         memio.close()
         self.assertRaises(ValueError,  memio.readline)
@@ -189,8 +232,8 @@ class MemoryTestMixin:
         memio = self.ioclass(buf * 10)
 
         self.assertEqual(iter(memio), memio)
-        self.failUnless(hasattr(memio, '__iter__'))
-        self.failUnless(hasattr(memio, 'next'))
+        self.assertTrue(hasattr(memio, '__iter__'))
+        self.assertTrue(hasattr(memio, 'next'))
         i = 0
         for line in memio:
             self.assertEqual(line, buf)
@@ -204,7 +247,7 @@ class MemoryTestMixin:
         self.assertEqual(i, 10)
         memio = self.ioclass(buf * 2)
         memio.close()
-        self.assertRaises(ValueError, memio.next)
+        self.assertRaises(ValueError, next, memio)
 
     def test_getvalue(self):
         buf = self.buftype("1234567890")
@@ -307,12 +350,58 @@ class MemoryTestMixin:
         self.assertEqual(test1(), buf)
         self.assertEqual(test2(), buf)
 
+    def test_instance_dict_leak(self):
+        # Test case for issue #6242.
+        # This will be caught by regrtest.py -R if this leak.
+        for _ in range(100):
+            memio = self.ioclass()
+            memio.foo = 1
 
-class PyBytesIOTest(MemoryTestMixin, unittest.TestCase):
+    def test_pickling(self):
+        buf = self.buftype("1234567890")
+        memio = self.ioclass(buf)
+        memio.foo = 42
+        memio.seek(2)
+
+        class PickleTestMemIO(self.ioclass):
+            def __init__(me, initvalue, foo):
+                self.ioclass.__init__(me, initvalue)
+                me.foo = foo
+            # __getnewargs__ is undefined on purpose. This checks that PEP 307
+            # is used to provide pickling support.
+
+        # Pickle expects the class to be on the module level. Here we use a
+        # little hack to allow the PickleTestMemIO class to derive from
+        # self.ioclass without having to define all combinations explicitly on
+        # the module-level.
+        import __main__
+        PickleTestMemIO.__module__ = '__main__'
+        __main__.PickleTestMemIO = PickleTestMemIO
+        submemio = PickleTestMemIO(buf, 80)
+        submemio.seek(2)
+
+        # We only support pickle protocol 2 and onward since we use extended
+        # __reduce__ API of PEP 307 to provide pickling support.
+        for proto in range(2, pickle.HIGHEST_PROTOCOL):
+            for obj in (memio, submemio):
+                obj2 = pickle.loads(pickle.dumps(obj, protocol=proto))
+                self.assertEqual(obj.getvalue(), obj2.getvalue())
+                self.assertEqual(obj.__class__, obj2.__class__)
+                self.assertEqual(obj.foo, obj2.foo)
+                self.assertEqual(obj.tell(), obj2.tell())
+                obj.close()
+                self.assertRaises(ValueError, pickle.dumps, obj, proto)
+        del __main__.PickleTestMemIO
+
+
+class PyBytesIOTest(MemoryTestMixin, MemorySeekTestMixin, unittest.TestCase):
+
+    UnsupportedOperation = pyio.UnsupportedOperation
+
     @staticmethod
     def buftype(s):
         return s.encode("ascii")
-    ioclass = io._BytesIO
+    ioclass = pyio.BytesIO
     EOF = b""
 
     def test_read1(self):
@@ -342,12 +431,18 @@ class PyBytesIOTest(MemoryTestMixin, unittest.TestCase):
         self.assertEqual(memio.readinto(b), 0)
         self.assertEqual(b, b"")
         self.assertRaises(TypeError, memio.readinto, '')
-        a = array.array(b'b', map(ord, b"hello world"))
+        import array
+        a = array.array(b'b', b"hello world")
         memio = self.ioclass(buf)
         memio.readinto(a)
         self.assertEqual(a.tostring(), b"1234567890d")
         memio.close()
         self.assertRaises(ValueError, memio.readinto, b)
+        memio = self.ioclass(b"123")
+        b = bytearray()
+        memio.seek(42)
+        memio.readinto(b)
+        self.assertEqual(b, b"")
 
     def test_relative_seek(self):
         buf = self.buftype("1234567890")
@@ -374,18 +469,39 @@ class PyBytesIOTest(MemoryTestMixin, unittest.TestCase):
 
     def test_bytes_array(self):
         buf = b"1234567890"
-
-        a = array.array(b'b', map(ord, buf))
+        import array
+        a = array.array(b'b', buf)
         memio = self.ioclass(a)
         self.assertEqual(memio.getvalue(), buf)
         self.assertEqual(memio.write(a), 10)
         self.assertEqual(memio.getvalue(), buf)
 
+    def test_issue5449(self):
+        buf = self.buftype("1234567890")
+        self.ioclass(initial_bytes=buf)
+        self.assertRaises(TypeError, self.ioclass, buf, foo=None)
 
-class PyStringIOTest(MemoryTestMixin, unittest.TestCase):
-    buftype = unicode
-    ioclass = io.StringIO
-    EOF = ""
+
+class TextIOTestMixin:
+
+    def test_newlines_property(self):
+        memio = self.ioclass(newline=None)
+        # The C StringIO decodes newlines in write() calls, but the Python
+        # implementation only does when reading.  This function forces them to
+        # be decoded for testing.
+        def force_decode():
+            memio.seek(0)
+            memio.read()
+        self.assertEqual(memio.newlines, None)
+        memio.write("a\n")
+        force_decode()
+        self.assertEqual(memio.newlines, "\n")
+        memio.write("b\r\n")
+        force_decode()
+        self.assertEqual(memio.newlines, ("\n", "\r\n"))
+        memio.write("c\rd")
+        force_decode()
+        self.assertEqual(memio.newlines, ("\r", "\n", "\r\n"))
 
     def test_relative_seek(self):
         memio = self.ioclass()
@@ -397,29 +513,195 @@ class PyStringIOTest(MemoryTestMixin, unittest.TestCase):
         self.assertRaises(IOError, memio.seek, 1, 1)
         self.assertRaises(IOError, memio.seek, 1, 2)
 
+    def test_textio_properties(self):
+        memio = self.ioclass()
+
+        # These are just dummy values but we nevertheless check them for fear
+        # of unexpected breakage.
+        self.assertIsNone(memio.encoding)
+        self.assertIsNone(memio.errors)
+        self.assertFalse(memio.line_buffering)
+
+    def test_newline_none(self):
+        # newline=None
+        memio = self.ioclass("a\nb\r\nc\rd", newline=None)
+        self.assertEqual(list(memio), ["a\n", "b\n", "c\n", "d"])
+        memio.seek(0)
+        self.assertEqual(memio.read(1), "a")
+        self.assertEqual(memio.read(2), "\nb")
+        self.assertEqual(memio.read(2), "\nc")
+        self.assertEqual(memio.read(1), "\n")
+        memio = self.ioclass(newline=None)
+        self.assertEqual(2, memio.write("a\n"))
+        self.assertEqual(3, memio.write("b\r\n"))
+        self.assertEqual(3, memio.write("c\rd"))
+        memio.seek(0)
+        self.assertEqual(memio.read(), "a\nb\nc\nd")
+        memio = self.ioclass("a\r\nb", newline=None)
+        self.assertEqual(memio.read(3), "a\nb")
+
+    def test_newline_empty(self):
+        # newline=""
+        memio = self.ioclass("a\nb\r\nc\rd", newline="")
+        self.assertEqual(list(memio), ["a\n", "b\r\n", "c\r", "d"])
+        memio.seek(0)
+        self.assertEqual(memio.read(4), "a\nb\r")
+        self.assertEqual(memio.read(2), "\nc")
+        self.assertEqual(memio.read(1), "\r")
+        memio = self.ioclass(newline="")
+        self.assertEqual(2, memio.write("a\n"))
+        self.assertEqual(2, memio.write("b\r"))
+        self.assertEqual(2, memio.write("\nc"))
+        self.assertEqual(2, memio.write("\rd"))
+        memio.seek(0)
+        self.assertEqual(list(memio), ["a\n", "b\r\n", "c\r", "d"])
+
+    def test_newline_lf(self):
+        # newline="\n"
+        memio = self.ioclass("a\nb\r\nc\rd")
+        self.assertEqual(list(memio), ["a\n", "b\r\n", "c\rd"])
+
+    def test_newline_cr(self):
+        # newline="\r"
+        memio = self.ioclass("a\nb\r\nc\rd", newline="\r")
+        self.assertEqual(memio.read(), "a\rb\r\rc\rd")
+        memio.seek(0)
+        self.assertEqual(list(memio), ["a\r", "b\r", "\r", "c\r", "d"])
+
+    def test_newline_crlf(self):
+        # newline="\r\n"
+        memio = self.ioclass("a\nb\r\nc\rd", newline="\r\n")
+        self.assertEqual(memio.read(), "a\r\nb\r\r\nc\rd")
+        memio.seek(0)
+        self.assertEqual(list(memio), ["a\r\n", "b\r\r\n", "c\rd"])
+
+    def test_issue5265(self):
+        # StringIO can duplicate newlines in universal newlines mode
+        memio = self.ioclass("a\r\nb\r\n", newline=None)
+        self.assertEqual(memio.read(5), "a\nb\n")
+
+
+class PyStringIOTest(MemoryTestMixin, MemorySeekTestMixin,
+                     TextIOTestMixin, unittest.TestCase):
+    buftype = unicode
+    ioclass = pyio.StringIO
+    UnsupportedOperation = pyio.UnsupportedOperation
+    EOF = ""
+
+
+class PyStringIOPickleTest(TextIOTestMixin, unittest.TestCase):
+    """Test if pickle restores properly the internal state of StringIO.
+    """
+    buftype = unicode
+    UnsupportedOperation = pyio.UnsupportedOperation
+    EOF = ""
+
+    class ioclass(pyio.StringIO):
+        def __new__(cls, *args, **kwargs):
+            return pickle.loads(pickle.dumps(pyio.StringIO(*args, **kwargs)))
+        def __init__(self, *args, **kwargs):
+            pass
+
+
+class CBytesIOTest(PyBytesIOTest):
+    ioclass = io.BytesIO
+    UnsupportedOperation = io.UnsupportedOperation
+
+    test_bytes_array = unittest.skip(
+        "array.array() does not have the new buffer API"
+    )(PyBytesIOTest.test_bytes_array)
+
+
+    def test_getstate(self):
+        memio = self.ioclass()
+        state = memio.__getstate__()
+        self.assertEqual(len(state), 3)
+        bytearray(state[0]) # Check if state[0] supports the buffer interface.
+        self.assertIsInstance(state[1], int)
+        self.assertTrue(isinstance(state[2], dict) or state[2] is None)
+        memio.close()
+        self.assertRaises(ValueError, memio.__getstate__)
+
+    def test_setstate(self):
+        # This checks whether __setstate__ does proper input validation.
+        memio = self.ioclass()
+        memio.__setstate__((b"no error", 0, None))
+        memio.__setstate__((bytearray(b"no error"), 0, None))
+        memio.__setstate__((b"no error", 0, {'spam': 3}))
+        self.assertRaises(ValueError, memio.__setstate__, (b"", -1, None))
+        self.assertRaises(TypeError, memio.__setstate__, ("unicode", 0, None))
+        self.assertRaises(TypeError, memio.__setstate__, (b"", 0.0, None))
+        self.assertRaises(TypeError, memio.__setstate__, (b"", 0, 0))
+        self.assertRaises(TypeError, memio.__setstate__, (b"len-test", 0))
+        self.assertRaises(TypeError, memio.__setstate__)
+        self.assertRaises(TypeError, memio.__setstate__, 0)
+        memio.close()
+        self.assertRaises(ValueError, memio.__setstate__, (b"closed", 0, None))
+
+
+class CStringIOTest(PyStringIOTest):
+    ioclass = io.StringIO
+    UnsupportedOperation = io.UnsupportedOperation
+
     # XXX: For the Python version of io.StringIO, this is highly
     # dependent on the encoding used for the underlying buffer.
-    # def test_widechar(self):
-    #     buf = self.buftype("\U0002030a\U00020347")
-    #     memio = self.ioclass(buf)
-    #
-    #     self.assertEqual(memio.getvalue(), buf)
-    #     self.assertEqual(memio.write(buf), len(buf))
-    #     self.assertEqual(memio.tell(), len(buf))
-    #     self.assertEqual(memio.getvalue(), buf)
-    #     self.assertEqual(memio.write(buf), len(buf))
-    #     self.assertEqual(memio.tell(), len(buf) * 2)
-    #     self.assertEqual(memio.getvalue(), buf + buf)
+    def test_widechar(self):
+        buf = self.buftype("\U0002030a\U00020347")
+        memio = self.ioclass(buf)
 
-if has_c_implementation:
-    class CBytesIOTest(PyBytesIOTest):
-        ioclass = io.BytesIO
+        self.assertEqual(memio.getvalue(), buf)
+        self.assertEqual(memio.write(buf), len(buf))
+        self.assertEqual(memio.tell(), len(buf))
+        self.assertEqual(memio.getvalue(), buf)
+        self.assertEqual(memio.write(buf), len(buf))
+        self.assertEqual(memio.tell(), len(buf) * 2)
+        self.assertEqual(memio.getvalue(), buf + buf)
+
+    def test_getstate(self):
+        memio = self.ioclass()
+        state = memio.__getstate__()
+        self.assertEqual(len(state), 4)
+        self.assertIsInstance(state[0], unicode)
+        self.assertIsInstance(state[1], str)
+        self.assertIsInstance(state[2], int)
+        self.assertTrue(isinstance(state[3], dict) or state[3] is None)
+        memio.close()
+        self.assertRaises(ValueError, memio.__getstate__)
+
+    def test_setstate(self):
+        # This checks whether __setstate__ does proper input validation.
+        memio = self.ioclass()
+        memio.__setstate__(("no error", "\n", 0, None))
+        memio.__setstate__(("no error", "", 0, {'spam': 3}))
+        self.assertRaises(ValueError, memio.__setstate__, ("", "f", 0, None))
+        self.assertRaises(ValueError, memio.__setstate__, ("", "", -1, None))
+        self.assertRaises(TypeError, memio.__setstate__, (b"", "", 0, None))
+        # trunk is more tolerant than py3k on the type of the newline param
+        #self.assertRaises(TypeError, memio.__setstate__, ("", b"", 0, None))
+        self.assertRaises(TypeError, memio.__setstate__, ("", "", 0.0, None))
+        self.assertRaises(TypeError, memio.__setstate__, ("", "", 0, 0))
+        self.assertRaises(TypeError, memio.__setstate__, ("len-test", 0))
+        self.assertRaises(TypeError, memio.__setstate__)
+        self.assertRaises(TypeError, memio.__setstate__, 0)
+        memio.close()
+        self.assertRaises(ValueError, memio.__setstate__, ("closed", "", 0, None))
+
+
+class CStringIOPickleTest(PyStringIOPickleTest):
+    UnsupportedOperation = io.UnsupportedOperation
+
+    class ioclass(io.StringIO):
+        def __new__(cls, *args, **kwargs):
+            return pickle.loads(pickle.dumps(io.StringIO(*args, **kwargs),
+                                             protocol=2))
+        def __init__(self, *args, **kwargs):
+            pass
+
 
 def test_main():
-    tests = [PyBytesIOTest, PyStringIOTest]
-    if has_c_implementation:
-        tests.extend([CBytesIOTest])
-    test_support.run_unittest(*tests)
+    tests = [PyBytesIOTest, PyStringIOTest, CBytesIOTest, CStringIOTest,
+             PyStringIOPickleTest, CStringIOPickleTest]
+    support.run_unittest(*tests)
 
 if __name__ == '__main__':
     test_main()

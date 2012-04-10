@@ -1,5 +1,4 @@
 import parser
-import os
 import unittest
 import sys
 from test import test_support
@@ -20,8 +19,8 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         except parser.ParserError, why:
             self.fail("could not roundtrip %r: %s" % (s, why))
 
-        self.assertEquals(t, st2.totuple(),
-                          "could not re-generate syntax tree")
+        self.assertEqual(t, st2.totuple(),
+                         "could not re-generate syntax tree")
 
     def check_expr(self, s):
         self.roundtrip(parser.expr, s)
@@ -33,7 +32,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         code = suite.compile()
         scope = {}
         exec code in scope
-        self.assertTrue(isinstance(scope["x"], unicode))
+        self.assertIsInstance(scope["x"], unicode)
 
     def check_suite(self, s):
         self.roundtrip(parser.suite, s)
@@ -59,13 +58,37 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
 
     def test_expressions(self):
         self.check_expr("foo(1)")
+        self.check_expr("{1:1}")
+        self.check_expr("{1:1, 2:2, 3:3}")
+        self.check_expr("{1:1, 2:2, 3:3,}")
+        self.check_expr("{1}")
+        self.check_expr("{1, 2, 3}")
+        self.check_expr("{1, 2, 3,}")
+        self.check_expr("[]")
+        self.check_expr("[1]")
         self.check_expr("[1, 2, 3]")
+        self.check_expr("[1, 2, 3,]")
+        self.check_expr("()")
+        self.check_expr("(1,)")
+        self.check_expr("(1, 2, 3)")
+        self.check_expr("(1, 2, 3,)")
         self.check_expr("[x**3 for x in range(20)]")
         self.check_expr("[x**3 for x in range(20) if x % 3]")
         self.check_expr("[x**3 for x in range(20) if x % 2 if x % 3]")
+        self.check_expr("[x+y for x in range(30) for y in range(20) if x % 2 if y % 3]")
+        #self.check_expr("[x for x in lambda: True, lambda: False if x()]")
         self.check_expr("list(x**3 for x in range(20))")
         self.check_expr("list(x**3 for x in range(20) if x % 3)")
         self.check_expr("list(x**3 for x in range(20) if x % 2 if x % 3)")
+        self.check_expr("list(x+y for x in range(30) for y in range(20) if x % 2 if y % 3)")
+        self.check_expr("{x**3 for x in range(30)}")
+        self.check_expr("{x**3 for x in range(30) if x % 3}")
+        self.check_expr("{x**3 for x in range(30) if x % 2 if x % 3}")
+        self.check_expr("{x+y for x in range(30) for y in range(20) if x % 2 if y % 3}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30))}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30)) if x % 3}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30)) if x % 3 if y % 3}")
+        self.check_expr("{x:y for x in range(30) for y in range(20) if x % 2 if y % 3}")
         self.check_expr("foo(*args)")
         self.check_expr("foo(*args, **kw)")
         self.check_expr("foo(**kw)")
@@ -94,6 +117,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         self.check_expr("lambda foo=bar, blaz=blat+2, **z: 0")
         self.check_expr("lambda foo=bar, blaz=blat+2, *y, **z: 0")
         self.check_expr("lambda x, *y, **z: 0")
+        self.check_expr("lambda x: 5 if x else 2")
         self.check_expr("(x for x in range(10))")
         self.check_expr("foo(x for x in range(10))")
 
@@ -213,6 +237,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
     def test_with(self):
         self.check_suite("with open('x'): pass\n")
         self.check_suite("with open('x') as f: pass\n")
+        self.check_suite("with open('x') as f, open('y') as g: pass\n")
 
     def test_try_stmt(self):
         self.check_suite("try: pass\nexcept: pass\n")
@@ -233,7 +258,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
     def test_position(self):
         # An absolutely minimal test of position information.  Better
         # tests would be a big project.
-        code = "def f(x):\n    return x + 1\n"
+        code = "def f(x):\n    return x + 1"
         st1 = parser.suite(code)
         st2 = st1.totuple(line_info=1, col_info=1)
 
@@ -522,14 +547,14 @@ class CompileTestCase(unittest.TestCase):
     def test_compile_expr(self):
         st = parser.expr('2 + 3')
         code = parser.compilest(st)
-        self.assertEquals(eval(code), 5)
+        self.assertEqual(eval(code), 5)
 
     def test_compile_suite(self):
         st = parser.suite('x = 2; y = x + 3')
         code = parser.compilest(st)
         globs = {}
         exec code in globs
-        self.assertEquals(globs['y'], 5)
+        self.assertEqual(globs['y'], 5)
 
     def test_compile_error(self):
         st = parser.suite('1 = 3 + 4')

@@ -798,7 +798,7 @@ array_iter_extend(arrayobject *self, PyObject *bb)
         return -1;
 
     while ((v = PyIter_Next(it)) != NULL) {
-        if (ins1(self, (int) Py_SIZE(self), v) != 0) {
+        if (ins1(self, Py_SIZE(self), v) != 0) {
             Py_DECREF(v);
             Py_DECREF(it);
             return -1;
@@ -1090,7 +1090,7 @@ the buffer length in bytes.");
 static PyObject *
 array_append(arrayobject *self, PyObject *v)
 {
-    return ins(self, (int) Py_SIZE(self), v);
+    return ins(self, Py_SIZE(self), v);
 }
 
 PyDoc_STRVAR(append_doc,
@@ -1155,40 +1155,6 @@ PyDoc_STRVAR(byteswap_doc,
 \n\
 Byteswap all items of the array.  If the items in the array are not 1, 2,\n\
 4, or 8 bytes in size, RuntimeError is raised.");
-
-static PyObject *
-array_reduce(arrayobject *array)
-{
-    PyObject *dict, *result;
-
-    dict = PyObject_GetAttrString((PyObject *)array, "__dict__");
-    if (dict == NULL) {
-        PyErr_Clear();
-        dict = Py_None;
-        Py_INCREF(dict);
-    }
-    if (Py_SIZE(array) > 0) {
-        if (array->ob_descr->itemsize
-                        > PY_SSIZE_T_MAX / array->ob_size) {
-            return PyErr_NoMemory();
-        }
-        result = Py_BuildValue("O(cs#)O",
-            Py_TYPE(array),
-            array->ob_descr->typecode,
-            array->ob_item,
-            Py_SIZE(array) * array->ob_descr->itemsize,
-            dict);
-    } else {
-        result = Py_BuildValue("O(c)O",
-            Py_TYPE(array),
-            array->ob_descr->typecode,
-            dict);
-    }
-    Py_DECREF(dict);
-    return result;
-}
-
-PyDoc_STRVAR(array_doc, "Return state information for pickling.");
 
 static PyObject *
 array_reverse(arrayobject *self, PyObject *unused)
@@ -1533,6 +1499,38 @@ an array of some other type.");
 
 #endif /* Py_USING_UNICODE */
 
+static PyObject *
+array_reduce(arrayobject *array)
+{
+    PyObject *dict, *result, *list;
+
+    dict = PyObject_GetAttrString((PyObject *)array, "__dict__");
+    if (dict == NULL) {
+        if (!PyErr_ExceptionMatches(PyExc_AttributeError))
+            return NULL;
+        PyErr_Clear();
+        dict = Py_None;
+        Py_INCREF(dict);
+    }
+    /* Unlike in Python 3.x, we never use the more efficient memory
+     * representation of an array for pickling.  This is unfortunately
+     * necessary to allow array objects to be unpickled by Python 3.x,
+     * since str objects from 2.x are always decoded to unicode in
+     * Python 3.x.
+     */
+    list = array_tolist(array, NULL);
+    if (list == NULL) {
+        Py_DECREF(dict);
+        return NULL;
+    }
+    result = Py_BuildValue(
+        "O(cO)O", Py_TYPE(array), array->ob_descr->typecode, list, dict);
+    Py_DECREF(list);
+    Py_DECREF(dict);
+    return result;
+}
+
+PyDoc_STRVAR(reduce_doc, "Return state information for pickling.");
 
 static PyObject *
 array_get_typecode(arrayobject *a, void *closure)
@@ -1589,7 +1587,7 @@ static PyMethodDef array_methods[] = {
     {"read",            (PyCFunction)array_fromfile_as_read,    METH_VARARGS,
      fromfile_doc},
     {"__reduce__",      (PyCFunction)array_reduce,      METH_NOARGS,
-     array_doc},
+     reduce_doc},
     {"remove",          (PyCFunction)array_remove,      METH_O,
      remove_doc},
     {"reverse",         (PyCFunction)array_reverse,     METH_NOARGS,
@@ -2052,7 +2050,7 @@ PyDoc_STRVAR(arraytype_doc,
 \n\
 Return a new array whose items are restricted by typecode, and\n\
 initialized from the optional initializer value, which must be a list,\n\
-string. or iterable over elements of the appropriate type.\n\
+string or iterable over elements of the appropriate type.\n\
 \n\
 Arrays represent basic values and behave very much like lists, except\n\
 the type of objects stored in them is constrained.\n\

@@ -1,10 +1,12 @@
-
 :mod:`random` --- Generate pseudo-random numbers
 ================================================
 
 .. module:: random
    :synopsis: Generate pseudo-random numbers with various common distributions.
 
+**Source code:** :source:`Lib/random.py`
+
+--------------
 
 This module implements pseudo-random number generators for various
 distributions.
@@ -72,10 +74,6 @@ Bookkeeping functions:
 
    .. versionchanged:: 2.4
       formerly, operating system resources were not used.
-
-   If *x* is not ``None`` or an int or long, ``hash(x)`` is used instead. If *x* is
-   an int or long, *x* is used directly.
-
 
 .. function:: getstate()
 
@@ -198,6 +196,7 @@ be found in any statistics text.
    The end-point value ``b`` may or may not be included in the range
    depending on floating-point rounding in the equation ``a + (b-a) * random()``.
 
+
 .. function:: triangular(low, high, mode)
 
    Return a random floating point number *N* such that ``low <= N <= high`` and
@@ -227,6 +226,12 @@ be found in any statistics text.
 
    Gamma distribution.  (*Not* the gamma function!)  Conditions on the
    parameters are ``alpha > 0`` and ``beta > 0``.
+
+   The probability distribution function is::
+
+                 x ** (alpha - 1) * math.exp(-x / beta)
+       pdf(x) =  --------------------------------------
+                   math.gamma(alpha) * beta ** alpha
 
 
 .. function:: gauss(mu, sigma)

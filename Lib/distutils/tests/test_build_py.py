@@ -10,6 +10,7 @@ from distutils.core import Distribution
 from distutils.errors import DistutilsFileError
 
 from distutils.tests import support
+from test.test_support import run_unittest
 
 
 class BuildPyTestCase(support.TempdirManager,
@@ -19,11 +20,15 @@ class BuildPyTestCase(support.TempdirManager,
     def test_package_data(self):
         sources = self.mkdtemp()
         f = open(os.path.join(sources, "__init__.py"), "w")
-        f.write("# Pretend this is a package.")
-        f.close()
+        try:
+            f.write("# Pretend this is a package.")
+        finally:
+            f.close()
         f = open(os.path.join(sources, "README.txt"), "w")
-        f.write("Info about this package")
-        f.close()
+        try:
+            f.write("Info about this package")
+        finally:
+            f.close()
 
         destination = self.mkdtemp()
 
@@ -52,11 +57,15 @@ class BuildPyTestCase(support.TempdirManager,
         self.assertEqual(len(cmd.get_outputs()), 3)
         pkgdest = os.path.join(destination, "pkg")
         files = os.listdir(pkgdest)
-        self.assert_("__init__.py" in files)
-        self.assert_("__init__.pyc" in files)
-        self.assert_("README.txt" in files)
+        self.assertIn("__init__.py", files)
+        self.assertIn("README.txt", files)
+        # XXX even with -O, distutils writes pyc, not pyo; bug?
+        if sys.dont_write_bytecode:
+            self.assertNotIn("__init__.pyc", files)
+        else:
+            self.assertIn("__init__.pyc", files)
 
-    def test_empty_package_dir (self):
+    def test_empty_package_dir(self):
         # See SF 1668596/1720897.
         cwd = os.getcwd()
 
@@ -104,10 +113,10 @@ class BuildPyTestCase(support.TempdirManager,
         finally:
             sys.dont_write_bytecode = old_dont_write_bytecode
 
-        self.assertTrue('byte-compiling is disabled' in self.logs[0][1])
+        self.assertIn('byte-compiling is disabled', self.logs[0][1])
 
 def test_suite():
     return unittest.makeSuite(BuildPyTestCase)
 
 if __name__ == "__main__":
-    unittest.main(defaultTest="test_suite")
+    run_unittest(test_suite())

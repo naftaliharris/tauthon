@@ -123,6 +123,7 @@ alloc_error:
     op->cl_dict = dict;
     Py_XINCREF(name);
     op->cl_name = name;
+    op->cl_weakreflist = NULL;
 
     op->cl_getattr = class_lookup(op, getattrstr, &dummy);
     op->cl_setattr = class_lookup(op, setattrstr, &dummy);
@@ -188,6 +189,8 @@ static void
 class_dealloc(PyClassObject *op)
 {
     _PyObject_GC_UNTRACK(op);
+    if (op->cl_weakreflist != NULL)
+        PyObject_ClearWeakRefs((PyObject *) op);
     Py_DECREF(op->cl_bases);
     Py_DECREF(op->cl_dict);
     Py_XDECREF(op->cl_name);
@@ -222,10 +225,16 @@ static PyObject *
 class_getattr(register PyClassObject *op, PyObject *name)
 {
     register PyObject *v;
-    register char *sname = PyString_AsString(name);
+    register char *sname;
     PyClassObject *klass;
     descrgetfunc f;
 
+    if (!PyString_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "attribute name must be a string");
+        return NULL;
+    }
+
+    sname = PyString_AsString(name);
     if (sname[0] == '_' && sname[1] == '_') {
         if (strcmp(sname, "__dict__") == 0) {
             if (PyEval_GetRestricted()) {
@@ -331,6 +340,10 @@ class_setattr(PyClassObject *op, PyObject *name, PyObject *v)
     if (PyEval_GetRestricted()) {
         PyErr_SetString(PyExc_RuntimeError,
                    "classes are read-only in restricted mode");
+        return -1;
+    }
+    if (!PyString_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "attribute name must be a string");
         return -1;
     }
     sname = PyString_AsString(name);
@@ -454,7 +467,7 @@ PyTypeObject PyClass_Type = {
     (traverseproc)class_traverse,               /* tp_traverse */
     0,                                          /* tp_clear */
     0,                                          /* tp_richcompare */
-    0,                                          /* tp_weaklistoffset */
+    offsetof(PyClassObject, cl_weakreflist), /* tp_weaklistoffset */
     0,                                          /* tp_iter */
     0,                                          /* tp_iternext */
     0,                                          /* tp_methods */
@@ -696,7 +709,14 @@ static PyObject *
 instance_getattr1(register PyInstanceObject *inst, PyObject *name)
 {
     register PyObject *v;
-    register char *sname = PyString_AsString(name);
+    register char *sname;
+
+    if (!PyString_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "attribute name must be a string");
+        return NULL;
+    }
+
+    sname = PyString_AsString(name);
     if (sname[0] == '_' && sname[1] == '_') {
         if (strcmp(sname, "__dict__") == 0) {
             if (PyEval_GetRestricted()) {
@@ -807,7 +827,14 @@ static int
 instance_setattr(PyInstanceObject *inst, PyObject *name, PyObject *v)
 {
     PyObject *func, *args, *res, *tmp;
-    char *sname = PyString_AsString(name);
+    char *sname;
+
+    if (!PyString_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "attribute name must be a string");
+        return -1;
+    }
+
+    sname = PyString_AsString(name);
     if (sname[0] == '_' && sname[1] == '_') {
         Py_ssize_t n = PyString_Size(name);
         if (sname[n-1] == '_' && sname[n-2] == '_') {
@@ -1218,7 +1245,7 @@ instance_ass_item(PyInstanceObject *inst, Py_ssize_t i, PyObject *item)
     if (func == NULL)
         return -1;
     if (item == NULL)
-        arg = PyInt_FromSsize_t(i);
+        arg = Py_BuildValue("(n)", i);
     else
         arg = Py_BuildValue("(nO)", i, item);
     if (arg == NULL) {
@@ -2226,10 +2253,6 @@ PyObject *
 PyMethod_New(PyObject *func, PyObject *self, PyObject *klass)
 {
     register PyMethodObject *im;
-    if (!PyCallable_Check(func)) {
-        PyErr_BadInternalCall();
-        return NULL;
-    }
     im = free_list;
     if (im != NULL) {
         free_list = (PyMethodObject *)(im->im_self);

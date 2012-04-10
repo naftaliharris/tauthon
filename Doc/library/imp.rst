@@ -65,7 +65,7 @@ This module provides an interface to the mechanisms used to implement the
    path and the last item in the *description* tuple is :const:`PKG_DIRECTORY`.
 
    This function does not handle hierarchical module names (names containing
-   dots).  In order to find *P*.*M*, that is, submodule *M* of package *P*, use
+   dots).  In order to find *P.M*, that is, submodule *M* of package *P*, use
    :func:`find_module` and :func:`load_module` to find and load package *P*, and
    then use :func:`find_module` with the *path* argument set to ``P.__path__``.
    When *P* itself has a dotted name, apply this recipe recursively.
@@ -116,8 +116,7 @@ This module provides an interface to the mechanisms used to implement the
 .. function:: acquire_lock()
 
    Acquire the interpreter's import lock for the current thread.  This lock should
-   be used by import hooks to ensure thread-safety when importing modules. On
-   platforms without threads, this function does nothing.
+   be used by import hooks to ensure thread-safety when importing modules.
 
    Once a thread has acquired the import lock, the same thread may acquire it
    again without blocking; the thread must release it once for each time it has

@@ -1,10 +1,16 @@
+from test.test_support import verbose, run_unittest, import_module
+
+#Skip these tests if either fcntl or termios is not available
+fcntl = import_module('fcntl')
+import_module('termios')
+
 import errno
-import fcntl
 import pty
 import os
 import sys
+import select
 import signal
-from test.test_support import verbose, TestSkipped, run_unittest
+import socket
 import unittest
 
 TEST_STRING_1 = "I wish to buy a fish license.\n"
@@ -69,7 +75,7 @@ class PtyTest(unittest.TestCase):
             debug("Got slave_fd '%d'" % slave_fd)
         except OSError:
             # " An optional feature could not be imported " ... ?
-            raise TestSkipped, "Pseudo-terminals (seemingly) not functional."
+            raise unittest.SkipTest, "Pseudo-terminals (seemingly) not functional."
 
         self.assertTrue(os.isatty(slave_fd), 'slave_fd is not a tty')
 
@@ -82,7 +88,7 @@ class PtyTest(unittest.TestCase):
         fcntl.fcntl(master_fd, fcntl.F_SETFL, orig_flags | os.O_NONBLOCK)
         try:
             s1 = os.read(master_fd, 1024)
-            self.assertEquals('', s1)
+            self.assertEqual('', s1)
         except OSError, e:
             if e.errno != errno.EAGAIN:
                 raise
@@ -92,14 +98,14 @@ class PtyTest(unittest.TestCase):
         debug("Writing to slave_fd")
         os.write(slave_fd, TEST_STRING_1)
         s1 = os.read(master_fd, 1024)
-        self.assertEquals('I wish to buy a fish license.\n',
-                          normalize_output(s1))
+        self.assertEqual('I wish to buy a fish license.\n',
+                         normalize_output(s1))
 
         debug("Writing chunked output")
         os.write(slave_fd, TEST_STRING_2[:5])
         os.write(slave_fd, TEST_STRING_2[5:])
         s2 = os.read(master_fd, 1024)
-        self.assertEquals('For my pet fish, Eric.\n', normalize_output(s2))
+        self.assertEqual('For my pet fish, Eric.\n', normalize_output(s2))
 
         os.close(slave_fd)
         os.close(master_fd)
@@ -189,8 +195,95 @@ class PtyTest(unittest.TestCase):
 
         # pty.fork() passed.
 
+
+class SmallPtyTests(unittest.TestCase):
+    """These tests don't spawn children or hang."""
+
+    def setUp(self):
+        self.orig_stdin_fileno = pty.STDIN_FILENO
+        self.orig_stdout_fileno = pty.STDOUT_FILENO
+        self.orig_pty_select = pty.select
+        self.fds = []  # A list of file descriptors to close.
+        self.select_rfds_lengths = []
+        self.select_rfds_results = []
+
+    def tearDown(self):
+        pty.STDIN_FILENO = self.orig_stdin_fileno
+        pty.STDOUT_FILENO = self.orig_stdout_fileno
+        pty.select = self.orig_pty_select
+        for fd in self.fds:
+            try:
+                os.close(fd)
+            except:
+                pass
+
+    def _pipe(self):
+        pipe_fds = os.pipe()
+        self.fds.extend(pipe_fds)
+        return pipe_fds
+
+    def _mock_select(self, rfds, wfds, xfds):
+        # This will raise IndexError when no more expected calls exist.
+        self.assertEqual(self.select_rfds_lengths.pop(0), len(rfds))
+        return self.select_rfds_results.pop(0), [], []
+
+    def test__copy_to_each(self):
+        """Test the normal data case on both master_fd and stdin."""
+        read_from_stdout_fd, mock_stdout_fd = self._pipe()
+        pty.STDOUT_FILENO = mock_stdout_fd
+        mock_stdin_fd, write_to_stdin_fd = self._pipe()
+        pty.STDIN_FILENO = mock_stdin_fd
+        socketpair = socket.socketpair()
+        masters = [s.fileno() for s in socketpair]
+        self.fds.extend(masters)
+
+        # Feed data.  Smaller than PIPEBUF.  These writes will not block.
+        os.write(masters[1], b'from master')
+        os.write(write_to_stdin_fd, b'from stdin')
+
+        # Expect two select calls, the last one will cause IndexError
+        pty.select = self._mock_select
+        self.select_rfds_lengths.append(2)
+        self.select_rfds_results.append([mock_stdin_fd, masters[0]])
+        self.select_rfds_lengths.append(2)
+
+        with self.assertRaises(IndexError):
+            pty._copy(masters[0])
+
+        # Test that the right data went to the right places.
+        rfds = select.select([read_from_stdout_fd, masters[1]], [], [], 0)[0]
+        self.assertEqual([read_from_stdout_fd, masters[1]], rfds)
+        self.assertEqual(os.read(read_from_stdout_fd, 20), b'from master')
+        self.assertEqual(os.read(masters[1], 20), b'from stdin')
+
+    def test__copy_eof_on_all(self):
+        """Test the empty read EOF case on both master_fd and stdin."""
+        read_from_stdout_fd, mock_stdout_fd = self._pipe()
+        pty.STDOUT_FILENO = mock_stdout_fd
+        mock_stdin_fd, write_to_stdin_fd = self._pipe()
+        pty.STDIN_FILENO = mock_stdin_fd
+        socketpair = socket.socketpair()
+        masters = [s.fileno() for s in socketpair]
+        self.fds.extend(masters)
+
+        os.close(masters[1])
+        socketpair[1].close()
+        os.close(write_to_stdin_fd)
+
+        # Expect two select calls, the last one will cause IndexError
+        pty.select = self._mock_select
+        self.select_rfds_lengths.append(2)
+        self.select_rfds_results.append([mock_stdin_fd, masters[0]])
+        # We expect that both fds were removed from the fds list as they
+        # both encountered an EOF before the second select call.
+        self.select_rfds_lengths.append(0)
+
+        with self.assertRaises(IndexError):
+            pty._copy(masters[0])
+
+
 def test_main(verbose=None):
-    run_unittest(PtyTest)
+    run_unittest(SmallPtyTests, PtyTest)
 
 if __name__ == "__main__":
     test_main()

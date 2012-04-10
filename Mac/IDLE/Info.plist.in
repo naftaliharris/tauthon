@@ -36,7 +36,7 @@
 	<key>CFBundleExecutable</key>
 	<string>IDLE</string>
 	<key>CFBundleGetInfoString</key>
-	<string>%VERSION%, © 001-2006 Python Software Foundation</string>
+	<string>%VERSION%, © 2001-2012 Python Software Foundation</string>
 	<key>CFBundleIconFile</key>
 	<string>IDLE.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -51,5 +51,14 @@
 	<string>%VERSION%</string>
 	<key>CFBundleVersion</key>
 	<string>%VERSION%</string>
+<!--
+	<key>LSMinimumSystemVersionByArchitecture</key>
+	<dict>
+	    <key>x86_64</key>
+	    <string>10.6.0</string>
+	    <key>ppc64</key>
+	    <string>10.6.0</string>
+	</dict>
+-->
 </dict>
 </plist>

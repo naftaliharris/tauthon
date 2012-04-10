@@ -246,7 +246,7 @@ class IdleConf:
         else: #returning default, print warning
             if warn_on_default:
                 warning = ('\n Warning: configHandler.py - IdleConf.GetOption -\n'
-                           ' problem retrieving configration option %r\n'
+                           ' problem retrieving configuration option %r\n'
                            ' from section %r.\n'
                            ' returning default value: %r\n' %
                            (option, section, default))
@@ -595,7 +595,7 @@ class IdleConf:
             '<<replace>>': ['<Control-h>'],
             '<<goto-line>>': ['<Alt-g>'],
             '<<smart-backspace>>': ['<Key-BackSpace>'],
-            '<<newline-and-indent>>': ['<Key-Return> <Key-KP_Enter>'],
+            '<<newline-and-indent>>': ['<Key-Return>', '<Key-KP_Enter>'],
             '<<smart-indent>>': ['<Key-Tab>'],
             '<<indent-region>>': ['<Control-Key-bracketright>'],
             '<<dedent-region>>': ['<Control-Key-bracketleft>'],

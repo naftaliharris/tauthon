@@ -928,6 +928,16 @@ Test the __name__ attribute and the repr()
 'f'
 >>> repr(g)  # doctest: +ELLIPSIS
 '<generator object f at ...>'
+
+Lambdas shouldn't have their usual return behavior.
+
+>>> x = lambda: (yield 1)
+>>> list(x())
+[1]
+
+>>> x = lambda: ((yield 1), (yield 2))
+>>> list(x())
+[1, 2]
 """
 
 # conjoin is a simple backtracking generator, named in honor of Icon's
@@ -950,11 +960,11 @@ Test the __name__ attribute and the repr()
 # iterators have side-effects, so that which values *can* be generated at
 # each slot depend on the values iterated at previous slots.
 
-def conjoin(gs):
+def simple_conjoin(gs):
 
     values = [None] * len(gs)
 
-    def gen(i, values=values):
+    def gen(i):
         if i >= len(gs):
             yield values
         else:
@@ -979,7 +989,7 @@ def conjoin(gs):
     # Do one loop nest at time recursively, until the # of loop nests
     # remaining is divisible by 3.
 
-    def gen(i, values=values):
+    def gen(i):
         if i >= n:
             yield values
 
@@ -997,7 +1007,7 @@ def conjoin(gs):
     # remain.  Don't call directly:  this is an internal optimization for
     # gen's use.
 
-    def _gen3(i, values=values):
+    def _gen3(i):
         assert i < n and (n-i) % 3 == 0
         ip1, ip2, ip3 = i+1, i+2, i+3
         g, g1, g2 = gs[i : ip3]
@@ -1554,7 +1564,8 @@ Check some syntax errors for yield expressions:
 >>> f=lambda: (yield 1),(yield 2)
 Traceback (most recent call last):
   ...
-SyntaxError: 'yield' outside function (<doctest test.test_generators.__test__.coroutine[21]>, line 1)
+  File "<doctest test.test_generators.__test__.coroutine[21]>", line 1
+SyntaxError: 'yield' outside function
 
 >>> def f(): return lambda x=(yield): 1
 Traceback (most recent call last):
@@ -1564,17 +1575,20 @@ SyntaxError: 'return' with argument inside generator (<doctest test.test_generat
 >>> def f(): x = yield = y
 Traceback (most recent call last):
   ...
-SyntaxError: assignment to yield expression not possible (<doctest test.test_generators.__test__.coroutine[23]>, line 1)
+  File "<doctest test.test_generators.__test__.coroutine[23]>", line 1
+SyntaxError: assignment to yield expression not possible
 
 >>> def f(): (yield bar) = y
 Traceback (most recent call last):
   ...
-SyntaxError: can't assign to yield expression (<doctest test.test_generators.__test__.coroutine[24]>, line 1)
+  File "<doctest test.test_generators.__test__.coroutine[24]>", line 1
+SyntaxError: can't assign to yield expression
 
 >>> def f(): (yield bar) += y
 Traceback (most recent call last):
   ...
-SyntaxError: augmented assignment to yield expression not possible (<doctest test.test_generators.__test__.coroutine[25]>, line 1)
+  File "<doctest test.test_generators.__test__.coroutine[25]>", line 1
+SyntaxError: can't assign to yield expression
 
 
 Now check some throw() conditions:
@@ -1681,6 +1695,17 @@ And finalization:
 ...     finally:
 ...         print "exiting"
 
+>>> g = f()
+>>> g.next()
+>>> del g
+exiting
+
+>>> class context(object):
+...    def __enter__(self): pass
+...    def __exit__(self, *args): print 'exiting'
+>>> def f():
+...     with context():
+...          yield
 >>> g = f()
 >>> g.next()
 >>> del g

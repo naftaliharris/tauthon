@@ -8,6 +8,8 @@
 #include "symtable.h"
 
 #define UNDEFINED_FUTURE_FEATURE "future feature %.100s is not defined"
+#define ERR_LATE_FUTURE \
+"from __future__ imports must occur at the beginning of the file"
 
 static int
 future_check_features(PyFutureFeatures *ff, stmt_ty s, const char *filename)
@@ -57,13 +59,6 @@ future_parse(PyFutureFeatures *ff, mod_ty mod, const char *filename)
 {
     int i, found_docstring = 0, done = 0, prev_line = 0;
 
-    static PyObject *future;
-    if (!future) {
-        future = PyString_InternFromString("__future__");
-        if (!future)
-            return 0;
-    }
-
     if (!(mod->kind == Module_kind || mod->kind == Interactive_kind))
         return 1;
 
@@ -90,7 +85,9 @@ future_parse(PyFutureFeatures *ff, mod_ty mod, const char *filename)
         */
 
         if (s->kind == ImportFrom_kind) {
-            if (s->v.ImportFrom.module == future) {
+            identifier modname = s->v.ImportFrom.module;
+            if (modname && PyString_GET_SIZE(modname) == 10 &&
+                !strcmp(PyString_AS_STRING(modname), "__future__")) {
                 if (done) {
                     PyErr_SetString(PyExc_SyntaxError,
                                     ERR_LATE_FUTURE);
