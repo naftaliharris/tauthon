@@ -49,9 +49,22 @@ listed below.
 Logger Objects
 --------------
 
-Loggers have the following attributes and methods. Note that Loggers are never
+Loggers have the following attributes and methods.  Note that Loggers are never
 instantiated directly, but always through the module-level function
-``logging.getLogger(name)``.
+``logging.getLogger(name)``.  Multiple calls to :func:`getLogger` with the same
+name will always return a reference to the same Logger object.
+
+The ``name`` is potentially a period-separated hierarchical value, like
+``foo.bar.baz`` (though it could also be just plain ``foo``, for example).
+Loggers that are further down in the hierarchical list are children of loggers
+higher up in the list.  For example, given a logger with a name of ``foo``,
+loggers with names of ``foo.bar``, ``foo.bar.baz``, and ``foo.bam`` are all
+descendants of ``foo``.  The logger name hierarchy is analogous to the Python
+package hierarchy, and identical to it if you organise your loggers on a
+per-module basis using the recommended construction
+``logging.getLogger(__name__)``.  That's because in a module, ``__name__``
+is the module's name in the Python package namespace.
+
 
 .. class:: Logger
 
@@ -159,7 +172,7 @@ instantiated directly, but always through the module-level function
 
       FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
       logging.basicConfig(format=FORMAT)
-      d = { 'clientip' : '192.168.0.1', 'user' : 'fbloggs' }
+      d = {'clientip': '192.168.0.1', 'user': 'fbloggs'}
       logger = logging.getLogger('tcpserver')
       logger.warning('Protocol problem: %s', 'connection reset', extra=d)
 
@@ -1077,7 +1090,7 @@ with the :mod:`warnings` module.
    If *capture* is ``True``, warnings issued by the :mod:`warnings` module will
    be redirected to the logging system. Specifically, a warning will be
    formatted using :func:`warnings.formatwarning` and the resulting string
-   logged to a logger named ``'py.warnings'`` with a severity of ``'WARNING'``.
+   logged to a logger named ``'py.warnings'`` with a severity of :const:`WARNING`.
 
    If *capture* is ``False``, the redirection of warnings to the logging system
    will stop, and warnings will be redirected to their original destinations

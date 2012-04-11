@@ -619,6 +619,19 @@ class TestMessageAPI(TestEmailBase):
         msg['Dummy'] = 'dummy\nX-Injected-Header: test'
         self.assertRaises(errors.HeaderParseError, msg.as_string)
 
+    def test_unicode_header_defaults_to_utf8_encoding(self):
+        # Issue 14291
+        m = MIMEText('abc\n')
+        m['Subject'] = 'É test'
+        self.assertEqual(str(m),textwrap.dedent("""\
+            Content-Type: text/plain; charset="us-ascii"
+            MIME-Version: 1.0
+            Content-Transfer-Encoding: 7bit
+            Subject: =?utf-8?q?=C3=89_test?=
+
+            abc
+            """))
+
 # Test the email.encoders module
 class TestEncoders(unittest.TestCase):
 
@@ -1060,9 +1073,13 @@ Subject: =?iso-8859-1?q?Britische_Regierung_gibt_gr=FCnes_Licht_f=FCr_Offshore-W
                          'f\xfcr Offshore-Windkraftprojekte '
                          '<a-very-long-address@example.com>')
         msg['Reply-To'] = header_string
-        self.assertRaises(UnicodeEncodeError, msg.as_string)
+        eq(msg.as_string(maxheaderlen=78), """\
+Reply-To: =?utf-8?q?Britische_Regierung_gibt_gr=C3=BCnes_Licht_f=C3=BCr_Offs?=
+ =?utf-8?q?hore-Windkraftprojekte_=3Ca-very-long-address=40example=2Ecom=3E?=
+
+""")
         msg = Message()
-        msg['Reply-To'] = Header(header_string, 'utf-8',
+        msg['Reply-To'] = Header(header_string,
                                  header_name='Reply-To')
         eq(msg.as_string(maxheaderlen=78), """\
 Reply-To: =?utf-8?q?Britische_Regierung_gibt_gr=C3=BCnes_Licht_f=C3=BCr_Offs?=
@@ -1224,7 +1241,6 @@ List: List-Unsubscribe:
              =?utf-8?q?cter_set?=
              =?utf-8?q?_to_see_if_line_wrapping_with_encoded_words_and_embedded?=
              =?utf-8?q?_folding_white_space_works?=""")+'\n')
-
 
 
 # Test mangling of "From " lines in the body of a message
@@ -2502,14 +2518,11 @@ class TestMiscellaneous(TestEmailBase):
 
     def test__all__(self):
         module = __import__('email')
-        # Can't use sorted() here due to Python 2.3 compatibility
-        all = module.__all__[:]
-        all.sort()
-        self.assertEqual(all, [
-            'base64mime', 'charset', 'encoders', 'errors', 'generator',
-            'header', 'iterators', 'message', 'message_from_binary_file',
-            'message_from_bytes', 'message_from_file',
-            'message_from_string', 'mime', 'parser',
+        self.assertEqual(sorted(module.__all__), [
+            'base64mime', 'charset', 'encoders', 'errors', 'feedparser',
+            'generator', 'header', 'iterators', 'message',
+            'message_from_binary_file', 'message_from_bytes',
+            'message_from_file', 'message_from_string', 'mime', 'parser',
             'quoprimime', 'utils',
             ])
 
@@ -3423,6 +3436,30 @@ class Test8BitBytesHandling(unittest.TestCase):
         g = email.generator.BytesGenerator(s)
         g.flatten(msg)
         self.assertEqual(s.getvalue(), source)
+
+    def test_bytes_generator_b_encoding_linesep(self):
+        # Issue 14062: b encoding was tacking on an extra \n.
+        m = Message()
+        # This has enough non-ascii that it should always end up b encoded.
+        m['Subject'] = Header('žluťoučký kůň')
+        s = BytesIO()
+        g = email.generator.BytesGenerator(s)
+        g.flatten(m, linesep='\r\n')
+        self.assertEqual(
+            s.getvalue(),
+            b'Subject: =?utf-8?b?xb5sdcWlb3XEjWvDvSBrxa/FiA==?=\r\n\r\n')
+
+    def test_generator_b_encoding_linesep(self):
+        # Since this broke in ByteGenerator, test Generator for completeness.
+        m = Message()
+        # This has enough non-ascii that it should always end up b encoded.
+        m['Subject'] = Header('žluťoučký kůň')
+        s = StringIO()
+        g = email.generator.Generator(s)
+        g.flatten(m, linesep='\r\n')
+        self.assertEqual(
+            s.getvalue(),
+            'Subject: =?utf-8?b?xb5sdcWlb3XEjWvDvSBrxa/FiA==?=\r\n\r\n')
 
     maxDiff = None
 

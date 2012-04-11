@@ -945,8 +945,11 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
         """
 
         splitpath = _url_collapse_path_split(self.path)
-        if splitpath[0] in self.cgi_directories:
-            self.cgi_info = splitpath
+        joined_path = '/'.join(splitpath)
+        dir_sep = joined_path.find('/',1)
+        head, tail = joined_path[:dir_sep], joined_path[dir_sep+1:]
+        if head in self.cgi_directories:
+            self.cgi_info = head, tail
             return True
         return False
 

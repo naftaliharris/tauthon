@@ -2,6 +2,168 @@
 Python News
 +++++++++++
 
+What's New in Python 3.2.4
+==========================
+
+*Release date: XX-XX-XXXX*
+
+Core and Builtins
+-----------------
+
+- Issue #14474: Save and restore exception state in thread.start_new_thread()
+  while writing error message if the thread leaves a unhandled exception.
+
+- Issue #13019: Fix potential reference leaks in bytearray.extend().  Patch
+  by Suman Saha.
+
+- Issue #14378: Fix compiling ast.ImportFrom nodes with a "__future__" string as
+  the module name that was not interned.
+
+- Issue #14331: Use significantly less stack space when importing modules by
+  allocating path buffers on the heap instead of the stack.
+
+- Issue #14334: Prevent in a segfault in type.__getattribute__ when it was not
+  passed strings.
+
+- Issue #1469629: Allow cycles through an object's __dict__ slot to be
+  collected. (For example if ``x.__dict__ is x``).
+
+- Issue #14172: Fix reference leak when marshalling a buffer-like object
+  (other than a bytes object).
+
+- Issue #13521: dict.setdefault() now does only one lookup for the given key,
+  making it "atomic" for many purposes.  Patch by Filip Gruszczyński.
+
+- Issue #14471: Fix a possible buffer overrun in the winreg module.
+
+Library
+-------
+
+- Issue #7978: socketserver now restarts the select() call when EINTR is
+  returned.  This avoids crashing the server loop when a signal is received.
+  Patch by Jerzy Kozera.
+
+- Issue #14496: Fix wrong name in idlelib/tabbedpages.py.
+  Patch by Popa Claudiu.
+
+- Issue #14482: Raise a ValueError, not a NameError, when trying to create
+  a multiprocessing Client or Listener with an AF_UNIX type address under
+  Windows.  Patch by Popa Claudiu.
+
+- Issue #14151: Raise a ValueError, not a NameError, when trying to create
+  a multiprocessing Client or Listener with an AF_PIPE type address under
+  non-Windows platforms.  Patch by Popa Claudiu.
+
+- Issue #13872: socket.detach() now marks the socket closed (as mirrored
+  in the socket repr()).  Patch by Matt Joiner.
+
+- Issue #14406: Fix a race condition when using ``concurrent.futures.wait(
+  return_when=ALL_COMPLETED)``.  Patch by Matt Joiner.
+
+- Issue #14409: IDLE now properly executes commands in the Shell window
+  when it cannot read the normal config files on startup and
+  has to use the built-in default key bindings.
+  There was previously a bug in one of the defaults.
+
+- Issue #10340: asyncore - properly handle EINVAL in dispatcher constructor on
+  OSX; avoid to call handle_connect in case of a disconnected socket which
+  was not meant to connect.
+
+- Issue #12757: Fix the skipping of doctests when python is run with -OO so
+  that it works in unittest's verbose mode as well as non-verbose mode.
+
+- Issue #3573: IDLE hangs when passing invalid command line args
+  (directory(ies) instead of file(s)) (Patch by Guilherme Polo)
+
+- Issue #13694: asynchronous connect in asyncore.dispatcher does not set addr
+  attribute.
+
+- Issue #11686: Added missing entries to email package __all__ lists
+  (mostly the new Bytes classes).
+
+- Issue #10484: Fix the CGIHTTPServer's PATH_INFO handling problem.
+
+- Issue #11199: Fix the with urllib which hangs on particular ftp urls.
+
+- Issue #14062: Header objects now correctly respect the 'linesep' setting
+  when processed by BytesParser (which smtplib.SMTP.send_message uses).
+
+- Issue #14291: Email now defaults to utf-8 for non-ASCII unicode headers
+  instead of raising an error.  This fixes a regression relative to 2.7.
+
+- Issue #5219: Prevent event handler cascade in IDLE.
+
+- Issue #14184: Increase the default stack size for secondary threads on
+  Mac OS X to avoid interpreter crashes when using threads on 10.7.
+
+- Issue #10543: Fix unittest test discovery with Jython bytecode files.
+
+- Issue #14252: Fix subprocess.Popen.terminate() to not raise an error under
+  Windows when the child process has already exited.
+
+- Issue #14195: An issue that caused weakref.WeakSet instances to incorrectly
+  return True for a WeakSet instance 'a' in both 'a < a' and 'a > a' has been
+  fixed.
+
+- Issue #14177: marshal.loads() now raises TypeError when given an unicode
+  string.  Patch by Guilherme Gonçalves.
+
+- Issue #14159: Fix the len() of weak containers (WeakSet, WeakKeyDictionary,
+  WeakValueDictionary) to return a better approximation when some objects
+  are dead or dying.  Moreover, the implementation is now O(1) rather than
+  O(n).
+
+- Issue #13125: Silence spurious test_lib2to3 output when in non-verbose mode.
+  Patch by Mikhail Novikov.
+
+- Issue #13447: Add a test file to host regression tests for bugs in the
+  scripts found in the Tools directory.
+
+- Issue #8033: sqlite3: Fix 64-bit integer handling in user functions
+  on 32-bit architectures. Initial patch by Philippe Devalkeneer.
+
+Extension Modules
+-----------------
+
+- Issue #14212: The re module didn't retain a reference to buffers it was
+  scanning, resulting in segfaults.
+
+Build
+-----
+
+- Issue #14437: Fix building the _io module under Cygwin.
+
+- Issue #14387: Do not include accu.h from Python.h.
+
+- Issue #14359: Only use O_CLOEXEC in _posixmodule.c if it is defined.
+  Based on patch from Hervé Coatanhay.
+
+Documentation
+-------------
+
+- Issue #8799: Fix and improve the threading.Condition documentation.
+
+
+What's New in Python 3.2.3 release candidate 2?
+===============================================
+
+*Release date: XX-Mar-2012*
+
+Library
+-------
+
+- Issue #6884: Fix long-standing bugs with MANIFEST.in parsing in distutils
+  on Windows.
+
+Extension Modules
+-----------------
+
+- Issue #14234: CVE-2012-0876: Randomize hashes of xml attributes in the hash
+  table internal to the pyexpat module's copy of the expat library to avoid a
+  denial of service due to hash collisions.  Patch by David Malcolm with some
+  modifications by the expat project.
+
+
 What's New in Python 3.2.3?
 ===========================
 
@@ -155,9 +317,6 @@ Core and Builtins
 
 Library
 -------
-
-- Issue #8033: sqlite3: Fix 64-bit integer handling in user functions
-  on 32-bit architectures. Initial patch by Philippe Devalkeneer.
 
 - HTMLParser is now able to handle slashes in the start tag.
 

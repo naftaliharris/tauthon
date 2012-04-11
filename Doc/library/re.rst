@@ -330,16 +330,22 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
    Matches the empty string, but only at the beginning or end of a word.
    A word is defined as a sequence of Unicode alphanumeric or underscore
    characters, so the end of a word is indicated by whitespace or a
-   non-alphanumeric, non-underscore Unicode character. Note that
-   formally, ``\b`` is defined as the boundary between a ``\w`` and a
-   ``\W`` character (or vice versa). By default Unicode alphanumerics
-   are the ones used, but this can be changed by using the :const:`ASCII`
-   flag.  Inside a character range, ``\b`` represents the backspace
-   character, for compatibility with Python's string literals.
+   non-alphanumeric, non-underscore Unicode character.  Note that formally,
+   ``\b`` is defined as the boundary between a ``\w`` and a ``\W`` character
+   (or vice versa), or between ``\w`` and the beginning/end of the string.
+   This means that ``r'\bfoo\b'`` matches ``'foo'``, ``'foo.'``, ``'(foo)'``,
+   ``'bar foo baz'`` but not ``'foobar'`` or ``'foo3'``.
+
+   By default Unicode alphanumerics are the ones used, but this can  be changed
+   by using the :const:`ASCII` flag.  Inside a character range, ``\b``
+   represents the backspace character, for compatibility with Python's string
+   literals.
 
 ``\B``
-   Matches the empty string, but only when it is *not* at the beginning or end of a
-   word.  This is just the opposite of ``\b``, so word characters are
+   Matches the empty string, but only when it is *not* at the beginning or end
+   of a word.  This means that ``r'py\B'`` matches ``'python'``, ``'py3'``,
+   ``'py2'``, but not ``'py'``, ``'py.'``, or ``'py!'``.
+   ``\B`` is just the opposite of ``\b``, so word characters are
    Unicode alphanumerics or the underscore, although this can be changed
    by using the :const:`ASCII` flag.
 
@@ -415,31 +421,6 @@ Octal escapes are included in a limited form.  If the first digit is a 0, or if
 there are three octal digits, it is considered an octal escape. Otherwise, it is
 a group reference.  As for string literals, octal escapes are always at most
 three digits in length.
-
-
-.. _matching-searching:
-
-Matching vs. Searching
-----------------------
-
-.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
-
-
-Python offers two different primitive operations based on regular expressions:
-**match** checks for a match only at the beginning of the string, while
-**search** checks for a match anywhere in the string (this is what Perl does
-by default).
-
-Note that match may differ from search even when using a regular expression
-beginning with ``'^'``: ``'^'`` matches only at the start of the string, or in
-:const:`MULTILINE` mode also immediately following a newline.  The "match"
-operation succeeds only if the pattern matches at the start of the string
-regardless of mode, or at the starting position given by the optional *pos*
-argument regardless of whether a newline precedes it.
-
-   >>> re.match("c", "abcdef")  # No match
-   >>> re.search("c", "abcdef") # Match
-   <_sre.SRE_Match object at ...>
 
 
 .. _contents-of-module-re:
@@ -575,10 +556,11 @@ form.
    <match-objects>`.  Return ``None`` if the string does not match the pattern;
    note that this is different from a zero-length match.
 
-   .. note::
+   Note that even in :const:`MULTILINE` mode, :func:`re.match` will only match
+   at the beginning of the string and not at the beginning of each line.
 
-      If you want to locate a match anywhere in *string*, use :func:`search`
-      instead.
+   If you want to locate a match anywhere in *string*, use :func:`search`
+   instead (see also :ref:`search-vs-match`).
 
 
 .. function:: split(pattern, string, maxsplit=0, flags=0)
@@ -762,15 +744,13 @@ attributes:
    The optional *pos* and *endpos* parameters have the same meaning as for the
    :meth:`~regex.search` method.
 
-   .. note::
-
-      If you want to locate a match anywhere in *string*, use
-      :meth:`~regex.search` instead.
-
    >>> pattern = re.compile("o")
    >>> pattern.match("dog")      # No match as "o" is not at the start of "dog".
    >>> pattern.match("dog", 1)   # Match as "o" is the 2nd character of "dog".
    <_sre.SRE_Match object at ...>
+
+   If you want to locate a match anywhere in *string*, use
+   :meth:`~regex.search` instead (see also :ref:`search-vs-match`).
 
 
 .. method:: regex.split(string, maxsplit=0)
@@ -804,8 +784,9 @@ attributes:
 
 .. attribute:: regex.flags
 
-   The flags argument used when the RE object was compiled, or ``0`` if no flags
-   were provided.
+   The regex matching flags.  This is a combination of the flags given to
+   :func:`.compile`, any ``(?...)`` inline flags in the pattern, and implicit
+   flags such as :data:`UNICODE` if the pattern is a Unicode string.
 
 
 .. attribute:: regex.groups
@@ -964,16 +945,15 @@ support the following methods and attributes:
 .. attribute:: match.pos
 
    The value of *pos* which was passed to the :meth:`~regex.search` or
-   :meth:`~regex.match` method of a :ref:`match object <match-objects>`.  This
-   is the index into the string at which the RE engine started looking for a
-   match.
+   :meth:`~regex.match` method of a :ref:`regex object <re-objects>`.  This is
+   the index into the string at which the RE engine started looking for a match.
 
 
 .. attribute:: match.endpos
 
    The value of *endpos* which was passed to the :meth:`~regex.search` or
-   :meth:`~regex.match` method of a :ref:`match object <match-objects>`.  This
-   is the index into the string beyond which the RE engine will not go.
+   :meth:`~regex.match` method of a :ref:`regex object <re-objects>`.  This is
+   the index into the string beyond which the RE engine will not go.
 
 
 .. attribute:: match.lastindex
@@ -1111,59 +1091,39 @@ The equivalent regular expression would be ::
    (\S+) - (\d+) errors, (\d+) warnings
 
 
-Avoiding recursion
-^^^^^^^^^^^^^^^^^^
-
-If you create regular expressions that require the engine to perform a lot of
-recursion, you may encounter a :exc:`RuntimeError` exception with the message
-``maximum recursion limit exceeded``. For example, ::
-
-   >>> s = 'Begin ' + 1000*'a very long string ' + 'end'
-   >>> re.match('Begin (\w| )*? end', s).end()
-   Traceback (most recent call last):
-     File "<stdin>", line 1, in ?
-     File "/usr/local/lib/python3.2/re.py", line 132, in match
-       return _compile(pattern, flags).match(string)
-   RuntimeError: maximum recursion limit exceeded
-
-You can often restructure your regular expression to avoid recursion.
-
-Simple uses of the ``*?`` pattern are special-cased to avoid recursion.  Thus,
-the above regular expression can avoid recursion by being recast as ``Begin
-[a-zA-Z0-9_ ]*?end``.  As a further benefit, such regular expressions will run
-faster than their recursive equivalents.
-
+.. _search-vs-match:
 
 search() vs. match()
 ^^^^^^^^^^^^^^^^^^^^
 
-In a nutshell, :func:`match` only attempts to match a pattern at the beginning
-of a string where :func:`search` will match a pattern anywhere in a string.
-For example:
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
-   >>> re.match("o", "dog")  # No match as "o" is not the first letter of "dog".
-   >>> re.search("o", "dog") # Match as search() looks everywhere in the string.
+Python offers two different primitive operations based on regular expressions:
+:func:`re.match` checks for a match only at the beginning of the string, while
+:func:`re.search` checks for a match anywhere in the string (this is what Perl
+does by default).
+
+For example::
+
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("c", "abcdef") # Match
    <_sre.SRE_Match object at ...>
 
-.. note::
+Regular expressions beginning with ``'^'`` can be used with :func:`search` to
+restrict the match at the beginning of the string::
 
-   The following applies only to regular expression objects like those created
-   with ``re.compile("pattern")``, not the primitives ``re.match(pattern,
-   string)`` or ``re.search(pattern, string)``.
-
-:func:`match` has an optional second parameter that gives an index in the string
-where the search is to start::
-
-   >>> pattern = re.compile("o")
-   >>> pattern.match("dog")      # No match as "o" is not at the start of "dog."
-
-   # Equivalent to the above expression as 0 is the default starting index:
-   >>> pattern.match("dog", 0)
-
-   # Match as "o" is the 2nd character of "dog" (index 0 is the first):
-   >>> pattern.match("dog", 1)
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("^c", "abcdef") # No match
+   >>> re.search("^a", "abcdef")  # Match
    <_sre.SRE_Match object at ...>
-   >>> pattern.match("dog", 2)   # No match as "o" is not the 3rd character of "dog."
+
+Note however that in :const:`MULTILINE` mode :func:`match` only matches at the
+beginning of the string, whereas using :func:`search` with a regular expression
+beginning with ``'^'`` will match at the beginning of each line.
+
+   >>> re.match('X', 'A\nB\nX', re.MULTILINE)  # No match
+   >>> re.search('^X', 'A\nB\nX', re.MULTILINE)  # Match
+   <_sre.SRE_Match object at ...>
 
 
 Making a Phonebook
@@ -1177,7 +1137,7 @@ creates a phonebook.
 First, here is the input.  Normally it may come from a file, here we are using
 triple-quoted string syntax:
 
-   >>> input = """Ross McFluff: 834.345.1254 155 Elm Street
+   >>> text = """Ross McFluff: 834.345.1254 155 Elm Street
    ...
    ... Ronald Heathmore: 892.345.3428 436 Finley Avenue
    ... Frank Burger: 925.541.7625 662 South Dogwood Way
@@ -1191,7 +1151,7 @@ into a list with each nonempty line having its own entry:
 .. doctest::
    :options: +NORMALIZE_WHITESPACE
 
-   >>> entries = re.split("\n+", input)
+   >>> entries = re.split("\n+", text)
    >>> entries
    ['Ross McFluff: 834.345.1254 155 Elm Street',
    'Ronald Heathmore: 892.345.3428 436 Finley Avenue',
