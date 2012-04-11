@@ -5,23 +5,23 @@ class StringArrayTestCase(unittest.TestCase):
     def test(self):
         BUF = c_char * 4
 
-        buf = BUF("a", "b", "c")
+        buf = BUF(b"a", b"b", b"c")
         self.assertEqual(buf.value, b"abc")
         self.assertEqual(buf.raw, b"abc\000")
 
-        buf.value = "ABCD"
+        buf.value = b"ABCD"
         self.assertEqual(buf.value, b"ABCD")
         self.assertEqual(buf.raw, b"ABCD")
 
-        buf.value = "x"
+        buf.value = b"x"
         self.assertEqual(buf.value, b"x")
         self.assertEqual(buf.raw, b"x\000CD")
 
-        buf[1] = "Z"
+        buf[1] = b"Z"
         self.assertEqual(buf.value, b"xZCD")
         self.assertEqual(buf.raw, b"xZCD")
 
-        self.assertRaises(ValueError, setattr, buf, "value", "aaaaaaaa")
+        self.assertRaises(ValueError, setattr, buf, "value", b"aaaaaaaa")
         self.assertRaises(TypeError, setattr, buf, "value", 42)
 
     def test_c_buffer_value(self):
@@ -73,6 +73,13 @@ else:
 
             buf[1] = "Z"
             self.assertEqual(buf.value, "xZCD")
+
+        @unittest.skipIf(sizeof(c_wchar) < 4,
+                         "sizeof(wchar_t) is smaller than 4 bytes")
+        def test_nonbmp(self):
+            u = chr(0x10ffff)
+            w = c_wchar(u)
+            self.assertEqual(w.value, u)
 
 class StringTestCase(unittest.TestCase):
     def XX_test_basic_strings(self):

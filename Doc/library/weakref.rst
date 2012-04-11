@@ -8,6 +8,9 @@
 .. moduleauthor:: Martin von Löwis <martin@loewis.home.cs.tu-berlin.de>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/weakref.py`
+
+--------------
 
 The :mod:`weakref` module allows the Python programmer to create :dfn:`weak
 references` to objects.
@@ -59,8 +62,11 @@ is exposed by the :mod:`weakref` module for the benefit of advanced uses.
 Not all objects can be weakly referenced; those objects which can include class
 instances, functions written in Python (but not in C), instance methods, sets,
 frozensets, some :term:`file objects <file object>`, :term:`generator`\s, type
-objects, sockets, arrays, deques and regular expression pattern objects.
+objects, sockets, arrays, deques, regular expression pattern objects, and code
+objects.
 
+.. versionchanged:: 3.2
+   Added support for thread.lock, threading.Lock, and code objects.
 
 Several built-in types such as :class:`list` and :class:`dict` do not directly
 support weak references but can add support through subclassing::

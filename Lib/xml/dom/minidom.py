@@ -268,6 +268,14 @@ class Node(xml.dom.Node):
         self.previousSibling = None
         self.nextSibling = None
 
+    # A Node is its own context manager, to ensure that an unlink() call occurs.
+    # This is similar to how a file object works.
+    def __enter__(self):
+        return self
+
+    def __exit__(self, et, ev, tb):
+        self.unlink()
+
 defproperty(Node, "firstChild", doc="First child node, or None.")
 defproperty(Node, "lastChild",  doc="Last child node, or None.")
 defproperty(Node, "localName",  doc="Namespace-local name of this node.")
@@ -828,10 +836,16 @@ class Element(Node):
             _write_data(writer, attrs[a_name].value)
             writer.write("\"")
         if self.childNodes:
-            writer.write(">%s"%(newl))
-            for node in self.childNodes:
-                node.writexml(writer,indent+addindent,addindent,newl)
-            writer.write("%s</%s>%s" % (indent,self.tagName,newl))
+            writer.write(">")
+            if (len(self.childNodes) == 1 and
+                self.childNodes[0].nodeType == Node.TEXT_NODE):
+                self.childNodes[0].writexml(writer, '', '', '')
+            else:
+                writer.write(newl)
+                for node in self.childNodes:
+                    node.writexml(writer, indent+addindent, addindent, newl)
+                writer.write(indent)
+            writer.write("</%s>%s" % (self.tagName, newl))
         else:
             writer.write("/>%s"%(newl))
 
@@ -912,6 +926,10 @@ class Childless:
     def removeChild(self, oldChild):
         raise xml.dom.NotFoundErr(
             self.nodeName + " nodes do not have children")
+
+    def normalize(self):
+        # For childless nodes, normalize() has nothing to do.
+        pass
 
     def replaceChild(self, newChild, oldChild):
         raise xml.dom.HierarchyRequestErr(
@@ -1049,7 +1067,7 @@ class Text(CharacterData):
         return newText
 
     def writexml(self, writer, indent="", addindent="", newl=""):
-        _write_data(writer, "%s%s%s"%(indent, self.data, newl))
+        _write_data(writer, "%s%s%s" % (indent, self.data, newl))
 
     # DOM Level 3 (WD 9 April 2002)
 

@@ -1,5 +1,6 @@
 /* Definitions for bytecode */
 
+#ifndef Py_LIMITED_API
 #ifndef Py_CODE_H
 #define Py_CODE_H
 #ifdef __cplusplus
@@ -24,8 +25,10 @@ typedef struct {
     PyObject *co_filename;	/* unicode (where it was loaded from) */
     PyObject *co_name;		/* unicode (name, for reference) */
     int co_firstlineno;		/* first source line number */
-    PyObject *co_lnotab;	/* string (encoding addr<->lineno mapping) */
+    PyObject *co_lnotab;	/* string (encoding addr<->lineno mapping) See
+				   Objects/lnotab_notes.txt for details. */
     void *co_zombieframe;     /* for optimization only (see frameobject.c) */
+    PyObject *co_weakreflist;   /* to support weakrefs to code objects */
 } PyCodeObject;
 
 /* Masks for co_flags above */
@@ -70,8 +73,16 @@ PyAPI_DATA(PyTypeObject) PyCode_Type;
 PyAPI_FUNC(PyCodeObject *) PyCode_New(
 	int, int, int, int, int, PyObject *, PyObject *,
 	PyObject *, PyObject *, PyObject *, PyObject *,
-	PyObject *, PyObject *, int, PyObject *); 
+	PyObject *, PyObject *, int, PyObject *);
         /* same as struct above */
+
+/* Creates a new empty code object with the specified source location. */
+PyAPI_FUNC(PyCodeObject *)
+PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno);
+
+/* Return the line number associated with the specified bytecode index
+   in this code object.  If you just need the line number of a frame,
+   use PyFrame_GetLineNumber() instead. */
 PyAPI_FUNC(int) PyCode_Addr2Line(PyCodeObject *, int);
 
 /* for internal use only */
@@ -80,15 +91,13 @@ typedef struct _addr_pair {
         int ap_upper;
 } PyAddrPair;
 
-/* Check whether lasti (an instruction offset) falls outside bounds
-   and whether it is a line number that should be traced.  Returns
-   a line number if it should be traced or -1 if the line should not.
-
-   If lasti is not within bounds, updates bounds.
+/* Update *bounds to describe the first and one-past-the-last instructions in the
+   same line as lasti.  Return the number of that line.
 */
-
-PyAPI_FUNC(int) PyCode_CheckLineNumber(PyCodeObject* co,
-                                       int lasti, PyAddrPair *bounds);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(int) _PyCode_CheckLineNumber(PyCodeObject* co,
+                                        int lasti, PyAddrPair *bounds);
+#endif
 
 PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
                                       PyObject *names, PyObject *lineno_obj);
@@ -97,3 +106,4 @@ PyAPI_FUNC(PyObject*) PyCode_Optimize(PyObject *code, PyObject* consts,
 }
 #endif
 #endif /* !Py_CODE_H */
+#endif /* Py_LIMITED_API */

@@ -248,7 +248,7 @@ class Wave_read:
             chunk = chunk.file
             chunk.size_read = chunk.size_read + nitems * self._sampwidth
             data.byteswap()
-            data = data.tostring()
+            data = data.tobytes()
         else:
             data = self._data_chunk.read(nframes * self._framesize)
         if self._convert and data:
@@ -356,7 +356,7 @@ class Wave_write:
             raise Error('cannot change parameters after starting to write')
         if framerate <= 0:
             raise Error('bad frame rate')
-        self._framerate = framerate
+        self._framerate = int(round(framerate))
 
     def getframerate(self):
         if not self._framerate:
@@ -467,11 +467,11 @@ class Wave_write:
         self._datalength = self._nframes * self._nchannels * self._sampwidth
         self._form_length_pos = self._file.tell()
         self._file.write(struct.pack('<l4s4slhhllhh4s',
-            36 + self._datalength, 'WAVE', 'fmt ', 16,
+            36 + self._datalength, b'WAVE', b'fmt ', 16,
             WAVE_FORMAT_PCM, self._nchannels, self._framerate,
             self._nchannels * self._framerate * self._sampwidth,
             self._nchannels * self._sampwidth,
-            self._sampwidth * 8, 'data'))
+            self._sampwidth * 8, b'data'))
         self._data_length_pos = self._file.tell()
         self._file.write(struct.pack('<l', self._datalength))
         self._headerwritten = True

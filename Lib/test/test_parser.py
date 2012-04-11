@@ -1,5 +1,4 @@
 import parser
-import os
 import unittest
 import sys
 import operator
@@ -34,7 +33,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         code = suite.compile()
         scope = {}
         exec(code, {}, scope)
-        self.assertTrue(isinstance(scope["x"], str))
+        self.assertIsInstance(scope["x"], str)
 
     def check_suite(self, s):
         self.roundtrip(parser.suite, s)
@@ -227,7 +226,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
     def test_position(self):
         # An absolutely minimal test of position information.  Better
         # tests would be a big project.
-        code = "def f(x):\n    return x + 1\n"
+        code = "def f(x):\n    return x + 1"
         st1 = parser.suite(code)
         st2 = st1.totuple(line_info=1, col_info=1)
 
@@ -260,6 +259,12 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
             (4, '', 2, -1),
             (0, '', 2, -1)],
                          terminals)
+
+    def test_extended_unpacking(self):
+        self.check_suite("*a = y")
+        self.check_suite("x, *b, = m")
+        self.check_suite("[*a, *b] = y")
+        self.check_suite("for [*x, b] in x: pass")
 
 
 #
@@ -512,6 +517,16 @@ class CompileTestCase(unittest.TestCase):
         st = parser.suite('a = "\\u1"')
         self.assertRaises(SyntaxError, parser.compilest, st)
 
+    def test_issue_9011(self):
+        # Issue 9011: compilation of an unary minus expression changed
+        # the meaning of the ST, so that a second compilation produced
+        # incorrect results.
+        st = parser.expr('-3')
+        code1 = parser.compilest(st)
+        self.assertEqual(eval(code1), -3)
+        code2 = parser.compilest(st)
+        self.assertEqual(eval(code2), -3)
+
 class ParserStackLimitTestCase(unittest.TestCase):
     """try to push the parser to/over its limits.
     see http://bugs.python.org/issue1881 for a discussion
@@ -529,6 +544,7 @@ class ParserStackLimitTestCase(unittest.TestCase):
         e = self._nested_expression(100)
         print("Expecting 's_push: parser stack overflow' in next line",
               file=sys.stderr)
+        sys.stderr.flush()
         self.assertRaises(MemoryError, parser.expr, e)
 
 class STObjectTestCase(unittest.TestCase):

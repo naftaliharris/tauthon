@@ -1,6 +1,5 @@
 
 #include "Python.h"
-#include "structseq.h"
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <string.h>
@@ -323,6 +322,10 @@ PyInit_resource(void)
 
 #ifdef RUSAGE_BOTH
     PyModule_AddIntConstant(m, "RUSAGE_BOTH", RUSAGE_BOTH);
+#endif
+
+#ifdef RUSAGE_THREAD
+    PyModule_AddIntConstant(m, "RUSAGE_THREAD", RUSAGE_THREAD);
 #endif
 
 #if defined(HAVE_LONG_LONG)

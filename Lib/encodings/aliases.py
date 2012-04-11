@@ -146,6 +146,11 @@ aliases = {
     'csibm857'           : 'cp857',
     'ibm857'             : 'cp857',
 
+    # cp858 codec
+    '858'                : 'cp858',
+    'csibm858'           : 'cp858',
+    'ibm858'             : 'cp858',
+
     # cp860 codec
     '860'                : 'cp860',
     'csibm860'           : 'cp860',
@@ -430,6 +435,7 @@ aliases = {
     'maclatin2'          : 'mac_latin2',
 
     # mac_roman codec
+    'macintosh'          : 'mac_roman',
     'macroman'           : 'mac_roman',
 
     # mac_turkish codec
@@ -442,7 +448,7 @@ aliases = {
     'csptcp154'          : 'ptcp154',
     'pt154'              : 'ptcp154',
     'cp154'              : 'ptcp154',
-    'cyrillic-asian'     : 'ptcp154',
+    'cyrillic_asian'     : 'ptcp154',
 
     ## quopri_codec codec
     #'quopri'             : 'quopri_codec',

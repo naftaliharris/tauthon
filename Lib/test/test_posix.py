@@ -5,16 +5,19 @@ from test import support
 # Skip these tests if there is no posix module.
 posix = support.import_module('posix')
 
+import errno
 import sys
 import time
 import os
 import pwd
 import shutil
+import stat
+import tempfile
 import unittest
 import warnings
 
-warnings.filterwarnings('ignore', '.* potential security risk .*',
-                        RuntimeWarning)
+_DUMMY_SYMLINK = os.path.join(tempfile.gettempdir(),
+                              support.TESTFN + '-dummy-symlink')
 
 class PosixTester(unittest.TestCase):
 
@@ -22,9 +25,16 @@ class PosixTester(unittest.TestCase):
         # create empty file
         fp = open(support.TESTFN, 'w+')
         fp.close()
+        self.teardown_files = [ support.TESTFN ]
+        self._warnings_manager = support.check_warnings()
+        self._warnings_manager.__enter__()
+        warnings.filterwarnings('ignore', '.* potential security risk .*',
+                                RuntimeWarning)
 
     def tearDown(self):
-        support.unlink(support.TESTFN)
+        for teardown_file in self.teardown_files:
+            support.unlink(teardown_file)
+        self._warnings_manager.__exit__(None, None, None)
 
     def testNoArgFunctions(self):
         # test posix functions which take no arguments and have
@@ -40,6 +50,69 @@ class PosixTester(unittest.TestCase):
             if posix_func is not None:
                 posix_func()
                 self.assertRaises(TypeError, posix_func, 1)
+
+    if hasattr(posix, 'getresuid'):
+        def test_getresuid(self):
+            user_ids = posix.getresuid()
+            self.assertEqual(len(user_ids), 3)
+            for val in user_ids:
+                self.assertGreaterEqual(val, 0)
+
+    if hasattr(posix, 'getresgid'):
+        def test_getresgid(self):
+            group_ids = posix.getresgid()
+            self.assertEqual(len(group_ids), 3)
+            for val in group_ids:
+                self.assertGreaterEqual(val, 0)
+
+    if hasattr(posix, 'setresuid'):
+        def test_setresuid(self):
+            current_user_ids = posix.getresuid()
+            self.assertIsNone(posix.setresuid(*current_user_ids))
+            # -1 means don't change that value.
+            self.assertIsNone(posix.setresuid(-1, -1, -1))
+
+        def test_setresuid_exception(self):
+            # Don't do this test if someone is silly enough to run us as root.
+            current_user_ids = posix.getresuid()
+            if 0 not in current_user_ids:
+                new_user_ids = (current_user_ids[0]+1, -1, -1)
+                self.assertRaises(OSError, posix.setresuid, *new_user_ids)
+
+    if hasattr(posix, 'setresgid'):
+        def test_setresgid(self):
+            current_group_ids = posix.getresgid()
+            self.assertIsNone(posix.setresgid(*current_group_ids))
+            # -1 means don't change that value.
+            self.assertIsNone(posix.setresgid(-1, -1, -1))
+
+        def test_setresgid_exception(self):
+            # Don't do this test if someone is silly enough to run us as root.
+            current_group_ids = posix.getresgid()
+            if 0 not in current_group_ids:
+                new_group_ids = (current_group_ids[0]+1, -1, -1)
+                self.assertRaises(OSError, posix.setresgid, *new_group_ids)
+
+    @unittest.skipUnless(hasattr(posix, 'initgroups'),
+                         "test needs os.initgroups()")
+    def test_initgroups(self):
+        # It takes a string and an integer; check that it raises a TypeError
+        # for other argument lists.
+        self.assertRaises(TypeError, posix.initgroups)
+        self.assertRaises(TypeError, posix.initgroups, None)
+        self.assertRaises(TypeError, posix.initgroups, 3, "foo")
+        self.assertRaises(TypeError, posix.initgroups, "foo", 3, object())
+
+        # If a non-privileged user invokes it, it should fail with OSError
+        # EPERM.
+        if os.getuid() != 0:
+            name = pwd.getpwuid(posix.getuid()).pw_name
+            try:
+                posix.initgroups(name, 13)
+            except OSError as e:
+                self.assertEqual(e.errno, errno.EPERM)
+            else:
+                self.fail("Expected OSError to be raised by initgroups")
 
     def test_statvfs(self):
         if hasattr(posix, 'statvfs'):
@@ -69,7 +142,7 @@ class PosixTester(unittest.TestCase):
             fp = open(support.TESTFN)
             try:
                 fd = posix.dup(fp.fileno())
-                self.assertTrue(isinstance(fd, int))
+                self.assertIsInstance(fd, int)
                 os.close(fd)
             finally:
                 fp.close()
@@ -132,6 +205,28 @@ class PosixTester(unittest.TestCase):
         if hasattr(posix, 'stat'):
             self.assertTrue(posix.stat(support.TESTFN))
 
+    @unittest.skipUnless(hasattr(posix, 'mkfifo'), "don't have mkfifo()")
+    def test_mkfifo(self):
+        support.unlink(support.TESTFN)
+        posix.mkfifo(support.TESTFN, stat.S_IRUSR | stat.S_IWUSR)
+        self.assertTrue(stat.S_ISFIFO(posix.stat(support.TESTFN).st_mode))
+
+    @unittest.skipUnless(hasattr(posix, 'mknod') and hasattr(stat, 'S_IFIFO'),
+                         "don't have mknod()/S_IFIFO")
+    def test_mknod(self):
+        # Test using mknod() to create a FIFO (the only use specified
+        # by POSIX).
+        support.unlink(support.TESTFN)
+        mode = stat.S_IFIFO | stat.S_IRUSR | stat.S_IWUSR
+        try:
+            posix.mknod(support.TESTFN, mode, 0)
+        except OSError as e:
+            # Some old systems don't allow unprivileged users to use
+            # mknod(), or only support creating device nodes.
+            self.assertIn(e.errno, (errno.EPERM, errno.EINVAL))
+        else:
+            self.assertTrue(stat.S_ISFIFO(posix.stat(support.TESTFN).st_mode))
+
     def _test_all_chown_common(self, chown_func, first_param):
         """Common code for chown, fchown and lchown tests."""
         if os.getuid() == 0:
@@ -178,7 +273,7 @@ class PosixTester(unittest.TestCase):
     def test_lchown(self):
         os.unlink(support.TESTFN)
         # create a symlink
-        os.symlink('/tmp/dummy-symlink-target', support.TESTFN)
+        os.symlink(_DUMMY_SYMLINK, support.TESTFN)
         self._test_all_chown_common(posix.lchown, support.TESTFN)
 
     def test_chdir(self):
@@ -186,9 +281,14 @@ class PosixTester(unittest.TestCase):
             posix.chdir(os.curdir)
             self.assertRaises(OSError, posix.chdir, support.TESTFN)
 
-    def test_lsdir(self):
-        if hasattr(posix, 'lsdir'):
-            self.assertTrue(support.TESTFN in posix.lsdir(os.curdir))
+    def test_listdir(self):
+        if hasattr(posix, 'listdir'):
+            self.assertTrue(support.TESTFN in posix.listdir(os.curdir))
+
+    def test_listdir_default(self):
+        # When listdir is called without argument, it's the same as listdir(os.curdir)
+        if hasattr(posix, 'listdir'):
+            self.assertTrue(support.TESTFN in posix.listdir())
 
     def test_access(self):
         if hasattr(posix, 'access'):
@@ -197,7 +297,7 @@ class PosixTester(unittest.TestCase):
     def test_umask(self):
         if hasattr(posix, 'umask'):
             old_mask = posix.umask(0)
-            self.assertTrue(isinstance(old_mask, int))
+            self.assertIsInstance(old_mask, int)
             posix.umask(old_mask)
 
     def test_strerror(self):
@@ -220,22 +320,58 @@ class PosixTester(unittest.TestCase):
             posix.utime(support.TESTFN, (int(now), int(now)))
             posix.utime(support.TESTFN, (now, now))
 
-    def test_chflags(self):
-        if hasattr(posix, 'chflags'):
-            st = os.stat(support.TESTFN)
-            if hasattr(st, 'st_flags'):
-                posix.chflags(support.TESTFN, st.st_flags)
+    def _test_chflags_regular_file(self, chflags_func, target_file):
+        st = os.stat(target_file)
+        self.assertTrue(hasattr(st, 'st_flags'))
+        chflags_func(target_file, st.st_flags | stat.UF_IMMUTABLE)
+        try:
+            new_st = os.stat(target_file)
+            self.assertEqual(st.st_flags | stat.UF_IMMUTABLE, new_st.st_flags)
+            try:
+                fd = open(target_file, 'w+')
+            except IOError as e:
+                self.assertEqual(e.errno, errno.EPERM)
+        finally:
+            posix.chflags(target_file, st.st_flags)
 
-    def test_lchflags(self):
-        if hasattr(posix, 'lchflags'):
-            st = os.stat(support.TESTFN)
-            if hasattr(st, 'st_flags'):
-                posix.lchflags(support.TESTFN, st.st_flags)
+    @unittest.skipUnless(hasattr(posix, 'chflags'), 'test needs os.chflags()')
+    def test_chflags(self):
+        self._test_chflags_regular_file(posix.chflags, support.TESTFN)
+
+    @unittest.skipUnless(hasattr(posix, 'lchflags'), 'test needs os.lchflags()')
+    def test_lchflags_regular_file(self):
+        self._test_chflags_regular_file(posix.lchflags, support.TESTFN)
+
+    @unittest.skipUnless(hasattr(posix, 'lchflags'), 'test needs os.lchflags()')
+    def test_lchflags_symlink(self):
+        testfn_st = os.stat(support.TESTFN)
+
+        self.assertTrue(hasattr(testfn_st, 'st_flags'))
+
+        os.symlink(support.TESTFN, _DUMMY_SYMLINK)
+        self.teardown_files.append(_DUMMY_SYMLINK)
+        dummy_symlink_st = os.lstat(_DUMMY_SYMLINK)
+
+        posix.lchflags(_DUMMY_SYMLINK,
+                       dummy_symlink_st.st_flags | stat.UF_IMMUTABLE)
+        try:
+            new_testfn_st = os.stat(support.TESTFN)
+            new_dummy_symlink_st = os.lstat(_DUMMY_SYMLINK)
+
+            self.assertEqual(testfn_st.st_flags, new_testfn_st.st_flags)
+            self.assertEqual(dummy_symlink_st.st_flags | stat.UF_IMMUTABLE,
+                             new_dummy_symlink_st.st_flags)
+        finally:
+            posix.lchflags(_DUMMY_SYMLINK, dummy_symlink_st.st_flags)
 
     def test_environ(self):
+        if os.name == "nt":
+            item_type = str
+        else:
+            item_type = bytes
         for k, v in posix.environ.items():
-            self.assertEqual(type(k), str)
-            self.assertEqual(type(v), str)
+            self.assertEqual(type(k), item_type)
+            self.assertEqual(type(v), item_type)
 
     def test_getcwd_long_pathnames(self):
         if hasattr(posix, 'getcwd'):

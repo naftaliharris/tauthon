@@ -36,11 +36,11 @@ class LocaleTime_Tests(unittest.TestCase):
         """
         strftime_output = time.strftime(directive, self.time_tuple).lower()
         comparison = testing[self.time_tuple[tuple_position]]
-        self.assertTrue(strftime_output in testing, "%s: not found in tuple" %
-                                                    error_msg)
-        self.assertTrue(comparison == strftime_output,
-                        "%s: position within tuple incorrect; %s != %s" %
-                        (error_msg, comparison, strftime_output))
+        self.assertIn(strftime_output, testing,
+                      "%s: not found in tuple" % error_msg)
+        self.assertEqual(comparison, strftime_output,
+                         "%s: position within tuple incorrect; %s != %s" %
+                         (error_msg, comparison, strftime_output))
 
     def test_weekday(self):
         # Make sure that full and abbreviated weekday names are correct in
@@ -61,18 +61,18 @@ class LocaleTime_Tests(unittest.TestCase):
     def test_am_pm(self):
         # Make sure AM/PM representation done properly
         strftime_output = time.strftime("%p", self.time_tuple).lower()
-        self.assertTrue(strftime_output in self.LT_ins.am_pm,
-                        "AM/PM representation not in tuple")
+        self.assertIn(strftime_output, self.LT_ins.am_pm,
+                      "AM/PM representation not in tuple")
         if self.time_tuple[3] < 12: position = 0
         else: position = 1
-        self.assertTrue(strftime_output == self.LT_ins.am_pm[position],
-                        "AM/PM representation in the wrong position within the tuple")
+        self.assertEqual(self.LT_ins.am_pm[position], strftime_output,
+                         "AM/PM representation in the wrong position within the tuple")
 
     def test_timezone(self):
         # Make sure timezone is correct
         timezone = time.strftime("%Z", self.time_tuple).lower()
         if timezone:
-            self.assertTrue(timezone in self.LT_ins.timezone[0] or \
+            self.assertTrue(timezone in self.LT_ins.timezone[0] or
                             timezone in self.LT_ins.timezone[1],
                             "timezone %s not found in %s" %
                             (timezone, self.LT_ins.timezone))
@@ -86,17 +86,14 @@ class LocaleTime_Tests(unittest.TestCase):
         #  output.
         magic_date = (1999, 3, 17, 22, 44, 55, 2, 76, 0)
         strftime_output = time.strftime("%c", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_date_time,
-                                                         magic_date),
-                        "LC_date_time incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_date_time, magic_date),
+                         strftime_output, "LC_date_time incorrect")
         strftime_output = time.strftime("%x", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_date,
-                                                         magic_date),
-                        "LC_date incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_date, magic_date),
+                         strftime_output, "LC_date incorrect")
         strftime_output = time.strftime("%X", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_time,
-                                                         magic_date),
-                        "LC_time incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_time, magic_date),
+                         strftime_output, "LC_time incorrect")
         LT = _strptime.LocaleTime()
         LT.am_pm = ('', '')
         self.assertTrue(LT.LC_time, "LocaleTime's LC directives cannot handle "
@@ -133,9 +130,9 @@ class TimeRETests(unittest.TestCase):
         # Make sure any characters in the format string that might be taken as
         # regex syntax is escaped.
         pattern_string = self.time_re.pattern("\d+")
-        self.assertTrue(r"\\d\+" in pattern_string,
-                        "%s does not have re characters escaped properly" %
-                        pattern_string)
+        self.assertIn(r"\\d\+", pattern_string,
+                      "%s does not have re characters escaped properly" %
+                      pattern_string)
 
     def test_compile(self):
         # Check that compiled regex is correct
@@ -168,8 +165,8 @@ class TimeRETests(unittest.TestCase):
         # Fixes bug #661354
         test_locale = _strptime.LocaleTime()
         test_locale.timezone = (frozenset(), frozenset())
-        self.assertTrue(_strptime.TimeRE(test_locale).pattern("%Z") == '',
-                        "with timezone == ('',''), TimeRE().pattern('%Z') != ''")
+        self.assertEqual(_strptime.TimeRE(test_locale).pattern("%Z"), '',
+                         "with timezone == ('',''), TimeRE().pattern('%Z') != ''")
 
     def test_matching_with_escapes(self):
         # Make sure a format that requires escaping of characters works
@@ -195,7 +192,7 @@ class TimeRETests(unittest.TestCase):
         # so as to not allow to subpatterns to end up next to each other and
         # "steal" characters from each other.
         pattern = self.time_re.pattern('%j %H')
-        self.assertTrue(not re.match(pattern, "180"))
+        self.assertFalse(re.match(pattern, "180"))
         self.assertTrue(re.match(pattern, "18 0"))
 
 
@@ -298,9 +295,6 @@ class StrptimeTests(unittest.TestCase):
         self.assertEqual(strp_output.tm_isdst, 0)
         strp_output = _strptime._strptime_time("GMT", "%Z")
         self.assertEqual(strp_output.tm_isdst, 0)
-        if sys.platform == "mac":
-            # Timezones don't really work on MacOS9
-            return
         time_tuple = time.localtime()
         strf_output = time.strftime("%Z")  #UTC does not have a timezone
         strp_output = _strptime._strptime_time(strf_output, "%Z")
@@ -317,8 +311,6 @@ class StrptimeTests(unittest.TestCase):
     def test_bad_timezone(self):
         # Explicitly test possibility of bad timezone;
         # when time.tzname[0] == time.tzname[1] and time.daylight
-        if sys.platform == "mac":
-            return #MacOS9 has severely broken timezone support.
         tz_name = time.tzname[0]
         if tz_name.upper() in ("UTC", "GMT"):
             return

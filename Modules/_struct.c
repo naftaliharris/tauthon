@@ -6,7 +6,6 @@
 #define PY_SSIZE_T_CLEAN
 
 #include "Python.h"
-#include "structseq.h"
 #include "structmember.h"
 #include <ctype.h>
 
@@ -89,19 +88,30 @@ typedef struct { char c; _Bool x; } s_bool;
 #pragma options align=reset
 #endif
 
-/* Helper to get a PyLongObject.  Caller should decref. */
+/* Helper for integer format codes: converts an arbitrary Python object to a
+   PyLongObject if possible, otherwise fails.  Caller should decref. */
 
 static PyObject *
 get_pylong(PyObject *v)
 {
     assert(v != NULL);
     if (!PyLong_Check(v)) {
-        PyErr_SetString(StructError,
-                        "required argument is not an integer");
-        return NULL;
+        /* Not an integer;  try to use __index__ to convert. */
+        if (PyIndex_Check(v)) {
+            v = PyNumber_Index(v);
+            if (v == NULL)
+                return NULL;
+        }
+        else {
+            PyErr_SetString(StructError,
+                            "required argument is not an integer");
+            return NULL;
+        }
     }
+    else
+        Py_INCREF(v);
 
-    Py_INCREF(v);
+    assert(PyLong_Check(v));
     return v;
 }
 
@@ -113,13 +123,13 @@ get_long(PyObject *v, long *p)
 {
     long x;
 
-    if (!PyLong_Check(v)) {
-        PyErr_SetString(StructError,
-                        "required argument is not an integer");
+    v = get_pylong(v);
+    if (v == NULL)
         return -1;
-    }
+    assert(PyLong_Check(v));
     x = PyLong_AsLong(v);
-    if (x == -1 && PyErr_Occurred()) {
+    Py_DECREF(v);
+    if (x == (long)-1 && PyErr_Occurred()) {
         if (PyErr_ExceptionMatches(PyExc_OverflowError))
             PyErr_SetString(StructError,
                             "argument out of range");
@@ -132,18 +142,17 @@ get_long(PyObject *v, long *p)
 
 /* Same, but handling unsigned long */
 
-#ifndef PY_STRUCT_OVERFLOW_MASKING
 static int
 get_ulong(PyObject *v, unsigned long *p)
 {
     unsigned long x;
 
-    if (!PyLong_Check(v)) {
-        PyErr_SetString(StructError,
-                        "required argument is not an integer");
+    v = get_pylong(v);
+    if (v == NULL)
         return -1;
-    }
+    assert(PyLong_Check(v));
     x = PyLong_AsUnsignedLong(v);
+    Py_DECREF(v);
     if (x == (unsigned long)-1 && PyErr_Occurred()) {
         if (PyErr_ExceptionMatches(PyExc_OverflowError))
             PyErr_SetString(StructError,
@@ -153,7 +162,6 @@ get_ulong(PyObject *v, unsigned long *p)
     *p = x;
     return 0;
 }
-#endif  /* PY_STRUCT_OVERFLOW_MASKING */
 
 #ifdef HAVE_LONG_LONG
 
@@ -163,13 +171,14 @@ static int
 get_longlong(PyObject *v, PY_LONG_LONG *p)
 {
     PY_LONG_LONG x;
-    if (!PyLong_Check(v)) {
-        PyErr_SetString(StructError,
-                        "required argument is not an integer");
+
+    v = get_pylong(v);
+    if (v == NULL)
         return -1;
-    }
+    assert(PyLong_Check(v));
     x = PyLong_AsLongLong(v);
-    if (x == -1 && PyErr_Occurred()) {
+    Py_DECREF(v);
+    if (x == (PY_LONG_LONG)-1 && PyErr_Occurred()) {
         if (PyErr_ExceptionMatches(PyExc_OverflowError))
             PyErr_SetString(StructError,
                             "argument out of range");
@@ -185,13 +194,14 @@ static int
 get_ulonglong(PyObject *v, unsigned PY_LONG_LONG *p)
 {
     unsigned PY_LONG_LONG x;
-    if (!PyLong_Check(v)) {
-        PyErr_SetString(StructError,
-                        "required argument is not an integer");
+
+    v = get_pylong(v);
+    if (v == NULL)
         return -1;
-    }
+    assert(PyLong_Check(v));
     x = PyLong_AsUnsignedLongLong(v);
-    if (x == -1 && PyErr_Occurred()) {
+    Py_DECREF(v);
+    if (x == (unsigned PY_LONG_LONG)-1 && PyErr_Occurred()) {
         if (PyErr_ExceptionMatches(PyExc_OverflowError))
             PyErr_SetString(StructError,
                             "argument out of range");
@@ -452,14 +462,9 @@ np_ubyte(char *p, PyObject *v, const formatdef *f)
 static int
 np_char(char *p, PyObject *v, const formatdef *f)
 {
-    if (PyUnicode_Check(v)) {
-        v = _PyUnicode_AsDefaultEncodedString(v, NULL);
-        if (v == NULL)
-            return -1;
-    }
     if (!PyBytes_Check(v) || PyBytes_Size(v) != 1) {
         PyErr_SetString(StructError,
-                        "char format requires bytes or string of length 1");
+                        "char format requires a bytes object of length 1");
         return -1;
     }
     *p = *PyBytes_AsString(v);
@@ -1192,8 +1197,11 @@ prepare_s(PyStructObject *self)
                     goto overflow;
                 num = num*10 + (c - '0');
             }
-            if (c == '\0')
-                break;
+            if (c == '\0') {
+                PyErr_SetString(StructError,
+                                "repeat count given without format specifier");
+                return -1;
+            }
         }
         else
             num = 1;
@@ -1332,7 +1340,7 @@ s_init(PyObject *self, PyObject *args, PyObject *kwds)
     if (!PyBytes_Check(o_format)) {
         Py_DECREF(o_format);
         PyErr_Format(PyExc_TypeError,
-                     "Struct() argument 1 must be bytes, not %.200s",
+                     "Struct() argument 1 must be a bytes object, not %.200s",
                      Py_TYPE(o_format)->tp_name);
         return -1;
     }
@@ -1410,7 +1418,7 @@ s_unpack(PyObject *self, PyObject *input)
         return NULL;
     if (vbuf.len != soself->s_size) {
         PyErr_Format(StructError,
-                     "unpack requires a bytes argument of length %zd",
+                     "unpack requires a bytes object of length %zd",
                      soself->s_size);
         PyBuffer_Release(&vbuf);
         return NULL;
@@ -1490,15 +1498,10 @@ s_pack_internal(PyStructObject *soself, PyObject *args, int offset, char* buf)
         if (e->format == 's') {
             int isstring;
             void *p;
-            if (PyUnicode_Check(v)) {
-                v = _PyUnicode_AsDefaultEncodedString(v, NULL);
-                if (v == NULL)
-                    return -1;
-            }
             isstring = PyBytes_Check(v);
             if (!isstring && !PyByteArray_Check(v)) {
                 PyErr_SetString(StructError,
-                                "argument for 's' must be a bytes or string");
+                                "argument for 's' must be a bytes object");
                 return -1;
             }
             if (isstring) {
@@ -1516,15 +1519,10 @@ s_pack_internal(PyStructObject *soself, PyObject *args, int offset, char* buf)
         } else if (e->format == 'p') {
             int isstring;
             void *p;
-            if (PyUnicode_Check(v)) {
-                v = _PyUnicode_AsDefaultEncodedString(v, NULL);
-                if (v == NULL)
-                    return -1;
-            }
             isstring = PyBytes_Check(v);
             if (!isstring && !PyByteArray_Check(v)) {
                 PyErr_SetString(StructError,
-                                "argument for 'p' must be a bytes or string");
+                                "argument for 'p' must be a bytes object");
                 return -1;
             }
             if (isstring) {
@@ -1678,7 +1676,7 @@ static struct PyMethodDef s_methods[] = {
     {NULL,       NULL}          /* sentinel */
 };
 
-PyDoc_STRVAR(s__doc__, 
+PyDoc_STRVAR(s__doc__,
 "Struct(fmt) --> compiled struct object\n"
 "\n"
 "Return a new Struct object which writes and reads binary data according to\n"
@@ -1920,10 +1918,10 @@ unpack_from(PyObject *self, PyObject *args, PyObject *kwds)
 
 static struct PyMethodDef module_functions[] = {
     {"_clearcache",     (PyCFunction)clearcache,        METH_NOARGS,    clearcache_doc},
-    {"calcsize",        calcsize,       METH_O,         calcsize_doc},
+    {"calcsize",        calcsize,       METH_O, calcsize_doc},
     {"pack",            pack,           METH_VARARGS,   pack_doc},
     {"pack_into",       pack_into,      METH_VARARGS,   pack_into_doc},
-    {"unpack",          unpack,         METH_VARARGS,   unpack_doc},
+    {"unpack",          unpack, METH_VARARGS,   unpack_doc},
     {"unpack_from",     (PyCFunction)unpack_from,
                     METH_VARARGS|METH_KEYWORDS,         unpack_from_doc},
     {NULL,       NULL}          /* sentinel */
@@ -1977,11 +1975,7 @@ static struct PyModuleDef _structmodule = {
 PyMODINIT_FUNC
 PyInit__struct(void)
 {
-    PyObject *ver, *m;
-
-    ver = PyBytes_FromString("0.3");
-    if (ver == NULL)
-        return NULL;
+    PyObject *m;
 
     m = PyModule_Create(&_structmodule);
     if (m == NULL)
@@ -2042,8 +2036,6 @@ PyInit__struct(void)
 
     Py_INCREF((PyObject*)&PyStructType);
     PyModule_AddObject(m, "Struct", (PyObject*)&PyStructType);
-
-    PyModule_AddObject(m, "__version__", ver);
 
     return m;
 }

@@ -37,7 +37,7 @@ def _load_tile(master):
         import os
         tilelib = os.environ.get('TILE_LIBRARY')
         if tilelib:
-            # append custom tile path to the the list of directories that
+            # append custom tile path to the list of directories that
             # Tcl uses when attempting to resolve packages with the package
             # command
             master.tk.eval(
@@ -1170,7 +1170,7 @@ class Sizegrip(Widget):
         Widget.__init__(self, master, "ttk::sizegrip", kw)
 
 
-class Treeview(Widget):
+class Treeview(Widget, tkinter.XView, tkinter.YView):
     """Ttk Treeview widget displays a hierarchical collection of items.
 
     Each item has a textual label, an optional image, and an optional list
@@ -1253,7 +1253,7 @@ class Treeview(Widget):
 
 
     def exists(self, item):
-        """Returns True if the specified item is present in the three,
+        """Returns True if the specified item is present in the tree,
         False otherwise."""
         return bool(self.tk.call(self._w, "exists", item))
 
@@ -1478,16 +1478,6 @@ class Treeview(Widget):
 
         * Availability: Tk 8.6"""
         return self.tk.call(self._w, "tag", "has", tagname, item)
-
-
-    def xview(self, *args):
-        """Query or modify horizontal position of the treeview."""
-        return self.tk.call(self._w, "xview", *args)
-
-
-    def yview(self, *args):
-        """Query or modify vertical position of the treeview."""
-        return self.tk.call(self._w, "yview", *args)
 
 
 # Extensions

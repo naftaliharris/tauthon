@@ -1,18 +1,12 @@
 # Python test set -- part 1, grammar.
 # This just tests whether the parser accepts them all.
 
-# NOTE: When you run this test as a script from the command line, you
-# get warnings about certain hex/oct constants.  Since those are
-# issued by the parser, you can't suppress them by adding a
-# filterwarnings() call to this module.  Therefore, to shut up the
-# regression test, the filterwarnings() call has been added to
-# regrtest.py.
-
 from test.support import run_unittest, check_syntax_error
 import unittest
 import sys
 # testing import *
 from sys import *
+
 
 class TokenTests(unittest.TestCase):
 
@@ -307,12 +301,12 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual(f.__annotations__, {'b': 1, 'c': 2})
         def f(a, b:1, c:2, d, e:3=4, f=5, *g:6): pass
         self.assertEqual(f.__annotations__,
-                         {'b': 1, 'c': 2, 'e': 3, 'g': 6})
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6})
         def f(a, b:1, c:2, d, e:3=4, f=5, *g:6, h:7, i=8, j:9=10,
               **k:11) -> 12: pass
         self.assertEqual(f.__annotations__,
-                         {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
-                          'k': 11, 'return': 12})
+                          {'b': 1, 'c': 2, 'e': 3, 'g': 6, 'h': 7, 'j': 9,
+                           'k': 11, 'return': 12})
         # Check for SF Bug #1697248 - mixing decorators and a return annotation
         def null(x): return x
         @null
@@ -499,13 +493,35 @@ class GrammarTests(unittest.TestCase):
         assert 1, 1
         assert lambda x:x
         assert 1, lambda x:x+1
+
+        try:
+            assert True
+        except AssertionError as e:
+            self.fail("'assert True' should not have raised an AssertionError")
+
+        try:
+            assert True, 'this should always pass'
+        except AssertionError as e:
+            self.fail("'assert True, msg' should not have "
+                      "raised an AssertionError")
+
+    # these tests fail if python is run with -O, so check __debug__
+    @unittest.skipUnless(__debug__, "Won't work if __debug__ is False")
+    def testAssert2(self):
         try:
             assert 0, "msg"
         except AssertionError as e:
             self.assertEqual(e.args[0], "msg")
         else:
-            if __debug__:
-                self.fail("AssertionError not raised by assert 0")
+            self.fail("AssertionError not raised by assert 0")
+
+        try:
+            assert False
+        except AssertionError as e:
+            self.assertEqual(len(e.args), 0)
+        else:
+            self.fail("AssertionError not raised by 'assert False'")
+
 
     ### compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | funcdef | classdef
     # Tested below
@@ -914,6 +930,14 @@ class GrammarTests(unittest.TestCase):
         self.assertEqual((6 * 2 if 1 else 4), 12)
         self.assertEqual((6 / 2 if 1 else 3), 3)
         self.assertEqual((6 < 4 if 0 else 2), 2)
+
+    def test_paren_evaluation(self):
+        self.assertEqual(16 // (4 // 2), 8)
+        self.assertEqual((16 // 4) // 2, 2)
+        self.assertEqual(16 // 4 // 2, 2)
+        self.assertTrue(False is (2 is 3))
+        self.assertFalse((False is 2) is 3)
+        self.assertFalse(False is 2 is 3)
 
 
 def test_main():

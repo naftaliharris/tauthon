@@ -1,4 +1,3 @@
-
 :mod:`readline` --- GNU readline interface
 ==========================================
 
@@ -24,6 +23,7 @@ function.
   of GNU readline. If you programmatically load configuration strings
   you can check for the text "libedit" in :const:`readline.__doc__`
   to differentiate between GNU readline and libedit.
+
 
 The :mod:`readline` module defines the following functions:
 
@@ -176,7 +176,6 @@ The :mod:`readline` module defines the following functions:
 .. function:: add_history(line)
 
    Append a line to the history buffer, as if it was the last line typed.
-
 
 .. seealso::
 

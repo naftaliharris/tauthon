@@ -7,7 +7,6 @@
 #include "frameobject.h"
 #include "structmember.h"
 #include "osdefs.h"
-#include "traceback.h"
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
 #endif
@@ -114,8 +113,7 @@ newtracebackobject(PyTracebackObject *next, PyFrameObject *frame)
         Py_XINCREF(frame);
         tb->tb_frame = frame;
         tb->tb_lasti = frame->f_lasti;
-        tb->tb_lineno = PyCode_Addr2Line(frame->f_code,
-                                         frame->f_lasti);
+        tb->tb_lineno = PyFrame_GetLineNumber(frame);
         PyObject_GC_Track(tb);
     }
     return tb;
@@ -150,8 +148,7 @@ _Py_FindSourceFile(PyObject *filename, char* namebuf, size_t namelen, PyObject *
     Py_ssize_t len;
     PyObject* result;
 
-    filebytes = PyUnicode_AsEncodedObject(filename,
-        Py_FileSystemDefaultEncoding, "surrogateescape");
+    filebytes = PyUnicode_EncodeFSDefault(filename);
     if (filebytes == NULL) {
         PyErr_Clear();
         return NULL;
@@ -179,9 +176,7 @@ _Py_FindSourceFile(PyObject *filename, char* namebuf, size_t namelen, PyObject *
         }
         if (!PyUnicode_Check(v))
             continue;
-
-        path = PyUnicode_AsEncodedObject(v, Py_FileSystemDefaultEncoding,
-                                         "surrogateescape");
+        path = PyUnicode_EncodeFSDefault(v);
         if (path == NULL) {
             PyErr_Clear();
             continue;
