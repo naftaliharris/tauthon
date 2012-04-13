@@ -1,4 +1,5 @@
 from test.support import verbose, TestFailed
+import locale
 import sys
 import test.support as support
 import unittest
@@ -262,6 +263,49 @@ class FormatTest(unittest.TestCase):
                 pass
             else:
                 raise TestFailed('"%*d"%(maxsize, -127) should fail')
+
+    def test_non_ascii(self):
+        self.assertEqual(format("abc", "\u2007<5"), "abc\u2007\u2007")
+        self.assertEqual(format(123, "\u2007<5"), "123\u2007\u2007")
+        self.assertEqual(format(12.3, "\u2007<6"), "12.3\u2007\u2007")
+        self.assertEqual(format(0j, "\u2007<4"), "0j\u2007\u2007")
+        self.assertEqual(format(1+2j, "\u2007<8"), "(1+2j)\u2007\u2007")
+
+        self.assertEqual(format("abc", "\u2007>5"), "\u2007\u2007abc")
+        self.assertEqual(format(123, "\u2007>5"), "\u2007\u2007123")
+        self.assertEqual(format(12.3, "\u2007>6"), "\u2007\u200712.3")
+        self.assertEqual(format(1+2j, "\u2007>8"), "\u2007\u2007(1+2j)")
+        self.assertEqual(format(0j, "\u2007>4"), "\u2007\u20070j")
+
+        self.assertEqual(format("abc", "\u2007^5"), "\u2007abc\u2007")
+        self.assertEqual(format(123, "\u2007^5"), "\u2007123\u2007")
+        self.assertEqual(format(12.3, "\u2007^6"), "\u200712.3\u2007")
+        self.assertEqual(format(1+2j, "\u2007^8"), "\u2007(1+2j)\u2007")
+        self.assertEqual(format(0j, "\u2007^4"), "\u20070j\u2007")
+
+    def test_locale(self):
+        try:
+            oldloc = locale.setlocale(locale.LC_ALL)
+            locale.setlocale(locale.LC_ALL, '')
+        except locale.Error as err:
+            self.skipTest("Cannot set locale: {}".format(err))
+        try:
+            localeconv = locale.localeconv()
+            sep = localeconv['thousands_sep']
+            point = localeconv['decimal_point']
+
+            text = format(123456789, "n")
+            self.assertIn(sep, text)
+            self.assertEqual(text.replace(sep, ''), '123456789')
+
+            text = format(1234.5, "n")
+            self.assertIn(sep, text)
+            self.assertIn(point, text)
+            self.assertEqual(text.replace(sep, ''), '1234' + point + '5')
+        finally:
+            locale.setlocale(locale.LC_ALL, oldloc)
+
+
 
 def test_main():
     support.run_unittest(FormatTest)

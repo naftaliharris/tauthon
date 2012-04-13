@@ -276,16 +276,16 @@ Sequences
             single: integer
             single: Unicode
 
-         The items of a string object are Unicode code units.  A Unicode code
-         unit is represented by a string object of one item and can hold either
-         a 16-bit or 32-bit value representing a Unicode ordinal (the maximum
-         value for the ordinal is given in ``sys.maxunicode``, and depends on
-         how Python is configured at compile time).  Surrogate pairs may be
-         present in the Unicode object, and will be reported as two separate
-         items.  The built-in functions :func:`chr` and :func:`ord` convert
-         between code units and nonnegative integers representing the Unicode
-         ordinals as defined in the Unicode Standard 3.0. Conversion from and to
-         other encodings are possible through the string method :meth:`encode`.
+         A string is a sequence of values that represent Unicode codepoints.
+         All the codepoints in range ``U+0000 - U+10FFFF`` can be represented
+         in a string.  Python doesn't have a :c:type:`chr` type, and
+         every character in the string is represented as a string object
+         with length ``1``.  The built-in function :func:`ord` converts a
+         character to its codepoint (as an integer); :func:`chr` converts
+         an integer in range ``0 - 10FFFF`` to the corresponding character.
+         :meth:`str.encode` can be used to convert a :class:`str` to
+         :class:`bytes` using the given encoding, and :meth:`bytes.decode` can
+         be used to achieve the opposite.
 
       Tuples
          .. index::
@@ -447,6 +447,11 @@ Callable types
       |                         | unavailable                   |           |
       +-------------------------+-------------------------------+-----------+
       | :attr:`__name__`        | The function's name           | Writable  |
+      +-------------------------+-------------------------------+-----------+
+      | :attr:`__qualname__`    | The function's                | Writable  |
+      |                         | :term:`qualified name`        |           |
+      |                         |                               |           |
+      |                         | .. versionadded:: 3.3         |           |
       +-------------------------+-------------------------------+-----------+
       | :attr:`__module__`      | The name of the module the    | Writable  |
       |                         | function was defined in, or   |           |
@@ -1272,7 +1277,27 @@ Basic customization
    inheritance of :meth:`__hash__` will be blocked, just as if :attr:`__hash__`
    had been explicitly set to :const:`None`.
 
-   See also the :option:`-R` command-line option.
+
+   .. note::
+
+      Note by default the :meth:`__hash__` values of str, bytes and datetime
+      objects are "salted" with an unpredictable random value.  Although they
+      remain constant within an individual Python process, they are not
+      predictable between repeated invocations of Python.
+
+      This is intended to provide protection against a denial-of-service caused
+      by carefully-chosen inputs that exploit the worst case performance of a
+      dict insertion, O(n^2) complexity.  See
+      http://www.ocert.org/advisories/ocert-2011-003.html for details.
+
+      Changing hash values affects the order in which keys are retrieved from a
+      dict.  Note Python has never made guarantees about this ordering (and it
+      typically varies between 32-bit and 64-bit builds).
+
+      See also :envvar:`PYTHONHASHSEED`.
+
+   .. versionchanged:: 3.3
+      Hash randomization is enabled by default.
 
 
 .. method:: object.__bool__(self)
@@ -1353,7 +1378,8 @@ access (use of, assignment to, or deletion of ``x.name``) for class instances.
 
 .. method:: object.__dir__(self)
 
-   Called when :func:`dir` is called on the object.  A list must be returned.
+   Called when :func:`dir` is called on the object. A sequence must be
+   returned. :func:`dir` converts the returned sequence to a list and sorts it.
 
 
 .. _descriptors:
