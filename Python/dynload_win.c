@@ -171,43 +171,38 @@ static char *GetPythonImport (HINSTANCE hModule)
     return NULL;
 }
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
-                                    const char *pathname, FILE *fp)
+dl_funcptr _PyImport_GetDynLoadWindows(const char *shortname,
+                                       PyObject *pathname, FILE *fp)
 {
     dl_funcptr p;
     char funcname[258], *import_python;
+    wchar_t *wpathname;
 
 #ifndef _DEBUG
     _Py_CheckPython3();
 #endif
 
+    wpathname = PyUnicode_AsUnicode(pathname);
+    if (wpathname == NULL)
+        return NULL;
+
     PyOS_snprintf(funcname, sizeof(funcname), "PyInit_%.200s", shortname);
 
     {
         HINSTANCE hDLL = NULL;
-        char pathbuf[260];
-        LPTSTR dummy;
         unsigned int old_mode;
         ULONG_PTR cookie = 0;
-        /* We use LoadLibraryEx so Windows looks for dependent DLLs
-            in directory of pathname first.  However, Windows95
-            can sometimes not work correctly unless the absolute
-            path is used.  If GetFullPathName() fails, the LoadLibrary
-            will certainly fail too, so use its error code */
 
         /* Don't display a message box when Python can't load a DLL */
         old_mode = SetErrorMode(SEM_FAILCRITICALERRORS);
 
-        if (GetFullPathName(pathname,
-                            sizeof(pathbuf),
-                            pathbuf,
-                            &dummy)) {
-            ULONG_PTR cookie = _Py_ActivateActCtx();
-            /* XXX This call doesn't exist in Windows CE */
-            hDLL = LoadLibraryEx(pathname, NULL,
-                                 LOAD_WITH_ALTERED_SEARCH_PATH);
-            _Py_DeactivateActCtx(cookie);
-        }
+        cookie = _Py_ActivateActCtx();
+        /* We use LoadLibraryEx so Windows looks for dependent DLLs
+            in directory of pathname first. */
+        /* XXX This call doesn't exist in Windows CE */
+        hDLL = LoadLibraryExW(wpathname, NULL,
+                              LOAD_WITH_ALTERED_SEARCH_PATH);
+        _Py_DeactivateActCtx(cookie);
 
         /* restore old error mode settings */
         SetErrorMode(old_mode);
@@ -254,31 +249,33 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
                     "DLL load failed: ");
 
                 PyUnicode_AppendAndDel(&message,
-                    PyUnicode_FromUnicode(
+                    PyUnicode_FromWideChar(
                         theInfo,
                         theLength));
             }
-            PyErr_SetObject(PyExc_ImportError, message);
-            Py_XDECREF(message);
+            if (message != NULL) {
+                PyErr_SetObject(PyExc_ImportError, message);
+                Py_DECREF(message);
+            }
             return NULL;
         } else {
             char buffer[256];
 
+            PyOS_snprintf(buffer, sizeof(buffer),
 #ifdef _DEBUG
-            PyOS_snprintf(buffer, sizeof(buffer), "python%d%d_d.dll",
+                          "python%d%d_d.dll",
 #else
-            PyOS_snprintf(buffer, sizeof(buffer), "python%d%d.dll",
+                          "python%d%d.dll",
 #endif
                           PY_MAJOR_VERSION,PY_MINOR_VERSION);
             import_python = GetPythonImport(hDLL);
 
             if (import_python &&
                 strcasecmp(buffer,import_python)) {
-                PyOS_snprintf(buffer, sizeof(buffer),
-                              "Module use of %.150s conflicts "
-                              "with this version of Python.",
-                              import_python);
-                PyErr_SetString(PyExc_ImportError,buffer);
+                PyErr_Format(PyExc_ImportError,
+                             "Module use of %.150s conflicts "
+                             "with this version of Python.",
+                             import_python);
                 FreeLibrary(hDLL);
                 return NULL;
             }
