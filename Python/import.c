@@ -2980,8 +2980,11 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
 
     mod = PyDict_GetItem(interp->modules, abs_name);
     if (mod == Py_None) {
-        PyErr_Format(PyExc_ImportError,
-                     "import of %R halted; None in sys.modules", abs_name);
+        PyObject *msg = PyUnicode_FromFormat("import of %R halted; "
+                                             "None in sys.modules", abs_name);
+        if (msg != NULL) {
+            PyErr_SetFromImportErrorWithName(msg, abs_name);
+        }
         goto error_with_unlock;
     }
     else if (mod != NULL) {
@@ -3016,15 +3019,22 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
             Py_DECREF(partition);
 
             if (level == 0) {
-                final_mod = PyDict_GetItem(interp->modules, front);
-                Py_DECREF(front);
-                if (final_mod == NULL) {
-                    PyErr_Format(PyExc_KeyError,
-                                 "%R not in sys.modules as expected", front);
+                if (PyUnicode_GET_LENGTH(name) ==
+                        PyUnicode_GET_LENGTH(front)) {
+                    final_mod = mod;
                 }
                 else {
-                    Py_INCREF(final_mod);
+                    final_mod = PyDict_GetItem(interp->modules, front);
+                    if (final_mod == NULL) {
+                        PyErr_Format(PyExc_KeyError,
+                                     "%R not in sys.modules as expected", front);
+                    }
                 }
+                Py_DECREF(front);
+                if (final_mod == NULL) {
+                    goto error_with_unlock;
+                }
+                Py_INCREF(final_mod);
             }
             else {
                 Py_ssize_t cut_off = PyUnicode_GetLength(name) -
