@@ -297,7 +297,7 @@ The :mod:`multiprocessing` package mostly replicates the API of the
 :class:`Process` and exceptions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. class:: Process([group[, target[, name[, args[, kwargs]]]]])
+.. class:: Process([group[, target[, name[, args[, kwargs]]]]], *, daemon=None)
 
    Process objects represent activity that is run in a separate process. The
    :class:`Process` class has equivalents of all the methods of
@@ -312,12 +312,18 @@ The :mod:`multiprocessing` package mostly replicates the API of the
    :sub:`1`,N\ :sub:`2`,...,N\ :sub:`k` is a sequence of integers whose length
    is determined by the *generation* of the process.  *args* is the argument
    tuple for the target invocation.  *kwargs* is a dictionary of keyword
-   arguments for the target invocation.  By default, no arguments are passed to
-   *target*.
+   arguments for the target invocation.  If provided, the keyword-only *daemon* argument
+   sets the process :attr:`daemon` flag to ``True`` or ``False``.  If ``None``
+   (the default), this flag will be inherited from the creating process.
+
+   By default, no arguments are passed to *target*.
 
    If a subclass overrides the constructor, it must make sure it invokes the
    base class constructor (:meth:`Process.__init__`) before doing anything else
    to the process.
+
+   .. versionchanged:: 3.3
+      Added the *daemon* argument.
 
    .. method:: run()
 
@@ -337,10 +343,9 @@ The :mod:`multiprocessing` package mostly replicates the API of the
 
    .. method:: join([timeout])
 
-      Block the calling thread until the process whose :meth:`join` method is
-      called terminates or until the optional timeout occurs.
-
-      If *timeout* is ``None`` then there is no timeout.
+      If the optional argument *timeout* is ``None`` (the default), the method
+      blocks until the process whose :meth:`join` method is called terminates.
+      If *timeout* is a positive number, it blocks at most *timeout* seconds.
 
       A process can be joined many times.
 
@@ -405,6 +410,21 @@ The :mod:`multiprocessing` package mostly replicates the API of the
 
       See :ref:`multiprocessing-auth-keys`.
 
+   .. attribute:: sentinel
+
+      A numeric handle of a system object which will become "ready" when
+      the process ends.
+
+      You can use this value if you want to wait on several events at
+      once using :func:`multiprocessing.connection.wait`.  Otherwise
+      calling :meth:`join()` is simpler.
+
+      On Windows, this is an OS handle usable with the ``WaitForSingleObject``
+      and ``WaitForMultipleObjects`` family of API calls.  On Unix, this is
+      a file descriptor usable with primitives from the :mod:`select` module.
+
+      .. versionadded:: 3.3
+
    .. method:: terminate()
 
       Terminate the process.  On Unix this is done using the ``SIGTERM`` signal;
@@ -464,7 +484,7 @@ primitives like locks.
 For passing messages one can use :func:`Pipe` (for a connection between two
 processes) or a queue (which allows multiple producers and consumers).
 
-The :class:`Queue`, :class:`multiprocessing.queues.SimpleQueue` and :class:`JoinableQueue` types are multi-producer,
+The :class:`Queue`, :class:`SimpleQueue` and :class:`JoinableQueue` types are multi-producer,
 multi-consumer FIFO queues modelled on the :class:`queue.Queue` class in the
 standard library.  They differ in that :class:`Queue` lacks the
 :meth:`~queue.Queue.task_done` and :meth:`~queue.Queue.join` methods introduced
@@ -610,7 +630,7 @@ For an example of the usage of queues for interprocess communication see
       exits -- see :meth:`join_thread`.
 
 
-.. class:: multiprocessing.queues.SimpleQueue()
+.. class:: SimpleQueue()
 
    It is a simplified :class:`Queue` type, very close to a locked :class:`Pipe`.
 
@@ -766,6 +786,9 @@ Connection objects are usually created using :func:`Pipe` -- see also
       *timeout* is a number then this specifies the maximum time in seconds to
       block.  If *timeout* is ``None`` then an infinite timeout is used.
 
+      Note that multiple connection objects may be polled at once by
+      using :func:`multiprocessing.connection.wait`.
+
    .. method:: send_bytes(buffer[, offset[, size]])
 
       Send byte data from an object supporting the buffer interface as a
@@ -784,8 +807,13 @@ Connection objects are usually created using :func:`Pipe` -- see also
       to receive and the other end has closed.
 
       If *maxlength* is specified and the message is longer than *maxlength*
-      then :exc:`IOError` is raised and the connection will no longer be
+      then :exc:`OSError` is raised and the connection will no longer be
       readable.
+
+      .. versionchanged:: 3.3
+         This function used to raise a :exc:`IOError`, which is now an
+         alias of :exc:`OSError`.
+
 
    .. method:: recv_bytes_into(buffer[, offset])
 
@@ -1657,6 +1685,24 @@ with the :class:`Pool` class.
       returned iterator should be considered arbitrary.  (Only when there is
       only one worker process is the order guaranteed to be "correct".)
 
+   .. method:: starmap(func, iterable[, chunksize])
+
+      Like :meth:`map` except that the elements of the `iterable` are expected
+      to be iterables that are unpacked as arguments.
+
+      Hence an `iterable` of `[(1,2), (3, 4)]` results in `[func(1,2),
+      func(3,4)]`.
+
+      .. versionadded:: 3.3
+
+   .. method:: starmap_async(func, iterable[, chunksize[, callback[, error_back]]])
+
+      A combination of :meth:`starmap` and :meth:`map_async` that iterates over
+      `iterable` of iterables and calls `func` with the iterables unpacked.
+      Returns a result object.
+
+      .. versionadded:: 3.3
+
    .. method:: close()
 
       Prevents any more tasks from being submitted to the pool.  Once all the
@@ -1737,8 +1783,9 @@ Usually message passing between processes is done using queues or by using
 
 However, the :mod:`multiprocessing.connection` module allows some extra
 flexibility.  It basically gives a high level message oriented API for dealing
-with sockets or Windows named pipes, and also has support for *digest
-authentication* using the :mod:`hmac` module.
+with sockets or Windows named pipes.  It also has support for *digest
+authentication* using the :mod:`hmac` module, and for polling
+multiple connections at the same time.
 
 
 .. function:: deliver_challenge(connection, authkey)
@@ -1836,6 +1883,38 @@ authentication* using the :mod:`hmac` module.
       The address from which the last accepted connection came.  If this is
       unavailable then it is ``None``.
 
+.. function:: wait(object_list, timeout=None)
+
+   Wait till an object in *object_list* is ready.  Returns the list of
+   those objects in *object_list* which are ready.  If *timeout* is a
+   float then the call blocks for at most that many seconds.  If
+   *timeout* is ``None`` then it will block for an unlimited period.
+
+   For both Unix and Windows, an object can appear in *object_list* if
+   it is
+
+   * a readable :class:`~multiprocessing.Connection` object;
+   * a connected and readable :class:`socket.socket` object; or
+   * the :attr:`~multiprocessing.Process.sentinel` attribute of a
+     :class:`~multiprocessing.Process` object.
+
+   A connection or socket object is ready when there is data available
+   to be read from it, or the other end has been closed.
+
+   **Unix**: ``wait(object_list, timeout)`` almost equivalent
+   ``select.select(object_list, [], [], timeout)``.  The difference is
+   that, if :func:`select.select` is interrupted by a signal, it can
+   raise :exc:`OSError` with an error number of ``EINTR``, whereas
+   :func:`wait` will not.
+
+   **Windows**: An item in *object_list* must either be an integer
+   handle which is waitable (according to the definition used by the
+   documentation of the Win32 function ``WaitForMultipleObjects()``)
+   or it can be an object with a :meth:`fileno` method which returns a
+   socket handle or pipe handle.  (Note that pipe handles and socket
+   handles are **not** waitable handles.)
+
+   .. versionadded:: 3.3
 
 The module defines two exceptions:
 
@@ -1886,6 +1965,41 @@ server::
    print(arr)                          # => array('i', [42, 1729, 0, 0, 0])
 
    conn.close()
+
+The following code uses :func:`~multiprocessing.connection.wait` to
+wait for messages from multiple processes at once::
+
+   import time, random
+   from multiprocessing import Process, Pipe, current_process
+   from multiprocessing.connection import wait
+
+   def foo(w):
+       for i in range(10):
+           w.send((i, current_process().name))
+       w.close()
+
+   if __name__ == '__main__':
+       readers = []
+
+       for i in range(4):
+           r, w = Pipe(duplex=False)
+           readers.append(r)
+           p = Process(target=foo, args=(w,))
+           p.start()
+           # We close the writable end of the pipe now to be sure that
+           # p is the only process which owns a handle for it.  This
+           # ensures that when p closes its handle for the writable end,
+           # wait() will promptly report the readable end as being ready.
+           w.close()
+
+       while readers:
+           for r in wait(readers):
+               try:
+                   msg = r.recv()
+               except EOFError:
+                   readers.remove(r)
+               else:
+                   print(msg)
 
 
 .. _multiprocessing-address-formats:

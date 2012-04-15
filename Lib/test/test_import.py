@@ -2,6 +2,7 @@ import builtins
 import imp
 from importlib.test.import_ import test_relative_imports
 from importlib.test.import_ import util as importlib_util
+import importlib
 import marshal
 import os
 import platform
@@ -16,7 +17,7 @@ import errno
 from test.support import (
     EnvironmentVarGuard, TESTFN, check_warnings, forget, is_jython,
     make_legacy_pyc, rmtree, run_unittest, swap_attr, swap_item, temp_umask,
-    unlink, unload)
+    unlink, unload, create_empty_file)
 from test import script_helper
 
 
@@ -34,6 +35,7 @@ class ImportTests(unittest.TestCase):
 
     def setUp(self):
         remove_files(TESTFN)
+        importlib.invalidate_caches()
 
     def tearDown(self):
         unload(TESTFN)
@@ -71,6 +73,7 @@ class ImportTests(unittest.TestCase):
 
             if TESTFN in sys.modules:
                 del sys.modules[TESTFN]
+            importlib.invalidate_caches()
             try:
                 try:
                     mod = __import__(TESTFN)
@@ -98,25 +101,24 @@ class ImportTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'posix',
                          "test meaningful only on posix systems")
-    def test_execute_bit_not_copied(self):
-        # Issue 6070: under posix .pyc files got their execute bit set if
-        # the .py file had the execute bit set, but they aren't executable.
-        with temp_umask(0o022):
+    def test_creation_mode(self):
+        mask = 0o022
+        with temp_umask(mask):
             sys.path.insert(0, os.curdir)
             try:
                 fname = TESTFN + os.extsep + "py"
-                open(fname, 'w').close()
-                os.chmod(fname, (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH |
-                                 stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH))
+                create_empty_file(fname)
                 fn = imp.cache_from_source(fname)
                 unlink(fn)
+                importlib.invalidate_caches()
                 __import__(TESTFN)
                 if not os.path.exists(fn):
                     self.fail("__import__ did not result in creation of "
                               "either a .pyc or .pyo file")
                 s = os.stat(fn)
-                self.assertEqual(stat.S_IMODE(s.st_mode),
-                                 stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                # Check that the umask is respected, and the executable bits
+                # aren't set.
+                self.assertEqual(stat.S_IMODE(s.st_mode), 0o666 & ~mask)
             finally:
                 del sys.path[0]
                 remove_files(TESTFN)
@@ -170,6 +172,7 @@ class ImportTests(unittest.TestCase):
 
         # Need to be able to load from current dir.
         sys.path.append('')
+        importlib.invalidate_caches()
 
         try:
             make_legacy_pyc(filename)
@@ -262,6 +265,7 @@ class ImportTests(unittest.TestCase):
             os.remove(source)
             del sys.modules[TESTFN]
             make_legacy_pyc(source)
+            importlib.invalidate_caches()
             mod = __import__(TESTFN)
             base, ext = os.path.splitext(mod.__file__)
             self.assertIn(ext, ('.pyc', '.pyo'))
@@ -297,8 +301,6 @@ class ImportTests(unittest.TestCase):
             self.skipTest('path is not encodable to {}'.format(encoding))
         with self.assertRaises(ImportError) as c:
             __import__(path)
-        self.assertEqual("Import by filename is not supported.",
-                         c.exception.args[0])
 
     def test_import_in_del_does_not_crash(self):
         # Issue 4236
@@ -362,6 +364,7 @@ func_filename = func.__code__.co_filename
         with open(self.file_name, "w") as f:
             f.write(self.module_source)
         sys.path.insert(0, self.dir_name)
+        importlib.invalidate_caches()
 
     def tearDown(self):
         sys.path[:] = self.sys_path
@@ -401,6 +404,7 @@ func_filename = func.__code__.co_filename
         py_compile.compile(self.file_name, dfile=target)
         os.remove(self.file_name)
         pyc_file = make_legacy_pyc(self.file_name)
+        importlib.invalidate_caches()
         mod = self.import_module()
         self.assertEqual(mod.module_filename, pyc_file)
         self.assertEqual(mod.code_filename, target)
@@ -409,7 +413,7 @@ func_filename = func.__code__.co_filename
     def test_foreign_code(self):
         py_compile.compile(self.file_name)
         with open(self.compiled_name, "rb") as f:
-            header = f.read(8)
+            header = f.read(12)
             code = marshal.load(f)
         constants = list(code.co_consts)
         foreign_code = test_main.__code__
@@ -508,7 +512,7 @@ class RelativeImportTests(unittest.TestCase):
 
         # Check relative import fails with package set to a non-string
         ns = dict(__package__=object())
-        self.assertRaises(ValueError, check_relative)
+        self.assertRaises(TypeError, check_relative)
 
     def test_absolute_import_without_future(self):
         # If explicit relative import syntax is used, then do not try
@@ -556,6 +560,7 @@ class PycacheTests(unittest.TestCase):
         with open(self.source, 'w') as fp:
             print('# This is a test file written by test_import.py', file=fp)
         sys.path.insert(0, os.curdir)
+        importlib.invalidate_caches()
 
     def tearDown(self):
         assert sys.path[0] == os.curdir, 'Unexpected sys.path[0]'
@@ -603,6 +608,7 @@ class PycacheTests(unittest.TestCase):
         pyc_file = make_legacy_pyc(self.source)
         os.remove(self.source)
         unload(TESTFN)
+        importlib.invalidate_caches()
         m = __import__(TESTFN)
         self.assertEqual(m.__file__,
                          os.path.join(os.curdir, os.path.relpath(pyc_file)))
@@ -623,6 +629,7 @@ class PycacheTests(unittest.TestCase):
         pyc_file = make_legacy_pyc(self.source)
         os.remove(self.source)
         unload(TESTFN)
+        importlib.invalidate_caches()
         m = __import__(TESTFN)
         self.assertEqual(m.__cached__,
                          os.path.join(os.curdir, os.path.relpath(pyc_file)))
@@ -640,6 +647,7 @@ class PycacheTests(unittest.TestCase):
             pass
         unload('pep3147.foo')
         unload('pep3147')
+        importlib.invalidate_caches()
         m = __import__('pep3147.foo')
         init_pyc = imp.cache_from_source(
             os.path.join('pep3147', '__init__.py'))
@@ -662,9 +670,11 @@ class PycacheTests(unittest.TestCase):
             pass
         with open(os.path.join('pep3147', 'foo.py'), 'w'):
             pass
+        importlib.invalidate_caches()
         m = __import__('pep3147.foo')
         unload('pep3147.foo')
         unload('pep3147')
+        importlib.invalidate_caches()
         m = __import__('pep3147.foo')
         init_pyc = imp.cache_from_source(
             os.path.join('pep3147', '__init__.py'))
@@ -672,6 +682,16 @@ class PycacheTests(unittest.TestCase):
         foo_pyc = imp.cache_from_source(os.path.join('pep3147', 'foo.py'))
         self.assertEqual(sys.modules['pep3147.foo'].__cached__,
                          os.path.join(os.curdir, foo_pyc))
+
+    def test_recompute_pyc_same_second(self):
+        # Even when the source file doesn't change timestamp, a change in
+        # source size is enough to trigger recomputation of the pyc file.
+        __import__(TESTFN)
+        unload(TESTFN)
+        with open(self.source, 'a') as fp:
+            print("x = 5", file=fp)
+        m = __import__(TESTFN)
+        self.assertEqual(m.x, 5)
 
 
 class RelativeImportFromImportlibTests(test_relative_imports.RelativeImports):
