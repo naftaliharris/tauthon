@@ -86,10 +86,16 @@ def _repr(self):
 #   Id: errors.py 509 2006-04-20 00:58:24Z gward
 
 try:
-    from gettext import gettext
+    from gettext import gettext, ngettext
 except ImportError:
     def gettext(message):
         return message
+
+    def ngettext(singular, plural, n):
+        if n == 1:
+            return singular
+        return plural
+
 _ = gettext
 
 
@@ -411,11 +417,8 @@ def _parse_num(val, type):
 def _parse_int(val):
     return _parse_num(val, int)
 
-def _parse_long(val):
-    return _parse_num(val, int)
-
 _builtin_cvt = { "int" : (_parse_int, _("integer")),
-                 "long" : (_parse_long, _("long integer")),
+                 "long" : (_parse_int, _("integer")),
                  "float" : (float, _("floating-point")),
                  "complex" : (complex, _("complex")) }
 
@@ -1483,11 +1486,10 @@ class OptionParser (OptionContainer):
         if option.takes_value():
             nargs = option.nargs
             if len(rargs) < nargs:
-                if nargs == 1:
-                    self.error(_("%s option requires an argument") % opt)
-                else:
-                    self.error(_("%s option requires %d arguments")
-                               % (opt, nargs))
+                self.error(ngettext(
+                    "%(option)s option requires %(number)d argument",
+                    "%(option)s option requires %(number)d arguments",
+                    nargs) % {"option": opt, "number": nargs})
             elif nargs == 1:
                 value = rargs.pop(0)
             else:
@@ -1522,11 +1524,10 @@ class OptionParser (OptionContainer):
 
                 nargs = option.nargs
                 if len(rargs) < nargs:
-                    if nargs == 1:
-                        self.error(_("%s option requires an argument") % opt)
-                    else:
-                        self.error(_("%s option requires %d arguments")
-                                   % (opt, nargs))
+                    self.error(ngettext(
+                        "%(option)s option requires %(number)d argument",
+                        "%(option)s option requires %(number)d arguments",
+                        nargs) % {"option": opt, "number": nargs})
                 elif nargs == 1:
                     value = rargs.pop(0)
                 else:
