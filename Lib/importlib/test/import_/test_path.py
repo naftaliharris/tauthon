@@ -42,6 +42,15 @@ class FinderTests(unittest.TestCase):
             loader = machinery.PathFinder.find_module(module, [path])
             self.assertTrue(loader is importer)
 
+    def test_empty_list(self):
+        # An empty list should not count as asking for sys.path.
+        module = 'module'
+        path = '<test path>'
+        importer = util.mock_modules(module)
+        with util.import_state(path_importer_cache={path: importer},
+                               path=[path]):
+            self.assertIsNone(machinery.PathFinder.find_module('module', []))
+
     def test_path_hooks(self):
         # Test that sys.path_hooks is used.
         # Test that sys.path_importer_cache is set.
@@ -73,11 +82,21 @@ class FinderTests(unittest.TestCase):
             loader = machinery.PathFinder.find_module(module)
             self.assertTrue(loader is importer)
 
+    def test_path_importer_cache_empty_string(self):
+        # The empty string should create a finder using the cwd.
+        path = ''
+        module = '<test module>'
+        importer = util.mock_modules(module)
+        hook = import_util.mock_path_hook(os.curdir, importer=importer)
+        with util.import_state(path=[path], path_hooks=[hook]):
+            loader = machinery.PathFinder.find_module(module)
+            self.assertIs(loader, importer)
+            self.assertIn(os.curdir, sys.path_importer_cache)
 
 
 class DefaultPathFinderTests(unittest.TestCase):
 
-    """Test importlib._bootstrap._DefaultPathFinder."""
+    """Test _bootstrap._DefaultPathFinder."""
 
     def test_implicit_hooks(self):
         # Test that the implicit path hooks are used.
