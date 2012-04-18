@@ -7,7 +7,9 @@ import sys
 import stat
 import os
 import os.path
+import errno
 import functools
+import subprocess
 from test import support
 from test.support import TESTFN
 from os.path import splitdrive
@@ -21,7 +23,7 @@ import tarfile
 import warnings
 
 from test import support
-from test.support import TESTFN, check_warnings, captured_stdout
+from test.support import TESTFN, check_warnings, captured_stdout, requires_zlib
 
 try:
     import bz2
@@ -39,11 +41,6 @@ except ImportError:
     UID_GID_SUPPORT = False
 
 try:
-    import zlib
-except ImportError:
-    zlib = None
-
-try:
     import zipfile
     ZIP_SUPPORT = True
 except ImportError:
@@ -51,7 +48,7 @@ except ImportError:
 
 def _fake_rename(*args, **kwargs):
     # Pretend the destination path is on a different filesystem.
-    raise OSError()
+    raise OSError(getattr(errno, 'EXDEV', 18), "Invalid cross-device link")
 
 def mock_rename(func):
     @functools.wraps(func)
@@ -63,6 +60,31 @@ def mock_rename(func):
         finally:
             os.rename = builtin_rename
     return wrap
+
+def write_file(path, content, binary=False):
+    """Write *content* to a file located at *path*.
+
+    If *path* is a tuple instead of a string, os.path.join will be used to
+    make a path.  If *binary* is true, the file will be opened in binary
+    mode.
+    """
+    if isinstance(path, tuple):
+        path = os.path.join(*path)
+    with open(path, 'wb' if binary else 'w') as fp:
+        fp.write(content)
+
+def read_file(path, binary=False):
+    """Return contents from a file located at *path*.
+
+    If *path* is a tuple instead of a string, os.path.join will be used to
+    make a path.  If *binary* is true, the file will be opened in binary
+    mode.
+    """
+    if isinstance(path, tuple):
+        path = os.path.join(*path)
+    with open(path, 'rb' if binary else 'r') as fp:
+        return fp.read()
+
 
 class TestShutil(unittest.TestCase):
 
@@ -76,19 +98,6 @@ class TestShutil(unittest.TestCase):
             d = self.tempdirs.pop()
             shutil.rmtree(d, os.name in ('nt', 'cygwin'))
 
-    def write_file(self, path, content='xxx'):
-        """Writes a file in the given path.
-
-
-        path can be a string or a sequence.
-        """
-        if isinstance(path, (list, tuple)):
-            path = os.path.join(*path)
-        f = open(path, 'w')
-        try:
-            f.write(content)
-        finally:
-            f.close()
 
     def mkdtemp(self):
         """Create a temporary directory that will be cleaned up.
@@ -112,8 +121,7 @@ class TestShutil(unittest.TestCase):
             self.errorState = 0
             os.mkdir(TESTFN)
             self.childpath = os.path.join(TESTFN, 'a')
-            f = open(self.childpath, 'w')
-            f.close()
+            support.create_empty_file(self.childpath)
             old_dir_mode = os.stat(TESTFN).st_mode
             old_child_mode = os.stat(self.childpath).st_mode
             # Make unwritable.
@@ -158,84 +166,268 @@ class TestShutil(unittest.TestCase):
             self.assertTrue(issubclass(exc[0], OSError))
             self.errorState = 2
 
+    @unittest.skipUnless(hasattr(os, 'chmod'), 'requires os.chmod')
+    @support.skip_unless_symlink
+    def test_copymode_follow_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        dst_link = os.path.join(tmp_dir, 'quux')
+        write_file(src, 'foo')
+        write_file(dst, 'foo')
+        os.symlink(src, src_link)
+        os.symlink(dst, dst_link)
+        os.chmod(src, stat.S_IRWXU|stat.S_IRWXG)
+        # file to file
+        os.chmod(dst, stat.S_IRWXO)
+        self.assertNotEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        shutil.copymode(src, dst)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        # follow src link
+        os.chmod(dst, stat.S_IRWXO)
+        shutil.copymode(src_link, dst)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        # follow dst link
+        os.chmod(dst, stat.S_IRWXO)
+        shutil.copymode(src, dst_link)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        # follow both links
+        os.chmod(dst, stat.S_IRWXO)
+        shutil.copymode(src_link, dst)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+
+    @unittest.skipUnless(hasattr(os, 'lchmod'), 'requires os.lchmod')
+    @support.skip_unless_symlink
+    def test_copymode_symlink_to_symlink(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        dst_link = os.path.join(tmp_dir, 'quux')
+        write_file(src, 'foo')
+        write_file(dst, 'foo')
+        os.symlink(src, src_link)
+        os.symlink(dst, dst_link)
+        os.chmod(src, stat.S_IRWXU|stat.S_IRWXG)
+        os.chmod(dst, stat.S_IRWXU)
+        os.lchmod(src_link, stat.S_IRWXO|stat.S_IRWXG)
+        # link to link
+        os.lchmod(dst_link, stat.S_IRWXO)
+        shutil.copymode(src_link, dst_link, symlinks=True)
+        self.assertEqual(os.lstat(src_link).st_mode,
+                         os.lstat(dst_link).st_mode)
+        self.assertNotEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        # src link - use chmod
+        os.lchmod(dst_link, stat.S_IRWXO)
+        shutil.copymode(src_link, dst, symlinks=True)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+        # dst link - use chmod
+        os.lchmod(dst_link, stat.S_IRWXO)
+        shutil.copymode(src, dst_link, symlinks=True)
+        self.assertEqual(os.stat(src).st_mode, os.stat(dst).st_mode)
+
+    @unittest.skipIf(hasattr(os, 'lchmod'), 'requires os.lchmod to be missing')
+    @support.skip_unless_symlink
+    def test_copymode_symlink_to_symlink_wo_lchmod(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        dst_link = os.path.join(tmp_dir, 'quux')
+        write_file(src, 'foo')
+        write_file(dst, 'foo')
+        os.symlink(src, src_link)
+        os.symlink(dst, dst_link)
+        shutil.copymode(src_link, dst_link, symlinks=True)  # silent fail
+
+    @support.skip_unless_symlink
+    def test_copystat_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        dst_link = os.path.join(tmp_dir, 'qux')
+        write_file(src, 'foo')
+        src_stat = os.stat(src)
+        os.utime(src, (src_stat.st_atime,
+                       src_stat.st_mtime - 42.0))  # ensure different mtimes
+        write_file(dst, 'bar')
+        self.assertNotEqual(os.stat(src).st_mtime, os.stat(dst).st_mtime)
+        os.symlink(src, src_link)
+        os.symlink(dst, dst_link)
+        if hasattr(os, 'lchmod'):
+            os.lchmod(src_link, stat.S_IRWXO)
+        if hasattr(os, 'lchflags') and hasattr(stat, 'UF_NODUMP'):
+            os.lchflags(src_link, stat.UF_NODUMP)
+        src_link_stat = os.lstat(src_link)
+        # follow
+        if hasattr(os, 'lchmod'):
+            shutil.copystat(src_link, dst_link, symlinks=False)
+            self.assertNotEqual(src_link_stat.st_mode, os.stat(dst).st_mode)
+        # don't follow
+        shutil.copystat(src_link, dst_link, symlinks=True)
+        dst_link_stat = os.lstat(dst_link)
+        if hasattr(os, 'lutimes'):
+            for attr in 'st_atime', 'st_mtime':
+                # The modification times may be truncated in the new file.
+                self.assertLessEqual(getattr(src_link_stat, attr),
+                                     getattr(dst_link_stat, attr) + 1)
+        if hasattr(os, 'lchmod'):
+            self.assertEqual(src_link_stat.st_mode, dst_link_stat.st_mode)
+        if hasattr(os, 'lchflags') and hasattr(src_link_stat, 'st_flags'):
+            self.assertEqual(src_link_stat.st_flags, dst_link_stat.st_flags)
+        # tell to follow but dst is not a link
+        shutil.copystat(src_link, dst, symlinks=True)
+        self.assertTrue(abs(os.stat(src).st_mtime - os.stat(dst).st_mtime) <
+                        00000.1)
+
+    @support.skip_unless_symlink
+    def test_copy_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        write_file(src, 'foo')
+        os.symlink(src, src_link)
+        if hasattr(os, 'lchmod'):
+            os.lchmod(src_link, stat.S_IRWXU | stat.S_IRWXO)
+        # don't follow
+        shutil.copy(src_link, dst, symlinks=False)
+        self.assertFalse(os.path.islink(dst))
+        self.assertEqual(read_file(src), read_file(dst))
+        os.remove(dst)
+        # follow
+        shutil.copy(src_link, dst, symlinks=True)
+        self.assertTrue(os.path.islink(dst))
+        self.assertEqual(os.readlink(dst), os.readlink(src_link))
+        if hasattr(os, 'lchmod'):
+            self.assertEqual(os.lstat(src_link).st_mode,
+                             os.lstat(dst).st_mode)
+
+    @support.skip_unless_symlink
+    def test_copy2_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'foo')
+        dst = os.path.join(tmp_dir, 'bar')
+        src_link = os.path.join(tmp_dir, 'baz')
+        write_file(src, 'foo')
+        os.symlink(src, src_link)
+        if hasattr(os, 'lchmod'):
+            os.lchmod(src_link, stat.S_IRWXU | stat.S_IRWXO)
+        if hasattr(os, 'lchflags') and hasattr(stat, 'UF_NODUMP'):
+            os.lchflags(src_link, stat.UF_NODUMP)
+        src_stat = os.stat(src)
+        src_link_stat = os.lstat(src_link)
+        # follow
+        shutil.copy2(src_link, dst, symlinks=False)
+        self.assertFalse(os.path.islink(dst))
+        self.assertEqual(read_file(src), read_file(dst))
+        os.remove(dst)
+        # don't follow
+        shutil.copy2(src_link, dst, symlinks=True)
+        self.assertTrue(os.path.islink(dst))
+        self.assertEqual(os.readlink(dst), os.readlink(src_link))
+        dst_stat = os.lstat(dst)
+        if hasattr(os, 'lutimes'):
+            for attr in 'st_atime', 'st_mtime':
+                # The modification times may be truncated in the new file.
+                self.assertLessEqual(getattr(src_link_stat, attr),
+                                     getattr(dst_stat, attr) + 1)
+        if hasattr(os, 'lchmod'):
+            self.assertEqual(src_link_stat.st_mode, dst_stat.st_mode)
+            self.assertNotEqual(src_stat.st_mode, dst_stat.st_mode)
+        if hasattr(os, 'lchflags') and hasattr(src_link_stat, 'st_flags'):
+            self.assertEqual(src_link_stat.st_flags, dst_stat.st_flags)
+
+    @support.skip_unless_symlink
+    def test_copyfile_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src = os.path.join(tmp_dir, 'src')
+        dst = os.path.join(tmp_dir, 'dst')
+        dst_link = os.path.join(tmp_dir, 'dst_link')
+        link = os.path.join(tmp_dir, 'link')
+        write_file(src, 'foo')
+        os.symlink(src, link)
+        # don't follow
+        shutil.copyfile(link, dst_link, symlinks=True)
+        self.assertTrue(os.path.islink(dst_link))
+        self.assertEqual(os.readlink(link), os.readlink(dst_link))
+        # follow
+        shutil.copyfile(link, dst)
+        self.assertFalse(os.path.islink(dst))
+
     def test_rmtree_dont_delete_file(self):
         # When called on a file instead of a directory, don't delete it.
         handle, path = tempfile.mkstemp()
-        os.fdopen(handle).close()
+        os.close(handle)
         self.assertRaises(OSError, shutil.rmtree, path)
         os.remove(path)
 
-    def _write_data(self, path, data):
-        f = open(path, "w")
-        f.write(data)
-        f.close()
-
     def test_copytree_simple(self):
-
-        def read_data(path):
-            f = open(path)
-            data = f.read()
-            f.close()
-            return data
-
         src_dir = tempfile.mkdtemp()
         dst_dir = os.path.join(tempfile.mkdtemp(), 'destination')
-        self._write_data(os.path.join(src_dir, 'test.txt'), '123')
+        self.addCleanup(shutil.rmtree, src_dir)
+        self.addCleanup(shutil.rmtree, os.path.dirname(dst_dir))
+        write_file((src_dir, 'test.txt'), '123')
         os.mkdir(os.path.join(src_dir, 'test_dir'))
-        self._write_data(os.path.join(src_dir, 'test_dir', 'test.txt'), '456')
+        write_file((src_dir, 'test_dir', 'test.txt'), '456')
 
-        try:
-            shutil.copytree(src_dir, dst_dir)
-            self.assertTrue(os.path.isfile(os.path.join(dst_dir, 'test.txt')))
-            self.assertTrue(os.path.isdir(os.path.join(dst_dir, 'test_dir')))
-            self.assertTrue(os.path.isfile(os.path.join(dst_dir, 'test_dir',
-                                                        'test.txt')))
-            actual = read_data(os.path.join(dst_dir, 'test.txt'))
-            self.assertEqual(actual, '123')
-            actual = read_data(os.path.join(dst_dir, 'test_dir', 'test.txt'))
-            self.assertEqual(actual, '456')
-        finally:
-            for path in (
-                    os.path.join(src_dir, 'test.txt'),
-                    os.path.join(dst_dir, 'test.txt'),
-                    os.path.join(src_dir, 'test_dir', 'test.txt'),
-                    os.path.join(dst_dir, 'test_dir', 'test.txt'),
-                ):
-                if os.path.exists(path):
-                    os.remove(path)
-            for path in (src_dir,
-                    os.path.dirname(dst_dir)
-                ):
-                if os.path.exists(path):
-                    shutil.rmtree(path)
+        shutil.copytree(src_dir, dst_dir)
+        self.assertTrue(os.path.isfile(os.path.join(dst_dir, 'test.txt')))
+        self.assertTrue(os.path.isdir(os.path.join(dst_dir, 'test_dir')))
+        self.assertTrue(os.path.isfile(os.path.join(dst_dir, 'test_dir',
+                                                    'test.txt')))
+        actual = read_file((dst_dir, 'test.txt'))
+        self.assertEqual(actual, '123')
+        actual = read_file((dst_dir, 'test_dir', 'test.txt'))
+        self.assertEqual(actual, '456')
+
+    @support.skip_unless_symlink
+    def test_copytree_symlinks(self):
+        tmp_dir = self.mkdtemp()
+        src_dir = os.path.join(tmp_dir, 'src')
+        dst_dir = os.path.join(tmp_dir, 'dst')
+        sub_dir = os.path.join(src_dir, 'sub')
+        os.mkdir(src_dir)
+        os.mkdir(sub_dir)
+        write_file((src_dir, 'file.txt'), 'foo')
+        src_link = os.path.join(sub_dir, 'link')
+        dst_link = os.path.join(dst_dir, 'sub/link')
+        os.symlink(os.path.join(src_dir, 'file.txt'),
+                   src_link)
+        if hasattr(os, 'lchmod'):
+            os.lchmod(src_link, stat.S_IRWXU | stat.S_IRWXO)
+        if hasattr(os, 'lchflags') and hasattr(stat, 'UF_NODUMP'):
+            os.lchflags(src_link, stat.UF_NODUMP)
+        src_stat = os.lstat(src_link)
+        shutil.copytree(src_dir, dst_dir, symlinks=True)
+        self.assertTrue(os.path.islink(os.path.join(dst_dir, 'sub', 'link')))
+        self.assertEqual(os.readlink(os.path.join(dst_dir, 'sub', 'link')),
+                         os.path.join(src_dir, 'file.txt'))
+        dst_stat = os.lstat(dst_link)
+        if hasattr(os, 'lchmod'):
+            self.assertEqual(dst_stat.st_mode, src_stat.st_mode)
+        if hasattr(os, 'lchflags'):
+            self.assertEqual(dst_stat.st_flags, src_stat.st_flags)
 
     def test_copytree_with_exclude(self):
-
-        def read_data(path):
-            f = open(path)
-            data = f.read()
-            f.close()
-            return data
-
         # creating data
         join = os.path.join
         exists = os.path.exists
         src_dir = tempfile.mkdtemp()
         try:
             dst_dir = join(tempfile.mkdtemp(), 'destination')
-            self._write_data(join(src_dir, 'test.txt'), '123')
-            self._write_data(join(src_dir, 'test.tmp'), '123')
+            write_file((src_dir, 'test.txt'), '123')
+            write_file((src_dir, 'test.tmp'), '123')
             os.mkdir(join(src_dir, 'test_dir'))
-            self._write_data(join(src_dir, 'test_dir', 'test.txt'), '456')
+            write_file((src_dir, 'test_dir', 'test.txt'), '456')
             os.mkdir(join(src_dir, 'test_dir2'))
-            self._write_data(join(src_dir, 'test_dir2', 'test.txt'), '456')
+            write_file((src_dir, 'test_dir2', 'test.txt'), '456')
             os.mkdir(join(src_dir, 'test_dir2', 'subdir'))
             os.mkdir(join(src_dir, 'test_dir2', 'subdir2'))
-            self._write_data(join(src_dir, 'test_dir2', 'subdir', 'test.txt'),
-                             '456')
-            self._write_data(join(src_dir, 'test_dir2', 'subdir2', 'test.py'),
-                             '456')
-
+            write_file((src_dir, 'test_dir2', 'subdir', 'test.txt'), '456')
+            write_file((src_dir, 'test_dir2', 'subdir2', 'test.py'), '456')
 
             # testing glob-like patterns
             try:
@@ -243,21 +435,19 @@ class TestShutil(unittest.TestCase):
                 shutil.copytree(src_dir, dst_dir, ignore=patterns)
                 # checking the result: some elements should not be copied
                 self.assertTrue(exists(join(dst_dir, 'test.txt')))
-                self.assertTrue(not exists(join(dst_dir, 'test.tmp')))
-                self.assertTrue(not exists(join(dst_dir, 'test_dir2')))
+                self.assertFalse(exists(join(dst_dir, 'test.tmp')))
+                self.assertFalse(exists(join(dst_dir, 'test_dir2')))
             finally:
-                if os.path.exists(dst_dir):
-                    shutil.rmtree(dst_dir)
+                shutil.rmtree(dst_dir)
             try:
                 patterns = shutil.ignore_patterns('*.tmp', 'subdir*')
                 shutil.copytree(src_dir, dst_dir, ignore=patterns)
                 # checking the result: some elements should not be copied
-                self.assertTrue(not exists(join(dst_dir, 'test.tmp')))
-                self.assertTrue(not exists(join(dst_dir, 'test_dir2', 'subdir2')))
-                self.assertTrue(not exists(join(dst_dir, 'test_dir2', 'subdir')))
+                self.assertFalse(exists(join(dst_dir, 'test.tmp')))
+                self.assertFalse(exists(join(dst_dir, 'test_dir2', 'subdir2')))
+                self.assertFalse(exists(join(dst_dir, 'test_dir2', 'subdir')))
             finally:
-                if os.path.exists(dst_dir):
-                    shutil.rmtree(dst_dir)
+                shutil.rmtree(dst_dir)
 
             # testing callable-style
             try:
@@ -276,13 +466,12 @@ class TestShutil(unittest.TestCase):
                 shutil.copytree(src_dir, dst_dir, ignore=_filter)
 
                 # checking the result: some elements should not be copied
-                self.assertTrue(not exists(join(dst_dir, 'test_dir2', 'subdir2',
-                                        'test.py')))
-                self.assertTrue(not exists(join(dst_dir, 'test_dir2', 'subdir')))
+                self.assertFalse(exists(join(dst_dir, 'test_dir2', 'subdir2',
+                                             'test.py')))
+                self.assertFalse(exists(join(dst_dir, 'test_dir2', 'subdir')))
 
             finally:
-                if os.path.exists(dst_dir):
-                    shutil.rmtree(dst_dir)
+                shutil.rmtree(dst_dir)
         finally:
             shutil.rmtree(src_dir)
             shutil.rmtree(os.path.dirname(dst_dir))
@@ -377,9 +566,9 @@ class TestShutil(unittest.TestCase):
 
         src_dir = self.mkdtemp()
         dst_dir = os.path.join(self.mkdtemp(), 'destination')
-        self._write_data(os.path.join(src_dir, 'test.txt'), '123')
+        write_file((src_dir, 'test.txt'), '123')
         os.mkdir(os.path.join(src_dir, 'test_dir'))
-        self._write_data(os.path.join(src_dir, 'test_dir', 'test.txt'), '456')
+        write_file((src_dir, 'test_dir', 'test.txt'), '456')
 
         copied = []
         def _copy(src, dst):
@@ -396,7 +585,7 @@ class TestShutil(unittest.TestCase):
         dst_dir = os.path.join(self.mkdtemp(), 'destination')
         os.symlink('IDONTEXIST', os.path.join(src_dir, 'test.txt'))
         os.mkdir(os.path.join(src_dir, 'test_dir'))
-        self._write_data(os.path.join(src_dir, 'test_dir', 'test.txt'), '456')
+        write_file((src_dir, 'test_dir', 'test.txt'), '456')
         self.assertRaises(Error, shutil.copytree, src_dir, dst_dir)
 
         # a dangling symlink is ignored with the proper flag
@@ -412,7 +601,7 @@ class TestShutil(unittest.TestCase):
     def _copy_file(self, method):
         fname = 'test.txt'
         tmpdir = self.mkdtemp()
-        self.write_file([tmpdir, fname])
+        write_file((tmpdir, fname), 'xxx')
         file1 = os.path.join(tmpdir, fname)
         tmpdir2 = self.mkdtemp()
         method(file1, tmpdir2)
@@ -444,14 +633,14 @@ class TestShutil(unittest.TestCase):
             self.assertEqual(getattr(file1_stat, 'st_flags'),
                              getattr(file2_stat, 'st_flags'))
 
-    @unittest.skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_make_tarball(self):
         # creating something to tar
         tmpdir = self.mkdtemp()
-        self.write_file([tmpdir, 'file1'], 'xxx')
-        self.write_file([tmpdir, 'file2'], 'xxx')
+        write_file((tmpdir, 'file1'), 'xxx')
+        write_file((tmpdir, 'file2'), 'xxx')
         os.mkdir(os.path.join(tmpdir, 'sub'))
-        self.write_file([tmpdir, 'sub', 'file3'], 'xxx')
+        write_file((tmpdir, 'sub', 'file3'), 'xxx')
 
         tmpdir2 = self.mkdtemp()
         # force shutil to create the directory
@@ -498,16 +687,16 @@ class TestShutil(unittest.TestCase):
         tmpdir = self.mkdtemp()
         dist = os.path.join(tmpdir, 'dist')
         os.mkdir(dist)
-        self.write_file([dist, 'file1'], 'xxx')
-        self.write_file([dist, 'file2'], 'xxx')
+        write_file((dist, 'file1'), 'xxx')
+        write_file((dist, 'file2'), 'xxx')
         os.mkdir(os.path.join(dist, 'sub'))
-        self.write_file([dist, 'sub', 'file3'], 'xxx')
+        write_file((dist, 'sub', 'file3'), 'xxx')
         os.mkdir(os.path.join(dist, 'sub2'))
         tmpdir2 = self.mkdtemp()
         base_name = os.path.join(tmpdir2, 'archive')
         return tmpdir, tmpdir2, base_name
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(find_executable('tar') and find_executable('gzip'),
                          'Need the tar command to run')
     def test_tarfile_vs_tar(self):
@@ -562,13 +751,13 @@ class TestShutil(unittest.TestCase):
         tarball = base_name + '.tar'
         self.assertTrue(os.path.exists(tarball))
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(ZIP_SUPPORT, 'Need zip support to run')
     def test_make_zipfile(self):
         # creating something to tar
         tmpdir = self.mkdtemp()
-        self.write_file([tmpdir, 'file1'], 'xxx')
-        self.write_file([tmpdir, 'file2'], 'xxx')
+        write_file((tmpdir, 'file1'), 'xxx')
+        write_file((tmpdir, 'file2'), 'xxx')
 
         tmpdir2 = self.mkdtemp()
         # force shutil to create the directory
@@ -586,7 +775,7 @@ class TestShutil(unittest.TestCase):
         base_name = os.path.join(tmpdir, 'archive')
         self.assertRaises(ValueError, make_archive, base_name, 'xxx')
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     def test_make_archive_owner_group(self):
         # testing make_archive with owner and group, with various combinations
         # this works even if there's not gid/uid support
@@ -614,7 +803,7 @@ class TestShutil(unittest.TestCase):
         self.assertTrue(os.path.exists(res))
 
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     @unittest.skipUnless(UID_GID_SUPPORT, "Requires grp and pwd support")
     def test_tarfile_root_owner(self):
         tmpdir, tmpdir2, base_name =  self._create_files()
@@ -683,7 +872,7 @@ class TestShutil(unittest.TestCase):
                     diff.append(file_)
         return diff
 
-    @unittest.skipUnless(zlib, "Requires zlib")
+    @requires_zlib
     def test_unpack_archive(self):
         formats = ['tar', 'gztar', 'zip']
         if BZ2_SUPPORTED:
@@ -733,6 +922,75 @@ class TestShutil(unittest.TestCase):
         # let's leave a clean state
         unregister_unpack_format('Boo2')
         self.assertEqual(get_unpack_formats(), formats)
+
+    @unittest.skipUnless(hasattr(shutil, 'disk_usage'),
+                         "disk_usage not available on this platform")
+    def test_disk_usage(self):
+        usage = shutil.disk_usage(os.getcwd())
+        self.assertGreater(usage.total, 0)
+        self.assertGreater(usage.used, 0)
+        self.assertGreaterEqual(usage.free, 0)
+        self.assertGreaterEqual(usage.total, usage.used)
+        self.assertGreater(usage.total, usage.free)
+
+    @unittest.skipUnless(UID_GID_SUPPORT, "Requires grp and pwd support")
+    @unittest.skipUnless(hasattr(os, 'chown'), 'requires os.chown')
+    def test_chown(self):
+
+        # cleaned-up automatically by TestShutil.tearDown method
+        dirname = self.mkdtemp()
+        filename = tempfile.mktemp(dir=dirname)
+        write_file(filename, 'testing chown function')
+
+        with self.assertRaises(ValueError):
+            shutil.chown(filename)
+
+        with self.assertRaises(LookupError):
+            shutil.chown(filename, user='non-exising username')
+
+        with self.assertRaises(LookupError):
+            shutil.chown(filename, group='non-exising groupname')
+
+        with self.assertRaises(TypeError):
+            shutil.chown(filename, b'spam')
+
+        with self.assertRaises(TypeError):
+            shutil.chown(filename, 3.14)
+
+        uid = os.getuid()
+        gid = os.getgid()
+
+        def check_chown(path, uid=None, gid=None):
+            s = os.stat(filename)
+            if uid is not None:
+                self.assertEqual(uid, s.st_uid)
+            if gid is not None:
+                self.assertEqual(gid, s.st_gid)
+
+        shutil.chown(filename, uid, gid)
+        check_chown(filename, uid, gid)
+        shutil.chown(filename, uid)
+        check_chown(filename, uid)
+        shutil.chown(filename, user=uid)
+        check_chown(filename, uid)
+        shutil.chown(filename, group=gid)
+        check_chown(filename, gid=gid)
+
+        shutil.chown(dirname, uid, gid)
+        check_chown(dirname, uid, gid)
+        shutil.chown(dirname, uid)
+        check_chown(dirname, uid)
+        shutil.chown(dirname, user=uid)
+        check_chown(dirname, uid)
+        shutil.chown(dirname, group=gid)
+        check_chown(dirname, gid=gid)
+
+        user = pwd.getpwuid(uid)[0]
+        group = grp.getgrgid(gid)[0]
+        shutil.chown(filename, user, group)
+        check_chown(filename, uid, gid)
+        shutil.chown(dirname, user, group)
+        check_chown(dirname, uid, gid)
 
 
 class TestMove(unittest.TestCase):
@@ -846,6 +1104,49 @@ class TestMove(unittest.TestCase):
                             'dst (%s) is in src (%s)' % (dst, src))
         finally:
             shutil.rmtree(TESTFN, ignore_errors=True)
+
+    @support.skip_unless_symlink
+    @mock_rename
+    def test_move_file_symlink(self):
+        dst = os.path.join(self.src_dir, 'bar')
+        os.symlink(self.src_file, dst)
+        shutil.move(dst, self.dst_file)
+        self.assertTrue(os.path.islink(self.dst_file))
+        self.assertTrue(os.path.samefile(self.src_file, self.dst_file))
+
+    @support.skip_unless_symlink
+    @mock_rename
+    def test_move_file_symlink_to_dir(self):
+        filename = "bar"
+        dst = os.path.join(self.src_dir, filename)
+        os.symlink(self.src_file, dst)
+        shutil.move(dst, self.dst_dir)
+        final_link = os.path.join(self.dst_dir, filename)
+        self.assertTrue(os.path.islink(final_link))
+        self.assertTrue(os.path.samefile(self.src_file, final_link))
+
+    @support.skip_unless_symlink
+    @mock_rename
+    def test_move_dangling_symlink(self):
+        src = os.path.join(self.src_dir, 'baz')
+        dst = os.path.join(self.src_dir, 'bar')
+        os.symlink(src, dst)
+        dst_link = os.path.join(self.dst_dir, 'quux')
+        shutil.move(dst, dst_link)
+        self.assertTrue(os.path.islink(dst_link))
+        self.assertEqual(os.path.realpath(src), os.path.realpath(dst_link))
+
+    @support.skip_unless_symlink
+    @mock_rename
+    def test_move_dir_symlink(self):
+        src = os.path.join(self.src_dir, 'baz')
+        dst = os.path.join(self.src_dir, 'bar')
+        os.mkdir(src)
+        os.symlink(src, dst)
+        dst_link = os.path.join(self.dst_dir, 'quux')
+        shutil.move(dst, dst_link)
+        self.assertTrue(os.path.islink(dst_link))
+        self.assertTrue(os.path.samefile(src, dst_link))
 
 
 class TestCopyFile(unittest.TestCase):
@@ -965,13 +1266,57 @@ class TestCopyFile(unittest.TestCase):
             shutil.move(self.src_dir, dst_dir)
             self.assertTrue(os.path.isdir(dst_dir))
         finally:
-            if os.path.exists(dst_dir):
-                os.rmdir(dst_dir)
+            os.rmdir(dst_dir)
 
+class TermsizeTests(unittest.TestCase):
+    def test_does_not_crash(self):
+        """Check if get_terminal_size() returns a meaningful value.
+
+        There's no easy portable way to actually check the size of the
+        terminal, so let's check if it returns something sensible instead.
+        """
+        size = shutil.get_terminal_size()
+        self.assertGreaterEqual(size.columns, 0)
+        self.assertGreaterEqual(size.lines, 0)
+
+    def test_os_environ_first(self):
+        "Check if environment variables have precedence"
+
+        with support.EnvironmentVarGuard() as env:
+            env['COLUMNS'] = '777'
+            size = shutil.get_terminal_size()
+        self.assertEqual(size.columns, 777)
+
+        with support.EnvironmentVarGuard() as env:
+            env['LINES'] = '888'
+            size = shutil.get_terminal_size()
+        self.assertEqual(size.lines, 888)
+
+    @unittest.skipUnless(os.isatty(sys.__stdout__.fileno()), "not on tty")
+    def test_stty_match(self):
+        """Check if stty returns the same results ignoring env
+
+        This test will fail if stdin and stdout are connected to
+        different terminals with different sizes. Nevertheless, such
+        situations should be pretty rare.
+        """
+        try:
+            size = subprocess.check_output(['stty', 'size']).decode().split()
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            self.skipTest("stty invocation failed")
+        expected = (int(size[1]), int(size[0])) # reversed order
+
+        with support.EnvironmentVarGuard() as env:
+            del env['LINES']
+            del env['COLUMNS']
+            actual = shutil.get_terminal_size()
+
+        self.assertEqual(expected, actual)
 
 
 def test_main():
-    support.run_unittest(TestShutil, TestMove, TestCopyFile)
+    support.run_unittest(TestShutil, TestMove, TestCopyFile,
+                         TermsizeTests)
 
 if __name__ == '__main__':
     test_main()
