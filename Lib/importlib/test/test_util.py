@@ -59,9 +59,28 @@ class ModuleForLoaderTests(unittest.TestCase):
             self.raise_exception(name)
             self.assertIs(module, sys.modules[name])
 
+    def test_decorator_attrs(self):
+        def fxn(self, module): pass
+        wrapped = util.module_for_loader(fxn)
+        self.assertEqual(wrapped.__name__, fxn.__name__)
+        self.assertEqual(wrapped.__qualname__, fxn.__qualname__)
+
+    def test_false_module(self):
+        # If for some odd reason a module is considered false, still return it
+        # from sys.modules.
+        class FalseModule(types.ModuleType):
+            def __bool__(self): return False
+
+        name = 'mod'
+        module = FalseModule(name)
+        with test_util.uncache(name):
+            self.assertFalse(module)
+            sys.modules[name] = module
+            given = self.return_module(name)
+            self.assertTrue(given is module)
+
 
 class SetPackageTests(unittest.TestCase):
-
 
     """Tests for importlib.util.set_package."""
 
@@ -108,6 +127,11 @@ class SetPackageTests(unittest.TestCase):
             module.__package__ = value
             self.verify(module, value)
 
+    def test_decorator_attrs(self):
+        def fxn(module): pass
+        wrapped = util.set_package(fxn)
+        self.assertEqual(wrapped.__name__, fxn.__name__)
+        self.assertEqual(wrapped.__qualname__, fxn.__qualname__)
 
 def test_main():
     from test import support

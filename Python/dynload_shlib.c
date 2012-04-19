@@ -39,7 +39,6 @@
 const struct filedescr _PyImport_DynLoadFiletab[] = {
 #ifdef __CYGWIN__
     {".dll", "rb", C_EXTENSION},
-    {"module.dll", "rb", C_EXTENSION},
 #else  /* !__CYGWIN__ */
 #if defined(PYOS_OS2) && defined(PYCC_GCC)
     {".pyd", "rb", C_EXTENSION},
@@ -48,15 +47,10 @@ const struct filedescr _PyImport_DynLoadFiletab[] = {
 #ifdef __VMS
     {".exe", "rb", C_EXTENSION},
     {".EXE", "rb", C_EXTENSION},
-    {"module.exe", "rb", C_EXTENSION},
-    {"MODULE.EXE", "rb", C_EXTENSION},
 #else  /* !__VMS */
     {"." SOABI ".so", "rb", C_EXTENSION},
-    {"module." SOABI ".so", "rb", C_EXTENSION},
     {".abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
-    {"module.abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
     {".so", "rb", C_EXTENSION},
-    {"module.so", "rb", C_EXTENSION},
 #endif  /* __VMS */
 #endif  /* defined(PYOS_OS2) && defined(PYCC_GCC) */
 #endif  /* __CYGWIN__ */
@@ -75,7 +69,7 @@ static struct {
 static int nhandles = 0;
 
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
+dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;
@@ -120,10 +114,6 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
 #if !(defined(PYOS_OS2) && defined(PYCC_GCC))
     dlopenflags = PyThreadState_GET()->interp->dlopenflags;
 #endif
-
-    if (Py_VerboseFlag)
-        PySys_WriteStderr("dlopen(\"%s\", %x);\n", pathname,
-                          dlopenflags);
 
 #ifdef __VMS
     /* VMS currently don't allow a pathname, use a logical name instead */

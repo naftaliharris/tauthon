@@ -25,6 +25,7 @@ typedef struct _is {
     PyObject *modules_by_index;
     PyObject *sysdict;
     PyObject *builtins;
+    PyObject *importlib;
     PyObject *modules_reloading;
 
     PyObject *codec_search_path;
@@ -32,6 +33,7 @@ typedef struct _is {
     PyObject *codec_error_registry;
     int codecs_initialized;
     int fscodec_initialized;
+
 
 #ifdef HAVE_DLOPEN
     int dlopenflags;
@@ -74,9 +76,9 @@ typedef struct _ts {
     struct _frame *frame;
     int recursion_depth;
     char overflowed; /* The stack has overflowed. Allow 50 more calls
-		        to handle the runtime error. */
-    char recursion_critical; /* The current calls must not cause 
-				a stack overflow. */
+                        to handle the runtime error. */
+    char recursion_critical; /* The current calls must not cause
+                                a stack overflow. */
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
        the trace/profile. */
@@ -160,6 +162,8 @@ typedef
     enum {PyGILState_LOCKED, PyGILState_UNLOCKED}
         PyGILState_STATE;
 
+#ifdef WITH_THREAD
+
 /* Ensure that the current thread is ready to call the Python
    C API, regardless of the current state of Python, or of its
    thread lock.  This may be called as many times as desired
@@ -200,6 +204,8 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
    on the main thread.
 */
 PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
+
+#endif   /* #ifdef WITH_THREAD */
 
 /* The implementation of sys._current_frames()  Returns a dict mapping
    thread id to that thread's current frame.

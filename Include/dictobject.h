@@ -109,6 +109,8 @@ PyAPI_DATA(PyTypeObject) PyDictValues_Type;
 PyAPI_FUNC(PyObject *) PyDict_New(void);
 PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key);
 PyAPI_FUNC(PyObject *) PyDict_GetItemWithError(PyObject *mp, PyObject *key);
+PyAPI_FUNC(PyObject *) _PyDict_GetItemIdWithError(PyObject *dp,
+                                                  struct _Py_Identifier *key);
 PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item);
 PyAPI_FUNC(int) PyDict_DelItem(PyObject *mp, PyObject *key);
 PyAPI_FUNC(void) PyDict_Clear(PyObject *mp);
@@ -129,6 +131,8 @@ PyAPI_FUNC(int) _PyDict_Contains(PyObject *mp, PyObject *key, Py_hash_t hash);
 PyAPI_FUNC(PyObject *) _PyDict_NewPresized(Py_ssize_t minused);
 PyAPI_FUNC(void) _PyDict_MaybeUntrack(PyObject *mp);
 PyAPI_FUNC(int) _PyDict_HasOnlyStringKeys(PyObject *mp);
+
+PyAPI_FUNC(int) PyDict_ClearFreeList(void);
 #endif
 
 /* PyDict_Update(mp, other) is equivalent to PyDict_Merge(mp, other, 1). */
@@ -153,7 +157,9 @@ PyAPI_FUNC(int) PyDict_MergeFromSeq2(PyObject *d,
                                            int override);
 
 PyAPI_FUNC(PyObject *) PyDict_GetItemString(PyObject *dp, const char *key);
+PyAPI_FUNC(PyObject *) _PyDict_GetItemId(PyObject *dp, struct _Py_Identifier *key);
 PyAPI_FUNC(int) PyDict_SetItemString(PyObject *dp, const char *key, PyObject *item);
+PyAPI_FUNC(int) _PyDict_SetItemId(PyObject *dp, struct _Py_Identifier *key, PyObject *item);
 PyAPI_FUNC(int) PyDict_DelItemString(PyObject *dp, const char *key);
 
 #ifdef __cplusplus

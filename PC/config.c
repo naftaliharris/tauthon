@@ -12,6 +12,7 @@ extern PyObject* PyInit_audioop(void);
 extern PyObject* PyInit_binascii(void);
 extern PyObject* PyInit_cmath(void);
 extern PyObject* PyInit_errno(void);
+extern PyObject* PyInit_faulthandler(void);
 extern PyObject* PyInit_gc(void);
 extern PyObject* PyInit_math(void);
 extern PyObject* PyInit__md5(void);
@@ -55,7 +56,7 @@ extern PyObject* PyInit__codecs_iso2022(void);
 extern PyObject* PyInit__codecs_jp(void);
 extern PyObject* PyInit__codecs_kr(void);
 extern PyObject* PyInit__codecs_tw(void);
-extern PyObject* PyInit__subprocess(void);
+extern PyObject* PyInit__winapi(void);
 extern PyObject* PyInit__lsprof(void);
 extern PyObject* PyInit__ast(void);
 extern PyObject* PyInit__io(void);
@@ -82,6 +83,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"binascii", PyInit_binascii},
     {"cmath", PyInit_cmath},
     {"errno", PyInit_errno},
+    {"faulthandler", PyInit_faulthandler},
     {"gc", PyInit_gc},
     {"math", PyInit_math},
     {"nt", PyInit_nt}, /* Use the NT os functions, not posix */
@@ -99,8 +101,8 @@ struct _inittab _PyImport_Inittab[] = {
     {"msvcrt", PyInit_msvcrt},
     {"_locale", PyInit__locale},
 #endif
-    /* XXX Should _subprocess go in a WIN32 block?  not WIN64? */
-    {"_subprocess", PyInit__subprocess},
+    /* XXX Should _winapi go in a WIN32 block?  not WIN64? */
+    {"_winapi", PyInit__winapi},
 
     {"_codecs", PyInit__codecs},
     {"_weakref", PyInit__weakref},
@@ -141,7 +143,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"marshal", PyMarshal_Init},
 
     /* This lives it with import.c */
-    {"imp", PyInit_imp},
+    {"_imp", PyInit_imp},
 
     /* These entries are here for sys.builtin_module_names */
     {"__main__", NULL},
