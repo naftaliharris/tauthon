@@ -1,9 +1,3 @@
-# We can test part of the module without zlib.
-try:
-    import zlib
-except ImportError:
-    zlib = None
-
 import io
 import os
 import sys
@@ -19,7 +13,7 @@ from tempfile import TemporaryFile
 from random import randint, random
 from unittest import skipUnless
 
-from test.support import TESTFN, run_unittest, findfile, unlink
+from test.support import TESTFN, run_unittest, findfile, unlink, requires_zlib
 
 TESTFN2 = TESTFN + "2"
 TESTFNDIR = TESTFN + "d"
@@ -269,44 +263,44 @@ class TestsWithSourceFile(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_iterlines_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_test(f, zipfile.ZIP_DEFLATED)
 
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_open_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_open_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_random_open_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_random_open_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readline_read_deflated(self):
         # Issue #7610: calls to readline() interleaved with calls to read().
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_readline_read_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readline_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_readline_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readlines_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_readlines_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_iterlines_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_iterlines_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_low_compression(self):
         """Check for cases where compressed data is larger than original."""
         # Create the ZIP archive
@@ -377,7 +371,7 @@ class TestsWithSourceFile(unittest.TestCase):
             with open(TESTFN, "rb") as f:
                 self.assertEqual(zipfp.read(TESTFN), f.read())
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_per_file_compression(self):
         """Check that files within a Zip archive can have different
         compression options."""
@@ -446,19 +440,18 @@ class TestsWithSourceFile(unittest.TestCase):
         # remove the test file subdirectories
         shutil.rmtree(os.path.join(os.getcwd(), 'ziptest2dir'))
 
-    def test_writestr_compression(self):
+    def test_writestr_compression_stored(self):
         zipfp = zipfile.ZipFile(TESTFN2, "w")
         zipfp.writestr("a.txt", "hello world", compress_type=zipfile.ZIP_STORED)
-        if zlib:
-            zipfp.writestr("b.txt", "hello world", compress_type=zipfile.ZIP_DEFLATED)
-
         info = zipfp.getinfo('a.txt')
         self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
 
-        if zlib:
-            info = zipfp.getinfo('b.txt')
-            self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
-
+    @requires_zlib
+    def test_writestr_compression_deflated(self):
+        zipfp = zipfile.ZipFile(TESTFN2, "w")
+        zipfp.writestr("b.txt", "hello world", compress_type=zipfile.ZIP_DEFLATED)
+        info = zipfp.getinfo('b.txt')
+        self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
 
     def zip_test_writestr_permissions(self, f, compression):
         # Make sure that writestr creates files with mode 0600,
@@ -514,7 +507,12 @@ class TestsWithSourceFile(unittest.TestCase):
             self.assertRaises(ValueError, zipfp.write, TESTFN)
 
 
-    @skipUnless(zlib, "requires zlib")
+
+
+
+
+
+    @requires_zlib
     def test_unicode_filenames(self):
         # bug #10801
         fname = findfile('zip_cp437_header.zip')
@@ -623,7 +621,7 @@ class TestZip64InSmallFiles(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_test(f, zipfile.ZIP_DEFLATED)
@@ -1005,7 +1003,7 @@ class OtherTests(unittest.TestCase):
     def test_testzip_with_bad_crc_stored(self):
         self.check_testzip_with_bad_crc(zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_testzip_with_bad_crc_deflated(self):
         self.check_testzip_with_bad_crc(zipfile.ZIP_DEFLATED)
 
@@ -1033,7 +1031,7 @@ class OtherTests(unittest.TestCase):
     def test_read_with_bad_crc_stored(self):
         self.check_read_with_bad_crc(zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_read_with_bad_crc_deflated(self):
         self.check_read_with_bad_crc(zipfile.ZIP_DEFLATED)
 
@@ -1053,7 +1051,7 @@ class OtherTests(unittest.TestCase):
     def test_read_return_size_stored(self):
         self.check_read_return_size(zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_read_return_size_deflated(self):
         self.check_read_return_size(zipfile.ZIP_DEFLATED)
 
@@ -1143,7 +1141,7 @@ class DecryptionTests(unittest.TestCase):
         self.zip2.setpassword(b"perl")
         self.assertRaises(RuntimeError, self.zip2.read, "zero")
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_good_password(self):
         self.zip.setpassword(b"python")
         self.assertEqual(self.zip.read("test.txt"), self.plain)
@@ -1193,7 +1191,7 @@ class TestsWithRandomBinaryFiles(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_test(f, zipfile.ZIP_DEFLATED)
@@ -1233,7 +1231,7 @@ class TestsWithRandomBinaryFiles(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_open_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_open_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_open_test(f, zipfile.ZIP_DEFLATED)
@@ -1261,13 +1259,13 @@ class TestsWithRandomBinaryFiles(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_random_open_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_random_open_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.zip_random_open_test(f, zipfile.ZIP_DEFLATED)
 
 
-@skipUnless(zlib, "requires zlib")
+@requires_zlib
 class TestsWithMultipleOpens(unittest.TestCase):
     def setUp(self):
         # Create the ZIP archive
@@ -1459,28 +1457,28 @@ class UniversalNewlineTests(unittest.TestCase):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.iterlines_test(f, zipfile.ZIP_STORED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_read_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.read_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readline_read_deflated(self):
         # Issue #7610: calls to readline() interleaved with calls to read().
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.readline_read_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readline_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.readline_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_readlines_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.readlines_test(f, zipfile.ZIP_DEFLATED)
 
-    @skipUnless(zlib, "requires zlib")
+    @requires_zlib
     def test_iterlines_deflated(self):
         for f in (TESTFN2, TemporaryFile(), io.BytesIO()):
             self.iterlines_test(f, zipfile.ZIP_DEFLATED)
