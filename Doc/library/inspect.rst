@@ -355,16 +355,24 @@ Retrieving source code
    argument may be a module, class, method, function, traceback, frame, or code
    object.  The source code is returned as a list of the lines corresponding to the
    object and the line number indicates where in the original source file the first
-   line of code was found.  An :exc:`IOError` is raised if the source code cannot
+   line of code was found.  An :exc:`OSError` is raised if the source code cannot
    be retrieved.
+
+   .. versionchanged:: 3.3
+      :exc:`OSError` is raised instead of :exc:`IOError`, now an alias of the
+      former.
 
 
 .. function:: getsource(object)
 
    Return the text of the source code for an object. The argument may be a module,
    class, method, function, traceback, frame, or code object.  The source code is
-   returned as a single string.  An :exc:`IOError` is raised if the source code
+   returned as a single string.  An :exc:`OSError` is raised if the source code
    cannot be retrieved.
+
+   .. versionchanged:: 3.3
+      :exc:`OSError` is raised instead of :exc:`IOError`, now an alias of the
+      former.
 
 
 .. function:: cleandoc(doc)
@@ -432,11 +440,16 @@ Classes and functions
    locals dictionary of the given frame.
 
 
-.. function:: formatargspec(args[, varargs, varkw, defaults, formatarg, formatvarargs, formatvarkw, formatvalue])
+.. function:: formatargspec(args[, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations, formatarg, formatvarargs, formatvarkw, formatvalue, formatreturns, formatannotations])
 
-   Format a pretty argument spec from the four values returned by
-   :func:`getargspec`.  The format\* arguments are the corresponding optional
-   formatting functions that are called to turn names and values into strings.
+   Format a pretty argument spec from the values returned by
+   :func:`getargspec` or :func:`getfullargspec`.
+
+   The first seven arguments are (``args``, ``varargs``, ``varkw``,
+   ``defaults``, ``kwonlyargs``, ``kwonlydefaults``, ``annotations``). The
+   other five arguments are the corresponding optional formatting functions
+   that are called to turn names and values into strings. The last argument
+   is an optional function to format the sequence of arguments.
 
 
 .. function:: formatargvalues(args[, varargs, varkw, locals, formatarg, formatvarargs, formatvarkw, formatvalue])

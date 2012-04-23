@@ -12,7 +12,7 @@ class LoaderTests(abc.LoaderTests):
     """Test load_module() for extension modules."""
 
     def load_module(self, fullname):
-        loader = _bootstrap._ExtensionFileLoader(ext_util.NAME,
+        loader = _bootstrap.ExtensionFileLoader(ext_util.NAME,
                                                 ext_util.FILEPATH)
         return loader.load_module(fullname)
 
@@ -25,7 +25,7 @@ class LoaderTests(abc.LoaderTests):
                 self.assertEqual(getattr(module, attr), value)
             self.assertTrue(ext_util.NAME in sys.modules)
             self.assertTrue(isinstance(module.__loader__,
-                                    _bootstrap._ExtensionFileLoader))
+                                    _bootstrap.ExtensionFileLoader))
 
     def test_package(self):
         # Extensions are not found in packages.
@@ -46,8 +46,10 @@ class LoaderTests(abc.LoaderTests):
         pass
 
     def test_unloadable(self):
-        with self.assertRaises(ImportError):
-            self.load_module('asdfjkl;')
+        name = 'asdfjkl;'
+        with self.assertRaises(ImportError) as cm:
+            self.load_module(name)
+        self.assertEqual(cm.exception.name, name)
 
 
 def test_main():
