@@ -5,49 +5,232 @@
    :synopsis: Implementation of the ElementTree API.
 .. moduleauthor:: Fredrik Lundh <fredrik@pythonware.com>
 
-**Source code:** :source:`Lib/xml/etree/ElementTree.py`
+The :mod:`xml.etree.ElementTree` module implements a simple and efficient API
+for parsing and creating XML data.
 
---------------
+.. versionchanged:: 3.3
+   This module will use a fast implementation whenever available.
+   The :mod:`xml.etree.cElementTree` module is deprecated.
 
-The :class:`Element` type is a flexible container object, designed to store
-hierarchical data structures in memory.  The type can be described as a cross
-between a list and a dictionary.
+Tutorial
+--------
 
-Each element has a number of properties associated with it:
+This is a short tutorial for using :mod:`xml.etree.ElementTree` (``ET`` in
+short).  The goal is to demonstrate some of the building blocks and basic
+concepts of the module.
 
-* a tag which is a string identifying what kind of data this element represents
-  (the element type, in other words).
+XML tree and elements
+^^^^^^^^^^^^^^^^^^^^^
 
-* a number of attributes, stored in a Python dictionary.
+XML is an inherently hierarchical data format, and the most natural way to
+represent it is with a tree.  ``ET`` has two classes for this purpose -
+:class:`ElementTree` represents the whole XML document as a tree, and
+:class:`Element` represents a single node in this tree.  Interactions with
+the whole document (reading and writing to/from files) are usually done
+on the :class:`ElementTree` level.  Interactions with a single XML element
+and its sub-elements are done on the :class:`Element` level.
 
-* a text string.
+.. _elementtree-parsing-xml:
 
-* an optional tail string.
+Parsing XML
+^^^^^^^^^^^
 
-* a number of child elements, stored in a Python sequence
+We'll be using the following XML document contained in a Python string as the
+sample data for this section::
 
-To create an element instance, use the :class:`Element` constructor or the
-:func:`SubElement` factory function.
+   countrydata = r'''<?xml version="1.0"?>
+   <data>
+       <country name="Liechtenshtein">
+           <rank>1</rank>
+           <year>2008</year>
+           <gdppc>141100</gdppc>
+           <neighbor name="Austria" direction="E"/>
+           <neighbor name="Switzerland" direction="W"/>
+       </country>
+       <country name="Singapore">
+           <rank>4</rank>
+           <year>2011</year>
+           <gdppc>59900</gdppc>
+           <neighbor name="Malaysia" direction="N"/>
+       </country>
+       <country name="Panama">
+           <rank>68</rank>
+           <year>2011</year>
+           <gdppc>13600</gdppc>
+           <neighbor name="Costa Rica" direction="W"/>
+           <neighbor name="Colombia" direction="E"/>
+       </country>
+   </data>
+   '''
 
-The :class:`ElementTree` class can be used to wrap an element structure, and
-convert it from and to XML.
+First, import the module and parse the data::
 
-A C implementation of this API is available as :mod:`xml.etree.cElementTree`.
+   import xml.etree.ElementTree as ET
+
+   root = ET.fromstring(countrydata)
+
+:func:`fromstring` parses XML from a string directly into an :class:`Element`,
+which is the root element of the parsed tree.  Other parsing functions may
+create an :class:`ElementTree`.  Make sure to check the documentation to be
+sure.
+
+As an :class:`Element`, ``root`` has a tag and a dictionary of attributes::
+
+   >>> root.tag
+   'data'
+   >>> root.attrib
+   {}
+
+It also has children nodes over which we can iterate::
+
+   >>> for child in root:
+   ...   print(child.tag, child.attrib)
+   ...
+   country {'name': 'Liechtenshtein'}
+   country {'name': 'Singapore'}
+   country {'name': 'Panama'}
+
+Children are nested, and we can access specific child nodes by index::
+
+   >>> root[0][1].text
+   '2008'
+
+Finding interesting elements
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+:class:`Element` has some useful methods that help iterate recursively over all
+the sub-tree below it (its children, their children, and so on).  For example,
+:meth:`Element.iter`::
+
+   >>> for neighbor in root.iter('neighbor'):
+   ...   print(neighbor.attrib)
+   ...
+   {'name': 'Austria', 'direction': 'E'}
+   {'name': 'Switzerland', 'direction': 'W'}
+   {'name': 'Malaysia', 'direction': 'N'}
+   {'name': 'Costa Rica', 'direction': 'W'}
+   {'name': 'Colombia', 'direction': 'E'}
+
+More sophisticated specification of which elements to look for is possible by
+using :ref:`XPath <elementtree-xpath>`.
+
+Building XML documents
+^^^^^^^^^^^^^^^^^^^^^^
+
+``ET`` provides a simple way to build XML documents and write them to files.
+The :meth:`ElementTree.write` method serves this purpose.
+
+Once created, an :class:`Element` object may be manipulated by directly changing
+its fields (such as :attr:`Element.text`), adding and modifying attributes
+(:meth:`Element.set` method), as well as adding new children (for example
+with :meth:`Element.append`).
+
+The :func:`SubElement` function also provides a convenient way to create new
+sub-elements for a given element::
+
+   >>> a = ET.Element('a')
+   >>> b = ET.SubElement(a, 'b')
+   >>> c = ET.SubElement(a, 'c')
+   >>> d = ET.SubElement(c, 'd')
+   >>> ET.dump(a)
+   <a><b /><c><d /></c></a>
+
+Additional resources
+^^^^^^^^^^^^^^^^^^^^
 
 See http://effbot.org/zone/element-index.htm for tutorials and links to other
-docs.  Fredrik Lundh's page is also the location of the development version of
-the xml.etree.ElementTree.
+docs.
 
-.. versionchanged:: 3.2
-   The ElementTree API is updated to 1.3.  For more information, see
-   `Introducing ElementTree 1.3
-   <http://effbot.org/zone/elementtree-13-intro.htm>`_.
 
+.. _elementtree-xpath:
+
+XPath support
+-------------
+
+This module provides limited support for
+`XPath expressions <http://www.w3.org/TR/xpath>`_ for locating elements in a
+tree.  The goal is to support a small subset of the abbreviated syntax; a full
+XPath engine is outside the scope of the module.
+
+Example
+^^^^^^^
+
+Here's an example that demonstrates some of the XPath capabilities of the
+module.  We'll be using the ``countrydata`` XML document from the
+:ref:`Parsing XML <elementtree-parsing-xml>` section::
+
+   import xml.etree.ElementTree as ET
+
+   root = ET.fromstring(countrydata)
+
+   # Top-level elements
+   root.findall(".")
+
+   # All 'neighbor' grand-children of 'country' children of the top-level
+   # elements
+   root.findall("./country/neighbor")
+
+   # Nodes with name='Singapore' that have a 'year' child
+   root.findall(".//year/..[@name='Singapore']")
+
+   # 'year' nodes that are children of nodes with name='Singapore'
+   root.findall(".//*[@name='Singapore']/year")
+
+   # All 'neighbor' nodes that are the second child of their parent
+   root.findall(".//neighbor[2]")
+
+Supported XPath syntax
+^^^^^^^^^^^^^^^^^^^^^^
+
++-----------------------+------------------------------------------------------+
+| Syntax                | Meaning                                              |
++=======================+======================================================+
+| ``tag``               | Selects all child elements with the given tag.       |
+|                       | For example, ``spam`` selects all child elements     |
+|                       | named ``spam``, ``spam/egg`` selects all             |
+|                       | grandchildren named ``egg`` in all children named    |
+|                       | ``spam``.                                            |
++-----------------------+------------------------------------------------------+
+| ``*``                 | Selects all child elements.  For example, ``*/egg``  |
+|                       | selects all grandchildren named ``egg``.             |
++-----------------------+------------------------------------------------------+
+| ``.``                 | Selects the current node.  This is mostly useful     |
+|                       | at the beginning of the path, to indicate that it's  |
+|                       | a relative path.                                     |
++-----------------------+------------------------------------------------------+
+| ``//``                | Selects all subelements, on all levels beneath the   |
+|                       | current  element.  For example, ``.//egg`` selects   |
+|                       | all ``egg`` elements in the entire tree.             |
++-----------------------+------------------------------------------------------+
+| ``..``                | Selects the parent element.                          |
++-----------------------+------------------------------------------------------+
+| ``[@attrib]``         | Selects all elements that have the given attribute.  |
++-----------------------+------------------------------------------------------+
+| ``[@attrib='value']`` | Selects all elements for which the given attribute   |
+|                       | has the given value.  The value cannot contain       |
+|                       | quotes.                                              |
++-----------------------+------------------------------------------------------+
+| ``[tag]``             | Selects all elements that have a child named         |
+|                       | ``tag``.  Only immediate children are supported.     |
++-----------------------+------------------------------------------------------+
+| ``[position]``        | Selects all elements that are located at the given   |
+|                       | position.  The position can be either an integer     |
+|                       | (1 is the first position), the expression ``last()`` |
+|                       | (for the last position), or a position relative to   |
+|                       | the last position (e.g. ``last()-1``).               |
++-----------------------+------------------------------------------------------+
+
+Predicates (expressions within square brackets) must be preceded by a tag
+name, an asterisk, or another predicate.  ``position`` predicates must be
+preceded by a tag name.
+
+Reference
+---------
 
 .. _elementtree-functions:
 
 Functions
----------
+^^^^^^^^^
 
 
 .. function:: Comment(text=None)
@@ -198,8 +381,7 @@ Functions
 .. _elementtree-element-objects:
 
 Element Objects
----------------
-
+^^^^^^^^^^^^^^^
 
 .. class:: Element(tag, attrib={}, **extra)
 
@@ -281,14 +463,15 @@ Element Objects
 
    .. method:: append(subelement)
 
-      Adds the element *subelement* to the end of this elements internal list
-      of subelements.
+      Adds the element *subelement* to the end of this element's internal list
+      of subelements.  Raises :exc:`TypeError` if *subelement* is not an
+      :class:`Element`.
 
 
    .. method:: extend(subelements)
 
       Appends *subelements* from a sequence object with zero or more elements.
-      Raises :exc:`AssertionError` if a subelement is not a valid object.
+      Raises :exc:`TypeError` if a subelement is not an :class:`Element`.
 
       .. versionadded:: 3.2
 
@@ -296,21 +479,24 @@ Element Objects
    .. method:: find(match)
 
       Finds the first subelement matching *match*.  *match* may be a tag name
-      or path.  Returns an element instance or ``None``.
+      or a :ref:`path <elementtree-xpath>`.  Returns an element instance
+      or ``None``.
 
 
    .. method:: findall(match)
 
-      Finds all matching subelements, by tag name or path.  Returns a list
-      containing all matching elements in document order.
+      Finds all matching subelements, by tag name or
+      :ref:`path <elementtree-xpath>`.  Returns a list containing all matching
+      elements in document order.
 
 
    .. method:: findtext(match, default=None)
 
       Finds text for the first subelement matching *match*.  *match* may be
-      a tag name or path.  Returns the text content of the first matching
-      element, or *default* if no element was found.  Note that if the matching
-      element has no text content an empty string is returned.
+      a tag name or a :ref:`path <elementtree-xpath>`.  Returns the text content
+      of the first matching element, or *default* if no element was found.
+      Note that if the matching element has no text content an empty string
+      is returned.
 
 
    .. method:: getchildren()
@@ -325,9 +511,10 @@ Element Objects
          Use method :meth:`Element.iter` instead.
 
 
-   .. method:: insert(index, element)
+   .. method:: insert(index, subelement)
 
-      Inserts a subelement at the given position in this element.
+      Inserts *subelement* at the given position in this element.  Raises
+      :exc:`TypeError` if *subelement* is not an :class:`Element`.
 
 
    .. method:: iter(tag=None)
@@ -343,8 +530,9 @@ Element Objects
 
    .. method:: iterfind(match)
 
-      Finds all matching subelements, by tag name or path.  Returns an iterable
-      yielding all matching elements in document order.
+      Finds all matching subelements, by tag name or
+      :ref:`path <elementtree-xpath>`.  Returns an iterable yielding all
+      matching elements in document order.
 
       .. versionadded:: 3.2
 
@@ -389,7 +577,7 @@ Element Objects
 .. _elementtree-elementtree-objects:
 
 ElementTree Objects
--------------------
+^^^^^^^^^^^^^^^^^^^
 
 
 .. class:: ElementTree(element=None, file=None)
@@ -411,26 +599,17 @@ ElementTree Objects
 
    .. method:: find(match)
 
-      Finds the first toplevel element matching *match*.  *match* may be a tag
-      name or path.  Same as getroot().find(match).  Returns the first matching
-      element, or ``None`` if no element was found.
+      Same as :meth:`Element.find`, starting at the root of the tree.
 
 
    .. method:: findall(match)
 
-      Finds all matching subelements, by tag name or path.  Same as
-      getroot().findall(match).  *match* may be a tag name or path.  Returns a
-      list containing all matching elements, in document order.
+      Same as :meth:`Element.findall`, starting at the root of the tree.
 
 
    .. method:: findtext(match, default=None)
 
-      Finds the element text for the first toplevel element with given tag.
-      Same as getroot().findtext(match).  *match* may be a tag name or path.
-      *default* is the value to return if the element was not found.  Returns
-      the text content of the first matching element, or the default value no
-      element was found.  Note that if the element is found, but has no text
-      content, this method returns an empty string.
+      Same as :meth:`Element.findtext`, starting at the root of the tree.
 
 
    .. method:: getiterator(tag=None)
@@ -453,9 +632,7 @@ ElementTree Objects
 
    .. method:: iterfind(match)
 
-      Finds all matching subelements, by tag name or path.  Same as
-      getroot().iterfind(match). Returns an iterable yielding all matching
-      elements in document order.
+      Same as :meth:`Element.iterfind`, starting at the root of the tree.
 
       .. versionadded:: 3.2
 
@@ -510,7 +687,7 @@ Example of changing the attribute "target" of every link in first paragraph::
 .. _elementtree-qname-objects:
 
 QName Objects
--------------
+^^^^^^^^^^^^^
 
 
 .. class:: QName(text_or_uri, tag=None)
@@ -526,7 +703,7 @@ QName Objects
 .. _elementtree-treebuilder-objects:
 
 TreeBuilder Objects
--------------------
+^^^^^^^^^^^^^^^^^^^
 
 
 .. class:: TreeBuilder(element_factory=None)
@@ -577,7 +754,7 @@ TreeBuilder Objects
 .. _elementtree-xmlparser-objects:
 
 XMLParser Objects
------------------
+^^^^^^^^^^^^^^^^^
 
 
 .. class:: XMLParser(html=0, target=None, encoding=None)
@@ -645,6 +822,24 @@ This is an example of counting the maximum depth of an XML file::
     >>> parser.close()
     4
 
+Exceptions
+^^^^^^^^^^
+
+.. class:: ParseError
+
+   XML parse error, raised by the various parsing methods in this module when
+   parsing fails.  The string representation of an instance of this exception
+   will contain a user-friendly error message.  In addition, it will have
+   the following attributes available:
+
+   .. attribute:: code
+
+      A numeric error code from the expat parser. See the documentation of
+      :mod:`xml.parsers.expat` for the list of error codes and their meanings.
+
+   .. attribute:: position
+
+      A tuple of *line*, *column* numbers, specifying where the error occurred.
 
 .. rubric:: Footnotes
 

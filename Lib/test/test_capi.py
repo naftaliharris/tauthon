@@ -55,6 +55,29 @@ class CAPITest(unittest.TestCase):
     def test_memoryview_from_NULL_pointer(self):
         self.assertRaises(ValueError, _testcapi.make_memoryview_from_NULL_pointer)
 
+    def test_exc_info(self):
+        raised_exception = ValueError("5")
+        new_exc = TypeError("TEST")
+        try:
+            raise raised_exception
+        except ValueError as e:
+            tb = e.__traceback__
+            orig_sys_exc_info = sys.exc_info()
+            orig_exc_info = _testcapi.set_exc_info(new_exc.__class__, new_exc, None)
+            new_sys_exc_info = sys.exc_info()
+            new_exc_info = _testcapi.set_exc_info(*orig_exc_info)
+            reset_sys_exc_info = sys.exc_info()
+
+            self.assertEqual(orig_exc_info[1], e)
+
+            self.assertSequenceEqual(orig_exc_info, (raised_exception.__class__, raised_exception, tb))
+            self.assertSequenceEqual(orig_sys_exc_info, orig_exc_info)
+            self.assertSequenceEqual(reset_sys_exc_info, orig_exc_info)
+            self.assertSequenceEqual(new_exc_info, (new_exc.__class__, new_exc, None))
+            self.assertSequenceEqual(new_sys_exc_info, new_exc_info)
+        else:
+            self.assertTrue(False)
+
 @unittest.skipUnless(threading, 'Threading required for this test.')
 class TestPendingCalls(unittest.TestCase):
 
@@ -210,18 +233,17 @@ def test_main():
         idents = []
 
         def callback():
-            idents.append(_thread.get_ident())
+            idents.append(threading.get_ident())
 
         _testcapi._test_thread_state(callback)
         a = b = callback
         time.sleep(1)
         # Check our main thread is in the list exactly 3 times.
-        if idents.count(_thread.get_ident()) != 3:
+        if idents.count(threading.get_ident()) != 3:
             raise support.TestFailed(
                         "Couldn't find main thread correctly in the list")
 
     if threading:
-        import _thread
         import time
         TestThreadState()
         t = threading.Thread(target=TestThreadState)
