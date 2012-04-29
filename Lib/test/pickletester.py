@@ -4,10 +4,11 @@ import pickle
 import pickletools
 import sys
 import copyreg
+import weakref
 from http.cookies import SimpleCookie
 
 from test.support import (
-    TestFailed, TESTFN, run_with_locale,
+    TestFailed, TESTFN, run_with_locale, no_tracing,
     _2G, _4G, bigmemtest,
     )
 
@@ -18,7 +19,7 @@ from pickle import bytes_types
 # kind of outer loop.
 protocols = range(pickle.HIGHEST_PROTOCOL + 1)
 
-character_size = 4 if sys.maxunicode > 0xFFFF else 2
+ascii_char_size = 1
 
 
 # Return True if opcode code appears in the pickle, else False.
@@ -742,6 +743,18 @@ class AbstractPickleTests(unittest.TestCase):
                 u = self.loads(s)
                 self.assertEqual(t, u)
 
+    def test_ellipsis(self):
+        for proto in protocols:
+            s = self.dumps(..., proto)
+            u = self.loads(s)
+            self.assertEqual(..., u)
+
+    def test_notimplemented(self):
+        for proto in protocols:
+            s = self.dumps(NotImplemented, proto)
+            u = self.loads(s)
+            self.assertEqual(NotImplemented, u)
+
     # Tests for protocol 2
 
     def test_proto(self):
@@ -871,6 +884,25 @@ class AbstractPickleTests(unittest.TestCase):
                 x.foo = 42
                 s = self.dumps(x, proto)
                 y = self.loads(s)
+                detail = (proto, C, B, x, y, type(y))
+                self.assertEqual(B(x), B(y), detail)
+                self.assertEqual(x.__dict__, y.__dict__, detail)
+
+    def test_newobj_proxies(self):
+        # NEWOBJ should use the __class__ rather than the raw type
+        classes = myclasses[:]
+        # Cannot create weakproxies to these classes
+        for c in (MyInt, MyTuple):
+            classes.remove(c)
+        for proto in protocols:
+            for C in classes:
+                B = C.__base__
+                x = C(C.sample)
+                x.foo = 42
+                p = weakref.proxy(x)
+                s = self.dumps(p, proto)
+                y = self.loads(s)
+                self.assertEqual(type(y), type(x))  # rather than type(p)
                 detail = (proto, C, B, x, y, type(y))
                 self.assertEqual(B(x), B(y), detail)
                 self.assertEqual(x.__dict__, y.__dict__, detail)
@@ -1035,13 +1067,13 @@ class AbstractPickleTests(unittest.TestCase):
             y = self.loads(s)
             self.assertEqual(y._reduce_called, 1)
 
+    @no_tracing
     def test_bad_getattr(self):
         x = BadGetattr()
         for proto in 0, 1:
             self.assertRaises(RuntimeError, self.dumps, x, proto)
         # protocol 2 don't raise a RuntimeError.
         d = self.dumps(x, 2)
-        self.assertRaises(RuntimeError, self.loads, d)
 
     def test_reduce_bad_iterator(self):
         # Issue4176: crash when 4th and 5th items of __reduce__()
@@ -1131,6 +1163,15 @@ class AbstractPickleTests(unittest.TestCase):
         empty = self.loads(b'\x80\x03U\x00q\x00.', encoding='koi8-r')
         self.assertEqual(empty, '')
 
+    def test_int_pickling_efficiency(self):
+        # Test compacity of int representation (see issue #12744)
+        for proto in protocols:
+            sizes = [len(self.dumps(2**n, proto)) for n in range(70)]
+            # the size function is monotonic
+            self.assertEqual(sorted(sizes), sizes)
+            if proto >= 2:
+                self.assertLessEqual(sizes[-1], 14)
+
     def check_negative_32b_binXXX(self, dumped):
         if sys.maxsize > 2**32:
             self.skipTest("test is only meaningful on 32-bit builds")
@@ -1212,7 +1253,7 @@ class BigmemPickleTests(unittest.TestCase):
     # All protocols use 1-byte per printable ASCII character; we add another
     # byte because the encoded form has to be copied into the internal buffer.
 
-    @bigmemtest(size=_2G, memuse=2 + character_size, dry_run=False)
+    @bigmemtest(size=_2G, memuse=2 + ascii_char_size, dry_run=False)
     def test_huge_str_32b(self, size):
         data = "abcd" * (size // 4)
         try:
@@ -1229,7 +1270,7 @@ class BigmemPickleTests(unittest.TestCase):
     # BINUNICODE (protocols 1, 2 and 3) cannot carry more than
     # 2**32 - 1 bytes of utf-8 encoded unicode.
 
-    @bigmemtest(size=_4G, memuse=1 + character_size, dry_run=False)
+    @bigmemtest(size=_4G, memuse=1 + ascii_char_size, dry_run=False)
     def test_huge_str_64b(self, size):
         data = "a" * size
         try:
@@ -1574,6 +1615,105 @@ class AbstractPicklerUnpicklerObjectTests(unittest.TestCase):
                 f.seek(0)
                 unpickler = self.unpickler_class(f)
                 self.assertEqual(unpickler.load(), data)
+
+
+# Tests for dispatch_table attribute
+
+REDUCE_A = 'reduce_A'
+
+class AAA(object):
+    def __reduce__(self):
+        return str, (REDUCE_A,)
+
+class BBB(object):
+    pass
+
+class AbstractDispatchTableTests(unittest.TestCase):
+
+    def test_default_dispatch_table(self):
+        # No dispatch_table attribute by default
+        f = io.BytesIO()
+        p = self.pickler_class(f, 0)
+        with self.assertRaises(AttributeError):
+            p.dispatch_table
+        self.assertFalse(hasattr(p, 'dispatch_table'))
+
+    def test_class_dispatch_table(self):
+        # A dispatch_table attribute can be specified class-wide
+        dt = self.get_dispatch_table()
+
+        class MyPickler(self.pickler_class):
+            dispatch_table = dt
+
+        def dumps(obj, protocol=None):
+            f = io.BytesIO()
+            p = MyPickler(f, protocol)
+            self.assertEqual(p.dispatch_table, dt)
+            p.dump(obj)
+            return f.getvalue()
+
+        self._test_dispatch_table(dumps, dt)
+
+    def test_instance_dispatch_table(self):
+        # A dispatch_table attribute can also be specified instance-wide
+        dt = self.get_dispatch_table()
+
+        def dumps(obj, protocol=None):
+            f = io.BytesIO()
+            p = self.pickler_class(f, protocol)
+            p.dispatch_table = dt
+            self.assertEqual(p.dispatch_table, dt)
+            p.dump(obj)
+            return f.getvalue()
+
+        self._test_dispatch_table(dumps, dt)
+
+    def _test_dispatch_table(self, dumps, dispatch_table):
+        def custom_load_dump(obj):
+            return pickle.loads(dumps(obj, 0))
+
+        def default_load_dump(obj):
+            return pickle.loads(pickle.dumps(obj, 0))
+
+        # pickling complex numbers using protocol 0 relies on copyreg
+        # so check pickling a complex number still works
+        z = 1 + 2j
+        self.assertEqual(custom_load_dump(z), z)
+        self.assertEqual(default_load_dump(z), z)
+
+        # modify pickling of complex
+        REDUCE_1 = 'reduce_1'
+        def reduce_1(obj):
+            return str, (REDUCE_1,)
+        dispatch_table[complex] = reduce_1
+        self.assertEqual(custom_load_dump(z), REDUCE_1)
+        self.assertEqual(default_load_dump(z), z)
+
+        # check picklability of AAA and BBB
+        a = AAA()
+        b = BBB()
+        self.assertEqual(custom_load_dump(a), REDUCE_A)
+        self.assertIsInstance(custom_load_dump(b), BBB)
+        self.assertEqual(default_load_dump(a), REDUCE_A)
+        self.assertIsInstance(default_load_dump(b), BBB)
+
+        # modify pickling of BBB
+        dispatch_table[BBB] = reduce_1
+        self.assertEqual(custom_load_dump(a), REDUCE_A)
+        self.assertEqual(custom_load_dump(b), REDUCE_1)
+        self.assertEqual(default_load_dump(a), REDUCE_A)
+        self.assertIsInstance(default_load_dump(b), BBB)
+
+        # revert pickling of BBB and modify pickling of AAA
+        REDUCE_2 = 'reduce_2'
+        def reduce_2(obj):
+            return str, (REDUCE_2,)
+        dispatch_table[AAA] = reduce_2
+        del dispatch_table[BBB]
+        self.assertEqual(custom_load_dump(a), REDUCE_2)
+        self.assertIsInstance(custom_load_dump(b), BBB)
+        self.assertEqual(default_load_dump(a), REDUCE_A)
+        self.assertIsInstance(default_load_dump(b), BBB)
 
 
 if __name__ == "__main__":
