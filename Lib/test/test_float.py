@@ -88,7 +88,7 @@ class GeneralFloatCases(unittest.TestCase):
         self.assertRaises(ValueError, float, "  -0x3.p-1  ")
         self.assertRaises(ValueError, float, "  +0x3.p-1  ")
         self.assertEqual(float("  25.e-1  "), 2.5)
-        self.assertEqual(support.fcmp(float("  .25e-1  "), .025), 0)
+        self.assertAlmostEqual(float("  .25e-1  "), .025)
 
     def test_floatconversion(self):
         # Make sure that calls to __float__() work properly
@@ -869,6 +869,19 @@ class InfNanTest(unittest.TestCase):
         self.assertTrue(INF.is_inf())
         self.assertFalse(NAN.is_inf())
         self.assertFalse((0.).is_inf())
+
+    def test_inf_signs(self):
+        self.assertEqual(copysign(1.0, float('inf')), 1.0)
+        self.assertEqual(copysign(1.0, float('-inf')), -1.0)
+
+    @unittest.skipUnless(getattr(sys, 'float_repr_style', '') == 'short',
+                         "applies only when using short float repr style")
+    def test_nan_signs(self):
+        # When using the dtoa.c code, the sign of float('nan') should
+        # be predictable.
+        self.assertEqual(copysign(1.0, float('nan')), 1.0)
+        self.assertEqual(copysign(1.0, float('-nan')), -1.0)
+
 
 fromHex = float.fromhex
 toHex = float.hex
