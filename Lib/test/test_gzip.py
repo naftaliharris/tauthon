@@ -64,6 +64,21 @@ class TestGzip(unittest.TestCase):
             d = f.read()
         self.assertEqual(d, data1*50)
 
+    def test_read1(self):
+        self.test_write()
+        blocks = []
+        nread = 0
+        with gzip.GzipFile(self.filename, 'r') as f:
+            while True:
+                d = f.read1()
+                if not d:
+                    break
+                blocks.append(d)
+                nread += len(d)
+                # Check that position was updated correctly (see issue10791).
+                self.assertEqual(f.tell(), nread)
+        self.assertEqual(b''.join(blocks), data1 * 50)
+
     def test_io_on_closed_object(self):
         # Test that I/O operations on closed GzipFile objects raise a
         # ValueError, just like the corresponding functions on file objects.
@@ -124,7 +139,7 @@ class TestGzip(unittest.TestCase):
             with io.BufferedReader(f) as r:
                 lines = [line for line in r]
 
-        self.assertEqual(lines, 50 * data1.splitlines(True))
+        self.assertEqual(lines, 50 * data1.splitlines(keepends=True))
 
     def test_readline(self):
         self.test_write()
@@ -322,6 +337,14 @@ class TestGzip(unittest.TestCase):
                 nread += len(s)
             self.assertEqual(f.read(100), b'')
             self.assertEqual(nread, len(uncompressed))
+
+    def test_textio_readlines(self):
+        # Issue #10791: TextIOWrapper.readlines() fails when wrapping GzipFile.
+        lines = (data1 * 50).decode("ascii").splitlines(keepends=True)
+        self.test_write()
+        with gzip.GzipFile(self.filename, 'r') as f:
+            with io.TextIOWrapper(f, encoding="ascii") as t:
+                self.assertEqual(t.readlines(), lines)
 
     def test_fileobj_from_fdopen(self):
         # Issue #13781: Opening a GzipFile for writing fails when using a
