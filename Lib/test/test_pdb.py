@@ -1,5 +1,5 @@
 # A test suite for pdb; not very comprehensive at the moment.
-
+import os
 import imp
 import pdb
 import sys
@@ -21,9 +21,12 @@ class PdbTestInput(object):
     def __enter__(self):
         self.real_stdin = sys.stdin
         sys.stdin = _FakeInput(self.input)
+        self.orig_trace = sys.gettrace() if hasattr(sys, 'gettrace') else None
 
     def __exit__(self, *exc):
         sys.stdin = self.real_stdin
+        if self.orig_trace:
+            sys.settrace(self.orig_trace)
 
 
 def test_pdb_displayhook():
@@ -601,6 +604,7 @@ class PdbTestCase(unittest.TestCase):
         filename = 'main.py'
         with open(filename, 'w') as f:
             f.write(textwrap.dedent(script))
+        self.addCleanup(support.unlink, filename)
         cmd = [sys.executable, '-m', 'pdb', filename]
         stdout = stderr = None
         with subprocess.Popen(cmd, stdout=subprocess.PIPE,
@@ -627,6 +631,7 @@ class PdbTestCase(unittest.TestCase):
         self.assertNotIn(b'SyntaxError', stdout,
                          "Got a syntax error running test script under PDB")
 
+    @unittest.skipIf(os.name == 'nt', "temporarily disabled on Windows")
     def test_issue13183(self):
         script = """
             from bar import bar
@@ -657,9 +662,11 @@ class PdbTestCase(unittest.TestCase):
         """
         with open('bar.py', 'w') as f:
             f.write(textwrap.dedent(bar))
+        self.addCleanup(support.unlink, 'bar.py')
         stdout, stderr = self.run_pdb(script, commands)
-        self.assertIn('main.py(5)foo()->None', stdout.split('\n')[-3],
-                         'Fail to step into the caller after a return')
+        self.assertTrue(
+            any('main.py(5)foo()->None' in l for l in stdout.splitlines()),
+            'Fail to step into the caller after a return')
 
     def tearDown(self):
         support.unlink(support.TESTFN)
