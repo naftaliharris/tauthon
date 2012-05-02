@@ -184,6 +184,19 @@ Power and logarithmic functions
    result is calculated in a way which is accurate for *x* near zero.
 
 
+.. function:: log2(x)
+
+   Return the base-2 logarithm of *x*. This is usually more accurate than
+   ``log(x, 2)``.
+
+   .. versionadded:: 3.3
+
+   .. seealso::
+
+      :meth:`int.bit_length` returns the number of bits necessary to represent
+      an integer in binary, excluding the sign and leading zeros.
+
+
 .. function:: log10(x)
 
    Return the base-10 logarithm of *x*.  This is usually more accurate
