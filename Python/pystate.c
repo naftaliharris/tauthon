@@ -69,7 +69,6 @@ PyInterpreterState_New(void)
             Py_FatalError("Can't initialize threads for interpreter");
 #endif
         interp->modules = NULL;
-        interp->modules_reloading = NULL;
         interp->modules_by_index = NULL;
         interp->sysdict = NULL;
         interp->builtins = NULL;
@@ -79,6 +78,7 @@ PyInterpreterState_New(void)
         interp->codec_error_registry = NULL;
         interp->codecs_initialized = 0;
         interp->fscodec_initialized = 0;
+        interp->importlib = NULL;
 #ifdef HAVE_DLOPEN
 #ifdef RTLD_NOW
         interp->dlopenflags = RTLD_NOW;
@@ -113,9 +113,9 @@ PyInterpreterState_Clear(PyInterpreterState *interp)
     Py_CLEAR(interp->codec_error_registry);
     Py_CLEAR(interp->modules);
     Py_CLEAR(interp->modules_by_index);
-    Py_CLEAR(interp->modules_reloading);
     Py_CLEAR(interp->sysdict);
     Py_CLEAR(interp->builtins);
+    Py_CLEAR(interp->importlib);
 }
 
 
