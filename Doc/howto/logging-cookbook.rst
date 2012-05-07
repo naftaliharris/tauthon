@@ -1316,6 +1316,33 @@ For more information about this configuration, you can see the `relevant
 section <https://docs.djangoproject.com/en/1.3/topics/logging/#configuring-logging>`_
 of the Django documentation.
 
+.. _cookbook-rotator-namer:
+
+Using a rotator and namer to customise log rotation processing
+--------------------------------------------------------------
+
+An example of how you can define a namer and rotator is given in the following
+snippet, which shows zlib-based compression of the log file::
+
+    def namer(name):
+        return name + ".gz"
+
+    def rotator(source, dest):
+        with open(source, "rb") as sf:
+            data = sf.read()
+            compressed = zlib.compress(data, 9)
+            with open(dest, "wb") as df:
+                df.write(compressed)
+        os.remove(source)
+
+    rh = logging.handlers.RotatingFileHandler(...)
+    rh.rotator = rotator
+    rh.namer = namer
+
+These are not "true" .gz files, as they are bare compressed data, with no
+"container" such as you’d find in an actual gzip file. This snippet is just
+for illustration purposes.
+
 A more elaborate multiprocessing example
 ----------------------------------------
 
@@ -1572,7 +1599,7 @@ UTF-8, then you need to do the following:
 
       'ASCII section\ufeffUnicode section'
 
-   The Unicode code point ``'\feff```, when encoded using UTF-8, will be
+   The Unicode code point ``'\feff'``, when encoded using UTF-8, will be
    encoded as a UTF-8 BOM -- the byte-string ``b'\xef\xbb\xbf'``.
 
 #. Replace the ASCII section with whatever placeholders you like, but make sure
