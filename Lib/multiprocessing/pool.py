@@ -4,32 +4,7 @@
 # multiprocessing/pool.py
 #
 # Copyright (c) 2006-2008, R Oudkerk
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in the
-#    documentation and/or other materials provided with the distribution.
-# 3. Neither the name of author nor the names of any contributors may be
-#    used to endorse or promote products derived from this software
-#    without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
-# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-# SUCH DAMAGE.
+# Licensed to PSF under a Contributor Agreement.
 #
 
 __all__ = ['Pool']
@@ -63,6 +38,9 @@ job_counter = itertools.count()
 
 def mapstar(args):
     return list(map(*args))
+
+def starmapstar(args):
+    return list(itertools.starmap(args[0], args[1]))
 
 #
 # Code run by worker processes
@@ -248,7 +226,25 @@ class Pool(object):
         in a list that is returned.
         '''
         assert self._state == RUN
-        return self.map_async(func, iterable, chunksize).get()
+        return self._map_async(func, iterable, mapstar, chunksize).get()
+
+    def starmap(self, func, iterable, chunksize=None):
+        '''
+        Like `map()` method but the elements of the `iterable` are expected to
+        be iterables as well and will be unpacked as arguments. Hence
+        `func` and (a, b) becomes func(a, b).
+        '''
+        assert self._state == RUN
+        return self._map_async(func, iterable, starmapstar, chunksize).get()
+
+    def starmap_async(self, func, iterable, chunksize=None, callback=None,
+            error_callback=None):
+        '''
+        Asynchronous version of `starmap()` method.
+        '''
+        assert self._state == RUN
+        return self._map_async(func, iterable, starmapstar, chunksize,
+                               callback, error_callback)
 
     def imap(self, func, iterable, chunksize=1):
         '''
@@ -302,6 +298,13 @@ class Pool(object):
         Asynchronous version of `map()` method.
         '''
         assert self._state == RUN
+        return self._map_async(func, iterable, mapstar, chunksize)
+
+    def _map_async(self, func, iterable, mapper, chunksize=None, callback=None,
+            error_callback=None):
+        '''
+        Helper function to implement map, starmap and their async counterparts.
+        '''
         if not hasattr(iterable, '__len__'):
             iterable = list(iterable)
 
@@ -315,7 +318,7 @@ class Pool(object):
         task_batches = Pool._get_tasks(func, iterable, chunksize)
         result = MapResult(self._cache, chunksize, len(iterable), callback,
                            error_callback=error_callback)
-        self._taskqueue.put((((result._job, i, mapstar, (x,), {})
+        self._taskqueue.put((((result._job, i, mapper, (x,), {})
                               for i, x in enumerate(task_batches)), None))
         return result
 

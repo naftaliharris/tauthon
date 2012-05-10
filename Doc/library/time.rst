@@ -41,25 +41,6 @@ An explanation of some terminology and conventions is in order.
   parsed, they are converted according to the POSIX and ISO C standards: values
   69--99 are mapped to 1969--1999, and values 0--68 are mapped to 2000--2068.
 
-  For backward compatibility, years with less than 4 digits are treated
-  specially by :func:`asctime`, :func:`mktime`, and :func:`strftime` functions
-  that operate on a 9-tuple or :class:`struct_time` values. If year (the first
-  value in the 9-tuple) is specified with less than 4 digits, its interpretation
-  depends on the value of ``accept2dyear`` variable.
-
-  If ``accept2dyear`` is true (default), a backward compatibility behavior is
-  invoked as follows:
-
-    - for 2-digit year, century is guessed according to POSIX rules for
-      ``%y`` strptime format.  A deprecation warning is issued when century
-      information is guessed in this way.
-
-    - for 3-digit or negative year, a :exc:`ValueError` exception is raised.
-
-  If ``accept2dyear`` is false (set by the program or as a result of a
-  non-empty value assigned to ``PYTHONY2K`` environment variable) all year
-  values are interpreted as given.
-
 .. index::
    single: UTC
    single: Coordinated Universal Time
@@ -117,24 +98,6 @@ An explanation of some terminology and conventions is in order.
 
 The module defines the following functions and data items:
 
-
-.. data:: accept2dyear
-
-   Boolean value indicating whether two-digit year values will be
-   mapped to 1969--2068 range by :func:`asctime`, :func:`mktime`, and
-   :func:`strftime` functions.  This is true by default, but will be
-   set to false if the environment variable :envvar:`PYTHONY2K` has
-   been set to a non-empty string.  It may also be modified at run
-   time.
-
-   .. deprecated:: 3.2
-      Mapping of 2-digit year values by :func:`asctime`,
-      :func:`mktime`, and :func:`strftime` functions to 1969--2068
-      range is deprecated.  Programs that need to process 2-digit
-      years should use ``%y`` code available in :func:`strptime`
-      function or convert 2-digit year values to 4-digit themselves.
-
-
 .. data:: altzone
 
    The offset of the local DST timezone, in seconds west of UTC, if one is defined.
@@ -152,7 +115,8 @@ The module defines the following functions and data items:
 
    .. note::
 
-      Unlike the C function of the same name, there is no trailing newline.
+      Unlike the C function of the same name, :func:`asctime` does not add a
+      trailing newline.
 
 
 .. function:: clock()
@@ -172,6 +136,121 @@ The module defines the following functions and data items:
    :c:func:`QueryPerformanceCounter`. The resolution is typically better than one
    microsecond.
 
+   .. deprecated:: 3.3
+      The behaviour of this function depends on the platform: use
+      :func:`perf_counter` or :func:`process_time` instead, depending on your
+      requirements, to have a well defined behaviour.
+
+
+.. function:: clock_getres(clk_id)
+
+   Return the resolution (precision) of the specified clock *clk_id*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: clock_gettime(clk_id)
+
+   Return the time of the specified clock *clk_id*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. class:: clock_info
+
+   Clock information object returned by :func:`get_clock_info`.
+
+   .. attribute:: implementation
+
+      The name of the underlying C function used to get the clock value.
+
+   .. attribute::  monotonic
+
+      ``True`` if the clock cannot go backward, ``False`` otherwise.
+
+   .. attribute:: adjusted
+
+      ``True`` if the clock can be adjusted (e.g. by a NTP daemon), ``False``
+      otherwise.
+
+   .. attribute:: resolution
+
+      The resolution of the clock in seconds (:class:`float`).
+
+   .. versionadded:: 3.3
+
+
+.. function:: clock_settime(clk_id, time)
+
+   Set the time of the specified clock *clk_id*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_HIGHRES
+
+   The Solaris OS has a CLOCK_HIGHRES timer that attempts to use an optimal
+   hardware source, and may give close to nanosecond resolution.  CLOCK_HIGHRES
+   is the nonadjustable, high-resolution clock.
+
+   Availability: Solaris.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_MONOTONIC
+
+   Clock that cannot be set and represents monotonic time since some unspecified
+   starting point.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_MONOTONIC_RAW
+
+   Similar to :data:`CLOCK_MONOTONIC`, but provides access to a raw
+   hardware-based time that is not subject to NTP adjustments.
+
+   Availability: Linux 2.6.28 or later.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_PROCESS_CPUTIME_ID
+
+   High-resolution per-process timer from the CPU.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_REALTIME
+
+   System-wide real-time clock.  Setting this clock requires appropriate
+   privileges.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLOCK_THREAD_CPUTIME_ID
+
+   Thread-specific CPU-time clock.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
 
 .. function:: ctime([secs])
 
@@ -184,6 +263,21 @@ The module defines the following functions and data items:
 .. data:: daylight
 
    Nonzero if a DST timezone is defined.
+
+
+.. function:: get_clock_info(name)
+
+   Get information on the specified clock as a :class:`clock_info` object.
+   Supported clock names and the corresponding functions to read their value
+   are:
+
+   * ``'clock'``: :func:`time.clock`
+   * ``'monotonic'``: :func:`time.monotonic`
+   * ``'perf_counter'``: :func:`time.perf_counter`
+   * ``'process_time'``: :func:`time.process_time`
+   * ``'time'``: :func:`time.time`
+
+   .. versionadded:: 3.3
 
 
 .. function:: gmtime([secs])
@@ -213,6 +307,48 @@ The module defines the following functions and data items:
    :exc:`OverflowError` or :exc:`ValueError` will be raised (which depends on
    whether the invalid value is caught by Python or the underlying C libraries).
    The earliest date for which it can generate a time is platform-dependent.
+
+
+.. function:: monotonic()
+
+   Return the value (in fractional seconds) of a monotonic clock, i.e. a clock
+   that cannot go backwards.  The clock is not affected by system clock updates.
+   The reference point of the returned value is undefined, so that only the
+   difference between the results of consecutive calls is valid.
+
+   On Windows versions older than Vista, :func:`monotonic` detects
+   :c:func:`GetTickCount` integer overflow (32 bits, roll-over after 49.7 days).
+   It increases an internal epoch (reference time by) 2\ :sup:`32` each time
+   that an overflow is detected.  The epoch is stored in the process-local state
+   and so the value of :func:`monotonic` may be different in two Python
+   processes running for more than 49 days. On more recent versions of Windows
+   and on other operating systems, :func:`monotonic` is system-wide.
+
+   Availability: Windows, Mac OS X, Linux, FreeBSD, OpenBSD, Solaris.
+
+   .. versionadded:: 3.3
+
+
+.. function:: perf_counter()
+
+   Return the value (in fractional seconds) of a performance counter, i.e. a
+   clock with the highest available resolution to measure a short duration.  It
+   does include time elapsed during sleep and is system-wide.  The reference
+   point of the returned value is undefined, so that only the difference between
+   the results of consecutive calls is valid.
+
+   .. versionadded:: 3.3
+
+
+.. function:: process_time()
+
+   Return the value (in fractional seconds) of the sum of the system and user
+   CPU time of the current process.  It does not include time elapsed during
+   sleep.  It is process-wide by definition.  The reference point of the
+   returned value is undefined, so that only the difference between the results
+   of consecutive calls is valid.
+
+   .. versionadded:: 3.3
 
 
 .. function:: sleep(secs)
@@ -308,7 +444,7 @@ The module defines the following functions and data items:
    | ``%y``    | Year without century as a decimal number       |       |
    |           | [00,99].                                       |       |
    +-----------+------------------------------------------------+-------+
-   | ``%Y``    | Year with century as a decimal number.         | \(4)  |
+   | ``%Y``    | Year with century as a decimal number.         |       |
    |           |                                                |       |
    +-----------+------------------------------------------------+-------+
    | ``%Z``    | Time zone name (no characters if no time zone  |       |
@@ -331,12 +467,6 @@ The module defines the following functions and data items:
    (3)
       When used with the :func:`strptime` function, ``%U`` and ``%W`` are only used in
       calculations when the day of the week and the year are specified.
-
-   (4)
-      Produces different results depending on the value of
-      ``time.accept2dyear`` variable.  See :ref:`Year 2000 (Y2K)
-      issues <time-y2kissues>` for details.
-
 
    Here is an example, a format for dates compatible with that specified  in the
    :rfc:`2822` Internet email standard.  [#]_ ::
@@ -418,8 +548,7 @@ The module defines the following functions and data items:
    +-------+-------------------+---------------------------------+
 
    Note that unlike the C structure, the month value is a range of [1, 12], not
-   [0, 11].  A year value will be handled as described under :ref:`Year 2000
-   (Y2K) issues <time-y2kissues>` above.  A ``-1`` argument as the daylight
+   [0, 11].  A ``-1`` argument as the daylight
    savings flag, passed to :func:`mktime` will usually result in the correct
    daylight savings state to be filled in.
 
