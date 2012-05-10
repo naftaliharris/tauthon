@@ -1,6 +1,7 @@
 # Common utility functions used by various script execution tests
 #  e.g. test_cmd_line, test_cmd_line_script and test_runpy
 
+import importlib
 import sys
 import os
 import os.path
@@ -59,11 +60,12 @@ def assert_python_failure(*args, **env_vars):
     """
     return _assert_python(False, *args, **env_vars)
 
-def spawn_python(*args):
+def spawn_python(*args, **kw):
     cmd_line = [sys.executable, '-E']
     cmd_line.extend(args)
     return subprocess.Popen(cmd_line, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            **kw)
 
 def kill_python(p):
     p.stdin.close()
@@ -92,6 +94,7 @@ def make_script(script_dir, script_basename, source):
     script_file = open(script_name, 'w', encoding='utf-8')
     script_file.write(source)
     script_file.close()
+    importlib.invalidate_caches()
     return script_name
 
 def make_zip_script(zip_dir, zip_basename, script_name, name_in_zip=None):
