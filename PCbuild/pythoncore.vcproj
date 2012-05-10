@@ -735,10 +735,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\Include\formatter_unicode.h"
-				>
-			</File>
-			<File
 				RelativePath="..\Include\frameobject.h"
 				>
 			</File>
@@ -888,6 +884,10 @@
 			</File>
 			<File
 				RelativePath="..\Include\pytime.h"
+				>
+			</File>
+			<File
+				RelativePath="..\Include\pymacro.h"
 				>
 			</File>
 			<File
@@ -1051,15 +1051,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\Modules\_time.c"
-				>
-			</File>
-			<File
-				RelativePath="..\Modules\_time.h"
-				>
-			</File>
-			<File
 				RelativePath="..\Modules\_weakref.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Modules\_winapi.c"
 				>
 			</File>
 			<File
@@ -1088,6 +1084,10 @@
 			</File>
 			<File
 				RelativePath="..\Modules\errnomodule.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Modules\faulthandler.c"
 				>
 			</File>
 			<File
@@ -1683,10 +1683,6 @@
 			Name="PC"
 			>
 			<File
-				RelativePath="..\PC\_subprocess.c"
-				>
-			</File>
-			<File
 				RelativePath="..\PC\winreg.c"
 				>
 			</File>
@@ -1704,10 +1700,6 @@
 			</File>
 			<File
 				RelativePath="..\PC\getpathp.c"
-				>
-			</File>
-			<File
-				RelativePath="..\PC\import_nt.c"
 				>
 			</File>
 			<File

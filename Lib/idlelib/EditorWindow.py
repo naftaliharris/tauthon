@@ -1,8 +1,9 @@
-import sys
+import imp
+import importlib
 import os
 import re
 import string
-import imp
+import sys
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -27,8 +28,7 @@ def _sphinx_version():
     "Format sys.version_info to produce the Sphinx version string used to install the chm docs"
     major, minor, micro, level, serial = sys.version_info
     release = '%s%s' % (major, minor)
-    if micro:
-        release += '%s' % (micro,)
+    release += '%s' % (micro,)
     if level == 'candidate':
         release += 'rc%s' % (serial,)
     elif level != 'final':
@@ -1005,7 +1005,10 @@ class EditorWindow(object):
 
     def load_extension(self, name):
         try:
-            mod = __import__(name, globals(), locals(), [])
+            try:
+                mod = importlib.import_module('.' + name, package=__package__)
+            except ImportError:
+                mod = importlib.import_module(name)
         except ImportError:
             print("\nFailed to import extension: ", name)
             raise

@@ -2,6 +2,7 @@
 from importlib import _bootstrap
 from .. import util
 from . import util as source_util
+import imp
 import os
 import sys
 from test import support as test_support
@@ -19,9 +20,13 @@ class CaseSensitivityTest(unittest.TestCase):
     assert name != name.lower()
 
     def find(self, path):
-        finder = _bootstrap._FileFinder(path,
-                                        _bootstrap._SourceFinderDetails(),
-                                        _bootstrap._SourcelessFinderDetails())
+        finder = _bootstrap.FileFinder(path,
+                                        (_bootstrap.SourceFileLoader,
+                                            _bootstrap._SOURCE_SUFFIXES,
+                                            True),
+                                        (_bootstrap.SourcelessFileLoader,
+                                            [_bootstrap._BYTECODE_SUFFIX],
+                                            True))
         return finder.find_module(self.name)
 
     def sensitivity_test(self):
@@ -37,6 +42,9 @@ class CaseSensitivityTest(unittest.TestCase):
     def test_sensitive(self):
         with test_support.EnvironmentVarGuard() as env:
             env.unset('PYTHONCASEOK')
+            if b'PYTHONCASEOK' in _bootstrap._os.environ:
+                self.skipTest('os.environ changes not reflected in '
+                              '_os.environ')
             sensitive, insensitive = self.sensitivity_test()
             self.assertTrue(hasattr(sensitive, 'load_module'))
             self.assertIn(self.name, sensitive.get_filename(self.name))
@@ -45,6 +53,9 @@ class CaseSensitivityTest(unittest.TestCase):
     def test_insensitive(self):
         with test_support.EnvironmentVarGuard() as env:
             env.set('PYTHONCASEOK', '1')
+            if b'PYTHONCASEOK' not in _bootstrap._os.environ:
+                self.skipTest('os.environ changes not reflected in '
+                              '_os.environ')
             sensitive, insensitive = self.sensitivity_test()
             self.assertTrue(hasattr(sensitive, 'load_module'))
             self.assertIn(self.name, sensitive.get_filename(self.name))
