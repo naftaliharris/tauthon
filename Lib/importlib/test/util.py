@@ -35,7 +35,7 @@ def uncache(*names):
     for name in names:
         if name in ('sys', 'marshal', 'imp'):
             raise ValueError(
-                "cannot uncache {0} as it will break _importlib".format(name))
+                "cannot uncache {0}".format(name))
         try:
             del sys.modules[name]
         except KeyError:
@@ -124,7 +124,11 @@ class mock_modules:
         else:
             sys.modules[fullname] = self.modules[fullname]
             if fullname in self.module_code:
-                self.module_code[fullname]()
+                try:
+                    self.module_code[fullname]()
+                except Exception:
+                    del sys.modules[fullname]
+                    raise
             return self.modules[fullname]
 
     def __enter__(self):
