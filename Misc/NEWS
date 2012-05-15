@@ -33,6 +33,9 @@ Library
 
 - Issue 14773: Fix os.fwalk() failing on dangling symlinks.
 
+- Issue #12541: Be lenient with quotes around Realm field of HTTP Basic
+  Authentation in urllib2.
+
 - Issue 14807: move undocumented tarfile.filemode() to stat.filemode() and add
   doc entry. Add tarfile.filemode alias with deprecation warning.
 
