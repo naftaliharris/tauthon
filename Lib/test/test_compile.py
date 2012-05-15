@@ -1,9 +1,16 @@
 import unittest
 import sys
 import _ast
+import types
 from test import support
 
 class TestSpecifics(unittest.TestCase):
+
+    def compile_single(self, source):
+        compile(source, "<single>", "single")
+
+    def assertInvalidSingle(self, source):
+        self.assertRaises(SyntaxError, self.compile_single, source)
 
     def test_no_ending_newline(self):
         compile("hi", "<test>", "exec")
@@ -433,6 +440,39 @@ if 1:
         ast.body = [_ast.BoolOp()]
         self.assertRaises(TypeError, compile, ast, '<ast>', 'exec')
 
+    @support.cpython_only
+    def test_same_filename_used(self):
+        s = """def f(): pass\ndef g(): pass"""
+        c = compile(s, "myfile", "exec")
+        for obj in c.co_consts:
+            if isinstance(obj, types.CodeType):
+                self.assertIs(obj.co_filename, c.co_filename)
+
+    def test_single_statement(self):
+        self.compile_single("1 + 2")
+        self.compile_single("\n1 + 2")
+        self.compile_single("1 + 2\n")
+        self.compile_single("1 + 2\n\n")
+        self.compile_single("1 + 2\t\t\n")
+        self.compile_single("1 + 2\t\t\n        ")
+        self.compile_single("1 + 2 # one plus two")
+        self.compile_single("1; 2")
+        self.compile_single("import sys; sys")
+        self.compile_single("def f():\n   pass")
+        self.compile_single("while False:\n   pass")
+        self.compile_single("if x:\n   f(x)")
+        self.compile_single("if x:\n   f(x)\nelse:\n   g(x)")
+        self.compile_single("class T:\n   pass")
+
+    def test_bad_single_statement(self):
+        self.assertInvalidSingle('1\n2')
+        self.assertInvalidSingle('def f(): pass')
+        self.assertInvalidSingle('a = 13\nb = 187')
+        self.assertInvalidSingle('del x\ndel y')
+        self.assertInvalidSingle('f()\ng()')
+        self.assertInvalidSingle('f()\n# blah\nblah()')
+        self.assertInvalidSingle('f()\nxy # blah\nblah()')
+        self.assertInvalidSingle('x = 5 # comment\nx = 6\n')
 
 def test_main():
     support.run_unittest(TestSpecifics)
