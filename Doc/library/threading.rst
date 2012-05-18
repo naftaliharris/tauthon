@@ -426,15 +426,12 @@ All methods are executed atomically.
 
    Acquire a lock, blocking or non-blocking.
 
-   When invoked without arguments, block until the lock is unlocked, then set it to
-   locked, and return true.
+   When invoked with the *blocking* argument set to ``True`` (the default),
+   block until the lock is unlocked, then set it to locked and return ``True``.
 
-   When invoked with the *blocking* argument set to true, do the same thing as when
-   called without arguments, and return true.
-
-   When invoked with the *blocking* argument set to false, do not block.  If a call
-   without an argument would block, return false immediately; otherwise, do the
-   same thing as when called without arguments, and return true.
+   When invoked with the *blocking* argument set to ``False``, do not block.
+   If a call with *blocking* set to ``True`` would block, return ``False``
+   immediately; otherwise, set the lock to locked and return ``True``.
 
    When invoked with the floating-point *timeout* argument set to a positive
    value, block for at most the number of seconds specified by *timeout*
@@ -999,27 +996,3 @@ is equivalent to::
 Currently, :class:`Lock`, :class:`RLock`, :class:`Condition`,
 :class:`Semaphore`, and :class:`BoundedSemaphore` objects may be used as
 :keyword:`with` statement context managers.
-
-
-.. _threaded-imports:
-
-Importing in threaded code
---------------------------
-
-While the import machinery is thread-safe, there are two key restrictions on
-threaded imports due to inherent limitations in the way that thread-safety is
-provided:
-
-* Firstly, other than in the main module, an import should not have the
-  side effect of spawning a new thread and then waiting for that thread in
-  any way. Failing to abide by this restriction can lead to a deadlock if
-  the spawned thread directly or indirectly attempts to import a module.
-* Secondly, all import attempts must be completed before the interpreter
-  starts shutting itself down. This can be most easily achieved by only
-  performing imports from non-daemon threads created through the threading
-  module. Daemon threads and threads created directly with the thread
-  module will require some other form of synchronization to ensure they do
-  not attempt imports after system shutdown has commenced. Failure to
-  abide by this restriction will lead to intermittent exceptions and
-  crashes during interpreter shutdown (as the late imports attempt to
-  access machinery which is no longer in a valid state).
