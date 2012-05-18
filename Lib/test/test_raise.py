@@ -3,10 +3,25 @@
 
 """Tests for the raise statement."""
 
-from test import support
+from test import support, script_helper
+import re
 import sys
 import types
 import unittest
+
+
+try:
+    from resource import setrlimit, RLIMIT_CORE, error as resource_error
+except ImportError:
+    prepare_subprocess = None
+else:
+    def prepare_subprocess():
+        # don't create core file
+        try:
+            setrlimit(RLIMIT_CORE, (0, 0))
+        except (ValueError, resource_error):
+            pass
+
 
 
 def get_tb():
@@ -77,6 +92,16 @@ class TestRaise(unittest.TestCase):
                 nested_reraise()
         self.assertRaises(TypeError, reraise)
 
+    def test_raise_from_None(self):
+        try:
+            try:
+                raise TypeError("foo")
+            except:
+                raise ValueError() from None
+        except ValueError as e:
+            self.assertTrue(isinstance(e.__context__, TypeError))
+            self.assertIsNone(e.__cause__)
+
     def test_with_reraise1(self):
         def reraise():
             try:
@@ -130,8 +155,35 @@ class TestRaise(unittest.TestCase):
         with self.assertRaises(TypeError):
             raise MyException
 
+    def test_assert_with_tuple_arg(self):
+        try:
+            assert False, (3,)
+        except AssertionError as e:
+            self.assertEqual(str(e), "(3,)")
+
+
 
 class TestCause(unittest.TestCase):
+
+    def testCauseSyntax(self):
+        try:
+            try:
+                try:
+                    raise TypeError
+                except Exception:
+                    raise ValueError from None
+            except ValueError as exc:
+                self.assertIsNone(exc.__cause__)
+                self.assertTrue(exc.__suppress_context__)
+                exc.__suppress_context__ = False
+                raise exc
+        except ValueError as exc:
+            e = exc
+
+        self.assertIsNone(e.__cause__)
+        self.assertFalse(e.__suppress_context__)
+        self.assertIsInstance(e.__context__, TypeError)
+
     def test_invalid_cause(self):
         try:
             raise IndexError from 5
@@ -171,6 +223,44 @@ class TestCause(unittest.TestCase):
 
 
 class TestTraceback(unittest.TestCase):
+
+    def get_output(self, code, filename=None):
+        """
+        Run the specified code in Python (in a new child process) and read the
+        output from the standard error or from a file (if filename is set).
+        Return the output lines as a list.
+        """
+        options = {}
+        if prepare_subprocess:
+            options['preexec_fn'] = prepare_subprocess
+        process = script_helper.spawn_python('-c', code, **options)
+        stdout, stderr = process.communicate()
+        exitcode = process.wait()
+        output = support.strip_python_stderr(stdout)
+        output = output.decode('ascii', 'backslashreplace')
+        if filename:
+            self.assertEqual(output, '')
+            with open(filename, "rb") as fp:
+                output = fp.read()
+            output = output.decode('ascii', 'backslashreplace')
+        output = re.sub('Current thread 0x[0-9a-f]+',
+                        'Current thread XXX',
+                        output)
+        return output.splitlines(), exitcode
+
+    def test_traceback_verbiage(self):
+        code = """
+try:
+    raise ValueError
+except:
+    raise NameError from None
+"""
+        text, exitcode = self.get_output(code)
+        self.assertEqual(len(text), 3)
+        self.assertTrue(text[0].startswith('Traceback'))
+        self.assertTrue(text[1].startswith('  File '))
+        self.assertTrue(text[2].startswith('NameError'))
+
     def test_sets_traceback(self):
         try:
             raise IndexError()
