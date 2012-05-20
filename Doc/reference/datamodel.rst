@@ -35,12 +35,19 @@ represented by objects.)
 Every object has an identity, a type and a value.  An object's *identity* never
 changes once it has been created; you may think of it as the object's address in
 memory.  The ':keyword:`is`' operator compares the identity of two objects; the
-:func:`id` function returns an integer representing its identity (currently
-implemented as its address). An object's :dfn:`type` is also unchangeable. [#]_
+:func:`id` function returns an integer representing its identity.
+
+.. impl-detail::
+
+   For CPython, ``id(x)`` is the memory address where ``x`` is stored.
+
 An object's type determines the operations that the object supports (e.g., "does
 it have a length?") and also defines the possible values for objects of that
 type.  The :func:`type` function returns an object's type (which is an object
-itself).  The *value* of some objects can change.  Objects whose value can
+itself).  Like its identity, an object's :dfn:`type` is also unchangeable.
+[#]_
+
+The *value* of some objects can change.  Objects whose value can
 change are said to be *mutable*; objects whose value is unchangeable once they
 are created are called *immutable*. (The value of an immutable container object
 that contains a reference to a mutable object can change when the latter's value
@@ -276,16 +283,16 @@ Sequences
             single: integer
             single: Unicode
 
-         The items of a string object are Unicode code units.  A Unicode code
-         unit is represented by a string object of one item and can hold either
-         a 16-bit or 32-bit value representing a Unicode ordinal (the maximum
-         value for the ordinal is given in ``sys.maxunicode``, and depends on
-         how Python is configured at compile time).  Surrogate pairs may be
-         present in the Unicode object, and will be reported as two separate
-         items.  The built-in functions :func:`chr` and :func:`ord` convert
-         between code units and nonnegative integers representing the Unicode
-         ordinals as defined in the Unicode Standard 3.0. Conversion from and to
-         other encodings are possible through the string method :meth:`encode`.
+         A string is a sequence of values that represent Unicode codepoints.
+         All the codepoints in range ``U+0000 - U+10FFFF`` can be represented
+         in a string.  Python doesn't have a :c:type:`chr` type, and
+         every character in the string is represented as a string object
+         with length ``1``.  The built-in function :func:`ord` converts a
+         character to its codepoint (as an integer); :func:`chr` converts
+         an integer in range ``0 - 10FFFF`` to the corresponding character.
+         :meth:`str.encode` can be used to convert a :class:`str` to
+         :class:`bytes` using the given encoding, and :meth:`bytes.decode` can
+         be used to achieve the opposite.
 
       Tuples
          .. index::
@@ -447,6 +454,11 @@ Callable types
       |                         | unavailable                   |           |
       +-------------------------+-------------------------------+-----------+
       | :attr:`__name__`        | The function's name           | Writable  |
+      +-------------------------+-------------------------------+-----------+
+      | :attr:`__qualname__`    | The function's                | Writable  |
+      |                         | :term:`qualified name`        |           |
+      |                         |                               |           |
+      |                         | .. versionadded:: 3.3         |           |
       +-------------------------+-------------------------------+-----------+
       | :attr:`__module__`      | The name of the module the    | Writable  |
       |                         | function was defined in, or   |           |
@@ -1253,7 +1265,12 @@ Basic customization
 
    User-defined classes have :meth:`__eq__` and :meth:`__hash__` methods
    by default; with them, all objects compare unequal (except with themselves)
-   and ``x.__hash__()`` returns ``id(x)``.
+   and ``x.__hash__()`` returns an appropriate value such that ``x == y``
+   implies both that ``x is y`` and ``hash(x) == hash(y)``.
+
+   .. impl-detail::
+
+      CPython uses ``hash(id(x))`` as the default hash for class instances.
 
    Classes which inherit a :meth:`__hash__` method from a parent class but
    change the meaning of :meth:`__eq__` such that the hash value returned is no
@@ -1272,7 +1289,27 @@ Basic customization
    inheritance of :meth:`__hash__` will be blocked, just as if :attr:`__hash__`
    had been explicitly set to :const:`None`.
 
-   See also the :option:`-R` command-line option.
+
+   .. note::
+
+      Note by default the :meth:`__hash__` values of str, bytes and datetime
+      objects are "salted" with an unpredictable random value.  Although they
+      remain constant within an individual Python process, they are not
+      predictable between repeated invocations of Python.
+
+      This is intended to provide protection against a denial-of-service caused
+      by carefully-chosen inputs that exploit the worst case performance of a
+      dict insertion, O(n^2) complexity.  See
+      http://www.ocert.org/advisories/ocert-2011-003.html for details.
+
+      Changing hash values affects the order in which keys are retrieved from a
+      dict.  Note Python has never made guarantees about this ordering (and it
+      typically varies between 32-bit and 64-bit builds).
+
+      See also :envvar:`PYTHONHASHSEED`.
+
+   .. versionchanged:: 3.3
+      Hash randomization is enabled by default.
 
 
 .. method:: object.__bool__(self)
@@ -1353,7 +1390,8 @@ access (use of, assignment to, or deletion of ``x.name``) for class instances.
 
 .. method:: object.__dir__(self)
 
-   Called when :func:`dir` is called on the object.  A list must be returned.
+   Called when :func:`dir` is called on the object. A sequence must be
+   returned. :func:`dir` converts the returned sequence to a list and sorts it.
 
 
 .. _descriptors:
@@ -1524,53 +1562,115 @@ Notes on using *__slots__*
 Customizing class creation
 --------------------------
 
-By default, classes are constructed using :func:`type`. A class definition is
-read into a separate namespace and the value of class name is bound to the
-result of ``type(name, bases, dict)``.
+By default, classes are constructed using :func:`type`. The class body is
+executed in a new namespace and the class name is bound locally to the
+result of ``type(name, bases, namespace)``.
 
-When the class definition is read, if a callable ``metaclass`` keyword argument
-is passed after the bases in the class definition, the callable given will be
-called instead of :func:`type`.  If other keyword arguments are passed, they
-will also be passed to the metaclass.  This allows classes or functions to be
-written which monitor or alter the class creation process:
+The class creation process can be customised by passing the ``metaclass``
+keyword argument in the class definition line, or by inheriting from an
+existing class that included such an argument. In the following example,
+both ``MyClass`` and ``MySubclass`` are instances of ``Meta``::
 
-* Modifying the class dictionary prior to the class being created.
+   class Meta(type):
+       pass
 
-* Returning an instance of another class -- essentially performing the role of a
-  factory function.
+   class MyClass(metaclass=Meta):
+       pass
 
-These steps will have to be performed in the metaclass's :meth:`__new__` method
--- :meth:`type.__new__` can then be called from this method to create a class
-with different properties.  This example adds a new element to the class
-dictionary before creating the class::
+   class MySubclass(MyClass):
+       pass
 
-  class metacls(type):
-      def __new__(mcs, name, bases, dict):
-          dict['foo'] = 'metacls was here'
-          return type.__new__(mcs, name, bases, dict)
+Any other keyword arguments that are specified in the class definition are
+passed through to all metaclass operations described below.
 
-You can of course also override other class methods (or add new methods); for
-example defining a custom :meth:`__call__` method in the metaclass allows custom
-behavior when the class is called, e.g. not always creating a new instance.
+When a class definition is executed, the following steps occur:
 
-If the metaclass has a :meth:`__prepare__` attribute (usually implemented as a
-class or static method), it is called before the class body is evaluated with
-the name of the class and a tuple of its bases for arguments.  It should return
-an object that supports the mapping interface that will be used to store the
-namespace of the class.  The default is a plain dictionary.  This could be used,
-for example, to keep track of the order that class attributes are declared in by
-returning an ordered dictionary.
+* the appropriate metaclass is determined
+* the class namespace is prepared
+* the class body is executed
+* the class object is created
 
-The appropriate metaclass is determined by the following precedence rules:
+Determining the appropriate metaclass
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* If the ``metaclass`` keyword argument is passed with the bases, it is used.
+The appropriate metaclass for a class definition is determined as follows:
 
-* Otherwise, if there is at least one base class, its metaclass is used.
+* if no bases and no explicit metaclass are given, then :func:`type` is used
+* if an explicit metaclass is given and it is *not* an instance of
+  :func:`type`, then it is used directly as the metaclass
+* if an instance of :func:`type` is given as the explicit metaclass, or
+  bases are defined, then the most derived metaclass is used
 
-* Otherwise, the default metaclass (:class:`type`) is used.
+The most derived metaclass is selected from the explicitly specified
+metaclass (if any) and the metaclasses (i.e. ``type(cls)``) of all specified
+base classes. The most derived metaclass is one which is a subtype of *all*
+of these candidate metaclasses. If none of the candidate metaclasses meets
+that criterion, then the class definition will fail with ``TypeError``.
+
+
+Preparing the class namespace
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once the appropriate metaclass has been identified, then the class namespace
+is prepared. If the metaclass has a ``__prepare__`` attribute, it is called
+as ``namespace = metaclass.__prepare__(name, bases, **kwds)`` (where the
+additional keyword arguments, if any, come from the class definition).
+
+If the metaclass has no ``__prepare__`` attribute, then the class namespace
+is initialised as an empty :func:`dict` instance.
+
+.. seealso::
+
+   :pep:`3115` - Metaclasses in Python 3000
+      Introduced the ``__prepare__`` namespace hook
+
+
+Executing the class body
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+The class body is executed (approximately) as
+``exec(body, globals(), namespace)``. The key difference from a normal
+call to :func:`exec` is that lexical scoping allows the class body (including
+any methods) to reference names from the current and outer scopes when the
+class definition occurs inside a function.
+
+However, even when the class definition occurs inside the function, methods
+defined inside the class still cannot see names defined at the class scope.
+Class variables must be accessed through the first parameter of instance or
+class methods, and cannot be accessed at all from static methods.
+
+
+Creating the class object
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Once the class namespace has been populated by executing the class body,
+the class object is created by calling
+``metaclass(name, bases, namespace, **kwds)`` (the additional keywords
+passed here are the same as those passed to ``__prepare__``).
+
+This class object is the one that will be referenced by the zero-argument
+form of :func:`super`. ``__class__`` is an implicit closure reference
+created by the compiler if any methods in a class body refer to either
+``__class__`` or ``super``. This allows the zero argument form of
+:func:`super` to correctly identify the class being defined based on
+lexical scoping, while the class or instance that was used to make the
+current call is identified based on the first argument passed to the method.
+
+After the class object is created, it is passed to the class decorators
+included in the class definition (if any) and the resulting object is bound
+in the local namespace as the defined class.
+
+.. seealso::
+
+   :pep:`3135` - New super
+      Describes the implicit ``__class__`` closure reference
+
+
+Metaclass example
+^^^^^^^^^^^^^^^^^
 
 The potential uses for metaclasses are boundless. Some ideas that have been
-explored including logging, interface checking, automatic delegation, automatic
+explored include logging, interface checking, automatic delegation, automatic
 property creation, proxies, frameworks, and automatic resource
 locking/synchronization.
 
@@ -1583,9 +1683,9 @@ to remember the order that class members were defined::
          def __prepare__(metacls, name, bases, **kwds):
             return collections.OrderedDict()
 
-         def __new__(cls, name, bases, classdict):
-            result = type.__new__(cls, name, bases, dict(classdict))
-            result.members = tuple(classdict)
+         def __new__(cls, name, bases, namespace, **kwds):
+            result = type.__new__(cls, name, bases, dict(namespace))
+            result.members = tuple(namespace)
             return result
 
     class A(metaclass=OrderedClass):
