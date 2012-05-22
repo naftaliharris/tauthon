@@ -767,8 +767,9 @@ static PyObject *
 deque_reduce(dequeobject *deque)
 {
     PyObject *dict, *result, *aslist;
+    _Py_IDENTIFIER(__dict__);
 
-    dict = PyObject_GetAttrString((PyObject *)deque, "__dict__");
+    dict = _PyObject_GetAttrId((PyObject *)deque, &PyId___dict__);
     if (dict == NULL)
         PyErr_Clear();
     aslist = PySequence_List((PyObject *)deque);
@@ -832,8 +833,7 @@ deque_richcompare(PyObject *v, PyObject *w, int op)
 
     if (!PyObject_TypeCheck(v, &deque_type) ||
         !PyObject_TypeCheck(w, &deque_type)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        Py_RETURN_NOTIMPLEMENTED;
     }
 
     /* Shortcuts */
@@ -1122,6 +1122,35 @@ dequeiter_next(dequeiterobject *it)
 }
 
 static PyObject *
+dequeiter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    Py_ssize_t i, index=0;
+    PyObject *deque;
+    dequeiterobject *it;
+    if (!PyArg_ParseTuple(args, "O!|n", &deque_type, &deque, &index))
+        return NULL;
+    assert(type == &dequeiter_type);
+
+    it = (dequeiterobject*)deque_iter((dequeobject *)deque);
+    if (!it)
+        return NULL;
+    /* consume items from the queue */
+    for(i=0; i<index; i++) {
+        PyObject *item = dequeiter_next(it);
+        if (item) {
+            Py_DECREF(item);
+        } else {
+            if (it->counter) {
+                Py_DECREF(it);
+                return NULL;
+            } else
+                break;
+        }
+    }
+    return (PyObject*)it;
+}
+
+static PyObject *
 dequeiter_len(dequeiterobject *it)
 {
     return PyLong_FromSsize_t(it->counter);
@@ -1129,14 +1158,21 @@ dequeiter_len(dequeiterobject *it)
 
 PyDoc_STRVAR(length_hint_doc, "Private method returning an estimate of len(list(it)).");
 
+static PyObject *
+dequeiter_reduce(dequeiterobject *it)
+{
+    return Py_BuildValue("O(On)", Py_TYPE(it), it->deque, it->deque->len - it->counter);
+}
+
 static PyMethodDef dequeiter_methods[] = {
     {"__length_hint__", (PyCFunction)dequeiter_len, METH_NOARGS, length_hint_doc},
+    {"__reduce__", (PyCFunction)dequeiter_reduce, METH_NOARGS, reduce_doc},
     {NULL,              NULL}           /* sentinel */
 };
 
 static PyTypeObject dequeiter_type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "deque_iterator",                           /* tp_name */
+    "_collections._deque_iterator",              /* tp_name */
     sizeof(dequeiterobject),                    /* tp_basicsize */
     0,                                          /* tp_itemsize */
     /* methods */
@@ -1164,6 +1200,16 @@ static PyTypeObject dequeiter_type = {
     PyObject_SelfIter,                          /* tp_iter */
     (iternextfunc)dequeiter_next,               /* tp_iternext */
     dequeiter_methods,                          /* tp_methods */
+    0,                                          /* tp_members */
+    0,                                          /* tp_getset */
+    0,                                          /* tp_base */
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    dequeiter_new,                              /* tp_new */
     0,
 };
 
@@ -1217,9 +1263,38 @@ dequereviter_next(dequeiterobject *it)
     return item;
 }
 
+static PyObject *
+dequereviter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+{
+    Py_ssize_t i, index=0;
+    PyObject *deque;
+    dequeiterobject *it;
+    if (!PyArg_ParseTuple(args, "O!|n", &deque_type, &deque, &index))
+        return NULL;
+    assert(type == &dequereviter_type);
+
+    it = (dequeiterobject*)deque_reviter((dequeobject *)deque);
+    if (!it)
+        return NULL;
+    /* consume items from the queue */
+    for(i=0; i<index; i++) {
+        PyObject *item = dequereviter_next(it);
+        if (item) {
+            Py_DECREF(item);
+        } else {
+            if (it->counter) {
+                Py_DECREF(it);
+                return NULL;
+            } else
+                break;
+        }
+    }
+    return (PyObject*)it;
+}
+
 static PyTypeObject dequereviter_type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "deque_reverse_iterator",                   /* tp_name */
+    "_collections._deque_reverse_iterator",      /* tp_name */
     sizeof(dequeiterobject),                    /* tp_basicsize */
     0,                                          /* tp_itemsize */
     /* methods */
@@ -1247,6 +1322,16 @@ static PyTypeObject dequereviter_type = {
     PyObject_SelfIter,                          /* tp_iter */
     (iternextfunc)dequereviter_next,            /* tp_iternext */
     dequeiter_methods,                          /* tp_methods */
+    0,                                          /* tp_members */
+    0,                                          /* tp_getset */
+    0,                                          /* tp_base */
+    0,                                          /* tp_dict */
+    0,                                          /* tp_descr_get */
+    0,                                          /* tp_descr_set */
+    0,                                          /* tp_dictoffset */
+    0,                                          /* tp_init */
+    0,                                          /* tp_alloc */
+    dequereviter_new,                           /* tp_new */
     0,
 };
 
@@ -1335,13 +1420,15 @@ defdict_reduce(defdictobject *dd)
     PyObject *items;
     PyObject *iter;
     PyObject *result;
+    _Py_IDENTIFIER(items);
+
     if (dd->default_factory == NULL || dd->default_factory == Py_None)
         args = PyTuple_New(0);
     else
         args = PyTuple_Pack(1, dd->default_factory);
     if (args == NULL)
         return NULL;
-    items = PyObject_CallMethod((PyObject *)dd, "items", "()");
+    items = _PyObject_CallMethodId((PyObject *)dd, &PyId_items, "()");
     if (items == NULL) {
         Py_DECREF(args);
         return NULL;
@@ -1554,12 +1641,8 @@ _count_elements(PyObject *self, PyObject *args)
     if (PyDict_CheckExact(mapping)) {
         while (1) {
             key = PyIter_Next(it);
-            if (key == NULL) {
-                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-                    PyErr_Clear();
-                else
-                    break;
-            }
+            if (key == NULL)
+                break;
             oldval = PyDict_GetItem(mapping, key);
             if (oldval == NULL) {
                 if (PyDict_SetItem(mapping, key, one) == -1)
@@ -1577,12 +1660,8 @@ _count_elements(PyObject *self, PyObject *args)
     } else {
         while (1) {
             key = PyIter_Next(it);
-            if (key == NULL) {
-                if (PyErr_Occurred() && PyErr_ExceptionMatches(PyExc_StopIteration))
-                    PyErr_Clear();
-                else
-                    break;
-            }
+            if (key == NULL)
+                break;
             oldval = PyObject_GetItem(mapping, key);
             if (oldval == NULL) {
                 if (!PyErr_Occurred() || !PyErr_ExceptionMatches(PyExc_KeyError))
@@ -1659,9 +1738,13 @@ PyInit__collections(void)
 
     if (PyType_Ready(&dequeiter_type) < 0)
         return NULL;
+    Py_INCREF(&dequeiter_type);
+    PyModule_AddObject(m, "_deque_iterator", (PyObject *)&dequeiter_type);
 
     if (PyType_Ready(&dequereviter_type) < 0)
         return NULL;
+    Py_INCREF(&dequereviter_type);
+    PyModule_AddObject(m, "_deque_reverse_iterator", (PyObject *)&dequereviter_type);
 
     return m;
 }
