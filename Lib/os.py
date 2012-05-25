@@ -24,13 +24,18 @@ and opendir), and leave all pathname manipulation to os.path
 #'
 
 import sys, errno
+import stat as st
 
 _names = sys.builtin_module_names
 
 # Note:  more names are added to __all__ later.
 __all__ = ["altsep", "curdir", "pardir", "sep", "pathsep", "linesep",
-           "defpath", "name", "path", "devnull",
-           "SEEK_SET", "SEEK_CUR", "SEEK_END"]
+           "defpath", "name", "path", "devnull", "SEEK_SET", "SEEK_CUR",
+           "SEEK_END", "fsencode", "fsdecode", "get_exec_path", "fdopen",
+           "popen", "extsep"]
+
+def _exists(name):
+    return name in globals()
 
 def _get_exports_list(module):
     try:
@@ -38,12 +43,15 @@ def _get_exports_list(module):
     except AttributeError:
         return [n for n in dir(module) if n[0] != '_']
 
+# Any new dependencies of the os module and/or changes in path separator
+# requires updating importlib as well.
 if 'posix' in _names:
     name = 'posix'
     linesep = '\n'
     from posix import *
     try:
         from posix import _exit
+        __all__.append('_exit')
     except ImportError:
         pass
     import posixpath as path
@@ -58,6 +66,7 @@ elif 'nt' in _names:
     from nt import *
     try:
         from nt import _exit
+        __all__.append('_exit')
     except ImportError:
         pass
     import ntpath as path
@@ -72,6 +81,7 @@ elif 'os2' in _names:
     from os2 import *
     try:
         from os2 import _exit
+        __all__.append('_exit')
     except ImportError:
         pass
     if sys.version.find('EMX GCC') == -1:
@@ -90,6 +100,7 @@ elif 'ce' in _names:
     from ce import *
     try:
         from ce import _exit
+        __all__.append('_exit')
     except ImportError:
         pass
     # We can use the standard Windows path.
@@ -120,8 +131,6 @@ def _get_masked_mode(mode):
     umask(mask)
     return mode & ~mask
 
-#'
-
 # Super directory utilities.
 # (Inspired by Eric Raymond; the doc strings are mostly his)
 
@@ -151,7 +160,6 @@ def makedirs(name, mode=0o777, exist_ok=False):
     try:
         mkdir(name, mode)
     except OSError as e:
-        import stat as st
         if not (e.errno == errno.EEXIST and exist_ok and path.isdir(name) and
                 st.S_IMODE(lstat(name).st_mode) == _get_masked_mode(mode)):
             raise
@@ -291,12 +299,105 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
     for name in dirs:
         new_path = join(top, name)
         if followlinks or not islink(new_path):
-            for x in walk(new_path, topdown, onerror, followlinks):
-                yield x
+            yield from walk(new_path, topdown, onerror, followlinks)
     if not topdown:
         yield top, dirs, nondirs
 
 __all__.append("walk")
+
+if _exists("openat"):
+
+    def fwalk(top, topdown=True, onerror=None, followlinks=False):
+        """Directory tree generator.
+
+        This behaves exactly like walk(), except that it yields a 4-tuple
+
+            dirpath, dirnames, filenames, dirfd
+
+        `dirpath`, `dirnames` and `filenames` are identical to walk() output,
+        and `dirfd` is a file descriptor referring to the directory `dirpath`.
+
+        The advantage of walkfd() over walk() is that it's safe against symlink
+        races (when followlinks is False).
+
+        Caution:
+        Since fwalk() yields file descriptors, those are only valid until the
+        next iteration step, so you should dup() them if you want to keep them
+        for a longer period.
+
+        Example:
+
+        import os
+        for root, dirs, files, rootfd in os.fwalk('python/Lib/email'):
+            print(root, "consumes", end="")
+            print(sum([os.fstatat(rootfd, name).st_size for name in files]),
+                  end="")
+            print("bytes in", len(files), "non-directory files")
+            if 'CVS' in dirs:
+                dirs.remove('CVS')  # don't visit CVS directories
+        """
+        # Note: To guard against symlink races, we use the standard
+        # lstat()/open()/fstat() trick.
+        orig_st = lstat(top)
+        topfd = open(top, O_RDONLY)
+        try:
+            if (followlinks or (st.S_ISDIR(orig_st.st_mode) and
+                                path.samestat(orig_st, fstat(topfd)))):
+                yield from _fwalk(topfd, top, topdown, onerror, followlinks)
+        finally:
+            close(topfd)
+
+    def _fwalk(topfd, toppath, topdown, onerror, followlinks):
+        # Note: This uses O(depth of the directory tree) file descriptors: if
+        # necessary, it can be adapted to only require O(1) FDs, see issue
+        # #13734.
+
+        # whether to follow symlinks
+        flag = 0 if followlinks else AT_SYMLINK_NOFOLLOW
+
+        names = flistdir(topfd)
+        dirs, nondirs = [], []
+        for name in names:
+            try:
+                # Here, we don't use AT_SYMLINK_NOFOLLOW to be consistent with
+                # walk() which reports symlinks to directories as directories.
+                # We do however check for symlinks before recursing into
+                # a subdirectory.
+                if st.S_ISDIR(fstatat(topfd, name).st_mode):
+                    dirs.append(name)
+                else:
+                    nondirs.append(name)
+            except FileNotFoundError:
+                try:
+                    # Add dangling symlinks, ignore disappeared files
+                    if st.S_ISLNK(fstatat(topfd, name, AT_SYMLINK_NOFOLLOW)
+                                .st_mode):
+                        nondirs.append(name)
+                except FileNotFoundError:
+                    continue
+
+        if topdown:
+            yield toppath, dirs, nondirs, topfd
+
+        for name in dirs:
+            try:
+                orig_st = fstatat(topfd, name, flag)
+                dirfd = openat(topfd, name, O_RDONLY)
+            except error as err:
+                if onerror is not None:
+                    onerror(err)
+                return
+            try:
+                if followlinks or path.samestat(orig_st, fstat(dirfd)):
+                    dirpath = path.join(toppath, name)
+                    yield from _fwalk(dirfd, dirpath, topdown, onerror, followlinks)
+            finally:
+                close(dirfd)
+
+        if not topdown:
+            yield toppath, dirs, nondirs, topfd
+
+    __all__.append("fwalk")
 
 # Make sure os.environ exists, at least
 try:
@@ -434,7 +535,7 @@ def get_exec_path(env=None):
 
 
 # Change environ to automatically call putenv(), unsetenv if they exist.
-from _abcoll import MutableMapping  # Can't use collections (bootstrap)
+from collections.abc import MutableMapping
 
 class _Environ(MutableMapping):
     def __init__(self, data, encodekey, decodekey, encodevalue, decodevalue, putenv, unsetenv):
@@ -598,14 +699,13 @@ def _fscodec():
 fsencode, fsdecode = _fscodec()
 del _fscodec
 
-def _exists(name):
-    return name in globals()
-
 # Supply spawn*() (probably only for Unix)
 if _exists("fork") and not _exists("spawnv") and _exists("execv"):
 
     P_WAIT = 0
     P_NOWAIT = P_NOWAITO = 1
+
+    __all__.extend(["P_WAIT", "P_NOWAIT", "P_NOWAITO"])
 
     # XXX Should we support P_DETACH?  I suppose it could fork()**2
     # and close the std I/O streams.  Also, P_OVERLAY is the same
