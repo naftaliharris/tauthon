@@ -1,11 +1,13 @@
 # tests command line execution of scripts
 
+import importlib
 import unittest
 import sys
 import os
 import os.path
 import py_compile
 
+import textwrap
 from test import support
 from test.script_helper import (
     make_pkg, make_script, make_zip_pkg, make_zip_script,
@@ -49,12 +51,16 @@ print('cwd==%a' % os.getcwd())
 """
 
 def _make_test_script(script_dir, script_basename, source=test_source):
-    return make_script(script_dir, script_basename, source)
+    to_return = make_script(script_dir, script_basename, source)
+    importlib.invalidate_caches()
+    return to_return
 
 def _make_test_zip_pkg(zip_dir, zip_basename, pkg_name, script_basename,
                        source=test_source, depth=1):
-    return make_zip_pkg(zip_dir, zip_basename, pkg_name, script_basename,
-                        source, depth)
+    to_return = make_zip_pkg(zip_dir, zip_basename, pkg_name, script_basename,
+                             source, depth)
+    importlib.invalidate_caches()
+    return to_return
 
 # There's no easy way to pass the script directory in to get
 # -m to work (avoiding that is the whole point of making
@@ -72,7 +78,9 @@ def _make_launch_script(script_dir, script_basename, module_name, path=None):
     else:
         path = repr(path)
     source = launch_source % (path, module_name)
-    return make_script(script_dir, script_basename, source)
+    to_return = make_script(script_dir, script_basename, source)
+    importlib.invalidate_caches()
+    return to_return
 
 class CmdLineTest(unittest.TestCase):
     def _check_output(self, script_name, exit_code, data,
@@ -278,6 +286,24 @@ class CmdLineTest(unittest.TestCase):
                     rc, out, err = assert_python_ok('-m', 'other', *example_args)
                     self._check_output(script_name, rc, out,
                                       script_name, script_name, '', '')
+
+    def test_pep_409_verbiage(self):
+        # Make sure PEP 409 syntax properly suppresses
+        # the context of an exception
+        script = textwrap.dedent("""\
+            try:
+                raise ValueError
+            except:
+                raise NameError from None
+            """)
+        with temp_dir() as script_dir:
+            script_name = _make_test_script(script_dir, 'script', script)
+            exitcode, stdout, stderr = assert_python_failure(script_name)
+            text = stderr.decode('ascii').split('\n')
+            self.assertEqual(len(text), 4)
+            self.assertTrue(text[0].startswith('Traceback'))
+            self.assertTrue(text[1].startswith('  File '))
+            self.assertTrue(text[3].startswith('NameError'))
 
 def test_main():
     support.run_unittest(CmdLineTest)
