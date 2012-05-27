@@ -1,5 +1,6 @@
 import sys, os
 import contextlib
+import subprocess
 
 # find_library(name) returns the pathname of a library, or None.
 if os.name == "nt":
@@ -39,8 +40,8 @@ if os.name == "nt":
             clibname = 'msvcr%d' % (version * 10)
 
         # If python was built with in debug mode
-        import imp
-        if imp.get_suffixes()[0][0] == '_d.pyd':
+        import importlib.machinery
+        if '_d.pyd' in importlib.machinery.EXTENSION_SUFFIXES:
             clibname += 'd'
         return clibname+'.dll'
 
@@ -136,16 +137,12 @@ elif os.name == "posix":
             rv = f.close()
             if rv == 10:
                 raise OSError('objdump command not found')
-            with contextlib.closing(os.popen(cmd)) as f:
-                data = f.read()
-            res = re.search(r'\sSONAME\s+([^\s]+)', data)
+            res = re.search(r'\sSONAME\s+([^\s]+)', dump)
             if not res:
                 return None
             return res.group(1)
 
-    if (sys.platform.startswith("freebsd")
-        or sys.platform.startswith("openbsd")
-        or sys.platform.startswith("dragonfly")):
+    if sys.platform.startswith(("freebsd", "openbsd", "dragonfly")):
 
         def _num_version(libname):
             # "libxyz.so.MAJOR.MINOR" => [ MAJOR, MINOR ]
@@ -187,13 +184,19 @@ elif os.name == "posix":
             abi_type = mach_map.get(machine, 'libc6')
 
             # XXX assuming GLIBC's ldconfig (with option -p)
-            expr = r'\s+(lib%s\.[^\s]+)\s+\(%s' % (re.escape(name), abi_type)
-            with contextlib.closing(os.popen('LC_ALL=C LANG=C /sbin/ldconfig -p 2>/dev/null')) as f:
-                data = f.read()
-            res = re.search(expr, data)
-            if not res:
-                return None
-            return res.group(1)
+            regex = os.fsencode(
+                '\s+(lib%s\.[^\s]+)\s+\(%s' % (re.escape(name), abi_type))
+            try:
+                with subprocess.Popen(['/sbin/ldconfig', '-p'],
+                                      stdin=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL,
+                                      stdout=subprocess.PIPE,
+                                      env={'LC_ALL': 'C', 'LANG': 'C'}) as p:
+                    res = re.search(regex, p.stdout.read())
+                    if res:
+                        return os.fsdecode(res.group(1))
+            except OSError:
+                pass
 
         def find_library(name):
             return _findSoname_ldconfig(name) or _get_soname(_findLib_gcc(name))
