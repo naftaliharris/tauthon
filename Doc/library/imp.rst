@@ -30,6 +30,9 @@ This module provides an interface to the mechanisms used to implement the
    :const:`PY_SOURCE`, :const:`PY_COMPILED`, or :const:`C_EXTENSION`, described
    below.
 
+   .. deprecated:: 3.3
+      Use the constants defined on :mod:`importlib.machinery` instead.
+
 
 .. function:: find_module(name[, path])
 
@@ -69,6 +72,9 @@ This module provides an interface to the mechanisms used to implement the
    then use :func:`find_module` with the *path* argument set to ``P.__path__``.
    When *P* itself has a dotted name, apply this recipe recursively.
 
+   .. deprecated:: 3.3
+      Use :func:`importlib.find_loader` instead.
+
 
 .. function:: load_module(name, file, pathname, description)
 
@@ -90,42 +96,15 @@ This module provides an interface to the mechanisms used to implement the
    it was not ``None``, even when an exception is raised.  This is best done
    using a :keyword:`try` ... :keyword:`finally` statement.
 
+   .. deprecated:: 3.3
+      Unneeded as loaders should be used to load modules and
+      :func:`find_module` is deprecated.
+
 
 .. function:: new_module(name)
 
    Return a new empty module object called *name*.  This object is *not* inserted
    in ``sys.modules``.
-
-
-.. function:: lock_held()
-
-   Return ``True`` if the import lock is currently held, else ``False``. On
-   platforms without threads, always return ``False``.
-
-   On platforms with threads, a thread executing an import holds an internal lock
-   until the import is complete. This lock blocks other threads from doing an
-   import until the original import completes, which in turn prevents other threads
-   from seeing incomplete module objects constructed by the original thread while
-   in the process of completing its import (and the imports, if any, triggered by
-   that).
-
-
-.. function:: acquire_lock()
-
-   Acquire the interpreter's import lock for the current thread.  This lock should
-   be used by import hooks to ensure thread-safety when importing modules.
-
-   Once a thread has acquired the import lock, the same thread may acquire it
-   again without blocking; the thread must release it once for each time it has
-   acquired it.
-
-   On platforms without threads, this function does nothing.
-
-
-.. function:: release_lock()
-
-   Release the interpreter's import lock. On platforms without threads, this
-   function does nothing.
 
 
 .. function:: reload(module)
@@ -225,6 +204,49 @@ file paths.
    magic number, as returned by :func:`get_magic`.
 
 
+The following functions help interact with the import system's internal
+locking mechanism.  Locking semantics of imports are an implementation
+detail which may vary from release to release.  However, Python ensures
+that circular imports work without any deadlocks.
+
+.. versionchanged:: 3.3
+   In Python 3.3, the locking scheme has changed to per-module locks for
+   the most part.  A global import lock is kept for some critical tasks,
+   such as initializing the per-module locks.
+
+
+.. function:: lock_held()
+
+   Return ``True`` if the global import lock is currently held, else
+   ``False``. On platforms without threads, always return ``False``.
+
+   On platforms with threads, a thread executing an import first holds a
+   global import lock, then sets up a per-module lock for the rest of the
+   import.  This blocks other threads from importing the same module until
+   the original import completes, preventing other threads from seeing
+   incomplete module objects constructed by the original thread.  An
+   exception is made for circular imports, which by construction have to
+   expose an incomplete module object at some point.
+
+.. function:: acquire_lock()
+
+   Acquire the interpreter's global import lock for the current thread.
+   This lock should be used by import hooks to ensure thread-safety when
+   importing modules.
+
+   Once a thread has acquired the import lock, the same thread may acquire it
+   again without blocking; the thread must release it once for each time it has
+   acquired it.
+
+   On platforms without threads, this function does nothing.
+
+
+.. function:: release_lock()
+
+   Release the interpreter's global import lock. On platforms without
+   threads, this function does nothing.
+
+
 The following constants with integer values, defined in this module, are used
 to indicate the search result of :func:`find_module`.
 
@@ -233,30 +255,42 @@ to indicate the search result of :func:`find_module`.
 
    The module was found as a source file.
 
+   .. deprecated:: 3.3
+
 
 .. data:: PY_COMPILED
 
    The module was found as a compiled code object file.
+
+   .. deprecated:: 3.3
 
 
 .. data:: C_EXTENSION
 
    The module was found as dynamically loadable shared library.
 
+   .. deprecated:: 3.3
+
 
 .. data:: PKG_DIRECTORY
 
    The module was found as a package directory.
+
+   .. deprecated:: 3.3
 
 
 .. data:: C_BUILTIN
 
    The module was found as a built-in module.
 
+   .. deprecated:: 3.3
+
 
 .. data:: PY_FROZEN
 
    The module was found as a frozen module.
+
+   .. deprecated:: 3.3
 
 
 .. class:: NullImporter(path_string)
