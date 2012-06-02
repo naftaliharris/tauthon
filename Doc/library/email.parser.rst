@@ -58,11 +58,17 @@ list of defects that it can find.
 Here is the API for the :class:`FeedParser`:
 
 
-.. class:: FeedParser(_factory=email.message.Message)
+.. class:: FeedParser(_factory=email.message.Message, *, policy=policy.default)
 
    Create a :class:`FeedParser` instance.  Optional *_factory* is a no-argument
    callable that will be called whenever a new message object is needed.  It
    defaults to the :class:`email.message.Message` class.
+
+   The *policy* keyword specifies a :mod:`~email.policy` object that controls a
+   number of aspects of the parser's operation.  The default policy maintains
+   backward compatibility.
+
+   .. versionchanged:: 3.3 Added the *policy* keyword.
 
    .. method:: feed(data)
 
@@ -94,15 +100,17 @@ Parser class API
 The :class:`Parser` class, imported from the :mod:`email.parser` module,
 provides an API that can be used to parse a message when the complete contents
 of the message are available in a string or file.  The :mod:`email.parser`
-module also provides a second class, called :class:`HeaderParser` which can be
-used if you're only interested in the headers of the message.
-:class:`HeaderParser` can be much faster in these situations, since it does not
-attempt to parse the message body, instead setting the payload to the raw body
-as a string. :class:`HeaderParser` has the same API as the :class:`Parser`
-class.
+module also provides header-only parsers, called :class:`HeaderParser` and
+:class:`BytesHeaderParser`, which can be used if you're only interested in the
+headers of the message.  :class:`HeaderParser` and :class:`BytesHeaderParser`
+can be much faster in these situations, since they do not attempt to parse the
+message body, instead setting the payload to the raw body as a string.  They
+have the same API as the :class:`Parser` and :class:`BytesParser` classes.
+
+.. versionadded:: 3.3 BytesHeaderParser
 
 
-.. class:: Parser(_class=email.message.Message, strict=None)
+.. class:: Parser(_class=email.message.Message, *, policy=policy.default)
 
    The constructor for the :class:`Parser` class takes an optional argument
    *_class*.  This must be a callable factory (such as a function or a class), and
@@ -110,13 +118,13 @@ class.
    :class:`~email.message.Message` (see :mod:`email.message`).  The factory will
    be called without arguments.
 
-   The optional *strict* flag is ignored.
+   The *policy* keyword specifies a :mod:`~email.policy` object that controls a
+   number of aspects of the parser's operation.  The default policy maintains
+   backward compatibility.
 
-   .. deprecated:: 2.4
-      Because the :class:`Parser` class is a backward compatible API wrapper
-      around the new-in-Python 2.4 :class:`FeedParser`, *all* parsing is
-      effectively non-strict.  You should simply stop passing a *strict* flag to
-      the :class:`Parser` constructor.
+   .. versionchanged:: 3.3
+      Removed the *strict* argument that was deprecated in 2.4.  Added the
+      *policy* keyword.
 
    The other public :class:`Parser` methods are:
 
@@ -147,12 +155,18 @@ class.
       Optional *headersonly* is as with the :meth:`parse` method.
 
 
-.. class:: BytesParser(_class=email.message.Message, strict=None)
+.. class:: BytesParser(_class=email.message.Message, *, policy=policy.default)
 
    This class is exactly parallel to :class:`Parser`, but handles bytes input.
    The *_class* and *strict* arguments are interpreted in the same way as for
-   the :class:`Parser` constructor.  *strict* is supported only to make porting
-   code easier; it is deprecated.
+   the :class:`Parser` constructor.
+
+   The *policy* keyword specifies a :mod:`~email.policy` object that
+   controls a number of aspects of the parser's operation.  The default
+   policy maintains backward compatibility.
+
+   .. versionchanged:: 3.3
+      Removed the *strict* argument.  Added the *policy* keyword.
 
    .. method:: parse(fp, headeronly=False)
 
@@ -190,34 +204,48 @@ in the top-level :mod:`email` package namespace.
 
 .. currentmodule:: email
 
-.. function:: message_from_string(s, _class=email.message.Message, strict=None)
+.. function:: message_from_string(s, _class=email.message.Message, *, \
+                                  policy=policy.default)
 
    Return a message object structure from a string.  This is exactly equivalent to
-   ``Parser().parsestr(s)``.  Optional *_class* and *strict* are interpreted as
+   ``Parser().parsestr(s)``.  *_class* and *policy* are interpreted as
    with the :class:`Parser` class constructor.
 
-.. function:: message_from_bytes(s, _class=email.message.Message, strict=None)
+   .. versionchanged:: 3.3
+      Removed the *strict* argument.  Added the *policy* keyword.
+
+.. function:: message_from_bytes(s, _class=email.message.Message, *, \
+                                 policy=policy.default)
 
    Return a message object structure from a byte string.  This is exactly
    equivalent to ``BytesParser().parsebytes(s)``.  Optional *_class* and
    *strict* are interpreted as with the :class:`Parser` class constructor.
 
    .. versionadded:: 3.2
+   .. versionchanged:: 3.3
+      Removed the *strict* argument.  Added the *policy* keyword.
 
-.. function:: message_from_file(fp, _class=email.message.Message, strict=None)
+.. function:: message_from_file(fp, _class=email.message.Message, *, \
+                                policy=policy.default)
 
    Return a message object structure tree from an open :term:`file object`.
-   This is exactly equivalent to ``Parser().parse(fp)``.  Optional *_class*
-   and *strict* are interpreted as with the :class:`Parser` class constructor.
+   This is exactly equivalent to ``Parser().parse(fp)``.  *_class*
+   and *policy* are interpreted as with the :class:`Parser` class constructor.
 
-.. function:: message_from_binary_file(fp, _class=email.message.Message, strict=None)
+   .. versionchanged::
+      Removed the *strict* argument.  Added the *policy* keyword.
+
+.. function:: message_from_binary_file(fp, _class=email.message.Message, *, \
+                                       policy=policy.default)
 
    Return a message object structure tree from an open binary :term:`file
    object`.  This is exactly equivalent to ``BytesParser().parse(fp)``.
-   Optional *_class* and *strict* are interpreted as with the :class:`Parser`
+   *_class* and *policy* are interpreted as with the :class:`Parser`
    class constructor.
 
    .. versionadded:: 3.2
+   .. versionchanged:: 3.3
+      Removed the *strict* argument.  Added the *policy* keyword.
 
 Here's an example of how you might use this at an interactive Python prompt::
 
