@@ -5,32 +5,7 @@
 # multiprocessing/managers.py
 #
 # Copyright (c) 2006-2008, R Oudkerk
-# All rights reserved.
-#
-# Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions
-# are met:
-#
-# 1. Redistributions of source code must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-# 2. Redistributions in binary form must reproduce the above copyright
-#    notice, this list of conditions and the following disclaimer in the
-#    documentation and/or other materials provided with the distribution.
-# 3. Neither the name of author nor the names of any contributors may be
-#    used to endorse or promote products derived from this software
-#    without specific prior written permission.
-#
-# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS "AS IS" AND
-# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
-# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
-# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
-# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
-# SUCH DAMAGE.
+# Licensed to PSF under a Contributor Agreement.
 #
 
 __all__ = [ 'BaseManager', 'SyncManager', 'BaseProxy', 'Token' ]
@@ -39,19 +14,16 @@ __all__ = [ 'BaseManager', 'SyncManager', 'BaseProxy', 'Token' ]
 # Imports
 #
 
-import os
 import sys
-import weakref
 import threading
 import array
 import queue
 
 from traceback import format_exc
-from pickle import PicklingError
 from multiprocessing import Process, current_process, active_children, Pool, util, connection
 from multiprocessing.process import AuthenticationString
-from multiprocessing.forking import exit, Popen, assert_spawning, ForkingPickler
-from multiprocessing.util import Finalize, info
+from multiprocessing.forking import exit, Popen, ForkingPickler
+from time import time as _time
 
 #
 # Register some things for pickling
@@ -576,7 +548,10 @@ class BaseManager(object):
         '''
         Join the manager process (if it has been spawned)
         '''
-        self._process.join(timeout)
+        if self._process is not None:
+            self._process.join(timeout)
+            if not self._process.is_alive():
+                self._process = None
 
     def _debug_info(self):
         '''
@@ -982,8 +957,9 @@ class IteratorProxy(BaseProxy):
 
 class AcquirerProxy(BaseProxy):
     _exposed_ = ('acquire', 'release')
-    def acquire(self, blocking=True):
-        return self._callmethod('acquire', (blocking,))
+    def acquire(self, blocking=True, timeout=None):
+        args = (blocking,) if timeout is None else (blocking, timeout)
+        return self._callmethod('acquire', args)
     def release(self):
         return self._callmethod('release')
     def __enter__(self):
@@ -1000,6 +976,24 @@ class ConditionProxy(AcquirerProxy):
         return self._callmethod('notify')
     def notify_all(self):
         return self._callmethod('notify_all')
+    def wait_for(self, predicate, timeout=None):
+        result = predicate()
+        if result:
+            return result
+        if timeout is not None:
+            endtime = _time() + timeout
+        else:
+            endtime = None
+            waittime = None
+        while not result:
+            if endtime is not None:
+                waittime = endtime - _time()
+                if waittime <= 0:
+                    break
+            self.wait(waittime)
+            result = predicate()
+        return result
+
 
 class EventProxy(BaseProxy):
     _exposed_ = ('is_set', 'set', 'clear', 'wait')
@@ -1041,12 +1035,11 @@ class ValueProxy(BaseProxy):
 
 
 BaseListProxy = MakeProxyType('BaseListProxy', (
-    '__add__', '__contains__', '__delitem__', '__delslice__',
-    '__getitem__', '__getslice__', '__len__', '__mul__',
-    '__reversed__', '__rmul__', '__setitem__', '__setslice__',
+    '__add__', '__contains__', '__delitem__', '__getitem__', '__len__',
+    '__mul__', '__reversed__', '__rmul__', '__setitem__',
     'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove',
     'reverse', 'sort', '__imul__'
-    ))                  # XXX __getslice__ and __setslice__ unneeded in Py3.0
+    ))
 class ListProxy(BaseListProxy):
     def __iadd__(self, value):
         self._callmethod('extend', (value,))
@@ -1064,17 +1057,18 @@ DictProxy = MakeProxyType('DictProxy', (
 
 
 ArrayProxy = MakeProxyType('ArrayProxy', (
-    '__len__', '__getitem__', '__setitem__', '__getslice__', '__setslice__'
-    ))                  # XXX __getslice__ and __setslice__ unneeded in Py3.0
+    '__len__', '__getitem__', '__setitem__'
+    ))
 
 
 PoolProxy = MakeProxyType('PoolProxy', (
     'apply', 'apply_async', 'close', 'imap', 'imap_unordered', 'join',
-    'map', 'map_async', 'terminate'
+    'map', 'map_async', 'starmap', 'starmap_async', 'terminate'
     ))
 PoolProxy._method_to_typeid_ = {
     'apply_async': 'AsyncResult',
     'map_async': 'AsyncResult',
+    'starmap_async': 'AsyncResult',
     'imap': 'Iterator',
     'imap_unordered': 'Iterator'
     }

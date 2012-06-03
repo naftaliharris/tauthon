@@ -172,10 +172,6 @@ def _format_time(hh, mm, ss, us):
 
 # Correctly substitute for %z and %Z escapes in strftime formats.
 def _wrap_strftime(object, format, timetuple):
-    year = timetuple[0]
-    if year < 1000:
-        raise ValueError("year=%d is before 1000; the datetime strftime() "
-                         "methods require year >= 1000" % year)
     # Don't call utcoffset() or tzname() unless actually needed.
     freplace = None # the string to use for %f
     zreplace = None # the string to use for %z
@@ -1364,7 +1360,7 @@ class datetime(date):
         converter = _time.localtime if tz is None else _time.gmtime
 
         t, frac = divmod(t, 1.0)
-        us = round(frac * 1e6)
+        us = int(frac * 1e6)
 
         # If timestamp is less than one microsecond smaller than a
         # full second, us can be rounded up to 1000000.  In this case,
@@ -1384,7 +1380,7 @@ class datetime(date):
     def utcfromtimestamp(cls, t):
         "Construct a UTC datetime from a POSIX timestamp (like time.time())."
         t, frac = divmod(t, 1.0)
-        us = round(frac * 1e6)
+        us = int(frac * 1e6)
 
         # If timestamp is less than one microsecond smaller than a
         # full second, us can be rounded up to 1000000.  In this case,
