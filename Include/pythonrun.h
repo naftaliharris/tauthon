@@ -82,9 +82,12 @@ PyAPI_FUNC(struct _mod *) PyParser_ASTFromFile(
     PyParser_SimpleParseFileFlags(FP, S, B, 0)
 #endif
 PyAPI_FUNC(struct _node *) PyParser_SimpleParseStringFlags(const char *, int,
-                                                          int);
+                                                           int);
+PyAPI_FUNC(struct _node *) PyParser_SimpleParseStringFlagsFilename(const char *,
+                                                                   const char *,
+                                                                   int, int);
 PyAPI_FUNC(struct _node *) PyParser_SimpleParseFileFlags(FILE *, const char *,
-                                                        int, int);
+                                                         int, int);
 
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) PyRun_StringFlags(const char *, int, PyObject *,
@@ -179,9 +182,6 @@ PyAPI_FUNC(const char *) Py_GetCopyright(void);
 PyAPI_FUNC(const char *) Py_GetCompiler(void);
 PyAPI_FUNC(const char *) Py_GetBuildInfo(void);
 #ifndef Py_LIMITED_API
-PyAPI_FUNC(const char *) _Py_svnversion(void);
-PyAPI_FUNC(const char *) Py_SubversionRevision(void);
-PyAPI_FUNC(const char *) Py_SubversionShortBranch(void);
 PyAPI_FUNC(const char *) _Py_hgidentifier(void);
 PyAPI_FUNC(const char *) _Py_hgversion(void);
 #endif
@@ -191,7 +191,7 @@ PyAPI_FUNC(const char *) _Py_hgversion(void);
 PyAPI_FUNC(PyObject *) _PyBuiltin_Init(void);
 PyAPI_FUNC(PyObject *) _PySys_Init(void);
 PyAPI_FUNC(void) _PyImport_Init(void);
-PyAPI_FUNC(void) _PyExc_Init(void);
+PyAPI_FUNC(void) _PyExc_Init(PyObject * bltinmod);
 PyAPI_FUNC(void) _PyImportHooks_Init(void);
 PyAPI_FUNC(int) _PyFrame_Init(void);
 PyAPI_FUNC(void) _PyFloat_Init(void);
@@ -215,6 +215,7 @@ PyAPI_FUNC(void) PyByteArray_Fini(void);
 PyAPI_FUNC(void) PyFloat_Fini(void);
 PyAPI_FUNC(void) PyOS_FiniInterrupts(void);
 PyAPI_FUNC(void) _PyGC_Fini(void);
+PyAPI_FUNC(void) PySlice_Fini(void);
 
 PyAPI_DATA(PyThreadState *) _Py_Finalizing;
 #endif
