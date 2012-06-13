@@ -172,10 +172,6 @@ def _format_time(hh, mm, ss, us):
 
 # Correctly substitute for %z and %Z escapes in strftime formats.
 def _wrap_strftime(object, format, timetuple):
-    year = timetuple[0]
-    if year < 1000:
-        raise ValueError("year=%d is before 1000; the datetime strftime() "
-                         "methods require year >= 1000" % year)
     # Don't call utcoffset() or tzname() unless actually needed.
     freplace = None # the string to use for %f
     zreplace = None # the string to use for %z
@@ -1364,7 +1360,7 @@ class datetime(date):
         converter = _time.localtime if tz is None else _time.gmtime
 
         t, frac = divmod(t, 1.0)
-        us = round(frac * 1e6)
+        us = int(frac * 1e6)
 
         # If timestamp is less than one microsecond smaller than a
         # full second, us can be rounded up to 1000000.  In this case,
@@ -1384,7 +1380,7 @@ class datetime(date):
     def utcfromtimestamp(cls, t):
         "Construct a UTC datetime from a POSIX timestamp (like time.time())."
         t, frac = divmod(t, 1.0)
-        us = round(frac * 1e6)
+        us = int(frac * 1e6)
 
         # If timestamp is less than one microsecond smaller than a
         # full second, us can be rounded up to 1000000.  In this case,
@@ -1437,6 +1433,15 @@ class datetime(date):
         return _build_struct_time(self.year, self.month, self.day,
                                   self.hour, self.minute, self.second,
                                   dst)
+
+    def timestamp(self):
+        "Return POSIX timestamp as float"
+        if self._tzinfo is None:
+            return _time.mktime((self.year, self.month, self.day,
+                                 self.hour, self.minute, self.second,
+                                 -1, -1, -1)) + self.microsecond / 1e6
+        else:
+            return (self - _EPOCH).total_seconds()
 
     def utctimetuple(self):
         "Return UTC time tuple compatible with time.gmtime()."
@@ -1893,7 +1898,7 @@ class timezone(tzinfo):
 timezone.utc = timezone._create(timedelta(0))
 timezone.min = timezone._create(timezone._minoffset)
 timezone.max = timezone._create(timezone._maxoffset)
-
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 """
 Some time zone algebra.  For a datetime x, let
     x.n = x stripped of its timezone -- its naive time.
