@@ -29,6 +29,32 @@ always available.
    command line, see the :mod:`fileinput` module.
 
 
+.. data:: base_exec_prefix
+
+   Set during Python startup, before ``site.py`` is run, to the same value as
+   :data:`exec_prefix`. If not running in a virtual environment, the values
+   will stay the same; if ``site.py`` finds that a virtual environment is in
+   use, the values of :data:`prefix` and :data:`exec_prefix` will be changed to
+   point to the virtual environment, whereas :data:`base_prefix` and
+   :data:`base_exec_prefix` will remain pointing to the base Python
+   installation (the one which the virtual environment was created from).
+
+   .. versionadded:: 3.3
+
+
+.. data:: base_prefix
+
+   Set during Python startup, before ``site.py`` is run, to the same value as
+   :data:`prefix`. If not running in a virtual environment, the values
+   will stay the same; if ``site.py`` finds that a virtual environment is in
+   use, the values of :data:`prefix` and :data:`exec_prefix` will be changed to
+   point to the virtual environment, whereas :data:`base_prefix` and
+   :data:`base_exec_prefix` will remain pointing to the base Python
+   installation (the one which the virtual environment was created from).
+
+   .. versionadded:: 3.3
+
+
 .. data:: byteorder
 
    An indicator of the native byte order.  This will have the value ``'big'`` on
@@ -199,6 +225,10 @@ always available.
    installed in :file:`{exec_prefix}/lib/python{X.Y}/lib-dynload`, where *X.Y*
    is the version number of Python, for example ``3.2``.
 
+   .. note:: If a virtual environment is in effect, this value will be changed
+      in ``site.py`` to point to the virtual environment. The value for the
+      Python installation will still be available, via :data:`base_exec_prefix`.
+
 
 .. data:: executable
 
@@ -235,14 +265,13 @@ always available.
 
 .. data:: flags
 
-   The struct sequence *flags* exposes the status of command line flags. The
-   attributes are read only.
+   The :term:`struct sequence` *flags* exposes the status of command line
+   flags. The attributes are read only.
 
    ============================= =============================
    attribute                     flag
    ============================= =============================
    :const:`debug`                :option:`-d`
-   :const:`division_warning`     :option:`-Q`
    :const:`inspect`              :option:`-i`
    :const:`interactive`          :option:`-i`
    :const:`optimize`             :option:`-O` or :option:`-OO`
@@ -262,15 +291,18 @@ always available.
    .. versionadded:: 3.2.3
       The ``hash_randomization`` attribute.
 
+   .. versionchanged:: 3.3
+      Removed obsolete ``division_warning`` attribute.
+
 
 .. data:: float_info
 
-   A structseq holding information about the float type. It contains low level
-   information about the precision and internal representation.  The values
-   correspond to the various floating-point constants defined in the standard
-   header file :file:`float.h` for the 'C' programming language; see section
-   5.2.4.2.2 of the 1999 ISO/IEC C standard [C99]_, 'Characteristics of
-   floating types', for details.
+   A :term:`struct sequence` holding information about the float type. It
+   contains low level information about the precision and internal
+   representation.  The values correspond to the various floating-point
+   constants defined in the standard header file :file:`float.h` for the 'C'
+   programming language; see section 5.2.4.2.2 of the 1999 ISO/IEC C standard
+   [C99]_, 'Characteristics of floating types', for details.
 
    +---------------------+----------------+--------------------------------------------------+
    | attribute           | float.h macro  | explanation                                      |
@@ -520,8 +552,9 @@ always available.
 
 .. data:: hash_info
 
-   A structseq giving parameters of the numeric hash implementation.  For
-   more details about hashing of numeric types, see :ref:`numeric-hash`.
+   A :term:`struct sequence` giving parameters of the numeric hash
+   implementation.  For more details about hashing of numeric types, see
+   :ref:`numeric-hash`.
 
    +---------------------+--------------------------------------------------+
    | attribute           | explanation                                      |
@@ -556,8 +589,8 @@ always available.
 
    This is called ``hexversion`` since it only really looks meaningful when viewed
    as the result of passing it to the built-in :func:`hex` function.  The
-   struct sequence  :data:`sys.version_info` may be used for a more human-friendly
-   encoding of the same information.
+   :term:`struct sequence`  :data:`sys.version_info` may be used for a more
+   human-friendly encoding of the same information.
 
    The ``hexversion`` is a 32-bit number with the following layout:
 
@@ -583,10 +616,51 @@ always available.
 
    Thus ``2.1.0a3`` is hexversion ``0x020100a3``.
 
+
+.. data:: implementation
+
+   An object containing information about the implementation of the
+   currently running Python interpreter.  The following attributes are
+   required to exist in all Python implementations.
+
+   *name* is the implementation's identifier, e.g. ``'cpython'``.  The actual
+   string is defined by the Python implementation, but it is guaranteed to be
+   lower case.
+
+   *version* is a named tuple, in the same format as
+   :data:`sys.version_info`.  It represents the version of the Python
+   *implementation*.  This has a distinct meaning from the specific
+   version of the Python *language* to which the currently running
+   interpreter conforms, which ``sys.version_info`` represents.  For
+   example, for PyPy 1.8 ``sys.implementation.version`` might be
+   ``sys.version_info(1, 8, 0, 'final', 0)``, whereas ``sys.version_info``
+   would be ``sys.version_info(2, 7, 2, 'final', 0)``.  For CPython they
+   are the same value, since it is the reference implementation.
+
+   *hexversion* is the implementation version in hexadecimal format, like
+   :data:`sys.hexversion`.
+
+   *cache_tag* is the tag used by the import machinery in the filenames of
+   cached modules.  By convention, it would be a composite of the
+   implementation's name and version, like ``'cpython-33'``.  However, a
+   Python implementation may use some other value if appropriate.  If
+   ``cache_tag`` is set to ``None``, it indicates that module caching should
+   be disabled.
+
+   :data:`sys.implementation` may contain additional attributes specific to
+   the Python implementation.  These non-standard attributes must start with
+   an underscore, and are not described here.  Regardless of its contents,
+   :data:`sys.implementation` will not change during a run of the interpreter,
+   nor between implementation versions.  (It may change between Python
+   language versions, however.)  See `PEP 421` for more information.
+
+   .. versionadded:: 3.3
+
+
 .. data:: int_info
 
-   A struct sequence that holds information about Python's
-   internal representation of integers.  The attributes are read only.
+   A :term:`struct sequence` that holds information about Python's internal
+   representation of integers.  The attributes are read only.
 
    +-------------------------+----------------------------------------------+
    | Attribute               | Explanation                                  |
@@ -641,9 +715,13 @@ always available.
 
 .. data:: maxunicode
 
-   An integer giving the largest supported code point for a Unicode character.  The
-   value of this depends on the configuration option that specifies whether Unicode
-   characters are stored as UCS-2 or UCS-4.
+   An integer giving the value of the largest Unicode code point,
+   i.e. ``1114111`` (``0x10FFFF`` in hexadecimal).
+
+   .. versionchanged:: 3.3
+      Before :pep:`393`, ``sys.maxunicode`` used to be either ``0xFFFF``
+      or ``0x10FFFF``, depending on the configuration option that specified
+      whether Unicode characters were stored as UCS-2 or UCS-4.
 
 
 .. data:: meta_path
@@ -718,36 +796,35 @@ always available.
    This string contains a platform identifier that can be used to append
    platform-specific components to :data:`sys.path`, for instance.
 
-   For most Unix systems, this is the lowercased OS name as returned by ``uname
-   -s`` with the first part of the version as returned by ``uname -r`` appended,
-   e.g. ``'sunos5'``, *at the time when Python was built*.  Unless you want to
-   test for a specific system version, it is therefore recommended to use the
-   following idiom::
+   For Unix systems, except on Linux, this is the lowercased OS name as
+   returned by ``uname -s`` with the first part of the version as returned by
+   ``uname -r`` appended, e.g. ``'sunos5'`` or ``'freebsd8'``, *at the time
+   when Python was built*.  Unless you want to test for a specific system
+   version, it is therefore recommended to use the following idiom::
 
       if sys.platform.startswith('freebsd'):
           # FreeBSD-specific code here...
       elif sys.platform.startswith('linux'):
           # Linux-specific code here...
 
-   .. versionchanged:: 3.2.2
-      Since lots of code check for ``sys.platform == 'linux2'``, and there is
-      no essential change between Linux 2.x and 3.x, ``sys.platform`` is always
-      set to ``'linux2'``, even on Linux 3.x.  In Python 3.3 and later, the
-      value will always be set to ``'linux'``, so it is recommended to always
-      use the ``startswith`` idiom presented above.
-
    For other systems, the values are:
 
-   ====================== ===========================
-   System                 :data:`platform` value
-   ====================== ===========================
-   Linux (2.x *and* 3.x)  ``'linux2'``
-   Windows                ``'win32'``
-   Windows/Cygwin         ``'cygwin'``
-   Mac OS X               ``'darwin'``
-   OS/2                   ``'os2'``
-   OS/2 EMX               ``'os2emx'``
-   ====================== ===========================
+   ================ ===========================
+   System           :data:`platform` value
+   ================ ===========================
+   Linux            ``'linux'``
+   Windows          ``'win32'``
+   Windows/Cygwin   ``'cygwin'``
+   Mac OS X         ``'darwin'``
+   OS/2             ``'os2'``
+   OS/2 EMX         ``'os2emx'``
+   ================ ===========================
+
+   .. versionchanged:: 3.3
+      On Linux, :attr:`sys.platform` doesn't contain the major version anymore.
+      It is always ``'linux'``, instead of ``'linux2'`` or ``'linux3'``.  Since
+      older Python versions include the version number, it is recommended to
+      always use the ``startswith`` idiom presented above.
 
    .. seealso::
 
@@ -764,10 +841,14 @@ always available.
    independent Python files are installed; by default, this is the string
    ``'/usr/local'``.  This can be set at build time with the ``--prefix``
    argument to the :program:`configure` script.  The main collection of Python
-   library modules is installed in the directory :file:`{prefix}/lib/python{X.Y}``
+   library modules is installed in the directory :file:`{prefix}/lib/python{X.Y}`
    while the platform independent header files (all except :file:`pyconfig.h`) are
    stored in :file:`{prefix}/include/python{X.Y}`, where *X.Y* is the version
    number of Python, for example ``3.2``.
+
+   .. note:: If a virtual environment is in effect, this value will be changed
+      in ``site.py`` to point to the virtual environment. The value for the
+      Python installation will still be available, via :data:`base_prefix`.
 
 
 .. data:: ps1
@@ -806,11 +887,11 @@ always available.
    the interpreter loads extension modules.  Among other things, this will enable a
    lazy resolving of symbols when importing a module, if called as
    ``sys.setdlopenflags(0)``.  To share symbols across extension modules, call as
-   ``sys.setdlopenflags(ctypes.RTLD_GLOBAL)``.  Symbolic names for the
-   flag modules can be either found in the :mod:`ctypes` module, or in the :mod:`DLFCN`
-   module. If :mod:`DLFCN` is not available, it can be generated from
-   :file:`/usr/include/dlfcn.h` using the :program:`h2py` script. Availability:
-   Unix.
+   ``sys.setdlopenflags(os.RTLD_GLOBAL)``.  Symbolic names for the flag modules
+   can be found in the :mod:`os` module (``RTLD_xxx`` constants, e.g.
+   :data:`os.RTLD_LAZY`).
+
+   Availability: Unix.
 
 .. function:: setprofile(profilefunc)
 
@@ -1003,22 +1084,33 @@ always available.
        to a console and Python apps started with :program:`pythonw`.
 
 
-.. data:: subversion
+.. data:: thread_info
 
-   A triple (repo, branch, version) representing the Subversion information of the
-   Python interpreter. *repo* is the name of the repository, ``'CPython'``.
-   *branch* is a string of one of the forms ``'trunk'``, ``'branches/name'`` or
-   ``'tags/name'``. *version* is the output of ``svnversion``, if the interpreter
-   was built from a Subversion checkout; it contains the revision number (range)
-   and possibly a trailing 'M' if there were local modifications. If the tree was
-   exported (or svnversion was not available), it is the revision of
-   ``Include/patchlevel.h`` if the branch is a tag. Otherwise, it is ``None``.
+   A :term:`struct sequence` holding information about the thread
+   implementation.
 
-   .. deprecated:: 3.2.1
-      Python is now `developed <http://docs.python.org/devguide/>`_ using
-      Mercurial.  In recent Python 3.2 bugfix releases, :data:`subversion`
-      therefore contains placeholder information.  It is removed in Python
-      3.3.
+   +------------------+---------------------------------------------------------+
+   | Attribute        | Explanation                                             |
+   +==================+=========================================================+
+   | :const:`name`    | Name of the thread implementation:                      |
+   |                  |                                                         |
+   |                  |  * ``'nt'``: Windows threads                            |
+   |                  |  * ``'os2'``: OS/2 threads                              |
+   |                  |  * ``'pthread'``: POSIX threads                         |
+   |                  |  * ``'solaris'``: Solaris threads                       |
+   +------------------+---------------------------------------------------------+
+   | :const:`lock`    | Name of the lock implementation:                        |
+   |                  |                                                         |
+   |                  |  * ``'semaphore'``: a lock uses a semaphore             |
+   |                  |  * ``'mutex+cond'``: a lock uses a mutex                |
+   |                  |    and a condition variable                             |
+   |                  |  * ``None`` if this information is unknown              |
+   +------------------+---------------------------------------------------------+
+   | :const:`version` | Name and version of the thread library. It is a string, |
+   |                  | or ``None`` if these informations are unknown.          |
+   +------------------+---------------------------------------------------------+
+
+   .. versionadded:: 3.3
 
 
 .. data:: tracebacklimit
