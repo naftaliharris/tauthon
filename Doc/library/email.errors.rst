@@ -73,17 +73,38 @@ this class is *not* an exception!
 * :class:`StartBoundaryNotFoundDefect` -- The start boundary claimed in the
   :mailheader:`Content-Type` header was never found.
 
+* :class:`CloseBoundaryNotFoundDefect` -- A start boundary was found, but
+  no corresponding close boundary was ever found.
+
+  .. versionadded: 3.3
+
 * :class:`FirstHeaderLineIsContinuationDefect` -- The message had a continuation
   line as its first header line.
 
 * :class:`MisplacedEnvelopeHeaderDefect` - A "Unix From" header was found in the
   middle of a header block.
 
+* :class:`MissingHeaderBodySeparatorDefect` - A line was found while parsing
+  headers that had no leading white space but contained no ':'.  Parsing
+  continues assuming that the line represents the first line of the body.
+
+  .. versionadded: 3.3
+
 * :class:`MalformedHeaderDefect` -- A header was found that was missing a colon,
   or was otherwise malformed.
+
+  .. deprecated:: 3.3
+     This defect has not been used for several Python versions.
 
 * :class:`MultipartInvariantViolationDefect` -- A message claimed to be a
   :mimetype:`multipart`, but no subparts were found.  Note that when a message has
   this defect, its :meth:`is_multipart` method may return false even though its
   content type claims to be :mimetype:`multipart`.
 
+* :class:`InvalidBase64PaddingDefect` -- When decoding a block of base64
+  enocded bytes, the padding was not correct.  Enough padding is added to
+  perform the decode, but the resulting decoded bytes may be invalid.
+
+* :class:`InvalidBase64CharactersDefect` -- When decoding a block of base64
+  enocded bytes, characters outside the base64 alphebet were encountered.
+  The characters are ignored, but the resulting decoded bytes may be invalid.
