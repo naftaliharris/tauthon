@@ -45,12 +45,64 @@ tok_name[NL] = 'NL'
 ENCODING = N_TOKENS + 2
 tok_name[ENCODING] = 'ENCODING'
 N_TOKENS += 3
+EXACT_TOKEN_TYPES = {
+    '(':   LPAR,
+    ')':   RPAR,
+    '[':   LSQB,
+    ']':   RSQB,
+    ':':   COLON,
+    ',':   COMMA,
+    ';':   SEMI,
+    '+':   PLUS,
+    '-':   MINUS,
+    '*':   STAR,
+    '/':   SLASH,
+    '|':   VBAR,
+    '&':   AMPER,
+    '<':   LESS,
+    '>':   GREATER,
+    '=':   EQUAL,
+    '.':   DOT,
+    '%':   PERCENT,
+    '{':   LBRACE,
+    '}':   RBRACE,
+    '==':  EQEQUAL,
+    '!=':  NOTEQUAL,
+    '<=':  LESSEQUAL,
+    '>=':  GREATEREQUAL,
+    '~':   TILDE,
+    '^':   CIRCUMFLEX,
+    '<<':  LEFTSHIFT,
+    '>>':  RIGHTSHIFT,
+    '**':  DOUBLESTAR,
+    '+=':  PLUSEQUAL,
+    '-=':  MINEQUAL,
+    '*=':  STAREQUAL,
+    '/=':  SLASHEQUAL,
+    '%=':  PERCENTEQUAL,
+    '&=':  AMPEREQUAL,
+    '|=':  VBAREQUAL,
+    '^=': CIRCUMFLEXEQUAL,
+    '<<=': LEFTSHIFTEQUAL,
+    '>>=': RIGHTSHIFTEQUAL,
+    '**=': DOUBLESTAREQUAL,
+    '//':  DOUBLESLASH,
+    '//=': DOUBLESLASHEQUAL,
+    '@':   AT
+}
 
 class TokenInfo(collections.namedtuple('TokenInfo', 'type string start end line')):
     def __repr__(self):
         annotated_type = '%d (%s)' % (self.type, tok_name[self.type])
         return ('TokenInfo(type=%s, string=%r, start=%r, end=%r, line=%r)' %
                 self._replace(type=annotated_type))
+
+    @property
+    def exact_type(self):
+        if self.type == OP and self.string in EXACT_TOKEN_TYPES:
+            return EXACT_TOKEN_TYPES[self.string]
+        else:
+            return self.type
 
 def group(*choices): return '(' + '|'.join(choices) + ')'
 def any(*choices): return group(*choices) + '*'
@@ -75,6 +127,8 @@ Floatnumber = group(Pointfloat, Expfloat)
 Imagnumber = group(r'[0-9]+[jJ]', Floatnumber + r'[jJ]')
 Number = group(Imagnumber, Floatnumber, Intnumber)
 
+StringPrefix = r'(?:[uU][rR]?|[bB][rR]|[rR][bB]|[rR]|[uU])?'
+
 # Tail end of ' string.
 Single = r"[^'\\]*(?:\\.[^'\\]*)*'"
 # Tail end of " string.
@@ -83,10 +137,10 @@ Double = r'[^"\\]*(?:\\.[^"\\]*)*"'
 Single3 = r"[^'\\]*(?:(?:\\.|'(?!''))[^'\\]*)*'''"
 # Tail end of """ string.
 Double3 = r'[^"\\]*(?:(?:\\.|"(?!""))[^"\\]*)*"""'
-Triple = group("[bB]?[rR]?'''", '[bB]?[rR]?"""')
+Triple = group(StringPrefix + "'''", StringPrefix + '"""')
 # Single-line ' or " string.
-String = group(r"[bB]?[rR]?'[^\n'\\]*(?:\\.[^\n'\\]*)*'",
-               r'[bB]?[rR]?"[^\n"\\]*(?:\\.[^\n"\\]*)*"')
+String = group(StringPrefix + r"'[^\n'\\]*(?:\\.[^\n'\\]*)*'",
+               StringPrefix + r'"[^\n"\\]*(?:\\.[^\n"\\]*)*"')
 
 # Because of leftmost-then-longest match semantics, be sure to put the
 # longest operators first (e.g., if = came before ==, == would get
@@ -104,9 +158,9 @@ PlainToken = group(Number, Funny, String, Name)
 Token = Ignore + PlainToken
 
 # First (or only) line of ' or " string.
-ContStr = group(r"[bB]?[rR]?'[^\n'\\]*(?:\\.[^\n'\\]*)*" +
+ContStr = group(StringPrefix + r"'[^\n'\\]*(?:\\.[^\n'\\]*)*" +
                 group("'", r'\\\r?\n'),
-                r'[bB]?[rR]?"[^\n"\\]*(?:\\.[^\n"\\]*)*' +
+                StringPrefix + r'"[^\n"\\]*(?:\\.[^\n"\\]*)*' +
                 group('"', r'\\\r?\n'))
 PseudoExtras = group(r'\\\r?\n', Comment, Triple)
 PseudoToken = Whitespace + group(PseudoExtras, Number, Funny, ContStr, Name)
@@ -114,36 +168,54 @@ PseudoToken = Whitespace + group(PseudoExtras, Number, Funny, ContStr, Name)
 def _compile(expr):
     return re.compile(expr, re.UNICODE)
 
-tokenprog, pseudoprog, single3prog, double3prog = map(
-    _compile, (Token, PseudoToken, Single3, Double3))
-endprogs = {"'": _compile(Single), '"': _compile(Double),
-            "'''": single3prog, '"""': double3prog,
-            "r'''": single3prog, 'r"""': double3prog,
-            "b'''": single3prog, 'b"""': double3prog,
-            "br'''": single3prog, 'br"""': double3prog,
-            "R'''": single3prog, 'R"""': double3prog,
-            "B'''": single3prog, 'B"""': double3prog,
-            "bR'''": single3prog, 'bR"""': double3prog,
-            "Br'''": single3prog, 'Br"""': double3prog,
-            "BR'''": single3prog, 'BR"""': double3prog,
-            'r': None, 'R': None, 'b': None, 'B': None}
+endpats = {"'": Single, '"': Double,
+           "'''": Single3, '"""': Double3,
+           "r'''": Single3, 'r"""': Double3,
+           "b'''": Single3, 'b"""': Double3,
+           "R'''": Single3, 'R"""': Double3,
+           "B'''": Single3, 'B"""': Double3,
+           "br'''": Single3, 'br"""': Double3,
+           "bR'''": Single3, 'bR"""': Double3,
+           "Br'''": Single3, 'Br"""': Double3,
+           "BR'''": Single3, 'BR"""': Double3,
+           "rb'''": Single3, 'rb"""': Double3,
+           "Rb'''": Single3, 'Rb"""': Double3,
+           "rB'''": Single3, 'rB"""': Double3,
+           "RB'''": Single3, 'RB"""': Double3,
+           "u'''": Single3, 'u"""': Double3,
+           "ur'''": Single3, 'ur"""': Double3,
+           "R'''": Single3, 'R"""': Double3,
+           "U'''": Single3, 'U"""': Double3,
+           "uR'''": Single3, 'uR"""': Double3,
+           "Ur'''": Single3, 'Ur"""': Double3,
+           "UR'''": Single3, 'UR"""': Double3,
+           'r': None, 'R': None, 'b': None, 'B': None,
+           'u': None, 'U': None}
 
 triple_quoted = {}
 for t in ("'''", '"""',
           "r'''", 'r"""', "R'''", 'R"""',
           "b'''", 'b"""', "B'''", 'B"""',
           "br'''", 'br"""', "Br'''", 'Br"""',
-          "bR'''", 'bR"""', "BR'''", 'BR"""'):
+          "bR'''", 'bR"""', "BR'''", 'BR"""',
+          "rb'''", 'rb"""', "rB'''", 'rB"""',
+          "Rb'''", 'Rb"""', "RB'''", 'RB"""',
+          "u'''", 'u"""', "U'''", 'U"""',
+          "ur'''", 'ur"""', "Ur'''", 'Ur"""',
+          "uR'''", 'uR"""', "UR'''", 'UR"""'):
     triple_quoted[t] = t
 single_quoted = {}
 for t in ("'", '"',
           "r'", 'r"', "R'", 'R"',
           "b'", 'b"', "B'", 'B"',
           "br'", 'br"', "Br'", 'Br"',
-          "bR'", 'bR"', "BR'", 'BR"' ):
+          "bR'", 'bR"', "BR'", 'BR"' ,
+          "rb'", 'rb"', "rB'", 'rB"',
+          "Rb'", 'Rb"', "RB'", 'RB"' ,
+          "u'", 'u"', "U'", 'U"',
+          "ur'", 'ur"', "Ur'", 'Ur"',
+          "uR'", 'uR"', "UR'", 'UR"' ):
     single_quoted[t] = t
-
-del _compile
 
 tabsize = 8
 
@@ -281,6 +353,10 @@ def detect_encoding(readline):
 
     If no encoding is specified, then the default of 'utf-8' will be returned.
     """
+    try:
+        filename = readline.__self__.name
+    except AttributeError:
+        filename = None
     bom_found = False
     encoding = None
     default = 'utf-8'
@@ -297,7 +373,10 @@ def detect_encoding(readline):
             # per default encoding.
             line_string = line.decode('utf-8')
         except UnicodeDecodeError:
-            raise SyntaxError("invalid or missing encoding declaration")
+            msg = "invalid or missing encoding declaration"
+            if filename is not None:
+                msg = '{} for {!r}'.format(msg, filename)
+            raise SyntaxError(msg)
 
         matches = cookie_re.findall(line_string)
         if not matches:
@@ -307,12 +386,21 @@ def detect_encoding(readline):
             codec = lookup(encoding)
         except LookupError:
             # This behaviour mimics the Python interpreter
-            raise SyntaxError("unknown encoding: " + encoding)
+            if filename is None:
+                msg = "unknown encoding: " + encoding
+            else:
+                msg = "unknown encoding for {!r}: {}".format(filename,
+                        encoding)
+            raise SyntaxError(msg)
 
         if bom_found:
             if codec.name != 'utf-8':
                 # This behaviour mimics the Python interpreter
-                raise SyntaxError('encoding problem: utf-8')
+                if filename is None:
+                    msg = 'encoding problem: utf-8'
+                else:
+                    msg = 'encoding problem for {!r}: utf-8'.format(filename)
+                raise SyntaxError(msg)
             encoding += '-sig'
         return encoding
 
@@ -469,7 +557,7 @@ def _tokenize(readline, encoding):
             continued = 0
 
         while pos < max:
-            pseudomatch = pseudoprog.match(line, pos)
+            pseudomatch = _compile(PseudoToken).match(line, pos)
             if pseudomatch:                                # scan for tokens
                 start, end = pseudomatch.span(1)
                 spos, epos, pos = (lnum, start), (lnum, end), end
@@ -485,7 +573,7 @@ def _tokenize(readline, encoding):
                     assert not token.endswith("\n")
                     yield TokenInfo(COMMENT, token, spos, epos, line)
                 elif token in triple_quoted:
-                    endprog = endprogs[token]
+                    endprog = _compile(endpats[token])
                     endmatch = endprog.match(line, pos)
                     if endmatch:                           # all on one line
                         pos = endmatch.end(0)
@@ -501,8 +589,9 @@ def _tokenize(readline, encoding):
                     token[:3] in single_quoted:
                     if token[-1] == '\n':                  # continued string
                         strstart = (lnum, start)
-                        endprog = (endprogs[initial] or endprogs[token[1]] or
-                                   endprogs[token[2]])
+                        endprog = _compile(endpats[initial] or
+                                           endpats[token[1]] or
+                                           endpats[token[2]])
                         contstr, needcont = line[start:], 1
                         contline = line
                         break
@@ -533,27 +622,65 @@ def _tokenize(readline, encoding):
 def generate_tokens(readline):
     return _tokenize(readline, None)
 
+def main():
+    import argparse
+
+    # Helper error handling routines
+    def perror(message):
+        print(message, file=sys.stderr)
+
+    def error(message, filename=None, location=None):
+        if location:
+            args = (filename,) + location + (message,)
+            perror("%s:%d:%d: error: %s" % args)
+        elif filename:
+            perror("%s: error: %s" % (filename, message))
+        else:
+            perror("error: %s" % message)
+        sys.exit(1)
+
+    # Parse the arguments and options
+    parser = argparse.ArgumentParser(prog='python -m tokenize')
+    parser.add_argument(dest='filename', nargs='?',
+                        metavar='filename.py',
+                        help='the file to tokenize; defaults to stdin')
+    parser.add_argument('-e', '--exact', dest='exact', action='store_true',
+                        help='display token names using the exact type')
+    args = parser.parse_args()
+
+    try:
+        # Tokenize the input
+        if args.filename:
+            filename = args.filename
+            with builtins.open(filename, 'rb') as f:
+                tokens = list(tokenize(f.readline))
+        else:
+            filename = "<stdin>"
+            tokens = _tokenize(sys.stdin.readline, None)
+
+        # Output the tokenization
+        for token in tokens:
+            token_type = token.type
+            if args.exact:
+                token_type = token.exact_type
+            token_range = "%d,%d-%d,%d:" % (token.start + token.end)
+            print("%-20s%-15s%-15r" %
+                  (token_range, tok_name[token_type], token.string))
+    except IndentationError as err:
+        line, column = err.args[1][1:3]
+        error(err.args[0], filename, (line, column))
+    except TokenError as err:
+        line, column = err.args[1]
+        error(err.args[0], filename, (line, column))
+    except SyntaxError as err:
+        error(err, filename)
+    except IOError as err:
+        error(err)
+    except KeyboardInterrupt:
+        print("interrupted\n")
+    except Exception as err:
+        perror("unexpected error: %s" % err)
+        raise
+
 if __name__ == "__main__":
-    # Quick sanity check
-    s = b'''def parseline(self, line):
-            """Parse the line into a command name and a string containing
-            the arguments.  Returns a tuple containing (command, args, line).
-            'command' and 'args' may be None if the line couldn't be parsed.
-            """
-            line = line.strip()
-            if not line:
-                return None, None, line
-            elif line[0] == '?':
-                line = 'help ' + line[1:]
-            elif line[0] == '!':
-                if hasattr(self, 'do_shell'):
-                    line = 'shell ' + line[1:]
-                else:
-                    return None, None, line
-            i, n = 0, len(line)
-            while i < n and line[i] in self.identchars: i = i+1
-            cmd, arg = line[:i], line[i:].strip()
-            return cmd, arg, line
-    '''
-    for tok in tokenize(iter(s.splitlines()).__next__):
-        print(tok)
+    main()
