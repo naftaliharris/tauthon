@@ -197,7 +197,7 @@ class build_ext(Command):
             # Append the source distribution include and library directories,
             # this allows distutils on windows to work in the source tree
             self.include_dirs.append(os.path.join(sys.exec_prefix, 'PC'))
-            if MSVC_VERSION == 9:
+            if MSVC_VERSION >= 9:
                 # Use the .lib files for the correct architecture
                 if self.plat_name == 'win32':
                     suffix = ''
@@ -239,8 +239,7 @@ class build_ext(Command):
         # for extensions under Linux or Solaris with a shared Python library,
         # Python's library directory must be appended to library_dirs
         sysconfig.get_config_var('Py_ENABLE_SHARED')
-        if ((sys.platform.startswith('linux') or sys.platform.startswith('gnu')
-             or sys.platform.startswith('sunos'))
+        if (sys.platform.startswith(('linux', 'gnu', 'sunos'))
             and sysconfig.get_config_var('Py_ENABLE_SHARED')):
             if sys.executable.startswith(os.path.join(sys.exec_prefix, "bin")):
                 # building third party extensions

@@ -3,12 +3,14 @@
   Nick Mathewson
 """
 
+import imp
 import sys
 import os
 import shutil
+import importlib
 import unittest
 
-from test.support import run_unittest
+from test.support import run_unittest, create_empty_file
 from reprlib import repr as r # Don't shadow builtin repr
 from reprlib import Repr
 from reprlib import recursive_repr
@@ -129,8 +131,8 @@ class ReprTests(unittest.TestCase):
         self.assertIn(s.find("..."), [12, 13])
 
     def test_lambda(self):
-        self.assertTrue(repr(lambda x: x).startswith(
-            "<function <lambda"))
+        r = repr(lambda x: x)
+        self.assertTrue(r.startswith("<function ReprTests.test_lambda.<locals>.<lambda"), r)
         # XXX anonymous functions?  see func_repr
 
     def test_builtin_function(self):
@@ -193,26 +195,29 @@ class ReprTests(unittest.TestCase):
         r(y)
         r(z)
 
-def touch(path, text=''):
-    fp = open(path, 'w')
-    fp.write(text)
-    fp.close()
+def write_file(path, text):
+    with open(path, 'w', encoding='ASCII') as fp:
+        fp.write(text)
 
 class LongReprTest(unittest.TestCase):
+    longname = 'areallylongpackageandmodulenametotestreprtruncation'
+
     def setUp(self):
-        longname = 'areallylongpackageandmodulenametotestreprtruncation'
-        self.pkgname = os.path.join(longname)
-        self.subpkgname = os.path.join(longname, longname)
+        self.pkgname = os.path.join(self.longname)
+        self.subpkgname = os.path.join(self.longname, self.longname)
         # Make the package and subpackage
         shutil.rmtree(self.pkgname, ignore_errors=True)
         os.mkdir(self.pkgname)
-        touch(os.path.join(self.pkgname, '__init__.py'))
+        create_empty_file(os.path.join(self.pkgname, '__init__.py'))
         shutil.rmtree(self.subpkgname, ignore_errors=True)
         os.mkdir(self.subpkgname)
-        touch(os.path.join(self.subpkgname, '__init__.py'))
+        create_empty_file(os.path.join(self.subpkgname, '__init__.py'))
         # Remember where we are
         self.here = os.getcwd()
         sys.path.insert(0, self.here)
+        # When regrtest is run with its -j option, this command alone is not
+        # enough.
+        importlib.invalidate_caches()
 
     def tearDown(self):
         actions = []
@@ -229,20 +234,38 @@ class LongReprTest(unittest.TestCase):
                 os.remove(p)
         del sys.path[0]
 
+    def _check_path_limitations(self, module_name):
+        # base directory
+        source_path_len = len(self.here)
+        # a path separator + `longname` (twice)
+        source_path_len += 2 * (len(self.longname) + 1)
+        # a path separator + `module_name` + ".py"
+        source_path_len += len(module_name) + 1 + len(".py")
+        cached_path_len = source_path_len + len(imp.cache_from_source("x.py")) - len("x.py")
+        if os.name == 'nt' and cached_path_len >= 259:
+            # Under Windows, the max path len is 260 including C's terminating
+            # NUL character.
+            # (see http://msdn.microsoft.com/en-us/library/windows/desktop/aa365247%28v=vs.85%29.aspx#maxpath)
+            self.skipTest("test paths too long (%d characters) for Windows' 260 character limit"
+                          % cached_path_len)
+
     def test_module(self):
-        eq = self.assertEqual
-        touch(os.path.join(self.subpkgname, self.pkgname + '.py'))
+        self._check_path_limitations(self.pkgname)
+        create_empty_file(os.path.join(self.subpkgname, self.pkgname + '.py'))
+        importlib.invalidate_caches()
         from areallylongpackageandmodulenametotestreprtruncation.areallylongpackageandmodulenametotestreprtruncation import areallylongpackageandmodulenametotestreprtruncation
-        eq(repr(areallylongpackageandmodulenametotestreprtruncation),
-           "<module '%s' from '%s'>" % (areallylongpackageandmodulenametotestreprtruncation.__name__, areallylongpackageandmodulenametotestreprtruncation.__file__))
-        eq(repr(sys), "<module 'sys' (built-in)>")
+        module = areallylongpackageandmodulenametotestreprtruncation
+        self.assertEqual(repr(module), "<module %r from %r>" % (module.__name__, module.__file__))
+        self.assertEqual(repr(sys), "<module 'sys' (built-in)>")
 
     def test_type(self):
+        self._check_path_limitations('foo')
         eq = self.assertEqual
-        touch(os.path.join(self.subpkgname, 'foo.py'), '''\
+        write_file(os.path.join(self.subpkgname, 'foo.py'), '''\
 class foo(object):
     pass
 ''')
+        importlib.invalidate_caches()
         from areallylongpackageandmodulenametotestreprtruncation.areallylongpackageandmodulenametotestreprtruncation import foo
         eq(repr(foo.foo),
                "<class '%s.foo'>" % foo.__name__)
@@ -253,39 +276,46 @@ class foo(object):
         pass
 
     def test_class(self):
-        touch(os.path.join(self.subpkgname, 'bar.py'), '''\
+        self._check_path_limitations('bar')
+        write_file(os.path.join(self.subpkgname, 'bar.py'), '''\
 class bar:
     pass
 ''')
+        importlib.invalidate_caches()
         from areallylongpackageandmodulenametotestreprtruncation.areallylongpackageandmodulenametotestreprtruncation import bar
         # Module name may be prefixed with "test.", depending on how run.
         self.assertEqual(repr(bar.bar), "<class '%s.bar'>" % bar.__name__)
 
     def test_instance(self):
-        touch(os.path.join(self.subpkgname, 'baz.py'), '''\
+        self._check_path_limitations('baz')
+        write_file(os.path.join(self.subpkgname, 'baz.py'), '''\
 class baz:
     pass
 ''')
+        importlib.invalidate_caches()
         from areallylongpackageandmodulenametotestreprtruncation.areallylongpackageandmodulenametotestreprtruncation import baz
         ibaz = baz.baz()
         self.assertTrue(repr(ibaz).startswith(
             "<%s.baz object at 0x" % baz.__name__))
 
     def test_method(self):
+        self._check_path_limitations('qux')
         eq = self.assertEqual
-        touch(os.path.join(self.subpkgname, 'qux.py'), '''\
+        write_file(os.path.join(self.subpkgname, 'qux.py'), '''\
 class aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:
     def amethod(self): pass
 ''')
+        importlib.invalidate_caches()
         from areallylongpackageandmodulenametotestreprtruncation.areallylongpackageandmodulenametotestreprtruncation import qux
         # Unbound methods first
-        self.assertTrue(repr(qux.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.amethod).startswith(
-        '<function amethod'))
+        r = repr(qux.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.amethod)
+        self.assertTrue(r.startswith('<function aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.amethod'), r)
         # Bound method next
         iqux = qux.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa()
-        self.assertTrue(repr(iqux.amethod).startswith(
+        r = repr(iqux.amethod)
+        self.assertTrue(r.startswith(
             '<bound method aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.amethod of <%s.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa object at 0x' \
-            % (qux.__name__,) ))
+            % (qux.__name__,) ), r)
 
     def test_builtin_function(self):
         # XXX test built-in functions and methods with really long names

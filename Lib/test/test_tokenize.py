@@ -289,6 +289,82 @@ String literals
     OP         '+'           (1, 29) (1, 30)
     STRING     'R"ABC"'      (1, 31) (1, 37)
 
+    >>> dump_tokens("u'abc' + U'abc'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     "u'abc'"      (1, 0) (1, 6)
+    OP         '+'           (1, 7) (1, 8)
+    STRING     "U'abc'"      (1, 9) (1, 15)
+    >>> dump_tokens('u"abc" + U"abc"')
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     'u"abc"'      (1, 0) (1, 6)
+    OP         '+'           (1, 7) (1, 8)
+    STRING     'U"abc"'      (1, 9) (1, 15)
+    >>> dump_tokens("ur'abc' + uR'abc' + Ur'abc' + UR'abc'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     "ur'abc'"     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     "uR'abc'"     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     "Ur'abc'"     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     "UR'abc'"     (1, 30) (1, 37)
+    >>> dump_tokens('ur"abc" + uR"abc" + Ur"abc" + UR"abc"')
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     'ur"abc"'     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     'uR"abc"'     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     'Ur"abc"'     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     'UR"abc"'     (1, 30) (1, 37)
+
+    >>> dump_tokens("b'abc' + B'abc'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     "b'abc'"      (1, 0) (1, 6)
+    OP         '+'           (1, 7) (1, 8)
+    STRING     "B'abc'"      (1, 9) (1, 15)
+    >>> dump_tokens('b"abc" + B"abc"')
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     'b"abc"'      (1, 0) (1, 6)
+    OP         '+'           (1, 7) (1, 8)
+    STRING     'B"abc"'      (1, 9) (1, 15)
+    >>> dump_tokens("br'abc' + bR'abc' + Br'abc' + BR'abc'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     "br'abc'"     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     "bR'abc'"     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     "Br'abc'"     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     "BR'abc'"     (1, 30) (1, 37)
+    >>> dump_tokens('br"abc" + bR"abc" + Br"abc" + BR"abc"')
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     'br"abc"'     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     'bR"abc"'     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     'Br"abc"'     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     'BR"abc"'     (1, 30) (1, 37)
+    >>> dump_tokens("rb'abc' + rB'abc' + Rb'abc' + RB'abc'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     "rb'abc'"     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     "rB'abc'"     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     "Rb'abc'"     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     "RB'abc'"     (1, 30) (1, 37)
+    >>> dump_tokens('rb"abc" + rB"abc" + Rb"abc" + RB"abc"')
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    STRING     'rb"abc"'     (1, 0) (1, 7)
+    OP         '+'           (1, 8) (1, 9)
+    STRING     'rB"abc"'     (1, 10) (1, 17)
+    OP         '+'           (1, 18) (1, 19)
+    STRING     'Rb"abc"'     (1, 20) (1, 27)
+    OP         '+'           (1, 28) (1, 29)
+    STRING     'RB"abc"'     (1, 30) (1, 37)
+
 Operators
 
     >>> dump_tokens("def d22(a, b, c=2, d=2, *k): pass")
@@ -563,15 +639,28 @@ Non-ascii identifiers
     NAME       'grün'        (2, 0) (2, 4)
     OP         '='           (2, 5) (2, 6)
     STRING     "'green'"     (2, 7) (2, 14)
+
+Legacy unicode literals:
+
+    >>> dump_tokens("Örter = u'places'\\ngrün = UR'green'")
+    ENCODING   'utf-8'       (0, 0) (0, 0)
+    NAME       'Örter'       (1, 0) (1, 5)
+    OP         '='           (1, 6) (1, 7)
+    STRING     "u'places'"   (1, 8) (1, 17)
+    NEWLINE    '\\n'          (1, 17) (1, 18)
+    NAME       'grün'        (2, 0) (2, 4)
+    OP         '='           (2, 5) (2, 6)
+    STRING     "UR'green'"   (2, 7) (2, 16)
 """
 
 from test import support
 from tokenize import (tokenize, _tokenize, untokenize, NUMBER, NAME, OP,
-                     STRING, ENDMARKER, tok_name, detect_encoding,
+                     STRING, ENDMARKER, ENCODING, tok_name, detect_encoding,
                      open as tokenize_open)
 from io import BytesIO
 from unittest import TestCase
 import os, sys, glob
+import token
 
 def dump_tokens(s):
     """Print out the tokens in s in a table format.
@@ -600,7 +689,7 @@ def roundtrip(f):
         f.close()
     tokens1 = [tok[:2] for tok in token_list]
     new_bytes = untokenize(tokens1)
-    readline = (line for line in new_bytes.splitlines(1)).__next__
+    readline = (line for line in new_bytes.splitlines(keepends=True)).__next__
     tokens2 = [tok[:2] for tok in tokenize(readline)]
     return tokens1 == tokens2
 
@@ -891,6 +980,35 @@ class TestDetectEncoding(TestCase):
             self.assertEqual(fp.encoding, 'utf-8-sig')
             self.assertEqual(fp.mode, 'r')
 
+    def test_filename_in_exception(self):
+        # When possible, include the file name in the exception.
+        path = 'some_file_path'
+        lines = (
+            b'print("\xdf")', # Latin-1: LATIN SMALL LETTER SHARP S
+            )
+        class Bunk:
+            def __init__(self, lines, path):
+                self.name = path
+                self._lines = lines
+                self._index = 0
+
+            def readline(self):
+                if self._index == len(lines):
+                    raise StopIteration
+                line = lines[self._index]
+                self._index += 1
+                return line
+
+        with self.assertRaises(SyntaxError):
+            ins = Bunk(lines, path)
+            # Make sure lacking a name isn't an issue.
+            del ins.name
+            detect_encoding(ins.readline)
+        with self.assertRaisesRegex(SyntaxError, '.*{}'.format(path)):
+            ins = Bunk(lines, path)
+            detect_encoding(ins.readline)
+
+
 class TestTokenize(TestCase):
 
     def test_tokenize(self):
@@ -932,6 +1050,78 @@ class TestTokenize(TestCase):
 
         self.assertTrue(encoding_used, encoding)
 
+    def assertExactTypeEqual(self, opstr, *optypes):
+        tokens = list(tokenize(BytesIO(opstr.encode('utf-8')).readline))
+        num_optypes = len(optypes)
+        self.assertEqual(len(tokens), 2 + num_optypes)
+        self.assertEqual(token.tok_name[tokens[0].exact_type],
+                         token.tok_name[ENCODING])
+        for i in range(num_optypes):
+            self.assertEqual(token.tok_name[tokens[i + 1].exact_type],
+                             token.tok_name[optypes[i]])
+        self.assertEqual(token.tok_name[tokens[1 + num_optypes].exact_type],
+                         token.tok_name[token.ENDMARKER])
+
+    def test_exact_type(self):
+        self.assertExactTypeEqual('()', token.LPAR, token.RPAR)
+        self.assertExactTypeEqual('[]', token.LSQB, token.RSQB)
+        self.assertExactTypeEqual(':', token.COLON)
+        self.assertExactTypeEqual(',', token.COMMA)
+        self.assertExactTypeEqual(';', token.SEMI)
+        self.assertExactTypeEqual('+', token.PLUS)
+        self.assertExactTypeEqual('-', token.MINUS)
+        self.assertExactTypeEqual('*', token.STAR)
+        self.assertExactTypeEqual('/', token.SLASH)
+        self.assertExactTypeEqual('|', token.VBAR)
+        self.assertExactTypeEqual('&', token.AMPER)
+        self.assertExactTypeEqual('<', token.LESS)
+        self.assertExactTypeEqual('>', token.GREATER)
+        self.assertExactTypeEqual('=', token.EQUAL)
+        self.assertExactTypeEqual('.', token.DOT)
+        self.assertExactTypeEqual('%', token.PERCENT)
+        self.assertExactTypeEqual('{}', token.LBRACE, token.RBRACE)
+        self.assertExactTypeEqual('==', token.EQEQUAL)
+        self.assertExactTypeEqual('!=', token.NOTEQUAL)
+        self.assertExactTypeEqual('<=', token.LESSEQUAL)
+        self.assertExactTypeEqual('>=', token.GREATEREQUAL)
+        self.assertExactTypeEqual('~', token.TILDE)
+        self.assertExactTypeEqual('^', token.CIRCUMFLEX)
+        self.assertExactTypeEqual('<<', token.LEFTSHIFT)
+        self.assertExactTypeEqual('>>', token.RIGHTSHIFT)
+        self.assertExactTypeEqual('**', token.DOUBLESTAR)
+        self.assertExactTypeEqual('+=', token.PLUSEQUAL)
+        self.assertExactTypeEqual('-=', token.MINEQUAL)
+        self.assertExactTypeEqual('*=', token.STAREQUAL)
+        self.assertExactTypeEqual('/=', token.SLASHEQUAL)
+        self.assertExactTypeEqual('%=', token.PERCENTEQUAL)
+        self.assertExactTypeEqual('&=', token.AMPEREQUAL)
+        self.assertExactTypeEqual('|=', token.VBAREQUAL)
+        self.assertExactTypeEqual('^=', token.CIRCUMFLEXEQUAL)
+        self.assertExactTypeEqual('^=', token.CIRCUMFLEXEQUAL)
+        self.assertExactTypeEqual('<<=', token.LEFTSHIFTEQUAL)
+        self.assertExactTypeEqual('>>=', token.RIGHTSHIFTEQUAL)
+        self.assertExactTypeEqual('**=', token.DOUBLESTAREQUAL)
+        self.assertExactTypeEqual('//', token.DOUBLESLASH)
+        self.assertExactTypeEqual('//=', token.DOUBLESLASHEQUAL)
+        self.assertExactTypeEqual('@', token.AT)
+
+        self.assertExactTypeEqual('a**2+b**2==c**2',
+                                  NAME, token.DOUBLESTAR, NUMBER,
+                                  token.PLUS,
+                                  NAME, token.DOUBLESTAR, NUMBER,
+                                  token.EQEQUAL,
+                                  NAME, token.DOUBLESTAR, NUMBER)
+        self.assertExactTypeEqual('{1, 2, 3}',
+                                  token.LBRACE,
+                                  token.NUMBER, token.COMMA,
+                                  token.NUMBER, token.COMMA,
+                                  token.NUMBER,
+                                  token.RBRACE)
+        self.assertExactTypeEqual('^(x & 0x1)',
+                                  token.CIRCUMFLEX,
+                                  token.LPAR,
+                                  token.NAME, token.AMPER, token.NUMBER,
+                                  token.RPAR)
 
 __test__ = {"doctests" : doctests, 'decistmt': decistmt}
 
