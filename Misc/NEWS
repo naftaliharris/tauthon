@@ -10,6 +10,9 @@ What's New in Python 3.3.0 Beta 1?
 Core and Builtins
 -----------------
 
+- Issue #10053: Don't close FDs when FileIO.__init__ fails. Loosely based on
+  the work by Hirokazu Yamamoto.
+
 - Issue #15096: Removed support for ur'' as the raw notation isn't
   compatible with Python 2.x's raw unicode strings.
 
@@ -33,6 +36,9 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #14684: zlib.compressobj() and zlib.decompressobj() now support the use
+  of predefined compression dictionaries. Original patch by Sam Rushing.
 
 - Fix GzipFile's handling of filenames given as bytes objects.
 
@@ -161,6 +167,8 @@ Tests
 
 Build
 -----
+
+- Issue #14225: Fix Unicode support for curses (#12567) on OS X
 
 - Issue #14928: Fix importlib bootstrap issues by using a custom executable
   (Modules/_freeze_importlib) to build Python/importlib.h.
