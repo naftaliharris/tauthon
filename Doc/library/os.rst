@@ -221,6 +221,17 @@ process and user.
    Availability: Unix.
 
 
+.. function:: getgrouplist(user, group)
+
+   Return list of group ids that *user* belongs to. If *group* is not in the
+   list, it is included; typically, *group* is specified as the group ID
+   field from the password record for *user*.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: getgroups()
 
    Return list of supplemental group ids associated with the current process.
@@ -302,6 +313,22 @@ process and user.
    .. versionchanged:: 3.2
       Added support for Windows.
 
+.. function:: getpriority(which, who)
+
+   .. index:: single: process; scheduling priority
+
+   Get program scheduling priority. The value *which* is one of
+   :const:`PRIO_PROCESS`, :const:`PRIO_PGRP`, or :const:`PRIO_USER`, and *who*
+   is interpreted relative to *which* (a process identifier for
+   :const:`PRIO_PROCESS`, process group identifier for :const:`PRIO_PGRP`, and a
+   user ID for :const:`PRIO_USER`). A zero value for *who* denotes
+   (respectively) the calling process, the process group of the calling process,
+   or the real user ID of the calling process.
+
+   Availability: Unix
+
+   .. versionadded:: 3.3
+
 .. function:: getresuid()
 
    Return a tuple (ruid, euid, suid) denoting the current process's
@@ -352,6 +379,15 @@ process and user.
 
    .. versionadded:: 3.2
 
+.. data:: PRIO_PROCESS
+          PRIO_PGRP
+          PRIO_USER
+
+   Parameters for :func:`getpriority` and :func:`setpriority` functions.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 .. function:: putenv(key, value)
 
@@ -423,6 +459,25 @@ process and user.
    for the semantics.
 
    Availability: Unix.
+
+
+.. function:: setpriority(which, who, priority)
+
+   .. index:: single: process; scheduling priority
+
+   Set program scheduling priority. The value *which* is one of
+   :const:`PRIO_PROCESS`, :const:`PRIO_PGRP`, or :const:`PRIO_USER`, and *who*
+   is interpreted relative to *which* (a process identifier for
+   :const:`PRIO_PROCESS`, process group identifier for :const:`PRIO_PGRP`, and a
+   user ID for :const:`PRIO_USER`). A zero value for *who* denotes
+   (respectively) the calling process, the process group of the calling process,
+   or the real user ID of the calling process.
+   *priority* is a value in the range -20 to 19. The default priority is 0;
+   lower priorities cause more favorable scheduling.
+
+   Availability: Unix
+
+   .. versionadded:: 3.3
 
 
 .. function:: setregid(rgid, egid)
@@ -572,6 +627,7 @@ associated with a :term:`file object` when required.  Note that using the file
 descriptor directly will bypass the file object methods, ignoring aspects such
 as internal buffering of data.
 
+
 .. function:: close(fd)
 
    Close file descriptor *fd*.
@@ -624,6 +680,7 @@ as internal buffering of data.
 
    Change the mode of the file given by *fd* to the numeric *mode*.  See the docs
    for :func:`chmod` for possible values of *mode*.
+   Equivalent to ``os.chmod(fd, mode)``.
 
    Availability: Unix.
 
@@ -631,7 +688,8 @@ as internal buffering of data.
 .. function:: fchown(fd, uid, gid)
 
    Change the owner and group id of the file given by *fd* to the numeric *uid*
-   and *gid*.  To leave one of the ids unchanged, set it to -1.
+   and *gid*.  To leave one of the ids unchanged, set it to -1.  Equivalent
+   to ``os.chown(fd, uid, gid)``.
 
    Availability: Unix.
 
@@ -671,7 +729,6 @@ as internal buffering of data.
 
    Availability: Unix, Windows.
 
-
 .. function:: fstatvfs(fd)
 
    Return information about the filesystem containing the file associated with file
@@ -708,6 +765,30 @@ as internal buffering of data.
    Availability: Unix.
 
 
+.. function:: lockf(fd, cmd, len)
+
+   Apply, test or remove a POSIX lock on an open file descriptor.
+   *fd* is an open file descriptor.
+   *cmd* specifies the command to use - one of :data:`F_LOCK`, :data:`F_TLOCK`,
+   :data:`F_ULOCK` or :data:`F_TEST`.
+   *len* specifies the section of the file to lock.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: F_LOCK
+          F_TLOCK
+          F_ULOCK
+          F_TEST
+
+   Flags that specify what action :func:`lockf` will take.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
 .. function:: lseek(fd, pos, how)
 
    Set the current position of file descriptor *fd* to position *pos*, modified
@@ -726,18 +807,29 @@ as internal buffering of data.
    Parameters to the :func:`lseek` function. Their values are 0, 1, and 2,
    respectively. Availability: Windows, Unix.
 
+   .. versionadded:: 3.3
+      Some operating systems could support additional values, like
+      :data:`os.SEEK_HOLE` or :data:`os.SEEK_DATA`.
 
-.. function:: open(file, flags[, mode])
+
+.. function:: open(file, flags, mode=0o777, *, dir_fd=None)
 
    Open the file *file* and set various flags according to *flags* and possibly
-   its mode according to *mode*.  The default *mode* is ``0o777`` (octal), and
-   the current umask value is first masked out.  Return the file descriptor for
-   the newly opened file.
+   its mode according to *mode*.  When computing *mode*, the current umask value
+   is first masked out.  Return the file descriptor for the newly opened file.
 
    For a description of the flag and mode values, see the C run-time documentation;
    flag constants (like :const:`O_RDONLY` and :const:`O_WRONLY`) are defined in
    this module too (see :ref:`open-constants`).  In particular, on Windows adding
    :const:`O_BINARY` is needed to open files in binary mode.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
 
    Availability: Unix, Windows.
 
@@ -747,6 +839,9 @@ as internal buffering of data.
       built-in function :func:`open`, which returns a :term:`file object` with
       :meth:`~file.read` and :meth:`~file.write` methods (and many more).  To
       wrap a file descriptor in a file object, use :func:`fdopen`.
+
+   .. versionadded:: 3.3
+      The *dir_fd* argument.
 
 
 .. function:: openpty()
@@ -768,6 +863,79 @@ as internal buffering of data.
    Availability: Unix, Windows.
 
 
+.. function:: pipe2(flags)
+
+   Create a pipe with *flags* set atomically.
+   *flags* can be constructed by ORing together one or more of these values:
+   :data:`O_NONBLOCK`, :data:`O_CLOEXEC`.
+   Return a pair of file descriptors ``(r, w)`` usable for reading and writing,
+   respectively.
+
+   Availability: some flavors of Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: posix_fallocate(fd, offset, len)
+
+   Ensures that enough disk space is allocated for the file specified by *fd*
+   starting from *offset* and continuing for *len* bytes.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: posix_fadvise(fd, offset, len, advice)
+
+   Announces an intention to access data in a specific pattern thus allowing
+   the kernel to make optimizations.
+   The advice applies to the region of the file specified by *fd* starting at
+   *offset* and continuing for *len* bytes.
+   *advice* is one of :data:`POSIX_FADV_NORMAL`, :data:`POSIX_FADV_SEQUENTIAL`,
+   :data:`POSIX_FADV_RANDOM`, :data:`POSIX_FADV_NOREUSE`,
+   :data:`POSIX_FADV_WILLNEED` or :data:`POSIX_FADV_DONTNEED`.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: POSIX_FADV_NORMAL
+          POSIX_FADV_SEQUENTIAL
+          POSIX_FADV_RANDOM
+          POSIX_FADV_NOREUSE
+          POSIX_FADV_WILLNEED
+          POSIX_FADV_DONTNEED
+
+   Flags that can be used in *advice* in :func:`posix_fadvise` that specify
+   the access pattern that is likely to be used.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: pread(fd, buffersize, offset)
+
+   Read from a file descriptor, *fd*, at a position of *offset*. It will read up
+   to *buffersize* number of bytes. The file offset remains unchanged.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: pwrite(fd, string, offset)
+
+   Write *string* to a file descriptor, *fd*, from *offset*, leaving the file
+   offset unchanged.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. function:: read(fd, n)
 
    Read at most *n* bytes from file descriptor *fd*. Return a bytestring containing the
@@ -783,6 +951,58 @@ as internal buffering of data.
       returned by the built-in function :func:`open` or by :func:`popen` or
       :func:`fdopen`, or :data:`sys.stdin`, use its :meth:`~file.read` or
       :meth:`~file.readline` methods.
+
+
+.. function:: sendfile(out, in, offset, nbytes)
+              sendfile(out, in, offset, nbytes, headers=None, trailers=None, flags=0)
+
+   Copy *nbytes* bytes from file descriptor *in* to file descriptor *out*
+   starting at *offset*.
+   Return the number of bytes sent. When EOF is reached return 0.
+
+   The first function notation is supported by all platforms that define
+   :func:`sendfile`.
+
+   On Linux, if *offset* is given as ``None``, the bytes are read from the
+   current position of *in* and the position of *in* is updated.
+
+   The second case may be used on Mac OS X and FreeBSD where *headers* and
+   *trailers* are arbitrary sequences of buffers that are written before and
+   after the data from *in* is written. It returns the same as the first case.
+
+   On Mac OS X and FreeBSD, a value of 0 for *nbytes* specifies to send until
+   the end of *in* is reached.
+
+   On Solaris, *out* may be the file descriptor of a regular file or the file
+   descriptor of a socket. On all other platforms, *out* must be the file
+   descriptor of an open socket.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: SF_NODISKIO
+          SF_MNOWAIT
+          SF_SYNC
+
+   Parameters to the :func:`sendfile` function, if the implementation supports
+   them.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: readv(fd, buffers)
+
+   Read from a file descriptor into a number of writable buffers. *buffers* is
+   an arbitrary sequence of writable buffers. Returns the total number of bytes
+   read.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
 
 
 .. function:: tcgetpgrp(fd)
@@ -826,6 +1046,17 @@ as internal buffering of data.
       :meth:`~file.write` method.
 
 
+.. function:: writev(fd, buffers)
+
+   Write the contents of *buffers* to file descriptor *fd*, where *buffers*
+   is an arbitrary sequence of buffers.
+   Returns the total number of bytes written.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. _open-constants:
 
 ``open()`` flag constants
@@ -857,9 +1088,12 @@ or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Window
           O_NOCTTY
           O_SHLOCK
           O_EXLOCK
+          O_CLOEXEC
 
    These constants are only available on Unix.
 
+   .. versionchanged:: 3.3
+      Add :data:`O_CLOEXEC` constant.
 
 .. data:: O_BINARY
           O_NOINHERIT
@@ -882,12 +1116,62 @@ or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Window
    the C library.
 
 
+.. data:: RTLD_LAZY
+          RTLD_NOW
+          RTLD_GLOBAL
+          RTLD_LOCAL
+          RTLD_NODELETE
+          RTLD_NOLOAD
+          RTLD_DEEPBIND
+
+   See the Unix manual page :manpage:`dlopen(3)`.
+
+   .. versionadded:: 3.3
+
+
+.. _terminal-size:
+
+Querying the size of a terminal
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. versionadded:: 3.3
+
+.. function:: get_terminal_size(fd=STDOUT_FILENO)
+
+   Return the size of the terminal window as ``(columns, lines)``,
+   tuple of type :class:`terminal_size`.
+
+   The optional argument ``fd`` (default ``STDOUT_FILENO``, or standard
+   output) specifies which file descriptor should be queried.
+
+   If the file descriptor is not connected to a terminal, an :exc:`OSError`
+   is thrown.
+
+   :func:`shutil.get_terminal_size` is the high-level function which
+   should normally be used, ``os.get_terminal_size`` is the low-level
+   implementation.
+
+   Availability: Unix, Windows.
+
+.. class:: terminal_size(tuple)
+
+   A tuple of ``(columns, lines)`` for holding terminal window size.
+
+   .. attribute:: columns
+
+      Width of the terminal window in characters.
+
+   .. attribute:: lines
+
+      Height of the terminal window in characters.
+
+
 .. _os-file-dir:
 
 Files and Directories
 ---------------------
 
-.. function:: access(path, mode)
+.. function:: access(path, mode, *, dir_fd=None, effective_ids=False, follow_symlinks=True)
 
    Use the real uid/gid to test for access to *path*.  Note that most operations
    will use the effective uid/gid, therefore this routine can be used in a
@@ -897,6 +1181,27 @@ Files and Directories
    :const:`X_OK` to test permissions.  Return :const:`True` if access is allowed,
    :const:`False` if not. See the Unix man page :manpage:`access(2)` for more
    information.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   If *effective_ids* is ``True``, :func:`access` will perform its access
+   checks using the effective uid/gid instead of the real uid/gid.
+   *effective_ids* may not be supported on your platform; you can check whether
+   or not it is available using :data:`os.supports_effective_ids`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`access` will examine the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
 
    Availability: Unix, Windows.
 
@@ -917,11 +1222,8 @@ Files and Directories
 
          try:
              fp = open("myfile")
-         except IOError as e:
-             if e.errno == errno.EACCES:
-                 return "some default data"
-             # Not a permission error.
-             raise
+         except PermissionError:
+             return "some default data"
          else:
              with fp:
                  return fp.read()
@@ -931,6 +1233,9 @@ Files and Directories
       I/O operations may fail even when :func:`access` indicates that they would
       succeed, particularly for operations on network filesystems which may have
       permissions semantics beyond the usual POSIX permission-bit model.
+
+   .. versionchanged:: 3.3
+      Added the *dir_fd*, *effective_ids*, and *follow_symlinks* parameters.
 
 
 .. data:: F_OK
@@ -963,14 +1268,24 @@ Files and Directories
 
    Change the current working directory to *path*.
 
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      Added support for specifying *path* as a file descriptor
+      on some platforms, and the *dir_fd*, *effective_ids*, and
+      *follow_symlinks* parameters.
 
 
 .. function:: fchdir(fd)
 
    Change the current working directory to the directory represented by the file
    descriptor *fd*.  The descriptor must refer to an opened directory, not an open
-   file.
+   file.  Equivalent to ``os.chdir(fd)``.
 
    Availability: Unix.
 
@@ -989,7 +1304,7 @@ Files and Directories
    Availability: Unix, Windows.
 
 
-.. function:: chflags(path, flags)
+.. function:: chflags(path, flags, *, follow_symlinks=True)
 
    Set the flags of *path* to the numeric *flags*. *flags* may take a combination
    (bitwise OR) of the following values (as defined in the :mod:`stat` module):
@@ -1007,7 +1322,17 @@ Files and Directories
    * :data:`stat.SF_NOUNLINK`
    * :data:`stat.SF_SNAPSHOT`
 
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`follow_symlinks` will examine the symbolic link itself
+   instead of the file the link points to.  *follow_symlinks* may not be
+   supported on your platform; you can check whether or not it is available
+   using :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
+
    Availability: Unix.
+
+   .. versionadded:: 3.3
+      The *follow_symlinks* argument.
 
 
 .. function:: chroot(path)
@@ -1016,7 +1341,7 @@ Files and Directories
    Unix.
 
 
-.. function:: chmod(path, mode)
+.. function:: chmod(path, mode, *, dir_fd=None, follow_symlinks=True)
 
    Change the mode of *path* to the numeric *mode*. *mode* may take one of the
    following values (as defined in the :mod:`stat` module) or bitwise ORed
@@ -1042,6 +1367,29 @@ Files and Directories
    * :data:`stat.S_IWOTH`
    * :data:`stat.S_IXOTH`
 
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`chmod` will examine the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
+
+   It is an error to use *dir_fd* or *follow_symlinks* when specifying
+   *path* as an open file descriptor.
+
    Availability: Unix, Windows.
 
    .. note::
@@ -1051,19 +1399,72 @@ Files and Directories
       constants or a corresponding integer value).  All other bits are
       ignored.
 
+   .. versionadded:: 3.3
+      Added support for specifying *path* as an open file descriptor,
+      and the *dir_fd* and *follow_symlinks* arguments.
 
-.. function:: chown(path, uid, gid)
+
+.. function:: chown(path, uid, gid, *, dir_fd=None, follow_symlinks=True)
 
    Change the owner and group id of *path* to the numeric *uid* and *gid*. To leave
    one of the ids unchanged, set it to -1.
 
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`chown` will examine the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
+
+   It is an error to use *dir_fd* or *follow_symlinks* when specifying
+   *path* as an open file descriptor.
+
+   See :func:`shutil.chown` for a higher-level function that accepts names in
+   addition to numeric ids.
+
    Availability: Unix.
+
+   .. versionadded:: 3.3
+      Added support for specifying an open file descriptor for *path*,
+      and the *dir_fd* and *follow_symlinks* arguments.
+
+
+.. function:: getxattr(path, attribute, *, follow_symlinks=True)
+
+   Return the value of the extended filesystem attribute *attribute* for
+   *path*. *attribute* can be bytes or str. If it is str, it is encoded
+   with the filesystem encoding.
+
+   *path* may be specified as either a string or an open file descriptor.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`setxattr` will examine the symbolic link itself
+   instead of the file the link points to.  It is an error to use
+   *follow_symlinks* when specifying *path* as an open file descriptor.
+
+   Availability: Linux
+
+   .. versionadded:: 3.3
 
 
 .. function:: lchflags(path, flags)
 
    Set the flags of *path* to the numeric *flags*, like :func:`chflags`, but do not
    follow symbolic links.
+   Equivalent to ``os.chflags(path, flags, follow_symlinks=False)``.
 
    Availability: Unix.
 
@@ -1073,6 +1474,7 @@ Files and Directories
    Change the mode of *path* to the numeric *mode*. If path is a symlink, this
    affects the symlink rather than the target. See the docs for :func:`chmod`
    for possible values of *mode*.
+   Equivalent to ``os.chmod(path, mode, follow_symlinks=False)``.
 
    Availability: Unix.
 
@@ -1081,18 +1483,38 @@ Files and Directories
 
    Change the owner and group id of *path* to the numeric *uid* and *gid*. This
    function will not follow symbolic links.
+   Equivalent to ``os.chown(path, uid, gid, follow_symlinks=False)``.
 
    Availability: Unix.
 
 
-.. function:: link(source, link_name)
+.. function:: link(src, dst, *, src_dir_fd=None, dst_dir_fd=None, follow_symlinks=True)
 
-   Create a hard link pointing to *source* named *link_name*.
+   Create a hard link pointing to *src* named *dst*.
+
+   If either *src_dir_fd* or *dst_dir_fd* is not ``None``, it should be a
+   file descriptor referring to a directory, and the corresponding path
+   (*src* or *dst*) should be relative; that path will then be relative to
+   that directory.  (If *src* is absolute, *src_dir_fd* is ignored; the same
+   goes for *dst* and *dst_dir_fd*.)
+   *src_dir_fd* and *dst_dir_fd* may not be supported on your platform;
+   you can check whether or not they are available using :data:`os.supports_dir_fd`.
+   If they are unavailable, using either will raise a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of *src* is a
+   symbolic link, :func:`link` will use the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
 
    Availability: Unix, Windows.
 
    .. versionchanged:: 3.2
       Added Windows support.
+
+   .. versionadded:: 3.3
+      Added the *src_dir_fd*, *dst_dir_fd*, and *follow_symlinks* arguments.
 
 
 .. function:: listdir(path='.')
@@ -1104,27 +1526,73 @@ Files and Directories
    This function can be called with a bytes or string argument, and returns
    filenames of the same datatype.
 
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
    Availability: Unix, Windows.
 
    .. versionchanged:: 3.2
       The *path* parameter became optional.
 
-.. function:: lstat(path)
+   .. versionadded:: 3.3
+      Added support for specifying an open file descriptor for *path*.
+
+.. function:: listxattr(path=None, *, follow_symlinks=True)
+
+   Return a list of the extended filesystem attributes on *path*.
+   The attributes in the list are represented as strings decoded
+   with the filesystem encoding.
+
+   *path* may be specified as either ``None``, a string, or an open file
+   descriptor.  If *path* is ``None``, :func:`listxattr` will examine the
+   current directory.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`listxattr` will examine the symbolic link itself
+   instead of the file the link points to.  It is an error to use
+   *follow_symlinks* when specifying *path* as an open file descriptor.
+
+   Availability: Linux
+
+   .. versionadded:: 3.3
+
+
+.. function:: lstat(path, *, dir_fd=None)
 
    Perform the equivalent of an :c:func:`lstat` system call on the given path.
    Similar to :func:`~os.stat`, but does not follow symbolic links.  On
    platforms that do not support symbolic links, this is an alias for
-   :func:`~os.stat`.
+   :func:`~os.stat`.  (Equivalent to ``os.stat(path, follow_symlinks=False)``.)
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
 
    .. versionchanged:: 3.2
       Added support for Windows 6.0 (Vista) symbolic links.
 
+   .. versionchanged:: 3.3
+      Added the *dir_fd* parameter.
 
-.. function:: mkfifo(path[, mode])
 
-   Create a FIFO (a named pipe) named *path* with numeric mode *mode*.  The
-   default *mode* is ``0o666`` (octal).  The current umask value is first masked
-   out from the mode.
+.. function:: mkfifo(path, mode=0o666, *, dir_fd=None)
+
+   Create a FIFO (a named pipe) named *path* with numeric mode *mode*.
+   The current umask value is first masked out from the mode.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
 
    FIFOs are pipes that can be accessed like regular files.  FIFOs exist until they
    are deleted (for example with :func:`os.unlink`). Generally, FIFOs are used as
@@ -1134,8 +1602,11 @@ Files and Directories
 
    Availability: Unix.
 
+   .. versionadded:: 3.3
+      The *dir_fd* argument.
 
-.. function:: mknod(filename[, mode=0o600[, device=0]])
+
+.. function:: mknod(filename, mode=0o600, device=0, *, dir_fd=None)
 
    Create a filesystem node (file, device special file or named pipe) named
    *filename*. *mode* specifies both the permissions to use and the type of node
@@ -1144,6 +1615,17 @@ Files and Directories
    available in :mod:`stat`).  For ``stat.S_IFCHR`` and ``stat.S_IFBLK``,
    *device* defines the newly created device special file (probably using
    :func:`os.makedev`), otherwise it is ignored.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   .. versionadded:: 3.3
+      The *dir_fd* argument.
 
 
 .. function:: major(device)
@@ -1163,17 +1645,29 @@ Files and Directories
    Compose a raw device number from the major and minor device numbers.
 
 
-.. function:: mkdir(path[, mode])
+.. function:: mkdir(path, mode=0o777, *, dir_fd=None)
 
-   Create a directory named *path* with numeric mode *mode*. The default *mode*
-   is ``0o777`` (octal).  On some systems, *mode* is ignored.  Where it is used,
-   the current umask value is first masked out.  If the directory already
+   Create a directory named *path* with numeric mode *mode*.
+
+   On some systems, *mode* is ignored.  Where it is used, the current
+   umask value is first masked out.  If the directory already
    exists, :exc:`OSError` is raised.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
 
    It is also possible to create temporary directories; see the
    :mod:`tempfile` module's :func:`tempfile.mkdtemp` function.
 
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      The *dir_fd* argument.
 
 
 .. function:: makedirs(path, mode=0o777, exist_ok=False)
@@ -1228,7 +1722,7 @@ Files and Directories
    Unix.
 
 
-.. function:: readlink(path)
+.. function:: readlink(path, *, dir_fd=None)
 
    Return a string representing the path to which the symbolic link points.  The
    result may be either an absolute or relative pathname; if it is relative, it may
@@ -1239,22 +1733,48 @@ Files and Directories
    and the call may raise an UnicodeDecodeError. If the *path* is a bytes
    object, the result will be a bytes object.
 
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
    Availability: Unix, Windows
 
    .. versionchanged:: 3.2
       Added support for Windows 6.0 (Vista) symbolic links.
 
+   .. versionadded:: 3.3
+      The *dir_fd* argument.
 
-.. function:: remove(path)
 
-   Remove (delete) the file *path*.  If *path* is a directory, :exc:`OSError` is
-   raised; see :func:`rmdir` below to remove a directory.  This is identical to
-   the :func:`unlink` function documented below.  On Windows, attempting to
-   remove a file that is in use causes an exception to be raised; on Unix, the
-   directory entry is removed but the storage allocated to the file is not made
-   available until the original file is no longer in use.
+.. function:: remove(path, *, dir_fd=None, rmdir=False)
+
+   Remove (delete) the file *path*.  This function is identical to
+   :func:`os.unlink`.
+
+   Specify ``rmdir=True`` if *path* is a directory.  Failing to do so
+   will raise an exception; likewise, specifying ``rmdir=True`` when
+   *path* is not a directory will also raise an exception.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   On Windows, attempting to remove a file that is in use causes an exception to
+   be raised; on Unix, the directory entry is removed but the storage allocated
+   to the file is not made available until the original file is no longer in use.
 
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      The *dir_fd* and *rmdir* arguments.
 
 
 .. function:: removedirs(path)
@@ -1271,7 +1791,26 @@ Files and Directories
    successfully removed.
 
 
-.. function:: rename(src, dst)
+.. function:: removexattr(path, attribute, *, follow_symlinks=True)
+
+   Removes the extended filesystem attribute *attribute* from *path*.
+   *attribute* should be bytes or str. If it is a string, it is encoded
+   with the filesystem encoding.
+
+   *path* may be specified as either a string or an open file descriptor.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`removexattr` will remove the attribute from the
+   symbolic link itself instead of the file the link points to.  It is an
+   error to use *follow_symlinks* when specifying *path* as an open file
+   descriptor.
+
+   Availability: Linux
+
+   .. versionadded:: 3.3
+
+
+.. function:: rename(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
 
    Rename the file or directory *src* to *dst*.  If *dst* is a directory,
    :exc:`OSError` will be raised.  On Unix, if *dst* exists and is a file, it will
@@ -1279,10 +1818,23 @@ Files and Directories
    Unix flavors if *src* and *dst* are on different filesystems.  If successful,
    the renaming will be an atomic operation (this is a POSIX requirement).  On
    Windows, if *dst* already exists, :exc:`OSError` will be raised even if it is a
-   file; there may be no way to implement an atomic rename when *dst* names an
-   existing file.
+   file.
+
+   If either *src_dir_fd* or *dst_dir_fd* is not ``None``, it should be a
+   file descriptor referring to a directory, and the corresponding path
+   (*src* or *dst*) should be relative; that path will then be relative to
+   that directory.  (If *src* is absolute, *src_dir_fd* is ignored; the same
+   goes for *dst* and *dst_dir_fd*.)
+   *src_dir_fd* and *dst_dir_fd* may not be supported on your platform;
+   you can check whether or not they are available using :data:`os.supports_dir_fd`.
+   If they are unavailable, using either will raise a :exc:`NotImplementedError`.
+
+   If you want cross-platform overwriting of the destination, use :func:`replace`.
 
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      The *src_dir_fd* and *dst_dir_fd* arguments.
 
 
 .. function:: renames(old, new)
@@ -1298,6 +1850,28 @@ Files and Directories
       permissions needed to remove the leaf directory or file.
 
 
+.. function:: replace(src, dst, *, src_dir_fd=None, dst_dir_fd=None)
+
+   Rename the file or directory *src* to *dst*.  If *dst* is a directory,
+   :exc:`OSError` will be raised.  If *dst* exists and is a file, it will
+   be replaced silently if the user has permission.  The operation may fail
+   if *src* and *dst* are on different filesystems.  If successful,
+   the renaming will be an atomic operation (this is a POSIX requirement).
+
+   If either *src_dir_fd* or *dst_dir_fd* is not ``None``, it should be a
+   file descriptor referring to a directory, and the corresponding path
+   (*src* or *dst*) should be relative; that path will then be relative to
+   that directory.  (If *src* is absolute, *src_dir_fd* is ignored; the same
+   goes for *dst* and *dst_dir_fd*.)
+   *src_dir_fd* and *dst_dir_fd* may not be supported on your platform;
+   you can check whether or not they are available using :data:`os.supports_dir_fd`.
+   If they are unavailable, using either will raise a :exc:`NotImplementedError`.
+
+   Availability: Unix, Windows
+
+   .. versionadded:: 3.3
+
+
 .. function:: rmdir(path)
 
    Remove (delete) the directory *path*.  Only works when the directory is
@@ -1307,13 +1881,60 @@ Files and Directories
    Availability: Unix, Windows.
 
 
-.. function:: stat(path)
+.. data:: XATTR_SIZE_MAX
+
+   The maximum size the value of an extended attribute can be. Currently, this
+   is 64 kilobytes on Linux.
+
+
+.. data:: XATTR_CREATE
+
+   This is a possible value for the flags argument in :func:`setxattr`. It
+   indicates the operation must create an attribute.
+
+
+.. data:: XATTR_REPLACE
+
+   This is a possible value for the flags argument in :func:`setxattr`. It
+   indicates the operation must replace an existing attribute.
+
+
+.. function:: setxattr(path, attribute, value, flags=0, *, follow_symlinks=True)
+
+   Set the extended filesystem attribute *attribute* on *path* to *value*.
+   *attribute* must be a bytes or str with no embedded NULs. If it is a str,
+   it is encoded with the filesystem encoding.  *flags* may be
+   :data:`XATTR_REPLACE` or :data:`XATTR_CREATE`. If :data:`XATTR_REPLACE` is
+   given and the attribute does not exist, ``EEXISTS`` will be raised.
+   If :data:`XATTR_CREATE` is given and the attribute already exists, the
+   attribute will not be created and ``ENODATA`` will be raised.
+
+   *path* may be specified as either a string or an open file descriptor.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`setxattr` will examine the symbolic link itself
+   instead of the file the link points to.  It is an error to use
+   *follow_symlinks* when specifying *path* as an open file descriptor.
+
+   Availability: Linux
+
+   .. note::
+
+      A bug in Linux kernel versions less than 2.6.39 caused the flags argument
+      to be ignored on some filesystems.
+
+   .. versionadded:: 3.3
+
+
+.. function:: stat(path, *, dir_fd=None, follow_symlinks=True)
 
    Perform the equivalent of a :c:func:`stat` system call on the given path.
-   (This function follows symlinks; to stat a symlink use :func:`lstat`.)
+   *path* may be specified as either a string or as an open file descriptor.
+   (This function normally follows symlinks; to stat a symlink add the argument
+   ``follow_symlinks=False``, or use :func:`lstat`.)
 
-   The return value is an object whose attributes correspond to the members
-   of the :c:type:`stat` structure, namely:
+   The return value is an object whose attributes correspond roughly
+   to the members of the :c:type:`stat` structure, namely:
 
    * :attr:`st_mode` - protection bits,
    * :attr:`st_ino` - inode number,
@@ -1322,10 +1943,18 @@ Files and Directories
    * :attr:`st_uid` - user id of owner,
    * :attr:`st_gid` - group id of owner,
    * :attr:`st_size` - size of file, in bytes,
-   * :attr:`st_atime` - time of most recent access,
-   * :attr:`st_mtime` - time of most recent content modification,
-   * :attr:`st_ctime` - platform dependent; time of most recent metadata change on
-     Unix, or the time of creation on Windows)
+   * :attr:`st_atime` - time of most recent access expressed in seconds,
+   * :attr:`st_mtime` - time of most recent content modification
+     expressed in seconds,
+   * :attr:`st_ctime` - platform dependent; time of most recent metadata
+     change on Unix, or the time of creation on Windows, expressed in seconds
+   * :attr:`st_atime_ns` - time of most recent access
+     expressed in nanoseconds as an integer,
+   * :attr:`st_mtime_ns` - time of most recent content modification
+     expressed in nanoseconds as an integer,
+   * :attr:`st_ctime_ns` - platform dependent; time of most recent metadata
+     change on Unix, or the time of creation on Windows,
+     expressed in nanoseconds as an integer
 
    On some Unix systems (such as Linux), the following attributes may also be
    available:
@@ -1355,6 +1984,14 @@ Files and Directories
       or FAT32 file systems, :attr:`st_mtime` has 2-second resolution, and
       :attr:`st_atime` has only 1-day resolution.  See your operating system
       documentation for details.
+      Similarly, although :attr:`st_atime_ns`, :attr:`st_mtime_ns`,
+      and :attr:`st_ctime_ns` are always expressed in nanoseconds, many
+      systems do not provide nanosecond precision.  On systems that do
+      provide nanosecond precision, the floating-point object used to
+      store :attr:`st_atime`, :attr:`st_mtime`, and :attr:`st_ctime`
+      cannot preserve all of it, and as such will be slightly inexact.
+      If you need the exact timestamps you should always use
+      :attr:`st_atime_ns`, :attr:`st_mtime_ns`, and :attr:`st_ctime_ns`.
 
    For backward compatibility, the return value of :func:`~os.stat` is also accessible
    as a tuple of at least 10 integers giving the most important (and portable)
@@ -1362,6 +1999,24 @@ Files and Directories
    :attr:`st_ino`, :attr:`st_dev`, :attr:`st_nlink`, :attr:`st_uid`,
    :attr:`st_gid`, :attr:`st_size`, :attr:`st_atime`, :attr:`st_mtime`,
    :attr:`st_ctime`. More items may be added at the end by some implementations.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`stat` will examine the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
+
+   It is an error to use *dir_fd* or *follow_symlinks* when specifying
+   *path* as an open file descriptor.
 
    .. index:: module: stat
 
@@ -1381,6 +2036,12 @@ Files and Directories
       264
 
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      Added the *dir_fd* and *follow_symlinks* arguments,
+      specifying a file descriptor instead of a path,
+      and the :attr:`st_atime_ns`, :attr:`st_mtime_ns`,
+      and :attr:`st_ctime_ns` members.
 
 
 .. function:: stat_float_times([newvalue])
@@ -1407,6 +2068,8 @@ Files and Directories
    are processed, this application should turn the feature off until the library
    has been corrected.
 
+   .. deprecated:: 3.3
+
 
 .. function:: statvfs(path)
 
@@ -1422,34 +2085,122 @@ Files and Directories
    read-only, and if :const:`ST_NOSUID` is set, the semantics of
    setuid/setgid bits are disabled or not supported.
 
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
    .. versionchanged:: 3.2
       The :const:`ST_RDONLY` and :const:`ST_NOSUID` constants were added.
 
    Availability: Unix.
 
+   .. versionadded:: 3.3
+      Added support for specifying an open file descriptor for *path*.
 
-.. function:: symlink(source, link_name)
-              symlink(source, link_name, target_is_directory=False)
+
+.. data:: supports_dir_fd
+
+   An object implementing collections.Set indicating which functions in the
+   :mod:`os` permit use of their *dir_fd* parameter.  Different platforms
+   provide different functionality, and an option that might work on one might
+   be unsupported on another.  For consistency's sakes, functions that support
+   *dir_fd* always allow specifying the parameter, but will throw an exception
+   if the functionality is not actually available.
+
+   To check whether a particular function permits use of its *dir_fd*
+   parameter, use the ``in`` operator on ``supports_dir_fd``.  As an example,
+   this expression determines whether the *dir_fd* parameter of :func:`os.stat`
+   is locally available::
+
+       os.stat in os.supports_dir_fd
+
+   Currently *dir_fd* parameters only work on UNIX platforms;
+   none of them work on Windows.
+
+   .. versionadded:: 3.3
+
+.. data:: supports_effective_ids
+
+   An object implementing collections.Set indicating which functions in the
+   :mod:`os` permit use of the *effective_id* parameter for :func:`os.access`.
+   If the local platform supports it, the collection will contain
+   :func:`os.access`, otherwise it will be empty.
+
+   To check whether you can use the *effective_id* parameter for
+   :func:`os.access`, use the ``in`` operator on ``supports_dir_fd``, like so::
+
+       os.access in os.supports_effective_ids
+
+   Currently *effective_id* only works on UNIX platforms;
+   it does not work on Windows.
+
+   .. versionadded:: 3.3
+
+.. data:: supports_fd
+
+   An object implementing collections.Set indicating which functions in the
+   :mod:`os` permit specifying their *path* parameter as an open file
+   descriptor.  Different platforms provide different functionality, and an
+   option that might work on one might be unsupported on another.  For
+   consistency's sakes, functions that support *fd* always allow specifying
+   the parameter, but will throw an exception if the functionality is not
+   actually available.
+
+   To check whether a particular function permits specifying an open file
+   descriptor for its *path* parameter, use the ``in`` operator on
+   ``supports_fd``. As an example, this expression determines whether
+   :func:`os.chdir` accepts open file descriptors when called on your local
+   platform::
+
+       os.chdir in os.supports_fd
+
+   .. versionadded:: 3.3
+
+.. data:: supports_follow_symlinks
+
+   An object implementing collections.Set indicating which functions in the
+   :mod:`os` permit use of their *follow_symlinks* parameter.  Different
+   platforms provide different functionality, and an option that might work on
+   one might be unsupported on another.  For consistency's sakes, functions that
+   support *follow_symlinks* always allow specifying the parameter, but will
+   throw an exception if the functionality is not actually available.
+
+   To check whether a particular function permits use of its *follow_symlinks*
+   parameter, use the ``in`` operator on ``supports_follow_symlinks``.  As an
+   example, this expression determines whether the *follow_symlinks* parameter
+   of :func:`os.stat` is locally available::
+
+       os.stat in os.supports_follow_symlinks
+
+   .. versionadded:: 3.3
+
+.. function:: symlink(source, link_name, target_is_directory=False, *, dir_fd=None)
 
    Create a symbolic link pointing to *source* named *link_name*.
 
-   On Windows, symlink version takes an additional optional parameter,
-   *target_is_directory*, which defaults to ``False``.
-
-   On Windows, a symlink represents a file or a directory, and does not morph to
-   the target dynamically.  If *target_is_directory* is set to ``True``, the
-   symlink will be created as a directory symlink, otherwise as a file symlink
-   (the default).
+   On Windows, a symlink represents either a file or a directory, and does not
+   morph to the target dynamically.  If *target_is_directory* is set to ``True``,
+   the symlink will be created as a directory symlink, otherwise as a file symlink
+   (the default).  On non-Window platforms, *target_is_directory* is ignored.
 
    Symbolic link support was introduced in Windows 6.0 (Vista).  :func:`symlink`
    will raise a :exc:`NotImplementedError` on Windows versions earlier than 6.0.
 
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
    .. note::
 
-      The *SeCreateSymbolicLinkPrivilege* is required in order to successfully
-      create symlinks. This privilege is not typically granted to regular
-      users but is available to accounts which can escalate privileges to the
-      administrator level. Either obtaining the privilege or running your
+      On Windows, the *SeCreateSymbolicLinkPrivilege* is required in order to
+      successfully create symlinks. This privilege is not typically granted to
+      regular users but is available to accounts which can escalate privileges
+      to the administrator level. Either obtaining the privilege or running your
       application as an administrator are ways to successfully create symlinks.
 
       :exc:`OSError` is raised when the function is called by an unprivileged
@@ -1460,30 +2211,101 @@ Files and Directories
    .. versionchanged:: 3.2
       Added support for Windows 6.0 (Vista) symbolic links.
 
+   .. versionadded:: 3.3
+      Added the *dir_fd* argument, and now allow *target_is_directory*
+      on non-Windows platforms.
 
-.. function:: unlink(path)
+
+.. function:: sync()
+
+   Force write of everything to disk.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: truncate(path, length)
+
+   Truncate the file corresponding to *path*, so that it is at most
+   *length* bytes in size.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. function:: unlink(path, *, dir_fd=None, rmdir=False)
 
    Remove (delete) the file *path*.  This is the same function as
    :func:`remove`; the :func:`unlink` name is its traditional Unix
-   name.
+   name.  Please see the documentation for :func:`remove` for
+   further information.
 
    Availability: Unix, Windows.
 
+   .. versionadded:: 3.3
+      The *dir_fd* and *rmdir* parameters.
 
-.. function:: utime(path, times)
 
-   Set the access and modified times of the file specified by *path*. If *times*
-   is ``None``, then the file's access and modified times are set to the current
-   time. (The effect is similar to running the Unix program :program:`touch` on
-   the path.)  Otherwise, *times* must be a 2-tuple of numbers, of the form
-   ``(atime, mtime)`` which is used to set the access and modified times,
-   respectively. Whether a directory can be given for *path* depends on whether
-   the operating system implements directories as files (for example, Windows
-   does not).  Note that the exact times you set here may not be returned by a
-   subsequent :func:`~os.stat` call, depending on the resolution with which your
-   operating system records access and modification times; see :func:`~os.stat`.
+.. function:: utime(path, times=None, *, ns=None, dir_fd=None, follow_symlinks=True)
+
+   Set the access and modified times of the file specified by *path*.
+
+   :func:`utime` takes two optional parameters, *times* and *ns*.
+   These specify the times set on *path* and are used as follows:
+
+   - If *ns* is not ``None``,
+     it must be a 2-tuple of the form ``(atime_ns, mtime_ns)``
+     where each member is an int expressing nanoseconds.
+   - If *times* is not ``None``,
+     it must be a 2-tuple of the form ``(atime, mtime)``
+     where each member is an int or float expressing seconds.
+   - If *times* and *ns* are both ``None``,
+     this is equivalent to specifying ``ns=(atime_ns, mtime_ns)``
+     where both times are the current time.
+     (The effect is similar to running the Unix program
+     :program:`touch` on *path*.)
+
+   It is an error to specify tuples for both *times* and *ns*.
+
+   Whether a directory can be given for *path*
+   depends on whether the operating system implements directories as files
+   (for example, Windows does not).  Note that the exact times you set here may
+   not be returned by a subsequent :func:`~os.stat` call, depending on the
+   resolution with which your operating system records access and modification
+   times; see :func:`~os.stat`.  The best way to preserve exact times is to
+   use the *st_atime_ns* and *st_mtime_ns* fields from the :func:`os.stat`
+   result object with the *ns* parameter to `utime`.
+
+   On some platforms, *path* may also be specified as an open file descriptor.
+   This functionality may not be supported on your platform; you can check
+   whether or not it is available using :data:`os.supports_fd`.  If it is
+   unavailable, using it will raise a :exc:`NotImplementedError`.
+
+   If *dir_fd* is not ``None``, it should be a file descriptor referring to a
+   directory, and *path* should be relative; path will then be relative to
+   that directory.  (If *path* is absolute, *dir_fd* is ignored.)
+   *dir_fd* may not be supported on your platform;
+   you can check whether or not it is available using
+   :data:`os.supports_dir_fd`.  If it is unavailable, using it will raise
+   a :exc:`NotImplementedError`.
+
+   If *follow_symlinks* is ``False``, and the last element of the path is a
+   symbolic link, :func:`utime` will examine the symbolic link itself instead
+   of the file the link points to.  *follow_symlinks* may not be supported
+   on your platform; you can check whether or not it is available using
+   :data:`os.supports_follow_symlinks`.  If it is unavailable,
+   using it will raise a :exc:`NotImplementedError`.
+
+   It is an error to use *dir_fd* or *follow_symlinks* when specifying
+   *path* as an open file descriptor.
 
    Availability: Unix, Windows.
+
+   .. versionadded:: 3.3
+      Added support for specifying an open file descriptor for *path*,
+      and the *dir_fd*, *follow_symlinks*, and *ns* parameters.
 
 
 .. function:: walk(top, topdown=True, onerror=None, followlinks=False)
@@ -1569,6 +2391,57 @@ Files and Directories
               os.rmdir(os.path.join(root, name))
 
 
+.. function:: fwalk(top, topdown=True, onerror=None, followlinks=False)
+
+   .. index::
+      single: directory; walking
+      single: directory; traversal
+
+   This behaves exactly like :func:`walk`, except that it yields a 4-tuple
+   ``(dirpath, dirnames, filenames, dirfd)``.
+
+   *dirpath*, *dirnames* and *filenames* are identical to :func:`walk` output,
+   and *dirfd* is a file descriptor referring to the directory *dirpath*.
+
+   .. note::
+
+      Since :func:`fwalk` yields file descriptors, those are only valid until
+      the next iteration step, so you should duplicate them (e.g. with
+      :func:`dup`) if you want to keep them longer.
+
+   This example displays the number of bytes taken by non-directory files in each
+   directory under the starting directory, except that it doesn't look under any
+   CVS subdirectory::
+
+      import os
+      for root, dirs, files, rootfd in os.fwalk('python/Lib/email'):
+          print(root, "consumes", end="")
+          print(sum([os.fstatat(rootfd, name).st_size for name in files]),
+                end="")
+          print("bytes in", len(files), "non-directory files")
+          if 'CVS' in dirs:
+              dirs.remove('CVS')  # don't visit CVS directories
+
+   In the next example, walking the tree bottom-up is essential:
+   :func:`unlinkat` doesn't allow deleting a directory before the directory is
+   empty::
+
+      # Delete everything reachable from the directory named in "top",
+      # assuming there are no symbolic links.
+      # CAUTION:  This is dangerous!  For example, if top == '/', it
+      # could delete all your disk files.
+      import os
+      for root, dirs, files, rootfd in os.fwalk(top, topdown=False):
+          for name in files:
+              os.unlinkat(rootfd, name)
+          for name in dirs:
+              os.unlinkat(rootfd, name, os.AT_REMOVEDIR)
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
 .. _os-process:
 
 Process Management
@@ -1642,8 +2515,16 @@ to be ignored.
    :func:`execlp`, :func:`execv`, and :func:`execvp` all cause the new process to
    inherit the environment of the current process.
 
+   For :func:`execve` on some platforms, *path* may also be specified as an open
+   file descriptor.  This functionality may not be supported on your platform;
+   you can check whether or not it is available using :data:`os.supports_fd`.
+   If it is unavailable, using it will raise a :exc:`NotImplementedError`.
+
    Availability: Unix, Windows.
 
+   .. versionadded:: 3.3
+      Added support for specifying an open file descriptor for *path*
+      for :func:`execve`.
 
 .. function:: _exit(n)
 
@@ -1832,6 +2713,8 @@ written in Python, such as a mail server's external command delivery program.
    to be unconditionally killed by the TerminateProcess API, and the exit code
    will be set to *sig*. The Windows version of :func:`kill` additionally takes
    process handles to be killed.
+
+   See also :func:`signal.pthread_kill`.
 
    .. versionadded:: 3.2
       Windows support.
@@ -2043,6 +2926,58 @@ written in Python, such as a mail server's external command delivery program.
 
    Availability: Unix.
 
+.. function:: waitid(idtype, id, options)
+
+   Wait for the completion of one or more child processes.
+   *idtype* can be :data:`P_PID`, :data:`P_PGID` or :data:`P_ALL`.
+   *id* specifies the pid to wait on.
+   *options* is constructed from the ORing of one or more of :data:`WEXITED`,
+   :data:`WSTOPPED` or :data:`WCONTINUED` and additionally may be ORed with
+   :data:`WNOHANG` or :data:`WNOWAIT`. The return value is an object
+   representing the data contained in the :c:type:`siginfo_t` structure, namely:
+   :attr:`si_pid`, :attr:`si_uid`, :attr:`si_signo`, :attr:`si_status`,
+   :attr:`si_code` or ``None`` if :data:`WNOHANG` is specified and there are no
+   children in a waitable state.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+.. data:: P_PID
+          P_PGID
+          P_ALL
+
+   These are the possible values for *idtype* in :func:`waitid`. They affect
+   how *id* is interpreted.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+.. data:: WEXITED
+          WSTOPPED
+          WNOWAIT
+
+   Flags that can be used in *options* in :func:`waitid` that specify what
+   child signal to wait for.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
+
+.. data:: CLD_EXITED
+          CLD_DUMPED
+          CLD_TRAPPED
+          CLD_CONTINUED
+
+   These are the possible values for :attr:`si_code` in the result returned by
+   :func:`waitid`.
+
+   Availability: Unix.
+
+   .. versionadded:: 3.3
+
 
 .. function:: waitpid(pid, options)
 
@@ -2182,6 +3117,155 @@ used to determine the disposition of a process.
    Return the signal which caused the process to exit.
 
    Availability: Unix.
+
+
+Interface to the scheduler
+--------------------------
+
+These functions control how a process is allocated CPU time by the operating
+system. They are only available on some Unix platforms. For more detailed
+information, consult your Unix manpages.
+
+.. versionadded:: 3.3
+
+The following scheduling policies are exposed if they are a supported by the
+operating system.
+
+.. data:: SCHED_OTHER
+
+   The default scheduling policy.
+
+.. data:: SCHED_BATCH
+
+   Scheduling policy for CPU-intensive processes that tries to preserve
+   interactivity on the rest of the computer.
+
+.. data:: SCHED_IDLE
+
+   Scheduling policy for extremely low priority background tasks.
+
+.. data:: SCHED_SPORADIC
+
+   Scheduling policy for sporadic server programs.
+
+.. data:: SCHED_FIFO
+
+   A First In First Out scheduling policy.
+
+.. data:: SCHED_RR
+
+   A round-robin scheduling policy.
+
+.. data:: SCHED_RESET_ON_FORK
+
+   This flag can OR'ed with any other scheduling policy. When a process with
+   this flag set forks, its child's scheduling policy and priority are reset to
+   the default.
+
+
+.. class:: sched_param(sched_priority)
+
+   This class represents tunable scheduling parameters used in
+   :func:`sched_setparam`, :func:`sched_setscheduler`, and
+   :func:`sched_getparam`. It is immutable.
+
+   At the moment, there is only one possible parameter:
+
+   .. attribute:: sched_priority
+
+      The scheduling priority for a scheduling policy.
+
+
+.. function:: sched_get_priority_min(policy)
+
+   Get the minimum priority value for *policy*. *policy* is one of the
+   scheduling policy constants above.
+
+
+.. function:: sched_get_priority_max(policy)
+
+   Get the maximum priority value for *policy*. *policy* is one of the
+   scheduling policy constants above.
+
+
+.. function:: sched_setscheduler(pid, policy, param)
+
+   Set the scheduling policy for the process with PID *pid*. A *pid* of 0 means
+   the calling process. *policy* is one of the scheduling policy constants
+   above. *param* is a :class:`sched_param` instance.
+
+
+.. function:: sched_getscheduler(pid)
+
+   Return the scheduling policy for the process with PID *pid*. A *pid* of 0
+   means the calling process. The result is one of the scheduling policy
+   constants above.
+
+
+.. function:: sched_setparam(pid, param)
+
+   Set a scheduling parameters for the process with PID *pid*. A *pid* of 0 means
+   the calling process. *param* is a :class:`sched_param` instance.
+
+
+.. function:: sched_getparam(pid)
+
+   Return the scheduling parameters as a :class:`sched_param` instance for the
+   process with PID *pid*. A *pid* of 0 means the calling process.
+
+
+.. function:: sched_rr_get_interval(pid)
+
+   Return the round-robin quantum in seconds for the process with PID *pid*. A
+   *pid* of 0 means the calling process.
+
+
+.. function:: sched_yield()
+
+   Voluntarily relinquish the CPU.
+
+
+.. class:: cpu_set(ncpus)
+
+   :class:`cpu_set` represents a set of CPUs on which a process is eligible to
+   run. *ncpus* is the number of CPUs the set should describe. Methods on
+   :class:`cpu_set` allow CPUs to be add or removed.
+
+   :class:`cpu_set` supports the AND, OR, and XOR bitwise operations. For
+   example, given two cpu_sets, ``one`` and ``two``, ``one | two`` returns a
+   :class:`cpu_set` containing the cpus enabled both in ``one`` and ``two``.
+
+   .. method:: set(i)
+
+      Enable CPU *i*.
+
+   .. method:: clear(i)
+
+      Remove CPU *i*.
+
+   .. method:: isset(i)
+
+      Return ``True`` if CPU *i* is enabled in the set.
+
+   .. method:: count()
+
+      Return the number of enabled CPUs in the set.
+
+   .. method:: zero()
+
+      Clear the set completely.
+
+
+.. function:: sched_setaffinity(pid, mask)
+
+   Restrict the process with PID *pid* to a set of CPUs. *mask* is a
+   :class:`cpu_set` instance.
+
+
+.. function:: sched_getaffinity(pid, size)
+
+   Return the :class:`cpu_set` the process with PID *pid* is restricted to. The
+   result will contain *size* CPUs.
 
 
 .. _os-path:

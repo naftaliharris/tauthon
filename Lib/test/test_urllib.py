@@ -298,6 +298,10 @@ Content-Type: text/html; charset=iso-8859-1
         finally:
             self.unfakehttp()
 
+    def test_URLopener_deprecation(self):
+        with support.check_warnings(('',DeprecationWarning)):
+            warn = urllib.request.URLopener()
+
 class urlretrieve_FileTests(unittest.TestCase):
     """Test urllib.urlretrieve() on local files"""
 
@@ -331,7 +335,7 @@ class urlretrieve_FileTests(unittest.TestCase):
     def constructLocalFileUrl(self, filePath):
         filePath = os.path.abspath(filePath)
         try:
-            filePath.encode("utf8")
+            filePath.encode("utf-8")
         except UnicodeEncodeError:
             raise unittest.SkipTest("filePath is not encodable to utf8")
         return "file://%s" % urllib.request.pathname2url(filePath)
@@ -384,11 +388,11 @@ class urlretrieve_FileTests(unittest.TestCase):
 
     def test_reporthook(self):
         # Make sure that the reporthook works.
-        def hooktester(count, block_size, total_size, count_holder=[0]):
-            self.assertIsInstance(count, int)
-            self.assertIsInstance(block_size, int)
-            self.assertIsInstance(total_size, int)
-            self.assertEqual(count, count_holder[0])
+        def hooktester(block_count, block_read_size, file_size, count_holder=[0]):
+            self.assertIsInstance(block_count, int)
+            self.assertIsInstance(block_read_size, int)
+            self.assertIsInstance(file_size, int)
+            self.assertEqual(block_count, count_holder[0])
             count_holder[0] = count_holder[0] + 1
         second_temp = "%s.2" % support.TESTFN
         self.registerFileForCleanUp(second_temp)
@@ -399,8 +403,8 @@ class urlretrieve_FileTests(unittest.TestCase):
     def test_reporthook_0_bytes(self):
         # Test on zero length file. Should call reporthook only 1 time.
         report = []
-        def hooktester(count, block_size, total_size, _report=report):
-            _report.append((count, block_size, total_size))
+        def hooktester(block_count, block_read_size, file_size, _report=report):
+            _report.append((block_count, block_read_size, file_size))
         srcFileName = self.createNewTempFile()
         urllib.request.urlretrieve(self.constructLocalFileUrl(srcFileName),
             support.TESTFN, hooktester)
@@ -410,31 +414,31 @@ class urlretrieve_FileTests(unittest.TestCase):
     def test_reporthook_5_bytes(self):
         # Test on 5 byte file. Should call reporthook only 2 times (once when
         # the "network connection" is established and once when the block is
-        # read). Since the block size is 8192 bytes, only one block read is
-        # required to read the entire file.
+        # read).
         report = []
-        def hooktester(count, block_size, total_size, _report=report):
-            _report.append((count, block_size, total_size))
+        def hooktester(block_count, block_read_size, file_size, _report=report):
+            _report.append((block_count, block_read_size, file_size))
         srcFileName = self.createNewTempFile(b"x" * 5)
         urllib.request.urlretrieve(self.constructLocalFileUrl(srcFileName),
             support.TESTFN, hooktester)
         self.assertEqual(len(report), 2)
-        self.assertEqual(report[0][1], 8192)
-        self.assertEqual(report[0][2], 5)
+        self.assertEqual(report[0][1], 0)
+        self.assertEqual(report[1][1], 5)
 
     def test_reporthook_8193_bytes(self):
         # Test on 8193 byte file. Should call reporthook only 3 times (once
         # when the "network connection" is established, once for the next 8192
         # bytes, and once for the last byte).
         report = []
-        def hooktester(count, block_size, total_size, _report=report):
-            _report.append((count, block_size, total_size))
+        def hooktester(block_count, block_read_size, file_size, _report=report):
+            _report.append((block_count, block_read_size, file_size))
         srcFileName = self.createNewTempFile(b"x" * 8193)
         urllib.request.urlretrieve(self.constructLocalFileUrl(srcFileName),
             support.TESTFN, hooktester)
         self.assertEqual(len(report), 3)
-        self.assertEqual(report[0][1], 8192)
-        self.assertEqual(report[0][2], 8193)
+        self.assertEqual(report[0][1], 0)
+        self.assertEqual(report[1][1], 8192)
+        self.assertEqual(report[2][1], 1)
 
 
 class urlretrieve_HttpTests(unittest.TestCase, FakeHTTPMixin):
@@ -1245,6 +1249,28 @@ class URLopener_Tests(unittest.TestCase):
 #         self.assertEqual(ftp.ftp.sock.gettimeout(), 30)
 #         ftp.close()
 
+class RequestTests(unittest.TestCase):
+    """Unit tests for urllib.request.Request."""
+
+    def test_default_values(self):
+        Request = urllib.request.Request
+        request = Request("http://www.python.org")
+        self.assertEqual(request.get_method(), 'GET')
+        request = Request("http://www.python.org", {})
+        self.assertEqual(request.get_method(), 'POST')
+
+    def test_with_method_arg(self):
+        Request = urllib.request.Request
+        request = Request("http://www.python.org", method='HEAD')
+        self.assertEqual(request.method, 'HEAD')
+        self.assertEqual(request.get_method(), 'HEAD')
+        request = Request("http://www.python.org", {}, method='HEAD')
+        self.assertEqual(request.method, 'HEAD')
+        self.assertEqual(request.get_method(), 'HEAD')
+        request = Request("http://www.python.org", method='GET')
+        self.assertEqual(request.get_method(), 'GET')
+        request.method = 'HEAD'
+        self.assertEqual(request.get_method(), 'HEAD')
 
 
 def test_main():
@@ -1261,6 +1287,7 @@ def test_main():
         Utility_Tests,
         URLopener_Tests,
         #FTPWrapperTests,
+        RequestTests,
     )
 
 
