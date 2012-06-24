@@ -1249,6 +1249,14 @@ The Tk GUI and the :func:`~pydoc.serve` function have been removed from the
 in Python 3.2.
 
 
+re
+--
+
+:class:`str` regular expressions now support ``\u`` and ``\U`` escapes.
+
+(Contributed by Serhiy Storchaka in :issue:`3665`.)
+
+
 sched
 -----
 
@@ -1402,6 +1410,11 @@ ssl
 
   (Contributed by Colin Marc in :issue:`14204`)
 
+* SSL errors can now be introspected more easily thanks to
+  :attr:`~ssl.SSLError.library` and :attr:`~ssl.SSLError.reason` attributes.
+
+  (Contributed by Antoine Pitrou in :issue:`14837`)
+
 stat
 ----
 
@@ -1497,8 +1510,7 @@ Major performance enhancements have been added:
   * repeating a single ASCII letter and getting a substring of a ASCII strings
     is 4 times faster
 
-* UTF-8 and UTF-16 decoding is now 2x to 4x faster.  UTF-16 encoding is now
-  up to 10x faster.
+* UTF-8 is now 2x to 4x faster.  UTF-16 encoding is now up to 10x faster.
 
   (contributed by Serhiy Storchaka, :issue:`14624`, :issue:`14738` and
   :issue:`15026`.)
