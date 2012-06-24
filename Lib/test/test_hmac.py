@@ -302,12 +302,50 @@ class CopyTestCase(unittest.TestCase):
         self.assertEqual(h1.hexdigest(), h2.hexdigest(),
             "Hexdigest of copy doesn't match original hexdigest.")
 
+class CompareDigestTestCase(unittest.TestCase):
+
+    def test_compare(self):
+        # Testing input type exception handling
+        a, b = 100, 200
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = 100, b"foobar"
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = b"foobar", 200
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = "foobar", b"foobar"
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = b"foobar", "foobar"
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = "foobar", "foobar"
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+        a, b = bytearray(b"foobar"), bytearray(b"foobar")
+        self.assertRaises(TypeError, hmac.compare_digest, a, b)
+
+        # Testing bytes of different lengths
+        a, b = b"foobar", b"foo"
+        self.assertFalse(hmac.compare_digest(a, b))
+        a, b = b"\xde\xad\xbe\xef", b"\xde\xad"
+        self.assertFalse(hmac.compare_digest(a, b))
+
+        # Testing bytes of same lengths, different values
+        a, b = b"foobar", b"foobaz"
+        self.assertFalse(hmac.compare_digest(a, b))
+        a, b = b"\xde\xad\xbe\xef", b"\xab\xad\x1d\xea"
+        self.assertFalse(hmac.compare_digest(a, b))
+
+        # Testing bytes of same lengths, same values
+        a, b = b"foobar", b"foobar"
+        self.assertTrue(hmac.compare_digest(a, b))
+        a, b = b"\xde\xad\xbe\xef", b"\xde\xad\xbe\xef"
+        self.assertTrue(hmac.compare_digest(a, b))
+
 def test_main():
     support.run_unittest(
         TestVectorsTestCase,
         ConstructorTestCase,
         SanityTestCase,
-        CopyTestCase
+        CopyTestCase,
+        CompareDigestTestCase
     )
 
 if __name__ == "__main__":

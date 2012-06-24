@@ -38,6 +38,13 @@ An HMAC object has the following methods:
    given to the constructor.  It may contain non-ASCII bytes, including NUL
    bytes.
 
+   .. warning::
+
+      When comparing the output of :meth:`digest` to an externally-supplied
+      digest during a verification routine, it is recommended to use the
+      :func:`compare_digest` function instead of the ``==`` operator
+      to reduce the vulnerability to timing attacks.
+
 
 .. method:: HMAC.hexdigest()
 
@@ -45,12 +52,47 @@ An HMAC object has the following methods:
    length containing only hexadecimal digits.  This may be used to exchange the
    value safely in email or other non-binary environments.
 
+   .. warning::
+
+      The output of :meth:`hexdigest` should not be compared directly to an
+      externally-supplied digest during a verification routine. Instead, the
+      externally supplied digest should be converted to a :class:`bytes`
+      value and compared to the output of :meth:`digest` with
+      :func:`compare_digest`.
+
 
 .. method:: HMAC.copy()
 
    Return a copy ("clone") of the hmac object.  This can be used to efficiently
    compute the digests of strings that share a common initial substring.
 
+
+This module also provides the following helper function:
+
+.. function:: compare_digest(a, b)
+
+   Returns the equivalent of ``a == b``, but avoids content based
+   short circuiting behaviour to reduce the vulnerability to timing
+   analysis. The inputs must be :class:`bytes` instances.
+
+   Using a short circuiting comparison (that is, one that terminates as soon
+   as it finds any difference between the values) to check digests for
+   correctness can be problematic, as it introduces a potential
+   vulnerability when an attacker can control both the message to be checked
+   *and* the purported signature value. By keeping the plaintext consistent
+   and supplying different signature values, an attacker may be able to use
+   timing variations to search the signature space for the expected value in
+   O(n) time rather than the desired O(2**n).
+
+   .. note::
+
+      While this function reduces the likelihood of leaking the contents of
+      the expected digest via a timing attack, it still uses short circuiting
+      behaviour based on the *length* of the inputs. It is assumed that the
+      expected length of the digest is not a secret, as it is typically
+      published as part of a file format, network protocol or API definition.
+
+   .. versionadded:: 3.3
 
 .. seealso::
 
