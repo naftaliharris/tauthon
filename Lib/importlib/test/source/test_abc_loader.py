@@ -40,8 +40,10 @@ class SourceLoaderMock(SourceOnlyLoaderMock):
     def __init__(self, path, magic=imp.get_magic()):
         super().__init__(path)
         self.bytecode_path = imp.cache_from_source(self.path)
+        self.source_size = len(self.source)
         data = bytearray(magic)
-        data.extend(marshal._w_long(self.source_mtime))
+        data.extend(importlib._w_long(self.source_mtime))
+        data.extend(importlib._w_long(self.source_size))
         code_object = compile(self.source, self.path, 'exec',
                                 dont_inherit=True)
         data.extend(marshal.dumps(code_object))
@@ -56,9 +58,9 @@ class SourceLoaderMock(SourceOnlyLoaderMock):
         else:
             raise IOError
 
-    def path_mtime(self, path):
+    def path_stats(self, path):
         assert path == self.path
-        return self.source_mtime
+        return {'mtime': self.source_mtime, 'size': self.source_size}
 
     def set_data(self, path, data):
         self.written[path] = bytes(data)
@@ -102,7 +104,7 @@ class PyLoaderMock(abc.PyLoader):
             warnings.simplefilter("always")
             path = super().get_filename(name)
             assert len(w) == 1
-            assert issubclass(w[0].category, PendingDeprecationWarning)
+            assert issubclass(w[0].category, DeprecationWarning)
             return path
 
 
@@ -198,7 +200,7 @@ class PyPycLoaderMock(abc.PyPycLoader, PyLoaderMock):
             warnings.simplefilter("always")
             code_object = super().get_code(name)
             assert len(w) == 1
-            assert issubclass(w[0].category, PendingDeprecationWarning)
+            assert issubclass(w[0].category, DeprecationWarning)
             return code_object
 
 class PyLoaderTests(testing_abc.LoaderTests):
@@ -469,8 +471,9 @@ class BadBytecodeFailureTests(unittest.TestCase):
                 {'path': os.path.join('path', 'to', 'mod'),
                  'magic': bad_magic}}
         mock = PyPycLoaderMock({name: None}, bc)
-        with util.uncache(name), self.assertRaises(ImportError):
+        with util.uncache(name), self.assertRaises(ImportError) as cm:
             mock.load_module(name)
+        self.assertEqual(cm.exception.name, name)
 
     def test_no_bytecode(self):
         # Missing code object bytecode should lead to an EOFError.
@@ -514,8 +517,9 @@ class MissingPathsTests(unittest.TestCase):
         # If all *_path methods return None, raise ImportError.
         name = 'mod'
         mock = PyPycLoaderMock({name: None})
-        with util.uncache(name), self.assertRaises(ImportError):
+        with util.uncache(name), self.assertRaises(ImportError) as cm:
             mock.load_module(name)
+        self.assertEqual(cm.exception.name, name)
 
     def test_source_path_ImportError(self):
         # An ImportError from source_path should trigger an ImportError.
@@ -531,7 +535,7 @@ class MissingPathsTests(unittest.TestCase):
         mock = PyPycLoaderMock({name: os.path.join('path', 'to', 'mod')})
         bad_meth = types.MethodType(raise_ImportError, mock)
         mock.bytecode_path = bad_meth
-        with util.uncache(name), self.assertRaises(ImportError):
+        with util.uncache(name), self.assertRaises(ImportError) as cm:
             mock.load_module(name)
 
 
@@ -592,15 +596,17 @@ class SourceOnlyLoaderTests(SourceLoaderTestHarness):
         def raise_IOError(path):
             raise IOError
         self.loader.get_data = raise_IOError
-        with self.assertRaises(ImportError):
+        with self.assertRaises(ImportError) as cm:
             self.loader.get_source(self.name)
+        self.assertEqual(cm.exception.name, self.name)
 
     def test_is_package(self):
         # Properly detect when loading a package.
-        self.setUp(is_package=True)
-        self.assertTrue(self.loader.is_package(self.name))
         self.setUp(is_package=False)
         self.assertFalse(self.loader.is_package(self.name))
+        self.setUp(is_package=True)
+        self.assertTrue(self.loader.is_package(self.name))
+        self.assertFalse(self.loader.is_package(self.name + '.__init__'))
 
     def test_get_code(self):
         # Verify the code object is created.
@@ -656,7 +662,8 @@ class SourceLoaderBytecodeTests(SourceLoaderTestHarness):
         if bytecode_written:
             self.assertIn(self.cached, self.loader.written)
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(self.loader.source_mtime))
+            data.extend(importlib._w_long(self.loader.source_mtime))
+            data.extend(importlib._w_long(self.loader.source_size))
             data.extend(marshal.dumps(code_object))
             self.assertEqual(self.loader.written[self.cached], bytes(data))
 
@@ -847,7 +854,7 @@ class AbstractMethodImplTests(unittest.TestCase):
         # Required abstractmethods.
         self.raises_NotImplementedError(ins, 'get_filename', 'get_data')
         # Optional abstractmethods.
-        self.raises_NotImplementedError(ins,'path_mtime', 'set_data')
+        self.raises_NotImplementedError(ins,'path_stats', 'set_data')
 
     def test_PyLoader(self):
         self.raises_NotImplementedError(self.PyLoader(), 'source_path',
