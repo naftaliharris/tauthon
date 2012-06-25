@@ -404,11 +404,18 @@ Other constructors, all class methods:
 .. classmethod:: date.fromtimestamp(timestamp)
 
    Return the local date corresponding to the POSIX timestamp, such as is returned
-   by :func:`time.time`.  This may raise :exc:`ValueError`, if the timestamp is out
-   of the range of values supported by the platform C :c:func:`localtime` function.
+   by :func:`time.time`.  This may raise :exc:`OverflowError`, if the timestamp is out
+   of the range of values supported by the platform C :c:func:`localtime` function,
+   and :exc:`OSError` on :c:func:`localtime` failure.
    It's common for this to be restricted to years from 1970 through 2038.  Note
    that on non-POSIX systems that include leap seconds in their notion of a
    timestamp, leap seconds are ignored by :meth:`fromtimestamp`.
+
+   .. versionchanged:: 3.3
+      Raise :exc:`OverflowError` instead of :exc:`ValueError` if the timestamp
+      is out of the range of values supported by the platform C
+      :c:func:`localtime` function. Raise :exc:`OSError` instead of
+      :exc:`ValueError` on :c:func:`localtime` failure.
 
 
 .. classmethod:: date.fromordinal(ordinal)
@@ -713,22 +720,43 @@ Other constructors, all class methods:
    equivalent to
    ``tz.fromutc(datetime.utcfromtimestamp(timestamp).replace(tzinfo=tz))``.
 
-   :meth:`fromtimestamp` may raise :exc:`ValueError`, if the timestamp is out of
+   :meth:`fromtimestamp` may raise :exc:`OverflowError`, if the timestamp is out of
    the range of values supported by the platform C :c:func:`localtime` or
-   :c:func:`gmtime` functions.  It's common for this to be restricted to years in
+   :c:func:`gmtime` functions, and :exc:`OSError` on :c:func:`localtime` or
+   :c:func:`gmtime` failure.
+   It's common for this to be restricted to years in
    1970 through 2038. Note that on non-POSIX systems that include leap seconds in
    their notion of a timestamp, leap seconds are ignored by :meth:`fromtimestamp`,
    and then it's possible to have two timestamps differing by a second that yield
    identical :class:`.datetime` objects. See also :meth:`utcfromtimestamp`.
 
+   .. versionchanged:: 3.3
+      Raise :exc:`OverflowError` instead of :exc:`ValueError` if the timestamp
+      is out of the range of values supported by the platform C
+      :c:func:`localtime` or :c:func:`gmtime` functions. Raise :exc:`OSError`
+      instead of :exc:`ValueError` on :c:func:`localtime` or :c:func:`gmtime`
+      failure.
+
 
 .. classmethod:: datetime.utcfromtimestamp(timestamp)
 
    Return the UTC :class:`.datetime` corresponding to the POSIX timestamp, with
-   :attr:`tzinfo` ``None``. This may raise :exc:`ValueError`, if the timestamp is
-   out of the range of values supported by the platform C :c:func:`gmtime` function.
+   :attr:`tzinfo` ``None``. This may raise :exc:`OverflowError`, if the timestamp is
+   out of the range of values supported by the platform C :c:func:`gmtime` function,
+   and :exc:`OSError` on :c:func:`gmtime` failure.
    It's common for this to be restricted to years in 1970 through 2038. See also
    :meth:`fromtimestamp`.
+
+   On the POSIX compliant platforms, ``utcfromtimestamp(timestamp)``
+   is equivalent to the following expression::
+
+     datetime(1970, 1, 1) + timedelta(seconds=timestamp)
+
+   .. versionchanged:: 3.3
+      Raise :exc:`OverflowError` instead of :exc:`ValueError` if the timestamp
+      is out of the range of values supported by the platform C
+      :c:func:`gmtime` function. Raise :exc:`OSError` instead of
+      :exc:`ValueError` on :c:func:`gmtime` failure.
 
 
 .. classmethod:: datetime.fromordinal(ordinal)
@@ -873,12 +901,19 @@ Supported operations:
    *datetime1* is considered less than *datetime2* when *datetime1* precedes
    *datetime2* in time.
 
-   If one comparand is naive and the other is aware, :exc:`TypeError` is raised.
+   If one comparand is naive and the other is aware, :exc:`TypeError`
+   is raised if an order comparison is attempted.  For equality
+   comparisons, naive instances are never equal to aware instances.
+
    If both comparands are aware, and have the same :attr:`tzinfo` attribute, the
    common :attr:`tzinfo` attribute is ignored and the base datetimes are
    compared.  If both comparands are aware and have different :attr:`tzinfo`
    attributes, the comparands are first adjusted by subtracting their UTC
    offsets (obtained from ``self.utcoffset()``).
+
+   .. versionchanged:: 3.3
+      Equality comparisons between naive and aware :class:`datetime`
+      instances don't raise :exc:`TypeError`.
 
    .. note::
 
@@ -922,16 +957,21 @@ Instance methods:
    datetime with no conversion of date and time data.
 
 
-.. method:: datetime.astimezone(tz)
+.. method:: datetime.astimezone(tz=None)
 
-   Return a :class:`.datetime` object with new :attr:`tzinfo` attribute *tz*,
+   Return a :class:`datetime` object with new :attr:`tzinfo` attribute *tz*,
    adjusting the date and time data so the result is the same UTC time as
    *self*, but in *tz*'s local time.
 
-   *tz* must be an instance of a :class:`tzinfo` subclass, and its
+   If provided, *tz* must be an instance of a :class:`tzinfo` subclass, and its
    :meth:`utcoffset` and :meth:`dst` methods must not return ``None``.  *self* must
    be aware (``self.tzinfo`` must not be ``None``, and ``self.utcoffset()`` must
    not return ``None``).
+
+   If called without arguments (or with ``tz=None``) the system local
+   timezone is assumed.  The ``tzinfo`` attribute of the converted
+   datetime instance will be set to an instance of :class:`timezone`
+   with the zone name and offset obtained from the OS.
 
    If ``self.tzinfo`` is *tz*, ``self.astimezone(tz)`` is equal to *self*:  no
    adjustment of date or time data is performed. Else the result is local
@@ -1015,6 +1055,39 @@ Instance methods:
    Return the proleptic Gregorian ordinal of the date.  The same as
    ``self.date().toordinal()``.
 
+.. method:: datetime.timestamp()
+
+   Return POSIX timestamp corresponding to the :class:`datetime`
+   instance.  The return value is a :class:`float` similar to that
+   returned by :func:`time.time`.
+
+   Naive :class:`datetime` instances are assumed to represent local
+   time and this method relies on the platform C :c:func:`mktime`
+   function to perform the conversion.  Since :class:`datetime`
+   supports wider range of values than :c:func:`mktime` on many
+   platforms, this method may raise :exc:`OverflowError` for times far
+   in the past or far in the future.
+
+   For aware :class:`datetime` instances, the return value is computed
+   as::
+
+      (dt - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds()
+
+   .. versionadded:: 3.3
+
+   .. note::
+
+      There is no method to obtain the POSIX timestamp directly from a
+      naive :class:`datetime` instance representing UTC time.  If your
+      application uses this convention and your system timezone is not
+      set to UTC, you can obtain the POSIX timestamp by supplying
+      ``tzinfo=timezone.utc``::
+
+         timestamp = dt.replace(tzinfo=timezone.utc).timestamp()
+
+      or by calculating the timestamp directly::
+
+         timestamp = (dt - datetime(1970, 1, 1)) / timedelta(seconds=1)
 
 .. method:: datetime.weekday()
 
@@ -1255,7 +1328,10 @@ Supported operations:
 
 * comparison of :class:`.time` to :class:`.time`, where *a* is considered less
   than *b* when *a* precedes *b* in time.  If one comparand is naive and the other
-  is aware, :exc:`TypeError` is raised.  If both comparands are aware, and have
+  is aware, :exc:`TypeError` is raised if an order comparison is attempted. For equality
+  comparisons, naive instances are never equal to aware instances.
+
+  If both comparands are aware, and have
   the same :attr:`tzinfo` attribute, the common :attr:`tzinfo` attribute is
   ignored and the base times are compared.  If both comparands are aware and
   have different :attr:`tzinfo` attributes, the comparands are first adjusted by
@@ -1264,6 +1340,10 @@ Supported operations:
   object address, when a :class:`.time` object is compared to an object of a
   different type, :exc:`TypeError` is raised unless the comparison is ``==`` or
   ``!=``.  The latter cases return :const:`False` or :const:`True`, respectively.
+
+  .. versionchanged:: 3.3
+     Equality comparisons between naive and aware :class:`time` instances
+     don't raise :exc:`TypeError`.
 
 * hash, use as dict key
 
@@ -1588,11 +1668,12 @@ only EST (fixed offset -5 hours), or only EDT (fixed offset -4 hours)).
 :class:`timezone` Objects
 --------------------------
 
-A :class:`timezone` object represents a timezone that is defined by a
-fixed offset from UTC.  Note that objects of this class cannot be used
-to represent timezone information in the locations where different
-offsets are used in different days of the year or where historical
-changes have been made to civil time.
+The :class:`timezone` class is a subclass of :class:`tzinfo`, each
+instance of which represents a timezone defined by a fixed offset from
+UTC.  Note that objects of this class cannot be used to represent
+timezone information in the locations where different offsets are used
+in different days of the year or where historical changes have been
+made to civil time.
 
 
 .. class:: timezone(offset[, name])
@@ -1761,8 +1842,7 @@ format codes.
 |           | decimal number [00,99].        |       |
 +-----------+--------------------------------+-------+
 | ``%Y``    | Year with century as a decimal | \(5)  |
-|           | number [0001,9999] (strptime), |       |
-|           | [1000,9999] (strftime).        |       |
+|           | number [0001,9999].            |       |
 +-----------+--------------------------------+-------+
 | ``%z``    | UTC offset in the form +HHMM   | \(6)  |
 |           | or -HHMM (empty string if the  |       |
@@ -1796,16 +1876,17 @@ Notes:
    calculations when the day of the week and the year are specified.
 
 (5)
-   For technical reasons, :meth:`strftime` method does not support
-   dates before year 1000: ``t.strftime(format)`` will raise a
-   :exc:`ValueError` when ``t.year < 1000`` even if ``format`` does
-   not contain ``%Y`` directive.  The :meth:`strptime` method can
+   The :meth:`strptime` method can
    parse years in the full [1, 9999] range, but years < 1000 must be
    zero-filled to 4-digit width.
 
    .. versionchanged:: 3.2
       In previous versions, :meth:`strftime` method was restricted to
       years >= 1900.
+
+   .. versionchanged:: 3.3
+      In version 3.2, :meth:`strftime` method was restricted to
+      years >= 1000.
 
 (6)
    For example, if :meth:`utcoffset` returns ``timedelta(hours=-3, minutes=-30)``,
