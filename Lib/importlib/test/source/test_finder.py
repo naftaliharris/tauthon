@@ -1,10 +1,12 @@
-from importlib import _bootstrap
 from .. import abc
 from . import util as source_util
-from test.support import make_legacy_pyc
-import os
+
+from importlib import machinery
 import errno
+import imp
+import os
 import py_compile
+from test.support import make_legacy_pyc
 import unittest
 import warnings
 
@@ -34,9 +36,11 @@ class FinderTests(abc.FinderTests):
     """
 
     def import_(self, root, module):
-        finder = _bootstrap._FileFinder(root,
-                                        _bootstrap._SourceFinderDetails(),
-                                        _bootstrap._SourcelessFinderDetails())
+        loader_details = [(machinery.SourceFileLoader,
+                            machinery.SOURCE_SUFFIXES, True),
+                          (machinery.SourcelessFileLoader,
+                            machinery.BYTECODE_SUFFIXES, True)]
+        finder = machinery.FileFinder(root, *loader_details)
         return finder.find_module(module)
 
     def run_test(self, test, create=None, *, compile_=None, unlink=None):
@@ -102,39 +106,21 @@ class FinderTests(abc.FinderTests):
             loader = self.import_(pkg_dir, 'pkg.sub')
             self.assertTrue(hasattr(loader, 'load_module'))
 
-    # [sub empty]
-    def test_empty_sub_directory(self):
-        context = source_util.create_modules('pkg.__init__', 'pkg.sub.__init__')
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", ImportWarning)
-            with context as mapping:
-                os.unlink(mapping['pkg.sub.__init__'])
-                pkg_dir = os.path.dirname(mapping['pkg.__init__'])
-                with self.assertRaises(ImportWarning):
-                    self.import_(pkg_dir, 'pkg.sub')
-
     # [package over modules]
     def test_package_over_module(self):
         name = '_temp'
         loader = self.run_test(name, {'{0}.__init__'.format(name), name})
-        self.assertTrue('__init__' in loader.get_filename(name))
-
+        self.assertIn('__init__', loader.get_filename(name))
 
     def test_failure(self):
         with source_util.create_modules('blah') as mapping:
             nothing = self.import_(mapping['.root'], 'sdfsadsadf')
             self.assertTrue(nothing is None)
 
-    # [empty dir]
-    def test_empty_dir(self):
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", ImportWarning)
-            with self.assertRaises(ImportWarning):
-                self.run_test('pkg', {'pkg.__init__'}, unlink={'pkg.__init__'})
-
     def test_empty_string_for_dir(self):
         # The empty string from sys.path means to search in the cwd.
-        finder = _bootstrap._FileFinder('', _bootstrap._SourceFinderDetails())
+        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
+            machinery.SOURCE_SUFFIXES, True))
         with open('mod.py', 'w') as file:
             file.write("# test file for importlib")
         try:
@@ -142,6 +128,14 @@ class FinderTests(abc.FinderTests):
             self.assertTrue(hasattr(loader, 'load_module'))
         finally:
             os.unlink('mod.py')
+
+    def test_invalidate_caches(self):
+        # invalidate_caches() should reset the mtime.
+        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
+            machinery.SOURCE_SUFFIXES, True))
+        finder._path_mtime = 42
+        finder.invalidate_caches()
+        self.assertEqual(finder._path_mtime, -1)
 
 
 def test_main():
