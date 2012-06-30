@@ -657,7 +657,7 @@ class PyBuildExt(build_ext):
                 ret = os.system("ldd %s > %s" % (do_readline, tmpfile))
             else:
                 ret = 256
-            if ret >> 8 == 0:
+            if ret == 0:
                 with open(tmpfile) as fp:
                     for ln in fp:
                         if 'curses' in ln:
