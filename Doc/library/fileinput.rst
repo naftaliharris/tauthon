@@ -28,7 +28,10 @@ as the first argument to :func:`.input`.  A single file name is also allowed.
 All files are opened in text mode by default, but you can override this by
 specifying the *mode* parameter in the call to :func:`.input` or
 :class:`FileInput`.  If an I/O error occurs during opening or reading a file,
-:exc:`IOError` is raised.
+:exc:`OSError` is raised.
+
+.. versionchanged:: 3.3
+   :exc:`IOError` used to be raised; it is now an alias of :exc:`OSError`.
 
 If ``sys.stdin`` is used more than once, the second and further use will return
 no lines, except perhaps for interactive use, or if it has been explicitly reset
@@ -167,10 +170,6 @@ input file in place.  If the *backup* parameter is given (typically as
 and the backup file remains around; by default, the extension is ``'.bak'`` and
 it is deleted when the output file is closed.  In-place filtering is disabled
 when standard input is read.
-
-.. note::
-
-   The current implementation does not work for MS-DOS 8+3 filesystems.
 
 
 The two following opening hooks are provided by this module:
