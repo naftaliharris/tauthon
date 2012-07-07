@@ -23,6 +23,14 @@ Core and Builtins
 Library
 -------
 
+- Issue #13248: Remove obsolete argument "max_buffer_size" of BufferedWriter
+  and BufferedRWPair, from the io module.
+
+- Issue #13248: Remove obsolete argument "version" of argparse.ArgumentParser.
+
+- Issue #14814: implement more consistent ordering and sorting behaviour
+  for ipaddress objects
+
 - Issue #14814: ipaddress network objects correctly return NotImplemented
   when compared to arbitrary objects instead of raising TypeError
 
