@@ -193,6 +193,20 @@ class RelativeImports(unittest.TestCase):
             self.assertEqual(module.__name__, '__runpy_pkg__.uncle.cousin')
         self.relative_import_test(create, globals_, callback)
 
+    def test_import_relative_import_no_fromlist(self):
+        # Import a relative module w/ no fromlist.
+        create = ['crash.__init__', 'crash.mod']
+        globals_ = [{'__package__': 'crash', '__name__': 'crash'}]
+        def callback(global_):
+            import_util.import_('crash')
+            mod = import_util.import_('mod', global_, {}, [], 1)
+            self.assertEqual(mod.__name__, 'crash.mod')
+        self.relative_import_test(create, globals_, callback)
+
+    def test_relative_import_no_globals(self):
+        # No globals for a relative import is an error.
+        with self.assertRaises(KeyError):
+            import_util.import_('sys', level=1)
 
 
 def test_main():
