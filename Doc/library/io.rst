@@ -33,6 +33,10 @@ giving a :class:`str` object to the ``write()`` method of a binary stream
 will raise a ``TypeError``.  So will giving a :class:`bytes` object to the
 ``write()`` method of a text stream.
 
+.. versionchanged:: 3.3
+   Operations defined in this module used to raise :exc:`IOError`, which is
+   now an alias of :exc:`OSError`.
+
 
 Text I/O
 ^^^^^^^^
@@ -109,21 +113,13 @@ High-level Module Interface
 
 .. exception:: BlockingIOError
 
-   Error raised when blocking would occur on a non-blocking stream.  It inherits
-   :exc:`IOError`.
-
-   In addition to those of :exc:`IOError`, :exc:`BlockingIOError` has one
-   attribute:
-
-   .. attribute:: characters_written
-
-      An integer containing the number of characters written to the stream
-      before it blocked.
+   This is a compatibility alias for the builtin :exc:`BlockingIOError`
+   exception.
 
 
 .. exception:: UnsupportedOperation
 
-   An exception inheriting :exc:`IOError` and :exc:`ValueError` that is raised
+   An exception inheriting :exc:`OSError` and :exc:`ValueError` that is raised
    when an unsupported operation is called on a stream.
 
 
@@ -202,8 +198,8 @@ I/O Base Classes
    Even though :class:`IOBase` does not declare :meth:`read`, :meth:`readinto`,
    or :meth:`write` because their signatures will vary, implementations and
    clients should consider those methods part of the interface.  Also,
-   implementations may raise a :exc:`IOError` when operations they do not
-   support are called.
+   implementations may raise a :exc:`ValueError` (or :exc:`UnsupportedOperation`)
+   when operations they do not support are called.
 
    The basic type used for binary data read from or written to a file is
    :class:`bytes`.  :class:`bytearray`\s are accepted too, and in some cases
@@ -211,7 +207,7 @@ I/O Base Classes
    :class:`str` data.
 
    Note that calling any method (even inquiries) on a closed stream is
-   undefined.  Implementations may raise :exc:`IOError` in this case.
+   undefined.  Implementations may raise :exc:`ValueError` in this case.
 
    IOBase (and its subclasses) support the iterator protocol, meaning that an
    :class:`IOBase` object can be iterated over yielding the lines in a stream.
@@ -244,7 +240,7 @@ I/O Base Classes
    .. method:: fileno()
 
       Return the underlying file descriptor (an integer) of the stream if it
-      exists.  An :exc:`IOError` is raised if the IO object does not use a file
+      exists.  An :exc:`OSError` is raised if the IO object does not use a file
       descriptor.
 
    .. method:: flush()
@@ -260,7 +256,7 @@ I/O Base Classes
    .. method:: readable()
 
       Return ``True`` if the stream can be read from.  If False, :meth:`read`
-      will raise :exc:`IOError`.
+      will raise :exc:`OSError`.
 
    .. method:: readline(limit=-1)
 
@@ -295,10 +291,15 @@ I/O Base Classes
       .. versionadded:: 3.1
          The ``SEEK_*`` constants.
 
+      .. versionadded:: 3.3
+         Some operating systems could support additional values, like
+         :data:`os.SEEK_HOLE` or :data:`os.SEEK_DATA`. The valid values
+         for a file could depend on it being open in text or binary mode.
+
    .. method:: seekable()
 
       Return ``True`` if the stream supports random access.  If ``False``,
-      :meth:`seek`, :meth:`tell` and :meth:`truncate` will raise :exc:`IOError`.
+      :meth:`seek`, :meth:`tell` and :meth:`truncate` will raise :exc:`OSError`.
 
    .. method:: tell()
 
@@ -316,7 +317,7 @@ I/O Base Classes
    .. method:: writable()
 
       Return ``True`` if the stream supports writing.  If ``False``,
-      :meth:`write` and :meth:`truncate` will raise :exc:`IOError`.
+      :meth:`write` and :meth:`truncate` will raise :exc:`OSError`.
 
    .. method:: writelines(lines)
 
@@ -450,7 +451,7 @@ I/O Base Classes
 
       Write the given bytes or bytearray object, *b* and return the number
       of bytes written (never less than ``len(b)``, since if the write fails
-      an :exc:`IOError` will be raised).  Depending on the actual
+      an :exc:`OSError` will be raised).  Depending on the actual
       implementation, these bytes may be readily written to the underlying
       stream, or held in a buffer for performance and latency reasons.
 
@@ -462,7 +463,7 @@ I/O Base Classes
 Raw File I/O
 ^^^^^^^^^^^^
 
-.. class:: FileIO(name, mode='r', closefd=True)
+.. class:: FileIO(name, mode='r', closefd=True, opener=None)
 
    :class:`FileIO` represents an OS-level file containing bytes data.
    It implements the :class:`RawIOBase` interface (and therefore the
@@ -475,13 +476,26 @@ Raw File I/O
    * an integer representing the number of an existing OS-level file descriptor
      to which the resulting :class:`FileIO` object will give access.
 
-   The *mode* can be ``'r'``, ``'w'`` or ``'a'`` for reading (default), writing,
-   or appending.  The file will be created if it doesn't exist when opened for
-   writing or appending; it will be truncated when opened for writing.  Add a
+   The *mode* can be ``'r'``, ``'w'``, ``'x'`` or ``'a'`` for reading
+   (default), writing, exclusive creation or appending. The file will be
+   created if it doesn't exist when opened for writing or appending; it will be
+   truncated when opened for writing. :exc:`FileExistsError` will be raised if
+   it already exists when opened for creating. Opening a file for creating
+   implies writing, so this mode behaves in a similar way to ``'w'``. Add a
    ``'+'`` to the mode to allow simultaneous reading and writing.
 
    The :meth:`read` (when called with a positive argument), :meth:`readinto`
    and :meth:`write` methods on this class will only make one system call.
+
+   A custom opener can be used by passing a callable as *opener*. The underlying
+   file descriptor for the file object is then obtained by calling *opener* with
+   (*name*, *flags*). *opener* must return an open file descriptor (passing
+   :mod:`os.open` as *opener* results in functionality similar to passing
+   ``None``).
+
+   .. versionchanged:: 3.3
+      The *opener* parameter was added.
+      The ``'x'`` mode was added.
 
    In addition to the attributes and methods from :class:`IOBase` and
    :class:`RawIOBase`, :class:`FileIO` provides the following data
@@ -590,8 +604,6 @@ than raw I/O does.
    *raw* stream.  If the *buffer_size* is not given, it defaults to
    :data:`DEFAULT_BUFFER_SIZE`.
 
-   A third argument, *max_buffer_size*, is supported, but unused and deprecated.
-
    :class:`BufferedWriter` provides or overrides these methods in addition to
    those from :class:`BufferedIOBase` and :class:`IOBase`:
 
@@ -617,8 +629,6 @@ than raw I/O does.
    in the first argument.  If the *buffer_size* is omitted it defaults to
    :data:`DEFAULT_BUFFER_SIZE`.
 
-   A third argument, *max_buffer_size*, is supported, but unused and deprecated.
-
    :class:`BufferedRandom` is capable of anything :class:`BufferedReader` or
    :class:`BufferedWriter` can do.
 
@@ -632,9 +642,6 @@ than raw I/O does.
    *reader* and *writer* are :class:`RawIOBase` objects that are readable and
    writeable respectively.  If the *buffer_size* is omitted it defaults to
    :data:`DEFAULT_BUFFER_SIZE`.
-
-   A fourth argument, *max_buffer_size*, is supported, but unused and
-   deprecated.
 
    :class:`BufferedRWPair` implements all of :class:`BufferedIOBase`\'s methods
    except for :meth:`~BufferedIOBase.detach`, which raises
@@ -736,13 +743,14 @@ Text I/O
       written.
 
 
-.. class:: TextIOWrapper(buffer, encoding=None, errors=None, newline=None, line_buffering=False)
+.. class:: TextIOWrapper(buffer, encoding=None, errors=None, newline=None, \
+                         line_buffering=False, write_through=False)
 
    A buffered text stream over a :class:`BufferedIOBase` binary stream.
    It inherits :class:`TextIOBase`.
 
    *encoding* gives the name of the encoding that the stream will be decoded or
-   encoded with.  It defaults to :func:`locale.getpreferredencoding`.
+   encoded with.  It defaults to ``locale.getpreferredencoding(False)``.
 
    *errors* is an optional string that specifies how encoding and decoding
    errors are to be handled.  Pass ``'strict'`` to raise a :exc:`ValueError`
@@ -766,6 +774,19 @@ Text I/O
 
    If *line_buffering* is ``True``, :meth:`flush` is implied when a call to
    write contains a newline character.
+
+   If *write_through* is ``True``, calls to :meth:`write` are guaranteed
+   not to be buffered: any data written on the :class:`TextIOWrapper`
+   object is immediately handled to its underlying binary *buffer*.
+
+   .. versionchanged:: 3.3
+      The *write_through* argument has been added.
+
+   .. versionchanged:: 3.3
+      The default *encoding* is now ``locale.getpreferredencoding(False)``
+      instead of ``locale.getpreferredencoding()``. Don't change temporary the
+      locale encoding using :func:`locale.setlocale`, use the current locale
+      encoding instead of the user preferred encoding.
 
    :class:`TextIOWrapper` provides one attribute in addition to those of
    :class:`TextIOBase` and its parents:
