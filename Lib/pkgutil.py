@@ -21,7 +21,7 @@ def read_code(stream):
     if magic != imp.get_magic():
         return None
 
-    stream.read(4) # Skip timestamp
+    stream.read(8) # Skip timestamp and size
     return marshal.load(stream)
 
 
@@ -256,7 +256,7 @@ class ImpLoader:
         if self.file and self.file.closed:
             mod_type = self.etc[2]
             if mod_type==imp.PY_SOURCE:
-                self.file = open(self.filename, 'rU')
+                self.file = open(self.filename, 'r')
             elif mod_type in (imp.PY_COMPILED, imp.C_EXTENSION):
                 self.file = open(self.filename, 'rb')
 
@@ -301,7 +301,7 @@ class ImpLoader:
                     self.file.close()
             elif mod_type==imp.PY_COMPILED:
                 if os.path.exists(self.filename[:-1]):
-                    f = open(self.filename[:-1], 'rU')
+                    f = open(self.filename[:-1], 'r')
                     self.source = f.read()
                     f.close()
             elif mod_type==imp.PKG_DIRECTORY:
@@ -315,9 +315,9 @@ class ImpLoader:
     def get_filename(self, fullname=None):
         fullname = self._fix_name(fullname)
         mod_type = self.etc[2]
-        if self.etc[2]==imp.PKG_DIRECTORY:
+        if mod_type==imp.PKG_DIRECTORY:
             return self._get_delegate().get_filename()
-        elif self.etc[2] in (imp.PY_SOURCE, imp.PY_COMPILED, imp.C_EXTENSION):
+        elif mod_type in (imp.PY_SOURCE, imp.PY_COMPILED, imp.C_EXTENSION):
             return self.filename
         return None
 
@@ -379,18 +379,15 @@ def get_importer(path_item):
         for path_hook in sys.path_hooks:
             try:
                 importer = path_hook(path_item)
+                sys.path_importer_cache.setdefault(path_item, importer)
                 break
             except ImportError:
                 pass
         else:
-            importer = None
-        sys.path_importer_cache.setdefault(path_item, importer)
-
-    if importer is None:
-        try:
-            importer = ImpImporter(path_item)
-        except ImportError:
-            importer = None
+            try:
+                importer = ImpImporter(path_item)
+            except ImportError:
+                importer = None
     return importer
 
 
@@ -469,6 +466,8 @@ def find_loader(fullname):
     platform-specific special import locations such as the Windows registry.
     """
     for importer in iter_importers(fullname):
+        if importer is None:
+            continue
         loader = importer.find_module(fullname)
         if loader is not None:
             return loader
@@ -514,21 +513,41 @@ def extend_path(path, name):
         # frozen package.  Return the path unchanged in that case.
         return path
 
-    pname = os.path.join(*name.split('.')) # Reconstitute as relative path
     sname_pkg = name + ".pkg"
-    init_py = "__init__.py"
 
     path = path[:] # Start with a copy of the existing path
 
-    for dir in sys.path:
-        if not isinstance(dir, str) or not os.path.isdir(dir):
+    parent_package, _, final_name = name.rpartition('.')
+    if parent_package:
+        try:
+            search_path = sys.modules[parent_package].__path__
+        except (KeyError, AttributeError):
+            # We can't do anything: find_loader() returns None when
+            # passed a dotted name.
+            return path
+    else:
+        search_path = sys.path
+
+    for dir in search_path:
+        if not isinstance(dir, str):
             continue
-        subdir = os.path.join(dir, pname)
-        # XXX This may still add duplicate entries to path on
-        # case-insensitive filesystems
-        initfile = os.path.join(subdir, init_py)
-        if subdir not in path and os.path.isfile(initfile):
-            path.append(subdir)
+
+        finder = get_importer(dir)
+        if finder is not None:
+            # Is this finder PEP 420 compliant?
+            if hasattr(finder, 'find_loader'):
+                loader, portions = finder.find_loader(final_name)
+            else:
+                # No, no need to call it
+                loader = None
+                portions = []
+
+            for portion in portions:
+                # XXX This may still add duplicate entries to path on
+                # case-insensitive filesystems
+                if portion not in path:
+                    path.append(portion)
+
         # XXX Is this the right thing for subpackages like zope.app?
         # It looks for a file named "zope.app.pkg"
         pkgfile = os.path.join(dir, sname_pkg)
