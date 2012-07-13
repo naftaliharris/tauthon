@@ -68,8 +68,9 @@ __all__ = [
     "tostring", "tostringlist",
     "TreeBuilder",
     "VERSION",
-    "XML",
+    "XML", "XMLID",
     "XMLParser", "XMLTreeBuilder",
+    "register_namespace",
     ]
 
 VERSION = "1.3.0"
@@ -100,33 +101,8 @@ import sys
 import re
 import warnings
 
+from . import ElementPath
 
-class _SimpleElementPath:
-    # emulate pre-1.2 find/findtext/findall behaviour
-    def find(self, element, tag, namespaces=None):
-        for elem in element:
-            if elem.tag == tag:
-                return elem
-        return None
-    def findtext(self, element, tag, default=None, namespaces=None):
-        elem = self.find(element, tag)
-        if elem is None:
-            return default
-        return elem.text or ""
-    def iterfind(self, element, tag, namespaces=None):
-        if tag[:3] == ".//":
-            for elem in element.iter(tag[3:]):
-                yield elem
-        for elem in element:
-            if elem.tag == tag:
-                yield elem
-    def findall(self, element, tag, namespaces=None):
-        return list(self.iterfind(element, tag, namespaces))
-
-try:
-    from . import ElementPath
-except ImportError:
-    ElementPath = _SimpleElementPath()
 
 ##
 # Parser error.  This is a subclass of <b>SyntaxError</b>.
@@ -148,9 +124,9 @@ class ParseError(SyntaxError):
 # @defreturn flag
 
 def iselement(element):
-    # FIXME: not sure about this; might be a better idea to look
-    # for tag/attrib/text attributes
-    return isinstance(element, Element) or hasattr(element, "tag")
+    # FIXME: not sure about this;
+    # isinstance(element, Element) or look for tag/attrib/text attributes
+    return hasattr(element, 'tag')
 
 ##
 # Element class.  This class defines the Element interface, and
@@ -205,6 +181,9 @@ class Element:
     # constructor
 
     def __init__(self, tag, attrib={}, **extra):
+        if not isinstance(attrib, dict):
+            raise TypeError("attrib must be dict, not %s" % (
+                attrib.__class__.__name__,))
         attrib = attrib.copy()
         attrib.update(extra)
         self.tag = tag
@@ -298,7 +277,7 @@ class Element:
     # @param element The element to add.
 
     def append(self, element):
-        # assert iselement(element)
+        self._assert_is_element(element)
         self._children.append(element)
 
     ##
@@ -308,8 +287,8 @@ class Element:
     # @since 1.3
 
     def extend(self, elements):
-        # for element in elements:
-        #     assert iselement(element)
+        for element in elements:
+            self._assert_is_element(element)
         self._children.extend(elements)
 
     ##
@@ -318,8 +297,12 @@ class Element:
     # @param index Where to insert the new subelement.
 
     def insert(self, index, element):
-        # assert iselement(element)
+        self._assert_is_element(element)
         self._children.insert(index, element)
+
+    def _assert_is_element(self, e):
+        if not isinstance(e, Element):
+            raise TypeError('expected an Element, not %s' % type(e).__name__)
 
     ##
     # Removes a matching subelement.  Unlike the <b>find</b> methods,
@@ -909,11 +892,7 @@ def _namespaces(elem, default_namespace=None):
             _raise_serialization_error(qname)
 
     # populate qname and namespaces table
-    try:
-        iterate = elem.iter
-    except AttributeError:
-        iterate = elem.getiterator # cET compatibility
-    for elem in iterate():
+    for elem in elem.iter():
         tag = elem.tag
         if isinstance(tag, QName):
             if tag.text not in qnames:
@@ -1085,6 +1064,8 @@ _namespace_map = {
     # dublin core
     "http://purl.org/dc/elements/1.1/": "dc",
 }
+# For tests and troubleshooting
+register_namespace._namespace_map = _namespace_map
 
 def _raise_serialization_error(text):
     raise TypeError(
@@ -1509,24 +1490,30 @@ class XMLParser:
         self.target = self._target = target
         self._error = expat.error
         self._names = {} # name memo cache
-        # callbacks
+        # main callbacks
         parser.DefaultHandlerExpand = self._default
-        parser.StartElementHandler = self._start
-        parser.EndElementHandler = self._end
-        parser.CharacterDataHandler = self._data
-        # optional callbacks
-        parser.CommentHandler = self._comment
-        parser.ProcessingInstructionHandler = self._pi
+        if hasattr(target, 'start'):
+            parser.StartElementHandler = self._start
+        if hasattr(target, 'end'):
+            parser.EndElementHandler = self._end
+        if hasattr(target, 'data'):
+            parser.CharacterDataHandler = target.data
+        # miscellaneous callbacks
+        if hasattr(target, 'comment'):
+            parser.CommentHandler = target.comment
+        if hasattr(target, 'pi'):
+            parser.ProcessingInstructionHandler = target.pi
         # let expat do the buffering, if supported
         try:
-            self._parser.buffer_text = 1
+            parser.buffer_text = 1
         except AttributeError:
             pass
         # use new-style attribute handling, if supported
         try:
-            self._parser.ordered_attributes = 1
-            self._parser.specified_attributes = 1
-            parser.StartElementHandler = self._start_list
+            parser.ordered_attributes = 1
+            parser.specified_attributes = 1
+            if hasattr(target, 'start'):
+                parser.StartElementHandler = self._start_list
         except AttributeError:
             pass
         self._doctype = None
@@ -1570,44 +1557,29 @@ class XMLParser:
                 attrib[fixname(attrib_in[i])] = attrib_in[i+1]
         return self.target.start(tag, attrib)
 
-    def _data(self, text):
-        return self.target.data(text)
-
     def _end(self, tag):
         return self.target.end(self._fixname(tag))
-
-    def _comment(self, data):
-        try:
-            comment = self.target.comment
-        except AttributeError:
-            pass
-        else:
-            return comment(data)
-
-    def _pi(self, target, data):
-        try:
-            pi = self.target.pi
-        except AttributeError:
-            pass
-        else:
-            return pi(target, data)
 
     def _default(self, text):
         prefix = text[:1]
         if prefix == "&":
             # deal with undefined entities
             try:
-                self.target.data(self.entity[text[1:-1]])
+                data_handler = self.target.data
+            except AttributeError:
+                return
+            try:
+                data_handler(self.entity[text[1:-1]])
             except KeyError:
                 from xml.parsers import expat
                 err = expat.error(
                     "undefined entity %s: line %d, column %d" %
-                    (text, self._parser.ErrorLineNumber,
-                    self._parser.ErrorColumnNumber)
+                    (text, self.parser.ErrorLineNumber,
+                    self.parser.ErrorColumnNumber)
                     )
                 err.code = 11 # XML_ERROR_UNDEFINED_ENTITY
-                err.lineno = self._parser.ErrorLineNumber
-                err.offset = self._parser.ErrorColumnNumber
+                err.lineno = self.parser.ErrorLineNumber
+                err.offset = self.parser.ErrorColumnNumber
                 raise err
         elif prefix == "<" and text[:9] == "<!DOCTYPE":
             self._doctype = [] # inside a doctype declaration
@@ -1625,16 +1597,16 @@ class XMLParser:
                 type = self._doctype[1]
                 if type == "PUBLIC" and n == 4:
                     name, type, pubid, system = self._doctype
+                    if pubid:
+                        pubid = pubid[1:-1]
                 elif type == "SYSTEM" and n == 3:
                     name, type, system = self._doctype
                     pubid = None
                 else:
                     return
-                if pubid:
-                    pubid = pubid[1:-1]
                 if hasattr(self.target, "doctype"):
                     self.target.doctype(name, pubid, system[1:-1])
-                elif self.doctype is not self._XMLParser__doctype:
+                elif self.doctype != self._XMLParser__doctype:
                     # warn about deprecated call
                     self._XMLParser__doctype(name, pubid, system[1:-1])
                     self.doctype(name, pubid, system[1:-1])
@@ -1665,7 +1637,7 @@ class XMLParser:
 
     def feed(self, data):
         try:
-            self._parser.Parse(data, 0)
+            self.parser.Parse(data, 0)
         except self._error as v:
             self._raiseerror(v)
 
@@ -1677,12 +1649,100 @@ class XMLParser:
 
     def close(self):
         try:
-            self._parser.Parse("", 1) # end of data
+            self.parser.Parse("", 1) # end of data
         except self._error as v:
             self._raiseerror(v)
-        tree = self.target.close()
-        del self.target, self._parser # get rid of circular references
-        return tree
+        try:
+            close_handler = self.target.close
+        except AttributeError:
+            pass
+        else:
+            return close_handler()
+        finally:
+            # get rid of circular references
+            del self.parser, self._parser
+            del self.target, self._target
+
+
+# Import the C accelerators
+try:
+    # Element, SubElement, ParseError, TreeBuilder, XMLParser
+    from _elementtree import *
+except ImportError:
+    pass
+else:
+    # Overwrite 'ElementTree.parse' and 'iterparse' to use the C XMLParser
+
+    class ElementTree(ElementTree):
+        def parse(self, source, parser=None):
+            close_source = False
+            if not hasattr(source, 'read'):
+                source = open(source, 'rb')
+                close_source = True
+            try:
+                if parser is not None:
+                    while True:
+                        data = source.read(65536)
+                        if not data:
+                            break
+                        parser.feed(data)
+                    self._root = parser.close()
+                else:
+                    parser = XMLParser()
+                    self._root = parser._parse(source)
+                return self._root
+            finally:
+                if close_source:
+                    source.close()
+
+    class iterparse:
+        root = None
+        def __init__(self, file, events=None):
+            self._close_file = False
+            if not hasattr(file, 'read'):
+                file = open(file, 'rb')
+                self._close_file = True
+            self._file = file
+            self._events = []
+            self._index = 0
+            self._error = None
+            self.root = self._root = None
+            b = TreeBuilder()
+            self._parser = XMLParser(b)
+            self._parser._setevents(self._events, events)
+
+        def __next__(self):
+            while True:
+                try:
+                    item = self._events[self._index]
+                    self._index += 1
+                    return item
+                except IndexError:
+                    pass
+                if self._error:
+                    e = self._error
+                    self._error = None
+                    raise e
+                if self._parser is None:
+                    self.root = self._root
+                    if self._close_file:
+                        self._file.close()
+                    raise StopIteration
+                # load event buffer
+                del self._events[:]
+                self._index = 0
+                data = self._file.read(16384)
+                if data:
+                    try:
+                        self._parser.feed(data)
+                    except SyntaxError as exc:
+                        self._error = exc
+                else:
+                    self._root = self._parser.close()
+                    self._parser = None
+
+        def __iter__(self):
+            return self
 
 # compatibility
 XMLTreeBuilder = XMLParser
