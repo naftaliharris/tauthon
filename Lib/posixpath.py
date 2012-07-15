@@ -85,7 +85,8 @@ def join(a, *p):
     except TypeError:
         strs = [isinstance(s, str) for s in (a, ) + p]
         if any(strs) and not all(strs):
-            raise TypeError("Can't mix strings and bytes in path components.")
+            raise TypeError("Can't mix strings and bytes in path "
+                            "components.") from None
         else:
             raise
     return path
