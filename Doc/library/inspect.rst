@@ -190,6 +190,10 @@ attributes:
    compared to the constants defined in the :mod:`imp` module; see the
    documentation for that module for more information on module types.
 
+   .. deprecated:: 3.3
+      You may check the file path's suffix against the supported suffixes
+      listed in :mod:`importlib.machinery` to infer the same information.
+
 
 .. function:: getmodulename(path)
 
@@ -355,16 +359,24 @@ Retrieving source code
    argument may be a module, class, method, function, traceback, frame, or code
    object.  The source code is returned as a list of the lines corresponding to the
    object and the line number indicates where in the original source file the first
-   line of code was found.  An :exc:`IOError` is raised if the source code cannot
+   line of code was found.  An :exc:`OSError` is raised if the source code cannot
    be retrieved.
+
+   .. versionchanged:: 3.3
+      :exc:`OSError` is raised instead of :exc:`IOError`, now an alias of the
+      former.
 
 
 .. function:: getsource(object)
 
    Return the text of the source code for an object. The argument may be a module,
    class, method, function, traceback, frame, or code object.  The source code is
-   returned as a single string.  An :exc:`IOError` is raised if the source code
+   returned as a single string.  An :exc:`OSError` is raised if the source code
    cannot be retrieved.
+
+   .. versionchanged:: 3.3
+      :exc:`OSError` is raised instead of :exc:`IOError`, now an alias of the
+      former.
 
 
 .. function:: cleandoc(doc)
@@ -432,11 +444,16 @@ Classes and functions
    locals dictionary of the given frame.
 
 
-.. function:: formatargspec(args[, varargs, varkw, defaults, formatarg, formatvarargs, formatvarkw, formatvalue])
+.. function:: formatargspec(args[, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations, formatarg, formatvarargs, formatvarkw, formatvalue, formatreturns, formatannotations])
 
-   Format a pretty argument spec from the four values returned by
-   :func:`getargspec`.  The format\* arguments are the corresponding optional
-   formatting functions that are called to turn names and values into strings.
+   Format a pretty argument spec from the values returned by
+   :func:`getargspec` or :func:`getfullargspec`.
+
+   The first seven arguments are (``args``, ``varargs``, ``varkw``,
+   ``defaults``, ``kwonlyargs``, ``kwonlydefaults``, ``annotations``). The
+   other five arguments are the corresponding optional formatting functions
+   that are called to turn names and values into strings. The last argument
+   is an optional function to format the sequence of arguments.
 
 
 .. function:: formatargvalues(args[, varargs, varkw, locals, formatarg, formatvarargs, formatvarkw, formatvalue])
@@ -478,6 +495,22 @@ Classes and functions
     TypeError: f() takes at least 1 argument (0 given)
 
    .. versionadded:: 3.2
+
+
+.. function:: getclosurevars(func)
+
+   Get the mapping of external name references in a Python function or
+   method *func* to their current values. A
+   :term:`named tuple` ``ClosureVars(nonlocals, globals, builtins, unbound)``
+   is returned. *nonlocals* maps referenced names to lexical closure
+   variables, *globals* to the function's module globals and *builtins* to
+   the builtins visible from the function body. *unbound* is the set of names
+   referenced in the function that could not be resolved at all given the
+   current module globals and builtins.
+
+   :exc:`TypeError` is raised if *func* is not a Python function or method.
+
+   .. versionadded:: 3.3
 
 
 .. _inspect-stack:
@@ -643,3 +676,27 @@ generator to be determined easily.
     * GEN_CLOSED: Execution has completed.
 
    .. versionadded:: 3.2
+
+The current internal state of the generator can also be queried. This is
+mostly useful for testing purposes, to ensure that internal state is being
+updated as expected:
+
+.. function:: getgeneratorlocals(generator)
+
+   Get the mapping of live local variables in *generator* to their current
+   values.  A dictionary is returned that maps from variable names to values.
+   This is the equivalent of calling :func:`locals` in the body of the
+   generator, and all the same caveats apply.
+
+   If *generator* is a :term:`generator` with no currently associated frame,
+   then an empty dictionary is returned.  :exc:`TypeError` is raised if
+   *generator* is not a Python generator object.
+
+   .. impl-detail::
+
+      This function relies on the generator exposing a Python stack frame
+      for introspection, which isn't guaranteed to be the case in all
+      implementations of Python. In such cases, this function will always
+      return an empty dictionary.
+
+   .. versionadded:: 3.3
