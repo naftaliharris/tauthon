@@ -10,46 +10,60 @@ class LoaderTests(abc.LoaderTests):
     def test_module(self):
         with util.uncache('__hello__'), captured_stdout() as stdout:
             module = machinery.FrozenImporter.load_module('__hello__')
-            check = {'__name__': '__hello__', '__file__': '<frozen>',
-                    '__package__': '', '__loader__': machinery.FrozenImporter}
+            check = {'__name__': '__hello__',
+                    '__package__': '',
+                    '__loader__': machinery.FrozenImporter,
+                    }
             for attr, value in check.items():
                 self.assertEqual(getattr(module, attr), value)
             self.assertEqual(stdout.getvalue(), 'Hello world!\n')
+            self.assertFalse(hasattr(module, '__file__'))
 
     def test_package(self):
         with util.uncache('__phello__'),  captured_stdout() as stdout:
             module = machinery.FrozenImporter.load_module('__phello__')
-            check = {'__name__': '__phello__', '__file__': '<frozen>',
-                     '__package__': '__phello__', '__path__': ['__phello__'],
-                     '__loader__': machinery.FrozenImporter}
+            check = {'__name__': '__phello__',
+                     '__package__': '__phello__',
+                     '__path__': ['__phello__'],
+                     '__loader__': machinery.FrozenImporter,
+                     }
             for attr, value in check.items():
                 attr_value = getattr(module, attr)
                 self.assertEqual(attr_value, value,
                                  "for __phello__.%s, %r != %r" %
                                  (attr, attr_value, value))
             self.assertEqual(stdout.getvalue(), 'Hello world!\n')
+            self.assertFalse(hasattr(module, '__file__'))
 
     def test_lacking_parent(self):
         with util.uncache('__phello__', '__phello__.spam'), \
              captured_stdout() as stdout:
             module = machinery.FrozenImporter.load_module('__phello__.spam')
-            check = {'__name__': '__phello__.spam', '__file__': '<frozen>',
+            check = {'__name__': '__phello__.spam',
                     '__package__': '__phello__',
-                    '__loader__': machinery.FrozenImporter}
+                    '__loader__': machinery.FrozenImporter,
+                    }
             for attr, value in check.items():
                 attr_value = getattr(module, attr)
                 self.assertEqual(attr_value, value,
                                  "for __phello__.spam.%s, %r != %r" %
                                  (attr, attr_value, value))
             self.assertEqual(stdout.getvalue(), 'Hello world!\n')
+            self.assertFalse(hasattr(module, '__file__'))
 
     def test_module_reuse(self):
         with util.uncache('__hello__'), captured_stdout() as stdout:
             module1 = machinery.FrozenImporter.load_module('__hello__')
             module2 = machinery.FrozenImporter.load_module('__hello__')
-            self.assertTrue(module1 is module2)
+            self.assertIs(module1, module2)
             self.assertEqual(stdout.getvalue(),
                              'Hello world!\nHello world!\n')
+
+    def test_module_repr(self):
+        with util.uncache('__hello__'), captured_stdout():
+            module = machinery.FrozenImporter.load_module('__hello__')
+            self.assertEqual(repr(module),
+                             "<module '__hello__' (frozen)>")
 
     def test_state_after_failure(self):
         # No way to trigger an error in a frozen module.
@@ -57,8 +71,9 @@ class LoaderTests(abc.LoaderTests):
 
     def test_unloadable(self):
         assert machinery.FrozenImporter.find_module('_not_real') is None
-        with self.assertRaises(ImportError):
+        with self.assertRaises(ImportError) as cm:
             machinery.FrozenImporter.load_module('_not_real')
+        self.assertEqual(cm.exception.name, '_not_real')
 
 
 class InspectLoaderTests(unittest.TestCase):
@@ -78,7 +93,7 @@ class InspectLoaderTests(unittest.TestCase):
     def test_get_source(self):
         # Should always return None.
         result = machinery.FrozenImporter.get_source('__hello__')
-        self.assertTrue(result is None)
+        self.assertIsNone(result)
 
     def test_is_package(self):
         # Should be able to tell what is a package.
@@ -86,14 +101,15 @@ class InspectLoaderTests(unittest.TestCase):
                     ('__phello__.spam', False))
         for name, is_package in test_for:
             result = machinery.FrozenImporter.is_package(name)
-            self.assertTrue(bool(result) == is_package)
+            self.assertEqual(bool(result), is_package)
 
     def test_failure(self):
         # Raise ImportError for modules that are not frozen.
         for meth_name in ('get_code', 'get_source', 'is_package'):
             method = getattr(machinery.FrozenImporter, meth_name)
-            with self.assertRaises(ImportError):
+            with self.assertRaises(ImportError) as cm:
                 method('importlib')
+            self.assertEqual(cm.exception.name, 'importlib')
 
 
 def test_main():
