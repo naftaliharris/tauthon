@@ -11,12 +11,14 @@ __all__ = [
     'encode_rfc2231',
     'formataddr',
     'formatdate',
+    'format_datetime',
     'getaddresses',
     'make_msgid',
     'mktime_tz',
     'parseaddr',
     'parsedate',
     'parsedate_tz',
+    'parsedate_to_datetime',
     'unquote',
     ]
 
@@ -26,6 +28,7 @@ import time
 import base64
 import random
 import socket
+import datetime
 import urllib.parse
 import warnings
 from io import StringIO
@@ -37,11 +40,13 @@ from email._parseaddr import mktime_tz
 # We need wormarounds for bugs in these methods in older Pythons (see below)
 from email._parseaddr import parsedate as _parsedate
 from email._parseaddr import parsedate_tz as _parsedate_tz
+from email._parseaddr import _parsedate_tz as __parsedate_tz
 
 from quopri import decodestring as _qdecode
 
 # Intrapackage imports
 from email.encoders import _bencode, _qencode
+from email.charset import Charset
 
 COMMASPACE = ', '
 EMPTYSTRING = ''
@@ -50,27 +55,53 @@ CRLF = '\r\n'
 TICK = "'"
 
 specialsre = re.compile(r'[][\\()<>@,:;".]')
-escapesre = re.compile(r'[][\\()"]')
+escapesre = re.compile(r'[\\"]')
 
+# How to figure out if we are processing strings that come from a byte
+# source with undecodable characters.
+_has_surrogates = re.compile(
+    '([^\ud800-\udbff]|\A)[\udc00-\udfff]([^\udc00-\udfff]|\Z)').search
+
+# How to deal with a string containing bytes before handing it to the
+# application through the 'normal' interface.
+def _sanitize(string):
+    # Turn any escaped bytes into unicode 'unknown' char.
+    original_bytes = string.encode('ascii', 'surrogateescape')
+    return original_bytes.decode('ascii', 'replace')
 
 
 # Helpers
 
-def formataddr(pair):
+def formataddr(pair, charset='utf-8'):
     """The inverse of parseaddr(), this takes a 2-tuple of the form
     (realname, email_address) and returns the string value suitable
     for an RFC 2822 From, To or Cc header.
 
     If the first element of pair is false, then the second element is
     returned unmodified.
+
+    Optional charset if given is the character set that is used to encode
+    realname in case realname is not ASCII safe.  Can be an instance of str or
+    a Charset-like object which has a header_encode method.  Default is
+    'utf-8'.
     """
     name, address = pair
+    # The address MUST (per RFC) be ascii, so throw a UnicodeError if it isn't.
+    address.encode('ascii')
     if name:
-        quotes = ''
-        if specialsre.search(name):
-            quotes = '"'
-        name = escapesre.sub(r'\\\g<0>', name)
-        return '%s%s%s <%s>' % (quotes, name, quotes, address)
+        try:
+            name.encode('ascii')
+        except UnicodeEncodeError:
+            if isinstance(charset, str):
+                charset = Charset(charset)
+            encoded_name = charset.header_encode(name)
+            return "%s <%s>" % (encoded_name, address)
+        else:
+            quotes = ''
+            if specialsre.search(name):
+                quotes = '"'
+            name = escapesre.sub(r'\\\g<0>', name)
+            return '%s%s%s <%s>' % (quotes, name, quotes, address)
     return address
 
 
@@ -94,6 +125,14 @@ ecre = re.compile(r'''
   ''', re.VERBOSE | re.IGNORECASE)
 
 
+def _format_timetuple_and_zone(timetuple, zone):
+    return '%s, %02d %s %04d %02d:%02d:%02d %s' % (
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][timetuple[6]],
+        timetuple[2],
+        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][timetuple[1] - 1],
+        timetuple[0], timetuple[3], timetuple[4], timetuple[5],
+        zone)
 
 def formatdate(timeval=None, localtime=False, usegmt=False):
     """Returns a date string as specified by RFC 2822, e.g.:
@@ -138,14 +177,25 @@ def formatdate(timeval=None, localtime=False, usegmt=False):
             zone = 'GMT'
         else:
             zone = '-0000'
-    return '%s, %02d %s %04d %02d:%02d:%02d %s' % (
-        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][now[6]],
-        now[2],
-        ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][now[1] - 1],
-        now[0], now[3], now[4], now[5],
-        zone)
+    return _format_timetuple_and_zone(now, zone)
 
+def format_datetime(dt, usegmt=False):
+    """Turn a datetime into a date string as specified in RFC 2822.
+
+    If usegmt is True, dt must be an aware datetime with an offset of zero.  In
+    this case 'GMT' will be rendered instead of the normal +0000 required by
+    RFC2822.  This is to support HTTP headers involving date stamps.
+    """
+    now = dt.timetuple()
+    if usegmt:
+        if dt.tzinfo is None or dt.tzinfo != datetime.timezone.utc:
+            raise ValueError("usegmt option requires a UTC datetime")
+        zone = 'GMT'
+    elif dt.tzinfo is None:
+        zone = '-0000'
+    else:
+        zone = dt.strftime("%z")
+    return _format_timetuple_and_zone(now, zone)
 
 
 def make_msgid(idstring=None, domain=None):
@@ -186,6 +236,15 @@ def parsedate_tz(data):
     if not data:
         return None
     return _parsedate_tz(data)
+
+def parsedate_to_datetime(data):
+    if not data:
+        return None
+    *dtuple, tz = __parsedate_tz(data)
+    if tz is None:
+        return datetime.datetime(*dtuple[:6])
+    return datetime.datetime(*dtuple[:6],
+            tzinfo=datetime.timezone(datetime.timedelta(seconds=tz)))
 
 
 def parseaddr(addr):
@@ -304,3 +363,56 @@ def collapse_rfc2231_value(value, errors='replace',
     except LookupError:
         # charset is not a known codec.
         return unquote(text)
+
+
+#
+# datetime doesn't provide a localtime function yet, so provide one.  Code
+# adapted from the patch in issue 9527.  This may not be perfect, but it is
+# better than not having it.
+#
+
+def localtime(dt=None, isdst=-1):
+    """Return local time as an aware datetime object.
+
+    If called without arguments, return current time.  Otherwise *dt*
+    argument should be a datetime instance, and it is converted to the
+    local time zone according to the system time zone database.  If *dt* is
+    naive (that is, dt.tzinfo is None), it is assumed to be in local time.
+    In this case, a positive or zero value for *isdst* causes localtime to
+    presume initially that summer time (for example, Daylight Saving Time)
+    is or is not (respectively) in effect for the specified time.  A
+    negative value for *isdst* causes the localtime() function to attempt
+    to divine whether summer time is in effect for the specified time.
+
+    """
+    if dt is None:
+        seconds = time.time()
+    else:
+        if dt.tzinfo is None:
+            # A naive datetime is given.  Convert to a (localtime)
+            # timetuple and pass to system mktime together with
+            # the isdst hint.  System mktime will return seconds
+            # sysce epoch.
+            tm = dt.timetuple()[:-1] + (isdst,)
+            seconds = time.mktime(tm)
+        else:
+            # An aware datetime is given.  Use aware datetime
+            # arithmetics to find seconds since epoch.
+            delta = dt - datetime.datetime(1970, 1, 1,
+                                           tzinfo=datetime.timezone.utc)
+            seconds = delta.total_seconds()
+    tm = time.localtime(seconds)
+
+    # XXX: The following logic may not work correctly if UTC
+    # offset has changed since time provided in dt.  This will be
+    # corrected in C implementation for platforms that support
+    # tm_gmtoff.
+    if time.daylight and tm.tm_isdst:
+        offset = time.altzone
+        tzname = time.tzname[1]
+    else:
+        offset = time.timezone
+        tzname = time.tzname[0]
+
+    tz = datetime.timezone(datetime.timedelta(seconds=-offset), tzname)
+    return datetime.datetime.fromtimestamp(seconds, tz)
