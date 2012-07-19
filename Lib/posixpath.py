@@ -87,7 +87,8 @@ def join(a, *p):
                           for s in (a, ) + p)
         if valid_types:
             # Must have a mixture of text and binary data
-            raise TypeError("Can't mix strings and bytes in path components.")
+            raise TypeError("Can't mix strings and bytes in path "
+                            "components.") from None
         raise
     return path
 
