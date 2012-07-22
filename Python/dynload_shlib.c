@@ -36,31 +36,25 @@
    live in the same directory.  E.g. foomodule.cpython-32.so
 */
 
-const struct filedescr _PyImport_DynLoadFiletab[] = {
+const char *_PyImport_DynLoadFiletab[] = {
 #ifdef __CYGWIN__
-    {".dll", "rb", C_EXTENSION},
-    {"module.dll", "rb", C_EXTENSION},
+    ".dll",
 #else  /* !__CYGWIN__ */
 #if defined(PYOS_OS2) && defined(PYCC_GCC)
-    {".pyd", "rb", C_EXTENSION},
-    {".dll", "rb", C_EXTENSION},
+    ".pyd",
+    ".dll",
 #else  /* !(defined(PYOS_OS2) && defined(PYCC_GCC)) */
 #ifdef __VMS
-    {".exe", "rb", C_EXTENSION},
-    {".EXE", "rb", C_EXTENSION},
-    {"module.exe", "rb", C_EXTENSION},
-    {"MODULE.EXE", "rb", C_EXTENSION},
+    ".exe",
+    ".EXE",
 #else  /* !__VMS */
-    {"." SOABI ".so", "rb", C_EXTENSION},
-    {"module." SOABI ".so", "rb", C_EXTENSION},
-    {".abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
-    {"module.abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
-    {".so", "rb", C_EXTENSION},
-    {"module.so", "rb", C_EXTENSION},
+    "." SOABI ".so",
+    ".abi" PYTHON_ABI_STRING ".so",
+    ".so",
 #endif  /* __VMS */
 #endif  /* defined(PYOS_OS2) && defined(PYCC_GCC) */
 #endif  /* __CYGWIN__ */
-    {0, 0}
+    NULL,
 };
 
 static struct {
@@ -75,7 +69,7 @@ static struct {
 static int nhandles = 0;
 
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
+dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;
@@ -121,10 +115,6 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
     dlopenflags = PyThreadState_GET()->interp->dlopenflags;
 #endif
 
-    if (Py_VerboseFlag)
-        PySys_WriteStderr("dlopen(\"%s\", %x);\n", pathname,
-                          dlopenflags);
-
 #ifdef __VMS
     /* VMS currently don't allow a pathname, use a logical name instead */
     /* Concatenate 'python_module_' and shortname */
@@ -139,10 +129,19 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
     handle = dlopen(pathname, dlopenflags);
 
     if (handle == NULL) {
+        PyObject *mod_name = NULL;
+        PyObject *path = NULL;
+        PyObject *error_ob = NULL;
         const char *error = dlerror();
         if (error == NULL)
             error = "unknown dlopen() error";
-        PyErr_SetString(PyExc_ImportError, error);
+        error_ob = PyUnicode_FromString(error);
+        path = PyUnicode_FromString(pathname);
+        mod_name = PyUnicode_FromString(shortname);
+        PyErr_SetImportError(error_ob, mod_name, path);
+        Py_DECREF(error_ob);
+        Py_DECREF(path);
+        Py_DECREF(mod_name);
         return NULL;
     }
     if (fp != NULL && nhandles < 128)
