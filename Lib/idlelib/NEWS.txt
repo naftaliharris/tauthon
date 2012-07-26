@@ -1,9 +1,12 @@
-What's New in IDLE 3.2.4?
+What's New in IDLE 3.3.0?
 =========================
 
 - Issue #7163: Propagate return value of sys.stdout.write.
 
 - Issue #15318: Prevent writing to sys.stdin.
+
+- Issue #4832: Modify IDLE to save files with .py extension by
+  default on Windows and OS X (Tk 8.5) as it already does with X11 Tk.
 
 - Issue #13532, #15319: Check that arguments to sys.stdout.write are strings.
 
@@ -18,8 +21,10 @@ What's New in IDLE 3.2.4?
 - Issue #14937: Perform auto-completion of filenames in strings even for
   non-ASCII filenames. Likewise for identifiers.
 
-What's New in IDLE 3.2.3?
-=========================
+- Issue #8515: Set __file__ when run file in IDLE.
+  Initial patch by Bruce Frederiksen.
+
+- IDLE can be launched as `python -m idlelib`
 
 - Issue #14409: IDLE now properly executes commands in the Shell window
   when it cannot read the normal config files on startup and

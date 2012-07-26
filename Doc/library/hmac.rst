@@ -38,6 +38,13 @@ An HMAC object has the following methods:
    given to the constructor.  It may contain non-ASCII bytes, including NUL
    bytes.
 
+   .. warning::
+
+      When comparing the output of :meth:`digest` to an externally-supplied
+      digest during a verification routine, it is recommended to use the
+      :func:`compare_digest` function instead of the ``==`` operator
+      to reduce the vulnerability to timing attacks.
+
 
 .. method:: HMAC.hexdigest()
 
@@ -45,11 +52,39 @@ An HMAC object has the following methods:
    length containing only hexadecimal digits.  This may be used to exchange the
    value safely in email or other non-binary environments.
 
+   .. warning::
+
+      When comparing the output of :meth:`hexdigest` to an externally-supplied
+      digest during a verification routine, it is recommended to use the
+      :func:`compare_digest` function instead of the ``==`` operator
+      to reduce the vulnerability to timing attacks.
+
 
 .. method:: HMAC.copy()
 
    Return a copy ("clone") of the hmac object.  This can be used to efficiently
    compute the digests of strings that share a common initial substring.
+
+
+This module also provides the following helper function:
+
+.. function:: compare_digest(a, b)
+
+   Return ``a == b``.  This function uses an approach designed to prevent
+   timing analysis by avoiding content-based short circuiting behaviour,
+   making it appropriate for cryptography.  *a* and *b* must both be of the
+   same type: either :class:`str` (ASCII only, as e.g. returned by
+   :meth:`HMAC.hexdigest`), or any type that supports the buffer protocol
+   (e.g. :class:`bytes`).
+
+   .. note::
+
+      If *a* and *b* are of different lengths, or if an error occurs,
+      a timing attack could theoretically reveal information about the
+      types and lengths of *a* and *b*--but not their values.
+
+
+   .. versionadded:: 3.3
 
 
 .. seealso::
