@@ -7,6 +7,7 @@ extern "C" {
 #ifdef PY_SSIZE_T_CLEAN
 #define PyObject_CallFunction _PyObject_CallFunction_SizeT
 #define PyObject_CallMethod _PyObject_CallMethod_SizeT
+#define _PyObject_CallMethodId _PyObject_CallMethodId_SizeT
 #endif
 
 /* Abstract Object Interface (many thanks to Jim Fulton) */
@@ -307,10 +308,21 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
      Python expression: o.method(args).
        */
 
+     PyAPI_FUNC(PyObject *) _PyObject_CallMethodId(PyObject *o, _Py_Identifier *method,
+                                                  char *format, ...);
+
+       /*
+         Like PyObject_CallMethod, but expect a _Py_Identifier* as the
+         method name.
+       */
+
      PyAPI_FUNC(PyObject *) _PyObject_CallFunction_SizeT(PyObject *callable,
                                                          char *format, ...);
      PyAPI_FUNC(PyObject *) _PyObject_CallMethod_SizeT(PyObject *o,
                                                        char *name,
+                                                       char *format, ...);
+     PyAPI_FUNC(PyObject *) _PyObject_CallMethodId_SizeT(PyObject *o,
+                                                       _Py_Identifier *name,
                                                        char *format, ...);
 
      PyAPI_FUNC(PyObject *) PyObject_CallFunctionObjArgs(PyObject *callable,
@@ -327,6 +339,10 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(PyObject *) PyObject_CallMethodObjArgs(PyObject *o,
                                                        PyObject *method, ...);
+     PyAPI_FUNC(PyObject *) _PyObject_CallMethodObjIdArgs(PyObject *o,
+                                               struct _Py_Identifier *method,
+                                               ...);
+
 
        /*
      Call the method named m of object o with a variable number of
@@ -519,11 +535,12 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
 
 
+     /* Implementation in memoryobject.c */
      PyAPI_FUNC(int) PyBuffer_ToContiguous(void *buf, Py_buffer *view,
-                                           Py_ssize_t len, char fort);
+                                           Py_ssize_t len, char order);
 
      PyAPI_FUNC(int) PyBuffer_FromContiguous(Py_buffer *view, void *buf,
-                                             Py_ssize_t len, char fort);
+                                             Py_ssize_t len, char order);
 
 
     /* Copy len bytes of data from the contiguous chunk of memory
@@ -547,7 +564,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
     /* Copy the data from the src buffer to the buffer of destination
      */
 
-     PyAPI_FUNC(int) PyBuffer_IsContiguous(Py_buffer *view, char fort);
+     PyAPI_FUNC(int) PyBuffer_IsContiguous(const Py_buffer *view, char fort);
 
 
      PyAPI_FUNC(void) PyBuffer_FillContiguousStrides(int ndims,
@@ -759,21 +776,6 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
        */
 
      PyAPI_FUNC(Py_ssize_t) PyNumber_AsSsize_t(PyObject *o, PyObject *exc);
-
-       /*
-     Returns the Integral instance converted to an int. The
-     instance is expected to be int or long or have an __int__
-     method. Steals integral's reference. error_format will be
-     used to create the TypeError if integral isn't actually an
-     Integral instance. error_format should be a format string
-     that can accept a char* naming integral's type.
-       */
-
-#ifndef Py_LIMITED_API
-     PyAPI_FUNC(PyObject *) _PyNumber_ConvertIntegralToInt(
-         PyObject *integral,
-         const char* error_format);
-#endif
 
        /*
     Returns the object converted to Py_ssize_t by going through
@@ -1014,7 +1016,7 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(PyObject *) PySequence_Fast(PyObject *o, const char* m);
        /*
-     Returns the sequence, o, as a tuple, unless it's already a
+     Returns the sequence, o, as a list, unless it's already a
      tuple or list.  Use PySequence_Fast_GET_ITEM to access the
      members of this list, and PySequence_Fast_GET_SIZE to get its length.
 
