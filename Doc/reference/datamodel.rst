@@ -651,17 +651,20 @@ Modules
       statement: import
       object: module
 
-   Modules are imported by the :keyword:`import` statement (see section
-   :ref:`import`). A module object has a
-   namespace implemented by a dictionary object (this is the dictionary referenced
-   by the __globals__ attribute of functions defined in the module).  Attribute
-   references are translated to lookups in this dictionary, e.g., ``m.x`` is
-   equivalent to ``m.__dict__["x"]``. A module object does not contain the code
-   object used to initialize the module (since it isn't needed once the
-   initialization is done).
+   Modules are a basic organizational unit of Python code, and are created by
+   the :ref:`import system <importsystem>` as invoked either by the
+   :keyword:`import` statement (see :keyword:`import`), or by calling
+   functions such as :func:`importlib.import_module` and built-in
+   :func:`__import__`.  A module object has a namespace implemented by a
+   dictionary object (this is the dictionary referenced by the ``__globals__``
+   attribute of functions defined in the module).  Attribute references are
+   translated to lookups in this dictionary, e.g., ``m.x`` is equivalent to
+   ``m.__dict__["x"]``. A module object does not contain the code object used
+   to initialize the module (since it isn't needed once the initialization is
+   done).
 
-   Attribute assignment updates the module's namespace dictionary, e.g., ``m.x =
-   1`` is equivalent to ``m.__dict__["x"] = 1``.
+   Attribute assignment updates the module's namespace dictionary, e.g.,
+   ``m.x = 1`` is equivalent to ``m.__dict__["x"] = 1``.
 
    .. index:: single: __dict__ (module attribute)
 
@@ -683,11 +686,12 @@ Modules
 
    Predefined (writable) attributes: :attr:`__name__` is the module's name;
    :attr:`__doc__` is the module's documentation string, or ``None`` if
-   unavailable; :attr:`__file__` is the pathname of the file from which the module
-   was loaded, if it was loaded from a file. The :attr:`__file__` attribute is not
-   present for C modules that are statically linked into the interpreter; for
-   extension modules loaded dynamically from a shared library, it is the pathname
-   of the shared library file.
+   unavailable; :attr:`__file__` is the pathname of the file from which the
+   module was loaded, if it was loaded from a file. The :attr:`__file__`
+   attribute may be missing for certain types of modules, such as C modules
+   that are statically linked into the interpreter; for extension modules
+   loaded dynamically from a shared library, it is the pathname of the shared
+   library file.
 
 Custom classes
    Custom class types are typically created by class definitions (see section
