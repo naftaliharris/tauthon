@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """
 This script is used to build "official" universal installers on Mac OS X.
 It requires at least Mac OS X 10.4, Xcode 2.2 and the 10.4u SDK for
@@ -12,15 +12,24 @@ Python 2.4.
 
 Usage: see USAGE variable in the script.
 """
-import platform, os, sys, getopt, textwrap, shutil, urllib2, stat, time, pwd
-import grp
+import platform, os, sys, getopt, textwrap, shutil, stat, time, pwd, grp
+try:
+    import urllib2 as urllib_request
+except ImportError:
+    import urllib.request as urllib_request
+
+STAT_0o755 = ( stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+             | stat.S_IRGRP |                stat.S_IXGRP
+             | stat.S_IROTH |                stat.S_IXOTH )
+
+STAT_0o775 = ( stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+             | stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP
+             | stat.S_IROTH |                stat.S_IXOTH )
 
 INCLUDE_TIMESTAMP = 1
 VERBOSE = 1
 
 from plistlib import Plist
-
-import MacOS
 
 try:
     from plistlib import writePlist
@@ -42,20 +51,35 @@ def grepValue(fn, variable):
         if ln.startswith(variable):
             value = ln[len(variable):].strip()
             return value[1:-1]
-    raise RuntimeError, "Cannot find variable %s" % variable[:-1]
+    raise RuntimeError("Cannot find variable %s" % variable[:-1])
+
+_cache_getVersion = None
 
 def getVersion():
-    return grepValue(os.path.join(SRCDIR, 'configure'), 'PACKAGE_VERSION')
+    global _cache_getVersion
+    if _cache_getVersion is None:
+        _cache_getVersion = grepValue(
+            os.path.join(SRCDIR, 'configure'), 'PACKAGE_VERSION')
+    return _cache_getVersion
 
 def getVersionTuple():
     return tuple([int(n) for n in getVersion().split('.')])
 
+def getVersionMajorMinor():
+    return tuple([int(n) for n in getVersion().split('.', 2)])
+
+_cache_getFullVersion = None
+
 def getFullVersion():
+    global _cache_getFullVersion
+    if _cache_getFullVersion is not None:
+        return _cache_getFullVersion
     fn = os.path.join(SRCDIR, 'Include', 'patchlevel.h')
     for ln in open(fn):
         if 'PY_VERSION' in ln:
-            return ln.split()[-1][1:-1]
-    raise RuntimeError, "Cannot find full version??"
+            _cache_getFullVersion = ln.split()[-1][1:-1]
+            return _cache_getFullVersion
+    raise RuntimeError("Cannot find full version??")
 
 # The directory we'll use to create the build (will be erased and recreated)
 WORKDIR = "/tmp/_py"
@@ -113,8 +137,10 @@ DEPTARGET = '10.3'
 target_cc_map = {
         '10.3': 'gcc-4.0',
         '10.4': 'gcc-4.0',
-        '10.5': 'gcc-4.0',
+        '10.5': 'gcc-4.2',
         '10.6': 'gcc-4.2',
+        '10.7': 'clang',
+        '10.8': 'clang',
 }
 
 CC = target_cc_map[DEPTARGET]
@@ -135,6 +161,13 @@ USAGE = textwrap.dedent("""\
     --universal-archs=x  universal architectures (options: %(UNIVERSALOPTS)r, default: %(UNIVERSALARCHS)r)
 """)% globals()
 
+# Dict of object file names with shared library names to check after building.
+# This is to ensure that we ended up dynamically linking with the shared
+# library paths and versions we expected.  For example:
+#   EXPECTED_SHARED_LIBS['_tkinter.so'] = [
+#                       '/Library/Frameworks/Tcl.framework/Versions/8.5/Tcl',
+#                       '/Library/Frameworks/Tk.framework/Versions/8.5/Tk']
+EXPECTED_SHARED_LIBS = {}
 
 # Instructions for building libraries that are necessary for building a
 # batteries included python.
@@ -142,6 +175,17 @@ USAGE = textwrap.dedent("""\
 #    command line options have been processed.]
 def library_recipes():
     result = []
+
+    result.extend([
+          dict(
+              name="XZ 5.0.3",
+              url="http://tukaani.org/xz/xz-5.0.3.tar.gz",
+              checksum='fefe52f9ecd521de2a8ce38c21a27574',
+              configure_pre=[
+                    '--disable-dependency-tracking',
+              ]
+              )
+          ])
 
     if DEPTARGET < '10.5':
         result.extend([
@@ -326,7 +370,7 @@ def pkg_recipes():
         ),
     ]
 
-    if DEPTARGET < '10.4':
+    if DEPTARGET < '10.4' and not PYTHON_3:
         result.append(
             dict(
                 name="PythonSystemFixes",
@@ -358,7 +402,7 @@ def fileContents(fn):
     """
     Return the contents of the named file
     """
-    return open(fn, 'rb').read()
+    return open(fn, 'r').read()
 
 def runCommand(commandline):
     """
@@ -370,7 +414,7 @@ def runCommand(commandline):
     xit = fd.close()
     if xit is not None:
         sys.stdout.write(data)
-        raise RuntimeError, "command failed: %s"%(commandline,)
+        raise RuntimeError("command failed: %s"%(commandline,))
 
     if VERBOSE:
         sys.stdout.write(data); sys.stdout.flush()
@@ -381,7 +425,7 @@ def captureCommand(commandline):
     xit = fd.close()
     if xit is not None:
         sys.stdout.write(data)
-        raise RuntimeError, "command failed: %s"%(commandline,)
+        raise RuntimeError("command failed: %s"%(commandline,))
 
     return data
 
@@ -423,26 +467,39 @@ def checkEnvironment():
     # Because we only support dynamic load of only one major/minor version of
     # Tcl/Tk, ensure:
     # 1. there are no user-installed frameworks of Tcl/Tk with version
-    #       higher than the Apple-supplied system version
-    # 2. there is a user-installed framework in /Library/Frameworks with the
-    #       same version as the system version.  This allows users to choose
-    #       to install a newer patch level.
+    #       higher than the Apple-supplied system version in
+    #       SDKROOT/System/Library/Frameworks
+    # 2. there is a user-installed framework (usually ActiveTcl) in (or linked
+    #       in) SDKROOT/Library/Frameworks with the same version as the system
+    #       version. This allows users to choose to install a newer patch level.
 
+    frameworks = {}
     for framework in ['Tcl', 'Tk']:
-        #fw = dict(lower=framework.lower(),
-        #            upper=framework.upper(),
-        #            cap=framework.capitalize())
-        #fwpth = "Library/Frameworks/%(cap)s.framework/%(lower)sConfig.sh" % fw
-        fwpth = 'Library/Frameworks/Tcl.framework/Versions/Current'
+        fwpth = 'Library/Frameworks/%s.framework/Versions/Current' % framework
         sysfw = os.path.join(SDKPATH, 'System', fwpth)
-        libfw = os.path.join('/', fwpth)
+        libfw = os.path.join(SDKPATH, fwpth)
         usrfw = os.path.join(os.getenv('HOME'), fwpth)
-        #version = "%(upper)s_VERSION" % fw
+        frameworks[framework] = os.readlink(sysfw)
+        if not os.path.exists(libfw):
+            fatal("Please install a link to a current %s %s as %s so "
+                    "the user can override the system framework."
+                    % (framework, frameworks[framework], libfw))
         if os.readlink(libfw) != os.readlink(sysfw):
             fatal("Version of %s must match %s" % (libfw, sysfw) )
         if os.path.exists(usrfw):
             fatal("Please rename %s to avoid possible dynamic load issues."
                     % usrfw)
+
+    if frameworks['Tcl'] != frameworks['Tk']:
+        fatal("The Tcl and Tk frameworks are not the same version.")
+
+    # add files to check after build
+    EXPECTED_SHARED_LIBS['_tkinter.so'] = [
+            "/Library/Frameworks/Tcl.framework/Versions/%s/Tcl"
+                % frameworks['Tcl'],
+            "/Library/Frameworks/Tk.framework/Versions/%s/Tk"
+                % frameworks['Tk'],
+            ]
 
     # Remove inherited environment variables which might influence build
     environ_var_prefixes = ['CPATH', 'C_INCLUDE_', 'DYLD_', 'LANG', 'LC_',
@@ -450,12 +507,12 @@ def checkEnvironment():
     for ev in list(os.environ):
         for prefix in environ_var_prefixes:
             if ev.startswith(prefix) :
-                print "INFO: deleting environment variable %s=%s" % (
-                                                    ev, os.environ[ev])
+                print("INFO: deleting environment variable %s=%s" % (
+                                                    ev, os.environ[ev]))
                 del os.environ[ev]
 
     os.environ['PATH'] = '/bin:/sbin:/usr/bin:/usr/sbin'
-    print "Setting default PATH: %s"%(os.environ['PATH'])
+    print("Setting default PATH: %s"%(os.environ['PATH']))
 
 
 def parseOptions(args=None):
@@ -472,18 +529,18 @@ def parseOptions(args=None):
         options, args = getopt.getopt(args, '?hb',
                 [ 'build-dir=', 'third-party=', 'sdk-path=' , 'src-dir=',
                   'dep-target=', 'universal-archs=', 'help' ])
-    except getopt.error, msg:
-        print msg
+    except getopt.GetoptError:
+        print(sys.exc_info()[1])
         sys.exit(1)
 
     if args:
-        print "Additional arguments"
+        print("Additional arguments")
         sys.exit(1)
 
     deptarget = None
     for k, v in options:
         if k in ('-h', '-?', '--help'):
-            print USAGE
+            print(USAGE)
             sys.exit(0)
 
         elif k in ('-d', '--build-dir'):
@@ -511,10 +568,10 @@ def parseOptions(args=None):
                     # target
                     DEPTARGET = default_target_map.get(v, '10.3')
             else:
-                raise NotImplementedError, v
+                raise NotImplementedError(v)
 
         else:
-            raise NotImplementedError, k
+            raise NotImplementedError(k)
 
     SRCDIR=os.path.abspath(SRCDIR)
     WORKDIR=os.path.abspath(WORKDIR)
@@ -523,15 +580,15 @@ def parseOptions(args=None):
 
     CC=target_cc_map[DEPTARGET]
 
-    print "Settings:"
-    print " * Source directory:", SRCDIR
-    print " * Build directory: ", WORKDIR
-    print " * SDK location:    ", SDKPATH
-    print " * Third-party source:", DEPSRC
-    print " * Deployment target:", DEPTARGET
-    print " * Universal architectures:", ARCHLIST
-    print " * C compiler:", CC
-    print ""
+    print("Settings:")
+    print(" * Source directory:", SRCDIR)
+    print(" * Build directory: ", WORKDIR)
+    print(" * SDK location:    ", SDKPATH)
+    print(" * Third-party source:", DEPSRC)
+    print(" * Deployment target:", DEPTARGET)
+    print(" * Universal architectures:", ARCHLIST)
+    print(" * C compiler:", CC)
+    print("")
 
 
 
@@ -576,7 +633,7 @@ def extractArchive(builddir, archiveName):
         xit = fp.close()
         if xit is not None:
             sys.stdout.write(data)
-            raise RuntimeError, "Cannot extract %s"%(archiveName,)
+            raise RuntimeError("Cannot extract %s"%(archiveName,))
 
         return os.path.join(builddir, retval)
 
@@ -598,9 +655,9 @@ def downloadURL(url, fname):
         pass
     else:
         if KNOWNSIZES.get(url) == size:
-            print "Using existing file for", url
+            print("Using existing file for", url)
             return
-    fpIn = urllib2.urlopen(url)
+    fpIn = urllib_request.urlopen(url)
     fpOut = open(fname, 'wb')
     block = fpIn.read(10240)
     try:
@@ -637,15 +694,15 @@ def buildRecipe(recipe, basedir, archList):
 
 
     if os.path.exists(sourceArchive):
-        print "Using local copy of %s"%(name,)
+        print("Using local copy of %s"%(name,))
 
     else:
-        print "Did not find local copy of %s"%(name,)
-        print "Downloading %s"%(name,)
+        print("Did not find local copy of %s"%(name,))
+        print("Downloading %s"%(name,))
         downloadURL(url, sourceArchive)
-        print "Archive for %s stored as %s"%(name, sourceArchive)
+        print("Archive for %s stored as %s"%(name, sourceArchive))
 
-    print "Extracting archive for %s"%(name,)
+    print("Extracting archive for %s"%(name,))
     buildDir=os.path.join(WORKDIR, '_bld')
     if not os.path.exists(buildDir):
         os.mkdir(buildDir)
@@ -711,14 +768,14 @@ def buildRecipe(recipe, basedir, archList):
         if 'configure_env' in recipe:
             configure_args.insert(0, recipe['configure_env'])
 
-        print "Running configure for %s"%(name,)
+        print("Running configure for %s"%(name,))
         runCommand(' '.join(configure_args) + ' 2>&1')
 
-    print "Running install for %s"%(name,)
+    print("Running install for %s"%(name,))
     runCommand('{ ' + install + ' ;} 2>&1')
 
-    print "Done %s"%(name,)
-    print ""
+    print("Done %s"%(name,))
+    print("")
 
     os.chdir(curdir)
 
@@ -726,9 +783,9 @@ def buildLibraries():
     """
     Build our dependencies into $WORKDIR/libraries/usr/local
     """
-    print ""
-    print "Building required libraries"
-    print ""
+    print("")
+    print("Building required libraries")
+    print("")
     universal = os.path.join(WORKDIR, 'libraries')
     os.mkdir(universal)
     os.makedirs(os.path.join(universal, 'usr', 'local', 'lib'))
@@ -742,7 +799,7 @@ def buildLibraries():
 def buildPythonDocs():
     # This stores the documentation as Resources/English.lproj/Documentation
     # inside the framwork. pydoc and IDLE will pick it up there.
-    print "Install python documentation"
+    print("Install python documentation")
     rootDir = os.path.join(WORKDIR, '_root')
     buildDir = os.path.join('../../Doc')
     docdir = os.path.join(rootDir, 'pydocs')
@@ -757,7 +814,7 @@ def buildPythonDocs():
 
 
 def buildPython():
-    print "Building a universal python for %s architectures" % UNIVERSALARCHS
+    print("Building a universal python for %s architectures" % UNIVERSALARCHS)
 
     buildDir = os.path.join(WORKDIR, '_bld', 'python')
     rootDir = os.path.join(WORKDIR, '_root')
@@ -785,7 +842,7 @@ def buildPython():
     # will find them during its extension import sanity checks.
     os.environ['DYLD_LIBRARY_PATH'] = os.path.join(WORKDIR,
                                         'libraries', 'usr', 'local', 'lib')
-    print "Running configure..."
+    print("Running configure...")
     runCommand("%s -C --enable-framework --enable-universalsdk=%s "
                "--with-universal-archs=%s "
                "%s "
@@ -797,19 +854,19 @@ def buildPython():
         shellQuote(WORKDIR)[1:-1],
         shellQuote(WORKDIR)[1:-1]))
 
-    print "Running make"
+    print("Running make")
     runCommand("make")
 
-    print "Running make install"
+    print("Running make install")
     runCommand("make install DESTDIR=%s"%(
         shellQuote(rootDir)))
 
-    print "Running make frameworkinstallextras"
+    print("Running make frameworkinstallextras")
     runCommand("make frameworkinstallextras DESTDIR=%s"%(
         shellQuote(rootDir)))
 
     del os.environ['DYLD_LIBRARY_PATH']
-    print "Copying required shared libraries"
+    print("Copying required shared libraries")
     if os.path.exists(os.path.join(WORKDIR, 'libraries', 'Library')):
         runCommand("mv %s/* %s"%(
             shellQuote(os.path.join(
@@ -820,15 +877,15 @@ def buildPython():
                 'Python.framework', 'Versions', getVersion(),
                 'lib'))))
 
-    print "Fix file modes"
+    print("Fix file modes")
     frmDir = os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework')
     gid = grp.getgrnam('admin').gr_gid
 
+    shared_lib_error = False
     for dirpath, dirnames, filenames in os.walk(frmDir):
         for dn in dirnames:
-            os.chmod(os.path.join(dirpath, dn), 0775)
+            os.chmod(os.path.join(dirpath, dn), STAT_0o775)
             os.chown(os.path.join(dirpath, dn), -1, gid)
-
 
         for fn in filenames:
             if os.path.islink(fn):
@@ -839,6 +896,19 @@ def buildPython():
             st = os.stat(p)
             os.chmod(p, stat.S_IMODE(st.st_mode) | stat.S_IWGRP)
             os.chown(p, -1, gid)
+
+            if fn in EXPECTED_SHARED_LIBS:
+                # check to see that this file was linked with the
+                # expected library path and version
+                data = captureCommand("otool -L %s" % shellQuote(p))
+                for sl in EXPECTED_SHARED_LIBS[fn]:
+                    if ("\t%s " % sl) not in data:
+                        print("Expected shared lib %s was not linked with %s"
+                                % (sl, p))
+                        shared_lib_error = True
+
+    if shared_lib_error:
+        fatal("Unexpected shared library errors.")
 
     if PYTHON_3:
         LDVERSION=None
@@ -863,19 +933,26 @@ def buildPython():
 
     # We added some directories to the search path during the configure
     # phase. Remove those because those directories won't be there on
-    # the end-users system.
-    path =os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework',
-                'Versions', version, 'lib', 'python%s'%(version,),
-                'config' + config_suffix, 'Makefile')
-    fp = open(path, 'r')
-    data = fp.read()
-    fp.close()
+    # the end-users system. Also remove the directories from _sysconfigdata.py
+    # (added in 3.3) if it exists.
 
-    data = data.replace('-L%s/libraries/usr/local/lib'%(WORKDIR,), '')
-    data = data.replace('-I%s/libraries/usr/local/include'%(WORKDIR,), '')
-    fp = open(path, 'w')
-    fp.write(data)
-    fp.close()
+    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
+                                'Python.framework', 'Versions',
+                                version, 'lib', 'python%s'%(version,))
+    paths = [os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile'),
+             os.path.join(path_to_lib, '_sysconfigdata.py')]
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+        fp = open(path, 'r')
+        data = fp.read()
+        fp.close()
+
+        data = data.replace(' -L%s/libraries/usr/local/lib'%(WORKDIR,), '')
+        data = data.replace(' -I%s/libraries/usr/local/include'%(WORKDIR,), '')
+        fp = open(path, 'w')
+        fp.write(data)
+        fp.close()
 
     # Add symlinks in /usr/local/bin, using relative links
     usr_local_bin = os.path.join(rootDir, 'usr', 'local', 'bin')
@@ -907,17 +984,17 @@ def patchFile(inPath, outPath):
 
     # This one is not handy as a template variable
     data = data.replace('$PYTHONFRAMEWORKINSTALLDIR', '/Library/Frameworks/Python.framework')
-    fp = open(outPath, 'wb')
+    fp = open(outPath, 'w')
     fp.write(data)
     fp.close()
 
 def patchScript(inPath, outPath):
     data = fileContents(inPath)
     data = data.replace('@PYVER@', getVersion())
-    fp = open(outPath, 'wb')
+    fp = open(outPath, 'w')
     fp.write(data)
     fp.close()
-    os.chmod(outPath, 0755)
+    os.chmod(outPath, STAT_0o755)
 
 
 
@@ -934,7 +1011,7 @@ def packageFromRecipe(targetDir, recipe):
         readme = textwrap.dedent(recipe['readme'])
         isRequired = recipe.get('required', True)
 
-        print "- building package %s"%(pkgname,)
+        print("- building package %s"%(pkgname,))
 
         # Substitute some variables
         textvars = dict(
@@ -979,7 +1056,7 @@ def packageFromRecipe(targetDir, recipe):
             patchScript(postflight, os.path.join(rsrcDir, 'postflight'))
 
         vers = getFullVersion()
-        major, minor = map(int, getVersion().split('.', 2))
+        major, minor = getVersionMajorMinor()
         pl = Plist(
                 CFBundleGetInfoString="Python.%s %s"%(pkgname, vers,),
                 CFBundleIdentifier='org.python.Python.%s'%(pkgname,),
@@ -1016,7 +1093,7 @@ def packageFromRecipe(targetDir, recipe):
 def makeMpkgPlist(path):
 
     vers = getFullVersion()
-    major, minor = map(int, getVersion().split('.', 2))
+    major, minor = getVersionMajorMinor()
 
     pl = Plist(
             CFBundleGetInfoString="Python %s"%(vers,),
@@ -1198,7 +1275,7 @@ def main():
 
     folder = os.path.join(WORKDIR, "_root", "Applications", "Python %s"%(
         getVersion(),))
-    os.chmod(folder, 0755)
+    os.chmod(folder, STAT_0o755)
     setIcon(folder, "../Icons/Python Folder.icns")
 
     # Create the installer
@@ -1211,9 +1288,9 @@ def main():
     shutil.copy('../../LICENSE', os.path.join(WORKDIR, 'installer', 'License.txt'))
 
     fp = open(os.path.join(WORKDIR, 'installer', 'Build.txt'), 'w')
-    print >> fp, "# BUILD INFO"
-    print >> fp, "# Date:", time.ctime()
-    print >> fp, "# By:", pwd.getpwuid(os.getuid()).pw_gecos
+    fp.write("# BUILD INFO\n")
+    fp.write("# Date: %s\n" % time.ctime())
+    fp.write("# By: %s\n" % pwd.getpwuid(os.getuid()).pw_gecos)
     fp.close()
 
     # And copy it to a DMG
