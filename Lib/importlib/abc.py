@@ -1,16 +1,26 @@
 """Abstract base classes related to import."""
 from . import _bootstrap
 from . import machinery
-from . import util
+try:
+    import _frozen_importlib
+except ImportError as exc:
+    if exc.name != '_frozen_importlib':
+        raise
+    _frozen_importlib = None
 import abc
 import imp
-import io
 import marshal
-import os.path
 import sys
 import tokenize
-import types
 import warnings
+
+
+def _register(abstract_cls, *classes):
+    for cls in classes:
+        abstract_cls.register(cls)
+        if _frozen_importlib is not None:
+            frozen_cls = getattr(_frozen_importlib, cls.__name__)
+            abstract_cls.register(frozen_cls)
 
 
 class Loader(metaclass=abc.ABCMeta):
@@ -23,22 +33,38 @@ class Loader(metaclass=abc.ABCMeta):
         The fullname is a str."""
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def module_repr(self, module):
+        """Abstract method which when implemented calculates and returns the
+        given module's repr."""
+        raise NotImplementedError
+
 
 class Finder(metaclass=abc.ABCMeta):
 
     """Abstract base class for import finders."""
 
     @abc.abstractmethod
-    def find_module(self, fullname, path=None):
-        """Abstract method which when implemented should find a module.
-        The fullname is a str and the optional path is a str or None.
-        Returns a Loader object.
+    def find_loader(self, fullname):
+        """Abstract method which when implemented returns a module loader.
+        The fullname is a str.  Returns a 2-tuple of (Loader, portion) where
+        portion is a sequence of file system locations contributing to part of
+        a namespace package.  The sequence may be empty.  When present,
+        `find_loader()` is preferred over `find_module()`.
         """
         raise NotImplementedError
 
-Finder.register(machinery.BuiltinImporter)
-Finder.register(machinery.FrozenImporter)
-Finder.register(machinery.PathFinder)
+    @abc.abstractmethod
+    def find_module(self, fullname, path=None):
+        """Abstract method which when implemented should find a module.
+        The fullname is a str and the optional path is a str or None.
+        Returns a Loader object.  This method is only called if
+        `find_loader()` is not present.
+        """
+        raise NotImplementedError
+
+_register(Finder, machinery.BuiltinImporter, machinery.FrozenImporter,
+          machinery.PathFinder, machinery.FileFinder)
 
 
 class ResourceLoader(Loader):
@@ -84,8 +110,8 @@ class InspectLoader(Loader):
         module.  The fullname is a str.  Returns a str."""
         raise NotImplementedError
 
-InspectLoader.register(machinery.BuiltinImporter)
-InspectLoader.register(machinery.FrozenImporter)
+_register(InspectLoader, machinery.BuiltinImporter, machinery.FrozenImporter,
+            machinery.ExtensionFileLoader)
 
 
 class ExecutionLoader(InspectLoader):
@@ -102,6 +128,15 @@ class ExecutionLoader(InspectLoader):
         """Abstract method which should return the value that __file__ is to be
         set to."""
         raise NotImplementedError
+
+
+class FileLoader(_bootstrap.FileLoader, ResourceLoader, ExecutionLoader):
+
+    """Abstract base class partially implementing the ResourceLoader and
+    ExecutionLoader ABCs."""
+
+_register(FileLoader, machinery.SourceFileLoader,
+            machinery.SourcelessFileLoader)
 
 
 class SourceLoader(_bootstrap.SourceLoader, ResourceLoader, ExecutionLoader):
@@ -123,7 +158,20 @@ class SourceLoader(_bootstrap.SourceLoader, ResourceLoader, ExecutionLoader):
 
     def path_mtime(self, path):
         """Return the (int) modification time for the path (str)."""
-        raise NotImplementedError
+        if self.path_stats.__func__ is SourceLoader.path_stats:
+            raise NotImplementedError
+        return int(self.path_stats(path)['mtime'])
+
+    def path_stats(self, path):
+        """Return a metadata dict for the source pointed to by the path (str).
+        Possible keys:
+        - 'mtime' (mandatory) is the numeric timestamp of last source
+          code modification;
+        - 'size' (optional) is the size in bytes of the source code.
+        """
+        if self.path_mtime.__func__ is SourceLoader.path_mtime:
+            raise NotImplementedError
+        return {'mtime': self.path_mtime(path)}
 
     def set_data(self, path, data):
         """Write the bytes to the path (if possible).
@@ -137,6 +185,7 @@ class SourceLoader(_bootstrap.SourceLoader, ResourceLoader, ExecutionLoader):
         """
         raise NotImplementedError
 
+_register(SourceLoader, machinery.SourceFileLoader)
 
 class PyLoader(SourceLoader):
 
@@ -195,10 +244,10 @@ class PyLoader(SourceLoader):
                             "use SourceLoader instead. "
                             "See the importlib documentation on how to be "
                             "compatible with Python 3.1 onwards.",
-                        PendingDeprecationWarning)
+                        DeprecationWarning)
         path = self.source_path(fullname)
         if path is None:
-            raise ImportError
+            raise ImportError(name=fullname)
         else:
             return path
 
@@ -226,7 +275,7 @@ class PyPycLoader(PyLoader):
         if path is not None:
             return path
         raise ImportError("no source or bytecode path available for "
-                            "{0!r}".format(fullname))
+                            "{0!r}".format(fullname), name=fullname)
 
     def get_code(self, fullname):
         """Get a code object from source or bytecode."""
@@ -234,7 +283,7 @@ class PyPycLoader(PyLoader):
                             "removal in Python 3.4; use SourceLoader instead. "
                             "If Python 3.1 compatibility is required, see the "
                             "latest documentation for PyLoader.",
-                        PendingDeprecationWarning)
+                        DeprecationWarning)
         source_timestamp = self.source_mtime(fullname)
         # Try to use bytecode if it is available.
         bytecode_path = self.bytecode_path(fullname)
@@ -243,20 +292,30 @@ class PyPycLoader(PyLoader):
             try:
                 magic = data[:4]
                 if len(magic) < 4:
-                    raise ImportError("bad magic number in {}".format(fullname))
+                    raise ImportError(
+                        "bad magic number in {}".format(fullname),
+                        name=fullname, path=bytecode_path)
                 raw_timestamp = data[4:8]
                 if len(raw_timestamp) < 4:
                     raise EOFError("bad timestamp in {}".format(fullname))
-                pyc_timestamp = marshal._r_long(raw_timestamp)
-                bytecode = data[8:]
+                pyc_timestamp = _bootstrap._r_long(raw_timestamp)
+                raw_source_size = data[8:12]
+                if len(raw_source_size) != 4:
+                    raise EOFError("bad file size in {}".format(fullname))
+                # Source size is unused as the ABC does not provide a way to
+                # get the size of the source ahead of reading it.
+                bytecode = data[12:]
                 # Verify that the magic number is valid.
                 if imp.get_magic() != magic:
-                    raise ImportError("bad magic number in {}".format(fullname))
+                    raise ImportError(
+                        "bad magic number in {}".format(fullname),
+                        name=fullname, path=bytecode_path)
                 # Verify that the bytecode is not stale (only matters when
                 # there is source to fall back on.
                 if source_timestamp:
                     if pyc_timestamp < source_timestamp:
-                        raise ImportError("bytecode is stale")
+                        raise ImportError("bytecode is stale", name=fullname,
+                                          path=bytecode_path)
             except (ImportError, EOFError):
                 # If source is available give it a shot.
                 if source_timestamp is not None:
@@ -268,18 +327,20 @@ class PyPycLoader(PyLoader):
                 return marshal.loads(bytecode)
         elif source_timestamp is None:
             raise ImportError("no source or bytecode available to create code "
-                                "object for {0!r}".format(fullname))
+                              "object for {0!r}".format(fullname),
+                              name=fullname)
         # Use the source.
         source_path = self.source_path(fullname)
         if source_path is None:
             message = "a source path must exist to load {0}".format(fullname)
-            raise ImportError(message)
+            raise ImportError(message, name=fullname)
         source = self.get_data(source_path)
         code_object = compile(source, source_path, 'exec', dont_inherit=True)
         # Generate bytecode and write it out.
         if not sys.dont_write_bytecode:
             data = bytearray(imp.get_magic())
-            data.extend(marshal._w_long(source_timestamp))
+            data.extend(_bootstrap._w_long(source_timestamp))
+            data.extend(_bootstrap._w_long(len(source) & 0xFFFFFFFF))
             data.extend(marshal.dumps(code_object))
             self.write_bytecode(fullname, data)
         return code_object
