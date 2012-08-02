@@ -34,7 +34,7 @@ Glossary
       subclasses, which are classes that don't inherit from a class but are
       still recognized by :func:`isinstance` and :func:`issubclass`; see the
       :mod:`abc` module documentation.  Python comes with many built-in ABCs for
-      data structures (in the :mod:`collections` module), numbers (in the
+      data structures (in the :mod:`collections.abc` module), numbers (in the
       :mod:`numbers` module), streams (in the :mod:`io` module), import finders
       and loaders (in the :mod:`importlib.abc` module).  You can create your own
       ABCs with the :mod:`abc` module.
@@ -209,9 +209,9 @@ Glossary
 
    finder
       An object that tries to find the :term:`loader` for a module. It must
-      implement a method named :meth:`find_module`. See :pep:`302` for
-      details and :class:`importlib.abc.Finder` for an
-      :term:`abstract base class`.
+      implement either a method named :meth:`find_loader` or a method named
+      :meth:`find_module`. See :pep:`302` and :pep:`420` for details and
+      :class:`importlib.abc.Finder` for an :term:`abstract base class`.
 
    floor division
       Mathematical division that rounds down to nearest integer.  The floor
@@ -314,6 +314,17 @@ Glossary
       be created if a different value has to be stored.  They play an important
       role in places where a constant hash value is needed, for example as a key
       in a dictionary.
+
+   import path
+      A list of locations (or :term:`path entries <path entry>`) that are
+      searched by the :term:`path importer` for modules to import.  During
+      import, this list of locations usually comes from :data:`sys.path`, but
+      for subpackages it may also come from the parent package's ``__path__``
+      attribute.
+
+   importing
+      The process by which Python code in one module is made available to
+      Python code in another module.
 
    importer
       An object that both finds and loads a module; both a
@@ -434,11 +445,16 @@ Glossary
 
    mapping
       A container object that supports arbitrary key lookups and implements the
-      methods specified in the :class:`~collections.Mapping` or
-      :class:`~collections.MutableMapping`
+      methods specified in the :class:`~collections.abc.Mapping` or
+      :class:`~collections.abc.MutableMapping`
       :ref:`abstract base classes <collections-abstract-base-classes>`.  Examples
       include :class:`dict`, :class:`collections.defaultdict`,
       :class:`collections.OrderedDict` and :class:`collections.Counter`.
+
+   meta path finder
+      A finder returned by a search of :data:`sys.meta_path`.  Meta path
+      finders are related to, but different from :term:`path entry finders
+      <path entry finder>`.
 
    metaclass
       The class of a class.  Class definitions create a class name, a class
@@ -463,6 +479,11 @@ Glossary
       Method Resolution Order is the order in which base classes are searched
       for a member during lookup. See `The Python 2.3 Method Resolution Order
       <http://www.python.org/download/releases/2.3/mro/>`_.
+
+   module
+      An object that serves as an organizational unit of Python code.  Modules
+      have a namespace containing arbitrary Python objects.  Modules are loaded
+      into Python by the process of :term:`importing`.
 
    MRO
       See :term:`method resolution order`.
@@ -496,6 +517,12 @@ Glossary
       functions are implemented by the :mod:`random` and :mod:`itertools`
       modules, respectively.
 
+   namespace package
+      A :pep:`420` :term:`package` which serves only as a container for
+      subpackages.  Namespace packages may have no physical representation,
+      and specifically are not like a :term:`regular package` because they
+      have no ``__init__.py`` file.
+
    nested scope
       The ability to refer to a variable in an enclosing definition.  For
       instance, a function defined inside another function can refer to
@@ -516,6 +543,33 @@ Glossary
       (methods).  Also the ultimate base class of any :term:`new-style
       class`.
 
+   package
+      A Python module which can contain submodules or recursively,
+      subpackages.  Technically, a package is a Python module with an
+      ``__path__`` attribute.
+
+   path entry
+      A single location on the :term:`import path` which the :term:`path
+      importer` consults to find modules for importing.
+
+   path entry finder
+      A :term:`finder` returned by a callable on :data:`sys.path_hooks`
+      (i.e. a :term:`path entry hook`) which knows how to locate modules given
+      a :term:`path entry`.
+
+   path entry hook
+      A callable on the :data:`sys.path_hook` list which returns a :term:`path
+      entry finder` if it knows how to find modules on a specific :term:`path
+      entry`.
+
+   path importer
+      One of the default :term:`meta path finders <meta path finder>` which
+      searches an :term:`import path` for modules.
+
+   portion
+      A set of files in a single directory (possibly stored in a zip file)
+      that contribute to a namespace package, as defined in :pep:`420`.
+
    positional argument
       The arguments assigned to local names inside a function or method,
       determined by the order in which they were given in the call.  ``*`` is
@@ -523,9 +577,23 @@ Glossary
       definition), or pass several arguments as a list to a function.  See
       :term:`argument`.
 
+   provisional package
+      A provisional package is one which has been deliberately excluded from
+      the standard library's backwards compatibility guarantees.  While major
+      changes to such packages are not expected, as long as they are marked
+      provisional, backwards incompatible changes (up to and including removal
+      of the package) may occur if deemed necessary by core developers.  Such
+      changes will not be made gratuitously -- they will occur only if serious
+      flaws are uncovered that were missed prior to the inclusion of the
+      package.
+
+      This process allows the standard library to continue to evolve over
+      time, without locking in problematic design errors for extended periods
+      of time.  See :pep:`411` for more details.
+
    Python 3000
-      Nickname for the Python 3.x release line (coined long ago when the release
-      of version 3 was something in the distant future.)  This is also
+      Nickname for the Python 3.x release line (coined long ago when the
+      release of version 3 was something in the distant future.)  This is also
       abbreviated "Py3k".
 
    Pythonic
@@ -544,6 +612,32 @@ Glossary
          for piece in food:
              print(piece)
 
+   qualified name
+      A dotted name showing the "path" from a module's global scope to a
+      class, function or method defined in that module, as defined in
+      :pep:`3155`.  For top-level functions and classes, the qualified name
+      is the same as the object's name::
+
+         >>> class C:
+         ...     class D:
+         ...         def meth(self):
+         ...             pass
+         ...
+         >>> C.__qualname__
+         'C'
+         >>> C.D.__qualname__
+         'C.D'
+         >>> C.D.meth.__qualname__
+         'C.D.meth'
+
+      When used to refer to modules, the *fully qualified name* means the
+      entire dotted path to the module, including any parent packages,
+      e.g. ``email.mime.text``::
+
+         >>> import email.mime.text
+         >>> email.mime.text.__name__
+         'email.mime.text'
+
    reference count
       The number of references to an object.  When the reference count of an
       object drops to zero, it is deallocated.  Reference counting is
@@ -551,6 +645,10 @@ Glossary
       :term:`CPython` implementation.  The :mod:`sys` module defines a
       :func:`~sys.getrefcount` function that programmers can call to return the
       reference count for a particular object.
+
+   regular package
+      A traditional :term:`package`, such as a directory containing an
+      ``__init__.py`` file.
 
    __slots__
       A declaration inside a class that saves memory by pre-declaring space for
@@ -585,6 +683,14 @@ Glossary
       A statement is part of a suite (a "block" of code).  A statement is either
       an :term:`expression` or a one of several constructs with a keyword, such
       as :keyword:`if`, :keyword:`while` or :keyword:`for`.
+
+   struct sequence
+      A tuple with named elements. Struct sequences expose an interface similar
+      to :term:`named tuple` in that elements can either be accessed either by
+      index or as an attribute. However, they do not have any of the named tuple
+      methods like :meth:`~collections.somenamedtuple._make` or
+      :meth:`~collections.somenamedtuple._asdict`. Examples of struct sequences
+      include :data:`sys.float_info` and the return value of :func:`os.stat`.
 
    triple-quoted string
       A string which is bound by three instances of either a quotation mark
