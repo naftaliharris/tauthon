@@ -16,7 +16,14 @@ import can be suppressed using the interpreter's :option:`-S` option.
 .. index:: triple: module; search; path
 
 Importing this module will append site-specific paths to the module search path
-and add a few builtins.
+and add a few builtins, unless :option:`-S` was used.  In that case, this module
+can be safely imported with no automatic modifications to the module search path
+or additions to the builtins.  To explicitly trigger the usual site-specific
+additions, call the :func:`site.main` function.
+
+.. versionchanged:: 3.3
+   Importing the module used to trigger paths manipulation even when using
+   :option:`-S`.
 
 .. index::
    pair: site-python; directory
@@ -30,6 +37,15 @@ are skipped.  For the tail part, it uses the empty string and then
 Unix and Macintosh).  For each of the distinct head-tail combinations, it sees
 if it refers to an existing directory, and if so, adds it to ``sys.path`` and
 also inspects the newly added path for configuration files.
+
+If a file named "pyvenv.cfg" exists one directory above sys.executable,
+sys.prefix and sys.exec_prefix are set to that directory and
+it is also checked for site-packages and site-python (sys.base_prefix and
+sys.base_exec_prefix will always be the "real" prefixes of the Python
+installation). If "pyvenv.cfg" (a bootstrap configuration file) contains
+the key "include-system-site-packages" set to anything other than "false"
+(case-insensitive), the system-level prefixes will still also be
+searched for site-packages; otherwise they won't.
 
 A path configuration file is a file whose name has the form :file:`{name}.pth`
 and exists in one of the four directories mentioned above; its contents are
@@ -129,8 +145,19 @@ empty, and the path manipulations are skipped; however the import of
    :file:`~/Library/Python/{X.Y}` for Mac framework builds, and
    :file:`{%APPDATA%}\\Python` for Windows.  This value is used by Distutils to
    compute the installation directories for scripts, data files, Python modules,
-   etc. for the :ref:`user installation scheme <inst-alt-install-user>`.  See
-   also :envvar:`PYTHONUSERBASE`.
+   etc. for the :ref:`user installation scheme <inst-alt-install-user>`.
+   See also :envvar:`PYTHONUSERBASE`.
+
+
+.. function:: main()
+
+   Adds all the standard site-specific directories to the module search
+   path.  This function is called automatically when this module is imported,
+   unless the :program:`python` interpreter was started with the :option:`-S`
+   flag.
+
+   .. versionchanged:: 3.3
+      This function used to be called unconditionnally.
 
 
 .. function:: addsitedir(sitedir, known_paths=None)
