@@ -47,7 +47,7 @@ def link(source, target):
 
     s = os.open(source, os.O_RDONLY | os.O_BINARY)
     if os.isatty(s):
-        raise OSError(errno.EXDEV, 'Cross-device link')
+        raise OSError, (errno.EXDEV, 'Cross-device link')
     data = os.read(s, 1024)
 
     try:
@@ -74,6 +74,6 @@ if __name__ == '__main__':
     try:
         link(sys.argv[1], sys.argv[2])
     except IndexError:
-        print('Usage: emx_link <source> <target>')
+        print 'Usage: emx_link <source> <target>'
     except OSError:
-        print('emx_link: %s' % str(sys.exc_info()[1]))
+        print 'emx_link: %s' % str(sys.exc_info()[1])

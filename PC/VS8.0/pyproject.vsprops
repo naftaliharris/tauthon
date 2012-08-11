@@ -38,7 +38,7 @@
 	/>
 	<UserMacro
 		Name="PyDllName"
-		Value="python32"
+		Value="python27"
 	/>
 	<UserMacro
 		Name="PythonExe"
@@ -49,16 +49,40 @@
 		Value="..\..\.."
 	/>
 	<UserMacro
+		Name="bsddb47Dir"
+		Value="$(externalsDir)\db-4.7.25.0\build_windows"
+	/>
+	<UserMacro
+		Name="bsddb47DepLibs"
+		Value="ws2_32.lib"
+	/>
+	<UserMacro
+		Name="bsddbDir"
+		Value="$(bsddb47Dir)"
+	/>
+	<UserMacro
+		Name="bsddbDepLibs"
+		Value="$(bsddb47DepLibs)"
+	/>
+	<UserMacro
+		Name="bsddb44Dir"
+		Value="$(externalsDir)\db-4.4.20\build_win32"
+	/>
+	<UserMacro
+		Name="bsddb44DepLibs"
+		Value=""
+	/>
+	<UserMacro
 		Name="sqlite3Dir"
 		Value="$(externalsDir)\sqlite-3.6.21"
 	/>
 	<UserMacro
 		Name="bz2Dir"
-		Value="$(externalsDir)\bzip2-1.0.5"
+		Value="$(externalsDir)\bzip2-1.0.6"
 	/>
 	<UserMacro
 		Name="opensslDir"
-		Value="$(externalsDir)\openssl-1.0.0a"
+		Value="$(externalsDir)\openssl-0.9.8x"
 	/>
 	<UserMacro
 		Name="tcltkDir"

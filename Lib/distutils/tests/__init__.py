@@ -15,7 +15,7 @@ by import rather than matching pre-defined names.
 import os
 import sys
 import unittest
-from test.support import run_unittest
+from test.test_support import run_unittest
 
 
 here = os.path.dirname(__file__) or os.curdir

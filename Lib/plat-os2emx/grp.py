@@ -58,11 +58,11 @@ import os
 
 # try and find the group file
 __group_path = []
-if 'ETC_GROUP' in os.environ:
+if os.environ.has_key('ETC_GROUP'):
     __group_path.append(os.environ['ETC_GROUP'])
-if 'ETC' in os.environ:
+if os.environ.has_key('ETC'):
     __group_path.append('%s/group' % os.environ['ETC'])
-if 'PYTHONHOME' in os.environ:
+if os.environ.has_key('PYTHONHOME'):
     __group_path.append('%s/Etc/group' % os.environ['PYTHONHOME'])
 
 group_file = None
@@ -94,7 +94,7 @@ def __get_field_sep(record):
     if fs:
         return fs
     else:
-        raise KeyError('>> group database fields not delimited <<')
+        raise KeyError, '>> group database fields not delimited <<'
 
 # class to match the new record field name accessors.
 # the resulting object is intended to behave like a read-only tuple,
@@ -136,7 +136,7 @@ def __read_group_file():
     if group_file:
         group = open(group_file, 'r')
     else:
-        raise KeyError('>> no group database <<')
+        raise KeyError, '>> no group database <<'
     gidx = {}
     namx = {}
     sep = None
@@ -149,9 +149,9 @@ def __read_group_file():
             fields[2] = int(fields[2])
             fields[3] = [f.strip() for f in fields[3].split(',')]
             record = Group(*fields)
-            if fields[2] not in gidx:
+            if not gidx.has_key(fields[2]):
                 gidx[fields[2]] = record
-            if fields[0] not in namx:
+            if not namx.has_key(fields[0]):
                 namx[fields[0]] = record
         elif len(entry) > 0:
             pass                         # skip empty or malformed records

@@ -1,32 +1,51 @@
 """Codec for quoted-printable encoding.
 
-This codec de/encodes from bytes to bytes and is therefore usable with
-bytes.transform() and bytes.untransform().
+Like base64 and rot13, this returns Python strings, not Unicode.
 """
 
-import codecs
-import quopri
-from io import BytesIO
+import codecs, quopri
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 def quopri_encode(input, errors='strict'):
+    """Encode the input, returning a tuple (output object, length consumed).
+
+    errors defines the error handling to apply. It defaults to
+    'strict' handling which is the only currently supported
+    error handling for this codec.
+
+    """
     assert errors == 'strict'
-    f = BytesIO(input)
-    g = BytesIO()
+    # using str() because of cStringIO's Unicode undesired Unicode behavior.
+    f = StringIO(str(input))
+    g = StringIO()
     quopri.encode(f, g, 1)
-    return (g.getvalue(), len(input))
+    output = g.getvalue()
+    return (output, len(input))
 
 def quopri_decode(input, errors='strict'):
+    """Decode the input, returning a tuple (output object, length consumed).
+
+    errors defines the error handling to apply. It defaults to
+    'strict' handling which is the only currently supported
+    error handling for this codec.
+
+    """
     assert errors == 'strict'
-    f = BytesIO(input)
-    g = BytesIO()
+    f = StringIO(str(input))
+    g = StringIO()
     quopri.decode(f, g)
-    return (g.getvalue(), len(input))
+    output = g.getvalue()
+    return (output, len(input))
 
 class Codec(codecs.Codec):
-    def encode(self, input, errors='strict'):
-        return quopri_encode(input, errors)
-    def decode(self, input, errors='strict'):
-        return quopri_decode(input, errors)
+
+    def encode(self, input,errors='strict'):
+        return quopri_encode(input,errors)
+    def decode(self, input,errors='strict'):
+        return quopri_decode(input,errors)
 
 class IncrementalEncoder(codecs.IncrementalEncoder):
     def encode(self, input, final=False):
@@ -37,10 +56,10 @@ class IncrementalDecoder(codecs.IncrementalDecoder):
         return quopri_decode(input, self.errors)[0]
 
 class StreamWriter(Codec, codecs.StreamWriter):
-    charbuffertype = bytes
+    pass
 
-class StreamReader(Codec, codecs.StreamReader):
-    charbuffertype = bytes
+class StreamReader(Codec,codecs.StreamReader):
+    pass
 
 # encodings module API
 

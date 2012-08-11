@@ -1,3 +1,4 @@
+
 :mod:`ossaudiodev` --- Access to OSS-compatible audio devices
 =============================================================
 
@@ -5,6 +6,8 @@
    :platform: Linux, FreeBSD
    :synopsis: Access to OSS-compatible audio devices.
 
+
+.. versionadded:: 2.3
 
 This module allows you to access the OSS (Open Sound System) audio interface.
 OSS is available for a wide range of open-source and commercial Unices, and is
@@ -14,7 +17,7 @@ the standard audio interface for Linux and recent versions of FreeBSD.
    ALSA is in the standard kernel as of 2.5.x.  Presumably if you
    use ALSA, you'll have to make sure its OSS compatibility layer
    is active to use ossaudiodev, but you're gonna need it for the vast
-   majority of Linux audio apps anyways.
+   majority of Linux audio apps anyway.
 
    Sounds like things are also complicated for other BSDs.  In response
    to my python-dev query, Thomas Wouters said:
@@ -159,11 +162,6 @@ and (read-only) attributes:
    is only useful in non-blocking mode.  Has no return value, since the amount of
    data written is always equal to the amount of data supplied.
 
-.. versionchanged:: 3.2
-   Audio device objects also support the context manager protocol, i.e. they can
-   be used in a :keyword:`with` statement.
-
-
 The following methods each map to exactly one :func:`ioctl` system call.  The
 correspondence is obvious: for example, :meth:`setfmt` corresponds to the
 ``SNDCTL_DSP_SETFMT`` ioctl, and :meth:`sync` to ``SNDCTL_DSP_SYNC`` (this can
@@ -277,7 +275,7 @@ The following convenience methods combine several ioctls, or one ioctl and some
 simple calculations.
 
 
-.. method:: oss_audio_device.setparameters(format, nchannels, samplerate [, strict=False])
+.. method:: oss_audio_device.setparameters(format, nchannels, samplerate[, strict=False])
 
    Set the key audio sampling parameters---sample format, number of channels, and
    sampling rate---in one method call.  *format*,  *nchannels*, and *samplerate*
@@ -350,10 +348,6 @@ The mixer object provides two file-like methods:
 .. method:: oss_mixer_device.fileno()
 
    Returns the file handle number of the open mixer device file.
-
-.. versionchanged:: 3.2
-   Mixer objects also support the context manager protocol.
-
 
 The remaining methods are specific to audio mixing:
 

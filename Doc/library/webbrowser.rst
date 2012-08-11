@@ -61,6 +61,9 @@ The following functions are defined:
    may work and start the operating system's associated program.  However, this
    is neither supported nor portable.
 
+   .. versionchanged:: 2.5
+      *new* can now be 2.
+
 
 .. function:: open_new(url)
 
@@ -72,15 +75,17 @@ The following functions are defined:
    Open *url* in a new page ("tab") of the default browser, if possible, otherwise
    equivalent to :func:`open_new`.
 
-
-.. function:: get(using=None)
-
-   Return a controller object for the browser type *using*.  If *using* is
-   ``None``, return a controller for a default browser appropriate to the
-   caller's environment.
+   .. versionadded:: 2.5
 
 
-.. function:: register(name, constructor, instance=None)
+.. function:: get([name])
+
+   Return a controller object for the browser type *name*.  If *name* is empty,
+   return a controller for a default browser appropriate to the caller's
+   environment.
+
+
+.. function:: register(name, constructor[, instance])
 
    Register the browser type *name*.  Once a browser type is registered, the
    :func:`get` function can return a controller for that browser type.  If
@@ -133,9 +138,9 @@ for the controller classes, all defined in this module.
 +-----------------------+-----------------------------------------+-------+
 | ``'windows-default'`` | :class:`WindowsDefault`                 | \(2)  |
 +-----------------------+-----------------------------------------+-------+
-| ``'internet-config'`` | :class:`InternetConfig`                 | \(3)  |
+| ``'macosx'``          | :class:`MacOSX('default')`              | \(3)  |
 +-----------------------+-----------------------------------------+-------+
-| ``'macosx'``          | :class:`MacOSX('default')`              | \(4)  |
+| ``'safari'``          | :class:`MacOSX('safari')`               | \(3)  |
 +-----------------------+-----------------------------------------+-------+
 
 Notes:
@@ -151,9 +156,6 @@ Notes:
    Only on Windows platforms.
 
 (3)
-   Only on Mac OS platforms; requires the standard MacPython :mod:`ic` module.
-
-(4)
    Only on Mac OS X platform.
 
 Here are some simple examples::
@@ -194,6 +196,8 @@ module-level convenience functions:
 
    Open *url* in a new page ("tab") of the browser handled by this controller, if
    possible, otherwise equivalent to :func:`open_new`.
+
+   .. versionadded:: 2.5
 
 
 .. rubric:: Footnotes

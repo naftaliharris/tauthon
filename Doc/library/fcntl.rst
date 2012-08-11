@@ -1,3 +1,4 @@
+
 :mod:`fcntl` --- The :func:`fcntl` and :func:`ioctl` system calls
 =================================================================
 
@@ -16,8 +17,8 @@ interface to the :c:func:`fcntl` and :c:func:`ioctl` Unix routines.
 
 All functions in this module take a file descriptor *fd* as their first
 argument.  This can be an integer file descriptor, such as returned by
-``sys.stdin.fileno()``, or a :class:`io.IOBase` object, such as ``sys.stdin``
-itself, which provides a :meth:`fileno` that returns a genuine file descriptor.
+``sys.stdin.fileno()``, or a file object, such as ``sys.stdin`` itself, which
+provides a :meth:`fileno` which returns a genuine file descriptor.
 
 The module defines the following functions:
 
@@ -46,6 +47,7 @@ The module defines the following functions:
 .. function:: ioctl(fd, op[, arg[, mutate_flag]])
 
    This function is identical to the :func:`fcntl` function, except that the
+   operations are typically defined in the library module :mod:`termios` and the
    argument handling is even more complicated.
 
    The op parameter is limited to values that can fit in 32-bits.
@@ -64,13 +66,17 @@ The module defines the following functions:
    so long as the buffer you pass is as least as long as what the operating system
    wants to put there, things should work.
 
-   If *mutate_flag* is true (the default), then the buffer is (in effect) passed
-   to the underlying :func:`ioctl` system call, the latter's return code is
-   passed back to the calling Python, and the buffer's new contents reflect the
-   action of the :func:`ioctl`.  This is a slight simplification, because if the
-   supplied buffer is less than 1024 bytes long it is first copied into a static
-   buffer 1024 bytes long which is then passed to :func:`ioctl` and copied back
-   into the supplied buffer.
+   If *mutate_flag* is true, then the buffer is (in effect) passed to the
+   underlying :func:`ioctl` system call, the latter's return code is passed back to
+   the calling Python, and the buffer's new contents reflect the action of the
+   :func:`ioctl`.  This is a slight simplification, because if the supplied buffer
+   is less than 1024 bytes long it is first copied into a static buffer 1024 bytes
+   long which is then passed to :func:`ioctl` and copied back into the supplied
+   buffer.
+
+   If *mutate_flag* is not supplied, then from Python 2.5 it defaults to true,
+   which is a change from versions 2.3 and 2.4. Supply the argument explicitly if
+   version portability is a priority.
 
    An example::
 

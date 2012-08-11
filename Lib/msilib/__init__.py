@@ -1,4 +1,5 @@
-# Copyright (C) 2005 Martin v. LÃ¶wis
+# -*- coding: iso-8859-1 -*-
+# Copyright (C) 2005 Martin v. Löwis
 # Licensed to PSF under a Contributor Agreement.
 from _msi import *
 import os, string, re, sys
@@ -41,7 +42,7 @@ class Table:
             index -= 1
             unk = type & ~knownbits
             if unk:
-                print("%s.%s unknown bits %x" % (self.name, name, unk))
+                print "%s.%s unknown bits %x" % (self.name, name, unk)
             size = type & datasizemask
             dtype = type & typemask
             if dtype == type_string:
@@ -60,7 +61,7 @@ class Table:
                 tname="OBJECT"
             else:
                 tname="unknown"
-                print("%s.%sunknown integer type %d" % (self.name, name, size))
+                print "%s.%sunknown integer type %d" % (self.name, name, size)
             if type & type_nullable:
                 flags = ""
             else:
@@ -90,7 +91,7 @@ def change_sequence(seq, action, seqno=_Unspecified, cond = _Unspecified):
                 seqno = seq[i][2]
             seq[i] = (action, cond, seqno)
             return
-    raise ValueError("Action not found in sequence")
+    raise ValueError, "Action not found in sequence"
 
 def add_data(db, table, values):
     v = db.OpenView("SELECT * FROM `%s`" % table)
@@ -100,19 +101,19 @@ def add_data(db, table, values):
         assert len(value) == count, value
         for i in range(count):
             field = value[i]
-            if isinstance(field, int):
+            if isinstance(field, (int, long)):
                 r.SetInteger(i+1,field)
-            elif isinstance(field, str):
+            elif isinstance(field, basestring):
                 r.SetString(i+1,field)
             elif field is None:
                 pass
             elif isinstance(field, Binary):
                 r.SetStream(i+1, field.name)
             else:
-                raise TypeError("Unsupported type %s" % field.__class__.__name__)
+                raise TypeError, "Unsupported type %s" % field.__class__.__name__
         try:
             v.Modify(MSIMODIFY_INSERT, r)
-        except Exception as e:
+        except Exception, e:
             raise MSIError("Could not insert "+repr(values)+" into "+table)
 
         r.ClearData()
@@ -172,11 +173,10 @@ def add_tables(db, module):
         add_data(db, table, getattr(module, table))
 
 def make_id(str):
-    #str = str.replace(".", "_") # colons are allowed
-    str = str.replace(" ", "_")
-    str = str.replace("-", "_")
-    if str[0] in string.digits:
-        str = "_"+str
+    identifier_chars = string.ascii_letters + string.digits + "._"
+    str = "".join([c if c in identifier_chars else "_" for c in str])
+    if str[0] in (string.digits + "."):
+        str = "_" + str
     assert re.match("^[A-Za-z_][A-Za-z0-9_.]*$", str), "FILE"+str
     return str
 
@@ -284,19 +284,28 @@ class Directory:
                         [(feature.id, component)])
 
     def make_short(self, file):
+        oldfile = file
+        file = file.replace('+', '_')
+        file = ''.join(c for c in file if not c in ' "/\[]:;=,')
         parts = file.split(".")
-        if len(parts)>1:
+        if len(parts) > 1:
+            prefix = "".join(parts[:-1]).upper()
             suffix = parts[-1].upper()
+            if not prefix:
+                prefix = suffix
+                suffix = None
         else:
+            prefix = file.upper()
             suffix = None
-        prefix = parts[0].upper()
-        if len(prefix) <= 8 and (not suffix or len(suffix)<=3):
+        if len(parts) < 3 and len(prefix) <= 8 and file == oldfile and (
+                                                not suffix or len(suffix) <= 3):
             if suffix:
                 file = prefix+"."+suffix
             else:
                 file = prefix
-            assert file not in self.short_names
         else:
+            file = None
+        if file is None or file in self.short_names:
             prefix = prefix[:6]
             if suffix:
                 suffix = suffix[:3]

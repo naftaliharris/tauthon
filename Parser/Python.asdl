@@ -1,4 +1,4 @@
--- ASDL's four builtin types are identifier, int, string, object
+-- ASDL's five builtin types are identifier, int, string, object, bool
 
 module Python version "$Revision$"
 {
@@ -10,19 +10,16 @@ module Python version "$Revision$"
 	    | Suite(stmt* body)
 
 	stmt = FunctionDef(identifier name, arguments args, 
-                           stmt* body, expr* decorator_list, expr? returns)
-	      | ClassDef(identifier name, 
-			 expr* bases,
-			 keyword* keywords,
-			 expr? starargs,
-			 expr? kwargs,
-			 stmt* body,
-			 expr* decorator_list)
+                            stmt* body, expr* decorator_list)
+	      | ClassDef(identifier name, expr* bases, stmt* body, expr* decorator_list)
 	      | Return(expr? value)
 
 	      | Delete(expr* targets)
 	      | Assign(expr* targets, expr value)
 	      | AugAssign(expr target, operator op, expr value)
+
+	      -- not sure if bool is allowed, can always use int
+ 	      | Print(expr? dest, expr* values, bool nl)
 
 	      -- use 'orelse' because else is a keyword in target languages
 	      | For(expr target, expr iter, stmt* body, stmt* orelse)
@@ -30,7 +27,8 @@ module Python version "$Revision$"
 	      | If(expr test, stmt* body, stmt* orelse)
 	      | With(expr context_expr, expr? optional_vars, stmt* body)
 
-	      | Raise(expr? exc, expr? cause)
+	      -- 'type' is a bad name
+	      | Raise(expr? type, expr? inst, expr? tback)
 	      | TryExcept(stmt* body, excepthandler* handlers, stmt* orelse)
 	      | TryFinally(stmt* body, stmt* finalbody)
 	      | Assert(expr test, expr? msg)
@@ -38,8 +36,12 @@ module Python version "$Revision$"
 	      | Import(alias* names)
 	      | ImportFrom(identifier? module, alias* names, int? level)
 
+	      -- Doesn't capture requirement that locals must be
+	      -- defined if globals is
+	      -- still supports use as a function!
+	      | Exec(expr body, expr? globals, expr? locals)
+
 	      | Global(identifier* names)
-	      | Nonlocal(identifier* names)
 	      | Expr(expr value)
 	      | Pass | Break | Continue
 
@@ -66,16 +68,14 @@ module Python version "$Revision$"
 	     | Compare(expr left, cmpop* ops, expr* comparators)
 	     | Call(expr func, expr* args, keyword* keywords,
 			 expr? starargs, expr? kwargs)
+	     | Repr(expr value)
 	     | Num(object n) -- a number as a PyObject.
 	     | Str(string s) -- need to specify raw, unicode, etc?
-	     | Bytes(string s)
-	     | Ellipsis
 	     -- other literals? bools?
 
 	     -- the following expression can appear in assignment context
 	     | Attribute(expr value, identifier attr, expr_context ctx)
 	     | Subscript(expr value, slice slice, expr_context ctx)
-	     | Starred(expr value, expr_context ctx)
 	     | Name(identifier id, expr_context ctx)
 	     | List(expr* elts, expr_context ctx) 
 	     | Tuple(expr* elts, expr_context ctx)
@@ -85,7 +85,7 @@ module Python version "$Revision$"
 
 	expr_context = Load | Store | Del | AugLoad | AugStore | Param
 
-	slice = Slice(expr? lower, expr? upper, expr? step) 
+	slice = Ellipsis | Slice(expr? lower, expr? upper, expr? step) 
 	      | ExtSlice(slice* dims) 
 	      | Index(expr value) 
 
@@ -101,14 +101,11 @@ module Python version "$Revision$"
 	comprehension = (expr target, expr iter, expr* ifs)
 
 	-- not sure what to call the first argument for raise and except
-	excepthandler = ExceptHandler(expr? type, identifier? name, stmt* body)
+	excepthandler = ExceptHandler(expr? type, expr? name, stmt* body)
 	                attributes (int lineno, int col_offset)
 
-	arguments = (arg* args, identifier? vararg, expr? varargannotation,
-                     arg* kwonlyargs, identifier? kwarg,
-                     expr? kwargannotation, expr* defaults,
-                     expr* kw_defaults)
-	arg = (identifier arg, expr? annotation)
+	arguments = (expr* args, identifier? vararg, 
+		     identifier? kwarg, expr* defaults)
 
         -- keyword arguments supplied to call
         keyword = (identifier arg, expr value)
@@ -116,4 +113,3 @@ module Python version "$Revision$"
         -- import name with optional 'as' alias.
         alias = (identifier name, identifier? asname)
 }
-

@@ -3,7 +3,7 @@ try:
 except ImportError:
     # IDLE is not installed, but maybe PyShell is on sys.path:
     try:
-        from . import PyShell
+        import PyShell
     except ImportError:
         raise
     else:

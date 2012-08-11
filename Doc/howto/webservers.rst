@@ -103,10 +103,10 @@ simple CGI program::
     import cgitb
     cgitb.enable()
 
-    print("Content-Type: text/plain;charset=utf-8")
-    print()
+    print "Content-Type: text/plain;charset=utf-8"
+    print
 
-    print("Hello World!")
+    print "Hello World!"
 
 Depending on your web server configuration, you may need to save this code with
 a ``.py`` or ``.cgi`` extension.  Additionally, this file may also need to be
@@ -264,7 +264,7 @@ used for the deployment of WSGI applications.
 
    * `FastCGI, SCGI, and Apache: Background and Future
      <http://www.vmunix.com/mark/blog/archives/2006/01/02/fastcgi-scgi-and-apache-background-and-future/>`_
-     is a discussion on why the concept of FastCGI and SCGI is better that that
+     is a discussion on why the concept of FastCGI and SCGI is better than that
      of mod_python.
 
 
@@ -274,7 +274,7 @@ Setting up FastCGI
 Each web server requires a specific module.
 
 * Apache has both `mod_fastcgi <http://www.fastcgi.com/drupal/>`_ and `mod_fcgid
-  <http://fastcgi.coremail.cn/>`_.  ``mod_fastcgi`` is the original one, but it
+  <http://httpd.apache.org/mod_fcgid/>`_.  ``mod_fastcgi`` is the original one, but it
   has some licensing issues, which is why it is sometimes considered non-free.
   ``mod_fcgid`` is a smaller, compatible alternative.  One of these modules needs
   to be loaded by Apache.
@@ -292,8 +292,8 @@ following WSGI-application::
     #!/usr/bin/env python
     # -*- coding: UTF-8 -*-
 
+    from cgi import escape
     import sys, os
-    from html import escape
     from flup.server.fcgi import WSGIServer
 
     def app(environ, start_response):
@@ -302,8 +302,7 @@ following WSGI-application::
         yield '<h1>FastCGI Environment</h1>'
         yield '<table>'
         for k, v in sorted(environ.items()):
-             yield '<tr><th>{0}</th><td>{1}</td></tr>'.format(
-                 escape(k), escape(v))
+             yield '<tr><th>%s</th><td>%s</td></tr>' % (escape(k), escape(v))
         yield '</table>'
 
     WSGIServer(app).run()
@@ -365,7 +364,7 @@ testing.
 
 A really great WSGI feature is middleware.  Middleware is a layer around your
 program which can add various functionality to it.  There is quite a bit of
-`middleware <http://wsgi.org/wsgi/Middleware_and_Utilities>`_ already
+`middleware <http://www.wsgi.org/en/latest/libraries.html>`_ already
 available.  For example, instead of writing your own session management (HTTP
 is a stateless protocol, so to associate multiple HTTP requests with a single
 user your application must create and manage such state via a session), you can
@@ -396,9 +395,9 @@ compared with other web technologies.
 
 .. seealso::
 
-   A good overview of WSGI-related code can be found in the `WSGI wiki
-   <http://wsgi.org/wsgi>`_, which contains an extensive list of `WSGI servers
-   <http://wsgi.org/wsgi/Servers>`_ which can be used by *any* application
+   A good overview of WSGI-related code can be found in the `WSGI homepage
+   <http://www.wsgi.org/en/latest/index.html>`_, which contains an extensive list of `WSGI servers
+   <http://www.wsgi.org/en/latest/servers.html>`_ which can be used by *any* application
    supporting WSGI.
 
    You might be interested in some WSGI-supporting modules already contained in
@@ -498,11 +497,16 @@ templates exist.  Templates are, in the simplest case, just HTML files with
 placeholders.  The HTML is sent to the user's browser after filling in the
 placeholders.
 
-Python already includes a way to build simple templates::
+Python already includes two ways to build simple templates::
 
-    # a simple template
-    template = "<html><body><h1>Hello {who}!</h1></body></html>"
-    print(template.format(who="Reader"))
+    >>> template = "<html><body><h1>Hello %s!</h1></body></html>"
+    >>> print template % "Reader"
+    <html><body><h1>Hello Reader!</h1></body></html>
+
+    >>> from string import Template
+    >>> template = Template("<html><body><h1>Hello ${name}</h1></body></html>")
+    >>> print template.substitute(dict(name='Dinsdale'))
+    <html><body><h1>Hello Dinsdale!</h1></body></html>
 
 To generate complex HTML based on non-trivial model data, conditional
 and looping constructs like Python's *for* and *if* are generally needed.

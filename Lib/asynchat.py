@@ -45,22 +45,12 @@ command will be accumulated (using your own 'collect_incoming_data'
 method) up to the terminator, and then control will be returned to
 you - by calling your self.found_terminator() method.
 """
+
 import socket
 import asyncore
 from collections import deque
-
-def buffer(obj, start=None, stop=None):
-    # if memoryview objects gain slicing semantics,
-    # this function will change for the better
-    # memoryview used for the TypeError
-    memoryview(obj)
-    if start == None:
-        start = 0
-    if stop == None:
-        stop = len(obj)
-    x = obj[start:stop]
-    ## print("buffer type is: %s"%(type(x),))
-    return x
+from sys import py3kwarning
+from warnings import filterwarnings, catch_warnings
 
 class async_chat (asyncore.dispatcher):
     """This is an abstract class.  You must derive from this class, and add
@@ -71,15 +61,9 @@ class async_chat (asyncore.dispatcher):
     ac_in_buffer_size       = 4096
     ac_out_buffer_size      = 4096
 
-    # we don't want to enable the use of encoding by default, because that is a
-    # sign of an application bug that we don't want to pass silently
-
-    use_encoding            = 0
-    encoding                = 'latin1'
-
     def __init__ (self, sock=None, map=None):
         # for string terminator matching
-        self.ac_in_buffer = b''
+        self.ac_in_buffer = ''
 
         # we use a list here rather than cStringIO for a few reasons...
         # del lst[:] is faster than sio.truncate(0)
@@ -101,7 +85,7 @@ class async_chat (asyncore.dispatcher):
         self.incoming.append(data)
 
     def _get_data(self):
-        d = b''.join(self.incoming)
+        d = ''.join(self.incoming)
         del self.incoming[:]
         return d
 
@@ -110,8 +94,6 @@ class async_chat (asyncore.dispatcher):
 
     def set_terminator (self, term):
         "Set the input delimiter.  Can be a fixed string of any length, an integer, or None"
-        if isinstance(term, str) and self.use_encoding:
-            term = bytes(term, self.encoding)
         self.terminator = term
 
     def get_terminator (self):
@@ -126,12 +108,10 @@ class async_chat (asyncore.dispatcher):
 
         try:
             data = self.recv (self.ac_in_buffer_size)
-        except socket.error as why:
+        except socket.error, why:
             self.handle_error()
             return
 
-        if isinstance(data, str) and self.use_encoding:
-            data = bytes(str, self.encoding)
         self.ac_in_buffer = self.ac_in_buffer + data
 
         # Continue to search for self.terminator in self.ac_in_buffer,
@@ -145,13 +125,13 @@ class async_chat (asyncore.dispatcher):
             if not terminator:
                 # no terminator, collect it all
                 self.collect_incoming_data (self.ac_in_buffer)
-                self.ac_in_buffer = b''
-            elif isinstance(terminator, int):
+                self.ac_in_buffer = ''
+            elif isinstance(terminator, int) or isinstance(terminator, long):
                 # numeric terminator
                 n = terminator
                 if lb < n:
                     self.collect_incoming_data (self.ac_in_buffer)
-                    self.ac_in_buffer = b''
+                    self.ac_in_buffer = ''
                     self.terminator = self.terminator - lb
                 else:
                     self.collect_incoming_data (self.ac_in_buffer[:n])
@@ -188,7 +168,7 @@ class async_chat (asyncore.dispatcher):
                     else:
                         # no prefix, collect it all
                         self.collect_incoming_data (self.ac_in_buffer)
-                        self.ac_in_buffer = b''
+                        self.ac_in_buffer = ''
 
     def handle_write (self):
         self.initiate_send()
@@ -199,7 +179,7 @@ class async_chat (asyncore.dispatcher):
     def push (self, data):
         sabs = self.ac_out_buffer_size
         if len(data) > sabs:
-            for i in range(0, len(data), sabs):
+            for i in xrange(0, len(data), sabs):
                 self.producer_fifo.append(data[i:i+sabs])
         else:
             self.producer_fifo.append(data)
@@ -232,15 +212,16 @@ class async_chat (asyncore.dispatcher):
             if not first:
                 del self.producer_fifo[0]
                 if first is None:
-                    ## print("first is None")
                     self.handle_close()
                     return
-                ## print("first is not None")
 
             # handle classic producer behavior
             obs = self.ac_out_buffer_size
             try:
-                data = buffer(first, 0, obs)
+                with catch_warnings():
+                    if py3kwarning:
+                        filterwarnings("ignore", ".*buffer", DeprecationWarning)
+                    data = buffer(first, 0, obs)
             except TypeError:
                 data = first.more()
                 if data:
@@ -248,9 +229,6 @@ class async_chat (asyncore.dispatcher):
                 else:
                     del self.producer_fifo[0]
                 continue
-
-            if isinstance(data, str) and self.use_encoding:
-                data = bytes(data, self.encoding)
 
             # send the data
             try:
@@ -269,7 +247,7 @@ class async_chat (asyncore.dispatcher):
 
     def discard_buffers (self):
         # Emergencies only!
-        self.ac_in_buffer = b''
+        self.ac_in_buffer = ''
         del self.incoming[:]
         self.producer_fifo.clear()
 
@@ -286,7 +264,7 @@ class simple_producer:
             return result
         else:
             result = self.data
-            self.data = b''
+            self.data = ''
             return result
 
 class fifo:

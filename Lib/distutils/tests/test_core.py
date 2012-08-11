@@ -1,12 +1,12 @@
 """Tests for distutils.core."""
 
-import io
+import StringIO
 import distutils.core
 import os
 import shutil
 import sys
-import test.support
-from test.support import captured_stdout, run_unittest
+import test.test_support
+from test.test_support import captured_stdout, run_unittest
 import unittest
 from distutils.tests import support
 
@@ -22,7 +22,7 @@ setup()
 setup_prints_cwd = """\
 
 import os
-print(os.getcwd())
+print os.getcwd()
 
 from distutils.core import setup
 setup()
@@ -45,13 +45,13 @@ class CoreTestCase(support.EnvironGuard, unittest.TestCase):
         super(CoreTestCase, self).tearDown()
 
     def cleanup_testfn(self):
-        path = test.support.TESTFN
+        path = test.test_support.TESTFN
         if os.path.isfile(path):
             os.remove(path)
         elif os.path.isdir(path):
             shutil.rmtree(path)
 
-    def write_setup(self, text, path=test.support.TESTFN):
+    def write_setup(self, text, path=test.test_support.TESTFN):
         f = open(path, "w")
         try:
             f.write(text)
@@ -69,12 +69,12 @@ class CoreTestCase(support.EnvironGuard, unittest.TestCase):
         # This tests that the setup script is run with the current directory
         # as its own current directory; this was temporarily broken by a
         # previous patch when TESTFN did not use the current directory.
-        sys.stdout = io.StringIO()
+        sys.stdout = StringIO.StringIO()
         cwd = os.getcwd()
 
         # Create a directory and write the setup.py file there:
-        os.mkdir(test.support.TESTFN)
-        setup_py = os.path.join(test.support.TESTFN, "setup.py")
+        os.mkdir(test.test_support.TESTFN)
+        setup_py = os.path.join(test.test_support.TESTFN, "setup.py")
         distutils.core.run_setup(
             self.write_setup(setup_prints_cwd, path=setup_py))
 

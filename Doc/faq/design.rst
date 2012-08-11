@@ -77,7 +77,7 @@ that was probably intended::
 
    >>> 1.1 - 0.9
    0.20000000000000007
-   >>> print(1.1 - 0.9)
+   >>> print 1.1 - 0.9
    0.2
 
 One of the consequences of this is that it is error-prone to compare the result
@@ -210,8 +210,8 @@ have to remember to change two places in your program -- the second occurrence
 is hidden at the bottom of the loop.
 
 The best approach is to use iterators, making it possible to loop through
-objects using the ``for`` statement.  For example, :term:`file objects
-<file object>` support the iterator protocol, so you can write simply::
+objects using the ``for`` statement.  For example, in the current version of
+Python file objects support the iterator protocol, so you can now write simply::
 
    for line in f:
        ... # do something with line...
@@ -272,20 +272,34 @@ a string method, since in that case it is easy to see that ::
    "1, 2, 4, 8, 16".split(", ")
 
 is an instruction to a string literal to return the substrings delimited by the
-given separator (or, by default, arbitrary runs of white space).
+given separator (or, by default, arbitrary runs of white space).  In this case a
+Unicode string returns a list of Unicode strings, an ASCII string returns a list
+of ASCII strings, and everyone is happy.
 
 :meth:`~str.join` is a string method because in using it you are telling the
 separator string to iterate over a sequence of strings and insert itself between
 adjacent elements.  This method can be used with any argument which obeys the
 rules for sequence objects, including any new classes you might define yourself.
-Similar methods exist for bytes and bytearray objects.
+
+Because this is a string method it can work for Unicode strings as well as plain
+ASCII strings.  If ``join()`` were a method of the sequence types then the
+sequence types would have to decide which type of string to return depending on
+the type of the separator.
+
+.. XXX remove next paragraph eventually
+
+If none of these arguments persuade you, then for the moment you can continue to
+use the ``join()`` function from the string module, which allows you to write ::
+
+   string.join(['1', '2', '4', '8', '16'], ", ")
 
 
 How fast are exceptions?
 ------------------------
 
-A try/except block is extremely efficient.  Actually catching an exception is
-expensive.  In versions of Python prior to 2.0 it was common to use this idiom::
+A try/except block is extremely efficient if no exceptions are raised.  Actually
+catching an exception is expensive.  In versions of Python prior to 2.0 it was
+common to use this idiom::
 
    try:
        value = mydict[key]
@@ -296,15 +310,15 @@ expensive.  In versions of Python prior to 2.0 it was common to use this idiom::
 This only made sense when you expected the dict to have the key almost all the
 time.  If that wasn't the case, you coded it like this::
 
-   if mydict.has_key(key):
+   if key in mydict:
        value = mydict[key]
    else:
-       mydict[key] = getvalue(key)
-       value = mydict[key]
+       value = mydict[key] = getvalue(key)
 
-For this specific case, you could also use ``value = dict.setdefault(key,
-getvalue(key))``, but only if the ``getvalue()`` call is cheap enough because it
-is evaluated in all cases.
+.. note::
+
+   In Python 2.0 and higher, you can code this as ``value =
+   mydict.setdefault(key, getvalue(key))``.
 
 
 Why isn't there a switch or case statement in Python?
@@ -381,7 +395,7 @@ Can Python be compiled to machine code, C or some other language?
 -----------------------------------------------------------------
 
 Not easily.  Python's high level data types, dynamic typing of objects and
-run-time invocation of the interpreter (using :func:`eval` or :func:`exec`)
+run-time invocation of the interpreter (using :func:`eval` or :keyword:`exec`)
 together mean that a "compiled" Python program would probably consist mostly of
 calls into the Python run-time system, even for seemingly simple operations like
 ``x+1``.
@@ -418,9 +432,11 @@ much speed.
 .. XXX check which of these projects are still alive
 
 There are also several programs which make it easier to intermingle Python and C
-code in various ways to increase performance.  See, for example, `Cython
-<http://cython.org/>`_, `Pyrex
-<http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_ and `Weave
+code in various ways to increase performance.  See, for example, `Psyco
+<http://psyco.sourceforge.net/>`_, `Pyrex
+<http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_, `PyInline
+<http://pyinline.sourceforge.net/>`_, `Py2Cmod
+<http://sourceforge.net/projects/py2cmod/>`_, and `Weave
 <http://www.scipy.org/Weave>`_.
 
 
@@ -439,20 +455,21 @@ Jython relies on the Java runtime so the JVM's garbage collector is used.  This
 difference can cause some subtle porting problems if your Python code depends on
 the behavior of the reference counting implementation.
 
-.. XXX relevant for Python 3?
+.. XXX relevant for Python 2.6?
 
-   Sometimes objects get stuck in traceback temporarily and hence are not
-   deallocated when you might expect.  Clear the traceback with::
+Sometimes objects get stuck in tracebacks temporarily and hence are not
+deallocated when you might expect.  Clear the tracebacks with::
 
-     import sys
-     sys.last_traceback = None
+   import sys
+   sys.exc_clear()
+   sys.exc_traceback = sys.last_traceback = None
 
-   Tracebacks are used for reporting errors, implementing debuggers and related
-   things.  They contain a portion of the program state extracted during the
-   handling of an exception (usually the most recent exception).
+Tracebacks are used for reporting errors, implementing debuggers and related
+things.  They contain a portion of the program state extracted during the
+handling of an exception (usually the most recent exception).
 
-In the absence of circularities, Python programs do not need to manage memory
-explicitly.
+In the absence of circularities and tracebacks, Python programs do not need to
+manage memory explicitly.
 
 Why doesn't Python use a more traditional garbage collection scheme?  For one
 thing, this is not a C standard feature and hence it's not portable.  (Yes, we
@@ -580,7 +597,7 @@ Some unacceptable solutions that have been proposed:
   construct a new list with the same value it won't be found; e.g.::
 
      mydict = {[1, 2]: '12'}
-     print(mydict[[1, 2]])
+     print mydict[[1, 2]]
 
   would raise a KeyError exception because the id of the ``[1, 2]`` used in the
   second line differs from that in the first line.  In other words, dictionary
@@ -667,7 +684,7 @@ construction of large programs.
 Python 2.6 adds an :mod:`abc` module that lets you define Abstract Base Classes
 (ABCs).  You can then use :func:`isinstance` and :func:`issubclass` to check
 whether an instance or a class implements a particular ABC.  The
-:mod:`collections` modules defines a set of useful ABCs such as
+:mod:`collections` module defines a set of useful ABCs such as
 :class:`Iterable`, :class:`Container`, and :class:`MutableMapping`.
 
 For Python, many of the advantages of interface specifications can be obtained
@@ -829,7 +846,7 @@ For instance, take the following incomplete snippet::
 
    def foo(a):
        with a:
-           print(x)
+           print x
 
 The snippet assumes that "a" must have a member attribute called "x".  However,
 there is nothing in Python that tells the interpreter this. What should happen
@@ -863,12 +880,12 @@ The colon is required primarily to enhance readability (one of the results of
 the experimental ABC language).  Consider this::
 
    if a == b
-       print(a)
+       print a
 
 versus ::
 
    if a == b:
-       print(a)
+       print a
 
 Notice how the second one is slightly easier to read.  Notice further how a
 colon sets off the example in this FAQ answer; it's a standard usage in English.

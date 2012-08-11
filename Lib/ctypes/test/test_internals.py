@@ -29,7 +29,7 @@ class ObjectsTestCase(unittest.TestCase):
         self.assertEqual(ci._objects, None)
 
     def test_c_char_p(self):
-        s = b"Hello, World"
+        s = "Hello, World"
         refcnt = grc(s)
         cs = c_char_p(s)
         self.assertEqual(refcnt + 1, grc(s))
@@ -70,8 +70,8 @@ class ObjectsTestCase(unittest.TestCase):
         class Y(Structure):
             _fields_ = [("x", X), ("y", X)]
 
-        s1 = b"Hello, World"
-        s2 = b"Hallo, Welt"
+        s1 = "Hello, World"
+        s2 = "Hallo, Welt"
 
         x = X()
         x.a = s1

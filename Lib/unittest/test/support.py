@@ -1,6 +1,31 @@
 import unittest
 
 
+class TestHashing(object):
+    """Used as a mixin for TestCase"""
+
+    # Check for a valid __hash__ implementation
+    def test_hash(self):
+        for obj_1, obj_2 in self.eq_pairs:
+            try:
+                if not hash(obj_1) == hash(obj_2):
+                    self.fail("%r and %r do not hash equal" % (obj_1, obj_2))
+            except KeyboardInterrupt:
+                raise
+            except Exception, e:
+                self.fail("Problem hashing %r and %r: %s" % (obj_1, obj_2, e))
+
+        for obj_1, obj_2 in self.ne_pairs:
+            try:
+                if hash(obj_1) == hash(obj_2):
+                    self.fail("%s and %s hash equal, but shouldn't" %
+                              (obj_1, obj_2))
+            except KeyboardInterrupt:
+                raise
+            except Exception, e:
+                self.fail("Problem hashing %s and %s: %s" % (obj_1, obj_2, e))
+
+
 class TestEquality(object):
     """Used as a mixin for TestCase"""
 
@@ -16,39 +41,15 @@ class TestEquality(object):
             self.assertNotEqual(obj_1, obj_2)
             self.assertNotEqual(obj_2, obj_1)
 
-class TestHashing(object):
-    """Used as a mixin for TestCase"""
-
-    # Check for a valid __hash__ implementation
-    def test_hash(self):
-        for obj_1, obj_2 in self.eq_pairs:
-            try:
-                if not hash(obj_1) == hash(obj_2):
-                    self.fail("%r and %r do not hash equal" % (obj_1, obj_2))
-            except KeyboardInterrupt:
-                raise
-            except Exception as e:
-                self.fail("Problem hashing %r and %r: %s" % (obj_1, obj_2, e))
-
-        for obj_1, obj_2 in self.ne_pairs:
-            try:
-                if hash(obj_1) == hash(obj_2):
-                    self.fail("%s and %s hash equal, but shouldn't" %
-                              (obj_1, obj_2))
-            except KeyboardInterrupt:
-                raise
-            except Exception as e:
-                self.fail("Problem hashing %s and %s: %s" % (obj_1, obj_2, e))
-
 
 class LoggingResult(unittest.TestResult):
     def __init__(self, log):
         self._events = log
-        super().__init__()
+        super(LoggingResult, self).__init__()
 
     def startTest(self, test):
         self._events.append('startTest')
-        super().startTest(test)
+        super(LoggingResult, self).startTest(test)
 
     def startTestRun(self):
         self._events.append('startTestRun')
@@ -56,7 +57,7 @@ class LoggingResult(unittest.TestResult):
 
     def stopTest(self, test):
         self._events.append('stopTest')
-        super().stopTest(test)
+        super(LoggingResult, self).stopTest(test)
 
     def stopTestRun(self):
         self._events.append('stopTestRun')
@@ -64,7 +65,7 @@ class LoggingResult(unittest.TestResult):
 
     def addFailure(self, *args):
         self._events.append('addFailure')
-        super().addFailure(*args)
+        super(LoggingResult, self).addFailure(*args)
 
     def addSuccess(self, *args):
         self._events.append('addSuccess')
@@ -72,7 +73,7 @@ class LoggingResult(unittest.TestResult):
 
     def addError(self, *args):
         self._events.append('addError')
-        super().addError(*args)
+        super(LoggingResult, self).addError(*args)
 
     def addSkip(self, *args):
         self._events.append('addSkip')

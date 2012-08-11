@@ -58,8 +58,8 @@ class Test_FunctionTestCase(unittest.TestCase):
         def tearDown():
             events.append('tearDown')
 
-        expected = ['startTest', 'setUp', 'test', 'tearDown',
-                    'addError', 'stopTest']
+        expected = ['startTest', 'setUp', 'test', 'addError', 'tearDown',
+                    'stopTest']
         unittest.FunctionTestCase(test, setUp, tearDown).run(result)
         self.assertEqual(events, expected)
 
@@ -84,8 +84,8 @@ class Test_FunctionTestCase(unittest.TestCase):
         def tearDown():
             events.append('tearDown')
 
-        expected = ['startTest', 'setUp', 'test', 'tearDown',
-                    'addFailure', 'stopTest']
+        expected = ['startTest', 'setUp', 'test', 'addFailure', 'tearDown',
+                    'stopTest']
         unittest.FunctionTestCase(test, setUp, tearDown).run(result)
         self.assertEqual(events, expected)
 
@@ -124,7 +124,7 @@ class Test_FunctionTestCase(unittest.TestCase):
     def test_id(self):
         test = unittest.FunctionTestCase(lambda: None)
 
-        self.assertIsInstance(test.id(), str)
+        self.assertIsInstance(test.id(), basestring)
 
     # "Returns a one-line description of the test, or None if no description
     # has been provided. The default implementation of this method returns
@@ -142,3 +142,7 @@ class Test_FunctionTestCase(unittest.TestCase):
         test = unittest.FunctionTestCase(lambda: None, description=desc)
 
         self.assertEqual(test.shortDescription(), "this tests foo")
+
+
+if __name__ == '__main__':
+    unittest.main()

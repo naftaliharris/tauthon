@@ -1,24 +1,33 @@
-:mod:`threading` --- Thread-based parallelism
-=============================================
+:mod:`threading` --- Higher-level threading interface
+=====================================================
 
 .. module:: threading
-   :synopsis: Thread-based parallelism.
+   :synopsis: Higher-level threading interface.
 
 **Source code:** :source:`Lib/threading.py`
 
 --------------
 
-This module constructs higher-level threading interfaces on top of the lower
-level :mod:`_thread` module.  See also the :mod:`queue` module.
+This module constructs higher-level threading interfaces on top of the  lower
+level :mod:`thread` module.
+See also the :mod:`mutex` and :mod:`Queue` modules.
 
 The :mod:`dummy_threading` module is provided for situations where
-:mod:`threading` cannot be used because :mod:`_thread` is missing.
+:mod:`threading` cannot be used because :mod:`thread` is missing.
 
 .. note::
 
-   While they are not listed below, the ``camelCase`` names used for some
-   methods and functions in this module in the Python 2.x series are still
-   supported by this module.
+   Starting with Python 2.6, this module provides :pep:`8` compliant aliases and
+   properties to replace the ``camelCase`` names that were inspired by Java's
+   threading API. This updated API is compatible with that of the
+   :mod:`multiprocessing` module. However, no schedule has been set for the
+   deprecation of the ``camelCase`` names and they remain fully supported in
+   both Python 2.x and 3.x.
+
+.. note::
+
+   Starting with Python 2.5, several Thread methods raise :exc:`RuntimeError`
+   instead of :exc:`AssertionError` if called erroneously.
 
 .. impl-detail::
 
@@ -27,15 +36,14 @@ The :mod:`dummy_threading` module is provided for situations where
    libraries might overcome this limitation).
    If you want your application to make better of use of the computational
    resources of multi-core machines, you are advised to use
-   :mod:`multiprocessing` or :class:`concurrent.futures.ProcessPoolExecutor`.
-   However, threading is still an appropriate model if you want to run
-   multiple I/O-bound tasks simultaneously.
+   :mod:`multiprocessing`. However, threading is still an appropriate model
+   if you want to run multiple I/O-bound tasks simultaneously.
 
 
 This module defines the following functions and objects:
 
-
 .. function:: active_count()
+              activeCount()
 
    Return the number of :class:`Thread` objects currently alive.  The returned
    count is equal to the length of the list returned by :func:`.enumerate`.
@@ -52,6 +60,7 @@ This module defines the following functions and objects:
 
 
 .. function:: current_thread()
+              currentThread()
 
    Return the current :class:`Thread` object, corresponding to the caller's thread
    of control.  If the caller's thread of control was not created through the
@@ -92,6 +101,8 @@ This module defines the following functions and objects:
    For more details and extensive examples, see the documentation string of the
    :mod:`_threading_local` module.
 
+   .. versionadded:: 2.4
+
 
 .. function:: Lock()
 
@@ -112,7 +123,7 @@ This module defines the following functions and objects:
    See :ref:`rlock-objects`.
 
 
-.. function:: Semaphore(value=1)
+.. function:: Semaphore([value])
    :noindex:
 
    A factory function that returns a new semaphore object.  A semaphore manages a
@@ -124,7 +135,7 @@ This module defines the following functions and objects:
    See :ref:`semaphore-objects`.
 
 
-.. function:: BoundedSemaphore(value=1)
+.. function:: BoundedSemaphore([value])
 
    A factory function that returns a new bounded semaphore object.  A bounded
    semaphore checks to make sure its current value doesn't exceed its initial
@@ -158,6 +169,8 @@ This module defines the following functions and objects:
    The *func* will be passed to  :func:`sys.settrace` for each thread, before its
    :meth:`run` method is called.
 
+   .. versionadded:: 2.3
+
 
 .. function:: setprofile(func)
 
@@ -166,6 +179,8 @@ This module defines the following functions and objects:
    Set a profile function for all threads started from the :mod:`threading` module.
    The *func* will be passed to  :func:`sys.setprofile` for each thread, before its
    :meth:`run` method is called.
+
+   .. versionadded:: 2.3
 
 
 .. function:: stack_size([size])
@@ -185,18 +200,7 @@ This module defines the following functions and objects:
    the suggested approach in the absence of more specific information).
    Availability: Windows, systems with POSIX threads.
 
-
-This module also defines the following constant:
-
-.. data:: TIMEOUT_MAX
-
-   The maximum value allowed for the *timeout* parameter of blocking functions
-   (:meth:`Lock.acquire`, :meth:`RLock.acquire`, :meth:`Condition.wait`, etc.).
-   Specifying a timeout greater than this value will raise an
-   :exc:`OverflowError`.
-
-   .. versionadded:: 3.2
-
+   .. versionadded:: 2.5
 
 Detailed interfaces for the objects are documented below.
 
@@ -296,7 +300,7 @@ impossible to detect the termination of alien threads.
       the *target* argument, if any, with sequential and keyword arguments taken
       from the *args* and *kwargs* arguments, respectively.
 
-   .. method:: join(timeout=None)
+   .. method:: join([timeout])
 
       Wait until the thread terminates. This blocks the calling thread until the
       thread whose :meth:`join` method is called terminates -- either normally
@@ -305,7 +309,7 @@ impossible to detect the termination of alien threads.
       When the *timeout* argument is present and not ``None``, it should be a
       floating point number specifying a timeout for the operation in seconds
       (or fractions thereof). As :meth:`join` always returns ``None``, you must
-      call :meth:`is_alive` after :meth:`join` to decide whether a timeout
+      call :meth:`isAlive` after :meth:`join` to decide whether a timeout
       happened -- if the thread is still alive, the :meth:`join` call timed out.
 
       When the *timeout* argument is not present or ``None``, the operation will
@@ -318,17 +322,16 @@ impossible to detect the termination of alien threads.
       :meth:`join` a thread before it has been started and attempts to do so
       raises the same exception.
 
+   .. method:: getName()
+               setName()
+
+      Old API for :attr:`~Thread.name`.
+
    .. attribute:: name
 
       A string used for identification purposes only. It has no semantics.
       Multiple threads may be given the same name.  The initial name is set by
       the constructor.
-
-   .. method:: getName()
-               setName()
-
-      Old getter/setter API for :attr:`~Thread.name`; use it directly as a
-      property instead.
 
    .. attribute:: ident
 
@@ -338,13 +341,21 @@ impossible to detect the termination of alien threads.
       when a thread exits and another thread is created.  The identifier is
       available even after the thread has exited.
 
+      .. versionadded:: 2.6
+
    .. method:: is_alive()
+               isAlive()
 
       Return whether the thread is alive.
 
       This method returns ``True`` just before the :meth:`run` method starts
       until just after the :meth:`run` method terminates.  The module function
       :func:`.enumerate` returns a list of all alive threads.
+
+   .. method:: isDaemon()
+               setDaemon()
+
+      Old API for :attr:`~Thread.daemon`.
 
    .. attribute:: daemon
 
@@ -357,12 +368,6 @@ impossible to detect the termination of alien threads.
 
       The entire Python program exits when no alive non-daemon threads are left.
 
-   .. method:: isDaemon()
-               setDaemon()
-
-      Old getter/setter API for :attr:`~Thread.daemon`; use it directly as a
-      property instead.
-
 
 .. _lock-objects:
 
@@ -371,7 +376,7 @@ Lock Objects
 
 A primitive lock is a synchronization primitive that is not owned by a
 particular thread when locked.  In Python, it is currently the lowest level
-synchronization primitive available, implemented directly by the :mod:`_thread`
+synchronization primitive available, implemented directly by the :mod:`thread`
 extension module.
 
 A primitive lock is in one of two states, "locked" or "unlocked". It is created
@@ -392,34 +397,16 @@ and may vary across implementations.
 All methods are executed atomically.
 
 
-.. method:: Lock.acquire(blocking=True, timeout=-1)
+.. method:: Lock.acquire([blocking])
 
    Acquire a lock, blocking or non-blocking.
 
-   When invoked without arguments, block until the lock is unlocked, then set it to
-   locked, and return true.
+   When invoked with the *blocking* argument set to ``True`` (the default),
+   block until the lock is unlocked, then set it to locked and return ``True``.
 
-   When invoked with the *blocking* argument set to true, do the same thing as when
-   called without arguments, and return true.
-
-   When invoked with the *blocking* argument set to false, do not block.  If a call
-   without an argument would block, return false immediately; otherwise, do the
-   same thing as when called without arguments, and return true.
-
-   When invoked with the floating-point *timeout* argument set to a positive
-   value, block for at most the number of seconds specified by *timeout*
-   and as long as the lock cannot be acquired.  A negative *timeout* argument
-   specifies an unbounded wait.  It is forbidden to specify a *timeout*
-   when *blocking* is false.
-
-   The return value is ``True`` if the lock is acquired successfully,
-   ``False`` if not (for example if the *timeout* expired).
-
-   .. versionchanged:: 3.2
-      The *timeout* parameter is new.
-
-   .. versionchanged:: 3.2
-      Lock acquires can now be interrupted by signals on POSIX.
+   When invoked with the *blocking* argument set to ``False``, do not block.
+   If a call with *blocking* set to ``True`` would block, return ``False``
+   immediately; otherwise, set the lock to locked and return ``True``.
 
 
 .. method:: Lock.release()
@@ -430,7 +417,7 @@ All methods are executed atomically.
    are blocked waiting for the lock to become unlocked, allow exactly one of them
    to proceed.
 
-   Do not call this method when the lock is unlocked.
+   When invoked on an unlocked lock, a :exc:`ThreadError` is raised.
 
    There is no return value.
 
@@ -454,7 +441,7 @@ pair) resets the lock to unlocked and allows another thread blocked in
 :meth:`acquire` to proceed.
 
 
-.. method:: RLock.acquire(blocking=True, timeout=-1)
+.. method:: RLock.acquire([blocking=1])
 
    Acquire a lock, blocking or non-blocking.
 
@@ -472,14 +459,6 @@ pair) resets the lock to unlocked and allows another thread blocked in
    When invoked with the *blocking* argument set to false, do not block.  If a call
    without an argument would block, return false immediately; otherwise, do the
    same thing as when called without arguments, and return true.
-
-   When invoked with the floating-point *timeout* argument set to a positive
-   value, block for at most the number of seconds specified by *timeout*
-   and as long as the lock cannot be acquired.  Return true if the lock has
-   been acquired, false if the timeout has elapsed.
-
-   .. versionchanged:: 3.2
-      The *timeout* parameter is new.
 
 
 .. method:: RLock.release()
@@ -508,29 +487,29 @@ several condition variables must share the same lock.)
 
 A condition variable has :meth:`acquire` and :meth:`release` methods that call
 the corresponding methods of the associated lock. It also has a :meth:`wait`
-method, and :meth:`notify` and :meth:`notify_all` methods.  These three must only
+method, and :meth:`notify` and :meth:`notifyAll` methods.  These three must only
 be called when the calling thread has acquired the lock, otherwise a
 :exc:`RuntimeError` is raised.
 
 The :meth:`wait` method releases the lock, and then blocks until it is awakened
-by a :meth:`notify` or :meth:`notify_all` call for the same condition variable in
+by a :meth:`notify` or :meth:`notifyAll` call for the same condition variable in
 another thread.  Once awakened, it re-acquires the lock and returns.  It is also
 possible to specify a timeout.
 
 The :meth:`notify` method wakes up one of the threads waiting for the condition
-variable, if any are waiting.  The :meth:`notify_all` method wakes up all threads
+variable, if any are waiting.  The :meth:`notifyAll` method wakes up all threads
 waiting for the condition variable.
 
-Note: the :meth:`notify` and :meth:`notify_all` methods don't release the lock;
+Note: the :meth:`notify` and :meth:`notifyAll` methods don't release the lock;
 this means that the thread or threads awakened will not return from their
 :meth:`wait` call immediately, but only when the thread that called
-:meth:`notify` or :meth:`notify_all` finally relinquishes ownership of the lock.
+:meth:`notify` or :meth:`notifyAll` finally relinquishes ownership of the lock.
 
 Tip: the typical programming style using condition variables uses the lock to
 synchronize access to some shared state; threads that are interested in a
 particular change of state call :meth:`wait` repeatedly until they see the
 desired state, while threads that modify the state call :meth:`notify` or
-:meth:`notify_all` when they change the state in such a way that it could
+:meth:`notifyAll` when they change the state in such a way that it could
 possibly be a desired state for one of the waiters.  For example, the following
 code is a generic producer-consumer situation with unlimited buffer capacity::
 
@@ -547,20 +526,13 @@ code is a generic producer-consumer situation with unlimited buffer capacity::
    cv.notify()
    cv.release()
 
-To choose between :meth:`notify` and :meth:`notify_all`, consider whether one
+To choose between :meth:`notify` and :meth:`notifyAll`, consider whether one
 state change can be interesting for only one or several waiting threads.  E.g.
 in a typical producer-consumer situation, adding one item to the buffer only
 needs to wake up one consumer thread.
 
-Note:  Condition variables can be, depending on the implementation, subject
-to both spurious wakeups (when :meth:`wait` returns without a :meth:`notify`
-call) and stolen wakeups (when another thread acquires the lock before the
-awoken thread.)  For this reason, it is always necessary to verify the state
-the thread is waiting for when :meth:`wait` returns and optionally repeat
-the call as often as necessary.
 
-
-.. class:: Condition(lock=None)
+.. class:: Condition([lock])
 
    If the *lock* argument is given and not ``None``, it must be a :class:`Lock`
    or :class:`RLock` object, and it is used as the underlying lock.  Otherwise,
@@ -576,14 +548,13 @@ the call as often as necessary.
       Release the underlying lock. This method calls the corresponding method on
       the underlying lock; there is no return value.
 
-   .. method:: wait(timeout=None)
+   .. method:: wait([timeout])
 
-      Wait until notified or until a timeout occurs. If the calling thread has
-      not acquired the lock when this method is called, a :exc:`RuntimeError` is
-      raised.
+      Wait until notified or until a timeout occurs. If the calling thread has not
+      acquired the lock when this method is called, a :exc:`RuntimeError` is raised.
 
       This method releases the underlying lock, and then blocks until it is
-      awakened by a :meth:`notify` or :meth:`notify_all` call for the same
+      awakened by a :meth:`notify` or :meth:`notifyAll` call for the same
       condition variable in another thread, or until the optional timeout
       occurs.  Once awakened or timed out, it re-acquires the lock and returns.
 
@@ -599,59 +570,26 @@ the call as often as necessary.
       interface is then used to restore the recursion level when the lock is
       reacquired.
 
-      The return value is ``True`` unless a given *timeout* expired, in which
-      case it is ``False``.
+   .. method:: notify(n=1)
 
-      .. versionchanged:: 3.2
-         Previously, the method always returned ``None``.
-
-   .. method:: wait_for(predicate, timeout=None)
-
-      Wait until a condition evaluates to True.  *predicate* should be a
-      callable which result will be interpreted as a boolean value.
-      A *timeout* may be provided giving the maximum time to wait.
-
-      This utility method may call :meth:`wait` repeatedly until the predicate
-      is satisfied, or until a timeout occurs. The return value is
-      the last return value of the predicate and will evaluate to
-      ``False`` if the method timed out.
-
-      Ignoring the timeout feature, calling this method is roughly equivalent to
-      writing::
-
-        while not predicate():
-            cv.wait()
-
-      Therefore, the same rules apply as with :meth:`wait`: The lock must be
-      held when called and is re-aquired on return.  The predicate is evaluated
-      with the lock held.
-
-      Using this method, the consumer example above can be written thus::
-
-         with cv:
-             cv.wait_for(an_item_is_available)
-             get_an_available_item()
-
-      .. versionadded:: 3.2
-
-   .. method:: notify()
-
-      Wake up a thread waiting on this condition, if any.  If the calling thread
-      has not acquired the lock when this method is called, a
+      By default, wake up one thread waiting on this condition, if any.  If the
+      calling thread has not acquired the lock when this method is called, a
       :exc:`RuntimeError` is raised.
 
-      This method wakes up one of the threads waiting for the condition
-      variable, if any are waiting; it is a no-op if no threads are waiting.
+      This method wakes up at most *n* of the threads waiting for the condition
+      variable; it is a no-op if no threads are waiting.
 
-      The current implementation wakes up exactly one thread, if any are
-      waiting.  However, it's not safe to rely on this behavior.  A future,
-      optimized implementation may occasionally wake up more than one thread.
+      The current implementation wakes up exactly *n* threads, if at least *n*
+      threads are waiting.  However, it's not safe to rely on this behavior.
+      A future, optimized implementation may occasionally wake up more than
+      *n* threads.
 
-      Note: the awakened thread does not actually return from its :meth:`wait`
+      Note: an awakened thread does not actually return from its :meth:`wait`
       call until it can reacquire the lock.  Since :meth:`notify` does not
       release the lock, its caller should.
 
    .. method:: notify_all()
+               notifyAll()
 
       Wake up all threads waiting on this condition.  This method acts like
       :meth:`notify`, but wakes up all waiting threads instead of one. If the
@@ -674,13 +612,13 @@ can never go below zero; when :meth:`acquire` finds that it is zero, it blocks,
 waiting until some other thread calls :meth:`release`.
 
 
-.. class:: Semaphore(value=1)
+.. class:: Semaphore([value])
 
    The optional argument gives the initial *value* for the internal counter; it
    defaults to ``1``. If the *value* given is less than 0, :exc:`ValueError` is
    raised.
 
-   .. method:: acquire(blocking=True, timeout=None)
+   .. method:: acquire([blocking])
 
       Acquire a semaphore.
 
@@ -691,18 +629,14 @@ waiting until some other thread calls :meth:`release`.
       interlocking so that if multiple :meth:`acquire` calls are blocked,
       :meth:`release` will wake exactly one of them up.  The implementation may
       pick one at random, so the order in which blocked threads are awakened
-      should not be relied on.  Returns true (or blocks indefinitely).
+      should not be relied on.  There is no return value in this case.
+
+      When invoked with *blocking* set to true, do the same thing as when called
+      without arguments, and return true.
 
       When invoked with *blocking* set to false, do not block.  If a call
-      without an argument would block, return false immediately; otherwise,
-      do the same thing as when called without arguments, and return true.
-
-      When invoked with a *timeout* other than None, it will block for at
-      most *timeout* seconds.  If acquire does not complete successfully in
-      that interval, return false.  Return true otherwise.
-
-      .. versionchanged:: 3.2
-         The *timeout* parameter is new.
+      without an argument would block, return false immediately; otherwise, do
+      the same thing as when called without arguments, and return true.
 
    .. method:: release()
 
@@ -756,8 +690,12 @@ An event object manages an internal flag that can be set to true with the
    The internal flag is initially false.
 
    .. method:: is_set()
+               isSet()
 
       Return true if and only if the internal flag is true.
+
+      .. versionchanged:: 2.6
+         The ``is_set()`` syntax is new.
 
    .. method:: set()
 
@@ -771,11 +709,12 @@ An event object manages an internal flag that can be set to true with the
       :meth:`wait` will block until :meth:`.set` is called to set the internal
       flag to true again.
 
-   .. method:: wait(timeout=None)
+   .. method:: wait([timeout])
 
       Block until the internal flag is true.  If the internal flag is true on
       entry, return immediately.  Otherwise, block until another thread calls
-      :meth:`set` to set the flag to true, or until the optional timeout occurs.
+      :meth:`.set` to set the flag to true, or until the optional timeout
+      occurs.
 
       When the timeout argument is present and not ``None``, it should be a
       floating point number specifying a timeout for the operation in seconds
@@ -784,7 +723,7 @@ An event object manages an internal flag that can be set to true with the
       This method returns the internal flag on exit, so it will always return
       ``True`` except if a timeout is given and the operation times out.
 
-      .. versionchanged:: 3.1
+      .. versionchanged:: 2.7
          Previously, the method always returned ``None``.
 
 
@@ -805,7 +744,7 @@ exactly the same as the interval specified by the user.
 For example::
 
    def hello():
-       print("hello, world")
+       print "hello, world"
 
    t = Timer(30.0, hello)
    t.start() # after 30 seconds, "hello, world" will be printed
@@ -820,108 +759,6 @@ For example::
 
       Stop the timer, and cancel the execution of the timer's action.  This will
       only work if the timer is still in its waiting stage.
-
-
-Barrier Objects
----------------
-
-.. versionadded:: 3.2
-
-This class provides a simple synchronization primitive for use by a fixed number
-of threads that need to wait for each other.  Each of the threads tries to pass
-the barrier by calling the :meth:`wait` method and will block until all of the
-threads have made the call.  At this points, the threads are released
-simultanously.
-
-The barrier can be reused any number of times for the same number of threads.
-
-As an example, here is a simple way to synchronize a client and server thread::
-
-   b = Barrier(2, timeout=5)
-
-   def server():
-       start_server()
-       b.wait()
-       while True:
-           connection = accept_connection()
-           process_server_connection(connection)
-
-   def client():
-       b.wait()
-       while True:
-           connection = make_connection()
-           process_client_connection(connection)
-
-
-.. class:: Barrier(parties, action=None, timeout=None)
-
-   Create a barrier object for *parties* number of threads.  An *action*, when
-   provided, is a callable to be called by one of the threads when they are
-   released.  *timeout* is the default timeout value if none is specified for
-   the :meth:`wait` method.
-
-   .. method:: wait(timeout=None)
-
-      Pass the barrier.  When all the threads party to the barrier have called
-      this function, they are all released simultaneously.  If a *timeout* is
-      provided, is is used in preference to any that was supplied to the class
-      constructor.
-
-      The return value is an integer in the range 0 to *parties* -- 1, different
-      for each thread.  This can be used to select a thread to do some special
-      housekeeping, e.g.::
-
-         i = barrier.wait()
-         if i == 0:
-             # Only one thread needs to print this
-             print("passed the barrier")
-
-      If an *action* was provided to the constructor, one of the threads will
-      have called it prior to being released.  Should this call raise an error,
-      the barrier is put into the broken state.
-
-      If the call times out, the barrier is put into the broken state.
-
-      This method may raise a :class:`BrokenBarrierError` exception if the
-      barrier is broken or reset while a thread is waiting.
-
-   .. method:: reset()
-
-      Return the barrier to the default, empty state.  Any threads waiting on it
-      will receive the :class:`BrokenBarrierError` exception.
-
-      Note that using this function may can require some external
-      synchronization if there are other threads whose state is unknown.  If a
-      barrier is broken it may be better to just leave it and create a new one.
-
-   .. method:: abort()
-
-      Put the barrier into a broken state.  This causes any active or future
-      calls to :meth:`wait` to fail with the :class:`BrokenBarrierError`.  Use
-      this for example if one of the needs to abort, to avoid deadlocking the
-      application.
-
-      It may be preferable to simply create the barrier with a sensible
-      *timeout* value to automatically guard against one of the threads going
-      awry.
-
-   .. attribute:: parties
-
-      The number of threads required to pass the barrier.
-
-   .. attribute:: n_waiting
-
-      The number of threads currently waiting in the barrier.
-
-   .. attribute:: broken
-
-      A boolean that is ``True`` if the barrier is in the broken state.
-
-
-.. exception:: BrokenBarrierError
-
-   This exception, a subclass of :exc:`RuntimeError`, is raised when the
-   :class:`Barrier` object is reset or broken.
 
 
 .. _with-locks:
@@ -943,7 +780,7 @@ Currently, :class:`Lock`, :class:`RLock`, :class:`Condition`,
    some_rlock = threading.RLock()
 
    with some_rlock:
-       print("some_rlock is locked while this executes")
+       print "some_rlock is locked while this executes"
 
 
 .. _threaded-imports:

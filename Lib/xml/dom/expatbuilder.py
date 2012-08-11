@@ -476,8 +476,8 @@ class FilterVisibilityController(object):
             if val == FILTER_INTERRUPT:
                 raise ParseEscape
             if val not in _ALLOWED_FILTER_RETURNS:
-                raise ValueError(
-                      "startContainer() returned illegal value: " + repr(val))
+                raise ValueError, \
+                      "startContainer() returned illegal value: " + repr(val)
             return val
         else:
             return FILTER_ACCEPT
@@ -496,8 +496,8 @@ class FilterVisibilityController(object):
                 # node is handled by the caller
                 return FILTER_REJECT
             if val not in _ALLOWED_FILTER_RETURNS:
-                raise ValueError(
-                      "acceptNode() returned illegal value: " + repr(val))
+                raise ValueError, \
+                      "acceptNode() returned illegal value: " + repr(val)
             return val
         else:
             return FILTER_ACCEPT
@@ -918,7 +918,7 @@ def parse(file, namespaces=True):
     else:
         builder = ExpatBuilder()
 
-    if isinstance(file, str):
+    if isinstance(file, StringTypes):
         fp = open(file, 'rb')
         try:
             result = builder.parseFile(fp)
@@ -952,7 +952,7 @@ def parseFragment(file, context, namespaces=True):
     else:
         builder = FragmentBuilder(context)
 
-    if isinstance(file, str):
+    if isinstance(file, StringTypes):
         fp = open(file, 'rb')
         try:
             result = builder.parseFile(fp)

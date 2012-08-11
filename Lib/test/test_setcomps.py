@@ -9,7 +9,7 @@ Test simple loop with conditional
 Test simple case
 
     >>> {2*y + x + 1 for x in (0,) for y in (1,)}
-    {3}
+    set([3])
 
 Test simple nesting
 
@@ -68,7 +68,7 @@ Generators can call other generators:
 Make sure that None is a valid return value
 
     >>> {None for i in range(10)}
-    {None}
+    set([None])
 
 ########### Tests for various scoping corner cases ############
 
@@ -82,21 +82,21 @@ Same again, only this time as a closure variable
 
     >>> items = {(lambda: i) for i in range(5)}
     >>> {x() for x in items}
-    {4}
+    set([4])
 
 Another way to test that the iteration variable is local to the list comp
 
     >>> items = {(lambda: i) for i in range(5)}
     >>> i = 20
     >>> {x() for x in items}
-    {4}
+    set([4])
 
 And confirm that a closure can jump over the list comp scope
 
     >>> items = {(lambda: y) for i in range(5)}
     >>> y = 2
     >>> {x() for x in items}
-    {2}
+    set([2])
 
 We also repeat each of the above scoping tests inside a function
 
@@ -110,21 +110,21 @@ We also repeat each of the above scoping tests inside a function
     ...     items = {(lambda: i) for i in range(5)}
     ...     return {x() for x in items}
     >>> test_func()
-    {4}
+    set([4])
 
     >>> def test_func():
     ...     items = {(lambda: i) for i in range(5)}
     ...     i = 20
     ...     return {x() for x in items}
     >>> test_func()
-    {4}
+    set([4])
 
     >>> def test_func():
     ...     items = {(lambda: y) for i in range(5)}
     ...     y = 2
     ...     return {x() for x in items}
     >>> test_func()
-    {2}
+    set([2])
 
 """
 
@@ -133,16 +133,16 @@ __test__ = {'doctests' : doctests}
 
 def test_main(verbose=None):
     import sys
-    from test import support
+    from test import test_support
     from test import test_setcomps
-    support.run_doctest(test_setcomps, verbose)
+    test_support.run_doctest(test_setcomps, verbose)
 
     # verify reference counting
     if verbose and hasattr(sys, "gettotalrefcount"):
         import gc
         counts = [None] * 5
         for i in range(len(counts)):
-            support.run_doctest(test_setcomps, verbose)
+            test_support.run_doctest(test_setcomps, verbose)
             gc.collect()
             counts[i] = sys.gettotalrefcount()
         print(counts)

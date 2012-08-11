@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Python documentation build configuration file
 #
@@ -58,9 +59,6 @@ add_function_parentheses = True
 # unit titles (such as .. function::).
 add_module_names = True
 
-# By default, highlight as Python 3.
-highlight_language = 'python3'
-
 
 # Options for HTML output
 # -----------------------
@@ -88,7 +86,7 @@ html_additional_pages = {
 }
 
 # Output an OpenSearch description file.
-html_use_opensearch = 'http://docs.python.org/dev/py3k'
+html_use_opensearch = 'http://docs.python.org/'
 
 # Additional static files.
 html_static_path = ['tools/sphinxext/static']
@@ -117,8 +115,6 @@ latex_documents = [
      'The Python/C API', _stdauthor, 'manual'),
     ('distutils/index', 'distutils.tex',
      'Distributing Python Modules', _stdauthor, 'manual'),
-    ('documenting/index', 'documenting.tex',
-     'Documenting Python', 'Georg Brandl', 'manual'),
     ('extending/index', 'extending.tex',
      'Extending and Embedding Python', _stdauthor, 'manual'),
     ('install/index', 'install.tex',

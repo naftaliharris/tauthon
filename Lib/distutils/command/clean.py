@@ -76,3 +76,5 @@ class clean(Command):
                 log.info("removing '%s'", self.build_base)
             except OSError:
                 pass
+
+# class clean

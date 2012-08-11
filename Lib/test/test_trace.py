@@ -1,6 +1,6 @@
 import os
 import sys
-from test.support import (run_unittest, TESTFN, rmtree, unlink,
+from test.test_support import (run_unittest, TESTFN, rmtree, unlink,
                                captured_stdout)
 import unittest
 
@@ -163,9 +163,7 @@ class TestLineCounts(unittest.TestCase):
         firstlineno_called = get_firstlineno(traced_doubler)
         expected = {
             (self.my_py_filename, firstlineno_calling + 1): 1,
-            # List compehentions work differently in 3.x, so the count
-            # below changed compared to 2.x.
-            (self.my_py_filename, firstlineno_calling + 2): 12,
+            (self.my_py_filename, firstlineno_calling + 2): 11,
             (self.my_py_filename, firstlineno_calling + 3): 1,
             (self.my_py_filename, firstlineno_called + 1): 10,
         }
@@ -207,7 +205,7 @@ class TestRunExecCounts(unittest.TestCase):
             (self.my_py_filename, firstlineno + 4): 1,
         }
 
-        # When used through 'run', some other spurios counts are produced, like
+        # When used through 'run', some other spurious counts are produced, like
         # the settrace of threading, which we ignore, just making sure that the
         # counts fo traced_func_loop were right.
         #
@@ -330,24 +328,9 @@ class TestCoverage(unittest.TestCase):
             lines, cov, module = line.split()[:3]
             coverage[module] = (int(lines), int(cov[:-1]))
         # XXX This is needed to run regrtest.py as a script
-        modname = trace._fullmodname(sys.modules[modname].__file__)
+        modname = trace.fullmodname(sys.modules[modname].__file__)
         self.assertIn(modname, coverage)
         self.assertEqual(coverage[modname], (5, 100))
-
-### Tests that don't mess with sys.settrace and can be traced
-### themselves TODO: Skip tests that do mess with sys.settrace when
-### regrtest is invoked with -T option.
-class Test_Ignore(unittest.TestCase):
-    def test_ignored(self):
-        jn = os.path.join
-        ignore = trace._Ignore(['x', 'y.z'], [jn('foo', 'bar')])
-        self.assertTrue(ignore.names('x.py', 'x'))
-        self.assertFalse(ignore.names('xy.py', 'xy'))
-        self.assertFalse(ignore.names('y.py', 'y'))
-        self.assertTrue(ignore.names(jn('foo', 'bar', 'baz.py'), 'baz'))
-        self.assertFalse(ignore.names(jn('bar', 'z.py'), 'z'))
-        # Matched before.
-        self.assertTrue(ignore.names(jn('bar', 'baz.py'), 'baz'))
 
 
 def test_main():

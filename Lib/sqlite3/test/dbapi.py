@@ -22,6 +22,7 @@
 # 3. This notice may not be removed or altered from any source distribution.
 
 import unittest
+import sys
 import sqlite3 as sqlite
 try:
     import threading
@@ -43,12 +44,12 @@ class ModuleTests(unittest.TestCase):
                          sqlite.paramstyle)
 
     def CheckWarning(self):
-        self.assertTrue(issubclass(sqlite.Warning, Exception),
-                     "Warning is not a subclass of Exception")
+        self.assertTrue(issubclass(sqlite.Warning, StandardError),
+                        "Warning is not a subclass of StandardError")
 
     def CheckError(self):
-        self.assertTrue(issubclass(sqlite.Error, Exception),
-                        "Error is not a subclass of Exception")
+        self.assertTrue(issubclass(sqlite.Error, StandardError),
+                        "Error is not a subclass of StandardError")
 
     def CheckInterfaceError(self):
         self.assertTrue(issubclass(sqlite.InterfaceError, sqlite.Error),
@@ -84,7 +85,6 @@ class ModuleTests(unittest.TestCase):
                         "NotSupportedError is not a subclass of DatabaseError")
 
 class ConnectionTests(unittest.TestCase):
-
     def setUp(self):
         self.cx = sqlite.connect(":memory:")
         cu = self.cx.cursor()
@@ -140,28 +140,6 @@ class ConnectionTests(unittest.TestCase):
         self.assertEqual(self.cx.InternalError, sqlite.InternalError)
         self.assertEqual(self.cx.ProgrammingError, sqlite.ProgrammingError)
         self.assertEqual(self.cx.NotSupportedError, sqlite.NotSupportedError)
-
-    def CheckInTransaction(self):
-        # Can't use db from setUp because we want to test initial state.
-        cx = sqlite.connect(":memory:")
-        cu = cx.cursor()
-        self.assertEqual(cx.in_transaction, False)
-        cu.execute("create table transactiontest(id integer primary key, name text)")
-        self.assertEqual(cx.in_transaction, False)
-        cu.execute("insert into transactiontest(name) values (?)", ("foo",))
-        self.assertEqual(cx.in_transaction, True)
-        cu.execute("select name from transactiontest where name=?", ["foo"])
-        row = cu.fetchone()
-        self.assertEqual(cx.in_transaction, True)
-        cx.commit()
-        self.assertEqual(cx.in_transaction, False)
-        cu.execute("select name from transactiontest where name=?", ["foo"])
-        row = cu.fetchone()
-        self.assertEqual(cx.in_transaction, False)
-
-    def CheckInTransactionRO(self):
-        with self.assertRaises(AttributeError):
-            self.cx.in_transaction = True
 
 class CursorTests(unittest.TestCase):
     def setUp(self):
@@ -225,6 +203,13 @@ class CursorTests(unittest.TestCase):
     def CheckExecuteArgString(self):
         self.cu.execute("insert into test(name) values (?)", ("Hugo",))
 
+    def CheckExecuteArgStringWithZeroByte(self):
+        self.cu.execute("insert into test(name) values (?)", ("Hu\x00go",))
+
+        self.cu.execute("select name from test where id=?", (self.cu.lastrowid,))
+        row = self.cu.fetchone()
+        self.assertEqual(row[0], "Hu\x00go")
+
     def CheckExecuteWrongNoOfArgs1(self):
         # too many parameters
         try:
@@ -275,6 +260,10 @@ class CursorTests(unittest.TestCase):
         self.assertEqual(row[0], "foo")
 
     def CheckExecuteDictMapping_Mapping(self):
+        # Test only works with Python 2.5 or later
+        if sys.version_info < (2, 5, 0):
+            return
+
         class D(dict):
             def __missing__(self, key):
                 return "foo"
@@ -350,7 +339,7 @@ class CursorTests(unittest.TestCase):
             def __init__(self):
                 self.value = 5
 
-            def __next__(self):
+            def next(self):
                 if self.value == 10:
                     raise StopIteration
                 else:
@@ -390,8 +379,8 @@ class CursorTests(unittest.TestCase):
             self.fail("should have raised a TypeError")
         except TypeError:
             return
-        except Exception as e:
-            print("raised", e.__class__)
+        except Exception, e:
+            print "raised", e.__class__
             self.fail("raised wrong exception.")
 
     def CheckFetchIter(self):
@@ -664,7 +653,7 @@ class ConstructorTests(unittest.TestCase):
         ts = sqlite.TimestampFromTicks(42)
 
     def CheckBinary(self):
-        b = sqlite.Binary(b"\0'")
+        b = sqlite.Binary(chr(0) + "'")
 
 class ExtensionTests(unittest.TestCase):
     def CheckScriptStringSql(self):
@@ -679,6 +668,20 @@ class ExtensionTests(unittest.TestCase):
         cur.execute("select i from a")
         res = cur.fetchone()[0]
         self.assertEqual(res, 5)
+
+    def CheckScriptStringUnicode(self):
+        con = sqlite.connect(":memory:")
+        cur = con.cursor()
+        cur.executescript(u"""
+            create table a(i);
+            insert into a(i) values (5);
+            select i from a;
+            delete from a;
+            insert into a(i) values (6);
+            """)
+        cur.execute("select i from a")
+        res = cur.fetchone()[0]
+        self.assertEqual(res, 6)
 
     def CheckScriptSyntaxError(self):
         con = sqlite.connect(":memory:")

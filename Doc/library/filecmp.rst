@@ -16,7 +16,7 @@ see also the :mod:`difflib` module.
 The :mod:`filecmp` module defines the following functions:
 
 
-.. function:: cmp(f1, f2, shallow=True)
+.. function:: cmp(f1, f2[, shallow])
 
    Compare the files named *f1* and *f2*, returning ``True`` if they seem equal,
    ``False`` otherwise.
@@ -31,7 +31,7 @@ The :mod:`filecmp` module defines the following functions:
    portability and efficiency.
 
 
-.. function:: cmpfiles(dir1, dir2, common, shallow=True)
+.. function:: cmpfiles(dir1, dir2, common[, shallow])
 
    Compare the files in the two directories *dir1* and *dir2* whose names are
    given by *common*.
@@ -68,12 +68,15 @@ The :class:`dircmp` class
 :class:`dircmp` instances are built using this constructor:
 
 
-.. class:: dircmp(a, b, ignore=None, hide=None)
+.. class:: dircmp(a, b[, ignore[, hide]])
 
    Construct a new directory comparison object, to compare the directories *a* and
    *b*. *ignore* is a list of names to ignore, and defaults to ``['RCS', 'CVS',
    'tags']``. *hide* is a list of names to hide, and defaults to ``[os.curdir,
    os.pardir]``.
+
+   The :class:`dircmp` class compares files by doing *shallow* comparisons
+   as described for :func:`filecmp.cmp`.
 
    The :class:`dircmp` class provides the following methods:
 
@@ -94,7 +97,7 @@ The :class:`dircmp` class
       Print a comparison between *a* and *b* and common subdirectories
       (recursively).
 
-   The :class:`dircmp` offers a number of interesting attributes that may be
+   The :class:`dircmp` class offers a number of interesting attributes that may be
    used to get various bits of information about the directory trees being
    compared.
 
@@ -146,12 +149,14 @@ The :class:`dircmp` class
 
    .. attribute:: same_files
 
-      Files which are identical in both *a* and *b*.
+      Files which are identical in both *a* and *b*, using the class's
+      file comparison operator.
 
 
    .. attribute:: diff_files
 
-      Files which are in both *a* and *b*, whose contents differ.
+      Files which are in both *a* and *b*, whose contents differ according
+      to the class's file comparison operator.
 
 
    .. attribute:: funny_files
@@ -161,6 +166,5 @@ The :class:`dircmp` class
 
    .. attribute:: subdirs
 
-      A dictionary mapping names in :attr:`common_dirs` to :class:`dircmp`
-      objects.
+      A dictionary mapping names in :attr:`common_dirs` to :class:`dircmp` objects.
 

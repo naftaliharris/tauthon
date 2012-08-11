@@ -4,7 +4,7 @@
 
 import distutils.versionpredicate
 import doctest
-from test.support import run_unittest
+from test.test_support import run_unittest
 
 def test_suite():
     return doctest.DocTestSuite(distutils.versionpredicate)

@@ -91,6 +91,7 @@ extensions = [
     'unicodedata.pyd',
     'winsound.pyd',
     '_elementtree.pyd',
+    '_bsddb.pyd',
     '_socket.pyd',
     '_ssl.pyd',
     '_testcapi.pyd',
@@ -116,9 +117,6 @@ pythondll_uuid = {
     "25":"{2e41b118-38bd-4c1b-a840-6977efd1b911}",
     "26":"{34ebecac-f046-4e1c-b0e3-9bac3cdaacfa}",
     "27":"{4fe21c76-1760-437b-a2f2-99909130a175}",
-    "30":"{6953bc3b-6768-4291-8410-7914ce6e2ca8}",
-    "31":"{4afcba0b-13e4-47c3-bebe-477428b46913}",
-    "32":"{3ff95315-1096-4d31-bd86-601d5438ad5e}",
     } [major+minor]
 
 # Compute the name that Sphinx gives to the docfile
@@ -140,7 +138,7 @@ def build_mingw_lib(lib_file, def_file, dll_file, mingw_lib):
     dlltool = find_executable('dlltool')
 
     if not nm or not dlltool:
-        print(warning % "nm and/or dlltool were not found")
+        print warning % "nm and/or dlltool were not found"
         return False
 
     nm_command = '%s -Cs %s' % (nm, lib_file)
@@ -149,23 +147,23 @@ def build_mingw_lib(lib_file, def_file, dll_file, mingw_lib):
     export_match = re.compile(r"^_imp__(.*) in python\d+\.dll").match
 
     f = open(def_file,'w')
-    f.write("LIBRARY %s\n" % dll_file)
-    f.write("EXPORTS\n")
+    print >>f, "LIBRARY %s" % dll_file
+    print >>f, "EXPORTS"
 
     nm_pipe = os.popen(nm_command)
     for line in nm_pipe.readlines():
         m = export_match(line)
         if m:
-            f.write(m.group(1)+"\n")
+            print >>f, m.group(1)
     f.close()
     exit = nm_pipe.close()
 
     if exit:
-        print(warning % "nm did not run successfully")
+        print warning % "nm did not run successfully"
         return False
 
     if os.system(dlltool_command) != 0:
-        print(warning % "dlltool did not run successfully")
+        print warning % "dlltool did not run successfully"
         return False
 
     return True
@@ -178,11 +176,13 @@ mingw_lib = os.path.join(srcdir, PCBUILD, "libpython%s%s.a" % (major, minor))
 
 have_mingw = build_mingw_lib(lib_file, def_file, dll_file, mingw_lib)
 
-# Determine the target architechture
+# Determine the target architecture
+if os.system("nmake /nologo /c /f msisupport.mak") != 0:
+    raise RuntimeError("'nmake /f msisupport.mak' failed")
 dll_path = os.path.join(srcdir, PCBUILD, dll_file)
 msilib.set_arch_from_file(dll_path)
 if msilib.pe_type(dll_path) != msilib.pe_type("msisupport.dll"):
-    raise SystemError("msisupport.dll for incorrect architecture")
+    raise SystemError, "msisupport.dll for incorrect architecture"
 if msilib.Win64:
     upgrade_code = upgrade_code_64
     # Bump the last digit of the code by one, so that 32-bit and 64-bit
@@ -363,7 +363,7 @@ def add_ui(db):
 
     # Bitmaps
     if not os.path.exists(srcdir+r"\PC\python_icon.exe"):
-        raise RuntimeError("Run icons.mak in PC directory")
+        raise "Run icons.mak in PC directory"
     add_data(db, "Binary",
              [("PythonWin", msilib.Binary(r"%s\PCbuild\installer.bmp" % srcdir)), # 152x328 pixels
               ("py.ico",msilib.Binary(srcdir+r"\PC\py.ico")),
@@ -376,8 +376,6 @@ def add_ui(db):
     # UpdateEditIDLE sets the REGISTRY.tcl component into
     # the installed/uninstalled state according to both the
     # Extensions and TclTk features.
-    if os.system("nmake /nologo /c /f msisupport.mak") != 0:
-        raise RuntimeError("'nmake /f msisupport.mak' failed")
     add_data(db, "Binary", [("Script", msilib.Binary("msisupport.dll"))])
     # See "Custom Action Type 1"
     if msilib.Win64:
@@ -410,7 +408,7 @@ def add_ui(db):
               ("VerdanaRed9", "Verdana", 9, 255, 0),
              ])
 
-    compileargs = r'-Wi "[TARGETDIR]Lib\compileall.py" -f -x "bad_coding|badsyntax|site-packages|py2_|lib2to3\\tests" "[TARGETDIR]Lib"'
+    compileargs = r'-Wi "[TARGETDIR]Lib\compileall.py" -f -x "bad_coding|badsyntax|site-packages|py3_" "[TARGETDIR]Lib"'
     lib2to3args = r'-c "import lib2to3.pygram, lib2to3.patcomp;lib2to3.patcomp.PatternCompiler()"'
     # See "CustomAction Table"
     add_data(db, "CustomAction", [
@@ -497,7 +495,7 @@ def add_ui(db):
 
     exit_dialog = PyDialog(db, "ExitDialog", x, y, w, h, modal, title,
                          "Finish", "Finish", "Finish")
-    exit_dialog.title("Completing the [ProductName] Installer")
+    exit_dialog.title("Complete the [ProductName] Installer")
     exit_dialog.back("< Back", "Finish", active = 0)
     exit_dialog.cancel("Cancel", "Back", active = 0)
     exit_dialog.text("Acknowledgements", 135, 95, 220, 120, 0x30003,
@@ -507,9 +505,9 @@ def add_ui(db):
       "    would still be Python for DOS.")
 
     c = exit_dialog.text("warning", 135, 200, 220, 40, 0x30003,
-            "{\\VerdanaRed9}Warning: Python 2.5.x is the last "
-            "Python release for Windows 9x.")
-    c.condition("Hide", "NOT Version9X")
+            "{\\VerdanaRed9}Warning: Python 3.3.0 is the last "
+            "Python release for Windows 2000.")
+    c.condition("Hide", "VersionNT > 500")
 
     exit_dialog.text("Description", 135, 235, 220, 20, 0x30003,
                "Click the Finish button to exit the Installer.")
@@ -881,6 +879,7 @@ def generate_license():
     shutil.copyfileobj(open(os.path.join(srcdir, "LICENSE")), out)
     shutil.copyfileobj(open("crtlicense.txt"), out)
     for name, pat, file in (("bzip2","bzip2-*", "LICENSE"),
+                      ("Berkeley DB", "db-*", "LICENSE"),
                       ("openssl", "openssl-*", "LICENSE"),
                       ("Tcl", "tcl8*", "license.terms"),
                       ("Tk", "tk8*", "license.terms"),
@@ -900,16 +899,9 @@ class PyDirectory(Directory):
     """By default, all components in the Python installer
     can run from source."""
     def __init__(self, *args, **kw):
-        if "componentflags" not in kw:
+        if not kw.has_key("componentflags"):
             kw['componentflags'] = 2 #msidbComponentAttributesOptional
         Directory.__init__(self, *args, **kw)
-
-    def check_unpackaged(self):
-        self.unpackaged_files.discard('__pycache__')
-        self.unpackaged_files.discard('.svn')
-        if self.unpackaged_files:
-            print "Warning: Unpackaged files in %s" % self.absolute
-            print self.unpackaged_files
 
 # See "File Table", "Component Table", "Directory Table",
 # "FeatureComponents Table"
@@ -970,24 +962,24 @@ def add_files(db):
     # Check if _ctypes.pyd exists
     have_ctypes = os.path.exists(srcdir+"/%s/_ctypes.pyd" % PCBUILD)
     if not have_ctypes:
-        print("WARNING: _ctypes.pyd not found, ctypes will not be included")
+        print "WARNING: _ctypes.pyd not found, ctypes will not be included"
         extensions.remove("_ctypes.pyd")
 
-    # Add all .py files in Lib, except tkinter, test
-    dirs = []
+    # Add all .py files in Lib, except lib-tk, test
+    dirs={}
     pydirs = [(root,"Lib")]
     while pydirs:
         # Commit every now and then, or else installer will complain
         db.Commit()
         parent, dir = pydirs.pop()
-        if dir == ".svn" or dir == '__pycache__' or dir.startswith("plat-"):
+        if dir == ".svn" or dir.startswith("plat-"):
             continue
-        elif dir in ["tkinter", "idlelib", "Icons"]:
+        elif dir in ["lib-tk", "idlelib", "Icons"]:
             if not have_tcl:
                 continue
             tcltk.set_current()
         elif dir in ['test', 'tests', 'data', 'output']:
-            # test: Lib, Lib/email, Lib/ctypes, Lib/sqlite3
+            # test: Lib, Lib/email, Lib/bsddb, Lib/ctypes, Lib/sqlite3
             # tests: Lib/distutils
             # data: Lib/email/test
             # output: Lib/test
@@ -998,7 +990,7 @@ def add_files(db):
             default_feature.set_current()
         lib = PyDirectory(db, cab, parent, dir, dir, "%s|%s" % (parent.make_short(dir), dir))
         # Add additional files
-        dirs.append(lib)
+        dirs[dir]=lib
         lib.glob("*.txt")
         if dir=='site-packages':
             lib.add_file("README.txt", src="README")
@@ -1008,13 +1000,16 @@ def add_files(db):
         if files:
             # Add an entry to the RemoveFile table to remove bytecode files.
             lib.remove_pyc()
-        # package READMEs if present
-        lib.glob("README")
-        if dir=='Lib':
-            lib.add_file('wsgiref.egg-info')
+        if dir.endswith('.egg-info'):
+            lib.add_file('entry_points.txt')
+            lib.add_file('PKG-INFO')
+            lib.add_file('top_level.txt')
+            lib.add_file('zip-safe')
+            continue
         if dir=='test' and parent.physical=='Lib':
             lib.add_file("185test.db")
             lib.add_file("audiotest.au")
+            lib.add_file("cfgparser.1")
             lib.add_file("sgml_input.html")
             lib.add_file("testtar.tar")
             lib.add_file("test_difflib_expect.html")
@@ -1024,11 +1019,7 @@ def add_files(db):
             lib.glob("*.uue")
             lib.glob("*.pem")
             lib.glob("*.pck")
-            lib.glob("cfgparser.*")
-            lib.add_file("zip_cp437_header.zip")
             lib.add_file("zipdir.zip")
-        if dir=='capath':
-            lib.glob("*.0")
         if dir=='tests' and parent.physical=='distutils':
             lib.add_file("Setup.sample")
         if dir=='decimaltestdata':
@@ -1038,27 +1029,19 @@ def add_files(db):
             lib.add_file("test.xml.out")
         if dir=='output':
             lib.glob("test_*")
-        if dir=='sndhdrdata':
-            lib.glob("sndhdr.*")
         if dir=='idlelib':
             lib.glob("*.def")
             lib.add_file("idle.bat")
-            lib.add_file("ChangeLog")
         if dir=="Icons":
             lib.glob("*.gif")
             lib.add_file("idle.icns")
         if dir=="command" and parent.physical=="distutils":
             lib.glob("wininst*.exe")
-            lib.add_file("command_template")
+        if dir=="setuptools":
+            lib.add_file("cli.exe")
+            lib.add_file("gui.exe")
         if dir=="lib2to3":
             lib.removefile("pickle", "*.pickle")
-        if dir=="macholib":
-            lib.add_file("README.ctypes")
-            lib.glob("fetch_macholib*")
-        if dir=='turtledemo':
-            lib.add_file("turtle.cfg")
-        if dir=="pydoc_data":
-            lib.add_file("_pydoc.css")
         if dir=="data" and parent.physical=="test" and parent.basedir.physical=="email":
             # This should contain all non-.svn files listed in subversion
             for f in os.listdir(lib.absolute):
@@ -1066,12 +1049,10 @@ def add_files(db):
                 if f.endswith(".au") or f.endswith(".gif"):
                     lib.add_file(f)
                 else:
-                    print("WARNING: New file %s in email/test/data" % f)
+                    print "WARNING: New file %s in email/test/data" % f
         for f in os.listdir(lib.absolute):
             if os.path.isdir(os.path.join(lib.absolute, f)):
                 pydirs.append((lib, f))
-    for d in dirs:
-        d.check_unpackaged()
     # Add DLLs
     default_feature.set_current()
     lib = DLLs
@@ -1083,11 +1064,10 @@ def add_files(db):
         if f=="_tkinter.pyd":
             continue
         if not os.path.exists(srcdir + "/" + PCBUILD + "/" + f):
-            print("WARNING: Missing extension", f)
+            print "WARNING: Missing extension", f
             continue
         dlls.append(f)
         lib.add_file(f)
-    lib.add_file('python3.dll')
     # Add sqlite
     if msilib.msi_type=="Intel64;1033":
         sqlite_arch = "/ia64"
@@ -1100,7 +1080,7 @@ def add_files(db):
     lib.add_file("sqlite3.dll")
     if have_tcl:
         if not os.path.exists("%s/%s/_tkinter.pyd" % (srcdir, PCBUILD)):
-            print("WARNING: Missing _tkinter.pyd")
+            print "WARNING: Missing _tkinter.pyd"
         else:
             lib.start_component("TkDLLs", tcltk)
             lib.add_file("_tkinter.pyd")
@@ -1112,7 +1092,7 @@ def add_files(db):
     for f in glob.glob1(srcdir+"/"+PCBUILD, "*.pyd"):
         if f.endswith("_d.pyd"): continue # debug version
         if f in dlls: continue
-        print("WARNING: Unknown extension", f)
+        print "WARNING: Unknown extension", f
 
     # Add headers
     default_feature.set_current()
@@ -1124,7 +1104,6 @@ def add_files(db):
     for f in dlls:
         lib.add_file(f.replace('pyd','lib'))
     lib.add_file('python%s%s.lib' % (major, minor))
-    lib.add_file('python3.lib')
     # Add the mingw-format library
     if have_mingw:
         lib.add_file('libpython%s%s.a' % (major, minor))
@@ -1145,7 +1124,7 @@ def add_files(db):
     # Add tools
     tools.set_current()
     tooldir = PyDirectory(db, cab, root, "Tools", "Tools", "TOOLS|Tools")
-    for f in ['i18n', 'pynche', 'Scripts']:
+    for f in ['i18n', 'pynche', 'Scripts', 'versioncheck', 'webchecker']:
         lib = PyDirectory(db, cab, tooldir, f, f, "%s|%s" % (tooldir.make_short(f), f))
         lib.glob("*.py")
         lib.glob("*.pyw", exclude=['pydocgui.pyw'])
@@ -1279,7 +1258,7 @@ def add_registry(db):
               ("InstallGroup", -1, prefix+r"\InstallPath\InstallGroup", "",
                "Python %s" % short_version, "REGISTRY"),
               ("PythonPath", -1, prefix+r"\PythonPath", "",
-               r"[TARGETDIR]Lib;[TARGETDIR]DLLs", "REGISTRY"),
+               r"[TARGETDIR]Lib;[TARGETDIR]DLLs;[TARGETDIR]Lib\lib-tk", "REGISTRY"),
               ("Documentation", -1, prefix+r"\Help\Main Python Documentation", "",
                "[TARGETDIR]Doc\\"+docfile , "REGISTRY.doc"),
               ("Modules", -1, prefix+r"\Modules", "+", None, "REGISTRY"),

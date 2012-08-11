@@ -1,7 +1,7 @@
 #-*- coding: ISO-8859-1 -*-
 # pysqlite2/test/regression.py: pysqlite regression tests
 #
-# Copyright (C) 2006-2010 Gerhard Häring <gh@ghaering.de>
+# Copyright (C) 2006-2007 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -52,10 +52,10 @@ class RegressionTests(unittest.TestCase):
         # reset before a rollback, but only those that are still in the
         # statement cache. The others are not accessible from the connection object.
         con = sqlite.connect(":memory:", cached_statements=5)
-        cursors = [con.cursor() for x in range(5)]
+        cursors = [con.cursor() for x in xrange(5)]
         cursors[0].execute("create table test(x)")
         for i in range(10):
-            cursors[0].executemany("insert into test(x) values (?)", [(x,) for x in range(10)])
+            cursors[0].executemany("insert into test(x) values (?)", [(x,) for x in xrange(10)])
 
         for i in range(5):
             cursors[i].execute(" " * i + "select x from test")
@@ -116,6 +116,18 @@ class RegressionTests(unittest.TestCase):
         """
         self.con.execute("")
 
+    def CheckUnicodeConnect(self):
+        """
+        With pysqlite 2.4.0 you needed to use a string or a APSW connection
+        object for opening database connections.
+
+        Formerly, both bytestrings and unicode strings used to work.
+
+        Let's make sure unicode strings work in the future.
+        """
+        con = sqlite.connect(u":memory:")
+        con.close()
+
     def CheckTypeMapUsage(self):
         """
         pysqlite until 2.4.1 did not rebuild the row_cast_map when recompiling
@@ -131,21 +143,6 @@ class RegressionTests(unittest.TestCase):
         con.execute("insert into foo(bar) values (5)")
         con.execute(SELECT)
 
-    def CheckErrorMsgDecodeError(self):
-        # When porting the module to Python 3.0, the error message about
-        # decoding errors disappeared. This verifies they're back again.
-        failure = None
-        try:
-            self.con.execute("select 'xxx' || ? || 'yyy' colname",
-                             (bytes(bytearray([250])),)).fetchone()
-            failure = "should have raised an OperationalError with detailed description"
-        except sqlite.OperationalError as e:
-            msg = e.args[0]
-            if not msg.startswith("Could not decode to UTF-8 column 'colname' with text 'xxx"):
-                failure = "OperationalError did not have expected description text"
-        if failure:
-            self.fail(failure)
-
     def CheckRegisterAdapter(self):
         """
         See issue 3312.
@@ -157,7 +154,8 @@ class RegressionTests(unittest.TestCase):
         See issue 3312.
         """
         con = sqlite.connect(":memory:")
-        setattr(con, "isolation_level", "\xe9")
+        self.assertRaises(UnicodeEncodeError, setattr, con,
+                          "isolation_level", u"\xe9")
 
     def CheckCursorConstructorCallCheck(self):
         """
@@ -176,14 +174,6 @@ class RegressionTests(unittest.TestCase):
             pass
         except:
             self.fail("should have raised ProgrammingError")
-
-
-    def CheckStrSubclass(self):
-        """
-        The Python 3.0 port of the module didn't cope with values of subclasses of str.
-        """
-        class MyStr(str): pass
-        self.con.execute("select ?", (MyStr("abc"),))
 
     def CheckConnectionConstructorCallCheck(self):
         """
@@ -274,12 +264,27 @@ class RegressionTests(unittest.TestCase):
         """
         self.assertRaises(sqlite.Warning, self.con, 1)
 
-    def CheckCollation(self):
-        def collation_cb(a, b):
-            return 1
-        self.assertRaises(sqlite.ProgrammingError, self.con.create_collation,
-            # Lone surrogate cannot be encoded to the default encoding (utf8)
-            "\uDC80", collation_cb)
+    def CheckRecursiveCursorUse(self):
+        """
+        http://bugs.python.org/issue10811
+
+        Recursively using a cursor, such as when reusing it from a generator led to segfaults.
+        Now we catch recursive cursor usage and raise a ProgrammingError.
+        """
+        con = sqlite.connect(":memory:")
+
+        cur = con.cursor()
+        cur.execute("create table a (bar)")
+        cur.execute("create table b (baz)")
+
+        def foo():
+            cur.execute("insert into a (bar) values (?)", (1,))
+            yield 1
+
+        with self.assertRaises(sqlite.ProgrammingError):
+            cur.executemany("insert into b (baz) values (?)",
+                            ((i,) for i in foo()))
+
 
 def suite():
     regression_suite = unittest.makeSuite(RegressionTests, "Check")

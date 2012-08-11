@@ -4,6 +4,7 @@
 /* XXX Signals should be recorded per thread, now we have thread state. */
 
 #include "Python.h"
+#include "intrcheck.h"
 
 #ifdef MS_WINDOWS
 #include <Windows.h>
@@ -166,6 +167,20 @@ checksignals_witharg(void * unused)
 }
 
 static void
+trip_signal(int sig_num)
+{
+    Handlers[sig_num].tripped = 1;
+    if (is_tripped)
+        return;
+    /* Set is_tripped after setting .tripped, as it gets
+       cleared in PyErr_CheckSignals() before .tripped. */
+    is_tripped = 1;
+    Py_AddPendingCall(checksignals_witharg, NULL);
+    if (wakeup_fd != -1)
+        write(wakeup_fd, "\0", 1);
+}
+
+static void
 signal_handler(int sig_num)
 {
     int save_errno = errno;
@@ -182,13 +197,7 @@ signal_handler(int sig_num)
     if (getpid() == main_pid)
 #endif
     {
-        Handlers[sig_num].tripped = 1;
-        /* Set is_tripped after setting .tripped, as it gets
-           cleared in PyErr_CheckSignals() before .tripped. */
-        is_tripped = 1;
-        Py_AddPendingCall(checksignals_witharg, NULL);
-        if (wakeup_fd != -1)
-            write(wakeup_fd, "\0", 1);
+        trip_signal(sig_num);
     }
 
 #ifndef HAVE_SIGACTION
@@ -220,7 +229,7 @@ signal_alarm(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "i:alarm", &t))
         return NULL;
     /* alarm() returns the number of seconds remaining */
-    return PyLong_FromLong((long)alarm(t));
+    return PyInt_FromLong((long)alarm(t));
 }
 
 PyDoc_STRVAR(alarm_doc,
@@ -551,20 +560,8 @@ ITIMER_PROF -- decrements both when the process is executing and\n\
 A signal handler function is called with two arguments:\n\
 the first is the signal number, the second is the interrupted stack frame.");
 
-static struct PyModuleDef signalmodule = {
-    PyModuleDef_HEAD_INIT,
-    "signal",
-    module_doc,
-    -1,
-    signal_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_signal(void)
+initsignal(void)
 {
     PyObject *m, *d, *x;
     int i;
@@ -575,9 +572,9 @@ PyInit_signal(void)
 #endif
 
     /* Create the module and add the functions */
-    m = PyModule_Create(&signalmodule);
+    m = Py_InitModule3("signal", signal_methods, module_doc);
     if (m == NULL)
-        return NULL;
+        return;
 
     /* Add some symbolic constants to the module */
     d = PyModule_GetDict(m);
@@ -590,7 +587,7 @@ PyInit_signal(void)
     if (!x || PyDict_SetItemString(d, "SIG_IGN", x) < 0)
         goto finally;
 
-    x = PyLong_FromLong((long)NSIG);
+    x = PyInt_FromLong((long)NSIG);
     if (!x || PyDict_SetItemString(d, "NSIG", x) < 0)
         goto finally;
     Py_DECREF(x);
@@ -622,192 +619,192 @@ PyInit_signal(void)
     }
 
 #ifdef SIGHUP
-    x = PyLong_FromLong(SIGHUP);
+    x = PyInt_FromLong(SIGHUP);
     PyDict_SetItemString(d, "SIGHUP", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGINT
-    x = PyLong_FromLong(SIGINT);
+    x = PyInt_FromLong(SIGINT);
     PyDict_SetItemString(d, "SIGINT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGBREAK
-    x = PyLong_FromLong(SIGBREAK);
+    x = PyInt_FromLong(SIGBREAK);
     PyDict_SetItemString(d, "SIGBREAK", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGQUIT
-    x = PyLong_FromLong(SIGQUIT);
+    x = PyInt_FromLong(SIGQUIT);
     PyDict_SetItemString(d, "SIGQUIT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGILL
-    x = PyLong_FromLong(SIGILL);
+    x = PyInt_FromLong(SIGILL);
     PyDict_SetItemString(d, "SIGILL", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGTRAP
-    x = PyLong_FromLong(SIGTRAP);
+    x = PyInt_FromLong(SIGTRAP);
     PyDict_SetItemString(d, "SIGTRAP", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGIOT
-    x = PyLong_FromLong(SIGIOT);
+    x = PyInt_FromLong(SIGIOT);
     PyDict_SetItemString(d, "SIGIOT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGABRT
-    x = PyLong_FromLong(SIGABRT);
+    x = PyInt_FromLong(SIGABRT);
     PyDict_SetItemString(d, "SIGABRT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGEMT
-    x = PyLong_FromLong(SIGEMT);
+    x = PyInt_FromLong(SIGEMT);
     PyDict_SetItemString(d, "SIGEMT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGFPE
-    x = PyLong_FromLong(SIGFPE);
+    x = PyInt_FromLong(SIGFPE);
     PyDict_SetItemString(d, "SIGFPE", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGKILL
-    x = PyLong_FromLong(SIGKILL);
+    x = PyInt_FromLong(SIGKILL);
     PyDict_SetItemString(d, "SIGKILL", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGBUS
-    x = PyLong_FromLong(SIGBUS);
+    x = PyInt_FromLong(SIGBUS);
     PyDict_SetItemString(d, "SIGBUS", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGSEGV
-    x = PyLong_FromLong(SIGSEGV);
+    x = PyInt_FromLong(SIGSEGV);
     PyDict_SetItemString(d, "SIGSEGV", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGSYS
-    x = PyLong_FromLong(SIGSYS);
+    x = PyInt_FromLong(SIGSYS);
     PyDict_SetItemString(d, "SIGSYS", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGPIPE
-    x = PyLong_FromLong(SIGPIPE);
+    x = PyInt_FromLong(SIGPIPE);
     PyDict_SetItemString(d, "SIGPIPE", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGALRM
-    x = PyLong_FromLong(SIGALRM);
+    x = PyInt_FromLong(SIGALRM);
     PyDict_SetItemString(d, "SIGALRM", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGTERM
-    x = PyLong_FromLong(SIGTERM);
+    x = PyInt_FromLong(SIGTERM);
     PyDict_SetItemString(d, "SIGTERM", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGUSR1
-    x = PyLong_FromLong(SIGUSR1);
+    x = PyInt_FromLong(SIGUSR1);
     PyDict_SetItemString(d, "SIGUSR1", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGUSR2
-    x = PyLong_FromLong(SIGUSR2);
+    x = PyInt_FromLong(SIGUSR2);
     PyDict_SetItemString(d, "SIGUSR2", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGCLD
-    x = PyLong_FromLong(SIGCLD);
+    x = PyInt_FromLong(SIGCLD);
     PyDict_SetItemString(d, "SIGCLD", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGCHLD
-    x = PyLong_FromLong(SIGCHLD);
+    x = PyInt_FromLong(SIGCHLD);
     PyDict_SetItemString(d, "SIGCHLD", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGPWR
-    x = PyLong_FromLong(SIGPWR);
+    x = PyInt_FromLong(SIGPWR);
     PyDict_SetItemString(d, "SIGPWR", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGIO
-    x = PyLong_FromLong(SIGIO);
+    x = PyInt_FromLong(SIGIO);
     PyDict_SetItemString(d, "SIGIO", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGURG
-    x = PyLong_FromLong(SIGURG);
+    x = PyInt_FromLong(SIGURG);
     PyDict_SetItemString(d, "SIGURG", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGWINCH
-    x = PyLong_FromLong(SIGWINCH);
+    x = PyInt_FromLong(SIGWINCH);
     PyDict_SetItemString(d, "SIGWINCH", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGPOLL
-    x = PyLong_FromLong(SIGPOLL);
+    x = PyInt_FromLong(SIGPOLL);
     PyDict_SetItemString(d, "SIGPOLL", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGSTOP
-    x = PyLong_FromLong(SIGSTOP);
+    x = PyInt_FromLong(SIGSTOP);
     PyDict_SetItemString(d, "SIGSTOP", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGTSTP
-    x = PyLong_FromLong(SIGTSTP);
+    x = PyInt_FromLong(SIGTSTP);
     PyDict_SetItemString(d, "SIGTSTP", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGCONT
-    x = PyLong_FromLong(SIGCONT);
+    x = PyInt_FromLong(SIGCONT);
     PyDict_SetItemString(d, "SIGCONT", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGTTIN
-    x = PyLong_FromLong(SIGTTIN);
+    x = PyInt_FromLong(SIGTTIN);
     PyDict_SetItemString(d, "SIGTTIN", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGTTOU
-    x = PyLong_FromLong(SIGTTOU);
+    x = PyInt_FromLong(SIGTTOU);
     PyDict_SetItemString(d, "SIGTTOU", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGVTALRM
-    x = PyLong_FromLong(SIGVTALRM);
+    x = PyInt_FromLong(SIGVTALRM);
     PyDict_SetItemString(d, "SIGVTALRM", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGPROF
-    x = PyLong_FromLong(SIGPROF);
+    x = PyInt_FromLong(SIGPROF);
     PyDict_SetItemString(d, "SIGPROF", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGXCPU
-    x = PyLong_FromLong(SIGXCPU);
+    x = PyInt_FromLong(SIGXCPU);
     PyDict_SetItemString(d, "SIGXCPU", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGXFSZ
-    x = PyLong_FromLong(SIGXFSZ);
+    x = PyInt_FromLong(SIGXFSZ);
     PyDict_SetItemString(d, "SIGXFSZ", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGRTMIN
-    x = PyLong_FromLong(SIGRTMIN);
+    x = PyInt_FromLong(SIGRTMIN);
     PyDict_SetItemString(d, "SIGRTMIN", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGRTMAX
-    x = PyLong_FromLong(SIGRTMAX);
+    x = PyInt_FromLong(SIGRTMAX);
     PyDict_SetItemString(d, "SIGRTMAX", x);
     Py_XDECREF(x);
 #endif
 #ifdef SIGINFO
-    x = PyLong_FromLong(SIGINFO);
+    x = PyInt_FromLong(SIGINFO);
     PyDict_SetItemString(d, "SIGINFO", x);
     Py_XDECREF(x);
 #endif
@@ -836,24 +833,23 @@ PyInit_signal(void)
 #endif
 
 #ifdef CTRL_C_EVENT
-    x = PyLong_FromLong(CTRL_C_EVENT);
+    x = PyInt_FromLong(CTRL_C_EVENT);
     PyDict_SetItemString(d, "CTRL_C_EVENT", x);
     Py_DECREF(x);
 #endif
 
 #ifdef CTRL_BREAK_EVENT
-    x = PyLong_FromLong(CTRL_BREAK_EVENT);
+    x = PyInt_FromLong(CTRL_BREAK_EVENT);
     PyDict_SetItemString(d, "CTRL_BREAK_EVENT", x);
     Py_DECREF(x);
 #endif
 
-    if (PyErr_Occurred()) {
-        Py_DECREF(m);
-        m = NULL;
-    }
+    if (!PyErr_Occurred())
+        return;
 
+    /* Check for errors */
   finally:
-    return m;
+    return;
 }
 
 static void
@@ -946,19 +942,14 @@ PyErr_CheckSignals(void)
 void
 PyErr_SetInterrupt(void)
 {
-    is_tripped = 1;
-    Handlers[SIGINT].tripped = 1;
-    Py_AddPendingCall((int (*)(void *))PyErr_CheckSignals, NULL);
+    trip_signal(SIGINT);
 }
 
 void
 PyOS_InitInterrupts(void)
 {
-    PyObject *m = PyInit_signal();
-    if (m) {
-        _PyImport_FixupBuiltin(m, "signal");
-        Py_DECREF(m);
-    }
+    initsignal();
+    _PyImport_FixupExtension("signal", "signal");
 }
 
 void
@@ -985,10 +976,12 @@ void
 PyOS_AfterFork(void)
 {
 #ifdef WITH_THREAD
+    /* PyThread_ReInitTLS() must be called early, to make sure that the TLS API
+     * can be called safely. */
+    PyThread_ReInitTLS();
     PyEval_ReInitThreads();
     main_thread = PyThread_get_thread_ident();
     main_pid = getpid();
     _PyImport_ReInitLock();
-    PyThread_ReInitTLS();
 #endif
 }

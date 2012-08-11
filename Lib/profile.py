@@ -1,36 +1,27 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 #
 # Class for profiling python code. rev 1.0  6/2/94
 #
+# Written by James Roskind
 # Based on prior profile module by Sjoerd Mullender...
 #   which was hacked somewhat by: Guido van Rossum
 
 """Class for profiling Python code."""
 
-# Copyright 1994, by InfoSeek Corporation, all rights reserved.
-# Written by James Roskind
+# Copyright Disney Enterprises, Inc.  All Rights Reserved.
+# Licensed to PSF under a Contributor Agreement
 #
-# Permission to use, copy, modify, and distribute this Python software
-# and its associated documentation for any purpose (subject to the
-# restriction in the following sentence) without fee is hereby granted,
-# provided that the above copyright notice appears in all copies, and
-# that both that copyright notice and this permission notice appear in
-# supporting documentation, and that the name of InfoSeek not be used in
-# advertising or publicity pertaining to distribution of the software
-# without specific, written prior permission.  This permission is
-# explicitly restricted to the copying and modification of the software
-# to remain in Python, compiled Python, or other languages (such as C)
-# wherein the modified or derived code is exclusively imported into a
-# Python module.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# INFOSEEK CORPORATION DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS
-# SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
-# FITNESS. IN NO EVENT SHALL INFOSEEK CORPORATION BE LIABLE FOR ANY
-# SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
-# RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
-# CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
-# CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+# either express or implied.  See the License for the specific language
+# governing permissions and limitations under the License.
 
 
 import sys
@@ -39,7 +30,7 @@ import time
 import marshal
 from optparse import OptionParser
 
-__all__ = ["run", "runctx", "Profile"]
+__all__ = ["run", "runctx", "help", "Profile"]
 
 # Sample timer for use with
 #i_count = 0
@@ -91,6 +82,11 @@ def runctx(statement, globals, locals, filename=None, sort=-1):
         prof.dump_stats(filename)
     else:
         return prof.print_stats(sort)
+
+# Backwards compatibility.
+def help():
+    print "Documentation for the profile module can be found "
+    print "in the Python Library Reference, section 'The Python Profiler'."
 
 if hasattr(os, "times"):
     def _get_time_times(timer=os.times):
@@ -425,10 +421,10 @@ class Profile:
 
     def snapshot_stats(self):
         self.stats = {}
-        for func, (cc, ns, tt, ct, callers) in self.timings.items():
+        for func, (cc, ns, tt, ct, callers) in self.timings.iteritems():
             callers = callers.copy()
             nc = 0
-            for callcnt in callers.values():
+            for callcnt in callers.itervalues():
                 nc += callcnt
             self.stats[func] = cc, nc, tt, ct, callers
 
@@ -445,7 +441,7 @@ class Profile:
         self.set_cmd(cmd)
         sys.setprofile(self.dispatcher)
         try:
-            exec(cmd, globals, locals)
+            exec cmd in globals, locals
         finally:
             sys.setprofile(None)
         return self
@@ -536,7 +532,7 @@ class Profile:
         t1 = get_time()
         elapsed_noprofile = t1 - t0
         if verbose:
-            print("elapsed time without profiling =", elapsed_noprofile)
+            print "elapsed time without profiling =", elapsed_noprofile
 
         # elapsed_profile <- time f(m) takes with profiling.  The difference
         # is profiling overhead, only some of which the profiler subtracts
@@ -547,7 +543,7 @@ class Profile:
         t1 = get_time()
         elapsed_profile = t1 - t0
         if verbose:
-            print("elapsed time with profiling =", elapsed_profile)
+            print "elapsed time with profiling =", elapsed_profile
 
         # reported_time <- "CPU seconds" the profiler charged to f and f1.
         total_calls = 0.0
@@ -559,8 +555,8 @@ class Profile:
                 reported_time += tt
 
         if verbose:
-            print("'CPU seconds' profiler reported =", reported_time)
-            print("total # calls =", total_calls)
+            print "'CPU seconds' profiler reported =", reported_time
+            print "total # calls =", total_calls
         if total_calls != m + 1:
             raise ValueError("internal error: total calls = %d" % total_calls)
 
@@ -570,10 +566,12 @@ class Profile:
         # overhead per event.
         mean = (reported_time - elapsed_noprofile) / 2.0 / total_calls
         if verbose:
-            print("mean stopwatch overhead per profile event =", mean)
+            print "mean stopwatch overhead per profile event =", mean
         return mean
 
 #****************************************************************************
+def Stats(*args):
+    print 'Report generating functions are in the "pstats" module\a'
 
 def main():
     usage = "profile.py [-o output_file_path] [-s sort] scriptfile [arg] ..."
@@ -601,7 +599,6 @@ def main():
             '__file__': progname,
             '__name__': '__main__',
             '__package__': None,
-            '__cached__': None,
         }
         runctx(code, globs, None, options.outfile, options.sort)
     else:

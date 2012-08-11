@@ -1,6 +1,7 @@
+#-*- coding: ISO-8859-1 -*-
 # pysqlite2/dbapi2.py: the DB-API 2.0 interface
 #
-# Copyright (C) 2004-2005 Gerhard HÃ¤ring <gh@ghaering.de>
+# Copyright (C) 2004-2005 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -49,7 +50,7 @@ def TimestampFromTicks(ticks):
 version_info = tuple([int(x) for x in version.split(".")])
 sqlite_version_info = tuple([int(x) for x in sqlite_version.split(".")])
 
-Binary = memoryview
+Binary = buffer
 
 def register_adapters_and_converters():
     def adapt_date(val):
@@ -59,13 +60,13 @@ def register_adapters_and_converters():
         return val.isoformat(" ")
 
     def convert_date(val):
-        return datetime.date(*map(int, val.split(b"-")))
+        return datetime.date(*map(int, val.split("-")))
 
     def convert_timestamp(val):
-        datepart, timepart = val.split(b" ")
-        year, month, day = map(int, datepart.split(b"-"))
-        timepart_full = timepart.split(b".")
-        hours, minutes, seconds = map(int, timepart_full[0].split(b":"))
+        datepart, timepart = val.split(" ")
+        year, month, day = map(int, datepart.split("-"))
+        timepart_full = timepart.split(".")
+        hours, minutes, seconds = map(int, timepart_full[0].split(":"))
         if len(timepart_full) == 2:
             microseconds = int(timepart_full[1])
         else:

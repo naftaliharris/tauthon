@@ -1,5 +1,3 @@
-.. _whats-new-in-2.6:
-
 ****************************
   What's New in Python 2.6
 ****************************
@@ -234,7 +232,7 @@ have adopted Sphinx as their documentation tool.
 
 .. seealso::
 
-   :ref:`documenting-index`
+   `Documenting Python <http://docs.python.org/devguide/documenting.html>`__
        Describes how to write for Python's documentation.
 
    `Sphinx <http://sphinx.pocoo.org/>`__
@@ -243,8 +241,6 @@ have adopted Sphinx as their documentation tool.
    `Docutils <http://docutils.sf.net>`__
      The underlying reStructuredText parser and toolset.
 
-
-.. _pep-0343:
 
 PEP 343: The 'with' statement
 =============================
@@ -427,7 +423,7 @@ add a :keyword:`return` statement at the marked location. ::
                # return False
 
 
-.. _new-module-contextlib:
+.. _module-contextlib:
 
 The contextlib module
 ---------------------
@@ -615,8 +611,8 @@ multiple of 4.
         result = queue.get()
         print 'Factorial', N, '=', result
 
-A :class:`Queue` is used to communicate the input parameter *N* and
-the result.  The :class:`Queue` object is stored in a global variable.
+A :class:`Queue` is used to communicate the result of the factorial.
+The :class:`Queue` object is stored in a global variable.
 The child process will use the value of the variable when the child
 was created; because it's a :class:`Queue`, parent and child can use
 the object to communicate.  (If the parent were to change the value of

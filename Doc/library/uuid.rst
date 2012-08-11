@@ -1,3 +1,4 @@
+
 :mod:`uuid` --- UUID objects according to RFC 4122
 ==================================================
 
@@ -6,6 +7,8 @@
 .. moduleauthor:: Ka-Ping Yee <ping@zesty.ca>
 .. sectionauthor:: George Yoshida <quiver@users.sourceforge.net>
 
+
+.. versionadded:: 2.5
 
 This module provides immutable :class:`UUID` objects (the :class:`UUID` class)
 and the functions :func:`uuid1`, :func:`uuid3`, :func:`uuid4`, :func:`uuid5` for
@@ -17,7 +20,7 @@ a UUID containing the computer's network address.  :func:`uuid4` creates a
 random UUID.
 
 
-.. class:: UUID(hex=None, bytes=None, bytes_le=None, fields=None, int=None, version=None)
+.. class:: UUID([hex[, bytes[, bytes_le[, fields[, int[, version]]]]]])
 
    Create a UUID from either a string of 32 hexadecimal digits, a string of 16
    bytes as the *bytes* argument, a string of 16 bytes in little-endian order as
@@ -31,9 +34,9 @@ random UUID.
       UUID('{12345678-1234-5678-1234-567812345678}')
       UUID('12345678123456781234567812345678')
       UUID('urn:uuid:12345678-1234-5678-1234-567812345678')
-      UUID(bytes=b'\x12\x34\x56\x78'*4)
-      UUID(bytes_le=b'\x78\x56\x34\x12\x34\x12\x78\x56' +
-                    b'\x12\x34\x56\x78\x12\x34\x56\x78')
+      UUID(bytes='\x12\x34\x56\x78'*4)
+      UUID(bytes_le='\x78\x56\x34\x12\x34\x12\x78\x56' +
+                    '\x12\x34\x56\x78\x12\x34\x56\x78')
       UUID(fields=(0x12345678, 0x1234, 0x5678, 0x12, 0x34, 0x567812345678))
       UUID(int=0x12345678123456781234567812345678)
 
@@ -42,8 +45,8 @@ random UUID.
    variant and version number set according to RFC 4122, overriding bits in the
    given *hex*, *bytes*, *bytes_le*, *fields*, or *int*.
 
-
 :class:`UUID` instances have these read-only attributes:
+
 
 .. attribute:: UUID.bytes
 
@@ -125,7 +128,7 @@ The :mod:`uuid` module defines the following functions:
 .. index:: single: getnode
 
 
-.. function:: uuid1(node=None, clock_seq=None)
+.. function:: uuid1([node[, clock_seq]])
 
    Generate a UUID from a host ID, sequence number, and the current time. If *node*
    is not given, :func:`getnode` is used to obtain the hardware address. If
@@ -222,34 +225,34 @@ Here are some examples of typical usage of the :mod:`uuid` module::
 
    >>> import uuid
 
-   # make a UUID based on the host ID and current time
+   >>> # make a UUID based on the host ID and current time
    >>> uuid.uuid1()
    UUID('a8098c1a-f86e-11da-bd1a-00112444be1e')
 
-   # make a UUID using an MD5 hash of a namespace UUID and a name
+   >>> # make a UUID using an MD5 hash of a namespace UUID and a name
    >>> uuid.uuid3(uuid.NAMESPACE_DNS, 'python.org')
    UUID('6fa459ea-ee8a-3ca4-894e-db77e160355e')
 
-   # make a random UUID
+   >>> # make a random UUID
    >>> uuid.uuid4()
    UUID('16fd2706-8baf-433b-82eb-8c7fada847da')
 
-   # make a UUID using a SHA-1 hash of a namespace UUID and a name
+   >>> # make a UUID using a SHA-1 hash of a namespace UUID and a name
    >>> uuid.uuid5(uuid.NAMESPACE_DNS, 'python.org')
    UUID('886313e1-3b8a-5372-9b90-0c9aee199e5d')
 
-   # make a UUID from a string of hex digits (braces and hyphens ignored)
+   >>> # make a UUID from a string of hex digits (braces and hyphens ignored)
    >>> x = uuid.UUID('{00010203-0405-0607-0809-0a0b0c0d0e0f}')
 
-   # convert a UUID to a string of hex digits in standard form
+   >>> # convert a UUID to a string of hex digits in standard form
    >>> str(x)
    '00010203-0405-0607-0809-0a0b0c0d0e0f'
 
-   # get the raw 16 bytes of the UUID
+   >>> # get the raw 16 bytes of the UUID
    >>> x.bytes
-   b'\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f'
+   '\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f'
 
-   # make a UUID from a 16-byte string
+   >>> # make a UUID from a 16-byte string
    >>> uuid.UUID(bytes=x.bytes)
    UUID('00010203-0405-0607-0809-0a0b0c0d0e0f')
 

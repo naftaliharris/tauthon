@@ -23,13 +23,13 @@ Complete Python programs
 .. index::
    module: sys
    module: __main__
-   module: builtins
+   module: __builtin__
 
 While a language specification need not prescribe how the language interpreter
 is invoked, it is useful to have a notion of a complete Python program.  A
 complete Python program is executed in a minimally initialized environment: all
 built-in and standard modules are available, but none have been initialized,
-except for :mod:`sys` (various system services), :mod:`builtins` (built-in
+except for :mod:`sys` (various system services), :mod:`__builtin__` (built-in
 functions, exceptions and ``None``) and :mod:`__main__`.  The latter is used to
 provide the local and global namespace for execution of the complete program.
 
@@ -53,9 +53,9 @@ a complete program; each statement is executed in the namespace of
 
 Under Unix, a complete program can be passed to the interpreter in three forms:
 with the :option:`-c` *string* command line option, as a file passed as the
-first command line argument, or as standard input.  If the file or standard
-input is a tty device, the interpreter enters interactive mode; otherwise, it
-executes the file as a complete program.
+first command line argument, or as standard input. If the file or standard input
+is a tty device, the interpreter enters interactive mode; otherwise, it executes
+the file as a complete program.
 
 
 .. _file-input:
@@ -74,7 +74,7 @@ This syntax is used in the following situations:
 
 * when parsing a module;
 
-* when parsing a string passed to the :func:`exec` function;
+* when parsing a string passed to the :keyword:`exec` statement;
 
 
 .. _interactive:
@@ -106,11 +106,20 @@ string argument to :func:`eval` must have the following form:
 .. productionlist::
    eval_input: `expression_list` NEWLINE*
 
+.. index:: builtin: input
+
+The input line read by :func:`input` must have the following form:
+
+.. productionlist::
+   input_input: `expression_list` NEWLINE
+
 .. index::
    object: file
    single: input; raw
+   single: raw input
+   builtin: raw_input
    single: readline() (file method)
 
-Note: to read 'raw' input line without interpretation, you can use the the
-:meth:`readline` method of file objects, including ``sys.stdin``.
+Note: to read 'raw' input line without interpretation, you can use the built-in
+function :func:`raw_input` or the :meth:`readline` method of file objects.
 

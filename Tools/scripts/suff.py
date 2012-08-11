@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # suff
 #
@@ -6,21 +6,25 @@
 
 import sys
 
-
 def main():
     files = sys.argv[1:]
     suffixes = {}
     for filename in files:
         suff = getsuffix(filename)
-        suffixes.setdefault(suff, []).append(filename)
-    for suff, filenames in sorted(suffixes.items()):
-        print(repr(suff), len(filenames))
-
+        if not suffixes.has_key(suff):
+            suffixes[suff] = []
+        suffixes[suff].append(filename)
+    keys = suffixes.keys()
+    keys.sort()
+    for suff in keys:
+        print repr(suff), len(suffixes[suff])
 
 def getsuffix(filename):
-    name, sep, suff = filename.rpartition('.')
-    return sep + suff if sep else ''
-
+    suff = ''
+    for i in range(len(filename)):
+        if filename[i] == '.':
+            suff = filename[i:]
+    return suff
 
 if __name__ == '__main__':
     main()

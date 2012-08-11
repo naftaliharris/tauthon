@@ -6,7 +6,14 @@
 
 
 This module encodes and decodes files in binhex4 format, a format allowing
-representation of Macintosh files in ASCII. Only the data fork is handled.
+representation of Macintosh files in ASCII.  On the Macintosh, both forks of a
+file and the finder information are encoded (or decoded), on other platforms
+only the data fork is handled.
+
+.. note::
+
+   In Python 3.x, special Macintosh support has been removed.
+
 
 The :mod:`binhex` module defines the following functions:
 
@@ -18,11 +25,11 @@ The :mod:`binhex` module defines the following functions:
    supporting a :meth:`write` and :meth:`close` method).
 
 
-.. function:: hexbin(input, output)
+.. function:: hexbin(input[, output])
 
    Decode a binhex file *input*. *input* may be a filename or a file-like object
    supporting :meth:`read` and :meth:`close` methods. The resulting file is written
-   to a file named *output*, unless the argument is ``None`` in which case the
+   to a file named *output*, unless the argument is omitted in which case the
    output filename is read from the binhex file.
 
 The following exception is also defined:

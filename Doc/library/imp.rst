@@ -1,3 +1,4 @@
+
 :mod:`imp` --- Access the :keyword:`import` internals
 =====================================================
 
@@ -48,8 +49,8 @@ This module provides an interface to the mechanisms used to implement the
    If search is successful, the return value is a 3-element tuple ``(file,
    pathname, description)``:
 
-   *file* is an open :term:`file object` positioned at the beginning, *pathname*
-   is the pathname of the file found, and *description* is a 3-element tuple as
+   *file* is an open file object positioned at the beginning, *pathname* is the
+   pathname of the file found, and *description* is a 3-element tuple as
    contained in the list returned by :func:`get_suffixes` describing the kind of
    module found.
 
@@ -64,7 +65,7 @@ This module provides an interface to the mechanisms used to implement the
    path and the last item in the *description* tuple is :const:`PKG_DIRECTORY`.
 
    This function does not handle hierarchical module names (names containing
-   dots).  In order to find *P*.*M*, that is, submodule *M* of package *P*, use
+   dots).  In order to find *P.M*, that is, submodule *M* of package *P*, use
    :func:`find_module` and :func:`load_module` to find and load package *P*, and
    then use :func:`find_module` with the *path* argument set to ``P.__path__``.
    When *P* itself has a dotted name, apply this recipe recursively.
@@ -72,10 +73,12 @@ This module provides an interface to the mechanisms used to implement the
 
 .. function:: load_module(name, file, pathname, description)
 
+   .. index:: builtin: reload
+
    Load a module that was previously found by :func:`find_module` (or by an
    otherwise conducted search yielding compatible results).  This function does
-   more than importing the module: if the module was already imported, it will
-   reload the module!  The *name* argument indicates the full
+   more than importing the module: if the module was already imported, it is
+   equivalent to a :func:`reload`!  The *name* argument indicates the full
    module name (including the package name, if this is a submodule of a
    package).  The *file* argument is an open file, and *pathname* is the
    corresponding file name; these can be ``None`` and ``''``, respectively, when
@@ -121,112 +124,18 @@ This module provides an interface to the mechanisms used to implement the
 
    On platforms without threads, this function does nothing.
 
+   .. versionadded:: 2.3
+
 
 .. function:: release_lock()
 
    Release the interpreter's import lock. On platforms without threads, this
    function does nothing.
 
+   .. versionadded:: 2.3
 
-.. function:: reload(module)
-
-   Reload a previously imported *module*.  The argument must be a module object, so
-   it must have been successfully imported before.  This is useful if you have
-   edited the module source file using an external editor and want to try out the
-   new version without leaving the Python interpreter.  The return value is the
-   module object (the same as the *module* argument).
-
-   When ``reload(module)`` is executed:
-
-   * Python modules' code is recompiled and the module-level code reexecuted,
-     defining a new set of objects which are bound to names in the module's
-     dictionary.  The ``init`` function of extension modules is not called a second
-     time.
-
-   * As with all other objects in Python the old objects are only reclaimed after
-     their reference counts drop to zero.
-
-   * The names in the module namespace are updated to point to any new or changed
-     objects.
-
-   * Other references to the old objects (such as names external to the module) are
-     not rebound to refer to the new objects and must be updated in each namespace
-     where they occur if that is desired.
-
-   There are a number of other caveats:
-
-   If a module is syntactically correct but its initialization fails, the first
-   :keyword:`import` statement for it does not bind its name locally, but does
-   store a (partially initialized) module object in ``sys.modules``.  To reload the
-   module you must first :keyword:`import` it again (this will bind the name to the
-   partially initialized module object) before you can :func:`reload` it.
-
-   When a module is reloaded, its dictionary (containing the module's global
-   variables) is retained.  Redefinitions of names will override the old
-   definitions, so this is generally not a problem.  If the new version of a module
-   does not define a name that was defined by the old version, the old definition
-   remains.  This feature can be used to the module's advantage if it maintains a
-   global table or cache of objects --- with a :keyword:`try` statement it can test
-   for the table's presence and skip its initialization if desired::
-
-      try:
-          cache
-      except NameError:
-          cache = {}
-
-   It is legal though generally not very useful to reload built-in or dynamically
-   loaded modules, except for :mod:`sys`, :mod:`__main__` and :mod:`__builtin__`.
-   In many cases, however, extension modules are not designed to be initialized
-   more than once, and may fail in arbitrary ways when reloaded.
-
-   If a module imports objects from another module using :keyword:`from` ...
-   :keyword:`import` ..., calling :func:`reload` for the other module does not
-   redefine the objects imported from it --- one way around this is to re-execute
-   the :keyword:`from` statement, another is to use :keyword:`import` and qualified
-   names (*module*.*name*) instead.
-
-   If a module instantiates instances of a class, reloading the module that defines
-   the class does not affect the method definitions of the instances --- they
-   continue to use the old class definition.  The same is true for derived classes.
-
-
-The following functions are conveniences for handling :pep:`3147` byte-compiled
-file paths.
-
-.. versionadded:: 3.2
-
-.. function:: cache_from_source(path, debug_override=None)
-
-   Return the :pep:`3147` path to the byte-compiled file associated with the
-   source *path*.  For example, if *path* is ``/foo/bar/baz.py`` the return
-   value would be ``/foo/bar/__pycache__/baz.cpython-32.pyc`` for Python 3.2.
-   The ``cpython-32`` string comes from the current magic tag (see
-   :func:`get_tag`).  The returned path will end in ``.pyc`` when
-   ``__debug__`` is True or ``.pyo`` for an optimized Python
-   (i.e. ``__debug__`` is False).  By passing in True or False for
-   *debug_override* you can override the system's value for ``__debug__`` for
-   extension selection.
-
-   *path* need not exist.
-
-
-.. function:: source_from_cache(path)
-
-   Given the *path* to a :pep:`3147` file name, return the associated source code
-   file path.  For example, if *path* is
-   ``/foo/bar/__pycache__/baz.cpython-32.pyc`` the returned path would be
-   ``/foo/bar/baz.py``.  *path* need not exist, however if it does not conform
-   to :pep:`3147` format, a ``ValueError`` is raised.
-
-
-.. function:: get_tag()
-
-   Return the :pep:`3147` magic tag string matching this version of Python's
-   magic number, as returned by :func:`get_magic`.
-
-
-The following constants with integer values, defined in this module, are used
-to indicate the search result of :func:`find_module`.
+The following constants with integer values, defined in this module, are used to
+indicate the search result of :func:`find_module`.
 
 
 .. data:: PY_SOURCE
@@ -258,6 +167,88 @@ to indicate the search result of :func:`find_module`.
 
    The module was found as a frozen module (see :func:`init_frozen`).
 
+The following constant and functions are obsolete; their functionality is
+available through :func:`find_module` or :func:`load_module`. They are kept
+around for backward compatibility:
+
+
+.. data:: SEARCH_ERROR
+
+   Unused.
+
+
+.. function:: init_builtin(name)
+
+   Initialize the built-in module called *name* and return its module object along
+   with storing it in ``sys.modules``.  If the module was already initialized, it
+   will be initialized *again*.  Re-initialization involves the copying of the
+   built-in module's ``__dict__`` from the cached module over the module's entry in
+   ``sys.modules``.  If there is no built-in module called *name*, ``None`` is
+   returned.
+
+
+.. function:: init_frozen(name)
+
+   Initialize the frozen module called *name* and return its module object.  If
+   the module was already initialized, it will be initialized *again*.  If there
+   is no frozen module called *name*, ``None`` is returned.  (Frozen modules are
+   modules written in Python whose compiled byte-code object is incorporated
+   into a custom-built Python interpreter by Python's :program:`freeze`
+   utility. See :file:`Tools/freeze/` for now.)
+
+
+.. function:: is_builtin(name)
+
+   Return ``1`` if there is a built-in module called *name* which can be
+   initialized again.  Return ``-1`` if there is a built-in module called *name*
+   which cannot be initialized again (see :func:`init_builtin`).  Return ``0`` if
+   there is no built-in module called *name*.
+
+
+.. function:: is_frozen(name)
+
+   Return ``True`` if there is a frozen module (see :func:`init_frozen`) called
+   *name*, or ``False`` if there is no such module.
+
+
+.. function:: load_compiled(name, pathname, [file])
+
+   .. index:: pair: file; byte-code
+
+   Load and initialize a module implemented as a byte-compiled code file and return
+   its module object.  If the module was already initialized, it will be
+   initialized *again*.  The *name* argument is used to create or access a module
+   object.  The *pathname* argument points to the byte-compiled code file.  The
+   *file* argument is the byte-compiled code file, open for reading in binary mode,
+   from the beginning. It must currently be a real file object, not a user-defined
+   class emulating a file.
+
+
+.. function:: load_dynamic(name, pathname[, file])
+
+   Load and initialize a module implemented as a dynamically loadable shared
+   library and return its module object.  If the module was already initialized, it
+   will be initialized *again*. Re-initialization involves copying the ``__dict__``
+   attribute of the cached instance of the module over the value used in the module
+   cached in ``sys.modules``.  The *pathname* argument must point to the shared
+   library.  The *name* argument is used to construct the name of the
+   initialization function: an external C function called ``initname()`` in the
+   shared library is called.  The optional *file* argument is ignored.  (Note:
+   using shared libraries is highly system dependent, and not all systems support
+   it.)
+
+
+.. function:: load_source(name, pathname[, file])
+
+   Load and initialize a module implemented as a Python source file and return its
+   module object.  If the module was already initialized, it will be initialized
+   *again*.  The *name* argument is used to create or access a module object.  The
+   *pathname* argument points to the source file.  The *file* argument is the
+   source file, open for reading as text, from the beginning. It must currently be
+   a real file object, not a user-defined class emulating a file.  Note that if a
+   properly matching byte-compiled file (with suffix :file:`.pyc` or :file:`.pyo`)
+   exists, it will be used instead of parsing the given source file.
+
 
 .. class:: NullImporter(path_string)
 
@@ -275,6 +266,8 @@ to indicate the search result of :func:`find_module`.
 
       This method always returns ``None``, indicating that the requested module could
       not be found.
+
+   .. versionadded:: 2.5
 
 
 .. _examples-imp:
@@ -308,3 +301,12 @@ in that version, since :func:`find_module` has been extended and
            # Since we may exit via an exception, close fp explicitly.
            if fp:
                fp.close()
+
+.. index::
+   builtin: reload
+   module: knee
+
+A more complete example that implements hierarchical module names and includes a
+:func:`reload` function can be found in the module :mod:`knee`.  The :mod:`knee`
+module can be found in :file:`Demo/imputil/` in the Python source distribution.
+

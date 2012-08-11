@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """fixdiv - tool to fix division operators.
 
@@ -113,7 +113,7 @@ Notes:
   future division statement.
 
 - Warnings may be issued for code not read from a file, but executed
-  using the exec() or eval() functions.  These may have
+  using an exec statement or the eval() function.  These may have
   <string> in the filename position, in which case the fixdiv script
   will attempt and fail to open a file named '<string>' and issue a
   warning about this failure; or these may be reported as 'Phantom'
@@ -140,12 +140,12 @@ multi_ok = 0
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "hm")
-    except getopt.error as msg:
+    except getopt.error, msg:
         usage(msg)
         return 2
     for o, a in opts:
         if o == "-h":
-            print(__doc__)
+            print __doc__
             return
         if o == "-m":
             global multi_ok
@@ -158,9 +158,9 @@ def main():
     warnings = readwarnings(args[0])
     if warnings is None:
         return 1
-    files = list(warnings.keys())
+    files = warnings.keys()
     if not files:
-        print("No classic division warnings read from", args[0])
+        print "No classic division warnings read from", args[0]
         return
     files.sort()
     exit = None
@@ -181,7 +181,7 @@ def readwarnings(warningsfile):
     prog = re.compile(PATTERN)
     try:
         f = open(warningsfile)
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write("can't open: %s\n" % msg)
         return
     warnings = {}
@@ -198,19 +198,19 @@ def readwarnings(warningsfile):
         list = warnings.get(filename)
         if list is None:
             warnings[filename] = list = []
-        list.append((int(lineno), sys.intern(what)))
+        list.append((int(lineno), intern(what)))
     f.close()
     return warnings
 
 def process(filename, list):
-    print("-"*70)
+    print "-"*70
     assert list # if this fails, readwarnings() is broken
     try:
         fp = open(filename)
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write("can't open: %s\n" % msg)
         return 1
-    print("Index:", filename)
+    print "Index:", filename
     f = FileContext(fp)
     list.sort()
     index = 0 # list[:index] has been processed, list[index:] is still to do
@@ -248,10 +248,10 @@ def process(filename, list):
                         lastrow = row
                     assert rows
                     if len(rows) == 1:
-                        print("*** More than one / operator in line", rows[0])
+                        print "*** More than one / operator in line", rows[0]
                     else:
-                        print("*** More than one / operator per statement", end=' ')
-                        print("in lines %d-%d" % (rows[0], rows[-1]))
+                        print "*** More than one / operator per statement",
+                        print "in lines %d-%d" % (rows[0], rows[-1])
             intlong = []
             floatcomplex = []
             bad = []
@@ -269,24 +269,24 @@ def process(filename, list):
                 lastrow = row
                 line = chop(line)
                 if line[col:col+1] != "/":
-                    print("*** Can't find the / operator in line %d:" % row)
-                    print("*", line)
+                    print "*** Can't find the / operator in line %d:" % row
+                    print "*", line
                     continue
                 if bad:
-                    print("*** Bad warning for line %d:" % row, bad)
-                    print("*", line)
+                    print "*** Bad warning for line %d:" % row, bad
+                    print "*", line
                 elif intlong and not floatcomplex:
-                    print("%dc%d" % (row, row))
-                    print("<", line)
-                    print("---")
-                    print(">", line[:col] + "/" + line[col:])
+                    print "%dc%d" % (row, row)
+                    print "<", line
+                    print "---"
+                    print ">", line[:col] + "/" + line[col:]
                 elif floatcomplex and not intlong:
-                    print("True division / operator at line %d:" % row)
-                    print("=", line)
+                    print "True division / operator at line %d:" % row
+                    print "=", line
                 elif intlong and floatcomplex:
-                    print("*** Ambiguous / operator (%s, %s) at line %d:" % (
-                        "|".join(intlong), "|".join(floatcomplex), row))
-                    print("?", line)
+                    print "*** Ambiguous / operator (%s, %s) at line %d:" % (
+                        "|".join(intlong), "|".join(floatcomplex), row)
+                    print "?", line
     fp.close()
 
 def reportphantomwarnings(warnings, f):
@@ -301,15 +301,15 @@ def reportphantomwarnings(warnings, f):
     for block in blocks:
         row = block[0]
         whats = "/".join(block[1:])
-        print("*** Phantom %s warnings for line %d:" % (whats, row))
+        print "*** Phantom %s warnings for line %d:" % (whats, row)
         f.report(row, mark="*")
 
 def report(slashes, message):
     lastrow = None
     for (row, col), line in slashes:
         if row != lastrow:
-            print("*** %s on line %d:" % (message, row))
-            print("*", chop(line))
+            print "*** %s on line %d:" % (message, row)
+            print "*", chop(line)
             lastrow = row
 
 class FileContext:
@@ -354,7 +354,7 @@ class FileContext:
                 line = self[first]
             except KeyError:
                 line = "<missing line>"
-            print(mark, chop(line))
+            print mark, chop(line)
 
 def scanline(g):
     slashes = []

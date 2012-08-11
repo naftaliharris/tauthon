@@ -112,7 +112,7 @@ class MixinBytesBufferCommonTests(object):
         self.assertEqual(b'abc   ', self.marshal(b'abc').ljust(6))
         self.assertEqual(b'abc', self.marshal(b'abc').ljust(3))
         self.assertEqual(b'abc', self.marshal(b'abc').ljust(2))
-        self.assertEqual(b'abc*******', self.marshal(b'abc').ljust(10, b'*'))
+        self.assertEqual(b'abc*******', self.marshal(b'abc').ljust(10, '*'))
         self.assertRaises(TypeError, self.marshal(b'abc').ljust)
 
     def test_rjust(self):
@@ -120,7 +120,7 @@ class MixinBytesBufferCommonTests(object):
         self.assertEqual(b'   abc', self.marshal(b'abc').rjust(6))
         self.assertEqual(b'abc', self.marshal(b'abc').rjust(3))
         self.assertEqual(b'abc', self.marshal(b'abc').rjust(2))
-        self.assertEqual(b'*******abc', self.marshal(b'abc').rjust(10, b'*'))
+        self.assertEqual(b'*******abc', self.marshal(b'abc').rjust(10, '*'))
         self.assertRaises(TypeError, self.marshal(b'abc').rjust)
 
     def test_center(self):
@@ -128,7 +128,7 @@ class MixinBytesBufferCommonTests(object):
         self.assertEqual(b' abc  ', self.marshal(b'abc').center(6))
         self.assertEqual(b'abc', self.marshal(b'abc').center(3))
         self.assertEqual(b'abc', self.marshal(b'abc').center(2))
-        self.assertEqual(b'***abc****', self.marshal(b'abc').center(10, b'*'))
+        self.assertEqual(b'***abc****', self.marshal(b'abc').center(10, '*'))
         self.assertRaises(TypeError, self.marshal(b'abc').center)
 
     def test_swapcase(self):
@@ -172,9 +172,9 @@ class MixinBytesBufferCommonTests(object):
 
         self.assertRaises(TypeError, self.marshal(b'hello').expandtabs, 42, 42)
         # This test is only valid when sizeof(int) == sizeof(void*) == 4.
-        if sys.maxsize < (1 << 32) and struct.calcsize('P') == 4:
+        if sys.maxint < (1 << 32) and struct.calcsize('P') == 4:
             self.assertRaises(OverflowError,
-                              self.marshal(b'\ta\n\tb').expandtabs, sys.maxsize)
+                              self.marshal(b'\ta\n\tb').expandtabs, sys.maxint)
 
     def test_title(self):
         self.assertEqual(b' Hello ', self.marshal(b' hello ').title())

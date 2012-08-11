@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Read #define's and translate to Python code.
 # Handle #include statements.
@@ -49,7 +49,15 @@ except KeyError:
     try:
         searchdirs=os.environ['INCLUDE'].split(';')
     except KeyError:
-        searchdirs=['/usr/include']
+        try:
+            if  sys.platform.find("beos") == 0:
+                searchdirs=os.environ['BEINCLUDES'].split(';')
+            elif sys.platform.startswith("atheos"):
+                searchdirs=os.environ['C_INCLUDE_PATH'].split(':')
+            else:
+                raise KeyError
+        except KeyError:
+            searchdirs=['/usr/include']
 
 def main():
     global filedict
@@ -90,13 +98,13 @@ def pytify(body):
     body = p_char.sub("ord('\\1')", body)
     # Compute negative hexadecimal constants
     start = 0
-    UMAX = 2*(sys.maxsize+1)
+    UMAX = 2*(sys.maxint+1)
     while 1:
         m = p_hex.search(body, start)
         if not m: break
         s,e = m.span()
-        val = int(body[slice(*m.span(1))], 16)
-        if val > sys.maxsize:
+        val = long(body[slice(*m.span(1))], 16)
+        if val > sys.maxint:
             val -= UMAX
             body = body[:s] + "(" + str(val) + ")" + body[e:]
         start = s + 1
@@ -122,7 +130,7 @@ def process(fp, outfp, env = {}):
             ok = 0
             stmt = '%s = %s\n' % (name, body.strip())
             try:
-                exec(stmt, env)
+                exec stmt in env
             except:
                 sys.stderr.write('Skipping: %s' % stmt)
             else:
@@ -134,7 +142,7 @@ def process(fp, outfp, env = {}):
             body = pytify(body)
             stmt = 'def %s(%s): return %s\n' % (macro, arg, body)
             try:
-                exec(stmt, env)
+                exec stmt in env
             except:
                 sys.stderr.write('Skipping: %s' % stmt)
             else:
@@ -144,9 +152,9 @@ def process(fp, outfp, env = {}):
             regs = match.regs
             a, b = regs[1]
             filename = line[a:b]
-            if filename in importable:
+            if importable.has_key(filename):
                 outfp.write('from %s import *\n' % importable[filename])
-            elif filename not in filedict:
+            elif not filedict.has_key(filename):
                 filedict[filename] = None
                 inclfp = None
                 for dir in searchdirs:

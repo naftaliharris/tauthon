@@ -1,5 +1,7 @@
 # Adapted from test_file.py by Daniel Stutzbach
 
+from __future__ import unicode_literals
+
 import sys
 import os
 import errno
@@ -8,7 +10,9 @@ from array import array
 from weakref import proxy
 from functools import wraps
 
-from test.support import TESTFN, check_warnings, run_unittest, make_bad_fd
+from test.test_support import TESTFN, check_warnings, run_unittest, make_bad_fd
+from test.test_support import py3k_bytes as bytes
+from test.script_helper import run_python
 
 from _io import FileIO as _FileIO
 
@@ -60,12 +64,12 @@ class AutoFileTests(unittest.TestCase):
 
     def testReadinto(self):
         # verify readinto
-        self.f.write(bytes([1, 2]))
+        self.f.write(b"\x01\x02")
         self.f.close()
-        a = array('b', b'x'*10)
+        a = array(b'b', b'x'*10)
         self.f = _FileIO(TESTFN, 'r')
         n = self.f.readinto(a)
-        self.assertEqual(array('b', [1, 2]), a[:n])
+        self.assertEqual(array(b'b', [1, 2]), a[:n])
 
     def test_none_args(self):
         self.f.write(b"hi\nbye\nabc")
@@ -76,15 +80,12 @@ class AutoFileTests(unittest.TestCase):
         self.assertEqual(self.f.readline(None), b"hi\n")
         self.assertEqual(self.f.readlines(None), [b"bye\n", b"abc"])
 
-    def test_reject(self):
-        self.assertRaises(TypeError, self.f.write, "Hello!")
-
     def testRepr(self):
-        self.assertEqual(repr(self.f), "<_io.FileIO name=%r mode=%r>"
-                                        % (self.f.name, self.f.mode))
+        self.assertEqual(repr(self.f), "<_io.FileIO name=%r mode='%s'>"
+                                       % (self.f.name, self.f.mode))
         del self.f.name
-        self.assertEqual(repr(self.f), "<_io.FileIO fd=%r mode=%r>"
-                                        % (self.f.fileno(), self.f.mode))
+        self.assertEqual(repr(self.f), "<_io.FileIO fd=%r mode='%s'>"
+                                       % (self.f.fileno(), self.f.mode))
         self.f.close()
         self.assertEqual(repr(self.f), "<_io.FileIO [closed]>")
 
@@ -106,6 +107,8 @@ class AutoFileTests(unittest.TestCase):
         methods = ['fileno', 'isatty', 'read', 'readinto',
                    'seek', 'tell', 'truncate', 'write', 'seekable',
                    'readable', 'writable']
+        if sys.platform.startswith('atheos'):
+            methods.remove('truncate')
 
         self.f.close()
         self.assertTrue(self.f.closed)
@@ -126,6 +129,14 @@ class AutoFileTests(unittest.TestCase):
             self.assertEqual(e.filename, ".")
         else:
             self.fail("Should have raised IOError")
+
+    @unittest.skipIf(os.name == 'nt', "test only works on a POSIX-like system")
+    def testOpenDirFD(self):
+        fd = os.open('.', os.O_RDONLY)
+        with self.assertRaises(IOError) as cm:
+            _FileIO(fd, 'r')
+        os.close(fd)
+        self.assertEqual(cm.exception.errno, errno.EISDIR)
 
     #A set of functions testing that we get expected behaviour if someone has
     #manually closed the internal file descriptor.  First, a decorator:
@@ -169,7 +180,7 @@ class AutoFileTests(unittest.TestCase):
 
     @ClosedFDRaises
     def testErrnoOnClosedWrite(self, f):
-        f.write(b'a')
+        f.write('a')
 
     @ClosedFDRaises
     def testErrnoOnClosedSeek(self, f):
@@ -225,7 +236,7 @@ class AutoFileTests(unittest.TestCase):
     @ClosedFDRaises
     def testErrnoOnClosedReadinto(self, f):
         f = self.ReopenForRead()
-        a = array('b', b'x'*10)
+        a = array(b'b', b'x'*10)
         f.readinto(a)
 
 class OtherFileTests(unittest.TestCase):
@@ -398,6 +409,36 @@ class OtherFileTests(unittest.TestCase):
             self.assertRaises(ValueError, _FileIO, "/some/invalid/name", "rt")
             self.assertEqual(w.warnings, [])
 
+    def test_surrogates(self):
+        # Issue #8438: try to open a filename containing surrogates.
+        # It should either fail because the file doesn't exist or the filename
+        # can't be represented using the filesystem encoding, but not because
+        # of a LookupError for the error handler "surrogateescape".
+        filename = u'\udc80.txt'
+        try:
+            with _FileIO(filename):
+                pass
+        except (UnicodeEncodeError, IOError):
+            pass
+        # Spawn a separate Python process with a different "file system
+        # default encoding", to exercise this further.
+        env = dict(os.environ)
+        env[b'LC_CTYPE'] = b'C'
+        _, out = run_python('-c', 'import _io; _io.FileIO(%r)' % filename, env=env)
+        if ('UnicodeEncodeError' not in out and
+            'IOError: [Errno 2] No such file or directory' not in out):
+            self.fail('Bad output: %r' % out)
+
+    def testUnclosedFDOnException(self):
+        class MyException(Exception): pass
+        class MyFileIO(_FileIO):
+            def __setattr__(self, name, value):
+                if name == "name":
+                    raise MyException("blocked setting name")
+                return super(MyFileIO, self).__setattr__(name, value)
+        fd = os.open(__file__, os.O_RDONLY)
+        self.assertRaises(MyException, MyFileIO, fd)
+        os.close(fd)  # should not raise OSError(EBADF)
 
 def test_main():
     # Historically, these tests have been sloppy about removing TESTFN.

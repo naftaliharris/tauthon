@@ -1,3 +1,4 @@
+
 :mod:`xml.dom` --- The Document Object Model API
 ================================================
 
@@ -6,6 +7,8 @@
 .. sectionauthor:: Paul Prescod <paul@prescod.net>
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
 
+
+.. versionadded:: 2.0
 
 The Document Object Model, or "DOM," is a cross-language API from the World Wide
 Web Consortium (W3C) for accessing and modifying XML documents.  A DOM
@@ -95,7 +98,7 @@ The :mod:`xml.dom` contains the following functions:
    implementation supports some customization).
 
 
-.. function:: getDOMImplementation(name=None, features=())
+.. function:: getDOMImplementation([name[, features]])
 
    Return a suitable DOM implementation. The *name* is either well-known, the
    module name of a DOM implementation, or ``None``. If it is not ``None``, imports
@@ -118,11 +121,15 @@ Some convenience constants are also provided:
    DOM.  This is typically found as the :attr:`namespaceURI` of a node, or used as
    the *namespaceURI* parameter to a namespaces-specific method.
 
+   .. versionadded:: 2.2
+
 
 .. data:: XML_NAMESPACE
 
    The namespace URI associated with the reserved prefix ``xml``, as defined by
    `Namespaces in XML <http://www.w3.org/TR/REC-xml-names/>`_ (section 4).
+
+   .. versionadded:: 2.2
 
 
 .. data:: XMLNS_NAMESPACE
@@ -131,12 +138,15 @@ Some convenience constants are also provided:
    Model (DOM) Level 2 Core Specification
    <http://www.w3.org/TR/DOM-Level-2-Core/core.html>`_ (section 1.1.8).
 
+   .. versionadded:: 2.2
+
 
 .. data:: XHTML_NAMESPACE
 
    The URI of the XHTML namespace as defined by `XHTML 1.0: The Extensible
    HyperText Markup Language <http://www.w3.org/TR/xhtml1/>`_ (section 3.1.1).
 
+   .. versionadded:: 2.2
 
 In addition, :mod:`xml.dom` contains a base :class:`Node` class and the DOM
 exception classes.  The :class:`Node` class provided by this module does not
@@ -393,6 +403,8 @@ All of the components of an XML document are subclasses of :class:`Node`.
    Join adjacent text nodes so that all stretches of text are stored as single
    :class:`Text` instances.  This simplifies processing text from a DOM tree for
    many applications.
+
+   .. versionadded:: 2.1
 
 
 .. method:: Node.cloneNode(deep)
@@ -810,6 +822,8 @@ Represents a processing instruction in the XML document; this inherits from the
 Exceptions
 ^^^^^^^^^^
 
+.. versionadded:: 2.1
+
 The DOM Level 2 recommendation defines a single exception, :exc:`DOMException`,
 and a number of constants that allow applications to determine what sort of
 error occurred. :exc:`DOMException` instances carry a :attr:`code` attribute
@@ -976,24 +990,29 @@ Python.
 Type Mapping
 ^^^^^^^^^^^^
 
-The IDL types used in the DOM specification are mapped to Python types
+The primitive IDL types used in the DOM specification are mapped to Python types
 according to the following table.
 
 +------------------+-------------------------------------------+
 | IDL Type         | Python Type                               |
 +==================+===========================================+
-| ``boolean``      | ``bool`` or ``int``                       |
+| ``boolean``      | ``IntegerType`` (with a value of ``0`` or |
+|                  | ``1``)                                    |
 +------------------+-------------------------------------------+
-| ``int``          | ``int``                                   |
+| ``int``          | ``IntegerType``                           |
 +------------------+-------------------------------------------+
-| ``long int``     | ``int``                                   |
+| ``long int``     | ``IntegerType``                           |
 +------------------+-------------------------------------------+
-| ``unsigned int`` | ``int``                                   |
+| ``unsigned int`` | ``IntegerType``                           |
 +------------------+-------------------------------------------+
-| ``DOMString``    | ``str`` or ``bytes``                      |
-+------------------+-------------------------------------------+
-| ``null``         | ``None``                                  |
-+------------------+-------------------------------------------+
+
+Additionally, the :class:`DOMString` defined in the recommendation is mapped to
+a Python string or Unicode string.  Applications should be able to handle
+Unicode whenever a string is returned from the DOM.
+
+The IDL ``null`` value is mapped to ``None``, which may be accepted or
+provided by the implementation whenever ``null`` is allowed by the API.
+
 
 .. _dom-accessor-methods:
 

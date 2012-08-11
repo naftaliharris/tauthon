@@ -61,7 +61,7 @@ class FixImport(fixer_base.BaseFix):
             while not hasattr(imp, 'value'):
                 imp = imp.children[0]
             if self.probably_a_local_import(imp.value):
-                imp.value = "." + imp.value
+                imp.value = u"." + imp.value
                 imp.changed()
         else:
             have_local = False
@@ -78,15 +78,15 @@ class FixImport(fixer_base.BaseFix):
                     self.warning(node, "absolute and local imports together")
                 return
 
-            new = FromImport(".", [imp])
+            new = FromImport(u".", [imp])
             new.prefix = node.prefix
             return new
 
     def probably_a_local_import(self, imp_name):
-        if imp_name.startswith("."):
+        if imp_name.startswith(u"."):
             # Relative imports are certainly not local imports.
             return False
-        imp_name = imp_name.split(".", 1)[0]
+        imp_name = imp_name.split(u".", 1)[0]
         base_path = dirname(self.filename)
         base_path = join(base_path, imp_name)
         # If there is no __init__.py next to the file its not in a package

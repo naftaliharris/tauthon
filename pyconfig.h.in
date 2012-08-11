@@ -1,4 +1,4 @@
-/* pyconfig.h.in.  Generated from configure.in by autoheader.  */
+/* pyconfig.h.in.  Generated from configure.ac by autoheader.  */
 
 
 #ifndef Py_PYCONFIG_H
@@ -11,6 +11,12 @@
 /* Define for AIX if your compiler is a genuine IBM xlC/xlC_r and you want
    support for AIX C++ shared extension modules. */
 #undef AIX_GENUINE_CPLUSPLUS
+
+/* Define this if you have AtheOS threads. */
+#undef ATHEOS_THREADS
+
+/* Define this if you have BeOS threads. */
+#undef BEOS_THREADS
 
 /* Define if you have the Mach cthreads package */
 #undef C_THREADS
@@ -39,9 +45,6 @@
 /* Define if gettimeofday() does not have second (timezone) argument This is
    the case on Motorola V4 (R40V4.2) */
 #undef GETTIMEOFDAY_NO_TZ
-
-/* Define to 1 if you have the `accept4' function. */
-#undef HAVE_ACCEPT4
 
 /* Define to 1 if you have the `acosh' function. */
 #undef HAVE_ACOSH
@@ -76,10 +79,6 @@
 /* Define to 1 if you have the <bluetooth.h> header file. */
 #undef HAVE_BLUETOOTH_H
 
-/* Define if mbstowcs(NULL, "text", 0) does not return the number of wide
-   chars that would be converted. */
-#undef HAVE_BROKEN_MBSTOWCS
-
 /* Define if nice() returns success/failure instead of the new priority. */
 #undef HAVE_BROKEN_NICE
 
@@ -98,10 +97,13 @@
 /* define to 1 if your sem_getvalue is broken. */
 #undef HAVE_BROKEN_SEM_GETVALUE
 
+/* Define if `unsetenv` does not return an int. */
+#undef HAVE_BROKEN_UNSETENV
+
 /* Define this if you have the type _Bool. */
 #undef HAVE_C99_BOOL
 
-/* Define to 1 if you have the `chflags' function. */
+/* Define to 1 if you have the 'chflags' function. */
 #undef HAVE_CHFLAGS
 
 /* Define to 1 if you have the `chown' function. */
@@ -112,9 +114,6 @@
 
 /* Define to 1 if you have the `clock' function. */
 #undef HAVE_CLOCK
-
-/* Define if the C compiler supports computed gotos. */
-#undef HAVE_COMPUTED_GOTOS
 
 /* Define to 1 if you have the `confstr' function. */
 #undef HAVE_CONFSTR
@@ -395,7 +394,7 @@
    Solaris and Linux, the necessary defines are already defined.) */
 #undef HAVE_LARGEFILE_SUPPORT
 
-/* Define to 1 if you have the `lchflags' function. */
+/* Define to 1 if you have the 'lchflags' function. */
 #undef HAVE_LCHFLAGS
 
 /* Define to 1 if you have the `lchmod' function. */
@@ -452,9 +451,6 @@
 /* Define this if you have the makedev macro. */
 #undef HAVE_MAKEDEV
 
-/* Define to 1 if you have the `mbrtowc' function. */
-#undef HAVE_MBRTOWC
-
 /* Define to 1 if you have the `memmove' function. */
 #undef HAVE_MEMMOVE
 
@@ -497,9 +493,6 @@
 /* Define to 1 if you have the `pause' function. */
 #undef HAVE_PAUSE
 
-/* Define if the OS supports pipe2() */
-#undef HAVE_PIPE2
-
 /* Define to 1 if you have the `plock' function. */
 #undef HAVE_PLOCK
 
@@ -514,6 +507,9 @@
 
 /* Define if your compiler supports function prototype */
 #undef HAVE_PROTOTYPES
+
+/* Define if you have GNU PTH threads. */
+#undef HAVE_PTH
 
 /* Defined for Solaris 2.6 bug in pthread header. */
 #undef HAVE_PTHREAD_DESTRUCTOR
@@ -686,9 +682,6 @@
 
 /* Define to 1 if you have the <string.h> header file. */
 #undef HAVE_STRING_H
-
-/* Define to 1 if you have the `strlcpy' function. */
-#undef HAVE_STRLCPY
 
 /* Define to 1 if you have the <stropts.h> header file. */
 #undef HAVE_STROPTS_H
@@ -895,12 +888,6 @@
 /* Define to 1 if you have the `wcscoll' function. */
 #undef HAVE_WCSCOLL
 
-/* Define to 1 if you have the `wcsftime' function. */
-#undef HAVE_WCSFTIME
-
-/* Define to 1 if you have the `wcsxfrm' function. */
-#undef HAVE_WCSXFRM
-
 /* Define if tzset() actually switches the local timezone in a meaningful way.
    */
 #undef HAVE_WORKING_TZSET
@@ -913,9 +900,6 @@
 
 /* Define if you are using Mach cthreads directly under /include */
 #undef HURD_C_THREADS
-
-/* Define if log1p(-0.) is 0. rather than -0. */
-#undef LOG1P_DROPS_ZERO_SIGN
 
 /* Define if you are using Mach cthreads under mach / */
 #undef MACH_C_THREADS
@@ -975,6 +959,9 @@
 
 /* Define as the size of the unicode type. */
 #undef Py_UNICODE_SIZE
+
+/* Define if you want to have a Unicode type. */
+#undef Py_USING_UNICODE
 
 /* assume C89 semantics that RETSIGTYPE is always void */
 #undef RETSIGTYPE
@@ -1055,12 +1042,6 @@
 /* Define to 1 if your <sys/time.h> declares `struct tm'. */
 #undef TM_IN_SYS_TIME
 
-/* Define if you want to use computed gotos in ceval.c. */
-#undef USE_COMPUTED_GOTOS
-
-/* Define to use the C99 inline keyword. */
-#undef USE_INLINE
-
 /* Enable extensions on AIX 3, Interix.  */
 #ifndef _ALL_SOURCE
 # undef _ALL_SOURCE
@@ -1083,11 +1064,18 @@
 #endif
 
 
+/* Define if you want to use MacPython modules on MacOSX in unix-Python. */
+#undef USE_TOOLBOX_OBJECT_GLUE
+
 /* Define if a va_list is an array of some kind */
 #undef VA_LIST_IS_ARRAY
 
 /* Define if you want SIGFPE handled (see Include/pyfpe.h). */
 #undef WANT_SIGFPE_HANDLER
+
+/* Define if you want wctype.h functions to be used instead of the one
+   supplied by Python itself. (see Include/unicodectype.h). */
+#undef WANT_WCTYPE_FUNCTIONS
 
 /* Define if WINDOW in curses.h offers a field _flags. */
 #undef WINDOW_HAS_FLAGS
@@ -1152,6 +1140,9 @@
 /* This must be defined on some systems to enable large file support. */
 #undef _LARGEFILE_SOURCE
 
+/* This must be defined on AIX systems to enable large file support. */
+#undef _LARGE_FILES
+
 /* Define to 1 if on MINIX. */
 #undef _MINIX
 
@@ -1201,6 +1192,9 @@
 # undef __CHAR_UNSIGNED__
 #endif
 
+/* Defined on Solaris to see additional function prototypes. */
+#undef __EXTENSIONS__
+
 /* Define to 'long' if <time.h> doesn't define. */
 #undef clock_t
 
@@ -1209,12 +1203,6 @@
 
 /* Define to `int' if <sys/types.h> doesn't define. */
 #undef gid_t
-
-/* Define to `__inline__' or `__inline' if that's what the C compiler
-   calls it, or to nothing if 'inline' is not supported under any name.  */
-#ifndef __cplusplus
-#undef inline
-#endif
 
 /* Define to the type of a signed integer type of width exactly 32 bits if
    such a type exists and the standard includes do not define it. */

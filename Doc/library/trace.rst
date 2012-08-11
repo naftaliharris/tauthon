@@ -130,8 +130,7 @@ These options may be repeated multiple times.
 Programmatic Interface
 ----------------------
 
-.. class:: Trace(count=1, trace=1, countfuncs=0, countcallers=0, ignoremods=(),\
-                 ignoredirs=(), infile=None, outfile=None, timing=False)
+.. class:: Trace([count=1[, trace=1[, countfuncs=0[, countcallers=0[, ignoremods=()[, ignoredirs=()[, infile=None[, outfile=None[, timing=False]]]]]]]]])
 
    Create an object to trace execution of a single statement or expression.  All
    parameters are optional.  *count* enables counting of line numbers.  *trace*
@@ -178,7 +177,7 @@ Programmatic Interface
 
        Merge in data from another :class:`CoverageResults` object.
 
-    .. method:: write_results(show_missing=True, summary=False, coverdir=None)
+    .. method:: write_results([show_missing=True[, summary=False[, coverdir=None]]])
 
        Write coverage results.  Set *show_missing* to show lines that had no
        hits.  Set *summary* to include in the output the coverage summary per

@@ -182,7 +182,7 @@ win32_SetNamedPipeHandleState(PyObject *self, PyObject *args)
 
     for (i = 0 ; i < 3 ; i++) {
         if (oArgs[i] != Py_None) {
-            dwArgs[i] = PyLong_AsUnsignedLongMask(oArgs[i]);
+            dwArgs[i] = PyInt_AsUnsignedLongMask(oArgs[i]);
             if (PyErr_Occurred())
                 return NULL;
             pArgs[i] = &dwArgs[i];
@@ -244,6 +244,7 @@ create_win32_namespace(void)
     Py_INCREF(&Win32Type);
 
     WIN32_CONSTANT(F_DWORD, ERROR_ALREADY_EXISTS);
+    WIN32_CONSTANT(F_DWORD, ERROR_NO_DATA);
     WIN32_CONSTANT(F_DWORD, ERROR_PIPE_BUSY);
     WIN32_CONSTANT(F_DWORD, ERROR_PIPE_CONNECTED);
     WIN32_CONSTANT(F_DWORD, ERROR_SEM_TIMEOUT);

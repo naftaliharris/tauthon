@@ -27,9 +27,15 @@ the caller that an error has been set.  If the error is not handled or carefully
 propagated, additional calls into the Python/C API may not behave as intended
 and may fail in mysterious ways.
 
-The error indicator consists of three Python objects corresponding to the result
-of ``sys.exc_info()``.  API functions exist to interact with the error indicator
-in various ways.  There is a separate error indicator for each thread.
+.. index::
+   single: exc_type (in module sys)
+   single: exc_value (in module sys)
+   single: exc_traceback (in module sys)
+
+The error indicator consists of three Python objects corresponding to   the
+Python variables ``sys.exc_type``, ``sys.exc_value`` and ``sys.exc_traceback``.
+API functions exist to interact with the error indicator in various ways.  There
+is a separate error indicator for each thread.
 
 .. XXX Order of these should be more thoughtful.
    Either alphabetical or some kind of structure.
@@ -134,7 +140,7 @@ in various ways.  There is a separate error indicator for each thread.
    This is the most common way to set the error indicator.  The first argument
    specifies the exception type; it is normally one of the standard exceptions,
    e.g. :c:data:`PyExc_RuntimeError`.  You need not increment its reference count.
-   The second argument is an error message; it is decoded from ``'utf-8``'.
+   The second argument is an error message; it is converted to a string object.
 
 
 .. c:function:: void PyErr_SetObject(PyObject *type, PyObject *value)
@@ -148,8 +154,7 @@ in various ways.  There is a separate error indicator for each thread.
    This function sets the error indicator and returns *NULL*.  *exception*
    should be a Python exception class.  The *format* and subsequent
    parameters help format the error message; they have the same meaning and
-   values as in :c:func:`PyUnicode_FromFormat`. *format* is an ASCII-encoded
-   string.
+   values as in :c:func:`PyString_FromFormat`.
 
 
 .. c:function:: void PyErr_SetNone(PyObject *type)
@@ -193,8 +198,6 @@ in various ways.  There is a separate error indicator for each thread.
    *filename* is not *NULL*, it is passed to the constructor of *type* as a third
    parameter.  In the case of exceptions such as :exc:`IOError` and :exc:`OSError`,
    this is used to define the :attr:`filename` attribute of the exception instance.
-   *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
 
 
 .. c:function:: PyObject* PyErr_SetFromWindowsErr(int ierr)
@@ -214,14 +217,14 @@ in various ways.  There is a separate error indicator for each thread.
    Similar to :c:func:`PyErr_SetFromWindowsErr`, with an additional parameter
    specifying the exception type to be raised. Availability: Windows.
 
+   .. versionadded:: 2.3
+
 
 .. c:function:: PyObject* PyErr_SetFromWindowsErrWithFilename(int ierr, const char *filename)
 
    Similar to :c:func:`PyErr_SetFromWindowsErr`, with the additional behavior that
    if *filename* is not *NULL*, it is passed to the constructor of
-   :exc:`WindowsError` as a third parameter.  *filename* is decoded from the
-   filesystem encoding (:func:`sys.getfilesystemencoding`).  Availability:
-   Windows.
+   :exc:`WindowsError` as a third parameter. Availability: Windows.
 
 
 .. c:function:: PyObject* PyErr_SetExcFromWindowsErrWithFilename(PyObject *type, int ierr, char *filename)
@@ -229,22 +232,7 @@ in various ways.  There is a separate error indicator for each thread.
    Similar to :c:func:`PyErr_SetFromWindowsErrWithFilename`, with an additional
    parameter specifying the exception type to be raised. Availability: Windows.
 
-
-.. c:function:: void PyErr_SyntaxLocationEx(char *filename, int lineno, int col_offset)
-
-   Set file, line, and offset information for the current exception.  If the
-   current exception is not a :exc:`SyntaxError`, then it sets additional
-   attributes, which make the exception printing subsystem think the exception
-   is a :exc:`SyntaxError`. *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
-
-.. versionadded:: 3.2
-
-
-.. c:function:: void PyErr_SyntaxLocation(char *filename, int lineno)
-
-   Like :c:func:`PyErr_SyntaxLocationExc`, but the col_offset parameter is
-   omitted.
+   .. versionadded:: 2.3
 
 
 .. c:function:: void PyErr_BadInternalCall()
@@ -255,12 +243,12 @@ in various ways.  There is a separate error indicator for each thread.
    use.
 
 
-.. c:function:: int PyErr_WarnEx(PyObject *category, char *message, int stack_level)
+.. c:function:: int PyErr_WarnEx(PyObject *category, char *message, int stacklevel)
 
    Issue a warning message.  The *category* argument is a warning category (see
-   below) or *NULL*; the *message* argument is an UTF-8 encoded string.  *stack_level* is a
+   below) or *NULL*; the *message* argument is a message string.  *stacklevel* is a
    positive number giving a number of stack frames; the warning will be issued from
-   the  currently executing line of code in that stack frame.  A *stack_level* of 1
+   the  currently executing line of code in that stack frame.  A *stacklevel* of 1
    is the function calling :c:func:`PyErr_WarnEx`, 2 is  the function above that,
    and so forth.
 
@@ -292,24 +280,32 @@ in various ways.  There is a separate error indicator for each thread.
    documentation.  There is no C API for warning control.
 
 
+.. c:function:: int PyErr_Warn(PyObject *category, char *message)
+
+   Issue a warning message.  The *category* argument is a warning category (see
+   below) or *NULL*; the *message* argument is a message string.  The warning will
+   appear to be issued from the function calling :c:func:`PyErr_Warn`, equivalent to
+   calling :c:func:`PyErr_WarnEx` with a *stacklevel* of 1.
+
+   Deprecated; use :c:func:`PyErr_WarnEx` instead.
+
+
 .. c:function:: int PyErr_WarnExplicit(PyObject *category, const char *message, const char *filename, int lineno, const char *module, PyObject *registry)
 
    Issue a warning message with explicit control over all warning attributes.  This
    is a straightforward wrapper around the Python function
    :func:`warnings.warn_explicit`, see there for more information.  The *module*
    and *registry* arguments may be set to *NULL* to get the default effect
-   described there. *message* and *module* are UTF-8 encoded strings,
-   *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
+   described there.
 
 
-.. c:function:: int PyErr_WarnFormat(PyObject *category, Py_ssize_t stack_level, const char *format, ...)
+.. c:function:: int PyErr_WarnPy3k(char *message, int stacklevel)
 
-   Function similar to :c:func:`PyErr_WarnEx`, but use
-   :c:func:`PyUnicode_FromFormat` to format the warning message.  *format* is
-   an ASCII-encoded string.
+   Issue a :exc:`DeprecationWarning` with the given *message* and *stacklevel*
+   if the :c:data:`Py_Py3kWarningFlag` flag is enabled.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.6
+
 
 .. c:function:: int PyErr_CheckSignals()
 
@@ -339,7 +335,7 @@ in various ways.  There is a separate error indicator for each thread.
    be raised.  It may be called without holding the interpreter lock.
 
    .. % XXX This was described as obsolete, but is used in
-   .. % _thread.interrupt_main() (used from IDLE), so it's still needed.
+   .. % thread.interrupt_main() (used from IDLE), so it's still needed.
 
 
 .. c:function:: int PySignal_SetWakeupFd(int fd)
@@ -351,13 +347,15 @@ in various ways.  There is a separate error indicator for each thread.
    error checking.  *fd* should be a valid file descriptor.  The function should
    only be called from the main thread.
 
+   .. versionadded:: 2.6
+
 
 .. c:function:: PyObject* PyErr_NewException(char *name, PyObject *base, PyObject *dict)
 
-   This utility function creates and returns a new exception object. The *name*
+   This utility function creates and returns a new exception class. The *name*
    argument must be the name of the new exception, a C string of the form
-   ``module.class``.  The *base* and *dict* arguments are normally *NULL*.  This
-   creates a class object derived from :exc:`Exception` (accessible in C as
+   ``module.classname``.  The *base* and *dict* arguments are normally *NULL*.
+   This creates a class object derived from :exc:`Exception` (accessible in C as
    :c:data:`PyExc_Exception`).
 
    The :attr:`__module__` attribute of the new class is set to the first part (up
@@ -373,7 +371,7 @@ in various ways.  There is a separate error indicator for each thread.
    easily be given a docstring: If *doc* is non-*NULL*, it will be used as the
    docstring for the exception class.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. c:function:: void PyErr_WriteUnraisable(PyObject *obj)
@@ -388,52 +386,6 @@ in various ways.  There is a separate error indicator for each thread.
    the warning message.
 
 
-Exception Objects
-=================
-
-.. c:function:: PyObject* PyException_GetTraceback(PyObject *ex)
-
-   Return the traceback associated with the exception as a new reference, as
-   accessible from Python through :attr:`__traceback__`.  If there is no
-   traceback associated, this returns *NULL*.
-
-
-.. c:function:: int PyException_SetTraceback(PyObject *ex, PyObject *tb)
-
-   Set the traceback associated with the exception to *tb*.  Use ``Py_None`` to
-   clear it.
-
-
-.. c:function:: PyObject* PyException_GetContext(PyObject *ex)
-
-   Return the context (another exception instance during whose handling *ex* was
-   raised) associated with the exception as a new reference, as accessible from
-   Python through :attr:`__context__`.  If there is no context associated, this
-   returns *NULL*.
-
-
-.. c:function:: void PyException_SetContext(PyObject *ex, PyObject *ctx)
-
-   Set the context associated with the exception to *ctx*.  Use *NULL* to clear
-   it.  There is no type check to make sure that *ctx* is an exception instance.
-   This steals a reference to *ctx*.
-
-
-.. c:function:: PyObject* PyException_GetCause(PyObject *ex)
-
-   Return the cause (another exception instance set by ``raise ... from ...``)
-   associated with the exception as a new reference, as accessible from Python
-   through :attr:`__cause__`.  If there is no cause associated, this returns
-   *NULL*.
-
-
-.. c:function:: void PyException_SetCause(PyObject *ex, PyObject *ctx)
-
-   Set the cause associated with the exception to *ctx*.  Use *NULL* to clear
-   it.  There is no type check to make sure that *ctx* is an exception instance.
-   This steals a reference to *ctx*.
-
-
 .. _unicodeexceptions:
 
 Unicode Exception Objects
@@ -444,70 +396,68 @@ The following functions are used to create and modify Unicode exceptions from C.
 .. c:function:: PyObject* PyUnicodeDecodeError_Create(const char *encoding, const char *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
 
    Create a :class:`UnicodeDecodeError` object with the attributes *encoding*,
-   *object*, *length*, *start*, *end* and *reason*. *encoding* and *reason* are
-   UTF-8 encoded strings.
+   *object*, *length*, *start*, *end* and *reason*.
 
 .. c:function:: PyObject* PyUnicodeEncodeError_Create(const char *encoding, const Py_UNICODE *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
 
    Create a :class:`UnicodeEncodeError` object with the attributes *encoding*,
-   *object*, *length*, *start*, *end* and *reason*. *encoding* and *reason* are
-   UTF-8 encoded strings.
+   *object*, *length*, *start*, *end* and *reason*.
 
 .. c:function:: PyObject* PyUnicodeTranslateError_Create(const Py_UNICODE *object, Py_ssize_t length, Py_ssize_t start, Py_ssize_t end, const char *reason)
 
    Create a :class:`UnicodeTranslateError` object with the attributes *object*,
-   *length*, *start*, *end* and *reason*. *reason* is an UTF-8 encoded string.
+   *length*, *start*, *end* and *reason*.
 
 .. c:function:: PyObject* PyUnicodeDecodeError_GetEncoding(PyObject *exc)
-                PyObject* PyUnicodeEncodeError_GetEncoding(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetEncoding(PyObject *exc)
 
    Return the *encoding* attribute of the given exception object.
 
 .. c:function:: PyObject* PyUnicodeDecodeError_GetObject(PyObject *exc)
-                PyObject* PyUnicodeEncodeError_GetObject(PyObject *exc)
-                PyObject* PyUnicodeTranslateError_GetObject(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetObject(PyObject *exc)
+               PyObject* PyUnicodeTranslateError_GetObject(PyObject *exc)
 
    Return the *object* attribute of the given exception object.
 
 .. c:function:: int PyUnicodeDecodeError_GetStart(PyObject *exc, Py_ssize_t *start)
-                int PyUnicodeEncodeError_GetStart(PyObject *exc, Py_ssize_t *start)
-                int PyUnicodeTranslateError_GetStart(PyObject *exc, Py_ssize_t *start)
+               int PyUnicodeEncodeError_GetStart(PyObject *exc, Py_ssize_t *start)
+               int PyUnicodeTranslateError_GetStart(PyObject *exc, Py_ssize_t *start)
 
    Get the *start* attribute of the given exception object and place it into
    *\*start*.  *start* must not be *NULL*.  Return ``0`` on success, ``-1`` on
    failure.
 
 .. c:function:: int PyUnicodeDecodeError_SetStart(PyObject *exc, Py_ssize_t start)
-                int PyUnicodeEncodeError_SetStart(PyObject *exc, Py_ssize_t start)
-                int PyUnicodeTranslateError_SetStart(PyObject *exc, Py_ssize_t start)
+               int PyUnicodeEncodeError_SetStart(PyObject *exc, Py_ssize_t start)
+               int PyUnicodeTranslateError_SetStart(PyObject *exc, Py_ssize_t start)
 
    Set the *start* attribute of the given exception object to *start*.  Return
    ``0`` on success, ``-1`` on failure.
 
 .. c:function:: int PyUnicodeDecodeError_GetEnd(PyObject *exc, Py_ssize_t *end)
-                int PyUnicodeEncodeError_GetEnd(PyObject *exc, Py_ssize_t *end)
-                int PyUnicodeTranslateError_GetEnd(PyObject *exc, Py_ssize_t *end)
+               int PyUnicodeEncodeError_GetEnd(PyObject *exc, Py_ssize_t *end)
+               int PyUnicodeTranslateError_GetEnd(PyObject *exc, Py_ssize_t *end)
 
    Get the *end* attribute of the given exception object and place it into
    *\*end*.  *end* must not be *NULL*.  Return ``0`` on success, ``-1`` on
    failure.
 
 .. c:function:: int PyUnicodeDecodeError_SetEnd(PyObject *exc, Py_ssize_t end)
-                int PyUnicodeEncodeError_SetEnd(PyObject *exc, Py_ssize_t end)
-                int PyUnicodeTranslateError_SetEnd(PyObject *exc, Py_ssize_t end)
+               int PyUnicodeEncodeError_SetEnd(PyObject *exc, Py_ssize_t end)
+               int PyUnicodeTranslateError_SetEnd(PyObject *exc, Py_ssize_t end)
 
    Set the *end* attribute of the given exception object to *end*.  Return ``0``
    on success, ``-1`` on failure.
 
 .. c:function:: PyObject* PyUnicodeDecodeError_GetReason(PyObject *exc)
-                PyObject* PyUnicodeEncodeError_GetReason(PyObject *exc)
-                PyObject* PyUnicodeTranslateError_GetReason(PyObject *exc)
+               PyObject* PyUnicodeEncodeError_GetReason(PyObject *exc)
+               PyObject* PyUnicodeTranslateError_GetReason(PyObject *exc)
 
    Return the *reason* attribute of the given exception object.
 
 .. c:function:: int PyUnicodeDecodeError_SetReason(PyObject *exc, const char *reason)
-                int PyUnicodeEncodeError_SetReason(PyObject *exc, const char *reason)
-                int PyUnicodeTranslateError_SetReason(PyObject *exc, const char *reason)
+               int PyUnicodeEncodeError_SetReason(PyObject *exc, const char *reason)
+               int PyUnicodeTranslateError_SetReason(PyObject *exc, const char *reason)
 
    Set the *reason* attribute of the given exception object to *reason*.  Return
    ``0`` on success, ``-1`` on failure.
@@ -525,7 +475,7 @@ recursion depth automatically).
 
    Marks a point where a recursive C-level call is about to be performed.
 
-   If :const:`USE_STACKCHECK` is defined, this function checks if the the OS
+   If :const:`USE_STACKCHECK` is defined, this function checks if the OS
    stack overflowed using :c:func:`PyOS_CheckStack`.  In this is the case, it
    sets a :exc:`MemoryError` and returns a nonzero value.
 
@@ -542,35 +492,6 @@ recursion depth automatically).
    Ends a :c:func:`Py_EnterRecursiveCall`.  Must be called once for each
    *successful* invocation of :c:func:`Py_EnterRecursiveCall`.
 
-Properly implementing :attr:`tp_repr` for container types requires
-special recursion handling.  In addition to protecting the stack,
-:attr:`tp_repr` also needs to track objects to prevent cycles.  The
-following two functions facilitate this functionality.  Effectively,
-these are the C equivalent to :func:`reprlib.recursive_repr`.
-
-.. c:function:: int Py_ReprEnter(PyObject *object)
-
-   Called at the beginning of the :attr:`tp_repr` implementation to
-   detect cycles.
-
-   If the object has already been processed, the function returns a
-   positive integer.  In that case the :attr:`tp_repr` implementation
-   should return a string object indicating a cycle.  As examples,
-   :class:`dict` objects return ``{...}`` and :class:`list` objects
-   return ``[...]``.
-
-   The function will return a negative integer if the recursion limit
-   is reached.  In that case the :attr:`tp_repr` implementation should
-   typically return ``NULL``.
-
-   Otherwise, the function returns zero and the :attr:`tp_repr`
-   implementation can continue normally.
-
-.. c:function:: void Py_ReprLeave(PyObject *object)
-
-   Ends a :c:func:`Py_ReprEnter`.  Must be called once for each
-   invocation of :c:func:`Py_ReprEnter` that returns zero.
-
 
 .. _standardexceptions:
 
@@ -585,9 +506,11 @@ the variables:
 +-------------------------------------+----------------------------+----------+
 | C Name                              | Python Name                | Notes    |
 +=====================================+============================+==========+
-| :c:data:`PyExc_BaseException`       | :exc:`BaseException`       | \(1)     |
+| :c:data:`PyExc_BaseException`       | :exc:`BaseException`       | (1), (4) |
 +-------------------------------------+----------------------------+----------+
 | :c:data:`PyExc_Exception`           | :exc:`Exception`           | \(1)     |
++-------------------------------------+----------------------------+----------+
+| :c:data:`PyExc_StandardError`       | :exc:`StandardError`       | \(1)     |
 +-------------------------------------+----------------------------+----------+
 | :c:data:`PyExc_ArithmeticError`     | :exc:`ArithmeticError`     | \(1)     |
 +-------------------------------------+----------------------------+----------+
@@ -645,6 +568,7 @@ the variables:
 .. index::
    single: PyExc_BaseException
    single: PyExc_Exception
+   single: PyExc_StandardError
    single: PyExc_ArithmeticError
    single: PyExc_LookupError
    single: PyExc_AssertionError
@@ -683,3 +607,15 @@ Notes:
 (3)
    Only defined on Windows; protect code that uses this by testing that the
    preprocessor macro ``MS_WINDOWS`` is defined.
+
+(4)
+   .. versionadded:: 2.5
+
+
+String Exceptions
+=================
+
+.. versionchanged:: 2.6
+   All exceptions to be raised or caught must be derived from :exc:`BaseException`.
+   Trying to raise a string exception now raises :exc:`TypeError`.
+

@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Module ndiff version 1.7.0
 # Released to the public domain 08-Dec-2000,
@@ -61,7 +61,7 @@ def fail(msg):
 def fopen(fname):
     try:
         return open(fname, 'U')
-    except IOError as detail:
+    except IOError, detail:
         return fail("couldn't open " + fname + ": " + str(detail))
 
 # open two files & spray the diff to stdout; return false iff a problem
@@ -74,7 +74,7 @@ def fcompare(f1name, f2name):
     a = f1.readlines(); f1.close()
     b = f2.readlines(); f2.close()
     for line in difflib.ndiff(a, b):
-        print(line, end=' ')
+        print line,
 
     return 1
 
@@ -85,7 +85,7 @@ def main(args):
     import getopt
     try:
         opts, args = getopt.getopt(args, "qr:")
-    except getopt.error as detail:
+    except getopt.error, detail:
         return fail(str(detail))
     noisy = 1
     qseen = rseen = 0
@@ -109,8 +109,8 @@ def main(args):
         return fail("need 2 filename args")
     f1name, f2name = args
     if noisy:
-        print('-:', f1name)
-        print('+:', f2name)
+        print '-:', f1name
+        print '+:', f2name
     return fcompare(f1name, f2name)
 
 # read ndiff output from stdin, and print file1 (which=='1') or

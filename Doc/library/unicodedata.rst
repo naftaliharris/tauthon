@@ -1,3 +1,4 @@
+
 :mod:`unicodedata` --- Unicode Database
 =======================================
 
@@ -13,86 +14,87 @@
    single: character
    pair: Unicode; database
 
-This module provides access to the Unicode Character Database (UCD) which
-defines character properties for all Unicode characters. The data contained in
-this database is compiled from the `UCD version 6.0.0
-<http://www.unicode.org/Public/6.0.0/ucd>`_.
+This module provides access to the Unicode Character Database which defines
+character properties for all Unicode characters. The data in this database is
+based on the :file:`UnicodeData.txt` file version 5.2.0 which is publicly
+available from ftp://ftp.unicode.org/.
 
-The module uses the same names and symbols as defined by Unicode
-Standard Annex #44, `"Unicode Character Database"
-<http://www.unicode.org/reports/tr44/tr44-6.html>`_.  It defines the
-following functions:
+The module uses the same names and symbols as defined by the UnicodeData File
+Format 5.2.0 (see http://www.unicode.org/reports/tr44/tr44-4.html).
+It defines the following functions:
 
 
 .. function:: lookup(name)
 
    Look up character by name.  If a character with the given name is found, return
-   the corresponding character.  If not found, :exc:`KeyError` is raised.
+   the corresponding Unicode character.  If not found, :exc:`KeyError` is raised.
 
 
-.. function:: name(chr[, default])
+.. function:: name(unichr[, default])
 
-   Returns the name assigned to the character *chr* as a string. If no
+   Returns the name assigned to the Unicode character *unichr* as a string. If no
    name is defined, *default* is returned, or, if not given, :exc:`ValueError` is
    raised.
 
 
-.. function:: decimal(chr[, default])
+.. function:: decimal(unichr[, default])
 
-   Returns the decimal value assigned to the character *chr* as integer.
+   Returns the decimal value assigned to the Unicode character *unichr* as integer.
    If no such value is defined, *default* is returned, or, if not given,
    :exc:`ValueError` is raised.
 
 
-.. function:: digit(chr[, default])
+.. function:: digit(unichr[, default])
 
-   Returns the digit value assigned to the character *chr* as integer.
+   Returns the digit value assigned to the Unicode character *unichr* as integer.
    If no such value is defined, *default* is returned, or, if not given,
    :exc:`ValueError` is raised.
 
 
-.. function:: numeric(chr[, default])
+.. function:: numeric(unichr[, default])
 
-   Returns the numeric value assigned to the character *chr* as float.
+   Returns the numeric value assigned to the Unicode character *unichr* as float.
    If no such value is defined, *default* is returned, or, if not given,
    :exc:`ValueError` is raised.
 
 
-.. function:: category(chr)
+.. function:: category(unichr)
 
-   Returns the general category assigned to the character *chr* as
+   Returns the general category assigned to the Unicode character *unichr* as
    string.
 
 
-.. function:: bidirectional(chr)
+.. function:: bidirectional(unichr)
 
-   Returns the bidirectional category assigned to the character *chr* as
+   Returns the bidirectional category assigned to the Unicode character *unichr* as
    string. If no such value is defined, an empty string is returned.
 
 
-.. function:: combining(chr)
+.. function:: combining(unichr)
 
-   Returns the canonical combining class assigned to the character *chr*
+   Returns the canonical combining class assigned to the Unicode character *unichr*
    as integer. Returns ``0`` if no combining class is defined.
 
 
-.. function:: east_asian_width(chr)
+.. function:: east_asian_width(unichr)
 
-   Returns the east asian width assigned to the character *chr* as
+   Returns the east asian width assigned to the Unicode character *unichr* as
    string.
 
+   .. versionadded:: 2.4
 
-.. function:: mirrored(chr)
 
-   Returns the mirrored property assigned to the character *chr* as
+.. function:: mirrored(unichr)
+
+   Returns the mirrored property assigned to the Unicode character *unichr* as
    integer. Returns ``1`` if the character has been identified as a "mirrored"
    character in bidirectional text, ``0`` otherwise.
 
 
-.. function:: decomposition(chr)
+.. function:: decomposition(unichr)
 
-   Returns the character decomposition mapping assigned to the character
-   *chr* as string. An empty string is returned in case no such mapping is
+   Returns the character decomposition mapping assigned to the Unicode character
+   *unichr* as string. An empty string is returned in case no such mapping is
    defined.
 
 
@@ -105,7 +107,7 @@ following functions:
    based on the definition of canonical equivalence and compatibility equivalence.
    In Unicode, several characters can be expressed in various way. For example, the
    character U+00C7 (LATIN CAPITAL LETTER C WITH CEDILLA) can also be expressed as
-   the sequence U+0327 (COMBINING CEDILLA) U+0043 (LATIN CAPITAL LETTER C).
+   the sequence U+0043 (LATIN CAPITAL LETTER C) U+0327 (COMBINING CEDILLA).
 
    For each character, there are two normal forms: normal form C and normal form D.
    Normal form D (NFD) is also known as canonical decomposition, and translates
@@ -128,12 +130,16 @@ following functions:
    a human reader, if one has combining characters and the other
    doesn't, they may not compare equal.
 
+   .. versionadded:: 2.3
 
 In addition, the module exposes the following constant:
+
 
 .. data:: unidata_version
 
    The version of the Unicode database used in this module.
+
+   .. versionadded:: 2.3
 
 
 .. data:: ucd_3_2_0
@@ -142,21 +148,23 @@ In addition, the module exposes the following constant:
    Unicode database version 3.2 instead, for applications that require this
    specific version of the Unicode database (such as IDNA).
 
+   .. versionadded:: 2.5
+
 Examples:
 
    >>> import unicodedata
    >>> unicodedata.lookup('LEFT CURLY BRACKET')
-   '{'
-   >>> unicodedata.name('/')
+   u'{'
+   >>> unicodedata.name(u'/')
    'SOLIDUS'
-   >>> unicodedata.decimal('9')
+   >>> unicodedata.decimal(u'9')
    9
-   >>> unicodedata.decimal('a')
+   >>> unicodedata.decimal(u'a')
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
    ValueError: not a decimal
-   >>> unicodedata.category('A')  # 'L'etter, 'u'ppercase
+   >>> unicodedata.category(u'A')  # 'L'etter, 'u'ppercase
    'Lu'
-   >>> unicodedata.bidirectional('\u0660') # 'A'rabic, 'N'umber
+   >>> unicodedata.bidirectional(u'\u0660') # 'A'rabic, 'N'umber
    'AN'
 

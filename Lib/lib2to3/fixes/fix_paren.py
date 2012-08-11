@@ -39,6 +39,6 @@ class FixParen(fixer_base.BaseFix):
 
         lparen = LParen()
         lparen.prefix = target.prefix
-        target.prefix = "" # Make it hug the parentheses
+        target.prefix = u"" # Make it hug the parentheses
         target.insert_child(0, lparen)
         target.append_child(RParen())

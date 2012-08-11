@@ -1,3 +1,4 @@
+
 :mod:`msvcrt` -- Useful routines from the MS VC++ runtime
 =========================================================
 
@@ -90,17 +91,19 @@ Console I/O
 
 .. function:: getch()
 
-   Read a keypress and return the resulting character as a byte string.
-   Nothing is echoed to the console.  This call will block if a keypress
-   is not already available, but will not wait for :kbd:`Enter` to be
-   pressed. If the pressed key was a special function key, this will
-   return ``'\000'`` or ``'\xe0'``; the next call will return the keycode.
-   The :kbd:`Control-C` keypress cannot be read with this function.
+   Read a keypress and return the resulting character.  Nothing is echoed to the
+   console.  This call will block if a keypress is not already available, but will
+   not wait for :kbd:`Enter` to be pressed. If the pressed key was a special
+   function key, this will return ``'\000'`` or ``'\xe0'``; the next call will
+   return the keycode.  The :kbd:`Control-C` keypress cannot be read with this
+   function.
 
 
 .. function:: getwch()
 
    Wide char variant of :func:`getch`, returning a Unicode value.
+
+   .. versionadded:: 2.6
 
 
 .. function:: getche()
@@ -113,26 +116,32 @@ Console I/O
 
    Wide char variant of :func:`getche`, returning a Unicode value.
 
+   .. versionadded:: 2.6
+
 
 .. function:: putch(char)
 
-   Print the byte string *char* to the console without buffering.
+   Print the character *char* to the console without buffering.
 
 
 .. function:: putwch(unicode_char)
 
    Wide char variant of :func:`putch`, accepting a Unicode value.
 
+   .. versionadded:: 2.6
+
 
 .. function:: ungetch(char)
 
-   Cause the byte string *char* to be "pushed back" into the console buffer;
-   it will be the next character read by :func:`getch` or :func:`getche`.
+   Cause the character *char* to be "pushed back" into the console buffer; it will
+   be the next character read by :func:`getch` or :func:`getche`.
 
 
 .. function:: ungetwch(unicode_char)
 
    Wide char variant of :func:`ungetch`, accepting a Unicode value.
+
+   .. versionadded:: 2.6
 
 
 .. _msvcrt-other:

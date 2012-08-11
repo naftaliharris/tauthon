@@ -1,9 +1,9 @@
 import mimetypes
-import io
+import StringIO
 import unittest
 import sys
 
-from test import support
+from test import test_support
 
 # Tell it we don't know about external files:
 mimetypes.knownfiles = []
@@ -31,7 +31,7 @@ class MimeTypesTestCase(unittest.TestCase):
 
     def test_file_parsing(self):
         eq = self.assertEqual
-        sio = io.StringIO("x-application/x-unittest pyunit\n")
+        sio = StringIO.StringIO("x-application/x-unittest pyunit\n")
         self.db.readfp(sio)
         eq(self.db.guess_type("foo.pyunit"),
            ("x-application/x-unittest", None))
@@ -84,9 +84,8 @@ class Win32MimeTypesTestCase(unittest.TestCase):
         eq = self.assertEqual
         eq(self.db.guess_type("foo.txt"), ("text/plain", None))
 
-
 def test_main():
-    support.run_unittest(MimeTypesTestCase,
+    test_support.run_unittest(MimeTypesTestCase,
         Win32MimeTypesTestCase
         )
 

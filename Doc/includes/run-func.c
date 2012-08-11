@@ -13,7 +13,7 @@ main(int argc, char *argv[])
     }
 
     Py_Initialize();
-    pName = PyUnicode_FromString(argv[1]);
+    pName = PyString_FromString(argv[1]);
     /* Error checking of pName left out */
 
     pModule = PyImport_Import(pName);
@@ -26,7 +26,7 @@ main(int argc, char *argv[])
         if (pFunc && PyCallable_Check(pFunc)) {
             pArgs = PyTuple_New(argc - 3);
             for (i = 0; i < argc - 3; ++i) {
-                pValue = PyLong_FromLong(atoi(argv[i + 3]));
+                pValue = PyInt_FromLong(atoi(argv[i + 3]));
                 if (!pValue) {
                     Py_DECREF(pArgs);
                     Py_DECREF(pModule);
@@ -39,7 +39,7 @@ main(int argc, char *argv[])
             pValue = PyObject_CallObject(pFunc, pArgs);
             Py_DECREF(pArgs);
             if (pValue != NULL) {
-                printf("Result of call: %ld\n", PyLong_AsLong(pValue));
+                printf("Result of call: %ld\n", PyInt_AsLong(pValue));
                 Py_DECREF(pValue);
             }
             else {

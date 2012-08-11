@@ -63,8 +63,8 @@ class FixMap(fixer_base.ConditionalFix):
         if node.parent.type == syms.simple_stmt:
             self.warning(node, "You should use a for loop here")
             new = node.clone()
-            new.prefix = ""
-            new = Call(Name("list"), [new])
+            new.prefix = u""
+            new = Call(Name(u"list"), [new])
         elif "map_lambda" in results:
             new = ListComp(results["xp"].clone(),
                            results["fp"].clone(),
@@ -85,7 +85,7 @@ class FixMap(fixer_base.ConditionalFix):
                 if in_special_context(node):
                     return None
                 new = node.clone()
-            new.prefix = ""
-            new = Call(Name("list"), [new])
+            new.prefix = u""
+            new = Call(Name(u"list"), [new])
         new.prefix = node.prefix
         return new

@@ -1,4 +1,4 @@
-from test.support import run_unittest
+from test.test_support import run_unittest
 import unittest
 import sys
 import imp
@@ -15,17 +15,17 @@ class PkgutilTests(unittest.TestCase):
 
     def setUp(self):
         self.dirname = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dirname)
         sys.path.insert(0, self.dirname)
 
     def tearDown(self):
         del sys.path[0]
-        shutil.rmtree(self.dirname)
 
     def test_getdata_filesys(self):
         pkg = 'test_getdata_filesys'
 
         # Include a LF and a CRLF, to test that binary data is read back
-        RESOURCE_DATA = b'Hello, world!\nSecond line\r\nThird line'
+        RESOURCE_DATA = 'Hello, world!\nSecond line\r\nThird line'
 
         # Make a package with some resources
         package_dir = os.path.join(self.dirname, pkg)
@@ -55,7 +55,7 @@ class PkgutilTests(unittest.TestCase):
         pkg = 'test_getdata_zipfile'
 
         # Include a LF and a CRLF, to test that binary data is read back
-        RESOURCE_DATA = b'Hello, world!\nSecond line\r\nThird line'
+        RESOURCE_DATA = 'Hello, world!\nSecond line\r\nThird line'
 
         # Make a package with some resources
         zip_file = os.path.join(self.dirname, zip)
@@ -74,15 +74,20 @@ class PkgutilTests(unittest.TestCase):
         self.assertEqual(res1, RESOURCE_DATA)
         res2 = pkgutil.get_data(pkg, 'sub/res.txt')
         self.assertEqual(res2, RESOURCE_DATA)
-
-        names = []
-        for loader, name, ispkg in pkgutil.iter_modules([zip_file]):
-            names.append(name)
-        self.assertEqual(names, ['test_getdata_zipfile'])
-
         del sys.path[0]
 
         del sys.modules[pkg]
+
+    def test_unreadable_dir_on_syspath(self):
+        # issue7367 - walk_packages failed if unreadable dir on sys.path
+        package_name = "unreadable_package"
+        d = os.path.join(self.dirname, package_name)
+        # this does not appear to create an unreadable dir on Windows
+        #   but the test should not fail anyway
+        os.mkdir(d, 0)
+        self.addCleanup(os.rmdir, d)
+        for t in pkgutil.walk_packages(path=[self.dirname]):
+            self.fail("unexpected package found")
 
 class PkgutilPEP302Tests(unittest.TestCase):
 

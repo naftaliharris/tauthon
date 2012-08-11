@@ -5,7 +5,6 @@
 
 /* Windows socket errors (WSA*)  */
 #ifdef MS_WINDOWS
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
@@ -20,10 +19,10 @@ static PyMethodDef errno_methods[] = {
 /* Helper function doing the dictionary inserting */
 
 static void
-_inscode(PyObject *d, PyObject *de, const char *name, int code)
+_inscode(PyObject *d, PyObject *de, char *name, int code)
 {
-    PyObject *u = PyUnicode_FromString(name);
-    PyObject *v = PyLong_FromLong((long) code);
+    PyObject *u = PyString_FromString(name);
+    PyObject *v = PyInt_FromLong((long) code);
 
     /* Don't bother checking for errors; they'll be caught at the end
      * of the module initialization function by the caller of
@@ -53,37 +52,24 @@ Symbols that are not relevant to the underlying system are not defined.\n\
 To map error codes to error messages, use the function os.strerror(),\n\
 e.g. os.strerror(2) could return 'No such file or directory'.");
 
-static struct PyModuleDef errnomodule = {
-    PyModuleDef_HEAD_INIT,
-    "errno",
-    errno__doc__,
-    -1,
-    errno_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_errno(void)
+initerrno(void)
 {
     PyObject *m, *d, *de;
-    m = PyModule_Create(&errnomodule);
+    m = Py_InitModule3("errno", errno_methods, errno__doc__);
     if (m == NULL)
-        return NULL;
+        return;
     d = PyModule_GetDict(m);
     de = PyDict_New();
     if (!d || !de || PyDict_SetItemString(d, "errorcode", de) < 0)
-        return NULL;
+        return;
 
 /* Macro so I don't have to edit each and every line below... */
 #define inscode(d, ds, de, name, code, comment) _inscode(d, de, name, code)
 
     /*
      * The names and comments are borrowed from linux/include/errno.h,
-     * which should be pretty all-inclusive.  However, the Solaris specific
-     * names and comments are borrowed from sys/errno.h in Solaris.
+     * which should be pretty all-inclusive
      */
 
 #ifdef ENODEV
@@ -797,57 +783,9 @@ PyInit_errno(void)
 #ifdef WSAN
     inscode(d, ds, de, "WSAN", WSAN, "Error WSAN");
 #endif
-#ifdef ENOMEDIUM
-    inscode(d, ds, de, "ENOMEDIUM", ENOMEDIUM, "No medium found");
-#endif
-#ifdef EMEDIUMTYPE
-    inscode(d, ds, de, "EMEDIUMTYPE", EMEDIUMTYPE, "Wrong medium type");
-#endif
-#ifdef ECANCELED
-    inscode(d, ds, de, "ECANCELED", ECANCELED, "Operation Canceled");
-#endif
-#ifdef ENOKEY
-    inscode(d, ds, de, "ENOKEY", ENOKEY, "Required key not available");
-#endif
-#ifdef EKEYEXPIRED
-    inscode(d, ds, de, "EKEYEXPIRED", EKEYEXPIRED, "Key has expired");
-#endif
-#ifdef EKEYREVOKED
-    inscode(d, ds, de, "EKEYREVOKED", EKEYREVOKED, "Key has been revoked");
-#endif
-#ifdef EKEYREJECTED
-    inscode(d, ds, de, "EKEYREJECTED", EKEYREJECTED, "Key was rejected by service");
-#endif
-#ifdef EOWNERDEAD
-    inscode(d, ds, de, "EOWNERDEAD", EOWNERDEAD, "Owner died");
-#endif
-#ifdef ENOTRECOVERABLE
-    inscode(d, ds, de, "ENOTRECOVERABLE", ENOTRECOVERABLE, "State not recoverable");
-#endif
-#ifdef ERFKILL
-    inscode(d, ds, de, "ERFKILL", ERFKILL, "Operation not possible due to RF-kill");
-#endif
-
-    /* Solaris-specific errnos */
-#ifdef ECANCELED
-    inscode(d, ds, de, "ECANCELED", ECANCELED, "Operation canceled");
-#endif
 #ifdef ENOTSUP
     inscode(d, ds, de, "ENOTSUP", ENOTSUP, "Operation not supported");
 #endif
-#ifdef EOWNERDEAD
-    inscode(d, ds, de, "EOWNERDEAD", EOWNERDEAD, "Process died with the lock");
-#endif
-#ifdef ENOTRECOVERABLE
-    inscode(d, ds, de, "ENOTRECOVERABLE", ENOTRECOVERABLE, "Lock is not recoverable");
-#endif
-#ifdef ELOCKUNMAPPED
-    inscode(d, ds, de, "ELOCKUNMAPPED", ELOCKUNMAPPED, "Locked lock was unmapped");
-#endif
-#ifdef ENOTACTIVE
-    inscode(d, ds, de, "ENOTACTIVE", ENOTACTIVE, "Facility is not active");
-#endif
 
     Py_DECREF(de);
-    return m;
 }

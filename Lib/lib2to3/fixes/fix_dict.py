@@ -58,11 +58,11 @@ class FixDict(fixer_base.BaseFix):
         tail = results["tail"]
         syms = self.syms
         method_name = method.value
-        isiter = method_name.startswith("iter")
-        isview = method_name.startswith("view")
+        isiter = method_name.startswith(u"iter")
+        isview = method_name.startswith(u"view")
         if isiter or isview:
             method_name = method_name[4:]
-        assert method_name in ("keys", "items", "values"), repr(method)
+        assert method_name in (u"keys", u"items", u"values"), repr(method)
         head = [n.clone() for n in head]
         tail = [n.clone() for n in tail]
         special = not tail and self.in_special_context(node, isiter)
@@ -73,8 +73,8 @@ class FixDict(fixer_base.BaseFix):
                        results["parens"].clone()]
         new = pytree.Node(syms.power, args)
         if not (special or isview):
-            new.prefix = ""
-            new = Call(Name("iter" if isiter else "list"), [new])
+            new.prefix = u""
+            new = Call(Name(u"iter" if isiter else u"list"), [new])
         if tail:
             new = pytree.Node(syms.power, [new] + tail)
         new.prefix = node.prefix

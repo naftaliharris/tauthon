@@ -11,7 +11,7 @@ class ArrayTestCase(unittest.TestCase):
         # create classes holding simple numeric types, and check
         # various properties.
 
-        init = list(range(15, 25))
+        init = range(15, 25)
 
         for fmt in formats:
             alen = len(init)
@@ -27,7 +27,7 @@ class ArrayTestCase(unittest.TestCase):
 
             # change the items
             from operator import setitem
-            new_values = list(range(42, 42+alen))
+            new_values = range(42, 42+alen)
             [setitem(ia, n, new_values[n]) for n in range(alen)]
             values = [ia[i] for i in range(len(init))]
             self.assertEqual(values, new_values)
@@ -37,28 +37,31 @@ class ArrayTestCase(unittest.TestCase):
             values = [ia[i] for i in range(len(init))]
             self.assertEqual(values, [0] * len(init))
 
-            # Too many in itializers should be caught
+            # Too many initializers should be caught
             self.assertRaises(IndexError, int_array, *range(alen*2))
 
         CharArray = ARRAY(c_char, 3)
 
-        ca = CharArray(b"a", b"b", b"c")
+        ca = CharArray("a", "b", "c")
 
         # Should this work? It doesn't:
         # CharArray("abc")
         self.assertRaises(TypeError, CharArray, "abc")
 
-        self.assertEqual(ca[0], b"a")
-        self.assertEqual(ca[1], b"b")
-        self.assertEqual(ca[2], b"c")
-        self.assertEqual(ca[-3], b"a")
-        self.assertEqual(ca[-2], b"b")
-        self.assertEqual(ca[-1], b"c")
+        self.assertEqual(ca[0], "a")
+        self.assertEqual(ca[1], "b")
+        self.assertEqual(ca[2], "c")
+        self.assertEqual(ca[-3], "a")
+        self.assertEqual(ca[-2], "b")
+        self.assertEqual(ca[-1], "c")
 
         self.assertEqual(len(ca), 3)
 
+        # slicing is now supported, but not extended slicing (3-argument)!
+        from operator import getslice, delitem
+        self.assertRaises(TypeError, getslice, ca, 0, 1, -1)
+
         # cannot delete items
-        from operator import delitem
         self.assertRaises(TypeError, delitem, ca, 0)
 
     def test_numeric_arrays(self):
@@ -89,14 +92,14 @@ class ArrayTestCase(unittest.TestCase):
 
     def test_from_address(self):
         # Failed with 0.9.8, reported by JUrner
-        p = create_string_buffer(b"foo")
+        p = create_string_buffer("foo")
         sz = (c_char * 3).from_address(addressof(p))
-        self.assertEqual(sz[:], b"foo")
-        self.assertEqual(sz[::], b"foo")
-        self.assertEqual(sz[::-1], b"oof")
-        self.assertEqual(sz[::3], b"f")
-        self.assertEqual(sz[1:4:2], b"o")
-        self.assertEqual(sz.value, b"foo")
+        self.assertEqual(sz[:], "foo")
+        self.assertEqual(sz[::], "foo")
+        self.assertEqual(sz[::-1], "oof")
+        self.assertEqual(sz[::3], "f")
+        self.assertEqual(sz[1:4:2], "o")
+        self.assertEqual(sz.value, "foo")
 
     try:
         create_unicode_buffer

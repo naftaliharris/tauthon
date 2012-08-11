@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """
 combinerefs path
@@ -86,8 +86,7 @@ def read(fileiter, pat, whilematch):
             break
 
 def combine(fname):
-    f = open(fname)
-
+    f = file(fname)
     fi = iter(f)
 
     for line in read(fi, re.compile(r'^Remaining objects:$'), False):
@@ -103,7 +102,7 @@ def combine(fname):
             addr, addr2rc[addr], addr2guts[addr] = m.groups()
             before += 1
         else:
-            print('??? skipped:', line)
+            print '??? skipped:', line
 
     after = 0
     for line in read(fi, crack, True):
@@ -112,17 +111,17 @@ def combine(fname):
         assert m
         addr, rc, guts = m.groups() # guts is type name here
         if addr not in addr2rc:
-            print('??? new object created while tearing down:', line.rstrip())
+            print '??? new object created while tearing down:', line.rstrip()
             continue
-        print(addr, end=' ')
+        print addr,
         if rc == addr2rc[addr]:
-            print('[%s]' % rc, end=' ')
+            print '[%s]' % rc,
         else:
-            print('[%s->%s]' % (addr2rc[addr], rc), end=' ')
-        print(guts, addr2guts[addr])
+            print '[%s->%s]' % (addr2rc[addr], rc),
+        print guts, addr2guts[addr]
 
     f.close()
-    print("%d objects before, %d after" % (before, after))
+    print "%d objects before, %d after" % (before, after)
 
 if __name__ == '__main__':
     combine(sys.argv[1])

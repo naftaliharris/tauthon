@@ -51,21 +51,21 @@ class Percolator:
             f.setdelegate(filter.delegate)
             filter.setdelegate(None)
 
+
 def main():
-    import tkinter as Tk
     class Tracer(Delegator):
         def __init__(self, name):
             self.name = name
             Delegator.__init__(self, None)
         def insert(self, *args):
-            print(self.name, ": insert", args)
+            print self.name, ": insert", args
             self.delegate.insert(*args)
         def delete(self, *args):
-            print(self.name, ": delete", args)
+            print self.name, ": delete", args
             self.delegate.delete(*args)
-    root = Tk.Tk()
+    root = Tk()
     root.wm_protocol("WM_DELETE_WINDOW", root.quit)
-    text = Tk.Text()
+    text = Text()
     text.pack()
     text.focus_set()
     p = Percolator(text)
@@ -73,7 +73,7 @@ def main():
     t2 = Tracer("t2")
     p.insertfilter(t1)
     p.insertfilter(t2)
-    root.mainloop() # click close widget to continue...
+    root.mainloop()
     p.removefilter(t2)
     root.mainloop()
     p.insertfilter(t2)
@@ -81,4 +81,5 @@ def main():
     root.mainloop()
 
 if __name__ == "__main__":
+    from Tkinter import *
     main()

@@ -4,7 +4,7 @@
 import os
 import time
 from test.fork_wait import ForkWait
-from test.support import run_unittest, reap_children, get_attribute
+from test.test_support import run_unittest, reap_children, get_attribute
 
 # If either of these do not exist, skip this test.
 get_attribute(os, 'fork')

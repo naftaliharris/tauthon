@@ -9,6 +9,22 @@ __revision__ = "$Id$"
 
 import string, re
 
+try:
+    _unicode = unicode
+except NameError:
+    # If Python is built without Unicode support, the unicode type
+    # will not exist. Fake one.
+    class _unicode(object):
+        pass
+
+# Do the right thing with boolean values for all known Python versions
+# (so this module can be copied to projects that don't depend on Python
+# 2.3, e.g. Optik and Docutils) by uncommenting the block of code below.
+#try:
+#    True, False
+#except NameError:
+#    (True, False) = (1, 0)
+
 __all__ = ['TextWrapper', 'wrap', 'fill', 'dedent']
 
 # Hardcode the recognized whitespace characters to the US-ASCII
@@ -63,10 +79,12 @@ class TextWrapper:
         Drop leading and trailing whitespace from lines.
     """
 
+    whitespace_trans = string.maketrans(_whitespace, ' ' * len(_whitespace))
+
     unicode_whitespace_trans = {}
-    uspace = ord(' ')
-    for x in _whitespace:
-        unicode_whitespace_trans[ord(x)] = uspace
+    uspace = ord(u' ')
+    for x in map(ord, _whitespace):
+        unicode_whitespace_trans[x] = uspace
 
     # This funky little regex is just the trick for splitting
     # text up into word-wrappable chunks.  E.g.
@@ -87,10 +105,11 @@ class TextWrapper:
 
     # XXX this is not locale- or charset-aware -- string.lowercase
     # is US-ASCII only (and therefore English-only)
-    sentence_end_re = re.compile(r'[a-z]'             # lowercase letter
+    sentence_end_re = re.compile(r'[%s]'              # lowercase letter
                                  r'[\.\!\?]'          # sentence-ending punct.
                                  r'[\"\']?'           # optional end-of-quote
-                                 r'\Z')               # end of chunk
+                                 r'\Z'                # end of chunk
+                                 % string.lowercase)
 
 
     def __init__(self,
@@ -113,6 +132,13 @@ class TextWrapper:
         self.drop_whitespace = drop_whitespace
         self.break_on_hyphens = break_on_hyphens
 
+        # recompile the regexes for Unicode mode -- done in this clumsy way for
+        # backwards compatibility because it's rather common to monkey-patch
+        # the TextWrapper class' wordsep_re attribute.
+        self.wordsep_re_uni = re.compile(self.wordsep_re.pattern, re.U)
+        self.wordsep_simple_re_uni = re.compile(
+            self.wordsep_simple_re.pattern, re.U)
+
 
     # -- Private methods -----------------------------------------------
     # (possibly useful for subclasses to override)
@@ -127,7 +153,10 @@ class TextWrapper:
         if self.expand_tabs:
             text = text.expandtabs()
         if self.replace_whitespace:
-            text = text.translate(self.unicode_whitespace_trans)
+            if isinstance(text, str):
+                text = text.translate(self.whitespace_trans)
+            elif isinstance(text, _unicode):
+                text = text.translate(self.unicode_whitespace_trans)
         return text
 
 
@@ -146,11 +175,18 @@ class TextWrapper:
           'use', ' ', 'the', ' ', '-b', ' ', option!'
         otherwise.
         """
-        if self.break_on_hyphens is True:
-            chunks = self.wordsep_re.split(text)
+        if isinstance(text, _unicode):
+            if self.break_on_hyphens:
+                pat = self.wordsep_re_uni
+            else:
+                pat = self.wordsep_simple_re_uni
         else:
-            chunks = self.wordsep_simple_re.split(text)
-        chunks = [c for c in chunks if c]
+            if self.break_on_hyphens:
+                pat = self.wordsep_re
+            else:
+                pat = self.wordsep_simple_re
+        chunks = pat.split(text)
+        chunks = filter(None, chunks)  # remove empty chunks
         return chunks
 
     def _fix_sentence_endings(self, chunks):
@@ -386,4 +422,4 @@ def dedent(text):
 if __name__ == "__main__":
     #print dedent("\tfoo\n\tbar")
     #print dedent("  \thello there\n  \t  how are you?")
-    print(dedent("Hello there.\n  This is indented."))
+    print dedent("Hello there.\n  This is indented.")

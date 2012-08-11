@@ -12,7 +12,7 @@ __all__ = [
     ]
 
 import sys
-from io import StringIO
+from cStringIO import StringIO
 
 
 
@@ -39,7 +39,7 @@ def body_line_iterator(msg, decode=False):
     """
     for subpart in msg.walk():
         payload = subpart.get_payload(decode=decode)
-        if isinstance(payload, str):
+        if isinstance(payload, basestring):
             for line in StringIO(payload):
                 yield line
 
@@ -63,11 +63,11 @@ def _structure(msg, fp=None, level=0, include_default=False):
     if fp is None:
         fp = sys.stdout
     tab = ' ' * (level * 4)
-    print(tab + msg.get_content_type(), end='', file=fp)
+    print >> fp, tab + msg.get_content_type(),
     if include_default:
-        print(' [%s]' % msg.get_default_type(), file=fp)
+        print >> fp, '[%s]' % msg.get_default_type()
     else:
-        print(file=fp)
+        print >> fp
     if msg.is_multipart():
         for subpart in msg.get_payload():
             _structure(subpart, fp, level+1, include_default)

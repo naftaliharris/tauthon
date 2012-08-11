@@ -3,18 +3,18 @@
    Nick Mathewson
 """
 import unittest
-from test.support import run_unittest, is_jython
+from test.test_support import run_unittest, is_jython
 
 from codeop import compile_command, PyCF_DONT_IMPLY_DEDENT
-import io
 
 if is_jython:
     import sys
+    import cStringIO
 
     def unify_callables(d):
         for n,v in d.items():
-            if hasattr(v, '__call__'):
-                d[n] = True
+            if callable(v):
+                d[n] = callable
         return d
 
 class CodeopTests(unittest.TestCase):
@@ -27,10 +27,10 @@ class CodeopTests(unittest.TestCase):
             if symbol == "single":
                 d,r = {},{}
                 saved_stdout = sys.stdout
-                sys.stdout = io.StringIO()
+                sys.stdout = cStringIO.StringIO()
                 try:
-                    exec(code, d)
-                    exec(compile(str,"<input>","single"), r)
+                    exec code in d
+                    exec compile(str,"<input>","single") in r
                 finally:
                     sys.stdout = saved_stdout
             elif symbol == 'eval':

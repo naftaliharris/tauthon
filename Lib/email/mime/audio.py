@@ -1,4 +1,4 @@
-# Copyright (C) 2001-2007 Python Software Foundation
+# Copyright (C) 2001-2006 Python Software Foundation
 # Author: Anthony Baxter
 # Contact: email-sig@python.org
 
@@ -8,7 +8,7 @@ __all__ = ['MIMEAudio']
 
 import sndhdr
 
-from io import BytesIO
+from cStringIO import StringIO
 from email import encoders
 from email.mime.nonmultipart import MIMENonMultipart
 
@@ -30,7 +30,7 @@ def _whatsnd(data):
     command and use the standard 'magic' file, as shipped with a modern Unix.
     """
     hdr = data[:512]
-    fakefile = BytesIO(hdr)
+    fakefile = StringIO(hdr)
     for testfn in sndhdr.tests:
         res = testfn(hdr, fakefile)
         if res is not None:

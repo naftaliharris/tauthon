@@ -1,3 +1,4 @@
+
 :mod:`select` --- Waiting for I/O completion
 ============================================
 
@@ -23,12 +24,14 @@ The module defines the following:
    string, as would be printed by the C function :c:func:`perror`.
 
 
-.. function:: epoll(sizehint=-1)
+.. function:: epoll([sizehint=-1])
 
    (Only supported on Linux 2.5.44 and newer.)  Returns an edge polling object,
    which can be used as Edge or Level Triggered interface for I/O events; see
    section :ref:`epoll-objects` below for the methods supported by epolling
    objects.
+
+   .. versionadded:: 2.6
 
 
 .. function:: poll()
@@ -44,11 +47,15 @@ The module defines the following:
    (Only supported on BSD.)  Returns a kernel queue object; see section
    :ref:`kqueue-objects` below for the methods supported by kqueue objects.
 
+   .. versionadded:: 2.6
+
 
 .. function:: kevent(ident, filter=KQ_FILTER_READ, flags=KQ_EV_ADD, fflags=0, data=0, udata=0)
 
    (Only supported on BSD.)  Returns a kernel event object; see section
    :ref:`kevent-objects` below for the methods supported by kevent objects.
+
+   .. versionadded:: 2.6
 
 
 .. function:: select(rlist, wlist, xlist[, timeout])
@@ -78,12 +85,11 @@ The module defines the following:
       single: socket() (in module socket)
       single: popen() (in module os)
 
-   Among the acceptable object types in the sequences are Python :term:`file
-   objects <file object>` (e.g. ``sys.stdin``, or objects returned by
-   :func:`open` or :func:`os.popen`), socket objects returned by
-   :func:`socket.socket`.  You may also define a :dfn:`wrapper` class yourself,
-   as long as it has an appropriate :meth:`fileno` method (that really returns
-   a file descriptor, not just a random integer).
+   Among the acceptable object types in the sequences are Python file objects (e.g.
+   ``sys.stdin``, or objects returned by :func:`open` or :func:`os.popen`), socket
+   objects returned by :func:`socket.socket`.  You may also define a :dfn:`wrapper`
+   class yourself, as long as it has an appropriate :meth:`fileno` method (that
+   really returns a file descriptor, not just a random integer).
 
    .. note::
 
@@ -94,16 +100,14 @@ The module defines the following:
       library, and does not handle file descriptors that don't originate from
       WinSock.
 
-.. attribute:: PIPE_BUF
+.. attribute:: select.PIPE_BUF
 
-   The minimum number of bytes which can be written without blocking to a pipe
-   when the pipe has been reported as ready for writing by :func:`select`,
-   :func:`poll` or another interface in this module.  This doesn't apply
-   to other kind of file-like objects such as sockets.
-
+   Files reported as ready for writing by :func:`select`, :func:`poll` or
+   similar interfaces in this module are guaranteed to not block on a write
+   of up to :const:`PIPE_BUF` bytes.
    This value is guaranteed by POSIX to be at least 512.  Availability: Unix.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. _epoll-objects:
@@ -239,6 +243,8 @@ linearly scanned again. :c:func:`select` is O(highest file descriptor), while
    ``register(fd, eventmask)``.  Attempting to modify a file descriptor
    that was never registered causes an :exc:`IOError` exception with errno
    :const:`ENOENT` to be raised.
+
+   .. versionadded:: 2.6
 
 
 .. method:: poll.unregister(fd)

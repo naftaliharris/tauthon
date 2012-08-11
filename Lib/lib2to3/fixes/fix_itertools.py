@@ -29,7 +29,7 @@ class FixItertools(fixer_base.BaseFix):
         prefix = None
         func = results['func'][0]
         if ('it' in results and
-            func.value not in ('ifilterfalse', 'izip_longest')):
+            func.value not in (u'ifilterfalse', u'izip_longest')):
             dot, it = (results['dot'], results['it'])
             # Remove the 'itertools'
             prefix = it.prefix

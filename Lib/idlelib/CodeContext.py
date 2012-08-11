@@ -9,10 +9,10 @@ variable in the CodeContext section of config-extensions.def. Lines which do
 not open blocks are not shown in the context hints pane.
 
 """
-import tkinter
-from tkinter.constants import TOP, LEFT, X, W, SUNKEN
+import Tkinter
+from Tkconstants import TOP, LEFT, X, W, SUNKEN
 import re
-from sys import maxsize as INFINITY
+from sys import maxint as INFINITY
 from idlelib.configHandler import idleConf
 
 BLOCKOPENERS = set(["class", "def", "elif", "else", "except", "finally", "for",
@@ -69,7 +69,7 @@ class CodeContext:
             border = 0
             for widget in widgets:
                 border += int(str( widget.cget('border') ))
-            self.label = tkinter.Label(self.editwin.top,
+            self.label = Tkinter.Label(self.editwin.top,
                                        text="\n" * (self.context_depth - 1),
                                        anchor=W, justify=LEFT,
                                        font=self.textfont,
@@ -117,7 +117,7 @@ class CodeContext:
         lastindent = INFINITY
         # For a line to be interesting, it must begin with a block opening
         # keyword, and have less indentation than lastindent.
-        for linenum in range(new_topvisible, stopline-1, -1):
+        for linenum in xrange(new_topvisible, stopline-1, -1):
             indent, text, opener = self.get_line_info(linenum)
             if indent < lastindent:
                 lastindent = indent

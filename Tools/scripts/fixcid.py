@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Perform massive identifier substitution on C source files.
 # This actually tokenizes the files (to some extent) so it can
@@ -62,7 +62,7 @@ def usage():
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'crs:')
-    except getopt.error as msg:
+    except getopt.error, msg:
         err('Options error: ' + str(msg) + '\n')
         usage()
         sys.exit(2)
@@ -97,7 +97,7 @@ def recursedown(dirname):
     bad = 0
     try:
         names = os.listdir(dirname)
-    except os.error as msg:
+    except os.error, msg:
         err(dirname + ': cannot list directory: ' + str(msg) + '\n')
         return 1
     names.sort()
@@ -124,7 +124,7 @@ def fix(filename):
         # File replacement mode
         try:
             f = open(filename, 'r')
-        except IOError as msg:
+        except IOError, msg:
             err(filename + ': cannot open: ' + str(msg) + '\n')
             return 1
         head, tail = os.path.split(filename)
@@ -148,7 +148,7 @@ def fix(filename):
             if g is None:
                 try:
                     g = open(tempname, 'w')
-                except IOError as msg:
+                except IOError, msg:
                     f.close()
                     err(tempname+': cannot create: '+
                         str(msg)+'\n')
@@ -174,21 +174,21 @@ def fix(filename):
     # First copy the file's mode to the temp file
     try:
         statbuf = os.stat(filename)
-        os.chmod(tempname, statbuf[ST_MODE] & 0o7777)
-    except os.error as msg:
+        os.chmod(tempname, statbuf[ST_MODE] & 07777)
+    except os.error, msg:
         err(tempname + ': warning: chmod failed (' + str(msg) + ')\n')
     # Then make a backup of the original file as filename~
     try:
         os.rename(filename, filename + '~')
-    except os.error as msg:
+    except os.error, msg:
         err(filename + ': warning: backup failed (' + str(msg) + ')\n')
     # Now move the temp file to the original file
     try:
         os.rename(tempname, filename)
-    except os.error as msg:
+    except os.error, msg:
         err(filename + ': rename failed (' + str(msg) + ')\n')
         return 1
-    # Return succes
+    # Return success
     return 0
 
 # Tokenizing ANSI C (partly)
@@ -240,11 +240,11 @@ def fixline(line):
             elif found == '*/':
                 Program = OutsideCommentProgram
         n = len(found)
-        if found in Dict:
+        if Dict.has_key(found):
             subst = Dict[found]
             if Program is InsideCommentProgram:
                 if not Docomments:
-                    print('Found in comment:', found)
+                    print 'Found in comment:', found
                     i = i + n
                     continue
                 if NotInComment.has_key(found):
@@ -276,7 +276,7 @@ NotInComment = {}
 def addsubst(substfile):
     try:
         fp = open(substfile, 'r')
-    except IOError as msg:
+    except IOError, msg:
         err(substfile + ': cannot read substfile: ' + str(msg) + '\n')
         sys.exit(1)
     lineno = 0
@@ -304,7 +304,7 @@ def addsubst(substfile):
         if key[0] == '*':
             key = key[1:]
             NotInComment[key] = value
-        if key in Dict:
+        if Dict.has_key(key):
             err('%s:%r: warning: overriding: %r %r\n' % (substfile, lineno, key, value))
             err('%s:%r: warning: previous: %r\n' % (substfile, lineno, Dict[key]))
         Dict[key] = value

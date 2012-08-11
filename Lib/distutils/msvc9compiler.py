@@ -19,24 +19,23 @@ import subprocess
 import sys
 import re
 
-from distutils.errors import DistutilsExecError, DistutilsPlatformError, \
-                             CompileError, LibError, LinkError
-from distutils.ccompiler import CCompiler, gen_preprocess_options, \
-                                gen_lib_options
+from distutils.errors import (DistutilsExecError, DistutilsPlatformError,
+                              CompileError, LibError, LinkError)
+from distutils.ccompiler import CCompiler, gen_lib_options
 from distutils import log
 from distutils.util import get_platform
 
-import winreg
+import _winreg
 
-RegOpenKeyEx = winreg.OpenKeyEx
-RegEnumKey = winreg.EnumKey
-RegEnumValue = winreg.EnumValue
-RegError = winreg.error
+RegOpenKeyEx = _winreg.OpenKeyEx
+RegEnumKey = _winreg.EnumKey
+RegEnumValue = _winreg.EnumValue
+RegError = _winreg.error
 
-HKEYS = (winreg.HKEY_USERS,
-         winreg.HKEY_CURRENT_USER,
-         winreg.HKEY_LOCAL_MACHINE,
-         winreg.HKEY_CLASSES_ROOT)
+HKEYS = (_winreg.HKEY_USERS,
+         _winreg.HKEY_CURRENT_USER,
+         _winreg.HKEY_LOCAL_MACHINE,
+         _winreg.HKEY_CLASSES_ROOT)
 
 NATIVE_WIN64 = (sys.platform == 'win32' and sys.maxsize > 2**32)
 if NATIVE_WIN64:
@@ -44,10 +43,12 @@ if NATIVE_WIN64:
     # the corresponding registry branch, if we're running a
     # 64-bit Python on Win64
     VS_BASE = r"Software\Wow6432Node\Microsoft\VisualStudio\%0.1f"
+    VSEXPRESS_BASE = r"Software\Wow6432Node\Microsoft\VCExpress\%0.1f"
     WINSDK_BASE = r"Software\Wow6432Node\Microsoft\Microsoft SDKs\Windows"
     NET_BASE = r"Software\Wow6432Node\Microsoft\.NETFramework"
 else:
     VS_BASE = r"Software\Microsoft\VisualStudio\%0.1f"
+    VSEXPRESS_BASE = r"Software\Microsoft\VCExpress\%0.1f"
     WINSDK_BASE = r"Software\Microsoft\Microsoft SDKs\Windows"
     NET_BASE = r"Software\Microsoft\.NETFramework"
 
@@ -226,8 +227,17 @@ def find_vcvarsall(version):
         productdir = Reg.get_value(r"%s\Setup\VC" % vsbase,
                                    "productdir")
     except KeyError:
-        log.debug("Unable to find productdir in registry")
         productdir = None
+
+    # trying Express edition
+    if productdir is None:
+        vsbase = VSEXPRESS_BASE % version
+        try:
+            productdir = Reg.get_value(r"%s\Setup\VC" % vsbase,
+                                       "productdir")
+        except KeyError:
+            productdir = None
+            log.debug("Unable to find productdir in registry")
 
     if not productdir or not os.path.isdir(productdir):
         toolskey = "VS%0.f0COMNTOOLS" % version
@@ -372,9 +382,10 @@ class MSVCCompiler(CCompiler) :
 
             vc_env = query_vcvarsall(VERSION, plat_spec)
 
-            self.__paths = vc_env['path'].split(os.pathsep)
-            os.environ['lib'] = vc_env['lib']
-            os.environ['include'] = vc_env['include']
+            # take care to only use strings in the environment.
+            self.__paths = vc_env['path'].encode('mbcs').split(os.pathsep)
+            os.environ['lib'] = vc_env['lib'].encode('mbcs')
+            os.environ['include'] = vc_env['include'].encode('mbcs')
 
             if len(self.__paths) == 0:
                 raise DistutilsPlatformError("Python was built with %s, "
@@ -493,7 +504,7 @@ class MSVCCompiler(CCompiler) :
                 try:
                     self.spawn([self.rc] + pp_opts +
                                [output_opt] + [input_opt])
-                except DistutilsExecError as msg:
+                except DistutilsExecError, msg:
                     raise CompileError(msg)
                 continue
             elif ext in self._mc_extensions:
@@ -520,7 +531,7 @@ class MSVCCompiler(CCompiler) :
                     self.spawn([self.rc] +
                                ["/fo" + obj] + [rc_file])
 
-                except DistutilsExecError as msg:
+                except DistutilsExecError, msg:
                     raise CompileError(msg)
                 continue
             else:
@@ -533,7 +544,7 @@ class MSVCCompiler(CCompiler) :
                 self.spawn([self.cc] + compile_opts + pp_opts +
                            [input_opt, output_opt] +
                            extra_postargs)
-            except DistutilsExecError as msg:
+            except DistutilsExecError, msg:
                 raise CompileError(msg)
 
         return objects
@@ -558,7 +569,7 @@ class MSVCCompiler(CCompiler) :
                 pass # XXX what goes here?
             try:
                 self.spawn([self.lib] + lib_args)
-            except DistutilsExecError as msg:
+            except DistutilsExecError, msg:
                 raise LibError(msg)
         else:
             log.debug("skipping %s (up-to-date)", output_filename)
@@ -629,15 +640,7 @@ class MSVCCompiler(CCompiler) :
                     self.library_filename(dll_name))
                 ld_args.append ('/IMPLIB:' + implib_file)
 
-            # Embedded manifests are recommended - see MSDN article titled
-            # "How to: Embed a Manifest Inside a C/C++ Application"
-            # (currently at http://msdn2.microsoft.com/en-us/library/ms235591(VS.80).aspx)
-            # Ask the linker to generate the manifest in the temp dir, so
-            # we can embed it later.
-            temp_manifest = os.path.join(
-                    build_temp,
-                    os.path.basename(output_filename) + ".manifest")
-            ld_args.append('/MANIFESTFILE:' + temp_manifest)
+            self.manifest_setup_ldargs(output_filename, build_temp, ld_args)
 
             if extra_preargs:
                 ld_args[:0] = extra_preargs
@@ -647,7 +650,7 @@ class MSVCCompiler(CCompiler) :
             self.mkpath(os.path.dirname(output_filename))
             try:
                 self.spawn([self.linker] + ld_args)
-            except DistutilsExecError as msg:
+            except DistutilsExecError, msg:
                 raise LinkError(msg)
 
             # embed the manifest
@@ -655,20 +658,53 @@ class MSVCCompiler(CCompiler) :
             # will still consider the DLL up-to-date, but it will not have a
             # manifest.  Maybe we should link to a temp file?  OTOH, that
             # implies a build environment error that shouldn't go undetected.
-            if target_desc == CCompiler.EXECUTABLE:
-                mfid = 1
-            else:
-                mfid = 2
-                # Remove references to the Visual C runtime
-                self._remove_visual_c_ref(temp_manifest)
-            out_arg = '-outputresource:%s;%s' % (output_filename, mfid)
-            try:
-                self.spawn(['mt.exe', '-nologo', '-manifest',
-                            temp_manifest, out_arg])
-            except DistutilsExecError as msg:
-                raise LinkError(msg)
+            mfinfo = self.manifest_get_embed_info(target_desc, ld_args)
+            if mfinfo is not None:
+                mffilename, mfid = mfinfo
+                out_arg = '-outputresource:%s;%s' % (output_filename, mfid)
+                try:
+                    self.spawn(['mt.exe', '-nologo', '-manifest',
+                                mffilename, out_arg])
+                except DistutilsExecError, msg:
+                    raise LinkError(msg)
         else:
             log.debug("skipping %s (up-to-date)", output_filename)
+
+    def manifest_setup_ldargs(self, output_filename, build_temp, ld_args):
+        # If we need a manifest at all, an embedded manifest is recommended.
+        # See MSDN article titled
+        # "How to: Embed a Manifest Inside a C/C++ Application"
+        # (currently at http://msdn2.microsoft.com/en-us/library/ms235591(VS.80).aspx)
+        # Ask the linker to generate the manifest in the temp dir, so
+        # we can check it, and possibly embed it, later.
+        temp_manifest = os.path.join(
+                build_temp,
+                os.path.basename(output_filename) + ".manifest")
+        ld_args.append('/MANIFESTFILE:' + temp_manifest)
+
+    def manifest_get_embed_info(self, target_desc, ld_args):
+        # If a manifest should be embedded, return a tuple of
+        # (manifest_filename, resource_id).  Returns None if no manifest
+        # should be embedded.  See http://bugs.python.org/issue7833 for why
+        # we want to avoid any manifest for extension modules if we can)
+        for arg in ld_args:
+            if arg.startswith("/MANIFESTFILE:"):
+                temp_manifest = arg.split(":", 1)[1]
+                break
+        else:
+            # no /MANIFESTFILE so nothing to do.
+            return None
+        if target_desc == CCompiler.EXECUTABLE:
+            # by default, executables always get the manifest with the
+            # CRT referenced.
+            mfid = 1
+        else:
+            # Extension modules try and avoid any manifest if possible.
+            mfid = 2
+            temp_manifest = self._remove_visual_c_ref(temp_manifest)
+        if temp_manifest is None:
+            return None
+        return temp_manifest, mfid
 
     def _remove_visual_c_ref(self, manifest_file):
         try:
@@ -678,6 +714,8 @@ class MSVCCompiler(CCompiler) :
             # runtimes are not in WinSxS folder, but in Python's own
             # folder), the runtimes do not need to be in every folder
             # with .pyd's.
+            # Returns either the filename of the modified manifest or
+            # None if no manifest should be embedded.
             manifest_f = open(manifest_file)
             try:
                 manifest_buf = manifest_f.read()
@@ -690,9 +728,18 @@ class MSVCCompiler(CCompiler) :
             manifest_buf = re.sub(pattern, "", manifest_buf)
             pattern = "<dependentAssembly>\s*</dependentAssembly>"
             manifest_buf = re.sub(pattern, "", manifest_buf)
+            # Now see if any other assemblies are referenced - if not, we
+            # don't want a manifest embedded.
+            pattern = re.compile(
+                r"""<assemblyIdentity.*?name=(?:"|')(.+?)(?:"|')"""
+                r""".*?(?:/>|</assemblyIdentity>)""", re.DOTALL)
+            if re.search(pattern, manifest_buf) is None:
+                return None
+
             manifest_f = open(manifest_file, 'w')
             try:
                 manifest_f.write(manifest_buf)
+                return manifest_file
             finally:
                 manifest_f.close()
         except IOError:

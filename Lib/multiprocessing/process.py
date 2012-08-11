@@ -93,7 +93,7 @@ class Process(object):
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
         assert group is None, 'group argument must be None for now'
-        count = next(_current_process._counter)
+        count = _current_process._counter.next()
         self._identity = _current_process._identity + (count,)
         self._authkey = _current_process._authkey
         self._daemonic = _current_process._daemonic
@@ -164,7 +164,7 @@ class Process(object):
 
     @name.setter
     def name(self, name):
-        assert isinstance(name, str), 'name must be a string'
+        assert isinstance(name, basestring), 'name must be a string'
         self._name = name
 
     @property
@@ -245,12 +245,11 @@ class Process(object):
         try:
             self._children = set()
             self._counter = itertools.count(1)
-            if sys.stdin is not None:
-                try:
-                    sys.stdin.close()
-                    sys.stdin = open(os.devnull)
-                except (OSError, ValueError):
-                    pass
+            try:
+                sys.stdin.close()
+                sys.stdin = open(os.devnull)
+            except (OSError, ValueError):
+                pass
             _current_process = self
             util._finalizer_registry.clear()
             util._run_after_forkers()
@@ -260,15 +259,15 @@ class Process(object):
                 exitcode = 0
             finally:
                 util._exit_function()
-        except SystemExit as e:
+        except SystemExit, e:
             if not e.args:
                 exitcode = 1
-            elif type(e.args[0]) is int:
+            elif isinstance(e.args[0], int):
                 exitcode = e.args[0]
             else:
-                sys.stderr.write(e.args[0] + '\n')
+                sys.stderr.write(str(e.args[0]) + '\n')
                 sys.stderr.flush()
-                exitcode = 1
+                exitcode = 0 if isinstance(e.args[0], str) else 1
         except:
             exitcode = 1
             import traceback
@@ -319,6 +318,6 @@ del _MainProcess
 
 _exitcode_to_name = {}
 
-for name, signum in list(signal.__dict__.items()):
+for name, signum in signal.__dict__.items():
     if name[:3]=='SIG' and '_' not in name:
         _exitcode_to_name[-signum] = name

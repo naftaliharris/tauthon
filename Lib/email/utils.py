@@ -26,9 +26,8 @@ import time
 import base64
 import random
 import socket
-import urllib.parse
+import urllib
 import warnings
-from io import StringIO
 
 from email._parseaddr import quote
 from email._parseaddr import AddressList as _AddressList
@@ -45,7 +44,7 @@ from email.encoders import _bencode, _qencode
 
 COMMASPACE = ', '
 EMPTYSTRING = ''
-UEMPTYSTRING = ''
+UEMPTYSTRING = u''
 CRLF = '\r\n'
 TICK = "'"
 
@@ -53,9 +52,36 @@ specialsre = re.compile(r'[][\\()<>@,:;".]')
 escapesre = re.compile(r'[][\\()"]')
 
 
-
+
 # Helpers
 
+def _identity(s):
+    return s
+
+
+def _bdecode(s):
+    """Decodes a base64 string.
+
+    This function is equivalent to base64.decodestring and it's retained only
+    for backward compatibility. It used to remove the last \n of the decoded
+    string, if it had any (see issue 7143).
+    """
+    if not s:
+        return s
+    return base64.decodestring(s)
+
+
+
+def fix_eols(s):
+    """Replace all line-ending characters with \r\n."""
+    # Fix newlines with no preceding carriage return
+    s = re.sub(r'(?<!\r)\n', CRLF, s)
+    # Fix carriage returns with no following newline
+    s = re.sub(r'\r(?!\n)', CRLF, s)
+    return s
+
+
+
 def formataddr(pair):
     """The inverse of parseaddr(), this takes a 2-tuple of the form
     (realname, email_address) and returns the string value suitable
@@ -74,7 +100,7 @@ def formataddr(pair):
     return address
 
 
-
+
 def getaddresses(fieldvalues):
     """Return a list of (REALNAME, EMAIL) for each fieldvalue."""
     all = COMMASPACE.join(fieldvalues)
@@ -82,7 +108,7 @@ def getaddresses(fieldvalues):
     return a.addresslist
 
 
-
+
 ecre = re.compile(r'''
   =\?                   # literal =?
   (?P<charset>[^?]*?)   # non-greedy up to the next ? is the charset
@@ -94,7 +120,7 @@ ecre = re.compile(r'''
   ''', re.VERBOSE | re.IGNORECASE)
 
 
-
+
 def formatdate(timeval=None, localtime=False, usegmt=False):
     """Returns a date string as specified by RFC 2822, e.g.:
 
@@ -147,16 +173,14 @@ def formatdate(timeval=None, localtime=False, usegmt=False):
         zone)
 
 
-
-def make_msgid(idstring=None, domain=None):
+
+def make_msgid(idstring=None):
     """Returns a string suitable for RFC 2822 compliant Message-ID, e.g:
 
     <20020201195627.33539.96671@nightshade.la.mastaler.com>
 
     Optional idstring if given is a string used to strengthen the
-    uniqueness of the message id.  Optional domain if given provides the
-    portion of the message id after the '@'.  It defaults to the locally
-    defined hostname.
+    uniqueness of the message id.
     """
     timeval = time.time()
     utcdate = time.strftime('%Y%m%d%H%M%S', time.gmtime(timeval))
@@ -166,13 +190,12 @@ def make_msgid(idstring=None, domain=None):
         idstring = ''
     else:
         idstring = '.' + idstring
-    if domain is None:
-        domain = socket.getfqdn()
-    msgid = '<%s.%s.%s%s@%s>' % (utcdate, pid, randint, idstring, domain)
+    idhost = socket.getfqdn()
+    msgid = '<%s.%s.%s%s@%s>' % (utcdate, pid, randint, idstring, idhost)
     return msgid
 
 
-
+
 # These functions are in the standalone mimelib version only because they've
 # subsequently been fixed in the latest Python versions.  We use this to worm
 # around broken older Pythons.
@@ -206,7 +229,7 @@ def unquote(str):
     return str
 
 
-
+
 # RFC2231-related functions - parameter encoding and decoding
 def decode_rfc2231(s):
     """Decode string according to RFC 2231"""
@@ -223,7 +246,8 @@ def encode_rfc2231(s, charset=None, language=None):
     charset is given but not language, the string is encoded using the empty
     string for language.
     """
-    s = urllib.parse.quote(s, safe='', encoding=charset or 'ascii')
+    import urllib
+    s = urllib.quote(s, safe='')
     if charset is None and language is None:
         return s
     if language is None:
@@ -231,8 +255,7 @@ def encode_rfc2231(s, charset=None, language=None):
     return "%s'%s'%s" % (charset, language, s)
 
 
-rfc2231_continuation = re.compile(r'^(?P<name>\w+)\*((?P<num>[0-9]+)\*?)?$',
-    re.ASCII)
+rfc2231_continuation = re.compile(r'^(?P<name>\w+)\*((?P<num>[0-9]+)\*?)?$')
 
 def decode_params(params):
     """Decode parameters list according to RFC 2231.
@@ -276,10 +299,7 @@ def decode_params(params):
             # language specifiers at the beginning of the string.
             for num, s, encoded in continuations:
                 if encoded:
-                    # Decode as "latin-1", so the characters in s directly
-                    # represent the percent-encoded octet values.
-                    # collapse_rfc2231_value treats this as an octet sequence.
-                    s = urllib.parse.unquote(s, encoding="latin-1")
+                    s = urllib.unquote(s)
                     extended = True
                 value.append(s)
             value = quote(EMPTYSTRING.join(value))
@@ -292,15 +312,13 @@ def decode_params(params):
 
 def collapse_rfc2231_value(value, errors='replace',
                            fallback_charset='us-ascii'):
-    if not isinstance(value, tuple) or len(value) != 3:
+    if isinstance(value, tuple):
+        rawval = unquote(value[2])
+        charset = value[0] or 'us-ascii'
+        try:
+            return unicode(rawval, charset, errors)
+        except LookupError:
+            # XXX charset is unknown to Python.
+            return unicode(rawval, fallback_charset, errors)
+    else:
         return unquote(value)
-    # While value comes to us as a unicode string, we need it to be a bytes
-    # object.  We do not want bytes() normal utf-8 decoder, we want a straight
-    # interpretation of the string as character bytes.
-    charset, language, text = value
-    rawbytes = bytes(text, 'raw-unicode-escape')
-    try:
-        return str(rawbytes, charset, errors)
-    except LookupError:
-        # charset is not a known codec.
-        return unquote(text)

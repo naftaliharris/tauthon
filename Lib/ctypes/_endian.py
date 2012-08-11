@@ -1,20 +1,27 @@
+######################################################################
+#  This file should be kept compatible with Python 2.3, see PEP 291. #
+######################################################################
 import sys
 from ctypes import *
 
-_array_type = type(c_int * 3)
+_array_type = type(Array)
 
 def _other_endian(typ):
     """Return the type with the 'other' byte order.  Simple types like
     c_int and so on already have __ctype_be__ and __ctype_le__
     attributes which contain the types, for more complicated types
-    only arrays are supported.
+    arrays and structures are supported.
     """
-    try:
+    # check _OTHER_ENDIAN attribute (present if typ is primitive type)
+    if hasattr(typ, _OTHER_ENDIAN):
         return getattr(typ, _OTHER_ENDIAN)
-    except AttributeError:
-        if type(typ) == _array_type:
-            return _other_endian(typ._type_) * typ._length_
-        raise TypeError("This type does not support other endian: %s" % typ)
+    # if typ is array
+    if isinstance(typ, _array_type):
+        return _other_endian(typ._type_) * typ._length_
+    # if typ is structure
+    if issubclass(typ, Structure):
+        return typ
+    raise TypeError("This type does not support other endian: %s" % typ)
 
 class _swapped_meta(type(Structure)):
     def __setattr__(self, attrname, value):
@@ -26,7 +33,7 @@ class _swapped_meta(type(Structure)):
                 rest = desc[2:]
                 fields.append((name, _other_endian(typ)) + rest)
             value = fields
-        super().__setattr__(attrname, value)
+        super(_swapped_meta, self).__setattr__(attrname, value)
 
 ################################################################
 
@@ -39,16 +46,18 @@ if sys.byteorder == "little":
 
     LittleEndianStructure = Structure
 
-    class BigEndianStructure(Structure, metaclass=_swapped_meta):
+    class BigEndianStructure(Structure):
         """Structure with big endian byte order"""
+        __metaclass__ = _swapped_meta
         _swappedbytes_ = None
 
 elif sys.byteorder == "big":
     _OTHER_ENDIAN = "__ctype_le__"
 
     BigEndianStructure = Structure
-    class LittleEndianStructure(Structure, metaclass=_swapped_meta):
+    class LittleEndianStructure(Structure):
         """Structure with little endian byte order"""
+        __metaclass__ = _swapped_meta
         _swappedbytes_ = None
 
 else:

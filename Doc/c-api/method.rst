@@ -1,46 +1,5 @@
 .. highlightlang:: c
 
-.. _instancemethod-objects:
-
-Instance Method Objects
------------------------
-
-.. index:: object: instancemethod
-
-An instance method is a wrapper for a :c:data:`PyCFunction` and the new way
-to bind a :c:data:`PyCFunction` to a class object. It replaces the former call
-``PyMethod_New(func, NULL, class)``.
-
-
-.. c:var:: PyTypeObject PyInstanceMethod_Type
-
-   This instance of :c:type:`PyTypeObject` represents the Python instance
-   method type. It is not exposed to Python programs.
-
-
-.. c:function:: int PyInstanceMethod_Check(PyObject *o)
-
-   Return true if *o* is an instance method object (has type
-   :c:data:`PyInstanceMethod_Type`).  The parameter must not be *NULL*.
-
-
-.. c:function:: PyObject* PyInstanceMethod_New(PyObject *func)
-
-   Return a new instance method object, with *func* being any callable object
-   *func* is is the function that will be called when the instance method is
-   called.
-
-
-.. c:function:: PyObject* PyInstanceMethod_Function(PyObject *im)
-
-   Return the function object associated with the instance method *im*.
-
-
-.. c:function:: PyObject* PyInstanceMethod_GET_FUNCTION(PyObject *im)
-
-   Macro version of :c:func:`PyInstanceMethod_Function` which avoids error checking.
-
-
 .. _method-objects:
 
 Method Objects
@@ -48,9 +7,7 @@ Method Objects
 
 .. index:: object: method
 
-Methods are bound function objects. Methods are always bound to an instance of
-an user-defined class. Unbound methods (methods bound to a class object) are
-no longer available.
+There are some useful functions that are useful for working with method objects.
 
 
 .. c:var:: PyTypeObject PyMethod_Type
@@ -67,11 +24,24 @@ no longer available.
    parameter must not be *NULL*.
 
 
-.. c:function:: PyObject* PyMethod_New(PyObject *func, PyObject *self)
+.. c:function:: PyObject* PyMethod_New(PyObject *func, PyObject *self, PyObject *class)
 
-   Return a new method object, with *func* being any callable object and *self*
-   the instance the method should be bound. *func* is is the function that will
-   be called when the method is called. *self* must not be *NULL*.
+   Return a new method object, with *func* being any callable object; this is the
+   function that will be called when the method is called.  If this method should
+   be bound to an instance, *self* should be the instance and *class* should be the
+   class of *self*, otherwise *self* should be *NULL* and *class* should be the
+   class which provides the unbound method..
+
+
+.. c:function:: PyObject* PyMethod_Class(PyObject *meth)
+
+   Return the class object from which the method *meth* was created; if this was
+   created from an instance, it will be the class of the instance.
+
+
+.. c:function:: PyObject* PyMethod_GET_CLASS(PyObject *meth)
+
+   Macro version of :c:func:`PyMethod_Class` which avoids error checking.
 
 
 .. c:function:: PyObject* PyMethod_Function(PyObject *meth)
@@ -86,7 +56,8 @@ no longer available.
 
 .. c:function:: PyObject* PyMethod_Self(PyObject *meth)
 
-   Return the instance associated with the method *meth*.
+   Return the instance associated with the method *meth* if it is bound, otherwise
+   return *NULL*.
 
 
 .. c:function:: PyObject* PyMethod_GET_SELF(PyObject *meth)
@@ -98,3 +69,4 @@ no longer available.
 
    Clear the free list. Return the total number of freed items.
 
+   .. versionadded:: 2.6

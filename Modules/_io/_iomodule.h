@@ -61,13 +61,18 @@ extern Py_ssize_t _PyIO_find_line_ending(
 #define DEFAULT_BUFFER_SIZE (8 * 1024)  /* bytes */
 
 typedef struct {
-    PyException_HEAD
+    /* This is the equivalent of PyException_HEAD in 3.x */
+    PyObject_HEAD
+    PyObject *dict;
+    PyObject *args;
+    PyObject *message;
+
     PyObject *myerrno;
     PyObject *strerror;
     PyObject *filename; /* Not used, but part of the IOError object */
     Py_ssize_t written;
 } PyBlockingIOErrorObject;
-PyAPI_DATA(PyObject *) PyExc_BlockingIOError;
+extern PyObject *PyExc_BlockingIOError;
 
 /*
  * Offset type for positioning.
@@ -127,20 +132,9 @@ extern Py_off_t PyNumber_AsOff_t(PyObject *item, PyObject *err);
 
 /* Implementation details */
 
-/* IO module structure */
-
-extern PyModuleDef _PyIO_Module;
-
-typedef struct {
-    int initialized;
-    PyObject *os_module;
-    PyObject *locale_module;
-
-    PyObject *unsupported_operation;
-} _PyIO_State;
-
-#define IO_MOD_STATE(mod) ((_PyIO_State *)PyModule_GetState(mod))
-#define IO_STATE IO_MOD_STATE(PyState_FindModule(&_PyIO_Module))
+extern PyObject *_PyIO_os_module;
+extern PyObject *_PyIO_locale_module;
+extern PyObject *_PyIO_unsupported_operation;
 
 extern PyObject *_PyIO_str_close;
 extern PyObject *_PyIO_str_closed;
@@ -169,5 +163,3 @@ extern PyObject *_PyIO_str_write;
 extern PyObject *_PyIO_empty_str;
 extern PyObject *_PyIO_empty_bytes;
 extern PyObject *_PyIO_zero;
-
-extern PyTypeObject _PyBytesIOBuffer_Type;

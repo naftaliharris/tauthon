@@ -1,12 +1,12 @@
 # Tests of the full ZIP64 functionality of zipfile
-# The support.requires call is the only reason for keeping this separate
+# The test_support.requires call is the only reason for keeping this separate
 # from test_zipfile
-from test import support
+from test import test_support
 
 # XXX(nnorwitz): disable this test by looking for extra largfile resource
 # which doesn't exist.  This test takes over 30 minutes to run in general
 # and requires more disk space than most of the buildbots.
-support.requires(
+test_support.requires(
         'extralargefile',
         'test requires loads of disk-space bytes and a long time to run'
     )
@@ -21,10 +21,9 @@ import zipfile, os, unittest
 import time
 import sys
 
-from io import StringIO
 from tempfile import TemporaryFile
 
-from test.support import TESTFN, run_unittest
+from test.test_support import TESTFN, run_unittest
 
 TESTFN2 = TESTFN + "2"
 
@@ -34,8 +33,10 @@ _PRINT_WORKING_MSG_INTERVAL = 5 * 60
 class TestsWithSourceFile(unittest.TestCase):
     def setUp(self):
         # Create test data.
-        line_gen = ("Test of zipfile line %d." % i for i in range(1000000))
-        self.data = '\n'.join(line_gen).encode('ascii')
+        # xrange() is important here -- don't want to create immortal space
+        # for a million ints.
+        line_gen = ("Test of zipfile line %d." % i for i in xrange(1000000))
+        self.data = '\n'.join(line_gen)
 
         # And write it to a file.
         fp = open(TESTFN, "wb")
@@ -56,9 +57,9 @@ class TestsWithSourceFile(unittest.TestCase):
             # Print still working message since this test can be really slow
             if next_time <= time.time():
                 next_time = time.time() + _PRINT_WORKING_MSG_INTERVAL
-                print((
+                print >>sys.__stdout__, (
                    '  zipTest still writing %d of %d, be patient...' %
-                   (num, filecount)), file=sys.__stdout__)
+                   (num, filecount))
                 sys.__stdout__.flush()
         zipfp.close()
 
@@ -69,9 +70,9 @@ class TestsWithSourceFile(unittest.TestCase):
             # Print still working message since this test can be really slow
             if next_time <= time.time():
                 next_time = time.time() + _PRINT_WORKING_MSG_INTERVAL
-                print((
+                print >>sys.__stdout__, (
                    '  zipTest still reading %d of %d, be patient...' %
-                   (num, filecount)), file=sys.__stdout__)
+                   (num, filecount))
                 sys.__stdout__.flush()
         zipfp.close()
 
@@ -100,22 +101,21 @@ class OtherTests(unittest.TestCase):
         # and that the resulting archive can be read properly by ZipFile
         zipf = zipfile.ZipFile(TESTFN, mode="w")
         zipf.debug = 100
-        numfiles = (1 << 16) * 3//2
-        for i in range(numfiles):
+        numfiles = (1 << 16) * 3/2
+        for i in xrange(numfiles):
             zipf.writestr("foo%08d" % i, "%d" % (i**3 % 57))
         self.assertEqual(len(zipf.namelist()), numfiles)
         zipf.close()
 
         zipf2 = zipfile.ZipFile(TESTFN, mode="r")
         self.assertEqual(len(zipf2.namelist()), numfiles)
-        for i in range(numfiles):
-            content = zipf2.read("foo%08d" % i).decode('ascii')
-            self.assertEqual(content, "%d" % (i**3 % 57))
+        for i in xrange(numfiles):
+            self.assertEqual(zipf2.read("foo%08d" % i), "%d" % (i**3 % 57))
         zipf.close()
 
     def tearDown(self):
-        support.unlink(TESTFN)
-        support.unlink(TESTFN2)
+        test_support.unlink(TESTFN)
+        test_support.unlink(TESTFN2)
 
 def test_main():
     run_unittest(TestsWithSourceFile, OtherTests)

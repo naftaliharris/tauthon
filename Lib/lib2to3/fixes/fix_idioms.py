@@ -100,18 +100,18 @@ class FixIdioms(fixer_base.BaseFix):
     def transform_isinstance(self, node, results):
         x = results["x"].clone() # The thing inside of type()
         T = results["T"].clone() # The type being compared against
-        x.prefix = ""
-        T.prefix = " "
-        test = Call(Name("isinstance"), [x, Comma(), T])
+        x.prefix = u""
+        T.prefix = u" "
+        test = Call(Name(u"isinstance"), [x, Comma(), T])
         if "n" in results:
-            test.prefix = " "
-            test = Node(syms.not_test, [Name("not"), test])
+            test.prefix = u" "
+            test = Node(syms.not_test, [Name(u"not"), test])
         test.prefix = node.prefix
         return test
 
     def transform_while(self, node, results):
         one = results["while"]
-        one.replace(Name("True", prefix=one.prefix))
+        one.replace(Name(u"True", prefix=one.prefix))
 
     def transform_sort(self, node, results):
         sort_stmt = results["sort"]
@@ -120,11 +120,11 @@ class FixIdioms(fixer_base.BaseFix):
         simple_expr = results.get("expr")
 
         if list_call:
-            list_call.replace(Name("sorted", prefix=list_call.prefix))
+            list_call.replace(Name(u"sorted", prefix=list_call.prefix))
         elif simple_expr:
             new = simple_expr.clone()
-            new.prefix = ""
-            simple_expr.replace(Call(Name("sorted"), [new],
+            new.prefix = u""
+            simple_expr.replace(Call(Name(u"sorted"), [new],
                                      prefix=simple_expr.prefix))
         else:
             raise RuntimeError("should not have reached here")
@@ -133,13 +133,13 @@ class FixIdioms(fixer_base.BaseFix):
         btwn = sort_stmt.prefix
         # Keep any prefix lines between the sort_stmt and the list_call and
         # shove them right after the sorted() call.
-        if "\n" in btwn:
+        if u"\n" in btwn:
             if next_stmt:
                 # The new prefix should be everything from the sort_stmt's
                 # prefix up to the last newline, then the old prefix after a new
                 # line.
-                prefix_lines = (btwn.rpartition("\n")[0], next_stmt[0].prefix)
-                next_stmt[0].prefix = "\n".join(prefix_lines)
+                prefix_lines = (btwn.rpartition(u"\n")[0], next_stmt[0].prefix)
+                next_stmt[0].prefix = u"\n".join(prefix_lines)
             else:
                 assert list_call.parent
                 assert list_call.next_sibling is None
@@ -149,4 +149,4 @@ class FixIdioms(fixer_base.BaseFix):
                 assert list_call.next_sibling is end_line
                 # The new prefix should be everything up to the first new line
                 # of sort_stmt's prefix.
-                end_line.prefix = btwn.rpartition("\n")[0]
+                end_line.prefix = btwn.rpartition(u"\n")[0]

@@ -1,4 +1,9 @@
+/*****************************************************************
+  This file should be kept compatible with Python 2.3, see PEP 291.
+ *****************************************************************/
+
 #include "Python.h"
+#include "compile.h" /* required only for 2.3, as it seems */
 #include "frameobject.h"
 
 #include <ffi.h>
@@ -13,6 +18,7 @@ static void
 CThunkObject_dealloc(PyObject *_self)
 {
     CThunkObject *self = (CThunkObject *)_self;
+    PyObject_GC_UnTrack(self);
     Py_XDECREF(self->converters);
     Py_XDECREF(self->callable);
     Py_XDECREF(self->restype);
@@ -50,7 +56,7 @@ PyTypeObject PyCThunk_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -85,10 +91,59 @@ PrintError(char *msg, ...)
     va_start(marker, msg);
     vsnprintf(buf, sizeof(buf), msg, marker);
     va_end(marker);
-    if (f != NULL && f != Py_None)
+    if (f)
         PyFile_WriteString(buf, f);
     PyErr_Print();
 }
+
+#if (PY_VERSION_HEX < 0x02070000)
+PyCodeObject *
+PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno)
+{
+    static PyObject *emptystring = NULL;
+    static PyObject *nulltuple = NULL;
+    PyObject *filename_ob = NULL;
+    PyObject *funcname_ob = NULL;
+    PyCodeObject *result = NULL;
+    if (emptystring == NULL) {
+        emptystring = PyString_FromString("");
+        if (emptystring == NULL)
+            goto failed;
+    }
+    if (nulltuple == NULL) {
+        nulltuple = PyTuple_New(0);
+        if (nulltuple == NULL)
+            goto failed;
+    }
+    funcname_ob = PyString_FromString(funcname);
+    if (funcname_ob == NULL)
+        goto failed;
+    filename_ob = PyString_FromString(filename);
+    if (filename_ob == NULL)
+        goto failed;
+
+    result = PyCode_New(0,                      /* argcount */
+                0,                              /* nlocals */
+                0,                              /* stacksize */
+                0,                              /* flags */
+                emptystring,                    /* code */
+                nulltuple,                      /* consts */
+                nulltuple,                      /* names */
+                nulltuple,                      /* varnames */
+                nulltuple,                      /* freevars */
+                nulltuple,                      /* cellvars */
+                filename_ob,                    /* filename */
+                funcname_ob,                    /* name */
+                firstlineno,                    /* firstlineno */
+                emptystring                     /* lnotab */
+                );
+
+failed:
+    Py_XDECREF(funcname_ob);
+    Py_XDECREF(filename_ob);
+    return result;
+}
+#endif
 
 
 /* after code that pyrex generates */
@@ -202,7 +257,7 @@ static void _CallPythonObject(void *mem,
             /* XXX XXX XX
                We have the problem that c_byte or c_short have dict->size of
                1 resp. 4, but these parameters are pushed as sizeof(int) bytes.
-               BTW, the same problem occurrs when they are pushed as parameters
+               BTW, the same problem occurs when they are pushed as parameters
             */
         } else if (dict) {
             /* Hm, shouldn't we use PyCData_AtAddress() or something like that instead? */
@@ -297,9 +352,8 @@ if (x == NULL) _ctypes_add_traceback(what, "_ctypes/callbacks.c", __LINE__ - 1),
         else if (keep == Py_None) /* Nothing to keep */
             Py_DECREF(keep);
         else if (setfunc != _ctypes_get_fielddesc("O")->setfunc) {
-            if (-1 == PyErr_WarnEx(PyExc_RuntimeWarning,
-                                   "memory leak in callback function.",
-                                   1))
+            if (-1 == PyErr_Warn(PyExc_RuntimeWarning,
+                                 "memory leak in callback function."))
                 PyErr_WriteUnraisable(callable);
         }
     }
@@ -367,10 +421,10 @@ CThunkObject *_ctypes_alloc_callback(PyObject *callable,
     if (p == NULL)
         return NULL;
 
-    assert(CThunk_CheckExact((PyObject *)p));
+    assert(CThunk_CheckExact(p));
 
     p->pcl_write = ffi_closure_alloc(sizeof(ffi_closure),
-									 &p->pcl_exec);
+				     &p->pcl_exec);
     if (p->pcl_write == NULL) {
         PyErr_NoMemory();
         goto error;
@@ -461,7 +515,7 @@ long Call_GetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
     static PyObject *context;
 
     if (context == NULL)
-        context = PyUnicode_InternFromString("_ctypes.DllGetClassObject");
+        context = PyString_InternFromString("_ctypes.DllGetClassObject");
 
     mod = PyImport_ImportModuleNoBlock("ctypes");
     if (!mod) {
@@ -504,7 +558,7 @@ long Call_GetClassObject(REFCLSID rclsid, REFIID riid, LPVOID *ppv)
         return E_FAIL;
     }
 
-    retval = PyLong_AsLong(result);
+    retval = PyInt_AsLong(result);
     if (PyErr_Occurred()) {
         PyErr_WriteUnraisable(context ? context : Py_None);
         retval = E_FAIL;
@@ -540,7 +594,7 @@ long Call_CanUnloadNow(void)
     static PyObject *context;
 
     if (context == NULL)
-        context = PyUnicode_InternFromString("_ctypes.DllCanUnloadNow");
+        context = PyString_InternFromString("_ctypes.DllCanUnloadNow");
 
     mod = PyImport_ImportModuleNoBlock("ctypes");
     if (!mod) {
@@ -565,7 +619,7 @@ long Call_CanUnloadNow(void)
         return E_FAIL;
     }
 
-    retval = PyLong_AsLong(result);
+    retval = PyInt_AsLong(result);
     if (PyErr_Occurred()) {
         PyErr_WriteUnraisable(context ? context : Py_None);
         retval = E_FAIL;

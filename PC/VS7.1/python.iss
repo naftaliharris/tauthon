@@ -137,6 +137,9 @@ Source: libs\_testcapi.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Comp
 Source: DLLs\_tkinter.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: tk
 Source: libs\_tkinter.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: tk
 
+Source: DLLs\bsddb.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
+Source: libs\bsddb.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
+
 Source: DLLs\mmap.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
 Source: libs\mmap.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
 
@@ -152,8 +155,8 @@ Source: libs\select.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Compone
 Source: DLLs\unicodedata.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
 Source: libs\unicodedata.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
 
-Source: DLLs\winreg.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
-Source: libs\winreg.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
+Source: DLLs\_winreg.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
+Source: libs\_winreg.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
 
 Source: DLLs\winsound.pyd; DestDir: {app}\DLLs; CopyMode: alwaysoverwrite; Components: main
 Source: libs\winsound.lib; DestDir: {app}\libs; CopyMode: alwaysoverwrite; Components: main
@@ -177,7 +180,6 @@ Source: Lib\lib-old\*.*; DestDir: {app}\Lib\lib-old; CopyMode: alwaysoverwrite; 
 Source: Lib\xml\*.*; DestDir: {app}\Lib\xml; CopyMode: alwaysoverwrite; Components: main; Flags: recursesubdirs
 Source: Lib\hotshot\*.*; DestDir: {app}\Lib\hotshot; CopyMode: alwaysoverwrite; Components: main; Flags: recursesubdirs
 Source: Lib\test\*.*; DestDir: {app}\Lib\test; CopyMode: alwaysoverwrite; Components: test; Flags: recursesubdirs
-Source: Lib\tkinter\*.py; DestDir: {app}\Lib\tkinter; CopyMode: alwaysoverwrite; Components: tk; Flags: recursesubdirs
 
 Source: Lib\site-packages\README.txt; DestDir: {app}\Lib\site-packages; CopyMode: alwaysoverwrite; Components: main
 
@@ -185,6 +187,8 @@ Source: Lib\site-packages\PyWin32.chm; DestDir: {app}\Lib\site-packages; CopyMod
 Source: Lib\site-packages\win32\*.*; DestDir: {app}\Lib\site-packages\win32; CopyMode: alwaysoverwrite; Components: main; Flags: recursesubdirs
 Source: Lib\site-packages\win32com\*.*; DestDir: {app}\Lib\site-packages\win32com; CopyMode: alwaysoverwrite; Components: main; Flags: recursesubdirs
 Source: Lib\site-packages\win32comext\*.*; DestDir: {app}\Lib\site-packages\win32comext; CopyMode: alwaysoverwrite; Components: main; Flags: recursesubdirs
+
+Source: Lib\lib-tk\*.py; DestDir: {app}\Lib\lib-tk; CopyMode: alwaysoverwrite; Components: tk; Flags: recursesubdirs
 
 Source: include\*.h; DestDir: {app}\include; CopyMode: alwaysoverwrite; Components: main
 
@@ -235,6 +239,7 @@ Root: HKLM; Subkey: SOFTWARE\Python; Flags: uninsdeletekeyifempty; Check: IsAdmi
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore; Flags: uninsdeletekeyifempty
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2; Flags: uninsdeletekeyifempty
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2\PythonPath; ValueData: "{app}\Lib;{app}\DLLs"; Flags: uninsdeletekeyifempty
+Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2\PythonPath\tk; ValueData: {app}\Lib\lib-tk; Flags: uninsdeletekey; Components: tk
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2\PythonPath\win32; ValueData: "{app}\lib\site-packages\win32;{app}\lib\site-packages\win32\lib"; Flags: uninsdeletekey
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2\PythonPath\win32com; ValueData: C:\Python\lib\site-packages; Flags: uninsdeletekey
 Root: HKLM; Subkey: SOFTWARE\Python\PythonCore\2.2\Modules; Flags: uninsdeletekeyifempty
@@ -289,9 +294,9 @@ Name: {app}\Lib\hotshot; Type: dirifempty
 Name: {app}\Lib\lib-old\*.pyc; Type: files
 Name: {app}\Lib\lib-old\*.pyo; Type: files
 Name: {app}\Lib\lib-old; Type: dirifempty
-Name: {app}\Lib\tkinter\*.pyc; Type: files
-Name: {app}\Lib\tkinter\*.pyo; Type: files
-Name: {app}\Lib\tkinter; Type: dirifempty
+Name: {app}\Lib\lib-tk\*.pyc; Type: files
+Name: {app}\Lib\lib-tk\*.pyo; Type: files
+Name: {app}\Lib\lib-tk; Type: dirifempty
 Name: {app}\Lib\test\*.pyc; Type: files
 Name: {app}\Lib\test\*.pyo; Type: files
 Name: {app}\Lib\test; Type: dirifempty

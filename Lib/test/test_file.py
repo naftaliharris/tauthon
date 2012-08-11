@@ -1,3 +1,8 @@
+# NOTE: this file tests the new `io` library backported from Python 3.x.
+# Similar tests for the builtin file object can be found in test_file2k.py.
+
+from __future__ import print_function
+
 import sys
 import os
 import unittest
@@ -7,8 +12,8 @@ from weakref import proxy
 import io
 import _pyio as pyio
 
-from test.support import TESTFN, run_unittest
-from collections import UserList
+from test.test_support import TESTFN, run_unittest
+from UserList import UserList
 
 class AutoFileTests(unittest.TestCase):
     # file tests for which a test file is automatically set up
@@ -44,7 +49,7 @@ class AutoFileTests(unittest.TestCase):
         a = array('b', b'x'*10)
         self.f = self.open(TESTFN, 'rb')
         n = self.f.readinto(a)
-        self.assertEqual(b'12', a.tobytes()[:n])
+        self.assertEqual(b'12', a.tostring()[:n])
 
     def testReadinto_text(self):
         # verify readinto refuses text files
@@ -95,7 +100,7 @@ class AutoFileTests(unittest.TestCase):
         methods = [('fileno', ()),
                    ('flush', ()),
                    ('isatty', ()),
-                   ('__next__', ()),
+                   ('next', ()),
                    ('read', ()),
                    ('write', (b"",)),
                    ('readline', ()),
@@ -106,7 +111,8 @@ class AutoFileTests(unittest.TestCase):
                    ('writelines', ([],)),
                    ('__iter__', ()),
                    ]
-        methods.append(('truncate', ()))
+        if not sys.platform.startswith('atheos'):
+            methods.append(('truncate', ()))
 
         # __exit__ should close the file
         self.f.__exit__(None, None, None)
@@ -121,7 +127,7 @@ class AutoFileTests(unittest.TestCase):
         self.assertEqual(self.f.__exit__(None, None, None), None)
         # it must also return None if an exception was given
         try:
-            1/0
+            1 // 0
         except:
             self.assertEqual(self.f.__exit__(*sys.exc_info()), None)
 
@@ -281,7 +287,7 @@ class OtherFileTests(unittest.TestCase):
             except ValueError:
                 self.fail("readinto() after next() with supposedly empty "
                           "iteration-buffer failed anyway")
-            line = buf.tobytes()
+            line = buf.tostring()
             if line != testline:
                 self.fail("readinto() after next() with empty buffer "
                           "failed. Got %r, expected %r" % (line, testline))
@@ -303,8 +309,6 @@ class OtherFileTests(unittest.TestCase):
             if lines != testlines:
                 self.fail("readlines() after next() with empty buffer "
                           "failed. Got %r, expected %r" % (line, testline))
-            f.close()
-
             # Reading after iteration hit EOF shouldn't hurt either
             f = self.open(TESTFN, 'rb')
             try:

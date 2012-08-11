@@ -15,7 +15,7 @@ else:
     libc_name = find_library("c")
 
 if is_resource_enabled("printing"):
-    print("libc_name is", libc_name)
+    print "libc_name is", libc_name
 
 class LoaderTest(unittest.TestCase):
 
@@ -45,8 +45,8 @@ class LoaderTest(unittest.TestCase):
         def test_load_library(self):
             self.assertFalse(libc_name is None)
             if is_resource_enabled("printing"):
-                print(find_library("kernel32"))
-                print(find_library("user32"))
+                print find_library("kernel32")
+                print find_library("user32")
 
             if os.name == "nt":
                 windll.kernel32.GetModuleHandleW
@@ -97,7 +97,7 @@ class LoaderTest(unittest.TestCase):
             self.assertEqual(0, advapi32.CloseEventLog(None))
             windll.kernel32.GetProcAddress.argtypes = c_void_p, c_char_p
             windll.kernel32.GetProcAddress.restype = c_void_p
-            proc = windll.kernel32.GetProcAddress(advapi32._handle, b"CloseEventLog")
+            proc = windll.kernel32.GetProcAddress(advapi32._handle, "CloseEventLog")
             self.assertTrue(proc)
             # This is the real test: call the function via 'call_function'
             self.assertEqual(0, call_function(proc, (None,)))

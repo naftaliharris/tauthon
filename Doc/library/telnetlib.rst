@@ -26,7 +26,7 @@ SE (Subnegotiation End), NOP (No Operation), DM (Data Mark), BRK (Break), IP
 Character), EL (Erase Line), GA (Go Ahead), SB (Subnegotiation Begin).
 
 
-.. class:: Telnet(host=None, port=0[, timeout])
+.. class:: Telnet([host[, port[, timeout]]])
 
    :class:`Telnet` represents a connection to a Telnet server. The instance is
    initially not connected by default; the :meth:`open` method must be used to
@@ -43,6 +43,9 @@ Character), EL (Erase Line), GA (Go Ahead), SB (Subnegotiation Begin).
    :exc:`EOFError` when the end of the connection is read, because they can return
    an empty string for other reasons.  See the individual descriptions below.
 
+   .. versionchanged:: 2.6
+      *timeout* was added.
+
 
 .. seealso::
 
@@ -58,60 +61,60 @@ Telnet Objects
 :class:`Telnet` instances have the following methods:
 
 
-.. method:: Telnet.read_until(expected, timeout=None)
+.. method:: Telnet.read_until(expected[, timeout])
 
-   Read until a given byte string, *expected*, is encountered or until *timeout*
-   seconds have passed.
+   Read until a given string, *expected*, is encountered or until *timeout* seconds
+   have passed.
 
-   When no match is found, return whatever is available instead, possibly empty
-   bytes.  Raise :exc:`EOFError` if the connection is closed and no cooked data
-   is available.
+   When no match is found, return whatever is available instead, possibly the empty
+   string.  Raise :exc:`EOFError` if the connection is closed and no cooked data is
+   available.
 
 
 .. method:: Telnet.read_all()
 
-   Read all data until EOF as bytes; block until connection closed.
+   Read all data until EOF; block until connection closed.
 
 
 .. method:: Telnet.read_some()
 
-   Read at least one byte of cooked data unless EOF is hit. Return ``b''`` if
-   EOF is hit.  Block if no data is immediately available.
+   Read at least one byte of cooked data unless EOF is hit. Return ``''`` if EOF is
+   hit.  Block if no data is immediately available.
 
 
 .. method:: Telnet.read_very_eager()
 
    Read everything that can be without blocking in I/O (eager).
 
-   Raise :exc:`EOFError` if connection closed and no cooked data available.
-   Return ``b''`` if no cooked data available otherwise. Do not block unless in
-   the midst of an IAC sequence.
+   Raise :exc:`EOFError` if connection closed and no cooked data available.  Return
+   ``''`` if no cooked data available otherwise. Do not block unless in the midst
+   of an IAC sequence.
 
 
 .. method:: Telnet.read_eager()
 
    Read readily available data.
 
-   Raise :exc:`EOFError` if connection closed and no cooked data available.
-   Return ``b''`` if no cooked data available otherwise. Do not block unless in
-   the midst of an IAC sequence.
+   Raise :exc:`EOFError` if connection closed and no cooked data available.  Return
+   ``''`` if no cooked data available otherwise. Do not block unless in the midst
+   of an IAC sequence.
 
 
 .. method:: Telnet.read_lazy()
 
    Process and return data already in the queues (lazy).
 
-   Raise :exc:`EOFError` if connection closed and no data available. Return
-   ``b''`` if no cooked data available otherwise.  Do not block unless in the
-   midst of an IAC sequence.
+   Raise :exc:`EOFError` if connection closed and no data available. Return ``''``
+   if no cooked data available otherwise.  Do not block unless in the midst of an
+   IAC sequence.
 
 
 .. method:: Telnet.read_very_lazy()
 
    Return any data available in the cooked queue (very lazy).
 
-   Raise :exc:`EOFError` if connection closed and no data available. Return
-   ``b''`` if no cooked data available otherwise.  This method never blocks.
+   Raise :exc:`EOFError` if connection closed and no data available. Return ``''``
+   if no cooked data available otherwise.  This method never blocks.
 
 
 .. method:: Telnet.read_sb_data()
@@ -120,8 +123,10 @@ Telnet Objects
    callback should access these data when it was invoked with a ``SE`` command.
    This method never blocks.
 
+   .. versionadded:: 2.3
 
-.. method:: Telnet.open(host, port=0[, timeout])
+
+.. method:: Telnet.open(host[, port[, timeout]])
 
    Connect to a host. The optional second argument is the port number, which
    defaults to the standard Telnet port (23). The optional *timeout* parameter
@@ -130,8 +135,11 @@ Telnet Objects
 
    Do not try to reopen an already connected instance.
 
+   .. versionchanged:: 2.6
+      *timeout* was added.
 
-.. method:: Telnet.msg(msg, *args)
+
+.. method:: Telnet.msg(msg[, *args])
 
    Print a debug message when the debug level is ``>`` 0. If extra arguments are
    present, they are substituted in the message using the standard string
@@ -161,9 +169,9 @@ Telnet Objects
 
 .. method:: Telnet.write(buffer)
 
-   Write a byte string to the socket, doubling any IAC characters. This can
-   block if the connection is blocked.  May raise :exc:`socket.error` if the
-   connection is closed.
+   Write a string to the socket, doubling any IAC characters. This can block if the
+   connection is blocked.  May raise :exc:`socket.error` if the connection is
+   closed.
 
 
 .. method:: Telnet.interact()
@@ -176,22 +184,21 @@ Telnet Objects
    Multithreaded version of :meth:`interact`.
 
 
-.. method:: Telnet.expect(list, timeout=None)
+.. method:: Telnet.expect(list[, timeout])
 
    Read until one from a list of a regular expressions matches.
 
    The first argument is a list of regular expressions, either compiled
-   (:class:`re.RegexObject` instances) or uncompiled (byte strings). The
-   optional second argument is a timeout, in seconds; the default is to block
-   indefinitely.
+   (:class:`re.RegexObject` instances) or uncompiled (strings). The optional second
+   argument is a timeout, in seconds; the default is to block indefinitely.
 
    Return a tuple of three items: the index in the list of the first regular
-   expression that matches; the match object returned; and the bytes read up
-   till and including the match.
+   expression that matches; the match object returned; and the text read up till
+   and including the match.
 
-   If end of file is found and no bytes were read, raise :exc:`EOFError`.
-   Otherwise, when nothing matches, return ``(-1, None, data)`` where *data* is
-   the bytes received so far (may be empty bytes if a timeout happened).
+   If end of file is found and no text was read, raise :exc:`EOFError`.  Otherwise,
+   when nothing matches, return ``(-1, None, text)`` where *text* is the text
+   received so far (may be the empty string if a timeout happened).
 
    If a regular expression ends with a greedy match (such as ``.*``) or if more
    than one expression can match the same input, the results are
@@ -216,22 +223,23 @@ Telnet Example
 A simple example illustrating typical use::
 
    import getpass
+   import sys
    import telnetlib
 
    HOST = "localhost"
-   user = input("Enter your remote account: ")
+   user = raw_input("Enter your remote account: ")
    password = getpass.getpass()
 
    tn = telnetlib.Telnet(HOST)
 
-   tn.read_until(b"login: ")
-   tn.write(user.encode('ascii') + b"\n")
+   tn.read_until("login: ")
+   tn.write(user + "\n")
    if password:
-       tn.read_until(b"Password: ")
-       tn.write(password.encode('ascii') + b"\n")
+       tn.read_until("Password: ")
+       tn.write(password + "\n")
 
-   tn.write(b"ls\n")
-   tn.write(b"exit\n")
+   tn.write("ls\n")
+   tn.write("exit\n")
 
-   print(tn.read_all().decode('ascii'))
+   print tn.read_all()
 

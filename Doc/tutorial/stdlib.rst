@@ -15,7 +15,7 @@ operating system::
 
    >>> import os
    >>> os.getcwd()      # Return the current working directory
-   'C:\\Python31'
+   'C:\\Python26'
    >>> os.chdir('/server/accesslogs')   # Change current working directory
    >>> os.system('mkdir today')   # Run the command mkdir in the system shell
    0
@@ -67,7 +67,7 @@ instance the following output results from running ``python demo.py one two
 three`` at the command line::
 
    >>> import sys
-   >>> print(sys.argv)
+   >>> print sys.argv
    ['demo.py', 'one', 'two', 'three']
 
 The :mod:`getopt` module processes *sys.argv* using the conventions of the Unix
@@ -121,7 +121,7 @@ The :mod:`math` module gives access to the underlying C library functions for
 floating point math::
 
    >>> import math
-   >>> math.cos(math.pi / 4)
+   >>> math.cos(math.pi / 4.0)
    0.70710678118654757
    >>> math.log(1024, 2)
    10.0
@@ -131,15 +131,13 @@ The :mod:`random` module provides tools for making random selections::
    >>> import random
    >>> random.choice(['apple', 'pear', 'banana'])
    'apple'
-   >>> random.sample(range(100), 10)   # sampling without replacement
+   >>> random.sample(xrange(100), 10)   # sampling without replacement
    [30, 83, 16, 4, 8, 81, 41, 50, 18, 33]
    >>> random.random()    # random float
    0.17970987693706186
    >>> random.randrange(6)    # random integer chosen from range(6)
    4
 
-The SciPy project <http://scipy.org> has many other modules for numerical
-computations.
 
 .. _tut-internet-access:
 
@@ -147,14 +145,13 @@ Internet Access
 ===============
 
 There are a number of modules for accessing the internet and processing internet
-protocols. Two of the simplest are :mod:`urllib.request` for retrieving data
-from urls and :mod:`smtplib` for sending mail::
+protocols. Two of the simplest are :mod:`urllib2` for retrieving data from urls
+and :mod:`smtplib` for sending mail::
 
-   >>> from urllib.request import urlopen
-   >>> for line in urlopen('http://tycho.usno.navy.mil/cgi-bin/timer.pl'):
-   ...     line = line.decode('utf-8')  # Decoding the binary data to text.
+   >>> import urllib2
+   >>> for line in urllib2.urlopen('http://tycho.usno.navy.mil/cgi-bin/timer.pl'):
    ...     if 'EST' in line or 'EDT' in line:  # look for Eastern Time
-   ...         print(line)
+   ...         print line
 
    <BR>Nov. 25, 09:43:32 PM EST
 
@@ -207,14 +204,14 @@ including: :mod:`zlib`, :mod:`gzip`, :mod:`bz2`, :mod:`zipfile` and
 :mod:`tarfile`. ::
 
    >>> import zlib
-   >>> s = b'witch which has which witches wrist watch'
+   >>> s = 'witch which has which witches wrist watch'
    >>> len(s)
    41
    >>> t = zlib.compress(s)
    >>> len(t)
    37
    >>> zlib.decompress(t)
-   b'witch which has which witches wrist watch'
+   'witch which has which witches wrist watch'
    >>> zlib.crc32(s)
    226805979
 
@@ -262,10 +259,10 @@ documentation::
    def average(values):
        """Computes the arithmetic mean of a list of numbers.
 
-       >>> print(average([20, 30, 70]))
+       >>> print average([20, 30, 70])
        40.0
        """
-       return sum(values) / len(values)
+       return sum(values, 0.0) / len(values)
 
    import doctest
    doctest.testmod()   # automatically validate the embedded tests
@@ -295,7 +292,7 @@ Batteries Included
 Python has a "batteries included" philosophy.  This is best seen through the
 sophisticated and robust capabilities of its larger packages. For example:
 
-* The :mod:`xmlrpc.client` and :mod:`xmlrpc.server` modules make implementing
+* The :mod:`xmlrpclib` and :mod:`SimpleXMLRPCServer` modules make implementing
   remote procedure calls into an almost trivial task.  Despite the modules
   names, no direct knowledge or handling of XML is needed.
 

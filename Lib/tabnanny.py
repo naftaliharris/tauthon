@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """The Tab Nanny despises ambiguous indentation.  She knows no mercy.
 
@@ -43,7 +43,7 @@ def main():
     global verbose, filename_only
     try:
         opts, args = getopt.getopt(sys.argv[1:], "qv")
-    except getopt.error as msg:
+    except getopt.error, msg:
         errprint(msg)
         return
     for o, a in opts:
@@ -83,7 +83,7 @@ def check(file):
 
     if os.path.isdir(file) and not os.path.islink(file):
         if verbose:
-            print("%r: listing directory" % (file,))
+            print "%r: listing directory" % (file,)
         names = os.listdir(file)
         for name in names:
             fullname = os.path.join(file, name)
@@ -94,40 +94,40 @@ def check(file):
         return
 
     try:
-        f = tokenize.open(file)
-    except IOError as msg:
+        f = open(file)
+    except IOError, msg:
         errprint("%r: I/O Error: %s" % (file, msg))
         return
 
     if verbose > 1:
-        print("checking %r ..." % file)
+        print "checking %r ..." % file
 
     try:
         process_tokens(tokenize.generate_tokens(f.readline))
 
-    except tokenize.TokenError as msg:
+    except tokenize.TokenError, msg:
         errprint("%r: Token Error: %s" % (file, msg))
         return
 
-    except IndentationError as msg:
+    except IndentationError, msg:
         errprint("%r: Indentation Error: %s" % (file, msg))
         return
 
-    except NannyNag as nag:
+    except NannyNag, nag:
         badline = nag.get_lineno()
         line = nag.get_line()
         if verbose:
-            print("%r: *** Line %d: trouble in tab city! ***" % (file, badline))
-            print("offending line: %r" % (line,))
-            print(nag.get_msg())
+            print "%r: *** Line %d: trouble in tab city! ***" % (file, badline)
+            print "offending line: %r" % (line,)
+            print nag.get_msg()
         else:
             if ' ' in file: file = '"' + file + '"'
-            if filename_only: print(file)
-            else: print(file, badline, repr(line))
+            if filename_only: print file
+            else: print file, badline, repr(line)
         return
 
     if verbose:
-        print("%r: Clean bill of health." % (file,))
+        print "%r: Clean bill of health." % (file,)
 
 class Whitespace:
     # the characters used for space and tab
@@ -264,7 +264,7 @@ class Whitespace:
         return a
 
 def format_witnesses(w):
-    firsts = (str(tup[0]) for tup in w)
+    firsts = map(lambda tup: str(tup[0]), w)
     prefix = "at tab size"
     if len(w) > 1:
         prefix = prefix + "s"

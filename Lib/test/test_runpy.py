@@ -5,10 +5,9 @@ import os.path
 import sys
 import re
 import tempfile
-import py_compile
-from test.support import forget, make_legacy_pyc, run_unittest, unload, verbose
-from test.script_helper import (
-    make_pkg, make_script, make_zip_pkg, make_zip_script, temp_dir)
+from test.test_support import verbose, run_unittest, forget
+from test.script_helper import (temp_dir, make_script, compile_script,
+                                make_pkg, make_zip_script, make_zip_pkg)
 
 
 from runpy import _run_code, _run_module_code, run_module, run_path
@@ -46,7 +45,6 @@ class RunModuleCodeTest(unittest.TestCase):
         self.assertEqual(d["result"], self.expected_result)
         self.assertIs(d["__name__"], None)
         self.assertIs(d["__file__"], None)
-        self.assertIs(d["__cached__"], None)
         self.assertIs(d["__loader__"], None)
         self.assertIs(d["__package__"], None)
         self.assertIs(d["run_argv0"], saved_argv0)
@@ -75,7 +73,6 @@ class RunModuleCodeTest(unittest.TestCase):
         self.assertTrue(d2["run_name_in_sys_modules"])
         self.assertTrue(d2["module_in_sys_modules"])
         self.assertIs(d2["__file__"], file)
-        self.assertIs(d2["__cached__"], None)
         self.assertIs(d2["run_argv0"], file)
         self.assertIs(d2["__loader__"], loader)
         self.assertIs(d2["__package__"], package)
@@ -111,7 +108,7 @@ class RunModuleTest(unittest.TestCase):
 
     def _add_pkg_dir(self, pkg_dir):
         os.mkdir(pkg_dir)
-        pkg_fname = os.path.join(pkg_dir, "__init__.py")
+        pkg_fname = os.path.join(pkg_dir, "__init__"+os.extsep+"py")
         pkg_file = open(pkg_fname, "w")
         pkg_file.close()
         return pkg_fname
@@ -120,19 +117,19 @@ class RunModuleTest(unittest.TestCase):
         pkg_name = "__runpy_pkg__"
         test_fname = mod_base+os.extsep+"py"
         pkg_dir = sub_dir = tempfile.mkdtemp()
-        if verbose: print("  Package tree in:", sub_dir)
+        if verbose: print "  Package tree in:", sub_dir
         sys.path.insert(0, pkg_dir)
-        if verbose: print("  Updated sys.path:", sys.path[0])
+        if verbose: print "  Updated sys.path:", sys.path[0]
         for i in range(depth):
             sub_dir = os.path.join(sub_dir, pkg_name)
             pkg_fname = self._add_pkg_dir(sub_dir)
-            if verbose: print("  Next level in:", sub_dir)
-            if verbose: print("  Created:", pkg_fname)
+            if verbose: print "  Next level in:", sub_dir
+            if verbose: print "  Created:", pkg_fname
         mod_fname = os.path.join(sub_dir, test_fname)
         mod_file = open(mod_fname, "w")
         mod_file.write(source)
         mod_file.close()
-        if verbose: print("  Created:", mod_fname)
+        if verbose: print "  Created:", mod_fname
         mod_name = (pkg_name+".")*depth + mod_base
         return pkg_dir, mod_fname, mod_name
 
@@ -140,49 +137,47 @@ class RunModuleTest(unittest.TestCase):
         for entry in list(sys.modules):
             if entry.startswith("__runpy_pkg__"):
                 del sys.modules[entry]
-        if verbose: print("  Removed sys.modules entries")
+        if verbose: print "  Removed sys.modules entries"
         del sys.path[0]
-        if verbose: print("  Removed sys.path entry")
+        if verbose: print "  Removed sys.path entry"
         for root, dirs, files in os.walk(top, topdown=False):
             for name in files:
                 try:
                     os.remove(os.path.join(root, name))
-                except OSError as ex:
-                    if verbose: print(ex) # Persist with cleaning up
+                except OSError, ex:
+                    if verbose: print ex # Persist with cleaning up
             for name in dirs:
                 fullname = os.path.join(root, name)
                 try:
                     os.rmdir(fullname)
-                except OSError as ex:
-                    if verbose: print(ex) # Persist with cleaning up
+                except OSError, ex:
+                    if verbose: print ex # Persist with cleaning up
         try:
             os.rmdir(top)
-            if verbose: print("  Removed package tree")
-        except OSError as ex:
-            if verbose: print(ex) # Persist with cleaning up
+            if verbose: print "  Removed package tree"
+        except OSError, ex:
+            if verbose: print ex # Persist with cleaning up
 
     def _check_module(self, depth):
         pkg_dir, mod_fname, mod_name = (
                self._make_pkg("x=1\n", depth))
         forget(mod_name)
         try:
-            if verbose: print("Running from source:", mod_name)
+            if verbose: print "Running from source:", mod_name
             d1 = run_module(mod_name) # Read from source
             self.assertIn("x", d1)
-            self.assertEqual(d1["x"], 1)
+            self.assertTrue(d1["x"] == 1)
             del d1 # Ensure __loader__ entry doesn't keep file open
             __import__(mod_name)
             os.remove(mod_fname)
-            make_legacy_pyc(mod_fname)
-            unload(mod_name)  # In case loader caches paths
-            if verbose: print("Running from compiled:", mod_name)
+            if verbose: print "Running from compiled:", mod_name
             d2 = run_module(mod_name) # Read from bytecode
             self.assertIn("x", d2)
-            self.assertEqual(d2["x"], 1)
+            self.assertTrue(d2["x"] == 1)
             del d2 # Ensure __loader__ entry doesn't keep file open
         finally:
             self._del_pkg(pkg_dir, depth, mod_name)
-        if verbose: print("Module executed successfully")
+        if verbose: print "Module executed successfully"
 
     def _check_package(self, depth):
         pkg_dir, mod_fname, mod_name = (
@@ -190,23 +185,21 @@ class RunModuleTest(unittest.TestCase):
         pkg_name, _, _ = mod_name.rpartition(".")
         forget(mod_name)
         try:
-            if verbose: print("Running from source:", pkg_name)
+            if verbose: print "Running from source:", pkg_name
             d1 = run_module(pkg_name) # Read from source
             self.assertIn("x", d1)
             self.assertTrue(d1["x"] == 1)
             del d1 # Ensure __loader__ entry doesn't keep file open
             __import__(mod_name)
             os.remove(mod_fname)
-            make_legacy_pyc(mod_fname)
-            unload(mod_name)  # In case loader caches paths
-            if verbose: print("Running from compiled:", pkg_name)
+            if verbose: print "Running from compiled:", pkg_name
             d2 = run_module(pkg_name) # Read from bytecode
             self.assertIn("x", d2)
             self.assertTrue(d2["x"] == 1)
             del d2 # Ensure __loader__ entry doesn't keep file open
         finally:
             self._del_pkg(pkg_dir, depth, pkg_name)
-        if verbose: print("Package executed successfully")
+        if verbose: print "Package executed successfully"
 
     def _add_relative_modules(self, base_dir, source, depth):
         if depth <= 1:
@@ -217,21 +210,21 @@ class RunModuleTest(unittest.TestCase):
             parent_dir = module_dir
             module_dir = os.path.join(module_dir, pkg_name)
         # Add sibling module
-        sibling_fname = os.path.join(module_dir, "sibling.py")
+        sibling_fname = os.path.join(module_dir, "sibling"+os.extsep+"py")
         sibling_file = open(sibling_fname, "w")
         sibling_file.close()
-        if verbose: print("  Added sibling module:", sibling_fname)
+        if verbose: print "  Added sibling module:", sibling_fname
         # Add nephew module
         uncle_dir = os.path.join(parent_dir, "uncle")
         self._add_pkg_dir(uncle_dir)
-        if verbose: print("  Added uncle package:", uncle_dir)
+        if verbose: print "  Added uncle package:", uncle_dir
         cousin_dir = os.path.join(uncle_dir, "cousin")
         self._add_pkg_dir(cousin_dir)
-        if verbose: print("  Added cousin package:", cousin_dir)
-        nephew_fname = os.path.join(cousin_dir, "nephew.py")
+        if verbose: print "  Added cousin package:", cousin_dir
+        nephew_fname = os.path.join(cousin_dir, "nephew"+os.extsep+"py")
         nephew_file = open(nephew_fname, "w")
         nephew_file.close()
-        if verbose: print("  Added nephew module:", nephew_fname)
+        if verbose: print "  Added nephew module:", nephew_fname
 
     def _check_relative_imports(self, depth, run_name=None):
         contents = r"""\
@@ -244,7 +237,7 @@ from ..uncle.cousin import nephew
         try:
             self._add_relative_modules(pkg_dir, contents, depth)
             pkg_name = mod_name.rpartition('.')[0]
-            if verbose: print("Running from source:", mod_name)
+            if verbose: print "Running from source:", mod_name
             d1 = run_module(mod_name, run_name=run_name) # Read from source
             self.assertIn("__package__", d1)
             self.assertTrue(d1["__package__"] == pkg_name)
@@ -253,9 +246,7 @@ from ..uncle.cousin import nephew
             del d1 # Ensure __loader__ entry doesn't keep file open
             __import__(mod_name)
             os.remove(mod_fname)
-            make_legacy_pyc(mod_fname)
-            unload(mod_name)  # In case the loader caches paths
-            if verbose: print("Running from compiled:", mod_name)
+            if verbose: print "Running from compiled:", mod_name
             d2 = run_module(mod_name, run_name=run_name) # Read from bytecode
             self.assertIn("__package__", d2)
             self.assertTrue(d2["__package__"] == pkg_name)
@@ -264,26 +255,26 @@ from ..uncle.cousin import nephew
             del d2 # Ensure __loader__ entry doesn't keep file open
         finally:
             self._del_pkg(pkg_dir, depth, mod_name)
-        if verbose: print("Module executed successfully")
+        if verbose: print "Module executed successfully"
 
     def test_run_module(self):
         for depth in range(4):
-            if verbose: print("Testing package depth:", depth)
+            if verbose: print "Testing package depth:", depth
             self._check_module(depth)
 
     def test_run_package(self):
         for depth in range(1, 4):
-            if verbose: print("Testing package depth:", depth)
+            if verbose: print "Testing package depth:", depth
             self._check_package(depth)
 
     def test_explicit_relative_import(self):
         for depth in range(2, 5):
-            if verbose: print("Testing relative imports at depth:", depth)
+            if verbose: print "Testing relative imports at depth:", depth
             self._check_relative_imports(depth)
 
     def test_main_relative_import(self):
         for depth in range(2, 5):
-            if verbose: print("Testing main relative imports at depth:", depth)
+            if verbose: print "Testing main relative imports at depth:", depth
             self._check_relative_imports(depth, "__main__")
 
 
@@ -322,14 +313,13 @@ argv0 = sys.argv[0]
         result = run_path(script_name)
         self.assertEqual(result["__name__"], expected_name)
         self.assertEqual(result["__file__"], expected_file)
-        self.assertEqual(result["__cached__"], None)
         self.assertIn("argv0", result)
         self.assertEqual(result["argv0"], expected_argv0)
         self.assertEqual(result["__package__"], expected_package)
 
     def _check_import_error(self, script_name, msg):
         msg = re.escape(msg)
-        self.assertRaisesRegex(ImportError, msg, run_path, script_name)
+        self.assertRaisesRegexp(ImportError, msg, run_path, script_name)
 
     def test_basic_script(self):
         with temp_dir() as script_dir:
@@ -342,7 +332,7 @@ argv0 = sys.argv[0]
         with temp_dir() as script_dir:
             mod_name = 'script'
             script_name = self._make_test_script(script_dir, mod_name)
-            compiled_name = py_compile.compile(script_name, doraise=True)
+            compiled_name = compile_script(script_name)
             os.remove(script_name)
             self._check_script(compiled_name, "<run_path>", compiled_name,
                                compiled_name, None)
@@ -358,10 +348,9 @@ argv0 = sys.argv[0]
         with temp_dir() as script_dir:
             mod_name = '__main__'
             script_name = self._make_test_script(script_dir, mod_name)
-            compiled_name = py_compile.compile(script_name, doraise=True)
+            compiled_name = compile_script(script_name)
             os.remove(script_name)
-            legacy_pyc = make_legacy_pyc(script_name)
-            self._check_script(script_dir, "<run_path>", legacy_pyc,
+            self._check_script(script_dir, "<run_path>", compiled_name,
                                script_dir, '')
 
     def test_directory_error(self):
@@ -382,9 +371,8 @@ argv0 = sys.argv[0]
         with temp_dir() as script_dir:
             mod_name = '__main__'
             script_name = self._make_test_script(script_dir, mod_name)
-            compiled_name = py_compile.compile(script_name, doraise=True)
-            zip_name, fname = make_zip_script(script_dir, 'test_zip',
-                                              compiled_name)
+            compiled_name = compile_script(script_name)
+            zip_name, fname = make_zip_script(script_dir, 'test_zip', compiled_name)
             self._check_script(zip_name, "<run_path>", fname, zip_name, '')
 
     def test_zipfile_error(self):
@@ -403,16 +391,12 @@ argv0 = sys.argv[0]
             script_name = self._make_test_script(script_dir, mod_name, source)
             zip_name, fname = make_zip_script(script_dir, 'test_zip', script_name)
             msg = "recursion depth exceeded"
-            self.assertRaisesRegex(RuntimeError, msg, run_path, zip_name)
+            self.assertRaisesRegexp(RuntimeError, msg, run_path, zip_name)
 
 
 
 def test_main():
-    run_unittest(
-                 RunModuleCodeTest,
-                 RunModuleTest,
-                 RunPathTest
-                 )
+    run_unittest(RunModuleCodeTest, RunModuleTest, RunPathTest)
 
 if __name__ == "__main__":
     test_main()

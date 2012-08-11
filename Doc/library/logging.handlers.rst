@@ -45,9 +45,9 @@ and :meth:`flush` methods).
    .. method:: emit(record)
 
       If a formatter is specified, it is used to format the record. The record
-      is then written to the stream with a terminator. If exception information
-      is present, it is formatted using :func:`traceback.print_exception` and
-      appended to the stream.
+      is then written to the stream with a newline terminator. If exception
+      information is present, it is formatted using
+      :func:`traceback.print_exception` and appended to the stream.
 
 
    .. method:: flush()
@@ -55,13 +55,6 @@ and :meth:`flush` methods).
       Flushes the stream by calling its :meth:`flush` method. Note that the
       :meth:`close` method is inherited from :class:`Handler` and so does
       no output, so an explicit :meth:`flush` call may be needed at times.
-
-.. versionchanged:: 3.2
-   The ``StreamHandler`` class now has a ``terminator`` attribute, default
-   value ``'\n'``, which is used as the terminator when writing a formatted
-   record to a stream. If you don't want this newline termination, you can
-   set the handler instance's ``terminator`` attribute to the empty string.
-   In earlier versions, the terminator was hardcoded as ``'\n'``.
 
 .. _file-handler:
 
@@ -81,6 +74,8 @@ sends logging output to a disk file.  It inherits the output functionality from
    with that encoding.  If *delay* is true, then file opening is deferred until the
    first call to :meth:`emit`. By default, the file grows indefinitely.
 
+   .. versionchanged:: 2.6
+      *delay* was added.
 
    .. method:: close()
 
@@ -97,7 +92,7 @@ sends logging output to a disk file.  It inherits the output functionality from
 NullHandler
 ^^^^^^^^^^^
 
-.. versionadded:: 3.1
+.. versionadded:: 2.7
 
 The :class:`NullHandler` class, located in the core :mod:`logging` package,
 does not do any formatting or output. It is essentially a 'no-op' handler
@@ -130,6 +125,8 @@ WatchedFileHandler
 ^^^^^^^^^^^^^^^^^^
 
 .. currentmodule:: logging.handlers
+
+.. versionadded:: 2.6
 
 The :class:`WatchedFileHandler` class, located in the :mod:`logging.handlers`
 module, is a :class:`FileHandler` which watches the file it is logging to. If
@@ -193,6 +190,9 @@ module, supports rotation of disk log files.
    this file is filled, it is closed and renamed to :file:`app.log.1`, and if files
    :file:`app.log.1`, :file:`app.log.2`, etc.  exist, then they are renamed to
    :file:`app.log.2`, :file:`app.log.3` etc.  respectively.
+
+   .. versionchanged:: 2.6
+      *delay* was added.
 
 
    .. method:: doRollover()
@@ -260,6 +260,9 @@ timed intervals.
 
    If *delay* is true, then file opening is deferred until the first call to
    :meth:`emit`.
+
+   .. versionchanged:: 2.6
+      *delay* and *utc* were added.
 
 
    .. method:: doRollover()
@@ -422,7 +425,7 @@ supports sending logging messages to a remote or local Unix syslog.
    application needs to run on several platforms). On Windows, you pretty
    much have to use the UDP option.
 
-   .. versionchanged:: 3.2
+   .. versionchanged:: 2.7
       *socktype* was added.
 
 
@@ -599,14 +602,28 @@ The :class:`SMTPHandler` class, located in the :mod:`logging.handlers` module,
 supports sending logging messages to an email address via SMTP.
 
 
-.. class:: SMTPHandler(mailhost, fromaddr, toaddrs, subject, credentials=None)
+.. class:: SMTPHandler(mailhost, fromaddr, toaddrs, subject, credentials=None, secure=None)
 
    Returns a new instance of the :class:`SMTPHandler` class. The instance is
-   initialized with the from and to addresses and subject line of the email. The
-   *toaddrs* should be a list of strings. To specify a non-standard SMTP port, use
-   the (host, port) tuple format for the *mailhost* argument. If you use a string,
-   the standard SMTP port is used. If your SMTP server requires authentication, you
-   can specify a (username, password) tuple for the *credentials* argument.
+   initialized with the from and to addresses and subject line of the email.
+   The *toaddrs* should be a list of strings. To specify a non-standard SMTP
+   port, use the (host, port) tuple format for the *mailhost* argument. If you
+   use a string, the standard SMTP port is used. If your SMTP server requires
+   authentication, you can specify a (username, password) tuple for the
+   *credentials* argument.
+
+   To specify the use of a secure protocol (TLS), pass in a tuple to the
+   *secure* argument. This will only be used when authentication credentials are
+   supplied. The tuple should be either an empty tuple, or a single-value tuple
+   with the name of a keyfile, or a 2-value tuple with the names of the keyfile
+   and certificate file. (This tuple is passed to the
+   :meth:`smtplib.SMTP.starttls` method.)
+
+   .. versionchanged:: 2.6
+      *credentials* was added.
+
+   .. versionchanged:: 2.7
+      *secure* was added.
 
 
    .. method:: emit(record)
@@ -633,7 +650,7 @@ event of a certain severity or greater is seen.
 :class:`BufferingHandler`, which is an abstract class. This buffers logging
 records in memory. Whenever each record is added to the buffer, a check is made
 by calling :meth:`shouldFlush` to see if the buffer should be flushed.  If it
-should, then :meth:`flush` is expected to do the needful.
+should, then :meth:`flush` is expected to do the flushing.
 
 
 .. class:: BufferingHandler(capacity)
@@ -681,6 +698,9 @@ should, then :meth:`flush` is expected to do the needful.
 
 
    .. method:: setTarget(target)
+   .. versionchanged:: 2.6
+      *credentials* was added.
+
 
       Sets the target handler for this handler.
 
@@ -700,143 +720,16 @@ supports sending logging messages to a Web server, using either ``GET`` or
 ``POST`` semantics.
 
 
-.. class:: HTTPHandler(host, url, method='GET', secure=False, credentials=None)
+.. class:: HTTPHandler(host, url, method='GET')
 
    Returns a new instance of the :class:`HTTPHandler` class. The *host* can be
    of the form ``host:port``, should you need to use a specific port number.
-   If no *method* is specified, ``GET`` is used. If *secure* is True, an HTTPS
-   connection will be used. If *credentials* is specified, it should be a
-   2-tuple consisting of userid and password, which will be placed in an HTTP
-   'Authorization' header using Basic authentication. If you specify
-   credentials, you should also specify secure=True so that your userid and
-   password are not passed in cleartext across the wire.
+   If no *method* is specified, ``GET`` is used.
 
 
    .. method:: emit(record)
 
       Sends the record to the Web server as a percent-encoded dictionary.
-
-
-.. _queue-handler:
-
-
-QueueHandler
-^^^^^^^^^^^^
-
-.. versionadded:: 3.2
-
-The :class:`QueueHandler` class, located in the :mod:`logging.handlers` module,
-supports sending logging messages to a queue, such as those implemented in the
-:mod:`queue` or :mod:`multiprocessing` modules.
-
-Along with the :class:`QueueListener` class, :class:`QueueHandler` can be used
-to let handlers do their work on a separate thread from the one which does the
-logging. This is important in Web applications and also other service
-applications where threads servicing clients need to respond as quickly as
-possible, while any potentially slow operations (such as sending an email via
-:class:`SMTPHandler`) are done on a separate thread.
-
-.. class:: QueueHandler(queue)
-
-   Returns a new instance of the :class:`QueueHandler` class. The instance is
-   initialized with the queue to send messages to. The queue can be any queue-
-   like object; it's used as-is by the :meth:`enqueue` method, which needs
-   to know how to send messages to it.
-
-
-   .. method:: emit(record)
-
-      Enqueues the result of preparing the LogRecord.
-
-   .. method:: prepare(record)
-
-      Prepares a record for queuing. The object returned by this
-      method is enqueued.
-
-      The base implementation formats the record to merge the message
-      and arguments, and removes unpickleable items from the record
-      in-place.
-
-      You might want to override this method if you want to convert
-      the record to a dict or JSON string, or send a modified copy
-      of the record while leaving the original intact.
-
-   .. method:: enqueue(record)
-
-      Enqueues the record on the queue using ``put_nowait()``; you may
-      want to override this if you want to use blocking behaviour, or a
-      timeout, or a customised queue implementation.
-
-
-
-.. queue-listener:
-
-QueueListener
-^^^^^^^^^^^^^
-
-.. versionadded:: 3.2
-
-The :class:`QueueListener` class, located in the :mod:`logging.handlers`
-module, supports receiving logging messages from a queue, such as those
-implemented in the :mod:`queue` or :mod:`multiprocessing` modules. The
-messages are received from a queue in an internal thread and passed, on
-the same thread, to one or more handlers for processing. While
-:class:`QueueListener` is not itself a handler, it is documented here
-because it works hand-in-hand with :class:`QueueHandler`.
-
-Along with the :class:`QueueHandler` class, :class:`QueueListener` can be used
-to let handlers do their work on a separate thread from the one which does the
-logging. This is important in Web applications and also other service
-applications where threads servicing clients need to respond as quickly as
-possible, while any potentially slow operations (such as sending an email via
-:class:`SMTPHandler`) are done on a separate thread.
-
-.. class:: QueueListener(queue, *handlers)
-
-   Returns a new instance of the :class:`QueueListener` class. The instance is
-   initialized with the queue to send messages to and a list of handlers which
-   will handle entries placed on the queue. The queue can be any queue-
-   like object; it's passed as-is to the :meth:`dequeue` method, which needs
-   to know how to get messages from it.
-
-   .. method:: dequeue(block)
-
-      Dequeues a record and return it, optionally blocking.
-
-      The base implementation uses ``get()``. You may want to override this
-      method if you want to use timeouts or work with custom queue
-      implementations.
-
-   .. method:: prepare(record)
-
-      Prepare a record for handling.
-
-      This implementation just returns the passed-in record. You may want to
-      override this method if you need to do any custom marshalling or
-      manipulation of the record before passing it to the handlers.
-
-   .. method:: handle(record)
-
-      Handle a record.
-
-      This just loops through the handlers offering them the record
-      to handle. The actual object passed to the handlers is that which
-      is returned from :meth:`prepare`.
-
-   .. method:: start()
-
-      Starts the listener.
-
-      This starts up a background thread to monitor the queue for
-      LogRecords to process.
-
-   .. method:: stop()
-
-      Stops the listener.
-
-      This asks the thread to terminate, and then waits for it to do so.
-      Note that if you don't call this before your application exits, there
-      may be some records still left on the queue, which won't be processed.
 
 
 .. seealso::

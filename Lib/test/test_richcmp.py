@@ -1,7 +1,7 @@
 # Tests for rich comparisons
 
 import unittest
-from test import support
+from test import test_support
 
 import operator
 
@@ -29,7 +29,7 @@ class Number:
         return self.x >= other
 
     def __cmp__(self, other):
-        raise support.TestFailed("Number.__cmp__() should not be called")
+        raise test_support.TestFailed, "Number.__cmp__() should not be called"
 
     def __repr__(self):
         return "Number(%r)" % (self.x, )
@@ -50,11 +50,11 @@ class Vector:
 
     __hash__ = None # Vectors cannot be hashed
 
-    def __bool__(self):
-        raise TypeError("Vectors cannot be used in Boolean contexts")
+    def __nonzero__(self):
+        raise TypeError, "Vectors cannot be used in Boolean contexts"
 
     def __cmp__(self, other):
-        raise support.TestFailed("Vector.__cmp__() should not be called")
+        raise test_support.TestFailed, "Vector.__cmp__() should not be called"
 
     def __repr__(self):
         return "Vector(%r)" % (self.data, )
@@ -81,7 +81,7 @@ class Vector:
         if isinstance(other, Vector):
             other = other.data
         if len(self.data) != len(other):
-            raise ValueError("Cannot compare vectors of different length")
+            raise ValueError, "Cannot compare vectors of different length"
         return other
 
 opmap = {
@@ -104,7 +104,7 @@ class VectorTest(unittest.TestCase):
             realres = op(a, b)
             # can't use assertEqual(realres, expres) here
             self.assertEqual(len(realres), len(expres))
-            for i in range(len(realres)):
+            for i in xrange(len(realres)):
                 # results are bool, so we can use "is" here
                 self.assertTrue(realres[i] is expres[i])
 
@@ -118,7 +118,7 @@ class VectorTest(unittest.TestCase):
         for opname in opmap:
             self.checkfail(ValueError, opname, a, b)
 
-        a = list(range(5))
+        a = range(5)
         b = 5 * [2]
         # try mixed arguments (but not (a, b) as that won't return a bool vector)
         args = [(a, Vector(b)), (Vector(a), b), (Vector(a), Vector(b))]
@@ -130,9 +130,9 @@ class VectorTest(unittest.TestCase):
             self.checkequal("gt", a, b, [False, False, False, True,  True ])
             self.checkequal("ge", a, b, [False, False, True,  True,  True ])
 
-            for ops in opmap.values():
+            for ops in opmap.itervalues():
                 for op in ops:
-                    # calls __bool__, which should fail
+                    # calls __nonzero__, which should fail
                     self.assertRaises(TypeError, bool, op(a, b))
 
 class NumberTest(unittest.TestCase):
@@ -141,15 +141,15 @@ class NumberTest(unittest.TestCase):
         # Check that comparisons involving Number objects
         # give the same results give as comparing the
         # corresponding ints
-        for a in range(3):
-            for b in range(3):
+        for a in xrange(3):
+            for b in xrange(3):
                 for typea in (int, Number):
                     for typeb in (int, Number):
                         if typea==typeb==int:
                             continue # the combination int, int is useless
                         ta = typea(a)
                         tb = typeb(b)
-                        for ops in opmap.values():
+                        for ops in opmap.itervalues():
                             for op in ops:
                                 realoutcome = op(a, b)
                                 testoutcome = op(ta, tb)
@@ -198,20 +198,22 @@ class MiscTest(unittest.TestCase):
             def __le__(self_, other): self.fail("This shouldn't happen")
             def __ge__(self_, other): self.fail("This shouldn't happen")
             def __ne__(self_, other): self.fail("This shouldn't happen")
+            def __cmp__(self_, other): raise RuntimeError, "expected"
         a = Misb()
         b = Misb()
         self.assertEqual(a<b, 0)
         self.assertEqual(a==b, 0)
         self.assertEqual(a>b, 0)
+        self.assertRaises(RuntimeError, cmp, a, b)
 
     def test_not(self):
-        # Check that exceptions in __bool__ are properly
+        # Check that exceptions in __nonzero__ are properly
         # propagated by the not operator
         import operator
         class Exc(Exception):
             pass
         class Bad:
-            def __bool__(self):
+            def __nonzero__(self):
                 raise Exc
 
         def do(bad):
@@ -222,7 +224,7 @@ class MiscTest(unittest.TestCase):
 
     def test_recursion(self):
         # Check that comparison for recursive objects fails gracefully
-        from collections import UserList
+        from UserList import UserList
         a = UserList()
         b = UserList()
         a.append(b)
@@ -262,16 +264,16 @@ class DictTest(unittest.TestCase):
         imag1a = {}
         for i in range(50):
             imag1a[random.randrange(100)*1j] = random.randrange(100)*1j
-        items = list(imag1a.items())
+        items = imag1a.items()
         random.shuffle(items)
         imag1b = {}
         for k, v in items:
             imag1b[k] = v
         imag2 = imag1b.copy()
         imag2[k] = v + 1.0
-        self.assertEqual(imag1a, imag1a)
-        self.assertEqual(imag1a, imag1b)
-        self.assertEqual(imag2, imag2)
+        self.assertTrue(imag1a == imag1a)
+        self.assertTrue(imag1a == imag1b)
+        self.assertTrue(imag2 == imag2)
         self.assertTrue(imag1a != imag2)
         for opname in ("lt", "le", "gt", "ge"):
             for op in opmap[opname]:
@@ -324,9 +326,13 @@ class ListTest(unittest.TestCase):
         for op in opmap["lt"]:
             self.assertIs(op(x, y), True)
 
-
 def test_main():
-    support.run_unittest(VectorTest, NumberTest, MiscTest, DictTest, ListTest)
+    test_support.run_unittest(VectorTest, NumberTest, MiscTest, ListTest)
+    with test_support.check_py3k_warnings(("dict inequality comparisons "
+                                             "not supported in 3.x",
+                                             DeprecationWarning)):
+        test_support.run_unittest(DictTest)
+
 
 if __name__ == "__main__":
     test_main()

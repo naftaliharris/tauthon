@@ -2,7 +2,7 @@ from ctypes import *
 import unittest, sys
 
 def callback_func(arg):
-    42 / arg
+    42 // arg
     raise ValueError(arg)
 
 if sys.platform == "win32":
@@ -17,8 +17,8 @@ if sys.platform == "win32":
             windll.kernel32.GetProcAddress.argtypes = c_void_p, c_char_p
             windll.kernel32.GetProcAddress.restype = c_void_p
 
-            hdll = windll.kernel32.LoadLibraryA(b"kernel32")
-            funcaddr = windll.kernel32.GetProcAddress(hdll, b"GetModuleHandleA")
+            hdll = windll.kernel32.LoadLibraryA("kernel32")
+            funcaddr = windll.kernel32.GetProcAddress(hdll, "GetModuleHandleA")
 
             self.assertEqual(call_function(funcaddr, (None,)),
                                  windll.kernel32.GetModuleHandleA(None))
@@ -37,9 +37,9 @@ class CallbackTracbackTestCase(unittest.TestCase):
 
     def capture_stderr(self, func, *args, **kw):
         # helper - call function 'func', and return the captured stderr
-        import io
+        import StringIO
         old_stderr = sys.stderr
-        logger = sys.stderr = io.StringIO()
+        logger = sys.stderr = StringIO.StringIO()
         try:
             func(*args, **kw)
         finally:
@@ -66,10 +66,10 @@ class CallbackTracbackTestCase(unittest.TestCase):
 
     def test_TypeErrorDivisionError(self):
         cb = CFUNCTYPE(c_int, c_char_p)(callback_func)
-        out = self.capture_stderr(cb, b"spam")
+        out = self.capture_stderr(cb, "spam")
         self.assertEqual(out.splitlines()[-1],
                              "TypeError: "
-                             "unsupported operand type(s) for /: 'int' and 'bytes'")
+                             "unsupported operand type(s) for //: 'int' and 'str'")
 
 if __name__ == '__main__':
     unittest.main()

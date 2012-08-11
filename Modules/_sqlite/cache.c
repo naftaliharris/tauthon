@@ -1,6 +1,6 @@
 /* cache .c - a LRU cache
  *
- * Copyright (C) 2004-2010 Gerhard HÃ¤ring <gh@ghaering.de>
+ * Copyright (C) 2004-2010 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -242,12 +242,12 @@ PyObject* pysqlite_cache_display(pysqlite_Cache* self, PyObject* args)
         if (!fmt_args) {
             return NULL;
         }
-        template = PyUnicode_FromString("%s <- %s ->%s\n");
+        template = PyString_FromString("%s <- %s ->%s\n");
         if (!template) {
             Py_DECREF(fmt_args);
             return NULL;
         }
-        display_str = PyUnicode_Format(template, fmt_args);
+        display_str = PyString_Format(template, fmt_args);
         Py_DECREF(template);
         Py_DECREF(fmt_args);
         if (!display_str) {
@@ -283,7 +283,7 @@ PyTypeObject pysqlite_NodeType = {
         0,                                              /* tp_print */
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_reserved */
+        0,                                              /* tp_compare */
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */
@@ -325,7 +325,7 @@ PyTypeObject pysqlite_CacheType = {
         0,                                              /* tp_print */
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_reserved */
+        0,                                              /* tp_compare */
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */

@@ -5,9 +5,9 @@ executing have not been removed.
 
 """
 import unittest
-from test.support import run_unittest, TESTFN, EnvironmentVarGuard
-from test.support import captured_stderr
-import builtins
+from test.test_support import run_unittest, TESTFN, EnvironmentVarGuard
+from test.test_support import captured_output
+import __builtin__
 import os
 import sys
 import re
@@ -24,13 +24,17 @@ if "site" in sys.modules:
 else:
     raise unittest.SkipTest("importation of site.py suppressed")
 
-if not os.path.isdir(site.USER_SITE):
+if site.ENABLE_USER_SITE and not os.path.isdir(site.USER_SITE):
     # need to add user site directory for tests
     os.makedirs(site.USER_SITE)
     site.addsitedir(site.USER_SITE)
 
 class HelperFunctionsTests(unittest.TestCase):
     """Tests for helper functions.
+
+    The setting of the encoding (set using sys.setdefaultencoding) used by
+    the Unicode implementation is not tested.
+
     """
 
     def setUp(self):
@@ -97,7 +101,7 @@ class HelperFunctionsTests(unittest.TestCase):
         pth_dir = os.path.abspath(pth_dir)
         pth_basename = pth_name + '.pth'
         pth_fn = os.path.join(pth_dir, pth_basename)
-        pth_file = open(pth_fn, 'w', encoding='utf-8')
+        pth_file = open(pth_fn, 'w')
         self.addCleanup(lambda: os.remove(pth_fn))
         pth_file.write(contents)
         pth_file.close()
@@ -106,43 +110,43 @@ class HelperFunctionsTests(unittest.TestCase):
     def test_addpackage_import_bad_syntax(self):
         # Issue 10642
         pth_dir, pth_fn = self.make_pth("import bad)syntax\n")
-        with captured_stderr() as err_out:
+        with captured_output("stderr") as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegex(err_out.getvalue(), "line 1")
-        self.assertRegex(err_out.getvalue(),
+        self.assertRegexpMatches(err_out.getvalue(), "line 1")
+        self.assertRegexpMatches(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: the previous two should be independent checks so that the
         # order doesn't matter.  The next three could be a single check
         # but my regex foo isn't good enough to write it.
-        self.assertRegex(err_out.getvalue(), 'Traceback')
-        self.assertRegex(err_out.getvalue(), r'import bad\)syntax')
-        self.assertRegex(err_out.getvalue(), 'SyntaxError')
+        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
+        self.assertRegexpMatches(err_out.getvalue(), r'import bad\)syntax')
+        self.assertRegexpMatches(err_out.getvalue(), 'SyntaxError')
 
     def test_addpackage_import_bad_exec(self):
         # Issue 10642
         pth_dir, pth_fn = self.make_pth("randompath\nimport nosuchmodule\n")
-        with captured_stderr() as err_out:
+        with captured_output("stderr") as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegex(err_out.getvalue(), "line 2")
-        self.assertRegex(err_out.getvalue(),
+        self.assertRegexpMatches(err_out.getvalue(), "line 2")
+        self.assertRegexpMatches(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: ditto previous XXX comment.
-        self.assertRegex(err_out.getvalue(), 'Traceback')
-        self.assertRegex(err_out.getvalue(), 'ImportError')
+        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
+        self.assertRegexpMatches(err_out.getvalue(), 'ImportError')
 
     @unittest.skipIf(sys.platform == "win32", "Windows does not raise an "
                       "error for file paths containing null characters")
     def test_addpackage_import_bad_pth_file(self):
         # Issue 5258
         pth_dir, pth_fn = self.make_pth("abc\x00def\n")
-        with captured_stderr() as err_out:
+        with captured_output("stderr") as err_out:
             site.addpackage(pth_dir, pth_fn, set())
-        self.assertRegex(err_out.getvalue(), "line 1")
-        self.assertRegex(err_out.getvalue(),
+        self.assertRegexpMatches(err_out.getvalue(), "line 1")
+        self.assertRegexpMatches(err_out.getvalue(),
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: ditto previous XXX comment.
-        self.assertRegex(err_out.getvalue(), 'Traceback')
-        self.assertRegex(err_out.getvalue(), 'TypeError')
+        self.assertRegexpMatches(err_out.getvalue(), 'Traceback')
+        self.assertRegexpMatches(err_out.getvalue(), 'TypeError')
 
     def test_addsitedir(self):
         # Same tests for test_addpackage since addsitedir() essentially just
@@ -157,6 +161,8 @@ class HelperFunctionsTests(unittest.TestCase):
         finally:
             pth_file.cleanup()
 
+    @unittest.skipUnless(site.ENABLE_USER_SITE, "requires access to PEP 370 "
+                          "user-site (site.ENABLE_USER_SITE)")
     def test_s_option(self):
         usersite = site.USER_SITE
         self.assertIn(usersite, sys.path)
@@ -165,7 +171,8 @@ class HelperFunctionsTests(unittest.TestCase):
         rc = subprocess.call([sys.executable, '-c',
             'import sys; sys.exit(%r in sys.path)' % usersite],
             env=env)
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, 1, "%r is not in sys.path (sys.exit returned %r)"
+                % (usersite, rc))
 
         env = os.environ.copy()
         rc = subprocess.call([sys.executable, '-s', '-c',
@@ -221,7 +228,19 @@ class HelperFunctionsTests(unittest.TestCase):
             self.assertEqual(len(dirs), 1)
             wanted = os.path.join('xoxo', 'Lib', 'site-packages')
             self.assertEqual(dirs[0], wanted)
+        elif (sys.platform == "darwin" and
+            sysconfig.get_config_var("PYTHONFRAMEWORK")):
+            # OS X framework builds
+            site.PREFIXES = ['Python.framework']
+            dirs = site.getsitepackages()
+            self.assertEqual(len(dirs), 3)
+            wanted = os.path.join('/Library',
+                                  sysconfig.get_config_var("PYTHONFRAMEWORK"),
+                                  sys.version[:3],
+                                  'site-packages')
+            self.assertEqual(dirs[2], wanted)
         elif os.sep == '/':
+            # OS X non-framwework builds, Linux, FreeBSD, etc
             self.assertEqual(len(dirs), 2)
             wanted = os.path.join('xoxo', 'lib', 'python' + sys.version[:3],
                                   'site-packages')
@@ -229,20 +248,11 @@ class HelperFunctionsTests(unittest.TestCase):
             wanted = os.path.join('xoxo', 'lib', 'site-python')
             self.assertEqual(dirs[1], wanted)
         else:
+            # other platforms
             self.assertEqual(len(dirs), 2)
             self.assertEqual(dirs[0], 'xoxo')
             wanted = os.path.join('xoxo', 'lib', 'site-packages')
             self.assertEqual(dirs[1], wanted)
-
-        # let's try the specific Apple location
-        if (sys.platform == "darwin" and
-            sysconfig.get_config_var("PYTHONFRAMEWORK")):
-            site.PREFIXES = ['Python.framework']
-            dirs = site.getsitepackages()
-            self.assertEqual(len(dirs), 3)
-            wanted = os.path.join('/Library', 'Python', sys.version[:3],
-                                  'site-packages')
-            self.assertEqual(dirs[2], wanted)
 
 class PthFile(object):
     """Helper class for handling testing of .pth files"""
@@ -272,11 +282,11 @@ class PthFile(object):
         """
         FILE = open(self.file_path, 'w')
         try:
-            print("#import @bad module name", file=FILE)
-            print("\n", file=FILE)
-            print("import %s" % self.imported, file=FILE)
-            print(self.good_dirname, file=FILE)
-            print(self.bad_dirname, file=FILE)
+            print>>FILE, "#import @bad module name"
+            print>>FILE, "\n"
+            print>>FILE, "import %s" % self.imported
+            print>>FILE, self.good_dirname
+            print>>FILE, self.bad_dirname
         finally:
             FILE.close()
         os.mkdir(self.good_dir_path)
@@ -310,43 +320,19 @@ class ImportSideEffectTests(unittest.TestCase):
         """Restore sys.path"""
         sys.path[:] = self.sys_path
 
-    def test_abs_paths(self):
-        # Make sure all imported modules have their __file__ and __cached__
-        # attributes as absolute paths.  Arranging to put the Lib directory on
-        # PYTHONPATH would cause the os module to have a relative path for
-        # __file__ if abs_paths() does not get run.  sys and builtins (the
-        # only other modules imported before site.py runs) do not have
-        # __file__ or __cached__ because they are built-in.
-        parent = os.path.relpath(os.path.dirname(os.__file__))
-        env = os.environ.copy()
-        env['PYTHONPATH'] = parent
-        code = ('import os, sys',
-            # use ASCII to avoid locale issues with non-ASCII directories
-            'os_file = os.__file__.encode("ascii", "backslashreplace")',
-            r'sys.stdout.buffer.write(os_file + b"\n")',
-            'os_cached = os.__cached__.encode("ascii", "backslashreplace")',
-            r'sys.stdout.buffer.write(os_cached + b"\n")')
-        command = '\n'.join(code)
-        # First, prove that with -S (no 'import site'), the paths are
-        # relative.
-        proc = subprocess.Popen([sys.executable, '-S', '-c', command],
-                                env=env,
-                                stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-
-        self.assertEqual(proc.returncode, 0)
-        os__file__, os__cached__ = stdout.splitlines()[:2]
-        self.assertFalse(os.path.isabs(os__file__))
-        self.assertFalse(os.path.isabs(os__cached__))
-        # Now, with 'import site', it works.
-        proc = subprocess.Popen([sys.executable, '-c', command],
-                                env=env,
-                                stdout=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        self.assertEqual(proc.returncode, 0)
-        os__file__, os__cached__ = stdout.splitlines()[:2]
-        self.assertTrue(os.path.isabs(os__file__))
-        self.assertTrue(os.path.isabs(os__cached__))
+    def test_abs__file__(self):
+        # Make sure all imported modules have their __file__ attribute
+        # as an absolute path.
+        # Handled by abs__file__()
+        site.abs__file__()
+        for module in (sys, os, __builtin__):
+            try:
+                self.assertTrue(os.path.isabs(module.__file__), repr(module))
+            except AttributeError:
+                continue
+        # We could try everything in sys.modules; however, when regrtest.py
+        # runs something like test_frozen before test_site, then we will
+        # be testing things loaded *after* test_site did path normalization
 
     def test_no_duplicate_paths(self):
         # No duplicate paths should exist in sys.path
@@ -364,28 +350,32 @@ class ImportSideEffectTests(unittest.TestCase):
         pass
 
     def test_setting_quit(self):
-        # 'quit' and 'exit' should be injected into builtins
-        self.assertTrue(hasattr(builtins, "quit"))
-        self.assertTrue(hasattr(builtins, "exit"))
+        # 'quit' and 'exit' should be injected into __builtin__
+        self.assertTrue(hasattr(__builtin__, "quit"))
+        self.assertTrue(hasattr(__builtin__, "exit"))
 
     def test_setting_copyright(self):
-        # 'copyright' and 'credits' should be in builtins
-        self.assertTrue(hasattr(builtins, "copyright"))
-        self.assertTrue(hasattr(builtins, "credits"))
+        # 'copyright' and 'credits' should be in __builtin__
+        self.assertTrue(hasattr(__builtin__, "copyright"))
+        self.assertTrue(hasattr(__builtin__, "credits"))
 
     def test_setting_help(self):
-        # 'help' should be set in builtins
-        self.assertTrue(hasattr(builtins, "help"))
+        # 'help' should be set in __builtin__
+        self.assertTrue(hasattr(__builtin__, "help"))
 
     def test_aliasing_mbcs(self):
         if sys.platform == "win32":
             import locale
             if locale.getdefaultlocale()[1].startswith('cp'):
-                for value in encodings.aliases.aliases.values():
+                for value in encodings.aliases.aliases.itervalues():
                     if value == "mbcs":
                         break
                 else:
                     self.fail("did not alias mbcs")
+
+    def test_setdefaultencoding_removed(self):
+        # Make sure sys.setdefaultencoding is gone
+        self.assertTrue(not hasattr(sys, "setdefaultencoding"))
 
     def test_sitecustomize_executed(self):
         # If sitecustomize is available, it should have been imported.

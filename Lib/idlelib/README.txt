@@ -45,10 +45,13 @@ and is cross-platform, working on Unix, Mac, and Windows.
 IDLE accepts command line arguments.  Try idle -h to see the options.
 
 
-If you find bugs or have suggestions or patches, let us know about
-them by using the Python issue tracker:
+If you find bugs or have suggestions, let us know about them by using the
+Python Bug Tracker:
 
-http://bugs.python.org
+http://sourceforge.net/projects/python
+
+Patches are always appreciated at the Python Patch Tracker, and change
+requests should be posted to the RFE Tracker.
 
 For further details and links, read the Help files and check the IDLE home
 page at

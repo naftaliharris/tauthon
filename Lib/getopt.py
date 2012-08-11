@@ -19,7 +19,7 @@ option involved with the exception.
 # Gerrit Holl <gerrit@nl.linux.org> moved the string-based exceptions
 # to class-based exceptions.
 #
-# Peter Ãstrand <astrand@lysator.liu.se> added gnu_getopt().
+# Peter Astrand <astrand@lysator.liu.se> added gnu_getopt().
 #
 # TODO for gnu_getopt():
 #
@@ -207,4 +207,4 @@ def short_has_arg(opt, shortopts):
 
 if __name__ == '__main__':
     import sys
-    print(getopt(sys.argv[1:], "a:b", ["alpha=", "beta"]))
+    print getopt(sys.argv[1:], "a:b", ["alpha=", "beta"])

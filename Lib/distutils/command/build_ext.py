@@ -4,9 +4,13 @@ Implements the Distutils 'build_ext' command, for building extension
 modules (currently limited to C extensions, should accommodate C++
 extensions ASAP)."""
 
+# This module should be kept compatible with Python 2.1.
+
 __revision__ = "$Id$"
 
-import sys, os, re
+import sys, os, string, re
+from types import *
+from site import USER_BASE, USER_SITE
 from distutils.core import Command
 from distutils.errors import *
 from distutils.sysconfig import customize_compiler, get_python_version
@@ -14,14 +18,6 @@ from distutils.dep_util import newer_group
 from distutils.extension import Extension
 from distutils.util import get_platform
 from distutils import log
-
-# this keeps compatibility from 2.3 to 2.5
-if sys.version < "2.6":
-    USER_BASE = None
-    HAS_USER_SITE = False
-else:
-    from site import USER_BASE
-    HAS_USER_SITE = True
 
 if os.name == 'nt':
     from distutils.msvccompiler import get_build_version
@@ -38,7 +34,7 @@ def show_compilers ():
     show_compilers()
 
 
-class build_ext(Command):
+class build_ext (Command):
 
     description = "build C/C++ extensions (compile/link to build directory)"
 
@@ -98,21 +94,18 @@ class build_ext(Command):
          "list of SWIG command line options"),
         ('swig=', None,
          "path to the SWIG executable"),
+        ('user', None,
+         "add user include, library and rpath"),
         ]
 
-    boolean_options = ['inplace', 'debug', 'force', 'swig-cpp']
-
-    if HAS_USER_SITE:
-        user_options.append(('user', None,
-                             "add user include, library and rpath"))
-        boolean_options.append('user')
+    boolean_options = ['inplace', 'debug', 'force', 'swig-cpp', 'user']
 
     help_options = [
         ('help-compiler', None,
          "list available compilers", show_compilers),
         ]
 
-    def initialize_options(self):
+    def initialize_options (self):
         self.extensions = None
         self.build_lib = None
         self.plat_name = None
@@ -167,8 +160,7 @@ class build_ext(Command):
         if plat_py_include != py_include:
             self.include_dirs.append(plat_py_include)
 
-        if isinstance(self.libraries, str):
-            self.libraries = [self.libraries]
+        self.ensure_string_list('libraries')
 
         # Life is easier if we're not forever checking for None, so
         # simplify these options to empty lists if unset
@@ -176,13 +168,13 @@ class build_ext(Command):
             self.libraries = []
         if self.library_dirs is None:
             self.library_dirs = []
-        elif isinstance(self.library_dirs, str):
-            self.library_dirs = self.library_dirs.split(os.pathsep)
+        elif type(self.library_dirs) is StringType:
+            self.library_dirs = string.split(self.library_dirs, os.pathsep)
 
         if self.rpath is None:
             self.rpath = []
-        elif isinstance(self.rpath, str):
-            self.rpath = self.rpath.split(os.pathsep)
+        elif type(self.rpath) is StringType:
+            self.rpath = string.split(self.rpath, os.pathsep)
 
         # for extensions under windows use different directories
         # for Release and Debug builds.
@@ -259,7 +251,7 @@ class build_ext(Command):
 
         if self.define:
             defines = self.define.split(',')
-            self.define = [(symbol, '1') for symbol in defines]
+            self.define = map(lambda symbol: (symbol, '1'), defines)
 
         # The option for macros to undefine is also a string from the
         # option parsing, but has to be a list.  Multiple symbols can also
@@ -357,8 +349,8 @@ class build_ext(Command):
         just returns otherwise.
         """
         if not isinstance(extensions, list):
-            raise DistutilsSetupError(
-                  "'ext_modules' option must be a list of Extension instances")
+            raise DistutilsSetupError, \
+                  "'ext_modules' option must be a list of Extension instances"
 
         for i, ext in enumerate(extensions):
             if isinstance(ext, Extension):
@@ -366,8 +358,8 @@ class build_ext(Command):
                                         # by Extension constructor)
 
             if not isinstance(ext, tuple) or len(ext) != 2:
-                raise DistutilsSetupError(
-                       "each element of 'ext_modules' option must be an "
+                raise DistutilsSetupError, \
+                      ("each element of 'ext_modules' option must be an "
                        "Extension instance or 2-tuple")
 
             ext_name, build_info = ext
@@ -378,13 +370,13 @@ class build_ext(Command):
 
             if not (isinstance(ext_name, str) and
                     extension_name_re.match(ext_name)):
-                raise DistutilsSetupError(
-                       "first element of each tuple in 'ext_modules' "
+                raise DistutilsSetupError, \
+                      ("first element of each tuple in 'ext_modules' "
                        "must be the extension name (a string)")
 
             if not isinstance(build_info, dict):
-                raise DistutilsSetupError(
-                       "second element of each tuple in 'ext_modules' "
+                raise DistutilsSetupError, \
+                      ("second element of each tuple in 'ext_modules' "
                        "must be a dictionary (build info)")
 
             # OK, the (ext_name, build_info) dict is type-safe: convert it
@@ -414,9 +406,9 @@ class build_ext(Command):
                 ext.undef_macros = []
                 for macro in macros:
                     if not (isinstance(macro, tuple) and len(macro) in (1, 2)):
-                        raise DistutilsSetupError(
-                              "'macros' element of build info dict "
-                              "must be 1- or 2-tuple")
+                        raise DistutilsSetupError, \
+                              ("'macros' element of build info dict "
+                               "must be 1- or 2-tuple")
                     if len(macro) == 1:
                         ext.undef_macros.append(macro[0])
                     elif len(macro) == 2:
@@ -431,6 +423,7 @@ class build_ext(Command):
         # Wouldn't it be neat if we knew the names of header files too...
         for ext in self.extensions:
             filenames.extend(ext.sources)
+
         return filenames
 
     def get_outputs(self):
@@ -452,21 +445,15 @@ class build_ext(Command):
         self.check_extensions_list(self.extensions)
 
         for ext in self.extensions:
-            try:
-                self.build_extension(ext)
-            except (CCompilerError, DistutilsError, CompileError) as e:
-                if not ext.optional:
-                    raise
-                self.warn('building extension "%s" failed: %s' %
-                          (ext.name, e))
+            self.build_extension(ext)
 
     def build_extension(self, ext):
         sources = ext.sources
-        if sources is None or not isinstance(sources, (list, tuple)):
-            raise DistutilsSetupError(
-                  "in 'ext_modules' option (extension '%s'), "
-                  "'sources' must be present and must be "
-                  "a list of source filenames" % ext.name)
+        if sources is None or type(sources) not in (ListType, TupleType):
+            raise DistutilsSetupError, \
+                  ("in 'ext_modules' option (extension '%s'), " +
+                   "'sources' must be present and must be " +
+                   "a list of source filenames") % ext.name
         sources = list(sources)
 
         ext_path = self.get_ext_fullpath(ext.name)
@@ -542,12 +529,15 @@ class build_ext(Command):
             build_temp=self.build_temp,
             target_lang=language)
 
-    def swig_sources(self, sources, extension):
+
+    def swig_sources (self, sources, extension):
+
         """Walk the list of source files in 'sources', looking for SWIG
         interface (.i) files.  Run SWIG on all that are found, and
         return a modified 'sources' list with SWIG source files replaced
         by the generated C (or C++) files.
         """
+
         new_sources = []
         swig_sources = []
         swig_targets = {}
@@ -596,14 +586,18 @@ class build_ext(Command):
 
         return new_sources
 
-    def find_swig(self):
+    # swig_sources ()
+
+    def find_swig (self):
         """Return the name of the SWIG executable.  On Unix, this is
         just "swig" -- it should be in the PATH.  Tries a bit harder on
         Windows.
         """
+
         if os.name == "posix":
             return "swig"
         elif os.name == "nt":
+
             # Look for SWIG in its standard installation directory on
             # Windows (or so I presume!).  If we find it there, great;
             # if not, act like Unix and assume it's in the PATH.
@@ -613,13 +607,17 @@ class build_ext(Command):
                     return fn
             else:
                 return "swig.exe"
+
         elif os.name == "os2":
             # assume swig available in the PATH.
             return "swig.exe"
+
         else:
-            raise DistutilsPlatformError(
-                  "I don't know how to find (much less run) SWIG "
-                  "on platform '%s'" % os.name)
+            raise DistutilsPlatformError, \
+                  ("I don't know how to find (much less run) SWIG "
+                   "on platform '%s'") % os.name
+
+    # find_swig ()
 
     # -- Name generators -----------------------------------------------
     # (extension names, filenames, whatever)
@@ -629,9 +627,14 @@ class build_ext(Command):
         The file is located in `build_lib` or directly in the package
         (inplace option).
         """
+        # makes sure the extension name is only using dots
+        all_dots = string.maketrans('/'+os.sep, '..')
+        ext_name = ext_name.translate(all_dots)
+
         fullname = self.get_ext_fullname(ext_name)
         modpath = fullname.split('.')
-        filename = self.get_ext_filename(modpath[-1])
+        filename = self.get_ext_filename(ext_name)
+        filename = os.path.split(filename)[-1]
 
         if not self.inplace:
             # no further work needed
@@ -665,7 +668,7 @@ class build_ext(Command):
         "foo\bar.pyd").
         """
         from distutils.sysconfig import get_config_var
-        ext_path = ext_name.split('.')
+        ext_path = string.split(ext_name, '.')
         # OS/2 has an 8 character module (extension) limit :-(
         if os.name == "os2":
             ext_path[len(ext_path) - 1] = ext_path[len(ext_path) - 1][:8]
@@ -675,18 +678,18 @@ class build_ext(Command):
             return os.path.join(*ext_path) + '_d' + so_ext
         return os.path.join(*ext_path) + so_ext
 
-    def get_export_symbols(self, ext):
+    def get_export_symbols (self, ext):
         """Return the list of symbols that a shared extension has to
         export.  This either uses 'ext.export_symbols' or, if it's not
-        provided, "PyInit_" + module_name.  Only relevant on Windows, where
-        the .pyd file (DLL) must export the module "PyInit_" function.
+        provided, "init" + module_name.  Only relevant on Windows, where
+        the .pyd file (DLL) must export the module "init" function.
         """
-        initfunc_name = "PyInit_" + ext.name.split('.')[-1]
+        initfunc_name = "init" + ext.name.split('.')[-1]
         if initfunc_name not in ext.export_symbols:
             ext.export_symbols.append(initfunc_name)
         return ext.export_symbols
 
-    def get_libraries(self, ext):
+    def get_libraries (self, ext):
         """Return the list of libraries to link against when building a
         shared extension.  On most platforms, this is just 'ext.libraries';
         on Windows and OS/2, we add the Python library (eg. python20.dll).
@@ -745,6 +748,7 @@ class build_ext(Command):
             # don't extend ext.libraries, it may be shared with other
             # extensions, it is a reference to the original list
             return ext.libraries + [pythonlib, "m"] + extra
+
         elif sys.platform == 'darwin':
             # Don't use the default code below
             return ext.libraries
@@ -754,9 +758,11 @@ class build_ext(Command):
         else:
             from distutils import sysconfig
             if sysconfig.get_config_var('Py_ENABLE_SHARED'):
-                pythonlib = 'python{}.{}{}'.format(
-                    sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff,
-                    sys.abiflags)
+                template = "python%d.%d"
+                pythonlib = (template %
+                             (sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff))
                 return ext.libraries + [pythonlib]
             else:
                 return ext.libraries
+
+# class build_ext

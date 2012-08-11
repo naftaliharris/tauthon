@@ -19,9 +19,9 @@ xmlreader -- Base classes and constants which define the SAX 2 API for
 expatreader -- Driver that allows use of the Expat parser with SAX.
 """
 
-from .xmlreader import InputSource
-from .handler import ContentHandler, ErrorHandler
-from ._exceptions import SAXException, SAXNotRecognizedException, \
+from xmlreader import InputSource
+from handler import ContentHandler, ErrorHandler
+from _exceptions import SAXException, SAXNotRecognizedException, \
                         SAXParseException, SAXNotSupportedException, \
                         SAXReaderNotAvailable
 
@@ -33,7 +33,10 @@ def parse(source, handler, errorHandler=ErrorHandler()):
     parser.parse(source)
 
 def parseString(string, handler, errorHandler=ErrorHandler()):
-    from io import BytesIO
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
 
     if errorHandler is None:
         errorHandler = ErrorHandler()
@@ -42,7 +45,7 @@ def parseString(string, handler, errorHandler=ErrorHandler()):
     parser.setErrorHandler(errorHandler)
 
     inpsrc = InputSource()
-    inpsrc.setByteStream(BytesIO(string))
+    inpsrc.setByteStream(StringIO(string))
     parser.parse(inpsrc)
 
 # this is the parser list used by the make_parser function if no
@@ -76,7 +79,7 @@ def make_parser(parser_list = []):
     for parser_name in parser_list + default_parser_list:
         try:
             return _create_parser(parser_name)
-        except ImportError as e:
+        except ImportError,e:
             import sys
             if parser_name in sys.modules:
                 # The parser module was found, but importing it

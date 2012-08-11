@@ -7,6 +7,7 @@ Data Structures
 This chapter describes some things you've learned about already in more detail,
 and adds some new things as well.
 
+
 .. _tut-morelists:
 
 More on Lists
@@ -81,7 +82,7 @@ objects:
 An example that uses most of the list methods::
 
    >>> a = [66.25, 333, 333, 1, 1234.5]
-   >>> print(a.count(333), a.count(66.25), a.count('x'))
+   >>> print a.count(333), a.count(66.25), a.count('x')
    2 1 0
    >>> a.insert(2, -1)
    >>> a.append(333)
@@ -158,112 +159,215 @@ have fast appends and pops from both ends.  For example::
    deque(['Michael', 'Terry', 'Graham'])
 
 
-.. _tut-listcomps:
+.. _tut-functional:
+
+Functional Programming Tools
+----------------------------
+
+There are three built-in functions that are very useful when used with lists:
+:func:`filter`, :func:`map`, and :func:`reduce`.
+
+``filter(function, sequence)`` returns a sequence consisting of those items from
+the sequence for which ``function(item)`` is true. If *sequence* is a
+:class:`string` or :class:`tuple`, the result will be of the same type;
+otherwise, it is always a :class:`list`. For example, to compute a sequence of
+numbers not divisible by 2 and 3::
+
+   >>> def f(x): return x % 2 != 0 and x % 3 != 0
+   ...
+   >>> filter(f, range(2, 25))
+   [5, 7, 11, 13, 17, 19, 23]
+
+``map(function, sequence)`` calls ``function(item)`` for each of the sequence's
+items and returns a list of the return values.  For example, to compute some
+cubes::
+
+   >>> def cube(x): return x*x*x
+   ...
+   >>> map(cube, range(1, 11))
+   [1, 8, 27, 64, 125, 216, 343, 512, 729, 1000]
+
+More than one sequence may be passed; the function must then have as many
+arguments as there are sequences and is called with the corresponding item from
+each sequence (or ``None`` if some sequence is shorter than another).  For
+example::
+
+   >>> seq = range(8)
+   >>> def add(x, y): return x+y
+   ...
+   >>> map(add, seq, seq)
+   [0, 2, 4, 6, 8, 10, 12, 14]
+
+``reduce(function, sequence)`` returns a single value constructed by calling the
+binary function *function* on the first two items of the sequence, then on the
+result and the next item, and so on.  For example, to compute the sum of the
+numbers 1 through 10::
+
+   >>> def add(x,y): return x+y
+   ...
+   >>> reduce(add, range(1, 11))
+   55
+
+If there's only one item in the sequence, its value is returned; if the sequence
+is empty, an exception is raised.
+
+A third argument can be passed to indicate the starting value.  In this case the
+starting value is returned for an empty sequence, and the function is first
+applied to the starting value and the first sequence item, then to the result
+and the next item, and so on.  For example, ::
+
+   >>> def sum(seq):
+   ...     def add(x,y): return x+y
+   ...     return reduce(add, seq, 0)
+   ...
+   >>> sum(range(1, 11))
+   55
+   >>> sum([])
+   0
+
+Don't use this example's definition of :func:`sum`: since summing numbers is
+such a common need, a built-in function ``sum(sequence)`` is already provided,
+and works exactly like this.
+
+.. versionadded:: 2.3
+
 
 List Comprehensions
 -------------------
 
-List comprehensions provide a concise way to create lists from sequences.
-Common applications are to make lists where each element is the result of
-some operations applied to each member of the sequence, or to create a
-subsequence of those elements that satisfy a certain condition.
+List comprehensions provide a concise way to create lists.
+Common applications are to make new lists where each element is the result of
+some operations applied to each member of another sequence or iterable, or to
+create a subsequence of those elements that satisfy a certain condition.
+
+For example, assume we want to create a list of squares, like::
+
+   >>> squares = []
+   >>> for x in range(10):
+   ...     squares.append(x**2)
+   ...
+   >>> squares
+   [0, 1, 4, 9, 16, 25, 36, 49, 64, 81]
+
+We can obtain the same result with::
+
+   squares = [x**2 for x in range(10)]
+
+This is also equivalent to ``squares = map(lambda x: x**2, range(10))``,
+but it's more concise and readable.
 
 A list comprehension consists of brackets containing an expression followed
 by a :keyword:`for` clause, then zero or more :keyword:`for` or :keyword:`if`
-clauses.  The result will be a list resulting from evaluating the expression in
-the context of the :keyword:`for` and :keyword:`if` clauses which follow it.  If
-the expression would evaluate to a tuple, it must be parenthesized.
+clauses.  The result will be a new list resulting from evaluating the expression
+in the context of the :keyword:`for` and :keyword:`if` clauses which follow it.
+For example, this listcomp combines the elements of two lists if they are not
+equal::
 
-Here we take a list of numbers and return a list of three times each number::
+   >>> [(x, y) for x in [1,2,3] for y in [3,1,4] if x != y]
+   [(1, 3), (1, 4), (2, 3), (2, 1), (2, 4), (3, 1), (3, 4)]
 
-   >>> vec = [2, 4, 6]
-   >>> [3*x for x in vec]
-   [6, 12, 18]
+and it's equivalent to:
 
-Now we get a little fancier::
+   >>> combs = []
+   >>> for x in [1,2,3]:
+   ...     for y in [3,1,4]:
+   ...         if x != y:
+   ...             combs.append((x, y))
+   ...
+   >>> combs
+   [(1, 3), (1, 4), (2, 3), (2, 1), (2, 4), (3, 1), (3, 4)]
 
-   >>> [[x, x**2] for x in vec]
-   [[2, 4], [4, 16], [6, 36]]
+Note how the order of the :keyword:`for` and :keyword:`if` statements is the
+same in both these snippets.
 
-Here we apply a method call to each item in a sequence::
+If the expression is a tuple (e.g. the ``(x, y)`` in the previous example),
+it must be parenthesized. ::
 
+   >>> vec = [-4, -2, 0, 2, 4]
+   >>> # create a new list with the values doubled
+   >>> [x*2 for x in vec]
+   [-8, -4, 0, 4, 8]
+   >>> # filter the list to exclude negative numbers
+   >>> [x for x in vec if x >= 0]
+   [0, 2, 4]
+   >>> # apply a function to all the elements
+   >>> [abs(x) for x in vec]
+   [4, 2, 0, 2, 4]
+   >>> # call a method on each element
    >>> freshfruit = ['  banana', '  loganberry ', 'passion fruit  ']
    >>> [weapon.strip() for weapon in freshfruit]
    ['banana', 'loganberry', 'passion fruit']
-
-Using the :keyword:`if` clause we can filter the stream::
-
-   >>> [3*x for x in vec if x > 3]
-   [12, 18]
-   >>> [3*x for x in vec if x < 2]
-   []
-
-Tuples can often be created without their parentheses, but not here::
-
-   >>> [x, x**2 for x in vec]  # error - parens required for tuples
-     File "<stdin>", line 1, in ?
-       [x, x**2 for x in vec]
+   >>> # create a list of 2-tuples like (number, square)
+   >>> [(x, x**2) for x in range(6)]
+   [(0, 0), (1, 1), (2, 4), (3, 9), (4, 16), (5, 25)]
+   >>> # the tuple must be parenthesized, otherwise an error is raised
+   >>> [x, x**2 for x in range(6)]
+     File "<stdin>", line 1
+       [x, x**2 for x in range(6)]
                   ^
    SyntaxError: invalid syntax
-   >>> [(x, x**2) for x in vec]
-   [(2, 4), (4, 16), (6, 36)]
+   >>> # flatten a list using a listcomp with two 'for'
+   >>> vec = [[1,2,3], [4,5,6], [7,8,9]]
+   >>> [num for elem in vec for num in elem]
+   [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-Here are some nested for loops and other fancy behavior::
+List comprehensions can contain complex expressions and nested functions::
 
-   >>> vec1 = [2, 4, 6]
-   >>> vec2 = [4, 3, -9]
-   >>> [x*y for x in vec1 for y in vec2]
-   [8, 6, -18, 16, 12, -36, 24, 18, -54]
-   >>> [x+y for x in vec1 for y in vec2]
-   [6, 5, -7, 8, 7, -5, 10, 9, -3]
-   >>> [vec1[i]*vec2[i] for i in range(len(vec1))]
-   [8, 12, -54]
-
-List comprehensions can be applied to complex expressions and nested functions::
-
-   >>> [str(round(355/113, i)) for i in range(1, 6)]
+   >>> from math import pi
+   >>> [str(round(pi, i)) for i in range(1, 6)]
    ['3.1', '3.14', '3.142', '3.1416', '3.14159']
 
 
 Nested List Comprehensions
---------------------------
+''''''''''''''''''''''''''
 
-If you've got the stomach for it, list comprehensions can be nested. They are a
-powerful tool but -- like all powerful tools -- they need to be used carefully,
-if at all.
+The initial expression in a list comprehension can be any arbitrary expression,
+including another list comprehension.
 
-Consider the following example of a 3x3 matrix held as a list containing three
-lists, one list per row::
+Consider the following example of a 3x4 matrix implemented as a list of
+3 lists of length 4::
 
-    >>> mat = [
-    ...        [1, 2, 3],
-    ...        [4, 5, 6],
-    ...        [7, 8, 9],
-    ...       ]
+   >>> matrix = [
+   ...     [1, 2, 3, 4],
+   ...     [5, 6, 7, 8],
+   ...     [9, 10, 11, 12],
+   ... ]
 
-Now, if you wanted to swap rows and columns, you could use a list
-comprehension::
+The following list comprehension will transpose rows and columns::
 
-    >>> print([[row[i] for row in mat] for i in [0, 1, 2]])
-    [[1, 4, 7], [2, 5, 8], [3, 6, 9]]
+   >>> [[row[i] for row in matrix] for i in range(4)]
+   [[1, 5, 9], [2, 6, 10], [3, 7, 11], [4, 8, 12]]
 
-Special care has to be taken for the *nested* list comprehension:
+As we saw in the previous section, the nested listcomp is evaluated in
+the context of the :keyword:`for` that follows it, so this example is
+equivalent to::
 
-    To avoid apprehension when nesting list comprehensions, read from right to
-    left.
+   >>> transposed = []
+   >>> for i in range(4):
+   ...     transposed.append([row[i] for row in matrix])
+   ...
+   >>> transposed
+   [[1, 5, 9], [2, 6, 10], [3, 7, 11], [4, 8, 12]]
 
-A more verbose version of this snippet shows the flow explicitly::
+which, in turn, is the same as::
 
-    for i in [0, 1, 2]:
-        for row in mat:
-            print(row[i], end="")
-        print()
+   >>> transposed = []
+   >>> for i in range(4):
+   ...     # the following 3 lines implement the nested listcomp
+   ...     transposed_row = []
+   ...     for row in matrix:
+   ...         transposed_row.append(row[i])
+   ...     transposed.append(transposed_row)
+   ...
+   >>> transposed
+   [[1, 5, 9], [2, 6, 10], [3, 7, 11], [4, 8, 12]]
 
-In real world, you should prefer built-in functions to complex flow statements.
+
+In the real world, you should prefer built-in functions to complex flow statements.
 The :func:`zip` function would do a great job for this use case::
 
-    >>> list(zip(*mat))
-    [(1, 4, 7), (2, 5, 8), (3, 6, 9)]
+   >>> zip(*matrix)
+   [(1, 5, 9), (2, 6, 10), (3, 7, 11), (4, 8, 12)]
 
 See :ref:`tut-unpacking-arguments` for details on the asterisk in this line.
 
@@ -319,17 +423,31 @@ A tuple consists of a number of values separated by commas, for instance::
    ... u = t, (1, 2, 3, 4, 5)
    >>> u
    ((12345, 54321, 'hello!'), (1, 2, 3, 4, 5))
+   >>> # Tuples are immutable:
+   ... t[0] = 88888
+   Traceback (most recent call last):
+     File "<stdin>", line 1, in <module>
+   TypeError: 'tuple' object does not support item assignment
+   >>> # but they can contain mutable objects:
+   ... v = ([1, 2, 3], [3, 2, 1])
+   >>> v
+   ([1, 2, 3], [3, 2, 1])
+
 
 As you see, on output tuples are always enclosed in parentheses, so that nested
 tuples are interpreted correctly; they may be input with or without surrounding
 parentheses, although often parentheses are necessary anyway (if the tuple is
-part of a larger expression).
+part of a larger expression).  It is not possible to assign to the individual
+items of a tuple, however it is possible to create tuples which contain mutable
+objects, such as lists.
 
-Tuples have many uses.  For example: (x, y) coordinate pairs, employee records
-from a database, etc.  Tuples, like strings, are immutable: it is not possible
-to assign to the individual items of a tuple (you can simulate much of the same
-effect with slicing and concatenation, though).  It is also possible to create
-tuples which contain mutable objects, such as lists.
+Though tuples may seem similar to lists, they are often used in different
+situations and for different purposes.
+Tuples are :term:`immutable`, and usually contain an heterogeneous sequence of
+elements that are accessed via unpacking (see later in this section) or indexing
+(or even by attribute in the case of :func:`namedtuples <collections.namedtuple>`).
+Lists are :term:`mutable`, and their elements are usually homogeneous and are
+accessed by iterating over the list.
 
 A special problem is the construction of tuples containing 0 or 1 items: the
 syntax has some extra quirks to accommodate these.  Empty tuples are constructed
@@ -353,12 +471,10 @@ The reverse operation is also possible::
    >>> x, y, z = t
 
 This is called, appropriately enough, *sequence unpacking* and works for any
-sequence on the right-hand side.  Sequence unpacking requires that there are as
-many variables on the left side of the equals sign as there are elements in the
+sequence on the right-hand side.  Sequence unpacking requires the list of
+variables on the left to have the same number of elements as the length of the
 sequence.  Note that multiple assignment is really just a combination of tuple
 packing and sequence unpacking.
-
-.. XXX Add a bit on the difference between tuples and lists.
 
 
 .. _tut-sets:
@@ -371,18 +487,15 @@ with no duplicate elements.  Basic uses include membership testing and
 eliminating duplicate entries.  Set objects also support mathematical operations
 like union, intersection, difference, and symmetric difference.
 
-Curly braces or the :func:`set` function can be used to create sets.  Note: To
-create an empty set you have to use ``set()``, not ``{}``; the latter creates an
-empty dictionary, a data structure that we discuss in the next section.
-
 Here is a brief demonstration::
 
-   >>> basket = {'apple', 'orange', 'apple', 'pear', 'orange', 'banana'}
-   >>> print(basket)                      # show that duplicates have been removed
-   {'orange', 'banana', 'pear', 'apple'}
-   >>> 'orange' in basket                 # fast membership testing
+   >>> basket = ['apple', 'orange', 'apple', 'pear', 'orange', 'banana']
+   >>> fruit = set(basket)               # create a set without duplicates
+   >>> fruit
+   set(['orange', 'pear', 'apple', 'banana'])
+   >>> 'orange' in fruit                 # fast membership testing
    True
-   >>> 'crabgrass' in basket
+   >>> 'crabgrass' in fruit
    False
 
    >>> # Demonstrate set operations on unique letters from two words
@@ -390,22 +503,15 @@ Here is a brief demonstration::
    >>> a = set('abracadabra')
    >>> b = set('alacazam')
    >>> a                                  # unique letters in a
-   {'a', 'r', 'b', 'c', 'd'}
+   set(['a', 'r', 'b', 'c', 'd'])
    >>> a - b                              # letters in a but not in b
-   {'r', 'd', 'b'}
+   set(['r', 'd', 'b'])
    >>> a | b                              # letters in either a or b
-   {'a', 'c', 'r', 'd', 'b', 'm', 'z', 'l'}
+   set(['a', 'c', 'r', 'd', 'b', 'm', 'z', 'l'])
    >>> a & b                              # letters in both a and b
-   {'a', 'c'}
+   set(['a', 'c'])
    >>> a ^ b                              # letters in a or b but not both
-   {'r', 'd', 'b', 'm', 'z', 'l'}
-
-Like :ref:`for lists <tut-listcomps>`, there is a set comprehension syntax::
-
-   >>> a = {x for x in 'abracadabra' if x not in 'abc'}
-   >>> a
-   {'r', 'd'}
-
+   set(['r', 'd', 'b', 'm', 'z', 'l'])
 
 
 .. _tut-dictionaries:
@@ -436,9 +542,9 @@ pair with ``del``. If you store using a key that is already in use, the old
 value associated with that key is forgotten.  It is an error to extract a value
 using a non-existent key.
 
-Performing ``list(d.keys())`` on a dictionary returns a list of all the keys
-used in the dictionary, in arbitrary order (if you want it sorted, just use
-``sorted(d.keys())`` instead). [1]_  To check whether a single key is in the
+The :meth:`keys` method of a dictionary object returns a list of all the keys
+used in the dictionary, in arbitrary order (if you want it sorted, just apply
+the :func:`sorted` function to it).  To check whether a single key is in the
 dictionary, use the :keyword:`in` keyword.
 
 Here is a small example using a dictionary::
@@ -453,26 +559,23 @@ Here is a small example using a dictionary::
    >>> tel['irv'] = 4127
    >>> tel
    {'guido': 4127, 'irv': 4127, 'jack': 4098}
-   >>> list(tel.keys())
-   ['irv', 'guido', 'jack']
-   >>> sorted(tel.keys())
+   >>> tel.keys()
    ['guido', 'irv', 'jack']
    >>> 'guido' in tel
    True
-   >>> 'jack' not in tel
-   False
 
-The :func:`dict` constructor builds dictionaries directly from sequences of
-key-value pairs::
+The :func:`dict` constructor builds dictionaries directly from lists of
+key-value pairs stored as tuples.  When the pairs form a pattern, list
+comprehensions can compactly specify the key-value list. ::
 
    >>> dict([('sape', 4139), ('guido', 4127), ('jack', 4098)])
    {'sape': 4139, 'jack': 4098, 'guido': 4127}
-
-In addition, dict comprehensions can be used to create dictionaries from
-arbitrary key and value expressions::
-
-   >>> {x: x**2 for x in (2, 4, 6)}
+   >>> dict([(x, x**2) for x in (2, 4, 6)])     # use a list comprehension
    {2: 4, 4: 16, 6: 36}
+
+Later in the tutorial, we will learn about Generator Expressions which are even
+better suited for the task of supplying key-values pairs to the :func:`dict`
+constructor.
 
 When the keys are simple strings, it is sometimes easier to specify pairs using
 keyword arguments::
@@ -486,21 +589,11 @@ keyword arguments::
 Looping Techniques
 ==================
 
-When looping through dictionaries, the key and corresponding value can be
-retrieved at the same time using the :meth:`items` method. ::
-
-   >>> knights = {'gallahad': 'the pure', 'robin': 'the brave'}
-   >>> for k, v in knights.items():
-   ...     print(k, v)
-   ...
-   gallahad the pure
-   robin the brave
-
 When looping through a sequence, the position index and corresponding value can
 be retrieved at the same time using the :func:`enumerate` function. ::
 
    >>> for i, v in enumerate(['tic', 'tac', 'toe']):
-   ...     print(i, v)
+   ...     print i, v
    ...
    0 tic
    1 tac
@@ -512,7 +605,7 @@ with the :func:`zip` function. ::
    >>> questions = ['name', 'quest', 'favorite color']
    >>> answers = ['lancelot', 'the holy grail', 'blue']
    >>> for q, a in zip(questions, answers):
-   ...     print('What is your {0}?  It is {1}.'.format(q, a))
+   ...     print 'What is your {0}?  It is {1}.'.format(q, a)
    ...
    What is your name?  It is lancelot.
    What is your quest?  It is the holy grail.
@@ -521,8 +614,8 @@ with the :func:`zip` function. ::
 To loop over a sequence in reverse, first specify the sequence in a forward
 direction and then call the :func:`reversed` function. ::
 
-   >>> for i in reversed(range(1, 10, 2)):
-   ...     print(i)
+   >>> for i in reversed(xrange(1,10,2)):
+   ...     print i
    ...
    9
    7
@@ -535,12 +628,22 @@ returns a new sorted list while leaving the source unaltered. ::
 
    >>> basket = ['apple', 'orange', 'apple', 'pear', 'orange', 'banana']
    >>> for f in sorted(set(basket)):
-   ...     print(f)
+   ...     print f
    ...
    apple
    banana
    orange
    pear
+
+When looping through dictionaries, the key and corresponding value can be
+retrieved at the same time using the :meth:`iteritems` method. ::
+
+   >>> knights = {'gallahad': 'the pure', 'robin': 'the brave'}
+   >>> for k, v in knights.iteritems():
+   ...     print k, v
+   ...
+   gallahad the pure
+   robin the brave
 
 
 .. _tut-conditions:
@@ -601,9 +704,9 @@ sequence is exhausted. If two items to be compared are themselves sequences of
 the same type, the lexicographical comparison is carried out recursively.  If
 all items of two sequences compare equal, the sequences are considered equal.
 If one sequence is an initial sub-sequence of the other, the shorter sequence is
-the smaller (lesser) one.  Lexicographical ordering for strings uses the Unicode
-codepoint number to order individual characters.  Some examples of comparisons
-between sequences of the same type::
+the smaller (lesser) one.  Lexicographical ordering for strings uses the ASCII
+ordering for individual characters.  Some examples of comparisons between
+sequences of the same type::
 
    (1, 2, 3)              < (1, 2, 4)
    [1, 2, 3]              < [1, 2, 4]
@@ -613,15 +716,15 @@ between sequences of the same type::
    (1, 2, 3)             == (1.0, 2.0, 3.0)
    (1, 2, ('aa', 'ab'))   < (1, 2, ('abc', 'a'), 4)
 
-Note that comparing objects of different types with ``<`` or ``>`` is legal
-provided that the objects have appropriate comparison methods.  For example,
-mixed numeric types are compared according to their numeric value, so 0 equals
-0.0, etc.  Otherwise, rather than providing an arbitrary ordering, the
-interpreter will raise a :exc:`TypeError` exception.
+Note that comparing objects of different types is legal.  The outcome is
+deterministic but arbitrary: the types are ordered by their name. Thus, a list
+is always smaller than a string, a string is always smaller than a tuple, etc.
+[#]_ Mixed numeric types are compared according to their numeric value, so 0
+equals 0.0, etc.
 
 
 .. rubric:: Footnotes
 
-.. [1] Calling ``d.keys()`` will return a :dfn:`dictionary view` object.  It
-       supports operations like membership test and iteration, but its contents
-       are not independent of the original dictionary -- it is only a *view*.
+.. [#] The rules for comparing objects of different types should not be relied upon;
+   they may change in a future version of the language.
+

@@ -72,7 +72,7 @@ Thus, when you say ``packages = ['foo']`` in your setup script, you are
 promising that the Distutils will find a file :file:`foo/__init__.py` (which
 might be spelled differently on your system, but you get the idea) relative to
 the directory where your setup script lives.  If you break this promise, the
-Distutils will issue a warning but still process the broken package anyways.
+Distutils will issue a warning but still process the broken package anyway.
 
 If you use a different convention to lay out your source directory, that's no
 problem: you just have to supply the :option:`package_dir` option to tell the
@@ -254,7 +254,7 @@ code: it's probably better to write C code like  ::
 
 If you need to include header files from some other Python extension, you can
 take advantage of the fact that header files are installed in a consistent way
-by the Distutils :command:`install_header` command.  For example, the Numerical
+by the Distutils :command:`install_headers` command.  For example, the Numerical
 Python header files are installed (on a standard Unix installation) to
 :file:`/usr/local/include/python1.5/Numerical`. (The exact location will differ
 according to your platform and Python installation.)  Since the Python include
@@ -333,10 +333,6 @@ Other options
 -------------
 
 There are still some other options which can be used to handle special cases.
-
-The :option:`optional` option is a boolean; if it is true,
-a build failure in the extension will not abort the build process, but
-instead simply not install the failing extension.
 
 The :option:`extra_objects` option is a list of object files to be passed to the
 linker. These files must not have extensions, as the default extension for the
@@ -454,10 +450,9 @@ way.  From the PyXML setup script::
           scripts=['scripts/xmlproc_parse', 'scripts/xmlproc_val']
           )
 
-.. versionchanged:: 3.1
-   All the scripts will also be added to the ``MANIFEST`` file if no template is
-   provided.  See :ref:`manifest`.
-
+.. versionchanged:: 2.7
+    All the scripts will also be added to the ``MANIFEST``
+    file if no template is provided. See :ref:`manifest`.
 
 .. _distutils-installing-package-data:
 
@@ -501,10 +496,11 @@ The corresponding call to :func:`setup` might be::
           package_data={'mypkg': ['data/*.dat']},
           )
 
+.. versionadded:: 2.4
 
-.. versionchanged:: 3.1
-   All the files that match ``package_data`` will be added to the ``MANIFEST``
-   file if no template is provided.  See :ref:`manifest`.
+.. versionchanged:: 2.7
+    All the files that match ``package_data`` will be added to the ``MANIFEST``
+    file if no template is provided. See :ref:`manifest`.
 
 
 .. _distutils-additional-files:
@@ -543,9 +539,10 @@ without specifying a target directory, but this is not recommended, and the
 files directly in the target directory, an empty string should be given as the
 directory.
 
-.. versionchanged:: 3.1
-   All the files that match ``data_files`` will be added to the ``MANIFEST``
-   file if no template is provided.  See :ref:`manifest`.
+.. versionchanged:: 2.7
+    All the files that match ``data_files`` will be added to the ``MANIFEST``
+    file if no template is provided. See :ref:`manifest`.
+
 
 
 .. _meta-data:
@@ -628,6 +625,8 @@ Notes:
 
 'list of strings'
     See below.
+
+None of the string values may be Unicode.
 
 Encoding the version information is an art in itself. Python packages generally
 adhere to the version format *major.minor[.patch][sub]*. The major number is 0

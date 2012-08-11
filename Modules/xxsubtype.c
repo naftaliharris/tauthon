@@ -28,7 +28,7 @@ spamlist_getstate(spamlistobject *self, PyObject *args)
 {
     if (!PyArg_ParseTuple(args, ":getstate"))
         return NULL;
-    return PyLong_FromLong(self->state);
+    return PyInt_FromLong(self->state);
 }
 
 static PyObject *
@@ -91,7 +91,7 @@ spamlist_init(spamlistobject *self, PyObject *args, PyObject *kwds)
 static PyObject *
 spamlist_state_get(spamlistobject *self)
 {
-    return PyLong_FromLong(self->state);
+    return PyInt_FromLong(self->state);
 }
 
 static PyGetSetDef spamlist_getsets[] = {
@@ -109,7 +109,7 @@ static PyTypeObject spamlist_type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -153,7 +153,7 @@ spamdict_getstate(spamdictobject *self, PyObject *args)
 {
     if (!PyArg_ParseTuple(args, ":getstate"))
         return NULL;
-    return PyLong_FromLong(self->state);
+    return PyInt_FromLong(self->state);
 }
 
 static PyObject *
@@ -200,7 +200,7 @@ static PyTypeObject spamdict_type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -257,21 +257,8 @@ static PyMethodDef xxsubtype_functions[] = {
     {NULL,              NULL}           /* sentinel */
 };
 
-static struct PyModuleDef xxsubtypemodule = {
-    PyModuleDef_HEAD_INIT,
-    "xxsubtype",
-    xxsubtype__doc__,
-    -1,
-    xxsubtype_functions,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
-
 PyMODINIT_FUNC
-PyInit_xxsubtype(void)
+initxxsubtype(void)
 {
     PyObject *m;
 
@@ -281,29 +268,30 @@ PyInit_xxsubtype(void)
        so it's not necessary to fill in ob_type first. */
     spamdict_type.tp_base = &PyDict_Type;
     if (PyType_Ready(&spamdict_type) < 0)
-        return NULL;
+        return;
 
     spamlist_type.tp_base = &PyList_Type;
     if (PyType_Ready(&spamlist_type) < 0)
-        return NULL;
+        return;
 
-    m = PyModule_Create(&xxsubtypemodule);
+    m = Py_InitModule3("xxsubtype",
+                       xxsubtype_functions,
+                       xxsubtype__doc__);
     if (m == NULL)
-        return NULL;
+        return;
 
     if (PyType_Ready(&spamlist_type) < 0)
-        return NULL;
+        return;
     if (PyType_Ready(&spamdict_type) < 0)
-        return NULL;
+        return;
 
     Py_INCREF(&spamlist_type);
     if (PyModule_AddObject(m, "spamlist",
                            (PyObject *) &spamlist_type) < 0)
-        return NULL;
+        return;
 
     Py_INCREF(&spamdict_type);
     if (PyModule_AddObject(m, "spamdict",
                            (PyObject *) &spamdict_type) < 0)
-        return NULL;
-    return m;
+        return;
 }

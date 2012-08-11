@@ -22,18 +22,7 @@
 __version__ = 'SPARK-0.7 (pre-alpha-5)'
 
 import re
-
-# Compatability with older pythons.
-def output(string='', end='\n'):
-    sys.stdout.write(string + end)
-
-try:
-    sorted
-except NameError:
-    def sorted(seq):
-        seq2 = seq[:]
-        seq2.sort()
-        return seq2
+import string
 
 def _namelist(instance):
     namelist, namedict, classlist = [], {}, [instance.__class__]
@@ -41,7 +30,7 @@ def _namelist(instance):
         for b in c.__bases__:
             classlist.append(b)
         for name in c.__dict__.keys():
-            if name not in namedict:
+            if not namedict.has_key(name):
                 namelist.append(name)
                 namedict[name] = 1
     return namelist
@@ -67,10 +56,10 @@ class GenericScanner:
                 rv.append(self.makeRE(name))
 
         rv.append(self.makeRE('t_default'))
-        return '|'.join(rv)
+        return string.join(rv, '|')
 
     def error(self, s, pos):
-        output("Lexical error at position %s" % pos)
+        print "Lexical error at position %s" % pos
         raise SystemExit
 
     def tokenize(self, s):
@@ -83,13 +72,13 @@ class GenericScanner:
 
             groups = m.groups()
             for i in range(len(groups)):
-                if groups[i] and i in self.index2func:
+                if groups[i] and self.index2func.has_key(i):
                     self.index2func[i](groups[i])
             pos = m.end()
 
     def t_default(self, s):
         r'( . | \n )+'
-        output("Specification error: unmatched input")
+        print "Specification error: unmatched input"
         raise SystemExit
 
 #
@@ -151,7 +140,7 @@ class GenericParser:
             for k, v in self.edges.items():
                 if v is None:
                     state, sym = k
-                    if state in self.states:
+                    if self.states.has_key(state):
                         self.goto(state, sym)
                         changes = 1
         rv = self.__dict__.copy()
@@ -182,7 +171,7 @@ class GenericParser:
 
     def addRule(self, doc, func, _preprocess=1):
         fn = func
-        rules = doc.split()
+        rules = string.split(doc)
 
         index = []
         for i in range(len(rules)):
@@ -198,7 +187,7 @@ class GenericParser:
             if _preprocess:
                 rule, fn = self.preprocess(rule, func)
 
-            if lhs in self.rules:
+            if self.rules.has_key(lhs):
                 self.rules[lhs].append(rule)
             else:
                 self.rules[lhs] = [ rule ]
@@ -236,7 +225,7 @@ class GenericParser:
                 #  grammars.
                 #
                 for sym in rhs:
-                    if sym not in self.rules:
+                    if not self.rules.has_key(sym):
                         break
                 else:
                     tbd.append(rule)
@@ -279,7 +268,7 @@ class GenericParser:
             n = len(rhs)
             while i < n:
                 sym = rhs[i]
-                if sym not in self.rules or \
+                if not self.rules.has_key(sym) or \
                    not self.nullable[sym]:
                     candidate = 0
                     i = i + 1
@@ -296,7 +285,7 @@ class GenericParser:
                 if candidate:
                     lhs = self._NULLABLE+lhs
                     rule = (lhs, rhs)
-                if lhs in self.newrules:
+                if self.newrules.has_key(lhs):
                     self.newrules[lhs].append(rule)
                 else:
                     self.newrules[lhs] = [ rule ]
@@ -306,7 +295,7 @@ class GenericParser:
         return None
 
     def error(self, token):
-        output("Syntax error at or near `%s' token" % token)
+        print "Syntax error at or near `%s' token" % token
         raise SystemExit
 
     def parse(self, tokens):
@@ -323,7 +312,7 @@ class GenericParser:
             self.states = { 0: self.makeState0() }
             self.makeState(0, self._BOF)
 
-        for i in range(len(tokens)):
+        for i in xrange(len(tokens)):
             sets.append([])
 
             if sets[i] == []:
@@ -352,10 +341,10 @@ class GenericParser:
         #
         return self._NULLABLE == sym[0:len(self._NULLABLE)]
 
-    def skip(self, hs, pos=0):
-        n = len(hs[1])
+    def skip(self, (lhs, rhs), pos=0):
+        n = len(rhs)
         while pos < n:
-            if not self.isnullable(hs[1][pos]):
+            if not self.isnullable(rhs[pos]):
                 break
             pos = pos + 1
         return pos
@@ -375,7 +364,7 @@ class GenericParser:
 
         core.sort()
         tcore = tuple(core)
-        if tcore in self.cores:
+        if self.cores.has_key(tcore):
             return self.cores[tcore]
         #
         #  Nope, doesn't exist.  Compute it and the associated
@@ -399,13 +388,13 @@ class GenericParser:
 
                 nextSym = rhs[pos]
                 key = (X.stateno, nextSym)
-                if nextSym not in rules:
-                    if key not in edges:
+                if not rules.has_key(nextSym):
+                    if not edges.has_key(key):
                         edges[key] = None
                         X.T.append(nextSym)
                 else:
                     edges[key] = None
-                    if nextSym not in predicted:
+                    if not predicted.has_key(nextSym):
                         predicted[nextSym] = 1
                         for prule in rules[nextSym]:
                             ppos = self.skip(prule)
@@ -429,9 +418,10 @@ class GenericParser:
         #  need to know the entire set of predicted nonterminals
         #  to do this without accidentally duplicating states.
         #
-        core = sorted(predicted.keys())
+        core = predicted.keys()
+        core.sort()
         tcore = tuple(core)
-        if tcore in self.cores:
+        if self.cores.has_key(tcore):
             self.edges[(k, None)] = self.cores[tcore]
             return k
 
@@ -442,7 +432,7 @@ class GenericParser:
 
     def goto(self, state, sym):
         key = (state, sym)
-        if key not in self.edges:
+        if not self.edges.has_key(key):
             #
             #  No transitions from state on sym.
             #
@@ -614,7 +604,7 @@ class GenericParser:
             rule = self.ambiguity(self.newrules[nt])
         else:
             rule = self.newrules[nt][0]
-        #output(rule)
+        #print rule
 
         rhs = rule[1]
         attr = [None] * len(rhs)
@@ -633,14 +623,14 @@ class GenericParser:
         rule = choices[0]
         if len(choices) > 1:
             rule = self.ambiguity(choices)
-        #output(rule)
+        #print rule
 
         rhs = rule[1]
         attr = [None] * len(rhs)
 
         for i in range(len(rhs)-1, -1, -1):
             sym = rhs[i]
-            if sym not in self.newrules:
+            if not self.newrules.has_key(sym):
                 if sym != self._BOF:
                     attr[i] = tokens[k-1]
                     key = (item, k)
@@ -670,7 +660,7 @@ class GenericParser:
             sortlist.append((len(rhs), name))
             name2index[name] = i
         sortlist.sort()
-        list = [b for a, b in sortlist]
+        list = map(lambda (a,b): b, sortlist)
         return rules[name2index[self.resolve(list)]]
 
     def resolve(self, list):
@@ -835,15 +825,15 @@ class GenericASTMatcher(GenericParser):
 
 def _dump(tokens, sets, states):
     for i in range(len(sets)):
-        output('set %d' % i)
+        print 'set', i
         for item in sets[i]:
-            output('\t', item)
+            print '\t', item
             for (lhs, rhs), pos in states[item[0]].items:
-                output('\t\t', lhs, '::=', end='')
-                output(' '.join(rhs[:pos]), end='')
-                output('.', end='')
-                output(' '.join(rhs[pos:]))
+                print '\t\t', lhs, '::=',
+                print string.join(rhs[:pos]),
+                print '.',
+                print string.join(rhs[pos:])
         if i < len(tokens):
-            output()
-            output('token %s' % str(tokens[i]))
-            output()
+            print
+            print 'token', str(tokens[i])
+            print

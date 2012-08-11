@@ -9,7 +9,7 @@
    Greg Stein (gstein@lyra.org)
    Trevor Perrin (trevp@trevp.net)
 
-   Copyright (C) 2005-2007   Gregory P. Smith (greg@krypto.org)
+   Copyright (C) 2005   Gregory P. Smith (greg@krypto.org)
    Licensed to PSF under a Contributor Agreement.
 
 */
@@ -18,7 +18,6 @@
 
 #include "Python.h"
 #include "structmember.h"
-#include "hashlib.h"
 
 #ifdef PY_LONG_LONG /* If no PY_LONG_LONG, don't compile anything! */
 
@@ -114,7 +113,7 @@ static void SHAcopy(SHAobject *src, SHAobject *dest)
  * The library is free for all purposes without any express
  * gurantee it works.
  *
- * Tom St Denis, tomstdenis@iahu.ca, http://libtom.org
+ * Tom St Denis, tomstdenis@iahu.ca, http://libtomcrypt.org
  */
 
 
@@ -291,9 +290,9 @@ sha384_init(SHAobject *sha_info)
 /* update the SHA digest */
 
 static void
-sha512_update(SHAobject *sha_info, SHA_BYTE *buffer, Py_ssize_t count)
+sha512_update(SHAobject *sha_info, SHA_BYTE *buffer, int count)
 {
-    Py_ssize_t i;
+    int i;
     SHA_INT32 clo;
 
     clo = sha_info->count_lo + ((SHA_INT32) count << 3);
@@ -499,7 +498,7 @@ SHA512_digest(SHAobject *self, PyObject *unused)
 
     SHAcopy(self, &temp);
     sha512_final(digest, &temp);
-    return PyBytes_FromStringAndSize((const char *)digest, self->digestsize);
+    return PyString_FromStringAndSize((const char *)digest, self->digestsize);
 }
 
 PyDoc_STRVAR(SHA512_hexdigest__doc__,
@@ -511,7 +510,7 @@ SHA512_hexdigest(SHAobject *self, PyObject *unused)
     unsigned char digest[SHA_DIGESTSIZE];
     SHAobject temp;
     PyObject *retval;
-    Py_UNICODE *hex_digest;
+    char *hex_digest;
     int i, j;
 
     /* Get the raw (binary) digest value */
@@ -519,10 +518,10 @@ SHA512_hexdigest(SHAobject *self, PyObject *unused)
     sha512_final(digest, &temp);
 
     /* Create a new string */
-    retval = PyUnicode_FromStringAndSize(NULL, self->digestsize * 2);
+    retval = PyString_FromStringAndSize(NULL, self->digestsize * 2);
     if (!retval)
             return NULL;
-    hex_digest = PyUnicode_AS_UNICODE(retval);
+    hex_digest = PyString_AsString(retval);
     if (!hex_digest) {
             Py_DECREF(retval);
             return NULL;
@@ -547,19 +546,15 @@ PyDoc_STRVAR(SHA512_update__doc__,
 static PyObject *
 SHA512_update(SHAobject *self, PyObject *args)
 {
-    PyObject *obj;
     Py_buffer buf;
 
-    if (!PyArg_ParseTuple(args, "O:update", &obj))
+    if (!PyArg_ParseTuple(args, "s*:update", &buf))
         return NULL;
-
-    GET_BUFFER_VIEW_OR_ERROUT(obj, &buf);
 
     sha512_update(self, buf.buf, buf.len);
 
     PyBuffer_Release(&buf);
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyMethodDef SHA_methods[] = {
@@ -573,16 +568,16 @@ static PyMethodDef SHA_methods[] = {
 static PyObject *
 SHA512_get_block_size(PyObject *self, void *closure)
 {
-    return PyLong_FromLong(SHA_BLOCKSIZE);
+    return PyInt_FromLong(SHA_BLOCKSIZE);
 }
 
 static PyObject *
 SHA512_get_name(PyObject *self, void *closure)
 {
     if (((SHAobject *)self)->digestsize == 64)
-        return PyUnicode_FromStringAndSize("SHA512", 6);
+        return PyString_FromStringAndSize("SHA512", 6);
     else
-        return PyUnicode_FromStringAndSize("SHA384", 6);
+        return PyString_FromStringAndSize("SHA384", 6);
 }
 
 static PyGetSetDef SHA_getseters[] = {
@@ -599,6 +594,9 @@ static PyGetSetDef SHA_getseters[] = {
 
 static PyMemberDef SHA_members[] = {
     {"digest_size", T_INT, offsetof(SHAobject, digestsize), READONLY, NULL},
+    /* the old md5 and sha modules support 'digest_size' as in PEP 247.
+     * the old sha module also supported 'digestsize'.  ugh. */
+    {"digestsize", T_INT, offsetof(SHAobject, digestsize), READONLY, NULL},
     {NULL}  /* Sentinel */
 };
 
@@ -612,7 +610,7 @@ static PyTypeObject SHA384type = {
     0,                  /*tp_print*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_reserved*/
+    0,                  /*tp_compare*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -646,7 +644,7 @@ static PyTypeObject SHA512type = {
     0,                  /*tp_print*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
-    0,                  /*tp_reserved*/
+    0,                  /*tp_compare*/
     0,                  /*tp_repr*/
     0,                  /*tp_as_number*/
     0,                  /*tp_as_sequence*/
@@ -681,20 +679,15 @@ SHA512_new(PyObject *self, PyObject *args, PyObject *kwdict)
 {
     static char *kwlist[] = {"string", NULL};
     SHAobject *new;
-    PyObject *data_obj = NULL;
-    Py_buffer buf;
+    Py_buffer buf = { 0 };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|O:new", kwlist,
-                                     &data_obj)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|s*:new", kwlist,
+                                     &buf)) {
         return NULL;
     }
 
-    if (data_obj)
-        GET_BUFFER_VIEW_OR_ERROUT(data_obj, &buf);
-
     if ((new = newSHA512object()) == NULL) {
-        if (data_obj)
-            PyBuffer_Release(&buf);
+        PyBuffer_Release(&buf);
         return NULL;
     }
 
@@ -702,14 +695,13 @@ SHA512_new(PyObject *self, PyObject *args, PyObject *kwdict)
 
     if (PyErr_Occurred()) {
         Py_DECREF(new);
-        if (data_obj)
-            PyBuffer_Release(&buf);
+        PyBuffer_Release(&buf);
         return NULL;
     }
-    if (data_obj) {
+    if (buf.len > 0) {
         sha512_update(new, buf.buf, buf.len);
-        PyBuffer_Release(&buf);
     }
+    PyBuffer_Release(&buf);
 
     return (PyObject *)new;
 }
@@ -722,20 +714,15 @@ SHA384_new(PyObject *self, PyObject *args, PyObject *kwdict)
 {
     static char *kwlist[] = {"string", NULL};
     SHAobject *new;
-    PyObject *data_obj = NULL;
-    Py_buffer buf;
+    Py_buffer buf = { 0 };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|O:new", kwlist,
-                                     &data_obj)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|s*:new", kwlist,
+                                     &buf)) {
         return NULL;
     }
 
-    if (data_obj)
-        GET_BUFFER_VIEW_OR_ERROUT(data_obj, &buf);
-
     if ((new = newSHA384object()) == NULL) {
-        if (data_obj)
-            PyBuffer_Release(&buf);
+        PyBuffer_Release(&buf);
         return NULL;
     }
 
@@ -743,14 +730,13 @@ SHA384_new(PyObject *self, PyObject *args, PyObject *kwdict)
 
     if (PyErr_Occurred()) {
         Py_DECREF(new);
-        if (data_obj)
-            PyBuffer_Release(&buf);
+        PyBuffer_Release(&buf);
         return NULL;
     }
-    if (data_obj) {
+    if (buf.len > 0) {
         sha512_update(new, buf.buf, buf.len);
-        PyBuffer_Release(&buf);
     }
+    PyBuffer_Release(&buf);
 
     return (PyObject *)new;
 }
@@ -769,29 +755,20 @@ static struct PyMethodDef SHA_functions[] = {
 
 #define insint(n,v) { PyModule_AddIntConstant(m,n,v); }
 
-
-static struct PyModuleDef _sha512module = {
-        PyModuleDef_HEAD_INIT,
-        "_sha512",
-        NULL,
-        -1,
-        SHA_functions,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-};
-
 PyMODINIT_FUNC
-PyInit__sha512(void)
+init_sha512(void)
 {
+    PyObject *m;
+
     Py_TYPE(&SHA384type) = &PyType_Type;
     if (PyType_Ready(&SHA384type) < 0)
-        return NULL;
+        return;
     Py_TYPE(&SHA512type) = &PyType_Type;
     if (PyType_Ready(&SHA512type) < 0)
-        return NULL;
-    return PyModule_Create(&_sha512module);
+        return;
+    m = Py_InitModule("_sha512", SHA_functions);
+    if (m == NULL)
+        return;
 }
 
 #endif

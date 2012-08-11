@@ -17,14 +17,14 @@ def genwinmap(codepage):
 
     enc2uni = {}
 
-    for i in list(range(32)) + [127]:
+    for i in range(32) + [127]:
         enc2uni[i] = (i, 'CONTROL CHARACTER')
 
     for i in range(256):
         buf = ctypes.create_unicode_buffer(2)
         ret = MultiByteToWideChar(
             codepage, 0,
-            bytes([i]), 1,
+            chr(i), 1,
             buf, 2)
         assert ret == 1, "invalid code page"
         assert buf[1] == '\x00'
@@ -54,7 +54,7 @@ def genwincodec(codepage):
 ''' % (encodingname, ' '.join(platform.win32_ver()), codepage
       ) + code.split('"""#"', 1)[1]
 
-    print(code)
+    print code
 
 if __name__ == '__main__':
     import sys

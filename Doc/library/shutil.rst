@@ -21,8 +21,8 @@ copying and removal. For operations on individual files, see also the
 
 .. warning::
 
-   Even the higher-level file copying functions (:func:`copy`, :func:`copy2`)
-   cannot copy all file metadata.
+   Even the higher-level file copying functions (:func:`shutil.copy`,
+   :func:`shutil.copy2`) can't copy all file metadata.
 
    On POSIX platforms, this means that file owner and group are lost as well
    as ACLs.  On Mac OS, the resource fork and other metadata are not used.
@@ -30,6 +30,8 @@ copying and removal. For operations on individual files, see also the
    not be correct. On Windows, file owners, ACLs and alternate data streams
    are not copied.
 
+
+.. _file-operations:
 
 Directory and files operations
 ------------------------------
@@ -47,10 +49,10 @@ Directory and files operations
 
 .. function:: copyfile(src, dst)
 
-   Copy the contents (no metadata) of the file named *src* to a file named *dst*.
-   *dst* must be the complete target file name; look at :func:`copy` for a copy that
-   accepts a target directory path.  If *src* and *dst* are the same files,
-   :exc:`Error` is raised.
+   Copy the contents (no metadata) of the file named *src* to a file named
+   *dst*.  *dst* must be the complete target file name; look at
+   :func:`shutil.copy` for a copy that accepts a target directory path.  If
+   *src* and *dst* are the same files, :exc:`Error` is raised.
    The destination location must be writable; otherwise,  an :exc:`IOError` exception
    will be raised. If *dst* already exists, it will be replaced.   Special files
    such as character or block devices and pipes cannot be copied with this
@@ -80,9 +82,9 @@ Directory and files operations
 
 .. function:: copy2(src, dst)
 
-   Similar to :func:`copy`, but metadata is copied as well -- in fact, this is just
-   :func:`copy` followed by :func:`copystat`.  This is similar to the
-   Unix command :program:`cp -p`.
+   Similar to :func:`shutil.copy`, but metadata is copied as well -- in fact,
+   this is just :func:`shutil.copy` followed by :func:`copystat`.  This is
+   similar to the Unix command :program:`cp -p`.
 
 
 .. function:: ignore_patterns(\*patterns)
@@ -91,25 +93,21 @@ Directory and files operations
    :func:`copytree`\'s *ignore* argument, ignoring files and directories that
    match one of the glob-style *patterns* provided.  See the example below.
 
+   .. versionadded:: 2.6
 
-.. function:: copytree(src, dst, symlinks=False, ignore=None, copy_function=copy2, ignore_dangling_symlinks=False)
+
+.. function:: copytree(src, dst, symlinks=False, ignore=None)
 
    Recursively copy an entire directory tree rooted at *src*.  The destination
-   directory, named by *dst*, must not already exist; it will be created as well
-   as missing parent directories.  Permissions and times of directories are
-   copied with :func:`copystat`, individual files are copied using
-   :func:`copy2`.
+   directory, named by *dst*, must not already exist; it will be created as
+   well as missing parent directories.  Permissions and times of directories
+   are copied with :func:`copystat`, individual files are copied using
+   :func:`shutil.copy2`.
 
    If *symlinks* is true, symbolic links in the source tree are represented as
-   symbolic links in the new tree; if false or omitted, the contents of the
-   linked files are copied to the new tree.
-
-   When *symlinks* is false, if the file pointed by the symlink doesn't
-   exist, a exception will be added in the list of errors raised in
-   a :exc:`Error` exception at the end of the copy process.
-   You can set the optional *ignore_dangling_symlinks* flag to true if you
-   want to silence this exception. Notice that this option has no effect
-   on platforms that don't support :func:`os.symlink`.
+   symbolic links in the new tree, but the metadata of the original links is NOT
+   copied; if false or omitted, the contents and metadata of the linked files
+   are copied to the new tree.
 
    If *ignore* is given, it must be a callable that will receive as its
    arguments the directory being visited by :func:`copytree`, and a list of its
@@ -123,21 +121,22 @@ Directory and files operations
 
    If exception(s) occur, an :exc:`Error` is raised with a list of reasons.
 
-   If *copy_function* is given, it must be a callable that will be used
-   to copy each file. It will be called with the source path and the
-   destination path as arguments. By default, :func:`copy2` is used, but any
-   function that supports the same signature (like :func:`copy`) can be used.
+   The source code for this should be considered an example rather than the
+   ultimate tool.
 
-   .. versionchanged:: 3.2
-      Added the *copy_function* argument to be able to provide a custom copy
-      function.
+   .. versionchanged:: 2.3
+      :exc:`Error` is raised if any exceptions occur during copying, rather than
+      printing a message.
 
-   .. versionchanged:: 3.2
-      Added the *ignore_dangling_symlinks* argument to silent dangling symlinks
-      errors when *symlinks* is false.
+   .. versionchanged:: 2.5
+      Create intermediate directories needed to create *dst*, rather than raising an
+      error. Copy permissions and times of directories using :func:`copystat`.
+
+   .. versionchanged:: 2.6
+      Added the *ignore* argument to be able to influence what is being copied.
 
 
-.. function:: rmtree(path, ignore_errors=False, onerror=None)
+.. function:: rmtree(path[, ignore_errors[, onerror]])
 
    .. index:: single: directory; deleting
 
@@ -156,23 +155,39 @@ Directory and files operations
    information return by :func:`sys.exc_info`.  Exceptions raised by *onerror*
    will not be caught.
 
+   .. versionchanged:: 2.6
+      Explicitly check for *path* being a symbolic link and raise :exc:`OSError`
+      in that case.
+
 
 .. function:: move(src, dst)
 
-   Recursively move a file or directory to another location.
+   Recursively move a file or directory (*src*) to another location (*dst*).
 
-   If the destination is on the current filesystem, then simply use rename.
-   Otherwise, copy src (with :func:`copy2`) to the dst and then remove src.
+   If the destination is a directory or a symlink to a directory, then *src* is
+   moved inside that directory.
+
+   The destination directory must not already exist.  If the destination already
+   exists but is not a directory, it may be overwritten depending on
+   :func:`os.rename` semantics.
+
+   If the destination is on the current filesystem, then :func:`os.rename` is
+   used.  Otherwise, *src* is copied (using :func:`shutil.copy2`) to *dst* and
+   then removed.
+
+   .. versionadded:: 2.3
 
 
 .. exception:: Error
 
-   This exception collects exceptions that raised during a multi-file operation. For
-   :func:`copytree`, the exception argument is a list of 3-tuples (*srcname*,
-   *dstname*, *exception*).
+   This exception collects exceptions that are raised during a multi-file
+   operation. For :func:`copytree`, the exception argument is a list of 3-tuples
+   (*srcname*, *dstname*, *exception*).
+
+   .. versionadded:: 2.3
 
 
-.. _shutil-example:
+.. _copytree-example:
 
 copytree example
 ::::::::::::::::
@@ -181,11 +196,18 @@ This example is the implementation of the :func:`copytree` function, described
 above, with the docstring omitted.  It demonstrates many of the other functions
 provided by this module. ::
 
-   def copytree(src, dst, symlinks=False):
+   def copytree(src, dst, symlinks=False, ignore=None):
        names = os.listdir(src)
+       if ignore is not None:
+           ignored_names = ignore(src, names)
+       else:
+           ignored_names = set()
+
        os.makedirs(dst)
        errors = []
        for name in names:
+           if name in ignored_names:
+               continue
            srcname = os.path.join(src, name)
            dstname = os.path.join(dst, name)
            try:
@@ -193,22 +215,22 @@ provided by this module. ::
                    linkto = os.readlink(srcname)
                    os.symlink(linkto, dstname)
                elif os.path.isdir(srcname):
-                   copytree(srcname, dstname, symlinks)
+                   copytree(srcname, dstname, symlinks, ignore)
                else:
                    copy2(srcname, dstname)
                # XXX What about devices, sockets etc.?
-           except (IOError, os.error) as why:
+           except (IOError, os.error), why:
                errors.append((srcname, dstname, str(why)))
            # catch the Error from the recursive copytree so that we can
            # continue with other files
-           except Error as err:
+           except Error, err:
                errors.extend(err.args[0])
        try:
            copystat(src, dst)
        except WindowsError:
            # can't copy file access times on Windows
            pass
-       except OSError as why:
+       except OSError, why:
            errors.extend((src, dst, str(why)))
        if errors:
            raise Error(errors)
@@ -239,20 +261,23 @@ Another example that uses the *ignore* argument to add a logging call::
 Archiving operations
 --------------------
 
+High-level utilities to create and read compressed and archived files are also
+provided.  They rely on the :mod:`zipfile` and :mod:`tarfile` modules.
+
 .. function:: make_archive(base_name, format, [root_dir, [base_dir, [verbose, [dry_run, [owner, [group, [logger]]]]]]])
 
-   Create an archive file (such as zip or tar) and return its name.
+   Create an archive file (eg. zip or tar) and returns its name.
 
    *base_name* is the name of the file to create, including the path, minus
    any format-specific extension. *format* is the archive format: one of
-   "zip", "tar", "bztar" (if the :mod:`bz2` module is available) or "gztar".
+   "zip", "tar", "bztar" or "gztar".
 
    *root_dir* is a directory that will be the root directory of the
-   archive; for example, we typically chdir into *root_dir* before creating the
+   archive; ie. we typically chdir into *root_dir* before creating the
    archive.
 
    *base_dir* is the directory where we start archiving from;
-   i.e. *base_dir* will be the common prefix of all files and
+   ie. *base_dir* will be the common prefix of all files and
    directories in the archive.
 
    *root_dir* and *base_dir* both default to the current directory.
@@ -260,111 +285,52 @@ Archiving operations
    *owner* and *group* are used when creating a tar archive. By default,
    uses the current owner and group.
 
-   *logger* is an instance of :class:`logging.Logger`.
+   *logger* must be an object compatible with :pep:`282`, usually an instance of
+   :class:`logging.Logger`.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: get_archive_formats()
 
-   Returns a list of supported formats for archiving.
+   Return a list of supported formats for archiving.
    Each element of the returned sequence is a tuple ``(name, description)``
 
    By default :mod:`shutil` provides these formats:
 
    - *gztar*: gzip'ed tar-file
-   - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available.)
+   - *bztar*: bzip2'ed tar-file
    - *tar*: uncompressed tar file
    - *zip*: ZIP file
 
    You can register new formats or provide your own archiver for any existing
    formats, by using :func:`register_archive_format`.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: register_archive_format(name, function, [extra_args, [description]])
 
-   Registers an archiver for the format *name*. *function* is a callable that
+   Register an archiver for the format *name*. *function* is a callable that
    will be used to invoke the archiver.
 
-   If given, *extra_args* is a sequence of ``(name, value)`` pairs that will be
+   If given, *extra_args* is a sequence of ``(name, value)`` that will be
    used as extra keywords arguments when the archiver callable is used.
 
    *description* is used by :func:`get_archive_formats` which returns the
    list of archivers. Defaults to an empty list.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
-.. function:: unregister_archive_format(name)
+.. function::  unregister_archive_format(name)
 
    Remove the archive format *name* from the list of supported formats.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
-.. function:: unpack_archive(filename[, extract_dir[, format]])
-
-   Unpack an archive. *filename* is the full path of the archive.
-
-   *extract_dir* is the name of the target directory where the archive is
-   unpacked. If not provided, the current working directory is used.
-
-   *format* is the archive format: one of "zip", "tar", or "gztar". Or any
-   other format registered with :func:`register_unpack_format`. If not
-   provided, :func:`unpack_archive` will use the archive file name extension
-   and see if an unpacker was registered for that extension. In case none is
-   found, a :exc:`ValueError` is raised.
-
-   .. versionadded:: 3.2
-
-
-.. function:: register_unpack_format(name, extensions, function[, extra_args[, description]])
-
-   Registers an unpack format. *name* is the name of the format and
-   *extensions* is a list of extensions corresponding to the format, like
-   ``.zip`` for Zip files.
-
-   *function* is the callable that will be used to unpack archives. The
-   callable will receive the path of the archive, followed by the directory
-   the archive must be extracted to.
-
-   When provided, *extra_args* is a sequence of ``(name, value)`` tuples that
-   will be passed as keywords arguments to the callable.
-
-   *description* can be provided to describe the format, and will be returned
-   by the :func:`get_unpack_formats` function.
-
-   .. versionadded:: 3.2
-
-
-.. function:: unregister_unpack_format(name)
-
-   Unregister an unpack format. *name* is the name of the format.
-
-   .. versionadded:: 3.2
-
-
-.. function:: get_unpack_formats()
-
-   Return a list of all registered formats for unpacking.
-   Each element of the returned sequence is a tuple
-   ``(name, extensions, description)``.
-
-   By default :mod:`shutil` provides these formats:
-
-   - *gztar*: gzip'ed tar-file
-   - *bztar*: bzip2'ed tar-file (if the :mod:`bz2` module is available.)
-   - *tar*: uncompressed tar file
-   - *zip*: ZIP file
-
-   You can register new formats or provide your own unpacker for any existing
-   formats, by using :func:`register_unpack_format`.
-
-   .. versionadded:: 3.2
-
-
+.. _archiving-example:
 
 Archiving example
 :::::::::::::::::
@@ -390,5 +356,3 @@ The resulting archive contains::
     -rw------- tarek/staff    1675 2008-06-09 13:26:54 ./id_rsa
     -rw-r--r-- tarek/staff     397 2008-06-09 13:26:54 ./id_rsa.pub
     -rw-r--r-- tarek/staff   37192 2010-02-06 18:23:10 ./known_hosts
-
-

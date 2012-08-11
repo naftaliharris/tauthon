@@ -353,10 +353,10 @@ root logger's name is printed as 'root' in the logged output.
 
 It is, of course, possible to log messages to different destinations. Support
 is included in the package for writing log messages to files, HTTP GET/POST
-locations, email via SMTP, generic sockets, queues, or OS-specific logging
-mechanisms such as syslog or the Windows NT event log. Destinations are served
-by :dfn:`handler` classes. You can create your own log destination class if
-you have special requirements not met by any of the built-in handler classes.
+locations, email via SMTP, generic sockets, or OS-specific logging mechanisms
+such as syslog or the Windows NT event log. Destinations are served by
+:dfn:`handler` classes. You can create your own log destination class if you
+have special requirements not met by any of the built-in handler classes.
 
 By default, no destination is set for any logging messages. You can specify
 a destination (such as console or file) by using :func:`basicConfig` as in the
@@ -496,29 +496,20 @@ Formatters
 Formatter objects configure the final order, structure, and contents of the log
 message.  Unlike the base :class:`logging.Handler` class, application code may
 instantiate formatter classes, although you could likely subclass the formatter
-if your application needs special behavior.  The constructor takes three
-optional arguments -- a message format string, a date format string and a style
-indicator.
+if your application needs special behavior.  The constructor takes two
+optional arguments -- a message format string and a date format string.
 
-.. method:: logging.Formatter.__init__(fmt=None, datefmt=None, style='%')
+.. method:: logging.Formatter.__init__(fmt=None, datefmt=None)
 
 If there is no message format string, the default is to use the
 raw message.  If there is no date format string, the default date format is::
 
     %Y-%m-%d %H:%M:%S
 
-with the milliseconds tacked on at the end. The ``style`` is one of `%`, '{'
-or '$'. If one of these is not specified, then '%' will be used.
+with the milliseconds tacked on at the end.
 
-If the ``style`` is '%', the message format string uses
-``%(<dictionary key>)s`` styled string substitution; the possible keys are
-documented in :ref:`logrecord-attributes`. If the style is '{', the message
-format string is assumed to be compatible with :meth:`str.format` (using
-keyword arguments), while if the style is '$' then the message format string
-should conform to what is expected by :meth:`string.Template.substitute`.
-
-.. versionchanged:: 3.2
-   Added the ``style`` parameter.
+The message format string uses ``%(<dictionary key>)s`` styled string
+substitution; the possible keys are documented in :ref:`logrecord-attributes`.
 
 The following message format string will log the time in a human-readable
 format, the severity of the message, and the contents of the message, in that
@@ -651,6 +642,21 @@ You can see that the config file approach has a few advantages over the Python
 code approach, mainly separation of configuration and code and the ability of
 noncoders to easily modify the logging properties.
 
+.. warning:: The :func:`fileConfig` function takes a default parameter,
+   ``disable_existing_loggers``, which defaults to ``True`` for reasons of
+   backward compatibility. This may or may not be what you want, since it
+   will cause any loggers existing before the :func:`fileConfig` call to
+   be disabled unless they (or an ancestor) are explicitly named in the
+   configuration.  Please refer to the reference documentation for more
+   information, and specify ``False`` for this parameter if you wish.
+
+   The dictionary passed to :func:`dictConfig` can also specify a Boolean
+   value with key ``disable_existing_loggers``, which if not specified
+   explicitly in the dictionary also defaults to being interpreted as
+   ``True``.  This leads to the logger-disabling behaviour described above,
+   which may not be what you want - in which case, provide the key
+   explicitly with a value of ``False``.
+
 .. currentmodule:: logging
 
 Note that the class names referenced in config files need to be either relative
@@ -661,7 +667,7 @@ import mechanisms. Thus, you could use either
 and module ``mymodule``, where ``mypackage`` is available on the Python import
 path).
 
-In Python 3.2, a new means of configuring logging has been introduced, using
+In Python 2.7, a new means of configuring logging has been introduced, using
 dictionaries to hold configuration information. This provides a superset of the
 functionality of the config-file-based approach outlined above, and is the
 recommended configuration method for new applications and deployments. Because
@@ -679,7 +685,7 @@ the new dictionary-based approach::
     version: 1
     formatters:
       simple:
-        format: format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+        format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     handlers:
       console:
         class: logging.StreamHandler
@@ -706,26 +712,13 @@ where a logging event needs to be output, but no handlers can be found to
 output the event. The behaviour of the logging package in these
 circumstances is dependent on the Python version.
 
-For versions of Python prior to 3.2, the behaviour is as follows:
+For Python 2.x, the behaviour is as follows:
 
 * If *logging.raiseExceptions* is *False* (production mode), the event is
   silently dropped.
 
 * If *logging.raiseExceptions* is *True* (development mode), a message
   'No handlers could be found for logger X.Y.Z' is printed once.
-
-In Python 3.2 and later, the behaviour is as follows:
-
-* The event is output using a 'handler of last resort', stored in
-  ``logging.lastResort``. This internal handler is not associated with any
-  logger, and acts like a :class:`~logging.StreamHandler` which writes the
-  event description message to the current value of ``sys.stderr`` (therefore
-  respecting any redirections which may be in effect). No formatting is
-  done on the message - just the bare event description message is printed.
-  The handler's level is set to ``WARNING``, so all events at this and
-  greater severities will be output.
-
-To obtain the pre-3.2 behaviour, ``logging.lastResort`` can be set to *None*.
 
 .. _library-config:
 
@@ -750,7 +743,7 @@ configured then logging calls made in library code will send output to those
 handlers, as normal.
 
 A do-nothing handler is included in the logging package:
-:class:`~logging.NullHandler` (since Python 3.1). An instance of this handler
+:class:`~logging.NullHandler` (since Python 2.7). An instance of this handler
 could be added to the top-level logger of the logging namespace used by the
 library (*if* you want to prevent your library's logged events being output to
 ``sys.stderr`` in the absence of logging configuration). If all logging by a
@@ -894,20 +887,14 @@ provided:
    name. This handler is only useful on Unix-like systems; Windows does not
    support the underlying mechanism used.
 
-#. :class:`~handlers.QueueHandler` instances send messages to a queue, such as
-   those implemented in the :mod:`queue` or :mod:`multiprocessing` modules.
-
 #. :class:`NullHandler` instances do nothing with error messages. They are used
    by library developers who want to use logging, but want to avoid the 'No
    handlers could be found for logger XXX' message which can be displayed if
    the library user has not configured logging. See :ref:`library-config` for
    more information.
 
-.. versionadded:: 3.1
+.. versionadded:: 2.7
    The :class:`NullHandler` class.
-
-.. versionadded:: 3.2
-   The :class:`~handlers.QueueHandler` class.
 
 The :class:`NullHandler`, :class:`StreamHandler` and :class:`FileHandler`
 classes are defined in the core logging package. The other handlers are

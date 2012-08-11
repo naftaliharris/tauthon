@@ -21,8 +21,6 @@
 #include <io.h>
 #include <conio.h>
 #include <sys/locking.h>
-#include <crtdbg.h>
-#include <windows.h>
 
 #ifdef _MSC_VER
 #if _MSC_VER >= 1500 && _MSC_VER < 1600
@@ -97,7 +95,7 @@ msvcrt_setmode(PyObject *self, PyObject *args)
     if (flags == -1)
         return PyErr_SetFromErrno(PyExc_IOError);
 
-    return PyLong_FromLong(flags);
+    return PyInt_FromLong(flags);
 }
 
 PyDoc_STRVAR(setmode_doc,
@@ -122,7 +120,7 @@ msvcrt_open_osfhandle(PyObject *self, PyObject *args)
     if (fd == -1)
         return PyErr_SetFromErrno(PyExc_IOError);
 
-    return PyLong_FromLong(fd);
+    return PyInt_FromLong(fd);
 }
 
 PyDoc_STRVAR(open_osfhandle_doc,
@@ -173,7 +171,7 @@ msvcrt_kbhit(PyObject *self, PyObject *args)
         return NULL;
 
     ok = _kbhit();
-    return PyLong_FromLong(ok);
+    return PyInt_FromLong(ok);
 }
 
 PyDoc_STRVAR(kbhit_doc,
@@ -194,18 +192,18 @@ msvcrt_getch(PyObject *self, PyObject *args)
     ch = _getch();
     Py_END_ALLOW_THREADS
     s[0] = ch;
-    return PyBytes_FromStringAndSize(s, 1);
+    return PyString_FromStringAndSize(s, 1);
 }
 
 PyDoc_STRVAR(getch_doc,
 "getch() -> key character\n\
 \n\
-Read a keypress and return the resulting character as a byte string.\n\
-Nothing is echoed to the console. This call will block if a keypress is\n\
-not already available, but will not wait for Enter to be pressed. If the\n\
-pressed key was a special function key, this will return '\\000' or\n\
-'\\xe0'; the next call will return the keycode. The Control-C keypress\n\
-cannot be read with this function.");
+Read a keypress and return the resulting character. Nothing is echoed to\n\
+the console. This call will block if a keypress is not already\n\
+available, but will not wait for Enter to be pressed. If the pressed key\n\
+was a special function key, this will return '\\000' or '\\xe0'; the next\n\
+call will return the keycode. The Control-C keypress cannot be read with\n\
+this function.");
 
 #ifdef _WCONIO_DEFINED
 static PyObject *
@@ -243,7 +241,7 @@ msvcrt_getche(PyObject *self, PyObject *args)
     ch = _getche();
     Py_END_ALLOW_THREADS
     s[0] = ch;
-    return PyBytes_FromStringAndSize(s, 1);
+    return PyString_FromStringAndSize(s, 1);
 }
 
 PyDoc_STRVAR(getche_doc,
@@ -291,18 +289,24 @@ msvcrt_putch(PyObject *self, PyObject *args)
 PyDoc_STRVAR(putch_doc,
 "putch(char) -> None\n\
 \n\
-Print the byte string char to the console without buffering.");
+Print the character char to the console without buffering.");
 
 #ifdef _WCONIO_DEFINED
 static PyObject *
 msvcrt_putwch(PyObject *self, PyObject *args)
 {
-    int ch;
+    Py_UNICODE *ch;
+    int size;
 
-    if (!PyArg_ParseTuple(args, "C:putwch", &ch))
+    if (!PyArg_ParseTuple(args, "u#:putwch", &ch, &size))
         return NULL;
 
-    _putwch(ch);
+    if (size == 0) {
+        PyErr_SetString(PyExc_ValueError,
+            "Expected unicode string of length 1");
+        return NULL;
+    }
+    _putwch(*ch);
     Py_RETURN_NONE;
 
 }
@@ -330,20 +334,19 @@ msvcrt_ungetch(PyObject *self, PyObject *args)
 PyDoc_STRVAR(ungetch_doc,
 "ungetch(char) -> None\n\
 \n\
-Cause the byte string char to be \"pushed back\" into the\n\
-console buffer; it will be the next character read by\n\
-getch() or getche().");
+Cause the character char to be \"pushed back\" into the console buffer;\n\
+it will be the next character read by getch() or getche().");
 
 #ifdef _WCONIO_DEFINED
 static PyObject *
 msvcrt_ungetwch(PyObject *self, PyObject *args)
 {
-    int ch;
+    Py_UNICODE ch;
 
-    if (!PyArg_ParseTuple(args, "C:ungetwch", &ch))
+    if (!PyArg_ParseTuple(args, "u:ungetwch", &ch))
         return NULL;
 
-    if (_ungetwch(ch) == WEOF)
+    if (_ungetch(ch) == EOF)
         return PyErr_SetFromErrno(PyExc_IOError);
     Py_INCREF(Py_None);
     return Py_None;
@@ -358,7 +361,7 @@ Wide char variant of ungetch(), accepting a Unicode value.");
 static void
 insertint(PyObject *d, char *name, int value)
 {
-    PyObject *v = PyLong_FromLong((long) value);
+    PyObject *v = PyInt_FromLong((long) value);
     if (v == NULL) {
         /* Don't bother reporting this error */
         PyErr_Clear();
@@ -367,60 +370,6 @@ insertint(PyObject *d, char *name, int value)
         PyDict_SetItemString(d, name, v);
         Py_DECREF(v);
     }
-}
-
-#ifdef _DEBUG
-
-static PyObject*
-msvcrt_setreportfile(PyObject *self, PyObject *args)
-{
-    int type, file;
-    _HFILE res;
-
-    if (!PyArg_ParseTuple(args, "ii", &type, &file))
-        return NULL;
-    res = _CrtSetReportFile(type, (_HFILE)file);
-    return PyLong_FromLong((long)res);
-    Py_INCREF(Py_None);
-    return Py_None;
-}
-
-static PyObject*
-msvcrt_setreportmode(PyObject *self, PyObject *args)
-{
-    int type, mode;
-    int res;
-
-    if (!PyArg_ParseTuple(args, "ii", &type, &mode))
-        return NULL;
-    res = _CrtSetReportMode(type, mode);
-    if (res == -1)
-        return PyErr_SetFromErrno(PyExc_IOError);
-    return PyLong_FromLong(res);
-}
-
-static PyObject*
-msvcrt_seterrormode(PyObject *self, PyObject *args)
-{
-    int mode, res;
-
-    if (!PyArg_ParseTuple(args, "i", &mode))
-        return NULL;
-    res = _set_error_mode(mode);
-    return PyLong_FromLong(res);
-}
-
-#endif
-
-static PyObject*
-seterrormode(PyObject *self, PyObject *args)
-{
-    unsigned int mode, res;
-
-    if (!PyArg_ParseTuple(args, "I", &mode))
-        return NULL;
-    res = SetErrorMode(mode);
-    return PyLong_FromUnsignedLong(res);
 }
 
 
@@ -436,12 +385,6 @@ static struct PyMethodDef msvcrt_functions[] = {
     {"getche",                  msvcrt_getche, METH_VARARGS, getche_doc},
     {"putch",                   msvcrt_putch, METH_VARARGS, putch_doc},
     {"ungetch",                 msvcrt_ungetch, METH_VARARGS, ungetch_doc},
-    {"SetErrorMode",            seterrormode, METH_VARARGS},
-#ifdef _DEBUG
-    {"CrtSetReportFile",        msvcrt_setreportfile, METH_VARARGS},
-    {"CrtSetReportMode",        msvcrt_setreportmode, METH_VARARGS},
-    {"set_error_mode",          msvcrt_seterrormode, METH_VARARGS},
-#endif
 #ifdef _WCONIO_DEFINED
     {"getwch",                  msvcrt_getwch, METH_VARARGS, getwch_doc},
     {"getwche",                 msvcrt_getwche, METH_VARARGS, getwche_doc},
@@ -451,27 +394,14 @@ static struct PyMethodDef msvcrt_functions[] = {
     {NULL,                      NULL}
 };
 
-
-static struct PyModuleDef msvcrtmodule = {
-    PyModuleDef_HEAD_INIT,
-    "msvcrt",
-    NULL,
-    -1,
-    msvcrt_functions,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_msvcrt(void)
+initmsvcrt(void)
 {
     int st;
     PyObject *d;
-    PyObject *m = PyModule_Create(&msvcrtmodule);
+    PyObject *m = Py_InitModule("msvcrt", msvcrt_functions);
     if (m == NULL)
-        return NULL;
+        return;
     d = PyModule_GetDict(m);
 
     /* constants for the locking() function's mode argument */
@@ -480,39 +410,21 @@ PyInit_msvcrt(void)
     insertint(d, "LK_NBRLCK", _LK_NBRLCK);
     insertint(d, "LK_RLCK", _LK_RLCK);
     insertint(d, "LK_UNLCK", _LK_UNLCK);
-    insertint(d, "SEM_FAILCRITICALERRORS", SEM_FAILCRITICALERRORS);
-    insertint(d, "SEM_NOALIGNMENTFAULTEXCEPT", SEM_NOALIGNMENTFAULTEXCEPT);
-    insertint(d, "SEM_NOGPFAULTERRORBOX", SEM_NOGPFAULTERRORBOX);
-    insertint(d, "SEM_NOOPENFILEERRORBOX", SEM_NOOPENFILEERRORBOX);
-#ifdef _DEBUG
-    insertint(d, "CRT_WARN", _CRT_WARN);
-    insertint(d, "CRT_ERROR", _CRT_ERROR);
-    insertint(d, "CRT_ASSERT", _CRT_ASSERT);
-    insertint(d, "CRTDBG_MODE_DEBUG", _CRTDBG_MODE_DEBUG);
-    insertint(d, "CRTDBG_MODE_FILE", _CRTDBG_MODE_FILE);
-    insertint(d, "CRTDBG_MODE_WNDW", _CRTDBG_MODE_WNDW);
-    insertint(d, "CRTDBG_REPORT_MODE", _CRTDBG_REPORT_MODE);
-    insertint(d, "CRTDBG_FILE_STDERR", (int)_CRTDBG_FILE_STDERR);
-    insertint(d, "CRTDBG_FILE_STDOUT", (int)_CRTDBG_FILE_STDOUT);
-    insertint(d, "CRTDBG_REPORT_FILE", (int)_CRTDBG_REPORT_FILE);
-#endif
 
     /* constants for the crt versions */
 #ifdef _VC_ASSEMBLY_PUBLICKEYTOKEN
     st = PyModule_AddStringConstant(m, "VC_ASSEMBLY_PUBLICKEYTOKEN",
                                     _VC_ASSEMBLY_PUBLICKEYTOKEN);
-    if (st < 0) return NULL;
+    if (st < 0)return;
 #endif
 #ifdef _CRT_ASSEMBLY_VERSION
     st = PyModule_AddStringConstant(m, "CRT_ASSEMBLY_VERSION",
                                     _CRT_ASSEMBLY_VERSION);
-    if (st < 0) return NULL;
+    if (st < 0)return;
 #endif
 #ifdef __LIBRARIES_ASSEMBLY_NAME_PREFIX
     st = PyModule_AddStringConstant(m, "LIBRARIES_ASSEMBLY_NAME_PREFIX",
                                     __LIBRARIES_ASSEMBLY_NAME_PREFIX);
-    if (st < 0) return NULL;
+    if (st < 0)return;
 #endif
-
-    return m;
 }

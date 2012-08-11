@@ -28,7 +28,7 @@ def run_all_tests(test_mod=None, tests=None):
     unittest.TextTestRunner(verbosity=2).run(tests)
 
 def reformat(string):
-    return dedent(string) + "\n\n"
+    return dedent(string) + u"\n\n"
 
 def get_refactorer(fixer_pkg="lib2to3", fixers=None, options=None):
     """

@@ -5,8 +5,8 @@ import _ctypes_test
 
 ctype_types = [c_byte, c_ubyte, c_short, c_ushort, c_int, c_uint,
                  c_long, c_ulong, c_longlong, c_ulonglong, c_double, c_float]
-python_types = [int, int, int, int, int, int,
-                int, int, int, int, float, float]
+python_types = [int, int, int, int, int, long,
+                int, long, long, long, float, float]
 
 class PointersTestCase(unittest.TestCase):
 
@@ -140,10 +140,10 @@ class PointersTestCase(unittest.TestCase):
         func.restype = c_char_p
         argv = (c_char_p * 2)()
         argc = c_int( 2 )
-        argv[0] = b'hello'
-        argv[1] = b'world'
+        argv[0] = 'hello'
+        argv[1] = 'world'
         result = func( byref(argc), argv )
-        self.assertEqual(result, b'world')
+        assert result == 'world', result
 
     def test_bug_1467852(self):
         # http://sourceforge.net/tracker/?func=detail&atid=532154&aid=1467852&group_id=71702
@@ -160,16 +160,16 @@ class PointersTestCase(unittest.TestCase):
     def test_c_void_p(self):
         # http://sourceforge.net/tracker/?func=detail&aid=1518190&group_id=5470&atid=105470
         if sizeof(c_void_p) == 4:
-            self.assertEqual(c_void_p(0xFFFFFFFF).value,
+            self.assertEqual(c_void_p(0xFFFFFFFFL).value,
                                  c_void_p(-1).value)
-            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFF).value,
+            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFFL).value,
                                  c_void_p(-1).value)
         elif sizeof(c_void_p) == 8:
-            self.assertEqual(c_void_p(0xFFFFFFFF).value,
-                                 0xFFFFFFFF)
-            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFF).value,
+            self.assertEqual(c_void_p(0xFFFFFFFFL).value,
+                                 0xFFFFFFFFL)
+            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFFL).value,
                                  c_void_p(-1).value)
-            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFFFFFFFFFF).value,
+            self.assertEqual(c_void_p(0xFFFFFFFFFFFFFFFFFFFFFFFFL).value,
                                  c_void_p(-1).value)
 
         self.assertRaises(TypeError, c_void_p, 3.14) # make sure floats are NOT accepted

@@ -26,8 +26,9 @@ The :mod:`nis` module defines the following functions:
 
    Note that *mapname* is first checked if it is an alias to another name.
 
-   The *domain* argument allows to override the NIS domain used for the lookup. If
-   unspecified, lookup is in the default NIS domain.
+   .. versionchanged:: 2.5
+      The *domain* argument allows to override the NIS domain used for the lookup. If
+      unspecified, lookup is in the default NIS domain.
 
 
 .. function:: cat(mapname[, domain=default_domain])
@@ -38,24 +39,28 @@ The :mod:`nis` module defines the following functions:
 
    Note that *mapname* is first checked if it is an alias to another name.
 
-   The *domain* argument allows to override the NIS domain used for the lookup. If
-   unspecified, lookup is in the default NIS domain.
+   .. versionchanged:: 2.5
+      The *domain* argument allows to override the NIS domain used for the lookup. If
+      unspecified, lookup is in the default NIS domain.
 
 
 .. function:: maps([domain=default_domain])
 
    Return a list of all valid maps.
 
-   The *domain* argument allows to override the NIS domain used for the lookup. If
-   unspecified, lookup is in the default NIS domain.
+   .. versionchanged:: 2.5
+      The *domain* argument allows to override the NIS domain used for the lookup. If
+      unspecified, lookup is in the default NIS domain.
 
 
 .. function:: get_default_domain()
 
    Return the system default NIS domain.
 
+   .. versionadded:: 2.5
 
 The :mod:`nis` module defines the following exception:
+
 
 .. exception:: error
 

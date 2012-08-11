@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # test_codecmaps_cn.py
 #   Codec mapping tests for PRC encodings
 #
 
-from test import support
+from test import test_support
 from test import test_multibytecodec_support
 import unittest
 
@@ -27,7 +27,7 @@ class TestGB18030Map(test_multibytecodec_support.TestBase_Mapping,
 
 
 def test_main():
-    support.run_unittest(__name__)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

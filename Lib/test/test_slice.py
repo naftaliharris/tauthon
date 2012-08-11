@@ -1,8 +1,8 @@
 # tests for slice objects; in particular the indices method.
 
 import unittest
-from test import support
-from pickle import loads, dumps
+from test import test_support
+from cPickle import loads, dumps
 
 import sys
 
@@ -26,9 +26,6 @@ class SliceTest(unittest.TestCase):
         s3 = slice(1, 2, 4)
         self.assertEqual(s1, s2)
         self.assertNotEqual(s1, s3)
-        self.assertNotEqual(s1, None)
-        self.assertNotEqual(s1, (1, 2, 3))
-        self.assertNotEqual(s1, "")
 
         class Exc(Exception):
             pass
@@ -36,21 +33,22 @@ class SliceTest(unittest.TestCase):
         class BadCmp(object):
             def __eq__(self, other):
                 raise Exc
+            __hash__ = None # Silence Py3k warning
 
         s1 = slice(BadCmp())
         s2 = slice(BadCmp())
+        self.assertRaises(Exc, cmp, s1, s2)
         self.assertEqual(s1, s1)
-        self.assertRaises(Exc, lambda: s1 == s2)
 
         s1 = slice(1, BadCmp())
         s2 = slice(1, BadCmp())
         self.assertEqual(s1, s1)
-        self.assertRaises(Exc, lambda: s1 == s2)
+        self.assertRaises(Exc, cmp, s1, s2)
 
         s1 = slice(1, 2, BadCmp())
         s2 = slice(1, 2, BadCmp())
         self.assertEqual(s1, s1)
-        self.assertRaises(Exc, lambda: s1 == s2)
+        self.assertRaises(Exc, cmp, s1, s2)
 
     def test_members(self):
         s = slice(1)
@@ -104,21 +102,22 @@ class SliceTest(unittest.TestCase):
             slice(100,  -100,  -1).indices(10),
             slice(None, None, -1).indices(10)
         )
-        self.assertEqual(slice(-100, 100, 2).indices(10), (0, 10,  2))
+        self.assertEqual(slice(-100L, 100L, 2L).indices(10), (0, 10,  2))
 
-        self.assertEqual(list(range(10))[::sys.maxsize - 1], [0])
+        self.assertEqual(range(10)[::sys.maxint - 1], [0])
 
-        self.assertRaises(OverflowError, slice(None).indices, 1<<100)
+        self.assertRaises(OverflowError, slice(None).indices, 1L<<100)
 
     def test_setslice_without_getslice(self):
         tmp = []
         class X(object):
-            def __setitem__(self, i, k):
-                tmp.append((i, k))
+            def __setslice__(self, i, j, k):
+                tmp.append((i, j, k))
 
         x = X()
-        x[1:2] = 42
-        self.assertEqual(tmp, [(slice(1, 2), 42)])
+        with test_support.check_py3k_warnings():
+            x[1:2] = 42
+        self.assertEqual(tmp, [(1, 2, 42)])
 
     def test_pickle(self):
         s = slice(10, 20, 3)
@@ -129,7 +128,7 @@ class SliceTest(unittest.TestCase):
             self.assertNotEqual(id(s), id(t))
 
 def test_main():
-    support.run_unittest(SliceTest)
+    test_support.run_unittest(SliceTest)
 
 if __name__ == "__main__":
     test_main()

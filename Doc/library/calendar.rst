@@ -2,8 +2,8 @@
 ======================================================
 
 .. module:: calendar
-   :synopsis: Functions for working with calendars, including some emulation
-              of the Unix cal program.
+   :synopsis: Functions for working with calendars, including some emulation of the Unix cal
+              program.
 .. sectionauthor:: Drew Csillag <drew_csillag@geocities.com>
 
 **Source code:** :source:`Lib/calendar.py`
@@ -19,13 +19,13 @@ are given as integers. For related
 functionality, see also the :mod:`datetime` and :mod:`time` modules.
 
 Most of these functions and classes rely on the :mod:`datetime` module which
-uses an idealized calendar, the current Gregorian calendar extended
+uses an idealized calendar, the current Gregorian calendar indefinitely extended
 in both directions.  This matches the definition of the "proleptic Gregorian"
 calendar in Dershowitz and Reingold's book "Calendrical Calculations", where
 it's the base calendar for all computations.
 
 
-.. class:: Calendar(firstweekday=0)
+.. class:: Calendar([firstweekday])
 
    Creates a :class:`Calendar` object. *firstweekday* is an integer specifying the
    first day of the week. ``0`` is Monday (the default), ``6`` is Sunday.
@@ -34,8 +34,10 @@ it's the base calendar for all computations.
    preparing the calendar data for formatting. This class doesn't do any formatting
    itself. This is the job of subclasses.
 
+   .. versionadded:: 2.5
 
    :class:`Calendar` instances have the following methods:
+
 
    .. method:: iterweekdays()
 
@@ -84,7 +86,7 @@ it's the base calendar for all computations.
       weeks.  Weeks are lists of seven day numbers.
 
 
-   .. method:: yeardatescalendar(year, width=3)
+   .. method:: yeardatescalendar(year[, width])
 
       Return the data for the specified year ready for formatting. The return
       value is a list of month rows. Each month row contains up to *width*
@@ -92,27 +94,30 @@ it's the base calendar for all computations.
       each week contains 1--7 days. Days are :class:`datetime.date` objects.
 
 
-   .. method:: yeardays2calendar(year, width=3)
+   .. method:: yeardays2calendar(year[, width])
 
       Return the data for the specified year ready for formatting (similar to
       :meth:`yeardatescalendar`). Entries in the week lists are tuples of day
       numbers and weekday numbers. Day numbers outside this month are zero.
 
 
-   .. method:: yeardayscalendar(year, width=3)
+   .. method:: yeardayscalendar(year[, width])
 
       Return the data for the specified year ready for formatting (similar to
       :meth:`yeardatescalendar`). Entries in the week lists are day numbers. Day
       numbers outside this month are zero.
 
 
-.. class:: TextCalendar(firstweekday=0)
+.. class:: TextCalendar([firstweekday])
 
    This class can be used to generate plain text calendars.
 
+   .. versionadded:: 2.5
+
    :class:`TextCalendar` instances have the following methods:
 
-   .. method:: formatmonth(theyear, themonth, w=0, l=0)
+
+   .. method:: formatmonth(theyear, themonth[, w[, l]])
 
       Return a month's calendar in a multi-line string. If *w* is provided, it
       specifies the width of the date columns, which are centered. If *l* is
@@ -121,12 +126,12 @@ it's the base calendar for all computations.
       :meth:`setfirstweekday` method.
 
 
-   .. method:: prmonth(theyear, themonth, w=0, l=0)
+   .. method:: prmonth(theyear, themonth[, w[, l]])
 
       Print a month's calendar as returned by :meth:`formatmonth`.
 
 
-   .. method:: formatyear(theyear, w=2, l=1, c=6, m=3)
+   .. method:: formatyear(theyear[, w[, l[, c[, m]]]])
 
       Return a *m*-column calendar for an entire year as a multi-line string.
       Optional parameters *w*, *l*, and *c* are for date column width, lines per
@@ -136,32 +141,34 @@ it's the base calendar for all computations.
       can be generated is platform-dependent.
 
 
-   .. method:: pryear(theyear, w=2, l=1, c=6, m=3)
+   .. method:: pryear(theyear[, w[, l[, c[, m]]]])
 
       Print the calendar for an entire year as returned by :meth:`formatyear`.
 
 
-.. class:: HTMLCalendar(firstweekday=0)
+.. class:: HTMLCalendar([firstweekday])
 
    This class can be used to generate HTML calendars.
 
+   .. versionadded:: 2.5
 
    :class:`HTMLCalendar` instances have the following methods:
 
-   .. method:: formatmonth(theyear, themonth, withyear=True)
+
+   .. method:: formatmonth(theyear, themonth[, withyear])
 
       Return a month's calendar as an HTML table. If *withyear* is true the year
       will be included in the header, otherwise just the month name will be
       used.
 
 
-   .. method:: formatyear(theyear, width=3)
+   .. method:: formatyear(theyear[, width])
 
       Return a year's calendar as an HTML table. *width* (defaulting to 3)
       specifies the number of months per row.
 
 
-   .. method:: formatyearpage(theyear, width=3, css='calendar.css', encoding=None)
+   .. method:: formatyearpage(theyear[, width[, css[, encoding]]])
 
       Return a year's calendar as a complete HTML page. *width* (defaulting to
       3) specifies the number of months per row. *css* is the name for the
@@ -170,20 +177,24 @@ it's the base calendar for all computations.
       output (defaulting to the system default encoding).
 
 
-.. class:: LocaleTextCalendar(firstweekday=0, locale=None)
+.. class:: LocaleTextCalendar([firstweekday[, locale]])
 
    This subclass of :class:`TextCalendar` can be passed a locale name in the
    constructor and will return month and weekday names in the specified locale.
    If this locale includes an encoding all strings containing month and weekday
    names will be returned as unicode.
 
+   .. versionadded:: 2.5
 
-.. class:: LocaleHTMLCalendar(firstweekday=0, locale=None)
+
+.. class:: LocaleHTMLCalendar([firstweekday[, locale]])
 
    This subclass of :class:`HTMLCalendar` can be passed a locale name in the
    constructor and will return month and weekday names in the specified
    locale. If this locale includes an encoding all strings containing month and
    weekday names will be returned as unicode.
+
+   .. versionadded:: 2.5
 
 .. note::
 
@@ -193,6 +204,7 @@ it's the base calendar for all computations.
 
 
 For simple text calendars this module provides the following functions.
+
 
 .. function:: setfirstweekday(weekday)
 
@@ -204,10 +216,14 @@ For simple text calendars this module provides the following functions.
       import calendar
       calendar.setfirstweekday(calendar.SUNDAY)
 
+   .. versionadded:: 2.0
+
 
 .. function:: firstweekday()
 
    Returns the current setting for the weekday to start each week.
+
+   .. versionadded:: 2.0
 
 
 .. function:: isleap(year)
@@ -220,7 +236,9 @@ For simple text calendars this module provides the following functions.
    Returns the number of leap years in the range from *y1* to *y2* (exclusive),
    where *y1* and *y2* are years.
 
-   This function works for ranges spanning a century change.
+   .. versionchanged:: 2.0
+      This function didn't work for ranges spanning a century change in Python
+      1.5.2.
 
 
 .. function:: weekday(year, month, day)
@@ -248,26 +266,30 @@ For simple text calendars this module provides the following functions.
    unless set by :func:`setfirstweekday`.
 
 
-.. function:: prmonth(theyear, themonth, w=0, l=0)
+.. function:: prmonth(theyear, themonth[, w[, l]])
 
    Prints a month's calendar as returned by :func:`month`.
 
 
-.. function:: month(theyear, themonth, w=0, l=0)
+.. function:: month(theyear, themonth[, w[, l]])
 
    Returns a month's calendar in a multi-line string using the :meth:`formatmonth`
    of the :class:`TextCalendar` class.
 
+   .. versionadded:: 2.0
 
-.. function:: prcal(year, w=0, l=0, c=6, m=3)
+
+.. function:: prcal(year[, w[, l[c]]])
 
    Prints the calendar for an entire year as returned by  :func:`calendar`.
 
 
-.. function:: calendar(year, w=2, l=1, c=6, m=3)
+.. function:: calendar(year[, w[, l[c]]])
 
-   Returns a 3-column calendar for an entire year as a multi-line string using
-   the :meth:`formatyear` of the :class:`TextCalendar` class.
+   Returns a 3-column calendar for an entire year as a multi-line string using the
+   :meth:`formatyear` of the :class:`TextCalendar` class.
+
+   .. versionadded:: 2.0
 
 
 .. function:: timegm(tuple)
@@ -277,8 +299,10 @@ For simple text calendars this module provides the following functions.
    Unix timestamp value, assuming an epoch of 1970, and the POSIX encoding.  In
    fact, :func:`time.gmtime` and :func:`timegm` are each others' inverse.
 
+   .. versionadded:: 2.0
 
 The :mod:`calendar` module exports the following data attributes:
+
 
 .. data:: day_name
 
@@ -312,3 +336,4 @@ The :mod:`calendar` module exports the following data attributes:
 
    Module :mod:`time`
       Low-level time related functions.
+

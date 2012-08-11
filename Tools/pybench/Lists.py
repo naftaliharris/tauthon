@@ -11,7 +11,7 @@ class SimpleListManipulation(Test):
         l = []
         append = l.append
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             append(2)
             append(3)
@@ -127,7 +127,7 @@ class SimpleListManipulation(Test):
         l = []
         append = l.append
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class ListSlicing(Test):
@@ -138,10 +138,10 @@ class ListSlicing(Test):
 
     def test(self):
 
-        n = list(range(100))
-        r = list(range(25))
+        n = range(100)
+        r = range(25)
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             l = n[:]
 
@@ -157,10 +157,10 @@ class ListSlicing(Test):
 
     def calibrate(self):
 
-        n = list(range(100))
-        r = list(range(25))
+        n = range(100)
+        r = range(25)
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             for j in r:
                 pass
 
@@ -172,7 +172,7 @@ class SmallLists(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             l = []
 
@@ -291,7 +291,7 @@ class SmallLists(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class SimpleListComprehensions(Test):
@@ -302,9 +302,9 @@ class SimpleListComprehensions(Test):
 
     def test(self):
 
-        n = list(range(10)) * 10
+        n = range(10) * 10
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             l = [x for x in n]
             l = [x for x in n if x]
             l = [x for x in n if not x]
@@ -315,9 +315,9 @@ class SimpleListComprehensions(Test):
 
     def calibrate(self):
 
-        n = list(range(10)) * 10
+        n = range(10) * 10
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class NestedListComprehensions(Test):
@@ -328,10 +328,10 @@ class NestedListComprehensions(Test):
 
     def test(self):
 
-        m = list(range(10))
-        n = list(range(10))
+        m = range(10)
+        n = range(10)
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             l = [x for x in n for y in m]
             l = [y for x in n for y in m]
 
@@ -343,8 +343,8 @@ class NestedListComprehensions(Test):
 
     def calibrate(self):
 
-        m = list(range(10))
-        n = list(range(10))
+        m = range(10)
+        n = range(10)
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass

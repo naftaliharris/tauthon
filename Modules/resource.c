@@ -1,5 +1,6 @@
 
 #include "Python.h"
+#include "structseq.h"
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <string.h>
@@ -85,20 +86,20 @@ resource_getrusage(PyObject *self, PyObject *args)
                     PyFloat_FromDouble(doubletime(ru.ru_utime)));
     PyStructSequence_SET_ITEM(result, 1,
                     PyFloat_FromDouble(doubletime(ru.ru_stime)));
-    PyStructSequence_SET_ITEM(result, 2, PyLong_FromLong(ru.ru_maxrss));
-    PyStructSequence_SET_ITEM(result, 3, PyLong_FromLong(ru.ru_ixrss));
-    PyStructSequence_SET_ITEM(result, 4, PyLong_FromLong(ru.ru_idrss));
-    PyStructSequence_SET_ITEM(result, 5, PyLong_FromLong(ru.ru_isrss));
-    PyStructSequence_SET_ITEM(result, 6, PyLong_FromLong(ru.ru_minflt));
-    PyStructSequence_SET_ITEM(result, 7, PyLong_FromLong(ru.ru_majflt));
-    PyStructSequence_SET_ITEM(result, 8, PyLong_FromLong(ru.ru_nswap));
-    PyStructSequence_SET_ITEM(result, 9, PyLong_FromLong(ru.ru_inblock));
-    PyStructSequence_SET_ITEM(result, 10, PyLong_FromLong(ru.ru_oublock));
-    PyStructSequence_SET_ITEM(result, 11, PyLong_FromLong(ru.ru_msgsnd));
-    PyStructSequence_SET_ITEM(result, 12, PyLong_FromLong(ru.ru_msgrcv));
-    PyStructSequence_SET_ITEM(result, 13, PyLong_FromLong(ru.ru_nsignals));
-    PyStructSequence_SET_ITEM(result, 14, PyLong_FromLong(ru.ru_nvcsw));
-    PyStructSequence_SET_ITEM(result, 15, PyLong_FromLong(ru.ru_nivcsw));
+    PyStructSequence_SET_ITEM(result, 2, PyInt_FromLong(ru.ru_maxrss));
+    PyStructSequence_SET_ITEM(result, 3, PyInt_FromLong(ru.ru_ixrss));
+    PyStructSequence_SET_ITEM(result, 4, PyInt_FromLong(ru.ru_idrss));
+    PyStructSequence_SET_ITEM(result, 5, PyInt_FromLong(ru.ru_isrss));
+    PyStructSequence_SET_ITEM(result, 6, PyInt_FromLong(ru.ru_minflt));
+    PyStructSequence_SET_ITEM(result, 7, PyInt_FromLong(ru.ru_majflt));
+    PyStructSequence_SET_ITEM(result, 8, PyInt_FromLong(ru.ru_nswap));
+    PyStructSequence_SET_ITEM(result, 9, PyInt_FromLong(ru.ru_inblock));
+    PyStructSequence_SET_ITEM(result, 10, PyInt_FromLong(ru.ru_oublock));
+    PyStructSequence_SET_ITEM(result, 11, PyInt_FromLong(ru.ru_msgsnd));
+    PyStructSequence_SET_ITEM(result, 12, PyInt_FromLong(ru.ru_msgrcv));
+    PyStructSequence_SET_ITEM(result, 13, PyInt_FromLong(ru.ru_nsignals));
+    PyStructSequence_SET_ITEM(result, 14, PyInt_FromLong(ru.ru_nvcsw));
+    PyStructSequence_SET_ITEM(result, 15, PyInt_FromLong(ru.ru_nivcsw));
 
     if (PyErr_Occurred()) {
         Py_DECREF(result);
@@ -157,18 +158,20 @@ resource_setrlimit(PyObject *self, PyObject *args)
     }
 
 #if !defined(HAVE_LARGEFILE_SUPPORT)
-    rl.rlim_cur = PyLong_AsLong(curobj);
+    rl.rlim_cur = PyInt_AsLong(curobj);
     if (rl.rlim_cur == (rlim_t)-1 && PyErr_Occurred())
         return NULL;
-    rl.rlim_max = PyLong_AsLong(maxobj);
+    rl.rlim_max = PyInt_AsLong(maxobj);
     if (rl.rlim_max == (rlim_t)-1 && PyErr_Occurred())
         return NULL;
 #else
     /* The limits are probably bigger than a long */
-    rl.rlim_cur = PyLong_AsLongLong(curobj);
+    rl.rlim_cur = PyLong_Check(curobj) ?
+        PyLong_AsLongLong(curobj) : PyInt_AsLong(curobj);
     if (rl.rlim_cur == (rlim_t)-1 && PyErr_Occurred())
         return NULL;
-    rl.rlim_max = PyLong_AsLongLong(maxobj);
+    rl.rlim_max = PyLong_Check(maxobj) ?
+        PyLong_AsLongLong(maxobj) : PyInt_AsLong(maxobj);
     if (rl.rlim_max == (rlim_t)-1 && PyErr_Occurred())
         return NULL;
 #endif
@@ -222,28 +225,15 @@ resource_methods[] = {
 
 /* Module initialization */
 
-
-static struct PyModuleDef resourcemodule = {
-    PyModuleDef_HEAD_INIT,
-    "resource",
-    NULL,
-    -1,
-    resource_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_resource(void)
+initresource(void)
 {
     PyObject *m, *v;
 
     /* Create the module and add the functions */
-    m = PyModule_Create(&resourcemodule);
+    m = Py_InitModule("resource", resource_methods);
     if (m == NULL)
-        return NULL;
+        return;
 
     /* Add some symbolic constants to the module */
     if (ResourceError == NULL) {
@@ -324,21 +314,16 @@ PyInit_resource(void)
     PyModule_AddIntConstant(m, "RUSAGE_BOTH", RUSAGE_BOTH);
 #endif
 
-#ifdef RUSAGE_THREAD
-    PyModule_AddIntConstant(m, "RUSAGE_THREAD", RUSAGE_THREAD);
-#endif
-
 #if defined(HAVE_LONG_LONG)
     if (sizeof(RLIM_INFINITY) > sizeof(long)) {
         v = PyLong_FromLongLong((PY_LONG_LONG) RLIM_INFINITY);
     } else
 #endif
     {
-        v = PyLong_FromLong((long) RLIM_INFINITY);
+        v = PyInt_FromLong((long) RLIM_INFINITY);
     }
     if (v) {
         PyModule_AddObject(m, "RLIM_INFINITY", v);
     }
     initialized = 1;
-    return m;
 }

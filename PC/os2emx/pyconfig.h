@@ -58,6 +58,7 @@
 #define WITH_DOC_STRINGS 1
 
 /* Unicode related */
+#define Py_USING_UNICODE 1
 #define PY_UNICODE_TYPE	wchar_t
 #define Py_UNICODE_SIZE SIZEOF_SHORT
 
@@ -262,6 +263,9 @@ typedef long intptr_t;
 
 /* Define if you have the <conio.h> header file. */
 #undef HAVE_CONIO_H
+
+/* Define to 1 if you have the `copysign' function. */
+#define HAVE_COPYSIGN 1
 
 /* Define if you have the <direct.h> header file. */
 #undef HAVE_DIRECT_H

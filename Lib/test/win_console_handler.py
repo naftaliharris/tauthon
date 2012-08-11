@@ -40,9 +40,9 @@ if __name__ == "__main__":
         print("Unable to add SetConsoleCtrlHandler")
         exit(-1)
 
-    # Awake main process
+    # Awaken mail process
     m = mmap.mmap(-1, 1, sys.argv[1])
-    m[0] = 1
+    m[0] = '1'
 
     # Do nothing but wait for the signal
     while True:

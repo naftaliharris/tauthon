@@ -86,7 +86,6 @@ PyTuple_New(register Py_ssize_t size)
         {
             return PyErr_NoMemory();
         }
-        nbytes += sizeof(PyTupleObject) - sizeof(PyObject *);
 
         op = PyObject_GC_NewVar(PyTupleObject, &PyTuple_Type, size);
         if (op == NULL)
@@ -236,6 +235,31 @@ done:
     Py_TRASHCAN_SAFE_END(op)
 }
 
+static int
+tupleprint(PyTupleObject *op, FILE *fp, int flags)
+{
+    Py_ssize_t i;
+    Py_BEGIN_ALLOW_THREADS
+    fprintf(fp, "(");
+    Py_END_ALLOW_THREADS
+    for (i = 0; i < Py_SIZE(op); i++) {
+        if (i > 0) {
+            Py_BEGIN_ALLOW_THREADS
+            fprintf(fp, ", ");
+            Py_END_ALLOW_THREADS
+        }
+        if (PyObject_Print(op->ob_item[i], fp, 0) != 0)
+            return -1;
+    }
+    i = Py_SIZE(op);
+    Py_BEGIN_ALLOW_THREADS
+    if (i == 1)
+        fprintf(fp, ",");
+    fprintf(fp, ")");
+    Py_END_ALLOW_THREADS
+    return 0;
+}
+
 static PyObject *
 tuplerepr(PyTupleObject *v)
 {
@@ -245,7 +269,7 @@ tuplerepr(PyTupleObject *v)
 
     n = Py_SIZE(v);
     if (n == 0)
-        return PyUnicode_FromString("()");
+        return PyString_FromString("()");
 
     /* While not mutable, it is still possible to end up with a cycle in a
        tuple through an object that stores itself within a tuple (and thus
@@ -253,7 +277,7 @@ tuplerepr(PyTupleObject *v)
        possible within a type. */
     i = Py_ReprEnter((PyObject *)v);
     if (i != 0) {
-        return i > 0 ? PyUnicode_FromString("(...)") : NULL;
+        return i > 0 ? PyString_FromString("(...)") : NULL;
     }
 
     pieces = PyTuple_New(n);
@@ -273,29 +297,29 @@ tuplerepr(PyTupleObject *v)
 
     /* Add "()" decorations to the first and last items. */
     assert(n > 0);
-    s = PyUnicode_FromString("(");
+    s = PyString_FromString("(");
     if (s == NULL)
         goto Done;
     temp = PyTuple_GET_ITEM(pieces, 0);
-    PyUnicode_AppendAndDel(&s, temp);
+    PyString_ConcatAndDel(&s, temp);
     PyTuple_SET_ITEM(pieces, 0, s);
     if (s == NULL)
         goto Done;
 
-    s = PyUnicode_FromString(n == 1 ? ",)" : ")");
+    s = PyString_FromString(n == 1 ? ",)" : ")");
     if (s == NULL)
         goto Done;
     temp = PyTuple_GET_ITEM(pieces, n-1);
-    PyUnicode_AppendAndDel(&temp, s);
+    PyString_ConcatAndDel(&temp, s);
     PyTuple_SET_ITEM(pieces, n-1, temp);
     if (temp == NULL)
         goto Done;
 
     /* Paste them all together with ", " between. */
-    s = PyUnicode_FromString(", ");
+    s = PyString_FromString(", ");
     if (s == NULL)
         goto Done;
-    result = PyUnicode_Join(s, pieces);
+    result = _PyString_Join(s, pieces);
     Py_DECREF(s);
 
 Done:
@@ -312,13 +336,13 @@ Done:
      1330111, 1412633, 1165069, 1247599, 1495177, 1577699
 */
 
-static Py_hash_t
+static long
 tuplehash(PyTupleObject *v)
 {
-    register Py_hash_t x, y;
+    register long x, y;
     register Py_ssize_t len = Py_SIZE(v);
     register PyObject **p;
-    Py_hash_t mult = 1000003L;
+    long mult = 1000003L;
     x = 0x345678L;
     p = v->ob_item;
     while (--len >= 0) {
@@ -327,7 +351,7 @@ tuplehash(PyTupleObject *v)
             return -1;
         x = (x ^ y) * mult;
         /* the cast might truncate len; that doesn't change hash stability */
-        mult += (Py_hash_t)(82520L + len + len);
+        mult += (long)(82520L + len + len);
     }
     x += 97531L;
     if (x == -1)
@@ -505,7 +529,7 @@ tupleindex(PyTupleObject *self, PyObject *args)
     for (i = start; i < stop && i < Py_SIZE(self); i++) {
         int cmp = PyObject_RichCompareBool(self->ob_item[i], v, Py_EQ);
         if (cmp > 0)
-            return PyLong_FromSsize_t(i);
+            return PyInt_FromSsize_t(i);
         else if (cmp < 0)
             return NULL;
     }
@@ -526,7 +550,7 @@ tuplecount(PyTupleObject *self, PyObject *v)
         else if (cmp < 0)
             return NULL;
     }
-    return PyLong_FromSsize_t(count);
+    return PyInt_FromSsize_t(count);
 }
 
 static int
@@ -666,7 +690,7 @@ static PySequenceMethods tuple_as_sequence = {
     (binaryfunc)tupleconcat,                    /* sq_concat */
     (ssizeargfunc)tuplerepeat,                  /* sq_repeat */
     (ssizeargfunc)tupleitem,                    /* sq_item */
-    0,                                          /* sq_slice */
+    (ssizessizeargfunc)tupleslice,              /* sq_slice */
     0,                                          /* sq_ass_item */
     0,                                          /* sq_ass_slice */
     (objobjproc)tuplecontains,                  /* sq_contains */
@@ -689,7 +713,7 @@ tuplesubscript(PyTupleObject* self, PyObject* item)
         PyObject* it;
         PyObject **src, **dest;
 
-        if (PySlice_GetIndicesEx(item,
+        if (PySlice_GetIndicesEx((PySliceObject*)item,
                          PyTuple_GET_SIZE(self),
                          &start, &stop, &step, &slicelength) < 0) {
             return NULL;
@@ -741,7 +765,7 @@ tuple_sizeof(PyTupleObject *self)
     Py_ssize_t res;
 
     res = PyTuple_Type.tp_basicsize + Py_SIZE(self) * sizeof(PyObject *);
-    return PyLong_FromSsize_t(res);
+    return PyInt_FromSsize_t(res);
 }
 
 PyDoc_STRVAR(index_doc,
@@ -775,10 +799,10 @@ PyTypeObject PyTuple_Type = {
     sizeof(PyTupleObject) - sizeof(PyObject *),
     sizeof(PyObject *),
     (destructor)tupledealloc,                   /* tp_dealloc */
-    0,                                          /* tp_print */
+    (printfunc)tupleprint,                      /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     (reprfunc)tuplerepr,                        /* tp_repr */
     0,                                          /* tp_as_number */
     &tuple_as_sequence,                         /* tp_as_sequence */
@@ -965,7 +989,7 @@ tupleiter_len(tupleiterobject *it)
     Py_ssize_t len = 0;
     if (it->it_seq)
         len = PyTuple_GET_SIZE(it->it_seq) - it->it_index;
-    return PyLong_FromSsize_t(len);
+    return PyInt_FromSsize_t(len);
 }
 
 PyDoc_STRVAR(length_hint_doc, "Private method returning an estimate of len(list(it)).");
@@ -977,7 +1001,7 @@ static PyMethodDef tupleiter_methods[] = {
 
 PyTypeObject PyTupleIter_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-    "tuple_iterator",                           /* tp_name */
+    "tupleiterator",                            /* tp_name */
     sizeof(tupleiterobject),                    /* tp_basicsize */
     0,                                          /* tp_itemsize */
     /* methods */
@@ -985,7 +1009,7 @@ PyTypeObject PyTupleIter_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */

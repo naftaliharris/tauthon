@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 """nm2def.py
 
 Helpers to extract symbols from Unix libs and auto-generate
@@ -84,7 +84,7 @@ SPECIALS = (
 
 def filter_Python(symbols,specials=SPECIALS):
 
-    for name in list(symbols.keys()):
+    for name in symbols.keys():
         if name[:2] == 'Py' or name[:3] == '_Py':
             pass
         elif name not in specials:

@@ -1,16 +1,31 @@
 """Unittests for heapq."""
 
-import random
-import unittest
-from test import support
 import sys
+import random
 
-# We do a bit of trickery here to be able to test both the C implementation
-# and the Python implementation of the module.
-import heapq as c_heapq
-py_heapq = support.import_fresh_module('heapq', blocked=['_heapq'])
+from test import test_support
+from unittest import TestCase, skipUnless
 
-class TestHeap(unittest.TestCase):
+py_heapq = test_support.import_fresh_module('heapq', blocked=['_heapq'])
+c_heapq = test_support.import_fresh_module('heapq', fresh=['_heapq'])
+
+# _heapq.nlargest/nsmallest are saved in heapq._nlargest/_smallest when
+# _heapq is imported, so check them there
+func_names = ['heapify', 'heappop', 'heappush', 'heappushpop',
+              'heapreplace', '_nlargest', '_nsmallest']
+
+class TestModules(TestCase):
+    def test_py_functions(self):
+        for fname in func_names:
+            self.assertEqual(getattr(py_heapq, fname).__module__, 'heapq')
+
+    @skipUnless(c_heapq, 'requires _heapq')
+    def test_c_functions(self):
+        for fname in func_names:
+            self.assertEqual(getattr(c_heapq, fname).__module__, '_heapq')
+
+
+class TestHeap(TestCase):
     module = None
 
     def test_push_pop(self):
@@ -122,7 +137,7 @@ class TestHeap(unittest.TestCase):
 
     def test_heapsort(self):
         # Exercise everything with repeated heapsort checks
-        for trial in range(100):
+        for trial in xrange(100):
             size = random.randrange(50)
             data = [random.randrange(25) for i in range(size)]
             if trial & 1:     # Half of the time, use heapify
@@ -137,7 +152,7 @@ class TestHeap(unittest.TestCase):
 
     def test_merge(self):
         inputs = []
-        for i in range(random.randrange(5)):
+        for i in xrange(random.randrange(5)):
             row = sorted(random.randrange(1000) for j in range(random.randrange(10)))
             inputs.append(row)
         self.assertEqual(sorted(chain(*inputs)), list(self.module.merge(*inputs)))
@@ -162,38 +177,23 @@ class TestHeap(unittest.TestCase):
         data = [(random.randrange(2000), i) for i in range(1000)]
         for f in (None, lambda x:  x[0] * 547 % 2000):
             for n in (0, 1, 2, 10, 100, 400, 999, 1000, 1100):
-                self.assertEqual(list(self.module.nsmallest(n, data)),
-                                 sorted(data)[:n])
-                self.assertEqual(list(self.module.nsmallest(n, data, key=f)),
+                self.assertEqual(self.module.nsmallest(n, data), sorted(data)[:n])
+                self.assertEqual(self.module.nsmallest(n, data, key=f),
                                  sorted(data, key=f)[:n])
 
     def test_nlargest(self):
         data = [(random.randrange(2000), i) for i in range(1000)]
         for f in (None, lambda x:  x[0] * 547 % 2000):
             for n in (0, 1, 2, 10, 100, 400, 999, 1000, 1100):
-                self.assertEqual(list(self.module.nlargest(n, data)),
+                self.assertEqual(self.module.nlargest(n, data),
                                  sorted(data, reverse=True)[:n])
-                self.assertEqual(list(self.module.nlargest(n, data, key=f)),
+                self.assertEqual(self.module.nlargest(n, data, key=f),
                                  sorted(data, key=f, reverse=True)[:n])
 
-class TestHeapPython(TestHeap):
-    module = py_heapq
-
-    # As an early adopter, we sanity check the
-    # test.support.import_fresh_module utility function
-    def test_pure_python(self):
-        self.assertFalse(sys.modules['heapq'] is self.module)
-        self.assertTrue(hasattr(self.module.heapify, '__code__'))
-
-
-class TestHeapC(TestHeap):
-    module = c_heapq
-
     def test_comparison_operator(self):
-        # Issue 3501: Make sure heapq works with both __lt__
-        # For python 3.0, __le__ alone is not enough
+        # Issue 3051: Make sure heapq works with both __lt__ and __le__
         def hsort(data, comp):
-            data = [comp(x) for x in data]
+            data = map(comp, data)
             self.module.heapify(data)
             return [self.module.heappop(data).x for i in range(len(data))]
         class LT:
@@ -209,13 +209,16 @@ class TestHeapC(TestHeap):
         data = [random.random() for i in range(100)]
         target = sorted(data, reverse=True)
         self.assertEqual(hsort(data, LT), target)
-        self.assertRaises(TypeError, data, LE)
+        self.assertEqual(hsort(data, LE), target)
 
-    # As an early adopter, we sanity check the
-    # test.support.import_fresh_module utility function
-    def test_accelerated(self):
-        self.assertTrue(sys.modules['heapq'] is self.module)
-        self.assertFalse(hasattr(self.module.heapify, '__code__'))
+
+class TestHeapPython(TestHeap):
+    module = py_heapq
+
+
+@skipUnless(c_heapq, 'requires _heapq')
+class TestHeapC(TestHeap):
+    module = c_heapq
 
 
 #==============================================================================
@@ -232,9 +235,8 @@ class GetOnly:
 
 class CmpErr:
     "Dummy element that always raises an error during comparison"
-    def __eq__(self, other):
+    def __cmp__(self, other):
         raise ZeroDivisionError
-    __ne__ = __lt__ = __le__ = __gt__ = __ge__ = __eq__
 
 def R(seqn):
     'Regular generator'
@@ -255,7 +257,7 @@ class I:
         self.i = 0
     def __iter__(self):
         return self
-    def __next__(self):
+    def next(self):
         if self.i >= len(self.seqn): raise StopIteration
         v = self.seqn[self.i]
         self.i += 1
@@ -275,14 +277,14 @@ class X:
     def __init__(self, seqn):
         self.seqn = seqn
         self.i = 0
-    def __next__(self):
+    def next(self):
         if self.i >= len(self.seqn): raise StopIteration
         v = self.seqn[self.i]
         self.i += 1
         return v
 
 class N:
-    'Iterator missing __next__()'
+    'Iterator missing next()'
     def __init__(self, seqn):
         self.seqn = seqn
         self.i = 0
@@ -296,7 +298,7 @@ class E:
         self.i = 0
     def __iter__(self):
         return self
-    def __next__(self):
+    def next(self):
         3 // 0
 
 class S:
@@ -305,40 +307,31 @@ class S:
         pass
     def __iter__(self):
         return self
-    def __next__(self):
+    def next(self):
         raise StopIteration
 
-from itertools import chain
+from itertools import chain, imap
 def L(seqn):
     'Test multiple tiers of iterators'
-    return chain(map(lambda x:x, R(Ig(G(seqn)))))
+    return chain(imap(lambda x:x, R(Ig(G(seqn)))))
 
-class TestErrorHandling(unittest.TestCase):
-    # only for C implementation
-    module = c_heapq
+class TestErrorHandling(TestCase):
+    module = None
 
     def test_non_sequence(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
         for f in (self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10, 10)
 
     def test_len_only(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, LenOnly())
+            self.assertRaises((TypeError, AttributeError), f, LenOnly())
         for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, LenOnly(), 10)
+            self.assertRaises((TypeError, AttributeError), f, LenOnly(), 10)
         for f in (self.module.nlargest, self.module.nsmallest):
             self.assertRaises(TypeError, f, 2, LenOnly())
-
-    def test_get_only(self):
-        for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, GetOnly())
-        for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, GetOnly(), 10)
-        for f in (self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 2, GetOnly())
 
     def test_get_only(self):
         seq = [CmpErr(), CmpErr(), CmpErr()]
@@ -353,35 +346,48 @@ class TestErrorHandling(unittest.TestCase):
         for f in (self.module.heapify, self.module.heappop,
                   self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
 
     def test_iterable_args(self):
         for f in (self.module.nlargest, self.module.nsmallest):
-            for s in ("123", "", range(1000), (1, 1.2), range(2000,2200,5)):
+            for s in ("123", "", range(1000), ('do', 1.2), xrange(2000,2200,5)):
                 for g in (G, I, Ig, L, R):
-                    self.assertEqual(list(f(2, g(s))), list(f(2,s)))
-                self.assertEqual(list(f(2, S(s))), [])
+                    with test_support.check_py3k_warnings(
+                            ("comparing unequal types not supported",
+                             DeprecationWarning), quiet=True):
+                        self.assertEqual(f(2, g(s)), f(2,s))
+                self.assertEqual(f(2, S(s)), [])
                 self.assertRaises(TypeError, f, 2, X(s))
                 self.assertRaises(TypeError, f, 2, N(s))
                 self.assertRaises(ZeroDivisionError, f, 2, E(s))
+
+
+class TestErrorHandlingPython(TestErrorHandling):
+    module = py_heapq
+
+
+@skipUnless(c_heapq, 'requires _heapq')
+class TestErrorHandlingC(TestErrorHandling):
+    module = c_heapq
 
 
 #==============================================================================
 
 
 def test_main(verbose=None):
-    test_classes = [TestHeapPython, TestHeapC, TestErrorHandling]
-    support.run_unittest(*test_classes)
+    test_classes = [TestModules, TestHeapPython, TestHeapC,
+                    TestErrorHandlingPython, TestErrorHandlingC]
+    test_support.run_unittest(*test_classes)
 
     # verify reference counting
     if verbose and hasattr(sys, "gettotalrefcount"):
         import gc
         counts = [None] * 5
-        for i in range(len(counts)):
-            support.run_unittest(*test_classes)
+        for i in xrange(len(counts)):
+            test_support.run_unittest(*test_classes)
             gc.collect()
             counts[i] = sys.gettotalrefcount()
-        print(counts)
+        print counts
 
 if __name__ == "__main__":
     test_main(verbose=True)

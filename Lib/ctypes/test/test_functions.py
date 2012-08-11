@@ -70,7 +70,7 @@ class FunctionTestCase(unittest.TestCase):
             return
         f = dll._testfunc_i_bhilfd
         f.argtypes = [c_byte, c_wchar, c_int, c_long, c_float, c_double]
-        result = f(1, "x", 3, 4, 5.0, 6.0)
+        result = f(1, u"x", 3, 4, 5.0, 6.0)
         self.assertEqual(result, 139)
         self.assertEqual(type(result), int)
 
@@ -83,7 +83,7 @@ class FunctionTestCase(unittest.TestCase):
         f.argtypes = [c_byte, c_short, c_int, c_long, c_float, c_double]
         f.restype = c_wchar
         result = f(0, 0, 0, 0, 0, 0)
-        self.assertEqual(result, '\x00')
+        self.assertEqual(result, u'\x00')
 
     def test_voidresult(self):
         f = dll._testfunc_v
@@ -116,7 +116,7 @@ class FunctionTestCase(unittest.TestCase):
         self.assertEqual(result, 21)
         self.assertEqual(type(result), int)
 
-        # You cannot assing character format codes as restype any longer
+        # You cannot assign character format codes as restype any longer
         self.assertRaises(TypeError, setattr, f, "restype", "i")
 
     def test_floatresult(self):
@@ -176,8 +176,8 @@ class FunctionTestCase(unittest.TestCase):
         f = dll._testfunc_p_p
         f.argtypes = None
         f.restype = c_char_p
-        result = f(b"123")
-        self.assertEqual(result, b"123")
+        result = f("123")
+        self.assertEqual(result, "123")
 
         result = f(None)
         self.assertEqual(result, None)
@@ -250,6 +250,7 @@ class FunctionTestCase(unittest.TestCase):
     def test_callbacks(self):
         f = dll._testfunc_callback_i_if
         f.restype = c_int
+        f.argtypes = None
 
         MyCallback = CFUNCTYPE(c_int, c_int)
 
@@ -305,7 +306,7 @@ class FunctionTestCase(unittest.TestCase):
         f.argtypes = [c_longlong, MyCallback]
 
         def callback(value):
-            self.assertTrue(isinstance(value, int))
+            self.assertTrue(isinstance(value, (int, long)))
             return value & 0x7FFFFFFF
 
         cb = MyCallback(callback)

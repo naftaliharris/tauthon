@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """Python utility to print MD5 checksums of argument files.
 """
@@ -43,7 +43,7 @@ def sum(*files):
 def printsum(filename, out=sys.stdout):
     try:
         fp = open(filename, rmode)
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write('%s: Can\'t open: %s\n' % (filename, msg))
         return 1
     if fnfilter:
@@ -60,7 +60,7 @@ def printsumfp(fp, filename, out=sys.stdout):
             if not data:
                 break
             m.update(data)
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write('%s: I/O error: %s\n' % (filename, msg))
         return 1
     out.write('%s %s\n' % (m.hexdigest(), filename))
@@ -70,7 +70,7 @@ def main(args = sys.argv[1:], out=sys.stdout):
     global fnfilter, rmode, bufsize
     try:
         opts, args = getopt.getopt(args, 'blts:')
-    except getopt.error as msg:
+    except getopt.error, msg:
         sys.stderr.write('%s: %s\n%s' % (sys.argv[0], msg, usage))
         return 2
     for o, a in opts:

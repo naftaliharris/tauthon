@@ -55,7 +55,7 @@ patterns.
 
       for file in os.listdir('.'):
           if fnmatch.fnmatch(file, '*.txt'):
-              print(file)
+              print file
 
 
 .. function:: fnmatchcase(filename, pattern)
@@ -68,6 +68,8 @@ patterns.
 
    Return the subset of the list of *names* that match *pattern*. It is the same as
    ``[n for n in names if fnmatch(n, pattern)]``, but implemented more efficiently.
+
+   .. versionadded:: 2.2
 
 
 .. function:: translate(pattern)

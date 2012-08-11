@@ -1,6 +1,5 @@
 from unittest import TestCase
-from test import support
-import builtins
+from test import test_support
 import uuid
 
 def importable(name):
@@ -22,8 +21,8 @@ class TestUUID(TestCase):
             ('00000000-0000-0000-0000-000000000000',
              '{00000000-0000-0000-0000-000000000000}',
              '00000000000000000000000000000000',
-             b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
-             b'\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
+             '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
+             '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',
              (0, 0, 0, 0, 0, 0),
              0,
              'urn:uuid:00000000-0000-0000-0000-000000000000',
@@ -31,120 +30,120 @@ class TestUUID(TestCase):
             ('00010203-0405-0607-0809-0a0b0c0d0e0f',
              '{00010203-0405-0607-0809-0a0b0c0d0e0f}',
              '000102030405060708090a0b0c0d0e0f',
-             b'\0\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\x0d\x0e\x0f',
-             b'\x03\x02\x01\0\x05\x04\x07\x06\x08\t\n\x0b\x0c\x0d\x0e\x0f',
-             (0x00010203, 0x0405, 0x0607, 8, 9, 0x0a0b0c0d0e0f),
-             0x000102030405060708090a0b0c0d0e0f,
+             '\0\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\x0d\x0e\x0f',
+             '\x03\x02\x01\0\x05\x04\x07\x06\x08\t\n\x0b\x0c\x0d\x0e\x0f',
+             (0x00010203L, 0x0405, 0x0607, 8, 9, 0x0a0b0c0d0e0fL),
+             0x000102030405060708090a0b0c0d0e0fL,
              'urn:uuid:00010203-0405-0607-0809-0a0b0c0d0e0f',
-             0x607040500010203, 0x809, uuid.RESERVED_NCS, None),
+             0x607040500010203L, 0x809, uuid.RESERVED_NCS, None),
             ('02d9e6d5-9467-382e-8f9b-9300a64ac3cd',
              '{02d9e6d5-9467-382e-8f9b-9300a64ac3cd}',
              '02d9e6d59467382e8f9b9300a64ac3cd',
-             b'\x02\xd9\xe6\xd5\x94\x67\x38\x2e\x8f\x9b\x93\x00\xa6\x4a\xc3\xcd',
-             b'\xd5\xe6\xd9\x02\x67\x94\x2e\x38\x8f\x9b\x93\x00\xa6\x4a\xc3\xcd',
-             (0x02d9e6d5, 0x9467, 0x382e, 0x8f, 0x9b, 0x9300a64ac3cd),
-             0x02d9e6d59467382e8f9b9300a64ac3cd,
+             '\x02\xd9\xe6\xd5\x94\x67\x38\x2e\x8f\x9b\x93\x00\xa6\x4a\xc3\xcd',
+             '\xd5\xe6\xd9\x02\x67\x94\x2e\x38\x8f\x9b\x93\x00\xa6\x4a\xc3\xcd',
+             (0x02d9e6d5L, 0x9467, 0x382e, 0x8f, 0x9b, 0x9300a64ac3cdL),
+             0x02d9e6d59467382e8f9b9300a64ac3cdL,
              'urn:uuid:02d9e6d5-9467-382e-8f9b-9300a64ac3cd',
-             0x82e946702d9e6d5, 0xf9b, uuid.RFC_4122, 3),
+             0x82e946702d9e6d5L, 0xf9b, uuid.RFC_4122, 3),
             ('12345678-1234-5678-1234-567812345678',
              '{12345678-1234-5678-1234-567812345678}',
              '12345678123456781234567812345678',
-             b'\x12\x34\x56\x78'*4,
-             b'\x78\x56\x34\x12\x34\x12\x78\x56\x12\x34\x56\x78\x12\x34\x56\x78',
+             '\x12\x34\x56\x78'*4,
+             '\x78\x56\x34\x12\x34\x12\x78\x56\x12\x34\x56\x78\x12\x34\x56\x78',
              (0x12345678, 0x1234, 0x5678, 0x12, 0x34, 0x567812345678),
              0x12345678123456781234567812345678,
              'urn:uuid:12345678-1234-5678-1234-567812345678',
-             0x678123412345678, 0x1234, uuid.RESERVED_NCS, None),
+             0x678123412345678L, 0x1234, uuid.RESERVED_NCS, None),
             ('6ba7b810-9dad-11d1-80b4-00c04fd430c8',
              '{6ba7b810-9dad-11d1-80b4-00c04fd430c8}',
              '6ba7b8109dad11d180b400c04fd430c8',
-             b'\x6b\xa7\xb8\x10\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             b'\x10\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             (0x6ba7b810, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8),
-             0x6ba7b8109dad11d180b400c04fd430c8,
+             '\x6b\xa7\xb8\x10\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             '\x10\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             (0x6ba7b810L, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8L),
+             0x6ba7b8109dad11d180b400c04fd430c8L,
              'urn:uuid:6ba7b810-9dad-11d1-80b4-00c04fd430c8',
-             0x1d19dad6ba7b810, 0xb4, uuid.RFC_4122, 1),
+             0x1d19dad6ba7b810L, 0xb4, uuid.RFC_4122, 1),
             ('6ba7b811-9dad-11d1-80b4-00c04fd430c8',
              '{6ba7b811-9dad-11d1-80b4-00c04fd430c8}',
              '6ba7b8119dad11d180b400c04fd430c8',
-             b'\x6b\xa7\xb8\x11\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             b'\x11\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             (0x6ba7b811, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8),
-             0x6ba7b8119dad11d180b400c04fd430c8,
+             '\x6b\xa7\xb8\x11\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             '\x11\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             (0x6ba7b811L, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8L),
+             0x6ba7b8119dad11d180b400c04fd430c8L,
              'urn:uuid:6ba7b811-9dad-11d1-80b4-00c04fd430c8',
-             0x1d19dad6ba7b811, 0xb4, uuid.RFC_4122, 1),
+             0x1d19dad6ba7b811L, 0xb4, uuid.RFC_4122, 1),
             ('6ba7b812-9dad-11d1-80b4-00c04fd430c8',
              '{6ba7b812-9dad-11d1-80b4-00c04fd430c8}',
              '6ba7b8129dad11d180b400c04fd430c8',
-             b'\x6b\xa7\xb8\x12\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             b'\x12\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             (0x6ba7b812, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8),
-             0x6ba7b8129dad11d180b400c04fd430c8,
+             '\x6b\xa7\xb8\x12\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             '\x12\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             (0x6ba7b812L, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8L),
+             0x6ba7b8129dad11d180b400c04fd430c8L,
              'urn:uuid:6ba7b812-9dad-11d1-80b4-00c04fd430c8',
-             0x1d19dad6ba7b812, 0xb4, uuid.RFC_4122, 1),
+             0x1d19dad6ba7b812L, 0xb4, uuid.RFC_4122, 1),
             ('6ba7b814-9dad-11d1-80b4-00c04fd430c8',
              '{6ba7b814-9dad-11d1-80b4-00c04fd430c8}',
              '6ba7b8149dad11d180b400c04fd430c8',
-             b'\x6b\xa7\xb8\x14\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             b'\x14\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
-             (0x6ba7b814, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8),
-             0x6ba7b8149dad11d180b400c04fd430c8,
+             '\x6b\xa7\xb8\x14\x9d\xad\x11\xd1\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             '\x14\xb8\xa7\x6b\xad\x9d\xd1\x11\x80\xb4\x00\xc0\x4f\xd4\x30\xc8',
+             (0x6ba7b814L, 0x9dad, 0x11d1, 0x80, 0xb4, 0x00c04fd430c8L),
+             0x6ba7b8149dad11d180b400c04fd430c8L,
              'urn:uuid:6ba7b814-9dad-11d1-80b4-00c04fd430c8',
-             0x1d19dad6ba7b814, 0xb4, uuid.RFC_4122, 1),
+             0x1d19dad6ba7b814L, 0xb4, uuid.RFC_4122, 1),
             ('7d444840-9dc0-11d1-b245-5ffdce74fad2',
              '{7d444840-9dc0-11d1-b245-5ffdce74fad2}',
              '7d4448409dc011d1b2455ffdce74fad2',
-             b'\x7d\x44\x48\x40\x9d\xc0\x11\xd1\xb2\x45\x5f\xfd\xce\x74\xfa\xd2',
-             b'\x40\x48\x44\x7d\xc0\x9d\xd1\x11\xb2\x45\x5f\xfd\xce\x74\xfa\xd2',
-             (0x7d444840, 0x9dc0, 0x11d1, 0xb2, 0x45, 0x5ffdce74fad2),
-             0x7d4448409dc011d1b2455ffdce74fad2,
+             '\x7d\x44\x48\x40\x9d\xc0\x11\xd1\xb2\x45\x5f\xfd\xce\x74\xfa\xd2',
+             '\x40\x48\x44\x7d\xc0\x9d\xd1\x11\xb2\x45\x5f\xfd\xce\x74\xfa\xd2',
+             (0x7d444840L, 0x9dc0, 0x11d1, 0xb2, 0x45, 0x5ffdce74fad2L),
+             0x7d4448409dc011d1b2455ffdce74fad2L,
              'urn:uuid:7d444840-9dc0-11d1-b245-5ffdce74fad2',
-             0x1d19dc07d444840, 0x3245, uuid.RFC_4122, 1),
+             0x1d19dc07d444840L, 0x3245, uuid.RFC_4122, 1),
             ('e902893a-9d22-3c7e-a7b8-d6e313b71d9f',
              '{e902893a-9d22-3c7e-a7b8-d6e313b71d9f}',
              'e902893a9d223c7ea7b8d6e313b71d9f',
-             b'\xe9\x02\x89\x3a\x9d\x22\x3c\x7e\xa7\xb8\xd6\xe3\x13\xb7\x1d\x9f',
-             b'\x3a\x89\x02\xe9\x22\x9d\x7e\x3c\xa7\xb8\xd6\xe3\x13\xb7\x1d\x9f',
-             (0xe902893a, 0x9d22, 0x3c7e, 0xa7, 0xb8, 0xd6e313b71d9f),
-             0xe902893a9d223c7ea7b8d6e313b71d9f,
+             '\xe9\x02\x89\x3a\x9d\x22\x3c\x7e\xa7\xb8\xd6\xe3\x13\xb7\x1d\x9f',
+             '\x3a\x89\x02\xe9\x22\x9d\x7e\x3c\xa7\xb8\xd6\xe3\x13\xb7\x1d\x9f',
+             (0xe902893aL, 0x9d22, 0x3c7e, 0xa7, 0xb8, 0xd6e313b71d9fL),
+             0xe902893a9d223c7ea7b8d6e313b71d9fL,
              'urn:uuid:e902893a-9d22-3c7e-a7b8-d6e313b71d9f',
-             0xc7e9d22e902893a, 0x27b8, uuid.RFC_4122, 3),
+             0xc7e9d22e902893aL, 0x27b8, uuid.RFC_4122, 3),
             ('eb424026-6f54-4ef8-a4d0-bb658a1fc6cf',
              '{eb424026-6f54-4ef8-a4d0-bb658a1fc6cf}',
              'eb4240266f544ef8a4d0bb658a1fc6cf',
-             b'\xeb\x42\x40\x26\x6f\x54\x4e\xf8\xa4\xd0\xbb\x65\x8a\x1f\xc6\xcf',
-             b'\x26\x40\x42\xeb\x54\x6f\xf8\x4e\xa4\xd0\xbb\x65\x8a\x1f\xc6\xcf',
-             (0xeb424026, 0x6f54, 0x4ef8, 0xa4, 0xd0, 0xbb658a1fc6cf),
-             0xeb4240266f544ef8a4d0bb658a1fc6cf,
+             '\xeb\x42\x40\x26\x6f\x54\x4e\xf8\xa4\xd0\xbb\x65\x8a\x1f\xc6\xcf',
+             '\x26\x40\x42\xeb\x54\x6f\xf8\x4e\xa4\xd0\xbb\x65\x8a\x1f\xc6\xcf',
+             (0xeb424026L, 0x6f54, 0x4ef8, 0xa4, 0xd0, 0xbb658a1fc6cfL),
+             0xeb4240266f544ef8a4d0bb658a1fc6cfL,
              'urn:uuid:eb424026-6f54-4ef8-a4d0-bb658a1fc6cf',
-             0xef86f54eb424026, 0x24d0, uuid.RFC_4122, 4),
+             0xef86f54eb424026L, 0x24d0, uuid.RFC_4122, 4),
             ('f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
              '{f81d4fae-7dec-11d0-a765-00a0c91e6bf6}',
              'f81d4fae7dec11d0a76500a0c91e6bf6',
-             b'\xf8\x1d\x4f\xae\x7d\xec\x11\xd0\xa7\x65\x00\xa0\xc9\x1e\x6b\xf6',
-             b'\xae\x4f\x1d\xf8\xec\x7d\xd0\x11\xa7\x65\x00\xa0\xc9\x1e\x6b\xf6',
-             (0xf81d4fae, 0x7dec, 0x11d0, 0xa7, 0x65, 0x00a0c91e6bf6),
-             0xf81d4fae7dec11d0a76500a0c91e6bf6,
+             '\xf8\x1d\x4f\xae\x7d\xec\x11\xd0\xa7\x65\x00\xa0\xc9\x1e\x6b\xf6',
+             '\xae\x4f\x1d\xf8\xec\x7d\xd0\x11\xa7\x65\x00\xa0\xc9\x1e\x6b\xf6',
+             (0xf81d4faeL, 0x7dec, 0x11d0, 0xa7, 0x65, 0x00a0c91e6bf6L),
+             0xf81d4fae7dec11d0a76500a0c91e6bf6L,
              'urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
-             0x1d07decf81d4fae, 0x2765, uuid.RFC_4122, 1),
+             0x1d07decf81d4faeL, 0x2765, uuid.RFC_4122, 1),
             ('fffefdfc-fffe-fffe-fffe-fffefdfcfbfa',
              '{fffefdfc-fffe-fffe-fffe-fffefdfcfbfa}',
              'fffefdfcfffefffefffefffefdfcfbfa',
-             b'\xff\xfe\xfd\xfc\xff\xfe\xff\xfe\xff\xfe\xff\xfe\xfd\xfc\xfb\xfa',
-             b'\xfc\xfd\xfe\xff\xfe\xff\xfe\xff\xff\xfe\xff\xfe\xfd\xfc\xfb\xfa',
-             (0xfffefdfc, 0xfffe, 0xfffe, 0xff, 0xfe, 0xfffefdfcfbfa),
-             0xfffefdfcfffefffefffefffefdfcfbfa,
+             '\xff\xfe\xfd\xfc\xff\xfe\xff\xfe\xff\xfe\xff\xfe\xfd\xfc\xfb\xfa',
+             '\xfc\xfd\xfe\xff\xfe\xff\xfe\xff\xff\xfe\xff\xfe\xfd\xfc\xfb\xfa',
+             (0xfffefdfcL, 0xfffe, 0xfffe, 0xff, 0xfe, 0xfffefdfcfbfaL),
+             0xfffefdfcfffefffefffefffefdfcfbfaL,
              'urn:uuid:fffefdfc-fffe-fffe-fffe-fffefdfcfbfa',
-             0xffefffefffefdfc, 0x3ffe, uuid.RESERVED_FUTURE, None),
+             0xffefffefffefdfcL, 0x3ffe, uuid.RESERVED_FUTURE, None),
             ('ffffffff-ffff-ffff-ffff-ffffffffffff',
              '{ffffffff-ffff-ffff-ffff-ffffffffffff}',
              'ffffffffffffffffffffffffffffffff',
-             b'\xff'*16,
-             b'\xff'*16,
-             (0xffffffff, 0xffff, 0xffff, 0xff, 0xff, 0xffffffffffff),
-             0xffffffffffffffffffffffffffffffff,
+             '\xff'*16,
+             '\xff'*16,
+             (0xffffffffL, 0xffffL, 0xffffL, 0xff, 0xff, 0xffffffffffffL),
+             0xffffffffffffffffffffffffffffffffL,
              'urn:uuid:ffffffff-ffff-ffff-ffff-ffffffffffff',
-             0xfffffffffffffff, 0x3fff, uuid.RESERVED_FUTURE, None),
+             0xfffffffffffffffL, 0x3fff, uuid.RESERVED_FUTURE, None),
             ]:
             equivalents = []
             # Construct each UUID in several different ways.
@@ -177,22 +176,12 @@ class TestUUID(TestCase):
             for u in equivalents:
                 for v in equivalents:
                     equal(u, v)
-
-            # Bug 7380: "bytes" and "bytes_le" should give the same type.
-            equal(type(u.bytes), builtins.bytes)
-            equal(type(u.bytes_le), builtins.bytes)
-
             ascending.append(u)
 
         # Test comparison of UUIDs.
         for i in range(len(ascending)):
             for j in range(len(ascending)):
-                equal(i < j, ascending[i] < ascending[j])
-                equal(i <= j, ascending[i] <= ascending[j])
-                equal(i == j, ascending[i] == ascending[j])
-                equal(i > j, ascending[i] > ascending[j])
-                equal(i >= j, ascending[i] >= ascending[j])
-                equal(i != j, ascending[i] != ascending[j])
+                equal(cmp(i, j), cmp(ascending[i], ascending[j]))
 
         # Test sorting of UUIDs (above list is in ascending order).
         resorted = ascending[:]
@@ -228,17 +217,17 @@ class TestUUID(TestCase):
 
         # Field values out of range.
         badvalue(lambda: uuid.UUID(fields=(-1, 0, 0, 0, 0, 0)))
-        badvalue(lambda: uuid.UUID(fields=(0x100000000, 0, 0, 0, 0, 0)))
+        badvalue(lambda: uuid.UUID(fields=(0x100000000L, 0, 0, 0, 0, 0)))
         badvalue(lambda: uuid.UUID(fields=(0, -1, 0, 0, 0, 0)))
-        badvalue(lambda: uuid.UUID(fields=(0, 0x10000, 0, 0, 0, 0)))
+        badvalue(lambda: uuid.UUID(fields=(0, 0x10000L, 0, 0, 0, 0)))
         badvalue(lambda: uuid.UUID(fields=(0, 0, -1, 0, 0, 0)))
-        badvalue(lambda: uuid.UUID(fields=(0, 0, 0x10000, 0, 0, 0)))
+        badvalue(lambda: uuid.UUID(fields=(0, 0, 0x10000L, 0, 0, 0)))
         badvalue(lambda: uuid.UUID(fields=(0, 0, 0, -1, 0, 0)))
-        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0x100, 0, 0)))
+        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0x100L, 0, 0)))
         badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, -1, 0)))
-        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, 0x100, 0)))
+        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, 0x100L, 0)))
         badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, 0, -1)))
-        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, 0, 0x1000000000000)))
+        badvalue(lambda: uuid.UUID(fields=(0, 0, 0, 0, 0, 0x1000000000000L)))
 
         # Version number out of range.
         badvalue(lambda: uuid.UUID('00'*16, version=0))
@@ -246,10 +235,10 @@ class TestUUID(TestCase):
 
         # Integer value out of range.
         badvalue(lambda: uuid.UUID(int=-1))
-        badvalue(lambda: uuid.UUID(int=1<<128))
+        badvalue(lambda: uuid.UUID(int=1<<128L))
 
         # Must supply exactly one of hex, bytes, fields, int.
-        h, b, f, i = '00'*16, b'\0'*16, (0, 0, 0, 0, 0, 0), 0
+        h, b, f, i = '00'*16, '\0'*16, (0, 0, 0, 0, 0, 0), 0
         uuid.UUID(h)
         uuid.UUID(hex=h)
         uuid.UUID(bytes=b)
@@ -294,13 +283,13 @@ class TestUUID(TestCase):
     def check_node(self, node, source):
         message = "%012x is not an RFC 4122 node ID" % node
         self.assertTrue(0 < node, message)
-        self.assertTrue(node < (1 << 48), message)
+        self.assertTrue(node < (1L << 48), message)
 
         TestUUID.source2node[source] = node
         if TestUUID.last_node:
             if TestUUID.last_node != node:
                 msg = "different sources disagree on node:\n"
-                for s, n in TestUUID.source2node.items():
+                for s, n in TestUUID.source2node.iteritems():
                     msg += "    from source %r, node was %012x\n" % (s, n)
                 # There's actually no reason to expect the MAC addresses
                 # to agree across various methods -- e.g., a box may have
@@ -333,7 +322,7 @@ class TestUUID(TestCase):
         node = uuid._random_getnode()
         # Least significant bit of first octet must be set.
         self.assertTrue(node & 0x010000000000)
-        self.assertTrue(node < (1 << 48))
+        self.assertTrue(node < (1L << 48))
 
     def test_unixdll_getnode(self):
         import sys
@@ -471,14 +460,14 @@ class TestUUID(TestCase):
         if pid == 0:
             os.close(fds[0])
             value = uuid.uuid4()
-            os.write(fds[1], value.hex.encode('latin1'))
+            os.write(fds[1], value.hex)
             os._exit(0)
 
         else:
             os.close(fds[1])
             parent_value = uuid.uuid4().hex
             os.waitpid(pid, 0)
-            child_value = os.read(fds[0], 100).decode('latin1')
+            child_value = os.read(fds[0], 100)
 
             self.assertNotEqual(parent_value, child_value)
 
@@ -487,7 +476,7 @@ class TestUUID(TestCase):
 
 
 def test_main():
-    support.run_unittest(TestUUID)
+    test_support.run_unittest(TestUUID)
 
 if __name__ == '__main__':
     test_main()

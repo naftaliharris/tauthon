@@ -776,6 +776,14 @@ format_int_or_long_internal(PyObject *value, const InternalFormatSpec *format,
             goto done;
         }
 
+        /* Error to specify a comma. */
+        if (format->thousands_separators) {
+            PyErr_SetString(PyExc_ValueError,
+                            "Thousands separators not allowed with integer"
+                            " format specifier 'c'");
+            goto done;
+        }
+
         /* taken from unicodeobject.c formatchar() */
         /* Integer input truncated to a character */
 /* XXX: won't work for int */
@@ -941,16 +949,20 @@ format_float_internal(PyObject *value,
        from a hard-code pseudo-locale */
     LocaleInfo locale;
 
-    if (format->alternate)
-        flags |= Py_DTSF_ALT;
+    /* Alternate is not allowed on floats. */
+    if (format->alternate) {
+        PyErr_SetString(PyExc_ValueError,
+                        "Alternate form (#) not allowed in float format "
+                        "specifier");
+        goto done;
+    }
 
     if (type == '\0') {
-        /* Omitted type specifier.  Behaves in the same way as repr(x)
-           and str(x) if no precision is given, else like 'g', but with
-           at least one digit after the decimal point. */
+        /* Omitted type specifier. This is like 'g' but with at least one
+           digit after the decimal point, and different default precision.*/
+        type = 'g';
+        default_precision = PyFloat_STR_PRECISION;
         flags |= Py_DTSF_ADD_DOT_0;
-        type = 'r';
-        default_precision = 0;
     }
 
     if (type == 'n')
@@ -970,8 +982,6 @@ format_float_internal(PyObject *value,
 
     if (precision < 0)
         precision = default_precision;
-    else if (type == 'r')
-        type = 'g';
 
     /* Cast "type", because if we're in unicode we need to pass a
        8-bit char. This is safe, because we've restricted what "type"
@@ -1099,7 +1109,15 @@ format_complex_internal(PyObject *value,
        from a hard-code pseudo-locale */
     LocaleInfo locale;
 
-    /* Zero padding is not allowed. */
+    /* Alternate is not allowed on complex. */
+    if (format->alternate) {
+        PyErr_SetString(PyExc_ValueError,
+                        "Alternate form (#) not allowed in complex format "
+                        "specifier");
+        goto done;
+    }
+
+    /* Neither is zero pading. */
     if (format->fill_char == '0') {
         PyErr_SetString(PyExc_ValueError,
                         "Zero padding is not allowed in complex format "
@@ -1122,13 +1140,10 @@ format_complex_internal(PyObject *value,
     if (im == -1.0 && PyErr_Occurred())
         goto done;
 
-    if (format->alternate)
-        flags |= Py_DTSF_ALT;
-
     if (type == '\0') {
         /* Omitted type specifier. Should be like str(self). */
-        type = 'r';
-        default_precision = 0;
+        type = 'g';
+        default_precision = PyFloat_STR_PRECISION;
         if (re == 0.0 && copysign(1.0, re) == 1.0)
             skip_re = 1;
         else
@@ -1142,8 +1157,6 @@ format_complex_internal(PyObject *value,
 
     if (precision < 0)
         precision = default_precision;
-    else if (type == 'r')
-        type = 'g';
 
     /* Cast "type", because if we're in unicode we need to pass a
        8-bit char. This is safe, because we've restricted what "type"

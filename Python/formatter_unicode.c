@@ -1,14 +1,18 @@
-/* implements the unicode (as opposed to string) version of the
-   built-in formatters for string, int, float.  that is, the versions
-   of int.__float__, etc., that take and return unicode objects */
+/* Implements the unicode (as opposed to string) version of the
+   built-in formatter for unicode.  That is, unicode.__format__(). */
 
 #include "Python.h"
+
+#ifdef Py_USING_UNICODE
+
 #include "../Objects/stringlib/unicodedefs.h"
 
+#define FORMAT_STRING _PyUnicode_FormatAdvanced
 
-#define FORMAT_STRING  _PyUnicode_FormatAdvanced
-#define FORMAT_LONG    _PyLong_FormatAdvanced
-#define FORMAT_FLOAT   _PyFloat_FormatAdvanced
-#define FORMAT_COMPLEX _PyComplex_FormatAdvanced
+/* don't define FORMAT_LONG, FORMAT_FLOAT, and FORMAT_COMPLEX, since
+   we can live with only the string versions of those.  The builtin
+   format() will convert them to unicode. */
 
 #include "../Objects/stringlib/formatter.h"
+
+#endif

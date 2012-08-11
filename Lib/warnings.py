@@ -5,12 +5,23 @@
 # See bug 683658.
 import linecache
 import sys
+import types
 
 __all__ = ["warn", "showwarning", "formatwarning", "filterwarnings",
            "resetwarnings", "catch_warnings"]
 
 
-def showwarning(message, category, filename, lineno, file=None, line=None):
+def warnpy3k(message, category=None, stacklevel=1):
+    """Issue a deprecation warning for Python 3.x related changes.
+
+    Warnings are omitted unless Python is started with the -3 option.
+    """
+    if sys.py3kwarning:
+        if category is None:
+            category = DeprecationWarning
+        warn(message, category, stacklevel+1)
+
+def _show_warning(message, category, filename, lineno, file=None, line=None):
     """Hook to write a warning to a file; replace if you like."""
     if file is None:
         file = sys.stderr
@@ -18,6 +29,9 @@ def showwarning(message, category, filename, lineno, file=None, line=None):
         file.write(formatwarning(message, category, filename, lineno, line))
     except IOError:
         pass # the file (probably stderr) is invalid - this warning gets lost.
+# Keep a working version around in case the deprecation of the old API is
+# triggered.
+showwarning = _show_warning
 
 def formatwarning(message, category, filename, lineno, line=None):
     """Function to format a warning the standard way."""
@@ -29,7 +43,7 @@ def formatwarning(message, category, filename, lineno, line=None):
     return s
 
 def filterwarnings(action, message="", category=Warning, module="", lineno=0,
-                   append=False):
+                   append=0):
     """Insert an entry into the list of warnings filters (at the front).
 
     'action' -- one of "error", "ignore", "always", "default", "module",
@@ -43,10 +57,11 @@ def filterwarnings(action, message="", category=Warning, module="", lineno=0,
     import re
     assert action in ("error", "ignore", "always", "default", "module",
                       "once"), "invalid action: %r" % (action,)
-    assert isinstance(message, str), "message must be a string"
-    assert isinstance(category, type), "category must be a class"
+    assert isinstance(message, basestring), "message must be a string"
+    assert isinstance(category, (type, types.ClassType)), \
+           "category must be a class"
     assert issubclass(category, Warning), "category must be a Warning subclass"
-    assert isinstance(module, str), "module must be a string"
+    assert isinstance(module, basestring), "module must be a string"
     assert isinstance(lineno, int) and lineno >= 0, \
            "lineno must be an int >= 0"
     item = (action, re.compile(message, re.I), category,
@@ -56,7 +71,7 @@ def filterwarnings(action, message="", category=Warning, module="", lineno=0,
     else:
         filters.insert(0, item)
 
-def simplefilter(action, category=Warning, lineno=0, append=False):
+def simplefilter(action, category=Warning, lineno=0, append=0):
     """Insert a simple entry into the list of warnings filters (at the front).
 
     A simple filter matches all modules and messages.
@@ -89,8 +104,8 @@ def _processoptions(args):
     for arg in args:
         try:
             _setoption(arg)
-        except _OptionError as msg:
-            print("Invalid -W option ignored:", msg, file=sys.stderr)
+        except _OptionError, msg:
+            print >>sys.stderr, "Invalid -W option ignored:", msg
 
 # Helper for _processoptions()
 def _setoption(arg):
@@ -259,9 +274,6 @@ def warn_explicit(message, category, filename, lineno,
         raise RuntimeError(
               "Unrecognized action (%r) in warnings.filters:\n %s" %
               (action, item))
-    if not hasattr(showwarning, "__call__"):
-        raise TypeError("warnings.showwarning() must be set to a "
-                        "function or method")
     # Print message and context
     showwarning(message, category, filename, lineno)
 
@@ -303,7 +315,7 @@ class catch_warnings(object):
 
     """
 
-    def __init__(self, *, record=False, module=None):
+    def __init__(self, record=False, module=None):
         """Specify whether to record warnings and if an alternative module
         should be used other than sys.modules['warnings'].
 
@@ -357,10 +369,10 @@ class catch_warnings(object):
 # If either if the compiled regexs are None, match anything.
 _warnings_defaults = False
 try:
-    from _warnings import (filters, _defaultaction, _onceregistry,
+    from _warnings import (filters, default_action, once_registry,
                             warn, warn_explicit)
-    defaultaction = _defaultaction
-    onceregistry = _onceregistry
+    defaultaction = default_action
+    onceregistry = once_registry
     _warnings_defaults = True
 except ImportError:
     filters = []
@@ -372,7 +384,9 @@ except ImportError:
 _processoptions(sys.warnoptions)
 if not _warnings_defaults:
     silence = [ImportWarning, PendingDeprecationWarning]
-    silence.append(DeprecationWarning)
+    # Don't silence DeprecationWarning if -3 or -Q was used.
+    if not sys.py3kwarning and not sys.flags.division_warning:
+        silence.append(DeprecationWarning)
     for cls in silence:
         simplefilter("ignore", category=cls)
     bytes_warning = sys.flags.bytes_warning
@@ -383,11 +397,4 @@ if not _warnings_defaults:
     else:
         bytes_action = "ignore"
     simplefilter(bytes_action, category=BytesWarning, append=1)
-    # resource usage warnings are enabled by default in pydebug mode
-    if hasattr(sys, 'gettotalrefcount'):
-        resource_action = "always"
-    else:
-        resource_action = "ignore"
-    simplefilter(resource_action, category=ResourceWarning, append=1)
-
 del _warnings_defaults

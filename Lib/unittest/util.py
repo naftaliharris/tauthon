@@ -1,6 +1,6 @@
 """Various utility functions."""
-
 from collections import namedtuple, OrderedDict
+
 
 __unittest = True
 
@@ -13,6 +13,7 @@ def safe_repr(obj, short=False):
     if not short or len(result) < _MAX_LENGTH:
         return result
     return result[:_MAX_LENGTH] + ' [truncated]...'
+
 
 def strclass(cls):
     return "%s.%s" % (cls.__module__, cls.__name__)
@@ -58,26 +59,41 @@ def sorted_list_difference(expected, actual):
     return missing, unexpected
 
 
-def unorderable_list_difference(expected, actual):
+def unorderable_list_difference(expected, actual, ignore_duplicate=False):
     """Same behavior as sorted_list_difference but
     for lists of unorderable items (like dicts).
 
     As it does a linear search per item (remove) it
-    has O(n*n) performance."""
+    has O(n*n) performance.
+    """
     missing = []
+    unexpected = []
     while expected:
         item = expected.pop()
         try:
             actual.remove(item)
         except ValueError:
             missing.append(item)
+        if ignore_duplicate:
+            for lst in expected, actual:
+                try:
+                    while True:
+                        lst.remove(item)
+                except ValueError:
+                    pass
+    if ignore_duplicate:
+        while actual:
+            item = actual.pop()
+            unexpected.append(item)
+            try:
+                while True:
+                    actual.remove(item)
+            except ValueError:
+                pass
+        return missing, unexpected
 
     # anything left in actual is unexpected
     return missing, actual
-
-def three_way_cmp(x, y):
-    """Return -1 if x < y, 0 if x == y and 1 if x > y"""
-    return (x > y) - (x < y)
 
 _Mismatch = namedtuple('Mismatch', 'actual expected value')
 

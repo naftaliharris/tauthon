@@ -1,3 +1,4 @@
+
 :mod:`math` --- Mathematical functions
 ======================================
 
@@ -26,9 +27,8 @@ Number-theoretic and representation functions
 
 .. function:: ceil(x)
 
-   Return the ceiling of *x*, the smallest integer greater than or equal to *x*.
-   If *x* is not a float, delegates to ``x.__ceil__()``, which should return an
-   :class:`Integral` value.
+   Return the ceiling of *x* as a float, the smallest integer value greater than or
+   equal to *x*.
 
 
 .. function:: copysign(x, y)
@@ -36,21 +36,26 @@ Number-theoretic and representation functions
    Return *x* with the sign of *y*.  On a platform that supports
    signed zeros, ``copysign(1.0, -0.0)`` returns *-1.0*.
 
+   .. versionadded:: 2.6
+
 
 .. function:: fabs(x)
 
    Return the absolute value of *x*.
+
 
 .. function:: factorial(x)
 
    Return *x* factorial.  Raises :exc:`ValueError` if *x* is not integral or
    is negative.
 
+   .. versionadded:: 2.6
+
+
 .. function:: floor(x)
 
-   Return the floor of *x*, the largest integer less than or equal to *x*.
-   If *x* is not a float, delegates to ``x.__floor__()``, which should return an
-   :class:`Integral` value.
+   Return the floor of *x* as a float, the largest integer value less than or equal
+   to *x*.
 
 
 .. function:: fmod(x, y)
@@ -96,24 +101,22 @@ Number-theoretic and representation functions
    recipes for accurate floating point summation
    <http://code.activestate.com/recipes/393090/>`_\.
 
-
-.. function:: isfinite(x)
-
-   Return ``True`` if *x* is neither an infinity nor a NaN, and
-   ``False`` otherwise.  (Note that ``0.0`` *is* considered finite.)
-
-   .. versionadded:: 3.2
+   .. versionadded:: 2.6
 
 
 .. function:: isinf(x)
 
-   Return ``True`` if *x* is a positive or negative infinity, and
-   ``False`` otherwise.
+   Check if the float *x* is positive or negative infinity.
+
+   .. versionadded:: 2.6
 
 
 .. function:: isnan(x)
 
-   Return ``True`` if *x* is a NaN (not a number), and ``False`` otherwise.
+   Check if the float *x* is a NaN (not a number).  For more information
+   on NaNs, see the IEEE 754 standards.
+
+   .. versionadded:: 2.6
 
 
 .. function:: ldexp(x, i)
@@ -131,7 +134,9 @@ Number-theoretic and representation functions
 .. function:: trunc(x)
 
    Return the :class:`Real` value *x* truncated to an :class:`Integral` (usually
-   an integer). Delegates to ``x.__trunc__()``.
+   a long integer).  Uses the ``__trunc__`` method.
+
+   .. versionadded:: 2.6
 
 
 Note that :func:`frexp` and :func:`modf` have a different call/return pattern
@@ -167,7 +172,7 @@ Power and logarithmic functions
       >>> expm1(1e-5)    # result accurate to full precision
       1.0000050000166668e-05
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: log(x[, base])
@@ -177,11 +182,16 @@ Power and logarithmic functions
    With two arguments, return the logarithm of *x* to the given *base*,
    calculated as ``log(x)/log(base)``.
 
+   .. versionchanged:: 2.3
+      *base* argument added.
+
 
 .. function:: log1p(x)
 
    Return the natural logarithm of *1+x* (base *e*). The
    result is calculated in a way which is accurate for *x* near zero.
+
+   .. versionadded:: 2.6
 
 
 .. function:: log10(x)
@@ -199,14 +209,17 @@ Power and logarithmic functions
    ``x`` is negative, and ``y`` is not an integer then ``pow(x, y)``
    is undefined, and raises :exc:`ValueError`.
 
+   .. versionchanged:: 2.6
+      The outcome of ``1**nan`` and ``nan**0`` was undefined.
+
 
 .. function:: sqrt(x)
 
    Return the square root of *x*.
 
+
 Trigonometric functions
 -----------------------
-
 
 .. function:: acos(x)
 
@@ -253,9 +266,9 @@ Trigonometric functions
 
    Return the tangent of *x* radians.
 
+
 Angular conversion
 ------------------
-
 
 .. function:: degrees(x)
 
@@ -266,23 +279,29 @@ Angular conversion
 
    Converts angle *x* from degrees to radians.
 
+
 Hyperbolic functions
 --------------------
-
 
 .. function:: acosh(x)
 
    Return the inverse hyperbolic cosine of *x*.
+
+   .. versionadded:: 2.6
 
 
 .. function:: asinh(x)
 
    Return the inverse hyperbolic sine of *x*.
 
+   .. versionadded:: 2.6
+
 
 .. function:: atanh(x)
 
    Return the inverse hyperbolic tangent of *x*.
+
+   .. versionadded:: 2.6
 
 
 .. function:: cosh(x)
@@ -307,21 +326,21 @@ Special functions
 
    Return the error function at *x*.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: erfc(x)
 
    Return the complementary error function at *x*.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: gamma(x)
 
    Return the Gamma function at *x*.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. function:: lgamma(x)
@@ -329,7 +348,7 @@ Special functions
    Return the natural logarithm of the absolute value of the Gamma
    function at *x*.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 Constants
@@ -362,6 +381,10 @@ Constants
    Note that Python makes no effort to distinguish signaling NaNs from
    quiet NaNs, and behavior for signaling NaNs remains unspecified.
    Typical behavior is to treat all NaNs as though they were quiet.
+
+   .. versionchanged:: 2.6
+      Behavior in special cases now aims to follow C99 Annex F.  In earlier
+      versions of Python the behavior in special cases was loosely specified.
 
 
 .. seealso::

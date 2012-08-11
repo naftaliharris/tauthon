@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Print the product of age and size of each file, in suitable units.
 #
@@ -43,7 +43,7 @@ def main():
     for filename in sys.argv[1:]:
         try:
             st = statfunc(filename)
-        except os.error as msg:
+        except os.error, msg:
             sys.stderr.write("can't stat %r: %r\n" % (filename, msg))
             status = 1
             st = ()
@@ -52,8 +52,8 @@ def main():
             size = st[ST_SIZE]
             age = now - anytime
             byteyears = float(size) * float(age) / secs_per_year
-            print(filename.ljust(maxlen), end=' ')
-            print(repr(int(byteyears)).rjust(8))
+            print filename.ljust(maxlen),
+            print repr(int(byteyears)).rjust(8)
 
     sys.exit(status)
 

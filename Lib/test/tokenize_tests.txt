@@ -21,7 +21,7 @@ y = [3, 4,
   5]
 z = {'a':5,
   'b':6}
-x = (len(repr(y)) + 5*x - a[
+x = (len(`y`) + 5*x - a[
    3 ]
    - x + len({
    }
@@ -36,22 +36,22 @@ x = 1 \
 x = 0
 
 # Ordinary integers
-0xff != 255
-0o377 != 255
-2147483647   != 0o17777777777
--2147483647-1 != 0o20000000000
-0o37777777777 != -1
-0xffffffff != -1; 0o37777777777 != -1; -0o1234567 == 0O001234567; 0b10101 == 0B00010101
+0xff <> 255
+0377 <> 255
+2147483647   != 017777777777
+-2147483647-1 != 020000000000
+037777777777 != -1
+0xffffffff != -1
 
 # Long integers
-x = 0
-x = 0
-x = 0xffffffffffffffff
-x = 0xffffffffffffffff
-x = 0o77777777777777777
-x = 0B11101010111111111
-x = 123456789012345678901234567890
-x = 123456789012345678901234567890
+x = 0L
+x = 0l
+x = 0xffffffffffffffffL
+x = 0xffffffffffffffffl
+x = 077777777777777777L
+x = 077777777777777777l
+x = 123456789012345678901234567890L
+x = 123456789012345678901234567890l
 
 # Floating-point numbers
 x = 3.14
@@ -110,19 +110,19 @@ y = r"""foo
 bar \\ baz
 """ + R'''spam
 '''
-x = b'abc' + B'ABC'
-y = b"abc" + B"ABC"
-x = br'abc' + Br'ABC' + bR'ABC' + BR'ABC'
-y = br"abc" + Br"ABC" + bR"ABC" + BR"ABC"
-x = br'\\' + BR'\\'
-x = br'\'' + ''
-y = br'''
+x = u'abc' + U'ABC'
+y = u"abc" + U"ABC"
+x = ur'abc' + Ur'ABC' + uR'ABC' + UR'ABC'
+y = ur"abc" + Ur"ABC" + uR"ABC" + UR"ABC"
+x = ur'\\' + UR'\\'
+x = ur'\'' + ''
+y = ur'''
 foo bar \\
-baz''' + BR'''
+baz''' + UR'''
 foo'''
-y = Br"""foo
+y = Ur"""foo
 bar \\ baz
-""" + bR'''spam
+""" + uR'''spam
 '''
 
 # Indentation
@@ -146,10 +146,10 @@ if 0:
 def d22(a, b, c=1, d=2): pass
 def d01v(a=1, *restt, **restd): pass
 
-(x, y) != ({'a':1}, {'b':2})
+(x, y) <> ({'a':1}, {'b':2})
 
 # comparison
-if 1 < 1 > 1 == 1 >= 1 <= 1 != 1 != 1 in 1 not in 1 is 1 is not 1: pass
+if 1 < 1 > 1 == 1 >= 1 <= 1 <> 1 != 1 in 1 not in 1 is 1 is not 1: pass
 
 # binary
 x = 1 & 1
@@ -175,7 +175,4 @@ x = sys.modules['time'].time()
 
 @staticmethod
 def foo(): pass
-
-@staticmethod
-def foo(x:1)->1: pass
 

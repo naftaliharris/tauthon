@@ -262,70 +262,6 @@ configuration::
     print('complete')
 
 
-Dealing with handlers that block
---------------------------------
-
-.. currentmodule:: logging.handlers
-
-Sometimes you have to get your logging handlers to do their work without
-blocking the thread you’re logging from. This is common in Web applications,
-though of course it also occurs in other scenarios.
-
-A common culprit which demonstrates sluggish behaviour is the
-:class:`SMTPHandler`: sending emails can take a long time, for a
-number of reasons outside the developer’s control (for example, a poorly
-performing mail or network infrastructure). But almost any network-based
-handler can block: Even a :class:`SocketHandler` operation may do a
-DNS query under the hood which is too slow (and this query can be deep in the
-socket library code, below the Python layer, and outside your control).
-
-One solution is to use a two-part approach. For the first part, attach only a
-:class:`QueueHandler` to those loggers which are accessed from
-performance-critical threads. They simply write to their queue, which can be
-sized to a large enough capacity or initialized with no upper bound to their
-size. The write to the queue will typically be accepted quickly, though you
-will probably need to catch the :exc:`queue.Full` exception as a precaution
-in your code. If you are a library developer who has performance-critical
-threads in their code, be sure to document this (together with a suggestion to
-attach only ``QueueHandlers`` to your loggers) for the benefit of other
-developers who will use your code.
-
-The second part of the solution is :class:`QueueListener`, which has been
-designed as the counterpart to :class:`QueueHandler`.  A
-:class:`QueueListener` is very simple: it’s passed a queue and some handlers,
-and it fires up an internal thread which listens to its queue for LogRecords
-sent from ``QueueHandlers`` (or any other source of ``LogRecords``, for that
-matter). The ``LogRecords`` are removed from the queue and passed to the
-handlers for processing.
-
-The advantage of having a separate :class:`QueueListener` class is that you
-can use the same instance to service multiple ``QueueHandlers``. This is more
-resource-friendly than, say, having threaded versions of the existing handler
-classes, which would eat up one thread per handler for no particular benefit.
-
-An example of using these two classes follows (imports omitted)::
-
-    que = queue.Queue(-1) # no limit on size
-    queue_handler = QueueHandler(que)
-    handler = logging.StreamHandler()
-    listener = QueueListener(que, handler)
-    root = logging.getLogger()
-    root.addHandler(queue_handler)
-    formatter = logging.Formatter('%(threadName)s: %(message)s')
-    handler.setFormatter(formatter)
-    listener.start()
-    # The log output will display the thread which generated
-    # the event (the main thread) rather than the internal
-    # thread which monitors the internal queue. This is what
-    # you want to happen.
-    root.warning('Look out!')
-    listener.stop()
-
-which, when run, will produce::
-
-    MainThread: Look out!
-
-
 .. _network-logging:
 
 Sending and receiving logging events across a network
@@ -674,9 +610,10 @@ need to log to a single file from multiple processes, one way of doing this is
 to have all the processes log to a :class:`SocketHandler`, and have a separate
 process which implements a socket server which reads from the socket and logs
 to file. (If you prefer, you can dedicate one thread in one of the existing
-processes to perform this function.) The following section documents this
-approach in more detail and includes a working socket receiver which can be
-used as a starting point for you to adapt in your own applications.
+processes to perform this function.) :ref:`This section <network-logging>`
+documents this approach in more detail and includes a working socket receiver
+which can be used as a starting point for you to adapt in your own
+applications.
 
 If you are using a recent version of Python which includes the
 :mod:`multiprocessing` module, you could write your own handler which uses the
@@ -689,223 +626,6 @@ http://bugs.python.org/issue3770).
 
 .. currentmodule:: logging.handlers
 
-Alternatively, you can use a ``Queue`` and a :class:`QueueHandler` to send
-all logging events to one of the processes in your multi-process application.
-The following example script demonstrates how you can do this; in the example
-a separate listener process listens for events sent by other processes and logs
-them according to its own logging configuration. Although the example only
-demonstrates one way of doing it (for example, you may want to use a listener
-thread rather than a separate listener process -- the implementation would be
-analogous) it does allow for completely different logging configurations for
-the listener and the other processes in your application, and can be used as
-the basis for code meeting your own specific requirements::
-
-    # You'll need these imports in your own code
-    import logging
-    import logging.handlers
-    import multiprocessing
-
-    # Next two import lines for this demo only
-    from random import choice, random
-    import time
-
-    #
-    # Because you'll want to define the logging configurations for listener and workers, the
-    # listener and worker process functions take a configurer parameter which is a callable
-    # for configuring logging for that process. These functions are also passed the queue,
-    # which they use for communication.
-    #
-    # In practice, you can configure the listener however you want, but note that in this
-    # simple example, the listener does not apply level or filter logic to received records.
-    # In practice, you would probably want to do this logic in the worker processes, to avoid
-    # sending events which would be filtered out between processes.
-    #
-    # The size of the rotated files is made small so you can see the results easily.
-    def listener_configurer():
-        root = logging.getLogger()
-        h = logging.handlers.RotatingFileHandler('/tmp/mptest.log', 'a', 300, 10)
-        f = logging.Formatter('%(asctime)s %(processName)-10s %(name)s %(levelname)-8s %(message)s')
-        h.setFormatter(f)
-        root.addHandler(h)
-
-    # This is the listener process top-level loop: wait for logging events
-    # (LogRecords)on the queue and handle them, quit when you get a None for a
-    # LogRecord.
-    def listener_process(queue, configurer):
-        configurer()
-        while True:
-            try:
-                record = queue.get()
-                if record is None: # We send this as a sentinel to tell the listener to quit.
-                    break
-                logger = logging.getLogger(record.name)
-                logger.handle(record) # No level or filter logic applied - just do it!
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except:
-                import sys, traceback
-                print >> sys.stderr, 'Whoops! Problem:'
-                traceback.print_exc(file=sys.stderr)
-
-    # Arrays used for random selections in this demo
-
-    LEVELS = [logging.DEBUG, logging.INFO, logging.WARNING,
-              logging.ERROR, logging.CRITICAL]
-
-    LOGGERS = ['a.b.c', 'd.e.f']
-
-    MESSAGES = [
-        'Random message #1',
-        'Random message #2',
-        'Random message #3',
-    ]
-
-    # The worker configuration is done at the start of the worker process run.
-    # Note that on Windows you can't rely on fork semantics, so each process
-    # will run the logging configuration code when it starts.
-    def worker_configurer(queue):
-        h = logging.handlers.QueueHandler(queue) # Just the one handler needed
-        root = logging.getLogger()
-        root.addHandler(h)
-        root.setLevel(logging.DEBUG) # send all messages, for demo; no other level or filter logic applied.
-
-    # This is the worker process top-level loop, which just logs ten events with
-    # random intervening delays before terminating.
-    # The print messages are just so you know it's doing something!
-    def worker_process(queue, configurer):
-        configurer(queue)
-        name = multiprocessing.current_process().name
-        print('Worker started: %s' % name)
-        for i in range(10):
-            time.sleep(random())
-            logger = logging.getLogger(choice(LOGGERS))
-            level = choice(LEVELS)
-            message = choice(MESSAGES)
-            logger.log(level, message)
-        print('Worker finished: %s' % name)
-
-    # Here's where the demo gets orchestrated. Create the queue, create and start
-    # the listener, create ten workers and start them, wait for them to finish,
-    # then send a None to the queue to tell the listener to finish.
-    def main():
-        queue = multiprocessing.Queue(-1)
-        listener = multiprocessing.Process(target=listener_process,
-                                           args=(queue, listener_configurer))
-        listener.start()
-        workers = []
-        for i in range(10):
-            worker = multiprocessing.Process(target=worker_process,
-                                           args=(queue, worker_configurer))
-            workers.append(worker)
-            worker.start()
-        for w in workers:
-            w.join()
-        queue.put_nowait(None)
-        listener.join()
-
-    if __name__ == '__main__':
-        main()
-
-A variant of the above script keeps the logging in the main process, in a
-separate thread::
-
-    import logging
-    import logging.config
-    import logging.handlers
-    from multiprocessing import Process, Queue
-    import random
-    import threading
-    import time
-
-    def logger_thread(q):
-        while True:
-            record = q.get()
-            if record is None:
-                break
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
-
-
-    def worker_process(q):
-        qh = logging.handlers.QueueHandler(q)
-        root = logging.getLogger()
-        root.setLevel(logging.DEBUG)
-        root.addHandler(qh)
-        levels = [logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR,
-                  logging.CRITICAL]
-        loggers = ['foo', 'foo.bar', 'foo.bar.baz',
-                   'spam', 'spam.ham', 'spam.ham.eggs']
-        for i in range(100):
-            lvl = random.choice(levels)
-            logger = logging.getLogger(random.choice(loggers))
-            logger.log(lvl, 'Message no. %d', i)
-
-    if __name__ == '__main__':
-        q = Queue()
-        d = {
-            'version': 1,
-            'formatters': {
-                'detailed': {
-                    'class': 'logging.Formatter',
-                    'format': '%(asctime)s %(name)-15s %(levelname)-8s %(processName)-10s %(message)s'
-                }
-            },
-            'handlers': {
-                'console': {
-                    'class': 'logging.StreamHandler',
-                    'level': 'INFO',
-                },
-                'file': {
-                    'class': 'logging.FileHandler',
-                    'filename': 'mplog.log',
-                    'mode': 'w',
-                    'formatter': 'detailed',
-                },
-                'foofile': {
-                    'class': 'logging.FileHandler',
-                    'filename': 'mplog-foo.log',
-                    'mode': 'w',
-                    'formatter': 'detailed',
-                },
-                'errors': {
-                    'class': 'logging.FileHandler',
-                    'filename': 'mplog-errors.log',
-                    'mode': 'w',
-                    'level': 'ERROR',
-                    'formatter': 'detailed',
-                },
-            },
-            'loggers': {
-                'foo': {
-                    'handlers' : ['foofile']
-                }
-            },
-            'root': {
-                'level': 'DEBUG',
-                'handlers': ['console', 'file', 'errors']
-            },
-        }
-        workers = []
-        for i in range(5):
-            wp = Process(target=worker_process, name='worker %d' % (i + 1), args=(q,))
-            workers.append(wp)
-            wp.start()
-        logging.config.dictConfig(d)
-        lp = threading.Thread(target=logger_thread, args=(q,))
-        lp.start()
-        # At this point, the main process could do some useful work of its own
-        # Once it's done that, it can wait for the workers to terminate...
-        for wp in workers:
-            wp.join()
-        # And now tell the logging thread to finish up, too
-        q.put(None)
-        lp.join()
-
-This variant shows how you can e.g. apply configuration for particular loggers
-- e.g. the ``foo`` logger has a special handler which stores all events in the
-``foo`` subsystem in a file ``mplog-foo.log``. This will be used by the logging
-machinery in the main process (even though the logging events are generated in
-the worker processes) to direct the messages to the appropriate destinations.
 
 Using file rotation
 -------------------
@@ -960,80 +680,113 @@ and each time it reaches the size limit it is renamed with the suffix
 ``.1``. Each of the existing backup files is renamed to increment the suffix
 (``.1`` becomes ``.2``, etc.)  and the ``.6`` file is erased.
 
-Obviously this example sets the log length much much too small as an extreme
+Obviously this example sets the log length much too small as an extreme
 example.  You would want to set *maxBytes* to an appropriate value.
 
-.. _zeromq-handlers:
+An example dictionary-based configuration
+-----------------------------------------
 
-Subclassing QueueHandler - a ZeroMQ example
--------------------------------------------
+Below is an example of a logging configuration dictionary - it's taken from
+the `documentation on the Django project <https://docs.djangoproject.com/en/1.3/topics/logging/#configuring-logging>`_.
+This dictionary is passed to :func:`~logging.config.dictConfig` to put the configuration into effect::
 
-You can use a :class:`QueueHandler` subclass to send messages to other kinds
-of queues, for example a ZeroMQ 'publish' socket. In the example below,the
-socket is created separately and passed to the handler (as its 'queue')::
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': True,
+        'formatters': {
+            'verbose': {
+                'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
+            },
+            'simple': {
+                'format': '%(levelname)s %(message)s'
+            },
+        },
+        'filters': {
+            'special': {
+                '()': 'project.logging.SpecialFilter',
+                'foo': 'bar',
+            }
+        },
+        'handlers': {
+            'null': {
+                'level':'DEBUG',
+                'class':'django.utils.log.NullHandler',
+            },
+            'console':{
+                'level':'DEBUG',
+                'class':'logging.StreamHandler',
+                'formatter': 'simple'
+            },
+            'mail_admins': {
+                'level': 'ERROR',
+                'class': 'django.utils.log.AdminEmailHandler',
+                'filters': ['special']
+            }
+        },
+        'loggers': {
+            'django': {
+                'handlers':['null'],
+                'propagate': True,
+                'level':'INFO',
+            },
+            'django.request': {
+                'handlers': ['mail_admins'],
+                'level': 'ERROR',
+                'propagate': False,
+            },
+            'myproject.custom': {
+                'handlers': ['console', 'mail_admins'],
+                'level': 'INFO',
+                'filters': ['special']
+            }
+        }
+    }
 
-    import zmq # using pyzmq, the Python binding for ZeroMQ
-    import json # for serializing records portably
+For more information about this configuration, you can see the `relevant
+section <https://docs.djangoproject.com/en/1.3/topics/logging/#configuring-logging>`_
+of the Django documentation.
 
-    ctx = zmq.Context()
-    sock = zmq.Socket(ctx, zmq.PUB) # or zmq.PUSH, or other suitable value
-    sock.bind('tcp://*:5556') # or wherever
+Inserting a BOM into messages sent to a SysLogHandler
+-----------------------------------------------------
 
-    class ZeroMQSocketHandler(QueueHandler):
-        def enqueue(self, record):
-            data = json.dumps(record.__dict__)
-            self.queue.send(data)
+`RFC 5424 <http://tools.ietf.org/html/rfc5424>`_ requires that a
+Unicode message be sent to a syslog daemon as a set of bytes which have the
+following structure: an optional pure-ASCII component, followed by a UTF-8 Byte
+Order Mark (BOM), followed by Unicode encoded using UTF-8. (See the `relevant
+section of the specification <http://tools.ietf.org/html/rfc5424#section-6>`_.)
 
-    handler = ZeroMQSocketHandler(sock)
+In Python 2.6 and 2.7, code was added to
+:class:`~logging.handlers.SysLogHandler` to insert a BOM into the message, but
+unfortunately, it was implemented incorrectly, with the BOM appearing at the
+beginning of the message and hence not allowing any pure-ASCII component to
+appear before it.
 
+As this behaviour is broken, the incorrect BOM insertion code is being removed
+from Python 2.7.4 and later. However, it is not being replaced, and if you
+want to produce RFC 5424-compliant messages which include a BOM, an optional
+pure-ASCII sequence before it and arbitrary Unicode after it, encoded using
+UTF-8, then you need to do the following:
 
-Of course there are other ways of organizing this, for example passing in the
-data needed by the handler to create the socket::
+#. Attach a :class:`~logging.Formatter` instance to your
+   :class:`~logging.handlers.SysLogHandler` instance, with a format string
+   such as::
 
-    class ZeroMQSocketHandler(QueueHandler):
-        def __init__(self, uri, socktype=zmq.PUB, ctx=None):
-            self.ctx = ctx or zmq.Context()
-            socket = zmq.Socket(self.ctx, socktype)
-            socket.bind(uri)
-            QueueHandler.__init__(self, socket)
+      u'ASCII section\ufeffUnicode section'
 
-        def enqueue(self, record):
-            data = json.dumps(record.__dict__)
-            self.queue.send(data)
+   The Unicode code point ``u'\feff```, when encoded using UTF-8, will be
+   encoded as a UTF-8 BOM -- the byte-string ``'\xef\xbb\xbf'``.
 
-        def close(self):
-            self.queue.close()
+#. Replace the ASCII section with whatever placeholders you like, but make sure
+   that the data that appears in there after substitution is always ASCII (that
+   way, it will remain unchanged after UTF-8 encoding).
 
+#. Replace the Unicode section with whatever placeholders you like; if the data
+   which appears there after substitution contains characters outside the ASCII
+   range, that's fine -- it will be encoded using UTF-8.
 
-Subclassing QueueListener - a ZeroMQ example
---------------------------------------------
+If the formatted message is Unicode, it *will* be encoded using UTF-8 encoding
+by ``SysLogHandler``. If you follow the above rules, you should be able to
+produce RFC 5424-compliant messages. If you don't, logging may not complain,
+but your messages will not be RFC 5424-compliant, and your syslog daemon may
+complain.
 
-You can also subclass :class:`QueueListener` to get messages from other kinds
-of queues, for example a ZeroMQ 'subscribe' socket. Here's an example::
-
-    class ZeroMQSocketListener(QueueListener):
-        def __init__(self, uri, *handlers, **kwargs):
-            self.ctx = kwargs.get('ctx') or zmq.Context()
-            socket = zmq.Socket(self.ctx, zmq.SUB)
-            socket.setsockopt(zmq.SUBSCRIBE, '') # subscribe to everything
-            socket.connect(uri)
-
-        def dequeue(self):
-            msg = self.queue.recv()
-            return logging.makeLogRecord(json.loads(msg))
-
-
-.. seealso::
-
-   Module :mod:`logging`
-      API reference for the logging module.
-
-   Module :mod:`logging.config`
-      Configuration API for the logging module.
-
-   Module :mod:`logging.handlers`
-      Useful handlers included with the logging module.
-
-   :ref:`A basic logging tutorial <logging-basic-tutorial>`
-
-   :ref:`A more advanced logging tutorial <logging-advanced-tutorial>`

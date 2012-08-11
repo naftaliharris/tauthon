@@ -1,5 +1,5 @@
-:mod:`email`: Representing character sets
------------------------------------------
+:mod:`email.charset`: Representing character sets
+-------------------------------------------------
 
 .. module:: email.charset
    :synopsis: Character Sets
@@ -13,8 +13,10 @@ Instances of :class:`Charset` are used in several other modules within the
 
 Import this class from the :mod:`email.charset` module.
 
+.. versionadded:: 2.2.2
 
-.. class:: Charset(input_charset=DEFAULT_CHARSET)
+
+.. class:: Charset([input_charset])
 
    Map character sets to their email properties.
 
@@ -39,6 +41,7 @@ Import this class from the :mod:`email.charset` module.
    character set to the ``iso-2022-jp`` character set.
 
    :class:`Charset` instances have the following data attributes:
+
 
    .. attribute:: input_charset
 
@@ -65,10 +68,10 @@ Import this class from the :mod:`email.charset` module.
 
    .. attribute:: output_charset
 
-      Some character sets must be converted before they can be used in email
-      headers or bodies.  If the *input_charset* is one of them, this attribute
-      will contain the name of the character set output will be converted to.
-      Otherwise, it will be ``None``.
+      Some character sets must be converted before they can be used in email headers
+      or bodies.  If the *input_charset* is one of them, this attribute will
+      contain the name of the character set output will be converted to.  Otherwise, it will
+      be ``None``.
 
 
    .. attribute:: input_codec
@@ -84,8 +87,8 @@ Import this class from the :mod:`email.charset` module.
       *output_charset*.  If no conversion codec is necessary, this attribute
       will have the same value as the *input_codec*.
 
-
    :class:`Charset` instances also have the following methods:
+
 
    .. method:: get_body_encoding()
 
@@ -101,9 +104,13 @@ Import this class from the :mod:`email.charset` module.
       returns the string ``base64`` if *body_encoding* is ``BASE64``, and
       returns the string ``7bit`` otherwise.
 
-   .. XXX to_splittable and from_splittable are not there anymore!
 
-   .. method to_splittable(s)
+   .. method:: convert(s)
+
+      Convert the string *s* from the *input_codec* to the *output_codec*.
+
+
+   .. method:: to_splittable(s)
 
       Convert a possibly multibyte string to a safely splittable format. *s* is
       the string to split.
@@ -118,7 +125,7 @@ Import this class from the :mod:`email.charset` module.
       the Unicode replacement character ``'U+FFFD'``.
 
 
-   .. method from_splittable(ustr[, to_output])
+   .. method:: from_splittable(ustr[, to_output])
 
       Convert a splittable string back into an encoded string.  *ustr* is a
       Unicode string to "unsplit".
@@ -142,27 +149,35 @@ Import this class from the :mod:`email.charset` module.
       it is *input_charset*.
 
 
-   .. method:: header_encode(string)
+   .. method:: encoded_header_len()
 
-      Header-encode the string *string*.
+      Return the length of the encoded header string, properly calculating for
+      quoted-printable or base64 encoding.
+
+
+   .. method:: header_encode(s[, convert])
+
+      Header-encode the string *s*.
+
+      If *convert* is ``True``, the string will be converted from the input
+      charset to the output charset automatically.  This is not useful for
+      multibyte character sets, which have line length issues (multibyte
+      characters must be split on a character, not a byte boundary); use the
+      higher-level :class:`~email.header.Header` class to deal with these issues
+      (see :mod:`email.header`).  *convert* defaults to ``False``.
 
       The type of encoding (base64 or quoted-printable) will be based on the
       *header_encoding* attribute.
 
 
-   .. method:: header_encode_lines(string, maxlengths)
+   .. method:: body_encode(s[, convert])
 
-      Header-encode a *string* by converting it first to bytes.
+      Body-encode the string *s*.
 
-      This is similar to :meth:`header_encode` except that the string is fit
-      into maximum line lengths as given by the argument *maxlengths*, which
-      must be an iterator: each element returned from this iterator will provide
-      the next maximum line length.
-
-
-   .. method:: body_encode(string)
-
-      Body-encode the string *string*.
+      If *convert* is ``True`` (the default), the string will be converted from
+      the input charset to output charset automatically. Unlike
+      :meth:`header_encode`, there are no issues with byte boundaries and
+      multibyte charsets in email bodies, so this is usually pretty safe.
 
       The type of encoding (base64 or quoted-printable) will be based on the
       *body_encoding* attribute.
@@ -192,7 +207,7 @@ The :mod:`email.charset` module also provides the following functions for adding
 new entries to the global character set, alias, and codec registries:
 
 
-.. function:: add_charset(charset, header_enc=None, body_enc=None, output_charset=None)
+.. function:: add_charset(charset[, header_enc[, body_enc[, output_charset]]])
 
    Add character properties to the global registry.
 
@@ -233,6 +248,6 @@ new entries to the global character set, alias, and codec registries:
    Add a codec that map characters in the given character set to and from Unicode.
 
    *charset* is the canonical name of a character set. *codecname* is the name of a
-   Python codec, as appropriate for the second argument to the :class:`str`'s
-   :func:`decode` method
+   Python codec, as appropriate for the second argument to the :func:`unicode`
+   built-in, or to the :meth:`encode` method of a Unicode string.
 

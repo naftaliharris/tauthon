@@ -19,6 +19,7 @@ class SimpleTypesTestCase(unittest.TestCase):
         else:
             set_conversion_mode(*self.prev_conv_mode)
 
+
     def test_subclasses(self):
         from ctypes import c_void_p, c_char_p
         # ctypes 0.9.5 and before did overwrite from_param in SimpleType_new
@@ -53,17 +54,18 @@ class SimpleTypesTestCase(unittest.TestCase):
 
         # c_char_p.from_param on a Python String packs the string
         # into a cparam object
-        s = b"123"
+        s = "123"
         self.assertTrue(c_char_p.from_param(s)._obj is s)
 
         # new in 0.9.1: convert (encode) unicode to ascii
-        self.assertEqual(c_char_p.from_param(b"123")._obj, b"123")
-        self.assertRaises(TypeError, c_char_p.from_param, "123\377")
+        self.assertEqual(c_char_p.from_param(u"123")._obj, "123")
+        self.assertRaises(UnicodeEncodeError, c_char_p.from_param, u"123\377")
+
         self.assertRaises(TypeError, c_char_p.from_param, 42)
 
         # calling c_char_p.from_param with a c_char_p instance
         # returns the argument itself:
-        a = c_char_p(b"123")
+        a = c_char_p("123")
         self.assertTrue(c_char_p.from_param(a) is a)
 
     def test_cw_strings(self):
@@ -73,16 +75,16 @@ class SimpleTypesTestCase(unittest.TestCase):
         except ImportError:
 ##            print "(No c_wchar_p)"
             return
-        s = "123"
+        s = u"123"
         if sys.platform == "win32":
             self.assertTrue(c_wchar_p.from_param(s)._obj is s)
             self.assertRaises(TypeError, c_wchar_p.from_param, 42)
 
             # new in 0.9.1: convert (decode) ascii to unicode
-            self.assertEqual(c_wchar_p.from_param("123")._obj, "123")
-        self.assertRaises(TypeError, c_wchar_p.from_param, b"123\377")
+            self.assertEqual(c_wchar_p.from_param("123")._obj, u"123")
+        self.assertRaises(UnicodeDecodeError, c_wchar_p.from_param, "123\377")
 
-        pa = c_wchar_p.from_param(c_wchar_p("123"))
+        pa = c_wchar_p.from_param(c_wchar_p(u"123"))
         self.assertEqual(type(pa), c_wchar_p)
 
     def test_int_pointers(self):

@@ -78,19 +78,24 @@ def RawArray(typecode_or_type, size_or_initializer):
     Returns a ctypes array allocated from shared memory
     '''
     type_ = typecode_to_type.get(typecode_or_type, typecode_or_type)
-    if isinstance(size_or_initializer, int):
+    if isinstance(size_or_initializer, (int, long)):
         type_ = type_ * size_or_initializer
-        return _new_value(type_)
+        obj = _new_value(type_)
+        ctypes.memset(ctypes.addressof(obj), 0, ctypes.sizeof(obj))
+        return obj
     else:
         type_ = type_ * len(size_or_initializer)
         result = _new_value(type_)
         result.__init__(*size_or_initializer)
         return result
 
-def Value(typecode_or_type, *args, lock=None):
+def Value(typecode_or_type, *args, **kwds):
     '''
     Return a synchronization wrapper for a Value
     '''
+    lock = kwds.pop('lock', None)
+    if kwds:
+        raise ValueError('unrecognized keyword argument(s): %s' % kwds.keys())
     obj = RawValue(typecode_or_type, *args)
     if lock is False:
         return obj
@@ -106,7 +111,7 @@ def Array(typecode_or_type, size_or_initializer, **kwds):
     '''
     lock = kwds.pop('lock', None)
     if kwds:
-        raise ValueError('unrecognized keyword argument(s): %s' % list(kwds.keys()))
+        raise ValueError('unrecognized keyword argument(s): %s' % kwds.keys())
     obj = RawArray(typecode_or_type, size_or_initializer)
     if lock is False:
         return obj
@@ -169,7 +174,7 @@ def make_property(name):
         return prop_cache[name]
     except KeyError:
         d = {}
-        exec(template % ((name,)*7), d)
+        exec template % ((name,)*7) in d
         prop_cache[name] = d[name]
         return d[name]
 

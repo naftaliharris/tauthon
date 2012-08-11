@@ -42,7 +42,7 @@ import time
 import atexit
 import weakref
 
-from queue import Empty, Full
+from Queue import Empty, Full
 import _multiprocessing
 from multiprocessing import Pipe
 from multiprocessing.synchronize import Lock, BoundedSemaphore, Semaphore, Condition
@@ -126,7 +126,11 @@ class Queue(object):
             if not self._rlock.acquire(block, timeout):
                 raise Empty
             try:
-                if not self._poll(block and (deadline-time.time()) or 0.0):
+                if block:
+                    timeout = deadline - time.time()
+                    if timeout < 0 or not self._poll(timeout):
+                        raise Empty
+                elif not self._poll():
                     raise Empty
                 res = self._recv()
                 self._sem.release()
@@ -188,13 +192,7 @@ class Queue(object):
         debug('... done self._thread.start()')
 
         # On process exit we will wait for data to be flushed to pipe.
-        #
-        # However, if this process created the queue then all
-        # processes which use the queue will be descendants of this
-        # process.  Therefore waiting for the queue to be flushed
-        # is pointless once all the child processes have been joined.
-        created_by_this_process = (self._opid == os.getpid())
-        if not self._joincancelled and not created_by_this_process:
+        if not self._joincancelled:
             self._jointhread = Finalize(
                 self._thread, Queue._finalize_join,
                 [weakref.ref(self._thread)],
@@ -270,7 +268,7 @@ class Queue(object):
                                 wrelease()
                 except IndexError:
                     pass
-        except Exception as e:
+        except Exception, e:
             # Since this runs in a daemon thread the resources it uses
             # may be become unusable while the process is cleaning up.
             # We ignore errors which happen after the process has

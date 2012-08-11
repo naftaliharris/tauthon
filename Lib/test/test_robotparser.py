@@ -1,8 +1,6 @@
-import io
-import unittest
-import urllib.robotparser
-from urllib.error import URLError
-from test import support
+import unittest, StringIO, robotparser
+from test import test_support
+from urllib2 import urlopen, HTTPError
 
 class RobotTestCase(unittest.TestCase):
     def __init__(self, index, parser, url, good, agent):
@@ -35,8 +33,8 @@ tests = unittest.TestSuite()
 def RobotTest(index, robots_txt, good_urls, bad_urls,
               agent="test_robotparser"):
 
-    lines = io.StringIO(robots_txt).readlines()
-    parser = urllib.robotparser.RobotFileParser()
+    lines = StringIO.StringIO(robots_txt).readlines()
+    parser = robotparser.RobotFileParser()
     parser.parse(lines)
     for url in good_urls:
         tests.addTest(RobotTestCase(index, parser, url, 1, agent))
@@ -234,30 +232,45 @@ RobotTest(15, doc, good, bad)
 class NetworkTestCase(unittest.TestCase):
 
     def testPasswordProtectedSite(self):
-        support.requires('network')
-        with support.transient_internet('mueblesmoraleda.com'):
+        test_support.requires('network')
+        with test_support.transient_internet('mueblesmoraleda.com'):
             url = 'http://mueblesmoraleda.com'
-            parser = urllib.robotparser.RobotFileParser()
+            robots_url = url + "/robots.txt"
+            # First check the URL is usable for our purposes, since the
+            # test site is a bit flaky.
+            try:
+                urlopen(robots_url)
+            except HTTPError as e:
+                if e.code not in {401, 403}:
+                    self.skipTest(
+                        "%r should return a 401 or 403 HTTP error, not %r"
+                        % (robots_url, e.code))
+            else:
+                self.skipTest(
+                    "%r should return a 401 or 403 HTTP error, not succeed"
+                    % (robots_url))
+            parser = robotparser.RobotFileParser()
             parser.set_url(url)
             try:
                 parser.read()
-            except URLError:
+            except IOError:
                 self.skipTest('%s is unavailable' % url)
-            self.assertEqual(parser.can_fetch("*", url+"/robots.txt"), False)
+            self.assertEqual(parser.can_fetch("*", robots_url), False)
 
     def testPythonOrg(self):
-        support.requires('network')
-        with support.transient_internet('www.python.org'):
-            parser = urllib.robotparser.RobotFileParser(
+        test_support.requires('network')
+        with test_support.transient_internet('www.python.org'):
+            parser = robotparser.RobotFileParser(
                 "http://www.python.org/robots.txt")
             parser.read()
             self.assertTrue(
                 parser.can_fetch("*", "http://www.python.org/robots.txt"))
 
+
 def test_main():
-    support.run_unittest(NetworkTestCase)
-    support.run_unittest(tests)
+    test_support.run_unittest(tests)
+    test_support.run_unittest(NetworkTestCase)
 
 if __name__=='__main__':
-    support.verbose = 1
+    test_support.verbose = 1
     test_main()

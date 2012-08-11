@@ -1,7 +1,7 @@
 """Unit tests for __instancecheck__ and __subclasscheck__."""
 
 import unittest
-from test import support
+from test import test_support
 
 
 class ABC(type):
@@ -9,19 +9,23 @@ class ABC(type):
     def __instancecheck__(cls, inst):
         """Implement isinstance(inst, cls)."""
         return any(cls.__subclasscheck__(c)
-                   for c in {type(inst), inst.__class__})
+                   for c in set([type(inst), inst.__class__]))
 
     def __subclasscheck__(cls, sub):
         """Implement issubclass(sub, cls)."""
-        candidates = cls.__dict__.get("__subclass__", set()) | {cls}
+        candidates = cls.__dict__.get("__subclass__", set()) | set([cls])
         return any(c in candidates for c in sub.mro())
 
 
-class Integer(metaclass=ABC):
-    __subclass__ = {int}
+class Integer:
+
+    __metaclass__ = ABC
+
+    __subclass__ = set([int])
 
 
 class SubInt(Integer):
+
     pass
 
 
@@ -67,9 +71,22 @@ class TypeChecksTest(unittest.TestCase):
         self.assertEqual(isinstance(42, SubInt), False)
         self.assertEqual(isinstance(42, (SubInt,)), False)
 
+    def test_oldstyle(self):
+        # These should just be ignored.
+        class X:
+            def __instancecheck__(self, inst):
+                return True
+            def __subclasscheck__(self, cls):
+                return True
+        class Sub(X): pass
+        self.assertNotIsInstance(3, X)
+        self.assertIsInstance(X(), X)
+        self.assertFalse(issubclass(int, X))
+        self.assertTrue(issubclass(Sub, X))
+
 
 def test_main():
-    support.run_unittest(TypeChecksTest)
+    test_support.run_unittest(TypeChecksTest)
 
 
 if __name__ == "__main__":

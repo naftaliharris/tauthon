@@ -1,5 +1,5 @@
-from test.support import run_unittest
-from _locale import (setlocale, LC_ALL, LC_CTYPE, LC_NUMERIC, localeconv, Error)
+from test.test_support import run_unittest
+from _locale import (setlocale, LC_NUMERIC, localeconv, Error)
 try:
     from _locale import (RADIXCHAR, THOUSEP, nl_langinfo)
 except ImportError:
@@ -40,10 +40,10 @@ known_numerics = {'fr_FR' : (',', ''), 'en_US':('.', ',')}
 class _LocaleTests(unittest.TestCase):
 
     def setUp(self):
-        self.oldlocale = setlocale(LC_ALL)
+        self.oldlocale = setlocale(LC_NUMERIC)
 
     def tearDown(self):
-        setlocale(LC_ALL, self.oldlocale)
+        setlocale(LC_NUMERIC, self.oldlocale)
 
     # Want to know what value was calculated, what it was compared against,
     # what function was used for the calculation, what type of data was used,
@@ -71,7 +71,6 @@ class _LocaleTests(unittest.TestCase):
         for loc in candidate_locales:
             try:
                 setlocale(LC_NUMERIC, loc)
-                setlocale(LC_CTYPE, loc)
             except Error:
                 continue
             for li, lc in ((RADIXCHAR, "decimal_point"),
@@ -83,11 +82,9 @@ class _LocaleTests(unittest.TestCase):
         for loc in candidate_locales:
             try:
                 setlocale(LC_NUMERIC, loc)
-                setlocale(LC_CTYPE, loc)
             except Error:
                 continue
-            for lc in ("decimal_point",
-                        "thousands_sep"):
+            for lc in ("decimal_point", "thousands_sep"):
                 self.numeric_tester('localeconv', localeconv()[lc], lc, loc)
 
     @unittest.skipUnless(nl_langinfo, "nl_langinfo is not available")
@@ -96,7 +93,6 @@ class _LocaleTests(unittest.TestCase):
         for loc in candidate_locales:
             try:
                 setlocale(LC_NUMERIC, loc)
-                setlocale(LC_CTYPE, loc)
             except Error:
                 continue
             for li, lc in ((RADIXCHAR, "decimal_point"),
@@ -119,7 +115,6 @@ class _LocaleTests(unittest.TestCase):
         for loc in candidate_locales:
             try:
                 setlocale(LC_NUMERIC, loc)
-                setlocale(LC_CTYPE, loc)
             except Error:
                 continue
 

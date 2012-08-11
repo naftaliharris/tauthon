@@ -11,14 +11,15 @@ this header file lives".
 
 __revision__ = "$Id$"
 
-import sys, os, re
+import os
+import re
 
 from distutils.core import Command
 from distutils.errors import DistutilsExecError
 from distutils.sysconfig import customize_compiler
 from distutils import log
 
-LANG_EXT = {"c": ".c", "c++": ".cxx"}
+LANG_EXT = {'c': '.c', 'c++': '.cxx'}
 
 class config(Command):
 
@@ -84,6 +85,7 @@ class config(Command):
     def run(self):
         pass
 
+
     # Utility methods for actual "config" commands.  The interfaces are
     # loosely based on Autoconf macros of similar names.  Sub-classes
     # may use these freely.
@@ -105,6 +107,7 @@ class config(Command):
                 self.compiler.set_libraries(self.libraries)
             if self.library_dirs:
                 self.compiler.set_library_dirs(self.library_dirs)
+
 
     def _gen_temp_sourcefile(self, body, headers, lang):
         filename = "_configtest" + LANG_EXT[lang]
@@ -181,11 +184,11 @@ class config(Command):
         """
         from distutils.ccompiler import CompileError
         self._check_compiler()
-        ok = True
+        ok = 1
         try:
             self._preprocess(body, headers, include_dirs, lang)
         except CompileError:
-            ok = False
+            ok = 0
 
         self._clean()
         return ok
@@ -206,13 +209,13 @@ class config(Command):
             pattern = re.compile(pattern)
 
         file = open(out)
-        match = False
-        while True:
+        match = 0
+        while 1:
             line = file.readline()
             if line == '':
                 break
             if pattern.search(line):
-                match = True
+                match = 1
                 break
 
         file.close()
@@ -227,9 +230,9 @@ class config(Command):
         self._check_compiler()
         try:
             self._compile(body, headers, include_dirs, lang)
-            ok = True
+            ok = 1
         except CompileError:
-            ok = False
+            ok = 0
 
         log.info(ok and "success!" or "failure.")
         self._clean()
@@ -246,9 +249,9 @@ class config(Command):
         try:
             self._link(body, headers, include_dirs,
                        libraries, library_dirs, lang)
-            ok = True
+            ok = 1
         except (CompileError, LinkError):
-            ok = False
+            ok = 0
 
         log.info(ok and "success!" or "failure.")
         self._clean()
@@ -266,9 +269,9 @@ class config(Command):
             src, obj, exe = self._link(body, headers, include_dirs,
                                        libraries, library_dirs, lang)
             self.spawn([exe])
-            ok = True
+            ok = 1
         except (CompileError, LinkError, DistutilsExecError):
-            ok = False
+            ok = 0
 
         log.info(ok and "success!" or "failure.")
         self._clean()
@@ -281,6 +284,7 @@ class config(Command):
 
     def check_func(self, func, headers=None, include_dirs=None,
                    libraries=None, library_dirs=None, decl=0, call=0):
+
         """Determine if function 'func' is available by constructing a
         source file that refers to 'func', and compiles and links it.
         If everything succeeds, returns true; otherwise returns false.
@@ -294,6 +298,7 @@ class config(Command):
         calls it.  'libraries' and 'library_dirs' are used when
         linking.
         """
+
         self._check_compiler()
         body = []
         if decl:
@@ -309,6 +314,8 @@ class config(Command):
         return self.try_link(body, headers, include_dirs,
                              libraries, library_dirs)
 
+    # check_func ()
+
     def check_lib(self, library, library_dirs=None, headers=None,
                   include_dirs=None, other_libraries=[]):
         """Determine if 'library' is available to be linked against,
@@ -320,8 +327,9 @@ class config(Command):
         has symbols that depend on other libraries.
         """
         self._check_compiler()
-        return self.try_link("int main (void) { }", headers, include_dirs,
-                             [library] + other_libraries, library_dirs)
+        return self.try_link("int main (void) { }",
+                             headers, include_dirs,
+                             [library]+other_libraries, library_dirs)
 
     def check_header(self, header, include_dirs=None, library_dirs=None,
                      lang="c"):

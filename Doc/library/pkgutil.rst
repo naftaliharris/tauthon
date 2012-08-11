@@ -4,6 +4,8 @@
 .. module:: pkgutil
    :synopsis: Utilities for the import system.
 
+.. versionadded:: 2.3
+
 **Source code:** :source:`Lib/pkgutil.py`
 
 --------------
@@ -38,10 +40,10 @@ support.
    returned.  Items are only appended to the copy at the end.
 
    It is assumed that :data:`sys.path` is a sequence.  Items of :data:`sys.path`
-   that are not strings referring to existing directories are ignored. Unicode
-   items on :data:`sys.path` that cause errors when used as filenames may cause
-   this function to raise an exception (in line with :func:`os.path.isdir`
-   behavior).
+   that are not (Unicode or 8-bit) strings referring to existing directories are
+   ignored.  Unicode items on :data:`sys.path` that cause errors when used as
+   filenames may cause this function to raise an exception (in line with
+   :func:`os.path.isdir` behavior).
 
 
 .. class:: ImpImporter(dirname=None)
@@ -188,3 +190,5 @@ support.
 
    If the package cannot be located or loaded, or it uses a :pep:`302` loader
    which does not support :func:`get_data`, then ``None`` is returned.
+
+   .. versionadded:: 2.6

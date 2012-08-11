@@ -5,7 +5,7 @@ import sys, inspect
 # line 5
 
 # line 7
-def spam(a, b, c, d=3, e=4, f=5, *g, **h):
+def spam(a, b, c, d=3, (e, (f,))=(4, (5,)), *g, **h):
     eggs(b + d, c + f)
 
 # line 11
@@ -15,7 +15,7 @@ def eggs(x, y):
     fr = inspect.currentframe()
     st = inspect.stack()
     p = x
-    q = y / 0
+    q = y // 0
 
 # line 20
 class StupidGit:

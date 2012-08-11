@@ -17,36 +17,20 @@ __all__ = ["Hashable", "Iterable", "Iterator",
            "Mapping", "MutableMapping",
            "MappingView", "KeysView", "ItemsView", "ValuesView",
            "Sequence", "MutableSequence",
-           "ByteString",
            ]
-
-
-### collection related types which are not exposed through builtin ###
-## iterators ##
-bytes_iterator = type(iter(b''))
-bytearray_iterator = type(iter(bytearray()))
-#callable_iterator = ???
-dict_keyiterator = type(iter({}.keys()))
-dict_valueiterator = type(iter({}.values()))
-dict_itemiterator = type(iter({}.items()))
-list_iterator = type(iter([]))
-list_reverseiterator = type(iter(reversed([])))
-range_iterator = type(iter(range(0)))
-set_iterator = type(iter(set()))
-str_iterator = type(iter(""))
-tuple_iterator = type(iter(()))
-zip_iterator = type(iter(zip()))
-## views ##
-dict_keys = type({}.keys())
-dict_values = type({}.values())
-dict_items = type({}.items())
-## misc ##
-dict_proxy = type(type.__dict__)
-
 
 ### ONE-TRICK PONIES ###
 
-class Hashable(metaclass=ABCMeta):
+def _hasattr(C, attr):
+    try:
+        return any(attr in B.__dict__ for B in C.__mro__)
+    except AttributeError:
+        # Old-style class
+        return hasattr(C, attr)
+
+
+class Hashable:
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __hash__(self):
@@ -55,15 +39,21 @@ class Hashable(metaclass=ABCMeta):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Hashable:
-            for B in C.__mro__:
-                if "__hash__" in B.__dict__:
-                    if B.__dict__["__hash__"]:
-                        return True
-                    break
+            try:
+                for B in C.__mro__:
+                    if "__hash__" in B.__dict__:
+                        if B.__dict__["__hash__"]:
+                            return True
+                        break
+            except AttributeError:
+                # Old-style class
+                if getattr(C, "__hash__", None):
+                    return True
         return NotImplemented
 
 
-class Iterable(metaclass=ABCMeta):
+class Iterable:
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __iter__(self):
@@ -73,15 +63,17 @@ class Iterable(metaclass=ABCMeta):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Iterable:
-            if any("__iter__" in B.__dict__ for B in C.__mro__):
+            if _hasattr(C, "__iter__"):
                 return True
         return NotImplemented
+
+Iterable.register(str)
 
 
 class Iterator(Iterable):
 
     @abstractmethod
-    def __next__(self):
+    def next(self):
         raise StopIteration
 
     def __iter__(self):
@@ -90,26 +82,13 @@ class Iterator(Iterable):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Iterator:
-            if (any("__next__" in B.__dict__ for B in C.__mro__) and
-                any("__iter__" in B.__dict__ for B in C.__mro__)):
+            if _hasattr(C, "next") and _hasattr(C, "__iter__"):
                 return True
         return NotImplemented
 
-Iterator.register(bytes_iterator)
-Iterator.register(bytearray_iterator)
-#Iterator.register(callable_iterator)
-Iterator.register(dict_keyiterator)
-Iterator.register(dict_valueiterator)
-Iterator.register(dict_itemiterator)
-Iterator.register(list_iterator)
-Iterator.register(list_reverseiterator)
-Iterator.register(range_iterator)
-Iterator.register(set_iterator)
-Iterator.register(str_iterator)
-Iterator.register(tuple_iterator)
-Iterator.register(zip_iterator)
 
-class Sized(metaclass=ABCMeta):
+class Sized:
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __len__(self):
@@ -118,12 +97,13 @@ class Sized(metaclass=ABCMeta):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Sized:
-            if any("__len__" in B.__dict__ for B in C.__mro__):
+            if _hasattr(C, "__len__"):
                 return True
         return NotImplemented
 
 
-class Container(metaclass=ABCMeta):
+class Container:
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __contains__(self, x):
@@ -132,12 +112,13 @@ class Container(metaclass=ABCMeta):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Container:
-            if any("__contains__" in B.__dict__ for B in C.__mro__):
+            if _hasattr(C, "__contains__"):
                 return True
         return NotImplemented
 
 
-class Callable(metaclass=ABCMeta):
+class Callable:
+    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __call__(self, *args, **kwds):
@@ -146,7 +127,7 @@ class Callable(metaclass=ABCMeta):
     @classmethod
     def __subclasshook__(cls, C):
         if cls is Callable:
-            if any("__call__" in B.__dict__ for B in C.__mro__):
+            if _hasattr(C, "__call__"):
                 return True
         return NotImplemented
 
@@ -155,7 +136,6 @@ class Callable(metaclass=ABCMeta):
 
 
 class Set(Sized, Iterable, Container):
-
     """A set is a finite, iterable container.
 
     This class provides concrete generic implementations of all
@@ -240,6 +220,9 @@ class Set(Sized, Iterable, Container):
             other = self._from_iterable(other)
         return (self - other) | (other - self)
 
+    # Sets are not hashable by default, but subclasses can change this
+    __hash__ = None
+
     def _hash(self):
         """Compute the hash value of a set.
 
@@ -255,7 +238,7 @@ class Set(Sized, Iterable, Container):
         freedom for __eq__ or __hash__.  We match the algorithm used
         by the built-in frozenset type.
         """
-        MAX = sys.maxsize
+        MAX = sys.maxint
         MASK = 2 * MAX + 1
         n = len(self)
         h = 1927868237 * (n + 1)
@@ -368,14 +351,28 @@ class Mapping(Sized, Iterable, Container):
         else:
             return True
 
+    def iterkeys(self):
+        return iter(self)
+
+    def itervalues(self):
+        for key in self:
+            yield self[key]
+
+    def iteritems(self):
+        for key in self:
+            yield (key, self[key])
+
     def keys(self):
-        return KeysView(self)
+        return list(self)
 
     def items(self):
-        return ItemsView(self)
+        return [(key, self[key]) for key in self]
 
     def values(self):
-        return ValuesView(self)
+        return [self[key] for key in self]
+
+    # Mappings are not hashable by default, but subclasses can change this
+    __hash__ = None
 
     def __eq__(self, other):
         if not isinstance(other, Mapping):
@@ -384,7 +381,6 @@ class Mapping(Sized, Iterable, Container):
 
     def __ne__(self, other):
         return not (self == other)
-
 
 class MappingView(Sized):
 
@@ -411,8 +407,6 @@ class KeysView(MappingView, Set):
         for key in self._mapping:
             yield key
 
-KeysView.register(dict_keys)
-
 
 class ItemsView(MappingView, Set):
 
@@ -433,8 +427,6 @@ class ItemsView(MappingView, Set):
         for key in self._mapping:
             yield (key, self._mapping[key])
 
-ItemsView.register(dict_items)
-
 
 class ValuesView(MappingView):
 
@@ -447,8 +439,6 @@ class ValuesView(MappingView):
     def __iter__(self):
         for key in self._mapping:
             yield self._mapping[key]
-
-ValuesView.register(dict_values)
 
 
 class MutableMapping(Mapping):
@@ -525,7 +515,6 @@ MutableMapping.register(dict)
 
 
 class Sequence(Sized, Iterable, Container):
-
     """All the operations on a read-only sequence.
 
     Concrete subclasses must override __new__ or __init__,
@@ -566,19 +555,9 @@ class Sequence(Sized, Iterable, Container):
         return sum(1 for v in self if v == value)
 
 Sequence.register(tuple)
-Sequence.register(str)
-Sequence.register(range)
-
-
-class ByteString(Sequence):
-
-    """This unifies bytes and bytearray.
-
-    XXX Should add all their methods.
-    """
-
-ByteString.register(bytes)
-ByteString.register(bytearray)
+Sequence.register(basestring)
+Sequence.register(buffer)
+Sequence.register(xrange)
 
 
 class MutableSequence(Sequence):
@@ -620,4 +599,3 @@ class MutableSequence(Sequence):
         return self
 
 MutableSequence.register(list)
-MutableSequence.register(bytearray)  # Multiply inheriting, see ByteString

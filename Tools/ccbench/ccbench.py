@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # This file should be kept compatible with both Python 2.6 and Python >= 3.0.
 
 from __future__ import division
@@ -277,21 +278,18 @@ def _recv(sock, n):
 
 def latency_client(addr, nb_pings, interval):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        _time = time.time
-        _sleep = time.sleep
-        def _ping():
-            _sendto(sock, "%r\n" % _time(), addr)
-        # The first ping signals the parent process that we are ready.
+    _time = time.time
+    _sleep = time.sleep
+    def _ping():
+        _sendto(sock, "%r\n" % _time(), addr)
+    # The first ping signals the parent process that we are ready.
+    _ping()
+    # We give the parent a bit of time to notice.
+    _sleep(1.0)
+    for i in range(nb_pings):
+        _sleep(interval)
         _ping()
-        # We give the parent a bit of time to notice.
-        _sleep(1.0)
-        for i in range(nb_pings):
-            _sleep(interval)
-            _ping()
-        _sendto(sock, LAT_END + "\n", addr)
-    finally:
-        sock.close()
+    _sendto(sock, LAT_END + "\n", addr)
 
 def run_latency_client(**kwargs):
     cmd_line = [sys.executable, '-E', os.path.abspath(__file__)]
@@ -366,7 +364,6 @@ def run_latency_test(func, args, nthreads):
     for t in threads:
         t.join()
     process.wait()
-    sock.close()
 
     for recv_time, chunk in chunks:
         # NOTE: it is assumed that a line sent by a client wasn't received

@@ -1,10 +1,10 @@
 # Test to see if openpty works. (But don't worry if it isn't available.)
 
 import os, unittest
-from test.support import run_unittest
+from test.test_support import run_unittest
 
 if not hasattr(os, "openpty"):
-    raise unittest.SkipTest("No openpty() available.")
+    raise unittest.SkipTest, "No openpty() available."
 
 
 class OpenptyTest(unittest.TestCase):
@@ -13,8 +13,8 @@ class OpenptyTest(unittest.TestCase):
         if not os.isatty(slave):
             self.fail("Slave-end of pty is not a terminal.")
 
-        os.write(slave, b'Ping!')
-        self.assertEqual(os.read(master, 1024), b'Ping!')
+        os.write(slave, 'Ping!')
+        self.assertEqual(os.read(master, 1024), 'Ping!')
 
 def test_main():
     run_unittest(OpenptyTest)

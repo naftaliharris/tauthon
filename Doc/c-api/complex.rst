@@ -63,11 +63,17 @@ pointers.  This is consistent throughout the API.
    Return the quotient of two complex numbers, using the C :c:type:`Py_complex`
    representation.
 
+   If *divisor* is null, this method returns zero and sets
+   :c:data:`errno` to :c:data:`EDOM`.
+
 
 .. c:function:: Py_complex _Py_c_pow(Py_complex num, Py_complex exp)
 
    Return the exponentiation of *num* by *exp*, using the C :c:type:`Py_complex`
    representation.
+
+   If *num* is null and *exp* is not a positive real number,
+   this method returns zero and sets :c:data:`errno` to :c:data:`EDOM`.
 
 
 Complex Numbers as Python Objects
@@ -82,7 +88,7 @@ Complex Numbers as Python Objects
 .. c:var:: PyTypeObject PyComplex_Type
 
    This instance of :c:type:`PyTypeObject` represents the Python complex number
-   type. It is the same object as :class:`complex` in the Python layer.
+   type. It is the same object as ``complex`` and ``types.ComplexType``.
 
 
 .. c:function:: int PyComplex_Check(PyObject *p)
@@ -90,11 +96,16 @@ Complex Numbers as Python Objects
    Return true if its argument is a :c:type:`PyComplexObject` or a subtype of
    :c:type:`PyComplexObject`.
 
+   .. versionchanged:: 2.2
+      Allowed subtypes to be accepted.
+
 
 .. c:function:: int PyComplex_CheckExact(PyObject *p)
 
    Return true if its argument is a :c:type:`PyComplexObject`, but not a subtype of
    :c:type:`PyComplexObject`.
+
+   .. versionadded:: 2.2
 
 
 .. c:function:: PyObject* PyComplex_FromCComplex(Py_complex v)
@@ -120,7 +131,9 @@ Complex Numbers as Python Objects
 .. c:function:: Py_complex PyComplex_AsCComplex(PyObject *op)
 
    Return the :c:type:`Py_complex` value of the complex number *op*.
+   Upon failure, this method returns ``-1.0`` as a real value.
 
-   If *op* is not a Python complex number object but has a :meth:`__complex__`
-   method, this method will first be called to convert *op* to a Python complex
-   number object.
+   .. versionchanged:: 2.6
+      If *op* is not a Python complex number object but has a :meth:`__complex__`
+      method, this method will first be called to convert *op* to a Python complex
+      number object.

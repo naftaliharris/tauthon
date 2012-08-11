@@ -1,6 +1,6 @@
 import array
 import unittest
-from test.support import run_unittest, import_module, get_attribute
+from test.test_support import run_unittest, import_module, get_attribute
 import os, struct
 fcntl = import_module('fcntl')
 termios = import_module('termios')
@@ -30,10 +30,10 @@ class IoctlTests(unittest.TestCase):
         # If this process has been put into the background, TIOCGPGRP returns
         # the session ID instead of the process group id.
         ids = (os.getpgrp(), os.getsid(0))
-        with open("/dev/tty", "r") as tty:
-            r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
-            rpgrp = struct.unpack("i", r)[0]
-            self.assertIn(rpgrp, ids)
+        tty = open("/dev/tty", "r")
+        r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
+        rpgrp = struct.unpack("i", r)[0]
+        self.assertIn(rpgrp, ids)
 
     def _check_ioctl_mutate_len(self, nbytes=None):
         buf = array.array('i')
@@ -72,7 +72,7 @@ class IoctlTests(unittest.TestCase):
         try:
             if termios.TIOCSWINSZ < 0:
                 set_winsz_opcode_maybe_neg = termios.TIOCSWINSZ
-                set_winsz_opcode_pos = termios.TIOCSWINSZ & 0xffffffff
+                set_winsz_opcode_pos = termios.TIOCSWINSZ & 0xffffffffL
             else:
                 set_winsz_opcode_pos = termios.TIOCSWINSZ
                 set_winsz_opcode_maybe_neg, = struct.unpack("i",

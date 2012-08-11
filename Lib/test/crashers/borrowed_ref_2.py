@@ -10,7 +10,7 @@ class A(object):
 
 class B(object):
     def __del__(self):
-        print("hi")
+        print "hi"
         del C.d
 
 class D(object):
@@ -33,6 +33,6 @@ lst = [None] * 1000000
 i = 0
 del a
 while 1:
-    c.d = 42         # segfaults in PyMethod_New(__func__=D.__set__, __self__=d)
+    c.d = 42         # segfaults in PyMethod_New(im_func=D.__set__, im_self=d)
     lst[i] = c.g     # consume the free list of instancemethod objects
     i += 1

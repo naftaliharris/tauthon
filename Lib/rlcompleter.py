@@ -1,13 +1,11 @@
-"""Word completion for GNU readline 2.0.
+"""Word completion for GNU readline.
 
-This requires the latest extension to the readline module. The completer
-completes keywords, built-ins and globals in a selectable namespace (which
-defaults to __main__); when completing NAME.NAME..., it evaluates (!) the
-expression up to the last dot and completes its attributes.
+The completer completes keywords, built-ins and globals in a selectable
+namespace (which defaults to __main__); when completing NAME.NAME..., it
+evaluates (!) the expression up to the last dot and completes its attributes.
 
-It's very cool to do "import sys" type "sys.", hit the
-completion key (twice), and see the list of names defined by the
-sys module!
+It's very cool to do "import sys" type "sys.", hit the completion key (twice),
+and see the list of names defined by the sys module!
 
 Tip: to use the tab key as the completion key, call
 
@@ -15,25 +13,29 @@ Tip: to use the tab key as the completion key, call
 
 Notes:
 
-- Exceptions raised by the completer function are *ignored* (and
-generally cause the completion to fail).  This is a feature -- since
-readline sets the tty device in raw (or cbreak) mode, printing a
-traceback wouldn't work well without some complicated hoopla to save,
-reset and restore the tty state.
+- Exceptions raised by the completer function are *ignored* (and generally cause
+  the completion to fail).  This is a feature -- since readline sets the tty
+  device in raw (or cbreak) mode, printing a traceback wouldn't work well
+  without some complicated hoopla to save, reset and restore the tty state.
 
-- The evaluation of the NAME.NAME... form may cause arbitrary
-application defined code to be executed if an object with a
-__getattr__ hook is found.  Since it is the responsibility of the
-application (or the user) to enable this feature, I consider this an
-acceptable risk.  More complicated expressions (e.g. function calls or
-indexing operations) are *not* evaluated.
+- The evaluation of the NAME.NAME... form may cause arbitrary application
+  defined code to be executed if an object with a __getattr__ hook is found.
+  Since it is the responsibility of the application (or the user) to enable this
+  feature, I consider this an acceptable risk.  More complicated expressions
+  (e.g. function calls or indexing operations) are *not* evaluated.
+
+- GNU readline is also used by the built-in functions input() and
+raw_input(), and thus these also benefit/suffer from the completer
+features.  Clearly an interactive application can benefit by
+specifying its own completer function and using raw_input() for all
+its input.
 
 - When the original stdin is not a tty device, GNU readline is never
-used, and this module (and the readline module) are silently inactive.
+  used, and this module (and the readline module) are silently inactive.
 
 """
 
-import builtins
+import __builtin__
 import __main__
 
 __all__ = ["Completer"]
@@ -55,7 +57,7 @@ class Completer:
         """
 
         if namespace and not isinstance(namespace, dict):
-            raise TypeError('namespace must be a dictionary')
+            raise TypeError,'namespace must be a dictionary'
 
         # Don't bind to namespace quite yet, but flag whether the user wants a
         # specific namespace or to use __main__.__dict__. This will allow us
@@ -104,7 +106,7 @@ class Completer:
         for word in keyword.kwlist:
             if word[:n] == text:
                 matches.append(word)
-        for nspace in [builtins.__dict__, self.namespace]:
+        for nspace in [__builtin__.__dict__, self.namespace]:
             for word, val in nspace.items():
                 if word[:n] == text and word != "__builtins__":
                     matches.append(self._callable_postfix(val, word))

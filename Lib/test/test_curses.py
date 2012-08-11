@@ -16,10 +16,8 @@ import sys, tempfile, os
 # option.  If not available, nothing after this line will be executed.
 
 import unittest
-from test.support import requires, import_module
+from test.test_support import requires, import_module
 requires('curses')
-
-# If either of these don't exist, skip the tests.
 curses = import_module('curses')
 curses.panel = import_module('curses.panel')
 
@@ -27,7 +25,7 @@ curses.panel = import_module('curses.panel')
 # XXX: if newterm was supported we could use it instead of initscr and not exit
 term = os.environ.get('TERM')
 if not term or term == 'unknown':
-    raise unittest.SkipTest("$TERM=%r, calling initscr() may cause exit" % term)
+    raise unittest.SkipTest, "$TERM=%r, calling initscr() may cause exit" % term
 
 if sys.platform == "cygwin":
     raise unittest.SkipTest("cygwin's curses mostly just hangs")
@@ -77,7 +75,7 @@ def window_funcs(stdscr):
     except TypeError:
         pass
     else:
-        raise RuntimeError("Expected win.border() to raise TypeError")
+        raise RuntimeError, "Expected win.border() to raise TypeError"
 
     stdscr.clearok(1)
 
@@ -239,7 +237,7 @@ def unit_tests():
                          ('\x8a', '!^J'), ('\xc1', '!A'),
                          ]:
         if ascii.unctrl(ch) != expected:
-            print('curses.unctrl fails on character', repr(ch))
+            print 'curses.unctrl fails on character', repr(ch)
 
 
 def test_userptr_without_set(stdscr):
@@ -248,7 +246,7 @@ def test_userptr_without_set(stdscr):
     # try to access userptr() before calling set_userptr() -- segfaults
     try:
         p.userptr()
-        raise RuntimeError('userptr should fail since not set')
+        raise RuntimeError, 'userptr should fail since not set'
     except curses.panel.error:
         pass
 
@@ -258,7 +256,7 @@ def test_resize_term(stdscr):
         curses.resizeterm(lines - 1, cols + 1)
 
         if curses.LINES != lines - 1 or curses.COLS != cols + 1:
-            raise RuntimeError("Expected resizeterm to update LINES and COLS")
+            raise RuntimeError, "Expected resizeterm to update LINES and COLS"
 
 def test_issue6243(stdscr):
     curses.ungetch(1025)
@@ -275,19 +273,18 @@ def main(stdscr):
     finally:
         curses.resetty()
 
-def test_main():
-    if not sys.stdout.isatty():
-        raise unittest.SkipTest("sys.stdout is not a tty")
+if __name__ == '__main__':
+    curses.wrapper(main)
+    unit_tests()
+else:
+    if not sys.__stdout__.isatty():
+        raise unittest.SkipTest("sys.__stdout__ is not a tty")
     # testing setupterm() inside initscr/endwin
     # causes terminal breakage
-    curses.setupterm(fd=sys.stdout.fileno())
+    curses.setupterm(fd=sys.__stdout__.fileno())
     try:
         stdscr = curses.initscr()
         main(stdscr)
     finally:
         curses.endwin()
-    unit_tests()
-
-if __name__ == '__main__':
-    curses.wrapper(main)
     unit_tests()

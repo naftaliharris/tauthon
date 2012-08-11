@@ -2,6 +2,8 @@
 
 #include "Python.h"
 
+#define PyInit_termios inittermios
+
 /* Apparently, on SGI, termios.h won't define CTRL if _XOPEN_SOURCE
    is defined, so we define it here. */
 #if defined(__sgi)
@@ -89,7 +91,7 @@ termios_tcgetattr(PyObject *self, PyObject *args)
         return NULL;
     for (i = 0; i < NCCS; i++) {
         ch = (char)mode.c_cc[i];
-        v = PyBytes_FromStringAndSize(&ch, 1);
+        v = PyString_FromStringAndSize(&ch, 1);
         if (v == NULL)
             goto err;
         PyList_SetItem(cc, i, v);
@@ -99,11 +101,11 @@ termios_tcgetattr(PyObject *self, PyObject *args)
        MIN and TIME slots are the same as the EOF and EOL slots.  So we
        only do this in noncanonical input mode.  */
     if ((mode.c_lflag & ICANON) == 0) {
-        v = PyLong_FromLong((long)mode.c_cc[VMIN]);
+        v = PyInt_FromLong((long)mode.c_cc[VMIN]);
         if (v == NULL)
             goto err;
         PyList_SetItem(cc, VMIN, v);
-        v = PyLong_FromLong((long)mode.c_cc[VTIME]);
+        v = PyInt_FromLong((long)mode.c_cc[VTIME]);
         if (v == NULL)
             goto err;
         PyList_SetItem(cc, VTIME, v);
@@ -112,12 +114,12 @@ termios_tcgetattr(PyObject *self, PyObject *args)
     if (!(v = PyList_New(7)))
         goto err;
 
-    PyList_SetItem(v, 0, PyLong_FromLong((long)mode.c_iflag));
-    PyList_SetItem(v, 1, PyLong_FromLong((long)mode.c_oflag));
-    PyList_SetItem(v, 2, PyLong_FromLong((long)mode.c_cflag));
-    PyList_SetItem(v, 3, PyLong_FromLong((long)mode.c_lflag));
-    PyList_SetItem(v, 4, PyLong_FromLong((long)ispeed));
-    PyList_SetItem(v, 5, PyLong_FromLong((long)ospeed));
+    PyList_SetItem(v, 0, PyInt_FromLong((long)mode.c_iflag));
+    PyList_SetItem(v, 1, PyInt_FromLong((long)mode.c_oflag));
+    PyList_SetItem(v, 2, PyInt_FromLong((long)mode.c_cflag));
+    PyList_SetItem(v, 3, PyInt_FromLong((long)mode.c_lflag));
+    PyList_SetItem(v, 4, PyInt_FromLong((long)ispeed));
+    PyList_SetItem(v, 5, PyInt_FromLong((long)ospeed));
     PyList_SetItem(v, 6, cc);
     if (PyErr_Occurred()){
         Py_DECREF(v);
@@ -161,12 +163,12 @@ termios_tcsetattr(PyObject *self, PyObject *args)
     /* Get the old mode, in case there are any hidden fields... */
     if (tcgetattr(fd, &mode) == -1)
         return PyErr_SetFromErrno(TermiosError);
-    mode.c_iflag = (tcflag_t) PyLong_AsLong(PyList_GetItem(term, 0));
-    mode.c_oflag = (tcflag_t) PyLong_AsLong(PyList_GetItem(term, 1));
-    mode.c_cflag = (tcflag_t) PyLong_AsLong(PyList_GetItem(term, 2));
-    mode.c_lflag = (tcflag_t) PyLong_AsLong(PyList_GetItem(term, 3));
-    ispeed = (speed_t) PyLong_AsLong(PyList_GetItem(term, 4));
-    ospeed = (speed_t) PyLong_AsLong(PyList_GetItem(term, 5));
+    mode.c_iflag = (tcflag_t) PyInt_AsLong(PyList_GetItem(term, 0));
+    mode.c_oflag = (tcflag_t) PyInt_AsLong(PyList_GetItem(term, 1));
+    mode.c_cflag = (tcflag_t) PyInt_AsLong(PyList_GetItem(term, 2));
+    mode.c_lflag = (tcflag_t) PyInt_AsLong(PyList_GetItem(term, 3));
+    ispeed = (speed_t) PyInt_AsLong(PyList_GetItem(term, 4));
+    ospeed = (speed_t) PyInt_AsLong(PyList_GetItem(term, 5));
     cc = PyList_GetItem(term, 6);
     if (PyErr_Occurred())
         return NULL;
@@ -181,10 +183,10 @@ termios_tcsetattr(PyObject *self, PyObject *args)
     for (i = 0; i < NCCS; i++) {
         v = PyList_GetItem(cc, i);
 
-        if (PyBytes_Check(v) && PyBytes_Size(v) == 1)
-            mode.c_cc[i] = (cc_t) * PyBytes_AsString(v);
-        else if (PyLong_Check(v))
-            mode.c_cc[i] = (cc_t) PyLong_AsLong(v);
+        if (PyString_Check(v) && PyString_Size(v) == 1)
+            mode.c_cc[i] = (cc_t) * PyString_AsString(v);
+        else if (PyInt_Check(v))
+            mode.c_cc[i] = (cc_t) PyInt_AsLong(v);
         else {
             PyErr_SetString(PyExc_TypeError,
      "tcsetattr: elements of attributes must be characters or integers");
@@ -347,43 +349,6 @@ static struct constant {
 #ifdef B230400
     {"B230400", B230400},
 #endif
-#ifdef B460800
-    {"B460800", B460800},
-#endif
-#ifdef B500000
-    {"B500000", B500000},
-#endif
-#ifdef B576000
-    {"B576000", B576000},
-#endif
-#ifdef B921600
-    {"B921600", B921600},
-#endif
-#ifdef B1000000
-    {"B1000000", B1000000},
-#endif
-#ifdef B1152000
-    {"B1152000", B1152000},
-#endif
-#ifdef B1500000
-    {"B1500000", B1500000},
-#endif
-#ifdef B2000000
-    {"B2000000", B2000000},
-#endif
-#ifdef B2500000
-    {"B2500000", B2500000},
-#endif
-#ifdef B3000000
-    {"B3000000", B3000000},
-#endif
-#ifdef B3500000
-    {"B3500000", B3500000},
-#endif
-#ifdef B4000000
-    {"B4000000", B4000000},
-#endif
-
 #ifdef CBAUDEX
     {"CBAUDEX", CBAUDEX},
 #endif
@@ -940,27 +905,16 @@ static struct constant {
 };
 
 
-static struct PyModuleDef termiosmodule = {
-    PyModuleDef_HEAD_INIT,
-    "termios",
-    termios__doc__,
-    -1,
-    termios_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
 PyInit_termios(void)
 {
     PyObject *m;
     struct constant *constant = termios_constants;
 
-    m = PyModule_Create(&termiosmodule);
+    m = Py_InitModule4("termios", termios_methods, termios__doc__,
+                       (PyObject *)NULL, PYTHON_API_VERSION);
     if (m == NULL)
-        return NULL;
+        return;
 
     if (TermiosError == NULL) {
         TermiosError = PyErr_NewException("termios.error", NULL, NULL);
@@ -972,5 +926,4 @@ PyInit_termios(void)
         PyModule_AddIntConstant(m, constant->name, constant->value);
         ++constant;
     }
-    return m;
 }

@@ -1,8 +1,8 @@
 import unittest
-from test import support
+from test import test_support
 import time
 
-resource = support.import_module('resource')
+resource = test_support.import_module('resource')
 
 # This test is checking a few specific problem spots with the resource module.
 
@@ -47,11 +47,11 @@ class ResourceTest(unittest.TestCase):
                     limit_set = True
                 except ValueError:
                     limit_set = False
-                f = open(support.TESTFN, "wb")
+                f = open(test_support.TESTFN, "wb")
                 try:
-                    f.write(b"X" * 1024)
+                    f.write("X" * 1024)
                     try:
-                        f.write(b"Y")
+                        f.write("Y")
                         f.flush()
                         # On some systems (e.g., Ubuntu on hppa) the flush()
                         # doesn't always cause the exception, but the close()
@@ -73,11 +73,11 @@ class ResourceTest(unittest.TestCase):
             finally:
                 if limit_set:
                     resource.setrlimit(resource.RLIMIT_FSIZE, (cur, max))
-                support.unlink(support.TESTFN)
+                test_support.unlink(test_support.TESTFN)
 
     def test_fsize_toobig(self):
         # Be sure that setrlimit is checking for really large values
-        too_big = 10**50
+        too_big = 10L**50
         try:
             (cur, max) = resource.getrlimit(resource.RLIMIT_FSIZE)
         except AttributeError:
@@ -102,13 +102,9 @@ class ResourceTest(unittest.TestCase):
             usageboth = resource.getrusage(resource.RUSAGE_BOTH)
         except (ValueError, AttributeError):
             pass
-        try:
-            usage_thread = resource.getrusage(resource.RUSAGE_THREAD)
-        except (ValueError, AttributeError):
-            pass
 
 def test_main(verbose=None):
-    support.run_unittest(ResourceTest)
+    test_support.run_unittest(ResourceTest)
 
 if __name__ == "__main__":
     test_main()

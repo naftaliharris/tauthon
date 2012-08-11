@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """Freeze a Python script into a binary.
 
@@ -125,7 +125,7 @@ def main():
     # default the exclude list for each platform
     if win: exclude = exclude + [
         'dos', 'dospath', 'mac', 'macpath', 'macfs', 'MACFS', 'posix',
-        'os2', 'ce',
+        'os2', 'ce', 'riscos', 'riscosenviron', 'riscospath',
         ]
 
     fail_import = exclude[:]
@@ -145,7 +145,7 @@ def main():
         if sys.argv[pos] == '-i':
             try:
                 options = open(sys.argv[pos+1]).read().split()
-            except IOError as why:
+            except IOError, why:
                 usage("File name '%s' specified with the -i option "
                       "can not be read - %s" % (sys.argv[pos+1], why) )
             # Replace the '-i' and the filename with the read params.
@@ -156,13 +156,13 @@ def main():
     # Now parse the command line with the extras inserted.
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'r:a:dEe:hmo:p:P:qs:wX:x:l:')
-    except getopt.error as msg:
+    except getopt.error, msg:
         usage('getopt error: ' + str(msg))
 
     # proces option arguments
     for o, a in opts:
         if o == '-h':
-            print(__doc__)
+            print __doc__
             return
         if o == '-d':
             debug = debug + 1
@@ -194,14 +194,14 @@ def main():
         if o == '-l':
             addn_link.append(a)
         if o == '-a':
-            modulefinder.AddPackagePath(*a.split("=", 2))
+            apply(modulefinder.AddPackagePath, tuple(a.split("=", 2)))
         if o == '-r':
             f,r = a.split("=", 2)
             replace_paths.append( (f,r) )
 
     # modules that are imported by the Python runtime
     implicits = []
-    for module in ('site', 'warnings', 'encodings.utf_8', 'encodings.latin_1'):
+    for module in ('site', 'warnings',):
         if module not in exclude:
             implicits.append(module)
 
@@ -222,7 +222,7 @@ def main():
     if win:
         extensions_c = 'frozen_extensions.c'
     if ishome:
-        print("(Using Python source directory)")
+        print "(Using Python source directory)"
         binlib = exec_prefix
         incldir = os.path.join(prefix, 'Include')
         config_h_dir = exec_prefix
@@ -310,8 +310,8 @@ def main():
     if odir and not os.path.isdir(odir):
         try:
             os.mkdir(odir)
-            print("Created output directory", odir)
-        except os.error as msg:
+            print "Created output directory", odir
+        except os.error, msg:
             usage('%s: mkdir failed (%s)' % (odir, str(msg)))
     base = ''
     if odir:
@@ -333,7 +333,7 @@ def main():
         try:
             custom_entry_point, python_entry_is_main = \
                 winmakemakefile.get_custom_entry_point(subsystem)
-        except ValueError as why:
+        except ValueError, why:
             usage(why)
 
 
@@ -371,7 +371,7 @@ def main():
 
     if debug > 0:
         mf.report()
-        print()
+        print
     dict = mf.modules
 
     if error_if_any_missing:
@@ -386,7 +386,8 @@ def main():
     # look for unfrozen modules (builtin and of unknown origin)
     builtins = []
     unknown = []
-    mods = sorted(dict.keys())
+    mods = dict.keys()
+    mods.sort()
     for mod in mods:
         if dict[mod].__code__:
             continue
@@ -460,7 +461,7 @@ def main():
     somevars = {}
     if os.path.exists(makefile_in):
         makevars = parsesetup.getmakevars(makefile_in)
-        for key in makevars:
+        for key in makevars.keys():
             somevars[key] = makevars[key]
 
     somevars['CFLAGS'] = ' '.join(cflags) # override
@@ -478,18 +479,18 @@ def main():
     # Done!
 
     if odir:
-        print('Now run "make" in', odir, end=' ')
-        print('to build the target:', base_target)
+        print 'Now run "make" in', odir,
+        print 'to build the target:', base_target
     else:
-        print('Now run "make" to build the target:', base_target)
+        print 'Now run "make" to build the target:', base_target
 
 
 # Print usage message and exit
 
 def usage(msg):
     sys.stdout = sys.stderr
-    print("Error:", msg)
-    print("Use ``%s -h'' for help" % sys.argv[0])
+    print "Error:", msg
+    print "Use ``%s -h'' for help" % sys.argv[0]
     sys.exit(2)
 
 

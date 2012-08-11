@@ -7,12 +7,14 @@
 .. sectionauthor:: Georg Brandl
 .. much of the content adapted from docstrings
 
+.. versionadded:: 2.6
+
 **Source code:** :source:`Lib/abc.py`
 
 --------------
 
-This module provides the infrastructure for defining an :term:`abstract base
-class` (ABCs) in Python, as outlined in :pep:`3119`; see the PEP for why this
+This module provides the infrastructure for defining :term:`abstract base
+classes <abstract base class>` (ABCs) in Python, as outlined in :pep:`3119`; see the PEP for why this
 was added to Python. (See also :pep:`3141` and the :mod:`numbers` module
 regarding a type hierarchy for numbers based on ABCs.)
 
@@ -47,8 +49,8 @@ This module provides the following class:
 
         from abc import ABCMeta
 
-        class MyABC(metaclass=ABCMeta):
-            pass
+        class MyABC:
+            __metaclass__ = ABCMeta
 
         MyABC.register(tuple)
 
@@ -79,7 +81,7 @@ This module provides the following class:
 
    For a demonstration of these concepts, look at this example ABC definition::
 
-      class Foo:
+      class Foo(object):
           def __getitem__(self, index):
               ...
           def __len__(self):
@@ -87,7 +89,8 @@ This module provides the following class:
           def get_iterator(self):
               return iter(self)
 
-      class MyIterable(metaclass=ABCMeta):
+      class MyIterable:
+          __metaclass__ = ABCMeta
 
           @abstractmethod
           def __iter__(self):
@@ -126,7 +129,7 @@ This module provides the following class:
 
 It also provides the following decorators:
 
-.. decorator:: abstractmethod(function)
+.. function:: abstractmethod(function)
 
    A decorator indicating abstract methods.
 
@@ -146,7 +149,8 @@ It also provides the following decorators:
 
    Usage::
 
-      class C(metaclass=ABCMeta):
+      class C:
+          __metaclass__ = ABCMeta
           @abstractmethod
           def my_abstract_method(self, ...):
               ...
@@ -161,37 +165,7 @@ It also provides the following decorators:
       multiple-inheritance.
 
 
-.. decorator:: abstractclassmethod(function)
-
-   A subclass of the built-in :func:`classmethod`, indicating an abstract
-   classmethod. Otherwise it is similar to :func:`abstractmethod`.
-
-   Usage::
-
-      class C(metaclass=ABCMeta):
-          @abstractclassmethod
-          def my_abstract_classmethod(cls, ...):
-              ...
-
-   .. versionadded:: 3.2
-
-
-.. decorator:: abstractstaticmethod(function)
-
-   A subclass of the built-in :func:`staticmethod`, indicating an abstract
-   staticmethod. Otherwise it is similar to :func:`abstractmethod`.
-
-   Usage::
-
-      class C(metaclass=ABCMeta):
-          @abstractstaticmethod
-          def my_abstract_staticmethod(...):
-              ...
-
-   .. versionadded:: 3.2
-
-
-.. function:: abstractproperty(fget=None, fset=None, fdel=None, doc=None)
+.. function:: abstractproperty([fget[, fset[, fdel[, doc]]]])
 
    A subclass of the built-in :func:`property`, indicating an abstract property.
 
@@ -204,7 +178,8 @@ It also provides the following decorators:
 
    Usage::
 
-      class C(metaclass=ABCMeta):
+      class C:
+          __metaclass__ = ABCMeta
           @abstractproperty
           def my_abstract_property(self):
               ...
@@ -212,7 +187,8 @@ It also provides the following decorators:
    This defines a read-only property; you can also define a read-write abstract
    property using the 'long' form of property declaration::
 
-      class C(metaclass=ABCMeta):
+      class C:
+          __metaclass__ = ABCMeta
           def getx(self): ...
           def setx(self, value): ...
           x = abstractproperty(getx, setx)

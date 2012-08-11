@@ -44,7 +44,7 @@ The special characters are:
     "|"      A|B, creates an RE that will match either A or B.
     (...)    Matches the RE inside the parentheses.
              The contents can be retrieved or matched later in the string.
-    (?aiLmsux) Set the A, I, L, M, S, U, or X flag for the RE (see below).
+    (?iLmsux) Set the I, L, M, S, U, or X flag for the RE (see below).
     (?:...)  Non-grouping version of regular parentheses.
     (?P<name>...) The substring matched by the group is accessible by name.
     (?P=name)     Matches the text matched earlier by the group named name.
@@ -64,18 +64,11 @@ resulting RE will match the second character.
     \Z       Matches only at the end of the string.
     \b       Matches the empty string, but only at the start or end of a word.
     \B       Matches the empty string, but not at the start or end of a word.
-    \d       Matches any decimal digit; equivalent to the set [0-9] in
-             bytes patterns or string patterns with the ASCII flag.
-             In string patterns without the ASCII flag, it will match the whole
-             range of Unicode digits.
-    \D       Matches any non-digit character; equivalent to [^\d].
+    \d       Matches any decimal digit; equivalent to the set [0-9].
+    \D       Matches any non-digit character; equivalent to the set [^0-9].
     \s       Matches any whitespace character; equivalent to [ \t\n\r\f\v].
     \S       Matches any non-whitespace character; equiv. to [^ \t\n\r\f\v].
-    \w       Matches any alphanumeric character; equivalent to [a-zA-Z0-9_]
-             in bytes patterns or string patterns with the ASCII flag.
-             In string patterns without the ASCII flag, it will match the
-             range of Unicode alphanumeric characters (letters plus digits
-             plus underscore).
+    \w       Matches any alphanumeric character; equivalent to [a-zA-Z0-9_].
              With LOCALE, it will match the set [0-9_] plus characters defined
              as letters for the current locale.
     \W       Matches the complement of \w.
@@ -94,12 +87,6 @@ This module exports the following functions:
     escape   Backslash all non-alphanumerics in a string.
 
 Some of the functions in this module takes flags as optional parameters:
-    A  ASCII       For string patterns, make \w, \W, \b, \B, \d, \D
-                   match the corresponding ASCII character categories
-                   (rather than the whole Unicode categories, which is the
-                   default).
-                   For bytes patterns, this flag is the only available
-                   behaviour and needn't be specified.
     I  IGNORECASE  Perform case-insensitive matching.
     L  LOCALE      Make \w, \W, \b, \B, dependent on the current locale.
     M  MULTILINE   "^" matches the beginning of lines (after a newline)
@@ -108,8 +95,7 @@ Some of the functions in this module takes flags as optional parameters:
                    as the end of the string.
     S  DOTALL      "." matches any character at all, including the newline.
     X  VERBOSE     Ignore whitespace and comments for nicer looking RE's.
-    U  UNICODE     For compatibility only. Ignored for string patterns (it
-                   is the default), and forbidden for bytes patterns.
+    U  UNICODE     Make \w, \W, \b, \B, dependent on the Unicode locale.
 
 This module also defines an exception 'error'.
 
@@ -118,21 +104,19 @@ This module also defines an exception 'error'.
 import sys
 import sre_compile
 import sre_parse
-import functools
 
 # public symbols
 __all__ = [ "match", "search", "sub", "subn", "split", "findall",
-    "compile", "purge", "template", "escape", "A", "I", "L", "M", "S", "X",
-    "U", "ASCII", "IGNORECASE", "LOCALE", "MULTILINE", "DOTALL", "VERBOSE",
+    "compile", "purge", "template", "escape", "I", "L", "M", "S", "X",
+    "U", "IGNORECASE", "LOCALE", "MULTILINE", "DOTALL", "VERBOSE",
     "UNICODE", "error" ]
 
 __version__ = "2.2.1"
 
 # flags
-A = ASCII = sre_compile.SRE_FLAG_ASCII # assume ascii "locale"
 I = IGNORECASE = sre_compile.SRE_FLAG_IGNORECASE # ignore case
 L = LOCALE = sre_compile.SRE_FLAG_LOCALE # assume current 8-bit locale
-U = UNICODE = sre_compile.SRE_FLAG_UNICODE # assume unicode "locale"
+U = UNICODE = sre_compile.SRE_FLAG_UNICODE # assume unicode locale
 M = MULTILINE = sre_compile.SRE_FLAG_MULTILINE # make anchors look for newline
 S = DOTALL = sre_compile.SRE_FLAG_DOTALL # make dot match newline
 X = VERBOSE = sre_compile.SRE_FLAG_VERBOSE # ignore whitespace and comments
@@ -206,71 +190,75 @@ def compile(pattern, flags=0):
     return _compile(pattern, flags)
 
 def purge():
-    "Clear the regular expression caches"
-    _compile_typed.cache_clear()
-    _compile_repl.cache_clear()
+    "Clear the regular expression cache"
+    _cache.clear()
+    _cache_repl.clear()
 
 def template(pattern, flags=0):
     "Compile a template pattern, returning a pattern object"
     return _compile(pattern, flags|T)
 
-_alphanum_str = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
-_alphanum_bytes = frozenset(
-    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+_alphanum = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
 def escape(pattern):
     "Escape all non-alphanumeric characters in pattern."
-    if isinstance(pattern, str):
-        alphanum = _alphanum_str
-        s = list(pattern)
-        for i in range(len(pattern)):
-            c = pattern[i]
-            if c not in alphanum:
-                if c == "\000":
-                    s[i] = "\\000"
-                else:
-                    s[i] = "\\" + c
-        return "".join(s)
-    else:
-        alphanum = _alphanum_bytes
-        s = []
-        esc = ord(b"\\")
-        for c in pattern:
-            if c in alphanum:
-                s.append(c)
+    s = list(pattern)
+    alphanum = _alphanum
+    for i, c in enumerate(pattern):
+        if c not in alphanum:
+            if c == "\000":
+                s[i] = "\\000"
             else:
-                if c == 0:
-                    s.extend(b"\\000")
-                else:
-                    s.append(esc)
-                    s.append(c)
-        return bytes(s)
+                s[i] = "\\" + c
+    return pattern[:0].join(s)
 
 # --------------------------------------------------------------------
 # internals
 
+_cache = {}
+_cache_repl = {}
+
 _pattern_type = type(sre_compile.compile("", 0))
 
-def _compile(pattern, flags):
-    return _compile_typed(type(pattern), pattern, flags)
+_MAXCACHE = 100
 
-@functools.lru_cache(maxsize=500)
-def _compile_typed(text_bytes_type, pattern, flags):
+def _compile(*key):
     # internal: compile pattern
+    cachekey = (type(key[0]),) + key
+    p = _cache.get(cachekey)
+    if p is not None:
+        return p
+    pattern, flags = key
     if isinstance(pattern, _pattern_type):
         if flags:
-            raise ValueError(
-                "Cannot process flags argument with a compiled pattern")
+            raise ValueError('Cannot process flags argument with a compiled pattern')
         return pattern
     if not sre_compile.isstring(pattern):
-        raise TypeError("first argument must be string or compiled pattern")
-    return sre_compile.compile(pattern, flags)
+        raise TypeError, "first argument must be string or compiled pattern"
+    try:
+        p = sre_compile.compile(pattern, flags)
+    except error, v:
+        raise error, v # invalid expression
+    if len(_cache) >= _MAXCACHE:
+        _cache.clear()
+    _cache[cachekey] = p
+    return p
 
-@functools.lru_cache(maxsize=500)
-def _compile_repl(repl, pattern):
+def _compile_repl(*key):
     # internal: compile replacement pattern
-    return sre_parse.parse_template(repl, pattern)
+    p = _cache_repl.get(key)
+    if p is not None:
+        return p
+    repl, pattern = key
+    try:
+        p = sre_parse.parse_template(repl, pattern)
+    except error, v:
+        raise error, v # invalid expression
+    if len(_cache_repl) >= _MAXCACHE:
+        _cache_repl.clear()
+    _cache_repl[key] = p
+    return p
 
 def _expand(pattern, match, template):
     # internal: match.expand implementation hook
@@ -289,12 +277,12 @@ def _subx(pattern, template):
 
 # register myself for pickling
 
-import copyreg
+import copy_reg
 
 def _pickle(p):
     return _compile, (p.pattern, p.flags)
 
-copyreg.pickle(_pattern_type, _pickle, _compile)
+copy_reg.pickle(_pattern_type, _pickle, _compile)
 
 # --------------------------------------------------------------------
 # experimental stuff (see python-dev discussions for details)
@@ -327,7 +315,7 @@ class Scanner:
             if i == j:
                 break
             action = self.lexicon[m.lastindex-1][1]
-            if hasattr(action, "__call__"):
+            if hasattr(action, '__call__'):
                 self.match = m
                 action = action(self, m.group())
             if action is not None:

@@ -22,12 +22,11 @@ language, maybe you could volunteer your time --- or invent a cloning machine
 
 It is dangerous to add too many implementation details to a language reference
 document --- the implementation may change, and other implementations of the
-same language may work differently.  On the other hand, CPython is the one
-Python implementation in widespread use (although alternate implementations
-continue to gain support), and its particular quirks are sometimes worth being
-mentioned, especially where the implementation imposes additional limitations.
-Therefore, you'll find short "implementation notes" sprinkled throughout the
-text.
+same language may work differently.  On the other hand, there is currently only
+one Python implementation in widespread use (although alternate implementations
+exist), and its particular quirks are sometimes worth being mentioned,
+especially where the implementation imposes additional limitations.  Therefore,
+you'll find short "implementation notes" sprinkled throughout the text.
 
 Every Python implementation comes with a number of built-in and standard
 modules.  These are documented in :ref:`library-index`.  A few built-in modules
@@ -66,7 +65,7 @@ IronPython
    An alternate Python for .NET.  Unlike Python.NET, this is a complete Python
    implementation that generates IL, and compiles Python code directly to .NET
    assemblies.  It was created by Jim Hugunin, the original creator of Jython.  For
-   more information, see `the IronPython website <http://www.ironpython.com/>`_.
+   more information, see `the IronPython website <http://www.ironpython.net/>`_.
 
 PyPy
    An implementation of Python written completely in Python. It supports several
@@ -88,7 +87,11 @@ implementation you're using.
 Notation
 ========
 
-.. index:: BNF, grammar, syntax, notation
+.. index::
+   single: BNF
+   single: grammar
+   single: syntax
+   single: notation
 
 The descriptions of lexical analysis and syntax use a modified BNF grammar
 notation.  This uses the following style of definition:
@@ -114,7 +117,9 @@ meaningful to separate tokens. Rules are normally contained on a single line;
 rules with many alternatives may be formatted alternatively with each line after
 the first beginning with a vertical bar.
 
-.. index:: lexical definitions, ASCII
+.. index::
+   single: lexical definitions
+   single: ASCII@ASCII
 
 In lexical definitions (as the example above), two more conventions are used:
 Two literal characters separated by three dots mean a choice of any single

@@ -55,9 +55,9 @@ def _open_terminal():
         pass
     else:
         try:
-            tty_name, master_fd = sgi._getpty(os.O_RDWR, 0o666, 0)
-        except IOError as msg:
-            raise os.error(msg)
+            tty_name, master_fd = sgi._getpty(os.O_RDWR, 0666, 0)
+        except IOError, msg:
+            raise os.error, msg
         return master_fd, tty_name
     for x in 'pqrstuvwxyzPQRST':
         for y in '0123456789abcdef':
@@ -67,7 +67,7 @@ def _open_terminal():
             except os.error:
                 continue
             return (fd, '/dev/tty' + x + y)
-    raise os.error('out of pty devices')
+    raise os.error, 'out of pty devices'
 
 def slave_open(tty_name):
     """slave_open(tty_name) -> slave_fd
@@ -129,7 +129,7 @@ def fork():
 
 def _writen(fd, data):
     """Write all the data to a descriptor."""
-    while data:
+    while data != '':
         n = os.write(fd, data)
         data = data[n:]
 
@@ -142,15 +142,21 @@ def _copy(master_fd, master_read=_read, stdin_read=_read):
     Copies
             pty master -> standard output   (master_read)
             standard input -> pty master    (stdin_read)"""
-    while 1:
-        rfds, wfds, xfds = select(
-                [master_fd, STDIN_FILENO], [], [])
+    fds = [master_fd, STDIN_FILENO]
+    while True:
+        rfds, wfds, xfds = select(fds, [], [])
         if master_fd in rfds:
             data = master_read(master_fd)
-            os.write(STDOUT_FILENO, data)
+            if not data:  # Reached EOF.
+                fds.remove(master_fd)
+            else:
+                os.write(STDOUT_FILENO, data)
         if STDIN_FILENO in rfds:
             data = stdin_read(STDIN_FILENO)
-            _writen(master_fd, data)
+            if not data:
+                fds.remove(STDIN_FILENO)
+            else:
+                _writen(master_fd, data)
 
 def spawn(argv, master_read=_read, stdin_read=_read):
     """Create a spawned process."""

@@ -1,3 +1,4 @@
+
 :mod:`gc` --- Garbage Collector interface
 =========================================
 
@@ -36,17 +37,21 @@ The :mod:`gc` module provides the following functions:
    Returns true if automatic collection is enabled.
 
 
-.. function:: collect(generations=2)
+.. function:: collect([generation])
 
    With no arguments, run a full collection.  The optional argument *generation*
    may be an integer specifying which generation to collect (from 0 to 2).  A
    :exc:`ValueError` is raised if the generation number  is invalid. The number of
    unreachable objects found is returned.
 
-   The free lists maintained for a number of built-in types are cleared
-   whenever a full collection or collection of the highest generation (2)
-   is run.  Not all items in some free lists may be freed due to the
-   particular implementation, in particular :class:`float`.
+   .. versionchanged:: 2.5
+      The optional *generation* argument was added.
+
+   .. versionchanged:: 2.6
+      The free lists maintained for a number of built-in types are cleared
+      whenever a full collection or collection of the highest generation (2)
+      is run.  Not all items in some free lists may be freed due to the
+      particular implementation, in particular :class:`int` and :class:`float`.
 
 
 .. function:: set_debug(flags)
@@ -65,6 +70,8 @@ The :mod:`gc` module provides the following functions:
 
    Returns a list of all objects tracked by the collector, excluding the list
    returned.
+
+   .. versionadded:: 2.2
 
 
 .. function:: set_threshold(threshold0[, threshold1[, threshold2]])
@@ -92,6 +99,8 @@ The :mod:`gc` module provides the following functions:
    Return the current collection  counts as a tuple of ``(count0, count1,
    count2)``.
 
+   .. versionadded:: 2.5
+
 
 .. function:: get_threshold()
 
@@ -116,6 +125,8 @@ The :mod:`gc` module provides the following functions:
    invalid state. Avoid using :func:`get_referrers` for any purpose other than
    debugging.
 
+   .. versionadded:: 2.2
+
 
 .. function:: get_referents(*objs)
 
@@ -127,6 +138,7 @@ The :mod:`gc` module provides the following functions:
    be involved in a cycle.  So, for example, if an integer is directly reachable
    from an argument, that integer object may or may not appear in the result list.
 
+   .. versionadded:: 2.3
 
 .. function:: is_tracked(obj)
 
@@ -150,17 +162,18 @@ The :mod:`gc` module provides the following functions:
       >>> gc.is_tracked({"a": []})
       True
 
-   .. versionadded:: 3.1
+   .. versionadded:: 2.7
 
 
 The following variable is provided for read-only access (you can mutate its
 value but should not rebind it):
 
+
 .. data:: garbage
 
    A list of objects which the collector found to be unreachable but could not be
    freed (uncollectable objects).  By default, this list contains only objects with
-   :meth:`__del__` methods. Objects that have :meth:`__del__` methods and are
+   :meth:`__del__` methods. [#]_ Objects that have :meth:`__del__` methods and are
    part of a reference cycle cause the entire reference cycle to be uncollectable,
    including objects not necessarily in the cycle but reachable only from it.
    Python doesn't collect such cycles automatically because, in general, it isn't
@@ -174,15 +187,8 @@ value but should not rebind it):
    with :meth:`__del__` methods, and *garbage* can be examined in that case to
    verify that no such cycles are being created.
 
-   If :const:`DEBUG_SAVEALL` is set, then all unreachable objects will be added
-   to this list rather than freed.
-
-   .. versionchanged:: 3.2
-      If this list is non-empty at interpreter shutdown, a
-      :exc:`ResourceWarning` is emitted, which is silent by default.  If
-      :const:`DEBUG_UNCOLLECTABLE` is set, in addition all uncollectable objects
-      are printed.
-
+   If :const:`DEBUG_SAVEALL` is set, then all unreachable objects will be added to
+   this list rather than freed.
 
 The following constants are provided for use with :func:`set_debug`:
 
@@ -201,12 +207,21 @@ The following constants are provided for use with :func:`set_debug`:
 .. data:: DEBUG_UNCOLLECTABLE
 
    Print information of uncollectable objects found (objects which are not
-   reachable but cannot be freed by the collector).  These objects will be added
-   to the ``garbage`` list.
+   reachable but cannot be freed by the collector).  These objects will be added to
+   the ``garbage`` list.
 
-   .. versionchanged:: 3.2
-      Also print the contents of the :data:`garbage` list at interpreter
-      shutdown, if it isn't empty.
+
+.. data:: DEBUG_INSTANCES
+
+   When :const:`DEBUG_COLLECTABLE` or :const:`DEBUG_UNCOLLECTABLE` is set, print
+   information about instance objects found.
+
+
+.. data:: DEBUG_OBJECTS
+
+   When :const:`DEBUG_COLLECTABLE` or :const:`DEBUG_UNCOLLECTABLE` is set, print
+   information about objects other than instance objects found.
+
 
 .. data:: DEBUG_SAVEALL
 
@@ -218,4 +233,10 @@ The following constants are provided for use with :func:`set_debug`:
 
    The debugging flags necessary for the collector to print information about a
    leaking program (equal to ``DEBUG_COLLECTABLE | DEBUG_UNCOLLECTABLE |
-   DEBUG_SAVEALL``).
+   DEBUG_INSTANCES | DEBUG_OBJECTS | DEBUG_SAVEALL``).
+
+.. rubric:: Footnotes
+
+.. [#] Prior to Python 2.2, the list contained all instance objects in unreachable
+   cycles,  not only those with :meth:`__del__` methods.
+

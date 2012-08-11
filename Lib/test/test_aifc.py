@@ -1,6 +1,7 @@
-from test.support import findfile, run_unittest, TESTFN
+from test.test_support import findfile, run_unittest, TESTFN
 import unittest
 import os
+import io
 
 import aifc
 
@@ -35,28 +36,25 @@ class AIFCTest(unittest.TestCase):
         self.assertEqual(f.getsampwidth(), 2)
         self.assertEqual(f.getframerate(), 48000)
         self.assertEqual(f.getnframes(), 14400)
-        self.assertEqual(f.getcomptype(), b'NONE')
-        self.assertEqual(f.getcompname(), b'not compressed')
-        self.assertEqual(
-            f.getparams(),
-            (2, 2, 48000, 14400, b'NONE', b'not compressed'),
-            )
+        self.assertEqual(f.getcomptype(), 'NONE')
+        self.assertEqual(f.getcompname(), 'not compressed')
+        self.assertEqual(f.getparams(), (2, 2, 48000, 14400, 'NONE', 'not compressed'))
 
     def test_read(self):
         f = self.f = aifc.open(self.sndfilepath)
         self.assertEqual(f.tell(), 0)
-        self.assertEqual(f.readframes(2), b'\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
+        self.assertEqual(f.readframes(2), '\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
         f.rewind()
         pos0 = f.tell()
         self.assertEqual(pos0, 0)
-        self.assertEqual(f.readframes(2), b'\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
+        self.assertEqual(f.readframes(2), '\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
         pos2 = f.tell()
         self.assertEqual(pos2, 2)
-        self.assertEqual(f.readframes(2), b'\x17t\x17t"\xad"\xad')
+        self.assertEqual(f.readframes(2), '\x17t\x17t"\xad"\xad')
         f.setpos(pos2)
-        self.assertEqual(f.readframes(2), b'\x17t\x17t"\xad"\xad')
+        self.assertEqual(f.readframes(2), '\x17t\x17t"\xad"\xad')
         f.setpos(pos0)
-        self.assertEqual(f.readframes(2), b'\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
+        self.assertEqual(f.readframes(2), '\x00\x00\x00\x00\x0b\xd4\x0b\xd4')
 
     def test_write(self):
         f = self.f = aifc.open(self.sndfilepath)
@@ -78,7 +76,7 @@ class AIFCTest(unittest.TestCase):
         fout.setnchannels(f.getnchannels())
         fout.setsampwidth(f.getsampwidth())
         fout.setframerate(f.getframerate())
-        fout.setcomptype(b'ULAW', b'foo')
+        fout.setcomptype('ULAW', 'foo')
         for frame in range(f.getnframes()):
             fout.writeframes(f.readframes(1))
         fout.close()
@@ -89,8 +87,8 @@ class AIFCTest(unittest.TestCase):
         fout = self.fout = aifc.open(TESTFN, 'rb')
         f.rewind()
         self.assertEqual(f.getparams()[0:3], fout.getparams()[0:3])
-        self.assertEqual(fout.getcomptype(), b'ULAW')
-        self.assertEqual(fout.getcompname(), b'foo')
+        self.assertEqual(fout.getcomptype(), 'ULAW')
+        self.assertEqual(fout.getcompname(), 'foo')
         # XXX: this test fails, not sure if it should succeed or not
         # self.assertEqual(f.readframes(5), fout.readframes(5))
 
@@ -110,8 +108,45 @@ class AIFCTest(unittest.TestCase):
         self.assertEqual(testfile.closed, True)
 
 
+class AIFCLowLevelTest(unittest.TestCase):
+
+    def test_read_written(self):
+        def read_written(self, what):
+            f = io.BytesIO()
+            getattr(aifc, '_write_' + what)(f, x)
+            f.seek(0)
+            return getattr(aifc, '_read_' + what)(f)
+        for x in (-1, 0, 0.1, 1):
+            self.assertEqual(read_written(x, 'float'), x)
+        for x in (float('NaN'), float('Inf')):
+            self.assertEqual(read_written(x, 'float'), aifc._HUGE_VAL)
+        for x in (b'', b'foo', b'a' * 255):
+            self.assertEqual(read_written(x, 'string'), x)
+        for x in (-0x7FFFFFFF, -1, 0, 1, 0x7FFFFFFF):
+            self.assertEqual(read_written(x, 'long'), x)
+        for x in (0, 1, 0xFFFFFFFF):
+            self.assertEqual(read_written(x, 'ulong'), x)
+        for x in (-0x7FFF, -1, 0, 1, 0x7FFF):
+            self.assertEqual(read_written(x, 'short'), x)
+        for x in (0, 1, 0xFFFF):
+            self.assertEqual(read_written(x, 'ushort'), x)
+
+    def test_read_raises(self):
+        f = io.BytesIO(b'\x00')
+        self.assertRaises(EOFError, aifc._read_ulong, f)
+        self.assertRaises(EOFError, aifc._read_long, f)
+        self.assertRaises(EOFError, aifc._read_ushort, f)
+        self.assertRaises(EOFError, aifc._read_short, f)
+
+    def test_write_long_string_raises(self):
+        f = io.BytesIO()
+        with self.assertRaises(ValueError):
+            aifc._write_string(f, b'too long' * 255)
+
+
 def test_main():
     run_unittest(AIFCTest)
+    run_unittest(AIFCLowLevelTest)
 
 
 if __name__ == "__main__":

@@ -1,17 +1,16 @@
 #!@EXENAME@
-# -*- python -*-
 
-import getopt
-import os
 import sys
-import sysconfig
+import os
+import getopt
+from distutils import sysconfig
 
 valid_opts = ['prefix', 'exec-prefix', 'includes', 'libs', 'cflags',
-              'ldflags', 'extension-suffix', 'help', 'abiflags']
+              'ldflags', 'help']
 
 def exit_with_usage(code=1):
-    print("Usage: {0} [{1}]".format(
-        sys.argv[0], '|'.join('--'+opt for opt in valid_opts)), file=sys.stderr)
+    print >>sys.stderr, "Usage: %s [%s]" % (sys.argv[0],
+                                            '|'.join('--'+opt for opt in valid_opts))
     sys.exit(code)
 
 try:
@@ -32,31 +31,26 @@ if '--help' in opt_flags:
 
 for opt in opt_flags:
     if opt == '--prefix':
-        print(sysconfig.get_config_var('prefix'))
+        print sysconfig.PREFIX
 
     elif opt == '--exec-prefix':
-        print(sysconfig.get_config_var('exec_prefix'))
+        print sysconfig.EXEC_PREFIX
 
     elif opt in ('--includes', '--cflags'):
-        flags = ['-I' + sysconfig.get_path('include'),
-                 '-I' + sysconfig.get_path('platinclude')]
+        flags = ['-I' + sysconfig.get_python_inc(),
+                 '-I' + sysconfig.get_python_inc(plat_specific=True)]
         if opt == '--cflags':
             flags.extend(getvar('CFLAGS').split())
-        print(' '.join(flags))
+        print ' '.join(flags)
 
     elif opt in ('--libs', '--ldflags'):
         libs = getvar('LIBS').split() + getvar('SYSLIBS').split()
-        libs.append('-lpython' + pyver + sys.abiflags)
+        libs.append('-lpython'+pyver)
         # add the prefix/lib/pythonX.Y/config dir, but only if there is no
         # shared library in prefix/lib/.
         if opt == '--ldflags':
             if not getvar('Py_ENABLE_SHARED'):
                 libs.insert(0, '-L' + getvar('LIBPL'))
             libs.extend(getvar('LINKFORSHARED').split())
-        print(' '.join(libs))
+        print ' '.join(libs)
 
-    elif opt == '--extension-suffix':
-        print(sysconfig.get_config_var('SO'))
-
-    elif opt == '--abiflags':
-        print(sys.abiflags)

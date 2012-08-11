@@ -7,9 +7,6 @@ Extending/Embedding FAQ
 .. highlight:: c
 
 
-.. XXX need review for Python 3.
-
-
 Can I create my own functions in C?
 -----------------------------------
 
@@ -45,11 +42,10 @@ time-critical functions in your code, and gain a significant improvement with
 very little effort, as long as you're running on a machine with an
 x86-compatible processor.
 
-`Cython <http://cython.org>`_ and its relative `Pyrex
-<http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_ are compilers
-that accept a slightly modified form of Python and generate the corresponding
-C code.  Cython and Pyrex make it possible to write an extension without having
-to learn Python's C API.
+`Pyrex <http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_ is a compiler
+that accepts a slightly modified form of Python and generates the corresponding
+C code.  Pyrex makes it possible to write an extension without having to learn
+Python's C API.
 
 If you need to interface to some C or C++ library for which no Python extension
 currently exists, you can try wrapping the library's data types and functions
@@ -165,8 +161,8 @@ Sample code and use for catching stdout:
    ...
    >>> import sys
    >>> sys.stdout = StdoutCatcher()
-   >>> print('foo')
-   >>> print('hello world!')
+   >>> print 'foo'
+   >>> print 'hello world!'
    >>> sys.stderr.write(sys.stdout.data)
    foo
    hello world!
@@ -380,7 +376,7 @@ complete example using the GNU readline library (you may want to ignore
            if (ps1  == prompt ||                  /* ">>> " or */
                '\n' == code[i + j - 1])           /* "... " and double '\n' */
            {                                               /* so execute it */
-             dum = PyEval_EvalCode (src, glb, loc);
+             dum = PyEval_EvalCode ((PyCodeObject *)src, glb, loc);
              Py_XDECREF (dum);
              Py_XDECREF (src);
              free (code);
@@ -472,9 +468,12 @@ checking the value of sys.maxunicode:
 
    >>> import sys
    >>> if sys.maxunicode > 65535:
-   ...     print('UCS4 build')
+   ...     print 'UCS4 build'
    ... else:
-   ...     print('UCS2 build')
+   ...     print 'UCS2 build'
 
 The only way to solve this problem is to use extension modules compiled with a
 Python binary built using the same size for Unicode characters.
+
+
+

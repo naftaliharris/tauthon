@@ -61,16 +61,16 @@ class FixFilter(fixer_base.ConditionalFix):
                            results.get("xp").clone())
 
         elif "none" in results:
-            new = ListComp(Name("_f"),
-                           Name("_f"),
+            new = ListComp(Name(u"_f"),
+                           Name(u"_f"),
                            results["seq"].clone(),
-                           Name("_f"))
+                           Name(u"_f"))
 
         else:
             if in_special_context(node):
                 return None
             new = node.clone()
-            new.prefix = ""
-            new = Call(Name("list"), [new])
+            new.prefix = u""
+            new = Call(Name(u"list"), [new])
         new.prefix = node.prefix
         return new

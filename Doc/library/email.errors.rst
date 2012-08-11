@@ -1,5 +1,5 @@
-:mod:`email`: Exception and Defect classes
-------------------------------------------
+:mod:`email.errors`: Exception and Defect classes
+-------------------------------------------------
 
 .. module:: email.errors
    :synopsis: The exception classes used by the email package.
@@ -66,6 +66,9 @@ object would have a defect, but the containing messages would not.
 
 All defect classes are subclassed from :class:`email.errors.MessageDefect`, but
 this class is *not* an exception!
+
+.. versionadded:: 2.4
+   All the defect classes were added.
 
 * :class:`NoBoundaryInMultipartDefect` -- A message claimed to be a multipart,
   but had no :mimetype:`boundary` parameter.

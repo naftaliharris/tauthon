@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 """Test script for the binhex C module
 
    Uses the mechanism of the python binhex module
@@ -7,23 +7,26 @@
 import binhex
 import os
 import unittest
-from test import support
+from test import test_support
 
 
 class BinHexTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.fname1 = support.TESTFN + "1"
-        self.fname2 = support.TESTFN + "2"
+        self.fname1 = test_support.TESTFN + "1"
+        self.fname2 = test_support.TESTFN + "2"
 
     def tearDown(self):
-        support.unlink(self.fname1)
-        support.unlink(self.fname2)
+        try: os.unlink(self.fname1)
+        except OSError: pass
 
-    DATA = b'Jack is my hero'
+        try: os.unlink(self.fname2)
+        except OSError: pass
+
+    DATA = 'Jack is my hero'
 
     def test_binhex(self):
-        f = open(self.fname1, 'wb')
+        f = open(self.fname1, 'w')
         f.write(self.DATA)
         f.close()
 
@@ -31,7 +34,7 @@ class BinHexTestCase(unittest.TestCase):
 
         binhex.hexbin(self.fname2, self.fname1)
 
-        f = open(self.fname1, 'rb')
+        f = open(self.fname1, 'r')
         finish = f.readline()
         f.close()
 
@@ -39,7 +42,7 @@ class BinHexTestCase(unittest.TestCase):
 
 
 def test_main():
-    support.run_unittest(BinHexTestCase)
+    test_support.run_unittest(BinHexTestCase)
 
 
 if __name__ == "__main__":

@@ -3,19 +3,19 @@ from __future__ import unicode_literals, print_function
 
 import sys
 import unittest
-from . import support
+from . import test_support
 
 
 class TestMultipleFeatures(unittest.TestCase):
 
     def test_unicode_literals(self):
-        self.assertIsInstance("", str)
+        self.assertIsInstance("", unicode)
 
     def test_print_function(self):
-        with support.captured_output("stderr") as s:
+        with test_support.captured_output("stderr") as s:
             print("foo", file=sys.stderr)
         self.assertEqual(s.getvalue(), "foo\n")
 
 
 def test_main():
-    support.run_unittest(TestMultipleFeatures)
+    test_support.run_unittest(TestMultipleFeatures)

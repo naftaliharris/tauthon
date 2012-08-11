@@ -32,7 +32,7 @@ class FixThrow(fixer_base.BaseFix):
             return
 
         # Leave "g.throw(E)" alone
-        val = results.get("val")
+        val = results.get(u"val")
         if val is None:
             return
 
@@ -40,17 +40,17 @@ class FixThrow(fixer_base.BaseFix):
         if is_tuple(val):
             args = [c.clone() for c in val.children[1:-1]]
         else:
-            val.prefix = ""
+            val.prefix = u""
             args = [val]
 
         throw_args = results["args"]
 
         if "tb" in results:
             tb = results["tb"].clone()
-            tb.prefix = ""
+            tb.prefix = u""
 
             e = Call(exc, args)
-            with_tb = Attr(e, Name('with_traceback')) + [ArgList([tb])]
+            with_tb = Attr(e, Name(u'with_traceback')) + [ArgList([tb])]
             throw_args.replace(pytree.Node(syms.power, with_tb))
         else:
             throw_args.replace(Call(exc, args))

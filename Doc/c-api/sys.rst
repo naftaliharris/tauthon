@@ -77,15 +77,11 @@ accessible to C code.  They all work with the current interpreter thread's
 
    Reset :data:`sys.warnoptions` to an empty list.
 
-.. c:function:: void PySys_AddWarnOption(wchar_t *s)
+.. c:function:: void PySys_AddWarnOption(char *s)
 
    Append *s* to :data:`sys.warnoptions`.
 
-.. c:function:: void PySys_AddWarnOptionUnicode(PyObject *unicode)
-
-   Append *unicode* to :data:`sys.warnoptions`.
-
-.. c:function:: void PySys_SetPath(wchar_t *path)
+.. c:function:: void PySys_SetPath(char *path)
 
    Set :data:`sys.path` to a list object of paths found in *path* which should
    be a list of paths separated with the platform's search path delimiter
@@ -109,38 +105,7 @@ accessible to C code.  They all work with the current interpreter thread's
 
 .. c:function:: void PySys_WriteStderr(const char *format, ...)
 
-   As :c:func:`PySys_WriteStdout`, but write to :data:`sys.stderr` or *stderr*
-   instead.
-
-.. c:function:: void PySys_FormatStdout(const char *format, ...)
-
-   Function similar to PySys_WriteStdout() but format the message using
-   :c:func:`PyUnicode_FromFormatV` and don't truncate the message to an
-   arbitrary length.
-
-   .. versionadded:: 3.2
-
-.. c:function:: void PySys_FormatStderr(const char *format, ...)
-
-   As :c:func:`PySys_FormatStdout`, but write to :data:`sys.stderr` or *stderr*
-   instead.
-
-   .. versionadded:: 3.2
-
-.. c:function:: void PySys_AddXOption(const wchar_t *s)
-
-   Parse *s* as a set of :option:`-X` options and add them to the current
-   options mapping as returned by :c:func:`PySys_GetXOptions`.
-
-   .. versionadded:: 3.2
-
-.. c:function:: PyObject *PySys_GetXOptions()
-
-   Return the current dictionary of :option:`-X` options, similarly to
-   :data:`sys._xoptions`.  On error, *NULL* is returned and an exception is
-   set.
-
-   .. versionadded:: 3.2
+   As above, but write to :data:`sys.stderr` or *stderr* instead.
 
 
 .. _processcontrol:

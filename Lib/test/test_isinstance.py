@@ -3,7 +3,7 @@
 # testing of error conditions uncovered when using extension types.
 
 import unittest
-from test import support
+from test import test_support
 import sys
 
 
@@ -15,7 +15,8 @@ class TestIsInstanceExceptions(unittest.TestCase):
     # (leading to an "undetected error" in the debug build).  Set up is,
     # isinstance(inst, cls) where:
     #
-    # - cls isn't a a type, or a tuple
+    # - inst isn't an InstanceType
+    # - cls isn't a ClassType, a TypeType, or a TupleType
     # - cls has a __bases__ attribute
     # - inst has a __class__ attribute
     # - inst.__class__ as no __bases__ attribute
@@ -81,20 +82,6 @@ class TestIsInstanceExceptions(unittest.TestCase):
 
         self.assertRaises(TypeError, isinstance, I(), C())
 
-    # check that we don't mask non AttributeErrors
-    # see: http://bugs.python.org/issue1574217
-    def test_isinstance_dont_mask_non_attribute_error(self):
-        class C(object):
-            def getclass(self):
-                raise RuntimeError
-            __class__ = property(getclass)
-
-        c = C()
-        self.assertRaises(RuntimeError, isinstance, c, bool)
-
-        # test another code path
-        class D: pass
-        self.assertRaises(RuntimeError, isinstance, c, D)
 
 
 # These tests are similar to above, but tickle certain code paths in
@@ -255,8 +242,9 @@ class TestIsInstanceIsSubclass(unittest.TestCase):
         self.assertEqual(False, issubclass(NewChild, ()))
         self.assertEqual(True, issubclass(NewSuper, (NewChild, (NewSuper,))))
 
-        self.assertEqual(True, issubclass(int, (int, (float, int))))
-        self.assertEqual(True, issubclass(str, (str, (Child, NewChild, str))))
+        self.assertEqual(True, issubclass(int, (long, (float, int))))
+        if test_support.have_unicode:
+            self.assertEqual(True, issubclass(str, (unicode, (Child, NewChild, basestring))))
 
     def test_subclass_recursion_limit(self):
         # make sure that issubclass raises RuntimeError before the C stack is
@@ -272,13 +260,13 @@ def blowstack(fxn, arg, compare_to):
     # Make sure that calling isinstance with a deeply nested tuple for its
     # argument will raise RuntimeError eventually.
     tuple_arg = (compare_to,)
-    for cnt in range(sys.getrecursionlimit()+5):
+    for cnt in xrange(sys.getrecursionlimit()+5):
         tuple_arg = (tuple_arg,)
         fxn(arg, tuple_arg)
 
 
 def test_main():
-    support.run_unittest(
+    test_support.run_unittest(
         TestIsInstanceExceptions,
         TestIsSubclassExceptions,
         TestIsInstanceIsSubclass

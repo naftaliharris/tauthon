@@ -31,9 +31,12 @@ extern void initrgbimg(void);
 extern void initsignal(void);
 extern void initselect(void);
 extern void init_socket(void);
+extern void initstrop(void);
 extern void initstruct(void);
 extern void inittime(void);
-extern void init_thread(void);
+extern void initthread(void);
+extern void initcStringIO(void);
+extern void initcPickle(void);
 extern void initpcre(void);
 #ifdef WIN32
 extern void initmsvcrt(void);
@@ -72,11 +75,14 @@ struct _inittab _PyImport_Inittab[] = {
         {"_socket", init_socket},
         {"select", initselect},
 #endif
+        {"strop", initstrop},
         {"struct", initstruct},
         {"time", inittime},
 #ifdef WITH_THREAD
-        {"_thread", init_thread},
+        {"thread", initthread},
 #endif
+        {"cStringIO", initcStringIO},
+        {"cPickle", initcPickle},
         {"pcre", initpcre},
 #ifdef WIN32
         {"msvcrt", initmsvcrt},
@@ -92,7 +98,7 @@ struct _inittab _PyImport_Inittab[] = {
 
         /* These entries are here for sys.builtin_module_names */
         {"__main__", NULL},
-        {"builtins", NULL},
+        {"__builtin__", NULL},
         {"sys", NULL},
 
         /* Sentinel */

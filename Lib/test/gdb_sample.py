@@ -7,6 +7,6 @@ def bar(a, b, c):
     baz(a, b, c)
 
 def baz(*args):
-    id(42)
+    print(42)
 
 foo(1, 2, 3)

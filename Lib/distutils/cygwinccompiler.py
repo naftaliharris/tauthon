@@ -45,21 +45,16 @@ cygwin in no-cygwin mode).
 # * mingw gcc 3.2/ld 2.13 works
 #   (ld supports -shared)
 
+# This module should be kept compatible with Python 2.1.
+
 __revision__ = "$Id$"
 
-import os
-import sys
-import copy
-from subprocess import Popen, PIPE
-import re
-
+import os,sys,copy
 from distutils.ccompiler import gen_preprocess_options, gen_lib_options
 from distutils.unixccompiler import UnixCCompiler
 from distutils.file_util import write_file
 from distutils.errors import DistutilsExecError, CompileError, UnknownFileError
 from distutils import log
-from distutils.version import LooseVersion
-from distutils.spawn import find_executable
 
 def get_msvcr():
     """Include the appropriate MSVC runtime library if Python was built
@@ -84,9 +79,8 @@ def get_msvcr():
             raise ValueError("Unknown MS Compiler version %s " % msc_ver)
 
 
-class CygwinCCompiler(UnixCCompiler):
-    """ Handles the Cygwin port of the GNU C compiler to Windows.
-    """
+class CygwinCCompiler (UnixCCompiler):
+
     compiler_type = 'cygwin'
     obj_extension = ".o"
     static_lib_extension = ".a"
@@ -95,11 +89,11 @@ class CygwinCCompiler(UnixCCompiler):
     shared_lib_format = "%s%s"
     exe_extension = ".exe"
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__ (self, verbose=0, dry_run=0, force=0):
 
-        UnixCCompiler.__init__(self, verbose, dry_run, force)
+        UnixCCompiler.__init__ (self, verbose, dry_run, force)
 
-        status, details = check_config_h()
+        (status, details) = check_config_h()
         self.debug_print("Python's GCC status: %s (details: %s)" %
                          (status, details))
         if status is not CONFIG_H_OK:
@@ -154,26 +148,38 @@ class CygwinCCompiler(UnixCCompiler):
             # with MSVC 7.0 or later.
             self.dll_libraries = get_msvcr()
 
+    # __init__ ()
+
+
     def _compile(self, obj, src, ext, cc_args, extra_postargs, pp_opts):
-        """Compiles the source by spawing GCC and windres if needed."""
         if ext == '.rc' or ext == '.res':
             # gcc needs '.res' and '.rc' compiled to object files !!!
             try:
                 self.spawn(["windres", "-i", src, "-o", obj])
-            except DistutilsExecError as msg:
-                raise CompileError(msg)
+            except DistutilsExecError, msg:
+                raise CompileError, msg
         else: # for other files use the C-compiler
             try:
                 self.spawn(self.compiler_so + cc_args + [src, '-o', obj] +
                            extra_postargs)
-            except DistutilsExecError as msg:
-                raise CompileError(msg)
+            except DistutilsExecError, msg:
+                raise CompileError, msg
 
-    def link(self, target_desc, objects, output_filename, output_dir=None,
-             libraries=None, library_dirs=None, runtime_library_dirs=None,
-             export_symbols=None, debug=0, extra_preargs=None,
-             extra_postargs=None, build_temp=None, target_lang=None):
-        """Link the objects."""
+    def link (self,
+              target_desc,
+              objects,
+              output_filename,
+              output_dir=None,
+              libraries=None,
+              library_dirs=None,
+              runtime_library_dirs=None,
+              export_symbols=None,
+              debug=0,
+              extra_preargs=None,
+              extra_postargs=None,
+              build_temp=None,
+              target_lang=None):
+
         # use separate copies, so we can modify the lists
         extra_preargs = copy.copy(extra_preargs or [])
         libraries = copy.copy(libraries or [])
@@ -238,44 +244,64 @@ class CygwinCCompiler(UnixCCompiler):
         if not debug:
             extra_preargs.append("-s")
 
-        UnixCCompiler.link(self, target_desc, objects, output_filename,
-                           output_dir, libraries, library_dirs,
+        UnixCCompiler.link(self,
+                           target_desc,
+                           objects,
+                           output_filename,
+                           output_dir,
+                           libraries,
+                           library_dirs,
                            runtime_library_dirs,
                            None, # export_symbols, we do this in our def-file
-                           debug, extra_preargs, extra_postargs, build_temp,
+                           debug,
+                           extra_preargs,
+                           extra_postargs,
+                           build_temp,
                            target_lang)
+
+    # link ()
 
     # -- Miscellaneous methods -----------------------------------------
 
-    def object_filenames(self, source_filenames, strip_dir=0, output_dir=''):
-        """Adds supports for rc and res files."""
-        if output_dir is None:
-            output_dir = ''
+    # overwrite the one from CCompiler to support rc and res-files
+    def object_filenames (self,
+                          source_filenames,
+                          strip_dir=0,
+                          output_dir=''):
+        if output_dir is None: output_dir = ''
         obj_names = []
         for src_name in source_filenames:
             # use normcase to make sure '.rc' is really '.rc' and not '.RC'
-            base, ext = os.path.splitext(os.path.normcase(src_name))
+            (base, ext) = os.path.splitext (os.path.normcase(src_name))
             if ext not in (self.src_extensions + ['.rc','.res']):
-                raise UnknownFileError("unknown file type '%s' (from '%s')" % \
-                      (ext, src_name))
+                raise UnknownFileError, \
+                      "unknown file type '%s' (from '%s')" % \
+                      (ext, src_name)
             if strip_dir:
                 base = os.path.basename (base)
-            if ext in ('.res', '.rc'):
+            if ext == '.res' or ext == '.rc':
                 # these need to be compiled to object files
-                obj_names.append (os.path.join(output_dir,
-                                              base + ext + self.obj_extension))
+                obj_names.append (os.path.join (output_dir,
+                                            base + ext + self.obj_extension))
             else:
-                obj_names.append (os.path.join(output_dir,
-                                               base + self.obj_extension))
+                obj_names.append (os.path.join (output_dir,
+                                            base + self.obj_extension))
         return obj_names
 
+    # object_filenames ()
+
+# class CygwinCCompiler
+
+
 # the same as cygwin plus some additional parameters
-class Mingw32CCompiler(CygwinCCompiler):
-    """ Handles the Mingw32 port of the GNU C compiler to Windows.
-    """
+class Mingw32CCompiler (CygwinCCompiler):
+
     compiler_type = 'mingw32'
 
-    def __init__(self, verbose=0, dry_run=0, force=0):
+    def __init__ (self,
+                  verbose=0,
+                  dry_run=0,
+                  force=0):
 
         CygwinCCompiler.__init__ (self, verbose, dry_run, force)
 
@@ -311,6 +337,10 @@ class Mingw32CCompiler(CygwinCCompiler):
         # with MSVC 7.0 or later.
         self.dll_libraries = get_msvcr()
 
+    # __init__ ()
+
+# class Mingw32CCompiler
+
 # Because these compilers aren't configured in Python's pyconfig.h file by
 # default, we should at least warn the user if he is using a unmodified
 # version.
@@ -320,16 +350,16 @@ CONFIG_H_NOTOK = "not ok"
 CONFIG_H_UNCERTAIN = "uncertain"
 
 def check_config_h():
-    """Check if the current Python installation appears amenable to building
-    extensions with GCC.
 
-    Returns a tuple (status, details), where 'status' is one of the following
-    constants:
-
-    - CONFIG_H_OK: all is well, go ahead and compile
-    - CONFIG_H_NOTOK: doesn't look good
-    - CONFIG_H_UNCERTAIN: not sure -- unable to read pyconfig.h
-
+    """Check if the current Python installation (specifically, pyconfig.h)
+    appears amenable to building extensions with GCC.  Returns a tuple
+    (status, details), where 'status' is one of the following constants:
+      CONFIG_H_OK
+        all is well, go ahead and compile
+      CONFIG_H_NOTOK
+        doesn't look good
+      CONFIG_H_UNCERTAIN
+        not sure -- unable to read pyconfig.h
     'details' is a human-readable string explaining the situation.
 
     Note there are two ways to conclude "OK": either 'sys.version' contains
@@ -341,54 +371,79 @@ def check_config_h():
     # "pyconfig.h" check -- should probably be renamed...
 
     from distutils import sysconfig
+    import string
+    # if sys.version contains GCC then python was compiled with
+    # GCC, and the pyconfig.h file should be OK
+    if string.find(sys.version,"GCC") >= 0:
+        return (CONFIG_H_OK, "sys.version mentions 'GCC'")
 
-    # if sys.version contains GCC then python was compiled with GCC, and the
-    # pyconfig.h file should be OK
-    if "GCC" in sys.version:
-        return CONFIG_H_OK, "sys.version mentions 'GCC'"
-
-    # let's see if __GNUC__ is mentioned in python.h
     fn = sysconfig.get_config_h_filename()
     try:
-        config_h = open(fn)
+        # It would probably better to read single lines to search.
+        # But we do this only once, and it is fast enough
+        f = open(fn)
         try:
-            if "__GNUC__" in config_h.read():
-                return CONFIG_H_OK, "'%s' mentions '__GNUC__'" % fn
-            else:
-                return CONFIG_H_NOTOK, "'%s' does not mention '__GNUC__'" % fn
+            s = f.read()
         finally:
-            config_h.close()
-    except IOError as exc:
+            f.close()
+
+    except IOError, exc:
+        # if we can't read this file, we cannot say it is wrong
+        # the compiler will complain later about this file as missing
         return (CONFIG_H_UNCERTAIN,
                 "couldn't read '%s': %s" % (fn, exc.strerror))
 
-RE_VERSION = re.compile(b'(\d+\.\d+(\.\d+)*)')
+    else:
+        # "pyconfig.h" contains an "#ifdef __GNUC__" or something similar
+        if string.find(s,"__GNUC__") >= 0:
+            return (CONFIG_H_OK, "'%s' mentions '__GNUC__'" % fn)
+        else:
+            return (CONFIG_H_NOTOK, "'%s' does not mention '__GNUC__'" % fn)
 
-def _find_exe_version(cmd):
-    """Find the version of an executable by running `cmd` in the shell.
 
-    If the command is not found, or the output does not match
-    `RE_VERSION`, returns None.
-    """
-    executable = cmd.split()[0]
-    if find_executable(executable) is None:
-        return None
-    out = Popen(cmd, shell=True, stdout=PIPE).stdout
-    try:
-        out_string = out.read()
-    finally:
-        out.close()
-    result = RE_VERSION.search(out_string)
-    if result is None:
-        return None
-    # LooseVersion works with strings
-    # so we need to decode our bytes
-    return LooseVersion(result.group(1).decode())
 
 def get_versions():
     """ Try to find out the versions of gcc, ld and dllwrap.
-
-    If not possible it returns None for it.
+        If not possible it returns None for it.
     """
-    commands = ['gcc -dumpversion', 'ld -v', 'dllwrap --version']
-    return tuple([_find_exe_version(cmd) for cmd in commands])
+    from distutils.version import LooseVersion
+    from distutils.spawn import find_executable
+    import re
+
+    gcc_exe = find_executable('gcc')
+    if gcc_exe:
+        out = os.popen(gcc_exe + ' -dumpversion','r')
+        out_string = out.read()
+        out.close()
+        result = re.search('(\d+\.\d+(\.\d+)*)',out_string)
+        if result:
+            gcc_version = LooseVersion(result.group(1))
+        else:
+            gcc_version = None
+    else:
+        gcc_version = None
+    ld_exe = find_executable('ld')
+    if ld_exe:
+        out = os.popen(ld_exe + ' -v','r')
+        out_string = out.read()
+        out.close()
+        result = re.search('(\d+\.\d+(\.\d+)*)',out_string)
+        if result:
+            ld_version = LooseVersion(result.group(1))
+        else:
+            ld_version = None
+    else:
+        ld_version = None
+    dllwrap_exe = find_executable('dllwrap')
+    if dllwrap_exe:
+        out = os.popen(dllwrap_exe + ' --version','r')
+        out_string = out.read()
+        out.close()
+        result = re.search(' (\d+\.\d+(\.\d+)*)',out_string)
+        if result:
+            dllwrap_version = LooseVersion(result.group(1))
+        else:
+            dllwrap_version = None
+    else:
+        dllwrap_version = None
+    return (gcc_version, ld_version, dllwrap_version)

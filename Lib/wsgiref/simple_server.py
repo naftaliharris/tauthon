@@ -1,4 +1,4 @@
-"""BaseHTTPServer that implements the Python WSGI protocol (PEP 3333)
+"""BaseHTTPServer that implements the Python WSGI protocol (PEP 333, rev 1.21)
 
 This is both an example of how WSGI can be implemented, and a basis for running
 simple web applications on a local machine, such as might be done when testing
@@ -10,12 +10,11 @@ For example usage, see the 'if __name__=="__main__"' block at the end of the
 module.  See also the BaseHTTPServer module docs for other API information.
 """
 
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import sys
-import urllib.parse
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+import urllib, sys
 from wsgiref.handlers import SimpleHandler
 
-__version__ = "0.2"
+__version__ = "0.1"
 __all__ = ['WSGIServer', 'WSGIRequestHandler', 'demo_app', 'make_server']
 
 
@@ -74,14 +73,13 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
     def get_environ(self):
         env = self.server.base_environ.copy()
         env['SERVER_PROTOCOL'] = self.request_version
-        env['SERVER_SOFTWARE'] = self.server_version
         env['REQUEST_METHOD'] = self.command
         if '?' in self.path:
             path,query = self.path.split('?',1)
         else:
             path,query = self.path,''
 
-        env['PATH_INFO'] = urllib.parse.unquote_to_bytes(path).decode('iso-8859-1')
+        env['PATH_INFO'] = urllib.unquote(path)
         env['QUERY_STRING'] = query
 
         host = self.address_string()
@@ -89,16 +87,17 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             env['REMOTE_HOST'] = host
         env['REMOTE_ADDR'] = self.client_address[0]
 
-        if self.headers.get('content-type') is None:
-            env['CONTENT_TYPE'] = self.headers.get_content_type()
+        if self.headers.typeheader is None:
+            env['CONTENT_TYPE'] = self.headers.type
         else:
-            env['CONTENT_TYPE'] = self.headers['content-type']
+            env['CONTENT_TYPE'] = self.headers.typeheader
 
-        length = self.headers.get('content-length')
+        length = self.headers.getheader('content-length')
         if length:
             env['CONTENT_LENGTH'] = length
 
-        for k, v in self.headers.items():
+        for h in self.headers.headers:
+            k,v = h.split(':',1)
             k=k.replace('-','_').upper(); v=v.strip()
             if k in env:
                 continue                    # skip content length, type,etc.
@@ -127,15 +126,15 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
 
 def demo_app(environ,start_response):
-    from io import StringIO
+    from StringIO import StringIO
     stdout = StringIO()
-    print("Hello world!", file=stdout)
-    print(file=stdout)
-    h = sorted(environ.items())
+    print >>stdout, "Hello world!"
+    print >>stdout
+    h = environ.items(); h.sort()
     for k,v in h:
-        print(k,'=',repr(v), file=stdout)
-    start_response("200 OK", [('Content-Type','text/plain; charset=utf-8')])
-    return [stdout.getvalue().encode("utf-8")]
+        print >>stdout, k,'=', repr(v)
+    start_response("200 OK", [('Content-Type','text/plain')])
+    return [stdout.getvalue()]
 
 
 def make_server(
@@ -150,7 +149,7 @@ def make_server(
 if __name__ == '__main__':
     httpd = make_server('', 8000, demo_app)
     sa = httpd.socket.getsockname()
-    print("Serving HTTP on", sa[0], "port", sa[1], "...")
+    print "Serving HTTP on", sa[0], "port", sa[1], "..."
     import webbrowser
     webbrowser.open('http://localhost:8000/xyz?abc')
     httpd.handle_request()  # serve one request, then exit

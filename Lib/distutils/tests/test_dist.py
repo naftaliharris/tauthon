@@ -1,6 +1,8 @@
+# -*- coding: utf8 -*-
+
 """Tests for distutils.dist."""
 import os
-import io
+import StringIO
 import sys
 import unittest
 import warnings
@@ -8,8 +10,8 @@ import textwrap
 
 from distutils.dist import Distribution, fix_help_options
 from distutils.cmd import Command
-
-from test.support import TESTFN, captured_stdout, run_unittest
+import distutils.dist
+from test.test_support import TESTFN, captured_stdout, run_unittest
 from distutils.tests import support
 
 
@@ -36,7 +38,8 @@ class TestDistribution(Distribution):
         return self._config_files
 
 
-class DistributionTestCase(support.LoggingSilencer,
+class DistributionTestCase(support.TempdirManager,
+                           support.LoggingSilencer,
                            support.EnvironGuard,
                            unittest.TestCase):
 
@@ -57,6 +60,27 @@ class DistributionTestCase(support.LoggingSilencer,
         d.parse_command_line()
         return d
 
+    def test_debug_mode(self):
+        with open(TESTFN, "w") as f:
+            f.write("[global]\n")
+            f.write("command_packages = foo.bar, splat")
+
+        files = [TESTFN]
+        sys.argv.append("build")
+
+        with captured_stdout() as stdout:
+            self.create_distribution(files)
+        stdout.seek(0)
+        self.assertEqual(stdout.read(), '')
+        distutils.dist.DEBUG = True
+        try:
+            with captured_stdout() as stdout:
+                self.create_distribution(files)
+            stdout.seek(0)
+            self.assertEqual(stdout.read(), '')
+        finally:
+            distutils.dist.DEBUG = False
+
     def test_command_packages_unspecified(self):
         sys.argv.append("build")
         d = self.create_distribution()
@@ -74,7 +98,7 @@ class DistributionTestCase(support.LoggingSilencer,
         self.assertEqual(d.get_command_packages(),
                          ["distutils.command", "foo.bar", "distutils.tests"])
         cmd = d.get_command_obj("test_dist")
-        self.assertTrue(isinstance(cmd, test_dist))
+        self.assertIsInstance(cmd, test_dist)
         self.assertEqual(cmd.sample_option, "sometext")
 
     def test_command_packages_configfile(self):
@@ -82,8 +106,8 @@ class DistributionTestCase(support.LoggingSilencer,
         self.addCleanup(os.unlink, TESTFN)
         f = open(TESTFN, "w")
         try:
-            print("[global]", file=f)
-            print("command_packages = foo.bar, splat", file=f)
+            print >> f, "[global]"
+            print >> f, "command_packages = foo.bar, splat"
         finally:
             f.close()
 
@@ -103,31 +127,53 @@ class DistributionTestCase(support.LoggingSilencer,
         d = self.create_distribution([TESTFN])
         self.assertEqual(d.get_command_packages(), ["distutils.command"])
 
+    def test_write_pkg_file(self):
+        # Check DistributionMetadata handling of Unicode fields
+        tmp_dir = self.mkdtemp()
+        my_file = os.path.join(tmp_dir, 'f')
+        klass = Distribution
+
+        dist = klass(attrs={'author': u'Mister Café',
+                            'name': 'my.package',
+                            'maintainer': u'Café Junior',
+                            'description': u'Café torréfié',
+                            'long_description': u'Héhéhé'})
+
+        # let's make sure the file can be written
+        # with Unicode fields. they are encoded with
+        # PKG_INFO_ENCODING
+        dist.metadata.write_pkg_file(open(my_file, 'w'))
+
+        # regular ascii is of course always usable
+        dist = klass(attrs={'author': 'Mister Cafe',
+                            'name': 'my.package',
+                            'maintainer': 'Cafe Junior',
+                            'description': 'Cafe torrefie',
+                            'long_description': 'Hehehe'})
+
+        my_file2 = os.path.join(tmp_dir, 'f2')
+        dist.metadata.write_pkg_file(open(my_file2, 'w'))
+
     def test_empty_options(self):
         # an empty options dictionary should not stay in the
         # list of attributes
-        klass = Distribution
 
         # catching warnings
         warns = []
+
         def _warn(msg):
             warns.append(msg)
 
-        old_warn = warnings.warn
+        self.addCleanup(setattr, warnings, 'warn', warnings.warn)
         warnings.warn = _warn
-        try:
-            dist = klass(attrs={'author': 'xxx',
-                                'name': 'xxx',
-                                'version': 'xxx',
-                                'url': 'xxxx',
-                                'options': {}})
-        finally:
-            warnings.warn = old_warn
+        dist = Distribution(attrs={'author': 'xxx', 'name': 'xxx',
+                                   'version': 'xxx', 'url': 'xxxx',
+                                   'options': {}})
 
         self.assertEqual(len(warns), 0)
+        self.assertNotIn('options', dir(dist))
 
     def test_finalize_options(self):
-
         attrs = {'keywords': 'one,two',
                  'platforms': 'one,two'}
 
@@ -150,13 +196,42 @@ class DistributionTestCase(support.LoggingSilencer,
         cmds = dist.get_command_packages()
         self.assertEqual(cmds, ['distutils.command', 'one', 'two'])
 
-
     def test_announce(self):
         # make sure the level is known
         dist = Distribution()
         args = ('ok',)
         kwargs = {'level': 'ok2'}
         self.assertRaises(ValueError, dist.announce, args, kwargs)
+
+    def test_find_config_files_disable(self):
+        # Ticket #1180: Allow user to disable their home config file.
+        temp_home = self.mkdtemp()
+        if os.name == 'posix':
+            user_filename = os.path.join(temp_home, ".pydistutils.cfg")
+        else:
+            user_filename = os.path.join(temp_home, "pydistutils.cfg")
+
+        with open(user_filename, 'w') as f:
+            f.write('[distutils]\n')
+
+        def _expander(path):
+            return temp_home
+
+        old_expander = os.path.expanduser
+        os.path.expanduser = _expander
+        try:
+            d = distutils.dist.Distribution()
+            all_files = d.find_config_files()
+
+            d = distutils.dist.Distribution(attrs={'script_args':
+                                            ['--no-user-cfg']})
+            files = d.find_config_files()
+        finally:
+            os.path.expanduser = old_expander
+
+        # make sure --no-user-cfg disables the user cfg file
+        self.assertEqual(len(all_files)-1, len(files))
+
 
 class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
                        unittest.TestCase):
@@ -170,15 +245,44 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
         sys.argv[:] = self.argv[1]
         super(MetadataTestCase, self).tearDown()
 
+    def test_classifier(self):
+        attrs = {'name': 'Boa', 'version': '3.0',
+                 'classifiers': ['Programming Language :: Python :: 3']}
+        dist = Distribution(attrs)
+        meta = self.format_metadata(dist)
+        self.assertIn('Metadata-Version: 1.1', meta)
+
+    def test_download_url(self):
+        attrs = {'name': 'Boa', 'version': '3.0',
+                 'download_url': 'http://example.org/boa'}
+        dist = Distribution(attrs)
+        meta = self.format_metadata(dist)
+        self.assertIn('Metadata-Version: 1.1', meta)
+
+    def test_long_description(self):
+        long_desc = textwrap.dedent("""\
+        example::
+              We start here
+            and continue here
+          and end here.""")
+        attrs = {"name": "package",
+                 "version": "1.0",
+                 "long_description": long_desc}
+
+        dist = Distribution(attrs)
+        meta = self.format_metadata(dist)
+        meta = meta.replace('\n' + 8 * ' ', '\n')
+        self.assertIn(long_desc, meta)
+
     def test_simple_metadata(self):
         attrs = {"name": "package",
                  "version": "1.0"}
         dist = Distribution(attrs)
         meta = self.format_metadata(dist)
-        self.assertTrue("Metadata-Version: 1.0" in meta)
-        self.assertTrue("provides:" not in meta.lower())
-        self.assertTrue("requires:" not in meta.lower())
-        self.assertTrue("obsoletes:" not in meta.lower())
+        self.assertIn("Metadata-Version: 1.0", meta)
+        self.assertNotIn("provides:", meta.lower())
+        self.assertNotIn("requires:", meta.lower())
+        self.assertNotIn("obsoletes:", meta.lower())
 
     def test_provides(self):
         attrs = {"name": "package",
@@ -190,9 +294,9 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
         self.assertEqual(dist.get_provides(),
                          ["package", "package.sub"])
         meta = self.format_metadata(dist)
-        self.assertTrue("Metadata-Version: 1.1" in meta)
-        self.assertTrue("requires:" not in meta.lower())
-        self.assertTrue("obsoletes:" not in meta.lower())
+        self.assertIn("Metadata-Version: 1.1", meta)
+        self.assertNotIn("requires:", meta.lower())
+        self.assertNotIn("obsoletes:", meta.lower())
 
     def test_provides_illegal(self):
         self.assertRaises(ValueError, Distribution,
@@ -210,11 +314,11 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
         self.assertEqual(dist.get_requires(),
                          ["other", "another (==1.0)"])
         meta = self.format_metadata(dist)
-        self.assertTrue("Metadata-Version: 1.1" in meta)
-        self.assertTrue("provides:" not in meta.lower())
-        self.assertTrue("Requires: other" in meta)
-        self.assertTrue("Requires: another (==1.0)" in meta)
-        self.assertTrue("obsoletes:" not in meta.lower())
+        self.assertIn("Metadata-Version: 1.1", meta)
+        self.assertNotIn("provides:", meta.lower())
+        self.assertIn("Requires: other", meta)
+        self.assertIn("Requires: another (==1.0)", meta)
+        self.assertNotIn("obsoletes:", meta.lower())
 
     def test_requires_illegal(self):
         self.assertRaises(ValueError, Distribution,
@@ -232,11 +336,11 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
         self.assertEqual(dist.get_obsoletes(),
                          ["other", "another (<1.0)"])
         meta = self.format_metadata(dist)
-        self.assertTrue("Metadata-Version: 1.1" in meta)
-        self.assertTrue("provides:" not in meta.lower())
-        self.assertTrue("requires:" not in meta.lower())
-        self.assertTrue("Obsoletes: other" in meta)
-        self.assertTrue("Obsoletes: another (<1.0)" in meta)
+        self.assertIn("Metadata-Version: 1.1", meta)
+        self.assertNotIn("provides:", meta.lower())
+        self.assertNotIn("requires:", meta.lower())
+        self.assertIn("Obsoletes: other", meta)
+        self.assertIn("Obsoletes: another (<1.0)", meta)
 
     def test_obsoletes_illegal(self):
         self.assertRaises(ValueError, Distribution,
@@ -245,7 +349,7 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
                            "obsoletes": ["my.pkg (splat)"]})
 
     def format_metadata(self, dist):
-        sio = io.StringIO()
+        sio = StringIO.StringIO()
         dist.metadata.write_pkg_file(sio)
         return sio.getvalue()
 
@@ -272,14 +376,14 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
             if sys.platform in ('linux', 'darwin'):
                 os.environ['HOME'] = temp_dir
                 files = dist.find_config_files()
-                self.assertTrue(user_filename in files)
+                self.assertIn(user_filename, files)
 
             # win32-style
             if sys.platform == 'win32':
                 # home drive should be found
                 os.environ['HOME'] = temp_dir
                 files = dist.find_config_files()
-                self.assertTrue(user_filename in files,
+                self.assertIn(user_filename, files,
                              '%r not found in %r' % (user_filename, files))
         finally:
             os.remove(user_filename)
@@ -301,22 +405,35 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
 
         output = [line for line in s.getvalue().split('\n')
                   if line.strip() != '']
-        self.assertTrue(len(output) > 0)
+        self.assertTrue(output)
 
-    def test_long_description(self):
-        long_desc = textwrap.dedent("""\
-        example::
-              We start here
-            and continue here
-          and end here.""")
+    def test_read_metadata(self):
         attrs = {"name": "package",
                  "version": "1.0",
-                 "long_description": long_desc}
+                 "long_description": "desc",
+                 "description": "xxx",
+                 "download_url": "http://example.com",
+                 "keywords": ['one', 'two'],
+                 "requires": ['foo']}
 
         dist = Distribution(attrs)
-        meta = self.format_metadata(dist)
-        meta = meta.replace('\n' + 8 * ' ', '\n')
-        self.assertTrue(long_desc in meta)
+        metadata = dist.metadata
+
+        # write it then reloads it
+        PKG_INFO = StringIO.StringIO()
+        metadata.write_pkg_file(PKG_INFO)
+        PKG_INFO.seek(0)
+        metadata.read_pkg_file(PKG_INFO)
+
+        self.assertEqual(metadata.name, "package")
+        self.assertEqual(metadata.version, "1.0")
+        self.assertEqual(metadata.description, "xxx")
+        self.assertEqual(metadata.download_url, 'http://example.com')
+        self.assertEqual(metadata.keywords, ['one', 'two'])
+        self.assertEqual(metadata.platforms, ['UNKNOWN'])
+        self.assertEqual(metadata.obsoletes, None)
+        self.assertEqual(metadata.requires, ['foo'])
+
 
 def test_suite():
     suite = unittest.TestSuite()

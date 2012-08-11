@@ -44,7 +44,8 @@ sometimes referred to as :dfn:`large files`.
 
 Large file support is enabled in Python when the size of an :c:type:`off_t` is
 larger than a :c:type:`long` and the :c:type:`long long` type is available and is
-at least as large as an :c:type:`off_t`.
+at least as large as an :c:type:`off_t`. Python longs are then used to represent
+file sizes, offsets and other values that can exceed the range of a Python int.
 It may be necessary to configure and compile Python with certain compiler flags
 to enable this mode. For example, it is enabled by default with recent versions
 of Irix, but with Solaris 2.6 and 2.7 you need to do something like::
@@ -69,22 +70,17 @@ In addition to many functions described in the :mod:`os` module documentation,
 .. data:: environ
 
    A dictionary representing the string environment at the time the interpreter
-   was started. Keys and values are bytes on Unix and str on Windows. For
-   example, ``environ[b'HOME']`` (``environ['HOME']`` on Windows) is the
-   pathname of your home directory, equivalent to ``getenv("HOME")`` in C.
+   was started.  For example, ``environ['HOME']`` is the pathname of your home
+   directory, equivalent to ``getenv("HOME")`` in C.
 
    Modifying this dictionary does not affect the string environment passed on by
    :func:`execv`, :func:`popen` or :func:`system`; if you need to change the
    environment, pass ``environ`` to :func:`execve` or add variable assignments and
    export statements to the command string for :func:`system` or :func:`popen`.
 
-   .. versionchanged:: 3.2
-      On Unix, keys and values are bytes.
-
    .. note::
 
-      The :mod:`os` module provides an alternate implementation of ``environ``
-      which updates the environment on modification. Note also that updating
-      :data:`os.environ` will render this dictionary obsolete. Use of the
-      :mod:`os` module version of this is recommended over direct access to the
-      :mod:`posix` module.
+      The :mod:`os` module provides an alternate implementation of ``environ`` which
+      updates the environment on modification.  Note also that updating ``os.environ``
+      will render this dictionary obsolete.  Use of the :mod:`os` module version of
+      this is recommended over direct access to the :mod:`posix` module.

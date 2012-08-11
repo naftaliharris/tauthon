@@ -18,10 +18,10 @@ FILES_PER_THREAD = 50
 
 import tempfile
 
-from test.support import threading_setup, threading_cleanup, run_unittest, import_module
+from test.test_support import threading_setup, threading_cleanup, run_unittest, import_module
 threading = import_module('threading')
 import unittest
-import io
+import StringIO
 from traceback import print_exc
 
 startEvent = threading.Event()
@@ -31,7 +31,7 @@ class TempFileGreedy(threading.Thread):
     ok_count = 0
 
     def run(self):
-        self.errors = io.StringIO()
+        self.errors = StringIO.StringIO()
         startEvent.wait()
         for i in range(FILES_PER_THREAD):
             try:
@@ -62,7 +62,7 @@ class ThreadedTempFileTest(unittest.TestCase):
             t.join()
             ok += t.ok_count
             if t.error_count:
-                errors.append(str(t.name) + str(t.errors.getvalue()))
+                errors.append(str(t.getName()) + str(t.errors.getvalue()))
 
         threading_cleanup(*thread_info)
 

@@ -6,6 +6,9 @@
 .. moduleauthor:: Marc-Andre Lemburg <mal@egenix.com>
 .. sectionauthor:: Bjorn Pettersen <bpettersen@corp.fairisaac.com>
 
+
+.. versionadded:: 2.3
+
 **Source code:** :source:`Lib/platform.py`
 
 --------------
@@ -103,16 +106,22 @@ Cross Platform
 
    Returns a string identifying the Python implementation SCM branch.
 
+   .. versionadded:: 2.6
+
 
 .. function:: python_implementation()
 
    Returns a string identifying the Python implementation. Possible return values
-   are: 'CPython', 'IronPython', 'Jython'.
+   are: 'CPython', 'IronPython', 'Jython', 'PyPy'.
+
+   .. versionadded:: 2.6
 
 
 .. function:: python_revision()
 
    Returns a string identifying the Python implementation SCM revision.
+
+   .. versionadded:: 2.6
 
 
 .. function:: python_version()
@@ -188,8 +197,8 @@ Windows Platform
 .. function:: win32_ver(release='', version='', csd='', ptype='')
 
    Get additional version information from the Windows Registry and return a tuple
-   ``(version, csd, ptype)`` referring to version number, CSD level and OS type
-   (multi/single processor).
+   ``(version, csd, ptype)`` referring to version number, CSD level
+   (service pack) and OS type (multi/single processor).
 
    As a hint: *ptype* is ``'Uniprocessor Free'`` on single processor NT machines
    and ``'Multiprocessor Free'`` on multi processor machines. The *'Free'* refers
@@ -228,9 +237,6 @@ Mac OS Platform
    Entries which cannot be determined are set to ``''``.  All tuple entries are
    strings.
 
-   Documentation for the underlying :c:func:`gestalt` API is available online at
-   http://www.rgaros.nl/gestalt/.
-
 
 Unix Platforms
 --------------
@@ -238,7 +244,15 @@ Unix Platforms
 
 .. function:: dist(distname='', version='', id='', supported_dists=('SuSE','debian','redhat','mandrake',...))
 
-   This is another name for :func:`linux_distribution`.
+   This is an old version of the functionality now provided by
+   :func:`linux_distribution`. For new code, please use the
+   :func:`linux_distribution`.
+
+   The only difference between the two is that ``dist()`` always
+   returns the short name of the distribution taken from the
+   ``supported_dists`` parameter.
+
+   .. deprecated:: 2.6
 
 .. function:: linux_distribution(distname='', version='', id='', supported_dists=('SuSE','debian','redhat','mandrake',...), full_distribution_name=1)
 
@@ -255,6 +269,8 @@ Unix Platforms
    Returns a tuple ``(distname,version,id)`` which defaults to the args given as
    parameters.  ``id`` is the item in parentheses after the version number.  It
    is usually the version codename.
+
+   .. versionadded:: 2.6
 
 .. function:: libc_ver(executable=sys.executable, lib='', version='', chunksize=2048)
 

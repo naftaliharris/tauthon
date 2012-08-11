@@ -30,36 +30,27 @@
 #define LEAD_UNDERSCORE ""
 #endif
 
-/* The .so extension module ABI tag, supplied by the Makefile via
-   Makefile.pre.in and configure.  This is used to discriminate between
-   incompatible .so files so that extensions for different Python builds can
-   live in the same directory.  E.g. foomodule.cpython-32.so
-*/
 
 const struct filedescr _PyImport_DynLoadFiletab[] = {
 #ifdef __CYGWIN__
     {".dll", "rb", C_EXTENSION},
     {"module.dll", "rb", C_EXTENSION},
-#else  /* !__CYGWIN__ */
+#else
 #if defined(PYOS_OS2) && defined(PYCC_GCC)
     {".pyd", "rb", C_EXTENSION},
     {".dll", "rb", C_EXTENSION},
-#else  /* !(defined(PYOS_OS2) && defined(PYCC_GCC)) */
+#else
 #ifdef __VMS
     {".exe", "rb", C_EXTENSION},
     {".EXE", "rb", C_EXTENSION},
     {"module.exe", "rb", C_EXTENSION},
     {"MODULE.EXE", "rb", C_EXTENSION},
-#else  /* !__VMS */
-    {"." SOABI ".so", "rb", C_EXTENSION},
-    {"module." SOABI ".so", "rb", C_EXTENSION},
-    {".abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
-    {"module.abi" PYTHON_ABI_STRING ".so", "rb", C_EXTENSION},
+#else
     {".so", "rb", C_EXTENSION},
     {"module.so", "rb", C_EXTENSION},
-#endif  /* __VMS */
-#endif  /* defined(PYOS_OS2) && defined(PYCC_GCC) */
-#endif  /* __CYGWIN__ */
+#endif
+#endif
+#endif
     {0, 0}
 };
 
@@ -91,7 +82,7 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
     }
 
     PyOS_snprintf(funcname, sizeof(funcname),
-                  LEAD_UNDERSCORE "PyInit_%.200s", shortname);
+                  LEAD_UNDERSCORE "init%.200s", shortname);
 
     if (fp != NULL) {
         int i;

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """List all those Python files that require a coding directive
 
@@ -28,8 +28,8 @@ except ImportError:
     pysource = pysource()
 
 
-    print("The pysource module is not available; "
-                         "no sophisticated Python source file search will be done.", file=sys.stderr)
+    print >>sys.stderr, ("The pysource module is not available; "
+                         "no sophisticated Python source file search will be done.")
 
 
 decl_re = re.compile(r"coding[=:]\s*([-\w.]+)")
@@ -42,7 +42,7 @@ def get_declaration(line):
 
 def has_correct_encoding(text, codec):
     try:
-        str(text, codec)
+        unicode(text, codec)
     except UnicodeDecodeError:
         return False
     else:
@@ -62,11 +62,11 @@ def needs_declaration(fullpath):
         infile.close()
         return False
 
-    # check the whole file for non utf-8 characters
+    # check the whole file for non-ASCII characters
     rest = infile.read()
     infile.close()
 
-    if has_correct_encoding(line1+line2+rest, "utf-8"):
+    if has_correct_encoding(line1+line2+rest, "ascii"):
         return False
 
     return True
@@ -78,9 +78,9 @@ usage = """Usage: %s [-cd] paths...
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], 'cd')
-except getopt.error as msg:
-    print(msg, file=sys.stderr)
-    print(usage, file=sys.stderr)
+except getopt.error, msg:
+    print >>sys.stderr, msg
+    print >>sys.stderr, usage
     sys.exit(1)
 
 is_python = pysource.looks_like_python
@@ -93,12 +93,12 @@ for o, a in opts:
         debug = True
 
 if not args:
-    print(usage, file=sys.stderr)
+    print >>sys.stderr, usage
     sys.exit(1)
 
 for fullpath in pysource.walk_python_files(args, is_python):
     if debug:
-        print("Testing for coding: %s" % fullpath)
+        print "Testing for coding: %s" % fullpath
     result = needs_declaration(fullpath)
     if result:
-        print(fullpath)
+        print fullpath

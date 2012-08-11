@@ -67,10 +67,9 @@ def _run_code(code, run_globals, init_globals=None,
         run_globals.update(init_globals)
     run_globals.update(__name__ = mod_name,
                        __file__ = mod_fname,
-                       __cached__ = None,
                        __loader__ = mod_loader,
                        __package__ = pkg_name)
-    exec(code, run_globals)
+    exec code in run_globals
     return run_globals
 
 def _run_module_code(code, init_globals=None,
@@ -108,7 +107,7 @@ def _get_module_details(mod_name):
         try:
             pkg_main_name = mod_name + ".__main__"
             return _get_module_details(pkg_main_name)
-        except ImportError as e:
+        except ImportError, e:
             raise ImportError(("%s; %r is a package and cannot " +
                                "be directly executed") %(e, mod_name))
     code = loader.get_code(mod_name)
@@ -117,10 +116,23 @@ def _get_module_details(mod_name):
     filename = _get_filename(loader, mod_name)
     return mod_name, loader, code, filename
 
-# XXX ncoghlan: Should this be documented and made public?
-# (Current thoughts: don't repeat the mistake that lead to its
-# creation when run_module() no longer met the needs of
-# mainmodule.c, but couldn't be changed because it was public)
+
+def _get_main_module_details():
+    # Helper that gives a nicer error message when attempting to
+    # execute a zipfile or directory by invoking __main__.py
+    main_name = "__main__"
+    try:
+        return _get_module_details(main_name)
+    except ImportError as exc:
+        if main_name in str(exc):
+            raise ImportError("can't find %r module in %r" %
+                              (main_name, sys.path[0]))
+        raise
+
+# This function is the actual implementation of the -m switch and direct
+# execution of zipfiles and directories and is deliberately kept private.
+# This avoids a repeat of the situation where run_module() no longer met the
+# needs of mainmodule.c, but couldn't be changed because it was public
 def _run_module_as_main(mod_name, alter_argv=True):
     """Runs the designated module in the __main__ namespace
 
@@ -131,7 +143,6 @@ def _run_module_as_main(mod_name, alter_argv=True):
        At the very least, these variables in __main__ will be overwritten:
            __name__
            __file__
-           __cached__
            __loader__
            __package__
     """
@@ -141,16 +152,7 @@ def _run_module_as_main(mod_name, alter_argv=True):
         else:          # i.e. directory or zipfile execution
             mod_name, loader, code, fname = _get_main_module_details()
     except ImportError as exc:
-        # Try to provide a good error message
-        # for directories, zip files and the -m switch
-        if alter_argv:
-            # For -m switch, just display the exception
-            info = str(exc)
-        else:
-            # For directories/zipfiles, let the user
-            # know what the code was looking for
-            info = "can't find '__main__' module in %r" % sys.argv[0]
-        msg = "%s: %s" % (sys.executable, info)
+        msg = "%s: %s" % (sys.executable, str(exc))
         sys.exit(msg)
     pkg_name = mod_name.rpartition('.')[0]
     main_globals = sys.modules["__main__"].__dict__
@@ -176,18 +178,6 @@ def run_module(mod_name, init_globals=None,
         # Leave the sys module alone
         return _run_code(code, {}, init_globals, run_name,
                          fname, loader, pkg_name)
-
-def _get_main_module_details():
-    # Helper that gives a nicer error message when attempting to
-    # execute a zipfile or directory by invoking __main__.py
-    main_name = "__main__"
-    try:
-        return _get_module_details(main_name)
-    except ImportError as exc:
-        if main_name in str(exc):
-            raise ImportError("can't find %r module in %r" %
-                              (main_name, sys.path[0]))
-        raise
 
 
 # XXX (ncoghlan): Perhaps expose the C API function
@@ -282,7 +272,7 @@ def run_path(path_name, init_globals=None, run_name=None):
 if __name__ == "__main__":
     # Run the module specified as the next command line argument
     if len(sys.argv) < 2:
-        print("No module specified for execution", file=sys.stderr)
+        print >> sys.stderr, "No module specified for execution"
     else:
         del sys.argv[0] # Make the requested module sys.argv[0]
         _run_module_as_main(sys.argv[0])

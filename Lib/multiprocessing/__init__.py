@@ -9,7 +9,7 @@
 # wrapper for 'threading'.
 #
 # Try calling `multiprocessing.doc.main()` to read the html
-# documentation in in a webbrowser.
+# documentation in a webbrowser.
 #
 #
 # Copyright (c) 2006-2008, R Oudkerk
@@ -80,6 +80,7 @@ class TimeoutError(ProcessError):
 class AuthenticationError(ProcessError):
     pass
 
+# This is down here because _multiprocessing uses BufferTooShort
 import _multiprocessing
 
 #
@@ -115,8 +116,11 @@ def cpu_count():
         except (ValueError, KeyError):
             num = 0
     elif 'bsd' in sys.platform or sys.platform == 'darwin':
+        comm = '/sbin/sysctl -n hw.ncpu'
+        if sys.platform == 'darwin':
+            comm = '/usr' + comm
         try:
-            with os.popen('sysctl -n hw.ncpu') as p:
+            with os.popen(comm) as p:
                 num = int(p.read())
         except ValueError:
             num = 0

@@ -1,3 +1,4 @@
+
 :mod:`macpath` --- Mac OS 9 path manipulation functions
 =======================================================
 

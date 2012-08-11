@@ -22,14 +22,21 @@ breaks them onto multiple lines if they don't fit within the allowed width.
 Construct :class:`PrettyPrinter` objects explicitly if you need to adjust the
 width constraint.
 
-Dictionaries are sorted by key before the display is computed.
+.. versionchanged:: 2.5
+   Dictionaries are sorted by key before the display is computed; before 2.5, a
+   dictionary was sorted only if its display required more than one line, although
+   that wasn't documented.
+
+.. versionchanged:: 2.6
+   Added support for :class:`set` and :class:`frozenset`.
+
 
 The :mod:`pprint` module defines one class:
 
 .. First the implementation class:
 
 
-.. class:: PrettyPrinter(indent=1, width=80, depth=None, stream=None)
+.. class:: PrettyPrinter(...)
 
    Construct a :class:`PrettyPrinter` instance.  This constructor understands
    several keyword parameters.  An output stream may be set using the *stream*
@@ -64,23 +71,26 @@ The :mod:`pprint` module defines one class:
       >>> pp.pprint(tup)
       ('spam', ('eggs', ('lumberjack', ('knights', ('ni', ('dead', (...)))))))
 
-
 The :class:`PrettyPrinter` class supports several derivative functions:
 
-.. function:: pformat(object, indent=1, width=80, depth=None)
+.. Now the derivative functions:
+
+.. function:: pformat(object[, indent[, width[, depth]]])
 
    Return the formatted representation of *object* as a string.  *indent*, *width*
    and *depth* will be passed to the :class:`PrettyPrinter` constructor as
    formatting parameters.
 
+   .. versionchanged:: 2.4
+      The parameters *indent*, *width* and *depth* were added.
 
-.. function:: pprint(object, stream=None, indent=1, width=80, depth=None)
+
+.. function:: pprint(object[, stream[, indent[, width[, depth]]]])
 
    Prints the formatted representation of *object* on *stream*, followed by a
-   newline.  If *stream* is ``None``, ``sys.stdout`` is used.  This may be used
-   in the interactive interpreter instead of the :func:`print` function for
-   inspecting values (you can even reassign ``print = pprint.pprint`` for use
-   within a scope).  *indent*, *width* and *depth* will be passed to the
+   newline.  If *stream* is omitted, ``sys.stdout`` is used.  This may be used in
+   the interactive interpreter instead of a :keyword:`print` statement for
+   inspecting values.    *indent*, *width* and *depth* will be passed to the
    :class:`PrettyPrinter` constructor as formatting parameters.
 
       >>> import pprint
@@ -93,6 +103,9 @@ The :class:`PrettyPrinter` class supports several derivative functions:
        'lumberjack',
        'knights',
        'ni']
+
+   .. versionchanged:: 2.4
+      The parameters *indent*, *width* and *depth* were added.
 
 
 .. function:: isreadable(object)
@@ -186,14 +199,14 @@ are converted to strings.  The default implementation uses the internals of the
    calls. The fourth argument, *level*, gives the current level; recursive calls
    should be passed a value less than that of the current call.
 
+   .. versionadded:: 2.3
 
 .. _pprint-example:
 
 pprint Example
 --------------
 
-This example demonstrates several uses of the :func:`pprint` function and its
-parameters.
+This example demonstrates several uses of the :func:`pprint` function and its parameters.
 
    >>> import pprint
    >>> tup = ('spam', ('eggs', ('lumberjack', ('knights', ('ni', ('dead',

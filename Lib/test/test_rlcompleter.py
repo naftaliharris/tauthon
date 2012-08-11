@@ -1,9 +1,9 @@
-from test import support
+from test import test_support as support
 import unittest
-import builtins
+import __builtin__ as builtins
 import rlcompleter
 
-class CompleteMe:
+class CompleteMe(object):
     """ Trivial class used in testing rlcompleter.Completer. """
     spam = 1
 

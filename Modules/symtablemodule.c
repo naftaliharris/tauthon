@@ -1,6 +1,7 @@
 #include "Python.h"
 
 #include "code.h"
+#include "compile.h"
 #include "Python-ast.h"
 #include "symtable.h"
 
@@ -32,7 +33,7 @@ symtable_symtable(PyObject *self, PyObject *args)
     st = Py_SymtableString(str, filename, start);
     if (st == NULL)
         return NULL;
-    t = st->st_blocks;
+    t = st->st_symbols;
     Py_INCREF(t);
     PyMem_Free((void *)st->st_future);
     PySymtable_Free(st);
@@ -46,26 +47,14 @@ static PyMethodDef symtable_methods[] = {
     {NULL,              NULL}           /* sentinel */
 };
 
-static struct PyModuleDef symtablemodule = {
-    PyModuleDef_HEAD_INIT,
-    "_symtable",
-    NULL,
-    -1,
-    symtable_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit__symtable(void)
+init_symtable(void)
 {
     PyObject *m;
 
-    m = PyModule_Create(&symtablemodule);
+    m = Py_InitModule("_symtable", symtable_methods);
     if (m == NULL)
-        return NULL;
+        return;
     PyModule_AddIntConstant(m, "USE", USE);
     PyModule_AddIntConstant(m, "DEF_GLOBAL", DEF_GLOBAL);
     PyModule_AddIntConstant(m, "DEF_LOCAL", DEF_LOCAL);
@@ -80,7 +69,8 @@ PyInit__symtable(void)
     PyModule_AddIntConstant(m, "TYPE_MODULE", ModuleBlock);
 
     PyModule_AddIntConstant(m, "OPT_IMPORT_STAR", OPT_IMPORT_STAR);
-    PyModule_AddIntConstant(m, "OPT_TOPLEVEL", OPT_TOPLEVEL);
+    PyModule_AddIntConstant(m, "OPT_EXEC", OPT_EXEC);
+    PyModule_AddIntConstant(m, "OPT_BARE_EXEC", OPT_BARE_EXEC);
 
     PyModule_AddIntConstant(m, "LOCAL", LOCAL);
     PyModule_AddIntConstant(m, "GLOBAL_EXPLICIT", GLOBAL_EXPLICIT);
@@ -88,12 +78,6 @@ PyInit__symtable(void)
     PyModule_AddIntConstant(m, "FREE", FREE);
     PyModule_AddIntConstant(m, "CELL", CELL);
 
-    PyModule_AddIntConstant(m, "SCOPE_OFF", SCOPE_OFFSET);
+    PyModule_AddIntConstant(m, "SCOPE_OFF", SCOPE_OFF);
     PyModule_AddIntConstant(m, "SCOPE_MASK", SCOPE_MASK);
-
-    if (PyErr_Occurred()) {
-        Py_DECREF(m);
-        m = 0;
-    }
-    return m;
 }

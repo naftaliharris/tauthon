@@ -1,4 +1,4 @@
-from test.support import verbose, TESTFN
+from test.test_support import verbose, TESTFN
 import random
 import os
 
@@ -88,21 +88,19 @@ class Horrid:
         # have any systematic relationship between comparison outcomes
         # (based on self.i and other.i) and relative position within the
         # hash vector (based on hashcode).
-        # XXX This is no longer effective.
-        ##self.hashcode = random.randrange(1000000000)
+        self.hashcode = random.randrange(1000000000)
 
     def __hash__(self):
         return 42
         return self.hashcode
 
+    def __cmp__(self, other):
+        maybe_mutate()   # The point of the test.
+        return cmp(self.i, other.i)
+
     def __eq__(self, other):
         maybe_mutate()   # The point of the test.
         return self.i == other.i
-
-    def __ne__(self, other):
-        raise RuntimeError("I didn't expect some kind of Spanish inquisition!")
-
-    __lt__ = __le__ = __gt__ = __ge__ = __ne__
 
     def __repr__(self):
         return "Horrid(%d)" % self.i
@@ -113,10 +111,10 @@ class Horrid:
 
 def fill_dict(d, candidates, numentries):
     d.clear()
-    for i in range(numentries):
+    for i in xrange(numentries):
         d[Horrid(random.choice(candidates))] = \
             Horrid(random.choice(candidates))
-    return list(d.keys())
+    return d.keys()
 
 # Test one pair of randomly generated dicts, each with n entries.
 # Note that dict comparison is trivial if they don't have the same number
@@ -135,13 +133,16 @@ def test_one(n):
     # same size.
     mutate = 1
     if verbose:
-        print("trying w/ lengths", len(dict1), len(dict2), end=' ')
+        print "trying w/ lengths", len(dict1), len(dict2),
     while dict1 and len(dict1) == len(dict2):
         if verbose:
-            print(".", end=' ')
-        c = dict1 == dict2
+            print ".",
+        if random.random() < 0.5:
+            c = cmp(dict1, dict2)
+        else:
+            c = dict1 == dict2
     if verbose:
-        print()
+        print
 
 # Run test_one n times.  At the start (before the bugs were fixed), 20
 # consecutive runs of this test each blew up on or before the sixth time
@@ -152,7 +153,7 @@ def test_one(n):
 # leak).
 
 def test(n):
-    for i in range(n):
+    for i in xrange(n):
         test_one(random.randrange(1, 100))
 
 # See last comment block for clues about good values for n.
@@ -186,7 +187,7 @@ class Parent:
 # the expected-output file doesn't need to change.
 
 f = open(TESTFN, "w")
-print(Parent().__dict__, file=f)
+print >> f, Parent().__dict__
 f.close()
 os.unlink(TESTFN)
 
@@ -207,7 +208,7 @@ class Machiavelli:
 
         # Michael sez:  "doesn't crash without this.  don't know why."
         # Tim sez:  "luck of the draw; crashes with or without for me."
-        print(file=f)
+        print >> f
 
         return repr("machiavelli")
 
@@ -216,7 +217,7 @@ class Machiavelli:
 
 dict[Machiavelli()] = Machiavelli()
 
-print(str(dict), file=f)
+print >> f, str(dict)
 f.close()
 os.unlink(TESTFN)
 del f, dict
@@ -280,7 +281,7 @@ dict[Machiavelli3(2)] = Machiavelli3(0)
 f = open(TESTFN, "w")
 try:
     try:
-        print(dict[Machiavelli3(2)], file=f)
+        print >> f, dict[Machiavelli3(2)]
     except KeyError:
         pass
 finally:

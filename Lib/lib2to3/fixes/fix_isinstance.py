@@ -35,7 +35,7 @@ class FixIsinstance(fixer_base.BaseFix):
         for idx, arg in iterator:
             if arg.type == token.NAME and arg.value in names_inserted:
                 if idx < len(args) - 1 and args[idx + 1].type == token.COMMA:
-                    next(iterator)
+                    iterator.next()
                     continue
             else:
                 new_args.append(arg)

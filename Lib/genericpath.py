@@ -87,7 +87,6 @@ def _splitext(p, sep, altsep, extsep):
 
     Extension is everything from the last dot to the end, ignoring
     leading dots.  Returns "(root, ext)"; ext may be empty."""
-    # NOTE: This code must work for text and bytes strings.
 
     sepIndex = p.rfind(sep)
     if altsep:
@@ -99,8 +98,8 @@ def _splitext(p, sep, altsep, extsep):
         # skip all leading dots
         filenameIndex = sepIndex + 1
         while filenameIndex < dotIndex:
-            if p[filenameIndex:filenameIndex+1] != extsep:
+            if p[filenameIndex] != extsep:
                 return p[:dotIndex], p[dotIndex:]
             filenameIndex += 1
 
-    return p, p[:0]
+    return p, ''

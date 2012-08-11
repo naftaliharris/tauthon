@@ -66,7 +66,7 @@
 #define PYCC_VACPP  /* Define Indicator of C Compiler */
 
   /* Platform Filesystem */
-#define PYTHONPATH  ".;.\\lib;.\\lib\\plat-win"
+#define PYTHONPATH  ".;.\\lib;.\\lib\\plat-win;.\\lib\\lib-tk"
 #define DOSFILESYS  /* OS/2 Uses the DOS File Naming Conventions */
 /* #define IMPORT_8x3_NAMES (let's move up to long filenames) */
 
@@ -80,6 +80,7 @@
 /* #define SIZEOF_LONG_LONG   8 */ /* Count of Bytes in a (long long)       */
 
 /* unicode definines */
+#define Py_USING_UNICODE
 #define PY_UNICODE_TYPE    wchar_t
 #define Py_UNICODE_SIZE SIZEOF_SHORT
 

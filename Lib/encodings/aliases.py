@@ -33,9 +33,9 @@ aliases = {
     'us'                 : 'ascii',
     'us_ascii'           : 'ascii',
 
-    ## base64_codec codec
-    #'base64'             : 'base64_codec',
-    #'base_64'            : 'base64_codec',
+    # base64_codec codec
+    'base64'             : 'base64_codec',
+    'base_64'            : 'base64_codec',
 
     # big5 codec
     'big5_tw'            : 'big5',
@@ -45,8 +45,8 @@ aliases = {
     'big5_hkscs'         : 'big5hkscs',
     'hkscs'              : 'big5hkscs',
 
-    ## bz2_codec codec
-    #'bz2'                : 'bz2_codec',
+    # bz2_codec codec
+    'bz2'                : 'bz2_codec',
 
     # cp037 codec
     '037'                : 'cp037',
@@ -248,8 +248,8 @@ aliases = {
     'cp936'              : 'gbk',
     'ms936'              : 'gbk',
 
-    ## hex_codec codec
-    #'hex'                : 'hex_codec',
+    # hex_codec codec
+    'hex'                : 'hex_codec',
 
     # hp_roman8 codec
     'roman8'             : 'hp_roman8',
@@ -435,7 +435,6 @@ aliases = {
     'maclatin2'          : 'mac_latin2',
 
     # mac_roman codec
-    'macintosh'          : 'mac_roman',
     'macroman'           : 'mac_roman',
 
     # mac_turkish codec
@@ -450,13 +449,13 @@ aliases = {
     'cp154'              : 'ptcp154',
     'cyrillic_asian'     : 'ptcp154',
 
-    ## quopri_codec codec
-    #'quopri'             : 'quopri_codec',
-    #'quoted_printable'   : 'quopri_codec',
-    #'quotedprintable'    : 'quopri_codec',
+    # quopri_codec codec
+    'quopri'             : 'quopri_codec',
+    'quoted_printable'   : 'quopri_codec',
+    'quotedprintable'    : 'quopri_codec',
 
-    ## rot_13 codec
-    #'rot13'              : 'rot_13',
+    # rot_13 codec
+    'rot13'              : 'rot_13',
 
     # shift_jis codec
     'csshiftjis'         : 'shift_jis',
@@ -518,16 +517,11 @@ aliases = {
     'utf8_ucs2'          : 'utf_8',
     'utf8_ucs4'          : 'utf_8',
 
-    ## uu_codec codec
-    #'uu'                 : 'uu_codec',
+    # uu_codec codec
+    'uu'                 : 'uu_codec',
 
-    ## zlib_codec codec
-    #'zip'                : 'zlib_codec',
-    #'zlib'               : 'zlib_codec',
+    # zlib_codec codec
+    'zip'                : 'zlib_codec',
+    'zlib'               : 'zlib_codec',
 
-    # temporary mac CJK aliases, will be replaced by proper codecs in 3.1
-    'x_mac_japanese'      : 'shift_jis',
-    'x_mac_korean'        : 'euc_kr',
-    'x_mac_simp_chinese'  : 'gb2312',
-    'x_mac_trad_chinese'  : 'big5',
 }

@@ -81,17 +81,3 @@ There are a few functions specific to Python functions.
    *Py_None* or a tuple of cell objects.
 
    Raises :exc:`SystemError` and returns ``-1`` on failure.
-
-
-.. c:function:: PyObject *PyFunction_GetAnnotations(PyObject *op)
-
-   Return the annotations of the function object *op*. This can be a
-   mutable dictionary or *NULL*.
-
-
-.. c:function:: int PyFunction_SetAnnotations(PyObject *op, PyObject *annotations)
-
-   Set the annotations for the function object *op*. *annotations*
-   must be a dictionary or *Py_None*.
-
-   Raises :exc:`SystemError` and returns ``-1`` on failure.

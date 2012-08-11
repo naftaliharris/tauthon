@@ -1,12 +1,12 @@
 # Test case for the os.poll() function
 
 import os, select, random, unittest
-from test.support import TESTFN, run_unittest
+from test.test_support import TESTFN, run_unittest
 
 try:
     select.poll
 except AttributeError:
-    raise unittest.SkipTest("select.poll not defined -- skipping test_poll")
+    raise unittest.SkipTest, "select.poll not defined -- skipping test_poll"
 
 
 def find_ready_matching(ready, flag):
@@ -25,7 +25,7 @@ class PollTests(unittest.TestCase):
         p = select.poll()
 
         NUM_PIPES = 12
-        MSG = b" This is a test."
+        MSG = " This is a test."
         MSG_LEN = len(MSG)
         readers = []
         writers = []
@@ -48,14 +48,14 @@ class PollTests(unittest.TestCase):
             ready = p.poll()
             ready_writers = find_ready_matching(ready, select.POLLOUT)
             if not ready_writers:
-                raise RuntimeError("no pipes ready for writing")
+                raise RuntimeError, "no pipes ready for writing"
             wr = random.choice(ready_writers)
             os.write(wr, MSG)
 
             ready = p.poll()
             ready_readers = find_ready_matching(ready, select.POLLIN)
             if not ready_readers:
-                raise RuntimeError("no pipes ready for reading")
+                raise RuntimeError, "no pipes ready for reading"
             rd = random.choice(ready_readers)
             buf = os.read(rd, MSG_LEN)
             self.assertEqual(len(buf), MSG_LEN)
@@ -144,7 +144,7 @@ class PollTests(unittest.TestCase):
         pollster = select.poll()
         pollster.register(1)
 
-        self.assertRaises(OverflowError, pollster.poll, 1 << 64)
+        self.assertRaises(OverflowError, pollster.poll, 1L << 64)
 
         x = 2 + 3
         if x != 5:

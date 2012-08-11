@@ -81,9 +81,9 @@ iter_len(seqiterobject *it)
             return NULL;
         len = seqsize - it->it_index;
         if (len >= 0)
-            return PyLong_FromSsize_t(len);
+            return PyInt_FromSsize_t(len);
     }
-    return PyLong_FromLong(0);
+    return PyInt_FromLong(0);
 }
 
 PyDoc_STRVAR(length_hint_doc, "Private method returning an estimate of len(list(it)).");
@@ -103,7 +103,7 @@ PyTypeObject PySeqIter_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -177,7 +177,9 @@ calliter_iternext(calliterobject *it)
         Py_DECREF(args);
         if (result != NULL) {
             int ok;
-            ok = PyObject_RichCompareBool(it->it_sentinel, result, Py_EQ);               
+            ok = PyObject_RichCompareBool(result,
+                                          it->it_sentinel,
+                                          Py_EQ);
             if (ok == 0)
                 return result; /* Common case, fast path */
             Py_DECREF(result);
@@ -197,7 +199,7 @@ calliter_iternext(calliterobject *it)
 
 PyTypeObject PyCallIter_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-    "callable_iterator",                        /* tp_name */
+    "callable-iterator",                        /* tp_name */
     sizeof(calliterobject),                     /* tp_basicsize */
     0,                                          /* tp_itemsize */
     /* methods */
@@ -205,7 +207,7 @@ PyTypeObject PyCallIter_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -226,5 +228,3 @@ PyTypeObject PyCallIter_Type = {
     (iternextfunc)calliter_iternext,            /* tp_iternext */
     0,                                          /* tp_methods */
 };
-
-

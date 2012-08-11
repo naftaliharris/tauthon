@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # portions copyright 2001, Autonomous Zones Industries, Inc., all rights...
 # err...  reserved and offered to the public under the terms of the
@@ -47,8 +47,7 @@ Sample use, programmatically
   r = tracer.results()
   r.write_results(show_missing=True, coverdir="/tmp")
 """
-__all__ = ['Trace', 'CoverageResults']
-import io
+
 import linecache
 import os
 import re
@@ -59,8 +58,11 @@ import tokenize
 import inspect
 import gc
 import dis
-import pickle
-from warnings import warn as _warn
+try:
+    import cPickle
+    pickle = cPickle
+except ImportError:
+    import pickle
 
 try:
     import threading
@@ -78,7 +80,7 @@ else:
         sys.settrace(None)
         threading.settrace(None)
 
-def _usage(outfile):
+def usage(outfile):
     outfile.write("""Usage: %s [OPTIONS] <file> [ARGS]
 
 Meta-options:
@@ -128,11 +130,12 @@ PRAGMA_NOCOVER = "#pragma NO COVER"
 # Simple rx to find lines with no code.
 rx_blank = re.compile(r'^\s*(#.*)?$')
 
-class _Ignore:
-    def __init__(self, modules=None, dirs=None):
-        self._mods = set() if not modules else set(modules)
-        self._dirs = [] if not dirs else [os.path.normpath(d)
-                                          for d in dirs]
+class Ignore:
+    def __init__(self, modules = None, dirs = None):
+        self._mods = modules or []
+        self._dirs = dirs or []
+
+        self._dirs = map(os.path.normpath, self._dirs)
         self._ignore = { '<string>': 1 }
 
     def names(self, filename, modulename):
@@ -140,22 +143,24 @@ class _Ignore:
             return self._ignore[modulename]
 
         # haven't seen this one before, so see if the module name is
-        # on the ignore list.
-        if modulename in self._mods:  # Identical names, so ignore
-            self._ignore[modulename] = 1
-            return 1
-
-        # check if the module is a proper submodule of something on
-        # the ignore list
+        # on the ignore list.  Need to take some care since ignoring
+        # "cmp" musn't mean ignoring "cmpcache" but ignoring
+        # "Spam" must also mean ignoring "Spam.Eggs".
         for mod in self._mods:
-            # Need to take some care since ignoring
-            # "cmp" mustn't mean ignoring "cmpcache" but ignoring
-            # "Spam" must also mean ignoring "Spam.Eggs".
-            if modulename.startswith(mod + '.'):
+            if mod == modulename:  # Identical names, so ignore
+                self._ignore[modulename] = 1
+                return 1
+            # check if the module is a proper submodule of something on
+            # the ignore list
+            n = len(mod)
+            # (will not overflow since if the first n characters are the
+            # same and the name has not already occurred, then the size
+            # of "name" is greater than that of "mod")
+            if mod == modulename[:n] and modulename[n] == '.':
                 self._ignore[modulename] = 1
                 return 1
 
-        # Now check that filename isn't in one of the directories
+        # Now check that __file__ isn't in one of the directories
         if filename is None:
             # must be a built-in, so we must ignore
             self._ignore[modulename] = 1
@@ -178,14 +183,14 @@ class _Ignore:
         self._ignore[modulename] = 0
         return 0
 
-def _modname(path):
+def modname(path):
     """Return a plausible module name for the patch."""
 
     base = os.path.basename(path)
     filename, ext = os.path.splitext(base)
     return filename
 
-def _fullmodname(path):
+def fullmodname(path):
     """Return a plausible module name for the path."""
 
     # If the file 'path' is part of a package, then the filename isn't
@@ -236,16 +241,9 @@ class CoverageResults:
                 counts, calledfuncs, callers = \
                         pickle.load(open(self.infile, 'rb'))
                 self.update(self.__class__(counts, calledfuncs, callers))
-            except (IOError, EOFError, ValueError) as err:
-                print(("Skipping counts file %r: %s"
-                                      % (self.infile, err)), file=sys.stderr)
-
-    def is_ignored_filename(self, filename):
-        """Return True if the filename does not refer to a file
-        we want to have reported.
-        """
-        return (filename == "<string>" or
-                filename.startswith("<doctest "))
+            except (IOError, EOFError, ValueError), err:
+                print >> sys.stderr, ("Skipping counts file %r: %s"
+                                      % (self.infile, err))
 
     def update(self, other):
         """Merge in the data from another CoverageResults"""
@@ -256,13 +254,13 @@ class CoverageResults:
         other_calledfuncs = other.calledfuncs
         other_callers = other.callers
 
-        for key in other_counts:
+        for key in other_counts.keys():
             counts[key] = counts.get(key, 0) + other_counts[key]
 
-        for key in other_calledfuncs:
+        for key in other_calledfuncs.keys():
             calledfuncs[key] = 1
 
-        for key in other_callers:
+        for key in other_callers.keys():
             callers[key] = 1
 
     def write_results(self, show_missing=True, summary=False, coverdir=None):
@@ -270,41 +268,46 @@ class CoverageResults:
         @param coverdir
         """
         if self.calledfuncs:
-            print()
-            print("functions called:")
-            calls = self.calledfuncs
-            for filename, modulename, funcname in sorted(calls):
-                print(("filename: %s, modulename: %s, funcname: %s"
-                       % (filename, modulename, funcname)))
+            print
+            print "functions called:"
+            calls = self.calledfuncs.keys()
+            calls.sort()
+            for filename, modulename, funcname in calls:
+                print ("filename: %s, modulename: %s, funcname: %s"
+                       % (filename, modulename, funcname))
 
         if self.callers:
-            print()
-            print("calling relationships:")
+            print
+            print "calling relationships:"
+            calls = self.callers.keys()
+            calls.sort()
             lastfile = lastcfile = ""
-            for ((pfile, pmod, pfunc), (cfile, cmod, cfunc)) \
-                    in sorted(self.callers):
+            for ((pfile, pmod, pfunc), (cfile, cmod, cfunc)) in calls:
                 if pfile != lastfile:
-                    print()
-                    print("***", pfile, "***")
+                    print
+                    print "***", pfile, "***"
                     lastfile = pfile
                     lastcfile = ""
                 if cfile != pfile and lastcfile != cfile:
-                    print("  -->", cfile)
+                    print "  -->", cfile
                     lastcfile = cfile
-                print("    %s.%s -> %s.%s" % (pmod, pfunc, cmod, cfunc))
+                print "    %s.%s -> %s.%s" % (pmod, pfunc, cmod, cfunc)
 
         # turn the counts data ("(filename, lineno) = count") into something
         # accessible on a per-file basis
         per_file = {}
-        for filename, lineno in self.counts:
+        for filename, lineno in self.counts.keys():
             lines_hit = per_file[filename] = per_file.get(filename, {})
             lines_hit[lineno] = self.counts[(filename, lineno)]
 
         # accumulate summary info, if needed
         sums = {}
 
-        for filename, count in per_file.items():
-            if self.is_ignored_filename(filename):
+        for filename, count in per_file.iteritems():
+            # skip some "files" we don't care about...
+            if filename == "<string>":
+                continue
+            if filename.startswith("<doctest "):
                 continue
 
             if filename.endswith((".pyc", ".pyo")):
@@ -312,57 +315,59 @@ class CoverageResults:
 
             if coverdir is None:
                 dir = os.path.dirname(os.path.abspath(filename))
-                modulename = _modname(filename)
+                modulename = modname(filename)
             else:
                 dir = coverdir
                 if not os.path.exists(dir):
                     os.makedirs(dir)
-                modulename = _fullmodname(filename)
+                modulename = fullmodname(filename)
 
             # If desired, get a list of the line numbers which represent
             # executable content (returned as a dict for better lookup speed)
             if show_missing:
-                lnotab = _find_executable_linenos(filename)
+                lnotab = find_executable_linenos(filename)
             else:
                 lnotab = {}
 
             source = linecache.getlines(filename)
             coverpath = os.path.join(dir, modulename + ".cover")
-            with open(filename, 'rb') as fp:
-                encoding, _ = tokenize.detect_encoding(fp.readline)
             n_hits, n_lines = self.write_results_file(coverpath, source,
-                                                      lnotab, count, encoding)
+                                                      lnotab, count)
+
             if summary and n_lines:
-                percent = int(100 * n_hits / n_lines)
+                percent = 100 * n_hits // n_lines
                 sums[modulename] = n_lines, percent, modulename, filename
 
         if summary and sums:
-            print("lines   cov%   module   (path)")
-            for m in sorted(sums):
+            mods = sums.keys()
+            mods.sort()
+            print "lines   cov%   module   (path)"
+            for m in mods:
                 n_lines, percent, modulename, filename = sums[m]
-                print("%5d   %3d%%   %s   (%s)" % sums[m])
+                print "%5d   %3d%%   %s   (%s)" % sums[m]
 
         if self.outfile:
             # try and store counts and module info into self.outfile
             try:
                 pickle.dump((self.counts, self.calledfuncs, self.callers),
                             open(self.outfile, 'wb'), 1)
-            except IOError as err:
-                print("Can't save counts files because %s" % err, file=sys.stderr)
+            except IOError, err:
+                print >> sys.stderr, "Can't save counts files because %s" % err
 
-    def write_results_file(self, path, lines, lnotab, lines_hit, encoding=None):
+    def write_results_file(self, path, lines, lnotab, lines_hit):
         """Return a coverage results file in path."""
 
         try:
-            outfile = open(path, "w", encoding=encoding)
-        except IOError as err:
-            print(("trace: Could not open %r for writing: %s"
-                                  "- skipping" % (path, err)), file=sys.stderr)
+            outfile = open(path, "w")
+        except IOError, err:
+            print >> sys.stderr, ("trace: Could not open %r for writing: %s"
+                                  "- skipping" % (path, err))
             return 0, 0
 
         n_lines = 0
         n_hits = 0
-        for lineno, line in enumerate(lines, 1):
+        for i, line in enumerate(lines):
+            lineno = i + 1
             # do the blank/comment match to try to mark more lines
             # (help the reader find stuff that hasn't been covered)
             if lineno in lines_hit:
@@ -375,17 +380,17 @@ class CoverageResults:
                 # lines preceded by no marks weren't hit
                 # Highlight them if so indicated, unless the line contains
                 # #pragma: NO COVER
-                if lineno in lnotab and not PRAGMA_NOCOVER in line:
+                if lineno in lnotab and not PRAGMA_NOCOVER in lines[i]:
                     outfile.write(">>>>>> ")
                     n_lines += 1
                 else:
                     outfile.write("       ")
-            outfile.write(line.expandtabs(8))
+            outfile.write(lines[i].expandtabs(8))
         outfile.close()
 
         return n_hits, n_lines
 
-def _find_lines_from_code(code, strs):
+def find_lines_from_code(code, strs):
     """Return dict where keys are lines in the line number table."""
     linenos = {}
 
@@ -395,19 +400,19 @@ def _find_lines_from_code(code, strs):
 
     return linenos
 
-def _find_lines(code, strs):
+def find_lines(code, strs):
     """Return lineno dict for all code objects reachable from code."""
     # get all of the lineno information from the code of this scope level
-    linenos = _find_lines_from_code(code, strs)
+    linenos = find_lines_from_code(code, strs)
 
     # and check the constants for references to other code objects
     for c in code.co_consts:
         if inspect.iscode(c):
             # find another code object, so recurse into it
-            linenos.update(_find_lines(c, strs))
+            linenos.update(find_lines(c, strs))
     return linenos
 
-def _find_strings(filename, encoding=None):
+def find_strings(filename):
     """Return a dict of possible docstring positions.
 
     The dict maps line numbers to strings.  There is an entry for
@@ -418,31 +423,29 @@ def _find_strings(filename, encoding=None):
     # If the first token is a string, then it's the module docstring.
     # Add this special case so that the test in the loop passes.
     prev_ttype = token.INDENT
-    with open(filename, encoding=encoding) as f:
-        tok = tokenize.generate_tokens(f.readline)
-        for ttype, tstr, start, end, line in tok:
-            if ttype == token.STRING:
-                if prev_ttype == token.INDENT:
-                    sline, scol = start
-                    eline, ecol = end
-                    for i in range(sline, eline + 1):
-                        d[i] = 1
-            prev_ttype = ttype
+    f = open(filename)
+    for ttype, tstr, start, end, line in tokenize.generate_tokens(f.readline):
+        if ttype == token.STRING:
+            if prev_ttype == token.INDENT:
+                sline, scol = start
+                eline, ecol = end
+                for i in range(sline, eline + 1):
+                    d[i] = 1
+        prev_ttype = ttype
+    f.close()
     return d
 
-def _find_executable_linenos(filename):
+def find_executable_linenos(filename):
     """Return dict where keys are line numbers in the line number table."""
     try:
-        with tokenize.open(filename) as f:
-            prog = f.read()
-            encoding = f.encoding
-    except IOError as err:
-        print(("Not printing coverage data for %r: %s"
-                              % (filename, err)), file=sys.stderr)
+        prog = open(filename, "rU").read()
+    except IOError, err:
+        print >> sys.stderr, ("Not printing coverage data for %r: %s"
+                              % (filename, err))
         return {}
     code = compile(prog, filename, "exec")
-    strs = _find_strings(filename, encoding)
-    return _find_lines(code, strs)
+    strs = find_strings(filename)
+    return find_lines(code, strs)
 
 class Trace:
     def __init__(self, count=1, trace=1, countfuncs=0, countcallers=0,
@@ -467,8 +470,9 @@ class Trace:
         """
         self.infile = infile
         self.outfile = outfile
-        self.ignore = _Ignore(ignoremods, ignoredirs)
+        self.ignore = Ignore(ignoremods, ignoredirs)
         self.counts = {}   # keys are (filename, linenumber)
+        self.blabbed = {} # for debugging
         self.pathtobasename = {} # for memoizing os.path.basename
         self.donothing = 0
         self.trace = trace
@@ -506,7 +510,7 @@ class Trace:
         if not self.donothing:
             _settrace(self.globaltrace)
         try:
-            exec(cmd, globals, locals)
+            exec cmd in globals, locals
         finally:
             if not self.donothing:
                 _unsettrace()
@@ -526,7 +530,7 @@ class Trace:
         code = frame.f_code
         filename = code.co_filename
         if filename:
-            modulename = _modname(filename)
+            modulename = modname(filename)
         else:
             modulename = None
 
@@ -593,15 +597,15 @@ class Trace:
             code = frame.f_code
             filename = frame.f_globals.get('__file__', None)
             if filename:
-                # XXX _modname() doesn't work right for packages, so
+                # XXX modname() doesn't work right for packages, so
                 # the ignore support won't work right for packages
-                modulename = _modname(filename)
+                modulename = modname(filename)
                 if modulename is not None:
                     ignore_it = self.ignore.names(filename, modulename)
                     if not ignore_it:
                         if self.trace:
-                            print((" --- modulename: %s, funcname: %s"
-                                   % (modulename, code.co_name)))
+                            print (" --- modulename: %s, funcname: %s"
+                                   % (modulename, code.co_name))
                         return self.localtrace
             else:
                 return None
@@ -615,10 +619,10 @@ class Trace:
             self.counts[key] = self.counts.get(key, 0) + 1
 
             if self.start_time:
-                print('%.2f' % (time.time() - self.start_time), end=' ')
+                print '%.2f' % (time.time() - self.start_time),
             bname = os.path.basename(filename)
-            print("%s(%d): %s" % (bname, lineno,
-                                  linecache.getline(filename, lineno)), end='')
+            print "%s(%d): %s" % (bname, lineno,
+                                  linecache.getline(filename, lineno)),
         return self.localtrace
 
     def localtrace_trace(self, frame, why, arg):
@@ -628,10 +632,10 @@ class Trace:
             lineno = frame.f_lineno
 
             if self.start_time:
-                print('%.2f' % (time.time() - self.start_time), end=' ')
+                print '%.2f' % (time.time() - self.start_time),
             bname = os.path.basename(filename)
-            print("%s(%d): %s" % (bname, lineno,
-                                  linecache.getline(filename, lineno)), end='')
+            print "%s(%d): %s" % (bname, lineno,
+                                  linecache.getline(filename, lineno)),
         return self.localtrace
 
     def localtrace_count(self, frame, why, arg):
@@ -666,7 +670,7 @@ def main(argv=None):
                                          "coverdir=", "listfuncs",
                                          "trackcalls", "timing"])
 
-    except getopt.error as msg:
+    except getopt.error, msg:
         sys.stderr.write("%s: %s\n" % (sys.argv[0], msg))
         sys.stderr.write("Try `%s --help' for more information\n"
                          % sys.argv[0])
@@ -801,7 +805,7 @@ def main(argv=None):
                 '__cached__': None,
             }
             t.runctx(code, globs, globs)
-        except IOError as err:
+        except IOError, err:
             _err_exit("Cannot run file %r because: %s" % (sys.argv[0], err))
         except SystemExit:
             pass
@@ -810,48 +814,6 @@ def main(argv=None):
 
         if not no_report:
             results.write_results(missing, summary=summary, coverdir=coverdir)
-
-#  Deprecated API
-def usage(outfile):
-    _warn("The trace.usage() function is deprecated",
-         DeprecationWarning, 2)
-    _usage(outfile)
-
-class Ignore(_Ignore):
-    def __init__(self, modules=None, dirs=None):
-        _warn("The class trace.Ignore is deprecated",
-             DeprecationWarning, 2)
-        _Ignore.__init__(self, modules, dirs)
-
-def modname(path):
-    _warn("The trace.modname() function is deprecated",
-         DeprecationWarning, 2)
-    return _modname(path)
-
-def fullmodname(path):
-    _warn("The trace.fullmodname() function is deprecated",
-         DeprecationWarning, 2)
-    return _fullmodname(path)
-
-def find_lines_from_code(code, strs):
-    _warn("The trace.find_lines_from_code() function is deprecated",
-         DeprecationWarning, 2)
-    return _find_lines_from_code(code, strs)
-
-def find_lines(code, strs):
-    _warn("The trace.find_lines() function is deprecated",
-         DeprecationWarning, 2)
-    return _find_lines(code, strs)
-
-def find_strings(filename, encoding=None):
-    _warn("The trace.find_strings() function is deprecated",
-         DeprecationWarning, 2)
-    return _find_strings(filename, encoding=None)
-
-def find_executable_linenos(filename):
-    _warn("The trace.find_executable_linenos() function is deprecated",
-         DeprecationWarning, 2)
-    return _find_executable_linenos(filename)
 
 if __name__=='__main__':
     main()

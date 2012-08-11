@@ -3,9 +3,9 @@
 import os
 import sys
 
-from tkinter import *
-import tkinter.messagebox as tkMessageBox
-import tkinter.filedialog as tkFileDialog
+from Tkinter import *
+import tkMessageBox
+import tkFileDialog
 
 class GetHelpSourceDialog(Toplevel):
     def __init__(self, parent, title, menuItem='', filePath=''):
@@ -164,6 +164,6 @@ if __name__ == '__main__':
     def run():
         keySeq = ''
         dlg = GetHelpSourceDialog(root, 'Get Help Source')
-        print(dlg.result)
+        print dlg.result
     Button(root,text='Dialog', command=run).pack()
     root.mainloop()

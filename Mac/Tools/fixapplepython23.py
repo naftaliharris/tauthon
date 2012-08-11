@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 """fixapplepython23 - Fix Apple-installed Python 2.3 (on Mac OS X 10.3)
 
 Python 2.3 (and 2.3.X for X<5) have the problem that building an extension
@@ -14,7 +14,7 @@ status also when nothing needs to be fixed.
 """
 import sys
 import os
-import platform
+import gestalt
 
 MAKEFILE='/System/Library/Frameworks/Python.framework/Versions/2.3/lib/python2.3/config/Makefile'
 CHANGES=((
@@ -57,35 +57,35 @@ def fix(makefile, do_apply):
             continue
         i = findline(lines, old)
         if i < 0:
-            print('fixapplepython23: Python installation not fixed (appears broken)')
-            print('fixapplepython23: missing line:', old)
+            print 'fixapplepython23: Python installation not fixed (appears broken)'
+            print 'fixapplepython23: missing line:', old
             return 2
         lines[i] = new
         fixed = True
 
     if fixed:
         if do_apply:
-            print('fixapplepython23: Fix to Apple-installed Python 2.3 applied')
+            print 'fixapplepython23: Fix to Apple-installed Python 2.3 applied'
             os.rename(makefile, makefile + '~')
             open(makefile, 'w').writelines(lines)
             return 0
         else:
-            print('fixapplepython23: Fix to Apple-installed Python 2.3 should be applied')
+            print 'fixapplepython23: Fix to Apple-installed Python 2.3 should be applied'
             return 1
     else:
-        print('fixapplepython23: No fix needed, appears to have been applied before')
+        print 'fixapplepython23: No fix needed, appears to have been applied before'
         return 0
 
 def makescript(filename, compiler):
     """Create a wrapper script for a compiler"""
     dirname = os.path.split(filename)[0]
     if not os.access(dirname, os.X_OK):
-        os.mkdir(dirname, 0o755)
+        os.mkdir(dirname, 0755)
     fp = open(filename, 'w')
     fp.write(SCRIPT % compiler)
     fp.close()
-    os.chmod(filename, 0o755)
-    print('fixapplepython23: Created', filename)
+    os.chmod(filename, 0755)
+    print 'fixapplepython23: Created', filename
 
 def main():
     # Check for -n option
@@ -96,25 +96,24 @@ def main():
     # First check OS version
     if sys.byteorder == 'little':
         # All intel macs are fine
-        print("fixapplypython23: no fix is needed on MacOSX on Intel")
+        print "fixapplypython23: no fix is needed on MacOSX on Intel"
         sys.exit(0)
 
-    osver =  platform.mac_ver()
-    if osver != '10.3' and os.ver < '10.3.':
-        print('fixapplepython23: no fix needed on MacOSX < 10.3')
+    if gestalt.gestalt('sysv') < 0x1030:
+        print 'fixapplepython23: no fix needed on MacOSX < 10.3'
         sys.exit(0)
 
-    if osver >= '10.4':
-        print('fixapplepython23: no fix needed on MacOSX >= 10.4')
+    if gestalt.gestalt('sysv') >= 0x1040:
+        print 'fixapplepython23: no fix needed on MacOSX >= 10.4'
         sys.exit(0)
 
     # Test that a framework Python is indeed installed
     if not os.path.exists(MAKEFILE):
-        print('fixapplepython23: Python framework does not appear to be installed (?), nothing fixed')
+        print 'fixapplepython23: Python framework does not appear to be installed (?), nothing fixed'
         sys.exit(0)
     # Check that we can actually write the file
     if do_apply and not os.access(MAKEFILE, os.W_OK):
-        print('fixapplepython23: No write permission, please run with "sudo"')
+        print 'fixapplepython23: No write permission, please run with "sudo"'
         sys.exit(2)
     # Create the shell scripts
     if do_apply:

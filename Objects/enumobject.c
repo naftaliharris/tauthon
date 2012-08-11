@@ -16,7 +16,7 @@ enum_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     enumobject *en;
     PyObject *seq = NULL;
     PyObject *start = NULL;
-    static char *kwlist[] = {"iterable", "start", 0};
+    static char *kwlist[] = {"sequence", "start", 0};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:enumerate", kwlist,
                                      &seq, &start))
@@ -31,8 +31,8 @@ enum_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             Py_DECREF(en);
             return NULL;
         }
-        assert(PyLong_Check(start));
-        en->en_index = PyLong_AsSsize_t(start);
+        assert(PyInt_Check(start) || PyLong_Check(start));
+        en->en_index = PyInt_AsSsize_t(start);
         if (en->en_index == -1 && PyErr_Occurred()) {
             PyErr_Clear();
             en->en_index = PY_SSIZE_T_MAX;
@@ -86,12 +86,12 @@ enum_next_long(enumobject *en, PyObject* next_item)
     PyObject *stepped_up;
 
     if (en->en_longindex == NULL) {
-        en->en_longindex = PyLong_FromSsize_t(PY_SSIZE_T_MAX);
+        en->en_longindex = PyInt_FromSsize_t(PY_SSIZE_T_MAX);
         if (en->en_longindex == NULL)
             return NULL;
     }
     if (one == NULL) {
-        one = PyLong_FromLong(1);
+        one = PyInt_FromLong(1);
         if (one == NULL)
             return NULL;
     }
@@ -134,7 +134,7 @@ enum_next(enumobject *en)
     if (en->en_index == PY_SSIZE_T_MAX)
         return enum_next_long(en, next_item);
 
-    next_index = PyLong_FromSsize_t(en->en_index);
+    next_index = PyInt_FromSsize_t(en->en_index);
     if (next_index == NULL) {
         Py_DECREF(next_item);
         return NULL;
@@ -177,7 +177,7 @@ PyTypeObject PyEnum_Type = {
     0,                              /* tp_print */
     0,                              /* tp_getattr */
     0,                              /* tp_setattr */
-    0,                              /* tp_reserved */
+    0,                              /* tp_compare */
     0,                              /* tp_repr */
     0,                              /* tp_as_number */
     0,                              /* tp_as_sequence */
@@ -233,14 +233,26 @@ reversed_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (!PyArg_UnpackTuple(args, "reversed", 1, 1, &seq) )
         return NULL;
 
-    reversed_meth = _PyObject_LookupSpecial(seq, "__reversed__", &reversed_cache);
+    if (PyInstance_Check(seq)) {
+        reversed_meth = PyObject_GetAttrString(seq, "__reversed__");
+        if (reversed_meth == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                PyErr_Clear();
+            else
+                return NULL;
+        }
+    }
+    else {
+        reversed_meth = _PyObject_LookupSpecial(seq, "__reversed__",
+                                                &reversed_cache);
+        if (reversed_meth == NULL && PyErr_Occurred())
+            return NULL;
+    }
     if (reversed_meth != NULL) {
         PyObject *res = PyObject_CallFunctionObjArgs(reversed_meth, NULL);
         Py_DECREF(reversed_meth);
         return res;
     }
-    else if (PyErr_Occurred())
-        return NULL;
 
     if (!PySequence_Check(seq)) {
         PyErr_SetString(PyExc_TypeError,
@@ -309,12 +321,12 @@ reversed_len(reversedobject *ro)
     Py_ssize_t position, seqsize;
 
     if (ro->seq == NULL)
-        return PyLong_FromLong(0);
+        return PyInt_FromLong(0);
     seqsize = PySequence_Size(ro->seq);
     if (seqsize == -1)
         return NULL;
     position = ro->index + 1;
-    return PyLong_FromSsize_t((seqsize < position)  ?  0  :  position);
+    return PyInt_FromSsize_t((seqsize < position)  ?  0  :  position);
 }
 
 PyDoc_STRVAR(length_hint_doc, "Private method returning an estimate of len(list(it)).");
@@ -334,7 +346,7 @@ PyTypeObject PyReversed_Type = {
     0,                              /* tp_print */
     0,                              /* tp_getattr */
     0,                              /* tp_setattr */
-    0,                              /* tp_reserved */
+    0,                              /* tp_compare */
     0,                              /* tp_repr */
     0,                              /* tp_as_number */
     0,                                  /* tp_as_sequence */

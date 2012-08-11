@@ -19,9 +19,9 @@ configuration problem notification and resolution.
 """
 import os
 import sys
-
+import string
 from idlelib import macosxSupport
-from configparser import ConfigParser, NoOptionError, NoSectionError
+from ConfigParser import ConfigParser, NoOptionError, NoSectionError
 
 class InvalidConfigType(Exception): pass
 class InvalidConfigSet(Exception): pass
@@ -270,13 +270,13 @@ class IdleConf:
         configType must be one of ('main','extensions','highlight','keys')
         """
         if not (configType in ('main','extensions','highlight','keys')):
-            raise InvalidConfigType('Invalid configType specified')
+            raise InvalidConfigType, 'Invalid configType specified'
         if configSet == 'user':
             cfgParser=self.userCfg[configType]
         elif configSet == 'default':
             cfgParser=self.defaultCfg[configType]
         else:
-            raise InvalidConfigSet('Invalid configSet specified')
+            raise InvalidConfigSet, 'Invalid configSet specified'
         return cfgParser.sections()
 
     def GetHighlight(self, theme, element, fgBg=None):
@@ -304,7 +304,7 @@ class IdleConf:
             if fgBg == 'bg':
                 return highlight["background"]
             else:
-                raise InvalidFgBg('Invalid fgBg specified')
+                raise InvalidFgBg, 'Invalid fgBg specified'
 
     def GetThemeDict(self,type,themeName):
         """
@@ -320,7 +320,7 @@ class IdleConf:
         elif type == 'default':
             cfgParser=self.defaultCfg['highlight']
         else:
-            raise InvalidTheme('Invalid theme type specified')
+            raise InvalidTheme, 'Invalid theme type specified'
         #foreground and background values are provded for each theme element
         #(apart from cursor) even though all these values are not yet used
         #by idle, to allow for their use in the future. Default values are
@@ -354,7 +354,7 @@ class IdleConf:
                 'stderr-background':'#ffffff',
                 'console-foreground':'#000000',
                 'console-background':'#ffffff' }
-        for element in theme:
+        for element in theme.keys():
             if not cfgParser.has_option(themeName,element):
                 #we are going to return a default, print warning
                 warning=('\n Warning: configHandler.py - IdleConf.GetThemeDict'
@@ -438,7 +438,7 @@ class IdleConf:
         extName=None
         vEvent='<<'+virtualEvent+'>>'
         for extn in self.GetExtensions(active_only=0):
-            for event in self.GetExtensionKeys(extn):
+            for event in self.GetExtensionKeys(extn).keys():
                 if event == vEvent:
                     extName=extn
         return extName
@@ -533,7 +533,7 @@ class IdleConf:
         for extn in activeExtns:
             extKeys=self.__GetRawExtensionKeys(extn)
             if extKeys: #the extension defines keybindings
-                for event in extKeys:
+                for event in extKeys.keys():
                     if extKeys[event] in keySet.values():
                         #the binding is already in use
                         extKeys[event]='' #disable this binding
@@ -546,7 +546,7 @@ class IdleConf:
         virtualEvent - string, name of the virtual event to test for, without
                        the enclosing '<< >>'
         """
-        return ('<<'+virtualEvent+'>>') in self.GetCoreKeys()
+        return ('<<'+virtualEvent+'>>') in self.GetCoreKeys().keys()
 
     def GetCoreKeys(self, keySetName=None):
         """
@@ -595,7 +595,7 @@ class IdleConf:
             '<<replace>>': ['<Control-h>'],
             '<<goto-line>>': ['<Alt-g>'],
             '<<smart-backspace>>': ['<Key-BackSpace>'],
-            '<<newline-and-indent>>': ['<Key-Return> <Key-KP_Enter>'],
+            '<<newline-and-indent>>': ['<Key-Return>', '<Key-KP_Enter>'],
             '<<smart-indent>>': ['<Key-Tab>'],
             '<<indent-region>>': ['<Control-Key-bracketright>'],
             '<<dedent-region>>': ['<Control-Key-bracketleft>'],
@@ -609,7 +609,7 @@ class IdleConf:
             '<<del-word-right>>': ['<Control-Key-Delete>']
             }
         if keySetName:
-            for event in keyBindings:
+            for event in keyBindings.keys():
                 binding=self.GetKeyBinding(keySetName,event)
                 if binding:
                     keyBindings[event]=binding
@@ -641,7 +641,7 @@ class IdleConf:
         elif configSet=='default':
             cfgParser=self.defaultCfg['main']
         else:
-            raise InvalidConfigSet('Invalid configSet specified')
+            raise InvalidConfigSet, 'Invalid configSet specified'
         options=cfgParser.GetOptionList('HelpFiles')
         for option in options:
             value=cfgParser.Get('HelpFiles',option,default=';')
@@ -649,12 +649,12 @@ class IdleConf:
                 menuItem='' #make these empty
                 helpPath='' #so value won't be added to list
             else: #config entry contains ';' as expected
-                value=value.split(';')
+                value=string.split(value,';')
                 menuItem=value[0].strip()
                 helpPath=value[1].strip()
             if menuItem and helpPath: #neither are empty strings
                 helpSources.append( (menuItem,helpPath,option) )
-        helpSources.sort(key=lambda x: x[2])
+        helpSources.sort(key=lambda x: int(x[2]))
         return helpSources
 
     def GetAllExtraHelpSourcesList(self):
@@ -671,7 +671,7 @@ class IdleConf:
         """
         load all configuration files.
         """
-        for key in self.defaultCfg:
+        for key in self.defaultCfg.keys():
             self.defaultCfg[key].Load()
             self.userCfg[key].Load() #same keys
 
@@ -679,7 +679,7 @@ class IdleConf:
         """
         write all loaded user configuration files back to disk
         """
-        for key in self.userCfg:
+        for key in self.userCfg.keys():
             self.userCfg[key].Save()
 
 idleConf=IdleConf()
@@ -687,18 +687,18 @@ idleConf=IdleConf()
 ### module test
 if __name__ == '__main__':
     def dumpCfg(cfg):
-        print('\n',cfg,'\n')
-        for key in cfg:
+        print '\n',cfg,'\n'
+        for key in cfg.keys():
             sections=cfg[key].sections()
-            print(key)
-            print(sections)
+            print key
+            print sections
             for section in sections:
                 options=cfg[key].options(section)
-                print(section)
-                print(options)
+                print section
+                print options
                 for option in options:
-                    print(option, '=', cfg[key].Get(section,option))
+                    print option, '=', cfg[key].Get(section,option)
     dumpCfg(idleConf.defaultCfg)
     dumpCfg(idleConf.userCfg)
-    print(idleConf.userCfg['main'].Get('Theme','name'))
+    print idleConf.userCfg['main'].Get('Theme','name')
     #print idleConf.userCfg['highlight'].GetDefHighlight('Foo','normal')

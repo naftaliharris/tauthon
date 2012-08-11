@@ -7,6 +7,9 @@
 .. moduleauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 .. sectionauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 
+
+.. versionadded:: 1.5.2
+
 **Source code:** :source:`Lib/netrc.py`
 
 --------------
@@ -69,8 +72,9 @@ Instances of :class:`netrc` have public instance variables:
 
 .. note::
 
-   Passwords are limited to a subset of the ASCII character set.  All ASCII
-   punctuation is allowed in passwords, however, note that whitespace and
+   Passwords are limited to a subset of the ASCII character set. Versions of
+   this module prior to 2.3 were extremely limited.  Starting with 2.3, all
+   ASCII punctuation is allowed in passwords.  However, note that whitespace and
    non-printable characters are not allowed in passwords.  This is a limitation
    of the way the .netrc file is parsed and may be removed in the future.
 

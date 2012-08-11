@@ -255,7 +255,7 @@ def iterfind(elem, path, namespaces=None):
             _cache.clear()
         if path[:1] == "/":
             raise SyntaxError("cannot use absolute path on element")
-        next = iter(xpath_tokenizer(path, namespaces)).__next__
+        next = iter(xpath_tokenizer(path, namespaces)).next
         token = next()
         selector = []
         while 1:
@@ -282,7 +282,7 @@ def iterfind(elem, path, namespaces=None):
 
 def find(elem, path, namespaces=None):
     try:
-        return next(iterfind(elem, path, namespaces))
+        return iterfind(elem, path, namespaces).next()
     except StopIteration:
         return None
 
@@ -297,7 +297,7 @@ def findall(elem, path, namespaces=None):
 
 def findtext(elem, path, default=None, namespaces=None):
     try:
-        elem = next(iterfind(elem, path, namespaces))
+        elem = iterfind(elem, path, namespaces).next()
         return elem.text or ""
     except StopIteration:
         return default

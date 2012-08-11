@@ -7,7 +7,7 @@ TabbedPageSet -- A Tkinter implementation of a tabbed-page widget.
 TabSet -- A widget containing tabs (buttons) in one or more rows.
 
 """
-from tkinter import *
+from Tkinter import *
 
 class InvalidNameError(Exception): pass
 class AlreadyExistsError(Exception): pass
@@ -143,8 +143,8 @@ class TabSet(Frame):
 
         """
         # remove all tabs and rows
-        while self._tabs:
-            self._tabs.popitem()[1].destroy()
+        for tab_name in self._tabs.keys():
+            self._tabs.pop(tab_name).destroy()
         self._reset_tab_rows()
 
         if not self._tab_names:
@@ -159,7 +159,7 @@ class TabSet(Frame):
         # not expanding the tabs with more than one row is very ugly
         expand_tabs = self.expand_tabs or n_rows > 1
         i = 0 # index in self._tab_names
-        for row_index in range(n_rows):
+        for row_index in xrange(n_rows):
             # calculate required number of tabs in this row
             n_tabs = (len(self._tab_names) - i - 1) // (n_rows - row_index) + 1
             tab_names = self._tab_names[i:i + n_tabs]

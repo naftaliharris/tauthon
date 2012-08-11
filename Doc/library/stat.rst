@@ -2,8 +2,7 @@
 =================================================
 
 .. module:: stat
-   :synopsis: Utilities for interpreting the results of os.stat(),
-              os.lstat() and os.fstat().
+   :synopsis: Utilities for interpreting the results of os.stat(), os.lstat() and os.fstat().
 .. sectionauthor:: Skip Montanaro <skip@automatrix.com>
 
 **Source code:** :source:`Lib/stat.py`
@@ -87,7 +86,7 @@ Example::
 
        for f in os.listdir(top):
            pathname = os.path.join(top, f)
-           mode = os.stat(pathname)[ST_MODE]
+           mode = os.stat(pathname).st_mode
            if S_ISDIR(mode):
                # It's a directory, recurse into it
                walktree(pathname, callback)
@@ -96,10 +95,10 @@ Example::
                callback(pathname)
            else:
                # Unknown file type, print a message
-               print('Skipping %s' % pathname)
+               print 'Skipping %s' % pathname
 
    def visitfile(file):
-       print('visiting', file)
+       print 'visiting', file
 
    if __name__ == '__main__':
        walktree(sys.argv[1], visitfile)
@@ -309,11 +308,19 @@ The following flags can be used in the *flags* argument of :func:`os.chflags`:
 
 .. data:: UF_OPAQUE
 
-   The file may not be renamed or deleted.
+   The directory is opaque when viewed through a union stack.
 
 .. data:: UF_NOUNLINK
 
-   The directory is opaque when viewed through a union stack.
+   The file may not be renamed or deleted.
+
+.. data:: UF_COMPRESSED
+
+   The file is stored compressed (Mac OS X 10.6+).
+
+.. data:: UF_HIDDEN
+
+   The file should not be displayed in a GUI (Mac OS X 10.5+).
 
 .. data:: SF_ARCHIVED
 

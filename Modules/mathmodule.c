@@ -69,7 +69,6 @@ extern double copysign(double, double);
 
 static const double pi = 3.141592653589793238462643383279502884197;
 static const double sqrtpi = 1.772453850905516027298167483341145182798;
-static const double logpi = 1.144729885849400174143427351353058711647;
 
 static double
 sinpi(double x)
@@ -357,15 +356,20 @@ m_lgamma(double x)
     if (absx < 1e-20)
         return -log(absx);
 
-    /* Lanczos' formula.  We could save a fraction of a ulp in accuracy by
-       having a second set of numerator coefficients for lanczos_sum that
-       absorbed the exp(-lanczos_g) term, and throwing out the lanczos_g
-       subtraction below; it's probably not worth it. */
-    r = log(lanczos_sum(absx)) - lanczos_g;
-    r += (absx - 0.5) * (log(absx + lanczos_g - 0.5) - 1);
-    if (x < 0.0)
-        /* Use reflection formula to get value for negative x. */
-        r = logpi - log(fabs(sinpi(absx))) - log(absx) - r;
+    /* Lanczos' formula */
+    if (x > 0.0) {
+        /* we could save a fraction of a ulp in accuracy by having a
+           second set of numerator coefficients for lanczos_sum that
+           absorbed the exp(-lanczos_g) term, and throwing out the
+           lanczos_g subtraction below; it's probably not worth it. */
+        r = log(lanczos_sum(x)) - lanczos_g +
+            (x-0.5)*(log(x+lanczos_g-0.5)-1);
+    }
+    else {
+        r = log(pi) - log(fabs(sinpi(absx))) - log(absx) -
+            (log(lanczos_sum(absx)) - lanczos_g +
+             (absx-0.5)*(log(absx+lanczos_g-0.5)-1));
+    }
     if (Py_IS_INFINITY(r))
         errno = ERANGE;
     return r;
@@ -676,9 +680,7 @@ is_error(double x)
 */
 
 static PyObject *
-math_1_to_whatever(PyObject *arg, double (*func) (double),
-                   PyObject *(*from_double_func) (double),
-                   int can_overflow)
+math_1(PyObject *arg, double (*func) (double), int can_overflow)
 {
     double x, r;
     x = PyFloat_AsDouble(arg);
@@ -688,25 +690,22 @@ math_1_to_whatever(PyObject *arg, double (*func) (double),
     PyFPE_START_PROTECT("in math_1", return 0);
     r = (*func)(x);
     PyFPE_END_PROTECT(r);
-    if (Py_IS_NAN(r) && !Py_IS_NAN(x)) {
-        PyErr_SetString(PyExc_ValueError,
-                        "math domain error"); /* invalid arg */
-        return NULL;
+    if (Py_IS_NAN(r)) {
+        if (!Py_IS_NAN(x))
+            errno = EDOM;
+        else
+            errno = 0;
     }
-    if (Py_IS_INFINITY(r) && Py_IS_FINITE(x)) {
-                    if (can_overflow)
-                            PyErr_SetString(PyExc_OverflowError,
-                                    "math range error"); /* overflow */
-            else
-                PyErr_SetString(PyExc_ValueError,
-                    "math domain error"); /* singularity */
-            return NULL;
+    else if (Py_IS_INFINITY(r)) {
+        if (Py_IS_FINITE(x))
+            errno = can_overflow ? ERANGE : EDOM;
+        else
+            errno = 0;
     }
-    if (Py_IS_FINITE(r) && errno && is_error(r))
-        /* this branch unnecessary on most platforms */
+    if (errno && is_error(r))
         return NULL;
-
-    return (*from_double_func)(r);
+    else
+        return PyFloat_FromDouble(r);
 }
 
 /* variant of math_1, to be used when the function being wrapped is known to
@@ -755,18 +754,6 @@ math_1a(PyObject *arg, double (*func) (double))
    ValueError and the 'overflow' floating-point exception mapping to
    OverflowError.
 */
-
-static PyObject *
-math_1(PyObject *arg, double (*func) (double), int can_overflow)
-{
-    return math_1_to_whatever(arg, func, PyFloat_FromDouble, can_overflow);
-}
-
-static PyObject *
-math_1_to_int(PyObject *arg, double (*func) (double), int can_overflow)
-{
-    return math_1_to_whatever(arg, func, PyLong_FromDouble, can_overflow);
-}
 
 static PyObject *
 math_2(PyObject *args, double (*func) (double, double), char *funcname)
@@ -834,26 +821,9 @@ FUNC2(atan2, m_atan2,
       "Unlike atan(y/x), the signs of both x and y are considered.")
 FUNC1(atanh, m_atanh, 0,
       "atanh(x)\n\nReturn the hyperbolic arc tangent (measured in radians) of x.")
-
-static PyObject * math_ceil(PyObject *self, PyObject *number) {
-    static PyObject *ceil_str = NULL;
-    PyObject *method, *result;
-
-    method = _PyObject_LookupSpecial(number, "__ceil__", &ceil_str);
-    if (method == NULL) {
-        if (PyErr_Occurred())
-            return NULL;
-        return math_1_to_int(number, ceil, 0);
-    }
-    result = PyObject_CallFunctionObjArgs(method, NULL);
-    Py_DECREF(method);
-    return result;
-}
-
-PyDoc_STRVAR(math_ceil_doc,
-             "ceil(x)\n\nReturn the ceiling of x as an int.\n"
-             "This is the smallest integral value >= x.");
-
+FUNC1(ceil, ceil, 0,
+      "ceil(x)\n\nReturn the ceiling of x as a float.\n"
+      "This is the smallest integral value >= x.")
 FUNC2(copysign, copysign,
       "copysign(x, y)\n\nReturn x with the sign of y.")
 FUNC1(cos, cos, 0,
@@ -872,31 +842,14 @@ FUNC1(expm1, m_expm1, 1,
       "evaluation of exp(x)-1 for small x.")
 FUNC1(fabs, fabs, 0,
       "fabs(x)\n\nReturn the absolute value of the float x.")
-
-static PyObject * math_floor(PyObject *self, PyObject *number) {
-    static PyObject *floor_str = NULL;
-    PyObject *method, *result;
-
-    method = _PyObject_LookupSpecial(number, "__floor__", &floor_str);
-    if (method == NULL) {
-        if (PyErr_Occurred())
-            return NULL;
-        return math_1_to_int(number, floor, 0);
-    }
-    result = PyObject_CallFunctionObjArgs(method, NULL);
-    Py_DECREF(method);
-    return result;
-}
-
-PyDoc_STRVAR(math_floor_doc,
-             "floor(x)\n\nReturn the floor of x as an int.\n"
-             "This is the largest integral value <= x.");
-
+FUNC1(floor, floor, 0,
+      "floor(x)\n\nReturn the floor of x as a float.\n"
+      "This is the largest integral value <= x.")
 FUNC1A(gamma, m_tgamma,
       "gamma(x)\n\nGamma function at x.")
 FUNC1A(lgamma, m_lgamma,
       "lgamma(x)\n\nNatural logarithm of absolute value of Gamma function at x.")
-FUNC1(log1p, m_log1p, 0,
+FUNC1(log1p, m_log1p, 1,
       "log1p(x)\n\nReturn the natural logarithm of 1+x (base e).\n"
       "The result is computed in a way which is accurate for x near zero.")
 FUNC1(sin, sin, 0,
@@ -1131,239 +1084,18 @@ PyDoc_STRVAR(math_fsum_doc,
 Return an accurate floating point sum of values in the iterable.\n\
 Assumes IEEE-754 floating point arithmetic.");
 
-/* Return the smallest integer k such that n < 2**k, or 0 if n == 0.
- * Equivalent to floor(lg(x))+1.  Also equivalent to: bitwidth_of_type -
- * count_leading_zero_bits(x)
- */
-
-/* XXX: This routine does more or less the same thing as
- * bits_in_digit() in Objects/longobject.c.  Someday it would be nice to
- * consolidate them.  On BSD, there's a library function called fls()
- * that we could use, and GCC provides __builtin_clz().
- */
-
-static unsigned long
-bit_length(unsigned long n)
-{
-    unsigned long len = 0;
-    while (n != 0) {
-        ++len;
-        n >>= 1;
-    }
-    return len;
-}
-
-static unsigned long
-count_set_bits(unsigned long n)
-{
-    unsigned long count = 0;
-    while (n != 0) {
-        ++count;
-        n &= n - 1; /* clear least significant bit */
-    }
-    return count;
-}
-
-/* Divide-and-conquer factorial algorithm
- *
- * Based on the formula and psuedo-code provided at:
- * http://www.luschny.de/math/factorial/binarysplitfact.html
- *
- * Faster algorithms exist, but they're more complicated and depend on
- * a fast prime factorization algorithm.
- *
- * Notes on the algorithm
- * ----------------------
- *
- * factorial(n) is written in the form 2**k * m, with m odd.  k and m are
- * computed separately, and then combined using a left shift.
- *
- * The function factorial_odd_part computes the odd part m (i.e., the greatest
- * odd divisor) of factorial(n), using the formula:
- *
- *   factorial_odd_part(n) =
- *
- *        product_{i >= 0} product_{0 < j <= n / 2**i, j odd} j
- *
- * Example: factorial_odd_part(20) =
- *
- *        (1) *
- *        (1) *
- *        (1 * 3 * 5) *
- *        (1 * 3 * 5 * 7 * 9)
- *        (1 * 3 * 5 * 7 * 9 * 11 * 13 * 15 * 17 * 19)
- *
- * Here i goes from large to small: the first term corresponds to i=4 (any
- * larger i gives an empty product), and the last term corresponds to i=0.
- * Each term can be computed from the last by multiplying by the extra odd
- * numbers required: e.g., to get from the penultimate term to the last one,
- * we multiply by (11 * 13 * 15 * 17 * 19).
- *
- * To see a hint of why this formula works, here are the same numbers as above
- * but with the even parts (i.e., the appropriate powers of 2) included.  For
- * each subterm in the product for i, we multiply that subterm by 2**i:
- *
- *   factorial(20) =
- *
- *        (16) *
- *        (8) *
- *        (4 * 12 * 20) *
- *        (2 * 6 * 10 * 14 * 18) *
- *        (1 * 3 * 5 * 7 * 9 * 11 * 13 * 15 * 17 * 19)
- *
- * The factorial_partial_product function computes the product of all odd j in
- * range(start, stop) for given start and stop.  It's used to compute the
- * partial products like (11 * 13 * 15 * 17 * 19) in the example above.  It
- * operates recursively, repeatedly splitting the range into two roughly equal
- * pieces until the subranges are small enough to be computed using only C
- * integer arithmetic.
- *
- * The two-valuation k (i.e., the exponent of the largest power of 2 dividing
- * the factorial) is computed independently in the main math_factorial
- * function.  By standard results, its value is:
- *
- *    two_valuation = n//2 + n//4 + n//8 + ....
- *
- * It can be shown (e.g., by complete induction on n) that two_valuation is
- * equal to n - count_set_bits(n), where count_set_bits(n) gives the number of
- * '1'-bits in the binary expansion of n.
- */
-
-/* factorial_partial_product: Compute product(range(start, stop, 2)) using
- * divide and conquer.  Assumes start and stop are odd and stop > start.
- * max_bits must be >= bit_length(stop - 2). */
-
-static PyObject *
-factorial_partial_product(unsigned long start, unsigned long stop,
-                          unsigned long max_bits)
-{
-    unsigned long midpoint, num_operands;
-    PyObject *left = NULL, *right = NULL, *result = NULL;
-
-    /* If the return value will fit an unsigned long, then we can
-     * multiply in a tight, fast loop where each multiply is O(1).
-     * Compute an upper bound on the number of bits required to store
-     * the answer.
-     *
-     * Storing some integer z requires floor(lg(z))+1 bits, which is
-     * conveniently the value returned by bit_length(z).  The
-     * product x*y will require at most
-     * bit_length(x) + bit_length(y) bits to store, based
-     * on the idea that lg product = lg x + lg y.
-     *
-     * We know that stop - 2 is the largest number to be multiplied.  From
-     * there, we have: bit_length(answer) <= num_operands *
-     * bit_length(stop - 2)
-     */
-
-    num_operands = (stop - start) / 2;
-    /* The "num_operands <= 8 * SIZEOF_LONG" check guards against the
-     * unlikely case of an overflow in num_operands * max_bits. */
-    if (num_operands <= 8 * SIZEOF_LONG &&
-        num_operands * max_bits <= 8 * SIZEOF_LONG) {
-        unsigned long j, total;
-        for (total = start, j = start + 2; j < stop; j += 2)
-            total *= j;
-        return PyLong_FromUnsignedLong(total);
-    }
-
-    /* find midpoint of range(start, stop), rounded up to next odd number. */
-    midpoint = (start + num_operands) | 1;
-    left = factorial_partial_product(start, midpoint,
-                                     bit_length(midpoint - 2));
-    if (left == NULL)
-        goto error;
-    right = factorial_partial_product(midpoint, stop, max_bits);
-    if (right == NULL)
-        goto error;
-    result = PyNumber_Multiply(left, right);
-
-  error:
-    Py_XDECREF(left);
-    Py_XDECREF(right);
-    return result;
-}
-
-/* factorial_odd_part:  compute the odd part of factorial(n). */
-
-static PyObject *
-factorial_odd_part(unsigned long n)
-{
-    long i;
-    unsigned long v, lower, upper;
-    PyObject *partial, *tmp, *inner, *outer;
-
-    inner = PyLong_FromLong(1);
-    if (inner == NULL)
-        return NULL;
-    outer = inner;
-    Py_INCREF(outer);
-
-    upper = 3;
-    for (i = bit_length(n) - 2; i >= 0; i--) {
-        v = n >> i;
-        if (v <= 2)
-            continue;
-        lower = upper;
-        /* (v + 1) | 1 = least odd integer strictly larger than n / 2**i */
-        upper = (v + 1) | 1;
-        /* Here inner is the product of all odd integers j in the range (0,
-           n/2**(i+1)].  The factorial_partial_product call below gives the
-           product of all odd integers j in the range (n/2**(i+1), n/2**i]. */
-        partial = factorial_partial_product(lower, upper, bit_length(upper-2));
-        /* inner *= partial */
-        if (partial == NULL)
-            goto error;
-        tmp = PyNumber_Multiply(inner, partial);
-        Py_DECREF(partial);
-        if (tmp == NULL)
-            goto error;
-        Py_DECREF(inner);
-        inner = tmp;
-        /* Now inner is the product of all odd integers j in the range (0,
-           n/2**i], giving the inner product in the formula above. */
-
-        /* outer *= inner; */
-        tmp = PyNumber_Multiply(outer, inner);
-        if (tmp == NULL)
-            goto error;
-        Py_DECREF(outer);
-        outer = tmp;
-    }
-
-    goto done;
-
-  error:
-    Py_DECREF(outer);
-  done:
-    Py_DECREF(inner);
-    return outer;
-}
-
-/* Lookup table for small factorial values */
-
-static const unsigned long SmallFactorials[] = {
-    1, 1, 2, 6, 24, 120, 720, 5040, 40320,
-    362880, 3628800, 39916800, 479001600,
-#if SIZEOF_LONG >= 8
-    6227020800, 87178291200, 1307674368000,
-    20922789888000, 355687428096000, 6402373705728000,
-    121645100408832000, 2432902008176640000
-#endif
-};
-
 static PyObject *
 math_factorial(PyObject *self, PyObject *arg)
 {
-    long x;
-    PyObject *result, *odd_part, *two_valuation;
+    long i, x;
+    PyObject *result, *iobj, *newresult;
 
     if (PyFloat_Check(arg)) {
         PyObject *lx;
         double dx = PyFloat_AS_DOUBLE((PyFloatObject *)arg);
         if (!(Py_IS_FINITE(dx) && dx == floor(dx))) {
             PyErr_SetString(PyExc_ValueError,
-                            "factorial() only accepts integral values");
+                "factorial() only accepts integral values");
             return NULL;
         }
         lx = PyLong_FromDouble(dx);
@@ -1373,34 +1105,35 @@ math_factorial(PyObject *self, PyObject *arg)
         Py_DECREF(lx);
     }
     else
-        x = PyLong_AsLong(arg);
+        x = PyInt_AsLong(arg);
 
     if (x == -1 && PyErr_Occurred())
         return NULL;
     if (x < 0) {
         PyErr_SetString(PyExc_ValueError,
-                        "factorial() not defined for negative values");
+            "factorial() not defined for negative values");
         return NULL;
     }
 
-    /* use lookup table if x is small */
-    if (x < (long)(sizeof(SmallFactorials)/sizeof(SmallFactorials[0])))
-        return PyLong_FromUnsignedLong(SmallFactorials[x]);
-
-    /* else express in the form odd_part * 2**two_valuation, and compute as
-       odd_part << two_valuation. */
-    odd_part = factorial_odd_part(x);
-    if (odd_part == NULL)
+    result = (PyObject *)PyInt_FromLong(1);
+    if (result == NULL)
         return NULL;
-    two_valuation = PyLong_FromLong(x - count_set_bits(x));
-    if (two_valuation == NULL) {
-        Py_DECREF(odd_part);
-        return NULL;
+    for (i=1 ; i<=x ; i++) {
+        iobj = (PyObject *)PyInt_FromLong(i);
+        if (iobj == NULL)
+            goto error;
+        newresult = PyNumber_Multiply(result, iobj);
+        Py_DECREF(iobj);
+        if (newresult == NULL)
+            goto error;
+        Py_DECREF(result);
+        result = newresult;
     }
-    result = PyNumber_Lshift(odd_part, two_valuation);
-    Py_DECREF(two_valuation);
-    Py_DECREF(odd_part);
     return result;
+
+error:
+    Py_DECREF(result);
+    return NULL;
 }
 
 PyDoc_STRVAR(math_factorial_doc,
@@ -1411,25 +1144,7 @@ PyDoc_STRVAR(math_factorial_doc,
 static PyObject *
 math_trunc(PyObject *self, PyObject *number)
 {
-    static PyObject *trunc_str = NULL;
-    PyObject *trunc, *result;
-
-    if (Py_TYPE(number)->tp_dict == NULL) {
-        if (PyType_Ready(Py_TYPE(number)) < 0)
-            return NULL;
-    }
-
-    trunc = _PyObject_LookupSpecial(number, "__trunc__", &trunc_str);
-    if (trunc == NULL) {
-        if (!PyErr_Occurred())
-            PyErr_Format(PyExc_TypeError,
-                         "type %.100s doesn't define __trunc__ method",
-                         Py_TYPE(number)->tp_name);
-        return NULL;
-    }
-    result = PyObject_CallFunctionObjArgs(trunc, NULL);
-    Py_DECREF(trunc);
-    return result;
+    return PyObject_CallMethod(number, "__trunc__", NULL);
 }
 
 PyDoc_STRVAR(math_trunc_doc,
@@ -1474,7 +1189,7 @@ math_ldexp(PyObject *self, PyObject *args)
     if (! PyArg_ParseTuple(args, "dO:ldexp", &x, &oexp))
         return NULL;
 
-    if (PyLong_Check(oexp)) {
+    if (PyLong_Check(oexp) || PyInt_Check(oexp)) {
         /* on overflow, replace exponent with either LONG_MAX
            or LONG_MIN, depending on the sign. */
         exp = PyLong_AsLongAndOverflow(oexp, &overflow);
@@ -1562,33 +1277,23 @@ loghelper(PyObject* arg, double (*func)(double), char *funcname)
 {
     /* If it is long, do it ourselves. */
     if (PyLong_Check(arg)) {
-        double x, result;
+        double x;
         Py_ssize_t e;
-
-        /* Negative or zero inputs give a ValueError. */
-        if (Py_SIZE(arg) <= 0) {
+        x = _PyLong_Frexp((PyLongObject *)arg, &e);
+        if (x == -1.0 && PyErr_Occurred())
+            return NULL;
+        if (x <= 0.0) {
             PyErr_SetString(PyExc_ValueError,
                             "math domain error");
             return NULL;
         }
-
-        x = PyLong_AsDouble(arg);
-        if (x == -1.0 && PyErr_Occurred()) {
-            if (!PyErr_ExceptionMatches(PyExc_OverflowError))
-                return NULL;
-            /* Here the conversion to double overflowed, but it's possible
-               to compute the log anyway.  Clear the exception and continue. */
-            PyErr_Clear();
-            x = _PyLong_Frexp((PyLongObject *)arg, &e);
-            if (x == -1.0 && PyErr_Occurred())
-                return NULL;
-            /* Value is ~= x * 2**e, so the log ~= log(x) + log(2) * e. */
-            result = func(x) + func(2.0) * e;
-        }
-        else
-            /* Successfully converted x to a double. */
-            result = func(x);
-        return PyFloat_FromDouble(result);
+        /* Special case for log(1), to make sure we get an
+           exact result there. */
+        if (e == 1 && x == 0.5)
+            return PyFloat_FromDouble(0.0);
+        /* Value is ~= x * 2**e, so the log ~= log(x) + log(2) * e. */
+        x = func(x) + func(2.0) * e;
+        return PyFloat_FromDouble(x);
     }
 
     /* Else let libm handle it by itself. */
@@ -1616,7 +1321,7 @@ math_log(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    ans = PyNumber_TrueDivide(num, den);
+    ans = PyNumber_Divide(num, den);
     Py_DECREF(num);
     Py_DECREF(den);
     return ans;
@@ -1828,19 +1533,6 @@ PyDoc_STRVAR(math_radians_doc,
 Convert angle x from degrees to radians.");
 
 static PyObject *
-math_isfinite(PyObject *self, PyObject *arg)
-{
-    double x = PyFloat_AsDouble(arg);
-    if (x == -1.0 && PyErr_Occurred())
-        return NULL;
-    return PyBool_FromLong((long)Py_IS_FINITE(x));
-}
-
-PyDoc_STRVAR(math_isfinite_doc,
-"isfinite(x) -> bool\n\n\
-Return True if x is neither an infinity nor a NaN, and False otherwise.");
-
-static PyObject *
 math_isnan(PyObject *self, PyObject *arg)
 {
     double x = PyFloat_AsDouble(arg);
@@ -1851,7 +1543,7 @@ math_isnan(PyObject *self, PyObject *arg)
 
 PyDoc_STRVAR(math_isnan_doc,
 "isnan(x) -> bool\n\n\
-Return True if x is a NaN (not a number), and False otherwise.");
+Check if float x is not a number (NaN).");
 
 static PyObject *
 math_isinf(PyObject *self, PyObject *arg)
@@ -1864,7 +1556,7 @@ math_isinf(PyObject *self, PyObject *arg)
 
 PyDoc_STRVAR(math_isinf_doc,
 "isinf(x) -> bool\n\n\
-Return True if x is a positive or negative infinity, and False otherwise.");
+Check if float x is infinite (positive or negative).");
 
 static PyMethodDef math_methods[] = {
     {"acos",            math_acos,      METH_O,         math_acos_doc},
@@ -1891,7 +1583,6 @@ static PyMethodDef math_methods[] = {
     {"fsum",            math_fsum,      METH_O,         math_fsum_doc},
     {"gamma",           math_gamma,     METH_O,         math_gamma_doc},
     {"hypot",           math_hypot,     METH_VARARGS,   math_hypot_doc},
-    {"isfinite",        math_isfinite,  METH_O,         math_isfinite_doc},
     {"isinf",           math_isinf,     METH_O,         math_isinf_doc},
     {"isnan",           math_isnan,     METH_O,         math_isnan_doc},
     {"ldexp",           math_ldexp,     METH_VARARGS,   math_ldexp_doc},
@@ -1916,25 +1607,12 @@ PyDoc_STRVAR(module_doc,
 "This module is always available.  It provides access to the\n"
 "mathematical functions defined by the C standard.");
 
-
-static struct PyModuleDef mathmodule = {
-    PyModuleDef_HEAD_INIT,
-    "math",
-    module_doc,
-    -1,
-    math_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_math(void)
+initmath(void)
 {
     PyObject *m;
 
-    m = PyModule_Create(&mathmodule);
+    m = Py_InitModule3("math", math_methods, module_doc);
     if (m == NULL)
         goto finally;
 
@@ -1942,5 +1620,5 @@ PyInit_math(void)
     PyModule_AddObject(m, "e", PyFloat_FromDouble(Py_MATH_E));
 
     finally:
-    return m;
+    return;
 }

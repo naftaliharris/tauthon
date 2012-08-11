@@ -30,8 +30,6 @@ typedef struct _excepthandler *excepthandler_ty;
 
 typedef struct _arguments *arguments_ty;
 
-typedef struct _arg *arg_ty;
-
 typedef struct _keyword *keyword_ty;
 
 typedef struct _alias *alias_ty;
@@ -62,12 +60,12 @@ struct _mod {
 };
 
 enum _stmt_kind {FunctionDef_kind=1, ClassDef_kind=2, Return_kind=3,
-                  Delete_kind=4, Assign_kind=5, AugAssign_kind=6, For_kind=7,
-                  While_kind=8, If_kind=9, With_kind=10, Raise_kind=11,
-                  TryExcept_kind=12, TryFinally_kind=13, Assert_kind=14,
-                  Import_kind=15, ImportFrom_kind=16, Global_kind=17,
-                  Nonlocal_kind=18, Expr_kind=19, Pass_kind=20, Break_kind=21,
-                  Continue_kind=22};
+                  Delete_kind=4, Assign_kind=5, AugAssign_kind=6, Print_kind=7,
+                  For_kind=8, While_kind=9, If_kind=10, With_kind=11,
+                  Raise_kind=12, TryExcept_kind=13, TryFinally_kind=14,
+                  Assert_kind=15, Import_kind=16, ImportFrom_kind=17,
+                  Exec_kind=18, Global_kind=19, Expr_kind=20, Pass_kind=21,
+                  Break_kind=22, Continue_kind=23};
 struct _stmt {
         enum _stmt_kind kind;
         union {
@@ -76,15 +74,11 @@ struct _stmt {
                         arguments_ty args;
                         asdl_seq *body;
                         asdl_seq *decorator_list;
-                        expr_ty returns;
                 } FunctionDef;
                 
                 struct {
                         identifier name;
                         asdl_seq *bases;
-                        asdl_seq *keywords;
-                        expr_ty starargs;
-                        expr_ty kwargs;
                         asdl_seq *body;
                         asdl_seq *decorator_list;
                 } ClassDef;
@@ -107,6 +101,12 @@ struct _stmt {
                         operator_ty op;
                         expr_ty value;
                 } AugAssign;
+                
+                struct {
+                        expr_ty dest;
+                        asdl_seq *values;
+                        bool nl;
+                } Print;
                 
                 struct {
                         expr_ty target;
@@ -134,8 +134,9 @@ struct _stmt {
                 } With;
                 
                 struct {
-                        expr_ty exc;
-                        expr_ty cause;
+                        expr_ty type;
+                        expr_ty inst;
+                        expr_ty tback;
                 } Raise;
                 
                 struct {
@@ -165,12 +166,14 @@ struct _stmt {
                 } ImportFrom;
                 
                 struct {
-                        asdl_seq *names;
-                } Global;
+                        expr_ty body;
+                        expr_ty globals;
+                        expr_ty locals;
+                } Exec;
                 
                 struct {
                         asdl_seq *names;
-                } Nonlocal;
+                } Global;
                 
                 struct {
                         expr_ty value;
@@ -184,10 +187,9 @@ struct _stmt {
 enum _expr_kind {BoolOp_kind=1, BinOp_kind=2, UnaryOp_kind=3, Lambda_kind=4,
                   IfExp_kind=5, Dict_kind=6, Set_kind=7, ListComp_kind=8,
                   SetComp_kind=9, DictComp_kind=10, GeneratorExp_kind=11,
-                  Yield_kind=12, Compare_kind=13, Call_kind=14, Num_kind=15,
-                  Str_kind=16, Bytes_kind=17, Ellipsis_kind=18,
-                  Attribute_kind=19, Subscript_kind=20, Starred_kind=21,
-                  Name_kind=22, List_kind=23, Tuple_kind=24};
+                  Yield_kind=12, Compare_kind=13, Call_kind=14, Repr_kind=15,
+                  Num_kind=16, Str_kind=17, Attribute_kind=18,
+                  Subscript_kind=19, Name_kind=20, List_kind=21, Tuple_kind=22};
 struct _expr {
         enum _expr_kind kind;
         union {
@@ -267,16 +269,16 @@ struct _expr {
                 } Call;
                 
                 struct {
+                        expr_ty value;
+                } Repr;
+                
+                struct {
                         object n;
                 } Num;
                 
                 struct {
                         string s;
                 } Str;
-                
-                struct {
-                        string s;
-                } Bytes;
                 
                 struct {
                         expr_ty value;
@@ -289,11 +291,6 @@ struct _expr {
                         slice_ty slice;
                         expr_context_ty ctx;
                 } Subscript;
-                
-                struct {
-                        expr_ty value;
-                        expr_context_ty ctx;
-                } Starred;
                 
                 struct {
                         identifier id;
@@ -315,7 +312,7 @@ struct _expr {
         int col_offset;
 };
 
-enum _slice_kind {Slice_kind=1, ExtSlice_kind=2, Index_kind=3};
+enum _slice_kind {Ellipsis_kind=1, Slice_kind=2, ExtSlice_kind=3, Index_kind=4};
 struct _slice {
         enum _slice_kind kind;
         union {
@@ -348,7 +345,7 @@ struct _excepthandler {
         union {
                 struct {
                         expr_ty type;
-                        identifier name;
+                        expr_ty name;
                         asdl_seq *body;
                 } ExceptHandler;
                 
@@ -360,17 +357,8 @@ struct _excepthandler {
 struct _arguments {
         asdl_seq *args;
         identifier vararg;
-        expr_ty varargannotation;
-        asdl_seq *kwonlyargs;
         identifier kwarg;
-        expr_ty kwargannotation;
         asdl_seq *defaults;
-        asdl_seq *kw_defaults;
-};
-
-struct _arg {
-        identifier arg;
-        expr_ty annotation;
 };
 
 struct _keyword {
@@ -392,13 +380,12 @@ mod_ty _Py_Interactive(asdl_seq * body, PyArena *arena);
 mod_ty _Py_Expression(expr_ty body, PyArena *arena);
 #define Suite(a0, a1) _Py_Suite(a0, a1)
 mod_ty _Py_Suite(asdl_seq * body, PyArena *arena);
-#define FunctionDef(a0, a1, a2, a3, a4, a5, a6, a7) _Py_FunctionDef(a0, a1, a2, a3, a4, a5, a6, a7)
+#define FunctionDef(a0, a1, a2, a3, a4, a5, a6) _Py_FunctionDef(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_FunctionDef(identifier name, arguments_ty args, asdl_seq * body,
-                        asdl_seq * decorator_list, expr_ty returns, int lineno,
-                        int col_offset, PyArena *arena);
-#define ClassDef(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6, a7, a8, a9)
-stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * keywords,
-                     expr_ty starargs, expr_ty kwargs, asdl_seq * body,
+                        asdl_seq * decorator_list, int lineno, int col_offset,
+                        PyArena *arena);
+#define ClassDef(a0, a1, a2, a3, a4, a5, a6) _Py_ClassDef(a0, a1, a2, a3, a4, a5, a6)
+stmt_ty _Py_ClassDef(identifier name, asdl_seq * bases, asdl_seq * body,
                      asdl_seq * decorator_list, int lineno, int col_offset,
                      PyArena *arena);
 #define Return(a0, a1, a2, a3) _Py_Return(a0, a1, a2, a3)
@@ -412,6 +399,9 @@ stmt_ty _Py_Assign(asdl_seq * targets, expr_ty value, int lineno, int
 #define AugAssign(a0, a1, a2, a3, a4, a5) _Py_AugAssign(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_AugAssign(expr_ty target, operator_ty op, expr_ty value, int
                       lineno, int col_offset, PyArena *arena);
+#define Print(a0, a1, a2, a3, a4, a5) _Py_Print(a0, a1, a2, a3, a4, a5)
+stmt_ty _Py_Print(expr_ty dest, asdl_seq * values, bool nl, int lineno, int
+                  col_offset, PyArena *arena);
 #define For(a0, a1, a2, a3, a4, a5, a6) _Py_For(a0, a1, a2, a3, a4, a5, a6)
 stmt_ty _Py_For(expr_ty target, expr_ty iter, asdl_seq * body, asdl_seq *
                 orelse, int lineno, int col_offset, PyArena *arena);
@@ -424,9 +414,9 @@ stmt_ty _Py_If(expr_ty test, asdl_seq * body, asdl_seq * orelse, int lineno,
 #define With(a0, a1, a2, a3, a4, a5) _Py_With(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_With(expr_ty context_expr, expr_ty optional_vars, asdl_seq * body,
                  int lineno, int col_offset, PyArena *arena);
-#define Raise(a0, a1, a2, a3, a4) _Py_Raise(a0, a1, a2, a3, a4)
-stmt_ty _Py_Raise(expr_ty exc, expr_ty cause, int lineno, int col_offset,
-                  PyArena *arena);
+#define Raise(a0, a1, a2, a3, a4, a5) _Py_Raise(a0, a1, a2, a3, a4, a5)
+stmt_ty _Py_Raise(expr_ty type, expr_ty inst, expr_ty tback, int lineno, int
+                  col_offset, PyArena *arena);
 #define TryExcept(a0, a1, a2, a3, a4, a5) _Py_TryExcept(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_TryExcept(asdl_seq * body, asdl_seq * handlers, asdl_seq * orelse,
                       int lineno, int col_offset, PyArena *arena);
@@ -442,12 +432,12 @@ stmt_ty _Py_Import(asdl_seq * names, int lineno, int col_offset, PyArena
 #define ImportFrom(a0, a1, a2, a3, a4, a5) _Py_ImportFrom(a0, a1, a2, a3, a4, a5)
 stmt_ty _Py_ImportFrom(identifier module, asdl_seq * names, int level, int
                        lineno, int col_offset, PyArena *arena);
+#define Exec(a0, a1, a2, a3, a4, a5) _Py_Exec(a0, a1, a2, a3, a4, a5)
+stmt_ty _Py_Exec(expr_ty body, expr_ty globals, expr_ty locals, int lineno, int
+                 col_offset, PyArena *arena);
 #define Global(a0, a1, a2, a3) _Py_Global(a0, a1, a2, a3)
 stmt_ty _Py_Global(asdl_seq * names, int lineno, int col_offset, PyArena
                    *arena);
-#define Nonlocal(a0, a1, a2, a3) _Py_Nonlocal(a0, a1, a2, a3)
-stmt_ty _Py_Nonlocal(asdl_seq * names, int lineno, int col_offset, PyArena
-                     *arena);
 #define Expr(a0, a1, a2, a3) _Py_Expr(a0, a1, a2, a3)
 stmt_ty _Py_Expr(expr_ty value, int lineno, int col_offset, PyArena *arena);
 #define Pass(a0, a1, a2) _Py_Pass(a0, a1, a2)
@@ -497,23 +487,18 @@ expr_ty _Py_Compare(expr_ty left, asdl_int_seq * ops, asdl_seq * comparators,
 expr_ty _Py_Call(expr_ty func, asdl_seq * args, asdl_seq * keywords, expr_ty
                  starargs, expr_ty kwargs, int lineno, int col_offset, PyArena
                  *arena);
+#define Repr(a0, a1, a2, a3) _Py_Repr(a0, a1, a2, a3)
+expr_ty _Py_Repr(expr_ty value, int lineno, int col_offset, PyArena *arena);
 #define Num(a0, a1, a2, a3) _Py_Num(a0, a1, a2, a3)
 expr_ty _Py_Num(object n, int lineno, int col_offset, PyArena *arena);
 #define Str(a0, a1, a2, a3) _Py_Str(a0, a1, a2, a3)
 expr_ty _Py_Str(string s, int lineno, int col_offset, PyArena *arena);
-#define Bytes(a0, a1, a2, a3) _Py_Bytes(a0, a1, a2, a3)
-expr_ty _Py_Bytes(string s, int lineno, int col_offset, PyArena *arena);
-#define Ellipsis(a0, a1, a2) _Py_Ellipsis(a0, a1, a2)
-expr_ty _Py_Ellipsis(int lineno, int col_offset, PyArena *arena);
 #define Attribute(a0, a1, a2, a3, a4, a5) _Py_Attribute(a0, a1, a2, a3, a4, a5)
 expr_ty _Py_Attribute(expr_ty value, identifier attr, expr_context_ty ctx, int
                       lineno, int col_offset, PyArena *arena);
 #define Subscript(a0, a1, a2, a3, a4, a5) _Py_Subscript(a0, a1, a2, a3, a4, a5)
 expr_ty _Py_Subscript(expr_ty value, slice_ty slice, expr_context_ty ctx, int
                       lineno, int col_offset, PyArena *arena);
-#define Starred(a0, a1, a2, a3, a4) _Py_Starred(a0, a1, a2, a3, a4)
-expr_ty _Py_Starred(expr_ty value, expr_context_ty ctx, int lineno, int
-                    col_offset, PyArena *arena);
 #define Name(a0, a1, a2, a3, a4) _Py_Name(a0, a1, a2, a3, a4)
 expr_ty _Py_Name(identifier id, expr_context_ty ctx, int lineno, int
                  col_offset, PyArena *arena);
@@ -523,6 +508,8 @@ expr_ty _Py_List(asdl_seq * elts, expr_context_ty ctx, int lineno, int
 #define Tuple(a0, a1, a2, a3, a4) _Py_Tuple(a0, a1, a2, a3, a4)
 expr_ty _Py_Tuple(asdl_seq * elts, expr_context_ty ctx, int lineno, int
                   col_offset, PyArena *arena);
+#define Ellipsis(a0) _Py_Ellipsis(a0)
+slice_ty _Py_Ellipsis(PyArena *arena);
 #define Slice(a0, a1, a2, a3) _Py_Slice(a0, a1, a2, a3)
 slice_ty _Py_Slice(expr_ty lower, expr_ty upper, expr_ty step, PyArena *arena);
 #define ExtSlice(a0, a1) _Py_ExtSlice(a0, a1)
@@ -533,16 +520,11 @@ slice_ty _Py_Index(expr_ty value, PyArena *arena);
 comprehension_ty _Py_comprehension(expr_ty target, expr_ty iter, asdl_seq *
                                    ifs, PyArena *arena);
 #define ExceptHandler(a0, a1, a2, a3, a4, a5) _Py_ExceptHandler(a0, a1, a2, a3, a4, a5)
-excepthandler_ty _Py_ExceptHandler(expr_ty type, identifier name, asdl_seq *
-                                   body, int lineno, int col_offset, PyArena
-                                   *arena);
-#define arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8) _Py_arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8)
-arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, expr_ty
-                           varargannotation, asdl_seq * kwonlyargs, identifier
-                           kwarg, expr_ty kwargannotation, asdl_seq * defaults,
-                           asdl_seq * kw_defaults, PyArena *arena);
-#define arg(a0, a1, a2) _Py_arg(a0, a1, a2)
-arg_ty _Py_arg(identifier arg, expr_ty annotation, PyArena *arena);
+excepthandler_ty _Py_ExceptHandler(expr_ty type, expr_ty name, asdl_seq * body,
+                                   int lineno, int col_offset, PyArena *arena);
+#define arguments(a0, a1, a2, a3, a4) _Py_arguments(a0, a1, a2, a3, a4)
+arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, identifier
+                           kwarg, asdl_seq * defaults, PyArena *arena);
 #define keyword(a0, a1, a2) _Py_keyword(a0, a1, a2)
 keyword_ty _Py_keyword(identifier arg, expr_ty value, PyArena *arena);
 #define alias(a0, a1, a2) _Py_alias(a0, a1, a2)

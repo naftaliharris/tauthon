@@ -1,3 +1,4 @@
+
 :mod:`zipimport` --- Import modules from Zip archives
 =====================================================
 
@@ -6,14 +7,16 @@
 .. moduleauthor:: Just van Rossum <just@letterror.com>
 
 
+.. versionadded:: 2.3
+
 This module adds the ability to import Python modules (:file:`\*.py`,
 :file:`\*.py[co]`) and packages from ZIP-format archives. It is usually not
 needed to use the :mod:`zipimport` module explicitly; it is automatically used
-by the built-in :keyword:`import` mechanism for ``sys.path`` items that are paths
+by the built-in :keyword:`import` mechanism for :data:`sys.path` items that are paths
 to ZIP archives.
 
-Typically, ``sys.path`` is a list of directory names as strings.  This module
-also allows an item of ``sys.path`` to be a string naming a ZIP file archive.
+Typically, :data:`sys.path` is a list of directory names as strings.  This module
+also allows an item of :data:`sys.path` to be a string naming a ZIP file archive.
 The ZIP archive can contain a subdirectory structure to support package imports,
 and a path within the archive can be specified to only import from a
 subdirectory.  For example, the path :file:`/tmp/example.zip/lib/` would only
@@ -25,6 +28,10 @@ Any files may be present in the ZIP archive, but only files :file:`.py` and
 :file:`.py` files, Python will not attempt to modify the archive by adding the
 corresponding :file:`.pyc` or :file:`.pyo` file, meaning that if a ZIP archive
 doesn't contain :file:`.pyc` files, importing may be rather slow.
+
+Using the built-in :func:`reload` function will fail if called on a module
+loaded from a ZIP archive; it is unlikely that :func:`reload` would be needed,
+since this would imply that the ZIP has been altered during runtime.
 
 ZIP archives with an archive comment are currently not supported.
 
@@ -95,7 +102,7 @@ zipimporter Objects
       was imported. Raise :exc:`ZipImportError` if the module couldn't be
       found.
 
-      .. versionadded:: 3.1
+   .. versionadded:: 2.7
 
 
    .. method:: get_source(fullname)

@@ -46,13 +46,13 @@ used for special methods; variants without leading and trailing\n\
   PyObject *a1, *a2; long r; \
   if(! PyArg_UnpackTuple(a,#OP,2,2,&a1,&a2)) return NULL; \
   if(-1 == (r=AOP(a1,a2))) return NULL; \
-  return PyLong_FromLong(r); }
+  return PyInt_FromLong(r); }
 
 #define spamn2(OP,AOP) static PyObject *OP(PyObject *s, PyObject *a) { \
   PyObject *a1, *a2; Py_ssize_t r; \
   if(! PyArg_UnpackTuple(a,#OP,2,2,&a1,&a2)) return NULL; \
   if(-1 == (r=AOP(a1,a2))) return NULL; \
-  return PyLong_FromSsize_t(r); }
+  return PyInt_FromSsize_t(r); }
 
 #define spami2b(OP,AOP) static PyObject *OP(PyObject *s, PyObject *a) { \
   PyObject *a1, *a2; long r; \
@@ -65,10 +65,32 @@ used for special methods; variants without leading and trailing\n\
   if(! PyArg_UnpackTuple(a,#OP,2,2,&a1,&a2)) return NULL; \
   return PyObject_RichCompare(a1,a2,A); }
 
+/* Deprecated operators that need warnings. */
+static int
+op_isCallable(PyObject *x)
+{
+    if (PyErr_WarnPy3k("operator.isCallable() is not supported in 3.x. "
+                       "Use hasattr(obj, '__call__').", 1) < 0)
+        return -1;
+    return PyCallable_Check(x);
+}
+
+static int
+op_sequenceIncludes(PyObject *seq, PyObject* ob)
+{
+    if (PyErr_WarnPy3k("operator.sequenceIncludes() is not supported "
+                       "in 3.x. Use operator.contains().", 1) < 0)
+        return -1;
+    return PySequence_Contains(seq, ob);
+}
+
+spami(isCallable       , op_isCallable)
+spami(isNumberType     , PyNumber_Check)
 spami(truth            , PyObject_IsTrue)
 spam2(op_add           , PyNumber_Add)
 spam2(op_sub           , PyNumber_Subtract)
 spam2(op_mul           , PyNumber_Multiply)
+spam2(op_div           , PyNumber_Divide)
 spam2(op_floordiv      , PyNumber_FloorDivide)
 spam2(op_truediv       , PyNumber_TrueDivide)
 spam2(op_mod           , PyNumber_Remainder)
@@ -86,6 +108,7 @@ spam2(op_or_           , PyNumber_Or)
 spam2(op_iadd          , PyNumber_InPlaceAdd)
 spam2(op_isub          , PyNumber_InPlaceSubtract)
 spam2(op_imul          , PyNumber_InPlaceMultiply)
+spam2(op_idiv          , PyNumber_InPlaceDivide)
 spam2(op_ifloordiv     , PyNumber_InPlaceFloorDivide)
 spam2(op_itruediv      , PyNumber_InPlaceTrueDivide)
 spam2(op_imod          , PyNumber_InPlaceRemainder)
@@ -94,11 +117,16 @@ spam2(op_irshift       , PyNumber_InPlaceRshift)
 spam2(op_iand          , PyNumber_InPlaceAnd)
 spam2(op_ixor          , PyNumber_InPlaceXor)
 spam2(op_ior           , PyNumber_InPlaceOr)
+spami(isSequenceType   , PySequence_Check)
 spam2(op_concat        , PySequence_Concat)
+spamoi(op_repeat       , PySequence_Repeat)
 spam2(op_iconcat       , PySequence_InPlaceConcat)
+spamoi(op_irepeat      , PySequence_InPlaceRepeat)
 spami2b(op_contains     , PySequence_Contains)
+spami2b(sequenceIncludes, op_sequenceIncludes)
 spamn2(indexOf         , PySequence_Index)
 spamn2(countOf         , PySequence_Count)
+spami(isMappingType    , PyMapping_Check)
 spam2(op_getitem       , PyObject_GetItem)
 spam2n(op_delitem       , PyObject_DelItem)
 spam3n(op_setitem      , PyObject_SetItem)
@@ -155,6 +183,47 @@ is_not(PyObject *s, PyObject *a)
     return result;
 }
 
+static PyObject*
+op_getslice(PyObject *s, PyObject *a)
+{
+    PyObject *a1;
+    Py_ssize_t a2, a3;
+
+    if (!PyArg_ParseTuple(a, "Onn:getslice", &a1, &a2, &a3))
+        return NULL;
+    return PySequence_GetSlice(a1, a2, a3);
+}
+
+static PyObject*
+op_setslice(PyObject *s, PyObject *a)
+{
+    PyObject *a1, *a4;
+    Py_ssize_t a2, a3;
+
+    if (!PyArg_ParseTuple(a, "OnnO:setslice", &a1, &a2, &a3, &a4))
+        return NULL;
+
+    if (-1 == PySequence_SetSlice(a1, a2, a3, a4))
+        return NULL;
+
+    Py_RETURN_NONE;
+}
+
+static PyObject*
+op_delslice(PyObject *s, PyObject *a)
+{
+    PyObject *a1;
+    Py_ssize_t a2, a3;
+
+    if (!PyArg_ParseTuple(a, "Onn:delslice", &a1, &a2, &a3))
+        return NULL;
+
+    if (-1 == PySequence_DelSlice(a1, a2, a3))
+        return NULL;
+
+    Py_RETURN_NONE;
+}
+
 #undef spam1
 #undef spam2
 #undef spam1o
@@ -168,14 +237,24 @@ is_not(PyObject *s, PyObject *a)
 
 static struct PyMethodDef operator_methods[] = {
 
+spam1o(isCallable,
+ "isCallable(a) -- Same as callable(a).")
+spam1o(isNumberType,
+ "isNumberType(a) -- Return True if a has a numeric type, False otherwise.")
+spam1o(isSequenceType,
+ "isSequenceType(a) -- Return True if a has a sequence type, False otherwise.")
 spam1o(truth,
  "truth(a) -- Return True if a is true, False otherwise.")
 spam2(contains,__contains__,
  "contains(a, b) -- Same as b in a (note reversed operands).")
+spam1(sequenceIncludes,
+ "sequenceIncludes(a, b) -- Same as b in a (note reversed operands; deprecated).")
 spam1(indexOf,
  "indexOf(a, b) -- Return the first index of b in a.")
 spam1(countOf,
  "countOf(a, b) -- Return the number of times b occurs in a.")
+spam1o(isMappingType,
+ "isMappingType(a) -- Return True if a has a mapping type, False otherwise.")
 
 spam1(is_, "is_(a, b) -- Same as a is b.")
 spam1(is_not, "is_not(a, b) -- Same as a is not b.")
@@ -183,8 +262,9 @@ spam2o(index, __index__, "index(a) -- Same as a.__index__()")
 spam2(add,__add__, "add(a, b) -- Same as a + b.")
 spam2(sub,__sub__, "sub(a, b) -- Same as a - b.")
 spam2(mul,__mul__, "mul(a, b) -- Same as a * b.")
+spam2(div,__div__, "div(a, b) -- Same as a / b when __future__.division is not in effect.")
 spam2(floordiv,__floordiv__, "floordiv(a, b) -- Same as a // b.")
-spam2(truediv,__truediv__, "truediv(a, b) -- Same as a / b.")
+spam2(truediv,__truediv__, "truediv(a, b) -- Same as a / b when __future__.division is in effect.")
 spam2(mod,__mod__, "mod(a, b) -- Same as a % b.")
 spam2o(neg,__neg__, "neg(a) -- Same as -a.")
 spam2o(pos,__pos__, "pos(a) -- Same as +a.")
@@ -200,8 +280,9 @@ spam2(or_,__or__, "or_(a, b) -- Same as a | b.")
 spam2(iadd,__iadd__, "a = iadd(a, b) -- Same as a += b.")
 spam2(isub,__isub__, "a = isub(a, b) -- Same as a -= b.")
 spam2(imul,__imul__, "a = imul(a, b) -- Same as a *= b.")
+spam2(idiv,__idiv__, "a = idiv(a, b) -- Same as a /= b when __future__.division is not in effect.")
 spam2(ifloordiv,__ifloordiv__, "a = ifloordiv(a, b) -- Same as a //= b.")
-spam2(itruediv,__itruediv__, "a = itruediv(a, b) -- Same as a /= b")
+spam2(itruediv,__itruediv__, "a = itruediv(a, b) -- Same as a /= b when __future__.division is in effect.")
 spam2(imod,__imod__, "a = imod(a, b) -- Same as a %= b.")
 spam2(ilshift,__ilshift__, "a = ilshift(a, b) -- Same as a <<= b.")
 spam2(irshift,__irshift__, "a = irshift(a, b) -- Same as a >>= b.")
@@ -210,8 +291,12 @@ spam2(ixor,__ixor__, "a = ixor(a, b) -- Same as a ^= b.")
 spam2(ior,__ior__, "a = ior(a, b) -- Same as a |= b.")
 spam2(concat,__concat__,
  "concat(a, b) -- Same as a + b, for a and b sequences.")
+spam2(repeat,__repeat__,
+ "repeat(a, b) -- Return a * b, where a is a sequence, and b is an integer.")
 spam2(iconcat,__iconcat__,
  "a = iconcat(a, b) -- Same as a += b, for a and b sequences.")
+spam2(irepeat,__irepeat__,
+ "a = irepeat(a, b) -- Same as a *= b, where a is a sequence, and b is an integer.")
 spam2(getitem,__getitem__,
  "getitem(a, b) -- Same as a[b].")
 spam2(setitem,__setitem__,
@@ -220,6 +305,12 @@ spam2(delitem,__delitem__,
  "delitem(a, b) -- Same as del a[b].")
 spam2(pow,__pow__, "pow(a, b) -- Same as a ** b.")
 spam2(ipow,__ipow__, "a = ipow(a, b) -- Same as a **= b.")
+spam2(getslice,__getslice__,
+ "getslice(a, b, c) -- Same as a[b:c].")
+spam2(setslice,__setslice__,
+"setslice(a, b, c, d) -- Same as a[b:c] = d.")
+spam2(delslice,__delslice__,
+"delslice(a, b, c) -- Same as del a[b:c].")
 spam2(lt,__lt__, "lt(a, b) -- Same as a<b.")
 spam2(le,__le__, "le(a, b) -- Same as a<=b.")
 spam2(eq,__eq__, "eq(a, b) -- Same as a==b.")
@@ -334,7 +425,7 @@ static PyTypeObject itemgetter_type = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_reserved */
+    0,                                  /* tp_compare */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -383,7 +474,7 @@ attrgetter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     attrgetterobject *ag;
     PyObject *attr;
-    Py_ssize_t nattrs, idx, char_idx;
+    Py_ssize_t nattrs;
 
     if (!_PyArg_NoKeywords("attrgetter()", kwds))
         return NULL;
@@ -392,92 +483,15 @@ attrgetter_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (nattrs <= 1) {
         if (!PyArg_UnpackTuple(args, "attrgetter", 1, 1, &attr))
             return NULL;
-    }
-
-    attr = PyTuple_New(nattrs);
-    if (attr == NULL)
-        return NULL;
-
-    /* prepare attr while checking args */
-    for (idx = 0; idx < nattrs; ++idx) {
-        PyObject *item = PyTuple_GET_ITEM(args, idx);
-        Py_ssize_t item_len;
-        Py_UNICODE *item_buffer;
-        int dot_count;
-
-        if (!PyUnicode_Check(item)) {
-            PyErr_SetString(PyExc_TypeError,
-                            "attribute name must be a string");
-            Py_DECREF(attr);
-            return NULL;
-        }
-        item_len = PyUnicode_GET_SIZE(item);
-        item_buffer = PyUnicode_AS_UNICODE(item);
-
-        /* check whethere the string is dotted */
-        dot_count = 0;
-        for (char_idx = 0; char_idx < item_len; ++char_idx) {
-            if (item_buffer[char_idx] == (Py_UNICODE)'.')
-                ++dot_count;
-        }
-
-        if (dot_count == 0) {
-            Py_INCREF(item);
-            PyUnicode_InternInPlace(&item);
-            PyTuple_SET_ITEM(attr, idx, item);
-        } else { /* make it a tuple of non-dotted attrnames */
-            PyObject *attr_chain = PyTuple_New(dot_count + 1);
-            PyObject *attr_chain_item;
-            Py_ssize_t unibuff_from = 0;
-            Py_ssize_t unibuff_till = 0;
-            Py_ssize_t attr_chain_idx = 0;
-
-            if (attr_chain == NULL) {
-                Py_DECREF(attr);
-                return NULL;
-            }
-
-            for (; dot_count > 0; --dot_count) {
-                while (item_buffer[unibuff_till] != (Py_UNICODE)'.') {
-                    ++unibuff_till;
-                }
-                attr_chain_item = PyUnicode_FromUnicode(
-                                      item_buffer + unibuff_from,
-                                      unibuff_till - unibuff_from);
-                if (attr_chain_item == NULL) {
-                    Py_DECREF(attr_chain);
-                    Py_DECREF(attr);
-                    return NULL;
-                }
-                PyUnicode_InternInPlace(&attr_chain_item);
-                PyTuple_SET_ITEM(attr_chain, attr_chain_idx, attr_chain_item);
-                ++attr_chain_idx;
-                unibuff_till = unibuff_from = unibuff_till + 1;
-            }
-
-            /* now add the last dotless name */
-            attr_chain_item = PyUnicode_FromUnicode(
-                                  item_buffer + unibuff_from,
-                                  item_len - unibuff_from);
-            if (attr_chain_item == NULL) {
-                Py_DECREF(attr_chain);
-                Py_DECREF(attr);
-                return NULL;
-            }
-            PyUnicode_InternInPlace(&attr_chain_item);
-            PyTuple_SET_ITEM(attr_chain, attr_chain_idx, attr_chain_item);
-
-            PyTuple_SET_ITEM(attr, idx, attr_chain);
-        }
-    }
+    } else
+        attr = args;
 
     /* create attrgetterobject structure */
     ag = PyObject_GC_New(attrgetterobject, &attrgetter_type);
-    if (ag == NULL) {
-        Py_DECREF(attr);
+    if (ag == NULL)
         return NULL;
-    }
 
+    Py_INCREF(attr);
     ag->attr = attr;
     ag->nattrs = nattrs;
 
@@ -503,31 +517,41 @@ attrgetter_traverse(attrgetterobject *ag, visitproc visit, void *arg)
 static PyObject *
 dotted_getattr(PyObject *obj, PyObject *attr)
 {
-    PyObject *newobj;
+    char *s, *p;
 
-    /* attr is either a tuple or instance of str.
-       Ensured by the setup code of attrgetter_new */
-    if (PyTuple_CheckExact(attr)) { /* chained getattr */
-        Py_ssize_t name_idx = 0, name_count;
-        PyObject *attr_name;
+#ifdef Py_USING_UNICODE
+    if (PyUnicode_Check(attr)) {
+        attr = _PyUnicode_AsDefaultEncodedString(attr, NULL);
+        if (attr == NULL)
+            return NULL;
+    }
+#endif
 
-        name_count = PyTuple_GET_SIZE(attr);
-        Py_INCREF(obj);
-        for (name_idx = 0; name_idx < name_count; ++name_idx) {
-            attr_name = PyTuple_GET_ITEM(attr, name_idx);
-            newobj = PyObject_GetAttr(obj, attr_name);
+    if (!PyString_Check(attr)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "attribute name must be a string");
+        return NULL;
+    }
+
+    s = PyString_AS_STRING(attr);
+    Py_INCREF(obj);
+    for (;;) {
+        PyObject *newobj, *str;
+        p = strchr(s, '.');
+        str = p ? PyString_FromStringAndSize(s, (p-s)) :
+              PyString_FromString(s);
+        if (str == NULL) {
             Py_DECREF(obj);
-            if (newobj == NULL) {
-                return NULL;
-            }
-            /* here */
-            obj = newobj;
+            return NULL;
         }
-    } else { /* single getattr */
-        newobj = PyObject_GetAttr(obj, attr);
+        newobj = PyObject_GetAttr(obj, str);
+        Py_DECREF(str);
+        Py_DECREF(obj);
         if (newobj == NULL)
             return NULL;
         obj = newobj;
+        if (p == NULL) break;
+        s = p+1;
     }
 
     return obj;
@@ -541,8 +565,8 @@ attrgetter_call(attrgetterobject *ag, PyObject *args, PyObject *kw)
 
     if (!PyArg_UnpackTuple(args, "attrgetter", 1, 1, &obj))
         return NULL;
-    if (ag->nattrs == 1) /* ag->attr is always a tuple */
-        return dotted_getattr(obj, PyTuple_GET_ITEM(ag->attr, 0));
+    if (ag->nattrs == 1)
+        return dotted_getattr(obj, ag->attr);
 
     assert(PyTuple_Check(ag->attr));
     assert(PyTuple_GET_SIZE(ag->attr) == nattrs);
@@ -583,7 +607,7 @@ static PyTypeObject attrgetter_type = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_reserved */
+    0,                                  /* tp_compare */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -714,7 +738,7 @@ static PyTypeObject methodcaller_type = {
     0,                                  /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_reserved */
+    0,                                  /* tp_compare */
     0,                                  /* tp_repr */
     0,                                  /* tp_as_number */
     0,                                  /* tp_as_sequence */
@@ -748,44 +772,31 @@ static PyTypeObject methodcaller_type = {
 };
 
 
-/* Initialization function for the module (*must* be called PyInit_operator) */
-
-
-static struct PyModuleDef operatormodule = {
-    PyModuleDef_HEAD_INIT,
-    "operator",
-    operator_doc,
-    -1,
-    operator_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
+/* Initialization function for the module (*must* be called initoperator) */
 
 PyMODINIT_FUNC
-PyInit_operator(void)
+initoperator(void)
 {
     PyObject *m;
 
     /* Create the module and add the functions */
-    m = PyModule_Create(&operatormodule);
+    m = Py_InitModule4("operator", operator_methods, operator_doc,
+                   (PyObject*)NULL, PYTHON_API_VERSION);
     if (m == NULL)
-        return NULL;
+        return;
 
     if (PyType_Ready(&itemgetter_type) < 0)
-        return NULL;
+        return;
     Py_INCREF(&itemgetter_type);
     PyModule_AddObject(m, "itemgetter", (PyObject *)&itemgetter_type);
 
     if (PyType_Ready(&attrgetter_type) < 0)
-        return NULL;
+        return;
     Py_INCREF(&attrgetter_type);
     PyModule_AddObject(m, "attrgetter", (PyObject *)&attrgetter_type);
 
     if (PyType_Ready(&methodcaller_type) < 0)
-        return NULL;
+        return;
     Py_INCREF(&methodcaller_type);
     PyModule_AddObject(m, "methodcaller", (PyObject *)&methodcaller_type);
-    return m;
 }

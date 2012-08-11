@@ -896,7 +896,7 @@ Here are all of the changes that Python 2.4 makes to the core Python language.
   (Contributed by Nick Coghlan.)
 
 * The :func:`eval(expr, globals, locals)` and :func:`execfile(filename, globals,
-  locals)` functions and the ``exec`` statement now accept any mapping type
+  locals)` functions and the :keyword:`exec` statement now accept any mapping type
   for the *locals* parameter.  Previously this had to be a regular Python
   dictionary.  (Contributed by Raymond Hettinger.)
 
@@ -947,7 +947,7 @@ Optimizations
   :meth:`__len__` method.  (Contributed by Raymond Hettinger.)
 
 * The methods :meth:`list.__getitem__`, :meth:`dict.__getitem__`, and
-  :meth:`dict.__contains__` are are now implemented as :class:`method_descriptor`
+  :meth:`dict.__contains__` are now implemented as :class:`method_descriptor`
   objects rather than :class:`wrapper_descriptor` objects.  This form of  access
   doubles their performance and makes them more suitable for use as arguments to
   functionals: ``map(mydict.__getitem__, keylist)``. (Contributed by Raymond
@@ -1554,7 +1554,7 @@ Acknowledgements
 ================
 
 The author would like to thank the following people for offering suggestions,
-corrections and assistance with various drafts of this article: Koray Can, Hye-
-Shik Chang, Michael Dyck, Raymond Hettinger, Brian Hurt, Hamish Lawson, Fredrik
-Lundh, Sean Reifschneider, Sadruddin Rejeb.
+corrections and assistance with various drafts of this article: Koray Can,
+Hye-Shik Chang, Michael Dyck, Raymond Hettinger, Brian Hurt, Hamish Lawson,
+Fredrik Lundh, Sean Reifschneider, Sadruddin Rejeb.
 

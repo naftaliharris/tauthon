@@ -29,14 +29,14 @@ Example::
 
    >>> import sched, time
    >>> s = sched.scheduler(time.time, time.sleep)
-   >>> def print_time(): print("From print_time", time.time())
+   >>> def print_time(): print "From print_time", time.time()
    ...
    >>> def print_some_times():
-   ...     print(time.time())
+   ...     print time.time()
    ...     s.enter(5, 1, print_time, ())
    ...     s.enter(10, 1, print_time, ())
    ...     s.run()
-   ...     print(time.time())
+   ...     print time.time()
    ...
    >>> print_some_times()
    930343690.257
@@ -55,14 +55,14 @@ Example::
     >>> import time
     >>> from threading import Timer
     >>> def print_time():
-    ...     print("From print_time", time.time())
+    ...     print "From print_time", time.time()
     ...
     >>> def print_some_times():
-    ...     print(time.time())
+    ...     print time.time()
     ...     Timer(5, print_time, ()).start()
     ...     Timer(10, print_time, ()).start()
     ...     time.sleep(11)  # sleep while time-delay events execute
-    ...     print(time.time())
+    ...     print time.time()
     ...
     >>> print_some_times()
     930343690.257
@@ -95,7 +95,7 @@ Scheduler Objects
 
 .. method:: scheduler.enter(delay, priority, action, argument)
 
-   Schedule an event for *delay* more time units. Other then the relative time, the
+   Schedule an event for *delay* more time units. Other than the relative time, the
    other arguments, the effect and the return value are the same as those for
    :meth:`enterabs`.
 
@@ -132,3 +132,5 @@ Scheduler Objects
    Read-only attribute returning a list of upcoming events in the order they
    will be run.  Each event is shown as a :term:`named tuple` with the
    following fields:  time, priority, action, argument.
+
+   .. versionadded:: 2.6

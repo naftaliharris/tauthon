@@ -8,6 +8,9 @@
 .. moduleauthor:: Martin von Löwis <martin@loewis.home.cs.tu-berlin.de>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+
+.. versionadded:: 2.1
+
 **Source code:** :source:`Lib/weakref.py`
 
 --------------
@@ -44,14 +47,11 @@ simply deleted.
 :class:`WeakKeyDictionary` and :class:`WeakValueDictionary` use weak references
 in their implementation, setting up callback functions on the weak references
 that notify the weak dictionaries when a key or value has been reclaimed by
-garbage collection.  :class:`WeakSet` implements the :class:`set` interface,
-but keeps weak references to its elements, just like a
-:class:`WeakKeyDictionary` does.
-
-Most programs should find that using one of these weak container types is all
-they need -- it's not usually necessary to create your own weak references
-directly.  The low-level machinery used by the weak dictionary implementations
-is exposed by the :mod:`weakref` module for the benefit of advanced uses.
+garbage collection.  Most programs should find that using one of these weak
+dictionary types is all they need -- it's not usually necessary to create your
+own weak references directly.  The low-level machinery used by the weak
+dictionary implementations is exposed by the :mod:`weakref` module for the
+benefit of advanced uses.
 
 .. note::
 
@@ -60,12 +60,15 @@ is exposed by the :mod:`weakref` module for the benefit of advanced uses.
    object still alive.
 
 Not all objects can be weakly referenced; those objects which can include class
-instances, functions written in Python (but not in C), instance methods, sets,
-frozensets, some :term:`file objects <file object>`, :term:`generator`\s, type
-objects, sockets, arrays, deques, regular expression pattern objects, and code
-objects.
+instances, functions written in Python (but not in C), methods (both bound and
+unbound), sets, frozensets, file objects, :term:`generator`\s, type objects,
+:class:`DBcursor` objects from the :mod:`bsddb` module, sockets, arrays, deques,
+regular expression pattern objects, and code objects.
 
-.. versionchanged:: 3.2
+.. versionchanged:: 2.4
+   Added support for files, sockets, arrays, and patterns.
+
+.. versionchanged:: 2.7
    Added support for thread.lock, threading.Lock, and code objects.
 
 Several built-in types such as :class:`list` and :class:`dict` do not directly
@@ -76,9 +79,10 @@ support weak references but can add support through subclassing::
 
    obj = Dict(red=1, green=2, blue=3)   # this object is weak referenceable
 
-Other built-in types such as :class:`tuple` and :class:`int` do not support weak
-references even when subclassed (This is an implementation detail and may be
-different across various Python implementations.).
+.. impl-detail::
+
+   Other built-in types such as :class:`tuple` and :class:`long` do not support
+   weak references even when subclassed.
 
 Extension types can easily be made to support weak references; see
 :ref:`weakref-support`.
@@ -102,17 +106,19 @@ Extension types can easily be made to support weak references; see
    but cannot be propagated; they are handled in exactly the same way as exceptions
    raised from an object's :meth:`__del__` method.
 
-   Weak references are :term:`hashable` if the *object* is hashable.  They will
-   maintain their hash value even after the *object* was deleted.  If
-   :func:`hash` is called the first time only after the *object* was deleted,
-   the call will raise :exc:`TypeError`.
+   Weak references are :term:`hashable` if the *object* is hashable.  They will maintain
+   their hash value even after the *object* was deleted.  If :func:`hash` is called
+   the first time only after the *object* was deleted, the call will raise
+   :exc:`TypeError`.
 
    Weak references support tests for equality, but not ordering.  If the referents
    are still alive, two references have the same equality relationship as their
    referents (regardless of the *callback*).  If either referent has been deleted,
    the references are equal only if the reference objects are the same object.
 
-   This is a subclassable type rather than a factory function.
+   .. versionchanged:: 2.4
+      This is now a subclassable type rather than a factory function; it derives from
+      :class:`object`.
 
 
 .. function:: proxy(object[, callback])
@@ -161,9 +167,18 @@ references that will cause the garbage collector to keep the keys around longer
 than needed.
 
 
+.. method:: WeakKeyDictionary.iterkeyrefs()
+
+   Return an :term:`iterator` that yields the weak references to the keys.
+
+   .. versionadded:: 2.5
+
+
 .. method:: WeakKeyDictionary.keyrefs()
 
-   Return an iterable of the weak references to the keys.
+   Return a list of weak references to the keys.
+
+   .. versionadded:: 2.5
 
 
 .. class:: WeakValueDictionary([dict])
@@ -180,19 +195,30 @@ than needed.
       magic" (as a side effect of garbage collection).
 
 :class:`WeakValueDictionary` objects have the following additional methods.
-These method have the same issues as the and :meth:`keyrefs` method of
-:class:`WeakKeyDictionary` objects.
+These method have the same issues as the :meth:`iterkeyrefs` and :meth:`keyrefs`
+methods of :class:`WeakKeyDictionary` objects.
+
+
+.. method:: WeakValueDictionary.itervaluerefs()
+
+   Return an :term:`iterator` that yields the weak references to the values.
+
+   .. versionadded:: 2.5
 
 
 .. method:: WeakValueDictionary.valuerefs()
 
-   Return an iterable of the weak references to the values.
+   Return a list of weak references to the values.
+
+   .. versionadded:: 2.5
 
 
 .. class:: WeakSet([elements])
 
    Set class that keeps weak references to its elements.  An element will be
    discarded when no strong reference to it exists any more.
+
+   .. versionadded:: 2.7
 
 
 .. data:: ReferenceType
@@ -252,7 +278,7 @@ If the referent no longer exists, calling the reference object returns
 :const:`None`:
 
    >>> del o, o2
-   >>> print(r())
+   >>> print r()
    None
 
 Testing that a weak reference object is still live should be done using the
@@ -263,9 +289,9 @@ a reference object should follow this pattern::
    o = r()
    if o is None:
        # referent has been garbage collected
-       print("Object has been deallocated; can't frobnicate.")
+       print "Object has been deallocated; can't frobnicate."
    else:
-       print("Object is still live!")
+       print "Object is still live!"
        o.do_something_useful()
 
 Using a separate test for "liveness" creates race conditions in threaded
@@ -289,7 +315,7 @@ the referent is accessed::
        def __init__(self, ob, callback=None, **annotations):
            super(ExtendedRef, self).__init__(ob, callback)
            self.__counter = 0
-           for k, v in annotations.items():
+           for k, v in annotations.iteritems():
                setattr(self, k, v)
 
        def __call__(self):

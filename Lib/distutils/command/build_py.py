@@ -4,16 +4,16 @@ Implements the Distutils 'build_py' command."""
 
 __revision__ = "$Id$"
 
-import sys, os
+import os
 import sys
 from glob import glob
 
 from distutils.core import Command
-from distutils.errors import *
-from distutils.util import convert_path, Mixin2to3
+from distutils.errors import DistutilsOptionError, DistutilsFileError
+from distutils.util import convert_path
 from distutils import log
 
-class build_py (Command):
+class build_py(Command):
 
     description = "\"build\" pure Python modules (copy to build directory)"
 
@@ -133,7 +133,6 @@ class build_py (Command):
 
     def build_package_data(self):
         """Copy data files into build directory"""
-        lastdir = None
         for package, src_dir, build_dir, filenames in self.data_files:
             for filename in filenames:
                 target = os.path.join(build_dir, filename)
@@ -145,6 +144,7 @@ class build_py (Command):
         """Return the directory, relative to the top of the source
            distribution, where package 'package' should be found
            (at least according to the 'package_dir' option, if any)."""
+
         path = package.split('.')
 
         if not self.package_dir:
@@ -343,6 +343,7 @@ class build_py (Command):
     def build_modules(self):
         modules = self.find_modules()
         for (package, module, module_file) in modules:
+
             # Now "build" the module -- ie. copy the source file to
             # self.build_lib (the build directory for Python source).
             # (Actually, it gets copied to the directory for this package
@@ -351,6 +352,7 @@ class build_py (Command):
 
     def build_packages(self):
         for package in self.packages:
+
             # Get list of (package, module, module_file) tuples based on
             # scanning the package directory.  'package' is only included
             # in the tuple so that 'find_modules()' and
@@ -382,33 +384,10 @@ class build_py (Command):
         # XXX this code is essentially the same as the 'byte_compile()
         # method of the "install_lib" command, except for the determination
         # of the 'prefix' string.  Hmmm.
+
         if self.compile:
             byte_compile(files, optimize=0,
                          force=self.force, prefix=prefix, dry_run=self.dry_run)
         if self.optimize > 0:
             byte_compile(files, optimize=self.optimize,
                          force=self.force, prefix=prefix, dry_run=self.dry_run)
-
-class build_py_2to3(build_py, Mixin2to3):
-    def run(self):
-        self.updated_files = []
-
-        # Base class code
-        if self.py_modules:
-            self.build_modules()
-        if self.packages:
-            self.build_packages()
-            self.build_package_data()
-
-        # 2to3
-        self.run_2to3(self.updated_files)
-
-        # Remaining base class code
-        self.byte_compile(self.get_outputs(include_bytecode=0))
-
-    def build_module(self, module, module_file, package):
-        res = build_py.build_module(self, module, module_file, package)
-        if res[1]:
-            # file was copied
-            self.updated_files.append(res[0])
-        return res

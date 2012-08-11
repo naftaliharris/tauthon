@@ -5,6 +5,14 @@ import os
 import re
 import fnmatch
 
+try:
+    _unicode = unicode
+except NameError:
+    # If Python is built without Unicode support, the unicode type
+    # will not exist. Fake one.
+    class _unicode(object):
+        pass
+
 __all__ = ["glob", "iglob"]
 
 def glob(pathname):
@@ -27,7 +35,7 @@ def iglob(pathname):
         return
     dirname, basename = os.path.split(pathname)
     if not dirname:
-        for name in glob1(None, basename):
+        for name in glob1(os.curdir, basename):
             yield name
         return
     if has_magic(dirname):
@@ -48,16 +56,16 @@ def iglob(pathname):
 
 def glob1(dirname, pattern):
     if not dirname:
-        if isinstance(pattern, bytes):
-            dirname = bytes(os.curdir, 'ASCII')
-        else:
-            dirname = os.curdir
+        dirname = os.curdir
+    if isinstance(pattern, _unicode) and not isinstance(dirname, unicode):
+        dirname = unicode(dirname, sys.getfilesystemencoding() or
+                                   sys.getdefaultencoding())
     try:
         names = os.listdir(dirname)
     except os.error:
         return []
     if pattern[0] != '.':
-        names = [x for x in names if x[0] != '.']
+        names = filter(lambda x: x[0] != '.', names)
     return fnmatch.filter(names, pattern)
 
 def glob0(dirname, basename):
@@ -73,11 +81,6 @@ def glob0(dirname, basename):
 
 
 magic_check = re.compile('[*?[]')
-magic_check_bytes = re.compile(b'[*?[]')
 
 def has_magic(s):
-    if isinstance(s, bytes):
-        match = magic_check_bytes.search(s)
-    else:
-        match = magic_check.search(s)
-    return match is not None
+    return magic_check.search(s) is not None

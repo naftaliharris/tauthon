@@ -58,21 +58,14 @@ compile Python sources.
    files and directories to compile.  If ``list`` is ``-``, read lines from
    ``stdin``.
 
-.. cmdoption:: -b
-
-   Write the byte-code files to their legacy locations and names, which may
-   overwrite byte-code files created by another version of Python.  The default
-   is to write files to their :pep:`3147` locations and names, which allows
-   byte-code files from multiple versions of Python to coexist.
-
-.. versionchanged:: 3.2
-   Added the ``-i``, ``-b`` and ``-h`` options.
+.. versionchanged:: 2.7
+   Added the ``-i``  option.
 
 
 Public functions
 ----------------
 
-.. function:: compile_dir(dir, maxlevels=10, ddir=None, force=False, rx=None, quiet=False, legacy=False, optimize=-1)
+.. function:: compile_dir(dir[, maxlevels[, ddir[, force[, rx[, quiet]]]]])
 
    Recursively descend the directory tree named by *dir*, compiling all :file:`.py`
    files along the way.
@@ -96,20 +89,8 @@ Public functions
    If *quiet* is true, nothing is printed to the standard output unless errors
    occur.
 
-   If *legacy* is true, byte-code files are written to their legacy locations
-   and names, which may overwrite byte-code files created by another version of
-   Python.  The default is to write files to their :pep:`3147` locations and
-   names, which allows byte-code files from multiple versions of Python to
-   coexist.
 
-   *optimize* specifies the optimization level for the compiler.  It is passed to
-   the built-in :func:`compile` function.
-
-   .. versionchanged:: 3.2
-      Added the *legacy* and *optimize* parameter.
-
-
-.. function:: compile_file(fullname, ddir=None, force=False, rx=None, quiet=False, legacy=False, optimize=-1)
+.. function:: compile_file(fullname[, ddir[, force[, rx[, quiet]]]])
 
    Compile the file with path *fullname*.
 
@@ -126,29 +107,16 @@ Public functions
    If *quiet* is true, nothing is printed to the standard output unless errors
    occur.
 
-   If *legacy* is true, byte-code files are written to their legacy locations
-   and names, which may overwrite byte-code files created by another version of
-   Python.  The default is to write files to their :pep:`3147` locations and
-   names, which allows byte-code files from multiple versions of Python to
-   coexist.
-
-   *optimize* specifies the optimization level for the compiler.  It is passed to
-   the built-in :func:`compile` function.
-
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
-.. function:: compile_path(skip_curdir=True, maxlevels=0, force=False, legacy=False, optimize=-1)
+.. function:: compile_path([skip_curdir[, maxlevels[, force]]])
 
    Byte-compile all the :file:`.py` files found along ``sys.path``. If
    *skip_curdir* is true (the default), the current directory is not included
    in the search.  All other parameters are passed to the :func:`compile_dir`
    function.  Note that unlike the other compile functions, ``maxlevels``
    defaults to ``0``.
-
-   .. versionchanged:: 3.2
-      Added the *legacy* and *optimize* parameter.
-
 
 To force a recompile of all the :file:`.py` files in the :file:`Lib/`
 subdirectory and all its subdirectories::

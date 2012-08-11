@@ -18,7 +18,7 @@ __revision__ = "$Id$"
 
 import os
 from distutils.core import Command
-from distutils.errors import *
+from distutils.errors import DistutilsSetupError
 from distutils.sysconfig import customize_compiler
 from distutils import log
 
@@ -92,7 +92,6 @@ class build_clib(Command):
         # XXX same as for build_ext -- what about 'self.define' and
         # 'self.undef' ?
 
-
     def run(self):
         if not self.libraries:
             return
@@ -128,30 +127,30 @@ class build_clib(Command):
         just returns otherwise.
         """
         if not isinstance(libraries, list):
-            raise DistutilsSetupError(
-                  "'libraries' option must be a list of tuples")
+            raise DistutilsSetupError, \
+                  "'libraries' option must be a list of tuples"
 
         for lib in libraries:
             if not isinstance(lib, tuple) and len(lib) != 2:
-                raise DistutilsSetupError(
-                      "each element of 'libraries' must a 2-tuple")
+                raise DistutilsSetupError, \
+                      "each element of 'libraries' must a 2-tuple"
 
             name, build_info = lib
 
             if not isinstance(name, str):
-                raise DistutilsSetupError(
-                      "first element of each tuple in 'libraries' "
-                      "must be a string (the library name)")
-
+                raise DistutilsSetupError, \
+                      "first element of each tuple in 'libraries' " + \
+                      "must be a string (the library name)"
             if '/' in name or (os.sep != '/' and os.sep in name):
-                raise DistutilsSetupError("bad library name '%s': "
-                       "may not contain directory separators" % lib[0])
+                raise DistutilsSetupError, \
+                      ("bad library name '%s': " +
+                       "may not contain directory separators") % \
+                      lib[0]
 
             if not isinstance(build_info, dict):
-                raise DistutilsSetupError(
-                      "second element of each tuple in 'libraries' "
-                      "must be a dictionary (build info)")
-
+                raise DistutilsSetupError, \
+                      "second element of each tuple in 'libraries' " + \
+                      "must be a dictionary (build info)"
 
     def get_library_names(self):
         # Assume the library list is valid -- 'check_library_list()' is
@@ -171,23 +170,22 @@ class build_clib(Command):
         for (lib_name, build_info) in self.libraries:
             sources = build_info.get('sources')
             if sources is None or not isinstance(sources, (list, tuple)):
-                raise DistutilsSetupError(
-                       "in 'libraries' option (library '%s'), "
+                raise DistutilsSetupError, \
+                      ("in 'libraries' option (library '%s'), "
                        "'sources' must be present and must be "
-                       "a list of source filenames" % lib_name)
+                       "a list of source filenames") % lib_name
 
             filenames.extend(sources)
         return filenames
-
 
     def build_libraries(self, libraries):
         for (lib_name, build_info) in libraries:
             sources = build_info.get('sources')
             if sources is None or not isinstance(sources, (list, tuple)):
-                raise DistutilsSetupError(
-                       "in 'libraries' option (library '%s'), "
-                       "'sources' must be present and must be "
-                       "a list of source filenames" % lib_name)
+                raise DistutilsSetupError, \
+                      ("in 'libraries' option (library '%s'), " +
+                       "'sources' must be present and must be " +
+                       "a list of source filenames") % lib_name
             sources = list(sources)
 
             log.info("building '%s' library", lib_name)

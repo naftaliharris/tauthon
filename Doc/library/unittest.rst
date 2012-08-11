@@ -8,6 +8,8 @@
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. sectionauthor:: Raymond Hettinger <python@rcn.com>
 
+.. versionadded:: 2.1
+
 (If you are already familiar with the basic concepts of testing, you might want
 to skip to :ref:`the list of assert methods <assert-methods>`.)
 
@@ -97,12 +99,6 @@ need to derive from a specific class.
       A special-interest-group for discussion of testing, and testing tools,
       in Python.
 
-   The script :file:`Tools/unittestgui/unittestgui.py` in the Python source distribution is
-   a GUI tool for test discovery and execution.  This is intended largely for ease of use
-   for those new to unit testing.  For production environments it is recommended that
-   tests be driven by a continuous integration system such as `Hudson <http://hudson-ci.org/>`_
-   or `Buildbot <http://buildbot.net/trac>`_.
-
 
 .. _unittest-minimal-example:
 
@@ -121,13 +117,13 @@ Here is a short script to test three functions from the :mod:`random` module::
    class TestSequenceFunctions(unittest.TestCase):
 
        def setUp(self):
-           self.seq = list(range(10))
+           self.seq = range(10)
 
        def test_shuffle(self):
            # make sure the shuffled sequence does not lose any elements
            random.shuffle(self.seq)
            self.seq.sort()
-           self.assertEqual(self.seq, list(range(10)))
+           self.assertEqual(self.seq, range(10))
 
            # should raise an exception for an immutable sequence
            self.assertRaises(TypeError, random.shuffle, (1,2,3))
@@ -211,29 +207,15 @@ modules, classes or even individual test methods::
 You can pass in a list with any combination of module names, and fully
 qualified class or method names.
 
-Test modules can be specified by file path as well::
-
-   python -m unittest tests/test_something.py
-
-This allows you to use the shell filename completion to specify the test module.
-The file specified must still be importable as a module. The path is converted
-to a module name by removing the '.py' and converting path separators into '.'.
-If you want to execute a test file that isn't importable as a module you should
-execute the file directly instead.
-
 You can run tests with more detail (higher verbosity) by passing in the -v flag::
 
    python -m unittest -v test_module
-
-When executed without arguments :ref:`unittest-test-discovery` is started::
-
-   python -m unittest
 
 For a list of all the command-line options::
 
    python -m unittest -h
 
-.. versionchanged:: 3.2
+..  versionchanged:: 2.7
    In earlier versions it was only possible to run individual test methods and
    not modules or classes.
 
@@ -263,7 +245,7 @@ Command-line options
 
    Stop the test run on the first error or failure.
 
-.. versionadded:: 3.2
+.. versionadded:: 2.7
    The command-line options ``-b``, ``-c`` and ``-f`` were added.
 
 The command line can also be used for test discovery, for running all of the
@@ -275,7 +257,7 @@ tests in a project or just a subset.
 Test Discovery
 --------------
 
-.. versionadded:: 3.2
+.. versionadded:: 2.7
 
 Unittest supports simple test discovery. In order to be compatible with test
 discovery, all of the test files must be :ref:`modules <tut-modules>` or
@@ -288,12 +270,6 @@ used from the command line. The basic command-line usage is::
 
    cd project_directory
    python -m unittest discover
-
-.. note::
-
-   As a shortcut, ``python -m unittest`` is the equivalent of
-   ``python -m unittest discover``. If you want to pass arguments to test
-   discovery the `discover` sub-command must be used explicitly.
 
 The ``discover`` sub-command has the following options:
 
@@ -329,9 +305,9 @@ as the start directory.
 
 .. caution::
 
-    Test discovery loads tests by importing them. Once test discovery has found
-    all the test files from the start directory you specify it turns the paths
-    into package names to import. For example :file:`foo/bar/baz.py` will be
+    Test discovery loads tests by importing them. Once test discovery has
+    found all the test files from the start directory you specify it turns the
+    paths into package names to import. For example :file:`foo/bar/baz.py` will be
     imported as ``foo.bar.baz``.
 
     If you have a package installed globally and attempt test discovery on
@@ -354,9 +330,9 @@ Organizing test code
 
 The basic building blocks of unit testing are :dfn:`test cases` --- single
 scenarios that must be set up and checked for correctness.  In :mod:`unittest`,
-test cases are represented by :class:`unittest.TestCase` instances.
-To make your own test cases you must write subclasses of
-:class:`TestCase` or use :class:`FunctionTestCase`.
+test cases are represented by instances of :mod:`unittest`'s :class:`TestCase`
+class. To make your own test cases you must write subclasses of
+:class:`TestCase`, or use :class:`FunctionTestCase`.
 
 An instance of a :class:`TestCase`\ -derived class is an object that can
 completely run a single test method, together with optional set-up and tidy-up
@@ -376,7 +352,7 @@ The simplest :class:`TestCase` subclass will simply override the
            widget = Widget('The widget')
            self.assertEqual(widget.size(), (50, 50), 'incorrect default size')
 
-Note that in order to test something, we use the one of the :meth:`assert\*`
+Note that in order to test something, we use one of the :meth:`assert\*`
 methods provided by the :class:`TestCase` base class.  If the test fails, an
 exception will be raised, and :mod:`unittest` will identify the test case as a
 :dfn:`failure`.  Any other exceptions will be treated as :dfn:`errors`. This
@@ -598,7 +574,7 @@ automatically build :class:`unittest.TestSuite` instances from the existing
 Skipping tests and expected failures
 ------------------------------------
 
-.. versionadded:: 3.1
+.. versionadded:: 2.7
 
 Unittest supports skipping individual test methods and even whole classes of
 tests.  In addition, it supports marking a test as a "expected failure," a test
@@ -640,7 +616,7 @@ This is the output of running the example above in verbose mode: ::
 
 Classes can be skipped just like methods: ::
 
-   @skip("showing class skipping")
+   @unittest.skip("showing class skipping")
    class MySkippedTestCase(unittest.TestCase):
        def test_not_run(self):
            pass
@@ -666,20 +642,20 @@ the test unless the passed object has a certain attribute: ::
 
 The following decorators implement test skipping and expected failures:
 
-.. decorator:: skip(reason)
+.. function:: skip(reason)
 
    Unconditionally skip the decorated test.  *reason* should describe why the
    test is being skipped.
 
-.. decorator:: skipIf(condition, reason)
+.. function:: skipIf(condition, reason)
 
    Skip the decorated test if *condition* is true.
 
-.. decorator:: skipUnless(condition, reason)
+.. function:: skipUnless(condition, reason)
 
    Skip the decorated test unless *condition* is true.
 
-.. decorator:: expectedFailure
+.. function:: expectedFailure
 
    Mark the test as an expected failure.  If the test fails when run, the test
    is not counted as a failure.
@@ -723,11 +699,6 @@ Test cases
    Here, we create two instances of :class:`WidgetTestCase`, each of which runs a
    single test.
 
-   .. versionchanged::
-      `TestCase` can be instantiated successfully without providing a method
-      name. This makes it easier to experiment with `TestCase` from the
-      interactive interpreter.
-
    *methodName* defaults to :meth:`runTest`.
 
    :class:`TestCase` instances provide three groups of methods: one group used
@@ -769,7 +740,7 @@ Test cases
 
       See `Class and Module Fixtures`_ for more details.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
    .. method:: tearDownClass()
@@ -784,7 +755,7 @@ Test cases
 
       See `Class and Module Fixtures`_ for more details.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
    .. method:: run(result=None)
@@ -803,7 +774,7 @@ Test cases
       Calling this during a test method or :meth:`setUp` skips the current
       test.  See :ref:`unittest-skipping` for more information.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: debug()
@@ -832,60 +803,56 @@ Test cases
    | :meth:`assertFalse(x)                   | ``bool(x) is False``        |               |
    | <TestCase.assertFalse>`                 |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIs(a, b)                   | ``a is b``                  | 3.1           |
+   | :meth:`assertIs(a, b)                   | ``a is b``                  | 2.7           |
    | <TestCase.assertIs>`                    |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIsNot(a, b)                | ``a is not b``              | 3.1           |
+   | :meth:`assertIsNot(a, b)                | ``a is not b``              | 2.7           |
    | <TestCase.assertIsNot>`                 |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIsNone(x)                  | ``x is None``               | 3.1           |
+   | :meth:`assertIsNone(x)                  | ``x is None``               | 2.7           |
    | <TestCase.assertIsNone>`                |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIsNotNone(x)               | ``x is not None``           | 3.1           |
+   | :meth:`assertIsNotNone(x)               | ``x is not None``           | 2.7           |
    | <TestCase.assertIsNotNone>`             |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIn(a, b)                   | ``a in b``                  | 3.1           |
+   | :meth:`assertIn(a, b)                   | ``a in b``                  | 2.7           |
    | <TestCase.assertIn>`                    |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertNotIn(a, b)                | ``a not in b``              | 3.1           |
+   | :meth:`assertNotIn(a, b)                | ``a not in b``              | 2.7           |
    | <TestCase.assertNotIn>`                 |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertIsInstance(a, b)           | ``isinstance(a, b)``        | 3.2           |
+   | :meth:`assertIsInstance(a, b)           | ``isinstance(a, b)``        | 2.7           |
    | <TestCase.assertIsInstance>`            |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
-   | :meth:`assertNotIsInstance(a, b)        | ``not isinstance(a, b)``    | 3.2           |
+   | :meth:`assertNotIsInstance(a, b)        | ``not isinstance(a, b)``    | 2.7           |
    | <TestCase.assertNotIsInstance>`         |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
 
    All the assert methods (except :meth:`assertRaises`,
-   :meth:`assertRaisesRegex`, :meth:`assertWarns`, :meth:`assertWarnsRegex`)
+   :meth:`assertRaisesRegexp`)
    accept a *msg* argument that, if specified, is used as the error message on
    failure (see also :data:`longMessage`).
 
    .. method:: assertEqual(first, second, msg=None)
 
-      Test that *first* and *second* are equal.  If the values do not
-      compare equal, the test will fail.
+      Test that *first* and *second* are equal.  If the values do not compare
+      equal, the test will fail.
 
       In addition, if *first* and *second* are the exact same type and one of
-      list, tuple, dict, set, frozenset or str or any type that a subclass
-      registers with :meth:`addTypeEqualityFunc` the type specific equality
+      list, tuple, dict, set, frozenset or unicode or any type that a subclass
+      registers with :meth:`addTypeEqualityFunc` the type-specific equality
       function will be called in order to generate a more useful default
       error message (see also the :ref:`list of type-specific methods
       <type-specific-methods>`).
 
-      .. versionchanged:: 3.1
-         Added the automatic calling of type specific equality function.
-
-      .. versionchanged:: 3.2
-         :meth:`assertMultiLineEqual` added as the default type equality
-         function for comparing strings.
+      .. versionchanged:: 2.7
+         Added the automatic calling of type-specific equality function.
 
 
    .. method:: assertNotEqual(first, second, msg=None)
 
-      Test that *first* and *second* are not equal.  If the values do
-      compare equal, the test will fail.
+      Test that *first* and *second* are not equal.  If the values do compare
+      equal, the test will fail.
 
    .. method:: assertTrue(expr, msg=None)
                assertFalse(expr, msg=None)
@@ -902,10 +869,9 @@ Test cases
    .. method:: assertIs(first, second, msg=None)
                assertIsNot(first, second, msg=None)
 
-      Test that *first* and *second* evaluate (or don't evaluate) to the
-      same object.
+      Test that *first* and *second* evaluate (or don't evaluate) to the same object.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: assertIsNone(expr, msg=None)
@@ -913,7 +879,7 @@ Test cases
 
       Test that *expr* is (or is not) None.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: assertIn(first, second, msg=None)
@@ -921,7 +887,7 @@ Test cases
 
       Test that *first* is (or is not) in *second*.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: assertIsInstance(obj, cls, msg=None)
@@ -929,9 +895,9 @@ Test cases
 
       Test that *obj* is (or is not) an instance of *cls* (which can be a
       class or a tuple of classes, as supported by :func:`isinstance`).
+      To check for the exact type, use :func:`assertIs(type(obj), cls) <assertIs>`.
 
-      .. versionadded:: 3.2
-
+      .. versionadded:: 2.7
 
 
    It is also possible to check that exceptions and warnings are raised using
@@ -940,17 +906,11 @@ Test cases
    +---------------------------------------------------------+--------------------------------------+------------+
    | Method                                                  | Checks that                          | New in     |
    +=========================================================+======================================+============+
-   | :meth:`assertRaises(exc, fun, *args, **kwds)            | ``fun(*args, **kwds)`` raises `exc`  |            |
+   | :meth:`assertRaises(exc, fun, *args, **kwds)            | ``fun(*args, **kwds)`` raises *exc*  |            |
    | <TestCase.assertRaises>`                                |                                      |            |
    +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertRaisesRegex(exc, re, fun, *args, **kwds)   | ``fun(*args, **kwds)`` raises `exc`  | 3.1        |
-   | <TestCase.assertRaisesRegex>`                           | and the message matches `re`         |            |
-   +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertWarns(warn, fun, *args, **kwds)            | ``fun(*args, **kwds)`` raises `warn` | 3.2        |
-   | <TestCase.assertWarns>`                                 |                                      |            |
-   +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertWarnsRegex(warn, re, fun, *args, **kwds)   | ``fun(*args, **kwds)`` raises `warn` | 3.2        |
-   | <TestCase.assertWarnsRegex>`                            | and the message matches `re`         |            |
+   | :meth:`assertRaisesRegexp(exc, re, fun, *args, **kwds)  | ``fun(*args, **kwds)`` raises *exc*  | 2.7        |
+   | <TestCase.assertRaisesRegexp>`                          | and the message matches *re*         |            |
    +---------------------------------------------------------+--------------------------------------+------------+
 
    .. method:: assertRaises(exception, callable, *args, **kwds)
@@ -973,93 +933,33 @@ Test cases
       :attr:`exception` attribute.  This can be useful if the intention
       is to perform additional checks on the exception raised::
 
-         with self.assertRaises(SomeException) as cm:
-             do_something()
+        with self.assertRaises(SomeException) as cm:
+            do_something()
 
-         the_exception = cm.exception
-         self.assertEqual(the_exception.error_code, 3)
+        the_exception = cm.exception
+        self.assertEqual(the_exception.error_code, 3)
 
-      .. versionchanged:: 3.1
+      .. versionchanged:: 2.7
          Added the ability to use :meth:`assertRaises` as a context manager.
 
-      .. versionchanged:: 3.2
-         Added the :attr:`exception` attribute.
 
+   .. method:: assertRaisesRegexp(exception, regexp, callable, *args, **kwds)
+               assertRaisesRegexp(exception, regexp)
 
-   .. method:: assertRaisesRegex(exception, regex, callable, *args, **kwds)
-               assertRaisesRegex(exception, regex)
-
-      Like :meth:`assertRaises` but also tests that *regex* matches
-      on the string representation of the raised exception.  *regex* may be
+      Like :meth:`assertRaises` but also tests that *regexp* matches
+      on the string representation of the raised exception.  *regexp* may be
       a regular expression object or a string containing a regular expression
       suitable for use by :func:`re.search`.  Examples::
 
-         self.assertRaisesRegex(ValueError, 'invalid literal for.*XYZ$',
-                                int, 'XYZ')
+         self.assertRaisesRegexp(ValueError, 'invalid literal for.*XYZ$',
+                                 int, 'XYZ')
 
       or::
 
-         with self.assertRaisesRegex(ValueError, 'literal'):
+         with self.assertRaisesRegexp(ValueError, 'literal'):
             int('XYZ')
 
-      .. versionadded:: 3.1
-         under the name ``assertRaisesRegexp``.
-      .. versionchanged:: 3.2
-         Renamed to :meth:`assertRaisesRegex`.
-
-
-   .. method:: assertWarns(warning, callable, *args, **kwds)
-               assertWarns(warning)
-
-      Test that a warning is triggered when *callable* is called with any
-      positional or keyword arguments that are also passed to
-      :meth:`assertWarns`.  The test passes if *warning* is triggered and
-      fails if it isn't.  Also, any unexpected exception is an error.
-      To catch any of a group of warnings, a tuple containing the warning
-      classes may be passed as *warnings*.
-
-      If only the *warning* argument is given, returns a context manager so
-      that the code under test can be written inline rather than as a function::
-
-         with self.assertWarns(SomeWarning):
-             do_something()
-
-      The context manager will store the caught warning object in its
-      :attr:`warning` attribute, and the source line which triggered the
-      warnings in the :attr:`filename` and :attr:`lineno` attributes.
-      This can be useful if the intention is to perform additional checks
-      on the exception raised::
-
-         with self.assertWarns(SomeWarning) as cm:
-             do_something()
-
-         self.assertIn('myfile.py', cm.filename)
-         self.assertEqual(320, cm.lineno)
-
-      This method works regardless of the warning filters in place when it
-      is called.
-
-      .. versionadded:: 3.2
-
-
-   .. method:: assertWarnsRegex(warning, regex, callable, *args, **kwds)
-               assertWarnsRegex(warning, regex)
-
-      Like :meth:`assertWarns` but also tests that *regex* matches on the
-      message of the triggered warning.  *regex* may be a regular expression
-      object or a string containing a regular expression suitable for use
-      by :func:`re.search`.  Example::
-
-         self.assertWarnsRegex(DeprecationWarning,
-                               r'legacy_function\(\) is deprecated',
-                               legacy_function, 'XYZ')
-
-      or::
-
-         with self.assertWarnsRegex(RuntimeWarning, 'unsafe frobnicating'):
-             frobnicate('/etc/passwd')
-
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
 
@@ -1074,27 +974,29 @@ Test cases
    | :meth:`assertNotAlmostEqual(a, b)     | ``round(a-b, 7) != 0``         |              |
    | <TestCase.assertNotAlmostEqual>`      |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertGreater(a, b)            | ``a > b``                      | 3.1          |
+   | :meth:`assertGreater(a, b)            | ``a > b``                      | 2.7          |
    | <TestCase.assertGreater>`             |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertGreaterEqual(a, b)       | ``a >= b``                     | 3.1          |
+   | :meth:`assertGreaterEqual(a, b)       | ``a >= b``                     | 2.7          |
    | <TestCase.assertGreaterEqual>`        |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertLess(a, b)               | ``a < b``                      | 3.1          |
+   | :meth:`assertLess(a, b)               | ``a < b``                      | 2.7          |
    | <TestCase.assertLess>`                |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertLessEqual(a, b)          | ``a <= b``                     | 3.1          |
+   | :meth:`assertLessEqual(a, b)          | ``a <= b``                     | 2.7          |
    | <TestCase.assertLessEqual>`           |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertRegex(s, re)             | ``regex.search(s)``            | 3.1          |
-   | <TestCase.assertRegex>`               |                                |              |
+   | :meth:`assertRegexpMatches(s, re)     | ``regex.search(s)``            | 2.7          |
+   | <TestCase.assertRegexpMatches>`       |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertNotRegex(s, re)          | ``not regex.search(s)``        | 3.2          |
-   | <TestCase.assertNotRegex>`            |                                |              |
+   | :meth:`assertNotRegexpMatches(s, re)  | ``not regex.search(s)``        | 2.7          |
+   | <TestCase.assertNotRegexpMatches>`    |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertCountEqual(a, b)         | `a` and `b` have the same      | 3.2          |
-   | <TestCase.assertCountEqual>`          | elements in the same number,   |              |
-   |                                       | regardless of their order      |              |
+   | :meth:`assertItemsEqual(a, b)         | sorted(a) == sorted(b) and     | 2.7          |
+   | <TestCase.assertItemsEqual>`          | works with unhashable objs     |              |
+   +---------------------------------------+--------------------------------+--------------+
+   | :meth:`assertDictContainsSubset(a, b) | all the key/value pairs        | 2.7          |
+   | <TestCase.assertDictContainsSubset>`  | in *a* exist in *b*            |              |
    +---------------------------------------+--------------------------------+--------------+
 
 
@@ -1112,10 +1014,11 @@ Test cases
 
       Supplying both *delta* and *places* raises a ``TypeError``.
 
-      .. versionchanged:: 3.2
+      .. versionchanged:: 2.7
          :meth:`assertAlmostEqual` automatically considers almost equal objects
          that compare equal.  :meth:`assertNotAlmostEqual` automatically fails
          if the objects compare equal.  Added the *delta* keyword argument.
+
 
 
    .. method:: assertGreater(first, second, msg=None)
@@ -1129,70 +1032,54 @@ Test cases
          >>> self.assertGreaterEqual(3, 4)
          AssertionError: "3" unexpectedly not greater than or equal to "4"
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
-   .. method:: assertRegex(text, regex, msg=None)
-               assertNotRegex(text, regex, msg=None)
+   .. method:: assertRegexpMatches(text, regexp, msg=None)
 
-      Test that a *regex* search matches (or does not match) *text*.  In case
+      Test that a *regexp* search matches *text*.  In case
       of failure, the error message will include the pattern and the *text* (or
-      the pattern and the part of *text* that unexpectedly matched).  *regex*
+      the pattern and the part of *text* that unexpectedly matched).  *regexp*
       may be a regular expression object or a string containing a regular
       expression suitable for use by :func:`re.search`.
 
-      .. versionadded:: 3.1
-         under the name ``assertRegexpMatches``.
-      .. versionchanged:: 3.2
-         The method ``assertRegexpMatches()`` has been renamed to
-         :meth:`.assertRegex`.
-      .. versionadded:: 3.2
-         :meth:`.assertNotRegex`.
+      .. versionadded:: 2.7
 
 
-   .. method:: assertDictContainsSubset(subset, dictionary, msg=None)
+   .. method:: assertNotRegexpMatches(text, regexp, msg=None)
 
-      Tests whether the key/value pairs in *dictionary* are a superset of
-      those in *subset*.  If not, an error message listing the missing keys
-      and mismatched values is generated.
+      Verifies that a *regexp* search does not match *text*.  Fails with an error
+      message including the pattern and the part of *text* that matches.  *regexp*
+      may be a regular expression object or a string containing a regular
+      expression suitable for use by :func:`re.search`.
 
-      Note, the arguments are in the opposite order of what the method name
-      dictates.  Instead, consider using the set-methods on :ref:`dictionary
-      views <dict-views>`, for example: ``d.keys() <= e.keys()`` or
-      ``d.items() <= d.items()``.
-
-      .. versionadded:: 3.1
-      .. deprecated:: 3.2
+      .. versionadded:: 2.7
 
 
-   .. method:: assertCountEqual(first, second, msg=None)
+   .. method:: assertItemsEqual(actual, expected, msg=None)
 
-      Test that sequence *first* contains the same elements as *second*,
+      Test that sequence *expected* contains the same elements as *actual*,
       regardless of their order. When they don't, an error message listing the
       differences between the sequences will be generated.
 
-      Duplicate elements are *not* ignored when comparing *first* and
-      *second*. It verifies whether each element has the same count in both
-      sequences. Equivalent to:
-      ``assertEqual(Counter(list(first)), Counter(list(second)))``
-      but works with sequences of unhashable objects as well.
+      Duplicate elements are *not* ignored when comparing *actual* and
+      *expected*. It verifies if each element has the same count in both
+      sequences. It is the equivalent of ``assertEqual(sorted(expected),
+      sorted(actual))`` but it works with sequences of unhashable objects as
+      well.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
-   .. method:: assertSameElements(first, second, msg=None)
 
-      Test that sequence *first* contains the same elements as *second*,
-      regardless of their order. When they don't, an error message listing
-      the differences between the sequences will be generated.
+   .. method:: assertDictContainsSubset(expected, actual, msg=None)
 
-      Duplicate elements are ignored when comparing *first* and *second*.
-      It is the equivalent of ``assertEqual(set(first), set(second))``
-      but it works with sequences of unhashable objects as well. Because
-      duplicates are ignored, this method has been deprecated in favour of
-      :meth:`assertCountEqual`.
+      Tests whether the key/value pairs in dictionary *actual* are a
+      superset of those in *expected*.  If not, an error message listing
+      the missing keys and mismatched values is generated.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
       .. deprecated:: 3.2
+
 
 
    .. _type-specific-methods:
@@ -1213,7 +1100,7 @@ Test cases
       information and explaining the inequalities in details in the error
       message.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
    The list of type-specific methods automatically used by
    :meth:`~TestCase.assertEqual` are summarized in the following table.  Note
@@ -1222,22 +1109,22 @@ Test cases
    +-----------------------------------------+-----------------------------+--------------+
    | Method                                  | Used to compare             | New in       |
    +=========================================+=============================+==============+
-   | :meth:`assertMultiLineEqual(a, b)       | strings                     | 3.1          |
+   | :meth:`assertMultiLineEqual(a, b)       | strings                     | 2.7          |
    | <TestCase.assertMultiLineEqual>`        |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
-   | :meth:`assertSequenceEqual(a, b)        | sequences                   | 3.1          |
+   | :meth:`assertSequenceEqual(a, b)        | sequences                   | 2.7          |
    | <TestCase.assertSequenceEqual>`         |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
-   | :meth:`assertListEqual(a, b)            | lists                       | 3.1          |
+   | :meth:`assertListEqual(a, b)            | lists                       | 2.7          |
    | <TestCase.assertListEqual>`             |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
-   | :meth:`assertTupleEqual(a, b)           | tuples                      | 3.1          |
+   | :meth:`assertTupleEqual(a, b)           | tuples                      | 2.7          |
    | <TestCase.assertTupleEqual>`            |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
-   | :meth:`assertSetEqual(a, b)             | sets or frozensets          | 3.1          |
+   | :meth:`assertSetEqual(a, b)             | sets or frozensets          | 2.7          |
    | <TestCase.assertSetEqual>`              |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
-   | :meth:`assertDictEqual(a, b)            | dicts                       | 3.1          |
+   | :meth:`assertDictEqual(a, b)            | dicts                       | 2.7          |
    | <TestCase.assertDictEqual>`             |                             |              |
    +-----------------------------------------+-----------------------------+--------------+
 
@@ -1250,13 +1137,13 @@ Test cases
       will be included in the error message. This method is used by default
       when comparing strings with :meth:`assertEqual`.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
-   .. method:: assertSequenceEqual(first, second, msg=None, seq_type=None)
+   .. method:: assertSequenceEqual(seq1, seq2, msg=None, seq_type=None)
 
       Tests that two sequences are equal.  If a *seq_type* is supplied, both
-      *first* and *second* must be instances of *seq_type* or a failure will
+      *seq1* and *seq2* must be instances of *seq_type* or a failure will
       be raised.  If the sequences are different an error message is
       constructed that shows the difference between the two.
 
@@ -1264,11 +1151,11 @@ Test cases
       it's used to implement :meth:`assertListEqual` and
       :meth:`assertTupleEqual`.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
-   .. method:: assertListEqual(first, second, msg=None)
-               assertTupleEqual(first, second, msg=None)
+   .. method:: assertListEqual(list1, list2, msg=None)
+               assertTupleEqual(tuple1, tuple2, msg=None)
 
       Tests that two lists or tuples are equal.  If not an error message is
       constructed that shows only the differences between the two.  An error
@@ -1276,29 +1163,29 @@ Test cases
       These methods are used by default when comparing lists or tuples with
       :meth:`assertEqual`.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
-   .. method:: assertSetEqual(first, second, msg=None)
+   .. method:: assertSetEqual(set1, set2, msg=None)
 
       Tests that two sets are equal.  If not, an error message is constructed
       that lists the differences between the sets.  This method is used by
       default when comparing sets or frozensets with :meth:`assertEqual`.
 
-      Fails if either of *first* or *second* does not have a :meth:`set.difference`
+      Fails if either of *set1* or *set2* does not have a :meth:`set.difference`
       method.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
-   .. method:: assertDictEqual(first, second, msg=None)
+   .. method:: assertDictEqual(expected, actual, msg=None)
 
       Test that two dictionaries are equal.  If not, an error message is
       constructed that shows the differences in the dictionaries. This
       method will be used by default to compare dictionaries in
       calls to :meth:`assertEqual`.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
 
@@ -1332,13 +1219,13 @@ Test cases
       to ``True`` allows you to have a custom error message in addition to the
       normal one.
 
-      This attribute defaults to ``True``. If set to False then a custom message
-      passed to an assert method will silence the normal message.
+      This attribute defaults to ``False``, meaning that a custom message passed
+      to an assert method will silence the normal message.
 
       The class setting can be overridden in individual tests by assigning an
       instance attribute to ``True`` or ``False`` before calling the assert methods.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. attribute:: maxDiff
@@ -1353,7 +1240,7 @@ Test cases
       Setting ``maxDiff`` to None means that there is no maximum length of
       diffs.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
    Testing frameworks can use the following methods to collect information on
@@ -1388,13 +1275,8 @@ Test cases
       Returns a description of the test, or ``None`` if no description
       has been provided.  The default implementation of this method
       returns the first line of the test method's docstring, if available,
-      or ``None``.
+      or :const:`None`.
 
-      .. versionchanged:: 3.1
-         In 3.1 this was changed to add the test name to the short description
-         even in the presence of a docstring.  This caused compatibility issues
-         with unittest extensions and adding the test name was moved to the
-         :class:`TextTestResult` in Python 3.2.
 
 
    .. method:: addCleanup(function, *args, **kwargs)
@@ -1408,7 +1290,7 @@ Test cases
       If :meth:`setUp` fails, meaning that :meth:`tearDown` is not called,
       then any cleanup functions added will still be called.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: doCleanups()
@@ -1424,7 +1306,7 @@ Test cases
       :meth:`doCleanups` pops methods off the stack of cleanup
       functions one at a time, so it can be called at any time.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
 .. class:: FunctionTestCase(testFunc, setUp=None, tearDown=None, description=None)
@@ -1436,8 +1318,6 @@ Test cases
    :mod:`unittest`-based test framework.
 
 
-.. _deprecated-aliases:
-
 Deprecated aliases
 ##################
 
@@ -1445,27 +1325,21 @@ For historical reasons, some of the :class:`TestCase` methods had one or more
 aliases that are now deprecated.  The following table lists the correct names
 along with their deprecated aliases:
 
-   ==============================  ====================== ======================
-    Method Name                     Deprecated alias       Deprecated alias
-   ==============================  ====================== ======================
-    :meth:`.assertEqual`            failUnlessEqual        assertEquals
-    :meth:`.assertNotEqual`         failIfEqual            assertNotEquals
-    :meth:`.assertTrue`             failUnless             assert\_
+   ==============================  ===============================
+    Method Name                     Deprecated alias(es)
+   ==============================  ===============================
+    :meth:`.assertEqual`            failUnlessEqual, assertEquals
+    :meth:`.assertNotEqual`         failIfEqual
+    :meth:`.assertTrue`             failUnless, assert\_
     :meth:`.assertFalse`            failIf
     :meth:`.assertRaises`           failUnlessRaises
-    :meth:`.assertAlmostEqual`      failUnlessAlmostEqual  assertAlmostEquals
-    :meth:`.assertNotAlmostEqual`   failIfAlmostEqual      assertNotAlmostEquals
-    :meth:`.assertRegex`                                   assertRegexpMatches
-    :meth:`.assertRaisesRegex`                             assertRaisesRegexp
-   ==============================  ====================== ======================
+    :meth:`.assertAlmostEqual`      failUnlessAlmostEqual
+    :meth:`.assertNotAlmostEqual`   failIfAlmostEqual
+   ==============================  ===============================
 
-   .. deprecated-removed:: 3.1 3.3
-         the fail* aliases listed in the second column.
-   .. deprecated:: 3.2
-         the assert* aliases listed in the third column.
-   .. deprecated:: 3.2
-         ``assertRegexpMatches`` and ``assertRaisesRegexp`` have been renamed to
-         :meth:`.assertRegex` and :meth:`.assertRaisesRegex`
+   .. deprecated:: 2.7
+         the aliases listed in the second column
+
 
 
 .. _testsuite-objects:
@@ -1535,7 +1409,7 @@ Grouping tests
       (for example when counting tests or comparing for equality)
       so the tests returned must be the same for repeated iterations.
 
-      .. versionchanged:: 3.2
+      .. versionchanged:: 2.7
          In earlier versions the :class:`TestSuite` accessed tests directly rather
          than through iteration, so overriding :meth:`__iter__` wasn't sufficient
          for providing tests.
@@ -1552,8 +1426,8 @@ Loading and running tests
    The :class:`TestLoader` class is used to create test suites from classes and
    modules.  Normally, there is no need to create an instance of this class; the
    :mod:`unittest` module provides an instance that can be shared as
-   ``unittest.defaultTestLoader``. Using a subclass or instance, however, allows
-   customization of some configurable properties.
+   :data:`unittest.defaultTestLoader`.  Using a subclass or instance, however,
+   allows customization of some configurable properties.
 
    :class:`TestLoader` objects have the following methods:
 
@@ -1583,7 +1457,7 @@ Loading and running tests
       load the tests. This allows modules to customize test loading.
       This is the `load_tests protocol`_.
 
-      .. versionchanged:: 3.2
+      .. versionchanged:: 2.7
          Support for ``load_tests`` added.
 
 
@@ -1655,8 +1529,7 @@ Loading and running tests
 
       *start_dir* can be a dotted module name as well as a directory.
 
-      .. versionadded:: 3.2
-
+      .. versionadded:: 2.7
 
    The following attributes of a :class:`TestLoader` can be configured either by
    subclassing or assignment on an instance:
@@ -1674,7 +1547,9 @@ Loading and running tests
    .. attribute:: sortTestMethodsUsing
 
       Function to be used to compare method names when sorting them in
-      :meth:`getTestCaseNames` and all the :meth:`loadTestsFrom\*` methods.
+      :meth:`getTestCaseNames` and all the :meth:`loadTestsFrom\*` methods. The
+      default value is the built-in :func:`cmp` function; the attribute can also
+      be set to :const:`None` to disable the sort.
 
 
    .. attribute:: suiteClass
@@ -1711,6 +1586,10 @@ Loading and running tests
       holding formatted tracebacks. Each tuple represents a test which raised an
       unexpected exception.
 
+      .. versionchanged:: 2.2
+         Contains formatted tracebacks instead of :func:`sys.exc_info` results.
+
+
    .. attribute:: failures
 
       A list containing 2-tuples of :class:`TestCase` instances and strings
@@ -1718,12 +1597,15 @@ Loading and running tests
       was explicitly signalled using the :meth:`TestCase.fail\*` or
       :meth:`TestCase.assert\*` methods.
 
+      .. versionchanged:: 2.2
+         Contains formatted tracebacks instead of :func:`sys.exc_info` results.
+
    .. attribute:: skipped
 
       A list containing 2-tuples of :class:`TestCase` instances and strings
       holding the reason for skipping the test.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
    .. attribute:: expectedFailures
 
@@ -1753,7 +1635,7 @@ Loading and running tests
       only be echoed onto the real ``sys.stdout`` and ``sys.stderr`` if the test
       fails or errors. Any output is also attached to the failure / error message.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
    .. attribute:: failfast
@@ -1761,7 +1643,7 @@ Loading and running tests
       If set to true :meth:`stop` will be called on the first failure or error,
       halting the test run.
 
-      .. versionadded:: 3.2
+      .. versionadded:: 2.7
 
 
    .. method:: wasSuccessful()
@@ -1801,14 +1683,14 @@ Loading and running tests
 
       Called once before any tests are executed.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: stopTestRun(test)
 
       Called once after all tests are executed.
 
-      .. versionadded:: 3.1
+      .. versionadded:: 2.7
 
 
    .. method:: addError(test, err)
@@ -1866,16 +1748,14 @@ Loading and running tests
       The default implementation appends the test to the instance's
       :attr:`unexpectedSuccesses` attribute.
 
-
 .. class:: TextTestResult(stream, descriptions, verbosity)
 
-   A concrete implementation of :class:`TestResult` used by the
-   :class:`TextTestRunner`.
+    A concrete implementation of :class:`TestResult` used by the
+    :class:`TextTestRunner`.
 
-   .. versionadded:: 3.2
-      This class was previously named ``_TextTestResult``. The old name still
-      exists as an alias but is deprecated.
-
+    .. versionadded:: 2.7
+        This class was previously named ``_TextTestResult``. The old name still
+        exists as an alias but is deprecated.
 
 .. data:: defaultTestLoader
 
@@ -1884,28 +1764,11 @@ Loading and running tests
    instead of repeatedly creating new instances.
 
 
-.. class:: TextTestRunner(stream=None, descriptions=True, verbosity=1, runnerclass=None, warnings=None)
+.. class:: TextTestRunner(stream=sys.stderr, descriptions=True, verbosity=1)
 
-   A basic test runner implementation that outputs results to a stream. If *stream*
-   is `None`, the default, `sys.stderr` is used as the output stream. This class
+   A basic test runner implementation which prints results on standard error.  It
    has a few configurable parameters, but is essentially very simple.  Graphical
    applications which run test suites should provide alternate implementations.
-
-   By default this runner shows :exc:`DeprecationWarning`,
-   :exc:`PendingDeprecationWarning`, and :exc:`ImportWarning` even if they are
-   :ref:`ignored by default <warning-ignored>`. Deprecation warnings caused by
-   :ref:`deprecated unittest methods <deprecated-aliases>` are also
-   special-cased and, when the warning filters are ``'default'`` or ``'always'``,
-   they will appear only once per-module, in order to avoid too many warning
-   messages.  This behavior can be overridden using the :option:`-Wd` or
-   :option:`-Wa` options and leaving *warnings* to ``None``.
-
-   .. versionchanged:: 3.2
-      Added the ``warnings`` argument.
-
-   .. versionchanged:: 3.2
-      The default stream is set to `sys.stderr` at instantiation time rather
-      than import time.
 
    .. method:: _makeResult()
 
@@ -1918,16 +1781,15 @@ Loading and running tests
       defaults to :class:`TextTestResult` if no ``resultclass`` is provided.
       The result class is instantiated with the following arguments::
 
-        stream, descriptions, verbosity
+            stream, descriptions, verbosity
 
 
-.. function:: main(module='__main__', defaultTest=None, argv=None, testRunner=None, \
-                   testLoader=unittest.defaultTestLoader, exit=True, verbosity=1, \
-                   failfast=None, catchbreak=None, buffer=None, warnings=None)
+.. function:: main([module[, defaultTest[, argv[, testRunner[, testLoader[, exit[, verbosity[, failfast[, catchbreak[, buffer]]]]]]]]]])
 
-   A command-line program that runs a set of tests; this is primarily for making
-   test modules conveniently executable.  The simplest use for this function is to
-   include the following line at the end of a test script::
+   A command-line program that loads a set of tests from *module* and runs them;
+   this is primarily for making test modules conveniently executable.
+   The simplest use for this function is to include the following line at the
+   end of a test script::
 
       if __name__ == '__main__':
           unittest.main()
@@ -1938,9 +1800,16 @@ Loading and running tests
       if __name__ == '__main__':
           unittest.main(verbosity=2)
 
+   The *argv* argument can be a list of options passed to the program, with the
+   first element being the program name.  If not specified or ``None``,
+   the values of :data:`sys.argv` are used.
+
    The *testRunner* argument can either be a test runner class or an already
    created instance of it. By default ``main`` calls :func:`sys.exit` with
    an exit code indicating success or failure of the tests run.
+
+   The *testLoader* argument has to be a :class:`TestLoader` instance,
+   and defaults to :data:`defaultTestLoader`.
 
    ``main`` supports being used from the interactive interpreter by passing in the
    argument ``exit=False``. This displays the result on standard output without
@@ -1949,29 +1818,21 @@ Loading and running tests
       >>> from unittest import main
       >>> main(module='test_module', exit=False)
 
-   The ``failfast``, ``catchbreak`` and ``buffer`` parameters have the same
+   The *failfast*, *catchbreak* and *buffer* parameters have the same
    effect as the same-name `command-line options`_.
-
-   The *warning* argument specifies the :ref:`warning filter <warning-filter>`
-   that should be used while running the tests.  If it's not specified, it will
-   remain ``None`` if a :option:`-W` option is passed to :program:`python`,
-   otherwise it will be set to ``'default'``.
 
    Calling ``main`` actually returns an instance of the ``TestProgram`` class.
    This stores the result of the tests run as the ``result`` attribute.
 
-   .. versionchanged:: 3.1
-      The ``exit`` parameter was added.
-
-   .. versionchanged:: 3.2
-      The ``verbosity``, ``failfast``, ``catchbreak``, ``buffer``
-      and ``warnings`` parameters were added.
+   .. versionchanged:: 2.7
+      The *exit*, *verbosity*, *failfast*, *catchbreak* and *buffer*
+      parameters were added.
 
 
 load_tests Protocol
 ###################
 
-.. versionadded:: 3.2
+.. versionadded:: 2.7
 
 Modules or packages can customize how tests are loaded from them during normal
 test runs or test discovery by implementing a function called ``load_tests``.
@@ -2119,8 +1980,6 @@ instead of as an error.
 Signal Handling
 ---------------
 
-.. versionadded:: 3.2
-
 The :option:`-c/--catch <unittest -c>` command-line option to unittest,
 along with the ``catchbreak`` parameter to :func:`unittest.main()`, provide
 more friendly handling of control-C during a test run. With catch break
@@ -2146,6 +2005,7 @@ handling functionality within test frameworks.
    (usually in response to the user pressing control-c) all registered results
    have :meth:`~TestResult.stop` called.
 
+   .. versionadded:: 2.7
 
 .. function:: registerResult(result)
 
@@ -2157,6 +2017,7 @@ handling functionality within test frameworks.
    handling is not enabled, so test frameworks can unconditionally register
    all results they create independently of whether or not handling is enabled.
 
+   .. versionadded:: 2.7
 
 .. function:: removeResult(result)
 
@@ -2164,6 +2025,7 @@ handling functionality within test frameworks.
    :meth:`~TestResult.stop` will no longer be called on that result object in
    response to a control-c.
 
+   .. versionadded:: 2.7
 
 .. function:: removeHandler(function=None)
 
@@ -2174,3 +2036,6 @@ handling functionality within test frameworks.
       @unittest.removeHandler
       def test_signal_handling(self):
           ...
+
+   .. versionadded:: 2.7
+

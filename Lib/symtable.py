@@ -2,8 +2,8 @@
 
 import _symtable
 from _symtable import (USE, DEF_GLOBAL, DEF_LOCAL, DEF_PARAM,
-     DEF_IMPORT, DEF_BOUND, OPT_IMPORT_STAR, SCOPE_OFF, SCOPE_MASK, FREE,
-     LOCAL, GLOBAL_IMPLICIT, GLOBAL_EXPLICIT, CELL)
+     DEF_IMPORT, DEF_BOUND, OPT_IMPORT_STAR, OPT_EXEC, OPT_BARE_EXEC,
+     SCOPE_OFF, SCOPE_MASK, FREE, GLOBAL_IMPLICIT, GLOBAL_EXPLICIT, CELL, LOCAL)
 
 import weakref
 
@@ -11,7 +11,7 @@ __all__ = ["symtable", "SymbolTable", "Class", "Function", "Symbol"]
 
 def symtable(code, filename, compile_type):
     raw = _symtable.symtable(code, filename, compile_type)
-    for top in raw.values():
+    for top in raw.itervalues():
         if top.name == 'top':
             break
     return _newSymbolTable(top, filename)
@@ -87,8 +87,8 @@ class SymbolTable(object):
         return bool(self._table.children)
 
     def has_exec(self):
-        """Return true if the scope uses exec.  Deprecated method."""
-        return False
+        """Return true if the scope uses exec"""
+        return bool(self._table.optimized & (OPT_EXEC | OPT_BARE_EXEC))
 
     def has_import_star(self):
         """Return true if the scope uses import *"""
@@ -230,7 +230,7 @@ class Symbol(object):
         Raises ValueError if the name is bound to multiple namespaces.
         """
         if len(self.__namespaces) != 1:
-            raise ValueError("name is bound to multiple namespaces")
+            raise ValueError, "name is bound to multiple namespaces"
         return self.__namespaces[0]
 
 if __name__ == "__main__":
@@ -239,4 +239,4 @@ if __name__ == "__main__":
     mod = symtable(src, os.path.split(sys.argv[0])[1], "exec")
     for ident in mod.get_identifiers():
         info = mod.lookup(ident)
-        print(info, info.is_local(), info.is_namespace())
+        print info, info.is_local(), info.is_namespace()

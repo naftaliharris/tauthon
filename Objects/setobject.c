@@ -3,13 +3,12 @@
    Written and maintained by Raymond D. Hettinger <python@rcn.com>
    Derived from Lib/sets.py and Objects/dictobject.c.
 
-   Copyright (c) 2003-2008 Python Software Foundation.
+   Copyright (c) 2003-2007 Python Software Foundation.
    All rights reserved.
 */
 
 #include "Python.h"
 #include "structmember.h"
-#include "stringlib/eq.h"
 
 /* Set a key error with the specified argument, wrapping it in a
  * tuple automatically so that tuple keys are not unpacked as the
@@ -58,7 +57,6 @@ _PySet_Dummy(void)
 static PySetObject *free_list[PySet_MAXFREELIST];
 static int numfree = 0;
 
-
 /*
 The basic lookup function used by all operations.
 This is based on Algorithm D from Knuth Vol. 3, Sec. 6.4.
@@ -75,7 +73,7 @@ NULL if the rich comparison returns an error.
 */
 
 static setentry *
-set_lookkey(PySetObject *so, PyObject *key, register Py_hash_t hash)
+set_lookkey(PySetObject *so, PyObject *key, register long hash)
 {
     register Py_ssize_t i;
     register size_t perturb;
@@ -152,12 +150,12 @@ set_lookkey(PySetObject *so, PyObject *key, register Py_hash_t hash)
 }
 
 /*
- * Hacked up version of set_lookkey which can assume keys are always unicode;
- * This means we can always use unicode_eq directly and not have to check to
+ * Hacked up version of set_lookkey which can assume keys are always strings;
+ * This means we can always use _PyString_Eq directly and not have to check to
  * see if the comparison altered the table.
  */
 static setentry *
-set_lookkey_unicode(PySetObject *so, PyObject *key, register Py_hash_t hash)
+set_lookkey_string(PySetObject *so, PyObject *key, register long hash)
 {
     register Py_ssize_t i;
     register size_t perturb;
@@ -166,11 +164,11 @@ set_lookkey_unicode(PySetObject *so, PyObject *key, register Py_hash_t hash)
     setentry *table = so->table;
     register setentry *entry;
 
-    /* Make sure this function doesn't have to handle non-unicode keys,
+    /* Make sure this function doesn't have to handle non-string keys,
        including subclasses of str; e.g., one reason to subclass
        strings is to override __eq__, and for speed we don't cater to
        that here. */
-    if (!PyUnicode_CheckExact(key)) {
+    if (!PyString_CheckExact(key)) {
         so->lookup = set_lookkey;
         return set_lookkey(so, key, hash);
     }
@@ -181,7 +179,7 @@ set_lookkey_unicode(PySetObject *so, PyObject *key, register Py_hash_t hash)
     if (entry->key == dummy)
         freeslot = entry;
     else {
-        if (entry->hash == hash && unicode_eq(entry->key, key))
+        if (entry->hash == hash && _PyString_Eq(entry->key, key))
             return entry;
         freeslot = NULL;
     }
@@ -196,7 +194,7 @@ set_lookkey_unicode(PySetObject *so, PyObject *key, register Py_hash_t hash)
         if (entry->key == key
             || (entry->hash == hash
             && entry->key != dummy
-            && unicode_eq(entry->key, key)))
+            && _PyString_Eq(entry->key, key)))
             return entry;
         if (entry->key == dummy && freeslot == NULL)
             freeslot = entry;
@@ -211,10 +209,10 @@ Used by the public insert routine.
 Eats a reference to key.
 */
 static int
-set_insert_key(register PySetObject *so, PyObject *key, Py_hash_t hash)
+set_insert_key(register PySetObject *so, PyObject *key, long hash)
 {
     register setentry *entry;
-    typedef setentry *(*lookupfunc)(PySetObject *, PyObject *, Py_hash_t);
+    typedef setentry *(*lookupfunc)(PySetObject *, PyObject *, long);
 
     assert(so->lookup != NULL);
     entry = so->lookup(so, key, hash);
@@ -248,7 +246,7 @@ Note that no refcounts are changed by this routine; if needed, the caller
 is responsible for incref'ing `key`.
 */
 static void
-set_insert_clean(register PySetObject *so, PyObject *key, Py_hash_t hash)
+set_insert_clean(register PySetObject *so, PyObject *key, long hash)
 {
     register size_t i;
     register size_t perturb;
@@ -365,11 +363,12 @@ set_add_entry(register PySetObject *so, setentry *entry)
 {
     register Py_ssize_t n_used;
     PyObject *key = entry->key;
+    long hash = entry->hash;
 
     assert(so->fill <= so->mask);  /* at least one empty slot */
     n_used = so->used;
     Py_INCREF(key);
-    if (set_insert_key(so, key, entry->hash) == -1) {
+    if (set_insert_key(so, key, hash) == -1) {
         Py_DECREF(key);
         return -1;
     }
@@ -381,11 +380,11 @@ set_add_entry(register PySetObject *so, setentry *entry)
 static int
 set_add_key(register PySetObject *so, PyObject *key)
 {
-    register Py_hash_t hash;
+    register long hash;
     register Py_ssize_t n_used;
 
-    if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+    if (!PyString_CheckExact(key) ||
+        (hash = ((PyStringObject *) key)->ob_shash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return -1;
@@ -426,14 +425,13 @@ set_discard_entry(PySetObject *so, setentry *oldentry)
 static int
 set_discard_key(PySetObject *so, PyObject *key)
 {
-    register Py_hash_t hash;
+    register long hash;
     register setentry *entry;
     PyObject *old_key;
 
     assert (PyAnySet_Check(so));
-
-    if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+    if (!PyString_CheckExact(key) ||
+        (hash = ((PyStringObject *) key)->ob_shash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return -1;
@@ -575,54 +573,67 @@ set_dealloc(PySetObject *so)
     Py_TRASHCAN_SAFE_END(so)
 }
 
+static int
+set_tp_print(PySetObject *so, FILE *fp, int flags)
+{
+    setentry *entry;
+    Py_ssize_t pos=0;
+    char *emit = "";            /* No separator emitted on first pass */
+    char *separator = ", ";
+    int status = Py_ReprEnter((PyObject*)so);
+
+    if (status != 0) {
+        if (status < 0)
+            return status;
+        Py_BEGIN_ALLOW_THREADS
+        fprintf(fp, "%s(...)", so->ob_type->tp_name);
+        Py_END_ALLOW_THREADS
+        return 0;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    fprintf(fp, "%s([", so->ob_type->tp_name);
+    Py_END_ALLOW_THREADS
+    while (set_next(so, &pos, &entry)) {
+        Py_BEGIN_ALLOW_THREADS
+        fputs(emit, fp);
+        Py_END_ALLOW_THREADS
+        emit = separator;
+        if (PyObject_Print(entry->key, fp, 0) != 0) {
+            Py_ReprLeave((PyObject*)so);
+            return -1;
+        }
+    }
+    Py_BEGIN_ALLOW_THREADS
+    fputs("])", fp);
+    Py_END_ALLOW_THREADS
+    Py_ReprLeave((PyObject*)so);
+    return 0;
+}
+
 static PyObject *
 set_repr(PySetObject *so)
 {
-    PyObject *keys, *result=NULL;
-    Py_UNICODE *u;
+    PyObject *keys, *result=NULL, *listrepr;
     int status = Py_ReprEnter((PyObject*)so);
-    PyObject *listrepr;
-    Py_ssize_t newsize;
 
     if (status != 0) {
         if (status < 0)
             return NULL;
-        return PyUnicode_FromFormat("%s(...)", Py_TYPE(so)->tp_name);
-    }
-
-    /* shortcut for the empty set */
-    if (!so->used) {
-        Py_ReprLeave((PyObject*)so);
-        return PyUnicode_FromFormat("%s()", Py_TYPE(so)->tp_name);
+        return PyString_FromFormat("%s(...)", so->ob_type->tp_name);
     }
 
     keys = PySequence_List((PyObject *)so);
     if (keys == NULL)
         goto done;
-
     listrepr = PyObject_Repr(keys);
     Py_DECREF(keys);
     if (listrepr == NULL)
         goto done;
-    newsize = PyUnicode_GET_SIZE(listrepr);
-    result = PyUnicode_FromUnicode(NULL, newsize);
-    if (result) {
-        u = PyUnicode_AS_UNICODE(result);
-        *u++ = '{';
-        /* Omit the brackets from the listrepr */
-        Py_UNICODE_COPY(u, PyUnicode_AS_UNICODE(listrepr)+1,
-                           PyUnicode_GET_SIZE(listrepr)-2);
-        u += newsize-2;
-        *u++ = '}';
-    }
+
+    result = PyString_FromFormat("%s(%s)", so->ob_type->tp_name,
+        PyString_AS_STRING(listrepr));
     Py_DECREF(listrepr);
-    if (Py_TYPE(so) != &PySet_Type) {
-        PyObject *tmp = PyUnicode_FromFormat("%s(%U)",
-                                             Py_TYPE(so)->tp_name,
-                                             result);
-        Py_DECREF(result);
-        result = tmp;
-    }
 done:
     Py_ReprLeave((PyObject*)so);
     return result;
@@ -639,6 +650,7 @@ set_merge(PySetObject *so, PyObject *otherset)
 {
     PySetObject *other;
     PyObject *key;
+    long hash;
     register Py_ssize_t i;
     register setentry *entry;
 
@@ -660,10 +672,11 @@ set_merge(PySetObject *so, PyObject *otherset)
     for (i = 0; i <= other->mask; i++) {
         entry = &other->table[i];
         key = entry->key;
+        hash = entry->hash;
         if (key != NULL &&
             key != dummy) {
             Py_INCREF(key);
-            if (set_insert_key(so, key, entry->hash) == -1) {
+            if (set_insert_key(so, key, hash) == -1) {
                 Py_DECREF(key);
                 return -1;
             }
@@ -675,11 +688,11 @@ set_merge(PySetObject *so, PyObject *otherset)
 static int
 set_contains_key(PySetObject *so, PyObject *key)
 {
-    Py_hash_t hash;
+    long hash;
     setentry *entry;
 
-    if (!PyUnicode_CheckExact(key) ||
-        (hash = ((PyUnicodeObject *) key)->hash) == -1) {
+    if (!PyString_CheckExact(key) ||
+        (hash = ((PyStringObject *) key)->ob_shash) == -1) {
         hash = PyObject_Hash(key);
         if (hash == -1)
             return -1;
@@ -761,11 +774,11 @@ set_traverse(PySetObject *so, visitproc visit, void *arg)
     return 0;
 }
 
-static Py_hash_t
+static long
 frozenset_hash(PyObject *self)
 {
     PySetObject *so = (PySetObject *)self;
-    Py_hash_t h, hash = 1927868237L;
+    long h, hash = 1927868237L;
     setentry *entry;
     Py_ssize_t pos = 0;
 
@@ -819,7 +832,7 @@ setiter_len(setiterobject *si)
     Py_ssize_t len = 0;
     if (si->si_set != NULL && si->si_used == si->si_set->used)
         len = si->len;
-    return PyLong_FromSsize_t(len);
+    return PyInt_FromLong(len);
 }
 
 PyDoc_STRVAR(length_hint_doc, "Private method returning an estimate of len(list(it)).");
@@ -867,9 +880,9 @@ fail:
     return NULL;
 }
 
-PyTypeObject PySetIter_Type = {
+static PyTypeObject PySetIter_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
-    "set_iterator",                             /* tp_name */
+    "setiterator",                              /* tp_name */
     sizeof(setiterobject),                      /* tp_basicsize */
     0,                                          /* tp_itemsize */
     /* methods */
@@ -877,7 +890,7 @@ PyTypeObject PySetIter_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     0,                                          /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -926,7 +939,7 @@ set_update_internal(PySetObject *so, PyObject *other)
     if (PyDict_CheckExact(other)) {
         PyObject *value;
         Py_ssize_t pos = 0;
-        Py_hash_t hash;
+        long hash;
         Py_ssize_t dictsize = PyDict_Size(other);
 
         /* Do one big resize at the start, rather than
@@ -990,7 +1003,7 @@ make_new_set(PyTypeObject *type, PyObject *iterable)
     register PySetObject *so = NULL;
 
     if (dummy == NULL) { /* Auto-initialize dummy */
-        dummy = PyUnicode_FromString("<dummy key>");
+        dummy = PyString_FromString("<dummy key>");
         if (dummy == NULL)
             return NULL;
     }
@@ -1013,7 +1026,7 @@ make_new_set(PyTypeObject *type, PyObject *iterable)
         INIT_NONZERO_SET_SLOTS(so);
     }
 
-    so->lookup = set_lookkey_unicode;
+    so->lookup = set_lookkey_string;
     so->weakreflist = NULL;
 
     if (iterable != NULL) {
@@ -1024,18 +1037,6 @@ make_new_set(PyTypeObject *type, PyObject *iterable)
     }
 
     return (PyObject *)so;
-}
-
-static PyObject *
-make_new_set_basetype(PyTypeObject *type, PyObject *iterable)
-{
-    if (type != &PySet_Type && type != &PyFrozenSet_Type) {
-        if (PyType_IsSubtype(type, &PySet_Type))
-            type = &PySet_Type;
-        else
-            type = &PyFrozenSet_Type;
-    }
-    return make_new_set(type, iterable);
 }
 
 /* The empty frozenset is a singleton */
@@ -1114,9 +1115,9 @@ set_swap_bodies(PySetObject *a, PySetObject *b)
 {
     Py_ssize_t t;
     setentry *u;
-    setentry *(*f)(PySetObject *so, PyObject *key, Py_ssize_t hash);
+    setentry *(*f)(PySetObject *so, PyObject *key, long hash);
     setentry tab[PySet_MINSIZE];
-    Py_hash_t h;
+    long h;
 
     t = a->fill;     a->fill   = b->fill;        b->fill  = t;
     t = a->used;     a->used   = b->used;        b->used  = t;
@@ -1150,7 +1151,7 @@ set_swap_bodies(PySetObject *a, PySetObject *b)
 static PyObject *
 set_copy(PySetObject *so)
 {
-    return make_new_set_basetype(Py_TYPE(so), (PyObject *)so);
+    return make_new_set(Py_TYPE(so), (PyObject *)so);
 }
 
 static PyObject *
@@ -1246,7 +1247,7 @@ set_intersection(PySetObject *so, PyObject *other)
     if ((PyObject *)so == other)
         return set_copy(so);
 
-    result = (PySetObject *)make_new_set_basetype(Py_TYPE(so), NULL);
+    result = (PySetObject *)make_new_set(Py_TYPE(so), NULL);
     if (result == NULL)
         return NULL;
 
@@ -1285,7 +1286,7 @@ set_intersection(PySetObject *so, PyObject *other)
     while ((key = PyIter_Next(it)) != NULL) {
         int rv;
         setentry entry;
-        Py_hash_t hash = PyObject_Hash(key);
+        long hash = PyObject_Hash(key);
 
         if (hash == -1) {
             Py_DECREF(it);
@@ -1344,9 +1345,9 @@ set_intersection_multi(PySetObject *so, PyObject *args)
 }
 
 PyDoc_STRVAR(intersection_doc,
-"Return the intersection of two sets as a new set.\n\
+"Return the intersection of two or more sets as a new set.\n\
 \n\
-(i.e. all elements that are in both sets.)");
+(i.e. elements that are common to all of the sets.)");
 
 static PyObject *
 set_intersection_update(PySetObject *so, PyObject *other)
@@ -1442,7 +1443,7 @@ set_isdisjoint(PySetObject *so, PyObject *other)
     while ((key = PyIter_Next(it)) != NULL) {
         int rv;
         setentry entry;
-        Py_hash_t hash = PyObject_Hash(key);
+        long hash = PyObject_Hash(key);
 
         if (hash == -1) {
             Py_DECREF(key);
@@ -1525,20 +1526,6 @@ PyDoc_STRVAR(difference_update_doc,
 "Remove all elements of another set from this set.");
 
 static PyObject *
-set_copy_and_difference(PySetObject *so, PyObject *other)
-{
-    PyObject *result;
-
-    result = set_copy(so);
-    if (result == NULL)
-        return NULL;
-    if (set_difference_update_internal((PySetObject *) result, other) != -1)
-        return result;
-    Py_DECREF(result);
-    return NULL;
-}
-
-static PyObject *
 set_difference(PySetObject *so, PyObject *other)
 {
     PyObject *result;
@@ -1546,16 +1533,16 @@ set_difference(PySetObject *so, PyObject *other)
     Py_ssize_t pos = 0;
 
     if (!PyAnySet_Check(other)  && !PyDict_CheckExact(other)) {
-        return set_copy_and_difference(so, other);
+        result = set_copy(so);
+        if (result == NULL)
+            return NULL;
+        if (set_difference_update_internal((PySetObject *)result, other) != -1)
+            return result;
+        Py_DECREF(result);
+        return NULL;
     }
 
-    /* If len(so) much more than len(other), it's more efficient to simply copy
-     * so and then iterate other looking for common elements. */
-    if ((PySet_GET_SIZE(so) >> 2) > PyObject_Size(other)) {
-        return set_copy_and_difference(so, other);
-    }
-
-    result = make_new_set_basetype(Py_TYPE(so), NULL);
+    result = make_new_set(Py_TYPE(so), NULL);
     if (result == NULL)
         return NULL;
 
@@ -1574,7 +1561,6 @@ set_difference(PySetObject *so, PyObject *other)
         return result;
     }
 
-    /* Iterate over so, checking for common elements in other. */
     while (set_next(so, &pos, &entry)) {
         int rv = set_contains_entry((PySetObject *)other, entry);
         if (rv == -1) {
@@ -1656,7 +1642,7 @@ set_symmetric_difference_update(PySetObject *so, PyObject *other)
     if (PyDict_CheckExact(other)) {
         PyObject *value;
         int rv;
-        Py_hash_t hash;
+        long hash;
         while (_PyDict_Next(other, &pos, &key, &value, &hash)) {
             setentry an_entry;
 
@@ -1684,7 +1670,7 @@ set_symmetric_difference_update(PySetObject *so, PyObject *other)
         Py_INCREF(other);
         otherset = (PySetObject *)other;
     } else {
-        otherset = (PySetObject *)make_new_set_basetype(Py_TYPE(so), other);
+        otherset = (PySetObject *)make_new_set(Py_TYPE(so), other);
         if (otherset == NULL)
             return NULL;
     }
@@ -1715,7 +1701,7 @@ set_symmetric_difference(PySetObject *so, PyObject *other)
     PyObject *rv;
     PySetObject *otherset;
 
-    otherset = (PySetObject *)make_new_set_basetype(Py_TYPE(so), other);
+    otherset = (PySetObject *)make_new_set(Py_TYPE(so), other);
     if (otherset == NULL)
         return NULL;
     rv = set_symmetric_difference_update(otherset, (PyObject *)so);
@@ -1811,8 +1797,12 @@ set_richcompare(PySetObject *v, PyObject *w, int op)
     PyObject *r1, *r2;
 
     if(!PyAnySet_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        if (op == Py_EQ)
+            Py_RETURN_FALSE;
+        if (op == Py_NE)
+            Py_RETURN_TRUE;
+        PyErr_SetString(PyExc_TypeError, "can only compare to a set");
+        return NULL;
     }
     switch (op) {
     case Py_EQ:
@@ -1847,6 +1837,13 @@ set_richcompare(PySetObject *v, PyObject *w, int op)
     return Py_NotImplemented;
 }
 
+static int
+set_nocmp(PyObject *self, PyObject *other)
+{
+    PyErr_SetString(PyExc_TypeError, "cannot compare sets using cmp()");
+    return -1;
+}
+
 static PyObject *
 set_add(PySetObject *so, PyObject *key)
 {
@@ -1874,7 +1871,7 @@ set_contains(PySetObject *so, PyObject *key)
         tmpkey = make_new_set(&PyFrozenSet_Type, key);
         if (tmpkey == NULL)
             return -1;
-        rv = set_contains(so, tmpkey);
+        rv = set_contains_key(so, tmpkey);
         Py_DECREF(tmpkey);
     }
     return rv;
@@ -1928,7 +1925,7 @@ If the element is not a member, raise a KeyError.");
 static PyObject *
 set_discard(PySetObject *so, PyObject *key)
 {
-    PyObject *tmpkey, *result;
+    PyObject *tmpkey;
     int rv;
 
     rv = set_discard_key(so, key);
@@ -1939,9 +1936,10 @@ set_discard(PySetObject *so, PyObject *key)
         tmpkey = make_new_set(&PyFrozenSet_Type, key);
         if (tmpkey == NULL)
             return NULL;
-        result = set_discard(so, tmpkey);
+        rv = set_discard_key(so, tmpkey);
         Py_DECREF(tmpkey);
-        return result;
+        if (rv == -1)
+            return NULL;
     }
     Py_RETURN_NONE;
 }
@@ -1986,7 +1984,7 @@ set_sizeof(PySetObject *so)
     res = sizeof(PySetObject);
     if (so->table != so->smalltable)
         res = res + (so->mask + 1) * sizeof(setentry);
-    return PyLong_FromSsize_t(res);
+    return PyInt_FromSsize_t(res);
 }
 
 PyDoc_STRVAR(sizeof_doc, "S.__sizeof__() -> size of S in memory, in bytes");
@@ -2080,25 +2078,30 @@ static PyNumberMethods set_as_number = {
     0,                                  /*nb_add*/
     (binaryfunc)set_sub,                /*nb_subtract*/
     0,                                  /*nb_multiply*/
+    0,                                  /*nb_divide*/
     0,                                  /*nb_remainder*/
     0,                                  /*nb_divmod*/
     0,                                  /*nb_power*/
     0,                                  /*nb_negative*/
     0,                                  /*nb_positive*/
     0,                                  /*nb_absolute*/
-    0,                                  /*nb_bool*/
+    0,                                  /*nb_nonzero*/
     0,                                  /*nb_invert*/
     0,                                  /*nb_lshift*/
     0,                                  /*nb_rshift*/
     (binaryfunc)set_and,                /*nb_and*/
     (binaryfunc)set_xor,                /*nb_xor*/
     (binaryfunc)set_or,                 /*nb_or*/
+    0,                                  /*nb_coerce*/
     0,                                  /*nb_int*/
-    0,                                  /*nb_reserved*/
+    0,                                  /*nb_long*/
     0,                                  /*nb_float*/
+    0,                                  /*nb_oct*/
+    0,                                  /*nb_hex*/
     0,                                  /*nb_inplace_add*/
     (binaryfunc)set_isub,               /*nb_inplace_subtract*/
     0,                                  /*nb_inplace_multiply*/
+    0,                                  /*nb_inplace_divide*/
     0,                                  /*nb_inplace_remainder*/
     0,                                  /*nb_inplace_power*/
     0,                                  /*nb_inplace_lshift*/
@@ -2121,28 +2124,28 @@ PyTypeObject PySet_Type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)set_dealloc,            /* tp_dealloc */
-    0,                                  /* tp_print */
+    (printfunc)set_tp_print,            /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_reserved */
+    set_nocmp,                          /* tp_compare */
     (reprfunc)set_repr,                 /* tp_repr */
     &set_as_number,                     /* tp_as_number */
     &set_as_sequence,                   /* tp_as_sequence */
     0,                                  /* tp_as_mapping */
-    PyObject_HashNotImplemented,        /* tp_hash */
+    (hashfunc)PyObject_HashNotImplemented,      /* tp_hash */
     0,                                  /* tp_call */
     0,                                  /* tp_str */
     PyObject_GenericGetAttr,            /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES |
         Py_TPFLAGS_BASETYPE,            /* tp_flags */
     set_doc,                            /* tp_doc */
     (traverseproc)set_traverse,         /* tp_traverse */
     (inquiry)set_clear_internal,        /* tp_clear */
     (richcmpfunc)set_richcompare,       /* tp_richcompare */
-    offsetof(PySetObject, weakreflist), /* tp_weaklistoffset */
-    (getiterfunc)set_iter,              /* tp_iter */
+    offsetof(PySetObject, weakreflist),         /* tp_weaklistoffset */
+    (getiterfunc)set_iter,      /* tp_iter */
     0,                                  /* tp_iternext */
     set_methods,                        /* tp_methods */
     0,                                  /* tp_members */
@@ -2191,13 +2194,14 @@ static PyNumberMethods frozenset_as_number = {
     0,                                  /*nb_add*/
     (binaryfunc)set_sub,                /*nb_subtract*/
     0,                                  /*nb_multiply*/
+    0,                                  /*nb_divide*/
     0,                                  /*nb_remainder*/
     0,                                  /*nb_divmod*/
     0,                                  /*nb_power*/
     0,                                  /*nb_negative*/
     0,                                  /*nb_positive*/
     0,                                  /*nb_absolute*/
-    0,                                  /*nb_bool*/
+    0,                                  /*nb_nonzero*/
     0,                                  /*nb_invert*/
     0,                                  /*nb_lshift*/
     0,                                  /*nb_rshift*/
@@ -2219,10 +2223,10 @@ PyTypeObject PyFrozenSet_Type = {
     0,                                  /* tp_itemsize */
     /* methods */
     (destructor)set_dealloc,            /* tp_dealloc */
-    0,                                  /* tp_print */
+    (printfunc)set_tp_print,            /* tp_print */
     0,                                  /* tp_getattr */
     0,                                  /* tp_setattr */
-    0,                                  /* tp_reserved */
+    set_nocmp,                          /* tp_compare */
     (reprfunc)set_repr,                 /* tp_repr */
     &frozenset_as_number,               /* tp_as_number */
     &set_as_sequence,                   /* tp_as_sequence */
@@ -2233,7 +2237,7 @@ PyTypeObject PyFrozenSet_Type = {
     PyObject_GenericGetAttr,            /* tp_getattro */
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC |
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_CHECKTYPES |
         Py_TPFLAGS_BASETYPE,            /* tp_flags */
     frozenset_doc,                      /* tp_doc */
     (traverseproc)set_traverse,         /* tp_traverse */
@@ -2323,7 +2327,22 @@ PySet_Add(PyObject *anyset, PyObject *key)
 }
 
 int
-_PySet_NextEntry(PyObject *set, Py_ssize_t *pos, PyObject **key, Py_hash_t *hash)
+_PySet_Next(PyObject *set, Py_ssize_t *pos, PyObject **key)
+{
+    setentry *entry_ptr;
+
+    if (!PyAnySet_Check(set)) {
+        PyErr_BadInternalCall();
+        return -1;
+    }
+    if (set_next((PySetObject *)set, pos, &entry_ptr) == 0)
+        return 0;
+    *key = entry_ptr->key;
+    return 1;
+}
+
+int
+_PySet_NextEntry(PyObject *set, Py_ssize_t *pos, PyObject **key, long *hash)
 {
     setentry *entry;
 
@@ -2378,7 +2397,6 @@ test_c_api(PySetObject *so)
     Py_ssize_t i;
     PyObject *elem=NULL, *dup=NULL, *t, *f, *dup2, *x;
     PyObject *ob = (PyObject *)so;
-    Py_hash_t hash;
     PyObject *str;
 
     /* Verify preconditions */
@@ -2387,7 +2405,7 @@ test_c_api(PySetObject *so)
     assert(!PyFrozenSet_CheckExact(ob));
 
     /* so.clear(); so |= set("abc"); */
-    str = PyUnicode_FromString("abc");
+    str = PyString_FromString("abc");
     if (str == NULL)
         return NULL;
     set_clear_internal(so);
@@ -2441,8 +2459,8 @@ test_c_api(PySetObject *so)
 
     /* Exercise direct iteration */
     i = 0, count = 0;
-    while (_PySet_NextEntry((PyObject *)dup, &i, &x, &hash)) {
-        s = _PyUnicode_AsString(x);
+    while (_PySet_Next((PyObject *)dup, &i, &x)) {
+        s = PyString_AsString(x);
         assert(s && (s[0] == 'a' || s[0] == 'b' || s[0] == 'c'));
         count++;
     }

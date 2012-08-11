@@ -82,7 +82,7 @@ Options and default settings:
   --examples       show examples of usage
 
 Version:
- 2.1
+ 2.0
 
 The normal operation is to run the suite and display the
 results. Use -f to save them for later reuse or comparisons.
@@ -95,9 +95,9 @@ Available timers:
 
 Examples:
 
-python3.0 pybench.py -f p30.pybench
-python3.1 pybench.py -f p31.pybench
-python pybench.py -s p31.pybench -c p30.pybench
+python2.1 pybench.py -f p21.pybench
+python2.5 pybench.py -f p25.pybench
+python pybench.py -s p25.pybench -c p21.pybench
 """
 
 License
@@ -111,9 +111,9 @@ Sample output
 
 """
 -------------------------------------------------------------------------------
-PYBENCH 2.1
+PYBENCH 2.0
 -------------------------------------------------------------------------------
-* using CPython 3.0
+* using Python 2.4.2
 * disabled garbage collection
 * system check interval set to maximum: 2147483647
 * using timer: time.time
@@ -141,9 +141,8 @@ Benchmark: 2006-06-12 12:09:25
        Processor:    x86_64
 
     Python:
-       Implementation: CPython
        Executable:   /usr/local/bin/python
-       Version:      3.0
+       Version:      2.4.2
        Compiler:     GCC 3.3.4 (pre 3.3.5 20040809)
        Bits:         64bit
        Build:        Oct  1 2005 15:24:35 (#1)
@@ -260,7 +259,10 @@ class IntegerCounting(Test):
 
         # Run test rounds
 	#
-        for i in range(self.rounds):
+        # NOTE: Use xrange() for all test loops unless you want to face
+	# a 20MB process !
+	#
+        for i in xrange(self.rounds):
 
             # Repeat the operations per round to raise the run-time
             # per operation significantly above the noise level of the
@@ -302,7 +304,7 @@ class IntegerCounting(Test):
         a = 1
 
         # Run test rounds (without actually doing any operation)
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
 	    # Skip the actual execution of the operations, since we
 	    # only want to measure the test's administration overhead.
@@ -328,11 +330,6 @@ versions of the test will list as "n/a" to reflect the change.
 
 Version History
 ---------------
-
-  2.1: made some minor changes for compatibility with Python 3.0:
-        - replaced cmp with divmod and range with max in Calls.py
-          (cmp no longer exists in 3.0, and range is a list in
-          Python 2.x and an iterator in Python 3.x)
 
   2.0: rewrote parts of pybench which resulted in more repeatable
        timings:

@@ -34,22 +34,21 @@ Parser/pgen$
 Parser/pgen.stamp$
 ^core
 ^python-gdb.py
-^python.exe-gdb.py
-^pybuilddir.txt
 
 syntax: glob
+python.exe-gdb.py
 libpython*.a
+libpython*.so*
 *.swp
 *.o
 *.pyc
 *.pyo
 *.pyd
 *.cover
-*.orig
-*.rej
 *~
 Lib/lib2to3/*.pickle
 Lib/test/data/*
+Misc/*.wpu
 PC/python_nt*.h
 PC/pythonnt_rc*.h
 PC/*.obj
@@ -62,4 +61,6 @@ PCbuild/*.o
 PCbuild/*.ncb
 PCbuild/*.bsc
 PCbuild/Win32-temp-*
-__pycache__
+.coverage
+coverage/
+htmlcov/

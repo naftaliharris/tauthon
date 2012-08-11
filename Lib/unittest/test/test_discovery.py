@@ -5,23 +5,12 @@ import sys
 import unittest
 
 
-class TestableTestProgram(unittest.TestProgram):
-    module = '__main__'
-    exit = True
-    defaultTest = failfast = catchbreak = buffer = None
-    verbosity = 1
-    progName = ''
-    testRunner = testLoader = None
-
-    def __init__(self):
-        pass
-
-
 class TestDiscovery(unittest.TestCase):
 
     # Heavily mocked tests so I can avoid hitting the filesystem
     def test_get_name_from_path(self):
         loader = unittest.TestLoader()
+
         loader._top_level_dir = '/foo'
         name = loader._get_name_from_path('/foo/bar/baz.py')
         self.assertEqual(name, 'bar.baz')
@@ -116,6 +105,9 @@ class TestDiscovery(unittest.TestCase):
             def __eq__(self, other):
                 return self.path == other.path
 
+            # Silence py3k warning
+            __hash__ = None
+
         loader._get_module_from_name = lambda name: Module(name)
         def loadTestsFromModule(module, use_load_tests):
             if use_load_tests:
@@ -207,7 +199,8 @@ class TestDiscovery(unittest.TestCase):
             test.test_this_does_not_exist()
 
     def test_command_line_handling_parseArgs(self):
-        program = TestableTestProgram()
+        # Haha - take that uninstantiable class
+        program = object.__new__(unittest.TestProgram)
 
         args = []
         def do_discovery(argv):
@@ -219,39 +212,13 @@ class TestDiscovery(unittest.TestCase):
         program.parseArgs(['something', 'discover', 'foo', 'bar'])
         self.assertEqual(args, ['foo', 'bar'])
 
-    def test_command_line_handling_discover_by_default(self):
-        program = TestableTestProgram()
-        program.module = None
-
-        self.called = False
-        def do_discovery(argv):
-            self.called = True
-            self.assertEqual(argv, [])
-        program._do_discovery = do_discovery
-        program.parseArgs(['something'])
-        self.assertTrue(self.called)
-
-    def test_command_line_handling_discover_by_default_with_options(self):
-        program = TestableTestProgram()
-        program.module = None
-
-        args = ['something', '-v', '-b', '-v', '-c', '-f']
-        self.called = False
-        def do_discovery(argv):
-            self.called = True
-            self.assertEqual(argv, args[1:])
-        program._do_discovery = do_discovery
-        program.parseArgs(args)
-        self.assertTrue(self.called)
-
-
     def test_command_line_handling_do_discovery_too_many_arguments(self):
         class Stop(Exception):
             pass
         def usageExit():
             raise Stop
 
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program.usageExit = usageExit
 
         with self.assertRaises(Stop):
@@ -260,7 +227,7 @@ class TestDiscovery(unittest.TestCase):
 
 
     def test_command_line_handling_do_discovery_calls_loader(self):
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
 
         class Loader(object):
             args = []
@@ -274,49 +241,49 @@ class TestDiscovery(unittest.TestCase):
         self.assertEqual(Loader.args, [('.', 'test*.py', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['--verbose'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('.', 'test*.py', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery([], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('.', 'test*.py', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['fish'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('fish', 'test*.py', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['fish', 'eggs'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('fish', 'eggs', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['fish', 'eggs', 'ham'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('fish', 'eggs', 'ham')])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['-s', 'fish'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('fish', 'test*.py', None)])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['-t', 'fish'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('.', 'test*.py', 'fish')])
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['-p', 'fish'], Loader=Loader)
         self.assertEqual(program.test, 'tests')
         self.assertEqual(Loader.args, [('.', 'fish', None)])
@@ -324,7 +291,7 @@ class TestDiscovery(unittest.TestCase):
         self.assertFalse(program.catchbreak)
 
         Loader.args = []
-        program = TestableTestProgram()
+        program = object.__new__(unittest.TestProgram)
         program._do_discovery(['-p', 'eggs', '-s', 'fish', '-v', '-f', '-c'],
                               Loader=Loader)
         self.assertEqual(program.test, 'tests')
@@ -367,7 +334,7 @@ class TestDiscovery(unittest.TestCase):
         expected_dir = os.path.abspath('foo')
         msg = re.escape(r"'foo' module incorrectly imported from %r. Expected %r. "
                 "Is this module globally installed?" % (mod_dir, expected_dir))
-        self.assertRaisesRegex(
+        self.assertRaisesRegexp(
             ImportError, '^%s$' % msg, loader.discover,
             start_dir='foo', pattern='foo.py'
         )

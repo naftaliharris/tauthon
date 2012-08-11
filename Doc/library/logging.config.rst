@@ -72,17 +72,31 @@ in :mod:`logging` itself) and defining handlers which are declared either in
     this new subclass, and then :func:`dictConfig` could be called exactly as
     in the default, uncustomized state.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
-.. function:: fileConfig(fname[, defaults])
+.. function:: fileConfig(fname, defaults=None, disable_existing_loggers=True)
 
-   Reads the logging configuration from a :mod:`configparser`\-format file named
-   *fname*. This function can be called several times from an application,
-   allowing an end user to select from various pre-canned
+   Reads the logging configuration from a :mod:`configparser`\-format file
+   named *fname*. This function can be called several times from an
+   application, allowing an end user to select from various pre-canned
    configurations (if the developer provides a mechanism to present the choices
-   and load the chosen configuration). Defaults to be passed to the ConfigParser
-   can be specified in the *defaults* argument.
+   and load the chosen configuration).
 
+   :param defaults: Defaults to be passed to the ConfigParser can be specified
+                    in this argument.
+
+   :param disable_existing_loggers: If specified as ``False``, loggers which
+                                    exist when this call is made are left
+                                    alone. The default is ``True`` because this
+                                    enables old behaviour in a backward-
+                                    compatible way. This behaviour is to
+                                    disable any existing loggers unless they or
+                                    their ancestors are explicitly named in the
+                                    logging configuration.
+
+   .. versionchanged:: 2.6
+      The ``disable_existing_loggers`` keyword argument was added. Previously,
+      existing loggers were *always* disabled.
 
 .. function:: listen(port=DEFAULT_LOGGING_CONFIG_PORT)
 
@@ -98,6 +112,19 @@ in :mod:`logging` itself) and defining handlers which are declared either in
    send it to the socket as a string of bytes preceded by a four-byte length
    string packed in binary using ``struct.pack('>L', n)``.
 
+   .. note:: Because portions of the configuration are passed through
+      :func:`eval`, use of this function may open its users to a security risk.
+      While the function only binds to a socket on ``localhost``, and so does
+      not accept connections from remote machines, there are scenarios where
+      untrusted code could be run under the account of the process which calls
+      :func:`listen`. Specifically, if the process calling :func:`listen` runs
+      on a multi-user machine where users cannot trust each other, then a
+      malicious user could arrange to run essentially arbitrary code in a
+      victim user's process, simply by connecting to the victim's
+      :func:`listen` socket and sending a configuration which runs whatever
+      code the attacker wants to have executed in the victim's process. This is
+      especially easy to do if the default port is used, but not hard even if a
+      different port is used).
 
 .. function:: stopListening()
 
@@ -502,6 +529,31 @@ the system will attempt to retrieve the value from
 to ``config_dict['handlers']['myhandler']['mykey']['123']`` if that
 fails.
 
+
+.. _logging-import-resolution:
+
+Import resolution and custom importers
+""""""""""""""""""""""""""""""""""""""
+
+Import resolution, by default, uses the builtin :func:`__import__` function
+to do its importing. You may want to replace this with your own importing
+mechanism: if so, you can replace the :attr:`importer` attribute of the
+:class:`DictConfigurator` or its superclass, the
+:class:`BaseConfigurator` class. However, you need to be
+careful because of the way functions are accessed from classes via
+descriptors. If you are using a Python callable to do your imports, and you
+want to define it at class level rather than instance level, you need to wrap
+it with :func:`staticmethod`. For example::
+
+   from importlib import import_module
+   from logging.config import BaseConfigurator
+
+   BaseConfigurator.importer = staticmethod(import_module)
+
+You don't need to wrap with :func:`staticmethod` if you're setting the import
+callable on a configurator *instance*.
+
+
 .. _logging-config-fileformat:
 
 Configuration file format
@@ -578,6 +630,10 @@ Sections which specify handler configuration are exemplified by the following.
 The ``class`` entry indicates the handler's class (as determined by :func:`eval`
 in the ``logging`` package's namespace). The ``level`` is interpreted as for
 loggers, and ``NOTSET`` is taken to mean 'log everything'.
+
+.. versionchanged:: 2.6
+   Added support for resolving the handler’s class as a dotted module and
+   class name.
 
 The ``formatter`` entry indicates the key name of the formatter for this
 handler. If blank, a default formatter (``logging._defaultFormatter``) is used.
@@ -657,6 +713,12 @@ The ``class`` entry is optional.  It indicates the name of the formatter's class
 (as a dotted module and class name.)  This option is useful for instantiating a
 :class:`Formatter` subclass.  Subclasses of :class:`Formatter` can present
 exception tracebacks in an expanded or condensed format.
+
+.. note:: Due to the use of :func:`eval` as described above, there are
+   potential security risks which result from using the :func:`listen` to send
+   and receive configurations via sockets. The risks are limited to where
+   multiple users with no mutual trust run code on the same machine; see the
+   :func:`listen` documentation for more information.
 
 .. seealso::
 

@@ -94,16 +94,20 @@ _chew_ordinaryre = re.compile(r"""
 # Build translation table to map uninteresting chars to "x", open
 # brackets to "(", and close brackets to ")".
 
-_tran = {}
-for i in range(256):
-    _tran[i] = 'x'
+_tran = ['x'] * 256
 for ch in "({[":
     _tran[ord(ch)] = '('
 for ch in ")}]":
     _tran[ord(ch)] = ')'
 for ch in "\"'\\\n#":
     _tran[ord(ch)] = ch
-del i, ch
+_tran = ''.join(_tran)
+del ch
+
+try:
+    UnicodeType = type(unicode(""))
+except NameError:
+    UnicodeType = None
 
 class Parser:
 
@@ -111,22 +115,22 @@ class Parser:
         self.indentwidth = indentwidth
         self.tabwidth = tabwidth
 
-    def set_str(self, s):
-        assert len(s) == 0 or s[-1] == '\n'
-        if isinstance(s, str):
+    def set_str(self, str):
+        assert len(str) == 0 or str[-1] == '\n'
+        if type(str) is UnicodeType:
             # The parse functions have no idea what to do with Unicode, so
             # replace all Unicode characters with "x".  This is "safe"
             # so long as the only characters germane to parsing the structure
             # of Python are 7-bit ASCII.  It's *necessary* because Unicode
             # strings don't have a .translate() method that supports
             # deletechars.
-            uniphooey = s
-            s = []
-            push = s.append
+            uniphooey = str
+            str = []
+            push = str.append
             for raw in map(ord, uniphooey):
                 push(raw < 127 and chr(raw) or "x")
-            s = "".join(s)
-        self.str = s
+            str = "".join(str)
+        self.str = str
         self.study_level = 0
 
     # Return index of a good place to begin parsing, as close to the

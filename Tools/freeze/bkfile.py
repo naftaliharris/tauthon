@@ -21,13 +21,11 @@ class _BkFile:
         self.mode = self.__file.mode
         self.name = self.__file.name
         self.read = self.__file.read
-        try:
-            self.readinto = self.__file.readinto
-        except AttributeError:
-            pass
+        self.readinto = self.__file.readinto
         self.readline = self.__file.readline
         self.readlines = self.__file.readlines
         self.seek = self.__file.seek
+        self.softspace = self.__file.softspace
         self.tell = self.__file.tell
         self.truncate = self.__file.truncate
         self.write = self.__file.write

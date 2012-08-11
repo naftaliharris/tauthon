@@ -7,7 +7,7 @@ def wrap(foo=None):
 # line 7
 def replace(func):
     def insteadfunc():
-        print('hello')
+        print 'hello'
     return insteadfunc
 
 # line 13
@@ -60,8 +60,8 @@ def with_comment():  # hello
 
 # line 61
 multiline_sig = [
-    lambda x, \
-            y: x+y,
+    lambda (x,
+            y): x+y,
     None,
     ]
 
@@ -96,16 +96,4 @@ def f():
             "doc"
             return 42
     return X
-method_in_dynamic_class = f().g
-
-#line 101
-def keyworded(*arg1, arg2=1):
-    pass
-
-#line 105
-def annotated(arg1: list):
-    pass
-
-#line 109
-def keyword_only_arg(*, arg):
-    pass
+method_in_dynamic_class = f().g.im_func

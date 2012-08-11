@@ -16,9 +16,9 @@
 This module defines the class :class:`FTP` and a few related items. The
 :class:`FTP` class implements the client side of the FTP protocol.  You can use
 this to write Python programs that perform a variety of automated FTP jobs, such
-as mirroring other ftp servers.  It is also used by the module
-:mod:`urllib.request` to handle URLs that use FTP.  For more information on FTP
-(File Transfer Protocol), see Internet :rfc:`959`.
+as mirroring other ftp servers.  It is also used by the module :mod:`urllib` to
+handle URLs that use FTP.  For more information on FTP (File Transfer Protocol),
+see Internet :rfc:`959`.
 
 Here's a sample session using the :mod:`ftplib` module::
 
@@ -40,7 +40,7 @@ Here's a sample session using the :mod:`ftplib` module::
 
 The module defines the following items:
 
-.. class:: FTP(host='', user='', passwd='', acct=''[, timeout])
+.. class:: FTP([host[, user[, passwd[, acct[, timeout]]]]])
 
    Return a new instance of the :class:`FTP` class.  When *host* is given, the
    method call ``connect(host)`` is made.  When *user* is given, additionally
@@ -50,26 +50,11 @@ The module defines the following items:
    connection attempt (if is not specified, the global default timeout setting
    will be used).
 
-   :class:`FTP` class supports the :keyword:`with` statement. Here is a sample
-   on how using it:
-
-    >>> from ftplib import FTP
-    >>> with FTP("ftp1.at.proftpd.org") as ftp:
-    ...     ftp.login()
-    ...     ftp.dir()
-    ...
-    '230 Anonymous login ok, restrictions apply.'
-    dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 .
-    dr-xr-xr-x   9 ftp      ftp           154 May  6 10:43 ..
-    dr-xr-xr-x   5 ftp      ftp          4096 May  6 10:43 CentOS
-    dr-xr-xr-x   3 ftp      ftp            18 Jul 10  2008 Fedora
-    >>>
-
-   .. versionchanged:: 3.2
-      Support for the :keyword:`with` statement was added.
+   .. versionchanged:: 2.6
+      *timeout* was added.
 
 
-.. class:: FTP_TLS(host='', user='', passwd='', acct='', [keyfile[, certfile[, context[, timeout]]]])
+.. class:: FTP_TLS([host[, user[, passwd[, acct[, keyfile[, certfile[, timeout]]]]]]])
 
    A :class:`FTP` subclass which adds TLS support to FTP as described in
    :rfc:`4217`.
@@ -78,11 +63,8 @@ The module defines the following items:
    explicitly ask for it by calling the :meth:`prot_p` method.
    *keyfile* and *certfile* are optional -- they can contain a PEM formatted
    private key and certificate chain file name for the SSL connection.
-   *context* parameter is a :class:`ssl.SSLContext` object which allows
-   bundling SSL configuration options, certificates and private keys into a
-   single (potentially long-lived) structure.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
    Here's a sample session using the :class:`FTP_TLS` class:
 
@@ -174,7 +156,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    debugging output, logging each line sent and received on the control connection.
 
 
-.. method:: FTP.connect(host='', port=0[, timeout])
+.. method:: FTP.connect(host[, port[, timeout]])
 
    Connect to the given host and port.  The default port number is ``21``, as
    specified by the FTP protocol specification.  It is rarely needed to specify a
@@ -187,6 +169,9 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    connection attempt. If no *timeout* is passed, the global default timeout
    setting will be used.
 
+   .. versionchanged:: 2.6
+      *timeout* was added.
+
 
 .. method:: FTP.getwelcome()
 
@@ -195,7 +180,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    that may be relevant to the user.)
 
 
-.. method:: FTP.login(user='anonymous', passwd='', acct='')
+.. method:: FTP.login([user[, passwd[, acct]]])
 
    Log in as the given *user*.  The *passwd* and *acct* parameters are optional and
    default to the empty string.  If no *user* is specified, it defaults to
@@ -213,73 +198,81 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    it's worth a try.
 
 
-.. method:: FTP.sendcmd(cmd)
+.. method:: FTP.sendcmd(command)
 
    Send a simple command string to the server and return the response string.
 
 
-.. method:: FTP.voidcmd(cmd)
+.. method:: FTP.voidcmd(command)
 
    Send a simple command string to the server and handle the response.  Return
    nothing if a response code corresponding to success (codes in the range
    200--299) is received.  Raise :exc:`error_reply` otherwise.
 
 
-.. method:: FTP.retrbinary(cmd, callback, blocksize=8192, rest=None)
+.. method:: FTP.retrbinary(command, callback[, maxblocksize[, rest]])
 
-   Retrieve a file in binary transfer mode.  *cmd* should be an appropriate
+   Retrieve a file in binary transfer mode.  *command* should be an appropriate
    ``RETR`` command: ``'RETR filename'``. The *callback* function is called for
    each block of data received, with a single string argument giving the data
-   block. The optional *blocksize* argument specifies the maximum chunk size to
+   block. The optional *maxblocksize* argument specifies the maximum chunk size to
    read on the low-level socket object created to do the actual transfer (which
    will also be the largest size of the data blocks passed to *callback*).  A
    reasonable default is chosen. *rest* means the same thing as in the
    :meth:`transfercmd` method.
 
 
-.. method:: FTP.retrlines(cmd, callback=None)
+.. method:: FTP.retrlines(command[, callback])
 
-   Retrieve a file or directory listing in ASCII transfer mode.  *cmd* should be
-   an appropriate ``RETR`` command (see :meth:`retrbinary`) or a command such as
-   ``LIST``, ``NLST`` or ``MLSD`` (usually just the string ``'LIST'``).
-   ``LIST`` retrieves a list of files and information about those files.
+   Retrieve a file or directory listing in ASCII transfer mode.  *command*
+   should be an appropriate ``RETR`` command (see :meth:`retrbinary`) or a
+   command such as ``LIST``, ``NLST`` or ``MLSD`` (usually just the string
+   ``'LIST'``).  ``LIST`` retrieves a list of files and information about those files.
    ``NLST`` retrieves a list of file names.  On some servers, ``MLSD`` retrieves
-   a machine readable list of files and information about those files.  The
-   *callback* function is called for each line with a string argument containing
-   the line with the trailing CRLF stripped.  The default *callback* prints the
-   line to ``sys.stdout``.
+   a machine readable list of files and information about those files.  The *callback*
+   function is called for each line with a string argument containing the line with
+   the trailing CRLF stripped.  The default *callback* prints the line to ``sys.stdout``.
 
 
 .. method:: FTP.set_pasv(boolean)
 
-   Enable "passive" mode if *boolean* is true, other disable passive mode.
-   Passive mode is on by default.
+   Enable "passive" mode if *boolean* is true, other disable passive mode.  (In
+   Python 2.0 and before, passive mode was off by default; in Python 2.1 and later,
+   it is on by default.)
 
 
-.. method:: FTP.storbinary(cmd, file, blocksize=8192, callback=None, rest=None)
+.. method:: FTP.storbinary(command, file[, blocksize, callback, rest])
 
-   Store a file in binary transfer mode.  *cmd* should be an appropriate
-   ``STOR`` command: ``"STOR filename"``. *file* is an open :term:`file object`
-   which is read until EOF using its :meth:`read` method in blocks of size
-   *blocksize* to provide the data to be stored.  The *blocksize* argument
-   defaults to 8192.  *callback* is an optional single parameter callable that
-   is called on each block of data after it is sent. *rest* means the same thing
-   as in the :meth:`transfercmd` method.
+   Store a file in binary transfer mode.  *command* should be an appropriate
+   ``STOR`` command: ``"STOR filename"``. *file* is an open file object which is
+   read until EOF using its :meth:`read` method in blocks of size *blocksize* to
+   provide the data to be stored.  The *blocksize* argument defaults to 8192.
+   *callback* is an optional single parameter callable that is called
+   on each block of data after it is sent. *rest* means the same thing as in
+   the :meth:`transfercmd` method.
 
-   .. versionchanged:: 3.2
+   .. versionchanged:: 2.1
+      default for *blocksize* added.
+
+   .. versionchanged:: 2.6
+      *callback* parameter added.
+
+   .. versionchanged:: 2.7
       *rest* parameter added.
 
+.. method:: FTP.storlines(command, file[, callback])
 
-.. method:: FTP.storlines(cmd, file, callback=None)
-
-   Store a file in ASCII transfer mode.  *cmd* should be an appropriate
+   Store a file in ASCII transfer mode.  *command* should be an appropriate
    ``STOR`` command (see :meth:`storbinary`).  Lines are read until EOF from the
-   open :term:`file object` *file* using its :meth:`readline` method to provide
-   the data to be stored.  *callback* is an optional single parameter callable
+   open file object *file* using its :meth:`readline` method to provide the data to
+   be stored.  *callback* is an optional single parameter callable
    that is called on each line after it is sent.
 
+   .. versionchanged:: 2.6
+      *callback* parameter added.
 
-.. method:: FTP.transfercmd(cmd, rest=None)
+
+.. method:: FTP.transfercmd(cmd[, rest])
 
    Initiate a transfer over the data connection.  If the transfer is active, send a
    ``EPRT`` or  ``PORT`` command and the transfer command specified by *cmd*, and
@@ -299,7 +292,7 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    *rest* argument.
 
 
-.. method:: FTP.ntransfercmd(cmd, rest=None)
+.. method:: FTP.ntransfercmd(cmd[, rest])
 
    Like :meth:`transfercmd`, but returns a tuple of the data connection and the
    expected size of the data.  If the expected size could not be computed, ``None``

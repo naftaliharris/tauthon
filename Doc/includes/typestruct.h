@@ -9,7 +9,7 @@ typedef struct _typeobject {
     printfunc tp_print;
     getattrfunc tp_getattr;
     setattrfunc tp_setattr;
-    void *tp_reserved;
+    cmpfunc tp_compare;
     reprfunc tp_repr;
 
     /* Method suites for standard classes */
@@ -34,18 +34,21 @@ typedef struct _typeobject {
 
     char *tp_doc; /* Documentation string */
 
+    /* Assigned meaning in release 2.0 */
     /* call function for all accessible objects */
     traverseproc tp_traverse;
 
     /* delete references to contained objects */
     inquiry tp_clear;
 
+    /* Assigned meaning in release 2.1 */
     /* rich comparisons */
     richcmpfunc tp_richcompare;
 
     /* weak reference enabler */
     long tp_weaklistoffset;
 
+    /* Added in release 2.2 */
     /* Iterators */
     getiterfunc tp_iter;
     iternextfunc tp_iternext;

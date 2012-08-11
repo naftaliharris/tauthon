@@ -2,7 +2,7 @@ import sys
 import imp
 import os
 import unittest
-from test import support
+from test import test_support
 
 
 test_src = """\
@@ -72,7 +72,7 @@ class TestImporter:
         mod.__loader__ = self
         if ispkg:
             mod.__path__ = self._get__path__()
-        exec(code, mod.__dict__)
+        exec code in mod.__dict__
         return mod
 
 
@@ -96,7 +96,7 @@ class ImportBlocker:
             return self
         return None
     def load_module(self, fullname):
-        raise ImportError("I dare you")
+        raise ImportError, "I dare you"
 
 
 class ImpWrapper:
@@ -143,14 +143,15 @@ class ImportHooksBaseTestCase(unittest.TestCase):
         self.meta_path = sys.meta_path[:]
         self.path_hooks = sys.path_hooks[:]
         sys.path_importer_cache.clear()
-        self.modules_before = support.modules_setup()
+        self.modules_before = sys.modules.copy()
 
     def tearDown(self):
         sys.path[:] = self.path
         sys.meta_path[:] = self.meta_path
         sys.path_hooks[:] = self.path_hooks
         sys.path_importer_cache.clear()
-        support.modules_cleanup(*self.modules_before)
+        sys.modules.clear()
+        sys.modules.update(self.modules_before)
 
 
 class ImportHooksTestCase(ImportHooksBaseTestCase):
@@ -178,6 +179,16 @@ class ImportHooksTestCase(ImportHooksBaseTestCase):
         import reloadmodule
         self.assertFalse(hasattr(reloadmodule,'reloaded'))
 
+        TestImporter.modules['reloadmodule'] = (False, reload_co)
+        imp.reload(reloadmodule)
+        self.assertTrue(hasattr(reloadmodule,'reloaded'))
+
+        import hooktestpackage.oldabs
+        self.assertEqual(hooktestpackage.oldabs.get_name(),
+                         "hooktestpackage.oldabs")
+        self.assertEqual(hooktestpackage.oldabs.sub,
+                         hooktestpackage.sub)
+
         import hooktestpackage.newrel
         self.assertEqual(hooktestpackage.newrel.get_name(),
                          "hooktestpackage.newrel")
@@ -199,11 +210,6 @@ class ImportHooksTestCase(ImportHooksBaseTestCase):
         import sub
         self.assertEqual(sub.get_name(), "sub")
 
-        import hooktestpackage.oldabs
-        self.assertEqual(hooktestpackage.oldabs.get_name(),
-                         "hooktestpackage.oldabs")
-        self.assertEqual(hooktestpackage.oldabs.sub, sub)
-
         import hooktestpackage.newabs
         self.assertEqual(hooktestpackage.newabs.get_name(),
                          "hooktestpackage.newabs")
@@ -221,7 +227,7 @@ class ImportHooksTestCase(ImportHooksBaseTestCase):
 
     def testBlocker(self):
         mname = "exceptions"  # an arbitrary harmless builtin module
-        support.unload(mname)
+        test_support.unload(mname)
         sys.meta_path.append(ImportBlocker(mname))
         self.assertRaises(ImportError, __import__, mname)
 
@@ -229,19 +235,21 @@ class ImportHooksTestCase(ImportHooksBaseTestCase):
         i = ImpWrapper()
         sys.meta_path.append(i)
         sys.path_hooks.append(ImpWrapper)
-        mnames = ("colorsys", "urllib.parse", "distutils.core")
+        mnames = ("colorsys", "urlparse", "distutils.core", "compiler.misc")
         for mname in mnames:
             parent = mname.split(".")[0]
-            for n in list(sys.modules):
+            for n in sys.modules.keys():
                 if n.startswith(parent):
                     del sys.modules[n]
-        for mname in mnames:
-            m = __import__(mname, globals(), locals(), ["__dummy__"])
-            m.__loader__  # to make sure we actually handled the import
+        with test_support.check_warnings(("The compiler package is deprecated "
+                                          "and removed", DeprecationWarning)):
+            for mname in mnames:
+                m = __import__(mname, globals(), locals(), ["__dummy__"])
+                m.__loader__  # to make sure we actually handled the import
 
 
 def test_main():
-    support.run_unittest(ImportHooksTestCase)
+    test_support.run_unittest(ImportHooksTestCase)
 
 if __name__ == "__main__":
     test_main()

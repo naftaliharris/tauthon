@@ -1,6 +1,7 @@
+#-*- coding: ISO-8859-1 -*-
 # pysqlite2/__init__.py: the pysqlite2 package.
 #
-# Copyright (C) 2005 Gerhard HÃ¤ring <gh@ghaering.de>
+# Copyright (C) 2005 Gerhard Häring <gh@ghaering.de>
 #
 # This file is part of pysqlite.
 #
@@ -20,4 +21,4 @@
 #    misrepresented as being the original software.
 # 3. This notice may not be removed or altered from any source distribution.
 
-from sqlite3.dbapi2 import *
+from dbapi2 import *

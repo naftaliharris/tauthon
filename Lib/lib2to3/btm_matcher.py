@@ -104,7 +104,7 @@ class BottomMatcher(object):
                 current_ast_node.was_checked = True
                 for child in current_ast_node.children:
                     # multiple statements, recheck
-                    if isinstance(child, pytree.Leaf) and child.value == ";":
+                    if isinstance(child, pytree.Leaf) and child.value == u";":
                         current_ast_node.was_checked = False
                         break
                 if current_ast_node.type == 1:

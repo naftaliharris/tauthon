@@ -10,7 +10,7 @@
    your own types of attributes instead.  Maybe you want to name your
    local variables other than 'self'.  If your object type is needed in
    other files, you'll have to create a file "foobarobject.h"; see
-   floatobject.h for an example. */
+   intobject.h for an example. */
 
 /* Xxo objects */
 
@@ -63,16 +63,16 @@ static PyMethodDef Xxo_methods[] = {
 };
 
 static PyObject *
-Xxo_getattro(XxoObject *self, PyObject *name)
+Xxo_getattr(XxoObject *self, char *name)
 {
     if (self->x_attr != NULL) {
-        PyObject *v = PyDict_GetItem(self->x_attr, name);
+        PyObject *v = PyDict_GetItemString(self->x_attr, name);
         if (v != NULL) {
             Py_INCREF(v);
             return v;
         }
     }
-    return PyObject_GenericGetAttr((PyObject *)self, name);
+    return Py_FindMethod(Xxo_methods, (PyObject *)self, name);
 }
 
 static int
@@ -104,9 +104,9 @@ static PyTypeObject Xxo_Type = {
     /* methods */
     (destructor)Xxo_dealloc, /*tp_dealloc*/
     0,                          /*tp_print*/
-    (getattrfunc)0,         /*tp_getattr*/
+    (getattrfunc)Xxo_getattr, /*tp_getattr*/
     (setattrfunc)Xxo_setattr, /*tp_setattr*/
-    0,                          /*tp_reserved*/
+    0,                          /*tp_compare*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -114,7 +114,7 @@ static PyTypeObject Xxo_Type = {
     0,                          /*tp_hash*/
     0,                      /*tp_call*/
     0,                      /*tp_str*/
-    (getattrofunc)Xxo_getattro, /*tp_getattro*/
+    0,                      /*tp_getattro*/
     0,                      /*tp_setattro*/
     0,                      /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT,     /*tp_flags*/
@@ -125,7 +125,7 @@ static PyTypeObject Xxo_Type = {
     0,                      /*tp_weaklistoffset*/
     0,                      /*tp_iter*/
     0,                      /*tp_iternext*/
-    Xxo_methods,            /*tp_methods*/
+    0,                      /*tp_methods*/
     0,                      /*tp_members*/
     0,                      /*tp_getset*/
     0,                      /*tp_base*/
@@ -156,7 +156,7 @@ xx_foo(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "ll:foo", &i, &j))
         return NULL;
     res = i+j; /* XXX Do something here */
-    return PyLong_FromLong(res);
+    return PyInt_FromLong(res);
 }
 
 
@@ -187,7 +187,7 @@ xx_bug(PyObject *self, PyObject *args)
 
     item = PyList_GetItem(list, 0);
     /* Py_INCREF(item); */
-    PyList_SetItem(list, 1, PyLong_FromLong(0L));
+    PyList_SetItem(list, 1, PyInt_FromLong(0L));
     PyObject_Print(item, stdout, 0);
     printf("\n");
     /* Py_DECREF(item); */
@@ -224,7 +224,7 @@ static PyTypeObject Str_Type = {
     0,                          /*tp_print*/
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
-    0,                          /*tp_reserved*/
+    0,                          /*tp_compare*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -246,7 +246,7 @@ static PyTypeObject Str_Type = {
     0,                          /*tp_methods*/
     0,                          /*tp_members*/
     0,                          /*tp_getset*/
-    0, /* see PyInit_xx */      /*tp_base*/
+    0, /* see initxx */         /*tp_base*/
     0,                          /*tp_dict*/
     0,                          /*tp_descr_get*/
     0,                          /*tp_descr_set*/
@@ -279,7 +279,7 @@ static PyTypeObject Null_Type = {
     0,                          /*tp_print*/
     0,                          /*tp_getattr*/
     0,                          /*tp_setattr*/
-    0,                          /*tp_reserved*/
+    0,                          /*tp_compare*/
     0,                          /*tp_repr*/
     0,                          /*tp_as_number*/
     0,                          /*tp_as_sequence*/
@@ -301,14 +301,14 @@ static PyTypeObject Null_Type = {
     0,                          /*tp_methods*/
     0,                          /*tp_members*/
     0,                          /*tp_getset*/
-    0, /* see PyInit_xx */      /*tp_base*/
+    0, /* see initxx */         /*tp_base*/
     0,                          /*tp_dict*/
     0,                          /*tp_descr_get*/
     0,                          /*tp_descr_set*/
     0,                          /*tp_dictoffset*/
     0,                          /*tp_init*/
     0,                          /*tp_alloc*/
-    0, /* see PyInit_xx */      /*tp_new*/
+    0, /* see initxx */         /*tp_new*/
     0,                          /*tp_free*/
     0,                          /*tp_is_gc*/
 };
@@ -334,25 +334,12 @@ static PyMethodDef xx_methods[] = {
 PyDoc_STRVAR(module_doc,
 "This is a template module just for instruction.");
 
-/* Initialization function for the module (*must* be called PyInit_xx) */
-
-
-static struct PyModuleDef xxmodule = {
-    PyModuleDef_HEAD_INIT,
-    "xx",
-    module_doc,
-    -1,
-    xx_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
+/* Initialization function for the module (*must* be called initxx) */
 
 PyMODINIT_FUNC
-PyInit_xx(void)
+initxx(void)
 {
-    PyObject *m = NULL;
+    PyObject *m;
 
     /* Due to cross platform compiler issues the slots must be filled
      * here. It's required for portability to Windows without requiring
@@ -364,33 +351,29 @@ PyInit_xx(void)
     /* Finalize the type object including setting type of the new type
      * object; doing it here is required for portability, too. */
     if (PyType_Ready(&Xxo_Type) < 0)
-        goto fail;
+        return;
 
     /* Create the module and add the functions */
-    m = PyModule_Create(&xxmodule);
+    m = Py_InitModule3("xx", xx_methods, module_doc);
     if (m == NULL)
-        goto fail;
+        return;
 
     /* Add some symbolic constants to the module */
     if (ErrorObject == NULL) {
         ErrorObject = PyErr_NewException("xx.error", NULL, NULL);
         if (ErrorObject == NULL)
-            goto fail;
+            return;
     }
     Py_INCREF(ErrorObject);
     PyModule_AddObject(m, "error", ErrorObject);
 
     /* Add Str */
     if (PyType_Ready(&Str_Type) < 0)
-        goto fail;
+        return;
     PyModule_AddObject(m, "Str", (PyObject *)&Str_Type);
 
     /* Add Null */
     if (PyType_Ready(&Null_Type) < 0)
-        goto fail;
+        return;
     PyModule_AddObject(m, "Null", (PyObject *)&Null_Type);
-    return m;
- fail:
-    Py_XDECREF(m);
-    return NULL;
 }

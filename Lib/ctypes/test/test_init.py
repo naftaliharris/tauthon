@@ -7,7 +7,7 @@ class X(Structure):
     new_was_called = False
 
     def __new__(cls):
-        result = super().__new__(cls)
+        result = super(X, cls).__new__(cls)
         result.new_was_called = True
         return result
 
@@ -27,7 +27,7 @@ class InitTest(unittest.TestCase):
         self.assertEqual((y.x.a, y.x.b), (0, 0))
         self.assertEqual(y.x.new_was_called, False)
 
-        # But explicitely creating an X structure calls __new__ and __init__, of course.
+        # But explicitly creating an X structure calls __new__ and __init__, of course.
         x = X()
         self.assertEqual((x.a, x.b), (9, 12))
         self.assertEqual(x.new_was_called, True)

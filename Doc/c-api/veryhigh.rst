@@ -25,20 +25,18 @@ are only passed to these functions if it is certain that they were created by
 the same library that the Python runtime is using.
 
 
-.. c:function:: int Py_Main(int argc, wchar_t **argv)
+.. c:function:: int Py_Main(int argc, char **argv)
 
-   The main program for the standard interpreter.  This is made
-   available for programs which embed Python.  The *argc* and *argv*
-   parameters should be prepared exactly as those which are passed to
-   a C program's :c:func:`main` function (converted to wchar_t
-   according to the user's locale).  It is important to note that the
-   argument list may be modified (but the contents of the strings
-   pointed to by the argument list are not). The return value will be
-   the integer passed to the :func:`sys.exit` function, ``1`` if the
-   interpreter exits due to an exception, or ``2`` if the parameter
-   list does not represent a valid Python command line.
+   The main program for the standard interpreter.  This is made available for
+   programs which embed Python.  The *argc* and *argv* parameters should be
+   prepared exactly as those which are passed to a C program's :c:func:`main`
+   function.  It is important to note that the argument list may be modified (but
+   the contents of the strings pointed to by the argument list are not). The return
+   value will be ``0`` if the interpreter exits normally (ie, without an
+   exception), ``1`` if the interpreter exits due to an exception, or ``2``
+   if the parameter list does not represent a valid Python command line.
 
-   Note that if an otherwise unhandled :exc:`SystemError` is raised, this
+   Note that if an otherwise unhandled :exc:`SystemExit` is raised, this
    function will not return ``1``, but exit the process, as long as
    ``Py_InspectFlag`` is not set.
 
@@ -66,9 +64,8 @@ the same library that the Python runtime is using.
    If *fp* refers to a file associated with an interactive device (console or
    terminal input or Unix pseudo-terminal), return the value of
    :c:func:`PyRun_InteractiveLoop`, otherwise return the result of
-   :c:func:`PyRun_SimpleFile`.  *filename* is decoded from the filesystem
-   encoding (:func:`sys.getfilesystemencoding`).  If *filename* is *NULL*, this
-   function uses ``"???"`` as the filename.
+   :c:func:`PyRun_SimpleFile`.  If *filename* is *NULL*, this function uses
+   ``"???"`` as the filename.
 
 
 .. c:function:: int PyRun_SimpleString(const char *command)
@@ -85,7 +82,7 @@ the same library that the Python runtime is using.
    there was an error, there is no way to get the exception information. For the
    meaning of *flags*, see below.
 
-   Note that if an otherwise unhandled :exc:`SystemError` is raised, this
+   Note that if an otherwise unhandled :exc:`SystemExit` is raised, this
    function will not return ``-1``, but exit the process, as long as
    ``Py_InspectFlag`` is not set.
 
@@ -111,10 +108,9 @@ the same library that the Python runtime is using.
 .. c:function:: int PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit, PyCompilerFlags *flags)
 
    Similar to :c:func:`PyRun_SimpleStringFlags`, but the Python source code is read
-   from *fp* instead of an in-memory string. *filename* should be the name of
-   the file, it is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).  If *closeit* is true, the file is
-   closed before PyRun_SimpleFileExFlags returns.
+   from *fp* instead of an in-memory string. *filename* should be the name of the
+   file.  If *closeit* is true, the file is closed before PyRun_SimpleFileExFlags
+   returns.
 
 
 .. c:function:: int PyRun_InteractiveOne(FILE *fp, const char *filename)
@@ -127,10 +123,7 @@ the same library that the Python runtime is using.
 
    Read and execute a single statement from a file associated with an
    interactive device according to the *flags* argument.  The user will be
-   prompted using ``sys.ps1`` and ``sys.ps2``.  *filename* is decoded from the
-   filesystem encoding (:func:`sys.getfilesystemencoding`).
-
-   Returns ``0`` when the input was
+   prompted using ``sys.ps1`` and ``sys.ps2``.  Returns ``0`` when the input was
    executed successfully, ``-1`` if there was an exception, or an error code
    from the :file:`errcode.h` include file distributed as part of Python if
    there was a parse error.  (Note that :file:`errcode.h` is not included by
@@ -147,8 +140,7 @@ the same library that the Python runtime is using.
 
    Read and execute statements from a file associated with an interactive device
    until EOF is reached.  The user will be prompted using ``sys.ps1`` and
-   ``sys.ps2``.  *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).  Returns ``0`` at EOF.
+   ``sys.ps2``.  Returns ``0`` at EOF.
 
 
 .. c:function:: struct _node* PyParser_SimpleParseString(const char *str, int start)
@@ -170,8 +162,7 @@ the same library that the Python runtime is using.
    Parse Python source code from *str* using the start token *start* according to
    the *flags* argument.  The result can be used to create a code object which can
    be evaluated efficiently. This is useful if a code fragment must be evaluated
-   many times. *filename* is decoded from the filesystem encoding
-   (:func:`sys.getfilesystemencoding`).
+   many times.
 
 
 .. c:function:: struct _node* PyParser_SimpleParseFile(FILE *fp, const char *filename, int start)
@@ -224,8 +215,7 @@ the same library that the Python runtime is using.
 .. c:function:: PyObject* PyRun_FileExFlags(FILE *fp, const char *filename, int start, PyObject *globals, PyObject *locals, int closeit, PyCompilerFlags *flags)
 
    Similar to :c:func:`PyRun_StringFlags`, but the Python source code is read from
-   *fp* instead of an in-memory string. *filename* should be the name of the file,
-   it is decoded from the filesystem encoding (:func:`sys.getfilesystemencoding`).
+   *fp* instead of an in-memory string. *filename* should be the name of the file.
    If *closeit* is true, the file is closed before :c:func:`PyRun_FileExFlags`
    returns.
 
@@ -238,38 +228,23 @@ the same library that the Python runtime is using.
 
 .. c:function:: PyObject* Py_CompileStringFlags(const char *str, const char *filename, int start, PyCompilerFlags *flags)
 
-   This is a simplified interface to :c:func:`Py_CompileStringExFlags` below, with
-   *optimize* set to ``-1``.
-
-
-.. c:function:: PyObject* Py_CompileStringExFlags(const char *str, const char *filename, int start, PyCompilerFlags *flags, int optimize)
-
    Parse and compile the Python source code in *str*, returning the resulting code
    object.  The start token is given by *start*; this can be used to constrain the
    code which can be compiled and should be :const:`Py_eval_input`,
    :const:`Py_file_input`, or :const:`Py_single_input`.  The filename specified by
    *filename* is used to construct the code object and may appear in tracebacks or
-   :exc:`SyntaxError` exception messages, it is decoded from the filesystem
-   encoding (:func:`sys.getfilesystemencoding`).  This returns *NULL* if the
-   code cannot be parsed or compiled.
-
-   The integer *optimize* specifies the optimization level of the compiler; a
-   value of ``-1`` selects the optimization level of the interpreter as given by
-   :option:`-O` options.  Explicit levels are ``0`` (no optimization;
-   ``__debug__`` is true), ``1`` (asserts are removed, ``__debug__`` is false)
-   or ``2`` (docstrings are removed too).
-
-   .. versionadded:: 3.2
+   :exc:`SyntaxError` exception messages.  This returns *NULL* if the code cannot
+   be parsed or compiled.
 
 
-.. c:function:: PyObject* PyEval_EvalCode(PyObject *co, PyObject *globals, PyObject *locals)
+.. c:function:: PyObject* PyEval_EvalCode(PyCodeObject *co, PyObject *globals, PyObject *locals)
 
    This is a simplified interface to :c:func:`PyEval_EvalCodeEx`, with just
    the code object, and the dictionaries of global and local variables.
    The other arguments are set to *NULL*.
 
 
-.. c:function:: PyObject* PyEval_EvalCodeEx(PyObject *co, PyObject *globals, PyObject *locals, PyObject **args, int argcount, PyObject **kws, int kwcount, PyObject **defs, int defcount, PyObject *closure)
+.. c:function:: PyObject* PyEval_EvalCodeEx(PyCodeObject *co, PyObject *globals, PyObject *locals, PyObject **args, int argcount, PyObject **kws, int kwcount, PyObject **defs, int defcount, PyObject *closure)
 
    Evaluate a precompiled code object, given a particular environment for its
    evaluation.  This environment consists of dictionaries of global and local

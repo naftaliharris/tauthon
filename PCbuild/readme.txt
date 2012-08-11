@@ -37,7 +37,7 @@ NOTE:
    running a Python core buildbot test slave; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python32_d.dll, python_d.exe, parser_d.pyd, and so on. Both
+their name:  python30_d.dll, python_d.exe, parser_d.pyd, and so on. Both
 the build and rt batch files accept a -d option for debug builds.
 
 The 32bit builds end up in the solution folder PCbuild while the x64 builds
@@ -103,10 +103,13 @@ winsound
     play sounds (typically .wav files) under Windows
 
 Python-controlled subprojects that wrap external projects:
+_bsddb
+    Wraps Berkeley DB 4.7.25, which is currently built by _bsddb.vcproj.
+    project (see below).
 _sqlite3
-    Wraps SQLite 3.7.4, which is currently built by sqlite3.vcproj (see below).
+    Wraps SQLite 3.6.21, which is currently built by sqlite3.vcproj (see below).
 _tkinter
-    Wraps the Tk windowing system.  Unlike _sqlite3, there's no
+    Wraps the Tk windowing system.  Unlike _bsddb and _sqlite3, there's no
     corresponding tcltk.vcproj-type project that builds Tcl/Tk from vcproj's
     within our pcbuild.sln, which means this module expects to find a
     pre-built Tcl/Tk in either ..\..\tcltk for 32-bit or ..\..\tcltk64 for
@@ -118,28 +121,28 @@ bz2
     Download the source from the python.org copy into the dist
     directory:
 
-    svn export http://svn.python.org/projects/external/bzip2-1.0.5
+    svn export http://svn.python.org/projects/external/bzip2-1.0.6
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
     above via subversion. **
 
     A custom pre-link step in the bz2 project settings should manage to
-    build bzip2-1.0.5\libbz2.lib by magic before bz2.pyd (or bz2_d.pyd) is
+    build bzip2-1.0.6\libbz2.lib by magic before bz2.pyd (or bz2_d.pyd) is
     linked in PCbuild\.
     However, the bz2 project is not smart enough to remove anything under
-    bzip2-1.0.5\ when you do a clean, so if you want to rebuild bzip2.lib
-    you need to clean up bzip2-1.0.5\ by hand.
+    bzip2-1.0.6\ when you do a clean, so if you want to rebuild bzip2.lib
+    you need to clean up bzip2-1.0.6\ by hand.
 
     All of this managed to build libbz2.lib in 
-    bzip2-1.0.5\$platform-$configuration\, which the Python project links in.
+    bzip2-1.0.6\$platform-$configuration\, which the Python project links in.
 
 _ssl
     Python wrapper for the secure sockets library.
 
     Get the source code through
 
-    svn export http://svn.python.org/projects/external/openssl-1.0.0a
+    svn export http://svn.python.org/projects/external/openssl-0.9.8x
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
@@ -212,8 +215,8 @@ So for a release build, you'd call it as:
 
 This will be cleaned up in the future; ideally Tcl/Tk will be brought into our
 pcbuild.sln as custom .vcproj files, just as we've recently done with the
-sqlite3.vcproj file, which will remove the need for Tcl/Tk to be built
-separately via a batch file.
+_bsddb.vcproj and sqlite3.vcproj files, which will remove the need for
+Tcl/Tk to be built separately via a batch file.
 
 XXX trent.nelson 02-Apr-08:
     Having the external subprojects in ..\.. relative to this directory is a

@@ -35,9 +35,9 @@ class FixSetLiteral(fixer_base.BaseFix):
             items = results["items"]
 
         # Build the contents of the literal
-        literal = [pytree.Leaf(token.LBRACE, "{")]
+        literal = [pytree.Leaf(token.LBRACE, u"{")]
         literal.extend(n.clone() for n in items.children)
-        literal.append(pytree.Leaf(token.RBRACE, "}"))
+        literal.append(pytree.Leaf(token.RBRACE, u"}"))
         # Set the prefix of the right brace to that of the ')' or ']'
         literal[-1].prefix = items.next_sibling.prefix
         maker = pytree.Node(syms.dictsetmaker, literal)

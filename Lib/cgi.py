@@ -15,6 +15,9 @@ This module defines a number of utilities for use by CGI scripts
 written in Python.
 """
 
+# XXX Perhaps there should be a slimmed version that doesn't contain
+# all those backwards compatible and debugging classes and functions?
+
 # History
 # -------
 #
@@ -31,17 +34,30 @@ __version__ = "2.6"
 # Imports
 # =======
 
-from io import StringIO, BytesIO, TextIOWrapper
+from operator import attrgetter
 import sys
 import os
-import urllib.parse
-from email.parser import FeedParser
-from warnings import warn
-import html
-import locale
-import tempfile
+import urllib
+import UserDict
+import urlparse
 
-__all__ = ["MiniFieldStorage", "FieldStorage",
+from warnings import filterwarnings, catch_warnings, warn
+with catch_warnings():
+    if sys.py3kwarning:
+        filterwarnings("ignore", ".*mimetools has been removed",
+                       DeprecationWarning)
+        filterwarnings("ignore", ".*rfc822 has been removed",
+                       DeprecationWarning)
+    import mimetools
+    import rfc822
+
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
+
+__all__ = ["MiniFieldStorage", "FieldStorage", "FormContentDict",
+           "SvFormContentDict", "InterpFormContentDict", "FormContent",
            "parse", "parse_qs", "parse_qsl", "parse_multipart",
            "parse_header", "print_exception", "print_environ",
            "print_form", "print_directory", "print_arguments",
@@ -111,7 +127,7 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
 
         Arguments, all optional:
 
-        fp              : file pointer; default: sys.stdin.buffer
+        fp              : file pointer; default: sys.stdin
 
         environ         : environment dictionary; default: os.environ
 
@@ -128,18 +144,6 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
     """
     if fp is None:
         fp = sys.stdin
-
-    # field keys and values (except for files) are returned as strings
-    # an encoding is required to decode the bytes read from self.fp
-    if hasattr(fp,'encoding'):
-        encoding = fp.encoding
-    else:
-        encoding = 'latin-1'
-
-    # fp.read() must return bytes
-    if isinstance(fp, TextIOWrapper):
-        fp = fp.buffer
-
     if not 'REQUEST_METHOD' in environ:
         environ['REQUEST_METHOD'] = 'GET'       # For testing stand-alone
     if environ['REQUEST_METHOD'] == 'POST':
@@ -149,8 +153,8 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
         elif ctype == 'application/x-www-form-urlencoded':
             clength = int(environ['CONTENT_LENGTH'])
             if maxlen and clength > maxlen:
-                raise ValueError('Maximum content length exceeded')
-            qs = fp.read(clength).decode(encoding)
+                raise ValueError, 'Maximum content length exceeded'
+            qs = fp.read(clength)
         else:
             qs = ''                     # Unknown content-type
         if 'QUERY_STRING' in environ:
@@ -168,8 +172,7 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
         else:
             qs = ""
         environ['QUERY_STRING'] = qs    # XXX Shouldn't, really
-    return urllib.parse.parse_qs(qs, keep_blank_values, strict_parsing,
-                                 encoding=encoding)
+    return urlparse.parse_qs(qs, keep_blank_values, strict_parsing)
 
 
 # parse query string function called from urlparse,
@@ -177,15 +180,16 @@ def parse(fp=None, environ=os.environ, keep_blank_values=0, strict_parsing=0):
 
 def parse_qs(qs, keep_blank_values=0, strict_parsing=0):
     """Parse a query given as a string argument."""
-    warn("cgi.parse_qs is deprecated, use urllib.parse.parse_qs instead",
-         DeprecationWarning, 2)
-    return urllib.parse.parse_qs(qs, keep_blank_values, strict_parsing)
+    warn("cgi.parse_qs is deprecated, use urlparse.parse_qs instead",
+         PendingDeprecationWarning, 2)
+    return urlparse.parse_qs(qs, keep_blank_values, strict_parsing)
+
 
 def parse_qsl(qs, keep_blank_values=0, strict_parsing=0):
     """Parse a query given as a string argument."""
-    warn("cgi.parse_qsl is deprecated, use urllib.parse.parse_qsl instead",
-         DeprecationWarning, 2)
-    return urllib.parse.parse_qsl(qs, keep_blank_values, strict_parsing)
+    warn("cgi.parse_qsl is deprecated, use urlparse.parse_qsl instead",
+         PendingDeprecationWarning, 2)
+    return urlparse.parse_qsl(qs, keep_blank_values, strict_parsing)
 
 def parse_multipart(fp, pdict):
     """Parse multipart input.
@@ -212,13 +216,11 @@ def parse_multipart(fp, pdict):
     since it can call parse_multipart().
 
     """
-    import http.client
-
     boundary = ""
     if 'boundary' in pdict:
         boundary = pdict['boundary']
     if not valid_boundary(boundary):
-        raise ValueError('Invalid boundary in multipart form: %r'
+        raise ValueError,  ('Invalid boundary in multipart form: %r'
                             % (boundary,))
 
     nextpart = "--" + boundary
@@ -231,8 +233,8 @@ def parse_multipart(fp, pdict):
         data = None
         if terminator:
             # At start of next part.  Read headers first.
-            headers = http.client.parse_headers(fp)
-            clength = headers.get('content-length')
+            headers = mimetools.Message(fp)
+            clength = headers.getheader('content-length')
             if clength:
                 try:
                     bytes = int(clength)
@@ -240,7 +242,7 @@ def parse_multipart(fp, pdict):
                     pass
             if bytes > 0:
                 if maxlen and bytes > maxlen:
-                    raise ValueError('Maximum content length exceeded')
+                    raise ValueError, 'Maximum content length exceeded'
                 data = fp.read(bytes)
             else:
                 data = ""
@@ -251,8 +253,8 @@ def parse_multipart(fp, pdict):
             if not line:
                 terminator = lastpart # End outer loop
                 break
-            if line.startswith("--"):
-                terminator = line.rstrip()
+            if line[:2] == "--":
+                terminator = line.strip()
                 if terminator in (nextpart, lastpart):
                     break
             lines.append(line)
@@ -291,7 +293,7 @@ def _parseparam(s):
     while s[:1] == ';':
         s = s[1:]
         end = s.find(';')
-        while end > 0 and s.count('"', 0, end) % 2:
+        while end > 0 and (s.count('"', 0, end) - s.count('\\"', 0, end)) % 2:
             end = s.find(';', end + 1)
         if end < 0:
             end = len(s)
@@ -306,7 +308,7 @@ def parse_header(line):
 
     """
     parts = _parseparam(';' + line)
-    key = parts.__next__()
+    key = parts.next()
     pdict = {}
     for p in parts:
         i = p.find('=')
@@ -367,10 +369,9 @@ class FieldStorage:
 
     value: the value as a *string*; for file uploads, this
         transparently reads the file every time you request the value
-        and returns *bytes*
 
-    file: the file(-like) object from which you can read the data *as
-        bytes* ; None if the data is stored a simple string
+    file: the file(-like) object from which you can read the data;
+        None if the data is stored a simple string
 
     type: the content-type, or None if not specified
 
@@ -381,7 +382,7 @@ class FieldStorage:
 
     disposition_options: dictionary of corresponding options
 
-    headers: a dictionary(-like) object (sometimes email.message.Message or a
+    headers: a dictionary(-like) object (sometimes rfc822.Message or a
         subclass thereof) containing *all* headers
 
     The class is subclassable, mostly for the purpose of overriding
@@ -391,18 +392,15 @@ class FieldStorage:
     directory and unlinking them as soon as they have been opened.
 
     """
-    def __init__(self, fp=None, headers=None, outerboundary=b'',
-                 environ=os.environ, keep_blank_values=0, strict_parsing=0,
-                 limit=None, encoding='utf-8', errors='replace'):
+
+    def __init__(self, fp=None, headers=None, outerboundary="",
+                 environ=os.environ, keep_blank_values=0, strict_parsing=0):
         """Constructor.  Read multipart/* until last part.
 
         Arguments, all optional:
 
-        fp              : file pointer; default: sys.stdin.buffer
+        fp              : file pointer; default: sys.stdin
             (not used when the request method is GET)
-            Can be :
-            1. a TextIOWrapper object
-            2. an object whose read() and readline() methods return bytes
 
         headers         : header dictionary-like object; default:
             taken from environ as per CGI spec
@@ -423,16 +421,6 @@ class FieldStorage:
             If false (the default), errors are silently ignored.
             If true, errors raise a ValueError exception.
 
-        limit : used internally to read parts of multipart/form-data forms,
-            to exit from the reading loop when reached. It is the difference
-            between the form content-length and the number of bytes already
-            read
-
-        encoding, errors : the encoding and error handler used to decode the
-            binary stream to strings. Must be the same as the charset defined
-            for the page sending the form (content-type : meta http-equiv or
-            header)
-
         """
         method = 'GET'
         self.keep_blank_values = keep_blank_values
@@ -447,8 +435,7 @@ class FieldStorage:
                 qs = sys.argv[1]
             else:
                 qs = ""
-            qs = qs.encode(locale.getpreferredencoding(), 'surrogateescape')
-            fp = BytesIO(qs)
+            fp = StringIO(qs)
             if headers is None:
                 headers = {'content-type':
                            "application/x-www-form-urlencoded"}
@@ -463,25 +450,9 @@ class FieldStorage:
                 self.qs_on_post = environ['QUERY_STRING']
             if 'CONTENT_LENGTH' in environ:
                 headers['content-length'] = environ['CONTENT_LENGTH']
-        if fp is None:
-            self.fp = sys.stdin.buffer
-        # self.fp.read() must return bytes
-        elif isinstance(fp, TextIOWrapper):
-            self.fp = fp.buffer
-        else:
-            self.fp = fp
-
-        self.encoding = encoding
-        self.errors = errors
-
+        self.fp = fp or sys.stdin
         self.headers = headers
-        if not isinstance(outerboundary, bytes):
-            raise TypeError('outerboundary must be bytes, not %s'
-                            % type(outerboundary).__name__)
         self.outerboundary = outerboundary
-
-        self.bytes_read = 0
-        self.limit = limit
 
         # Process content-disposition header
         cdisp, pdict = "", {}
@@ -495,7 +466,6 @@ class FieldStorage:
         self.filename = None
         if 'filename' in pdict:
             self.filename = pdict['filename']
-        self._binary_file = self.filename is not None
 
         # Process content-type header
         #
@@ -517,11 +487,9 @@ class FieldStorage:
             ctype, pdict = 'application/x-www-form-urlencoded', {}
         self.type = ctype
         self.type_options = pdict
+        self.innerboundary = ""
         if 'boundary' in pdict:
-            self.innerboundary = pdict['boundary'].encode(self.encoding)
-        else:
-            self.innerboundary = b""
-
+            self.innerboundary = pdict['boundary']
         clen = -1
         if 'content-length' in self.headers:
             try:
@@ -529,10 +497,8 @@ class FieldStorage:
             except ValueError:
                 pass
             if maxlen and clen > maxlen:
-                raise ValueError('Maximum content length exceeded')
+                raise ValueError, 'Maximum content length exceeded'
         self.length = clen
-        if self.limit is None and clen:
-            self.limit = clen
 
         self.list = self.file = None
         self.done = 0
@@ -553,7 +519,7 @@ class FieldStorage:
 
     def __getattr__(self, name):
         if name != 'value':
-            raise AttributeError(name)
+            raise AttributeError, name
         if self.file:
             self.file.seek(0)
             value = self.file.read()
@@ -567,12 +533,12 @@ class FieldStorage:
     def __getitem__(self, key):
         """Dictionary style indexing."""
         if self.list is None:
-            raise TypeError("not indexable")
+            raise TypeError, "not indexable"
         found = []
         for item in self.list:
             if item.name == key: found.append(item)
         if not found:
-            raise KeyError(key)
+            raise KeyError, key
         if len(found) == 1:
             return found[0]
         else:
@@ -582,8 +548,8 @@ class FieldStorage:
         """Dictionary style get() method, including 'value' lookup."""
         if key in self:
             value = self[key]
-            if isinstance(value, list):
-                return [x.value for x in value]
+            if type(value) is type([]):
+                return map(attrgetter('value'), value)
             else:
                 return value.value
         else:
@@ -593,7 +559,7 @@ class FieldStorage:
         """ Return the first value received."""
         if key in self:
             value = self[key]
-            if isinstance(value, list):
+            if type(value) is type([]):
                 return value[0].value
             else:
                 return value.value
@@ -604,8 +570,8 @@ class FieldStorage:
         """ Return list of received values."""
         if key in self:
             value = self[key]
-            if isinstance(value, list):
-                return [x.value for x in value]
+            if type(value) is type([]):
+                return map(attrgetter('value'), value)
             else:
                 return [value.value]
         else:
@@ -614,13 +580,19 @@ class FieldStorage:
     def keys(self):
         """Dictionary style keys() method."""
         if self.list is None:
-            raise TypeError("not indexable")
+            raise TypeError, "not indexable"
         return list(set(item.name for item in self.list))
+
+    def has_key(self, key):
+        """Dictionary style has_key() method."""
+        if self.list is None:
+            raise TypeError, "not indexable"
+        return any(item.name == key for item in self.list)
 
     def __contains__(self, key):
         """Dictionary style __contains__ method."""
         if self.list is None:
-            raise TypeError("not indexable")
+            raise TypeError, "not indexable"
         return any(item.name == key for item in self.list)
 
     def __len__(self):
@@ -633,18 +605,12 @@ class FieldStorage:
     def read_urlencoded(self):
         """Internal: read data in query string format."""
         qs = self.fp.read(self.length)
-        if not isinstance(qs, bytes):
-            raise ValueError("%s should return bytes, got %s" \
-                             % (self.fp, type(qs).__name__))
-        qs = qs.decode(self.encoding, self.errors)
         if self.qs_on_post:
             qs += '&' + self.qs_on_post
-        self.list = []
-        query = urllib.parse.parse_qsl(
-            qs, self.keep_blank_values, self.strict_parsing,
-            encoding=self.encoding, errors=self.errors)
-        for key, value in query:
-            self.list.append(MiniFieldStorage(key, value))
+        self.list = list = []
+        for key, value in urlparse.parse_qsl(qs, self.keep_blank_values,
+                                            self.strict_parsing):
+            list.append(MiniFieldStorage(key, value))
         self.skip_lines()
 
     FieldStorageClass = None
@@ -653,45 +619,23 @@ class FieldStorage:
         """Internal: read a part that is itself multipart."""
         ib = self.innerboundary
         if not valid_boundary(ib):
-            raise ValueError('Invalid boundary in multipart form: %r' % (ib,))
+            raise ValueError, 'Invalid boundary in multipart form: %r' % (ib,)
         self.list = []
         if self.qs_on_post:
-            query = urllib.parse.parse_qsl(
-                self.qs_on_post, self.keep_blank_values, self.strict_parsing,
-                encoding=self.encoding, errors=self.errors)
-            for key, value in query:
+            for key, value in urlparse.parse_qsl(self.qs_on_post,
+                                self.keep_blank_values, self.strict_parsing):
                 self.list.append(MiniFieldStorage(key, value))
             FieldStorageClass = None
 
         klass = self.FieldStorageClass or self.__class__
-        first_line = self.fp.readline() # bytes
-        if not isinstance(first_line, bytes):
-            raise ValueError("%s should return bytes, got %s" \
-                             % (self.fp, type(first_line).__name__))
-        self.bytes_read += len(first_line)
-        # first line holds boundary ; ignore it, or check that
-        # b"--" + ib == first_line.strip() ?
-        while True:
-            parser = FeedParser()
-            hdr_text = b""
-            while True:
-                data = self.fp.readline()
-                hdr_text += data
-                if not data.strip():
-                    break
-            if not hdr_text:
-                break
-            # parser takes strings, not bytes
-            self.bytes_read += len(hdr_text)
-            parser.feed(hdr_text.decode(self.encoding, self.errors))
-            headers = parser.close()
-            part = klass(self.fp, headers, ib, environ, keep_blank_values,
-                         strict_parsing,self.limit-self.bytes_read,
-                         self.encoding, self.errors)
-            self.bytes_read += part.bytes_read
+        part = klass(self.fp, {}, ib,
+                     environ, keep_blank_values, strict_parsing)
+        # Throw first part away
+        while not part.done:
+            headers = rfc822.Message(self.fp)
+            part = klass(self.fp, headers, ib,
+                         environ, keep_blank_values, strict_parsing)
             self.list.append(part)
-            if self.bytes_read >= self.length:
-                break
         self.skip_lines()
 
     def read_single(self):
@@ -707,15 +651,11 @@ class FieldStorage:
 
     def read_binary(self):
         """Internal: read binary data."""
-        self.file = self.make_file()
+        self.file = self.make_file('b')
         todo = self.length
         if todo >= 0:
             while todo > 0:
-                data = self.fp.read(min(todo, self.bufsize)) # bytes
-                if not isinstance(data, bytes):
-                    raise ValueError("%s should return bytes, got %s"
-                                     % (self.fp, type(data).__name__))
-                self.bytes_read += len(data)
+                data = self.fp.read(min(todo, self.bufsize))
                 if not data:
                     self.done = -1
                     break
@@ -724,77 +664,58 @@ class FieldStorage:
 
     def read_lines(self):
         """Internal: read lines until EOF or outerboundary."""
-        if self._binary_file:
-            self.file = self.__file = BytesIO() # store data as bytes for files
-        else:
-            self.file = self.__file = StringIO() # as strings for other fields
+        self.file = self.__file = StringIO()
         if self.outerboundary:
             self.read_lines_to_outerboundary()
         else:
             self.read_lines_to_eof()
 
     def __write(self, line):
-        """line is always bytes, not string"""
         if self.__file is not None:
             if self.__file.tell() + len(line) > 1000:
-                self.file = self.make_file()
-                data = self.__file.getvalue()
-                self.file.write(data)
+                self.file = self.make_file('')
+                self.file.write(self.__file.getvalue())
                 self.__file = None
-        if self._binary_file:
-            # keep bytes
-            self.file.write(line)
-        else:
-            # decode to string
-            self.file.write(line.decode(self.encoding, self.errors))
+        self.file.write(line)
 
     def read_lines_to_eof(self):
         """Internal: read lines until EOF."""
         while 1:
-            line = self.fp.readline(1<<16) # bytes
-            self.bytes_read += len(line)
+            line = self.fp.readline(1<<16)
             if not line:
                 self.done = -1
                 break
             self.__write(line)
 
     def read_lines_to_outerboundary(self):
-        """Internal: read lines until outerboundary.
-        Data is read as bytes: boundaries and line ends must be converted
-        to bytes for comparisons.
-        """
-        next_boundary = b"--" + self.outerboundary
-        last_boundary = next_boundary + b"--"
-        delim = b""
+        """Internal: read lines until outerboundary."""
+        next = "--" + self.outerboundary
+        last = next + "--"
+        delim = ""
         last_line_lfend = True
-        _read = 0
         while 1:
-            if _read >= self.limit:
-                break
-            line = self.fp.readline(1<<16) # bytes
-            self.bytes_read += len(line)
-            _read += len(line)
+            line = self.fp.readline(1<<16)
             if not line:
                 self.done = -1
                 break
-            if line.startswith(b"--") and last_line_lfend:
-                strippedline = line.rstrip()
-                if strippedline == next_boundary:
+            if line[:2] == "--" and last_line_lfend:
+                strippedline = line.strip()
+                if strippedline == next:
                     break
-                if strippedline == last_boundary:
+                if strippedline == last:
                     self.done = 1
                     break
             odelim = delim
-            if line.endswith(b"\r\n"):
-                delim = b"\r\n"
+            if line[-2:] == "\r\n":
+                delim = "\r\n"
                 line = line[:-2]
                 last_line_lfend = True
-            elif line.endswith(b"\n"):
-                delim = b"\n"
+            elif line[-1] == "\n":
+                delim = "\n"
                 line = line[:-1]
                 last_line_lfend = True
             else:
-                delim = b""
+                delim = ""
                 last_line_lfend = False
             self.__write(odelim + line)
 
@@ -802,25 +723,24 @@ class FieldStorage:
         """Internal: skip lines until outer boundary if defined."""
         if not self.outerboundary or self.done:
             return
-        next_boundary = b"--" + self.outerboundary
-        last_boundary = next_boundary + b"--"
+        next = "--" + self.outerboundary
+        last = next + "--"
         last_line_lfend = True
-        while True:
+        while 1:
             line = self.fp.readline(1<<16)
-            self.bytes_read += len(line)
             if not line:
                 self.done = -1
                 break
-            if line.endswith(b"--") and last_line_lfend:
+            if line[:2] == "--" and last_line_lfend:
                 strippedline = line.strip()
-                if strippedline == next_boundary:
+                if strippedline == next:
                     break
-                if strippedline == last_boundary:
+                if strippedline == last:
                     self.done = 1
                     break
-            last_line_lfend = line.endswith(b'\n')
+            last_line_lfend = line.endswith('\n')
 
-    def make_file(self):
+    def make_file(self, binary=None):
         """Overridable: return a readable & writable file.
 
         The file will be used as follows:
@@ -828,8 +748,8 @@ class FieldStorage:
         - seek(0)
         - data is read from it
 
-        The file is opened in binary mode for files, in text mode
-        for other fields
+        The 'binary' argument is unused -- the file is always opened
+        in binary mode.
 
         This version opens a temporary file for reading and writing,
         and immediately deletes (unlinks) it.  The trick (on Unix!) is
@@ -844,11 +764,117 @@ class FieldStorage:
         which unlinks the temporary files you have created.
 
         """
-        if self._binary_file:
-            return tempfile.TemporaryFile("wb+")
-        else:
-            return tempfile.TemporaryFile("w+",
-                encoding=self.encoding, newline = '\n')
+        import tempfile
+        return tempfile.TemporaryFile("w+b")
+
+
+
+# Backwards Compatibility Classes
+# ===============================
+
+class FormContentDict(UserDict.UserDict):
+    """Form content as dictionary with a list of values per field.
+
+    form = FormContentDict()
+
+    form[key] -> [value, value, ...]
+    key in form -> Boolean
+    form.keys() -> [key, key, ...]
+    form.values() -> [[val, val, ...], [val, val, ...], ...]
+    form.items() ->  [(key, [val, val, ...]), (key, [val, val, ...]), ...]
+    form.dict == {key: [val, val, ...], ...}
+
+    """
+    def __init__(self, environ=os.environ, keep_blank_values=0, strict_parsing=0):
+        self.dict = self.data = parse(environ=environ,
+                                      keep_blank_values=keep_blank_values,
+                                      strict_parsing=strict_parsing)
+        self.query_string = environ['QUERY_STRING']
+
+
+class SvFormContentDict(FormContentDict):
+    """Form content as dictionary expecting a single value per field.
+
+    If you only expect a single value for each field, then form[key]
+    will return that single value.  It will raise an IndexError if
+    that expectation is not true.  If you expect a field to have
+    possible multiple values, than you can use form.getlist(key) to
+    get all of the values.  values() and items() are a compromise:
+    they return single strings where there is a single value, and
+    lists of strings otherwise.
+
+    """
+    def __getitem__(self, key):
+        if len(self.dict[key]) > 1:
+            raise IndexError, 'expecting a single value'
+        return self.dict[key][0]
+    def getlist(self, key):
+        return self.dict[key]
+    def values(self):
+        result = []
+        for value in self.dict.values():
+            if len(value) == 1:
+                result.append(value[0])
+            else: result.append(value)
+        return result
+    def items(self):
+        result = []
+        for key, value in self.dict.items():
+            if len(value) == 1:
+                result.append((key, value[0]))
+            else: result.append((key, value))
+        return result
+
+
+class InterpFormContentDict(SvFormContentDict):
+    """This class is present for backwards compatibility only."""
+    def __getitem__(self, key):
+        v = SvFormContentDict.__getitem__(self, key)
+        if v[0] in '0123456789+-.':
+            try: return int(v)
+            except ValueError:
+                try: return float(v)
+                except ValueError: pass
+        return v.strip()
+    def values(self):
+        result = []
+        for key in self.keys():
+            try:
+                result.append(self[key])
+            except IndexError:
+                result.append(self.dict[key])
+        return result
+    def items(self):
+        result = []
+        for key in self.keys():
+            try:
+                result.append((key, self[key]))
+            except IndexError:
+                result.append((key, self.dict[key]))
+        return result
+
+
+class FormContent(FormContentDict):
+    """This class is present for backwards compatibility only."""
+    def values(self, key):
+        if key in self.dict :return self.dict[key]
+        else: return None
+    def indexed_value(self, key, location):
+        if key in self.dict:
+            if len(self.dict[key]) > location:
+                return self.dict[key][location]
+            else: return None
+        else: return None
+    def value(self, key):
+        if key in self.dict: return self.dict[key][0]
+        else: return None
+    def length(self, key):
+        return len(self.dict[key])
+    def stripped(self, key):
+        if key in self.dict: return self.dict[key][0].strip()
+        else: return None
+    def pars(self):
+        return self.dict
 
 
 # Test/debug code
@@ -861,8 +887,8 @@ def test(environ=os.environ):
     the script in HTML form.
 
     """
-    print("Content-type: text/html")
-    print()
+    print "Content-type: text/html"
+    print
     sys.stderr = sys.stdout
     try:
         form = FieldStorage()   # Replace with other classes to test those
@@ -872,15 +898,15 @@ def test(environ=os.environ):
         print_environ(environ)
         print_environ_usage()
         def f():
-            exec("testing print_exception() -- <I>italics?</I>")
+            exec "testing print_exception() -- <I>italics?</I>"
         def g(f=f):
             f()
-        print("<H3>What follows is a test, not an actual exception:</H3>")
+        print "<H3>What follows is a test, not an actual exception:</H3>"
         g()
     except:
         print_exception()
 
-    print("<H1>Second try with a small maxlen...</H1>")
+    print "<H1>Second try with a small maxlen...</H1>"
 
     global maxlen
     maxlen = 50
@@ -897,65 +923,67 @@ def print_exception(type=None, value=None, tb=None, limit=None):
     if type is None:
         type, value, tb = sys.exc_info()
     import traceback
-    print()
-    print("<H3>Traceback (most recent call last):</H3>")
+    print
+    print "<H3>Traceback (most recent call last):</H3>"
     list = traceback.format_tb(tb, limit) + \
            traceback.format_exception_only(type, value)
-    print("<PRE>%s<B>%s</B></PRE>" % (
-        html.escape("".join(list[:-1])),
-        html.escape(list[-1]),
-        ))
+    print "<PRE>%s<B>%s</B></PRE>" % (
+        escape("".join(list[:-1])),
+        escape(list[-1]),
+        )
     del tb
 
 def print_environ(environ=os.environ):
     """Dump the shell environment as HTML."""
-    keys = sorted(environ.keys())
-    print()
-    print("<H3>Shell Environment:</H3>")
-    print("<DL>")
+    keys = environ.keys()
+    keys.sort()
+    print
+    print "<H3>Shell Environment:</H3>"
+    print "<DL>"
     for key in keys:
-        print("<DT>", html.escape(key), "<DD>", html.escape(environ[key]))
-    print("</DL>")
-    print()
+        print "<DT>", escape(key), "<DD>", escape(environ[key])
+    print "</DL>"
+    print
 
 def print_form(form):
     """Dump the contents of a form as HTML."""
-    keys = sorted(form.keys())
-    print()
-    print("<H3>Form Contents:</H3>")
+    keys = form.keys()
+    keys.sort()
+    print
+    print "<H3>Form Contents:</H3>"
     if not keys:
-        print("<P>No form fields.")
-    print("<DL>")
+        print "<P>No form fields."
+    print "<DL>"
     for key in keys:
-        print("<DT>" + html.escape(key) + ":", end=' ')
+        print "<DT>" + escape(key) + ":",
         value = form[key]
-        print("<i>" + html.escape(repr(type(value))) + "</i>")
-        print("<DD>" + html.escape(repr(value)))
-    print("</DL>")
-    print()
+        print "<i>" + escape(repr(type(value))) + "</i>"
+        print "<DD>" + escape(repr(value))
+    print "</DL>"
+    print
 
 def print_directory():
     """Dump the current directory as HTML."""
-    print()
-    print("<H3>Current Working Directory:</H3>")
+    print
+    print "<H3>Current Working Directory:</H3>"
     try:
         pwd = os.getcwd()
-    except os.error as msg:
-        print("os.error:", html.escape(str(msg)))
+    except os.error, msg:
+        print "os.error:", escape(str(msg))
     else:
-        print(html.escape(pwd))
-    print()
+        print escape(pwd)
+    print
 
 def print_arguments():
-    print()
-    print("<H3>Command Line Arguments:</H3>")
-    print()
-    print(sys.argv)
-    print()
+    print
+    print "<H3>Command Line Arguments:</H3>"
+    print
+    print sys.argv
+    print
 
 def print_environ_usage():
     """Dump a list of environment variables used by CGI as HTML."""
-    print("""
+    print """
 <H3>These environment variables could have been set:</H3>
 <UL>
 <LI>AUTH_TYPE
@@ -994,16 +1022,16 @@ environment as well.  Here are some common variable names:
 <LI>HTTP_REFERER
 <LI>HTTP_USER_AGENT
 </UL>
-""")
+"""
 
 
 # Utilities
 # =========
 
 def escape(s, quote=None):
-    """Deprecated API."""
-    warn("cgi.escape is deprecated, use html.escape instead",
-         PendingDeprecationWarning, stacklevel=2)
+    '''Replace special characters "&", "<" and ">" to HTML-safe sequences.
+    If the optional flag quote is true, the quotation mark character (")
+    is also translated.'''
     s = s.replace("&", "&amp;") # Must be done first!
     s = s.replace("<", "&lt;")
     s = s.replace(">", "&gt;")
@@ -1011,13 +1039,8 @@ def escape(s, quote=None):
         s = s.replace('"', "&quot;")
     return s
 
-
-def valid_boundary(s, _vb_pattern=None):
+def valid_boundary(s, _vb_pattern="^[ -~]{0,200}[!-~]$"):
     import re
-    if isinstance(s, bytes):
-        _vb_pattern = b"^[ -~]{0,200}[!-~]$"
-    else:
-        _vb_pattern = "^[ -~]{0,200}[!-~]$"
     return re.match(_vb_pattern, s)
 
 # Invoke mainline

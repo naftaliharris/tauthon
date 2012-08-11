@@ -94,8 +94,15 @@ codec_encode(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "O|ss:encode", &v, &encoding, &errors))
         return NULL;
 
+#ifdef Py_USING_UNICODE
     if (encoding == NULL)
         encoding = PyUnicode_GetDefaultEncoding();
+#else
+    if (encoding == NULL) {
+        PyErr_SetString(PyExc_ValueError, "no encoding specified");
+        return NULL;
+    }
+#endif
 
     /* Encode via the codec registry */
     return PyCodec_Encode(v, encoding, errors);
@@ -121,8 +128,15 @@ codec_decode(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "O|ss:decode", &v, &encoding, &errors))
         return NULL;
 
+#ifdef Py_USING_UNICODE
     if (encoding == NULL)
         encoding = PyUnicode_GetDefaultEncoding();
+#else
+    if (encoding == NULL) {
+        PyErr_SetString(PyExc_ValueError, "no encoding specified");
+        return NULL;
+    }
+#endif
 
     /* Decode via the codec registry */
     return PyCodec_Decode(v, encoding, errors);
@@ -154,7 +168,7 @@ escape_decode(PyObject *self,
     if (!PyArg_ParseTuple(args, "s#|z:escape_decode",
                           &data, &size, &errors))
         return NULL;
-    return codec_tuple(PyBytes_DecodeEscape(data, size, errors, 0, NULL),
+    return codec_tuple(PyString_DecodeEscape(data, size, errors, 0, NULL),
                        size);
 }
 
@@ -162,64 +176,31 @@ static PyObject *
 escape_encode(PyObject *self,
               PyObject *args)
 {
-    static const char *hexdigits = "0123456789abcdef";
     PyObject *str;
-    Py_ssize_t size;
-    Py_ssize_t newsize;
     const char *errors = NULL;
-    PyObject *v;
+    char *buf;
+    Py_ssize_t consumed, len;
 
-    if (!PyArg_ParseTuple(args, "O!|z:escape_encode",
-                          &PyBytes_Type, &str, &errors))
+    if (!PyArg_ParseTuple(args, "S|z:escape_encode",
+                          &str, &errors))
         return NULL;
 
-    size = PyBytes_GET_SIZE(str);
-    newsize = 4*size;
-    if (newsize > PY_SSIZE_T_MAX || newsize / 4 != size) {
-        PyErr_SetString(PyExc_OverflowError,
-            "string is too large to encode");
-            return NULL;
-    }
-    v = PyBytes_FromStringAndSize(NULL, newsize);
-
-    if (v == NULL) {
+    consumed = PyString_GET_SIZE(str);
+    str = PyString_Repr(str, 0);
+    if (!str)
         return NULL;
-    }
-    else {
-        register Py_ssize_t i;
-        register char c;
-        register char *p = PyBytes_AS_STRING(v);
 
-        for (i = 0; i < size; i++) {
-            /* There's at least enough room for a hex escape */
-            assert(newsize - (p - PyBytes_AS_STRING(v)) >= 4);
-            c = PyBytes_AS_STRING(str)[i];
-            if (c == '\'' || c == '\\')
-                *p++ = '\\', *p++ = c;
-            else if (c == '\t')
-                *p++ = '\\', *p++ = 't';
-            else if (c == '\n')
-                *p++ = '\\', *p++ = 'n';
-            else if (c == '\r')
-                *p++ = '\\', *p++ = 'r';
-            else if (c < ' ' || c >= 0x7f) {
-                *p++ = '\\';
-                *p++ = 'x';
-                *p++ = hexdigits[(c & 0xf0) >> 4];
-                *p++ = hexdigits[c & 0xf];
-            }
-            else
-                *p++ = c;
-        }
-        *p = '\0';
-        if (_PyBytes_Resize(&v, (p - PyBytes_AS_STRING(v)))) {
-            return NULL;
-        }
-    }
+    /* The string will be quoted. Unquote, similar to unicode-escape. */
+    buf = PyString_AS_STRING (str);
+    len = PyString_GET_SIZE (str);
+    memmove(buf, buf+1, len-2);
+    if (_PyString_Resize(&str, len-2) < 0)
+        return NULL;
 
-    return codec_tuple(v, size);
+    return codec_tuple(str, consumed);
 }
 
+#ifdef Py_USING_UNICODE
 /* --- Decoder ------------------------------------------------------------ */
 
 static PyObject *
@@ -258,7 +239,7 @@ utf_7_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_7_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_7_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len;
@@ -281,7 +262,7 @@ utf_8_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_8_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_8_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len;
@@ -305,7 +286,7 @@ utf_16_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_16_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_16_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -328,7 +309,7 @@ utf_16_le_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_16_le_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_16_le_decode",
                           &pbuf, &errors, &final))
         return NULL;
 
@@ -352,7 +333,7 @@ utf_16_be_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_16_be_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_16_be_decode",
                           &pbuf, &errors, &final))
         return NULL;
 
@@ -384,7 +365,7 @@ utf_16_ex_decode(PyObject *self,
     int final = 0;
     Py_ssize_t consumed;
 
-    if (!PyArg_ParseTuple(args, "y*|zii:utf_16_ex_decode",
+    if (!PyArg_ParseTuple(args, "s*|zii:utf_16_ex_decode",
                           &pbuf, &errors, &byteorder, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -409,7 +390,7 @@ utf_32_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_32_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_32_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -432,7 +413,7 @@ utf_32_le_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_32_le_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_32_le_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -455,7 +436,7 @@ utf_32_be_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:utf_32_be_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:utf_32_be_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -486,7 +467,7 @@ utf_32_ex_decode(PyObject *self,
     int final = 0;
     Py_ssize_t consumed;
 
-    if (!PyArg_ParseTuple(args, "y*|zii:utf_32_ex_decode",
+    if (!PyArg_ParseTuple(args, "s*|zii:utf_32_ex_decode",
                           &pbuf, &errors, &byteorder, &final))
         return NULL;
     consumed = pbuf.len; /* This is overwritten unless final is true. */
@@ -542,7 +523,7 @@ latin_1_decode(PyObject *self,
     PyObject *unicode;
     const char *errors = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|z:latin_1_decode",
+    if (!PyArg_ParseTuple(args, "s*|z:latin_1_decode",
                           &pbuf, &errors))
         return NULL;
 
@@ -559,7 +540,7 @@ ascii_decode(PyObject *self,
     PyObject *unicode;
     const char *errors = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|z:ascii_decode",
+    if (!PyArg_ParseTuple(args, "s*|z:ascii_decode",
                           &pbuf, &errors))
         return NULL;
 
@@ -577,7 +558,7 @@ charmap_decode(PyObject *self,
     const char *errors = NULL;
     PyObject *mapping = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zO:charmap_decode",
+    if (!PyArg_ParseTuple(args, "s*|zO:charmap_decode",
                           &pbuf, &errors, &mapping))
         return NULL;
     if (mapping == Py_None)
@@ -600,7 +581,7 @@ mbcs_decode(PyObject *self,
     Py_ssize_t consumed;
     PyObject *decoded = NULL;
 
-    if (!PyArg_ParseTuple(args, "y*|zi:mbcs_decode",
+    if (!PyArg_ParseTuple(args, "s*|zi:mbcs_decode",
                           &pbuf, &errors, &final))
         return NULL;
     consumed = pbuf.len;
@@ -621,21 +602,32 @@ static PyObject *
 readbuffer_encode(PyObject *self,
                   PyObject *args)
 {
-    Py_buffer pdata;
     const char *data;
     Py_ssize_t size;
     const char *errors = NULL;
-    PyObject *result;
 
-    if (!PyArg_ParseTuple(args, "s*|z:readbuffer_encode",
-                          &pdata, &errors))
+    if (!PyArg_ParseTuple(args, "s#|z:readbuffer_encode",
+                          &data, &size, &errors))
         return NULL;
-    data = pdata.buf;
-    size = pdata.len;
 
-    result = PyBytes_FromStringAndSize(data, size);
-    PyBuffer_Release(&pdata);
-    return codec_tuple(result, size);
+    return codec_tuple(PyString_FromStringAndSize(data, size),
+                       size);
+}
+
+static PyObject *
+charbuffer_encode(PyObject *self,
+                  PyObject *args)
+{
+    const char *data;
+    Py_ssize_t size;
+    const char *errors = NULL;
+
+    if (!PyArg_ParseTuple(args, "t#|z:charbuffer_encode",
+                          &data, &size, &errors))
+        return NULL;
+
+    return codec_tuple(PyString_FromStringAndSize(data, size),
+                       size);
 }
 
 static PyObject *
@@ -654,13 +646,14 @@ unicode_internal_encode(PyObject *self,
     if (PyUnicode_Check(obj)) {
         data = PyUnicode_AS_DATA(obj);
         size = PyUnicode_GET_DATA_SIZE(obj);
-        return codec_tuple(PyBytes_FromStringAndSize(data, size),
+        return codec_tuple(PyString_FromStringAndSize(data, size),
                            PyUnicode_GET_SIZE(obj));
     }
     else {
         if (PyObject_AsReadBuffer(obj, (const void **)&data, &size))
             return NULL;
-        return codec_tuple(PyBytes_FromStringAndSize(data, size), size);
+        return codec_tuple(PyString_FromStringAndSize(data, size),
+                           size);
     }
 }
 
@@ -1015,6 +1008,7 @@ mbcs_encode(PyObject *self,
 }
 
 #endif /* MS_WINDOWS */
+#endif /* Py_USING_UNICODE */
 
 /* --- Error handler registry --------------------------------------------- */
 
@@ -1069,6 +1063,7 @@ static PyMethodDef _codecs_functions[] = {
         decode__doc__},
     {"escape_encode",           escape_encode,                  METH_VARARGS},
     {"escape_decode",           escape_decode,                  METH_VARARGS},
+#ifdef Py_USING_UNICODE
     {"utf_8_encode",            utf_8_encode,                   METH_VARARGS},
     {"utf_8_decode",            utf_8_decode,                   METH_VARARGS},
     {"utf_7_encode",            utf_7_encode,                   METH_VARARGS},
@@ -1101,10 +1096,12 @@ static PyMethodDef _codecs_functions[] = {
     {"charmap_decode",          charmap_decode,                 METH_VARARGS},
     {"charmap_build",           charmap_build,                  METH_VARARGS},
     {"readbuffer_encode",       readbuffer_encode,              METH_VARARGS},
+    {"charbuffer_encode",       charbuffer_encode,              METH_VARARGS},
 #if defined(MS_WINDOWS) && defined(HAVE_USABLE_WCHAR_T)
     {"mbcs_encode",             mbcs_encode,                    METH_VARARGS},
     {"mbcs_decode",             mbcs_decode,                    METH_VARARGS},
 #endif
+#endif /* Py_USING_UNICODE */
     {"register_error",          register_error,                 METH_VARARGS,
         register_error__doc__},
     {"lookup_error",            lookup_error,                   METH_VARARGS,
@@ -1112,20 +1109,8 @@ static PyMethodDef _codecs_functions[] = {
     {NULL, NULL}                /* sentinel */
 };
 
-static struct PyModuleDef codecsmodule = {
-        PyModuleDef_HEAD_INIT,
-        "_codecs",
-        NULL,
-        -1,
-        _codecs_functions,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-};
-
 PyMODINIT_FUNC
-PyInit__codecs(void)
+init_codecs(void)
 {
-        return PyModule_Create(&codecsmodule);
+    Py_InitModule("_codecs", _codecs_functions);
 }

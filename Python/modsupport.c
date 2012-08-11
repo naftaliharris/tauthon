@@ -11,6 +11,99 @@ static PyObject *va_build_value(const char *, va_list, int);
 /* Package context -- the full module name for package imports */
 char *_Py_PackageContext = NULL;
 
+/* Py_InitModule4() parameters:
+   - name is the module name
+   - methods is the list of top-level functions
+   - doc is the documentation string
+   - passthrough is passed as self to functions defined in the module
+   - api_version is the value of PYTHON_API_VERSION at the time the
+     module was compiled
+
+   Return value is a borrowed reference to the module object; or NULL
+   if an error occurred (in Python 1.4 and before, errors were fatal).
+   Errors may still leak memory.
+*/
+
+static char api_version_warning[] =
+"Python C API version mismatch for module %.100s:\
+ This Python has API version %d, module %.100s has version %d.";
+
+PyObject *
+Py_InitModule4(const char *name, PyMethodDef *methods, const char *doc,
+               PyObject *passthrough, int module_api_version)
+{
+    PyObject *m, *d, *v, *n;
+    PyMethodDef *ml;
+    PyInterpreterState *interp = PyThreadState_Get()->interp;
+    if (interp->modules == NULL)
+        Py_FatalError("Python import machinery not initialized");
+    if (module_api_version != PYTHON_API_VERSION) {
+        char message[512];
+        PyOS_snprintf(message, sizeof(message),
+                      api_version_warning, name,
+                      PYTHON_API_VERSION, name,
+                      module_api_version);
+        if (PyErr_Warn(PyExc_RuntimeWarning, message))
+            return NULL;
+    }
+    /* Make sure name is fully qualified.
+
+       This is a bit of a hack: when the shared library is loaded,
+       the module name is "package.module", but the module calls
+       Py_InitModule*() with just "module" for the name.  The shared
+       library loader squirrels away the true name of the module in
+       _Py_PackageContext, and Py_InitModule*() will substitute this
+       (if the name actually matches).
+    */
+    if (_Py_PackageContext != NULL) {
+        char *p = strrchr(_Py_PackageContext, '.');
+        if (p != NULL && strcmp(name, p+1) == 0) {
+            name = _Py_PackageContext;
+            _Py_PackageContext = NULL;
+        }
+    }
+    if ((m = PyImport_AddModule(name)) == NULL)
+        return NULL;
+    d = PyModule_GetDict(m);
+    if (methods != NULL) {
+        n = PyString_FromString(name);
+        if (n == NULL)
+            return NULL;
+        for (ml = methods; ml->ml_name != NULL; ml++) {
+            if ((ml->ml_flags & METH_CLASS) ||
+                (ml->ml_flags & METH_STATIC)) {
+                PyErr_SetString(PyExc_ValueError,
+                                "module functions cannot set"
+                                " METH_CLASS or METH_STATIC");
+                Py_DECREF(n);
+                return NULL;
+            }
+            v = PyCFunction_NewEx(ml, passthrough, n);
+            if (v == NULL) {
+                Py_DECREF(n);
+                return NULL;
+            }
+            if (PyDict_SetItemString(d, ml->ml_name, v) != 0) {
+                Py_DECREF(v);
+                Py_DECREF(n);
+                return NULL;
+            }
+            Py_DECREF(v);
+        }
+        Py_DECREF(n);
+    }
+    if (doc != NULL) {
+        v = PyString_FromString(doc);
+        if (v == NULL || PyDict_SetItemString(d, "__doc__", v) != 0) {
+            Py_XDECREF(v);
+            return NULL;
+        }
+        Py_DECREF(v);
+    }
+    return m;
+}
+
+
 /* Helper for mkvalue() to scan the length of a format */
 
 static int
@@ -148,6 +241,7 @@ do_mklist(const char **p_format, va_list *p_va, int endchar, int n, int flags)
     return v;
 }
 
+#ifdef Py_USING_UNICODE
 static int
 _ustrlen(Py_UNICODE *u)
 {
@@ -156,6 +250,7 @@ _ustrlen(Py_UNICODE *u)
     while (*v != 0) { i++; v++; }
     return i;
 }
+#endif
 
 static PyObject *
 do_mktuple(const char **p_format, va_list *p_va, int endchar, int n, int flags)
@@ -215,31 +310,37 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
         case 'B':
         case 'h':
         case 'i':
-            return PyLong_FromLong((long)va_arg(*p_va, int));
+            return PyInt_FromLong((long)va_arg(*p_va, int));
 
         case 'H':
-            return PyLong_FromLong((long)va_arg(*p_va, unsigned int));
+            return PyInt_FromLong((long)va_arg(*p_va, unsigned int));
 
         case 'I':
         {
             unsigned int n;
             n = va_arg(*p_va, unsigned int);
-            return PyLong_FromUnsignedLong(n);
+            if (n > (unsigned long)PyInt_GetMax())
+                return PyLong_FromUnsignedLong((unsigned long)n);
+            else
+                return PyInt_FromLong(n);
         }
 
         case 'n':
 #if SIZEOF_SIZE_T!=SIZEOF_LONG
-            return PyLong_FromSsize_t(va_arg(*p_va, Py_ssize_t));
+            return PyInt_FromSsize_t(va_arg(*p_va, Py_ssize_t));
 #endif
             /* Fall through from 'n' to 'l' if Py_ssize_t is long */
         case 'l':
-            return PyLong_FromLong(va_arg(*p_va, long));
+            return PyInt_FromLong(va_arg(*p_va, long));
 
         case 'k':
         {
             unsigned long n;
             n = va_arg(*p_va, unsigned long);
-            return PyLong_FromUnsignedLong(n);
+            if (n > (unsigned long)PyInt_GetMax())
+                return PyLong_FromUnsignedLong(n);
+            else
+                return PyInt_FromLong(n);
         }
 
 #ifdef HAVE_LONG_LONG
@@ -249,6 +350,7 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
         case 'K':
             return PyLong_FromUnsignedLongLong((PY_LONG_LONG)va_arg(*p_va, unsigned PY_LONG_LONG));
 #endif
+#ifdef Py_USING_UNICODE
         case 'u':
         {
             PyObject *v;
@@ -274,35 +376,27 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
             }
             return v;
         }
+#endif
         case 'f':
         case 'd':
             return PyFloat_FromDouble(
                 (double)va_arg(*p_va, va_double));
 
+#ifndef WITHOUT_COMPLEX
         case 'D':
             return PyComplex_FromCComplex(
                 *((Py_complex *)va_arg(*p_va, Py_complex *)));
+#endif /* WITHOUT_COMPLEX */
 
         case 'c':
         {
             char p[1];
             p[0] = (char)va_arg(*p_va, int);
-            return PyBytes_FromStringAndSize(p, 1);
-        }
-        case 'C':
-        {
-            int i = va_arg(*p_va, int);
-            if (i < 0 || i > PyUnicode_GetMax()) {
-                PyErr_SetString(PyExc_OverflowError,
-                                "%c arg not in range(0x110000)");
-                return NULL;
-            }
-            return PyUnicode_FromOrdinal(i);
+            return PyString_FromStringAndSize(p, 1);
         }
 
         case 's':
         case 'z':
-        case 'U':   /* XXX deprecated alias */
         {
             PyObject *v;
             char *str = va_arg(*p_va, char *);
@@ -330,40 +424,7 @@ do_mkvalue(const char **p_format, va_list *p_va, int flags)
                     }
                     n = (Py_ssize_t)m;
                 }
-                v = PyUnicode_FromStringAndSize(str, n);
-            }
-            return v;
-        }
-
-        case 'y':
-        {
-            PyObject *v;
-            char *str = va_arg(*p_va, char *);
-            Py_ssize_t n;
-            if (**p_format == '#') {
-                ++*p_format;
-                if (flags & FLAG_SIZE_T)
-                    n = va_arg(*p_va, Py_ssize_t);
-                else
-                    n = va_arg(*p_va, int);
-            }
-            else
-                n = -1;
-            if (str == NULL) {
-                v = Py_None;
-                Py_INCREF(v);
-            }
-            else {
-                if (n < 0) {
-                    size_t m = strlen(str);
-                    if (m > PY_SSIZE_T_MAX) {
-                        PyErr_SetString(PyExc_OverflowError,
-                            "string too long for Python bytes");
-                        return NULL;
-                    }
-                    n = (Py_ssize_t)m;
-                }
-                v = PyBytes_FromStringAndSize(str, n);
+                v = PyString_FromStringAndSize(str, n);
             }
             return v;
         }
@@ -456,7 +517,15 @@ va_build_value(const char *format, va_list va, int flags)
     int n = countformat(f, '\0');
     va_list lva;
 
-        Py_VA_COPY(lva, va);
+#ifdef VA_LIST_IS_ARRAY
+    memcpy(lva, va, sizeof(va_list));
+#else
+#ifdef __va_copy
+    __va_copy(lva, va);
+#else
+    lva = va;
+#endif
+#endif
 
     if (n < 0)
         return NULL;
@@ -553,7 +622,7 @@ PyModule_AddObject(PyObject *m, const char *name, PyObject *o)
 int
 PyModule_AddIntConstant(PyObject *m, const char *name, long value)
 {
-    PyObject *o = PyLong_FromLong(value);
+    PyObject *o = PyInt_FromLong(value);
     if (!o)
         return -1;
     if (PyModule_AddObject(m, name, o) == 0)
@@ -565,7 +634,7 @@ PyModule_AddIntConstant(PyObject *m, const char *name, long value)
 int
 PyModule_AddStringConstant(PyObject *m, const char *name, const char *value)
 {
-    PyObject *o = PyUnicode_FromString(value);
+    PyObject *o = PyString_FromString(value);
     if (!o)
         return -1;
     if (PyModule_AddObject(m, name, o) == 0)

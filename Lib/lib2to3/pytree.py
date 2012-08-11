@@ -14,7 +14,7 @@ __author__ = "Guido van Rossum <guido@python.org>"
 
 import sys
 import warnings
-from io import StringIO
+from StringIO import StringIO
 
 HUGE = 0x7FFFFFFF  # maximum repeat count, default max
 
@@ -229,12 +229,12 @@ class Base(object):
         """
         next_sib = self.next_sibling
         if next_sib is None:
-            return ""
+            return u""
         return next_sib.prefix
 
     if sys.version_info < (3, 0):
         def __str__(self):
-            return str(self).encode("ascii")
+            return unicode(self).encode("ascii")
 
 class Node(Base):
 
@@ -277,7 +277,7 @@ class Node(Base):
 
         This reproduces the input source exactly.
         """
-        return "".join(map(str, self.children))
+        return u"".join(map(unicode, self.children))
 
     if sys.version_info > (3, 0):
         __str__ = __unicode__
@@ -388,7 +388,7 @@ class Leaf(Base):
 
         This reproduces the input source exactly.
         """
-        return self.prefix + str(self.value)
+        return self.prefix + unicode(self.value)
 
     if sys.version_info > (3, 0):
         __str__ = __unicode__
@@ -548,7 +548,7 @@ class LeafPattern(BasePattern):
         if type is not None:
             assert 0 <= type < 256, type
         if content is not None:
-            assert isinstance(content, str), repr(content)
+            assert isinstance(content, basestring), repr(content)
         self.type = type
         self.content = content
         self.name = name
@@ -598,7 +598,7 @@ class NodePattern(BasePattern):
         if type is not None:
             assert type >= 256, type
         if content is not None:
-            assert not isinstance(content, str), repr(content)
+            assert not isinstance(content, basestring), repr(content)
             content = list(content)
             for i, item in enumerate(content):
                 assert isinstance(item, BasePattern), (i, item)
@@ -658,8 +658,8 @@ class WildcardPattern(BasePattern):
             content: optional sequence of subsequences of patterns;
                      if absent, matches one node;
                      if present, each subsequence is an alternative [*]
-            min: optinal minumum number of times to match, default 0
-            max: optional maximum number of times tro match, default HUGE
+            min: optional minimum number of times to match, default 0
+            max: optional maximum number of times to match, default HUGE
             name: optional name assigned to this match
 
         [*] Thus, if content is [[a, b, c], [d, e], [f, g, h]] this is
@@ -733,7 +733,7 @@ class WildcardPattern(BasePattern):
         """
         if self.content is None:
             # Shortcut for special case (see __init__.__doc__)
-            for count in range(self.min, 1 + min(len(nodes), self.max)):
+            for count in xrange(self.min, 1 + min(len(nodes), self.max)):
                 r = {}
                 if self.name:
                     r[self.name] = nodes[:count]
@@ -743,8 +743,8 @@ class WildcardPattern(BasePattern):
         else:
             # The reason for this is that hitting the recursion limit usually
             # results in some ugly messages about how RuntimeErrors are being
-            # ignored. We only have to do this on CPython, though, because other
-            # implementations don't have this nasty bug in the first place.
+            # ignored. We don't do this on non-CPython implementation because
+            # they don't have this problem.
             if hasattr(sys, "getrefcount"):
                 save_stderr = sys.stderr
                 sys.stderr = StringIO()

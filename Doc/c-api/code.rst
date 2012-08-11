@@ -47,4 +47,4 @@ bound into a function.
 
    Return a new empty code object with the specified filename,
    function name, and first line number.  It is illegal to
-   :func:`exec` or :func:`eval` the resulting code object.
+   :keyword:`exec` or :func:`eval` the resulting code object.

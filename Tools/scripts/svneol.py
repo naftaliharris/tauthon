@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """
 SVN helper script.
@@ -32,12 +32,9 @@ and for a file with a binary mime-type property:
 
 import re
 import os
-import sys
-import subprocess
-
 
 def propfiles(root, fn):
-    default = os.path.join(root, ".svn", "props", fn + ".svn-work")
+    default = os.path.join(root, ".svn", "props", fn+".svn-work")
     try:
         format = int(open(os.path.join(root, ".svn", "format")).read().strip())
     except IOError:
@@ -45,13 +42,12 @@ def propfiles(root, fn):
     if format in (8, 9):
         # In version 8 and 9, committed props are stored in prop-base, local
         # modifications in props
-        return [os.path.join(root, ".svn", "prop-base", fn + ".svn-base"),
-                os.path.join(root, ".svn", "props", fn + ".svn-work")]
-    raise ValueError("Unknown repository format")
-
+        return [os.path.join(root, ".svn", "prop-base", fn+".svn-base"),
+                os.path.join(root, ".svn", "props", fn+".svn-work")]
+    raise ValueError, "Unknown repository format"
 
 def proplist(root, fn):
-    """Return a list of property names for file fn in directory root."""
+    "Return a list of property names for file fn in directory root"
     result = []
     for path in propfiles(root, fn):
         try:
@@ -60,7 +56,7 @@ def proplist(root, fn):
             # no properties file: not under version control,
             # or no properties set
             continue
-        while True:
+        while 1:
             # key-value pairs, of the form
             # K <length>
             # <keyname>NL
@@ -83,32 +79,13 @@ def proplist(root, fn):
         f.close()
     return result
 
-
-def set_eol_native(path):
-    cmd = 'svn propset svn:eol-style native "{}"'.format(path)
-    propset = subprocess.Popen(cmd, shell=True)
-    propset.wait()
-
-
 possible_text_file = re.compile(r"\.([hc]|py|txt|sln|vcproj)$").search
 
-
-def main():
-    for arg in sys.argv[1:] or [os.curdir]:
-        if os.path.isfile(arg):
-            root, fn = os.path.split(arg)
+for root, dirs, files in os.walk('.'):
+    if '.svn' in dirs:
+        dirs.remove('.svn')
+    for fn in files:
+        if possible_text_file(fn):
             if 'svn:eol-style' not in proplist(root, fn):
-                set_eol_native(arg)
-        elif os.path.isdir(arg):
-            for root, dirs, files in os.walk(arg):
-                if '.svn' in dirs:
-                    dirs.remove('.svn')
-                for fn in files:
-                    if possible_text_file(fn):
-                        if 'svn:eol-style' not in proplist(root, fn):
-                            path = os.path.join(root, fn)
-                            set_eol_native(path)
-
-
-if __name__ == '__main__':
-    main()
+                path = os.path.join(root, fn)
+                os.system('svn propset svn:eol-style native "%s"' % path)

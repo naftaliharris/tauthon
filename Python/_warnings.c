@@ -44,7 +44,7 @@ get_warnings_attr(const char *attr)
     int result;
 
     if (warnings_str == NULL) {
-        warnings_str = PyUnicode_InternFromString("warnings");
+        warnings_str = PyString_InternFromString("warnings");
         if (warnings_str == NULL)
             return NULL;
     }
@@ -116,7 +116,7 @@ get_filter(PyObject *category, PyObject *text, Py_ssize_t lineno,
         _filters = warnings_filters;
     }
 
-    if (_filters == NULL || !PyList_Check(_filters)) {
+    if (!PyList_Check(_filters)) {
         PyErr_SetString(PyExc_ValueError,
                         MODULE_NAME ".filters must be a list");
         return NULL;
@@ -145,18 +145,18 @@ get_filter(PyObject *category, PyObject *text, Py_ssize_t lineno,
         good_msg = check_matched(msg, text);
         good_mod = check_matched(mod, module);
         is_subclass = PyObject_IsSubclass(category, cat);
-        ln = PyLong_AsSsize_t(ln_obj);
+        ln = PyInt_AsSsize_t(ln_obj);
         if (good_msg == -1 || good_mod == -1 || is_subclass == -1 ||
             (ln == -1 && PyErr_Occurred()))
             return NULL;
 
         if (good_msg && is_subclass && good_mod && (ln == 0 || lineno == ln))
-            return _PyUnicode_AsString(action);
+            return PyString_AsString(action);
     }
 
     action = get_default_action();
     if (action != NULL) {
-        return _PyUnicode_AsString(action);
+        return PyString_AsString(action);
     }
 
     PyErr_SetString(PyExc_ValueError,
@@ -198,17 +198,17 @@ normalize_module(PyObject *filename)
     if (rc == -1)
         return NULL;
     else if (rc == 0)
-        return PyUnicode_FromString("<unknown>");
+        return PyString_FromString("<unknown>");
 
-    mod_str = _PyUnicode_AsString(filename);
+    mod_str = PyString_AsString(filename);
     if (mod_str == NULL)
-            return NULL;
-    len = PyUnicode_GetSize(filename);
+        return NULL;
+    len = PyString_Size(filename);
     if (len < 0)
         return NULL;
     if (len >= 3 &&
-        strncmp(mod_str + (len - 3), ".py", 3) == 0) {
-        module = PyUnicode_FromStringAndSize(mod_str, len-3);
+            strncmp(mod_str + (len - 3), ".py", 3) == 0) {
+        module = PyString_FromStringAndSize(mod_str, len-3);
     }
     else {
         module = filename;
@@ -225,7 +225,7 @@ update_registry(PyObject *registry, PyObject *text, PyObject *category,
     int rc;
 
     if (add_zero) {
-        zero = PyLong_FromLong(0);
+        zero = PyInt_FromLong(0);
         if (zero == NULL)
             return -1;
         altkey = PyTuple_Pack(3, text, category, zero);
@@ -271,9 +271,7 @@ show_warning(PyObject *filename, int lineno, PyObject *text, PyObject
 
     /* Print "  source_line\n" */
     if (sourceline) {
-        char *source_line_str = _PyUnicode_AsString(sourceline);
-        if (source_line_str == NULL)
-                return;
+        char *source_line_str = PyString_AS_STRING(sourceline);
         while (*source_line_str == ' ' || *source_line_str == '\t' ||
                 *source_line_str == '\014')
             source_line_str++;
@@ -282,8 +280,8 @@ show_warning(PyObject *filename, int lineno, PyObject *text, PyObject
         PyFile_WriteString("\n", f_stderr);
     }
     else
-        if (_Py_DisplaySourceLine(f_stderr, filename, lineno, 2) < 0)
-                return;
+        _Py_DisplaySourceLine(f_stderr, PyString_AS_STRING(filename),
+                              lineno, 2);
     PyErr_Clear();
 }
 
@@ -330,7 +328,7 @@ warn_explicit(PyObject *category, PyObject *message,
             goto cleanup;
     }
 
-    lineno_obj = PyLong_FromLong(lineno);
+    lineno_obj = PyInt_FromLong(lineno);
     if (lineno_obj == NULL)
         goto cleanup;
 
@@ -384,11 +382,8 @@ warn_explicit(PyObject *category, PyObject *message,
             PyObject *to_str = PyObject_Str(item);
             const char *err_str = "???";
 
-            if (to_str != NULL) {
-                err_str = _PyUnicode_AsString(to_str);
-                if (err_str == NULL)
-                        goto cleanup;
-            }
+            if (to_str != NULL)
+                err_str = PyString_AS_STRING(to_str);
             PyErr_Format(PyExc_RuntimeError,
                         "Unrecognized action (%s) in warnings.filters:\n %s",
                         action, err_str);
@@ -407,23 +402,23 @@ warn_explicit(PyObject *category, PyObject *message,
             show_warning(filename, lineno, text, category, sourceline);
         }
         else {
-            PyObject *res;
+              PyObject *res;
 
-            if (!PyMethod_Check(show_fxn) && !PyFunction_Check(show_fxn)) {
-                PyErr_SetString(PyExc_TypeError,
-                                "warnings.showwarning() must be set to a "
-                                "function or method");
-                Py_DECREF(show_fxn);
-                goto cleanup;
-            }
+              if (!PyMethod_Check(show_fxn) && !PyFunction_Check(show_fxn)) {
+                  PyErr_SetString(PyExc_TypeError,
+                                  "warnings.showwarning() must be set to a "
+                                  "function or method");
+                  Py_DECREF(show_fxn);
+                  goto cleanup;
+              }
 
-            res = PyObject_CallFunctionObjArgs(show_fxn, message, category,
-                                                filename, lineno_obj,
-                                                NULL);
-            Py_DECREF(show_fxn);
-            Py_XDECREF(res);
-            if (res == NULL)
-                goto cleanup;
+              res = PyObject_CallFunctionObjArgs(show_fxn, message, category,
+                                                  filename, lineno_obj,
+                                                  NULL);
+              Py_DECREF(show_fxn);
+              Py_XDECREF(res);
+              if (res == NULL)
+                  goto cleanup;
         }
     }
     else /* if (rc == -1) */
@@ -487,7 +482,7 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
     /* Setup module. */
     *module = PyDict_GetItemString(globals, "__name__");
     if (*module == NULL) {
-        *module = PyUnicode_FromString("<string>");
+        *module = PyString_FromString("<string>");
         if (*module == NULL)
             goto handle_error;
     }
@@ -496,19 +491,21 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
 
     /* Setup filename. */
     *filename = PyDict_GetItemString(globals, "__file__");
-    if (*filename != NULL) {
-        Py_ssize_t len = PyUnicode_GetSize(*filename);
-        Py_UNICODE *unicode = PyUnicode_AS_UNICODE(*filename);
+    if (*filename != NULL && PyString_Check(*filename)) {
+            Py_ssize_t len = PyString_Size(*filename);
+        const char *file_str = PyString_AsString(*filename);
+            if (file_str == NULL || (len < 0 && PyErr_Occurred()))
+            goto handle_error;
 
         /* if filename.lower().endswith((".pyc", ".pyo")): */
         if (len >= 4 &&
-            unicode[len-4] == '.' &&
-            Py_UNICODE_TOLOWER(unicode[len-3]) == 'p' &&
-            Py_UNICODE_TOLOWER(unicode[len-2]) == 'y' &&
-            (Py_UNICODE_TOLOWER(unicode[len-1]) == 'c' ||
-                Py_UNICODE_TOLOWER(unicode[len-1]) == 'o'))
+            file_str[len-4] == '.' &&
+            tolower(file_str[len-3]) == 'p' &&
+            tolower(file_str[len-2]) == 'y' &&
+            (tolower(file_str[len-1]) == 'c' ||
+                tolower(file_str[len-1]) == 'o'))
         {
-            *filename = PyUnicode_FromUnicode(unicode, len-1);
+            *filename = PyString_FromStringAndSize(file_str, len-1);
             if (*filename == NULL)
                 goto handle_error;
         }
@@ -516,10 +513,9 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
             Py_INCREF(*filename);
     }
     else {
-        const char *module_str = _PyUnicode_AsString(*module);
-        if (module_str == NULL)
-                goto handle_error;
-        if (strcmp(module_str, "__main__") == 0) {
+        const char *module_str = PyString_AsString(*module);
+        *filename = NULL;
+        if (module_str && strcmp(module_str, "__main__") == 0) {
             PyObject *argv = PySys_GetObject("argv");
             if (argv != NULL && PyList_Size(argv) > 0) {
                 int is_true;
@@ -533,16 +529,16 @@ setup_context(Py_ssize_t stack_level, PyObject **filename, int *lineno,
                 }
                 else if (!is_true) {
                     Py_DECREF(*filename);
-                    *filename = PyUnicode_FromString("__main__");
+                    *filename = PyString_FromString("__main__");
                     if (*filename == NULL)
                         goto handle_error;
                 }
             }
             else {
                 /* embedded interpreters don't have sys.argv, see bug #839151 */
-                *filename = PyUnicode_FromString("__main__");
-                    if (*filename == NULL)
-                        goto handle_error;
+                *filename = PyString_FromString("__main__");
+                if (*filename == NULL)
+                    goto handle_error;
             }
         }
         if (*filename == NULL) {
@@ -652,12 +648,12 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
         PyObject *returned;
 
         if (get_source_name == NULL) {
-            get_source_name = PyUnicode_InternFromString("get_source");
+            get_source_name = PyString_InternFromString("get_source");
             if (!get_source_name)
                 return NULL;
         }
         if (splitlines_name == NULL) {
-            splitlines_name = PyUnicode_InternFromString("splitlines");
+            splitlines_name = PyString_InternFromString("splitlines");
             if (!splitlines_name)
                 return NULL;
         }
@@ -710,17 +706,19 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
 
 
 /* Function to issue a warning message; may raise an exception. */
-
-static int
-warn_unicode(PyObject *category, PyObject *message,
-             Py_ssize_t stack_level)
+int
+PyErr_WarnEx(PyObject *category, const char *text, Py_ssize_t stack_level)
 {
     PyObject *res;
+    PyObject *message = PyString_FromString(text);
+    if (message == NULL)
+        return -1;
 
     if (category == NULL)
         category = PyExc_RuntimeWarning;
 
     res = do_warn(message, category, stack_level);
+    Py_DECREF(message);
     if (res == NULL)
         return -1;
     Py_DECREF(res);
@@ -728,43 +726,7 @@ warn_unicode(PyObject *category, PyObject *message,
     return 0;
 }
 
-int
-PyErr_WarnFormat(PyObject *category, Py_ssize_t stack_level,
-                 const char *format, ...)
-{
-    int ret;
-    PyObject *message;
-    va_list vargs;
-
-#ifdef HAVE_STDARG_PROTOTYPES
-    va_start(vargs, format);
-#else
-    va_start(vargs);
-#endif
-    message = PyUnicode_FromFormatV(format, vargs);
-    if (message != NULL) {
-        ret = warn_unicode(category, message, stack_level);
-        Py_DECREF(message);
-    }
-    else
-        ret = -1;
-    va_end(vargs);
-    return ret;
-}
-
-int
-PyErr_WarnEx(PyObject *category, const char *text, Py_ssize_t stack_level)
-{
-    int ret;
-    PyObject *message = PyUnicode_FromString(text);
-    if (message == NULL)
-        return -1;
-    ret = warn_unicode(category, message, stack_level);
-    Py_DECREF(message);
-    return ret;
-}
-
-/* PyErr_Warn is only for backwards compatability and will be removed.
+/* PyErr_Warn is only for backwards compatibility and will be removed.
    Use PyErr_WarnEx instead. */
 
 #undef PyErr_Warn
@@ -782,15 +744,15 @@ PyErr_WarnExplicit(PyObject *category, const char *text,
                    const char *module_str, PyObject *registry)
 {
     PyObject *res;
-    PyObject *message = PyUnicode_FromString(text);
-    PyObject *filename = PyUnicode_DecodeFSDefault(filename_str);
+    PyObject *message = PyString_FromString(text);
+    PyObject *filename = PyString_FromString(filename_str);
     PyObject *module = NULL;
     int ret = -1;
 
     if (message == NULL || filename == NULL)
         goto exit;
     if (module_str != NULL) {
-        module = PyUnicode_FromString(module_str);
+        module = PyString_FromString(module_str);
             if (module == NULL)
                 goto exit;
     }
@@ -825,7 +787,7 @@ static PyMethodDef warnings_functions[] = {
         METH_VARARGS | METH_KEYWORDS, warn_explicit_doc},
     /* XXX(brett.cannon): add showwarning? */
     /* XXX(brett.cannon): Reasonable to add formatwarning? */
-    {NULL, NULL}                /* sentinel */
+    {NULL, NULL}	        /* sentinel */
 };
 
 
@@ -835,13 +797,12 @@ create_filter(PyObject *category, const char *action)
     static PyObject *ignore_str = NULL;
     static PyObject *error_str = NULL;
     static PyObject *default_str = NULL;
-    static PyObject *always_str = NULL;
     PyObject *action_obj = NULL;
     PyObject *lineno, *result;
 
     if (!strcmp(action, "ignore")) {
         if (ignore_str == NULL) {
-            ignore_str = PyUnicode_InternFromString("ignore");
+            ignore_str = PyString_InternFromString("ignore");
             if (ignore_str == NULL)
                 return NULL;
         }
@@ -849,7 +810,7 @@ create_filter(PyObject *category, const char *action)
     }
     else if (!strcmp(action, "error")) {
         if (error_str == NULL) {
-            error_str = PyUnicode_InternFromString("error");
+            error_str = PyString_InternFromString("error");
             if (error_str == NULL)
                 return NULL;
         }
@@ -857,26 +818,18 @@ create_filter(PyObject *category, const char *action)
     }
     else if (!strcmp(action, "default")) {
         if (default_str == NULL) {
-            default_str = PyUnicode_InternFromString("default");
+            default_str = PyString_InternFromString("default");
             if (default_str == NULL)
                 return NULL;
         }
         action_obj = default_str;
-    }
-    else if (!strcmp(action, "always")) {
-        if (always_str == NULL) {
-            always_str = PyUnicode_InternFromString("always");
-            if (always_str == NULL)
-                return NULL;
-        }
-        action_obj = always_str;
     }
     else {
         Py_FatalError("unknown action");
     }
 
     /* This assumes the line number is zero for now. */
-    lineno = PyLong_FromLong(0);
+    lineno = PyInt_FromLong(0);
     if (lineno == NULL)
         return NULL;
     result = PyTuple_Pack(5, action_obj, Py_None, category, Py_None, lineno);
@@ -887,17 +840,21 @@ create_filter(PyObject *category, const char *action)
 static PyObject *
 init_filters(void)
 {
-    /* Don't silence DeprecationWarning if -3 was used. */
-    PyObject *filters = PyList_New(5);
+    /* Don't silence DeprecationWarning if -3 or -Q were used. */
+    PyObject *filters = PyList_New(Py_Py3kWarningFlag ||
+                                    Py_DivisionWarningFlag ? 3 : 4);
     unsigned int pos = 0;  /* Post-incremented in each use. */
     unsigned int x;
-    const char *bytes_action, *resource_action;
+    const char *bytes_action;
 
     if (filters == NULL)
         return NULL;
 
-    PyList_SET_ITEM(filters, pos++,
-                    create_filter(PyExc_DeprecationWarning, "ignore"));
+    /* If guard changes, make sure to update 'filters' initialization above. */
+    if (!Py_Py3kWarningFlag && !Py_DivisionWarningFlag) {
+        PyList_SET_ITEM(filters, pos++,
+                        create_filter(PyExc_DeprecationWarning, "ignore"));
+    }
     PyList_SET_ITEM(filters, pos++,
                     create_filter(PyExc_PendingDeprecationWarning, "ignore"));
     PyList_SET_ITEM(filters, pos++,
@@ -910,14 +867,7 @@ init_filters(void)
         bytes_action = "ignore";
     PyList_SET_ITEM(filters, pos++, create_filter(PyExc_BytesWarning,
                     bytes_action));
-    /* resource usage warnings are enabled by default in pydebug mode */
-#ifdef Py_DEBUG
-    resource_action = "always";
-#else
-    resource_action = "ignore";
-#endif
-    PyList_SET_ITEM(filters, pos++, create_filter(PyExc_ResourceWarning,
-                    resource_action));
+
     for (x = 0; x < pos; x += 1) {
         if (PyList_GET_ITEM(filters, x) == NULL) {
             Py_DECREF(filters);
@@ -928,46 +878,33 @@ init_filters(void)
     return filters;
 }
 
-static struct PyModuleDef warningsmodule = {
-        PyModuleDef_HEAD_INIT,
-        MODULE_NAME,
-        warnings__doc__,
-        0,
-        warnings_functions,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-};
-
 
 PyMODINIT_FUNC
 _PyWarnings_Init(void)
 {
     PyObject *m;
 
-    m = PyModule_Create(&warningsmodule);
+    m = Py_InitModule3(MODULE_NAME, warnings_functions, warnings__doc__);
     if (m == NULL)
-        return NULL;
+        return;
 
     _filters = init_filters();
     if (_filters == NULL)
-        return NULL;
+        return;
     Py_INCREF(_filters);
     if (PyModule_AddObject(m, "filters", _filters) < 0)
-        return NULL;
+        return;
 
     _once_registry = PyDict_New();
     if (_once_registry == NULL)
-        return NULL;
+        return;
     Py_INCREF(_once_registry);
-    if (PyModule_AddObject(m, "_onceregistry", _once_registry) < 0)
-        return NULL;
+    if (PyModule_AddObject(m, "once_registry", _once_registry) < 0)
+        return;
 
-    _default_action = PyUnicode_FromString("default");
+    _default_action = PyString_FromString("default");
     if (_default_action == NULL)
-        return NULL;
-    if (PyModule_AddObject(m, "_defaultaction", _default_action) < 0)
-        return NULL;
-    return m;
+        return;
+    if (PyModule_AddObject(m, "default_action", _default_action) < 0)
+        return;
 }

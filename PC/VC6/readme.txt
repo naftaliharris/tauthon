@@ -12,7 +12,7 @@ and build the projects.
 The proper order to build subprojects:
 
 1) pythoncore (this builds the main Python DLL and library files,
-               python32.{dll, lib} in Release mode)
+               python27.{dll, lib} in Release mode)
 
 2) python (this builds the main Python executable,
            python.exe in Release mode)
@@ -23,7 +23,7 @@ The proper order to build subprojects:
    to the subsystems they implement; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python32_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
+their name:  python27_d.dll, python_d.exe, pyexpat_d.pyd, and so on.
 
 SUBPROJECTS
 -----------
@@ -120,15 +120,69 @@ bz2
     Download the source from the python.org copy into the dist
     directory:
 
-    svn export http://svn.python.org/projects/external/bzip2-1.0.5
+    svn export http://svn.python.org/projects/external/bzip2-1.0.6
 
     And requires building bz2 first.
 
-    cd dist\bzip2-1.0.5
+    cd dist\bzip2-1.0.6
     nmake -f makefile.msc
 
-    All of this managed to build bzip2-1.0.5\libbz2.lib, which the Python
+    All of this managed to build bzip2-1.0.6\libbz2.lib, which the Python
     project links in.
+
+
+_bsddb
+    To use the version of bsddb that Python is built with by default, invoke
+    (in the dist directory)
+
+     svn export http://svn.python.org/projects/external/db-4.7.25.0 db-4.7.25
+
+    Then open db-4.7.25\build_windows\Berkeley_DB.dsw and build the
+    "db_static" project for "Release" mode.
+
+    Alternatively, if you want to start with the original sources,
+    go to Oracle's download page:
+        http://www.oracle.com/technology/software/products/berkeley-db/db/
+
+    and download version 4.7.25.
+
+    With or without strong cryptography? You can choose either with or
+    without strong cryptography, as per the instructions below.  By
+    default, Python is built and distributed WITHOUT strong crypto.
+
+    Unpack the sources; if you downloaded the non-crypto version, rename
+    the directory from db-4.7.25.NC to db-4.7.25.
+
+    Now apply any patches that apply to your version.
+
+    To run extensive tests, pass "-u bsddb" to regrtest.py.  test_bsddb3.py
+    is then enabled.  Running in verbose mode may be helpful.
+
+    XXX The test_bsddb3 tests don't always pass, on Windows (according to
+    XXX me) or on Linux (according to Barry).  (I had much better luck
+    XXX on Win2K than on Win98SE.)  The common failure mode across platforms
+    XXX is
+    XXX     DBAgainError: (11, 'Resource temporarily unavailable -- unable
+    XXX                         to join the environment')
+    XXX
+    XXX and it appears timing-dependent.  On Win2K I also saw this once:
+    XXX
+    XXX test02_SimpleLocks (bsddb.test.test_thread.HashSimpleThreaded) ...
+    XXX Exception in thread reader 1:
+    XXX Traceback (most recent call last):
+    XXX File "C:\Code\python\lib\threading.py", line 411, in __bootstrap
+    XXX    self.run()
+    XXX File "C:\Code\python\lib\threading.py", line 399, in run
+    XXX    apply(self.__target, self.__args, self.__kwargs)
+    XXX File "C:\Code\python\lib\bsddb\test\test_thread.py", line 268, in
+    XXX                  readerThread
+    XXX    rec = c.next()
+    XXX DBLockDeadlockError: (-30996, 'DB_LOCK_DEADLOCK: Locker killed
+    XXX                                to resolve a deadlock')
+    XXX
+    XXX I'm told that DBLockDeadlockError is expected at times.  It
+    XXX doesn't cause a test to fail when it happens (exceptions in
+    XXX threads are invisible to unittest).
 
 
 _sqlite3

@@ -27,15 +27,16 @@ import time
 import select
 import unittest
 
-from test import support
+from test import test_support
 if not hasattr(select, "epoll"):
     raise unittest.SkipTest("test works only on Linux 2.6")
 
 try:
     select.epoll()
-except IOError as e:
+except IOError, e:
     if e.errno == errno.ENOSYS:
         raise unittest.SkipTest("kernel doesn't support epoll()")
+    raise
 
 class TestEPoll(unittest.TestCase):
 
@@ -55,7 +56,7 @@ class TestEPoll(unittest.TestCase):
         client.setblocking(False)
         try:
             client.connect(('127.0.0.1', self.serverSocket.getsockname()[1]))
-        except socket.error as e:
+        except socket.error, e:
             self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             raise AssertionError("Connect should have raised EINPROGRESS")
@@ -67,7 +68,7 @@ class TestEPoll(unittest.TestCase):
     def test_create(self):
         try:
             ep = select.epoll(16)
-        except OSError as e:
+        except OSError, e:
             raise AssertionError(str(e))
         self.assertTrue(ep.fileno() > 0, ep.fileno())
         self.assertTrue(not ep.closed)
@@ -138,7 +139,7 @@ class TestEPoll(unittest.TestCase):
         ep.close()
         try:
             ep2.poll(1, 4)
-        except IOError as e:
+        except IOError, e:
             self.assertEqual(e.args[0], errno.EBADF, e)
         else:
             self.fail("epoll on closed fd didn't raise EBADF")
@@ -170,8 +171,8 @@ class TestEPoll(unittest.TestCase):
         then = time.time()
         self.assertFalse(events)
 
-        client.send(b"Hello!")
-        server.send(b"world!!!")
+        client.send("Hello!")
+        server.send("world!!!")
 
         now = time.time()
         events = ep.poll(1, 4)
@@ -215,7 +216,7 @@ class TestEPoll(unittest.TestCase):
         ep.unregister(fd)
 
 def test_main():
-    support.run_unittest(TestEPoll)
+    test_support.run_unittest(TestEPoll)
 
 if __name__ == "__main__":
     test_main()

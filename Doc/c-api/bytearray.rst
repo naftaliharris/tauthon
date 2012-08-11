@@ -7,6 +7,8 @@ Byte Array Objects
 
 .. index:: object: bytearray
 
+.. versionadded:: 2.6
+
 
 .. c:type:: PyByteArrayObject
 
@@ -16,8 +18,7 @@ Byte Array Objects
 .. c:var:: PyTypeObject PyByteArray_Type
 
    This instance of :c:type:`PyTypeObject` represents the Python bytearray type;
-   it is the same object as :class:`bytearray` in the Python layer.
-
+   it is the same object as ``bytearray`` in the Python layer.
 
 Type check macros
 ^^^^^^^^^^^^^^^^^

@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """Reverse grep.
 
@@ -9,9 +9,8 @@ import sys
 import re
 import getopt
 
-
 def main():
-    bufsize = 64 * 1024
+    bufsize = 64*1024
     reflags = 0
     opts, args = getopt.getopt(sys.argv[1:], "i")
     for o, a in opts:
@@ -24,12 +23,12 @@ def main():
     pattern, filename = args
     try:
         prog = re.compile(pattern, reflags)
-    except re.error as msg:
-        usage("error in regular expression: %s" % msg)
+    except re.error, msg:
+        usage("error in regular expression: %s" % str(msg))
     try:
         f = open(filename)
-    except IOError as msg:
-        usage("can't open %r: %s" % (filename, msg), 1)
+    except IOError, msg:
+        usage("can't open %s: %s" % (repr(filename), str(msg)), 1)
     f.seek(0, 2)
     pos = f.tell()
     leftover = None
@@ -50,17 +49,16 @@ def main():
             del lines[0]
         else:
             leftover = None
-        for line in reversed(lines):
+        lines.reverse()
+        for line in lines:
             if prog.search(line):
-                print(line)
-
+                print line
 
 def usage(msg, code=2):
     sys.stdout = sys.stderr
-    print(msg)
-    print(__doc__)
+    print msg
+    print __doc__
     sys.exit(code)
-
 
 if __name__ == '__main__':
     main()

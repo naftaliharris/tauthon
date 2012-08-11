@@ -1,34 +1,52 @@
-What's New in IDLE 3.1?
+What's New in IDLE 2.7.4?
 =========================
 
-*Release date: 27-Jun-09*
+- Issue #15318: Prevent writing to sys.stdin.
 
-- Use of 'filter' in keybindingDialog.py was causing custom key assignment to
-  fail.  Patch 5707 amaury.forgeotdarc.
+- Issue #13532, #15319: Check that arguments to sys.stdout.write are strings.
+
+- Issue # 12510: Attempt to get certain tool tips no longer crashes IDLE.
+
+- Issue10365: File open dialog now works instead of crashing even when
+  parent window is closed while dialog is open.
+
+- Issue 14876: use user-selected font for highlight configuration.
+
+- Issue #14018: Update checks for unstable system Tcl/Tk versions on OS X
+  to include versions shipped with OS X 10.7 and 10.8 in addition to 10.6.
 
 
-What's New in IDLE 3.1a1?
+What's New in IDLE 2.7.3?
 =========================
 
-*Release date: 07-Mar-09*
+- Issue #14409: IDLE now properly executes commands in the Shell window
+  when it cannot read the normal config files on startup and
+  has to use the built-in default key bindings.
+  There was previously a bug in one of the defaults.
 
-- Issue #4815: Offer conversion to UTF-8 if source files have
-  no encoding declaration and are not encoded in UTF-8.
+- Issue #3573: IDLE hangs when passing invalid command line args
+  (directory(ies) instead of file(s)).
 
-- Issue #4008: Fix problems with non-ASCII source files.
 
-- Issue #4323: Always encode source as UTF-8 without asking
-  the user (unless a different encoding is declared); remove
-  user configuration of source encoding; all according to
-  PEP 3120.
+What's New in IDLE 2.7.2?
+=========================
 
-- Issue #2665: On Windows, an IDLE installation upgraded from an old version
-  would not start if a custom theme was defined.
+*Release date: 29-May-2011*
 
-What's New in IDLE 2.7? (UNRELEASED, but merged into 3.1 releases above.)
+- Issue #6378: Further adjust idle.bat to start associated Python
+
+- Issue #11896: Save on Close failed despite selecting "Yes" in dialog.
+
+- <Home> toggle failing on Tk 8.5, causing IDLE exits and strange selection
+  behavior. Issue 4676.  Improve selection extension behaviour.
+
+- <Home> toggle non-functional when NumLock set on Windows.  Issue 3851.
+
+
+What's New in IDLE 2.7?
 =======================
 
-*Release date: XX-XXX-2010*
+*Release date: 07-03-2010*
 
 - idle.py modified and simplified to better support developing experimental
   versions of IDLE which are not installed in the standard location.
@@ -47,90 +65,37 @@ What's New in IDLE 2.7? (UNRELEASED, but merged into 3.1 releases above.)
   extract port from command line when warnings are present.
 
 - Tk 8.5 Text widget requires 'wordprocessor' tabstyle attr to handle
-  mixed space/tab properly. Issue 5120, patch by Guilherme Polo.
+  mixed space/tab properly. Issue 5129, patch by Guilherme Polo.
 
 - Issue #3549: On MacOS the preferences menu was not present
 
-What's New in IDLE 3.0 final?
-=============================
 
-*Release date: 03-Dec-2008*
+What's New in IDLE 2.6?
+=======================
 
-- IDLE would print a "Unhandled server exception!" message when internal
-  debugging is enabled.
-
-- Issue #4455: IDLE failed to display the windows list when two windows have
-  the same title.
-
-- Issue #4383: When IDLE cannot make the connection to its subprocess, it would
-  fail to properly display the error message.
-
-
-What's New in IDLE 3.0a3?
-=========================
-
-*Release date: 29-Feb-2008*
-
-- help() was not paging to the shell.  Issue1650.
-
-- CodeContext was not importing.
-
-- Corrected two 3.0 compatibility errors reported by Mark Summerfield:
-  http://mail.python.org/pipermail/python-3000/2007-December/011491.html
-
-- Shell was not colorizing due to bug introduced at r57998,  Bug 1586.
-
-- Issue #1585: IDLE uses non-existent xrange() function.
-
-
-What's New in IDLE 3.0a2?
-=========================
-
-*Release date: 06-Dec-2007*
-
-- Windows EOL sequence not converted correctly, encoding error.
-  Caused file save to fail. Bug 1130.
-
-
-What's New in IDLE 3.0a1?
-=========================
-
-*Release date: 31-Aug-2007*
-
-- IDLE converted to Python 3000 syntax.
-
-- Strings became Unicode.
-
-- CallTips module now uses the inspect module to produce the argspec.
-
-- IDLE modules now use absolute import instead of implied relative import.
-
-- atexit call replaces sys.exitfunc.  The functionality of delete-exitfunc flag
-  in config-main.cfg remains unchanged: if set, registered exit functions will
-  be cleared before IDLE exits.
-
-
-What's New in IDLE 2.6 final?
-=============================
-
-*Release date: 01-Oct-2008*, merged into 3.0 releases detailed above (3.0rc2)
+*Release date: 01-Oct-2008*
 
 - Issue #2665: On Windows, an IDLE installation upgraded from an old version
   would not start if a custom theme was defined.
 
 - Home / Control-A toggles between left margin and end of leading white
-  space.  issue1196903, patch by Jeff Shute.
+  space.  Patch 1196903 Jeff Shute.
 
-- Improved AutoCompleteWindow logic.  issue2062, patch by Tal Einat.
+- Improved AutoCompleteWindow logic.  Patch 2062 Tal Einat.
 
 - Autocompletion of filenames now support alternate separators, e.g. the
-  '/' char on Windows.  issue2061 Patch by Tal Einat.
+  '/' char on Windows.  Patch 2061 Tal Einat.
+
+What's New in IDLE 2.6a1?
+=========================
+
+*Release date: 29-Feb-2008*
 
 - Configured selection highlighting colors were ignored; updating highlighting
   in the config dialog would cause non-Python files to be colored as if they
   were Python source; improve use of ColorDelagator.  Patch 1334. Tal Einat.
 
-- ScriptBinding event handlers weren't returning 'break'. Patch 2050, Tal Einat
+- ScriptBinding event handlers weren't returning 'break'. Patch 2050, Tal Einat.
 
 - There was an error on exit if no sys.exitfunc was defined. Issue 1647.
 

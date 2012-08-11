@@ -1,10 +1,8 @@
 from __future__ import with_statement
-# XXX(nnorwitz): what versions of python is this file supposed to work with?
-# It uses the old print statement not in py3k.
 
 import keyword
 import exceptions
-import builtins
+import __builtin__
 from string import Template
 from sys import subversion
 
@@ -40,7 +38,7 @@ exception_names = sorted(exc for exc in dir(exceptions)
 # nothing that comes with modules (e.g., __name__), so just exclude anything in
 # the 'exceptions' module since we want to ignore exceptions *and* what any
 # module would have
-builtin_names = sorted(builtin for builtin in dir(builtins)
+builtin_names = sorted(builtin for builtin in dir(__builtin__)
                             if builtin not in dir(exceptions))
 
 escapes = (r'+\\[abfnrtv\'"\\]+', r'"\\\o\{1,3}"', r'"\\x\x\{2}"',
@@ -142,7 +140,7 @@ def fill_stmt(iterable, fill_len):
             overflow = None
         while total_len < fill_len:
             try:
-                new_item = next(it)
+                new_item = it.next()
                 buffer_.append(new_item)
                 total_len += len(new_item) + 1
             except StopIteration:
@@ -191,7 +189,7 @@ def main(file_path):
                                             FILL - len(prefix) - len(indent))
                         try:
                             while True:
-                                print>>FILE, indent + prefix + next(stmt_iter)
+                                print>>FILE, indent + prefix + stmt_iter.next()
                         except StopIteration:
                             print>>FILE, ''
                     else:

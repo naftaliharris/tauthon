@@ -1,4 +1,3 @@
-# See: man pkg-config
 prefix=@prefix@
 exec_prefix=@exec_prefix@
 libdir=@libdir@
@@ -9,5 +8,6 @@ Description: Python library
 Requires: 
 Version: @VERSION@
 Libs.private: @LIBS@
-Libs: -L${libdir} -lpython@VERSION@@ABIFLAGS@
-Cflags: -I${includedir}/python@VERSION@@ABIFLAGS@
+Libs: -L${libdir} -lpython@VERSION@
+Cflags: -I${includedir}/python@VERSION@ 
+

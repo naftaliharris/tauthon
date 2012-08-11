@@ -1,5 +1,5 @@
 import unittest
-from test.support import run_unittest, TESTFN, skip_unless_symlink, can_symlink
+from test.test_support import run_unittest, TESTFN
 import glob
 import os
 import shutil
@@ -25,7 +25,7 @@ class GlobTests(unittest.TestCase):
         self.mktemp('ZZZ')
         self.mktemp('a', 'bcd', 'EF')
         self.mktemp('a', 'bcd', 'efg', 'ha')
-        if can_symlink():
+        if hasattr(os, 'symlink'):
             os.symlink(self.norm('broken'), self.norm('sym1'))
             os.symlink(self.norm('broken'), self.norm('sym2'))
 
@@ -54,11 +54,11 @@ class GlobTests(unittest.TestCase):
 
         # test return types are unicode, but only if os.listdir
         # returns unicode filenames
-        uniset = set([str])
-        tmp = os.listdir('.')
+        uniset = set([unicode])
+        tmp = os.listdir(u'.')
         if set(type(x) for x in tmp) == uniset:
-            u1 = glob.glob('*')
-            u2 = glob.glob('./*')
+            u1 = glob.glob(u'*')
+            u2 = glob.glob(u'./*')
             self.assertEqual(set(type(r) for r in u1), uniset)
             self.assertEqual(set(type(r) for r in u2), uniset)
 
@@ -98,12 +98,12 @@ class GlobTests(unittest.TestCase):
         # either of these results are reasonable
         self.assertIn(res[0], [self.tempdir, self.tempdir + os.sep])
 
-    @skip_unless_symlink
     def test_glob_broken_symlinks(self):
-        eq = self.assertSequencesEqual_noorder
-        eq(self.glob('sym*'), [self.norm('sym1'), self.norm('sym2')])
-        eq(self.glob('sym1'), [self.norm('sym1')])
-        eq(self.glob('sym2'), [self.norm('sym2')])
+        if hasattr(os, 'symlink'):
+            eq = self.assertSequencesEqual_noorder
+            eq(self.glob('sym*'), [self.norm('sym1'), self.norm('sym2')])
+            eq(self.glob('sym1'), [self.norm('sym1')])
+            eq(self.glob('sym2'), [self.norm('sym2')])
 
 
 def test_main():

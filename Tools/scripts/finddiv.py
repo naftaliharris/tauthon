@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """finddiv - a grep-like tool that looks for division operators.
 
@@ -23,7 +23,7 @@ import tokenize
 def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], "lh")
-    except getopt.error as msg:
+    except getopt.error, msg:
         usage(msg)
         return 2
     if not args:
@@ -32,7 +32,7 @@ def main():
     listnames = 0
     for o, a in opts:
         if o == "-h":
-            print(__doc__)
+            print __doc__
             return
         if o == "-l":
             listnames = 1
@@ -52,7 +52,7 @@ def process(filename, listnames):
         return processdir(filename, listnames)
     try:
         fp = open(filename)
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write("Can't open: %s\n" % msg)
         return 1
     g = tokenize.generate_tokens(fp.readline)
@@ -60,17 +60,17 @@ def process(filename, listnames):
     for type, token, (row, col), end, line in g:
         if token in ("/", "/="):
             if listnames:
-                print(filename)
+                print filename
                 break
             if row != lastrow:
                 lastrow = row
-                print("%s:%d:%s" % (filename, row, line), end=' ')
+                print "%s:%d:%s" % (filename, row, line),
     fp.close()
 
 def processdir(dir, listnames):
     try:
         names = os.listdir(dir)
-    except os.error as msg:
+    except os.error, msg:
         sys.stderr.write("Can't list directory: %s\n" % dir)
         return 1
     files = []
@@ -78,7 +78,7 @@ def processdir(dir, listnames):
         fn = os.path.join(dir, name)
         if os.path.normcase(fn).endswith(".py") or os.path.isdir(fn):
             files.append(fn)
-    files.sort(key=os.path.normcase)
+    files.sort(lambda a, b: cmp(os.path.normcase(a), os.path.normcase(b)))
     exit = None
     for fn in files:
         x = process(fn, listnames)

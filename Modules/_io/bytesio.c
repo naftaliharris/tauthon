@@ -10,14 +10,7 @@ typedef struct {
     size_t buf_size;
     PyObject *dict;
     PyObject *weakreflist;
-    Py_ssize_t exports;
 } bytesio;
-
-typedef struct {
-    PyObject_HEAD
-    bytesio *source;
-} bytesiobuf;
-
 
 #define CHECK_CLOSED(self)                                  \
     if ((self)->buf == NULL) {                              \
@@ -25,14 +18,6 @@ typedef struct {
                         "I/O operation on closed file.");   \
         return NULL;                                        \
     }
-
-#define CHECK_EXPORTS(self) \
-    if ((self)->exports > 0) { \
-        PyErr_SetString(PyExc_BufferError, \
-                        "Existing exports of data: object cannot be re-sized"); \
-        return NULL; \
-    }
-
 
 /* Internal routine to get a line from the buffer of a BytesIO
    object. Returns the length between the current position to the
@@ -188,30 +173,6 @@ bytesio_flush(bytesio *self)
     Py_RETURN_NONE;
 }
 
-PyDoc_STRVAR(getbuffer_doc,
-"getbuffer() -> bytes.\n"
-"\n"
-"Get a read-write view over the contents of the BytesIO object.");
-
-static PyObject *
-bytesio_getbuffer(bytesio *self)
-{
-    PyTypeObject *type = &_PyBytesIOBuffer_Type;
-    bytesiobuf *buf;
-    PyObject *view;
-
-    CHECK_CLOSED(self);
-
-    buf = (bytesiobuf *) type->tp_alloc(type, 0);
-    if (buf == NULL)
-        return NULL;
-    Py_INCREF(self);
-    buf->source = self;
-    view = PyMemoryView_FromObject((PyObject *) buf);
-    Py_DECREF(buf);
-    return view;
-}
-
 PyDoc_STRVAR(getval_doc,
 "getvalue() -> bytes.\n"
 "\n"
@@ -265,8 +226,8 @@ bytesio_read(bytesio *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|O:read", &arg))
         return NULL;
 
-    if (PyLong_Check(arg)) {
-        size = PyLong_AsSsize_t(arg);
+    if (PyNumber_Check(arg)) {
+        size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (size == -1 && PyErr_Occurred())
             return NULL;
     }
@@ -334,8 +295,8 @@ bytesio_readline(bytesio *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|O:readline", &arg))
         return NULL;
 
-    if (PyLong_Check(arg)) {
-        size = PyLong_AsSsize_t(arg);
+    if (PyNumber_Check(arg)) {
+        size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (size == -1 && PyErr_Occurred())
             return NULL;
     }
@@ -380,8 +341,8 @@ bytesio_readlines(bytesio *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|O:readlines", &arg))
         return NULL;
 
-    if (PyLong_Check(arg)) {
-        maxsize = PyLong_AsSsize_t(arg);
+    if (PyNumber_Check(arg)) {
+        maxsize = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (maxsize == -1 && PyErr_Occurred())
             return NULL;
     }
@@ -427,16 +388,17 @@ PyDoc_STRVAR(readinto_doc,
 "is set not to block as has no data to read.");
 
 static PyObject *
-bytesio_readinto(bytesio *self, PyObject *buffer)
+bytesio_readinto(bytesio *self, PyObject *args)
 {
-    void *raw_buffer;
+    Py_buffer buf;
     Py_ssize_t len, n;
 
     CHECK_CLOSED(self);
 
-    if (PyObject_AsWriteBuffer(buffer, &raw_buffer, &len) == -1)
+    if (!PyArg_ParseTuple(args, "w*", &buf))
         return NULL;
 
+    len = buf.len;
     /* adjust invalid sizes */
     n = self->string_size - self->pos;
     if (len > n) {
@@ -445,11 +407,12 @@ bytesio_readinto(bytesio *self, PyObject *buffer)
             len = 0;
     }
 
-    memcpy(raw_buffer, self->buf + self->pos, len);
+    memcpy(buf.buf, self->buf + self->pos, len);
     assert(self->pos + len < PY_SSIZE_T_MAX);
     assert(len >= 0);
     self->pos += len;
 
+    PyBuffer_Release(&buf);
     return PyLong_FromSsize_t(len);
 }
 
@@ -466,13 +429,12 @@ bytesio_truncate(bytesio *self, PyObject *args)
     PyObject *arg = Py_None;
 
     CHECK_CLOSED(self);
-    CHECK_EXPORTS(self);
 
     if (!PyArg_ParseTuple(args, "|O:truncate", &arg))
         return NULL;
 
-    if (PyLong_Check(arg)) {
-        size = PyLong_AsSsize_t(arg);
+    if (PyNumber_Check(arg)) {
+        size = PyNumber_AsSsize_t(arg, PyExc_OverflowError);
         if (size == -1 && PyErr_Occurred())
             return NULL;
     }
@@ -529,14 +491,19 @@ PyDoc_STRVAR(seek_doc,
 static PyObject *
 bytesio_seek(bytesio *self, PyObject *args)
 {
+    PyObject *posobj;
     Py_ssize_t pos;
     int mode = 0;
 
     CHECK_CLOSED(self);
 
-    if (!PyArg_ParseTuple(args, "n|i:seek", &pos, &mode))
+    if (!PyArg_ParseTuple(args, "O|i:seek", &posobj, &mode))
         return NULL;
 
+    pos = PyNumber_AsSsize_t(posobj, PyExc_OverflowError);
+    if (pos == -1 && PyErr_Occurred())
+        return NULL;
+    
     if (pos < 0 && mode == 0) {
         PyErr_Format(PyExc_ValueError,
                      "negative seek value %zd", pos);
@@ -588,7 +555,6 @@ bytesio_write(bytesio *self, PyObject *obj)
     PyObject *result = NULL;
 
     CHECK_CLOSED(self);
-    CHECK_EXPORTS(self);
 
     if (PyObject_GetBuffer(obj, &buf, PyBUF_CONTIG_RO) < 0)
         return NULL;
@@ -710,7 +676,6 @@ bytesio_setstate(bytesio *self, PyObject *state)
                      Py_TYPE(self)->tp_name, Py_TYPE(state)->tp_name);
         return NULL;
     }
-    CHECK_EXPORTS(self);
     /* Reset the object to its default state. This is only needed to handle
        the case of repeated calls to __setstate__. */
     self->string_size = 0;
@@ -727,13 +692,13 @@ bytesio_setstate(bytesio *self, PyObject *state)
        method instead of modifying self->pos directly to better protect the
        object internal state against errneous (or malicious) inputs. */
     position_obj = PyTuple_GET_ITEM(state, 1);
-    if (!PyLong_Check(position_obj)) {
+    if (!PyIndex_Check(position_obj)) {
         PyErr_Format(PyExc_TypeError,
                      "second item of state must be an integer, not %.200s",
                      Py_TYPE(position_obj)->tp_name);
         return NULL;
     }
-    pos = PyLong_AsSsize_t(position_obj);
+    pos = PyNumber_AsSsize_t(position_obj, PyExc_OverflowError);
     if (pos == -1 && PyErr_Occurred())
         return NULL;
     if (pos < 0) {
@@ -771,11 +736,6 @@ static void
 bytesio_dealloc(bytesio *self)
 {
     _PyObject_GC_UNTRACK(self);
-    if (self->exports > 0) {
-        PyErr_SetString(PyExc_SystemError,
-                        "deallocated BytesIO object has exported buffers");
-        PyErr_Print();
-    }
     if (self->buf != NULL) {
         PyMem_Free(self->buf);
         self->buf = NULL;
@@ -834,6 +794,17 @@ bytesio_init(bytesio *self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+static PyObject *
+bytesio_sizeof(bytesio *self, void *unused)
+{
+    Py_ssize_t res;
+
+    res = sizeof(bytesio);
+    if (self->buf)
+        res += self->buf_size;
+    return PyLong_FromSsize_t(res);
+}
+
 static int
 bytesio_traverse(bytesio *self, visitproc visit, void *arg)
 {
@@ -866,16 +837,16 @@ static struct PyMethodDef bytesio_methods[] = {
     {"write",      (PyCFunction)bytesio_write,      METH_O, write_doc},
     {"writelines", (PyCFunction)bytesio_writelines, METH_O, writelines_doc},
     {"read1",      (PyCFunction)bytesio_read1,      METH_O, read1_doc},
-    {"readinto",   (PyCFunction)bytesio_readinto,   METH_O, readinto_doc},
+    {"readinto",   (PyCFunction)bytesio_readinto,   METH_VARARGS, readinto_doc},
     {"readline",   (PyCFunction)bytesio_readline,   METH_VARARGS, readline_doc},
     {"readlines",  (PyCFunction)bytesio_readlines,  METH_VARARGS, readlines_doc},
     {"read",       (PyCFunction)bytesio_read,       METH_VARARGS, read_doc},
-    {"getbuffer",  (PyCFunction)bytesio_getbuffer,  METH_NOARGS,  getbuffer_doc},
     {"getvalue",   (PyCFunction)bytesio_getvalue,   METH_NOARGS,  getval_doc},
     {"seek",       (PyCFunction)bytesio_seek,       METH_VARARGS, seek_doc},
     {"truncate",   (PyCFunction)bytesio_truncate,   METH_VARARGS, truncate_doc},
     {"__getstate__",  (PyCFunction)bytesio_getstate,  METH_NOARGS, NULL},
     {"__setstate__",  (PyCFunction)bytesio_setstate,  METH_O, NULL},
+    {"__sizeof__", (PyCFunction)bytesio_sizeof,     METH_NOARGS, NULL},
     {NULL, NULL}        /* sentinel */
 };
 
@@ -925,97 +896,4 @@ PyTypeObject PyBytesIO_Type = {
     (initproc)bytesio_init,                    /*tp_init*/
     0,                                         /*tp_alloc*/
     bytesio_new,                               /*tp_new*/
-};
-
-
-/*
- * Implementation of the small intermediate object used by getbuffer().
- * getbuffer() returns a memoryview over this object, which should make it
- * invisible from Python code.
- */
-
-static int
-bytesiobuf_getbuffer(bytesiobuf *obj, Py_buffer *view, int flags)
-{
-    int ret;
-    void *ptr;
-    bytesio *b = (bytesio *) obj->source;
-    if (view == NULL) {
-        b->exports++;
-        return 0;
-    }
-    ptr = (void *) obj;
-    ret = PyBuffer_FillInfo(view, (PyObject*)obj, b->buf, b->string_size,
-                            0, flags);
-    if (ret >= 0) {
-        b->exports++;
-    }
-    return ret;
-}
-
-static void
-bytesiobuf_releasebuffer(bytesiobuf *obj, Py_buffer *view)
-{
-    bytesio *b = (bytesio *) obj->source;
-    b->exports--;
-}
-
-static int
-bytesiobuf_traverse(bytesiobuf *self, visitproc visit, void *arg)
-{
-    Py_VISIT(self->source);
-    return 0;
-}
-
-static void
-bytesiobuf_dealloc(bytesiobuf *self)
-{
-    Py_CLEAR(self->source);
-    Py_TYPE(self)->tp_free(self);
-}
-
-static PyBufferProcs bytesiobuf_as_buffer = {
-    (getbufferproc) bytesiobuf_getbuffer,
-    (releasebufferproc) bytesiobuf_releasebuffer,
-};
-
-PyTypeObject _PyBytesIOBuffer_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "_io._BytesIOBuffer",                      /*tp_name*/
-    sizeof(bytesiobuf),                        /*tp_basicsize*/
-    0,                                         /*tp_itemsize*/
-    (destructor)bytesiobuf_dealloc,            /*tp_dealloc*/
-    0,                                         /*tp_print*/
-    0,                                         /*tp_getattr*/
-    0,                                         /*tp_setattr*/
-    0,                                         /*tp_reserved*/
-    0,                                         /*tp_repr*/
-    0,                                         /*tp_as_number*/
-    0,                                         /*tp_as_sequence*/
-    0,                                         /*tp_as_mapping*/
-    0,                                         /*tp_hash*/
-    0,                                         /*tp_call*/
-    0,                                         /*tp_str*/
-    0,                                         /*tp_getattro*/
-    0,                                         /*tp_setattro*/
-    &bytesiobuf_as_buffer,                     /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,   /*tp_flags*/
-    0,                                         /*tp_doc*/
-    (traverseproc)bytesiobuf_traverse,         /*tp_traverse*/
-    0,                                         /*tp_clear*/
-    0,                                         /*tp_richcompare*/
-    0,                                         /*tp_weaklistoffset*/
-    0,                                         /*tp_iter*/
-    0,                                         /*tp_iternext*/
-    0,                                         /*tp_methods*/
-    0,                                         /*tp_members*/
-    0,                                         /*tp_getset*/
-    0,                                         /*tp_base*/
-    0,                                         /*tp_dict*/
-    0,                                         /*tp_descr_get*/
-    0,                                         /*tp_descr_set*/
-    0,                                         /*tp_dictoffset*/
-    0,                                         /*tp_init*/
-    0,                                         /*tp_alloc*/
-    0,                                         /*tp_new*/
 };

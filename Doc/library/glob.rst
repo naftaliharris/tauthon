@@ -34,6 +34,7 @@ subshell.  (For tilde and shell variable expansion, use
    Return an :term:`iterator` which yields the same values as :func:`glob`
    without actually storing them all simultaneously.
 
+   .. versionadded:: 2.5
 
 For example, consider a directory containing only the following files:
 :file:`1.gif`, :file:`2.txt`, and :file:`card.gif`.  :func:`glob` will produce

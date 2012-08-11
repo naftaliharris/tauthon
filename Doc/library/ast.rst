@@ -7,6 +7,12 @@
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
 .. sectionauthor:: Georg Brandl <georg@python.org>
 
+.. versionadded:: 2.5
+   The low-level ``_ast`` module containing only the node classes.
+
+.. versionadded:: 2.6
+   The high-level ``ast`` module containing all helpers.
+
 **Source code:** :source:`Lib/ast.py`
 
 --------------
@@ -90,6 +96,11 @@ Node classes
       node = ast.UnaryOp(ast.USub(), ast.Num(5, lineno=0, col_offset=0),
                          lineno=0, col_offset=0)
 
+   .. versionadded:: 2.6
+      The constructor as explained above was added.  In Python 2.5 nodes had
+      to be created by calling the class constructor without arguments and
+      setting the attributes afterwards.
+
 
 .. _abstract-grammar:
 
@@ -107,6 +118,8 @@ The abstract grammar is currently defined as follows:
 :mod:`ast` Helpers
 ------------------
 
+.. versionadded:: 2.6
+
 Apart from the node classes, :mod:`ast` module defines these utility functions
 and classes for traversing abstract syntax trees:
 
@@ -120,14 +133,11 @@ and classes for traversing abstract syntax trees:
 
    Safely evaluate an expression node or a string containing a Python
    expression.  The string or node provided may only consist of the following
-   Python literal structures: strings, bytes, numbers, tuples, lists, dicts,
-   sets, booleans, and ``None``.
+   Python literal structures: strings, numbers, tuples, lists, dicts, booleans,
+   and ``None``.
 
    This can be used for safely evaluating strings containing Python expressions
    from untrusted sources without the need to parse the values oneself.
-
-   .. versionchanged:: 3.2
-      Now allows bytes and set literals.
 
 
 .. function:: get_docstring(node, clean=True)

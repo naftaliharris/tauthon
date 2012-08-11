@@ -11,8 +11,8 @@ The :mod:`readline` module defines a number of functions to facilitate
 completion and reading/writing of history files from the Python interpreter.
 This module can be used directly or via the :mod:`rlcompleter` module.  Settings
 made using  this module affect the behaviour of both the interpreter's
-interactive prompt  and the prompts offered by the built-in :func:`input`
-function.
+interactive prompt  and the prompts offered by the :func:`raw_input` and
+:func:`input` built-in functions.
 
 .. note::
 
@@ -64,6 +64,8 @@ The :mod:`readline` module defines the following functions:
    Clear the current history.  (Note: this function is not available if the
    installed version of GNU readline doesn't support it.)
 
+   .. versionadded:: 2.4
+
 
 .. function:: get_history_length()
 
@@ -84,26 +86,36 @@ The :mod:`readline` module defines the following functions:
    :func:`get_history_length`, which returns the maximum number of lines that will
    be written to a history file.)
 
+   .. versionadded:: 2.3
+
 
 .. function:: get_history_item(index)
 
    Return the current contents of history item at *index*.
+
+   .. versionadded:: 2.3
 
 
 .. function:: remove_history_item(pos)
 
    Remove history item specified by its position from the history.
 
+   .. versionadded:: 2.4
+
 
 .. function:: replace_history_item(pos, line)
 
    Replace history item specified by its position with the given line.
+
+   .. versionadded:: 2.4
 
 
 .. function:: redisplay()
 
    Change what's displayed on the screen to reflect the current contents of the
    line buffer.
+
+   .. versionadded:: 2.3
 
 
 .. function:: set_startup_hook([function])
@@ -137,11 +149,14 @@ The :mod:`readline` module defines the following functions:
 
    Get the completer function, or ``None`` if no completer function has been set.
 
+   .. versionadded:: 2.3
+
 
 .. function:: get_completion_type()
 
    Get the type of completion being attempted.
 
+   .. versionadded:: 2.6
 
 .. function:: get_begidx()
 
@@ -162,7 +177,6 @@ The :mod:`readline` module defines the following functions:
 
    Get the readline word delimiters for tab-completion.
 
-
 .. function:: set_completion_display_matches_hook([function])
 
    Set or remove the completion display function.  If *function* is
@@ -172,6 +186,7 @@ The :mod:`readline` module defines the following functions:
    ``function(substitution, [matches], longest_match_length)`` once
    each time matches need to be displayed.
 
+   .. versionadded:: 2.6
 
 .. function:: add_history(line)
 
@@ -196,7 +211,7 @@ normally be executed automatically during interactive sessions from the user's
 
    import os
    import readline
-   histfile = os.path.join(os.environ["HOME"], ".pyhist")
+   histfile = os.path.join(os.path.expanduser("~"), ".pyhist")
    try:
        readline.read_history_file(histfile)
    except IOError:

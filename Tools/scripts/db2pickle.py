@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """
 Synopsis: %(prog)s [-h|-g|-b|-r|-a] dbfile [ picklefile ]
@@ -6,7 +6,7 @@ Synopsis: %(prog)s [-h|-g|-b|-r|-a] dbfile [ picklefile ]
 Convert the database file given on the command line to a pickle
 representation.  The optional flags indicate the type of the database:
 
-    -a - open using dbm (any supported format)
+    -a - open using anydbm
     -b - open as bsddb btree file
     -d - open as dbm file
     -g - open as gdbm file
@@ -25,20 +25,20 @@ try:
 except ImportError:
     bsddb = None
 try:
-    import dbm.ndbm as dbm
+    import dbm
 except ImportError:
     dbm = None
 try:
-    import dbm.gnu as gdbm
+    import gdbm
 except ImportError:
     gdbm = None
 try:
-    import dbm.ndbm as anydbm
+    import anydbm
 except ImportError:
     anydbm = None
 import sys
 try:
-    import pickle as pickle
+    import cPickle as pickle
 except ImportError:
     import pickle
 
@@ -94,19 +94,19 @@ def main(args):
             try:
                 dbopen = anydbm.open
             except AttributeError:
-                sys.stderr.write("dbm module unavailable.\n")
+                sys.stderr.write("anydbm module unavailable.\n")
                 return 1
         elif opt in ("-g", "--gdbm"):
             try:
                 dbopen = gdbm.open
             except AttributeError:
-                sys.stderr.write("dbm.gnu module unavailable.\n")
+                sys.stderr.write("gdbm module unavailable.\n")
                 return 1
         elif opt in ("-d", "--dbm"):
             try:
                 dbopen = dbm.open
             except AttributeError:
-                sys.stderr.write("dbm.ndbm module unavailable.\n")
+                sys.stderr.write("dbm module unavailable.\n")
                 return 1
     if dbopen is None:
         if bsddb is None:

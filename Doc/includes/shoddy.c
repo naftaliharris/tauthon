@@ -10,7 +10,7 @@ static PyObject *
 Shoddy_increment(Shoddy *self, PyObject *unused)
 {
     self->state++;
-    return PyLong_FromLong(self->state);
+    return PyInt_FromLong(self->state);
 }
 
 
@@ -32,6 +32,7 @@ Shoddy_init(Shoddy *self, PyObject *args, PyObject *kwds)
 
 static PyTypeObject ShoddyType = {
     PyObject_HEAD_INIT(NULL)
+    0,                       /* ob_size */
     "shoddy.Shoddy",         /* tp_name */
     sizeof(Shoddy),          /* tp_basicsize */
     0,                       /* tp_itemsize */
@@ -39,7 +40,7 @@ static PyTypeObject ShoddyType = {
     0,                       /* tp_print */
     0,                       /* tp_getattr */
     0,                       /* tp_setattr */
-    0,                       /* tp_reserved */
+    0,                       /* tp_compare */
     0,                       /* tp_repr */
     0,                       /* tp_as_number */
     0,                       /* tp_as_sequence */
@@ -51,7 +52,7 @@ static PyTypeObject ShoddyType = {
     0,                       /* tp_setattro */
     0,                       /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT |
-        Py_TPFLAGS_BASETYPE, /* tp_flags */
+      Py_TPFLAGS_BASETYPE,   /* tp_flags */
     0,                       /* tp_doc */
     0,                       /* tp_traverse */
     0,                       /* tp_clear */
@@ -72,28 +73,19 @@ static PyTypeObject ShoddyType = {
     0,                       /* tp_new */
 };
 
-static PyModuleDef shoddymodule = {
-    PyModuleDef_HEAD_INIT,
-    "shoddy",
-    "Shoddy module",
-    -1,
-    NULL, NULL, NULL, NULL, NULL
-};
-
 PyMODINIT_FUNC
-PyInit_shoddy(void)
+initshoddy(void)
 {
     PyObject *m;
 
     ShoddyType.tp_base = &PyList_Type;
     if (PyType_Ready(&ShoddyType) < 0)
-        return NULL;
+        return;
 
-    m = PyModule_Create(&shoddymodule);
+    m = Py_InitModule3("shoddy", NULL, "Shoddy module");
     if (m == NULL)
-        return NULL;
+        return;
 
     Py_INCREF(&ShoddyType);
     PyModule_AddObject(m, "Shoddy", (PyObject *) &ShoddyType);
-    return m;
 }

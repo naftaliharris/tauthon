@@ -11,7 +11,7 @@ class SpecialClassAttribute(Test):
         class c:
             pass
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             c.__a = 2
             c.__b = 3
@@ -178,7 +178,7 @@ class SpecialClassAttribute(Test):
         class c:
             pass
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class NormalClassAttribute(Test):
@@ -192,7 +192,7 @@ class NormalClassAttribute(Test):
         class c:
             pass
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             c.a = 2
             c.b = 3
@@ -364,7 +364,7 @@ class NormalClassAttribute(Test):
         class c:
             pass
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class SpecialInstanceAttribute(Test):
@@ -379,7 +379,7 @@ class SpecialInstanceAttribute(Test):
             pass
         o = c()
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             o.__a__ = 2
             o.__b__ = 3
@@ -552,7 +552,7 @@ class SpecialInstanceAttribute(Test):
             pass
         o = c()
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class NormalInstanceAttribute(Test):
@@ -567,7 +567,7 @@ class NormalInstanceAttribute(Test):
             pass
         o = c()
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             o.a = 2
             o.b = 3
@@ -740,7 +740,7 @@ class NormalInstanceAttribute(Test):
             pass
         o = c()
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class BuiltinMethodLookup(Test):
@@ -754,7 +754,7 @@ class BuiltinMethodLookup(Test):
         l = []
         d = {}
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             l.append
             l.append
@@ -774,11 +774,11 @@ class BuiltinMethodLookup(Test):
             l.sort
             l.sort
 
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
 
             d.items
             d.items
@@ -810,11 +810,11 @@ class BuiltinMethodLookup(Test):
             l.sort
             l.sort
 
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
 
             d.items
             d.items
@@ -846,11 +846,11 @@ class BuiltinMethodLookup(Test):
             l.sort
             l.sort
 
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
 
             d.items
             d.items
@@ -882,11 +882,11 @@ class BuiltinMethodLookup(Test):
             l.sort
             l.sort
 
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
 
             d.items
             d.items
@@ -918,11 +918,11 @@ class BuiltinMethodLookup(Test):
             l.sort
             l.sort
 
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
-            # d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
+            d.has_key
 
             d.items
             d.items
@@ -941,5 +941,5 @@ class BuiltinMethodLookup(Test):
         l = []
         d = {}
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass

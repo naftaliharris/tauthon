@@ -1,13 +1,12 @@
 """Tests for distutils.sysconfig."""
 import os
-import shutil
 import test
 import unittest
+import shutil
 
 from distutils import sysconfig
-from distutils.ccompiler import get_default_compiler
 from distutils.tests import support
-from test.support import TESTFN, run_unittest
+from test.test_support import TESTFN
 
 class SysconfigTestCase(support.EnvironGuard,
                         unittest.TestCase):
@@ -22,14 +21,11 @@ class SysconfigTestCase(support.EnvironGuard,
         super(SysconfigTestCase, self).tearDown()
 
     def cleanup_testfn(self):
-        if os.path.isfile(TESTFN):
-            os.remove(TESTFN)
-        elif os.path.isdir(TESTFN):
-            shutil.rmtree(TESTFN)
-
-    def test_get_config_h_filename(self):
-        config_h = sysconfig.get_config_h_filename()
-        self.assertTrue(os.path.isfile(config_h), config_h)
+        path = test.test_support.TESTFN
+        if os.path.isfile(path):
+            os.remove(path)
+        elif os.path.isdir(path):
+            shutil.rmtree(path)
 
     def test_get_python_lib(self):
         lib_dir = sysconfig.get_python_lib()
@@ -38,6 +34,9 @@ class SysconfigTestCase(support.EnvironGuard,
         # test for pythonxx.lib?
         self.assertNotEqual(sysconfig.get_python_lib(),
                             sysconfig.get_python_lib(prefix=TESTFN))
+        _sysconfig = __import__('sysconfig')
+        res = sysconfig.get_python_lib(True, True)
+        self.assertEqual(_sysconfig.get_path('platstdlib'), res)
 
     def test_get_python_inc(self):
         inc_dir = sysconfig.get_python_inc()
@@ -48,33 +47,8 @@ class SysconfigTestCase(support.EnvironGuard,
         python_h = os.path.join(inc_dir, "Python.h")
         self.assertTrue(os.path.isfile(python_h), python_h)
 
-    def test_get_config_vars(self):
-        cvars = sysconfig.get_config_vars()
-        self.assertTrue(isinstance(cvars, dict))
-        self.assertTrue(cvars)
-
-    def test_customize_compiler(self):
-
-        # not testing if default compiler is not unix
-        if get_default_compiler() != 'unix':
-            return
-
-        os.environ['AR'] = 'my_ar'
-        os.environ['ARFLAGS'] = '-arflags'
-
-        # make sure AR gets caught
-        class compiler:
-            compiler_type = 'unix'
-
-            def set_executables(self, **kw):
-                self.exes = kw
-
-        comp = compiler()
-        sysconfig.customize_compiler(comp)
-        self.assertEqual(comp.exes['archiver'], 'my_ar -arflags')
-
     def test_parse_makefile_base(self):
-        self.makefile = TESTFN
+        self.makefile = test.test_support.TESTFN
         fd = open(self.makefile, 'w')
         try:
             fd.write(r"CONFIG_ARGS=  '--arg1=optarg1' 'ENV=LIB'" '\n')
@@ -86,7 +60,7 @@ class SysconfigTestCase(support.EnvironGuard,
                              'OTHER': 'foo'})
 
     def test_parse_makefile_literal_dollar(self):
-        self.makefile = TESTFN
+        self.makefile = test.test_support.TESTFN
         fd = open(self.makefile, 'w')
         try:
             fd.write(r"CONFIG_ARGS=  '--arg1=optarg1' 'ENV=\$$LIB'" '\n')
@@ -98,15 +72,6 @@ class SysconfigTestCase(support.EnvironGuard,
                              'OTHER': 'foo'})
 
 
-    def test_sysconfig_module(self):
-        import sysconfig as global_sysconfig
-        self.assertEqual(global_sysconfig.get_config_var('CFLAGS'), sysconfig.get_config_var('CFLAGS'))
-        self.assertEqual(global_sysconfig.get_config_var('LDFLAGS'), sysconfig.get_config_var('LDFLAGS'))
-        self.assertEqual(global_sysconfig.get_config_var('LDSHARED'),sysconfig.get_config_var('LDSHARED'))
-        self.assertEqual(global_sysconfig.get_config_var('CC'), sysconfig.get_config_var('CC'))
-
-
-
 def test_suite():
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(SysconfigTestCase))
@@ -114,4 +79,4 @@ def test_suite():
 
 
 if __name__ == '__main__':
-    run_unittest(test_suite())
+    test.test_support.run_unittest(test_suite())

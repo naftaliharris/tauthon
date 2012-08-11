@@ -1,8 +1,7 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 """Interfaces for launching and remotely controlling Web browsers."""
 # Maintained by Georg Brandl.
 
-import io
 import os
 import shlex
 import sys
@@ -160,7 +159,7 @@ class GenericBrowser(BaseBrowser):
        and without remote functionality."""
 
     def __init__(self, name):
-        if isinstance(name, str):
+        if isinstance(name, basestring):
             self.name = name
             self.args = ["%s"]
         else:
@@ -224,7 +223,7 @@ class UnixBrowser(BaseBrowser):
         cmdline = [self.name] + raise_opt + args
 
         if remote or self.background:
-            inout = io.open(os.devnull, "r+")
+            inout = file(os.devnull, "r+")
         else:
             # for TTY browsers, we need stdin/out
             inout = None
@@ -238,7 +237,7 @@ class UnixBrowser(BaseBrowser):
                              stdout=(self.redirect_stdout and inout or None),
                              stderr=inout, preexec_fn=setsid)
         if remote:
-            # wait five secons. If the subprocess is not finished, the
+            # wait five seconds. If the subprocess is not finished, the
             # remote invocation has (hopefully) started a new instance.
             time.sleep(1)
             rc = p.poll()
@@ -344,7 +343,7 @@ class Konqueror(BaseBrowser):
         else:
             action = "openURL"
 
-        devnull = io.open(os.devnull, "r+")
+        devnull = file(os.devnull, "r+")
         # if possible, put browser in separate process group, so
         # keyboard interrupts don't affect browser as well as Python
         setsid = getattr(os, 'setsid', None)
@@ -653,22 +652,22 @@ def main():
     -t: open new tab""" % sys.argv[0]
     try:
         opts, args = getopt.getopt(sys.argv[1:], 'ntd')
-    except getopt.error as msg:
-        print(msg, file=sys.stderr)
-        print(usage, file=sys.stderr)
+    except getopt.error, msg:
+        print >>sys.stderr, msg
+        print >>sys.stderr, usage
         sys.exit(1)
     new_win = 0
     for o, a in opts:
         if o == '-n': new_win = 1
         elif o == '-t': new_win = 2
     if len(args) != 1:
-        print(usage, file=sys.stderr)
+        print >>sys.stderr, usage
         sys.exit(1)
 
     url = args[0]
     open(url, new_win)
 
-    print("\a")
+    print "\a"
 
 if __name__ == "__main__":
     main()

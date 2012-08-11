@@ -11,8 +11,6 @@
 
 """
 
-from __future__ import print_function
-
 __copyright__ = """\
 Copyright (c), 1997-2006, Marc-Andre Lemburg (mal@lemburg.com)
 Copyright (c), 2000-2006, eGenix.com Software GmbH (info@egenix.com)
@@ -22,7 +20,7 @@ or contact the author. All Rights Reserved.
 
 __version__ = '1.2'
 
-import sys, getopt, glob, os, re, traceback
+import sys, getopt, string, glob, os, re, exceptions, traceback
 
 ### Helpers
 
@@ -46,7 +44,7 @@ def _getopt_flags(options):
                 l.append(o.name+'=')
             else:
                 l.append(o.name)
-    return ''.join(s), l
+    return string.join(s,''),l
 
 def invisible_input(prompt='>>> '):
 
@@ -84,7 +82,7 @@ def fileopen(name, mode='wb', encoding=None):
         else:
             f = open(name, mode)
         if 'w' in mode:
-            os.chmod(name, 0o600)
+            os.chmod(name, 0600)
         return f
 
 def option_dict(options):
@@ -104,7 +102,7 @@ _integerRangeRE = re.compile('\s*(-?\d+)\s*-\s*(-?\d+)\s*$')
 
 def srange(s,
 
-           integer=_integerRE,
+           split=string.split,integer=_integerRE,
            integerRange=_integerRangeRE):
 
     """ Converts a textual representation of integer numbers and ranges
@@ -118,7 +116,7 @@ def srange(s,
     """
     l = []
     append = l.append
-    for entry in s.split(','):
+    for entry in split(s,','):
         m = integer.match(entry)
         if m:
             append(int(m.groups()[0]))
@@ -167,7 +165,7 @@ class Option:
     def __init__(self,name,help=None):
 
         if not name[:1] == '-':
-            raise TypeError('option names must start with "-"')
+            raise TypeError,'option names must start with "-"'
         if name[1:2] == '-':
             self.prefix = '--'
             self.name = name[2:]
@@ -295,7 +293,7 @@ class Application:
     verbose = 0
 
     # Internal errors to catch
-    InternalError = BaseException
+    InternalError = exceptions.Exception
 
     # Instance variables:
     values = None       # Dictionary of passed options (or default values)
@@ -326,52 +324,50 @@ class Application:
 
         # Append preset options
         for option in self.preset_options:
-            if not option.name in self.option_map:
+            if not self.option_map.has_key(option.name):
                 self.add_option(option)
 
         # Init .files list
         self.files = []
 
         # Start Application
-        rc = 0
         try:
             # Process startup
             rc = self.startup()
             if rc is not None:
-                raise SystemExit(rc)
+                raise SystemExit,rc
 
             # Parse command line
             rc = self.parse()
             if rc is not None:
-                raise SystemExit(rc)
+                raise SystemExit,rc
 
             # Start application
             rc = self.main()
             if rc is None:
                 rc = 0
 
-        except SystemExit as rcException:
-            rc = rcException
+        except SystemExit,rc:
             pass
 
         except KeyboardInterrupt:
-            print()
-            print('* User Break')
-            print()
+            print
+            print '* User Break'
+            print
             rc = 1
 
         except self.InternalError:
-            print()
-            print('* Internal Error (use --debug to display the traceback)')
+            print
+            print '* Internal Error (use --debug to display the traceback)'
             if self.debug:
-                print()
+                print
                 traceback.print_exc(20, sys.stdout)
             elif self.verbose:
-                print('  %s: %s' % sys.exc_info()[:2])
-            print()
+                print '  %s: %s' % sys.exc_info()[:2]
+            print
             rc = 1
 
-        raise SystemExit(rc)
+        raise SystemExit,rc
 
     def add_option(self, option):
 
@@ -402,7 +398,7 @@ class Application:
             program. It defaults to 0 which usually means: OK.
 
         """
-        raise SystemExit(rc)
+        raise SystemExit, rc
 
     def parse(self):
 
@@ -437,7 +433,7 @@ class Application:
                 files = l
             self.optionlist = optlist
             self.files = files + self.files
-        except getopt.error as why:
+        except getopt.error,why:
             self.help(why)
             sys.exit(1)
 
@@ -451,19 +447,19 @@ class Application:
 
             # Try to convert value to integer
             try:
-                value = int(value)
+                value = string.atoi(value)
             except ValueError:
                 pass
 
             # Find handler and call it (or count the number of option
             # instances on the command line)
-            handlername = 'handle' + optionname.replace('-', '_')
+            handlername = 'handle' + string.replace(optionname, '-', '_')
             try:
                 handler = getattr(self, handlername)
             except AttributeError:
                 if value == '':
                     # count the number of occurances
-                    if optionname in values:
+                    if values.has_key(optionname):
                         values[optionname] = values[optionname] + 1
                     else:
                         values[optionname] = 1
@@ -472,7 +468,7 @@ class Application:
             else:
                 rc = handler(value)
                 if rc is not None:
-                    raise SystemExit(rc)
+                    raise SystemExit, rc
 
         # Apply final file check (for backward compatibility)
         rc = self.check_files(self.files)
@@ -496,55 +492,54 @@ class Application:
 
         self.print_header()
         if self.synopsis:
-            print('Synopsis:')
+            print 'Synopsis:'
             # To remain backward compatible:
             try:
                 synopsis = self.synopsis % self.name
             except (NameError, KeyError, TypeError):
                 synopsis = self.synopsis % self.__dict__
-            print(' ' + synopsis)
-        print()
+            print ' ' + synopsis
+        print
         self.print_options()
         if self.version:
-            print('Version:')
-            print(' %s' % self.version)
-            print()
+            print 'Version:'
+            print ' %s' % self.version
+            print
         if self.about:
-            about = self.about % self.__dict__
-            print(about.strip())
-            print()
+            print string.strip(self.about % self.__dict__)
+            print
         if note:
-            print('-'*72)
-            print('Note:',note)
-            print()
+            print '-'*72
+            print 'Note:',note
+            print
 
     def notice(self,note):
 
-        print('-'*72)
-        print('Note:',note)
-        print('-'*72)
-        print()
+        print '-'*72
+        print 'Note:',note
+        print '-'*72
+        print
 
     def print_header(self):
 
-        print('-'*72)
-        print(self.header % self.__dict__)
-        print('-'*72)
-        print()
+        print '-'*72
+        print self.header % self.__dict__
+        print '-'*72
+        print
 
     def print_options(self):
 
         options = self.options
-        print('Options and default settings:')
+        print 'Options and default settings:'
         if not options:
-            print('  None')
+            print '  None'
             return
-        int = [x for x in options if x.prefix == '--']
-        short = [x for x in options if x.prefix == '-']
-        items = short + int
+        long = filter(lambda x: x.prefix == '--', options)
+        short = filter(lambda x: x.prefix == '-', options)
+        items = short + long
         for o in options:
-            print(' ',o)
-        print()
+            print ' ',o
+        print
 
     #
     # Example handlers:
@@ -582,29 +577,26 @@ class Application:
 
         self.debug = 1
         # We don't want to catch internal errors:
-        class NoErrorToCatch(Exception): pass
-        self.InternalError = NoErrorToCatch
+        self.InternalError = None
 
     def handle__copyright(self,arg):
 
         self.print_header()
-        copyright = self.copyright % self.__dict__
-        print(copyright.strip())
-        print()
+        print string.strip(self.copyright % self.__dict__)
+        print
         return 0
 
     def handle__examples(self,arg):
 
         self.print_header()
         if self.examples:
-            print('Examples:')
-            print()
-            examples = self.examples % self.__dict__
-            print(examples.strip())
-            print()
+            print 'Examples:'
+            print
+            print string.strip(self.examples % self.__dict__)
+            print
         else:
-            print('No examples available.')
-            print()
+            print 'No examples available.'
+            print
         return 0
 
     def main(self):
@@ -630,13 +622,13 @@ def _test():
         options = [Option('-v','verbose')]
 
         def handle_v(self,arg):
-            print('VERBOSE, Yeah !')
+            print 'VERBOSE, Yeah !'
 
     cmd = MyApplication()
     if not cmd.values['-h']:
         cmd.help()
-    print('files:',cmd.files)
-    print('Bye...')
+    print 'files:',cmd.files
+    print 'Bye...'
 
 if __name__ == '__main__':
     _test()

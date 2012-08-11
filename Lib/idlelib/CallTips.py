@@ -8,7 +8,6 @@ which disappear when you type a closing parenthesis.
 import re
 import sys
 import types
-import inspect
 
 from idlelib import CallTipWindow
 from idlelib.HyperParser import HyperParser
@@ -26,26 +25,28 @@ class CallTips:
     def __init__(self, editwin=None):
         if editwin is None:  # subprocess and test
             self.editwin = None
-        else:
-            self.editwin = editwin
-            self.text = editwin.text
-            self.active_calltip = None
-            self._calltip_window = self._make_tk_calltip_window
+            return
+        self.editwin = editwin
+        self.text = editwin.text
+        self.calltip = None
+        self._make_calltip_window = self._make_tk_calltip_window
 
     def close(self):
-        self._calltip_window = None
+        self._make_calltip_window = None
 
     def _make_tk_calltip_window(self):
         # See __init__ for usage
         return CallTipWindow.CallTip(self.text)
 
     def _remove_calltip_window(self, event=None):
-        if self.active_calltip:
-            self.active_calltip.hidetip()
-            self.active_calltip = None
+        if self.calltip:
+            self.calltip.hidetip()
+            self.calltip = None
 
     def force_open_calltip_event(self, event):
-        "The user selected the menu entry or hotkey, open the tip."
+        """Happens when the user really wants to open a CallTip, even if a
+        function call is needed.
+        """
         self.open_calltip(True)
 
     def try_open_calltip_event(self, event):
@@ -56,7 +57,10 @@ class CallTips:
         self.open_calltip(False)
 
     def refresh_calltip_event(self, event):
-        if self.active_calltip and self.active_calltip.is_active():
+        """If there is already a calltip window, check if it is still needed,
+        and if so, reload it.
+        """
+        if self.calltip and self.calltip.is_active():
             self.open_calltip(False)
 
     def open_calltip(self, evalfuncs):
@@ -67,23 +71,21 @@ class CallTips:
         if not sur_paren:
             return
         hp.set_index(sur_paren[0])
-        name = hp.get_expression()
-        if not name:
+        expression = hp.get_expression()
+        if not expression or (not evalfuncs and expression.find('(') != -1):
             return
-        if not evalfuncs and (name.find('(') != -1):
+        arg_text = self.fetch_tip(expression)
+        if not arg_text:
             return
-        argspec = self.fetch_tip(name)
-        if not argspec:
-            return
-        self.active_calltip = self._calltip_window()
-        self.active_calltip.showtip(argspec, sur_paren[0], sur_paren[1])
+        self.calltip = self._make_calltip_window()
+        self.calltip.showtip(arg_text, sur_paren[0], sur_paren[1])
 
-    def fetch_tip(self, name):
-        """Return the argument list and docstring of a function or class.
+    def fetch_tip(self, expression):
+        """Return the argument list and docstring of a function or class
 
         If there is a Python subprocess, get the calltip there.  Otherwise,
-        either this fetch_tip() is running in the subprocess or it was
-        called in an IDLE running without the subprocess.
+        either fetch_tip() is running in the subprocess itself or it was called
+        in an IDLE EditorWindow before any script had been run.
 
         The subprocess environment is that of the most recently run script.  If
         two unrelated modules are being edited some calltips in the current
@@ -94,86 +96,110 @@ class CallTips:
         """
         try:
             rpcclt = self.editwin.flist.pyshell.interp.rpcclt
-        except:
+        except AttributeError:
             rpcclt = None
         if rpcclt:
             return rpcclt.remotecall("exec", "get_the_calltip",
-                                     (name,), {})
+                                     (expression,), {})
         else:
-            entity = self.get_entity(name)
-            return get_argspec(entity)
+            entity = self.get_entity(expression)
+            return get_arg_text(entity)
 
-    def get_entity(self, name):
-        "Lookup name in a namespace spanning sys.modules and __main.dict__."
-        if name:
+    def get_entity(self, expression):
+        """Return the object corresponding to expression evaluated
+        in a namespace spanning sys.modules and __main.dict__.
+        """
+        if expression:
             namespace = sys.modules.copy()
             namespace.update(__main__.__dict__)
             try:
-                return eval(name, namespace)
-            except (NameError, AttributeError):
+                return eval(expression, namespace)
+            except BaseException:
+                # An uncaught exception closes idle, and eval can raise any
+                # exception, especially if user classes are involved.
                 return None
 
 def _find_constructor(class_ob):
-    "Find the nearest __init__() in the class tree."
+    # Given a class object, return a function object used for the
+    # constructor (ie, __init__() ) or None if we can't find one.
     try:
-        return class_ob.__init__.__func__
+        return class_ob.__init__.im_func
     except AttributeError:
         for base in class_ob.__bases__:
-            init = _find_constructor(base)
-            if init:
-                return init
-        return None
+            rc = _find_constructor(base)
+            if rc is not None: return rc
+    return None
 
-def get_argspec(ob):
-    """Get a string describing the arguments for the given object."""
-    argspec = ""
-    if ob is not None:
-        if isinstance(ob, type):
+def get_arg_text(ob):
+    """Get a string describing the arguments for the given object,
+       only if it is callable."""
+    arg_text = ""
+    if ob is not None and hasattr(ob, '__call__'):
+        arg_offset = 0
+        if type(ob) in (types.ClassType, types.TypeType):
+            # Look for the highest __init__ in the class chain.
             fob = _find_constructor(ob)
             if fob is None:
                 fob = lambda: None
-        elif isinstance(ob, types.MethodType):
-            fob = ob.__func__
+            else:
+                arg_offset = 1
+        elif type(ob)==types.MethodType:
+            # bit of a hack for methods - turn it into a function
+            # but we drop the "self" param.
+            fob = ob.im_func
+            arg_offset = 1
         else:
             fob = ob
-        if isinstance(fob, (types.FunctionType, types.LambdaType)):
-            argspec = inspect.formatargspec(*inspect.getfullargspec(fob))
-            pat = re.compile('self\,?\s*')
-            argspec = pat.sub("", argspec)
+        # Try to build one for Python defined functions
+        if type(fob) in [types.FunctionType, types.LambdaType]:
+            argcount = fob.func_code.co_argcount
+            real_args = fob.func_code.co_varnames[arg_offset:argcount]
+            defaults = fob.func_defaults or []
+            defaults = list(map(lambda name: "=%s" % repr(name), defaults))
+            defaults = [""] * (len(real_args) - len(defaults)) + defaults
+            items = map(lambda arg, dflt: arg + dflt, real_args, defaults)
+            if fob.func_code.co_flags & 0x4:
+                items.append("...")
+            if fob.func_code.co_flags & 0x8:
+                items.append("***")
+            arg_text = ", ".join(items)
+            arg_text = "(%s)" % re.sub("\.\d+", "<tuple>", arg_text)
+        # See if we can use the docstring
         doc = getattr(ob, "__doc__", "")
         if doc:
             doc = doc.lstrip()
             pos = doc.find("\n")
             if pos < 0 or pos > 70:
                 pos = 70
-            if argspec:
-                argspec += "\n"
-            argspec += doc[:pos]
-    return argspec
+            if arg_text:
+                arg_text += "\n"
+            arg_text += doc[:pos]
+    return arg_text
 
 #################################################
 #
 # Test code
 #
-def main():
+if __name__=='__main__':
+
     def t1(): "()"
     def t2(a, b=None): "(a, b=None)"
-    def t3(a, *args): "(a, *args)"
-    def t4(*args): "(*args)"
-    def t5(a, *args): "(a, *args)"
-    def t6(a, b=None, *args, **kw): "(a, b=None, *args, **kw)"
+    def t3(a, *args): "(a, ...)"
+    def t4(*args): "(...)"
+    def t5(a, *args): "(a, ...)"
+    def t6(a, b=None, *args, **kw): "(a, b=None, ..., ***)"
+    def t7((a, b), c, (d, e)): "(<tuple>, c, <tuple>)"
 
     class TC(object):
-        "(ai=None, *b)"
-        def __init__(self, ai=None, *b): "(ai=None, *b)"
+        "(ai=None, ...)"
+        def __init__(self, ai=None, *b): "(ai=None, ...)"
         def t1(self): "()"
         def t2(self, ai, b=None): "(ai, b=None)"
-        def t3(self, ai, *args): "(ai, *args)"
-        def t4(self, *args): "(*args)"
-        def t5(self, ai, *args): "(ai, *args)"
-        def t6(self, ai, b=None, *args, **kw): "(ai, b=None, *args, **kw)"
-
-    __main__.__dict__.update(locals())
+        def t3(self, ai, *args): "(ai, ...)"
+        def t4(self, *args): "(...)"
+        def t5(self, ai, *args): "(ai, ...)"
+        def t6(self, ai, b=None, *args, **kw): "(ai, b=None, ..., ***)"
+        def t7(self, (ai, b), c, (d, e)): "(<tuple>, c, <tuple>)"
 
     def test(tests):
         ct = CallTips()
@@ -181,23 +207,20 @@ def main():
         for t in tests:
             expected = t.__doc__ + "\n" + t.__doc__
             name = t.__name__
-            # exercise fetch_tip(), not just get_argspec()
+            # exercise fetch_tip(), not just get_arg_text()
             try:
-                qualified_name = "%s.%s" % (t.__self__.__class__.__name__, name)
+                qualified_name = "%s.%s" % (t.im_class.__name__, name)
             except AttributeError:
                 qualified_name = name
-            argspec = ct.fetch_tip(qualified_name)
-            if argspec != expected:
+            arg_text = ct.fetch_tip(qualified_name)
+            if arg_text != expected:
                 failed.append(t)
                 fmt = "%s - expected %s, but got %s"
-                print(fmt % (t.__name__, expected, get_argspec(t)))
-        print("%d of %d tests failed" % (len(failed), len(tests)))
+                print  fmt % (t.__name__, expected, get_arg_text(t))
+        print "%d of %d tests failed" % (len(failed), len(tests))
 
     tc = TC()
-    tests = (t1, t2, t3, t4, t5, t6,
-             TC, tc.t1, tc.t2, tc.t3, tc.t4, tc.t5, tc.t6)
+    tests = (t1, t2, t3, t4, t5, t6, t7,
+             TC, tc.t1, tc.t2, tc.t3, tc.t4, tc.t5, tc.t6, tc.t7)
 
     test(tests)
-
-if __name__ == '__main__':
-    main()

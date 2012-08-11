@@ -81,17 +81,16 @@ XXX Possible additions:
 
 import sys, os
 
-__all__ = ["input", "close", "nextfile", "filename", "lineno", "filelineno",
-           "isfirstline", "isstdin", "FileInput"]
+__all__ = ["input","close","nextfile","filename","lineno","filelineno",
+           "isfirstline","isstdin","FileInput"]
 
 _state = None
 
 DEFAULT_BUFSIZE = 8*1024
 
-def input(files=None, inplace=False, backup="", bufsize=0,
+def input(files=None, inplace=0, backup="", bufsize=0,
           mode="r", openhook=None):
-    """input(files=None, inplace=False, backup="", bufsize=0, \
-mode="r", openhook=None)
+    """input([files[, inplace[, backup[, mode[, openhook]]]]])
 
     Create an instance of the FileInput class. The instance will be used
     as global state for the functions of this module, and is also returned
@@ -100,7 +99,7 @@ mode="r", openhook=None)
     """
     global _state
     if _state and _state._file:
-        raise RuntimeError("input() already active")
+        raise RuntimeError, "input() already active"
     _state = FileInput(files, inplace, backup, bufsize, mode, openhook)
     return _state
 
@@ -123,7 +122,7 @@ def nextfile():
     last file has been read, this function has no effect.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.nextfile()
 
 def filename():
@@ -132,7 +131,7 @@ def filename():
     Before the first line has been read, returns None.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.filename()
 
 def lineno():
@@ -142,7 +141,7 @@ def lineno():
     of the last file has been read, returns the line number of that line.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.lineno()
 
 def filelineno():
@@ -152,7 +151,7 @@ def filelineno():
     been read, returns the line number of that line within the file.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.filelineno()
 
 def fileno():
@@ -161,7 +160,7 @@ def fileno():
     opened, returns -1.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.fileno()
 
 def isfirstline():
@@ -170,7 +169,7 @@ def isfirstline():
     otherwise returns false.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.isfirstline()
 
 def isstdin():
@@ -179,7 +178,7 @@ def isstdin():
     otherwise returns false.
     """
     if not _state:
-        raise RuntimeError("no active input()")
+        raise RuntimeError, "no active input()"
     return _state.isstdin()
 
 class FileInput:
@@ -195,9 +194,9 @@ class FileInput:
     sequential order; random access and readline() cannot be mixed.
     """
 
-    def __init__(self, files=None, inplace=False, backup="", bufsize=0,
+    def __init__(self, files=None, inplace=0, backup="", bufsize=0,
                  mode="r", openhook=None):
-        if isinstance(files, str):
+        if isinstance(files, basestring):
             files = (files,)
         else:
             if files is None:
@@ -238,16 +237,10 @@ class FileInput:
         self.nextfile()
         self._files = ()
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.close()
-
     def __iter__(self):
         return self
 
-    def __next__(self):
+    def next(self):
         try:
             line = self._buffer[self._bufindex]
         except IndexError:
@@ -264,11 +257,11 @@ class FileInput:
 
     def __getitem__(self, i):
         if i != self._lineno:
-            raise RuntimeError("accessing lines out of order")
+            raise RuntimeError, "accessing lines out of order"
         try:
-            return self.__next__()
+            return self.next()
         except StopIteration:
-            raise IndexError("end of input reached")
+            raise IndexError, "end of input reached"
 
     def nextfile(self):
         savestdout = self._savestdout
@@ -322,7 +315,7 @@ class FileInput:
             else:
                 if self._inplace:
                     self._backupfilename = (
-                        self._filename + (self._backup or ".bak"))
+                        self._filename + (self._backup or os.extsep+"bak"))
                     try: os.unlink(self._backupfilename)
                     except os.error: pass
                     # The next few lines may raise IOError
@@ -333,11 +326,9 @@ class FileInput:
                     except OSError:
                         self._output = open(self._filename, "w")
                     else:
-                        mode = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
-                        if hasattr(os, 'O_BINARY'):
-                            mode |= os.O_BINARY
-
-                        fd = os.open(self._filename, mode, perm)
+                        fd = os.open(self._filename,
+                                     os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
+                                     perm)
                         self._output = os.fdopen(fd, "w")
                         try:
                             if hasattr(os, 'chmod'):
@@ -405,18 +396,18 @@ def hook_encoded(encoding):
 
 def _test():
     import getopt
-    inplace = False
-    backup = False
+    inplace = 0
+    backup = 0
     opts, args = getopt.getopt(sys.argv[1:], "ib:")
     for o, a in opts:
-        if o == '-i': inplace = True
+        if o == '-i': inplace = 1
         if o == '-b': backup = a
     for line in input(args, inplace=inplace, backup=backup):
         if line[-1:] == '\n': line = line[:-1]
         if line[-1:] == '\r': line = line[:-1]
-        print("%d: %s[%d]%s %s" % (lineno(), filename(), filelineno(),
-                                   isfirstline() and "*" or "", line))
-    print("%d: %s[%d]" % (lineno(), filename(), filelineno()))
+        print "%d: %s[%d]%s %s" % (lineno(), filename(), filelineno(),
+                                   isfirstline() and "*" or "", line)
+    print "%d: %s[%d]" % (lineno(), filename(), filelineno())
 
 if __name__ == '__main__':
     _test()

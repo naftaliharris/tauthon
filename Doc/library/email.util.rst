@@ -1,5 +1,5 @@
-:mod:`email`: Miscellaneous utilities
--------------------------------------
+:mod:`email.utils`: Miscellaneous utilities
+-------------------------------------------
 
 .. module:: email.utils
    :synopsis: Miscellaneous email package utilities.
@@ -84,7 +84,7 @@ There are several useful utilities provided in the :mod:`email.utils` module:
    about for common use.
 
 
-.. function:: formatdate(timeval=None, localtime=False, usegmt=False)
+.. function:: formatdate([timeval[, localtime][, usegmt]])
 
    Returns a date string as per :rfc:`2822`, e.g.::
 
@@ -104,18 +104,14 @@ There are several useful utilities provided in the :mod:`email.utils` module:
    needed for some protocols (such as HTTP). This only applies when *localtime* is
    ``False``.  The default is ``False``.
 
+   .. versionadded:: 2.4
 
-.. function:: make_msgid(idstring=None, domain=None)
+
+.. function:: make_msgid([idstring])
 
    Returns a string suitable for an :rfc:`2822`\ -compliant
-   :mailheader:`Message-ID` header.  Optional *idstring* if given, is a string
-   used to strengthen the uniqueness of the message id.  Optional *domain* if
-   given provides the portion of the msgid after the '@'.  The default is the
-   local hostname.  It is not normally necessary to override this default, but
-   may be useful certain cases, such as a constructing distributed system that
-   uses a consistent domain name across multiple hosts.
-
-   .. versionchanged:: 3.2 domain keyword added
+   :mailheader:`Message-ID` header.  Optional *idstring* if given, is a string used
+   to strengthen the uniqueness of the message id.
 
 
 .. function:: decode_rfc2231(s)
@@ -123,7 +119,7 @@ There are several useful utilities provided in the :mod:`email.utils` module:
    Decode the string *s* according to :rfc:`2231`.
 
 
-.. function:: encode_rfc2231(s, charset=None, language=None)
+.. function:: encode_rfc2231(s[, charset[, language]])
 
    Encode the string *s* according to :rfc:`2231`.  Optional *charset* and
    *language*, if given is the character set name and language name to use.  If
@@ -131,15 +127,15 @@ There are several useful utilities provided in the :mod:`email.utils` module:
    is not, the string is encoded using the empty string for *language*.
 
 
-.. function:: collapse_rfc2231_value(value, errors='replace', fallback_charset='us-ascii')
+.. function:: collapse_rfc2231_value(value[, errors[, fallback_charset]])
 
    When a header parameter is encoded in :rfc:`2231` format,
    :meth:`Message.get_param` may return a 3-tuple containing the character set,
    language, and value.  :func:`collapse_rfc2231_value` turns this into a unicode
-   string.  Optional *errors* is passed to the *errors* argument of :class:`str`'s
-   :func:`encode` method; it defaults to ``'replace'``.  Optional
+   string.  Optional *errors* is passed to the *errors* argument of the built-in
+   :func:`unicode` function; it defaults to ``replace``.  Optional
    *fallback_charset* specifies the character set to use if the one in the
-   :rfc:`2231` header is not known by Python; it defaults to ``'us-ascii'``.
+   :rfc:`2231` header is not known by Python; it defaults to ``us-ascii``.
 
    For convenience, if the *value* passed to :func:`collapse_rfc2231_value` is not
    a tuple, it should be a string and it is returned unquoted.
@@ -150,6 +146,17 @@ There are several useful utilities provided in the :mod:`email.utils` module:
    Decode parameters list according to :rfc:`2231`.  *params* is a sequence of
    2-tuples containing elements of the form ``(content-type, string-value)``.
 
+.. versionchanged:: 2.4
+   The :func:`dump_address_pair` function has been removed; use :func:`formataddr`
+   instead.
+
+.. versionchanged:: 2.4
+   The :func:`decode` function has been removed; use the
+   :meth:`Header.decode_header` method instead.
+
+.. versionchanged:: 2.4
+   The :func:`encode` function has been removed; use the :meth:`Header.encode`
+   method instead.
 
 .. rubric:: Footnotes
 

@@ -13,16 +13,12 @@ extern "C" {
 struct _ts; /* Forward */
 struct _is; /* Forward */
 
-#ifdef Py_LIMITED_API
-typedef struct _is PyInterpreterState;
-#else
 typedef struct _is {
 
     struct _is *next;
     struct _ts *tstate_head;
 
     PyObject *modules;
-    PyObject *modules_by_index;
     PyObject *sysdict;
     PyObject *builtins;
     PyObject *modules_reloading;
@@ -30,7 +26,6 @@ typedef struct _is {
     PyObject *codec_search_path;
     PyObject *codec_search_cache;
     PyObject *codec_error_registry;
-    int codecs_initialized;
 
 #ifdef HAVE_DLOPEN
     int dlopenflags;
@@ -40,14 +35,12 @@ typedef struct _is {
 #endif
 
 } PyInterpreterState;
-#endif
 
 
 /* State unique per thread */
 
 struct _frame; /* Avoid including frameobject.h */
 
-#ifndef Py_LIMITED_API
 /* Py_tracefunc return -1 when raising an exception, or 0 for success. */
 typedef int (*Py_tracefunc)(PyObject *, struct _frame *, int, PyObject *);
 
@@ -59,11 +52,7 @@ typedef int (*Py_tracefunc)(PyObject *, struct _frame *, int, PyObject *);
 #define PyTrace_C_CALL 4
 #define PyTrace_C_EXCEPTION 5
 #define PyTrace_C_RETURN 6
-#endif
 
-#ifdef Py_LIMITED_API
-typedef struct _ts PyThreadState;
-#else
 typedef struct _ts {
     /* See Python/ceval.c for comments explaining most fields */
 
@@ -72,10 +61,6 @@ typedef struct _ts {
 
     struct _frame *frame;
     int recursion_depth;
-    char overflowed; /* The stack has overflowed. Allow 50 more calls
-		        to handle the runtime error. */
-    char recursion_critical; /* The current calls must not cause 
-				a stack overflow. */
     /* 'tracing' keeps track of the execution depth when tracing/profiling.
        This is to prevent the actual trace/profile code from being recorded in
        the trace/profile. */
@@ -97,8 +82,6 @@ typedef struct _ts {
 
     PyObject *dict;  /* Stores per-thread state */
 
-    /* XXX doesn't mean anything anymore (the comment below is obsolete)
-       => deprecate or remove? */
     /* tick_counter is incremented whenever the check_interval ticker
      * reaches zero. The purpose is to give a useful measure of the number
      * of interpreted bytecode instructions in a given thread.  This
@@ -115,14 +98,11 @@ typedef struct _ts {
     /* XXX signal handlers should also be here */
 
 } PyThreadState;
-#endif
 
 
 PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_New(void);
 PyAPI_FUNC(void) PyInterpreterState_Clear(PyInterpreterState *);
 PyAPI_FUNC(void) PyInterpreterState_Delete(PyInterpreterState *);
-PyAPI_FUNC(int) _PyState_AddModule(PyObject*, struct PyModuleDef*);
-PyAPI_FUNC(PyObject*) PyState_FindModule(struct PyModuleDef*);
 
 PyAPI_FUNC(PyThreadState *) PyThreadState_New(PyInterpreterState *);
 PyAPI_FUNC(PyThreadState *) _PyThreadState_Prealloc(PyInterpreterState *);
@@ -141,17 +121,12 @@ PyAPI_FUNC(int) PyThreadState_SetAsyncExc(long, PyObject *);
 
 /* Variable and macro for in-line access to current thread state */
 
-/* Assuming the current thread holds the GIL, this is the
-   PyThreadState for the current thread. */
-#ifndef Py_LIMITED_API
-PyAPI_DATA(_Py_atomic_address) _PyThreadState_Current;
-#endif
+PyAPI_DATA(PyThreadState *) _PyThreadState_Current;
 
-#if defined(Py_DEBUG) || defined(Py_LIMITED_API)
+#ifdef Py_DEBUG
 #define PyThreadState_GET() PyThreadState_Get()
 #else
-#define PyThreadState_GET() \
-    ((PyThreadState*)_Py_atomic_load_relaxed(&_PyThreadState_Current))
+#define PyThreadState_GET() (_PyThreadState_Current)
 #endif
 
 typedef
@@ -193,7 +168,7 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
 
 /* Helper/diagnostic function - get the current thread state for
    this thread.  May return NULL if no GILState API has been used
-   on the current thread.  Note the main thread always has such a
+   on the current thread.  Note that the main thread always has such a
    thread-state, even if no auto-thread-state call has been made
    on the main thread.
 */
@@ -202,25 +177,19 @@ PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
 /* The implementation of sys._current_frames()  Returns a dict mapping
    thread id to that thread's current frame.
 */
-#ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _PyThread_CurrentFrames(void);
-#endif
 
 /* Routines for advanced debuggers, requested by David Beazley.
    Don't use unless you know what you are doing! */
-#ifndef Py_LIMITED_API
 PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Head(void);
 PyAPI_FUNC(PyInterpreterState *) PyInterpreterState_Next(PyInterpreterState *);
 PyAPI_FUNC(PyThreadState *) PyInterpreterState_ThreadHead(PyInterpreterState *);
 PyAPI_FUNC(PyThreadState *) PyThreadState_Next(PyThreadState *);
 
 typedef struct _frame *(*PyThreadFrameGetter)(PyThreadState *self_);
-#endif
 
 /* hook for PyEval_GetFrame(), requested for Psyco */
-#ifndef Py_LIMITED_API
 PyAPI_DATA(PyThreadFrameGetter) _PyThreadState_GetFrame;
-#endif
 
 #ifdef __cplusplus
 }

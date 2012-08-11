@@ -5,16 +5,18 @@
 
 TODO: Fill out more detailed documentation on the operators."""
 
+from __future__ import division
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 __all__ = ["Number", "Complex", "Real", "Rational", "Integral"]
 
-class Number(metaclass=ABCMeta):
+class Number(object):
     """All numbers inherit from this class.
 
     If you just want to check if an argument x is a number, without
     caring what kind, use isinstance(x, Number).
     """
+    __metaclass__ = ABCMeta
     __slots__ = ()
 
     # Concrete numeric types must provide their own hash implementation
@@ -46,7 +48,8 @@ class Complex(Number):
     def __complex__(self):
         """Return a builtin complex instance. Called for complex(self)."""
 
-    def __bool__(self):
+    # Will be __bool__ in 3.0.
+    def __nonzero__(self):
         """True if self != 0. Called for bool(self)."""
         return self != 0
 
@@ -105,13 +108,29 @@ class Complex(Number):
         raise NotImplementedError
 
     @abstractmethod
+    def __div__(self, other):
+        """self / other without __future__ division
+
+        May promote to float.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def __rdiv__(self, other):
+        """other / self without __future__ division"""
+        raise NotImplementedError
+
+    @abstractmethod
     def __truediv__(self, other):
-        """self / other: Should promote to float when necessary."""
+        """self / other with __future__ division.
+
+        Should promote to float when necessary.
+        """
         raise NotImplementedError
 
     @abstractmethod
     def __rtruediv__(self, other):
-        """other / self"""
+        """other / self with __future__ division"""
         raise NotImplementedError
 
     @abstractmethod
@@ -175,25 +194,6 @@ class Real(Complex):
           * for any Integral j satisfying the first two conditions,
             abs(i) >= abs(j) [i.e. i has "maximal" abs among those].
         i.e. "truncate towards 0".
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def __floor__(self):
-        """Finds the greatest Integral <= self."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def __ceil__(self):
-        """Finds the least Integral >= self."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def __round__(self, ndigits=None):
-        """Rounds self to ndigits decimal places, defaulting to 0.
-
-        If ndigits is omitted or None, returns an Integral, otherwise
-        returns a Real. Rounds half toward even.
         """
         raise NotImplementedError
 
@@ -293,18 +293,18 @@ class Rational(Real):
 
 
 class Integral(Rational):
-    """Integral adds a conversion to int and the bit-string operations."""
+    """Integral adds a conversion to long and the bit-string operations."""
 
     __slots__ = ()
 
     @abstractmethod
-    def __int__(self):
-        """int(self)"""
+    def __long__(self):
+        """long(self)"""
         raise NotImplementedError
 
     def __index__(self):
-        """someobject[self]"""
-        return int(self)
+        """Called whenever an index is needed, such as in slicing"""
+        return long(self)
 
     @abstractmethod
     def __pow__(self, exponent, modulus=None):
@@ -374,8 +374,8 @@ class Integral(Rational):
 
     # Concrete implementations of Rational and Real abstract methods.
     def __float__(self):
-        """float(self) == float(int(self))"""
-        return float(int(self))
+        """float(self) == float(long(self))"""
+        return float(long(self))
 
     @property
     def numerator(self):
@@ -388,3 +388,4 @@ class Integral(Rational):
         return 1
 
 Integral.register(int)
+Integral.register(long)

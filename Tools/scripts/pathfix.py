@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#! /usr/bin/env python
 
 # Change the #! line occurring in Python scripts.  The new interpreter
 # pathname must be given with a -i option.
@@ -30,26 +30,21 @@ dbg = err
 rep = sys.stdout.write
 
 new_interpreter = None
-preserve_timestamps = False
 
 def main():
     global new_interpreter
-    global preserve_timestamps
-    usage = ('usage: %s -i /interpreter -p file-or-directory ...\n' %
+    usage = ('usage: %s -i /interpreter file-or-directory ...\n' %
              sys.argv[0])
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'i:p')
-    except getopt.error as msg:
-        err(str(msg) + '\n')
+        opts, args = getopt.getopt(sys.argv[1:], 'i:')
+    except getopt.error, msg:
+        err(msg + '\n')
         err(usage)
         sys.exit(2)
     for o, a in opts:
         if o == '-i':
-            new_interpreter = a.encode()
-        if o == '-p':
-            preserve_timestamps = True
-    if not new_interpreter or not new_interpreter.startswith(b'/') or \
-           not args:
+            new_interpreter = a
+    if not new_interpreter or new_interpreter[0] != '/' or not args:
         err('-i option or file-or-directory missing\n')
         err(usage)
         sys.exit(2)
@@ -66,14 +61,14 @@ def main():
 
 ispythonprog = re.compile('^[a-zA-Z0-9_]+\.py$')
 def ispython(name):
-    return bool(ispythonprog.match(name))
+    return ispythonprog.match(name) >= 0
 
 def recursedown(dirname):
     dbg('recursedown(%r)\n' % (dirname,))
     bad = 0
     try:
         names = os.listdir(dirname)
-    except os.error as msg:
+    except os.error, msg:
         err('%s: cannot list directory: %r\n' % (dirname, msg))
         return 1
     names.sort()
@@ -93,8 +88,8 @@ def recursedown(dirname):
 def fix(filename):
 ##  dbg('fix(%r)\n' % (filename,))
     try:
-        f = open(filename, 'rb')
-    except IOError as msg:
+        f = open(filename, 'r')
+    except IOError, msg:
         err('%s: cannot open: %r\n' % (filename, msg))
         return 1
     line = f.readline()
@@ -106,8 +101,8 @@ def fix(filename):
     head, tail = os.path.split(filename)
     tempname = os.path.join(head, '@' + tail)
     try:
-        g = open(tempname, 'wb')
-    except IOError as msg:
+        g = open(tempname, 'w')
+    except IOError, msg:
         f.close()
         err('%s: cannot create: %r\n' % (tempname, msg))
         return 1
@@ -123,43 +118,32 @@ def fix(filename):
 
     # Finishing touch -- move files
 
-    mtime = None
-    atime = None
     # First copy the file's mode to the temp file
     try:
         statbuf = os.stat(filename)
-        mtime = statbuf.st_mtime
-        atime = statbuf.st_atime
-        os.chmod(tempname, statbuf[ST_MODE] & 0o7777)
-    except os.error as msg:
+        os.chmod(tempname, statbuf[ST_MODE] & 07777)
+    except os.error, msg:
         err('%s: warning: chmod failed (%r)\n' % (tempname, msg))
     # Then make a backup of the original file as filename~
     try:
         os.rename(filename, filename + '~')
-    except os.error as msg:
+    except os.error, msg:
         err('%s: warning: backup failed (%r)\n' % (filename, msg))
     # Now move the temp file to the original file
     try:
         os.rename(tempname, filename)
-    except os.error as msg:
+    except os.error, msg:
         err('%s: rename failed (%r)\n' % (filename, msg))
         return 1
-    if preserve_timestamps:
-        if atime and mtime:
-            try:
-                os.utime(filename, (atime, mtime))
-            except os.error as msg:
-                err('%s: reset of timestamp failed (%r)\n' % (filename, msg))
-                return 1
     # Return succes
     return 0
 
 def fixline(line):
-    if not line.startswith(b'#!'):
+    if not line.startswith('#!'):
         return line
-    if b"python" not in line:
+    if "python" not in line:
         return line
-    return b'#! ' + new_interpreter + b'\n'
+    return '#! %s\n' % new_interpreter
 
 if __name__ == '__main__':
     main()

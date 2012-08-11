@@ -1,6 +1,6 @@
 /* row.c - an enhanced tuple for database rows
  *
- * Copyright (C) 2005-2010 Gerhard HÃ¤ring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -76,20 +76,23 @@ PyObject* pysqlite_row_subscript(pysqlite_Row* self, PyObject* idx)
 
     PyObject* item;
 
-    if (PyLong_Check(idx)) {
+    if (PyInt_Check(idx)) {
+        _idx = PyInt_AsLong(idx);
+        item = PyTuple_GetItem(self->data, _idx);
+        Py_XINCREF(item);
+        return item;
+    } else if (PyLong_Check(idx)) {
         _idx = PyLong_AsLong(idx);
         item = PyTuple_GetItem(self->data, _idx);
         Py_XINCREF(item);
         return item;
-    } else if (PyUnicode_Check(idx)) {
-        key = _PyUnicode_AsString(idx);
-        if (key == NULL)
-            return NULL;
+    } else if (PyString_Check(idx)) {
+        key = PyString_AsString(idx);
 
         nitems = PyTuple_Size(self->description);
 
         for (i = 0; i < nitems; i++) {
-            compare_key = _PyUnicode_AsString(PyTuple_GET_ITEM(PyTuple_GET_ITEM(self->description, i), 0));
+            compare_key = PyString_AsString(PyTuple_GET_ITEM(PyTuple_GET_ITEM(self->description, i), 0));
             if (!compare_key) {
                 return NULL;
             }
@@ -166,7 +169,7 @@ static PyObject* pysqlite_iter(pysqlite_Row* self)
     return PyObject_GetIter(self->data);
 }
 
-static Py_hash_t pysqlite_row_hash(pysqlite_Row *self)
+static long pysqlite_row_hash(pysqlite_Row *self)
 {
     return PyObject_Hash(self->description) ^ PyObject_Hash(self->data);
 }
@@ -212,7 +215,7 @@ PyTypeObject pysqlite_RowType = {
         (printfunc)pysqlite_row_print,                  /* tp_print */
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_reserved */
+        0,                                              /* tp_compare */
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */

@@ -2,6 +2,11 @@ import xml.sax
 import xml.sax.handler
 import types
 
+try:
+    _StringTypes = [types.StringType, types.UnicodeType]
+except AttributeError:
+    _StringTypes = [types.StringType]
+
 START_ELEMENT = "START_ELEMENT"
 END_ELEMENT = "END_ELEMENT"
 COMMENT = "COMMENT"
@@ -196,7 +201,7 @@ class PullDOM(xml.sax.ContentHandler):
 
 class ErrorHandler:
     def warning(self, exception):
-        print(exception)
+        print exception
     def error(self, exception):
         raise exception
     def fatalError(self, exception):
@@ -223,7 +228,7 @@ class DOMEventStream:
             return rc
         raise IndexError
 
-    def __next__(self):
+    def next(self):
         rc = self.getEvent()
         if rc:
             return rc
@@ -325,7 +330,7 @@ default_bufsize = (2 ** 14) - 20
 def parse(stream_or_string, parser=None, bufsize=None):
     if bufsize is None:
         bufsize = default_bufsize
-    if isinstance(stream_or_string, str):
+    if type(stream_or_string) in _StringTypes:
         stream = open(stream_or_string)
     else:
         stream = stream_or_string
@@ -335,9 +340,9 @@ def parse(stream_or_string, parser=None, bufsize=None):
 
 def parseString(string, parser=None):
     try:
-        from io import StringIO
+        from cStringIO import StringIO
     except ImportError:
-        from io import StringIO
+        from StringIO import StringIO
 
     bufsize = len(string)
     buf = StringIO(string)

@@ -16,13 +16,13 @@ class FixNumliterals(fixer_base.BaseFix):
 
     def match(self, node):
         # Override
-        return (node.value.startswith("0") or node.value[-1] in "Ll")
+        return (node.value.startswith(u"0") or node.value[-1] in u"Ll")
 
     def transform(self, node, results):
         val = node.value
-        if val[-1] in 'Ll':
+        if val[-1] in u'Ll':
             val = val[:-1]
-        elif val.startswith('0') and val.isdigit() and len(set(val)) > 1:
-            val = "0o" + val[1:]
+        elif val.startswith(u'0') and val.isdigit() and len(set(val)) > 1:
+            val = u"0o" + val[1:]
 
         return Number(val, prefix=node.prefix)

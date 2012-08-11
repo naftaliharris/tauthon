@@ -18,10 +18,14 @@ sentinel value is returned.
    one-argument form of the :func:`iter` built-in function for built-in sequence
    types.
 
+   .. versionadded:: 2.2
+
 
 .. c:function:: int PySeqIter_Check(op)
 
    Return true if the type of *op* is :c:data:`PySeqIter_Type`.
+
+   .. versionadded:: 2.2
 
 
 .. c:function:: PyObject* PySeqIter_New(PyObject *seq)
@@ -30,16 +34,22 @@ sentinel value is returned.
    iteration ends when the sequence raises :exc:`IndexError` for the subscripting
    operation.
 
+   .. versionadded:: 2.2
+
 
 .. c:var:: PyTypeObject PyCallIter_Type
 
    Type object for iterator objects returned by :c:func:`PyCallIter_New` and the
    two-argument form of the :func:`iter` built-in function.
 
+   .. versionadded:: 2.2
+
 
 .. c:function:: int PyCallIter_Check(op)
 
    Return true if the type of *op* is :c:data:`PyCallIter_Type`.
+
+   .. versionadded:: 2.2
 
 
 .. c:function:: PyObject* PyCallIter_New(PyObject *callable, PyObject *sentinel)
@@ -48,3 +58,5 @@ sentinel value is returned.
    callable object that can be called with no parameters; each call to it should
    return the next item in the iteration.  When *callable* returns a value equal to
    *sentinel*, the iteration will be terminated.
+
+   .. versionadded:: 2.2

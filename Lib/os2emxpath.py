@@ -9,12 +9,12 @@ import os
 import stat
 from genericpath import *
 from ntpath import (expanduser, expandvars, isabs, islink, splitdrive,
-                    splitext, split)
+                    splitext, split, walk)
 
 __all__ = ["normcase","isabs","join","splitdrive","split","splitext",
            "basename","dirname","commonprefix","getsize","getmtime",
            "getatime","getctime", "islink","exists","lexists","isdir","isfile",
-           "ismount","expanduser","expandvars","normpath","abspath",
+           "ismount","walk","expanduser","expandvars","normpath","abspath",
            "splitunc","curdir","pardir","sep","pathsep","defpath","altsep",
            "extsep","devnull","realpath","supports_unicode_filenames"]
 
@@ -36,9 +36,6 @@ def normcase(s):
     """Normalize case of pathname.
 
     Makes all characters lowercase and all altseps into seps."""
-    if not isinstance(s, (bytes, str)):
-        raise TypeError("normcase() argument must be str or bytes, "
-                        "not '{}'".format(s.__class__.__name__))
     return s.replace('\\', '/').lower()
 
 
@@ -149,7 +146,11 @@ def normpath(path):
 def abspath(path):
     """Return the absolute version of a path"""
     if not isabs(path):
-        path = join(os.getcwd(), path)
+        if isinstance(path, unicode):
+            cwd = os.getcwdu()
+        else:
+            cwd = os.getcwd()
+        path = join(cwd, path)
     return normpath(path)
 
 # realpath is a no-op on systems without islink support

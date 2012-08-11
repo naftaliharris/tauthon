@@ -1,7 +1,6 @@
 
 /* Generator object interface */
 
-#ifndef Py_LIMITED_API
 #ifndef Py_GENOBJECT_H
 #define Py_GENOBJECT_H
 #ifdef __cplusplus
@@ -39,4 +38,3 @@ PyAPI_FUNC(int) PyGen_NeedsFinalizing(PyGenObject *);
 }
 #endif
 #endif /* !Py_GENOBJECT_H */
-#endif /* Py_LIMITED_API */

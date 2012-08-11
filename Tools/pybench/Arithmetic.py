@@ -8,7 +8,7 @@ class SimpleIntegerArithmetic(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             a = 2
             b = 3
@@ -152,7 +152,7 @@ class SimpleIntegerArithmetic(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class SimpleFloatArithmetic(Test):
@@ -163,7 +163,7 @@ class SimpleFloatArithmetic(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             a = 2.1
             b = 3.3332
@@ -307,7 +307,7 @@ class SimpleFloatArithmetic(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class SimpleIntFloatArithmetic(Test):
@@ -318,7 +318,7 @@ class SimpleIntFloatArithmetic(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             a = 2
             b = 3
@@ -462,7 +462,7 @@ class SimpleIntFloatArithmetic(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 
@@ -474,39 +474,11 @@ class SimpleLongArithmetic(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
-            a = 2220001
-            b = 100001
-            c = 30005
-
-            c = a + b
-            c = b + c
-            c = c + a
-            c = a + b
-            c = b + c
-
-            c = c - a
-            c = a - b
-            c = b - c
-            c = c - a
-            c = b - c
-
-            c = a / b
-            c = b / a
-            c = c / b
-
-            c = a * b
-            c = b * a
-            c = c * b
-
-            c = a / b
-            c = b / a
-            c = c / b
-
-            a = 2220001
-            b = 100001
-            c = 30005
+            a = 2220001L
+            b = 100001L
+            c = 30005L
 
             c = a + b
             c = b + c
@@ -532,9 +504,9 @@ class SimpleLongArithmetic(Test):
             c = b / a
             c = c / b
 
-            a = 2220001
-            b = 100001
-            c = 30005
+            a = 2220001L
+            b = 100001L
+            c = 30005L
 
             c = a + b
             c = b + c
@@ -560,9 +532,9 @@ class SimpleLongArithmetic(Test):
             c = b / a
             c = c / b
 
-            a = 2220001
-            b = 100001
-            c = 30005
+            a = 2220001L
+            b = 100001L
+            c = 30005L
 
             c = a + b
             c = b + c
@@ -588,9 +560,37 @@ class SimpleLongArithmetic(Test):
             c = b / a
             c = c / b
 
-            a = 2220001
-            b = 100001
-            c = 30005
+            a = 2220001L
+            b = 100001L
+            c = 30005L
+
+            c = a + b
+            c = b + c
+            c = c + a
+            c = a + b
+            c = b + c
+
+            c = c - a
+            c = a - b
+            c = b - c
+            c = c - a
+            c = b - c
+
+            c = a / b
+            c = b / a
+            c = c / b
+
+            c = a * b
+            c = b * a
+            c = c * b
+
+            c = a / b
+            c = b / a
+            c = c / b
+
+            a = 2220001L
+            b = 100001L
+            c = 30005L
 
             c = a + b
             c = b + c
@@ -618,7 +618,7 @@ class SimpleLongArithmetic(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass
 
 class SimpleComplexArithmetic(Test):
@@ -629,7 +629,7 @@ class SimpleComplexArithmetic(Test):
 
     def test(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
 
             a = 2 + 3j
             b = 2.5 + 4.5j
@@ -773,5 +773,5 @@ class SimpleComplexArithmetic(Test):
 
     def calibrate(self):
 
-        for i in range(self.rounds):
+        for i in xrange(self.rounds):
             pass

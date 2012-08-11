@@ -2,20 +2,25 @@
 ===================================================
 
 .. module:: email
-   :synopsis: Package supporting the parsing, manipulating, and generating
-              email messages, including MIME documents.
+   :synopsis: Package supporting the parsing, manipulating, and generating email messages,
+              including MIME documents.
 .. moduleauthor:: Barry A. Warsaw <barry@python.org>
 .. sectionauthor:: Barry A. Warsaw <barry@python.org>
-.. Copyright (C) 2001-2010 Python Software Foundation
+.. Copyright (C) 2001-2007 Python Software Foundation
 
+
+.. versionadded:: 2.2
 
 The :mod:`email` package is a library for managing email messages, including
-MIME and other :rfc:`2822`\ -based message documents.  It is specifically *not*
-designed to do any sending of email messages to SMTP (:rfc:`2821`), NNTP, or
-other servers; those are functions of modules such as :mod:`smtplib` and
-:mod:`nntplib`. The :mod:`email` package attempts to be as RFC-compliant as
-possible, supporting in addition to :rfc:`2822`, such MIME-related RFCs as
-:rfc:`2045`, :rfc:`2046`, :rfc:`2047`, and :rfc:`2231`.
+MIME and other :rfc:`2822`\ -based message documents.  It subsumes most of the
+functionality in several older standard modules such as :mod:`rfc822`,
+:mod:`mimetools`, :mod:`multifile`, and other non-standard packages such as
+:mod:`mimecntl`.  It is specifically *not* designed to do any sending of email
+messages to SMTP (:rfc:`2821`), NNTP, or other servers; those are functions of
+modules such as :mod:`smtplib` and :mod:`nntplib`. The :mod:`email` package
+attempts to be as RFC-compliant as possible, supporting in addition to
+:rfc:`2822`, such MIME-related RFCs as :rfc:`2045`, :rfc:`2046`, :rfc:`2047`,
+and :rfc:`2231`.
 
 The primary distinguishing feature of the :mod:`email` package is that it splits
 the parsing and generating of email messages from the internal *object model*
@@ -92,44 +97,6 @@ table also describes the Python compatibility of each version of the package.
 +---------------+------------------------------+-----------------------+
 | :const:`4.0`  | Python 2.5                   | Python 2.3 to 2.5     |
 +---------------+------------------------------+-----------------------+
-| :const:`5.0`  | Python 3.0 and Python 3.1    | Python 3.0 to 3.2     |
-+---------------+------------------------------+-----------------------+
-| :const:`5.1`  | Python 3.2                   | Python 3.0 to 3.2     |
-+---------------+------------------------------+-----------------------+
-
-Here are the major differences between :mod:`email` version 5.1 and
-version 5.0:
-
-* It is once again possible to parse messages containing non-ASCII bytes,
-  and to reproduce such messages if the data containing the non-ASCII
-  bytes is not modified.
-
-* New functions :func:`message_from_bytes` and :func:`message_from_binary_file`,
-  and new classes :class:`~email.parser.BytesFeedParser` and
-  :class:`~email.parser.BytesParser` allow binary message data to be parsed
-  into model objects.
-
-* Given bytes input to the model, :meth:`~email.message.Message.get_payload`
-  will by default decode a message body that has a
-  :mailheader:`Content-Transfer-Encoding` of ``8bit`` using the charset
-  specified in the MIME headers and return the resulting string.
-
-* Given bytes input to the model, :class:`~email.generator.Generator` will
-  convert message bodies that have a :mailheader:`Content-Transfer-Encoding` of
-  8bit to instead have a 7bit Content-Transfer-Encoding.
-
-* New class :class:`~email.generator.BytesGenerator` produces bytes
-  as output, preserving any unchanged non-ASCII data that was
-  present in the input used to build the model, including message bodies
-  with a :mailheader:`Content-Transfer-Encoding` of 8bit.
-
-Here are the major differences between :mod:`email` version 5.0 and version 4:
-
-* All operations are on unicode strings.  Text inputs must be strings,
-  text outputs are strings.  Outputs are limited to the ASCII character
-  set and so can be encoded to ASCII for transmission.  Inputs are also
-  limited to ASCII; this is an acknowledged limitation of email 5.0 and
-  means it can only be used to parse email that is 7bit clean.
 
 Here are the major differences between :mod:`email` version 4 and version 3:
 

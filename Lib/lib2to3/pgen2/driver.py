@@ -19,6 +19,7 @@ __all__ = ["Driver", "load_grammar"]
 import codecs
 import os
 import logging
+import StringIO
 import sys
 
 # Pgen imports
@@ -42,7 +43,7 @@ class Driver(object):
         lineno = 1
         column = 0
         type = value = start = end = line_text = None
-        prefix = ""
+        prefix = u""
         for quintuple in tokens:
             type, value, start, end, line_text = quintuple
             if start != (lineno, column):
@@ -101,16 +102,8 @@ class Driver(object):
 
     def parse_string(self, text, debug=False):
         """Parse a string and return the syntax tree."""
-        tokens = tokenize.generate_tokens(generate_lines(text).__next__)
+        tokens = tokenize.generate_tokens(StringIO.StringIO(text).readline)
         return self.parse_tokens(tokens, debug)
-
-
-def generate_lines(text):
-    """Generator that behaves like readline without using StringIO."""
-    for line in text.splitlines(True):
-        yield line
-    while True:
-        yield ""
 
 
 def load_grammar(gt="Grammar.txt", gp=None,
@@ -130,7 +123,7 @@ def load_grammar(gt="Grammar.txt", gp=None,
             logger.info("Writing grammar tables to %s", gp)
             try:
                 g.dump(gp)
-            except IOError as e:
+            except IOError, e:
                 logger.info("Writing failed:"+str(e))
     else:
         g = grammar.Grammar()

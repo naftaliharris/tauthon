@@ -1,9 +1,9 @@
-from test import support
-support.requires('audio')
+from test import test_support
+test_support.requires('audio')
 
-from test.support import findfile
+from test.test_support import findfile
 
-ossaudiodev = support.import_module('ossaudiodev')
+ossaudiodev = test_support.import_module('ossaudiodev')
 
 import errno
 import sys
@@ -44,7 +44,7 @@ class OSSAudioDevTests(unittest.TestCase):
     def play_sound_file(self, data, rate, ssize, nchannels):
         try:
             dsp = ossaudiodev.open('w')
-        except IOError as msg:
+        except IOError, msg:
             if msg.args[0] in (errno.EACCES, errno.ENOENT,
                                errno.ENODEV, errno.EBUSY):
                 raise unittest.SkipTest(msg)
@@ -66,13 +66,13 @@ class OSSAudioDevTests(unittest.TestCase):
         for attr in ('closed', 'name', 'mode'):
             try:
                 setattr(dsp, attr, 42)
-            except (TypeError, AttributeError):
+            except TypeError:
                 pass
             else:
                 self.fail("dsp.%s not read-only" % attr)
 
         # Compute expected running time of sound sample (in seconds).
-        expected_time = float(len(data)) / (ssize/8) / nchannels / rate
+        expected_time = float(len(data)) / (ssize//8) / nchannels / rate
 
         # set parameters based on .au file headers
         dsp.setparameters(AFMT_S16_NE, nchannels, rate)
@@ -85,8 +85,7 @@ class OSSAudioDevTests(unittest.TestCase):
 
         percent_diff = (abs(elapsed_time - expected_time) / expected_time) * 100
         self.assertTrue(percent_diff <= 10.0,
-                        "elapsed time (%s) > 10%% off of expected time (%s)" %
-                        (elapsed_time, expected_time))
+                        "elapsed time > 10% off of expected time")
 
     def set_parameters(self, dsp):
         # Two configurations for testing:
@@ -138,7 +137,7 @@ class OSSAudioDevTests(unittest.TestCase):
 
             try:
                 result = dsp.setparameters(fmt, channels, rate, True)
-            except ossaudiodev.OSSAudioError as err:
+            except ossaudiodev.OSSAudioError, err:
                 pass
             else:
                 self.fail("expected OSSAudioError")
@@ -159,28 +158,17 @@ class OSSAudioDevTests(unittest.TestCase):
             dsp.close()
             self.assertTrue(dsp.closed)
 
-    def test_mixer_methods(self):
-        # Issue #8139: ossaudiodev didn't initialize its types properly,
-        # therefore some methods were unavailable.
-        with ossaudiodev.openmixer() as mixer:
-            self.assertGreaterEqual(mixer.fileno(), 0)
-
-    def test_with(self):
-        with ossaudiodev.open('w') as dsp:
-            pass
-        self.assertTrue(dsp.closed)
-
 
 def test_main():
     try:
         dsp = ossaudiodev.open('w')
-    except (ossaudiodev.error, IOError) as msg:
+    except (ossaudiodev.error, IOError), msg:
         if msg.args[0] in (errno.EACCES, errno.ENOENT,
                            errno.ENODEV, errno.EBUSY):
             raise unittest.SkipTest(msg)
         raise
     dsp.close()
-    support.run_unittest(__name__)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

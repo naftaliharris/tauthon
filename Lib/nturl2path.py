@@ -7,7 +7,7 @@ def url2pathname(url):
     # ///C|/foo/bar/spam.foo
     # becomes
     # C:\foo\bar\spam.foo
-    import string, urllib.parse
+    import string, urllib
     # Windows itself uses ":" even in URLs.
     url = url.replace(':', '|')
     if not '|' in url:
@@ -19,17 +19,20 @@ def url2pathname(url):
             url = url[2:]
         components = url.split('/')
         # make sure not to convert quoted slashes :-)
-        return urllib.parse.unquote('\\'.join(components))
+        return urllib.unquote('\\'.join(components))
     comp = url.split('|')
     if len(comp) != 2 or comp[0][-1] not in string.ascii_letters:
         error = 'Bad URL: ' + url
-        raise IOError(error)
+        raise IOError, error
     drive = comp[0][-1].upper()
-    components = comp[1].split('/')
     path = drive + ':'
-    for  comp in components:
+    components = comp[1].split('/')
+    for comp in components:
         if comp:
-            path = path + '\\' + urllib.parse.unquote(comp)
+            path = path + '\\' + urllib.unquote(comp)
+    # Issue #11474: url like '/C|/' should convert into 'C:\\'
+    if path.endswith(':') and url.endswith('/'):
+        path += '\\'
     return path
 
 def pathname2url(p):
@@ -39,7 +42,7 @@ def pathname2url(p):
     # C:\foo\bar\spam.foo
     # becomes
     # ///C|/foo/bar/spam.foo
-    import urllib.parse
+    import urllib
     if not ':' in p:
         # No drive specifier, just convert slashes and quote the name
         if p[:2] == '\\\\':
@@ -48,16 +51,16 @@ def pathname2url(p):
         # (notice doubling of slashes at the start of the path)
             p = '\\\\' + p
         components = p.split('\\')
-        return urllib.parse.quote('/'.join(components))
+        return urllib.quote('/'.join(components))
     comp = p.split(':')
     if len(comp) != 2 or len(comp[0]) > 1:
         error = 'Bad path: ' + p
-        raise IOError(error)
+        raise IOError, error
 
-    drive = urllib.parse.quote(comp[0].upper())
+    drive = urllib.quote(comp[0].upper())
     components = comp[1].split('\\')
     path = '///' + drive + ':'
     for comp in components:
         if comp:
-            path = path + '/' + urllib.parse.quote(comp)
+            path = path + '/' + urllib.quote(comp)
     return path

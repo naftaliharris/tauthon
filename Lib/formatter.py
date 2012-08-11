@@ -255,7 +255,7 @@ class AbstractFormatter:
 
     def push_margin(self, margin):
         self.margin_stack.append(margin)
-        fstack = [m for m in self.margin_stack if m]
+        fstack = filter(None, self.margin_stack)
         if not margin and fstack:
             margin = fstack[-1]
         self.writer.new_margin(margin, len(fstack))
@@ -263,7 +263,7 @@ class AbstractFormatter:
     def pop_margin(self):
         if self.margin_stack:
             del self.margin_stack[-1]
-        fstack = [m for m in self.margin_stack if m]
+        fstack = filter(None, self.margin_stack)
         if fstack:
             margin = fstack[-1]
         else:
@@ -324,37 +324,37 @@ class AbstractWriter(NullWriter):
     """
 
     def new_alignment(self, align):
-        print("new_alignment(%r)" % (align,))
+        print "new_alignment(%r)" % (align,)
 
     def new_font(self, font):
-        print("new_font(%r)" % (font,))
+        print "new_font(%r)" % (font,)
 
     def new_margin(self, margin, level):
-        print("new_margin(%r, %d)" % (margin, level))
+        print "new_margin(%r, %d)" % (margin, level)
 
     def new_spacing(self, spacing):
-        print("new_spacing(%r)" % (spacing,))
+        print "new_spacing(%r)" % (spacing,)
 
     def new_styles(self, styles):
-        print("new_styles(%r)" % (styles,))
+        print "new_styles(%r)" % (styles,)
 
     def send_paragraph(self, blankline):
-        print("send_paragraph(%r)" % (blankline,))
+        print "send_paragraph(%r)" % (blankline,)
 
     def send_line_break(self):
-        print("send_line_break()")
+        print "send_line_break()"
 
     def send_hor_rule(self, *args, **kw):
-        print("send_hor_rule()")
+        print "send_hor_rule()"
 
     def send_label_data(self, data):
-        print("send_label_data(%r)" % (data,))
+        print "send_label_data(%r)" % (data,)
 
     def send_flowing_data(self, data):
-        print("send_flowing_data(%r)" % (data,))
+        print "send_flowing_data(%r)" % (data,)
 
     def send_literal_data(self, data):
-        print("send_literal_data(%r)" % (data,))
+        print "send_literal_data(%r)" % (data,)
 
 
 class DumbWriter(NullWriter):

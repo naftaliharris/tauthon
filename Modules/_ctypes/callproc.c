@@ -1,3 +1,8 @@
+/*****************************************************************
+  This file should be kept compatible with Python 2.3, see PEP 291.
+ *****************************************************************/
+
+
 /*
  * History: First version dated from 3/97, derived from my SCMLIB version
  * for win16.
@@ -29,7 +34,7 @@
 
   4. _ctypes_callproc is then called with the 'callargs' tuple.  _ctypes_callproc first
   allocates two arrays.  The first is an array of 'struct argument' items, the
-  second array has 'void *' entried.
+  second array has 'void *' entries.
 
   5. If 'converters' are present (converters is a sequence of argtypes'
   from_param methods), for each item in 'callargs' converter is called and the
@@ -49,7 +54,7 @@
   So, there are 4 data structures holding processed arguments:
   - the inargs tuple (in PyCFuncPtr_call)
   - the callargs tuple (in PyCFuncPtr_call)
-  - the 'struct argguments' array
+  - the 'struct arguments' array
   - the 'void *' array
 
  */
@@ -78,15 +83,12 @@
 #define DONT_USE_SEH
 #endif
 
-#define CTYPES_CAPSULE_NAME_PYMEM "_ctypes pymem"
 
-static void pymem_destructor(PyObject *ptr)
-{
-    void *p = PyCapsule_GetPointer(ptr, CTYPES_CAPSULE_NAME_PYMEM);
-    if (p) {
-        PyMem_Free(p);
-    }
-}
+#define CTYPES_CAPSULE_ERROROBJ "_ctypes/callproc.c error object"
+CTYPES_CAPSULE_INSTANTIATE_DESTRUCTOR(CTYPES_CAPSULE_ERROROBJ)
+
+#define CTYPES_CAPSULE_WCHAR_T "_ctypes/callproc.c wchar_t buffer from unicode"
+CTYPES_CAPSULE_INSTANTIATE_DESTRUCTOR(CTYPES_CAPSULE_WCHAR_T)
 
 /*
   ctypes maintains thread-local storage that has space for two error numbers:
@@ -134,17 +136,19 @@ _ctypes_get_errobj(int **pspace)
         return NULL;
     }
     if (error_object_name == NULL) {
-        error_object_name = PyUnicode_InternFromString("ctypes.error_object");
+        error_object_name = PyString_InternFromString("ctypes.error_object");
         if (error_object_name == NULL)
             return NULL;
     }
     errobj = PyDict_GetItem(dict, error_object_name);
     if (errobj) {
-        if (!PyCapsule_IsValid(errobj, CTYPES_CAPSULE_NAME_PYMEM)) {
+#ifdef CTYPES_USING_CAPSULE
+        if (!PyCapsule_IsValid(errobj, CTYPES_CAPSULE_ERROROBJ)) {
             PyErr_SetString(PyExc_RuntimeError,
                 "ctypes.error_object is an invalid capsule");
             return NULL;
         }
+#endif /* CTYPES_USING_CAPSULE */
         Py_INCREF(errobj);
     }
     else {
@@ -152,7 +156,7 @@ _ctypes_get_errobj(int **pspace)
         if (space == NULL)
             return NULL;
         memset(space, 0, sizeof(int) * 2);
-        errobj = PyCapsule_New(space, CTYPES_CAPSULE_NAME_PYMEM, pymem_destructor);
+        errobj = CAPSULE_NEW(space, CTYPES_CAPSULE_ERROROBJ);
         if (errobj == NULL)
             return NULL;
         if (-1 == PyDict_SetItem(dict, error_object_name,
@@ -161,7 +165,7 @@ _ctypes_get_errobj(int **pspace)
             return NULL;
         }
     }
-    *pspace = (int *)PyCapsule_GetPointer(errobj, CTYPES_CAPSULE_NAME_PYMEM);
+    *pspace = (int *)CAPSULE_DEREFERENCE(errobj, CTYPES_CAPSULE_ERROROBJ);
     return errobj;
 }
 
@@ -174,7 +178,7 @@ get_error_internal(PyObject *self, PyObject *args, int index)
 
     if (errobj == NULL)
         return NULL;
-    result = PyLong_FromLong(space[index]);
+    result = PyInt_FromLong(space[index]);
     Py_DECREF(errobj);
     return result;
 }
@@ -194,7 +198,7 @@ set_error_internal(PyObject *self, PyObject *args, int index)
     old_errno = space[index];
     space[index] = new_errno;
     Py_DECREF(errobj);
-    return PyLong_FromLong(old_errno);
+    return PyInt_FromLong(old_errno);
 }
 
 static PyObject *
@@ -225,21 +229,21 @@ set_last_error(PyObject *self, PyObject *args)
 
 PyObject *ComError;
 
-static WCHAR *FormatError(DWORD code)
+static TCHAR *FormatError(DWORD code)
 {
-    WCHAR *lpMsgBuf;
+    TCHAR *lpMsgBuf;
     DWORD n;
-    n = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-                       NULL,
-                       code,
-                       MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), /* Default language */
-               (LPWSTR) &lpMsgBuf,
-               0,
-               NULL);
+    n = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+                      NULL,
+                      code,
+                      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), /* Default language */
+              (LPTSTR) &lpMsgBuf,
+              0,
+              NULL);
     if (n) {
-        while (iswspace(lpMsgBuf[n-1]))
+        while (_istspace(lpMsgBuf[n-1]))
             --n;
-        lpMsgBuf[n] = L'\0'; /* rstrip() */
+        lpMsgBuf[n] = _T('\0'); /* rstrip() */
     }
     return lpMsgBuf;
 }
@@ -409,7 +413,7 @@ check_hresult(PyObject *self, PyObject *args)
         return NULL;
     if (FAILED(hr))
         return PyErr_SetFromWindowsErr(hr);
-    return PyLong_FromLong(hr);
+    return PyInt_FromLong(hr);
 }
 
 #endif
@@ -505,7 +509,7 @@ PyCArg_repr(PyCArgObject *self)
             self->tag, self);
         break;
     }
-    return PyUnicode_FromString(buffer);
+    return PyString_FromString(buffer);
 }
 
 static PyMemberDef PyCArgType_members[] = {
@@ -524,7 +528,7 @@ PyTypeObject PyCArg_Type = {
     0,                                          /* tp_print */
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_reserved */
+    0,                                          /* tp_compare */
     (reprfunc)PyCArg_repr,                      /* tp_repr */
     0,                                          /* tp_as_number */
     0,                                          /* tp_as_sequence */
@@ -633,6 +637,12 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
         return 0;
     }
 
+    if (PyInt_Check(obj)) {
+        pa->ffi_type = &ffi_type_sint;
+        pa->value.i = PyInt_AS_LONG(obj);
+        return 0;
+    }
+
     if (PyLong_Check(obj)) {
         pa->ffi_type = &ffi_type_sint;
         pa->value.i = (long)PyLong_AsUnsignedLong(obj);
@@ -648,9 +658,9 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
         return 0;
     }
 
-    if (PyBytes_Check(obj)) {
+    if (PyString_Check(obj)) {
         pa->ffi_type = &ffi_type_pointer;
-        pa->value.p = PyBytes_AsString(obj);
+        pa->value.p = PyString_AS_STRING(obj);
         Py_INCREF(obj);
         pa->keep = obj;
         return 0;
@@ -658,22 +668,31 @@ static int ConvParam(PyObject *obj, Py_ssize_t index, struct argument *pa)
 
 #ifdef CTYPES_UNICODE
     if (PyUnicode_Check(obj)) {
-#if Py_UNICODE_SIZE == SIZEOF_WCHAR_T
+#ifdef HAVE_USABLE_WCHAR_T
         pa->ffi_type = &ffi_type_pointer;
         pa->value.p = PyUnicode_AS_UNICODE(obj);
         Py_INCREF(obj);
         pa->keep = obj;
         return 0;
 #else
+        int size = PyUnicode_GET_SIZE(obj);
         pa->ffi_type = &ffi_type_pointer;
-        pa->value.p = PyUnicode_AsWideCharString(obj, NULL);
-        if (pa->value.p == NULL)
+        size += 1; /* terminating NUL */
+        size *= sizeof(wchar_t);
+        pa->value.p = PyMem_Malloc(size);
+        if (!pa->value.p) {
+            PyErr_NoMemory();
             return -1;
-        pa->keep = PyCapsule_New(pa->value.p, CTYPES_CAPSULE_NAME_PYMEM, pymem_destructor);
+        }
+        memset(pa->value.p, 0, size);
+        pa->keep = CAPSULE_NEW(pa->value.p, CTYPES_CAPSULE_WCHAR_T);
         if (!pa->keep) {
             PyMem_Free(pa->value.p);
             return -1;
         }
+        if (-1 == PyUnicode_AsWideChar((PyUnicodeObject *)obj,
+                                       pa->value.p, PyUnicode_GET_SIZE(obj)))
+            return -1;
         return 0;
 #endif
     }
@@ -888,7 +907,7 @@ static PyObject *GetResult(PyObject *restype, void *result, PyObject *checker)
     PyObject *retval, *v;
 
     if (restype == NULL)
-        return PyLong_FromLong(*(int *)result);
+        return PyInt_FromLong(*(int *)result);
 
     if (restype == Py_None) {
         Py_INCREF(Py_None);
@@ -931,7 +950,7 @@ void _ctypes_extend_error(PyObject *exc_class, char *fmt, ...)
     PyObject *tp, *v, *tb, *s, *cls_str, *msg_str;
 
     va_start(vargs, fmt);
-    s = PyUnicode_FromFormatV(fmt, vargs);
+    s = PyString_FromFormatV(fmt, vargs);
     va_end(vargs);
     if (!s)
         return;
@@ -940,18 +959,18 @@ void _ctypes_extend_error(PyObject *exc_class, char *fmt, ...)
     PyErr_NormalizeException(&tp, &v, &tb);
     cls_str = PyObject_Str(tp);
     if (cls_str) {
-        PyUnicode_AppendAndDel(&s, cls_str);
-        PyUnicode_AppendAndDel(&s, PyUnicode_FromString(": "));
+        PyString_ConcatAndDel(&s, cls_str);
+        PyString_ConcatAndDel(&s, PyString_FromString(": "));
         if (s == NULL)
             goto error;
     } else
         PyErr_Clear();
     msg_str = PyObject_Str(v);
     if (msg_str)
-        PyUnicode_AppendAndDel(&s, msg_str);
+        PyString_ConcatAndDel(&s, msg_str);
     else {
         PyErr_Clear();
-        PyUnicode_AppendAndDel(&s, PyUnicode_FromString("???"));
+        PyString_ConcatAndDel(&s, PyString_FromString("???"));
         if (s == NULL)
             goto error;
     }
@@ -977,7 +996,7 @@ GetComError(HRESULT errcode, GUID *riid, IUnknown *pIunk)
     DWORD helpcontext=0;
     LPOLESTR progid;
     PyObject *obj;
-    LPOLESTR text;
+    TCHAR *text;
 
     /* We absolutely have to release the GIL during COM method calls,
        otherwise we may get a deadlock!
@@ -1017,7 +1036,11 @@ GetComError(HRESULT errcode, GUID *riid, IUnknown *pIunk)
 
     text = FormatError(errcode);
     obj = Py_BuildValue(
+#ifdef _UNICODE
         "iu(uuuiu)",
+#else
+        "is(uuuiu)",
+#endif
         errcode,
         text,
         descr, source, helpfile, helpcontext,
@@ -1138,7 +1161,7 @@ PyObject *_ctypes_callproc(PPROC pProc,
     }
     for (i = 0; i < argcount; ++i) {
         atypes[i] = args[i].ffi_type;
-        if (atypes[i]->type == FFI_TYPE_STRUCT
+        if (atypes[i]->type == FFI_TYPE_STRUCT 
 #ifdef _WIN64
             && atypes[i]->size <= sizeof(void *)
 #endif
@@ -1177,12 +1200,12 @@ PyObject *_ctypes_callproc(PPROC pProc,
         if (*(int *)resbuf & 0x80000000)
             retval = GetComError(*(HRESULT *)resbuf, iid, pIunk);
         else
-            retval = PyLong_FromLong(*(int *)resbuf);
+            retval = PyInt_FromLong(*(int *)resbuf);
     } else if (flags & FUNCFLAG_HRESULT) {
         if (*(int *)resbuf & 0x80000000)
             retval = PyErr_SetFromWindowsErr(*(int *)resbuf);
         else
-            retval = PyLong_FromLong(*(int *)resbuf);
+            retval = PyInt_FromLong(*(int *)resbuf);
     } else
 #endif
         retval = GetResult(restype, resbuf, checker);
@@ -1203,6 +1226,15 @@ _parse_voidp(PyObject *obj, void **address)
 
 #ifdef MS_WIN32
 
+#ifdef _UNICODE
+#  define PYBUILD_TSTR "u"
+#else
+#  define PYBUILD_TSTR "s"
+#  ifndef _T
+#    define _T(text) text
+#  endif
+#endif
+
 static char format_error_doc[] =
 "FormatError([integer]) -> string\n\
 \n\
@@ -1211,7 +1243,7 @@ given, the return value of a call to GetLastError() is used.\n";
 static PyObject *format_error(PyObject *self, PyObject *args)
 {
     PyObject *result;
-    wchar_t *lpMsgBuf;
+    TCHAR *lpMsgBuf;
     DWORD code = 0;
     if (!PyArg_ParseTuple(args, "|i:FormatError", &code))
         return NULL;
@@ -1219,10 +1251,10 @@ static PyObject *format_error(PyObject *self, PyObject *args)
         code = GetLastError();
     lpMsgBuf = FormatError(code);
     if (lpMsgBuf) {
-        result = PyUnicode_FromWideChar(lpMsgBuf, wcslen(lpMsgBuf));
+        result = Py_BuildValue(PYBUILD_TSTR, lpMsgBuf);
         LocalFree(lpMsgBuf);
     } else {
-        result = PyUnicode_FromString("<no description>");
+        result = Py_BuildValue("s", "<no description>");
     }
     return result;
 }
@@ -1235,18 +1267,34 @@ The handle may be used to locate exported functions in this\n\
 module.\n";
 static PyObject *load_library(PyObject *self, PyObject *args)
 {
-    WCHAR *name;
+    TCHAR *name;
     PyObject *nameobj;
     PyObject *ignored;
     HMODULE hMod;
     if (!PyArg_ParseTuple(args, "O|O:LoadLibrary", &nameobj, &ignored))
         return NULL;
-
-    name = PyUnicode_AsUnicode(nameobj);
-    if (!name)
+#ifdef _UNICODE
+    name = alloca((PyString_Size(nameobj) + 1) * sizeof(WCHAR));
+    if (!name) {
+        PyErr_NoMemory();
         return NULL;
+    }
 
-    hMod = LoadLibraryW(name);
+    {
+        int r;
+        char *aname = PyString_AsString(nameobj);
+        if(!aname)
+            return NULL;
+        r = MultiByteToWideChar(CP_ACP, 0, aname, -1, name, PyString_Size(nameobj) + 1);
+        name[r] = 0;
+    }
+#else
+    name = PyString_AsString(nameobj);
+    if(!name)
+        return NULL;
+#endif
+
+    hMod = LoadLibrary(name);
     if (!hMod)
         return PyErr_SetFromWindowsErr(GetLastError());
 #ifdef _WIN64
@@ -1346,12 +1394,12 @@ copy_com_pointer(PyObject *self, PyObject *args)
     pdst = (IUnknown **)b.value.p;
 
     if (pdst == NULL)
-        r = PyLong_FromLong(E_POINTER);
+        r = PyInt_FromLong(E_POINTER);
     else {
         if (src)
             src->lpVtbl->AddRef(src);
         *pdst = src;
-        r = PyLong_FromLong(S_OK);
+        r = PyInt_FromLong(S_OK);
     }
   done:
     Py_XDECREF(a.keep);
@@ -1362,8 +1410,7 @@ copy_com_pointer(PyObject *self, PyObject *args)
 
 static PyObject *py_dl_open(PyObject *self, PyObject *args)
 {
-    PyObject *name, *name2;
-    char *name_str;
+    char *name;
     void * handle;
 #ifdef RTLD_LOCAL
     int mode = RTLD_NOW | RTLD_LOCAL;
@@ -1371,22 +1418,10 @@ static PyObject *py_dl_open(PyObject *self, PyObject *args)
     /* cygwin doesn't define RTLD_LOCAL */
     int mode = RTLD_NOW;
 #endif
-    if (!PyArg_ParseTuple(args, "O|i:dlopen", &name, &mode))
+    if (!PyArg_ParseTuple(args, "z|i:dlopen", &name, &mode))
         return NULL;
     mode |= RTLD_NOW;
-    if (name != Py_None) {
-        if (PyUnicode_FSConverter(name, &name2) == 0)
-            return NULL;
-        if (PyBytes_Check(name2))
-            name_str = PyBytes_AS_STRING(name2);
-        else
-            name_str = PyByteArray_AS_STRING(name2);
-    } else {
-        name_str = NULL;
-        name2 = NULL;
-    }
-    handle = ctypes_dlopen(name_str, mode);
-    Py_XDECREF(name2);
+    handle = ctypes_dlopen(name, mode);
     if (!handle) {
         char *errmsg = ctypes_dlerror();
         if (!errmsg)
@@ -1509,10 +1544,10 @@ sizeof_func(PyObject *self, PyObject *obj)
 
     dict = PyType_stgdict(obj);
     if (dict)
-        return PyLong_FromSsize_t(dict->size);
+        return PyInt_FromSsize_t(dict->size);
 
     if (CDataObject_Check(obj))
-        return PyLong_FromSsize_t(((CDataObject *)obj)->b_size);
+        return PyInt_FromSsize_t(((CDataObject *)obj)->b_size);
     PyErr_SetString(PyExc_TypeError,
                     "this type has no size");
     return NULL;
@@ -1530,11 +1565,11 @@ align_func(PyObject *self, PyObject *obj)
 
     dict = PyType_stgdict(obj);
     if (dict)
-        return PyLong_FromSsize_t(dict->align);
+        return PyInt_FromSsize_t(dict->align);
 
     dict = PyObject_stgdict(obj);
     if (dict)
-        return PyLong_FromSsize_t(dict->align);
+        return PyInt_FromSsize_t(dict->align);
 
     PyErr_SetString(PyExc_TypeError,
                     "no alignment info");
@@ -1632,6 +1667,37 @@ My_Py_DECREF(PyObject *self, PyObject *arg)
     return arg;
 }
 
+#ifdef CTYPES_UNICODE
+
+static char set_conversion_mode_doc[] =
+"set_conversion_mode(encoding, errors) -> (previous-encoding, previous-errors)\n\
+\n\
+Set the encoding and error handling ctypes uses when converting\n\
+between unicode and strings.  Returns the previous values.\n";
+
+static PyObject *
+set_conversion_mode(PyObject *self, PyObject *args)
+{
+    char *coding, *mode;
+    PyObject *result;
+
+    if (!PyArg_ParseTuple(args, "zs:set_conversion_mode", &coding, &mode))
+        return NULL;
+    result = Py_BuildValue("(zz)", _ctypes_conversion_encoding, _ctypes_conversion_errors);
+    if (coding) {
+        PyMem_Free(_ctypes_conversion_encoding);
+        _ctypes_conversion_encoding = PyMem_Malloc(strlen(coding) + 1);
+        strcpy(_ctypes_conversion_encoding, coding);
+    } else {
+        _ctypes_conversion_encoding = NULL;
+    }
+    PyMem_Free(_ctypes_conversion_errors);
+    _ctypes_conversion_errors = PyMem_Malloc(strlen(mode) + 1);
+    strcpy(_ctypes_conversion_errors, mode);
+    return result;
+}
+#endif
+
 static PyObject *
 resize(PyObject *self, PyObject *args)
 {
@@ -1640,7 +1706,11 @@ resize(PyObject *self, PyObject *args)
     Py_ssize_t size;
 
     if (!PyArg_ParseTuple(args,
+#if (PY_VERSION_HEX < 0x02050000)
+                          "Oi:resize",
+#else
                           "On:resize",
+#endif
                           &obj, &size))
         return NULL;
 
@@ -1652,7 +1722,11 @@ resize(PyObject *self, PyObject *args)
     }
     if (size < dict->size) {
         PyErr_Format(PyExc_ValueError,
+#if PY_VERSION_HEX < 0x02050000
+                     "minimum size is %d",
+#else
                      "minimum size is %zd",
+#endif
                      dict->size);
         return NULL;
     }
@@ -1723,10 +1797,9 @@ POINTER(PyObject *self, PyObject *cls)
         Py_INCREF(result);
         return result;
     }
-    if (PyUnicode_CheckExact(cls)) {
-        char *name = _PyUnicode_AsString(cls);
-        buf = alloca(strlen(name) + 3 + 1);
-        sprintf(buf, "LP_%s", name);
+    if (PyString_CheckExact(cls)) {
+        buf = alloca(strlen(PyString_AS_STRING(cls)) + 3 + 1);
+        sprintf(buf, "LP_%s", PyString_AS_STRING(cls));
         result = PyObject_CallFunction((PyObject *)Py_TYPE(&PyCPointer_Type),
                                        "s(O){}",
                                        buf,
@@ -1810,8 +1883,12 @@ PyMethodDef _ctypes_module_methods[] = {
     {"POINTER", POINTER, METH_O },
     {"pointer", pointer, METH_O },
     {"_unpickle", unpickle, METH_VARARGS },
-    {"buffer_info", buffer_info, METH_O, "Return buffer interface information"},
+    {"_buffer_info", buffer_info, METH_O,
+     "Return buffer interface information (for testing only)"},
     {"resize", resize, METH_VARARGS, "Resize the memory buffer of a ctypes instance"},
+#ifdef CTYPES_UNICODE
+    {"set_conversion_mode", set_conversion_mode, METH_VARARGS, set_conversion_mode_doc},
+#endif
 #ifdef MS_WIN32
     {"get_last_error", get_last_error, METH_NOARGS},
     {"set_last_error", set_last_error, METH_VARARGS},

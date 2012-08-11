@@ -5,9 +5,13 @@ modules in setup scripts."""
 
 __revision__ = "$Id$"
 
-import os
-import sys
-import warnings
+import os, string, sys
+from types import *
+
+try:
+    import warnings
+except ImportError:
+    warnings = None
 
 # This class is really only used by the "build_ext" command, so it might
 # make sense to put it in distutils.command.build_ext.  However, that
@@ -79,14 +83,11 @@ class Extension:
       language : string
         extension language (i.e. "c", "c++", "objc"). Will be detected
         from the source extensions if not provided.
-      optional : boolean
-        specifies that a build failure in the extension should not abort the
-        build process, but simply not install the failing extension.
     """
 
     # When adding arguments to this constructor, be sure to update
     # setup_keywords in core.py.
-    def __init__(self, name, sources,
+    def __init__ (self, name, sources,
                   include_dirs=None,
                   define_macros=None,
                   undef_macros=None,
@@ -100,14 +101,12 @@ class Extension:
                   swig_opts = None,
                   depends=None,
                   language=None,
-                  optional=None,
                   **kw                      # To catch unknown keywords
                  ):
-        if not isinstance(name, str):
-            raise AssertionError("'name' must be a string")
-        if not (isinstance(sources, list) and
-                all(isinstance(v, str) for v in sources)):
-            raise AssertionError("'sources' must be a list of strings")
+        assert type(name) is StringType, "'name' must be a string"
+        assert (type(sources) is ListType and
+                map(type, sources) == [StringType]*len(sources)), \
+                "'sources' must be a list of strings"
 
         self.name = name
         self.sources = sources
@@ -124,20 +123,22 @@ class Extension:
         self.swig_opts = swig_opts or []
         self.depends = depends or []
         self.language = language
-        self.optional = optional
 
         # If there are unknown keyword options, warn about them
-        if len(kw) > 0:
-            options = [repr(option) for option in kw]
-            options = ', '.join(sorted(options))
-            msg = "Unknown Extension options: %s" % options
-            warnings.warn(msg)
+        if len(kw):
+            L = kw.keys() ; L.sort()
+            L = map(repr, L)
+            msg = "Unknown Extension options: " + string.join(L, ', ')
+            if warnings is not None:
+                warnings.warn(msg)
+            else:
+                sys.stderr.write(msg + '\n')
+# class Extension
 
-def read_setup_file(filename):
-    """Reads a Setup file and returns Extension instances."""
-    from distutils.sysconfig import (parse_makefile, expand_makefile_vars,
-                                     _variable_rx)
 
+def read_setup_file (filename):
+    from distutils.sysconfig import \
+         parse_makefile, expand_makefile_vars, _variable_rx
     from distutils.text_file import TextFile
     from distutils.util import split_quoted
 
@@ -152,19 +153,21 @@ def read_setup_file(filename):
     try:
         extensions = []
 
-        while True:
+        while 1:
             line = file.readline()
             if line is None:                # eof
                 break
             if _variable_rx.match(line):    # VAR=VALUE, handled in first pass
                 continue
 
-            if line[0] == line[-1] == "*":
-                file.warn("'%s' lines not handled yet" % line)
-                continue
+                if line[0] == line[-1] == "*":
+                    file.warn("'%s' lines not handled yet" % line)
+                    continue
 
+            #print "original line: " + line
             line = expand_makefile_vars(line, vars)
             words = split_quoted(line)
+            #print "expanded line: " + line
 
             # NB. this parses a slightly different syntax than the old
             # makesetup script: here, there must be exactly one extension per
@@ -193,7 +196,7 @@ def read_setup_file(filename):
                 elif switch == "-I":
                     ext.include_dirs.append(value)
                 elif switch == "-D":
-                    equals = value.find("=")
+                    equals = string.find(value, "=")
                     if equals == -1:        # bare "-DFOO" -- no value
                         ext.define_macros.append((value, None))
                     else:                   # "-DFOO=blah"
@@ -219,6 +222,12 @@ def read_setup_file(filename):
                     ext.extra_link_args.append(word)
                     if not value:
                         append_next_word = ext.extra_link_args
+                elif word == "-Xcompiler":
+                    append_next_word = ext.extra_compile_args
+                elif switch == "-u":
+                    ext.extra_link_args.append(word)
+                    if not value:
+                        append_next_word = ext.extra_link_args
                 elif suffix in (".a", ".so", ".sl", ".o", ".dylib"):
                     # NB. a really faithful emulation of makesetup would
                     # append a .o file to extra_objects only if it
@@ -232,4 +241,15 @@ def read_setup_file(filename):
     finally:
         file.close()
 
+        #print "module:", module
+        #print "source files:", source_files
+        #print "cpp args:", cpp_args
+        #print "lib args:", library_args
+
+        #extensions[module] = { 'sources': source_files,
+        #                       'cpp_args': cpp_args,
+        #                       'lib_args': library_args }
+
     return extensions
+
+# read_setup_file ()

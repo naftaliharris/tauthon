@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """Unpack a MIME message into a directory of files."""
 
@@ -35,7 +35,7 @@ Usage: %prog [options] msgfile
 
     try:
         os.mkdir(opts.directory)
-    except OSError as e:
+    except OSError, e:
         # Ignore directory exists error
         if e.errno != errno.EEXIST:
             raise

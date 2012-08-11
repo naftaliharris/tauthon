@@ -1,6 +1,6 @@
 /* cursor.h - definitions for the cursor type
  *
- * Copyright (C) 2004-2010 Gerhard HÃ¤ring <gh@ghaering.de>
+ * Copyright (C) 2004-2010 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -42,6 +42,7 @@ typedef struct
     pysqlite_Statement* statement;
     int closed;
     int reset;
+    int locked;
     int initialized;
 
     /* the next row to be returned, NULL if no next row available */

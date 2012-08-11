@@ -33,13 +33,7 @@ from collections import namedtuple
 
 __all__ = ["scheduler"]
 
-class Event(namedtuple('Event', 'time, priority, action, argument')):
-    def __eq__(s, o): return (s.time, s.priority) == (o.time, o.priority)
-    def __ne__(s, o): return (s.time, s.priority) != (o.time, o.priority)
-    def __lt__(s, o): return (s.time, s.priority) <  (o.time, o.priority)
-    def __le__(s, o): return (s.time, s.priority) <= (o.time, o.priority)
-    def __gt__(s, o): return (s.time, s.priority) >  (o.time, o.priority)
-    def __ge__(s, o): return (s.time, s.priority) >= (o.time, o.priority)
+Event = namedtuple('Event', 'time, priority, action, argument')
 
 class scheduler:
     def __init__(self, timefunc, delayfunc):
@@ -94,7 +88,7 @@ class scheduler:
         restarted.
 
         It is legal for both the delay function and the action
-        function to to modify the queue or to raise an exception;
+        function to modify the queue or to raise an exception;
         exceptions are not caught but the scheduler's state remains
         well-defined so run() may be called again.
 

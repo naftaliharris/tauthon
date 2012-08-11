@@ -11,4 +11,4 @@ class FixBasestring(fixer_base.BaseFix):
     PATTERN = "'basestring'"
 
     def transform(self, node, results):
-        return Name("str", prefix=node.prefix)
+        return Name(u"str", prefix=node.prefix)

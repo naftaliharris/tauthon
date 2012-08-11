@@ -260,7 +260,7 @@ Exceptions in this module are coded as class instances:
 
 .. exception:: Error
 
-   The base exception class.  :exc:`Error` has a single public data member
+   The base exception class.  :exc:`Error` has a single public attribute
    :attr:`msg` containing the description of the error.
 
 
@@ -274,6 +274,6 @@ Here is an example of how you would catch one of these exceptions::
    p = xdrlib.Packer()
    try:
        p.pack_double(8.01)
-   except xdrlib.ConversionError as instance:
-       print('packing the double failed:', instance.msg)
+   except xdrlib.ConversionError, instance:
+       print 'packing the double failed:', instance.msg
 

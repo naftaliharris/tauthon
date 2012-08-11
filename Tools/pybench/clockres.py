@@ -23,7 +23,8 @@ def clockres(timer):
             break
         for i in spin_loops:
             d[timer()] = 1
-    values = sorted(d.keys())
+    values = d.keys()
+    values.sort()
     min_diff = TEST_TIME
     for i in range(len(values) - 1):
         diff = values[i+1] - values[i]
@@ -32,11 +33,11 @@ def clockres(timer):
     return min_diff
 
 if __name__ == '__main__':
-    print('Clock resolution of various timer implementations:')
-    print('time.clock:           %10.3fus' % (clockres(time.clock) * 1e6))
-    print('time.time:            %10.3fus' % (clockres(time.time) * 1e6))
+    print 'Clock resolution of various timer implementations:'
+    print 'time.clock:           %10.3fus' % (clockres(time.clock) * 1e6)
+    print 'time.time:            %10.3fus' % (clockres(time.time) * 1e6)
     try:
         import systimes
-        print('systimes.processtime: %10.3fus' % (clockres(systimes.processtime) * 1e6))
+        print 'systimes.processtime: %10.3fus' % (clockres(systimes.processtime) * 1e6)
     except ImportError:
         pass

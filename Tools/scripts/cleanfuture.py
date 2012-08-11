@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """cleanfuture [-d][-r][-v] path ...
 
@@ -59,7 +59,7 @@ def main():
     global verbose, recurse, dryrun
     try:
         opts, args = getopt.getopt(sys.argv[1:], "drv")
-    except getopt.error as msg:
+    except getopt.error, msg:
         errprint(msg)
         return
     for o, a in opts:
@@ -78,7 +78,7 @@ def main():
 def check(file):
     if os.path.isdir(file) and not os.path.islink(file):
         if verbose:
-            print("listing directory", file)
+            print "listing directory", file
         names = os.listdir(file)
         for name in names:
             fullname = os.path.join(file, name)
@@ -89,10 +89,10 @@ def check(file):
         return
 
     if verbose:
-        print("checking", file, "...", end=' ')
+        print "checking", file, "...",
     try:
         f = open(file)
-    except IOError as msg:
+    except IOError, msg:
         errprint("%r: I/O Error: %s" % (file, str(msg)))
         return
 
@@ -103,33 +103,33 @@ def check(file):
     f.close()
     if changed:
         if verbose:
-            print("changed.")
+            print "changed."
             if dryrun:
-                print("But this is a dry run, so leaving it alone.")
+                print "But this is a dry run, so leaving it alone."
         for s, e, line in changed:
-            print("%r lines %d-%d" % (file, s+1, e+1))
+            print "%r lines %d-%d" % (file, s+1, e+1)
             for i in range(s, e+1):
-                print(ff.lines[i], end=' ')
+                print ff.lines[i],
             if line is None:
-                print("-- deleted")
+                print "-- deleted"
             else:
-                print("-- change to:")
-                print(line, end=' ')
+                print "-- change to:"
+                print line,
         if not dryrun:
             bak = file + ".bak"
             if os.path.exists(bak):
                 os.remove(bak)
             os.rename(file, bak)
             if verbose:
-                print("renamed", file, "to", bak)
+                print "renamed", file, "to", bak
             g = open(file, "w")
             ff.write(g)
             g.close()
             if verbose:
-                print("wrote new", file)
+                print "wrote new", file
     else:
         if verbose:
-            print("unchanged.")
+            print "unchanged."
 
 class FutureFinder:
 
@@ -162,7 +162,7 @@ class FutureFinder:
         OP = tokenize.OP
 
         changed = self.changed
-        get = tokenize.generate_tokens(self.getline).__next__
+        get = tokenize.generate_tokens(self.getline).next
         type, token, (srow, scol), (erow, ecol), line = get()
 
         # Chew up initial comments and blank lines (if any).

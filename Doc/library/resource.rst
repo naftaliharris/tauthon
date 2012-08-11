@@ -1,3 +1,4 @@
+
 :mod:`resource` --- Resource usage information
 ==============================================
 
@@ -202,6 +203,9 @@ These functions are used to retrieve resource usage information:
    This function will raise a :exc:`ValueError` if an invalid *who* parameter is
    specified. It may also raise :exc:`error` exception in unusual circumstances.
 
+   .. versionchanged:: 2.3
+      Added access to values as attributes of the returned object.
+
 
 .. function:: getpagesize()
 
@@ -217,14 +221,14 @@ function to specify which processes information should be provided for.
 
 .. data:: RUSAGE_SELF
 
-   Pass to :func:`getrusage` to request resources consumed by the calling
-   process, which is the sum of resources used by all threads in the process.
+   :const:`RUSAGE_SELF` should be used to request information pertaining only to
+   the process itself.
 
 
 .. data:: RUSAGE_CHILDREN
 
-   Pass to :func:`getrusage` to request resources consumed by child processes
-   of the calling process which have been terminated and waited for.
+   Pass to :func:`getrusage` to request resource information for child processes of
+   the calling process.
 
 
 .. data:: RUSAGE_BOTH
@@ -232,10 +236,3 @@ function to specify which processes information should be provided for.
    Pass to :func:`getrusage` to request resources consumed by both the current
    process and child processes.  May not be available on all systems.
 
-
-.. data:: RUSAGE_THREAD
-
-   Pass to :func:`getrusage` to request resources consumed by the current
-   thread.  May not be available on all systems.
-
-   .. versionadded:: 3.2

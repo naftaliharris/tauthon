@@ -5,8 +5,7 @@ import distutils.version
 import operator
 
 
-re_validPackage = re.compile(r"(?i)^\s*([a-z_]\w*(?:\.[a-z_]\w*)*)(.*)",
-    re.ASCII)
+re_validPackage = re.compile(r"(?i)^\s*([a-z_]\w*(?:\.[a-z_]\w*)*)(.*)")
 # (package) (rest)
 
 re_paren = re.compile(r"^\s*\((.*)\)\s*$") # (list) inside of parentheses
@@ -41,7 +40,7 @@ class VersionPredicate:
     The str() of a `VersionPredicate` provides a normalized
     human-readable version of the expression::
 
-    >>> print(v)
+    >>> print v
     pyepat.abc (> 1.0, < 3333.3a1, != 1555.1b3)
 
     The `satisfied_by()` method can be used to determine with a given
@@ -154,8 +153,7 @@ def split_provision(value):
     global _provision_rx
     if _provision_rx is None:
         _provision_rx = re.compile(
-            "([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)(?:\s*\(\s*([^)\s]+)\s*\))?$",
-            re.ASCII)
+            "([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)(?:\s*\(\s*([^)\s]+)\s*\))?$")
     value = value.strip()
     m = _provision_rx.match(value)
     if not m:

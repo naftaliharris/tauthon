@@ -17,16 +17,16 @@ Syntax Errors
 Syntax errors, also known as parsing errors, are perhaps the most common kind of
 complaint you get while you are still learning Python::
 
-   >>> while True print('Hello world')
+   >>> while True print 'Hello world'
      File "<stdin>", line 1, in ?
-       while True print('Hello world')
+       while True print 'Hello world'
                       ^
    SyntaxError: invalid syntax
 
 The parser repeats the offending line and displays a little 'arrow' pointing at
 the earliest point in the line where the error was detected.  The error is
 caused by (or at least detected at) the token *preceding* the arrow: in the
-example, the error is detected at the function :func:`print`, since a colon
+example, the error is detected at the keyword :keyword:`print`, since a colon
 (``':'``) is missing before it.  File name and line number are printed so you
 know where to look in case the input came from a script.
 
@@ -45,7 +45,7 @@ programs, however, and result in error messages as shown here::
    >>> 10 * (1/0)
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
-   ZeroDivisionError: int division or modulo by zero
+   ZeroDivisionError: integer division or modulo by zero
    >>> 4 + spam*3
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
@@ -53,7 +53,7 @@ programs, however, and result in error messages as shown here::
    >>> '2' + 2
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
-   TypeError: Can't convert 'int' object to str implicitly
+   TypeError: cannot concatenate 'str' and 'int' objects
 
 The last line of the error message indicates what happened. Exceptions come in
 different types, and the type is printed as part of the message: the types in
@@ -87,10 +87,10 @@ is signalled by raising the :exc:`KeyboardInterrupt` exception. ::
 
    >>> while True:
    ...     try:
-   ...         x = int(input("Please enter a number: "))
+   ...         x = int(raw_input("Please enter a number: "))
    ...         break
    ...     except ValueError:
-   ...         print("Oops!  That was no valid number.  Try again...")
+   ...         print "Oops!  That was no valid number.  Try again..."
    ...
 
 The :keyword:`try` statement works as follows.
@@ -120,6 +120,14 @@ name multiple exceptions as a parenthesized tuple, for example::
    ... except (RuntimeError, TypeError, NameError):
    ...     pass
 
+Note that the parentheses around this tuple are required, because
+``except ValueError, e:`` was the syntax used for what is normally
+written as ``except ValueError as e:`` in modern Python (described
+below). The old syntax is still supported for backwards compatibility.
+This means ``except RuntimeError, TypeError`` is not equivalent to
+``except (RuntimeError, TypeError):`` but to ``except RuntimeError as
+TypeError:`` which is not what you want.
+
 The last except clause may omit the exception name(s), to serve as a wildcard.
 Use this with extreme caution, since it is easy to mask a real programming error
 in this way!  It can also be used to print an error message and then re-raise
@@ -131,12 +139,12 @@ the exception (allowing a caller to handle the exception as well)::
        f = open('myfile.txt')
        s = f.readline()
        i = int(s.strip())
-   except IOError as err:
-       print("I/O error: {0}".format(err))
+   except IOError as e:
+       print "I/O error({0}): {1}".format(e.errno, e.strerror)
    except ValueError:
-       print("Could not convert data to an integer.")
+       print "Could not convert data to an integer."
    except:
-       print("Unexpected error:", sys.exc_info()[0])
+       print "Unexpected error:", sys.exc_info()[0]
        raise
 
 The :keyword:`try` ... :keyword:`except` statement has an optional *else
@@ -148,9 +156,9 @@ example::
        try:
            f = open(arg, 'r')
        except IOError:
-           print('cannot open', arg)
+           print 'cannot open', arg
        else:
-           print(arg, 'has', len(f.readlines()), 'lines')
+           print arg, 'has', len(f.readlines()), 'lines'
            f.close()
 
 The use of the :keyword:`else` clause is better than adding additional code to
@@ -162,31 +170,32 @@ When an exception occurs, it may have an associated value, also known as the
 exception's *argument*. The presence and type of the argument depend on the
 exception type.
 
-The except clause may specify a variable after the exception name.  The
-variable is bound to an exception instance with the arguments stored in
+The except clause may specify a variable after the exception name (or tuple).
+The variable is bound to an exception instance with the arguments stored in
 ``instance.args``.  For convenience, the exception instance defines
 :meth:`__str__` so the arguments can be printed directly without having to
-reference ``.args``.  One may also instantiate an exception first before
-raising it and add any attributes to it as desired. ::
+reference ``.args``.
+
+One may also instantiate an exception first before raising it and add any
+attributes to it as desired. ::
 
    >>> try:
    ...    raise Exception('spam', 'eggs')
    ... except Exception as inst:
-   ...    print(type(inst))    # the exception instance
-   ...    print(inst.args)     # arguments stored in .args
-   ...    print(inst)          # __str__ allows args to be printed directly,
-   ...                         # but may be overridden in exception subclasses
-   ...    x, y = inst.args     # unpack args
-   ...    print('x =', x)
-   ...    print('y =', y)
+   ...    print type(inst)     # the exception instance
+   ...    print inst.args      # arguments stored in .args
+   ...    print inst           # __str__ allows args to printed directly
+   ...    x, y = inst.args
+   ...    print 'x =', x
+   ...    print 'y =', y
    ...
-   <class 'Exception'>
+   <type 'exceptions.Exception'>
    ('spam', 'eggs')
    ('spam', 'eggs')
    x = spam
    y = eggs
 
-If an exception has arguments, they are printed as the last part ('detail') of
+If an exception has an argument, it is printed as the last part ('detail') of
 the message for unhandled exceptions.
 
 Exception handlers don't just handle exceptions if they occur immediately in the
@@ -198,10 +207,10 @@ indirectly) in the try clause. For example::
    ...
    >>> try:
    ...     this_fails()
-   ... except ZeroDivisionError as err:
-   ...     print('Handling run-time error:', err)
+   ... except ZeroDivisionError as detail:
+   ...     print 'Handling run-time error:', detail
    ...
-   Handling run-time error: int division or modulo by zero
+   Handling run-time error: integer division or modulo by zero
 
 
 .. _tut-raising:
@@ -228,7 +237,7 @@ re-raise the exception::
    >>> try:
    ...     raise NameError('HiThere')
    ... except NameError:
-   ...     print('An exception flew by!')
+   ...     print 'An exception flew by!'
    ...     raise
    ...
    An exception flew by!
@@ -256,7 +265,7 @@ example::
    >>> try:
    ...     raise MyError(2*2)
    ... except MyError as e:
-   ...     print('My exception occurred, value:', e.value)
+   ...     print 'My exception occurred, value:', e.value
    ...
    My exception occurred, value: 4
    >>> raise MyError('oops!')
@@ -283,28 +292,28 @@ to create specific exception classes for different error conditions::
        """Exception raised for errors in the input.
 
        Attributes:
-           expression -- input expression in which the error occurred
-           message -- explanation of the error
+           expr -- input expression in which the error occurred
+           msg  -- explanation of the error
        """
 
-       def __init__(self, expression, message):
-           self.expression = expression
-           self.message = message
+       def __init__(self, expr, msg):
+           self.expr = expr
+           self.msg = msg
 
    class TransitionError(Error):
        """Raised when an operation attempts a state transition that's not
        allowed.
 
        Attributes:
-           previous -- state at beginning of transition
+           prev -- state at beginning of transition
            next -- attempted new state
-           message -- explanation of why the specific transition is not allowed
+           msg  -- explanation of why the specific transition is not allowed
        """
 
-       def __init__(self, previous, next, message):
-           self.previous = previous
+       def __init__(self, prev, next, msg):
+           self.prev = prev
            self.next = next
-           self.message = message
+           self.msg = msg
 
 Most exceptions are defined with names that end in "Error," similar to the
 naming of the standard exceptions.
@@ -326,7 +335,7 @@ example::
    >>> try:
    ...     raise KeyboardInterrupt
    ... finally:
-   ...     print('Goodbye, world!')
+   ...     print 'Goodbye, world!'
    ...
    Goodbye, world!
    Traceback (most recent call last):
@@ -341,20 +350,21 @@ occurred in the :keyword:`try` clause and has not been handled by an
 been executed.  The :keyword:`finally` clause is also executed "on the way out"
 when any other clause of the :keyword:`try` statement is left via a
 :keyword:`break`, :keyword:`continue` or :keyword:`return` statement.  A more
-complicated example::
+complicated example (having :keyword:`except` and :keyword:`finally` clauses in
+the same :keyword:`try` statement works as of Python 2.5)::
 
    >>> def divide(x, y):
    ...     try:
    ...         result = x / y
    ...     except ZeroDivisionError:
-   ...         print("division by zero!")
+   ...         print "division by zero!"
    ...     else:
-   ...         print("result is", result)
+   ...         print "result is", result
    ...     finally:
-   ...         print("executing finally clause")
+   ...         print "executing finally clause"
    ...
    >>> divide(2, 1)
-   result is 2.0
+   result is 2
    executing finally clause
    >>> divide(2, 0)
    division by zero!
@@ -387,20 +397,20 @@ succeeded or failed. Look at the following example, which tries to open a file
 and print its contents to the screen. ::
 
    for line in open("myfile.txt"):
-       print(line)
+       print line
 
 The problem with this code is that it leaves the file open for an indeterminate
-amount of time after this part of the code has finished executing.
-This is not an issue in simple scripts, but can be a problem for larger
-applications. The :keyword:`with` statement allows objects like files to be
-used in a way that ensures they are always cleaned up promptly and correctly. ::
+amount of time after the code has finished executing. This is not an issue in
+simple scripts, but can be a problem for larger applications. The
+:keyword:`with` statement allows objects like files to be used in a way that
+ensures they are always cleaned up promptly and correctly. ::
 
    with open("myfile.txt") as f:
        for line in f:
-           print(line)
+           print line
 
 After the statement is executed, the file *f* is always closed, even if a
-problem was encountered while processing the lines. Objects which, like files,
-provide predefined clean-up actions will indicate this in their documentation.
+problem was encountered while processing the lines. Other objects which provide
+predefined clean-up actions will indicate this in their documentation.
 
 

@@ -10,7 +10,6 @@
  * On OSX 10.4 (and earlier) this falls back to using exec because the
  * posix_spawnv functions aren't available there.
  */
-
 #pragma weak_import posix_spawnattr_init
 #pragma weak_import posix_spawnattr_setbinpref_np
 #pragma weak_import posix_spawnattr_setflags
@@ -27,7 +26,6 @@
 #include <err.h>
 #include <dlfcn.h>
 #include <stdlib.h>
-#include <Python.h>
 
 
 extern char** environ;
@@ -105,8 +103,8 @@ setup_spawnattr(posix_spawnattr_t* spawnattr)
 
     count = 1;
 
-    /* Run the real python executable using the same architure as this
-     * executable, this allows users to controle the architecture using
+    /* Run the real python executable using the same architecture as this
+     * executable, this allows users to control the architecture using
      * "arch -ppc python"
      */
 
@@ -160,11 +158,13 @@ main(int argc, char **argv) {
     argv[0] = exec_path;
 
 #ifdef HAVE_SPAWN_H
+
     /* We're weak-linking to posix-spawnv to ensure that
      * an executable build on 10.5 can work on 10.4.
      */
     if (posix_spawn != NULL) {
         posix_spawnattr_t spawnattr = NULL;
+
 
         setup_spawnattr(&spawnattr);
         posix_spawn(NULL, exec_path, NULL,

@@ -1,4 +1,4 @@
-# regression test for SAX 2.0
+# regression test for SAX 2.0            -*- coding: utf-8 -*-
 # $Id$
 
 from xml.sax import make_parser, ContentHandler, \
@@ -13,17 +13,12 @@ from xml.sax.saxutils import XMLGenerator, escape, unescape, quoteattr, \
 from xml.sax.expatreader import create_parser
 from xml.sax.handler import feature_namespaces
 from xml.sax.xmlreader import InputSource, AttributesImpl, AttributesNSImpl
-from io import StringIO
-from test.support import findfile, run_unittest
+from cStringIO import StringIO
+from test.test_support import findfile, run_unittest
 import unittest
 
 TEST_XMLFILE = findfile("test.xml", subdir="xmltestdata")
 TEST_XMLFILE_OUT = findfile("test.xml.out", subdir="xmltestdata")
-try:
-    TEST_XMLFILE.encode("utf8")
-    TEST_XMLFILE_OUT.encode("utf8")
-except UnicodeEncodeError:
-    raise unittest.SkipTest("filename is not encodable to utf8")
 
 ns_uri = "http://www.python.org/xml-ns/saxtest/"
 
@@ -38,12 +33,12 @@ class XmlTestBase(unittest.TestCase):
         self.assertEqual(attrs.getNames(), [])
         self.assertEqual(attrs.getQNames(), [])
         self.assertEqual(len(attrs), 0)
-        self.assertNotIn("attr", attrs)
-        self.assertEqual(list(attrs.keys()), [])
+        self.assertFalse(attrs.has_key("attr"))
+        self.assertEqual(attrs.keys(), [])
         self.assertEqual(attrs.get("attrs"), None)
         self.assertEqual(attrs.get("attrs", 25), 25)
-        self.assertEqual(list(attrs.items()), [])
-        self.assertEqual(list(attrs.values()), [])
+        self.assertEqual(attrs.items(), [])
+        self.assertEqual(attrs.values(), [])
 
     def verify_empty_nsattrs(self, attrs):
         self.assertRaises(KeyError, attrs.getValue, (ns_uri, "attr"))
@@ -55,24 +50,24 @@ class XmlTestBase(unittest.TestCase):
         self.assertEqual(attrs.getNames(), [])
         self.assertEqual(attrs.getQNames(), [])
         self.assertEqual(len(attrs), 0)
-        self.assertNotIn((ns_uri, "attr"), attrs)
-        self.assertEqual(list(attrs.keys()), [])
+        self.assertFalse(attrs.has_key((ns_uri, "attr")))
+        self.assertEqual(attrs.keys(), [])
         self.assertEqual(attrs.get((ns_uri, "attr")), None)
         self.assertEqual(attrs.get((ns_uri, "attr"), 25), 25)
-        self.assertEqual(list(attrs.items()), [])
-        self.assertEqual(list(attrs.values()), [])
+        self.assertEqual(attrs.items(), [])
+        self.assertEqual(attrs.values(), [])
 
     def verify_attrs_wattr(self, attrs):
         self.assertEqual(attrs.getLength(), 1)
         self.assertEqual(attrs.getNames(), ["attr"])
         self.assertEqual(attrs.getQNames(), ["attr"])
         self.assertEqual(len(attrs), 1)
-        self.assertIn("attr", attrs)
-        self.assertEqual(list(attrs.keys()), ["attr"])
+        self.assertTrue(attrs.has_key("attr"))
+        self.assertEqual(attrs.keys(), ["attr"])
         self.assertEqual(attrs.get("attr"), "val")
         self.assertEqual(attrs.get("attr", 25), "val")
-        self.assertEqual(list(attrs.items()), [("attr", "val")])
-        self.assertEqual(list(attrs.values()), ["val"])
+        self.assertEqual(attrs.items(), [("attr", "val")])
+        self.assertEqual(attrs.values(), ["val"])
         self.assertEqual(attrs.getValue("attr"), "val")
         self.assertEqual(attrs.getValueByQName("attr"), "val")
         self.assertEqual(attrs.getNameByQName("attr"), "attr")
@@ -171,31 +166,9 @@ class XmlgenTest(unittest.TestCase):
 
         self.assertEqual(result.getvalue(), start + "<doc></doc>")
 
-    def test_xmlgen_basic_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-        gen.startDocument()
-        gen.startElement("doc", {})
-        gen.endElement("doc")
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start + "<doc/>")
-
     def test_xmlgen_content(self):
         result = StringIO()
         gen = XMLGenerator(result)
-
-        gen.startDocument()
-        gen.startElement("doc", {})
-        gen.characters("huhei")
-        gen.endElement("doc")
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start + "<doc>huhei</doc>")
-
-    def test_xmlgen_content_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
 
         gen.startDocument()
         gen.startElement("doc", {})
@@ -262,18 +235,6 @@ class XmlgenTest(unittest.TestCase):
 
         self.assertEqual(result.getvalue(), start + "<doc> </doc>")
 
-    def test_xmlgen_ignorable_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-
-        gen.startDocument()
-        gen.startElement("doc", {})
-        gen.ignorableWhitespace(" ")
-        gen.endElement("doc")
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start + "<doc> </doc>")
-
     def test_xmlgen_ns(self):
         result = StringIO()
         gen = XMLGenerator(result)
@@ -292,24 +253,6 @@ class XmlgenTest(unittest.TestCase):
            ('<ns1:doc xmlns:ns1="%s"><udoc></udoc></ns1:doc>' %
                                          ns_uri))
 
-    def test_xmlgen_ns_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-
-        gen.startDocument()
-        gen.startPrefixMapping("ns1", ns_uri)
-        gen.startElementNS((ns_uri, "doc"), "ns1:doc", {})
-        # add an unqualified name
-        gen.startElementNS((None, "udoc"), None, {})
-        gen.endElementNS((None, "udoc"), None)
-        gen.endElementNS((ns_uri, "doc"), "ns1:doc")
-        gen.endPrefixMapping("ns1")
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start + \
-           ('<ns1:doc xmlns:ns1="%s"><udoc/></ns1:doc>' %
-                                         ns_uri))
-
     def test_1463026_1(self):
         result = StringIO()
         gen = XMLGenerator(result)
@@ -320,17 +263,6 @@ class XmlgenTest(unittest.TestCase):
         gen.endDocument()
 
         self.assertEqual(result.getvalue(), start+'<a b="c"></a>')
-
-    def test_1463026_1_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-
-        gen.startDocument()
-        gen.startElementNS((None, 'a'), 'a', {(None, 'b'):'c'})
-        gen.endElementNS((None, 'a'), 'a')
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start+'<a b="c"/>')
 
     def test_1463026_2(self):
         result = StringIO()
@@ -345,19 +277,6 @@ class XmlgenTest(unittest.TestCase):
 
         self.assertEqual(result.getvalue(), start+'<a xmlns="qux"></a>')
 
-    def test_1463026_2_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-
-        gen.startDocument()
-        gen.startPrefixMapping(None, 'qux')
-        gen.startElementNS(('qux', 'a'), 'a', {})
-        gen.endElementNS(('qux', 'a'), 'a')
-        gen.endPrefixMapping(None)
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(), start+'<a xmlns="qux"/>')
-
     def test_1463026_3(self):
         result = StringIO()
         gen = XMLGenerator(result)
@@ -371,20 +290,6 @@ class XmlgenTest(unittest.TestCase):
 
         self.assertEqual(result.getvalue(),
             start+'<my:a xmlns:my="qux" b="c"></my:a>')
-
-    def test_1463026_3_empty(self):
-        result = StringIO()
-        gen = XMLGenerator(result, short_empty_elements=True)
-
-        gen.startDocument()
-        gen.startPrefixMapping('my', 'qux')
-        gen.startElementNS(('qux', 'a'), 'a', {(None, 'b'):'c'})
-        gen.endElementNS(('qux', 'a'), 'a')
-        gen.endPrefixMapping('my')
-        gen.endDocument()
-
-        self.assertEqual(result.getvalue(),
-            start+'<my:a xmlns:my="qux" b="c"/>')
 
     def test_5027_1(self):
         # The xml prefix (as in xml:lang below) is reserved and bound by
@@ -463,8 +368,7 @@ class XMLFilterBaseTest(unittest.TestCase):
 #
 # ===========================================================================
 
-with open(TEST_XMLFILE_OUT) as f:
-    xml_test_out = f.read()
+xml_test_out = open(TEST_XMLFILE_OUT).read()
 
 class ExpatReaderTest(XmlTestBase):
 
@@ -476,8 +380,7 @@ class ExpatReaderTest(XmlTestBase):
         xmlgen = XMLGenerator(result)
 
         parser.setContentHandler(xmlgen)
-        with open(TEST_XMLFILE) as f:
-            parser.parse(f)
+        parser.parse(open(TEST_XMLFILE))
 
         self.assertEqual(result.getvalue(), xml_test_out)
 
@@ -590,11 +493,11 @@ class ExpatReaderTest(XmlTestBase):
         self.assertTrue((attrs.getQNames() == [] or
                          attrs.getQNames() == ["ns:attr"]))
         self.assertEqual(len(attrs), 1)
-        self.assertIn((ns_uri, "attr"), attrs)
+        self.assertTrue(attrs.has_key((ns_uri, "attr")))
         self.assertEqual(attrs.get((ns_uri, "attr")), "val")
         self.assertEqual(attrs.get((ns_uri, "attr"), 25), "val")
-        self.assertEqual(list(attrs.items()), [((ns_uri, "attr"), "val")])
-        self.assertEqual(list(attrs.values()), ["val"])
+        self.assertEqual(attrs.items(), [((ns_uri, "attr"), "val")])
+        self.assertEqual(attrs.values(), ["val"])
         self.assertEqual(attrs.getValue((ns_uri, "attr")), "val")
         self.assertEqual(attrs[(ns_uri, "attr")], "val")
 
@@ -627,9 +530,8 @@ class ExpatReaderTest(XmlTestBase):
 
         parser.setContentHandler(xmlgen)
         inpsrc = InputSource()
-        with open(TEST_XMLFILE) as f:
-            inpsrc.setByteStream(f)
-            parser.parse(inpsrc)
+        inpsrc.setByteStream(open(TEST_XMLFILE))
+        parser.parse(inpsrc)
 
         self.assertEqual(result.getvalue(), xml_test_out)
 
@@ -712,7 +614,7 @@ class ErrorReportingTest(unittest.TestCase):
         try:
             parser.parse(source)
             self.fail()
-        except SAXException as e:
+        except SAXException, e:
             self.assertEqual(e.getSystemId(), name)
 
     def test_expat_incomplete(self):
@@ -781,12 +683,12 @@ class XmlReaderTest(XmlTestBase):
         self.assertEqual(attrs.getNames(), [(ns_uri, "attr")])
         self.assertEqual(attrs.getQNames(), ["ns:attr"])
         self.assertEqual(len(attrs), 1)
-        self.assertIn((ns_uri, "attr"), attrs)
-        self.assertEqual(list(attrs.keys()), [(ns_uri, "attr")])
+        self.assertTrue(attrs.has_key((ns_uri, "attr")))
+        self.assertEqual(attrs.keys(), [(ns_uri, "attr")])
         self.assertEqual(attrs.get((ns_uri, "attr")), "val")
         self.assertEqual(attrs.get((ns_uri, "attr"), 25), "val")
-        self.assertEqual(list(attrs.items()), [((ns_uri, "attr"), "val")])
-        self.assertEqual(list(attrs.values()), ["val"])
+        self.assertEqual(attrs.items(), [((ns_uri, "attr"), "val")])
+        self.assertEqual(attrs.values(), ["val"])
         self.assertEqual(attrs.getValue((ns_uri, "attr")), "val")
         self.assertEqual(attrs.getValueByQName("ns:attr"), "val")
         self.assertEqual(attrs.getNameByQName("ns:attr"), (ns_uri, "attr"))
@@ -821,7 +723,7 @@ class XmlReaderTest(XmlTestBase):
         # Bug report: http://www.python.org/sf/1511497
         import sys
         old_modules = sys.modules.copy()
-        for modname in list(sys.modules.keys()):
+        for modname in sys.modules.keys():
             if modname.startswith("xml."):
                 del sys.modules[modname]
         try:

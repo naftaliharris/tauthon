@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """ Utility for parsing HTML entity definitions available from:
 
       http://www.w3.org/ as e.g.
@@ -35,8 +35,9 @@ def parse(text,pos=0,endpos=None):
 def writefile(f,defs):
 
     f.write("entitydefs = {\n")
-    items = sorted(defs.items())
-    for name, (charcode,comment) in items:
+    items = defs.items()
+    items.sort()
+    for name,(charcode,comment) in items:
         if charcode[:2] == '&#':
             code = int(charcode[2:-1])
             if code < 256:

@@ -52,7 +52,7 @@ from multiprocessing import TimeoutError, cpu_count
 from multiprocessing.dummy.connection import Pipe
 from threading import Lock, RLock, Semaphore, BoundedSemaphore
 from threading import Event
-from queue import Queue
+from Queue import Queue
 
 #
 #
@@ -70,7 +70,8 @@ class DummyProcess(threading.Thread):
     def start(self):
         assert self._parent is current_process()
         self._start_called = True
-        self._parent._children[self] = None
+        if hasattr(self._parent, '_children'):
+            self._parent._children[self] = None
         threading.Thread.start(self)
 
     @property
@@ -85,11 +86,7 @@ class DummyProcess(threading.Thread):
 #
 
 class Condition(threading._Condition):
-    # XXX
-    if sys.version_info < (3, 0):
-        notify_all = threading._Condition.notify_all.__func__
-    else:
-        notify_all = threading._Condition.notify_all
+    notify_all = threading._Condition.notify_all.im_func
 
 #
 #
@@ -117,7 +114,7 @@ class Namespace(object):
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
     def __repr__(self):
-        items = list(self.__dict__.items())
+        items = self.__dict__.items()
         temp = []
         for name, value in items:
             if not name.startswith('_'):

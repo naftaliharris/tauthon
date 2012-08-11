@@ -27,11 +27,8 @@
 /* Modified to support --help and --version, as well as /? on Windows
  * by Georg Brandl. */
 
-#include <Python.h>
 #include <stdio.h>
 #include <string.h>
-#include <wchar.h>
-#include <pygetopt.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,40 +36,48 @@ extern "C" {
 
 int _PyOS_opterr = 1;          /* generate error messages */
 int _PyOS_optind = 1;          /* index into argv array   */
-wchar_t *_PyOS_optarg = NULL;     /* optional argument       */
+char *_PyOS_optarg = NULL;     /* optional argument       */
+static char *opt_ptr = "";
 
-int _PyOS_GetOpt(int argc, wchar_t **argv, wchar_t *optstring)
+void _PyOS_ResetGetOpt(void)
 {
-    static wchar_t *opt_ptr = L"";
-    wchar_t *ptr;
-    wchar_t option;
+    _PyOS_opterr = 1;
+    _PyOS_optind = 1;
+    _PyOS_optarg = NULL;
+    opt_ptr = "";
+}
+
+int _PyOS_GetOpt(int argc, char **argv, char *optstring)
+{
+    char *ptr;
+    int option;
 
     if (*opt_ptr == '\0') {
 
         if (_PyOS_optind >= argc)
             return -1;
 #ifdef MS_WINDOWS
-        else if (wcscmp(argv[_PyOS_optind], L"/?") == 0) {
+        else if (strcmp(argv[_PyOS_optind], "/?") == 0) {
             ++_PyOS_optind;
             return 'h';
         }
 #endif
 
-        else if (argv[_PyOS_optind][0] != L'-' ||
-                 argv[_PyOS_optind][1] == L'\0' /* lone dash */ )
+        else if (argv[_PyOS_optind][0] != '-' ||
+                 argv[_PyOS_optind][1] == '\0' /* lone dash */ )
             return -1;
 
-        else if (wcscmp(argv[_PyOS_optind], L"--") == 0) {
+        else if (strcmp(argv[_PyOS_optind], "--") == 0) {
             ++_PyOS_optind;
             return -1;
         }
 
-        else if (wcscmp(argv[_PyOS_optind], L"--help") == 0) {
+        else if (strcmp(argv[_PyOS_optind], "--help") == 0) {
             ++_PyOS_optind;
             return 'h';
         }
 
-        else if (wcscmp(argv[_PyOS_optind], L"--version") == 0) {
+        else if (strcmp(argv[_PyOS_optind], "--version") == 0) {
             ++_PyOS_optind;
             return 'V';
         }
@@ -81,7 +86,7 @@ int _PyOS_GetOpt(int argc, wchar_t **argv, wchar_t *optstring)
         opt_ptr = &argv[_PyOS_optind++][1];
     }
 
-    if ( (option = *opt_ptr++) == L'\0')
+    if ( (option = *opt_ptr++) == '\0')
         return -1;
 
     if (option == 'J') {
@@ -89,24 +94,30 @@ int _PyOS_GetOpt(int argc, wchar_t **argv, wchar_t *optstring)
         return '_';
     }
 
-    if ((ptr = wcschr(optstring, option)) == NULL) {
+    if (option == 'X') {
+        fprintf(stderr,
+          "-X is reserved for implementation-specific arguments\n");
+        return '_';
+    }
+
+    if ((ptr = strchr(optstring, option)) == NULL) {
         if (_PyOS_opterr)
-          fprintf(stderr, "Unknown option: -%c\n", (char)option);
+            fprintf(stderr, "Unknown option: -%c\n", option);
 
         return '_';
     }
 
-    if (*(ptr + 1) == L':') {
-        if (*opt_ptr != L'\0') {
+    if (*(ptr + 1) == ':') {
+        if (*opt_ptr != '\0') {
             _PyOS_optarg  = opt_ptr;
-            opt_ptr = L"";
+            opt_ptr = "";
         }
 
         else {
             if (_PyOS_optind >= argc) {
                 if (_PyOS_opterr)
                     fprintf(stderr,
-                        "Argument expected for the -%c option\n", (char)option);
+                "Argument expected for the -%c option\n", option);
                 return '_';
             }
 

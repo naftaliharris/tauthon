@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Copy one file's atime and mtime to another
 
@@ -7,7 +7,7 @@ import os
 from stat import ST_ATIME, ST_MTIME # Really constants 7 and 8
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) <> 3:
         sys.stderr.write('usage: copytime source destination\n')
         sys.exit(2)
     file1, file2 = sys.argv[1], sys.argv[2]

@@ -1,6 +1,7 @@
 """Create portable serialized representations of Python objects.
 
-See module copyreg for a mechanism for registering custom picklers.
+See module cPickle for a (much) faster implementation.
+See module copy_reg for a mechanism for registering custom picklers.
 See module pickletools source for extensive comments.
 
 Classes:
@@ -23,42 +24,31 @@ Misc variables:
 
 """
 
-__version__ = "$Revision$"       # Code version
+__version__ = "$Revision: 72223 $"       # Code version
 
-from types import FunctionType, BuiltinFunctionType
-from copyreg import dispatch_table
-from copyreg import _extension_registry, _inverted_registry, _extension_cache
+from types import *
+from copy_reg import dispatch_table
+from copy_reg import _extension_registry, _inverted_registry, _extension_cache
 import marshal
 import sys
 import struct
 import re
-import io
-import codecs
-import _compat_pickle
 
 __all__ = ["PickleError", "PicklingError", "UnpicklingError", "Pickler",
            "Unpickler", "dump", "dumps", "load", "loads"]
 
-# Shortcut for use in isinstance testing
-bytes_types = (bytes, bytearray)
-
 # These are purely informational; no code uses these.
-format_version = "3.0"                  # File format version we write
+format_version = "2.0"                  # File format version we write
 compatible_formats = ["1.0",            # Original protocol 0
                       "1.1",            # Protocol 0 with INST added
                       "1.2",            # Original protocol 1
                       "1.3",            # Protocol 1 with BINFLOAT added
                       "2.0",            # Protocol 2
-                      "3.0",            # Protocol 3
                       ]                 # Old format versions we can read
 
-# This is the highest protocol number we know how to read.
-HIGHEST_PROTOCOL = 3
-
-# The protocol we write by default.  May be less than HIGHEST_PROTOCOL.
-# We intentionally write a protocol that Python 2.x cannot read;
-# there are too many issues with that.
-DEFAULT_PROTOCOL = 3
+# Keep in synch with cPickle.  This is the highest protocol number we
+# know how to read.
+HIGHEST_PROTOCOL = 2
 
 # Why use struct.pack() for pickling but marshal.loads() for
 # unpickling?  struct.pack() is 40% faster than marshal.dumps(), but
@@ -99,120 +89,122 @@ try:
 except ImportError:
     PyStringMap = None
 
+# UnicodeType may or may not be exported (normally imported from types)
+try:
+    UnicodeType
+except NameError:
+    UnicodeType = None
+
 # Pickle opcodes.  See pickletools.py for extensive docs.  The listing
 # here is in kind-of alphabetical order of 1-character pickle code.
 # pickletools groups them by purpose.
 
-MARK           = b'('   # push special markobject on stack
-STOP           = b'.'   # every pickle ends with STOP
-POP            = b'0'   # discard topmost stack item
-POP_MARK       = b'1'   # discard stack top through topmost markobject
-DUP            = b'2'   # duplicate top stack item
-FLOAT          = b'F'   # push float object; decimal string argument
-INT            = b'I'   # push integer or bool; decimal string argument
-BININT         = b'J'   # push four-byte signed int
-BININT1        = b'K'   # push 1-byte unsigned int
-LONG           = b'L'   # push long; decimal string argument
-BININT2        = b'M'   # push 2-byte unsigned int
-NONE           = b'N'   # push None
-PERSID         = b'P'   # push persistent object; id is taken from string arg
-BINPERSID      = b'Q'   #  "       "         "  ;  "  "   "     "  stack
-REDUCE         = b'R'   # apply callable to argtuple, both on stack
-STRING         = b'S'   # push string; NL-terminated string argument
-BINSTRING      = b'T'   # push string; counted binary string argument
-SHORT_BINSTRING= b'U'   #  "     "   ;    "      "       "      " < 256 bytes
-UNICODE        = b'V'   # push Unicode string; raw-unicode-escaped'd argument
-BINUNICODE     = b'X'   #   "     "       "  ; counted UTF-8 string argument
-APPEND         = b'a'   # append stack top to list below it
-BUILD          = b'b'   # call __setstate__ or __dict__.update()
-GLOBAL         = b'c'   # push self.find_class(modname, name); 2 string args
-DICT           = b'd'   # build a dict from stack items
-EMPTY_DICT     = b'}'   # push empty dict
-APPENDS        = b'e'   # extend list on stack by topmost stack slice
-GET            = b'g'   # push item from memo on stack; index is string arg
-BINGET         = b'h'   #   "    "    "    "   "   "  ;   "    " 1-byte arg
-INST           = b'i'   # build & push class instance
-LONG_BINGET    = b'j'   # push item from memo on stack; index is 4-byte arg
-LIST           = b'l'   # build list from topmost stack items
-EMPTY_LIST     = b']'   # push empty list
-OBJ            = b'o'   # build & push class instance
-PUT            = b'p'   # store stack top in memo; index is string arg
-BINPUT         = b'q'   #   "     "    "   "   " ;   "    " 1-byte arg
-LONG_BINPUT    = b'r'   #   "     "    "   "   " ;   "    " 4-byte arg
-SETITEM        = b's'   # add key+value pair to dict
-TUPLE          = b't'   # build tuple from topmost stack items
-EMPTY_TUPLE    = b')'   # push empty tuple
-SETITEMS       = b'u'   # modify dict by adding topmost key+value pairs
-BINFLOAT       = b'G'   # push float; arg is 8-byte float encoding
+MARK            = '('   # push special markobject on stack
+STOP            = '.'   # every pickle ends with STOP
+POP             = '0'   # discard topmost stack item
+POP_MARK        = '1'   # discard stack top through topmost markobject
+DUP             = '2'   # duplicate top stack item
+FLOAT           = 'F'   # push float object; decimal string argument
+INT             = 'I'   # push integer or bool; decimal string argument
+BININT          = 'J'   # push four-byte signed int
+BININT1         = 'K'   # push 1-byte unsigned int
+LONG            = 'L'   # push long; decimal string argument
+BININT2         = 'M'   # push 2-byte unsigned int
+NONE            = 'N'   # push None
+PERSID          = 'P'   # push persistent object; id is taken from string arg
+BINPERSID       = 'Q'   #  "       "         "  ;  "  "   "     "  stack
+REDUCE          = 'R'   # apply callable to argtuple, both on stack
+STRING          = 'S'   # push string; NL-terminated string argument
+BINSTRING       = 'T'   # push string; counted binary string argument
+SHORT_BINSTRING = 'U'   #  "     "   ;    "      "       "      " < 256 bytes
+UNICODE         = 'V'   # push Unicode string; raw-unicode-escaped'd argument
+BINUNICODE      = 'X'   #   "     "       "  ; counted UTF-8 string argument
+APPEND          = 'a'   # append stack top to list below it
+BUILD           = 'b'   # call __setstate__ or __dict__.update()
+GLOBAL          = 'c'   # push self.find_class(modname, name); 2 string args
+DICT            = 'd'   # build a dict from stack items
+EMPTY_DICT      = '}'   # push empty dict
+APPENDS         = 'e'   # extend list on stack by topmost stack slice
+GET             = 'g'   # push item from memo on stack; index is string arg
+BINGET          = 'h'   #   "    "    "    "   "   "  ;   "    " 1-byte arg
+INST            = 'i'   # build & push class instance
+LONG_BINGET     = 'j'   # push item from memo on stack; index is 4-byte arg
+LIST            = 'l'   # build list from topmost stack items
+EMPTY_LIST      = ']'   # push empty list
+OBJ             = 'o'   # build & push class instance
+PUT             = 'p'   # store stack top in memo; index is string arg
+BINPUT          = 'q'   #   "     "    "   "   " ;   "    " 1-byte arg
+LONG_BINPUT     = 'r'   #   "     "    "   "   " ;   "    " 4-byte arg
+SETITEM         = 's'   # add key+value pair to dict
+TUPLE           = 't'   # build tuple from topmost stack items
+EMPTY_TUPLE     = ')'   # push empty tuple
+SETITEMS        = 'u'   # modify dict by adding topmost key+value pairs
+BINFLOAT        = 'G'   # push float; arg is 8-byte float encoding
 
-TRUE           = b'I01\n'  # not an opcode; see INT docs in pickletools.py
-FALSE          = b'I00\n'  # not an opcode; see INT docs in pickletools.py
+TRUE            = 'I01\n'  # not an opcode; see INT docs in pickletools.py
+FALSE           = 'I00\n'  # not an opcode; see INT docs in pickletools.py
 
 # Protocol 2
 
-PROTO          = b'\x80'  # identify pickle protocol
-NEWOBJ         = b'\x81'  # build object by applying cls.__new__ to argtuple
-EXT1           = b'\x82'  # push object from extension registry; 1-byte index
-EXT2           = b'\x83'  # ditto, but 2-byte index
-EXT4           = b'\x84'  # ditto, but 4-byte index
-TUPLE1         = b'\x85'  # build 1-tuple from stack top
-TUPLE2         = b'\x86'  # build 2-tuple from two topmost stack items
-TUPLE3         = b'\x87'  # build 3-tuple from three topmost stack items
-NEWTRUE        = b'\x88'  # push True
-NEWFALSE       = b'\x89'  # push False
-LONG1          = b'\x8a'  # push long from < 256 bytes
-LONG4          = b'\x8b'  # push really big long
+PROTO           = '\x80'  # identify pickle protocol
+NEWOBJ          = '\x81'  # build object by applying cls.__new__ to argtuple
+EXT1            = '\x82'  # push object from extension registry; 1-byte index
+EXT2            = '\x83'  # ditto, but 2-byte index
+EXT4            = '\x84'  # ditto, but 4-byte index
+TUPLE1          = '\x85'  # build 1-tuple from stack top
+TUPLE2          = '\x86'  # build 2-tuple from two topmost stack items
+TUPLE3          = '\x87'  # build 3-tuple from three topmost stack items
+NEWTRUE         = '\x88'  # push True
+NEWFALSE        = '\x89'  # push False
+LONG1           = '\x8a'  # push long from < 256 bytes
+LONG4           = '\x8b'  # push really big long
 
 _tuplesize2code = [EMPTY_TUPLE, TUPLE1, TUPLE2, TUPLE3]
 
-# Protocol 3 (Python 3.x)
-
-BINBYTES       = b'B'   # push bytes; counted binary string argument
-SHORT_BINBYTES = b'C'   #  "     "   ;    "      "       "      " < 256 bytes
 
 __all__.extend([x for x in dir() if re.match("[A-Z][A-Z0-9_]+$",x)])
+del x
+
 
 # Pickling machinery
 
-class _Pickler:
+class Pickler:
 
-    def __init__(self, file, protocol=None, *, fix_imports=True):
-        """This takes a binary file for writing a pickle data stream.
+    def __init__(self, file, protocol=None):
+        """This takes a file-like object for writing a pickle data stream.
 
         The optional protocol argument tells the pickler to use the
-        given protocol; supported protocols are 0, 1, 2, 3.  The default
-        protocol is 3; a backward-incompatible protocol designed for
-        Python 3.0.
+        given protocol; supported protocols are 0, 1, 2.  The default
+        protocol is 0, to be backwards compatible.  (Protocol 0 is the
+        only protocol that can be written to a file opened in text
+        mode and read back successfully.  When using a protocol higher
+        than 0, make sure the file is opened in binary mode, both when
+        pickling and unpickling.)
+
+        Protocol 1 is more efficient than protocol 0; protocol 2 is
+        more efficient than protocol 1.
 
         Specifying a negative protocol version selects the highest
         protocol version supported.  The higher the protocol used, the
         more recent the version of Python needed to read the pickle
         produced.
 
-        The file argument must have a write() method that accepts a single
-        bytes argument. It can thus be a file object opened for binary
-        writing, a io.BytesIO instance, or any other custom object that
-        meets this interface.
+        The file parameter must have a write() method that accepts a single
+        string argument.  It can thus be an open file object, a StringIO
+        object, or any other custom object that meets this interface.
 
-        If fix_imports is True and protocol is less than 3, pickle will try to
-        map the new Python 3.x names to the old module names used in Python
-        2.x, so that the pickle data stream is readable with Python 2.x.
         """
         if protocol is None:
-            protocol = DEFAULT_PROTOCOL
+            protocol = 0
         if protocol < 0:
             protocol = HIGHEST_PROTOCOL
         elif not 0 <= protocol <= HIGHEST_PROTOCOL:
             raise ValueError("pickle protocol must be <= %d" % HIGHEST_PROTOCOL)
-        try:
-            self.write = file.write
-        except AttributeError:
-            raise TypeError("file must have a 'write' attribute")
+        self.write = file.write
         self.memo = {}
         self.proto = int(protocol)
         self.bin = protocol >= 1
         self.fast = 0
-        self.fix_imports = fix_imports and protocol < 3
 
     def clear_memo(self):
         """Clears the pickler's "memo".
@@ -227,13 +219,8 @@ class _Pickler:
 
     def dump(self, obj):
         """Write a pickled representation of obj to the open file."""
-        # Check whether Pickler was initialized correctly. This is
-        # only needed to mimic the behavior of _pickle.Pickler.dump().
-        if not hasattr(self, "write"):
-            raise PicklingError("Pickler.__init__() was not called by "
-                                "%s.__init__()" % (self.__class__.__name__,))
         if self.proto >= 2:
-            self.write(PROTO + bytes([self.proto]))
+            self.write(PROTO + chr(self.proto))
         self.save(obj)
         self.write(STOP)
 
@@ -263,26 +250,26 @@ class _Pickler:
     def put(self, i, pack=struct.pack):
         if self.bin:
             if i < 256:
-                return BINPUT + bytes([i])
+                return BINPUT + chr(i)
             else:
                 return LONG_BINPUT + pack("<i", i)
 
-        return PUT + repr(i).encode("ascii") + b'\n'
+        return PUT + repr(i) + '\n'
 
     # Return a GET (BINGET, LONG_BINGET) opcode string, with argument i.
     def get(self, i, pack=struct.pack):
         if self.bin:
             if i < 256:
-                return BINGET + bytes([i])
+                return BINGET + chr(i)
             else:
                 return LONG_BINGET + pack("<i", i)
 
-        return GET + repr(i).encode("ascii") + b'\n'
+        return GET + repr(i) + '\n'
 
-    def save(self, obj, save_persistent_id=True):
+    def save(self, obj):
         # Check for persistent id (defined by a subclass)
         pid = self.persistent_id(obj)
-        if pid is not None and save_persistent_id:
+        if pid:
             self.save_pers(pid)
             return
 
@@ -299,20 +286,20 @@ class _Pickler:
             f(self, obj) # Call unbound method with explicit self
             return
 
-        # Check for a class with a custom metaclass; treat as regular class
-        try:
-            issc = issubclass(t, type)
-        except TypeError: # t is not a class (old Boost; see SF #502085)
-            issc = 0
-        if issc:
-            self.save_global(obj)
-            return
-
-        # Check copyreg.dispatch_table
+        # Check copy_reg.dispatch_table
         reduce = dispatch_table.get(t)
         if reduce:
             rv = reduce(obj)
         else:
+            # Check for a class with a custom metaclass; treat as regular class
+            try:
+                issc = issubclass(t, TypeType)
+            except TypeError: # t is not a class (old Boost; see SF #502085)
+                issc = 0
+            if issc:
+                self.save_global(obj)
+                return
+
             # Check for a __reduce_ex__ method, fall back to __reduce__
             reduce = getattr(obj, "__reduce_ex__", None)
             if reduce:
@@ -326,12 +313,12 @@ class _Pickler:
                                         (t.__name__, obj))
 
         # Check for string returned by reduce(), meaning "save as global"
-        if isinstance(rv, str):
+        if type(rv) is StringType:
             self.save_global(obj, rv)
             return
 
         # Assert that reduce() returned a tuple
-        if not isinstance(rv, tuple):
+        if type(rv) is not TupleType:
             raise PicklingError("%s must return string or tuple" % reduce)
 
         # Assert that it returned an appropriately sized tuple
@@ -350,22 +337,22 @@ class _Pickler:
     def save_pers(self, pid):
         # Save a persistent id reference
         if self.bin:
-            self.save(pid, save_persistent_id=False)
+            self.save(pid)
             self.write(BINPERSID)
         else:
-            self.write(PERSID + str(pid).encode("ascii") + b'\n')
+            self.write(PERSID + str(pid) + '\n')
 
     def save_reduce(self, func, args, state=None,
                     listitems=None, dictitems=None, obj=None):
         # This API is called by some subclasses
 
-        # Assert that args is a tuple
-        if not isinstance(args, tuple):
-            raise PicklingError("args from save_reduce() should be a tuple")
+        # Assert that args is a tuple or None
+        if not isinstance(args, TupleType):
+            raise PicklingError("args from reduce() should be a tuple")
 
         # Assert that func is callable
         if not hasattr(func, '__call__'):
-            raise PicklingError("func from save_reduce() should be callable")
+            raise PicklingError("func from reduce should be callable")
 
         save = self.save
         write = self.write
@@ -438,7 +425,7 @@ class _Pickler:
 
     def save_none(self, obj):
         self.write(NONE)
-    dispatch[type(None)] = save_none
+    dispatch[NoneType] = save_none
 
     def save_bool(self, obj):
         if self.proto >= 2:
@@ -447,7 +434,7 @@ class _Pickler:
             self.write(obj and TRUE or FALSE)
     dispatch[bool] = save_bool
 
-    def save_long(self, obj, pack=struct.pack):
+    def save_int(self, obj, pack=struct.pack):
         if self.bin:
             # If the int is small enough to fit in a signed 4-byte 2's-comp
             # format, we can store it more efficiently than the general
@@ -455,10 +442,10 @@ class _Pickler:
             # First one- and two-byte unsigned ints:
             if obj >= 0:
                 if obj <= 0xff:
-                    self.write(BININT1 + bytes([obj]))
+                    self.write(BININT1 + chr(obj))
                     return
                 if obj <= 0xffff:
-                    self.write(BININT2 + bytes([obj&0xff, obj>>8]))
+                    self.write("%c%c%c" % (BININT2, obj&0xff, obj>>8))
                     return
             # Next check for 4-byte signed ints:
             high_bits = obj >> 31  # note that Python shift sign-extends
@@ -467,48 +454,80 @@ class _Pickler:
                 # fits in a 4-byte signed int.
                 self.write(BININT + pack("<i", obj))
                 return
+        # Text pickle, or int too big to fit in signed 4-byte format.
+        self.write(INT + repr(obj) + '\n')
+    dispatch[IntType] = save_int
+
+    def save_long(self, obj, pack=struct.pack):
         if self.proto >= 2:
-            encoded = encode_long(obj)
-            n = len(encoded)
+            bytes = encode_long(obj)
+            n = len(bytes)
             if n < 256:
-                self.write(LONG1 + bytes([n]) + encoded)
+                self.write(LONG1 + chr(n) + bytes)
             else:
-                self.write(LONG4 + pack("<i", n) + encoded)
+                self.write(LONG4 + pack("<i", n) + bytes)
             return
-        self.write(LONG + repr(obj).encode("ascii") + b'L\n')
-    dispatch[int] = save_long
+        self.write(LONG + repr(obj) + '\n')
+    dispatch[LongType] = save_long
 
     def save_float(self, obj, pack=struct.pack):
         if self.bin:
             self.write(BINFLOAT + pack('>d', obj))
         else:
-            self.write(FLOAT + repr(obj).encode("ascii") + b'\n')
-    dispatch[float] = save_float
+            self.write(FLOAT + repr(obj) + '\n')
+    dispatch[FloatType] = save_float
 
-    def save_bytes(self, obj, pack=struct.pack):
-        if self.proto < 3:
-            self.save_reduce(bytes, (list(obj),), obj=obj)
-            return
-        n = len(obj)
-        if n < 256:
-            self.write(SHORT_BINBYTES + bytes([n]) + bytes(obj))
-        else:
-            self.write(BINBYTES + pack("<i", n) + bytes(obj))
-        self.memoize(obj)
-    dispatch[bytes] = save_bytes
-
-    def save_str(self, obj, pack=struct.pack):
+    def save_string(self, obj, pack=struct.pack):
         if self.bin:
-            encoded = obj.encode('utf-8', 'surrogatepass')
-            n = len(encoded)
-            self.write(BINUNICODE + pack("<i", n) + encoded)
+            n = len(obj)
+            if n < 256:
+                self.write(SHORT_BINSTRING + chr(n) + obj)
+            else:
+                self.write(BINSTRING + pack("<i", n) + obj)
+        else:
+            self.write(STRING + repr(obj) + '\n')
+        self.memoize(obj)
+    dispatch[StringType] = save_string
+
+    def save_unicode(self, obj, pack=struct.pack):
+        if self.bin:
+            encoding = obj.encode('utf-8')
+            n = len(encoding)
+            self.write(BINUNICODE + pack("<i", n) + encoding)
         else:
             obj = obj.replace("\\", "\\u005c")
             obj = obj.replace("\n", "\\u000a")
-            self.write(UNICODE + bytes(obj.encode('raw-unicode-escape')) +
-                       b'\n')
+            self.write(UNICODE + obj.encode('raw-unicode-escape') + '\n')
         self.memoize(obj)
-    dispatch[str] = save_str
+    dispatch[UnicodeType] = save_unicode
+
+    if StringType is UnicodeType:
+        # This is true for Jython
+        def save_string(self, obj, pack=struct.pack):
+            unicode = obj.isunicode()
+
+            if self.bin:
+                if unicode:
+                    obj = obj.encode("utf-8")
+                l = len(obj)
+                if l < 256 and not unicode:
+                    self.write(SHORT_BINSTRING + chr(l) + obj)
+                else:
+                    s = pack("<i", l)
+                    if unicode:
+                        self.write(BINUNICODE + s + obj)
+                    else:
+                        self.write(BINSTRING + s + obj)
+            else:
+                if unicode:
+                    obj = obj.replace("\\", "\\u005c")
+                    obj = obj.replace("\n", "\\u000a")
+                    obj = obj.encode('raw-unicode-escape')
+                    self.write(UNICODE + obj + '\n')
+                else:
+                    self.write(STRING + repr(obj) + '\n')
+            self.memoize(obj)
+        dispatch[StringType] = save_string
 
     def save_tuple(self, obj):
         write = self.write
@@ -561,7 +580,13 @@ class _Pickler:
         self.write(TUPLE)
         self.memoize(obj)
 
-    dispatch[tuple] = save_tuple
+    dispatch[TupleType] = save_tuple
+
+    # save_empty_tuple() isn't used by anything in Python 2.3.  However, I
+    # found a Pickler subclass in Zope3 that calls it, so it's not harmless
+    # to remove it.
+    def save_empty_tuple(self, obj):
+        self.write(EMPTY_TUPLE)
 
     def save_list(self, obj):
         write = self.write
@@ -572,10 +597,12 @@ class _Pickler:
             write(MARK + LIST)
 
         self.memoize(obj)
-        self._batch_appends(obj)
+        self._batch_appends(iter(obj))
 
-    dispatch[list] = save_list
+    dispatch[ListType] = save_list
 
+    # Keep in synch with cPickle's BATCHSIZE.  Nothing will break if it gets
+    # out of synch, though.
     _BATCHSIZE = 1000
 
     def _batch_appends(self, items):
@@ -589,13 +616,12 @@ class _Pickler:
                 write(APPEND)
             return
 
-        items = iter(items)
-        r = range(self._BATCHSIZE)
+        r = xrange(self._BATCHSIZE)
         while items is not None:
             tmp = []
             for i in r:
                 try:
-                    x = next(items)
+                    x = items.next()
                     tmp.append(x)
                 except StopIteration:
                     items = None
@@ -620,10 +646,10 @@ class _Pickler:
             write(MARK + DICT)
 
         self.memoize(obj)
-        self._batch_setitems(obj.items())
+        self._batch_setitems(obj.iteritems())
 
-    dispatch[dict] = save_dict
-    if PyStringMap is not None:
+    dispatch[DictionaryType] = save_dict
+    if not PyStringMap is None:
         dispatch[PyStringMap] = save_dict
 
     def _batch_setitems(self, items):
@@ -638,13 +664,12 @@ class _Pickler:
                 write(SETITEM)
             return
 
-        items = iter(items)
-        r = range(self._BATCHSIZE)
+        r = xrange(self._BATCHSIZE)
         while items is not None:
             tmp = []
             for i in r:
                 try:
-                    tmp.append(next(items))
+                    tmp.append(items.next())
                 except StopIteration:
                     items = None
                     break
@@ -662,6 +687,46 @@ class _Pickler:
                 write(SETITEM)
             # else tmp is empty, and we're done
 
+    def save_inst(self, obj):
+        cls = obj.__class__
+
+        memo  = self.memo
+        write = self.write
+        save  = self.save
+
+        if hasattr(obj, '__getinitargs__'):
+            args = obj.__getinitargs__()
+            len(args) # XXX Assert it's a sequence
+            _keep_alive(args, memo)
+        else:
+            args = ()
+
+        write(MARK)
+
+        if self.bin:
+            save(cls)
+            for arg in args:
+                save(arg)
+            write(OBJ)
+        else:
+            for arg in args:
+                save(arg)
+            write(INST + cls.__module__ + '\n' + cls.__name__ + '\n')
+
+        self.memoize(obj)
+
+        try:
+            getstate = obj.__getstate__
+        except AttributeError:
+            stuff = obj.__dict__
+        else:
+            stuff = getstate()
+            _keep_alive(stuff, memo)
+        save(stuff)
+        write(BUILD)
+
+    dispatch[InstanceType] = save_inst
+
     def save_global(self, obj, name=None, pack=struct.pack):
         write = self.write
         memo = self.memo
@@ -674,7 +739,7 @@ class _Pickler:
             module = whichmodule(obj, name)
 
         try:
-            __import__(module, level=0)
+            __import__(module)
             mod = sys.modules[module]
             klass = getattr(mod, name)
         except (ImportError, KeyError, AttributeError):
@@ -692,35 +757,20 @@ class _Pickler:
             if code:
                 assert code > 0
                 if code <= 0xff:
-                    write(EXT1 + bytes([code]))
+                    write(EXT1 + chr(code))
                 elif code <= 0xffff:
-                    write(EXT2 + bytes([code&0xff, code>>8]))
+                    write("%c%c%c" % (EXT2, code&0xff, code>>8))
                 else:
                     write(EXT4 + pack("<i", code))
                 return
-        # Non-ASCII identifiers are supported only with protocols >= 3.
-        if self.proto >= 3:
-            write(GLOBAL + bytes(module, "utf-8") + b'\n' +
-                  bytes(name, "utf-8") + b'\n')
-        else:
-            if self.fix_imports:
-                if (module, name) in _compat_pickle.REVERSE_NAME_MAPPING:
-                    module, name = _compat_pickle.REVERSE_NAME_MAPPING[(module, name)]
-                if module in _compat_pickle.REVERSE_IMPORT_MAPPING:
-                    module = _compat_pickle.REVERSE_IMPORT_MAPPING[module]
-            try:
-                write(GLOBAL + bytes(module, "ascii") + b'\n' +
-                      bytes(name, "ascii") + b'\n')
-            except UnicodeEncodeError:
-                raise PicklingError(
-                    "can't pickle global identifier '%s.%s' using "
-                    "pickle protocol %i" % (module, name, self.proto))
 
+        write(GLOBAL + module + '\n' + name + '\n')
         self.memoize(obj)
 
+    dispatch[ClassType] = save_global
     dispatch[FunctionType] = save_global
     dispatch[BuiltinFunctionType] = save_global
-    dispatch[type] = save_global
+    dispatch[TypeType] = save_global
 
 # Pickling helpers
 
@@ -761,7 +811,7 @@ def whichmodule(func, funcname):
     if func in classmap:
         return classmap[func]
 
-    for name, module in list(sys.modules.items()):
+    for name, module in sys.modules.items():
         if module is None:
             continue # skip dummy package entries
         if name != '__main__' and getattr(module, funcname, None) is func:
@@ -774,48 +824,29 @@ def whichmodule(func, funcname):
 
 # Unpickling machinery
 
-class _Unpickler:
+class Unpickler:
 
-    def __init__(self, file, *, fix_imports=True,
-                 encoding="ASCII", errors="strict"):
-        """This takes a binary file for reading a pickle data stream.
+    def __init__(self, file):
+        """This takes a file-like object for reading a pickle data stream.
 
         The protocol version of the pickle is detected automatically, so no
         proto argument is needed.
 
-        The file-like object must have two methods, a read() method
-        that takes an integer argument, and a readline() method that
-        requires no arguments.  Both methods should return bytes.
-        Thus file-like object can be a binary file object opened for
-        reading, a BytesIO object, or any other custom object that
-        meets this interface.
-
-        Optional keyword arguments are *fix_imports*, *encoding* and *errors*,
-        which are used to control compatiblity support for pickle stream
-        generated by Python 2.x.  If *fix_imports* is True, pickle will try to
-        map the old Python 2.x names to the new names used in Python 3.x.  The
-        *encoding* and *errors* tell pickle how to decode 8-bit string
-        instances pickled by Python 2.x; these default to 'ASCII' and
-        'strict', respectively.
+        The file-like object must have two methods, a read() method that
+        takes an integer argument, and a readline() method that requires no
+        arguments.  Both methods should return a string.  Thus file-like
+        object can be a file object opened for reading, a StringIO object,
+        or any other custom object that meets this interface.
         """
         self.readline = file.readline
         self.read = file.read
         self.memo = {}
-        self.encoding = encoding
-        self.errors = errors
-        self.proto = 0
-        self.fix_imports = fix_imports
 
     def load(self):
         """Read a pickled object representation from the open file.
 
         Return the reconstituted object hierarchy specified in the file.
         """
-        # Check whether Unpickler was initialized correctly. This is
-        # only needed to mimic the behavior of _pickle.Unpickler.dump().
-        if not hasattr(self, "read"):
-            raise UnpicklingError("Unpickler.__init__() was not called by "
-                                  "%s.__init__()" % (self.__class__.__name__,))
         self.mark = object() # any new unique object
         self.stack = []
         self.append = self.stack.append
@@ -824,11 +855,8 @@ class _Unpickler:
         try:
             while 1:
                 key = read(1)
-                if not key:
-                    raise EOFError
-                assert isinstance(key, bytes_types)
-                dispatch[key[0]](self)
-        except _Stop as stopinst:
+                dispatch[key](self)
+        except _Stop, stopinst:
             return stopinst.value
 
     # Return largest index k such that self.stack[k] is self.mark.
@@ -846,39 +874,39 @@ class _Unpickler:
         while stack[k] is not mark: k = k-1
         return k
 
-    def persistent_load(self, pid):
-        raise UnpicklingError("unsupported persistent id encountered")
-
     dispatch = {}
+
+    def load_eof(self):
+        raise EOFError
+    dispatch[''] = load_eof
 
     def load_proto(self):
         proto = ord(self.read(1))
-        if not 0 <= proto <= HIGHEST_PROTOCOL:
-            raise ValueError("unsupported pickle protocol: %d" % proto)
-        self.proto = proto
-    dispatch[PROTO[0]] = load_proto
+        if not 0 <= proto <= 2:
+            raise ValueError, "unsupported pickle protocol: %d" % proto
+    dispatch[PROTO] = load_proto
 
     def load_persid(self):
-        pid = self.readline()[:-1].decode("ascii")
+        pid = self.readline()[:-1]
         self.append(self.persistent_load(pid))
-    dispatch[PERSID[0]] = load_persid
+    dispatch[PERSID] = load_persid
 
     def load_binpersid(self):
         pid = self.stack.pop()
         self.append(self.persistent_load(pid))
-    dispatch[BINPERSID[0]] = load_binpersid
+    dispatch[BINPERSID] = load_binpersid
 
     def load_none(self):
         self.append(None)
-    dispatch[NONE[0]] = load_none
+    dispatch[NONE] = load_none
 
     def load_false(self):
         self.append(False)
-    dispatch[NEWFALSE[0]] = load_false
+    dispatch[NEWFALSE] = load_false
 
     def load_true(self):
         self.append(True)
-    dispatch[NEWTRUE[0]] = load_true
+    dispatch[NEWTRUE] = load_true
 
     def load_int(self):
         data = self.readline()
@@ -888,132 +916,113 @@ class _Unpickler:
             val = True
         else:
             try:
-                val = int(data, 0)
+                val = int(data)
             except ValueError:
-                val = int(data, 0)
+                val = long(data)
         self.append(val)
-    dispatch[INT[0]] = load_int
+    dispatch[INT] = load_int
 
     def load_binint(self):
-        self.append(mloads(b'i' + self.read(4)))
-    dispatch[BININT[0]] = load_binint
+        self.append(mloads('i' + self.read(4)))
+    dispatch[BININT] = load_binint
 
     def load_binint1(self):
         self.append(ord(self.read(1)))
-    dispatch[BININT1[0]] = load_binint1
+    dispatch[BININT1] = load_binint1
 
     def load_binint2(self):
-        self.append(mloads(b'i' + self.read(2) + b'\000\000'))
-    dispatch[BININT2[0]] = load_binint2
+        self.append(mloads('i' + self.read(2) + '\000\000'))
+    dispatch[BININT2] = load_binint2
 
     def load_long(self):
-        val = self.readline()[:-1].decode("ascii")
-        if val and val[-1] == 'L':
-            val = val[:-1]
-        self.append(int(val, 0))
-    dispatch[LONG[0]] = load_long
+        self.append(long(self.readline()[:-1], 0))
+    dispatch[LONG] = load_long
 
     def load_long1(self):
         n = ord(self.read(1))
-        data = self.read(n)
-        self.append(decode_long(data))
-    dispatch[LONG1[0]] = load_long1
+        bytes = self.read(n)
+        self.append(decode_long(bytes))
+    dispatch[LONG1] = load_long1
 
     def load_long4(self):
-        n = mloads(b'i' + self.read(4))
-        data = self.read(n)
-        self.append(decode_long(data))
-    dispatch[LONG4[0]] = load_long4
+        n = mloads('i' + self.read(4))
+        bytes = self.read(n)
+        self.append(decode_long(bytes))
+    dispatch[LONG4] = load_long4
 
     def load_float(self):
         self.append(float(self.readline()[:-1]))
-    dispatch[FLOAT[0]] = load_float
+    dispatch[FLOAT] = load_float
 
     def load_binfloat(self, unpack=struct.unpack):
         self.append(unpack('>d', self.read(8))[0])
-    dispatch[BINFLOAT[0]] = load_binfloat
+    dispatch[BINFLOAT] = load_binfloat
 
     def load_string(self):
-        orig = self.readline()
-        rep = orig[:-1]
-        for q in (b'"', b"'"): # double or single quote
+        rep = self.readline()[:-1]
+        for q in "\"'": # double or single quote
             if rep.startswith(q):
                 if not rep.endswith(q):
-                    raise ValueError("insecure string pickle")
+                    raise ValueError, "insecure string pickle"
                 rep = rep[len(q):-len(q)]
                 break
         else:
-            raise ValueError("insecure string pickle: %r" % orig)
-        self.append(codecs.escape_decode(rep)[0]
-                    .decode(self.encoding, self.errors))
-    dispatch[STRING[0]] = load_string
+            raise ValueError, "insecure string pickle"
+        self.append(rep.decode("string-escape"))
+    dispatch[STRING] = load_string
 
     def load_binstring(self):
-        len = mloads(b'i' + self.read(4))
-        data = self.read(len)
-        value = str(data, self.encoding, self.errors)
-        self.append(value)
-    dispatch[BINSTRING[0]] = load_binstring
-
-    def load_binbytes(self):
-        len = mloads(b'i' + self.read(4))
+        len = mloads('i' + self.read(4))
         self.append(self.read(len))
-    dispatch[BINBYTES[0]] = load_binbytes
+    dispatch[BINSTRING] = load_binstring
 
     def load_unicode(self):
-        self.append(str(self.readline()[:-1], 'raw-unicode-escape'))
-    dispatch[UNICODE[0]] = load_unicode
+        self.append(unicode(self.readline()[:-1],'raw-unicode-escape'))
+    dispatch[UNICODE] = load_unicode
 
     def load_binunicode(self):
-        len = mloads(b'i' + self.read(4))
-        self.append(str(self.read(len), 'utf-8', 'surrogatepass'))
-    dispatch[BINUNICODE[0]] = load_binunicode
+        len = mloads('i' + self.read(4))
+        self.append(unicode(self.read(len),'utf-8'))
+    dispatch[BINUNICODE] = load_binunicode
 
     def load_short_binstring(self):
         len = ord(self.read(1))
-        data = bytes(self.read(len))
-        value = str(data, self.encoding, self.errors)
-        self.append(value)
-    dispatch[SHORT_BINSTRING[0]] = load_short_binstring
-
-    def load_short_binbytes(self):
-        len = ord(self.read(1))
-        self.append(bytes(self.read(len)))
-    dispatch[SHORT_BINBYTES[0]] = load_short_binbytes
+        self.append(self.read(len))
+    dispatch[SHORT_BINSTRING] = load_short_binstring
 
     def load_tuple(self):
         k = self.marker()
         self.stack[k:] = [tuple(self.stack[k+1:])]
-    dispatch[TUPLE[0]] = load_tuple
+    dispatch[TUPLE] = load_tuple
 
     def load_empty_tuple(self):
-        self.append(())
-    dispatch[EMPTY_TUPLE[0]] = load_empty_tuple
+        self.stack.append(())
+    dispatch[EMPTY_TUPLE] = load_empty_tuple
 
     def load_tuple1(self):
         self.stack[-1] = (self.stack[-1],)
-    dispatch[TUPLE1[0]] = load_tuple1
+    dispatch[TUPLE1] = load_tuple1
 
     def load_tuple2(self):
         self.stack[-2:] = [(self.stack[-2], self.stack[-1])]
-    dispatch[TUPLE2[0]] = load_tuple2
+    dispatch[TUPLE2] = load_tuple2
 
     def load_tuple3(self):
         self.stack[-3:] = [(self.stack[-3], self.stack[-2], self.stack[-1])]
-    dispatch[TUPLE3[0]] = load_tuple3
+    dispatch[TUPLE3] = load_tuple3
 
     def load_empty_list(self):
-        self.append([])
-    dispatch[EMPTY_LIST[0]] = load_empty_list
+        self.stack.append([])
+    dispatch[EMPTY_LIST] = load_empty_list
 
     def load_empty_dictionary(self):
-        self.append({})
-    dispatch[EMPTY_DICT[0]] = load_empty_dictionary
+        self.stack.append({})
+    dispatch[EMPTY_DICT] = load_empty_dictionary
 
     def load_list(self):
         k = self.marker()
         self.stack[k:] = [self.stack[k+1:]]
-    dispatch[LIST[0]] = load_list
+    dispatch[LIST] = load_list
 
     def load_dict(self):
         k = self.marker()
@@ -1024,7 +1033,7 @@ class _Unpickler:
             value = items[i+1]
             d[key] = value
         self.stack[k:] = [d]
-    dispatch[DICT[0]] = load_dict
+    dispatch[DICT] = load_dict
 
     # INST and OBJ differ only in how they get a class object.  It's not
     # only sensible to do the rest in a common routine, the two routines
@@ -1034,59 +1043,68 @@ class _Unpickler:
     def _instantiate(self, klass, k):
         args = tuple(self.stack[k+1:])
         del self.stack[k:]
-        if (args or not isinstance(klass, type) or
-            hasattr(klass, "__getinitargs__")):
+        instantiated = 0
+        if (not args and
+                type(klass) is ClassType and
+                not hasattr(klass, "__getinitargs__")):
+            try:
+                value = _EmptyClass()
+                value.__class__ = klass
+                instantiated = 1
+            except RuntimeError:
+                # In restricted execution, assignment to inst.__class__ is
+                # prohibited
+                pass
+        if not instantiated:
             try:
                 value = klass(*args)
-            except TypeError as err:
-                raise TypeError("in constructor for %s: %s" %
-                                (klass.__name__, str(err)), sys.exc_info()[2])
-        else:
-            value = klass.__new__(klass)
+            except TypeError, err:
+                raise TypeError, "in constructor for %s: %s" % (
+                    klass.__name__, str(err)), sys.exc_info()[2]
         self.append(value)
 
     def load_inst(self):
-        module = self.readline()[:-1].decode("ascii")
-        name = self.readline()[:-1].decode("ascii")
+        module = self.readline()[:-1]
+        name = self.readline()[:-1]
         klass = self.find_class(module, name)
         self._instantiate(klass, self.marker())
-    dispatch[INST[0]] = load_inst
+    dispatch[INST] = load_inst
 
     def load_obj(self):
         # Stack is ... markobject classobject arg1 arg2 ...
         k = self.marker()
         klass = self.stack.pop(k+1)
         self._instantiate(klass, k)
-    dispatch[OBJ[0]] = load_obj
+    dispatch[OBJ] = load_obj
 
     def load_newobj(self):
         args = self.stack.pop()
         cls = self.stack[-1]
         obj = cls.__new__(cls, *args)
         self.stack[-1] = obj
-    dispatch[NEWOBJ[0]] = load_newobj
+    dispatch[NEWOBJ] = load_newobj
 
     def load_global(self):
-        module = self.readline()[:-1].decode("utf-8")
-        name = self.readline()[:-1].decode("utf-8")
+        module = self.readline()[:-1]
+        name = self.readline()[:-1]
         klass = self.find_class(module, name)
         self.append(klass)
-    dispatch[GLOBAL[0]] = load_global
+    dispatch[GLOBAL] = load_global
 
     def load_ext1(self):
         code = ord(self.read(1))
         self.get_extension(code)
-    dispatch[EXT1[0]] = load_ext1
+    dispatch[EXT1] = load_ext1
 
     def load_ext2(self):
-        code = mloads(b'i' + self.read(2) + b'\000\000')
+        code = mloads('i' + self.read(2) + '\000\000')
         self.get_extension(code)
-    dispatch[EXT2[0]] = load_ext2
+    dispatch[EXT2] = load_ext2
 
     def load_ext4(self):
-        code = mloads(b'i' + self.read(4))
+        code = mloads('i' + self.read(4))
         self.get_extension(code)
-    dispatch[EXT4[0]] = load_ext4
+    dispatch[EXT4] = load_ext4
 
     def get_extension(self, code):
         nil = []
@@ -1102,13 +1120,8 @@ class _Unpickler:
         self.append(obj)
 
     def find_class(self, module, name):
-        # Subclasses may override this.
-        if self.proto < 3 and self.fix_imports:
-            if (module, name) in _compat_pickle.NAME_MAPPING:
-                module, name = _compat_pickle.NAME_MAPPING[(module, name)]
-            if module in _compat_pickle.IMPORT_MAPPING:
-                module = _compat_pickle.IMPORT_MAPPING[module]
-        __import__(module, level=0)
+        # Subclasses may override this
+        __import__(module)
         mod = sys.modules[module]
         klass = getattr(mod, name)
         return klass
@@ -1117,64 +1130,57 @@ class _Unpickler:
         stack = self.stack
         args = stack.pop()
         func = stack[-1]
-        try:
-            value = func(*args)
-        except:
-            print(sys.exc_info())
-            print(func, args)
-            raise
+        value = func(*args)
         stack[-1] = value
-    dispatch[REDUCE[0]] = load_reduce
+    dispatch[REDUCE] = load_reduce
 
     def load_pop(self):
         del self.stack[-1]
-    dispatch[POP[0]] = load_pop
+    dispatch[POP] = load_pop
 
     def load_pop_mark(self):
         k = self.marker()
         del self.stack[k:]
-    dispatch[POP_MARK[0]] = load_pop_mark
+    dispatch[POP_MARK] = load_pop_mark
 
     def load_dup(self):
         self.append(self.stack[-1])
-    dispatch[DUP[0]] = load_dup
+    dispatch[DUP] = load_dup
 
     def load_get(self):
-        i = int(self.readline()[:-1])
-        self.append(self.memo[i])
-    dispatch[GET[0]] = load_get
+        self.append(self.memo[self.readline()[:-1]])
+    dispatch[GET] = load_get
 
     def load_binget(self):
-        i = self.read(1)[0]
-        self.append(self.memo[i])
-    dispatch[BINGET[0]] = load_binget
+        i = ord(self.read(1))
+        self.append(self.memo[repr(i)])
+    dispatch[BINGET] = load_binget
 
     def load_long_binget(self):
-        i = mloads(b'i' + self.read(4))
-        self.append(self.memo[i])
-    dispatch[LONG_BINGET[0]] = load_long_binget
+        i = mloads('i' + self.read(4))
+        self.append(self.memo[repr(i)])
+    dispatch[LONG_BINGET] = load_long_binget
 
     def load_put(self):
-        i = int(self.readline()[:-1])
-        self.memo[i] = self.stack[-1]
-    dispatch[PUT[0]] = load_put
+        self.memo[self.readline()[:-1]] = self.stack[-1]
+    dispatch[PUT] = load_put
 
     def load_binput(self):
-        i = self.read(1)[0]
-        self.memo[i] = self.stack[-1]
-    dispatch[BINPUT[0]] = load_binput
+        i = ord(self.read(1))
+        self.memo[repr(i)] = self.stack[-1]
+    dispatch[BINPUT] = load_binput
 
     def load_long_binput(self):
-        i = mloads(b'i' + self.read(4))
-        self.memo[i] = self.stack[-1]
-    dispatch[LONG_BINPUT[0]] = load_long_binput
+        i = mloads('i' + self.read(4))
+        self.memo[repr(i)] = self.stack[-1]
+    dispatch[LONG_BINPUT] = load_long_binput
 
     def load_append(self):
         stack = self.stack
         value = stack.pop()
         list = stack[-1]
         list.append(value)
-    dispatch[APPEND[0]] = load_append
+    dispatch[APPEND] = load_append
 
     def load_appends(self):
         stack = self.stack
@@ -1182,7 +1188,7 @@ class _Unpickler:
         list = stack[mark - 1]
         list.extend(stack[mark + 1:])
         del stack[mark:]
-    dispatch[APPENDS[0]] = load_appends
+    dispatch[APPENDS] = load_appends
 
     def load_setitem(self):
         stack = self.stack
@@ -1190,7 +1196,7 @@ class _Unpickler:
         key = stack.pop()
         dict = stack[-1]
         dict[key] = value
-    dispatch[SETITEM[0]] = load_setitem
+    dispatch[SETITEM] = load_setitem
 
     def load_setitems(self):
         stack = self.stack
@@ -1200,7 +1206,7 @@ class _Unpickler:
             dict[stack[i]] = stack[i + 1]
 
         del stack[mark:]
-    dispatch[SETITEMS[0]] = load_setitems
+    dispatch[SETITEMS] = load_setitems
 
     def load_build(self):
         stack = self.stack
@@ -1214,134 +1220,172 @@ class _Unpickler:
         if isinstance(state, tuple) and len(state) == 2:
             state, slotstate = state
         if state:
-            inst_dict = inst.__dict__
-            intern = sys.intern
-            for k, v in state.items():
-                if type(k) is str:
-                    inst_dict[intern(k)] = v
-                else:
-                    inst_dict[k] = v
+            try:
+                d = inst.__dict__
+                try:
+                    for k, v in state.iteritems():
+                        d[intern(k)] = v
+                # keys in state don't have to be strings
+                # don't blow up, but don't go out of our way
+                except TypeError:
+                    d.update(state)
+
+            except RuntimeError:
+                # XXX In restricted execution, the instance's __dict__
+                # is not accessible.  Use the old way of unpickling
+                # the instance variables.  This is a semantic
+                # difference when unpickling in restricted
+                # vs. unrestricted modes.
+                # Note, however, that cPickle has never tried to do the
+                # .update() business, and always uses
+                #     PyObject_SetItem(inst.__dict__, key, value) in a
+                # loop over state.items().
+                for k, v in state.items():
+                    setattr(inst, k, v)
         if slotstate:
             for k, v in slotstate.items():
                 setattr(inst, k, v)
-    dispatch[BUILD[0]] = load_build
+    dispatch[BUILD] = load_build
 
     def load_mark(self):
         self.append(self.mark)
-    dispatch[MARK[0]] = load_mark
+    dispatch[MARK] = load_mark
 
     def load_stop(self):
         value = self.stack.pop()
         raise _Stop(value)
-    dispatch[STOP[0]] = load_stop
+    dispatch[STOP] = load_stop
 
-# Encode/decode longs.
+# Helper class for load_inst/load_obj
+
+class _EmptyClass:
+    pass
+
+# Encode/decode longs in linear time.
+
+import binascii as _binascii
 
 def encode_long(x):
     r"""Encode a long to a two's complement little-endian binary string.
-    Note that 0 is a special case, returning an empty string, to save a
+    Note that 0L is a special case, returning an empty string, to save a
     byte in the LONG1 pickling context.
 
-    >>> encode_long(0)
-    b''
-    >>> encode_long(255)
-    b'\xff\x00'
-    >>> encode_long(32767)
-    b'\xff\x7f'
-    >>> encode_long(-256)
-    b'\x00\xff'
-    >>> encode_long(-32768)
-    b'\x00\x80'
-    >>> encode_long(-128)
-    b'\x80'
-    >>> encode_long(127)
-    b'\x7f'
+    >>> encode_long(0L)
+    ''
+    >>> encode_long(255L)
+    '\xff\x00'
+    >>> encode_long(32767L)
+    '\xff\x7f'
+    >>> encode_long(-256L)
+    '\x00\xff'
+    >>> encode_long(-32768L)
+    '\x00\x80'
+    >>> encode_long(-128L)
+    '\x80'
+    >>> encode_long(127L)
+    '\x7f'
     >>>
     """
+
     if x == 0:
-        return b''
-    nbytes = (x.bit_length() >> 3) + 1
-    result = x.to_bytes(nbytes, byteorder='little', signed=True)
-    if x < 0 and nbytes > 1:
-        if result[-1] == 0xff and (result[-2] & 0x80) != 0:
-            result = result[:-1]
-    return result
+        return ''
+    if x > 0:
+        ashex = hex(x)
+        assert ashex.startswith("0x")
+        njunkchars = 2 + ashex.endswith('L')
+        nibbles = len(ashex) - njunkchars
+        if nibbles & 1:
+            # need an even # of nibbles for unhexlify
+            ashex = "0x0" + ashex[2:]
+        elif int(ashex[2], 16) >= 8:
+            # "looks negative", so need a byte of sign bits
+            ashex = "0x00" + ashex[2:]
+    else:
+        # Build the 256's-complement:  (1L << nbytes) + x.  The trick is
+        # to find the number of bytes in linear time (although that should
+        # really be a constant-time task).
+        ashex = hex(-x)
+        assert ashex.startswith("0x")
+        njunkchars = 2 + ashex.endswith('L')
+        nibbles = len(ashex) - njunkchars
+        if nibbles & 1:
+            # Extend to a full byte.
+            nibbles += 1
+        nbits = nibbles * 4
+        x += 1L << nbits
+        assert x > 0
+        ashex = hex(x)
+        njunkchars = 2 + ashex.endswith('L')
+        newnibbles = len(ashex) - njunkchars
+        if newnibbles < nibbles:
+            ashex = "0x" + "0" * (nibbles - newnibbles) + ashex[2:]
+        if int(ashex[2], 16) < 8:
+            # "looks positive", so need a byte of sign bits
+            ashex = "0xff" + ashex[2:]
+
+    if ashex.endswith('L'):
+        ashex = ashex[2:-1]
+    else:
+        ashex = ashex[2:]
+    assert len(ashex) & 1 == 0, (x, ashex)
+    binary = _binascii.unhexlify(ashex)
+    return binary[::-1]
 
 def decode_long(data):
     r"""Decode a long from a two's complement little-endian binary string.
 
-    >>> decode_long(b'')
-    0
-    >>> decode_long(b"\xff\x00")
-    255
-    >>> decode_long(b"\xff\x7f")
-    32767
-    >>> decode_long(b"\x00\xff")
-    -256
-    >>> decode_long(b"\x00\x80")
-    -32768
-    >>> decode_long(b"\x80")
-    -128
-    >>> decode_long(b"\x7f")
-    127
+    >>> decode_long('')
+    0L
+    >>> decode_long("\xff\x00")
+    255L
+    >>> decode_long("\xff\x7f")
+    32767L
+    >>> decode_long("\x00\xff")
+    -256L
+    >>> decode_long("\x00\x80")
+    -32768L
+    >>> decode_long("\x80")
+    -128L
+    >>> decode_long("\x7f")
+    127L
     """
-    return int.from_bytes(data, byteorder='little', signed=True)
+
+    nbytes = len(data)
+    if nbytes == 0:
+        return 0L
+    ashex = _binascii.hexlify(data[::-1])
+    n = long(ashex, 16) # quadratic time before Python 2.3; linear now
+    if data[-1] >= '\x80':
+        n -= 1L << (nbytes * 8)
+    return n
 
 # Shorthands
 
-def dump(obj, file, protocol=None, *, fix_imports=True):
-    Pickler(file, protocol, fix_imports=fix_imports).dump(obj)
-
-def dumps(obj, protocol=None, *, fix_imports=True):
-    f = io.BytesIO()
-    Pickler(f, protocol, fix_imports=fix_imports).dump(obj)
-    res = f.getvalue()
-    assert isinstance(res, bytes_types)
-    return res
-
-def load(file, *, fix_imports=True, encoding="ASCII", errors="strict"):
-    return Unpickler(file, fix_imports=fix_imports,
-                     encoding=encoding, errors=errors).load()
-
-def loads(s, *, fix_imports=True, encoding="ASCII", errors="strict"):
-    if isinstance(s, str):
-        raise TypeError("Can't load pickle from unicode string")
-    file = io.BytesIO(s)
-    return Unpickler(file, fix_imports=fix_imports,
-                     encoding=encoding, errors=errors).load()
-
-# Use the faster _pickle if possible
 try:
-    from _pickle import *
+    from cStringIO import StringIO
 except ImportError:
-    Pickler, Unpickler = _Pickler, _Unpickler
+    from StringIO import StringIO
+
+def dump(obj, file, protocol=None):
+    Pickler(file, protocol).dump(obj)
+
+def dumps(obj, protocol=None):
+    file = StringIO()
+    Pickler(file, protocol).dump(obj)
+    return file.getvalue()
+
+def load(file):
+    return Unpickler(file).load()
+
+def loads(str):
+    file = StringIO(str)
+    return Unpickler(file).load()
 
 # Doctest
+
 def _test():
     import doctest
     return doctest.testmod()
 
 if __name__ == "__main__":
-    import sys, argparse
-    parser = argparse.ArgumentParser(
-        description='display contents of the pickle files')
-    parser.add_argument(
-        'pickle_file', type=argparse.FileType('br'),
-        nargs='*', help='the pickle file')
-    parser.add_argument(
-        '-t', '--test', action='store_true',
-        help='run self-test suite')
-    parser.add_argument(
-        '-v', action='store_true',
-        help='run verbosely; only affects self-test run')
-    args = parser.parse_args()
-    if args.test:
-        _test()
-    else:
-        if not args.pickle_file:
-            parser.print_help()
-        else:
-            import pprint
-            for f in args.pickle_file:
-                obj = load(f)
-                pprint.pprint(obj)
+    _test()

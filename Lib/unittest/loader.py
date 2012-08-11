@@ -5,11 +5,11 @@ import re
 import sys
 import traceback
 import types
-import functools
 
+from functools import cmp_to_key as _CmpToKey
 from fnmatch import fnmatch
 
-from . import case, suite, util
+from . import case, suite
 
 __unittest = True
 
@@ -41,7 +41,7 @@ class TestLoader(object):
     and returning them wrapped in a TestSuite
     """
     testMethodPrefix = 'test'
-    sortTestMethodsUsing = staticmethod(util.three_way_cmp)
+    sortTestMethodsUsing = cmp
     suiteClass = suite.TestSuite
     _top_level_dir = None
 
@@ -69,7 +69,7 @@ class TestLoader(object):
         if use_load_tests and load_tests is not None:
             try:
                 return load_tests(self, tests, None)
-            except Exception as e:
+            except Exception, e:
                 return _make_failed_load_tests(module.__name__, e,
                                                self.suiteClass)
         return tests
@@ -103,17 +103,13 @@ class TestLoader(object):
             return self.loadTestsFromModule(obj)
         elif isinstance(obj, type) and issubclass(obj, case.TestCase):
             return self.loadTestsFromTestCase(obj)
-        elif (isinstance(obj, types.FunctionType) and
+        elif (isinstance(obj, types.UnboundMethodType) and
               isinstance(parent, type) and
               issubclass(parent, case.TestCase)):
-            name = obj.__name__
-            inst = parent(name)
-            # static methods follow a different path
-            if not isinstance(getattr(inst, name), types.FunctionType):
-                return self.suiteClass([inst])
+            return self.suiteClass([parent(obj.__name__)])
         elif isinstance(obj, suite.TestSuite):
             return obj
-        if hasattr(obj, '__call__'):
+        elif hasattr(obj, '__call__'):
             test = obj()
             if isinstance(test, suite.TestSuite):
                 return test
@@ -139,17 +135,16 @@ class TestLoader(object):
                          prefix=self.testMethodPrefix):
             return attrname.startswith(prefix) and \
                 hasattr(getattr(testCaseClass, attrname), '__call__')
-        testFnNames = testFnNames = list(filter(isTestMethod,
-                                                dir(testCaseClass)))
+        testFnNames = filter(isTestMethod, dir(testCaseClass))
         if self.sortTestMethodsUsing:
-            testFnNames.sort(key=functools.cmp_to_key(self.sortTestMethodsUsing))
+            testFnNames.sort(key=_CmpToKey(self.sortTestMethodsUsing))
         return testFnNames
 
     def discover(self, start_dir, pattern='test*.py', top_level_dir=None):
         """Find and return all test modules from the specified start
-        directory, recursing into subdirectories to find them and return all
-        tests found within them. Only test files that match the pattern will
-        be loaded. (Using shell style pattern matching.)
+        directory, recursing into subdirectories to find them. Only test files
+        that match the pattern will be loaded. (Using shell style pattern
+        matching.)
 
         All test modules must be importable from the top level of the project.
         If the start directory is not the top level directory then the top
@@ -292,7 +287,7 @@ class TestLoader(object):
                 else:
                     try:
                         yield load_tests(self, tests, pattern)
-                    except Exception as e:
+                    except Exception, e:
                         yield _make_failed_load_tests(package.__name__, e,
                                                       self.suiteClass)
 
@@ -307,15 +302,13 @@ def _makeLoader(prefix, sortUsing, suiteClass=None):
         loader.suiteClass = suiteClass
     return loader
 
-def getTestCaseNames(testCaseClass, prefix, sortUsing=util.three_way_cmp):
+def getTestCaseNames(testCaseClass, prefix, sortUsing=cmp):
     return _makeLoader(prefix, sortUsing).getTestCaseNames(testCaseClass)
 
-def makeSuite(testCaseClass, prefix='test', sortUsing=util.three_way_cmp,
+def makeSuite(testCaseClass, prefix='test', sortUsing=cmp,
               suiteClass=suite.TestSuite):
-    return _makeLoader(prefix, sortUsing, suiteClass).loadTestsFromTestCase(
-        testCaseClass)
+    return _makeLoader(prefix, sortUsing, suiteClass).loadTestsFromTestCase(testCaseClass)
 
-def findTestCases(module, prefix='test', sortUsing=util.three_way_cmp,
+def findTestCases(module, prefix='test', sortUsing=cmp,
                   suiteClass=suite.TestSuite):
-    return _makeLoader(prefix, sortUsing, suiteClass).loadTestsFromModule(\
-        module)
+    return _makeLoader(prefix, sortUsing, suiteClass).loadTestsFromModule(module)

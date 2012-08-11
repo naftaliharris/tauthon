@@ -30,9 +30,8 @@ called :file:`fibo.py` in the current directory with the following contents::
    def fib(n):    # write Fibonacci series up to n
        a, b = 0, 1
        while b < n:
-           print(b, end=' ')
+           print b,
            a, b = b, a+b
-       print()
 
    def fib2(n): # return Fibonacci series up to n
        result = []
@@ -103,9 +102,6 @@ There is even a variant to import all names that a module defines::
    1 1 2 3 5 8 13 21 34 55 89 144 233 377
 
 This imports all names except those beginning with an underscore (``_``).
-In most cases Python programmers do not use this facility since it introduces
-an unknown set of names into the interpreter, possibly hiding some things
-you have already defined.
 
 Note that in general the practice of importing ``*`` from a module or package is
 frowned upon, since it often causes poorly readable code. However, it is okay to
@@ -116,7 +112,7 @@ use it to save typing in interactive sessions.
    For efficiency reasons, each module is only imported once per interpreter
    session.  Therefore, if you change your modules, you must restart the
    interpreter -- or, if it's just one module you want to test interactively,
-   use :func:`imp.reload`, e.g. ``import imp; imp.reload(modulename)``.
+   use :func:`reload`, e.g. ``reload(modulename)``.
 
 
 .. _tut-modulesasscripts:
@@ -159,26 +155,23 @@ The Module Search Path
 
 .. index:: triple: module; search; path
 
-When a module named :mod:`spam` is imported, the interpreter searches for a file
-named :file:`spam.py` in the current directory, and then in the list of
-directories specified by the environment variable :envvar:`PYTHONPATH`.  This
-has the same syntax as the shell variable :envvar:`PATH`, that is, a list of
-directory names.  When :envvar:`PYTHONPATH` is not set, or when the file is not
-found there, the search continues in an installation-dependent default path; on
-Unix, this is usually :file:`.:/usr/local/lib/python`.
+When a module named :mod:`spam` is imported, the interpreter first searches for
+a built-in module with that name. If not found, it then searches for a file
+named :file:`spam.py` in a list of directories given by the variable
+:data:`sys.path`.  :data:`sys.path` is initialized from these locations:
 
-Actually, modules are searched in the list of directories given by the variable
-``sys.path`` which is initialized from the directory containing the input script
-(or the current directory), :envvar:`PYTHONPATH` and the installation- dependent
-default.  This allows Python programs that know what they're doing to modify or
-replace the module search path.  Note that because the directory containing the
-script being run is on the search path, it is important that the script not have
-the same name as a standard module, or Python will attempt to load the script as
-a module when that module is imported. This will generally be an error.  See
-section :ref:`tut-standardmodules` for more information.
+* the directory containing the input script (or the current directory).
+* :envvar:`PYTHONPATH` (a list of directory names, with the same syntax as the
+  shell variable :envvar:`PATH`).
+* the installation-dependent default.
 
-.. %
-    Do we need stuff on zip files etc. ? DUBOIS
+After initialization, Python programs can modify :data:`sys.path`.  The
+directory containing the script being run is placed at the beginning of the
+search path, ahead of the standard library path. This means that scripts in that
+directory will be loaded instead of modules of the same name in the library
+directory. This is an error unless the replacement is intended.  See section
+:ref:`tut-standardmodules` for more information.
+
 
 "Compiled" Python files
 -----------------------
@@ -249,7 +242,7 @@ modules are built into the interpreter; these provide access to operations that
 are not part of the core of the language but are nevertheless built in, either
 for efficiency or to provide access to operating system primitives such as
 system calls.  The set of such modules is a configuration option which also
-depends on the underlying platform For example, the :mod:`winreg` module is only
+depends on the underlying platform.  For example, the :mod:`winreg` module is only
 provided on Windows systems. One particular module deserves some attention:
 :mod:`sys`, which is built into every Python interpreter.  The variables
 ``sys.ps1`` and ``sys.ps2`` define the strings used as primary and secondary
@@ -261,7 +254,7 @@ prompts::
    >>> sys.ps2
    '... '
    >>> sys.ps1 = 'C> '
-   C> print('Yuck!')
+   C> print 'Yuck!'
    Yuck!
    C>
 
@@ -293,7 +286,7 @@ defines.  It returns a sorted list of strings::
    ['__displayhook__', '__doc__', '__excepthook__', '__name__', '__stderr__',
     '__stdin__', '__stdout__', '_getframe', 'api_version', 'argv',
     'builtin_module_names', 'byteorder', 'callstats', 'copyright',
-    'displayhook', 'exc_info', 'excepthook',
+    'displayhook', 'exc_clear', 'exc_info', 'exc_type', 'excepthook',
     'exec_prefix', 'executable', 'exit', 'getdefaultencoding', 'getdlopenflags',
     'getrecursionlimit', 'getrefcount', 'hexversion', 'maxint', 'maxunicode',
     'meta_path', 'modules', 'path', 'path_hooks', 'path_importer_cache',
@@ -311,35 +304,39 @@ Without arguments, :func:`dir` lists the names you have defined currently::
 
 Note that it lists all types of names: variables, modules, functions, etc.
 
-.. index:: module: builtins
+.. index:: module: __builtin__
 
 :func:`dir` does not list the names of built-in functions and variables.  If you
 want a list of those, they are defined in the standard module
-:mod:`builtins`::
+:mod:`__builtin__`::
 
-   >>> import builtins
-   >>> dir(builtins)
+   >>> import __builtin__
+   >>> dir(__builtin__)
+   ['ArithmeticError', 'AssertionError', 'AttributeError', 'DeprecationWarning',
+    'EOFError', 'Ellipsis', 'EnvironmentError', 'Exception', 'False',
+    'FloatingPointError', 'FutureWarning', 'IOError', 'ImportError',
+    'IndentationError', 'IndexError', 'KeyError', 'KeyboardInterrupt',
+    'LookupError', 'MemoryError', 'NameError', 'None', 'NotImplemented',
+    'NotImplementedError', 'OSError', 'OverflowError',
+    'PendingDeprecationWarning', 'ReferenceError', 'RuntimeError',
+    'RuntimeWarning', 'StandardError', 'StopIteration', 'SyntaxError',
+    'SyntaxWarning', 'SystemError', 'SystemExit', 'TabError', 'True',
+    'TypeError', 'UnboundLocalError', 'UnicodeDecodeError',
+    'UnicodeEncodeError', 'UnicodeError', 'UnicodeTranslateError',
+    'UserWarning', 'ValueError', 'Warning', 'WindowsError',
+    'ZeroDivisionError', '_', '__debug__', '__doc__', '__import__',
+    '__name__', 'abs', 'apply', 'basestring', 'bool', 'buffer',
+    'callable', 'chr', 'classmethod', 'cmp', 'coerce', 'compile',
+    'complex', 'copyright', 'credits', 'delattr', 'dict', 'dir', 'divmod',
+    'enumerate', 'eval', 'execfile', 'exit', 'file', 'filter', 'float',
+    'frozenset', 'getattr', 'globals', 'hasattr', 'hash', 'help', 'hex',
+    'id', 'input', 'int', 'intern', 'isinstance', 'issubclass', 'iter',
+    'len', 'license', 'list', 'locals', 'long', 'map', 'max', 'memoryview',
+    'min', 'object', 'oct', 'open', 'ord', 'pow', 'property', 'quit', 'range',
+    'raw_input', 'reduce', 'reload', 'repr', 'reversed', 'round', 'set',
+    'setattr', 'slice', 'sorted', 'staticmethod', 'str', 'sum', 'super',
+    'tuple', 'type', 'unichr', 'unicode', 'vars', 'xrange', 'zip']
 
-   ['ArithmeticError', 'AssertionError', 'AttributeError', 'BaseException', 'Buffer
-   Error', 'BytesWarning', 'DeprecationWarning', 'EOFError', 'Ellipsis', 'Environme
-   ntError', 'Exception', 'False', 'FloatingPointError', 'FutureWarning', 'Generato
-   rExit', 'IOError', 'ImportError', 'ImportWarning', 'IndentationError', 'IndexErr
-   or', 'KeyError', 'KeyboardInterrupt', 'LookupError', 'MemoryError', 'NameError',
-    'None', 'NotImplemented', 'NotImplementedError', 'OSError', 'OverflowError', 'P
-   endingDeprecationWarning', 'ReferenceError', 'RuntimeError', 'RuntimeWarning', '
-   StopIteration', 'SyntaxError', 'SyntaxWarning', 'SystemError', 'SystemExit', 'Ta
-   bError', 'True', 'TypeError', 'UnboundLocalError', 'UnicodeDecodeError', 'Unicod
-   eEncodeError', 'UnicodeError', 'UnicodeTranslateError', 'UnicodeWarning', 'UserW
-   arning', 'ValueError', 'Warning', 'ZeroDivisionError', '__build_class__', '__deb
-   ug__', '__doc__', '__import__', '__name__', '__package__', 'abs', 'all', 'any',
-   'ascii', 'bin', 'bool', 'bytearray', 'bytes', 'chr', 'classmethod', 'compile', '
-   complex', 'copyright', 'credits', 'delattr', 'dict', 'dir', 'divmod', 'enumerate
-   ', 'eval', 'exec', 'exit', 'filter', 'float', 'format', 'frozenset', 'getattr',
-   'globals', 'hasattr', 'hash', 'help', 'hex', 'id', 'input', 'int', 'isinstance',
-    'issubclass', 'iter', 'len', 'license', 'list', 'locals', 'map', 'max', 'memory
-   view', 'min', 'next', 'object', 'oct', 'open', 'ord', 'pow', 'print', 'property'
-   , 'quit', 'range', 'repr', 'reversed', 'round', 'set', 'setattr', 'slice', 'sort
-   ed', 'staticmethod', 'str', 'sum', 'super', 'tuple', 'type', 'vars', 'zip']
 
 .. _tut-packages:
 
@@ -499,24 +496,35 @@ packages.
 Intra-package References
 ------------------------
 
+The submodules often need to refer to each other.  For example, the
+:mod:`surround` module might use the :mod:`echo` module.  In fact, such
+references are so common that the :keyword:`import` statement first looks in the
+containing package before looking in the standard module search path. Thus, the
+:mod:`surround` module can simply use ``import echo`` or ``from echo import
+echofilter``.  If the imported module is not found in the current package (the
+package of which the current module is a submodule), the :keyword:`import`
+statement looks for a top-level module with the given name.
+
 When packages are structured into subpackages (as with the :mod:`sound` package
 in the example), you can use absolute imports to refer to submodules of siblings
 packages.  For example, if the module :mod:`sound.filters.vocoder` needs to use
 the :mod:`echo` module in the :mod:`sound.effects` package, it can use ``from
 sound.effects import echo``.
 
-You can also write relative imports, with the ``from module import name`` form
-of import statement.  These imports use leading dots to indicate the current and
-parent packages involved in the relative import.  From the :mod:`surround`
-module for example, you might use::
+Starting with Python 2.5, in addition to the implicit relative imports described
+above, you can write explicit relative imports with the ``from module import
+name`` form of import statement. These explicit relative imports use leading
+dots to indicate the current and parent packages involved in the relative
+import. From the :mod:`surround` module for example, you might use::
 
    from . import echo
    from .. import formats
    from ..filters import equalizer
 
-Note that relative imports are based on the name of the current module.  Since
-the name of the main module is always ``"__main__"``, modules intended for use
-as the main module of a Python application must always use absolute imports.
+Note that both explicit and implicit relative imports are based on the name of
+the current module. Since the name of the main module is always ``"__main__"``,
+modules intended for use as the main module of a Python application should
+always use absolute imports.
 
 
 Packages in Multiple Directories

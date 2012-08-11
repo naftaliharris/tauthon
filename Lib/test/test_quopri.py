@@ -1,12 +1,12 @@
-from test import support
+from test import test_support
 import unittest
 
-import sys, os, io, subprocess
+import sys, cStringIO, subprocess
 import quopri
 
 
 
-ENCSAMPLE = b"""\
+ENCSAMPLE = """\
 Here's a bunch of special=20
 
 =A1=A2=A3=A4=A5=A6=A7=A8=A9
@@ -25,8 +25,8 @@ characters... have fun!
 """
 
 # First line ends with a space
-DECSAMPLE = b"Here's a bunch of special \n" + \
-b"""\
+DECSAMPLE = "Here's a bunch of special \n" + \
+"""\
 
 \xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9
 \xaa\xab\xac\xad\xae\xaf\xb0\xb1\xb2\xb3
@@ -67,48 +67,48 @@ class QuopriTestCase(unittest.TestCase):
     # used in the "quotetabs=0" tests.
     STRINGS = (
         # Some normal strings
-        (b'hello', b'hello'),
-        (b'''hello
+        ('hello', 'hello'),
+        ('''hello
         there
-        world''', b'''hello
+        world''', '''hello
         there
         world'''),
-        (b'''hello
+        ('''hello
         there
         world
-''', b'''hello
+''', '''hello
         there
         world
 '''),
-        (b'\201\202\203', b'=81=82=83'),
+        ('\201\202\203', '=81=82=83'),
         # Add some trailing MUST QUOTE strings
-        (b'hello ', b'hello=20'),
-        (b'hello\t', b'hello=09'),
+        ('hello ', 'hello=20'),
+        ('hello\t', 'hello=09'),
         # Some long lines.  First, a single line of 108 characters
-        (b'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\xd8\xd9\xda\xdb\xdc\xdd\xde\xdfxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-         b'''xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=D8=D9=DA=DB=DC=DD=DE=DFx=
+        ('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\xd8\xd9\xda\xdb\xdc\xdd\xde\xdfxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+         '''xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx=D8=D9=DA=DB=DC=DD=DE=DFx=
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'''),
         # A line of exactly 76 characters, no soft line break should be needed
-        (b'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy',
-        b'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'),
+        ('yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy',
+        'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy'),
         # A line of 77 characters, forcing a soft line break at position 75,
         # and a second line of exactly 2 characters (because the soft line
         # break `=' sign counts against the line length limit).
-        (b'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
-         b'''zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=
+        ('zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
+         '''zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=
 zz'''),
         # A line of 151 characters, forcing a soft line break at position 75,
         # with a second line of exactly 76 characters and no trailing =
-        (b'zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
-         b'''zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=
+        ('zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz',
+         '''zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz=
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'''),
         # A string containing a hard line break, but which the first line is
         # 151 characters and the second line is exactly 76 characters.  This
         # should leave us with three lines, the first which has a soft line
         # break, and which the second and third do not.
-        (b'''yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+        ('''yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz''',
-         b'''yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=
+         '''yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy=
 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
 zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz'''),
         # Now some really complex stuff ;)
@@ -117,62 +117,62 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz''')
 
     # These are used in the "quotetabs=1" tests.
     ESTRINGS = (
-        (b'hello world', b'hello=20world'),
-        (b'hello\tworld', b'hello=09world'),
+        ('hello world', 'hello=20world'),
+        ('hello\tworld', 'hello=09world'),
         )
 
     # These are used in the "header=1" tests.
     HSTRINGS = (
-        (b'hello world', b'hello_world'),
-        (b'hello_world', b'hello=5Fworld'),
+        ('hello world', 'hello_world'),
+        ('hello_world', 'hello=5Fworld'),
         )
 
     @withpythonimplementation
     def test_encodestring(self):
         for p, e in self.STRINGS:
-            self.assertEqual(quopri.encodestring(p), e)
+            self.assertTrue(quopri.encodestring(p) == e)
 
     @withpythonimplementation
     def test_decodestring(self):
         for p, e in self.STRINGS:
-            self.assertEqual(quopri.decodestring(e), p)
+            self.assertTrue(quopri.decodestring(e) == p)
 
     @withpythonimplementation
     def test_idempotent_string(self):
         for p, e in self.STRINGS:
-            self.assertEqual(quopri.decodestring(quopri.encodestring(e)), e)
+            self.assertTrue(quopri.decodestring(quopri.encodestring(e)) == e)
 
     @withpythonimplementation
     def test_encode(self):
         for p, e in self.STRINGS:
-            infp = io.BytesIO(p)
-            outfp = io.BytesIO()
+            infp = cStringIO.StringIO(p)
+            outfp = cStringIO.StringIO()
             quopri.encode(infp, outfp, quotetabs=False)
-            self.assertEqual(outfp.getvalue(), e)
+            self.assertTrue(outfp.getvalue() == e)
 
     @withpythonimplementation
     def test_decode(self):
         for p, e in self.STRINGS:
-            infp = io.BytesIO(e)
-            outfp = io.BytesIO()
+            infp = cStringIO.StringIO(e)
+            outfp = cStringIO.StringIO()
             quopri.decode(infp, outfp)
-            self.assertEqual(outfp.getvalue(), p)
+            self.assertTrue(outfp.getvalue() == p)
 
     @withpythonimplementation
     def test_embedded_ws(self):
         for p, e in self.ESTRINGS:
-            self.assertEqual(quopri.encodestring(p, quotetabs=True), e)
-            self.assertEqual(quopri.decodestring(e), p)
+            self.assertTrue(quopri.encodestring(p, quotetabs=True) == e)
+            self.assertTrue(quopri.decodestring(e) == p)
 
     @withpythonimplementation
     def test_encode_header(self):
         for p, e in self.HSTRINGS:
-            self.assertEqual(quopri.encodestring(p, header=True), e)
+            self.assertTrue(quopri.encodestring(p, header=True) == e)
 
     @withpythonimplementation
     def test_decode_header(self):
         for p, e in self.HSTRINGS:
-            self.assertEqual(quopri.decodestring(e, header=True), p)
+            self.assertTrue(quopri.decodestring(e, header=True) == p)
 
     def test_scriptencode(self):
         (p, e) = self.STRINGS[-1]
@@ -183,12 +183,7 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz''')
         # On Windows, Python will output the result to stdout using
         # CRLF, as the mode of stdout is text mode. To compare this
         # with the expected result, we need to do a line-by-line comparison.
-        cout = cout.decode('latin-1').splitlines()
-        e = e.decode('latin-1').splitlines()
-        assert len(cout)==len(e)
-        for i in range(len(cout)):
-            self.assertEqual(cout[i], e[i])
-        self.assertEqual(cout, e)
+        self.assertEqual(cout.splitlines(), e.splitlines())
 
     def test_scriptdecode(self):
         (p, e) = self.STRINGS[-1]
@@ -196,12 +191,10 @@ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz''')
                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.addCleanup(process.stdout.close)
         cout, cerr = process.communicate(e)
-        cout = cout.decode('latin-1')
-        p = p.decode('latin-1')
         self.assertEqual(cout.splitlines(), p.splitlines())
 
 def test_main():
-    support.run_unittest(QuopriTestCase)
+    test_support.run_unittest(QuopriTestCase)
 
 
 if __name__ == "__main__":

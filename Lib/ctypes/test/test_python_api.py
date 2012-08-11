@@ -17,21 +17,21 @@ else:
 
 class PythonAPITestCase(unittest.TestCase):
 
-    def test_PyBytes_FromStringAndSize(self):
-        PyBytes_FromStringAndSize = pythonapi.PyBytes_FromStringAndSize
+    def test_PyString_FromStringAndSize(self):
+        PyString_FromStringAndSize = pythonapi.PyString_FromStringAndSize
 
-        PyBytes_FromStringAndSize.restype = py_object
-        PyBytes_FromStringAndSize.argtypes = c_char_p, c_py_ssize_t
+        PyString_FromStringAndSize.restype = py_object
+        PyString_FromStringAndSize.argtypes = c_char_p, c_py_ssize_t
 
-        self.assertEqual(PyBytes_FromStringAndSize(b"abcdefghi", 3), b"abc")
+        self.assertEqual(PyString_FromStringAndSize("abcdefghi", 3), "abc")
 
     def test_PyString_FromString(self):
-        pythonapi.PyBytes_FromString.restype = py_object
-        pythonapi.PyBytes_FromString.argtypes = (c_char_p,)
+        pythonapi.PyString_FromString.restype = py_object
+        pythonapi.PyString_FromString.argtypes = (c_char_p,)
 
-        s = b"abc"
+        s = "abc"
         refcnt = grc(s)
-        pyob = pythonapi.PyBytes_FromString(s)
+        pyob = pythonapi.PyString_FromString(s)
         self.assertEqual(grc(s), refcnt)
         self.assertEqual(s, pyob)
         del pyob
@@ -41,17 +41,17 @@ class PythonAPITestCase(unittest.TestCase):
         # This test is unreliable, because it is possible that code in
         # unittest changes the refcount of the '42' integer.  So, it
         # is disabled by default.
-        def test_PyLong_Long(self):
+        def test_PyInt_Long(self):
             ref42 = grc(42)
-            pythonapi.PyLong_FromLong.restype = py_object
-            self.assertEqual(pythonapi.PyLong_FromLong(42), 42)
+            pythonapi.PyInt_FromLong.restype = py_object
+            self.assertEqual(pythonapi.PyInt_FromLong(42), 42)
 
             self.assertEqual(grc(42), ref42)
 
-            pythonapi.PyLong_AsLong.argtypes = (py_object,)
-            pythonapi.PyLong_AsLong.restype = c_long
+            pythonapi.PyInt_AsLong.argtypes = (py_object,)
+            pythonapi.PyInt_AsLong.restype = c_long
 
-            res = pythonapi.PyLong_AsLong(42)
+            res = pythonapi.PyInt_AsLong(42)
             self.assertEqual(grc(res), ref42 + 1)
             del res
             self.assertEqual(grc(42), ref42)
@@ -72,11 +72,11 @@ class PythonAPITestCase(unittest.TestCase):
         PyOS_snprintf.argtypes = POINTER(c_char), c_size_t, c_char_p
 
         buf = c_buffer(256)
-        PyOS_snprintf(buf, sizeof(buf), b"Hello from %s", b"ctypes")
-        self.assertEqual(buf.value, b"Hello from ctypes")
+        PyOS_snprintf(buf, sizeof(buf), "Hello from %s", "ctypes")
+        self.assertEqual(buf.value, "Hello from ctypes")
 
-        PyOS_snprintf(buf, sizeof(buf), b"Hello from %s (%d, %d, %d)", b"ctypes", 1, 2, 3)
-        self.assertEqual(buf.value, b"Hello from ctypes (1, 2, 3)")
+        PyOS_snprintf(buf, sizeof(buf), "Hello from %s", "ctypes", 1, 2, 3)
+        self.assertEqual(buf.value, "Hello from ctypes")
 
         # not enough arguments
         self.assertRaises(TypeError, PyOS_snprintf, buf)

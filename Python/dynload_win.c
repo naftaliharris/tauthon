@@ -134,15 +134,6 @@ static char *GetPythonImport (HINSTANCE hModule)
                 !strncmp(import_name,"python",6)) {
                 char *pch;
 
-#ifndef _DEBUG
-                /* In a release version, don't claim that python3.dll is
-                   a Python DLL. */
-                if (strcmp(import_name, "python3.dll") == 0) {
-                    import_data += 20;
-                    continue;
-                }
-#endif
-
                 /* Ensure python prefix is followed only
                    by numbers to the end of the basename */
                 pch = import_name + 6;
@@ -171,17 +162,14 @@ static char *GetPythonImport (HINSTANCE hModule)
     return NULL;
 }
 
+
 dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;
     char funcname[258], *import_python;
 
-#ifndef _DEBUG
-    _Py_CheckPython3();
-#endif
-
-    PyOS_snprintf(funcname, sizeof(funcname), "PyInit_%.200s", shortname);
+    PyOS_snprintf(funcname, sizeof(funcname), "init%.200s", shortname);
 
     {
         HINSTANCE hDLL = NULL;
@@ -213,35 +201,34 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
         SetErrorMode(old_mode);
 
         if (hDLL==NULL){
-            PyObject *message;
+            char errBuf[256];
             unsigned int errorCode;
 
             /* Get an error string from Win32 error code */
-            wchar_t theInfo[256]; /* Pointer to error text
+            char theInfo[256]; /* Pointer to error text
                                   from system */
             int theLength; /* Length of error text */
 
             errorCode = GetLastError();
 
-            theLength = FormatMessageW(
+            theLength = FormatMessage(
                 FORMAT_MESSAGE_FROM_SYSTEM |
                 FORMAT_MESSAGE_IGNORE_INSERTS, /* flags */
                 NULL, /* message source */
                 errorCode, /* the message (error) ID */
-                MAKELANGID(LANG_NEUTRAL,
-                           SUBLANG_DEFAULT),
-                           /* Default language */
-                theInfo, /* the buffer */
+                0, /* default language environment */
+                (LPTSTR) theInfo, /* the buffer */
                 sizeof(theInfo), /* the buffer size */
                 NULL); /* no additional format args. */
 
             /* Problem: could not get the error message.
                This should not happen if called correctly. */
             if (theLength == 0) {
-                message = PyUnicode_FromFormat(
-                    "DLL load failed with error code %d",
-                    errorCode);
+                PyOS_snprintf(errBuf, sizeof(errBuf),
+                      "DLL load failed with error code %d",
+                          errorCode);
             } else {
+                size_t len;
                 /* For some reason a \r\n
                    is appended to the text */
                 if (theLength >= 2 &&
@@ -250,16 +237,13 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
                     theLength -= 2;
                     theInfo[theLength] = '\0';
                 }
-                message = PyUnicode_FromString(
-                    "DLL load failed: ");
-
-                PyUnicode_AppendAndDel(&message,
-                    PyUnicode_FromUnicode(
-                        theInfo,
-                        theLength));
+                strcpy(errBuf, "DLL load failed: ");
+                len = strlen(errBuf);
+                strncpy(errBuf+len, theInfo,
+                    sizeof(errBuf)-len);
+                errBuf[sizeof(errBuf)-1] = '\0';
             }
-            PyErr_SetObject(PyExc_ImportError, message);
-            Py_XDECREF(message);
+            PyErr_SetString(PyExc_ImportError, errBuf);
             return NULL;
         } else {
             char buffer[256];

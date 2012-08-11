@@ -1,7 +1,7 @@
 import os
 import bdb
 import types
-from tkinter import *
+from Tkinter import *
 from idlelib.WindowList import ListedToplevel
 from idlelib.ScrolledList import ScrolledList
 from idlelib import macosxSupport
@@ -253,8 +253,7 @@ class Debugger:
         if self.vsource.get():
             self.sync_source_line()
 
-    def show_frame(self, stackitem):
-        frame, lineno = stackitem
+    def show_frame(self, (frame, lineno)):
         self.frame = frame
         self.show_variables()
 
@@ -312,7 +311,8 @@ class Debugger:
 
     def load_breakpoints(self):
         "Load PyShellEditorWindow breakpoints into subprocess debugger"
-        for editwin in self.pyshell.flist.inversedict:
+        pyshell_edit_windows = self.pyshell.flist.inversedict.keys()
+        for editwin in pyshell_edit_windows:
             filename = editwin.io.filename
             try:
                 for lineno in editwin.breakpoints:
@@ -348,7 +348,8 @@ class StackViewer(ScrolledList):
             funcname = code.co_name
             import linecache
             sourceline = linecache.getline(filename, lineno)
-            sourceline = sourceline.strip()
+            import string
+            sourceline = string.strip(sourceline)
             if funcname in ("?", "", None):
                 item = "%s, line %d: %s" % (modname, lineno, sourceline)
             else:
@@ -412,8 +413,8 @@ class NamespaceViewer:
             height = 20*len(dict) # XXX 20 == observed height of Entry widget
         self.master = master
         self.title = title
-        import reprlib
-        self.repr = reprlib.Repr()
+        import repr
+        self.repr = repr.Repr()
         self.repr.maxstring = 60
         self.repr.maxother = 60
         self.frame = frame = Frame(master)
@@ -439,27 +440,15 @@ class NamespaceViewer:
             return
         subframe = self.subframe
         frame = self.frame
-        for c in list(subframe.children.values()):
+        for c in subframe.children.values():
             c.destroy()
         self.dict = None
         if not dict:
             l = Label(subframe, text="None")
             l.grid(row=0, column=0)
         else:
-            #names = sorted(dict)
-            ###
-            # Because of (temporary) limitations on the dict_keys type (not yet
-            # public or pickleable), have the subprocess to send a list of
-            # keys, not a dict_keys object.  sorted() will take a dict_keys
-            # (no subprocess) or a list.
-            #
-            # There is also an obscure bug in sorted(dict) where the
-            # interpreter gets into a loop requesting non-existing dict[0],
-            # dict[1], dict[2], etc from the RemoteDebugger.DictProxy.
-            ###
-            keys_list = dict.keys()
-            names = sorted(keys_list)
-            ###
+            names = dict.keys()
+            names.sort()
             row = 0
             for name in names:
                 value = dict[name]

@@ -1,4 +1,4 @@
-from test import support, seq_tests
+from test import test_support, seq_tests
 
 import gc
 
@@ -6,7 +6,7 @@ class TupleTest(seq_tests.CommonTest):
     type2test = tuple
 
     def test_constructors(self):
-        super().test_constructors()
+        super(TupleTest, self).test_constructors()
         # calling built-in types without argument must return empty
         self.assertEqual(tuple(), ())
         t0_3 = (0, 1, 2, 3)
@@ -18,25 +18,25 @@ class TupleTest(seq_tests.CommonTest):
         self.assertEqual(tuple('spam'), ('s', 'p', 'a', 'm'))
 
     def test_truth(self):
-        super().test_truth()
+        super(TupleTest, self).test_truth()
         self.assertTrue(not ())
         self.assertTrue((42, ))
 
     def test_len(self):
-        super().test_len()
+        super(TupleTest, self).test_len()
         self.assertEqual(len(()), 0)
         self.assertEqual(len((0,)), 1)
         self.assertEqual(len((0, 1, 2)), 3)
 
     def test_iadd(self):
-        super().test_iadd()
+        super(TupleTest, self).test_iadd()
         u = (0, 1)
         u2 = u
         u += (2, 3)
         self.assertTrue(u is not u2)
 
     def test_imul(self):
-        super().test_imul()
+        super(TupleTest, self).test_imul()
         u = (0, 1)
         u2 = u
         u *= 3
@@ -47,7 +47,7 @@ class TupleTest(seq_tests.CommonTest):
         def f():
             for i in range(1000):
                 yield i
-        self.assertEqual(list(tuple(f())), list(range(1000)))
+        self.assertEqual(list(tuple(f())), range(1000))
 
     def test_hash(self):
         # See SF bug 942952:  Weakness in tuple hash
@@ -66,10 +66,10 @@ class TupleTest(seq_tests.CommonTest):
         #      is sorely suspect.
 
         N=50
-        base = list(range(N))
+        base = range(N)
         xp = [(i, j) for i in base for j in base]
         inps = base + [(i, j) for i in base for j in xp] + \
-                     [(i, j) for i in xp for j in base] + xp + list(zip(base))
+                     [(i, j) for i in xp for j in base] + xp + zip(base)
         collisions = len(inps) - len(set(map(hash, inps)))
         self.assertTrue(collisions <= 15)
 
@@ -96,7 +96,7 @@ class TupleTest(seq_tests.CommonTest):
         gc.collect()
         self.assertTrue(gc.is_tracked(t), t)
 
-    @support.cpython_only
+    @test_support.cpython_only
     def test_track_literals(self):
         # Test GC-optimization of tuple literals
         x, y, z = 1.5, "a", []
@@ -137,25 +137,25 @@ class TupleTest(seq_tests.CommonTest):
         self._tracked(tp(tuple([obj]) for obj in [x, y, z]))
         self._tracked(tuple(tp([obj]) for obj in [x, y, z]))
 
-    @support.cpython_only
+    @test_support.cpython_only
     def test_track_dynamic(self):
         # Test GC-optimization of dynamically constructed tuples.
         self.check_track_dynamic(tuple, False)
 
-    @support.cpython_only
+    @test_support.cpython_only
     def test_track_subtypes(self):
         # Tuple subtypes must always be tracked
         class MyTuple(tuple):
             pass
         self.check_track_dynamic(MyTuple, True)
 
-    @support.cpython_only
+    @test_support.cpython_only
     def test_bug7466(self):
         # Trying to untrack an unfinished tuple could crash Python
         self._not_tracked(tuple(gc.collect() for i in range(101)))
 
 def test_main():
-    support.run_unittest(TupleTest)
+    test_support.run_unittest(TupleTest)
 
 if __name__=="__main__":
     test_main()

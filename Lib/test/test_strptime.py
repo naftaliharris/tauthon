@@ -5,7 +5,7 @@ import time
 import locale
 import re
 import sys
-from test import support
+from test import test_support
 from datetime import date as datetime_date
 
 import _strptime
@@ -38,9 +38,9 @@ class LocaleTime_Tests(unittest.TestCase):
         comparison = testing[self.time_tuple[tuple_position]]
         self.assertIn(strftime_output, testing,
                       "%s: not found in tuple" % error_msg)
-        self.assertTrue(comparison == strftime_output,
-                        "%s: position within tuple incorrect; %s != %s" %
-                        (error_msg, comparison, strftime_output))
+        self.assertEqual(comparison, strftime_output,
+                         "%s: position within tuple incorrect; %s != %s" %
+                         (error_msg, comparison, strftime_output))
 
     def test_weekday(self):
         # Make sure that full and abbreviated weekday names are correct in
@@ -65,8 +65,8 @@ class LocaleTime_Tests(unittest.TestCase):
                       "AM/PM representation not in tuple")
         if self.time_tuple[3] < 12: position = 0
         else: position = 1
-        self.assertTrue(strftime_output == self.LT_ins.am_pm[position],
-                        "AM/PM representation in the wrong position within the tuple")
+        self.assertEqual(self.LT_ins.am_pm[position], strftime_output,
+                         "AM/PM representation in the wrong position within the tuple")
 
     def test_timezone(self):
         # Make sure timezone is correct
@@ -86,17 +86,14 @@ class LocaleTime_Tests(unittest.TestCase):
         #  output.
         magic_date = (1999, 3, 17, 22, 44, 55, 2, 76, 0)
         strftime_output = time.strftime("%c", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_date_time,
-                                                         magic_date),
-                        "LC_date_time incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_date_time, magic_date),
+                         strftime_output, "LC_date_time incorrect")
         strftime_output = time.strftime("%x", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_date,
-                                                         magic_date),
-                        "LC_date incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_date, magic_date),
+                         strftime_output, "LC_date incorrect")
         strftime_output = time.strftime("%X", magic_date)
-        self.assertTrue(strftime_output == time.strftime(self.LT_ins.LC_time,
-                                                         magic_date),
-                        "LC_time incorrect")
+        self.assertEqual(time.strftime(self.LT_ins.LC_time, magic_date),
+                         strftime_output, "LC_time incorrect")
         LT = _strptime.LocaleTime()
         LT.am_pm = ('', '')
         self.assertTrue(LT.LC_time, "LocaleTime's LC directives cannot handle "
@@ -168,8 +165,8 @@ class TimeRETests(unittest.TestCase):
         # Fixes bug #661354
         test_locale = _strptime.LocaleTime()
         test_locale.timezone = (frozenset(), frozenset())
-        self.assertTrue(_strptime.TimeRE(test_locale).pattern("%Z") == '',
-                        "with timezone == ('',''), TimeRE().pattern('%Z') != ''")
+        self.assertEqual(_strptime.TimeRE(test_locale).pattern("%Z"), '',
+                         "with timezone == ('',''), TimeRE().pattern('%Z') != ''")
 
     def test_matching_with_escapes(self):
         # Make sure a format that requires escaping of characters works
@@ -195,7 +192,7 @@ class TimeRETests(unittest.TestCase):
         # so as to not allow to subpatterns to end up next to each other and
         # "steal" characters from each other.
         pattern = self.time_re.pattern('%j %H')
-        self.assertTrue(not re.match(pattern, "180"))
+        self.assertFalse(re.match(pattern, "180"))
         self.assertTrue(re.match(pattern, "18 0"))
 
 
@@ -215,7 +212,7 @@ class StrptimeTests(unittest.TestCase):
                 _strptime._strptime_time("2005", bad_format)
             except ValueError:
                 continue
-            except Exception as err:
+            except Exception, err:
                 self.fail("'%s' raised %s, not ValueError" %
                             (bad_format, err.__class__.__name__))
             else:
@@ -381,6 +378,14 @@ class StrptimeTests(unittest.TestCase):
         need_escaping = ".^$*+?{}\[]|)("
         self.assertTrue(_strptime._strptime_time(need_escaping, need_escaping))
 
+    def test_feb29_on_leap_year_without_year(self):
+        time.strptime("Feb 29", "%b %d")
+
+    def test_mar1_comes_after_feb29_even_when_omitting_the_year(self):
+        self.assertLess(
+                time.strptime("Feb 29", "%b %d"),
+                time.strptime("Mar 1", "%b %d"))
+
 class Strptime12AMPMTests(unittest.TestCase):
     """Test a _strptime regression in '%I %p' at 12 noon (12 PM)"""
 
@@ -474,8 +479,8 @@ class CalculationTests(unittest.TestCase):
                                         "of the year")
         test_helper((1917, 12, 31), "Dec 31 on Monday with year starting and "
                                         "ending on Monday")
-        test_helper((2007, 1, 7), "First Sunday of 2007")
-        test_helper((2007, 1, 14), "Second Sunday of 2007")
+        test_helper((2007, 01, 07), "First Sunday of 2007")
+        test_helper((2007, 01, 14), "Second Sunday of 2007")
         test_helper((2006, 12, 31), "Last Sunday of 2006")
         test_helper((2006, 12, 24), "Second to last Sunday of 2006")
 
@@ -536,7 +541,7 @@ class CacheTests(unittest.TestCase):
                 self.assertIsNot(first_time_re, second_time_re)
             # Possible test locale is not supported while initial locale is.
             # If this is the case just suppress the exception and fall-through
-            # to the reseting to the original locale.
+            # to the resetting to the original locale.
             except locale.Error:
                 pass
         # Make sure we don't trample on the locale setting once we leave the
@@ -546,7 +551,7 @@ class CacheTests(unittest.TestCase):
 
 
 def test_main():
-    support.run_unittest(
+    test_support.run_unittest(
         getlang_Tests,
         LocaleTime_Tests,
         TimeRETests,

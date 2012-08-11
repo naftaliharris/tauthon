@@ -80,23 +80,23 @@ def _maybe_compile(compiler, source, filename, symbol):
 
     try:
         code = compiler(source, filename, symbol)
-    except SyntaxError as err:
+    except SyntaxError, err:
         pass
 
     try:
         code1 = compiler(source + "\n", filename, symbol)
-    except SyntaxError as e:
-        err1 = e
+    except SyntaxError, err1:
+        pass
 
     try:
         code2 = compiler(source + "\n\n", filename, symbol)
-    except SyntaxError as e:
-        err2 = e
+    except SyntaxError, err2:
+        pass
 
     if code:
         return code
     if not code1 and repr(err1) == repr(err2):
-        raise err1
+        raise SyntaxError, err1
 
 def _compile(source, filename, symbol):
     return compile(source, filename, symbol, PyCF_DONT_IMPLY_DEDENT)

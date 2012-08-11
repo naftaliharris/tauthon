@@ -5,7 +5,7 @@ connect to the Idle process, which listens for the connection.  Since Idle has
 has only one client per server, this was not a limitation.
 
    +---------------------------------+ +-------------+
-   | socketserver.BaseRequestHandler | | SocketIO    |
+   | SocketServer.BaseRequestHandler | | SocketIO    |
    +---------------------------------+ +-------------+
                    ^                   | register()  |
                    |                   | unregister()|
@@ -31,13 +31,13 @@ import sys
 import os
 import socket
 import select
-import socketserver
+import SocketServer
 import struct
-import pickle
+import cPickle as pickle
 import threading
-import queue
+import Queue
 import traceback
-import copyreg
+import copy_reg
 import types
 import marshal
 
@@ -60,18 +60,18 @@ def pickle_code(co):
 #      assert isinstance(fn, type.FunctionType)
 #      return repr(fn)
 
-copyreg.pickle(types.CodeType, pickle_code, unpickle_code)
-# copyreg.pickle(types.FunctionType, pickle_function, unpickle_function)
+copy_reg.pickle(types.CodeType, pickle_code, unpickle_code)
+# copy_reg.pickle(types.FunctionType, pickle_function, unpickle_function)
 
 BUFSIZE = 8*1024
 LOCALHOST = '127.0.0.1'
 
-class RPCServer(socketserver.TCPServer):
+class RPCServer(SocketServer.TCPServer):
 
     def __init__(self, addr, handlerclass=None):
         if handlerclass is None:
             handlerclass = RPCHandler
-        socketserver.TCPServer.__init__(self, addr, handlerclass)
+        SocketServer.TCPServer.__init__(self, addr, handlerclass)
 
     def server_bind(self):
         "Override TCPServer method, no bind() phase for connecting entity"
@@ -104,21 +104,21 @@ class RPCServer(socketserver.TCPServer):
             raise
         except:
             erf = sys.__stderr__
-            print('\n' + '-'*40, file=erf)
-            print('Unhandled server exception!', file=erf)
-            print('Thread: %s' % threading.current_thread().name, file=erf)
-            print('Client Address: ', client_address, file=erf)
-            print('Request: ', repr(request), file=erf)
+            print>>erf, '\n' + '-'*40
+            print>>erf, 'Unhandled server exception!'
+            print>>erf, 'Thread: %s' % threading.currentThread().getName()
+            print>>erf, 'Client Address: ', client_address
+            print>>erf, 'Request: ', repr(request)
             traceback.print_exc(file=erf)
-            print('\n*** Unrecoverable, server exiting!', file=erf)
-            print('-'*40, file=erf)
+            print>>erf, '\n*** Unrecoverable, server exiting!'
+            print>>erf, '-'*40
             os._exit(0)
 
 #----------------- end class RPCServer --------------------
 
 objecttable = {}
-request_queue = queue.Queue(0)
-response_queue = queue.Queue(0)
+request_queue = Queue.Queue(0)
+response_queue = Queue.Queue(0)
 
 
 class SocketIO(object):
@@ -126,7 +126,7 @@ class SocketIO(object):
     nextseq = 0
 
     def __init__(self, sock, objtable=None, debugging=None):
-        self.sockthread = threading.current_thread()
+        self.sockthread = threading.currentThread()
         if debugging is not None:
             self.debugging = debugging
         self.sock = sock
@@ -149,10 +149,10 @@ class SocketIO(object):
     def debug(self, *args):
         if not self.debugging:
             return
-        s = self.location + " " + str(threading.current_thread().name)
+        s = self.location + " " + str(threading.currentThread().getName())
         for a in args:
             s = s + " " + str(a)
-        print(s, file=sys.__stderr__)
+        print>>sys.__stderr__, s
 
     def register(self, oid, object):
         self.objtable[oid] = object
@@ -201,7 +201,7 @@ class SocketIO(object):
         except:
             msg = "*** Internal Error: rpc.py:SocketIO.localcall()\n\n"\
                   " Object: %s \n Method: %s \n Args: %s\n"
-            print(msg % (oid, method, args), file=sys.__stderr__)
+            print>>sys.__stderr__, msg % (oid, method, args)
             traceback.print_exc(file=sys.__stderr__)
             return ("EXCEPTION", None)
 
@@ -218,7 +218,7 @@ class SocketIO(object):
     def asynccall(self, oid, methodname, args, kwargs):
         request = ("CALL", (oid, methodname, args, kwargs))
         seq = self.newseq()
-        if threading.current_thread() != self.sockthread:
+        if threading.currentThread() != self.sockthread:
             cvar = threading.Condition()
             self.cvars[seq] = cvar
         self.debug(("asynccall:%d:" % seq), oid, methodname, args, kwargs)
@@ -228,7 +228,7 @@ class SocketIO(object):
     def asyncqueue(self, oid, methodname, args, kwargs):
         request = ("QUEUE", (oid, methodname, args, kwargs))
         seq = self.newseq()
-        if threading.current_thread() != self.sockthread:
+        if threading.currentThread() != self.sockthread:
             cvar = threading.Condition()
             self.cvars[seq] = cvar
         self.debug(("asyncqueue:%d:" % seq), oid, methodname, args, kwargs)
@@ -256,8 +256,8 @@ class SocketIO(object):
             return None
         if how == "ERROR":
             self.debug("decoderesponse: Internal ERROR:", what)
-            raise RuntimeError(what)
-        raise SystemError(how, what)
+            raise RuntimeError, what
+        raise SystemError, (how, what)
 
     def decode_interrupthook(self):
         ""
@@ -287,14 +287,14 @@ class SocketIO(object):
     def _proxify(self, obj):
         if isinstance(obj, RemoteProxy):
             return RPCProxy(self, obj.oid)
-        if isinstance(obj, list):
-            return list(map(self._proxify, obj))
+        if isinstance(obj, types.ListType):
+            return map(self._proxify, obj)
         # XXX Check for other types -- not currently needed
         return obj
 
     def _getresponse(self, myseq, wait):
         self.debug("_getresponse:myseq:", myseq)
-        if threading.current_thread() is self.sockthread:
+        if threading.currentThread() is self.sockthread:
             # this thread does all reading of requests or responses
             while 1:
                 response = self.pollresponse(myseq, wait)
@@ -323,7 +323,7 @@ class SocketIO(object):
         try:
             s = pickle.dumps(message)
         except pickle.PicklingError:
-            print("Cannot pickle:", repr(message), file=sys.__stderr__)
+            print >>sys.__stderr__, "Cannot pickle:", repr(message)
             raise
         s = struct.pack("<i", len(s)) + s
         while len(s) > 0:
@@ -331,19 +331,19 @@ class SocketIO(object):
                 r, w, x = select.select([], [self.sock], [])
                 n = self.sock.send(s[:BUFSIZE])
             except (AttributeError, TypeError):
-                raise IOError("socket no longer exists")
+                raise IOError, "socket no longer exists"
             except socket.error:
                 raise
             else:
                 s = s[n:]
 
-    buff = b''
+    buffer = ""
     bufneed = 4
     bufstate = 0 # meaning: 0 => reading count; 1 => reading data
 
     def pollpacket(self, wait):
         self._stage0()
-        if len(self.buff) < self.bufneed:
+        if len(self.buffer) < self.bufneed:
             r, w, x = select.select([self.sock.fileno()], [], [], wait)
             if len(r) == 0:
                 return None
@@ -353,21 +353,21 @@ class SocketIO(object):
                 raise EOFError
             if len(s) == 0:
                 raise EOFError
-            self.buff += s
+            self.buffer += s
             self._stage0()
         return self._stage1()
 
     def _stage0(self):
-        if self.bufstate == 0 and len(self.buff) >= 4:
-            s = self.buff[:4]
-            self.buff = self.buff[4:]
+        if self.bufstate == 0 and len(self.buffer) >= 4:
+            s = self.buffer[:4]
+            self.buffer = self.buffer[4:]
             self.bufneed = struct.unpack("<i", s)[0]
             self.bufstate = 1
 
     def _stage1(self):
-        if self.bufstate == 1 and len(self.buff) >= self.bufneed:
-            packet = self.buff[:self.bufneed]
-            self.buff = self.buff[self.bufneed:]
+        if self.bufstate == 1 and len(self.buffer) >= self.bufneed:
+            packet = self.buffer[:self.bufneed]
+            self.buffer = self.buffer[self.bufneed:]
             self.bufneed = 4
             self.bufstate = 0
             return packet
@@ -379,10 +379,10 @@ class SocketIO(object):
         try:
             message = pickle.loads(packet)
         except pickle.UnpicklingError:
-            print("-----------------------", file=sys.__stderr__)
-            print("cannot unpickle packet:", repr(packet), file=sys.__stderr__)
+            print >>sys.__stderr__, "-----------------------"
+            print >>sys.__stderr__, "cannot unpickle packet:", repr(packet)
             traceback.print_stack(file=sys.__stderr__)
-            print("-----------------------", file=sys.__stderr__)
+            print >>sys.__stderr__, "-----------------------"
             raise
         return message
 
@@ -413,7 +413,7 @@ class SocketIO(object):
             # send queued response if there is one available
             try:
                 qmsg = response_queue.get(0)
-            except queue.Empty:
+            except Queue.Empty:
                 pass
             else:
                 seq, response = qmsg
@@ -492,7 +492,7 @@ class RemoteProxy(object):
     def __init__(self, oid):
         self.oid = oid
 
-class RPCHandler(socketserver.BaseRequestHandler, SocketIO):
+class RPCHandler(SocketServer.BaseRequestHandler, SocketIO):
 
     debugging = False
     location = "#S"  # Server
@@ -500,10 +500,10 @@ class RPCHandler(socketserver.BaseRequestHandler, SocketIO):
     def __init__(self, sock, addr, svr):
         svr.current_handler = self ## cgt xxx
         SocketIO.__init__(self, sock)
-        socketserver.BaseRequestHandler.__init__(self, sock, addr, svr)
+        SocketServer.BaseRequestHandler.__init__(self, sock, addr, svr)
 
     def handle(self):
-        "handle() method required by socketserver"
+        "handle() method required by SocketServer"
         self.mainloop()
 
     def get_remote_proxy(self, oid):
@@ -524,11 +524,11 @@ class RPCClient(SocketIO):
     def accept(self):
         working_sock, address = self.listening_sock.accept()
         if self.debugging:
-            print("****** Connection request from ", address, file=sys.__stderr__)
+            print>>sys.__stderr__, "****** Connection request from ", address
         if address[0] == LOCALHOST:
             SocketIO.__init__(self, working_sock)
         else:
-            print("** Invalid host: ", address, file=sys.__stderr__)
+            print>>sys.__stderr__, "** Invalid host: ", address
             raise socket.error
 
     def get_remote_proxy(self, oid):
@@ -555,7 +555,7 @@ class RPCProxy(object):
                                            (name,), {})
             return value
         else:
-            raise AttributeError(name)
+            raise AttributeError, name
 
     def __getattributes(self):
         self.__attributes = self.sockio.remotecall(self.oid,
@@ -572,7 +572,9 @@ def _getmethods(obj, methods):
         attr = getattr(obj, name)
         if hasattr(attr, '__call__'):
             methods[name] = 1
-    if isinstance(obj, type):
+    if type(obj) == types.InstanceType:
+        _getmethods(obj.__class__, methods)
+    if type(obj) == types.ClassType:
         for super in obj.__bases__:
             _getmethods(super, methods)
 

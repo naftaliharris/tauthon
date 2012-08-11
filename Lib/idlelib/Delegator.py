@@ -13,7 +13,7 @@ class Delegator:
         return attr
 
     def resetcache(self):
-        for key in self.__cache:
+        for key in self.__cache.keys():
             try:
                 delattr(self, key)
             except AttributeError:
@@ -21,9 +21,9 @@ class Delegator:
         self.__cache.clear()
 
     def cachereport(self):
-        keys = list(self.__cache.keys())
+        keys = self.__cache.keys()
         keys.sort()
-        print(keys)
+        print keys
 
     def setdelegate(self, delegate):
         self.resetcache()

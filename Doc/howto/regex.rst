@@ -23,6 +23,11 @@
 Introduction
 ============
 
+The :mod:`re` module was added in Python 1.5, and provides Perl-style regular
+expression patterns.  Earlier versions of Python came with the :mod:`regex`
+module, which provided Emacs-style patterns.  The :mod:`regex` module was
+removed completely in Python 2.5.
+
 Regular expressions (called REs, or regexes, or regex patterns) are essentially
 a tiny, highly specialized programming language embedded inside Python and made
 available through the :mod:`re` module. Using this little language, you specify
@@ -108,7 +113,7 @@ Some of the special sequences beginning with ``'\'`` represent predefined sets
 of characters that are often useful, such as the set of digits, the set of
 letters, or the set of anything that isn't whitespace.  The following predefined
 special sequences are a subset of those available. The equivalent classes are
-for bytes patterns. For a complete list of sequences and expanded class
+for byte string patterns. For a complete list of sequences and expanded class
 definitions for Unicode string patterns, see the last part of
 :ref:`Regular Expression Syntax <re-syntax>`.
 
@@ -260,7 +265,7 @@ performing string substitutions. ::
 
    >>> import re
    >>> p = re.compile('ab*')
-   >>> p
+   >>> print p
    <_sre.SRE_Pattern object at 0x...>
 
 :func:`re.compile` also accepts an optional *flags* argument, used to enable
@@ -359,8 +364,8 @@ information about the match: where it starts and ends, the substring it matched,
 and more.
 
 You can learn about this by interactively experimenting with the :mod:`re`
-module.  If you have :mod:`tkinter` available, you may also want to look at
-:file:`Tools/demo/redemo.py`, a demonstration program included with the
+module.  If you have Tkinter available, you may also want to look at
+:source:`Tools/scripts/redemo.py`, a demonstration program included with the
 Python distribution.  It allows you to enter REs and strings, and displays
 whether the RE matches or fails. :file:`redemo.py` can be quite useful when
 trying to debug a complicated RE.  Phil Schwartz's `Kodos
@@ -370,6 +375,7 @@ testing RE patterns.
 This HOWTO uses the standard Python interpreter for its examples. First, run the
 Python interpreter, import the :mod:`re` module, and compile a RE::
 
+   Python 2.2.2 (#1, Feb 10 2003, 12:57:01)
    >>> import re
    >>> p = re.compile('[a-z]+')
    >>> p
@@ -382,7 +388,7 @@ interpreter to print no output.  You can explicitly print the result of
 :meth:`match` to make this clear. ::
 
    >>> p.match("")
-   >>> print(p.match(""))
+   >>> print p.match("")
    None
 
 Now, let's try it on a string that it should match, such as ``tempo``.  In this
@@ -390,7 +396,7 @@ case, :meth:`match` will return a :class:`MatchObject`, so you should store the
 result in a variable for later use. ::
 
    >>> m = p.match('tempo')
-   >>> m
+   >>> print m
    <_sre.SRE_Match object at 0x...>
 
 Now you can query the :class:`MatchObject` for information about the matching
@@ -427,9 +433,9 @@ will always be zero.  However, the :meth:`search` method of patterns
 scans through the string, so  the match may not start at zero in that
 case. ::
 
-   >>> print(p.match('::: message'))
+   >>> print p.match('::: message')
    None
-   >>> m = p.search('::: message') ; print(m)
+   >>> m = p.search('::: message') ; print m
    <_sre.SRE_Match object at 0x...>
    >>> m.group()
    'message'
@@ -442,9 +448,9 @@ in a variable, and then check if it was ``None``.  This usually looks like::
    p = re.compile( ... )
    m = p.match( 'string goes here' )
    if m:
-       print('Match found: ', m.group())
+       print 'Match found: ', m.group()
    else:
-       print('No match')
+       print 'No match'
 
 Two pattern methods return all of the matches for a pattern.
 :meth:`findall` returns a list of matching strings::
@@ -455,13 +461,13 @@ Two pattern methods return all of the matches for a pattern.
 
 :meth:`findall` has to create the entire list before it can be returned as the
 result.  The :meth:`finditer` method returns a sequence of :class:`MatchObject`
-instances as an :term:`iterator`::
+instances as an :term:`iterator`. [#]_ ::
 
    >>> iterator = p.finditer('12 drummers drumming, 11 ... 10 ...')
    >>> iterator
-   <callable_iterator object at 0x...>
+   <callable-iterator object at 0x401833ac>
    >>> for match in iterator:
-   ...     print(match.span())
+   ...     print match.span()
    ...
    (0, 2)
    (22, 24)
@@ -478,7 +484,7 @@ take the same arguments as the corresponding pattern method, with
 the RE string added as the first argument, and still return either ``None`` or a
 :class:`MatchObject` instance. ::
 
-   >>> print(re.match(r'From\s+', 'Fromage amk'))
+   >>> print re.match(r'From\s+', 'Fromage amk')
    None
    >>> re.match(r'From\s+', 'From amk Thu May 14 19:12:10 1998')
    <_sre.SRE_Match object at 0x...>
@@ -495,7 +501,7 @@ more convenient.  If a program contains a lot of regular expressions, or re-uses
 the same ones in several locations, then it might be worthwhile to collect all
 the definitions in one place, in a section of code that compiles all the REs
 ahead of time.  To take an example from the standard library, here's an extract
-from the now deprecated :file:`xmllib.py`::
+from the deprecated :mod:`xmllib` module::
 
    ref = re.compile( ... )
    entityref = re.compile( ... )
@@ -536,9 +542,9 @@ of each one.
 | :const:`VERBOSE`, :const:`X`    | Enable verbose REs, which can be organized |
 |                                 | more cleanly and understandably.           |
 +---------------------------------+--------------------------------------------+
-| :const:`ASCII`, :const:`A`      | Makes several escapes like ``\w``, ``\b``, |
-|                                 | ``\s`` and ``\d`` match only on ASCII      |
-|                                 | characters with the respective property.   |
+| :const:`UNICODE`, :const:`U`    | Makes several escapes like ``\w``, ``\b``, |
+|                                 | ``\s`` and ``\d`` dependent on the Unicode |
+|                                 | character database.                        |
 +---------------------------------+--------------------------------------------+
 
 
@@ -594,13 +600,12 @@ of each one.
    newline; without this flag, ``'.'`` will match anything *except* a newline.
 
 
-.. data:: A
-          ASCII
+.. data:: U
+          UNICODE
    :noindex:
 
-   Make ``\w``, ``\W``, ``\b``, ``\B``, ``\s`` and ``\S`` perform ASCII-only
-   matching instead of full Unicode matching. This is only meaningful for
-   Unicode patterns, and is ignored for byte patterns.
+   Make ``\w``, ``\W``, ``\b``, ``\B``, ``\d``, ``\D``, ``\s`` and ``\S``
+   dependent on the Unicode character properties database.
 
 
 .. data:: X
@@ -682,9 +687,9 @@ given location, they can obviously be matched an infinite number of times.
    For example, if you wish to match the word ``From`` only at the beginning of a
    line, the RE to use is ``^From``. ::
 
-      >>> print(re.search('^From', 'From Here to Eternity'))
+      >>> print re.search('^From', 'From Here to Eternity')
       <_sre.SRE_Match object at 0x...>
-      >>> print(re.search('^From', 'Reciting From Memory'))
+      >>> print re.search('^From', 'Reciting From Memory')
       None
 
    .. To match a literal \character{\^}, use \regexp{\e\^} or enclose it
@@ -694,11 +699,11 @@ given location, they can obviously be matched an infinite number of times.
    Matches at the end of a line, which is defined as either the end of the string,
    or any location followed by a newline character.     ::
 
-      >>> print(re.search('}$', '{block}'))
+      >>> print re.search('}$', '{block}')
       <_sre.SRE_Match object at 0x...>
-      >>> print(re.search('}$', '{block} '))
+      >>> print re.search('}$', '{block} ')
       None
-      >>> print(re.search('}$', '{block}\n'))
+      >>> print re.search('}$', '{block}\n')
       <_sre.SRE_Match object at 0x...>
 
    To match a literal ``'$'``, use ``\$`` or enclose it inside a character class,
@@ -723,11 +728,11 @@ given location, they can obviously be matched an infinite number of times.
    match when it's contained inside another word. ::
 
       >>> p = re.compile(r'\bclass\b')
-      >>> print(p.search('no class at all'))
+      >>> print p.search('no class at all')
       <_sre.SRE_Match object at 0x...>
-      >>> print(p.search('the declassified algorithm'))
+      >>> print p.search('the declassified algorithm')
       None
-      >>> print(p.search('one subclass is'))
+      >>> print p.search('one subclass is')
       None
 
    There are two subtleties you should remember when using this special sequence.
@@ -739,9 +744,9 @@ given location, they can obviously be matched an infinite number of times.
    in front of the RE string. ::
 
       >>> p = re.compile('\bclass\b')
-      >>> print(p.search('no class at all'))
+      >>> print p.search('no class at all')
       None
-      >>> print(p.search('\b' + 'class' + '\b')  )
+      >>> print p.search('\b' + 'class' + '\b')
       <_sre.SRE_Match object at 0x...>
 
    Second, inside a character class, where there's no use for this assertion,
@@ -779,7 +784,7 @@ of a group with a repeating qualifier, such as ``*``, ``+``, ``?``, or
 ``ab``. ::
 
    >>> p = re.compile('(ab)*')
-   >>> print(p.match('ababababab').span())
+   >>> print p.match('ababababab').span()
    (0, 10)
 
 Groups indicated with ``'('``, ``')'`` also capture the starting and ending
@@ -1245,17 +1250,17 @@ It's important to keep this distinction in mind.  Remember,  :func:`match` will
 only report a successful match which will start at 0; if the match wouldn't
 start at zero,  :func:`match` will *not* report it. ::
 
-   >>> print(re.match('super', 'superstition').span())
+   >>> print re.match('super', 'superstition').span()
    (0, 5)
-   >>> print(re.match('super', 'insuperable'))
+   >>> print re.match('super', 'insuperable')
    None
 
 On the other hand, :func:`search` will scan forward through the string,
 reporting the first match it finds. ::
 
-   >>> print(re.search('super', 'superstition').span())
+   >>> print re.search('super', 'superstition').span()
    (0, 5)
-   >>> print(re.search('super', 'insuperable').span())
+   >>> print re.search('super', 'insuperable').span()
    (2, 7)
 
 Sometimes you'll be tempted to keep using :func:`re.match`, and just add ``.*``
@@ -1284,9 +1289,9 @@ doesn't work because of the greedy nature of ``.*``. ::
    >>> s = '<html><head><title>Title</title>'
    >>> len(s)
    32
-   >>> print(re.match('<.*>', s).span())
+   >>> print re.match('<.*>', s).span()
    (0, 32)
-   >>> print(re.match('<.*>', s).group())
+   >>> print re.match('<.*>', s).group()
    <html><head><title>Title</title>
 
 The RE matches the ``'<'`` in ``<html>``, and the ``.*`` consumes the rest of
@@ -1302,7 +1307,7 @@ example, the ``'>'`` is tried immediately after the first ``'<'`` matches, and
 when it fails, the engine advances a character at a time, retrying the ``'>'``
 at every step.  This produces just the right result::
 
-   >>> print(re.match('<.*?>', s).group())
+   >>> print re.match('<.*?>', s).group()
    <html>
 
 (Note that parsing HTML or XML with regular expressions is painful.
@@ -1313,7 +1318,7 @@ be *very* complicated.  Use an HTML or XML parser module for such tasks.)
 
 
 Using re.VERBOSE
-----------------
+--------------------
 
 By now you've probably noticed that regular expressions are a very compact
 notation, but they're not terribly readable.  REs of moderate complexity can
@@ -1361,4 +1366,9 @@ and doesn't contain any Python material at all, so it won't be useful as a
 reference for programming in Python.  (The first edition covered Python's
 now-removed :mod:`regex` module, which won't help you much.)  Consider checking
 it out from your library.
+
+
+.. rubric:: Footnotes
+
+.. [#] Introduced in Python 2.2.2.
 

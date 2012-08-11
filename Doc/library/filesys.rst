@@ -1,3 +1,4 @@
+
 .. _filesys:
 
 *************************
@@ -15,24 +16,23 @@ in this chapter is:
    os.path.rst
    fileinput.rst
    stat.rst
+   statvfs.rst
    filecmp.rst
    tempfile.rst
    glob.rst
    fnmatch.rst
    linecache.rst
    shutil.rst
+   dircache.rst
    macpath.rst
 
 
 .. seealso::
 
+   Section :ref:`bltin-file-objects`
+      A description of Python's built-in file objects.
+
    Module :mod:`os`
-      Operating system interfaces, including functions to work with files at a
-      lower level than Python :term:`file objects <file object>`.
+      Operating system interfaces, including functions to work with files at a lower
+      level than the built-in file object.
 
-   Module :mod:`io`
-      Python's built-in I/O library, including both abstract classes and
-      some concrete classes such as file I/O.
-
-   Built-in function :func:`open`
-      The standard way to open files for reading and writing with Python.

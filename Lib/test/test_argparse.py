@@ -11,11 +11,12 @@ import tempfile
 import unittest
 import argparse
 
-from io import StringIO
+from StringIO import StringIO
 
-from test import support
 class StdIOBuffer(StringIO):
     pass
+
+from test import test_support
 
 class TestCase(unittest.TestCase):
 
@@ -32,7 +33,7 @@ class TestCase(unittest.TestCase):
         # The tests assume that line wrapping occurs at 80 columns, but this
         # behaviour can be overridden by setting the COLUMNS environment
         # variable.  To ensure that this assumption is true, unset COLUMNS.
-        env = support.EnvironmentVarGuard()
+        env = test_support.EnvironmentVarGuard()
         env.unset("COLUMNS")
         self.addCleanup(env.__exit__)
 
@@ -70,6 +71,8 @@ class NS(object):
         sorted_items = sorted(self.__dict__.items())
         kwarg_str = ', '.join(['%s=%r' % tup for tup in sorted_items])
         return '%s(%s)' % (type(self).__name__, kwarg_str)
+
+    __hash__ = None
 
     def __eq__(self, other):
         return vars(self) == vars(other)
@@ -1371,6 +1374,7 @@ class TestArgumentsFromFile(TempDirMixin, ParserTestCase):
         ('X @hello', NS(a=None, x='X', y=['hello world!'])),
         ('-a B @recursive Y Z', NS(a='A', x='hello world!', y=['Y', 'Z'])),
         ('X @recursive Z -a B', NS(a='B', x='X', y=['hello world!', 'Z'])),
+        (["-a", "", "X", "Y"], NS(a='', x='X', y=['Y'])),
     ]
 
 
@@ -1426,6 +1430,8 @@ class RFile(object):
     def __init__(self, name):
         self.name = name
 
+    __hash__ = None
+
     def __eq__(self, other):
         if other in self.seen:
             text = self.seen[other]
@@ -1452,7 +1458,7 @@ class TestFileTypeR(TempDirMixin, ParserTestCase):
         Sig('-x', type=argparse.FileType()),
         Sig('spam', type=argparse.FileType('r')),
     ]
-    failures = ['-x', '', 'non-existent-file.txt']
+    failures = ['-x', '-x bar', 'non-existent-file.txt']
     successes = [
         ('foo', NS(x=None, spam=RFile('foo'))),
         ('-x foo bar', NS(x=RFile('foo'), spam=RFile('bar'))),
@@ -1476,7 +1482,7 @@ class TestFileTypeRB(TempDirMixin, ParserTestCase):
         Sig('-x', type=argparse.FileType('rb')),
         Sig('spam', type=argparse.FileType('rb')),
     ]
-    failures = ['-x', '']
+    failures = ['-x', '-x bar']
     successes = [
         ('foo', NS(x=None, spam=RFile('foo'))),
         ('-x foo bar', NS(x=RFile('foo'), spam=RFile('bar'))),
@@ -1491,6 +1497,8 @@ class WFile(object):
     def __init__(self, name):
         self.name = name
 
+    __hash__ = None
+
     def __eq__(self, other):
         if other not in self.seen:
             text = 'Check that file is writable.'
@@ -1502,6 +1510,8 @@ class WFile(object):
         return self.name == other.name
 
 
+@unittest.skipIf(hasattr(os, 'geteuid') and os.geteuid() == 0,
+                 "non-root user required")
 class TestFileTypeW(TempDirMixin, ParserTestCase):
     """Test the FileType option/argument type for writing files"""
 
@@ -1513,7 +1523,8 @@ class TestFileTypeW(TempDirMixin, ParserTestCase):
         Sig('-x', type=argparse.FileType('w')),
         Sig('spam', type=argparse.FileType('w')),
     ]
-    failures = ['-x', '', 'readonly']
+    failures = ['-x', '-x bar']
+    failures = ['-x', '-x bar', 'readonly']
     successes = [
         ('foo', NS(x=None, spam=WFile('foo'))),
         ('-x foo bar', NS(x=WFile('foo'), spam=WFile('bar'))),
@@ -1528,7 +1539,7 @@ class TestFileTypeWB(TempDirMixin, ParserTestCase):
         Sig('-x', type=argparse.FileType('wb')),
         Sig('spam', type=argparse.FileType('wb')),
     ]
-    failures = ['-x', '']
+    failures = ['-x', '-x bar']
     successes = [
         ('foo', NS(x=None, spam=WFile('foo'))),
         ('-x foo bar', NS(x=WFile('foo'), spam=WFile('bar'))),
@@ -1560,6 +1571,8 @@ class TestTypeUserDefined(ParserTestCase):
         def __init__(self, value):
             self.value = value
 
+        __hash__ = None
+
         def __eq__(self, other):
             return (type(self), self.value) == (type(other), other.value)
 
@@ -1581,6 +1594,8 @@ class TestTypeClassicClass(ParserTestCase):
 
         def __init__(self, value):
             self.value = value
+
+        __hash__ = None
 
         def __eq__(self, other):
             return (type(self), self.value) == (type(other), other.value)
@@ -1714,8 +1729,7 @@ class TestAddSubparsers(TestCase):
     def assertArgumentParserError(self, *args, **kwargs):
         self.assertRaises(ArgumentParserError, *args, **kwargs)
 
-    def _get_parser(self, subparser_help=False, prefix_chars=None,
-                    aliases=False):
+    def _get_parser(self, subparser_help=False, prefix_chars=None):
         # create a parser with a subparsers argument
         if prefix_chars:
             parser = ErrorRaisingArgumentParser(
@@ -1731,21 +1745,13 @@ class TestAddSubparsers(TestCase):
             'bar', type=float, help='bar help')
 
         # check that only one subparsers argument can be added
-        subparsers_kwargs = {}
-        if aliases:
-            subparsers_kwargs['metavar'] = 'COMMAND'
-            subparsers_kwargs['title'] = 'commands'
-        else:
-            subparsers_kwargs['help'] = 'command help'
-        subparsers = parser.add_subparsers(**subparsers_kwargs)
+        subparsers = parser.add_subparsers(help='command help')
         self.assertArgumentParserError(parser.add_subparsers)
 
         # add first sub-parser
         parser1_kwargs = dict(description='1 description')
         if subparser_help:
             parser1_kwargs['help'] = '1 help'
-        if aliases:
-            parser1_kwargs['aliases'] = ['1alias1', '1alias2']
         parser1 = subparsers.add_parser('1', **parser1_kwargs)
         parser1.add_argument('-w', type=int, help='w help')
         parser1.add_argument('x', choices='abc', help='x help')
@@ -1758,11 +1764,19 @@ class TestAddSubparsers(TestCase):
         parser2.add_argument('-y', choices='123', help='y help')
         parser2.add_argument('z', type=complex, nargs='*', help='z help')
 
+        # add third sub-parser
+        parser3_kwargs = dict(description='3 description')
+        if subparser_help:
+            parser3_kwargs['help'] = '3 help'
+        parser3 = subparsers.add_parser('3', **parser3_kwargs)
+        parser3.add_argument('t', type=int, help='t help')
+        parser3.add_argument('u', nargs='...', help='u help')
+
         # return the main parser
         return parser
 
     def setUp(self):
-        super().setUp()
+        super(TestAddSubparsers, self).setUp()
         self.parser = self._get_parser()
         self.command_help_parser = self._get_parser(subparser_help=True)
 
@@ -1786,6 +1800,10 @@ class TestAddSubparsers(TestCase):
         self.assertEqual(
             self.parser.parse_args('--foo 0.125 1 c'.split()),
             NS(foo=True, bar=0.125, w=None, x='c'),
+        )
+        self.assertEqual(
+            self.parser.parse_args('-1.5 3 11 -- a --foo 7 -- b'.split()),
+            NS(foo=False, bar=-1.5, t=11, u=['a', '--foo', '7', '--', 'b']),
         )
 
     def test_parse_known_args(self):
@@ -1821,15 +1839,15 @@ class TestAddSubparsers(TestCase):
 
     def test_help(self):
         self.assertEqual(self.parser.format_usage(),
-                         'usage: PROG [-h] [--foo] bar {1,2} ...\n')
+                         'usage: PROG [-h] [--foo] bar {1,2,3} ...\n')
         self.assertEqual(self.parser.format_help(), textwrap.dedent('''\
-            usage: PROG [-h] [--foo] bar {1,2} ...
+            usage: PROG [-h] [--foo] bar {1,2,3} ...
 
             main description
 
             positional arguments:
               bar         bar help
-              {1,2}       command help
+              {1,2,3}     command help
 
             optional arguments:
               -h, --help  show this help message and exit
@@ -1840,15 +1858,15 @@ class TestAddSubparsers(TestCase):
         # Make sure - is still used for help if it is a non-first prefix char
         parser = self._get_parser(prefix_chars='+:-')
         self.assertEqual(parser.format_usage(),
-                         'usage: PROG [-h] [++foo] bar {1,2} ...\n')
+                         'usage: PROG [-h] [++foo] bar {1,2,3} ...\n')
         self.assertEqual(parser.format_help(), textwrap.dedent('''\
-            usage: PROG [-h] [++foo] bar {1,2} ...
+            usage: PROG [-h] [++foo] bar {1,2,3} ...
 
             main description
 
             positional arguments:
               bar         bar help
-              {1,2}       command help
+              {1,2,3}     command help
 
             optional arguments:
               -h, --help  show this help message and exit
@@ -1859,15 +1877,15 @@ class TestAddSubparsers(TestCase):
     def test_help_alternate_prefix_chars(self):
         parser = self._get_parser(prefix_chars='+:/')
         self.assertEqual(parser.format_usage(),
-                         'usage: PROG [+h] [++foo] bar {1,2} ...\n')
+                         'usage: PROG [+h] [++foo] bar {1,2,3} ...\n')
         self.assertEqual(parser.format_help(), textwrap.dedent('''\
-            usage: PROG [+h] [++foo] bar {1,2} ...
+            usage: PROG [+h] [++foo] bar {1,2,3} ...
 
             main description
 
             positional arguments:
               bar         bar help
-              {1,2}       command help
+              {1,2,3}     command help
 
             optional arguments:
               +h, ++help  show this help message and exit
@@ -1876,18 +1894,19 @@ class TestAddSubparsers(TestCase):
 
     def test_parser_command_help(self):
         self.assertEqual(self.command_help_parser.format_usage(),
-                         'usage: PROG [-h] [--foo] bar {1,2} ...\n')
+                         'usage: PROG [-h] [--foo] bar {1,2,3} ...\n')
         self.assertEqual(self.command_help_parser.format_help(),
                          textwrap.dedent('''\
-            usage: PROG [-h] [--foo] bar {1,2} ...
+            usage: PROG [-h] [--foo] bar {1,2,3} ...
 
             main description
 
             positional arguments:
               bar         bar help
-              {1,2}       command help
+              {1,2,3}     command help
                 1         1 help
                 2         2 help
+                3         3 help
 
             optional arguments:
               -h, --help  show this help message and exit
@@ -1962,44 +1981,6 @@ class TestAddSubparsers(TestCase):
               -y {1,2,3}  y help
             '''))
 
-    def test_alias_invocation(self):
-        parser = self._get_parser(aliases=True)
-        self.assertEqual(
-            parser.parse_known_args('0.5 1alias1 b'.split()),
-            (NS(foo=False, bar=0.5, w=None, x='b'), []),
-        )
-        self.assertEqual(
-            parser.parse_known_args('0.5 1alias2 b'.split()),
-            (NS(foo=False, bar=0.5, w=None, x='b'), []),
-        )
-
-    def test_error_alias_invocation(self):
-        parser = self._get_parser(aliases=True)
-        self.assertArgumentParserError(parser.parse_args,
-                                       '0.5 1alias3 b'.split())
-
-    def test_alias_help(self):
-        parser = self._get_parser(aliases=True, subparser_help=True)
-        self.maxDiff = None
-        self.assertEqual(parser.format_help(), textwrap.dedent("""\
-            usage: PROG [-h] [--foo] bar COMMAND ...
-
-            main description
-
-            positional arguments:
-              bar                   bar help
-
-            optional arguments:
-              -h, --help            show this help message and exit
-              --foo                 foo help
-
-            commands:
-              COMMAND
-                1 (1alias1, 1alias2)
-                                    1 help
-                2                   2 help
-            """))
-
 # ============
 # Groups tests
 # ============
@@ -2050,7 +2031,7 @@ class TestParentParsers(TestCase):
         self.assertRaises(ArgumentParserError, *args, **kwargs)
 
     def setUp(self):
-        super().setUp()
+        super(TestParentParsers, self).setUp()
         self.wxyz_parent = ErrorRaisingArgumentParser(add_help=False)
         self.wxyz_parent.add_argument('--w')
         x_group = self.wxyz_parent.add_argument_group('x')
@@ -2168,8 +2149,9 @@ class TestParentParsers(TestCase):
         parents = [self.abcd_parent, self.wxyz_parent]
         parser = ErrorRaisingArgumentParser(parents=parents)
         parser_help = parser.format_help()
+        progname = self.main_program
         self.assertEqual(parser_help, textwrap.dedent('''\
-            usage: {} [-h] [-b B] [--d D] [--w W] [-y Y] a z
+            usage: {}{}[-h] [-b B] [--d D] [--w W] [-y Y] a z
 
             positional arguments:
               a
@@ -2185,7 +2167,7 @@ class TestParentParsers(TestCase):
 
             x:
               -y Y
-        '''.format(self.main_program)))
+        '''.format(progname, ' ' if progname else '' )))
 
     def test_groups_parents(self):
         parent = ErrorRaisingArgumentParser(add_help=False)
@@ -2201,8 +2183,9 @@ class TestParentParsers(TestCase):
             ['-y', 'Y', '-z', 'Z'])
 
         parser_help = parser.format_help()
+        progname = self.main_program
         self.assertEqual(parser_help, textwrap.dedent('''\
-            usage: {} [-h] [-w W] [-x X] [-y Y | -z Z]
+            usage: {}{}[-h] [-w W] [-x X] [-y Y | -z Z]
 
             optional arguments:
               -h, --help  show this help message and exit
@@ -2214,7 +2197,7 @@ class TestParentParsers(TestCase):
 
               -w W
               -x X
-        '''.format(self.main_program)))
+        '''.format(progname, ' ' if progname else '' )))
 
 # ==============================
 # Mutually exclusive group tests
@@ -2837,16 +2820,22 @@ class TestHelpFormattingMetaclass(type):
                 parser = argparse.ArgumentParser(
                     *tester.parser_signature.args,
                     **tester.parser_signature.kwargs)
-                for argument_sig in tester.argument_signatures:
+                for argument_sig in getattr(tester, 'argument_signatures', []):
                     parser.add_argument(*argument_sig.args,
                                         **argument_sig.kwargs)
-                group_signatures = tester.argument_group_signatures
-                for group_sig, argument_sigs in group_signatures:
+                group_sigs = getattr(tester, 'argument_group_signatures', [])
+                for group_sig, argument_sigs in group_sigs:
                     group = parser.add_argument_group(*group_sig.args,
                                                       **group_sig.kwargs)
                     for argument_sig in argument_sigs:
                         group.add_argument(*argument_sig.args,
                                            **argument_sig.kwargs)
+                subparsers_sigs = getattr(tester, 'subparsers_signatures', [])
+                if subparsers_sigs:
+                    subparsers = parser.add_subparsers()
+                    for subparser_sig in subparsers_sigs:
+                        subparsers.add_parser(*subparser_sig.args,
+                                               **subparser_sig.kwargs)
                 return parser
 
             def _test(self, tester, parser_text):
@@ -3940,6 +3929,77 @@ class TestHelpVersionAction(HelpTestCase):
         '''
     version = ''
 
+class TestHelpSubparsersOrdering(HelpTestCase):
+    """Test ordering of subcommands in help matches the code"""
+    parser_signature = Sig(prog='PROG',
+                           description='display some subcommands',
+                           version='0.1')
+
+    subparsers_signatures = [Sig(name=name)
+                             for name in ('a', 'b', 'c', 'd', 'e')]
+
+    usage = '''\
+        usage: PROG [-h] [-v] {a,b,c,d,e} ...
+        '''
+
+    help = usage + '''\
+
+        display some subcommands
+
+        positional arguments:
+          {a,b,c,d,e}
+
+        optional arguments:
+          -h, --help     show this help message and exit
+          -v, --version  show program's version number and exit
+        '''
+
+    version = '''\
+        0.1
+        '''
+
+class TestHelpSubparsersWithHelpOrdering(HelpTestCase):
+    """Test ordering of subcommands in help matches the code"""
+    parser_signature = Sig(prog='PROG',
+                           description='display some subcommands',
+                           version='0.1')
+
+    subcommand_data = (('a', 'a subcommand help'),
+                       ('b', 'b subcommand help'),
+                       ('c', 'c subcommand help'),
+                       ('d', 'd subcommand help'),
+                       ('e', 'e subcommand help'),
+                       )
+
+    subparsers_signatures = [Sig(name=name, help=help)
+                             for name, help in subcommand_data]
+
+    usage = '''\
+        usage: PROG [-h] [-v] {a,b,c,d,e} ...
+        '''
+
+    help = usage + '''\
+
+        display some subcommands
+
+        positional arguments:
+          {a,b,c,d,e}
+            a            a subcommand help
+            b            b subcommand help
+            c            c subcommand help
+            d            d subcommand help
+            e            e subcommand help
+
+        optional arguments:
+          -h, --help     show this help message and exit
+          -v, --version  show program's version number and exit
+        '''
+
+    version = '''\
+        0.1
+        '''
+
+
 # =====================================
 # Optional/Positional constructor tests
 # =====================================
@@ -3974,10 +4034,12 @@ class TestInvalidArgumentConstructors(TestCase):
 
     def test_invalid_type(self):
         self.assertValueError('--foo', type='int')
+        self.assertValueError('--foo', type=(int, float))
 
     def test_invalid_action(self):
         self.assertValueError('-x', action='foo')
         self.assertValueError('foo', action='baz')
+        self.assertValueError('--foo', action=('store', 'append'))
         parser = argparse.ArgumentParser()
         try:
             parser.add_argument("--foo", action="store-true")
@@ -4394,6 +4456,177 @@ class TestParseKnownArgs(TestCase):
         self.assertEqual(NS(v=3, spam=True, badger="B"), args)
         self.assertEqual(["C", "--foo", "4"], extras)
 
+# ==========================
+# add_argument metavar tests
+# ==========================
+
+class TestAddArgumentMetavar(TestCase):
+
+    EXPECTED_MESSAGE = "length of metavar tuple does not match nargs"
+
+    def do_test_no_exception(self, nargs, metavar):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("--foo", nargs=nargs, metavar=metavar)
+
+    def do_test_exception(self, nargs, metavar):
+        parser = argparse.ArgumentParser()
+        with self.assertRaises(ValueError) as cm:
+            parser.add_argument("--foo", nargs=nargs, metavar=metavar)
+        self.assertEqual(cm.exception.args[0], self.EXPECTED_MESSAGE)
+
+    # Unit tests for different values of metavar when nargs=None
+
+    def test_nargs_None_metavar_string(self):
+        self.do_test_no_exception(nargs=None, metavar="1")
+
+    def test_nargs_None_metavar_length0(self):
+        self.do_test_exception(nargs=None, metavar=tuple())
+
+    def test_nargs_None_metavar_length1(self):
+        self.do_test_no_exception(nargs=None, metavar=("1"))
+
+    def test_nargs_None_metavar_length2(self):
+        self.do_test_exception(nargs=None, metavar=("1", "2"))
+
+    def test_nargs_None_metavar_length3(self):
+        self.do_test_exception(nargs=None, metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=?
+
+    def test_nargs_optional_metavar_string(self):
+        self.do_test_no_exception(nargs="?", metavar="1")
+
+    def test_nargs_optional_metavar_length0(self):
+        self.do_test_exception(nargs="?", metavar=tuple())
+
+    def test_nargs_optional_metavar_length1(self):
+        self.do_test_no_exception(nargs="?", metavar=("1"))
+
+    def test_nargs_optional_metavar_length2(self):
+        self.do_test_exception(nargs="?", metavar=("1", "2"))
+
+    def test_nargs_optional_metavar_length3(self):
+        self.do_test_exception(nargs="?", metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=*
+
+    def test_nargs_zeroormore_metavar_string(self):
+        self.do_test_no_exception(nargs="*", metavar="1")
+
+    def test_nargs_zeroormore_metavar_length0(self):
+        self.do_test_exception(nargs="*", metavar=tuple())
+
+    def test_nargs_zeroormore_metavar_length1(self):
+        self.do_test_no_exception(nargs="*", metavar=("1"))
+
+    def test_nargs_zeroormore_metavar_length2(self):
+        self.do_test_no_exception(nargs="*", metavar=("1", "2"))
+
+    def test_nargs_zeroormore_metavar_length3(self):
+        self.do_test_exception(nargs="*", metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=+
+
+    def test_nargs_oneormore_metavar_string(self):
+        self.do_test_no_exception(nargs="+", metavar="1")
+
+    def test_nargs_oneormore_metavar_length0(self):
+        self.do_test_exception(nargs="+", metavar=tuple())
+
+    def test_nargs_oneormore_metavar_length1(self):
+        self.do_test_no_exception(nargs="+", metavar=("1"))
+
+    def test_nargs_oneormore_metavar_length2(self):
+        self.do_test_no_exception(nargs="+", metavar=("1", "2"))
+
+    def test_nargs_oneormore_metavar_length3(self):
+        self.do_test_exception(nargs="+", metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=...
+
+    def test_nargs_remainder_metavar_string(self):
+        self.do_test_no_exception(nargs="...", metavar="1")
+
+    def test_nargs_remainder_metavar_length0(self):
+        self.do_test_no_exception(nargs="...", metavar=tuple())
+
+    def test_nargs_remainder_metavar_length1(self):
+        self.do_test_no_exception(nargs="...", metavar=("1"))
+
+    def test_nargs_remainder_metavar_length2(self):
+        self.do_test_no_exception(nargs="...", metavar=("1", "2"))
+
+    def test_nargs_remainder_metavar_length3(self):
+        self.do_test_no_exception(nargs="...", metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=A...
+
+    def test_nargs_parser_metavar_string(self):
+        self.do_test_no_exception(nargs="A...", metavar="1")
+
+    def test_nargs_parser_metavar_length0(self):
+        self.do_test_exception(nargs="A...", metavar=tuple())
+
+    def test_nargs_parser_metavar_length1(self):
+        self.do_test_no_exception(nargs="A...", metavar=("1"))
+
+    def test_nargs_parser_metavar_length2(self):
+        self.do_test_exception(nargs="A...", metavar=("1", "2"))
+
+    def test_nargs_parser_metavar_length3(self):
+        self.do_test_exception(nargs="A...", metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=1
+
+    def test_nargs_1_metavar_string(self):
+        self.do_test_no_exception(nargs=1, metavar="1")
+
+    def test_nargs_1_metavar_length0(self):
+        self.do_test_exception(nargs=1, metavar=tuple())
+
+    def test_nargs_1_metavar_length1(self):
+        self.do_test_no_exception(nargs=1, metavar=("1"))
+
+    def test_nargs_1_metavar_length2(self):
+        self.do_test_exception(nargs=1, metavar=("1", "2"))
+
+    def test_nargs_1_metavar_length3(self):
+        self.do_test_exception(nargs=1, metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=2
+
+    def test_nargs_2_metavar_string(self):
+        self.do_test_no_exception(nargs=2, metavar="1")
+
+    def test_nargs_2_metavar_length0(self):
+        self.do_test_exception(nargs=2, metavar=tuple())
+
+    def test_nargs_2_metavar_length1(self):
+        self.do_test_no_exception(nargs=2, metavar=("1"))
+
+    def test_nargs_2_metavar_length2(self):
+        self.do_test_no_exception(nargs=2, metavar=("1", "2"))
+
+    def test_nargs_2_metavar_length3(self):
+        self.do_test_exception(nargs=2, metavar=("1", "2", "3"))
+
+    # Unit tests for different values of metavar when nargs=3
+
+    def test_nargs_3_metavar_string(self):
+        self.do_test_no_exception(nargs=3, metavar="1")
+
+    def test_nargs_3_metavar_length0(self):
+        self.do_test_exception(nargs=3, metavar=tuple())
+
+    def test_nargs_3_metavar_length1(self):
+        self.do_test_no_exception(nargs=3, metavar=("1"))
+
+    def test_nargs_3_metavar_length2(self):
+        self.do_test_exception(nargs=3, metavar=("1", "2"))
+
+    def test_nargs_3_metavar_length3(self):
+        self.do_test_no_exception(nargs=3, metavar=("1", "2", "3"))
+
 # ============================
 # from argparse import * tests
 # ============================
@@ -4408,19 +4641,19 @@ class TestImportStar(TestCase):
         items = [
             name
             for name, value in vars(argparse).items()
-            if not (name.startswith("_") or name == 'ngettext')
+            if not name.startswith("_")
             if not inspect.ismodule(value)
         ]
         self.assertEqual(sorted(items), sorted(argparse.__all__))
 
 def test_main():
     # silence warnings about version argument - these are expected
-    with support.check_warnings(
+    with test_support.check_warnings(
             ('The "version" argument to ArgumentParser is deprecated.',
              DeprecationWarning),
             ('The (format|print)_version method is deprecated',
              DeprecationWarning)):
-        support.run_unittest(__name__)
+        test_support.run_unittest(__name__)
     # Remove global references to avoid looking like we have refleaks.
     RFile.seen = {}
     WFile.seen = set()

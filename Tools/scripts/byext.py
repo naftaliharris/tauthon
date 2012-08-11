@@ -1,10 +1,11 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 """Show file statistics by extension."""
 
+from __future__ import print_function
+
 import os
 import sys
-
 
 class Stats:
 
@@ -24,16 +25,16 @@ class Stats:
     def statdir(self, dir):
         self.addstats("<dir>", "dirs", 1)
         try:
-            names = os.listdir(dir)
+            names = sorted(os.listdir(dir))
         except os.error as err:
             sys.stderr.write("Can't list %s: %s\n" % (dir, err))
             self.addstats("<dir>", "unlistable", 1)
             return
-        for name in sorted(names):
+        for name in names:
             if name.startswith(".#"):
-                continue  # Skip CVS temp files
+                continue # Skip CVS temp files
             if name.endswith("~"):
-                continue  # Skip Emacs backup files
+                continue# Skip Emacs backup files
             full = os.path.join(dir, name)
             if os.path.islink(full):
                 self.addstats("<lnk>", "links", 1)
@@ -46,26 +47,27 @@ class Stats:
         head, ext = os.path.splitext(filename)
         head, base = os.path.split(filename)
         if ext == base:
-            ext = ""  # E.g. .cvsignore is deemed not to have an extension
+            ext = "" # E.g. .cvsignore is deemed not to have an extension
         ext = os.path.normcase(ext)
         if not ext:
             ext = "<none>"
         self.addstats(ext, "files", 1)
         try:
-            with open(filename, "rb") as f:
-                data = f.read()
+            f = open(filename, "rb")
         except IOError as err:
             sys.stderr.write("Can't open %s: %s\n" % (filename, err))
             self.addstats(ext, "unopenable", 1)
             return
+        data = f.read()
+        f.close()
         self.addstats(ext, "bytes", len(data))
         if b'\0' in data:
             self.addstats(ext, "binary", 1)
             return
         if not data:
             self.addstats(ext, "empty", 1)
-        # self.addstats(ext, "chars", len(data))
-        lines = str(data, "latin-1").splitlines()
+        #self.addstats(ext, "chars", len(data))
+        lines = data.splitlines()
         self.addstats(ext, "lines", len(lines))
         del lines
         words = data.split()
@@ -76,12 +78,12 @@ class Stats:
         d[key] = d.get(key, 0) + n
 
     def report(self):
-        exts = sorted(self.stats)
+        exts = sorted(self.stats.keys())
         # Get the column keys
         columns = {}
         for ext in exts:
             columns.update(self.stats[ext])
-        cols = sorted(columns)
+        cols = sorted(columns.keys())
         colwidth = {}
         colwidth["ext"] = max([len(ext) for ext in exts])
         minwidth = 6
@@ -104,20 +106,17 @@ class Stats:
         for ext in exts:
             self.stats[ext]["ext"] = ext
         cols.insert(0, "ext")
-
         def printheader():
             for col in cols:
-                print("%*s" % (colwidth[col], col), end=' ')
+                print("%*s" % (colwidth[col], col), end=" ")
             print()
-
         printheader()
         for ext in exts:
             for col in cols:
                 value = self.stats[ext].get(col, "")
-                print("%*s" % (colwidth[col], value), end=' ')
+                print("%*s" % (colwidth[col], value), end=" ")
             print()
-        printheader()  # Another header at the bottom
-
+        printheader() # Another header at the bottom
 
 def main():
     args = sys.argv[1:]
@@ -126,7 +125,6 @@ def main():
     s = Stats()
     s.statargs(args)
     s.report()
-
 
 if __name__ == "__main__":
     main()

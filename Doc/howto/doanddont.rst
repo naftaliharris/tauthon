@@ -32,8 +32,8 @@ Inside Function Definitions
 versions of Python do not check for the invalidity, it does not make it more
 valid, no more than having a smart lawyer makes a man innocent. Do not use it
 like that ever. Even in versions where it was accepted, it made the function
-execution slower, because the compiler could not be certain which names are
-local and which are global. In Python 2.1 this construct causes warnings, and
+execution slower, because the compiler could not be certain which names were
+local and which were global. In Python 2.1 this construct causes warnings, and
 sometimes even errors.
 
 
@@ -46,7 +46,7 @@ you can know where each toplevel name is defined by a simple "search" function
 in your favourite editor. You also open yourself to trouble in the future, if
 some module grows additional functions or classes.
 
-One of the most awful question asked on the newsgroup is why this code::
+One of the most awful questions asked on the newsgroup is why this code::
 
    f = open("www")
    f.read()
@@ -59,7 +59,7 @@ builtin is one of its least useful properties.
 
 Remember, you can never know for sure what names a module exports, so either
 take what you need --- ``from module import name1, name2``, or keep them in the
-module and access on a per-need basis --- ``import module; print(module.name)``.
+module and access on a per-need basis ---  ``import module;print module.name``.
 
 
 When It Is Just Fine
@@ -75,12 +75,45 @@ There are situations in which ``from module import *`` is just fine:
 * When the module advertises itself as ``from import *`` safe.
 
 
+Unadorned :keyword:`exec`, :func:`execfile` and friends
+-------------------------------------------------------
+
+The word "unadorned" refers to the use without an explicit dictionary, in which
+case those constructs evaluate code in the *current* environment. This is
+dangerous for the same reasons ``from import *`` is dangerous --- it might step
+over variables you are counting on and mess up things for the rest of your code.
+Simply do not do that.
+
+Bad examples::
+
+   >>> for name in sys.argv[1:]:
+   >>>     exec "%s=1" % name
+   >>> def func(s, **kw):
+   >>>     for var, val in kw.items():
+   >>>         exec "s.%s=val" % var  # invalid!
+   >>> execfile("handler.py")
+   >>> handle()
+
+Good examples::
+
+   >>> d = {}
+   >>> for name in sys.argv[1:]:
+   >>>     d[name] = 1
+   >>> def func(s, **kw):
+   >>>     for var, val in kw.items():
+   >>>         setattr(s, var, val)
+   >>> d={}
+   >>> execfile("handle.py", d, d)
+   >>> handle = d['handle']
+   >>> handle()
+
+
 from module import name1, name2
 -------------------------------
 
 This is a "don't" which is much weaker than the previous "don't"s but is still
 something you should not do if you don't have good reasons to do that. The
-reason it is usually bad idea is because you suddenly have an object which lives
+reason it is usually a bad idea is because you suddenly have an object which lives
 in two separate namespaces. When the binding in one namespace changes, the
 binding in the other will not, so there will be a discrepancy between them. This
 happens when, for example, one module is reloaded, or changes the definition of
@@ -144,7 +177,11 @@ Because ``except:`` catches *all* exceptions, including :exc:`SystemExit`,
 should not normally be caught by user code), using a bare ``except:`` is almost
 never a good idea.  In situations where you need to catch all "normal" errors,
 such as in a framework that runs callbacks, you can catch the base class for
-all normal exceptions, :exc:`Exception`.
+all normal exceptions, :exc:`Exception`.  Unfortunately in Python 2.x it is
+possible for third-party code to raise exceptions that do not inherit from
+:exc:`Exception`, so in Python 2.x there are some cases where you may have to
+use a bare ``except:`` and manually re-raise the exceptions you don't want
+to catch.
 
 
 Exceptions
@@ -158,7 +195,7 @@ The following is a very popular anti-idiom ::
 
    def get_status(file):
        if not os.path.exists(file):
-           print("file not found")
+           print "file not found"
            sys.exit(1)
        return open(file).readline()
 
@@ -177,7 +214,7 @@ Here is a somewhat better way to do it. ::
        try:
            return open(file).readline()
        except EnvironmentError as err:
-           print("Unable to open file: {}".format(err))
+           print "Unable to open file: {}".format(err)
            sys.exit(1)
 
 In this version, *either* the file gets opened and the line is read (so it
@@ -248,13 +285,13 @@ There are also many useful built-in functions people seem not to be aware of
 for some reason: :func:`min` and :func:`max` can find the minimum/maximum of
 any sequence with comparable semantics, for example, yet many people write
 their own :func:`max`/:func:`min`. Another highly useful function is
-:func:`functools.reduce` which can be used to repeatly apply a binary
-operation to a sequence, reducing it to a single value.  For example, compute
-a factorial with a series of multiply operations::
+:func:`reduce` which can be used to repeatly apply a binary operation to a
+sequence, reducing it to a single value.  For example, compute a factorial
+with a series of multiply operations::
 
    >>> n = 4
-   >>> import operator, functools
-   >>> functools.reduce(operator.mul, range(1, n+1))
+   >>> import operator
+   >>> reduce(operator.mul, range(1, n+1))
    24
 
 When it comes to parsing numbers, note that :func:`float`, :func:`int` and

@@ -1,8 +1,8 @@
 import parser
 import unittest
 import sys
-import operator
-from test import support
+import struct
+from test import test_support as support
 
 #
 #  First, we test that we can generate trees from valid source fragments,
@@ -17,7 +17,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         t = st1.totuple()
         try:
             st2 = parser.sequence2st(t)
-        except parser.ParserError as why:
+        except parser.ParserError, why:
             self.fail("could not roundtrip %r: %s" % (s, why))
 
         self.assertEqual(t, st2.totuple(),
@@ -32,8 +32,8 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         suite = parser.suite("from __future__ import unicode_literals; x = ''")
         code = suite.compile()
         scope = {}
-        exec(code, {}, scope)
-        self.assertIsInstance(scope["x"], str)
+        exec code in scope
+        self.assertIsInstance(scope["x"], unicode)
 
     def check_suite(self, s):
         self.roundtrip(parser.suite, s)
@@ -59,13 +59,37 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
 
     def test_expressions(self):
         self.check_expr("foo(1)")
+        self.check_expr("{1:1}")
+        self.check_expr("{1:1, 2:2, 3:3}")
+        self.check_expr("{1:1, 2:2, 3:3,}")
+        self.check_expr("{1}")
+        self.check_expr("{1, 2, 3}")
+        self.check_expr("{1, 2, 3,}")
+        self.check_expr("[]")
+        self.check_expr("[1]")
         self.check_expr("[1, 2, 3]")
+        self.check_expr("[1, 2, 3,]")
+        self.check_expr("()")
+        self.check_expr("(1,)")
+        self.check_expr("(1, 2, 3)")
+        self.check_expr("(1, 2, 3,)")
         self.check_expr("[x**3 for x in range(20)]")
         self.check_expr("[x**3 for x in range(20) if x % 3]")
         self.check_expr("[x**3 for x in range(20) if x % 2 if x % 3]")
+        self.check_expr("[x+y for x in range(30) for y in range(20) if x % 2 if y % 3]")
+        #self.check_expr("[x for x in lambda: True, lambda: False if x()]")
         self.check_expr("list(x**3 for x in range(20))")
         self.check_expr("list(x**3 for x in range(20) if x % 3)")
         self.check_expr("list(x**3 for x in range(20) if x % 2 if x % 3)")
+        self.check_expr("list(x+y for x in range(30) for y in range(20) if x % 2 if y % 3)")
+        self.check_expr("{x**3 for x in range(30)}")
+        self.check_expr("{x**3 for x in range(30) if x % 3}")
+        self.check_expr("{x**3 for x in range(30) if x % 2 if x % 3}")
+        self.check_expr("{x+y for x in range(30) for y in range(20) if x % 2 if y % 3}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30))}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30)) if x % 3}")
+        self.check_expr("{x**3: y**2 for x, y in zip(range(30), range(30)) if x % 3 if y % 3}")
+        self.check_expr("{x:y for x in range(30) for y in range(20) if x % 2 if y % 3}")
         self.check_expr("foo(*args)")
         self.check_expr("foo(*args, **kw)")
         self.check_expr("foo(**kw)")
@@ -94,8 +118,17 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         self.check_expr("lambda foo=bar, blaz=blat+2, **z: 0")
         self.check_expr("lambda foo=bar, blaz=blat+2, *y, **z: 0")
         self.check_expr("lambda x, *y, **z: 0")
+        self.check_expr("lambda x: 5 if x else 2")
         self.check_expr("(x for x in range(10))")
         self.check_expr("foo(x for x in range(10))")
+
+    def test_print(self):
+        self.check_suite("print")
+        self.check_suite("print 1")
+        self.check_suite("print 1,")
+        self.check_suite("print >>fp")
+        self.check_suite("print >>fp, 1")
+        self.check_suite("print >>fp, 1,")
 
     def test_simple_expression(self):
         # expr_stmt
@@ -148,7 +181,6 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
 
     def test_class_defs(self):
         self.check_suite("class foo():pass")
-        self.check_suite("class foo(object):pass")
         self.check_suite("@class_decorator\n"
                          "class foo():pass")
         self.check_suite("@class_decorator(arg)\n"
@@ -156,6 +188,7 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         self.check_suite("@decorator1\n"
                          "@decorator2\n"
                          "class foo():pass")
+
 
     def test_import_from_statement(self):
         self.check_suite("from sys.path import *")
@@ -192,14 +225,8 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
     def test_relative_imports(self):
         self.check_suite("from . import name")
         self.check_suite("from .. import name")
-        # check all the way up to '....', since '...' is tokenized
-        # differently from '.' (it's an ellipsis token).
-        self.check_suite("from ... import name")
-        self.check_suite("from .... import name")
         self.check_suite("from .pkg import name")
         self.check_suite("from ..pkg import name")
-        self.check_suite("from ...pkg import name")
-        self.check_suite("from ....pkg import name")
 
     def test_pep263(self):
         self.check_suite("# -*- coding: iso-8859-1 -*-\n"
@@ -222,6 +249,12 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
         self.check_suite("try: pass\nexcept: pass\nelse: pass\n")
         self.check_suite("try: pass\nexcept: pass\nelse: pass\n"
                          "finally: pass\n")
+
+    def test_except_clause(self):
+        self.check_suite("try: pass\nexcept: pass\n")
+        self.check_suite("try: pass\nexcept A: pass\n")
+        self.check_suite("try: pass\nexcept A, e: pass\n")
+        self.check_suite("try: pass\nexcept A as e: pass\n")
 
     def test_position(self):
         # An absolutely minimal test of position information.  Better
@@ -259,12 +292,6 @@ class RoundtripLegalSyntaxTestCase(unittest.TestCase):
             (4, '', 2, -1),
             (0, '', 2, -1)],
                          terminals)
-
-    def test_extended_unpacking(self):
-        self.check_suite("*a = y")
-        self.check_suite("x, *b, = m")
-        self.check_suite("[*a, *b] = y")
-        self.check_suite("for [*x, b] in x: pass")
 
 
 #
@@ -405,6 +432,29 @@ class IllegalSyntaxTestCase(unittest.TestCase):
            (0, ''))))
         self.check_bad_tree(tree, "def f():\n  return 1\n  yield 1")
 
+    def test_print_chevron_comma(self):
+        # Illegal input: print >>fp,
+        tree = \
+        (257,
+         (264,
+          (265,
+           (266,
+            (268,
+             (1, 'print'),
+             (35, '>>'),
+             (290,
+              (291,
+               (292,
+                (293,
+                 (295,
+                  (296,
+                   (297,
+                    (298, (299, (300, (301, (302, (303, (1, 'fp')))))))))))))),
+             (12, ','))),
+           (4, ''))),
+         (0, ''))
+        self.check_bad_tree(tree, "print >>fp,")
+
     def test_a_comma_comma_c(self):
         # Illegal input: a,,c
         tree = \
@@ -477,18 +527,18 @@ class IllegalSyntaxTestCase(unittest.TestCase):
         self.check_bad_tree(tree, "malformed global ast")
 
     def test_missing_import_source(self):
-        # from import fred
+        # from import a
         tree = \
             (257,
-             (268,
-              (269,
-               (270,
-                (282,
-                 (284, (1, 'from'), (1, 'import'),
-                  (287, (285, (1, 'fred')))))),
+             (267,
+              (268,
+               (269,
+                (281,
+                 (283, (1, 'from'), (1, 'import'),
+                  (286, (284, (1, 'fred')))))),
                (4, ''))),
              (4, ''), (0, ''))
-        self.check_bad_tree(tree, "from import fred")
+        self.check_bad_tree(tree, "from import a")
 
 
 class CompileTestCase(unittest.TestCase):
@@ -504,7 +554,7 @@ class CompileTestCase(unittest.TestCase):
         st = parser.suite('x = 2; y = x + 3')
         code = parser.compilest(st)
         globs = {}
-        exec(code, globs)
+        exec code in globs
         self.assertEqual(globs['y'], 5)
 
     def test_compile_error(self):
@@ -512,108 +562,71 @@ class CompileTestCase(unittest.TestCase):
         self.assertRaises(SyntaxError, parser.compilest, st)
 
     def test_compile_badunicode(self):
-        st = parser.suite('a = "\\U12345678"')
+        st = parser.suite('a = u"\U12345678"')
         self.assertRaises(SyntaxError, parser.compilest, st)
-        st = parser.suite('a = "\\u1"')
+        st = parser.suite('a = u"\u1"')
         self.assertRaises(SyntaxError, parser.compilest, st)
-
-    def test_issue_9011(self):
-        # Issue 9011: compilation of an unary minus expression changed
-        # the meaning of the ST, so that a second compilation produced
-        # incorrect results.
-        st = parser.expr('-3')
-        code1 = parser.compilest(st)
-        self.assertEqual(eval(code1), -3)
-        code2 = parser.compilest(st)
-        self.assertEqual(eval(code2), -3)
 
 class ParserStackLimitTestCase(unittest.TestCase):
-    """try to push the parser to/over its limits.
+    """try to push the parser to/over it's limits.
     see http://bugs.python.org/issue1881 for a discussion
     """
     def _nested_expression(self, level):
         return "["*level+"]"*level
 
     def test_deeply_nested_list(self):
-        # XXX used to be 99 levels in 2.x
-        e = self._nested_expression(93)
+        e = self._nested_expression(99)
         st = parser.expr(e)
         st.compile()
 
     def test_trigger_memory_error(self):
         e = self._nested_expression(100)
-        print("Expecting 's_push: parser stack overflow' in next line",
-              file=sys.stderr)
-        sys.stderr.flush()
+        print >>sys.stderr, "Expecting 's_push: parser stack overflow' in next line"
         self.assertRaises(MemoryError, parser.expr, e)
 
 class STObjectTestCase(unittest.TestCase):
     """Test operations on ST objects themselves"""
 
-    def test_comparisons(self):
-        # ST objects should support order and equality comparisons
-        st1 = parser.expr('2 + 3')
-        st2 = parser.suite('x = 2; y = x + 3')
-        st3 = parser.expr('list(x**3 for x in range(20))')
-        st1_copy = parser.expr('2 + 3')
-        st2_copy = parser.suite('x = 2; y = x + 3')
-        st3_copy = parser.expr('list(x**3 for x in range(20))')
+    check_sizeof = support.check_sizeof
 
-        # exercise fast path for object identity
-        self.assertEqual(st1 == st1, True)
-        self.assertEqual(st2 == st2, True)
-        self.assertEqual(st3 == st3, True)
-        # slow path equality
-        self.assertEqual(st1, st1_copy)
-        self.assertEqual(st2, st2_copy)
-        self.assertEqual(st3, st3_copy)
-        self.assertEqual(st1 == st2, False)
-        self.assertEqual(st1 == st3, False)
-        self.assertEqual(st2 == st3, False)
-        self.assertEqual(st1 != st1, False)
-        self.assertEqual(st2 != st2, False)
-        self.assertEqual(st3 != st3, False)
-        self.assertEqual(st1 != st1_copy, False)
-        self.assertEqual(st2 != st2_copy, False)
-        self.assertEqual(st3 != st3_copy, False)
-        self.assertEqual(st2 != st1, True)
-        self.assertEqual(st1 != st3, True)
-        self.assertEqual(st3 != st2, True)
-        # we don't particularly care what the ordering is;  just that
-        # it's usable and self-consistent
-        self.assertEqual(st1 < st2, not (st2 <= st1))
-        self.assertEqual(st1 < st3, not (st3 <= st1))
-        self.assertEqual(st2 < st3, not (st3 <= st2))
-        self.assertEqual(st1 < st2, st2 > st1)
-        self.assertEqual(st1 < st3, st3 > st1)
-        self.assertEqual(st2 < st3, st3 > st2)
-        self.assertEqual(st1 <= st2, st2 >= st1)
-        self.assertEqual(st3 <= st1, st1 >= st3)
-        self.assertEqual(st2 <= st3, st3 >= st2)
-        # transitivity
-        bottom = min(st1, st2, st3)
-        top = max(st1, st2, st3)
-        mid = sorted([st1, st2, st3])[1]
-        self.assertTrue(bottom < mid)
-        self.assertTrue(bottom < top)
-        self.assertTrue(mid < top)
-        self.assertTrue(bottom <= mid)
-        self.assertTrue(bottom <= top)
-        self.assertTrue(mid <= top)
-        self.assertTrue(bottom <= bottom)
-        self.assertTrue(mid <= mid)
-        self.assertTrue(top <= top)
-        # interaction with other types
-        self.assertEqual(st1 == 1588.602459, False)
-        self.assertEqual('spanish armada' != st2, True)
-        self.assertRaises(TypeError, operator.ge, st3, None)
-        self.assertRaises(TypeError, operator.le, False, st1)
-        self.assertRaises(TypeError, operator.lt, st1, 1815)
-        self.assertRaises(TypeError, operator.gt, b'waterloo', st2)
+    @support.cpython_only
+    def test_sizeof(self):
+        def XXXROUNDUP(n):
+            if n <= 1:
+                return n
+            if n <= 128:
+                return (n + 3) & ~3
+            return 1 << (n - 1).bit_length()
+
+        basesize = support.calcobjsize('Pii')
+        nodesize = struct.calcsize('hP3iP0h')
+        def sizeofchildren(node):
+            if node is None:
+                return 0
+            res = 0
+            hasstr = len(node) > 1 and isinstance(node[-1], str)
+            if hasstr:
+                res += len(node[-1]) + 1
+            children = node[1:-1] if hasstr else node[1:]
+            if children:
+                res += XXXROUNDUP(len(children)) * nodesize
+                for child in children:
+                    res += sizeofchildren(child)
+            return res
+
+        def check_st_sizeof(st):
+            self.check_sizeof(st, basesize + nodesize +
+                                  sizeofchildren(st.totuple()))
+
+        check_st_sizeof(parser.expr('2 + 3'))
+        check_st_sizeof(parser.expr('2 + 3 + 4'))
+        check_st_sizeof(parser.suite('x = 2 + 3'))
+        check_st_sizeof(parser.suite(''))
+        check_st_sizeof(parser.suite('# -*- coding: utf-8 -*-'))
+        check_st_sizeof(parser.expr('[' + '2,' * 1000 + ']'))
 
 
     # XXX tests for pickling and unpickling of ST objects should go here
-
 
 def test_main():
     support.run_unittest(

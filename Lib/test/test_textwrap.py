@@ -9,7 +9,7 @@
 #
 
 import unittest
-from test import support
+from test import test_support
 
 from textwrap import TextWrapper, wrap, fill, dedent
 
@@ -23,7 +23,7 @@ class BaseTestCase(unittest.TestCase):
             for i in range(len(textin)):
                 result.append("  %d: %r" % (i, textin[i]))
             result = '\n'.join(result)
-        elif isinstance(textin, str):
+        elif isinstance(textin, basestring):
             result = "  %s\n" % repr(textin)
         return result
 
@@ -174,7 +174,7 @@ What a mess!
         text = ("Python 1.0.0 was released on 1994-01-26.  Python 1.0.1 was\n"
                 "released on 1994-02-15.")
 
-        self.check_wrap(text, 30, ['Python 1.0.0 was released on',
+        self.check_wrap(text, 35, ['Python 1.0.0 was released on',
                                    '1994-01-26.  Python 1.0.1 was',
                                    'released on 1994-02-15.'])
         self.check_wrap(text, 40, ['Python 1.0.0 was released on 1994-01-26.',
@@ -340,6 +340,28 @@ What a mess!
                          "with     ", "much white", "space."],
                         drop_whitespace=False)
 
+    if test_support.have_unicode:
+        def test_unicode(self):
+            # *Very* simple test of wrapping Unicode strings.  I'm sure
+            # there's more to it than this, but let's at least make
+            # sure textwrap doesn't crash on Unicode input!
+            text = u"Hello there, how are you today?"
+            self.check_wrap(text, 50, [u"Hello there, how are you today?"])
+            self.check_wrap(text, 20, [u"Hello there, how are", "you today?"])
+            olines = self.wrapper.wrap(text)
+            self.assertIsInstance(olines, list)
+            self.assertIsInstance(olines[0], unicode)
+            otext = self.wrapper.fill(text)
+            self.assertIsInstance(otext, unicode)
+
+        def test_no_split_at_umlaut(self):
+            text = u"Die Empf\xe4nger-Auswahl"
+            self.check_wrap(text, 13, [u"Die", u"Empf\xe4nger-", u"Auswahl"])
+
+        def test_umlaut_followed_by_dash(self):
+            text = u"aa \xe4\xe4-\xe4\xe4"
+            self.check_wrap(text, 7, [u"aa \xe4\xe4-", u"\xe4\xe4"])
+
     def test_split(self):
         # Ensure that the standard _split() method works as advertised
         # in the comments
@@ -364,14 +386,6 @@ What a mess!
         text = "Whatever, it doesn't matter."
         self.assertRaises(ValueError, wrap, text, 0)
         self.assertRaises(ValueError, wrap, text, -1)
-
-    def test_no_split_at_umlaut(self):
-        text = "Die Empf\xe4nger-Auswahl"
-        self.check_wrap(text, 13, ["Die", "Empf\xe4nger-", "Auswahl"])
-
-    def test_umlaut_followed_by_dash(self):
-        text = "aa \xe4\xe4-\xe4\xe4"
-        self.check_wrap(text, 7, ["aa \xe4\xe4-", "\xe4\xe4"])
 
 
 class LongWordTestCase (BaseTestCase):
@@ -587,7 +601,7 @@ def foo():
 
 
 def test_main():
-    support.run_unittest(WrapTestCase,
+    test_support.run_unittest(WrapTestCase,
                               LongWordTestCase,
                               IndentTestCases,
                               DedentTestCase)

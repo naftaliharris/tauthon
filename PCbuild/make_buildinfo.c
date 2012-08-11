@@ -19,15 +19,9 @@
    invoked as a pre-link step for pythoncore, so that overwrites
    any previous getbuildinfo.o.
 
-   However, if a second argument is provided, this will be used
-   as a temporary directory where any getbuildinfo2.c and
-   getbuildinfo.o files are put.  This is useful if multiple
-   configurations are being built in parallel, to avoid them
-   trampling each other's files.
-
 */
 
-int make_buildinfo2(const char *tmppath)
+int make_buildinfo2()
 {
     struct _stat st;
     HKEY hTortoise;
@@ -52,9 +46,7 @@ int make_buildinfo2(const char *tmppath)
     if (_stat(command+1, &st) < 0)
         /* subwcrev.exe not part of the release */
         return 0;
-    strcat_s(command, CMD_SIZE, "\" .. ..\\Modules\\getbuildinfo.c \"");
-    strcat_s(command, CMD_SIZE, tmppath); /* quoted tmppath */
-    strcat_s(command, CMD_SIZE, "getbuildinfo2.c\"");
+    strcat_s(command, CMD_SIZE, "\" .. ..\\Modules\\getbuildinfo.c getbuildinfo2.c");
     puts(command); fflush(stdout);
     if (system(command) < 0)
         return 0;
@@ -63,12 +55,10 @@ int make_buildinfo2(const char *tmppath)
 
 int main(int argc, char*argv[])
 {
-    char command[CMD_SIZE] = "cl.exe -c -D_WIN32 -DUSE_DL_EXPORT -D_WINDOWS -DWIN32 -D_WINDLL ";
-    char tmppath[CMD_SIZE] = "";
+    char command[500] = "cl.exe -c -D_WIN32 -DUSE_DL_EXPORT -D_WINDOWS -DWIN32 -D_WINDLL ";
     int do_unlink, result;
-    char *tmpdir = NULL;
-    if (argc <= 2 || argc > 3) {
-        fprintf(stderr, "make_buildinfo $(ConfigurationName) [tmpdir]\n");
+    if (argc != 2) {
+        fprintf(stderr, "make_buildinfo $(ConfigurationName)\n");
         return EXIT_FAILURE;
     }
     if (strcmp(argv[1], "Release") == 0) {
@@ -88,41 +78,16 @@ int main(int argc, char*argv[])
         fprintf(stderr, "unsupported configuration %s\n", argv[1]);
         return EXIT_FAILURE;
     }
-    if (argc > 2) {
-        tmpdir = argv[2];
-        strcat_s(tmppath, _countof(tmppath), tmpdir);
-        /* Hack fix for bad command line:  If the command is issued like this:
-         * $(SolutionDir)make_buildinfo.exe" Debug "$(IntDir)"
-         * we will get a trailing quote because IntDir ends with a backslash that then
-         * escapes the final ".  To simplify the life for developers, catch that problem
-         * here by cutting it off.
-         * The proper command line, btw is:
-         * $(SolutionDir)make_buildinfo.exe" Debug "$(IntDir)\"
-         * Hooray for command line parsing on windows.
-         */
-        if (strlen(tmppath) > 0 && tmppath[strlen(tmppath)-1] == '"')
-            tmppath[strlen(tmppath)-1] = '\0';
-        strcat_s(tmppath, _countof(tmppath), "\\");
-    }
 
-    if ((do_unlink = make_buildinfo2(tmppath))) {
-        strcat_s(command, CMD_SIZE, "\"");
-        strcat_s(command, CMD_SIZE, tmppath);
-        strcat_s(command, CMD_SIZE, "getbuildinfo2.c\" -DSUBWCREV ");
-    } else
+    if ((do_unlink = make_buildinfo2()))
+        strcat_s(command, CMD_SIZE, "getbuildinfo2.c -DSUBWCREV ");
+    else
         strcat_s(command, CMD_SIZE, "..\\Modules\\getbuildinfo.c");
-    strcat_s(command, CMD_SIZE, " -Fo\"");
-    strcat_s(command, CMD_SIZE, tmppath);
-    strcat_s(command, CMD_SIZE, "getbuildinfo.o\" -I..\\Include -I..\\PC");
+    strcat_s(command, CMD_SIZE, " -Fogetbuildinfo.o -I..\\Include -I..\\PC");
     puts(command); fflush(stdout);
     result = system(command);
-    if (do_unlink) {
-        command[0] = '\0';
-        strcat_s(command, CMD_SIZE, "\"");
-        strcat_s(command, CMD_SIZE, tmppath);
-        strcat_s(command, CMD_SIZE, "getbuildinfo2.c\"");
-        _unlink(command);
-    }
+    if (do_unlink)
+        _unlink("getbuildinfo2.c");
     if (result < 0)
         return EXIT_FAILURE;
     return 0;

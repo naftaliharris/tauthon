@@ -43,7 +43,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -105,7 +105,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -167,7 +167,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -230,7 +230,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -292,7 +292,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -355,7 +355,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -418,7 +418,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -481,7 +481,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				AdditionalIncludeDirectories="$(bz2Dir)"
-				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64;_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE"
+				PreprocessorDefinitions="WIN32;_FILE_OFFSET_BITS=64"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -532,7 +532,7 @@
 			</File>
 		</Filter>
 		<Filter
-			Name="bzip2 1.0.5 Header Files"
+			Name="bzip2 1.0.6 Header Files"
 			>
 			<File
 				RelativePath="$(bz2Dir)\bzlib.h"
@@ -544,7 +544,7 @@
 			</File>
 		</Filter>
 		<Filter
-			Name="bzip2 1.0.5 Source Files"
+			Name="bzip2 1.0.6 Source Files"
 			>
 			<File
 				RelativePath="$(bz2Dir)\blocksort.c"

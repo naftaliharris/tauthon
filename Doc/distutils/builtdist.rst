@@ -88,8 +88,6 @@ The available formats for built distributions are:
 +-------------+------------------------------+---------+
 | ``sdux``    | HP-UX :program:`swinstall`   |         |
 +-------------+------------------------------+---------+
-| ``rpm``     | RPM                          | \(5)    |
-+-------------+------------------------------+---------+
 | ``wininst`` | self-extracting ZIP file for | \(4)    |
 |             | Windows                      |         |
 +-------------+------------------------------+---------+
@@ -141,13 +139,13 @@ The following sections give details on the individual :command:`bdist_\*`
 commands.
 
 
-.. .. _creating-dumb:
+.. _creating-dumb:
 
-.. Creating dumb built distributions
-.. =================================
+Creating dumb built distributions
+=================================
 
 .. XXX Need to document absolute vs. prefix-relative packages here, but first
-   I have to implement it!
+       I have to implement it!
 
 
 .. _creating-rpms:
@@ -241,7 +239,8 @@ tedious and error-prone, so it's usually best to put them in the setup
 configuration file, :file:`setup.cfg`\ ---see section :ref:`setup-config`.  If
 you distribute or package many Python module distributions, you might want to
 put options that apply to all of them in your personal Distutils configuration
-file (:file:`~/.pydistutils.cfg`).
+file (:file:`~/.pydistutils.cfg`).  If you want to temporarily disable
+this file, you can pass the --no-user-cfg option to setup.py.
 
 There are three steps to building a binary RPM package, all of which are
 handled automatically by the Distutils:

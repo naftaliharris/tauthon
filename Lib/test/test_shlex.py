@@ -1,8 +1,13 @@
+# -*- coding: iso-8859-1 -*-
 import unittest
-import os, sys, io
 import shlex
 
-from test import support
+from test import test_support
+
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 
 # The original test data set was from shellwords, by Hartmut Goebel.
@@ -67,7 +72,7 @@ foo\ x\x\""|foo|\|x|\|x|\|""|
 foo\ bar|foo|\|bar|
 foo#bar\nbaz|foobaz|
 :-) ;-)|:|-|)|;|-|)|
-Γ‘Γ©Γ­Γ³ΓΊ|Γ‘|Γ©|Γ­|Γ³|ΓΊ|
+αινσϊ|α|ι|ν|σ|ϊ|
 """
 
 posix_data = r"""x|x|
@@ -131,7 +136,7 @@ foo\ x\x\"|foo xx"|
 foo\ bar|foo bar|
 foo#bar\nbaz|foo|baz|
 :-) ;-)|:-)|;-)|
-Γ‘Γ©Γ­Γ³ΓΊ|Γ‘Γ©Γ­Γ³ΓΊ|
+αινσϊ|αινσϊ|
 """
 
 class ShlexTest(unittest.TestCase):
@@ -154,7 +159,7 @@ class ShlexTest(unittest.TestCase):
 
     def oldSplit(self, s):
         ret = []
-        lex = shlex.shlex(io.StringIO(s))
+        lex = shlex.shlex(StringIO(s))
         tok = lex.get_token()
         while tok:
             ret.append(tok)
@@ -180,7 +185,7 @@ if not getattr(shlex, "split", None):
             delattr(ShlexTest, methname)
 
 def test_main():
-    support.run_unittest(ShlexTest)
+    test_support.run_unittest(ShlexTest)
 
 if __name__ == "__main__":
     test_main()

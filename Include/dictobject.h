@@ -45,12 +45,14 @@ meaning otherwise.
  * majority of dicts (consisting mostly of usually-small instance dicts and
  * usually-small dicts created to pass keyword arguments).
  */
-#ifndef Py_LIMITED_API
 #define PyDict_MINSIZE 8
 
 typedef struct {
-    /* Cached hash code of me_key. */
-    Py_hash_t me_hash;
+    /* Cached hash code of me_key.  Note that hash codes are C longs.
+     * We have to use Py_ssize_t instead because dict_popitem() abuses
+     * me_hash to hold a search finger.
+     */
+    Py_ssize_t me_hash;
     PyObject *me_key;
     PyObject *me_value;
 } PyDictEntry;
@@ -82,10 +84,9 @@ struct _dictobject {
      * setitem calls.
      */
     PyDictEntry *ma_table;
-    PyDictEntry *(*ma_lookup)(PyDictObject *mp, PyObject *key, Py_hash_t hash);
+    PyDictEntry *(*ma_lookup)(PyDictObject *mp, PyObject *key, long hash);
     PyDictEntry ma_smalltable[PyDict_MINSIZE];
 };
-#endif /* Py_LIMITED_API */
 
 PyAPI_DATA(PyTypeObject) PyDict_Type;
 PyAPI_DATA(PyTypeObject) PyDictIterKey_Type;
@@ -105,31 +106,24 @@ PyAPI_DATA(PyTypeObject) PyDictValues_Type;
 # define PyDictViewSet_Check(op) \
     (PyDictKeys_Check(op) || PyDictItems_Check(op))
 
-
 PyAPI_FUNC(PyObject *) PyDict_New(void);
 PyAPI_FUNC(PyObject *) PyDict_GetItem(PyObject *mp, PyObject *key);
-PyAPI_FUNC(PyObject *) PyDict_GetItemWithError(PyObject *mp, PyObject *key);
 PyAPI_FUNC(int) PyDict_SetItem(PyObject *mp, PyObject *key, PyObject *item);
 PyAPI_FUNC(int) PyDict_DelItem(PyObject *mp, PyObject *key);
 PyAPI_FUNC(void) PyDict_Clear(PyObject *mp);
 PyAPI_FUNC(int) PyDict_Next(
     PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value);
-#ifndef Py_LIMITED_API
 PyAPI_FUNC(int) _PyDict_Next(
-    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value, Py_hash_t *hash);
-#endif
+    PyObject *mp, Py_ssize_t *pos, PyObject **key, PyObject **value, long *hash);
 PyAPI_FUNC(PyObject *) PyDict_Keys(PyObject *mp);
 PyAPI_FUNC(PyObject *) PyDict_Values(PyObject *mp);
 PyAPI_FUNC(PyObject *) PyDict_Items(PyObject *mp);
 PyAPI_FUNC(Py_ssize_t) PyDict_Size(PyObject *mp);
 PyAPI_FUNC(PyObject *) PyDict_Copy(PyObject *mp);
 PyAPI_FUNC(int) PyDict_Contains(PyObject *mp, PyObject *key);
-#ifndef Py_LIMITED_API
-PyAPI_FUNC(int) _PyDict_Contains(PyObject *mp, PyObject *key, Py_hash_t hash);
+PyAPI_FUNC(int) _PyDict_Contains(PyObject *mp, PyObject *key, long hash);
 PyAPI_FUNC(PyObject *) _PyDict_NewPresized(Py_ssize_t minused);
 PyAPI_FUNC(void) _PyDict_MaybeUntrack(PyObject *mp);
-PyAPI_FUNC(int) _PyDict_HasOnlyStringKeys(PyObject *mp);
-#endif
 
 /* PyDict_Update(mp, other) is equivalent to PyDict_Merge(mp, other, 1). */
 PyAPI_FUNC(int) PyDict_Update(PyObject *mp, PyObject *other);

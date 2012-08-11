@@ -7,13 +7,13 @@ from wsgiref import util
 from wsgiref.validate import validator
 from wsgiref.simple_server import WSGIServer, WSGIRequestHandler, demo_app
 from wsgiref.simple_server import make_server
-from io import StringIO, BytesIO, BufferedReader
-from socketserver import BaseServer
+from StringIO import StringIO
+from SocketServer import BaseServer
 import os
 import re
 import sys
 
-from test import support
+from test import test_support
 
 class MockServer(WSGIServer):
     """Non-socket HTTP server"""
@@ -47,17 +47,15 @@ def hello_app(environ,start_response):
         ('Content-Type','text/plain'),
         ('Date','Mon, 05 Jun 2006 18:49:54 GMT')
     ])
-    return [b"Hello, world!"]
+    return ["Hello, world!"]
 
-def run_amock(app=hello_app, data=b"GET / HTTP/1.0\n\n"):
+def run_amock(app=hello_app, data="GET / HTTP/1.0\n\n"):
     server = make_server("", 80, app, MockServer, MockHandler)
-    inp = BufferedReader(BytesIO(data))
-    out = BytesIO()
-    olderr = sys.stderr
-    err = sys.stderr = StringIO()
+    inp, out, err, olderr = StringIO(data), StringIO(), StringIO(), sys.stderr
+    sys.stderr = err
 
     try:
-        server.finish_request((inp, out), ("127.0.0.1",8888))
+        server.finish_request((inp,out), ("127.0.0.1",8888))
     finally:
         sys.stderr = olderr
 
@@ -113,13 +111,13 @@ def compare_generic_iter(make_it,match):
         it = make_it()
         if not iter(it) is it: raise AssertionError
         for item in match:
-            if not next(it) == item: raise AssertionError
+            if not it.next()==item: raise AssertionError
         try:
-            next(it)
+            it.next()
         except StopIteration:
             pass
         else:
-            raise AssertionError("Too many items from .__next__()", it)
+            raise AssertionError("Too many items from .next()",it)
 
 
 
@@ -130,13 +128,13 @@ class IntegrationTests(TestCase):
 
     def check_hello(self, out, has_length=True):
         self.assertEqual(out,
-            ("HTTP/1.0 200 OK\r\n"
-            "Server: WSGIServer/0.2 Python/"+sys.version.split()[0]+"\r\n"
+            "HTTP/1.0 200 OK\r\n"
+            "Server: WSGIServer/0.1 Python/"+sys.version.split()[0]+"\r\n"
             "Content-Type: text/plain\r\n"
             "Date: Mon, 05 Jun 2006 18:49:54 GMT\r\n" +
             (has_length and  "Content-Length: 13\r\n" or "") +
             "\r\n"
-            "Hello, world!").encode("iso-8859-1")
+            "Hello, world!"
         )
 
     def test_plain_hello(self):
@@ -154,45 +152,15 @@ class IntegrationTests(TestCase):
             return ["Hello, world!"]
         out, err = run_amock(validator(bad_app))
         self.assertTrue(out.endswith(
-            b"A server error occurred.  Please contact the administrator."
+            "A server error occurred.  Please contact the administrator."
         ))
         self.assertEqual(
             err.splitlines()[-2],
             "AssertionError: Headers (('Content-Type', 'text/plain')) must"
-            " be of type list: <class 'tuple'>"
+            " be of type list: <type 'tuple'>"
         )
 
-    def test_wsgi_input(self):
-        def bad_app(e,s):
-            e["wsgi.input"].read()
-            s("200 OK", [("Content-Type", "text/plain; charset=utf-8")])
-            return [b"data"]
-        out, err = run_amock(validator(bad_app))
-        self.assertTrue(out.endswith(
-            b"A server error occurred.  Please contact the administrator."
-        ))
-        self.assertEqual(
-            err.splitlines()[-2], "AssertionError"
-        )
 
-    def test_bytes_validation(self):
-        def app(e, s):
-            s("200 OK", [
-                ("Content-Type", "text/plain; charset=utf-8"),
-                ("Date", "Wed, 24 Dec 2008 13:29:32 GMT"),
-                ])
-            return [b"data"]
-        out, err = run_amock(validator(app))
-        self.assertTrue(err.endswith('"GET / HTTP/1.0" 200 4\n'))
-        ver = sys.version.split()[0].encode('ascii')
-        self.assertEqual(
-                b"HTTP/1.0 200 OK\r\n"
-                b"Server: WSGIServer/0.2 Python/" + ver + b"\r\n"
-                b"Content-Type: text/plain; charset=utf-8\r\n"
-                b"Date: Wed, 24 Dec 2008 13:29:32 GMT\r\n"
-                b"\r\n"
-                b"data",
-                out)
 
 
 
@@ -213,8 +181,6 @@ class UtilityTests(TestCase):
         util.setup_testing_defaults(env)
         if isinstance(value, StringIO):
             self.assertIsInstance(env[key], StringIO)
-        elif isinstance(value,BytesIO):
-            self.assertIsInstance(env[key],BytesIO)
         else:
             self.assertEqual(env[key], value)
 
@@ -294,7 +260,7 @@ class UtilityTests(TestCase):
             ('wsgi.run_once', 0),
             ('wsgi.multithread', 0),
             ('wsgi.multiprocess', 0),
-            ('wsgi.input', BytesIO()),
+            ('wsgi.input', StringIO("")),
             ('wsgi.errors', StringIO()),
             ('wsgi.url_scheme','http'),
         ]:
@@ -325,7 +291,6 @@ class UtilityTests(TestCase):
     def testAppURIs(self):
         self.checkAppURI("http://127.0.0.1/")
         self.checkAppURI("http://127.0.0.1/spam", SCRIPT_NAME="/spam")
-        self.checkAppURI("http://127.0.0.1/sp%C3%A4m", SCRIPT_NAME="/späm")
         self.checkAppURI("http://spam.example.com:2071/",
             HTTP_HOST="spam.example.com:2071", SERVER_PORT="2071")
         self.checkAppURI("http://spam.example.com/",
@@ -339,7 +304,6 @@ class UtilityTests(TestCase):
     def testReqURIs(self):
         self.checkReqURI("http://127.0.0.1/")
         self.checkReqURI("http://127.0.0.1/spam", SCRIPT_NAME="/spam")
-        self.checkReqURI("http://127.0.0.1/sp%C3%A4m", SCRIPT_NAME="/späm")
         self.checkReqURI("http://127.0.0.1/spammity/spam",
             SCRIPT_NAME="/spammity", PATH_INFO="/spam")
         self.checkReqURI("http://127.0.0.1/spammity/spam;ham",
@@ -384,7 +348,7 @@ class HeaderTests(TestCase):
         del h['foo']   # should not raise an error
 
         h['Foo'] = 'bar'
-        for m in h.__contains__, h.get, h.get_all, h.__getitem__:
+        for m in h.has_key, h.__contains__, h.get, h.get_all, h.__getitem__:
             self.assertTrue(m('foo'))
             self.assertTrue(m('Foo'))
             self.assertTrue(m('FOO'))
@@ -424,6 +388,7 @@ class HeaderTests(TestCase):
             '\r\n'
         )
 
+
 class ErrorHandler(BaseCGIHandler):
     """Simple handler subclass for testing BaseHandler"""
 
@@ -435,7 +400,7 @@ class ErrorHandler(BaseCGIHandler):
     def __init__(self,**kw):
         setup_testing_defaults(kw)
         BaseCGIHandler.__init__(
-            self, BytesIO(), BytesIO(), StringIO(), kw,
+            self, StringIO(''), StringIO(), StringIO(), kw,
             multithread=True, multiprocess=True
         )
 
@@ -510,15 +475,11 @@ class HandlerTests(TestCase):
 
         def trivial_app1(e,s):
             s('200 OK',[])
-            return [e['wsgi.url_scheme'].encode('iso-8859-1')]
+            return [e['wsgi.url_scheme']]
 
         def trivial_app2(e,s):
-            s('200 OK',[])(e['wsgi.url_scheme'].encode('iso-8859-1'))
+            s('200 OK',[])(e['wsgi.url_scheme'])
             return []
-
-        def trivial_app3(e,s):
-            s('200 OK',[])
-            return ['\u0442\u0435\u0441\u0442'.encode("utf-8")]
 
         def trivial_app4(e,s):
             # Simulate a response to a HEAD request
@@ -528,25 +489,18 @@ class HandlerTests(TestCase):
         h = TestHandler()
         h.run(trivial_app1)
         self.assertEqual(h.stdout.getvalue(),
-            ("Status: 200 OK\r\n"
+            "Status: 200 OK\r\n"
             "Content-Length: 4\r\n"
             "\r\n"
-            "http").encode("iso-8859-1"))
+            "http")
 
         h = TestHandler()
         h.run(trivial_app2)
         self.assertEqual(h.stdout.getvalue(),
-            ("Status: 200 OK\r\n"
+            "Status: 200 OK\r\n"
             "\r\n"
-            "http").encode("iso-8859-1"))
+            "http")
 
-        h = TestHandler()
-        h.run(trivial_app3)
-        self.assertEqual(h.stdout.getvalue(),
-            b'Status: 200 OK\r\n'
-            b'Content-Length: 8\r\n'
-            b'\r\n'
-            b'\xd1\x82\xd0\xb5\xd1\x81\xd1\x82')
 
         h = TestHandler()
         h.run(trivial_app4)
@@ -567,24 +521,23 @@ class HandlerTests(TestCase):
         h = ErrorHandler()
         h.run(non_error_app)
         self.assertEqual(h.stdout.getvalue(),
-            ("Status: 200 OK\r\n"
+            "Status: 200 OK\r\n"
             "Content-Length: 0\r\n"
-            "\r\n").encode("iso-8859-1"))
+            "\r\n")
         self.assertEqual(h.stderr.getvalue(),"")
 
         h = ErrorHandler()
         h.run(error_app)
         self.assertEqual(h.stdout.getvalue(),
-            ("Status: %s\r\n"
+            "Status: %s\r\n"
             "Content-Type: text/plain\r\n"
             "Content-Length: %d\r\n"
-            "\r\n" % (h.error_status,len(h.error_body))).encode('iso-8859-1')
-            + h.error_body)
+            "\r\n%s" % (h.error_status,len(h.error_body),h.error_body))
 
-        self.assertIn("AssertionError", h.stderr.getvalue())
+        self.assertNotEqual(h.stderr.getvalue().find("AssertionError"), -1)
 
     def testErrorAfterOutput(self):
-        MSG = b"Some output has been sent"
+        MSG = "Some output has been sent"
         def error_app(e,s):
             s("200 OK",[])(MSG)
             raise AssertionError("This should be caught by handler")
@@ -592,9 +545,9 @@ class HandlerTests(TestCase):
         h = ErrorHandler()
         h.run(error_app)
         self.assertEqual(h.stdout.getvalue(),
-            ("Status: 200 OK\r\n"
-            "\r\n".encode("iso-8859-1")+MSG))
-        self.assertIn("AssertionError", h.stderr.getvalue())
+            "Status: 200 OK\r\n"
+            "\r\n"+MSG)
+        self.assertNotEqual(h.stderr.getvalue().find("AssertionError"), -1)
 
 
     def testHeaderFormats(self):
@@ -610,7 +563,7 @@ class HandlerTests(TestCase):
         )
         shortpat = (
             "Status: 200 OK\r\n" "Content-Length: 0\r\n" "\r\n"
-        ).encode("iso-8859-1")
+        )
 
         for ssw in "FooBar/1.0", None:
             sw = ssw and "Server: %s\r\n" % ssw or ""
@@ -631,35 +584,17 @@ class HandlerTests(TestCase):
                     h.server_software = ssw
                     h.run(non_error_app)
                     if proto=="HTTP/0.9":
-                        self.assertEqual(h.stdout.getvalue(),b"")
+                        self.assertEqual(h.stdout.getvalue(),"")
                     else:
                         self.assertTrue(
-                            re.match((stdpat%(version,sw)).encode("iso-8859-1"),
-                                h.stdout.getvalue()),
-                            ((stdpat%(version,sw)).encode("iso-8859-1"),
-                                h.stdout.getvalue())
+                            re.match(stdpat%(version,sw), h.stdout.getvalue()),
+                            (stdpat%(version,sw), h.stdout.getvalue())
                         )
-
-    def testBytesData(self):
-        def app(e, s):
-            s("200 OK", [
-                ("Content-Type", "text/plain; charset=utf-8"),
-                ])
-            return [b"data"]
-
-        h = TestHandler()
-        h.run(app)
-        self.assertEqual(b"Status: 200 OK\r\n"
-            b"Content-Type: text/plain; charset=utf-8\r\n"
-            b"Content-Length: 4\r\n"
-            b"\r\n"
-            b"data",
-            h.stdout.getvalue())
 
 # This epilogue is needed for compatibility with the Python 2.5 regrtest module
 
 def test_main():
-    support.run_unittest(__name__)
+    test_support.run_unittest(__name__)
 
 if __name__ == "__main__":
     test_main()

@@ -8,9 +8,9 @@
 .. index::
    single: configuration information
 
-**Source code:** :source:`Lib/sysconfig.py`
+.. versionadded:: 2.7
 
-.. versionadded:: 3.2
+**Source code:** :source:`Lib/sysconfig.py`
 
 --------------
 
@@ -129,7 +129,7 @@ identifier.  Python currently uses eight paths:
    one may call this function and get the default value.
 
    If *scheme* is provided, it must be a value from the list returned by
-   :func:`get_path_names`.  Otherwise, the default scheme for the current
+   :func:`get_scheme_names`.  Otherwise, the default scheme for the current
    platform is used.
 
    If *vars* is provided, it must be a dictionary of variables that will update
@@ -221,39 +221,3 @@ Other functions
 .. function:: get_config_h_filename()
 
    Return the path of :file:`pyconfig.h`.
-
-.. function:: get_makefile_filename()
-
-   Return the path of :file:`Makefile`.
-
-Using :mod:`sysconfig` as a script
-----------------------------------
-
-You can use :mod:`sysconfig` as a script with Python's *-m* option::
-
-    $ python -m sysconfig
-    Platform: "macosx-10.4-i386"
-    Python version: "3.2"
-    Current installation scheme: "posix_prefix"
-
-    Paths:
-            data = "/usr/local"
-            include = "/Users/tarek/Dev/svn.python.org/py3k/Include"
-            platinclude = "."
-            platlib = "/usr/local/lib/python3.2/site-packages"
-            platstdlib = "/usr/local/lib/python3.2"
-            purelib = "/usr/local/lib/python3.2/site-packages"
-            scripts = "/usr/local/bin"
-            stdlib = "/usr/local/lib/python3.2"
-
-    Variables:
-            AC_APPLE_UNIVERSAL_BUILD = "0"
-            AIX_GENUINE_CPLUSPLUS = "0"
-            AR = "ar"
-            ARFLAGS = "rc"
-            ASDLGEN = "./Parser/asdl_c.py"
-            ...
-
-This call will print in the standard output the information returned by
-:func:`get_platform`, :func:`get_python_version`, :func:`get_path` and
-:func:`get_config_vars`.

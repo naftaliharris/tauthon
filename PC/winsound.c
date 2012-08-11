@@ -72,28 +72,33 @@ PyDoc_STRVAR(sound_module_doc,
 static PyObject *
 sound_playsound(PyObject *s, PyObject *args)
 {
-    Py_UNICODE *wsound;
+    const char *sound;
     int flags;
+    int length;
     int ok;
 
-    if (PyArg_ParseTuple(args, "Zi:PlaySound", &wsound, &flags)) {
-        if (flags & SND_ASYNC && flags & SND_MEMORY) {
-            /* Sidestep reference counting headache; unfortunately this also
-               prevent SND_LOOP from memory. */
-            PyErr_SetString(PyExc_RuntimeError, "Cannot play asynchronously from memory");
-            return NULL;
-        }
-        Py_BEGIN_ALLOW_THREADS
-        ok = PlaySoundW(wsound, NULL, flags);
-        Py_END_ALLOW_THREADS
-        if (!ok) {
-            PyErr_SetString(PyExc_RuntimeError, "Failed to play sound");
-            return NULL;
-        }
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
+    if(!PyArg_ParseTuple(args,"z#i:PlaySound",&sound,&length,&flags)) {
     return NULL;
+    }
+
+    if(flags&SND_ASYNC && flags &SND_MEMORY) {
+    /* Sidestep reference counting headache; unfortunately this also
+       prevent SND_LOOP from memory. */
+    PyErr_SetString(PyExc_RuntimeError,"Cannot play asynchronously from memory");
+    return NULL;
+    }
+
+    Py_BEGIN_ALLOW_THREADS
+    ok = PlaySound(sound,NULL,flags);
+    Py_END_ALLOW_THREADS
+    if(!ok)
+    {
+    PyErr_SetString(PyExc_RuntimeError,"Failed to play sound");
+    return NULL;
+    }
+
+    Py_INCREF(Py_None);
+    return Py_None;
 }
 
 static PyObject *
@@ -146,10 +151,11 @@ static struct PyMethodDef sound_methods[] =
 static void
 add_define(PyObject *dict, const char *key, long value)
 {
-    PyObject *k = PyUnicode_FromString(key);
-    PyObject *v = PyLong_FromLong(value);
-    if (v && k) {
-        PyDict_SetItem(dict, k, v);
+    PyObject *k=PyString_FromString(key);
+    PyObject *v=PyLong_FromLong(value);
+    if(v&&k)
+    {
+    PyDict_SetItem(dict,k,v);
     }
     Py_XDECREF(k);
     Py_XDECREF(v);
@@ -157,26 +163,15 @@ add_define(PyObject *dict, const char *key, long value)
 
 #define ADD_DEFINE(tok) add_define(dict,#tok,tok)
 
-
-static struct PyModuleDef winsoundmodule = {
-    PyModuleDef_HEAD_INIT,
-    "winsound",
-    sound_module_doc,
-    -1,
-    sound_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit_winsound(void)
+initwinsound(void)
 {
     PyObject *dict;
-    PyObject *module = PyModule_Create(&winsoundmodule);
+    PyObject *module = Py_InitModule3("winsound",
+                                      sound_methods,
+                                      sound_module_doc);
     if (module == NULL)
-        return NULL;
+        return;
     dict = PyModule_GetDict(module);
 
     ADD_DEFINE(SND_ASYNC);
@@ -195,5 +190,4 @@ PyInit_winsound(void)
     ADD_DEFINE(MB_ICONEXCLAMATION);
     ADD_DEFINE(MB_ICONHAND);
     ADD_DEFINE(MB_ICONQUESTION);
-    return module;
 }

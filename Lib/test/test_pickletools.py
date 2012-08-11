@@ -1,24 +1,23 @@
 import pickle
 import pickletools
-from test import support
+from test import test_support
 from test.pickletester import AbstractPickleTests
 from test.pickletester import AbstractPickleModuleTests
 
 class OptimizedPickleTests(AbstractPickleTests, AbstractPickleModuleTests):
 
-    def dumps(self, arg, proto=None):
+    def dumps(self, arg, proto=0, fast=0):
         return pickletools.optimize(pickle.dumps(arg, proto))
 
-    def loads(self, buf, **kwds):
-        return pickle.loads(buf, **kwds)
+    def loads(self, buf):
+        return pickle.loads(buf)
 
-    # Test relies on precise output of dumps()
-    test_pickle_to_2x = None
-
+    module = pickle
+    error = KeyError
 
 def test_main():
-    support.run_unittest(OptimizedPickleTests)
-    support.run_doctest(pickletools)
+    test_support.run_unittest(OptimizedPickleTests)
+    test_support.run_doctest(pickletools)
 
 
 if __name__ == "__main__":

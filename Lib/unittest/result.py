@@ -1,9 +1,10 @@
 """Test result object"""
 
 import os
-import io
 import sys
 import traceback
+
+from StringIO import StringIO
 
 from . import util
 from functools import wraps
@@ -59,10 +60,13 @@ class TestResult(object):
         "Called when the given test is about to be run"
         self.testsRun += 1
         self._mirrorOutput = False
+        self._setupStdout()
+
+    def _setupStdout(self):
         if self.buffer:
             if self._stderr_buffer is None:
-                self._stderr_buffer = io.StringIO()
-                self._stdout_buffer = io.StringIO()
+                self._stderr_buffer = StringIO()
+                self._stdout_buffer = StringIO()
             sys.stdout = self._stdout_buffer
             sys.stderr = self._stderr_buffer
 
@@ -74,6 +78,10 @@ class TestResult(object):
 
     def stopTest(self, test):
         """Called when the given test has been run"""
+        self._restoreStdout()
+        self._mirrorOutput = False
+
+    def _restoreStdout(self):
         if self.buffer:
             if self._mirrorOutput:
                 output = sys.stdout.getvalue()
@@ -93,7 +101,6 @@ class TestResult(object):
             self._stdout_buffer.truncate()
             self._stderr_buffer.seek(0)
             self._stderr_buffer.truncate()
-        self._mirrorOutput = False
 
     def stopTestRun(self):
         """Called once after all tests are executed.

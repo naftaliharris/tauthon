@@ -1,6 +1,6 @@
 import os
-from tkinter import *
-import tkinter.messagebox as tkMessageBox
+from Tkinter import *
+import tkMessageBox
 
 
 class FileList:
@@ -33,12 +33,7 @@ class FileList:
             # Don't create window, perform 'action', e.g. open in same window
             return action(filename)
         else:
-            edit = self.EditorWindow(self, filename, key)
-            if edit.good_load:
-                return edit
-            else:
-                edit._close()
-                return None
+            return self.EditorWindow(self, filename, key)
 
     def gotofileline(self, filename, lineno=None):
         edit = self.open(filename)
@@ -49,7 +44,7 @@ class FileList:
         return self.EditorWindow(self, filename)
 
     def close_all_callback(self, *args, **kwds):
-        for edit in list(self.inversedict):
+        for edit in self.inversedict.keys():
             reply = edit.close()
             if reply == "cancel":
                 break
@@ -59,7 +54,7 @@ class FileList:
         try:
             key = self.inversedict[edit]
         except KeyError:
-            print("Don't know this EditorWindow object.  (close)")
+            print "Don't know this EditorWindow object.  (close)"
             return
         if key:
             del self.dict[key]
@@ -72,7 +67,7 @@ class FileList:
         try:
             key = self.inversedict[edit]
         except KeyError:
-            print("Don't know this EditorWindow object.  (rename)")
+            print "Don't know this EditorWindow object.  (rename)"
             return
         filename = edit.io.filename
         if not filename:

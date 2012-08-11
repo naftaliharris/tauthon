@@ -12,6 +12,7 @@ __author__ = "Guido van Rossum <guido@python.org>"
 
 # Python imports
 import os
+import StringIO
 
 # Fairly local imports
 from .pgen2 import driver, literals, token, tokenize, parse, grammar
@@ -32,7 +33,7 @@ class PatternSyntaxError(Exception):
 def tokenize_wrapper(input):
     """Tokenizes a string suppressing significant whitespace."""
     skip = set((token.NEWLINE, token.INDENT, token.DEDENT))
-    tokens = tokenize.generate_tokens(driver.generate_lines(input).__next__)
+    tokens = tokenize.generate_tokens(StringIO.StringIO(input).readline)
     for quintuple in tokens:
         type, value, start, end, line_text = quintuple
         if type not in skip:
@@ -140,7 +141,7 @@ class PatternCompiler(object):
         assert len(nodes) >= 1
         node = nodes[0]
         if node.type == token.STRING:
-            value = str(literals.evalString(node.value))
+            value = unicode(literals.evalString(node.value))
             return pytree.LeafPattern(_type_of_literal(value), value)
         elif node.type == token.NAME:
             value = node.value

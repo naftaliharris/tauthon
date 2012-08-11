@@ -30,8 +30,8 @@ class FixCallable(fixer_base.BaseFix):
     def transform(self, node, results):
         func = results['func']
 
-        touch_import(None, 'collections', node=node)
+        touch_import(None, u'collections', node=node)
 
-        args = [func.clone(), String(', ')]
-        args.extend(Attr(Name('collections'), Name('Callable')))
-        return Call(Name('isinstance'), args, prefix=node.prefix)
+        args = [func.clone(), String(u', ')]
+        args.extend(Attr(Name(u'collections'), Name(u'Callable')))
+        return Call(Name(u'isinstance'), args, prefix=node.prefix)

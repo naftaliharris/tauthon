@@ -14,7 +14,7 @@ class Callbacks(unittest.TestCase):
         return args[-1]
 
     def check_type(self, typ, arg):
-        PROTO = self.functype.__func__(typ, typ)
+        PROTO = self.functype.im_func(typ, typ)
         result = PROTO(self.callback)(arg)
         if typ == c_float:
             self.assertAlmostEqual(result, arg, places=5)
@@ -22,7 +22,7 @@ class Callbacks(unittest.TestCase):
             self.assertEqual(self.got_args, (arg,))
             self.assertEqual(result, arg)
 
-        PROTO = self.functype.__func__(typ, c_byte, typ)
+        PROTO = self.functype.im_func(typ, c_byte, typ)
         result = PROTO(self.callback)(-3, arg)
         if typ == c_float:
             self.assertAlmostEqual(result, arg, places=5)
@@ -61,10 +61,16 @@ class Callbacks(unittest.TestCase):
         self.check_type(c_ulong, 42)
 
     def test_longlong(self):
+        # test some 64-bit values, positive and negative
+        self.check_type(c_longlong, 5948291757245277467)
+        self.check_type(c_longlong, -5229388909784190580)
         self.check_type(c_longlong, 42)
         self.check_type(c_longlong, -42)
 
     def test_ulonglong(self):
+        # test some 64-bit values, with and without msb set.
+        self.check_type(c_ulonglong, 10955412242170339782)
+        self.check_type(c_ulonglong, 3665885499841167458)
         self.check_type(c_ulonglong, 42)
 
     def test_float(self):
@@ -82,8 +88,8 @@ class Callbacks(unittest.TestCase):
         self.check_type(c_longdouble, -3.14)
 
     def test_char(self):
-        self.check_type(c_char, b"x")
-        self.check_type(c_char, b"a")
+        self.check_type(c_char, "x")
+        self.check_type(c_char, "a")
 
     # disabled: would now (correctly) raise a RuntimeWarning about
     # a memory leak.  A callback function cannot return a non-integral
@@ -110,16 +116,16 @@ class Callbacks(unittest.TestCase):
         # functions, the type must have a non-NULL stgdict->setfunc.
         # POINTER(c_double), for example, is not supported.
 
-        prototype = self.functype.__func__(POINTER(c_double))
+        prototype = self.functype.im_func(POINTER(c_double))
         # The type is checked when the prototype is called
         self.assertRaises(TypeError, prototype, lambda: None)
 
     def test_unsupported_restype_2(self):
-        prototype = self.functype.__func__(object)
+        prototype = self.functype.im_func(object)
         self.assertRaises(TypeError, prototype, lambda: None)
 
     def test_issue_7959(self):
-        proto = self.functype.__func__(None)
+        proto = self.functype.im_func(None)
 
         class X(object):
             def func(self): pass
@@ -133,6 +139,14 @@ class Callbacks(unittest.TestCase):
         live = [x for x in gc.get_objects()
                 if isinstance(x, X)]
         self.assertEqual(len(live), 0)
+
+    def test_issue12483(self):
+        import gc
+        class Nasty:
+            def __del__(self):
+                gc.collect()
+        CFUNCTYPE(None)(lambda x=Nasty(): None)
+
 
 try:
     WINFUNCTYPE

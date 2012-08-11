@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Variant of "which".
 # On stderr, near and total misses are reported.
@@ -35,9 +35,9 @@ def main():
                 msg(filename + ': not a disk file')
             else:
                 mode = S_IMODE(st[ST_MODE])
-                if mode & 0o111:
+                if mode & 0111:
                     if not ident:
-                        print(filename)
+                        print filename
                         ident = st[:3]
                     else:
                         if st[:3] == ident:

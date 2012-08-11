@@ -1,6 +1,6 @@
 import sqlite3
 
-class Point:
+class Point(object):
     def __init__(self, x, y):
         self.x, self.y = x, y
 
@@ -14,4 +14,4 @@ cur = con.cursor()
 
 p = Point(4.0, -3.2)
 cur.execute("select ?", (p,))
-print(cur.fetchone()[0])
+print cur.fetchone()[0]

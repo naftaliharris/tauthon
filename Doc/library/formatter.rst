@@ -1,3 +1,4 @@
+
 :mod:`formatter` --- Generic output formatting
 ==============================================
 
@@ -5,9 +6,12 @@
    :synopsis: Generic output formatter and device interface.
 
 
+.. index:: single: HTMLParser (class in htmllib)
+
 This module supports two interface definitions, each with multiple
-implementations: The *formatter* interface, and the *writer* interface which is
-required by the formatter interface.
+implementations.  The *formatter* interface is used by the :class:`HTMLParser`
+class of the :mod:`htmllib` module, and the *writer* interface is required by
+the formatter interface.
 
 Formatter objects transform an abstract flow of formatting events into specific
 output events on writer objects.  Formatters manage several stack structures to
@@ -165,7 +169,7 @@ The following attributes are defined for formatter instance objects:
    :const:`AS_IS` values, is passed to the writer's :meth:`new_styles` method.
 
 
-.. method:: formatter.pop_style(n=1)
+.. method:: formatter.pop_style([n=1])
 
    Pop the last *n* style specifications passed to :meth:`push_style`.  A tuple
    representing the revised stack, including :const:`AS_IS` values, is passed to
@@ -177,7 +181,7 @@ The following attributes are defined for formatter instance objects:
    Set the spacing style for the writer.
 
 
-.. method:: formatter.assert_line_data(flag=1)
+.. method:: formatter.assert_line_data([flag=1])
 
    Inform the formatter that data has been added to the current paragraph
    out-of-band.  This should be used when the writer has been manipulated
@@ -194,7 +198,7 @@ Two implementations of formatter objects are provided by this module. Most
 applications may use one of these classes without modification or subclassing.
 
 
-.. class:: NullFormatter(writer=None)
+.. class:: NullFormatter([writer])
 
    A formatter which does nothing.  If *writer* is omitted, a :class:`NullWriter`
    instance is created.  No methods of the writer are called by
@@ -339,8 +343,8 @@ this module.  Most applications will need to derive new writer classes from the
 
 .. class:: DumbWriter(file=None, maxcol=72)
 
-   Simple writer class which writes output on the :term:`file object` passed
-   in as *file* or, if *file* is omitted, on standard output.  The output is
-   simply word-wrapped to the number of columns specified by *maxcol*.  This
-   class is suitable for reflowing a sequence of paragraphs.
+   Simple writer class which writes output on the file object passed in as *file*
+   or, if *file* is None, on standard output.  The output is simply word-wrapped
+   to the number of columns specified by *maxcol*.  This class is suitable for
+   reflowing a sequence of paragraphs.
 

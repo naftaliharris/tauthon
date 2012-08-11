@@ -10,23 +10,23 @@ Using the Python Interpreter
 Invoking the Interpreter
 ========================
 
-The Python interpreter is usually installed as :file:`/usr/local/bin/python3.2`
-on those machines where it is available; putting :file:`/usr/local/bin` in your
+The Python interpreter is usually installed as :file:`/usr/local/bin/python` on
+those machines where it is available; putting :file:`/usr/local/bin` in your
 Unix shell's search path makes it possible to start it by typing the command ::
 
-   python3.2
+   python
 
-to the shell. [#]_ Since the choice of the directory where the interpreter lives
-is an installation option, other places are possible; check with your local
-Python guru or system administrator.  (E.g., :file:`/usr/local/python` is a
-popular alternative location.)
+to the shell.  Since the choice of the directory where the interpreter lives is
+an installation option, other places are possible; check with your local Python
+guru or system administrator.  (E.g., :file:`/usr/local/python` is a popular
+alternative location.)
 
 On Windows machines, the Python installation is usually placed in
-:file:`C:\\Python32`, though you can change this when you're running the
+:file:`C:\\Python27`, though you can change this when you're running the
 installer.  To add this directory to your path,  you can type the following
 command into the command prompt in a DOS box::
 
-   set path=%path%;C:\python32
+   set path=%path%;C:\python27
 
 Typing an end-of-file character (:kbd:`Control-D` on Unix, :kbd:`Control-Z` on
 Windows) at the primary prompt causes the interpreter to exit with a zero exit
@@ -60,8 +60,7 @@ if you had spelled out its full name on the command line.
 
 When a script file is used, it is sometimes useful to be able to run the script
 and enter interactive mode afterwards.  This can be done by passing :option:`-i`
-before the script.  (This does not work if the script is read from standard
-input, for the same reason as explained in the previous paragraph.)
+before the script.
 
 
 .. _tut-argpassing:
@@ -94,20 +93,17 @@ with the *secondary prompt*, by default three dots (``...``). The interpreter
 prints a welcome message stating its version number and a copyright notice
 before printing the first prompt::
 
-   $ python3.2
-   Python 3.2 (py3k, Sep 12 2007, 12:21:02)
-   [GCC 3.4.6 20060404 (Red Hat 3.4.6-8)] on linux2
+   python
+   Python 2.7 (#1, Feb 28 2010, 00:02:06)
    Type "help", "copyright", "credits" or "license" for more information.
    >>>
-
-.. XXX update for new releases
 
 Continuation lines are needed when entering a multi-line construct. As an
 example, take a look at this :keyword:`if` statement::
 
    >>> the_world_is_flat = 1
    >>> if the_world_is_flat:
-   ...     print("Be careful not to fall off!")
+   ...     print "Be careful not to fall off!"
    ...
    Be careful not to fall off!
 
@@ -148,7 +144,7 @@ Executable Python Scripts
 On BSD'ish Unix systems, Python scripts can be made directly executable, like
 shell scripts, by putting the line ::
 
-   #! /usr/bin/env python3.2
+   #! /usr/bin/env python
 
 (assuming that the interpreter is on the user's :envvar:`PATH`) at the beginning
 of the script and giving the file an executable mode.  The ``#!`` must be the
@@ -169,35 +165,47 @@ also be ``.pyw``, in that case, the console window that normally appears is
 suppressed.
 
 
+.. _tut-source-encoding:
+
 Source Code Encoding
 --------------------
 
-By default, Python source files are treated as encoded in UTF-8.  In that
-encoding, characters of most languages in the world can be used simultaneously
-in string literals, identifiers and comments --- although the standard library
-only uses ASCII characters for identifiers, a convention that any portable code
-should follow.  To display all these characters properly, your editor must
-recognize that the file is UTF-8, and it must use a font that supports all the
-characters in the file.
-
-It is also possible to specify a different encoding for source files.  In order
-to do this, put one more special comment line right after the ``#!`` line to
-define the source file encoding::
+It is possible to use encodings different than ASCII in Python source files. The
+best way to do it is to put one more special comment line right after the ``#!``
+line to define the source file encoding::
 
    # -*- coding: encoding -*-
 
-With that declaration, everything in the source file will be treated as having
-the encoding *encoding* instead of UTF-8.  The list of possible encodings can be
-found in the Python Library Reference, in the section on :mod:`codecs`.
 
-For example, if your editor of choice does not support UTF-8 encoded files and
-insists on using some other encoding, say Windows-1252, you can write::
+With that declaration, all characters in the source file will be treated as
+having the encoding *encoding*, and it will be possible to directly write
+Unicode string literals in the selected encoding.  The list of possible
+encodings can be found in the Python Library Reference, in the section on
+:mod:`codecs`.
 
-   # -*- coding: cp-1252 -*-
+For example, to write Unicode literals including the Euro currency symbol, the
+ISO-8859-15 encoding can be used, with the Euro symbol having the ordinal value
+164.  This script will print the value 8364 (the Unicode codepoint corresponding
+to the Euro symbol) and then exit::
 
-and still use all characters in the Windows-1252 character set in the source
-files.  The special encoding comment must be in the *first or second* line
-within the file.
+   # -*- coding: iso-8859-15 -*-
+
+   currency = u"€"
+   print ord(currency)
+
+If your editor supports saving files as ``UTF-8`` with a UTF-8 *byte order mark*
+(aka BOM), you can use that instead of an encoding declaration. IDLE supports
+this capability if ``Options/General/Default Source Encoding/UTF-8`` is set.
+Notice that this signature is not understood in older Python releases (2.2 and
+earlier), and also not understood by the operating system for script files with
+``#!`` lines (only used on Unix systems).
+
+By using UTF-8 (either through the signature or an encoding declaration),
+characters of most languages in the world can be used simultaneously in string
+literals and comments.  Using non-ASCII characters in identifiers is not
+supported. To display all these characters properly, your editor must recognize
+that the file is UTF-8, and it must use a font that supports all the characters
+in the file.
 
 
 .. _tut-startup:
@@ -224,21 +232,38 @@ file.
 
 If you want to read an additional start-up file from the current directory, you
 can program this in the global start-up file using code like ``if
-os.path.isfile('.pythonrc.py'): exec(open('.pythonrc.py').read())``.
-If you want to use the startup file in a script, you must do this explicitly
-in the script::
+os.path.isfile('.pythonrc.py'): execfile('.pythonrc.py')``.  If you want to use
+the startup file in a script, you must do this explicitly in the script::
 
    import os
    filename = os.environ.get('PYTHONSTARTUP')
    if filename and os.path.isfile(filename):
-       exec(open(filename).read())
+       execfile(filename)
+
+
+.. _tut-customize:
+
+The Customization Modules
+-------------------------
+
+Python provides two hooks to let you customize it: :mod:`sitecustomize` and
+:mod:`usercustomize`.  To see how it works, you need first to find the location
+of your user site-packages directory.  Start Python and run this code:
+
+   >>> import site
+   >>> site.getusersitepackages()
+   '/home/user/.local/lib/python3.2/site-packages'
+
+Now you can create a file named :file:`usercustomize.py` in that directory and
+put anything you want in it.  It will affect every invocation of Python, unless
+it is started with the :option:`-s` option to disable the automatic import.
+
+:mod:`sitecustomize` works in the same way, but is typically created by an
+administrator of the computer in the global site-packages directory, and is
+imported before :mod:`usercustomize`.  See the documentation of the :mod:`site`
+module for more details.
 
 
 .. rubric:: Footnotes
 
-.. [#] On Unix, the Python 3.x interpreter is by default not installed with the
-   executable named ``python``, so that it does not conflict with a
-   simultaneously installed Python 2.x executable.
-
 .. [#] A problem with the GNU Readline package may prevent this.
-

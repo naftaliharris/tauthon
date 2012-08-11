@@ -24,7 +24,7 @@ def randfloats(n):
         fp = open(fn, "rb")
     except IOError:
         r = random.random
-        result = [r() for i in range(n)]
+        result = [r() for i in xrange(n)]
         try:
             try:
                 fp = open(fn, "wb")
@@ -37,8 +37,8 @@ def randfloats(n):
                         os.unlink(fn)
                     except os.error:
                         pass
-        except IOError as msg:
-            print("can't write", fn, ":", msg)
+        except IOError, msg:
+            print "can't write", fn, ":", msg
     else:
         result = marshal.load(fp)
         fp.close()
@@ -60,7 +60,7 @@ def doit(L):
     t0 = time.clock()
     L.sort()
     t1 = time.clock()
-    print("%6.2f" % (t1-t0), end=' ')
+    print "%6.2f" % (t1-t0),
     flush()
 
 def tabulate(r):
@@ -84,11 +84,11 @@ def tabulate(r):
     """
     cases = tuple([ch + "sort" for ch in r"*\/3+%~=!"])
     fmt = ("%2s %7s" + " %6s"*len(cases))
-    print(fmt % (("i", "2**i") + cases))
+    print fmt % (("i", "2**i") + cases)
     for i in r:
         n = 1 << i
         L = randfloats(n)
-        print("%2d %7d" % (i, n), end=' ')
+        print "%2d %7d" % (i, n),
         flush()
         doit(L) # *sort
         L.reverse()
@@ -108,7 +108,7 @@ def tabulate(r):
         doit(L) # +sort
 
         # Replace 1% of the elements at random.
-        for dummy in range(n // 100):
+        for dummy in xrange(n // 100):
             L[random.randrange(n)] = random.random()
         doit(L) # %sort
 
@@ -118,12 +118,12 @@ def tabulate(r):
             L = L * (n // 4)
             # Force the elements to be distinct objects, else timings can be
             # artificially low.
-            L = list(map(lambda x: --x, L))
+            L = map(lambda x: --x, L)
         doit(L) # ~sort
         del L
 
         # All equal.  Again, force the elements to be distinct objects.
-        L = list(map(abs, [-0.5] * n))
+        L = map(abs, [-0.5] * n)
         doit(L) # =sort
         del L
 
@@ -131,13 +131,13 @@ def tabulate(r):
         # for an older implementation of quicksort, which used the median
         # of the first, last and middle elements as the pivot.
         half = n // 2
-        L = list(range(half - 1, -1, -1))
+        L = range(half - 1, -1, -1)
         L.extend(range(half))
         # Force to float, so that the timings are comparable.  This is
         # significantly faster if we leave tham as ints.
-        L = list(map(float, L))
+        L = map(float, L)
         doit(L) # !sort
-        print()
+        print
 
 def main():
     """Main program when invoked as a script.

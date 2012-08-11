@@ -6,7 +6,7 @@
 #
 #   NodeList      -- lightest possible NodeList implementation
 #
-#   EmptyNodeList -- lightest possible NodeList that is guarateed to
+#   EmptyNodeList -- lightest possible NodeList that is guaranteed to
 #                    remain empty (immutable)
 #
 #   StringTypes   -- tuple of defined string types
@@ -40,7 +40,12 @@ __all__ = ["NodeList", "EmptyNodeList", "StringTypes", "defproperty"]
 
 import xml.dom
 
-StringTypes = (str,)
+try:
+    unicode
+except NameError:
+    StringTypes = type(''),
+else:
+    StringTypes = type(''), type(unicode(''))
 
 
 class NodeList(list):
@@ -95,7 +100,7 @@ class EmptyNodeList(tuple):
 
 
 def defproperty(klass, name, doc):
-    get = getattr(klass, ("_get_" + name))
+    get = getattr(klass, ("_get_" + name)).im_func
     def set(self, value, name=name):
         raise xml.dom.NoModificationAllowedErr(
             "attempt to modify read-only attribute " + repr(name))

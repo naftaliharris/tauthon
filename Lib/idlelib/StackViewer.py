@@ -7,7 +7,7 @@ from idlelib.ObjectBrowser import ObjectTreeItem, make_objecttreeitem
 
 def StackBrowser(root, flist=None, tb=None, top=None):
     if top is None:
-        from tkinter import Toplevel
+        from Tkinter import Toplevel
         top = Toplevel(root)
     sc = ScrolledCanvas(top, bg="white", highlightthickness=0)
     sc.frame.pack(expand=1, fill="both")
@@ -106,7 +106,7 @@ class VariablesTreeItem(ObjectTreeItem):
         return len(self.object) > 0
 
     def keys(self):
-        return list(self.object.keys())
+        return self.object.keys()
 
     def GetSubList(self):
         sublist = []
@@ -120,3 +120,18 @@ class VariablesTreeItem(ObjectTreeItem):
             item = make_objecttreeitem(key + " =", value, setfunction)
             sublist.append(item)
         return sublist
+
+
+def _test():
+    try:
+        import testcode
+        reload(testcode)
+    except:
+        sys.last_type, sys.last_value, sys.last_traceback = sys.exc_info()
+    from Tkinter import Tk
+    root = Tk()
+    StackBrowser(None, top=root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    _test()

@@ -1,4 +1,5 @@
 #include "Python.h"
+#include "pyarena.h"
 
 /* A simple arena block structure.
 

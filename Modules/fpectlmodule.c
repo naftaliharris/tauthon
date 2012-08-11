@@ -90,8 +90,7 @@ static Sigfunc sigfpe_handler;
 static void fpe_reset(Sigfunc *);
 
 static PyObject *fpe_error;
-
-PyMODINIT_FUNC PyInit_fpectl(void);
+PyMODINIT_FUNC initfpectl(void);
 static PyObject *turnon_sigfpe            (PyObject *self,PyObject *args);
 static PyObject *turnoff_sigfpe           (PyObject *self,PyObject *args);
 
@@ -287,29 +286,16 @@ static void sigfpe_handler(int signo)
     }
 }
 
-static struct PyModuleDef fpectlmodule = {
-        PyModuleDef_HEAD_INIT,
-        "fpectl",
-        NULL,
-        -1,
-        fpectl_methods,
-        NULL,
-        NULL,
-        NULL,
-        NULL
-};
-
-PyMODINIT_FUNC PyInit_fpectl(void)
+PyMODINIT_FUNC initfpectl(void)
 {
     PyObject *m, *d;
-    m = PyModule_Create(&fpectlmodule);
+    m = Py_InitModule("fpectl", fpectl_methods);
     if (m == NULL)
-        return NULL;
+        return;
     d = PyModule_GetDict(m);
     fpe_error = PyErr_NewException("fpectl.error", NULL, NULL);
     if (fpe_error != NULL)
         PyDict_SetItemString(d, "error", fpe_error);
-    return m;
 }
 
 #ifdef __cplusplus

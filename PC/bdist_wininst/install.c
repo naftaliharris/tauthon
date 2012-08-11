@@ -62,7 +62,7 @@
  * instead showing the user an empty listbox to select something from.
  *
  * Finish the code so that we can use other python installations
- * additionaly to those found in the registry,
+ * additionally to those found in the registry,
  * and then #define USE_OTHER_PYTHON_VERSIONS
  *
  *  - install a help-button, which will display something meaningful
@@ -114,7 +114,6 @@
 FILE *logfile;
 
 char modulename[MAX_PATH];
-wchar_t wmodulename[MAX_PATH];
 
 HWND hwndMain;
 HWND hDialog;
@@ -148,7 +147,7 @@ BOOL pyc_compile, pyo_compile;
    the permissions of the current user. */
 HKEY hkey_root = (HKEY)-1;
 
-BOOL success;                   /* Installation successfull? */
+BOOL success;                   /* Installation successful? */
 char *failure_reason = NULL;
 
 HANDLE hBitmap;
@@ -300,27 +299,6 @@ static int do_compile_files(int (__cdecl * PyRun_SimpleString)(char *),
 
 typedef void PyObject;
 
-// Convert a "char *" string to "whcar_t *", or NULL on error.
-// Result string must be free'd
-wchar_t *widen_string(char *src)
-{
-    wchar_t *result;
-    DWORD dest_cch;
-    int src_len = strlen(src) + 1; // include NULL term in all ops
-    /* use MultiByteToWideChar() to see how much we need. */
-    /* NOTE: this will include the null-term in the length */
-    dest_cch = MultiByteToWideChar(CP_ACP, 0, src, src_len, NULL, 0);
-    // alloc the buffer
-    result = (wchar_t *)malloc(dest_cch * sizeof(wchar_t));
-    if (result==NULL)
-        return NULL;
-    /* do the conversion */
-    if (0==MultiByteToWideChar(CP_ACP, 0, src, src_len, result, dest_cch)) {
-        free(result);
-        return NULL;
-    }
-    return result;
-}
 
 /*
  * Returns number of files which failed to compile,
@@ -329,7 +307,7 @@ wchar_t *widen_string(char *src)
 static int compile_filelist(HINSTANCE hPython, BOOL optimize_flag)
 {
     DECLPROC(hPython, void, Py_Initialize, (void));
-    DECLPROC(hPython, void, Py_SetProgramName, (wchar_t *));
+    DECLPROC(hPython, void, Py_SetProgramName, (char *));
     DECLPROC(hPython, void, Py_Finalize, (void));
     DECLPROC(hPython, int, PyRun_SimpleString, (char *));
     DECLPROC(hPython, PyObject *, PySys_GetObject, (char *));
@@ -348,7 +326,7 @@ static int compile_filelist(HINSTANCE hPython, BOOL optimize_flag)
         return -1;
 
     *Py_OptimizeFlag = optimize_flag ? 1 : 0;
-    Py_SetProgramName(wmodulename);
+    Py_SetProgramName(modulename);
     Py_Initialize();
 
     errors += do_compile_files(PyRun_SimpleString, optimize_flag);
@@ -687,7 +665,7 @@ static int prepare_script_environment(HINSTANCE hPython)
     if (!Py_BuildValue || !PyArg_ParseTuple || !PyErr_Format)
         return 1;
 
-    mod = PyImport_ImportModule("builtins");
+    mod = PyImport_ImportModule("__builtin__");
     if (mod) {
         int i;
         g_PyExc_ValueError = PyObject_GetAttrString(mod, "ValueError");
@@ -718,10 +696,9 @@ static int prepare_script_environment(HINSTANCE hPython)
 static int
 do_run_installscript(HINSTANCE hPython, char *pathname, int argc, char **argv)
 {
-    int fh, result, i;
-    static wchar_t *wargv[256];
+    int fh, result;
     DECLPROC(hPython, void, Py_Initialize, (void));
-    DECLPROC(hPython, int, PySys_SetArgv, (int, wchar_t **));
+    DECLPROC(hPython, int, PySys_SetArgv, (int, char **));
     DECLPROC(hPython, int, PyRun_SimpleString, (char *));
     DECLPROC(hPython, void, Py_Finalize, (void));
     DECLPROC(hPython, PyObject *, Py_BuildValue, (char *, ...));
@@ -755,16 +732,7 @@ do_run_installscript(HINSTANCE hPython, char *pathname, int argc, char **argv)
     Py_Initialize();
 
     prepare_script_environment(hPython);
-    // widen the argv array for py3k.
-    memset(wargv, 0, sizeof(wargv));
-    for (i=0;i<argc;i++)
-        wargv[i] = argv[i] ? widen_string(argv[i]) : NULL;
-    PySys_SetArgv(argc, wargv);
-    // free the strings we just widened.
-    for (i=0;i<argc;i++)
-        if (wargv[i])
-            free(wargv[i]);
-
+    PySys_SetArgv(argc, argv);
     result = 3;
     {
         struct _stat statbuf;
@@ -797,7 +765,7 @@ run_installscript(char *pathname, int argc, char **argv, char **pOutput)
 
     tempname = tempnam(NULL, NULL);
     // We use a static CRT while the Python version we load uses
-    // the CRT from one of various possibile DLLs.  As a result we
+    // the CRT from one of various possible DLLs.  As a result we
     // need to redirect the standard handles using the API rather
     // than the CRT.
     redirected = CreateFile(
@@ -839,7 +807,7 @@ static int do_run_simple_script(HINSTANCE hPython, char *script)
 {
     int rc;
     DECLPROC(hPython, void, Py_Initialize, (void));
-    DECLPROC(hPython, void, Py_SetProgramName, (wchar_t *));
+    DECLPROC(hPython, void, Py_SetProgramName, (char *));
     DECLPROC(hPython, void, Py_Finalize, (void));
     DECLPROC(hPython, int, PyRun_SimpleString, (char *));
     DECLPROC(hPython, void, PyErr_Print, (void));
@@ -848,7 +816,7 @@ static int do_run_simple_script(HINSTANCE hPython, char *script)
         !PyRun_SimpleString || !PyErr_Print)
         return -1;
 
-    Py_SetProgramName(wmodulename);
+    Py_SetProgramName(modulename);
     Py_Initialize();
     prepare_script_environment(hPython);
     rc = PyRun_SimpleString(script);
@@ -2650,7 +2618,6 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst,
     char *basename;
 
     GetModuleFileName(NULL, modulename, sizeof(modulename));
-    GetModuleFileNameW(NULL, wmodulename, sizeof(wmodulename)/sizeof(wmodulename[0]));
 
     /* Map the executable file to memory */
     arc_data = MapExistingFile(modulename, &arc_size);

@@ -7,7 +7,7 @@ class IterChars:
     def __iter__(self):
         return self
 
-    def __next__(self):
+    def next(self):
         if self.count > ord('z'):
             raise StopIteration
         self.count += 1
@@ -21,4 +21,4 @@ theIter = IterChars()
 cur.executemany("insert into characters(c) values (?)", theIter)
 
 cur.execute("select c from characters")
-print(cur.fetchall())
+print cur.fetchall()

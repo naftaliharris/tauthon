@@ -6,8 +6,8 @@ import re
 from ..pgen2 import token
 from .. import fixer_base
 
-_mapping = {"unichr" : "chr", "unicode" : "str"}
-_literal_re = re.compile(r"[uU][rR]?[\'\"]")
+_mapping = {u"unichr" : u"chr", u"unicode" : u"str"}
+_literal_re = re.compile(ur"[uU][rR]?[\'\"]")
 
 class FixUnicode(fixer_base.BaseFix):
     BM_compatible = True

@@ -1,3 +1,4 @@
+
 :mod:`xml.sax.handler` --- Base classes for SAX handlers
 ========================================================
 
@@ -6,6 +7,8 @@
 .. moduleauthor:: Lars Marius Garshol <larsga@garshol.priv.no>
 .. sectionauthor:: Martin v. Löwis <martin@v.loewis.de>
 
+
+.. versionadded:: 2.0
 
 The SAX API defines four kinds of handlers: content handlers, DTD handlers,
 error handlers, and entity resolvers. Applications normally only need to
@@ -289,8 +292,8 @@ events in the input document:
    must come from the same external entity so that the Locator provides useful
    information.
 
-   *content* may be a string or bytes instance; the ``expat`` reader module
-   always produces strings.
+   *content* may be a Unicode string or a byte string; the ``expat`` reader module
+   produces always Unicode strings.
 
    .. note::
 

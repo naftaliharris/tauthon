@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 
 # Add some standard cpp magic to a header file
 
@@ -12,17 +12,17 @@ def main():
 def process(filename):
     try:
         f = open(filename, 'r')
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write('%s: can\'t open: %s\n' % (filename, str(msg)))
         return
     data = f.read()
     f.close()
-    if data[:2] != '/*':
+    if data[:2] <> '/*':
         sys.stderr.write('%s does not begin with C comment\n' % filename)
         return
     try:
         f = open(filename, 'w')
-    except IOError as msg:
+    except IOError, msg:
         sys.stderr.write('%s: can\'t write: %s\n' % (filename, str(msg)))
         return
     sys.stderr.write('Processing %s ...\n' % filename)
@@ -32,18 +32,18 @@ def process(filename):
             magic = magic + c.upper()
         else: magic = magic + '_'
     sys.stdout = f
-    print('#ifndef', magic)
-    print('#define', magic)
-    print('#ifdef __cplusplus')
-    print('extern "C" {')
-    print('#endif')
-    print()
+    print '#ifndef', magic
+    print '#define', magic
+    print '#ifdef __cplusplus'
+    print 'extern "C" {'
+    print '#endif'
+    print
     f.write(data)
-    print()
-    print('#ifdef __cplusplus')
-    print('}')
-    print('#endif')
-    print('#endif /*', '!'+magic, '*/')
+    print
+    print '#ifdef __cplusplus'
+    print '}'
+    print '#endif'
+    print '#endif /*', '!'+magic, '*/'
 
 if __name__ == '__main__':
     main()

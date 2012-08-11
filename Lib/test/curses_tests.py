@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 #
 # $Id: ncurses.py 36559 2004-07-18 05:56:09Z tim_one $
 #

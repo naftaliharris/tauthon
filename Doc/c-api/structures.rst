@@ -36,7 +36,6 @@ the definition of all other Python objects.
 These macros are used in the definition of :c:type:`PyObject` and
 :c:type:`PyVarObject`:
 
-.. XXX need to document PEP 3123 changes here
 
 .. c:macro:: PyObject_HEAD
 
@@ -99,14 +98,6 @@ These macros are used in the definition of :c:type:`PyObject` and
    reference.
 
 
-.. c:type:: PyCFunctionWithKeywords
-
-   Type of the functions used to implement Python callables in C that take
-   keyword arguments: they take three :c:type:`PyObject\*` parameters and return
-   one such value.  See :c:type:`PyCFunction` above for the meaning of the return
-   value.
-
-
 .. c:type:: PyMethodDef
 
    Structure used to describe a method of an extension type.  This structure has
@@ -148,7 +139,7 @@ convention flags can be combined with a binding flag.
    :c:type:`PyCFunction`. The function expects two :c:type:`PyObject\*` values.
    The first one is the *self* object for methods; for module functions, it is
    the module object.  The second parameter (often called *args*) is a tuple
-   object representing all arguments. This parameter is typically processed
+   object representing all arguments.  This parameter is typically processed
    using :c:func:`PyArg_ParseTuple` or :c:func:`PyArg_UnpackTuple`.
 
 
@@ -165,9 +156,9 @@ convention flags can be combined with a binding flag.
 
    Methods without parameters don't need to check whether arguments are given if
    they are listed with the :const:`METH_NOARGS` flag.  They need to be of type
-   :c:type:`PyCFunction`.  The first parameter is typically named *self* and will
-   hold a reference to the module or object instance.  In all cases the second
-   parameter will be *NULL*.
+   :c:type:`PyCFunction`.  The first parameter is typically named ``self`` and
+   will hold a reference to the module or object instance.  In all cases the
+   second parameter will be *NULL*.
 
 
 .. data:: METH_O
@@ -177,6 +168,15 @@ convention flags can be combined with a binding flag.
    They have the type :c:type:`PyCFunction`, with the *self* parameter, and a
    :c:type:`PyObject\*` parameter representing the single argument.
 
+
+.. data:: METH_OLDARGS
+
+   This calling convention is deprecated.  The method must be of type
+   :c:type:`PyCFunction`.  The second argument is *NULL* if no arguments are
+   given, a single object if exactly one argument is given, and a tuple of
+   objects if more than one argument is given.  There is no way for a function
+   using this convention to distinguish between a call with multiple arguments
+   and a call with a tuple as the only argument.
 
 These two constants are not used to indicate the calling convention but the
 binding when use with methods of classes.  These may not be used for functions
@@ -193,6 +193,8 @@ method.
    similar to what is created when using the :func:`classmethod` built-in
    function.
 
+   .. versionadded:: 2.3
+
 
 .. data:: METH_STATIC
 
@@ -201,6 +203,8 @@ method.
    The method will be passed *NULL* as the first parameter rather than an
    instance of the type.  This is used to create *static methods*, similar to
    what is created when using the :func:`staticmethod` built-in function.
+
+   .. versionadded:: 2.3
 
 One other constant controls whether a method is loaded in place of another
 definition with the same method name.
@@ -217,6 +221,8 @@ definition with the same method name.
    will be loaded in place of the wrapper object and will co-exist with the
    slot.  This is helpful because calls to PyCFunctions are optimized more
    than wrapper object calls.
+
+   .. versionadded:: 2.4
 
 
 .. c:type:: PyMemberDef
@@ -282,3 +288,11 @@ definition with the same method name.
    read-only access.  Using :c:macro:`T_STRING` for :attr:`type` implies
    :c:macro:`READONLY`.  Only :c:macro:`T_OBJECT` and :c:macro:`T_OBJECT_EX`
    members can be deleted.  (They are set to *NULL*).
+
+
+.. c:function:: PyObject* Py_FindMethod(PyMethodDef table[], PyObject *ob, char *name)
+
+   Return a bound method object for an extension type implemented in C.  This
+   can be useful in the implementation of a :attr:`tp_getattro` or
+   :attr:`tp_getattr` handler that does not use the
+   :c:func:`PyObject_GenericGetAttr` function.

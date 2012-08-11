@@ -34,15 +34,6 @@ DEFAULT_BUFFER_SIZE
 """
 # New I/O library conforming to PEP 3116.
 
-# XXX edge cases when switching between reading/writing
-# XXX need to support 1 meaning line-buffered
-# XXX whenever an argument is None, use the default value
-# XXX read/write ops should check readable/writable
-# XXX buffered readinto should work with arbitrary buffer objects
-# XXX use incremental encoder for text output, at least for UTF-16 and UTF-8-SIG
-# XXX check writable, readable and seekable in appropriate places
-
-
 __author__ = ("Guido van Rossum <guido@python.org>, "
               "Mike Verdone <mike.verdone@gmail.com>, "
               "Mark Russell <mark.russell@zen.co.uk>, "
@@ -75,8 +66,8 @@ SEEK_END = 2
 # Declaring ABCs in C is tricky so we do it here.
 # Method descriptions and default implementations are inherited from the C
 # version however.
-class IOBase(_io._IOBase, metaclass=abc.ABCMeta):
-    pass
+class IOBase(_io._IOBase):
+    __metaclass__ = abc.ABCMeta
 
 class RawIOBase(_io._RawIOBase, IOBase):
     pass

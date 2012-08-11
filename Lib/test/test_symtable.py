@@ -4,7 +4,7 @@ Test the API of the symtable module.
 import symtable
 import unittest
 
-from test import support
+from test import test_support
 
 
 TEST_CODE = """
@@ -27,7 +27,8 @@ def spam(a, b, *var, **kw):
     return internal
 
 def foo():
-    pass
+    exec 'm'
+    from sys import *
 
 def namespace_test(): pass
 def namespace_test(): pass
@@ -42,7 +43,9 @@ def find_block(block, name):
 
 class SymtableTest(unittest.TestCase):
 
-    top = symtable.symtable(TEST_CODE, "?", "exec")
+    with test_support.check_warnings(
+            ("import \* only allowed at module level", SyntaxWarning)):
+        top = symtable.symtable(TEST_CODE, "?", "exec")
     # These correspond to scopes in TEST_CODE
     Mine = find_block(top, "Mine")
     a_method = find_block(Mine, "a_method")
@@ -60,8 +63,13 @@ class SymtableTest(unittest.TestCase):
     def test_optimized(self):
         self.assertFalse(self.top.is_optimized())
         self.assertFalse(self.top.has_exec())
+        self.assertFalse(self.top.has_import_star())
 
         self.assertTrue(self.spam.is_optimized())
+
+        self.assertFalse(self.foo.is_optimized())
+        self.assertTrue(self.foo.has_exec())
+        self.assertTrue(self.foo.has_import_star())
 
     def test_nested(self):
         self.assertFalse(self.top.is_nested())
@@ -80,10 +88,10 @@ class SymtableTest(unittest.TestCase):
 
     def test_function_info(self):
         func = self.spam
-        self.assertEqual(func.get_parameters(), ("a", "b", "kw", "var"))
-        self.assertEqual(func.get_locals(),
-                         ("a", "b", "internal", "kw", "var", "x"))
-        self.assertEqual(func.get_globals(), ("bar", "glob"))
+        self.assertEqual(sorted(func.get_parameters()), ["a", "b", "kw", "var"])
+        expected = ["a", "b", "internal", "kw", "var", "x"]
+        self.assertEqual(sorted(func.get_locals()), expected)
+        self.assertEqual(sorted(func.get_globals()), ["bar", "glob"])
         self.assertEqual(self.internal.get_frees(), ("x",))
 
     def test_globals(self):
@@ -170,7 +178,7 @@ class SymtableTest(unittest.TestCase):
 
 
 def test_main():
-    support.run_unittest(SymtableTest)
+    test_support.run_unittest(SymtableTest)
 
 if __name__ == '__main__':
     test_main()

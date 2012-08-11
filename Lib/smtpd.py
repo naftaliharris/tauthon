@@ -1,4 +1,4 @@
-#! /usr/bin/env python3
+#! /usr/bin/env python
 """An RFC 2821 smtp proxy.
 
 Usage: %(program)s [options] [localhost:localport [remotehost:remoteport]]
@@ -35,7 +35,6 @@ given then 8025 is used.  If remotehost is not given then `localhost' is used,
 and if remoteport is not given, then 25 is used.
 """
 
-
 # Overview:
 #
 # This file implements the minimal SMTP protocol as defined in RFC 821.  It
@@ -59,6 +58,7 @@ and if remoteport is not given, then 25 is used.
 #   gets forwarded to a real backend smtpd, as with PureProxy.  Again, errors
 #   are not handled correctly yet.
 #
+# Please note that this script requires Python 2.0
 #
 # Author: Barry Warsaw <barry@python.org>
 #
@@ -77,7 +77,6 @@ import time
 import socket
 import asyncore
 import asynchat
-from warnings import warn
 
 __all__ = ["SMTPServer","DebuggingServer","PureProxy","MailmanProxy"]
 
@@ -96,198 +95,56 @@ EMPTYSTRING = ''
 COMMASPACE = ', '
 
 
-
 def usage(code, msg=''):
-    print(__doc__ % globals(), file=sys.stderr)
+    print >> sys.stderr, __doc__ % globals()
     if msg:
-        print(msg, file=sys.stderr)
+        print >> sys.stderr, msg
     sys.exit(code)
 
 
-
 class SMTPChannel(asynchat.async_chat):
     COMMAND = 0
     DATA = 1
 
-    data_size_limit = 33554432
-    command_size_limit = 512
-
     def __init__(self, server, conn, addr):
         asynchat.async_chat.__init__(self, conn)
-        self.smtp_server = server
-        self.conn = conn
-        self.addr = addr
-        self.received_lines = []
-        self.smtp_state = self.COMMAND
-        self.seen_greeting = ''
-        self.mailfrom = None
-        self.rcpttos = []
-        self.received_data = ''
-        self.fqdn = socket.getfqdn()
-        self.num_bytes = 0
+        self.__server = server
+        self.__conn = conn
+        self.__addr = addr
+        self.__line = []
+        self.__state = self.COMMAND
+        self.__greeting = 0
+        self.__mailfrom = None
+        self.__rcpttos = []
+        self.__data = ''
+        self.__fqdn = socket.getfqdn()
         try:
-            self.peer = conn.getpeername()
-        except socket.error as err:
+            self.__peer = conn.getpeername()
+        except socket.error, err:
             # a race condition  may occur if the other end is closing
             # before we can get the peername
             self.close()
-            if err.args[0] != errno.ENOTCONN:
+            if err[0] != errno.ENOTCONN:
                 raise
             return
-        print('Peer:', repr(self.peer), file=DEBUGSTREAM)
-        self.push('220 %s %s' % (self.fqdn, __version__))
-        self.set_terminator(b'\r\n')
-
-    # properties for backwards-compatibility
-    @property
-    def __server(self):
-        warn("Access to __server attribute on SMTPChannel is deprecated, "
-            "use 'smtp_server' instead", PendingDeprecationWarning, 2)
-        return self.smtp_server
-    @__server.setter
-    def __server(self, value):
-        warn("Setting __server attribute on SMTPChannel is deprecated, "
-            "set 'smtp_server' instead", PendingDeprecationWarning, 2)
-        self.smtp_server = value
-
-    @property
-    def __line(self):
-        warn("Access to __line attribute on SMTPChannel is deprecated, "
-            "use 'received_lines' instead", PendingDeprecationWarning, 2)
-        return self.received_lines
-    @__line.setter
-    def __line(self, value):
-        warn("Setting __line attribute on SMTPChannel is deprecated, "
-            "set 'received_lines' instead", PendingDeprecationWarning, 2)
-        self.received_lines = value
-
-    @property
-    def __state(self):
-        warn("Access to __state attribute on SMTPChannel is deprecated, "
-            "use 'smtp_state' instead", PendingDeprecationWarning, 2)
-        return self.smtp_state
-    @__state.setter
-    def __state(self, value):
-        warn("Setting __state attribute on SMTPChannel is deprecated, "
-            "set 'smtp_state' instead", PendingDeprecationWarning, 2)
-        self.smtp_state = value
-
-    @property
-    def __greeting(self):
-        warn("Access to __greeting attribute on SMTPChannel is deprecated, "
-            "use 'seen_greeting' instead", PendingDeprecationWarning, 2)
-        return self.seen_greeting
-    @__greeting.setter
-    def __greeting(self, value):
-        warn("Setting __greeting attribute on SMTPChannel is deprecated, "
-            "set 'seen_greeting' instead", PendingDeprecationWarning, 2)
-        self.seen_greeting = value
-
-    @property
-    def __mailfrom(self):
-        warn("Access to __mailfrom attribute on SMTPChannel is deprecated, "
-            "use 'mailfrom' instead", PendingDeprecationWarning, 2)
-        return self.mailfrom
-    @__mailfrom.setter
-    def __mailfrom(self, value):
-        warn("Setting __mailfrom attribute on SMTPChannel is deprecated, "
-            "set 'mailfrom' instead", PendingDeprecationWarning, 2)
-        self.mailfrom = value
-
-    @property
-    def __rcpttos(self):
-        warn("Access to __rcpttos attribute on SMTPChannel is deprecated, "
-            "use 'rcpttos' instead", PendingDeprecationWarning, 2)
-        return self.rcpttos
-    @__rcpttos.setter
-    def __rcpttos(self, value):
-        warn("Setting __rcpttos attribute on SMTPChannel is deprecated, "
-            "set 'rcpttos' instead", PendingDeprecationWarning, 2)
-        self.rcpttos = value
-
-    @property
-    def __data(self):
-        warn("Access to __data attribute on SMTPChannel is deprecated, "
-            "use 'received_data' instead", PendingDeprecationWarning, 2)
-        return self.received_data
-    @__data.setter
-    def __data(self, value):
-        warn("Setting __data attribute on SMTPChannel is deprecated, "
-            "set 'received_data' instead", PendingDeprecationWarning, 2)
-        self.received_data = value
-
-    @property
-    def __fqdn(self):
-        warn("Access to __fqdn attribute on SMTPChannel is deprecated, "
-            "use 'fqdn' instead", PendingDeprecationWarning, 2)
-        return self.fqdn
-    @__fqdn.setter
-    def __fqdn(self, value):
-        warn("Setting __fqdn attribute on SMTPChannel is deprecated, "
-            "set 'fqdn' instead", PendingDeprecationWarning, 2)
-        self.fqdn = value
-
-    @property
-    def __peer(self):
-        warn("Access to __peer attribute on SMTPChannel is deprecated, "
-            "use 'peer' instead", PendingDeprecationWarning, 2)
-        return self.peer
-    @__peer.setter
-    def __peer(self, value):
-        warn("Setting __peer attribute on SMTPChannel is deprecated, "
-            "set 'peer' instead", PendingDeprecationWarning, 2)
-        self.peer = value
-
-    @property
-    def __conn(self):
-        warn("Access to __conn attribute on SMTPChannel is deprecated, "
-            "use 'conn' instead", PendingDeprecationWarning, 2)
-        return self.conn
-    @__conn.setter
-    def __conn(self, value):
-        warn("Setting __conn attribute on SMTPChannel is deprecated, "
-            "set 'conn' instead", PendingDeprecationWarning, 2)
-        self.conn = value
-
-    @property
-    def __addr(self):
-        warn("Access to __addr attribute on SMTPChannel is deprecated, "
-            "use 'addr' instead", PendingDeprecationWarning, 2)
-        return self.addr
-    @__addr.setter
-    def __addr(self, value):
-        warn("Setting __addr attribute on SMTPChannel is deprecated, "
-            "set 'addr' instead", PendingDeprecationWarning, 2)
-        self.addr = value
+        print >> DEBUGSTREAM, 'Peer:', repr(self.__peer)
+        self.push('220 %s %s' % (self.__fqdn, __version__))
+        self.set_terminator('\r\n')
 
     # Overrides base class for convenience
     def push(self, msg):
-        asynchat.async_chat.push(self, bytes(msg + '\r\n', 'ascii'))
+        asynchat.async_chat.push(self, msg + '\r\n')
 
     # Implementation of base class abstract method
     def collect_incoming_data(self, data):
-        limit = None
-        if self.smtp_state == self.COMMAND:
-            limit = self.command_size_limit
-        elif self.smtp_state == self.DATA:
-            limit = self.data_size_limit
-        if limit and self.num_bytes > limit:
-            return
-        elif limit:
-            self.num_bytes += len(data)
-        self.received_lines.append(str(data, "utf8"))
+        self.__line.append(data)
 
     # Implementation of base class abstract method
     def found_terminator(self):
-        line = EMPTYSTRING.join(self.received_lines)
-        print('Data:', repr(line), file=DEBUGSTREAM)
-        self.received_lines = []
-        if self.smtp_state == self.COMMAND:
-            if self.num_bytes > self.command_size_limit:
-                self.push('500 Error: line too long')
-                self.num_bytes = 0
-                return
-            self.num_bytes = 0
+        line = EMPTYSTRING.join(self.__line)
+        print >> DEBUGSTREAM, 'Data:', repr(line)
+        self.__line = []
+        if self.__state == self.COMMAND:
             if not line:
                 self.push('500 Error: bad syntax')
                 return
@@ -306,13 +163,8 @@ class SMTPChannel(asynchat.async_chat):
             method(arg)
             return
         else:
-            if self.smtp_state != self.DATA:
+            if self.__state != self.DATA:
                 self.push('451 Internal confusion')
-                self.num_bytes = 0
-                return
-            if self.num_bytes > self.data_size_limit:
-                self.push('552 Error: Too much mail data')
-                self.num_bytes = 0
                 return
             # Remove extraneous carriage returns and de-transparency according
             # to RFC 821, Section 4.5.2.
@@ -322,16 +174,15 @@ class SMTPChannel(asynchat.async_chat):
                     data.append(text[1:])
                 else:
                     data.append(text)
-            self.received_data = NEWLINE.join(data)
-            status = self.smtp_server.process_message(self.peer,
-                                                      self.mailfrom,
-                                                      self.rcpttos,
-                                                      self.received_data)
-            self.rcpttos = []
-            self.mailfrom = None
-            self.smtp_state = self.COMMAND
-            self.num_bytes = 0
-            self.set_terminator(b'\r\n')
+            self.__data = NEWLINE.join(data)
+            status = self.__server.process_message(self.__peer,
+                                                   self.__mailfrom,
+                                                   self.__rcpttos,
+                                                   self.__data)
+            self.__rcpttos = []
+            self.__mailfrom = None
+            self.__state = self.COMMAND
+            self.set_terminator('\r\n')
             if not status:
                 self.push('250 Ok')
             else:
@@ -342,11 +193,11 @@ class SMTPChannel(asynchat.async_chat):
         if not arg:
             self.push('501 Syntax: HELO hostname')
             return
-        if self.seen_greeting:
+        if self.__greeting:
             self.push('503 Duplicate HELO/EHLO')
         else:
-            self.seen_greeting = arg
-            self.push('250 %s' % self.fqdn)
+            self.__greeting = arg
+            self.push('250 %s' % self.__fqdn)
 
     def smtp_NOOP(self, arg):
         if arg:
@@ -374,29 +225,29 @@ class SMTPChannel(asynchat.async_chat):
         return address
 
     def smtp_MAIL(self, arg):
-        print('===> MAIL', arg, file=DEBUGSTREAM)
+        print >> DEBUGSTREAM, '===> MAIL', arg
         address = self.__getaddr('FROM:', arg) if arg else None
         if not address:
             self.push('501 Syntax: MAIL FROM:<address>')
             return
-        if self.mailfrom:
+        if self.__mailfrom:
             self.push('503 Error: nested MAIL command')
             return
-        self.mailfrom = address
-        print('sender:', self.mailfrom, file=DEBUGSTREAM)
+        self.__mailfrom = address
+        print >> DEBUGSTREAM, 'sender:', self.__mailfrom
         self.push('250 Ok')
 
     def smtp_RCPT(self, arg):
-        print('===> RCPT', arg, file=DEBUGSTREAM)
-        if not self.mailfrom:
+        print >> DEBUGSTREAM, '===> RCPT', arg
+        if not self.__mailfrom:
             self.push('503 Error: need MAIL command')
             return
         address = self.__getaddr('TO:', arg) if arg else None
         if not address:
             self.push('501 Syntax: RCPT TO: <address>')
             return
-        self.rcpttos.append(address)
-        print('recips:', self.rcpttos, file=DEBUGSTREAM)
+        self.__rcpttos.append(address)
+        print >> DEBUGSTREAM, 'recips:', self.__rcpttos
         self.push('250 Ok')
 
     def smtp_RSET(self, arg):
@@ -404,29 +255,25 @@ class SMTPChannel(asynchat.async_chat):
             self.push('501 Syntax: RSET')
             return
         # Resets the sender, recipients, and data, but not the greeting
-        self.mailfrom = None
-        self.rcpttos = []
-        self.received_data = ''
-        self.smtp_state = self.COMMAND
+        self.__mailfrom = None
+        self.__rcpttos = []
+        self.__data = ''
+        self.__state = self.COMMAND
         self.push('250 Ok')
 
     def smtp_DATA(self, arg):
-        if not self.rcpttos:
+        if not self.__rcpttos:
             self.push('503 Error: need RCPT command')
             return
         if arg:
             self.push('501 Syntax: DATA')
             return
-        self.smtp_state = self.DATA
-        self.set_terminator(b'\r\n.\r\n')
+        self.__state = self.DATA
+        self.set_terminator('\r\n.\r\n')
         self.push('354 End data with <CR><LF>.<CR><LF>')
 
 
-
 class SMTPServer(asyncore.dispatcher):
-    # SMTPChannel class to use for managing client connections
-    channel_class = SMTPChannel
-
     def __init__(self, localaddr, remoteaddr):
         self._localaddr = localaddr
         self._remoteaddr = remoteaddr
@@ -438,16 +285,21 @@ class SMTPServer(asyncore.dispatcher):
             self.bind(localaddr)
             self.listen(5)
         except:
+            # cleanup asyncore.socket_map before raising
             self.close()
             raise
         else:
-            print('%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (
+            print >> DEBUGSTREAM, \
+                  '%s started at %s\n\tLocal addr: %s\n\tRemote addr:%s' % (
                 self.__class__.__name__, time.ctime(time.time()),
-                localaddr, remoteaddr), file=DEBUGSTREAM)
+                localaddr, remoteaddr)
 
-    def handle_accepted(self, conn, addr):
-        print('Incoming connection from %s' % repr(addr), file=DEBUGSTREAM)
-        channel = self.channel_class(self, conn, addr)
+    def handle_accept(self):
+        pair = self.accept()
+        if pair is not None:
+            conn, addr = pair
+            print >> DEBUGSTREAM, 'Incoming connection from %s' % repr(addr)
+            channel = SMTPChannel(self, conn, addr)
 
     # API for "doing something useful with the message"
     def process_message(self, peer, mailfrom, rcpttos, data):
@@ -475,23 +327,21 @@ class SMTPServer(asyncore.dispatcher):
         raise NotImplementedError
 
 
-
 class DebuggingServer(SMTPServer):
     # Do something with the gathered message
     def process_message(self, peer, mailfrom, rcpttos, data):
         inheaders = 1
         lines = data.split('\n')
-        print('---------- MESSAGE FOLLOWS ----------')
+        print '---------- MESSAGE FOLLOWS ----------'
         for line in lines:
             # headers first
             if inheaders and not line:
-                print('X-Peer:', peer[0])
+                print 'X-Peer:', peer[0]
                 inheaders = 0
-            print(line)
-        print('------------ END MESSAGE ------------')
+            print line
+        print '------------ END MESSAGE ------------'
 
 
-
 class PureProxy(SMTPServer):
     def process_message(self, peer, mailfrom, rcpttos, data):
         lines = data.split('\n')
@@ -505,7 +355,7 @@ class PureProxy(SMTPServer):
         data = NEWLINE.join(lines)
         refused = self._deliver(mailfrom, rcpttos, data)
         # TBD: what to do with refused addresses?
-        print('we got some refusals:', refused, file=DEBUGSTREAM)
+        print >> DEBUGSTREAM, 'we got some refusals:', refused
 
     def _deliver(self, mailfrom, rcpttos, data):
         import smtplib
@@ -517,11 +367,11 @@ class PureProxy(SMTPServer):
                 refused = s.sendmail(mailfrom, rcpttos, data)
             finally:
                 s.quit()
-        except smtplib.SMTPRecipientsRefused as e:
-            print('got SMTPRecipientsRefused', file=DEBUGSTREAM)
+        except smtplib.SMTPRecipientsRefused, e:
+            print >> DEBUGSTREAM, 'got SMTPRecipientsRefused'
             refused = e.recipients
-        except (socket.error, smtplib.SMTPException) as e:
-            print('got', e.__class__, file=DEBUGSTREAM)
+        except (socket.error, smtplib.SMTPException), e:
+            print >> DEBUGSTREAM, 'got', e.__class__
             # All recipients were refused.  If the exception had an associated
             # error code, use it.  Otherwise,fake it with a non-triggering
             # exception code.
@@ -532,10 +382,9 @@ class PureProxy(SMTPServer):
         return refused
 
 
-
 class MailmanProxy(PureProxy):
     def process_message(self, peer, mailfrom, rcpttos, data):
-        from io import StringIO
+        from cStringIO import StringIO
         from Mailman import Utils
         from Mailman import Message
         from Mailman import MailList
@@ -570,11 +419,11 @@ class MailmanProxy(PureProxy):
         for rcpt, listname, command in listnames:
             rcpttos.remove(rcpt)
         # If there's any non-list destined recipients left,
-        print('forwarding recips:', ' '.join(rcpttos), file=DEBUGSTREAM)
+        print >> DEBUGSTREAM, 'forwarding recips:', ' '.join(rcpttos)
         if rcpttos:
             refused = self._deliver(mailfrom, rcpttos, data)
             # TBD: what to do with refused addresses?
-            print('we got refusals:', refused, file=DEBUGSTREAM)
+            print >> DEBUGSTREAM, 'we got refusals:', refused
         # Now deliver directly to the list commands
         mlists = {}
         s = StringIO(data)
@@ -582,12 +431,12 @@ class MailmanProxy(PureProxy):
         # These headers are required for the proper execution of Mailman.  All
         # MTAs in existence seem to add these if the original message doesn't
         # have them.
-        if not msg.get('from'):
+        if not msg.getheader('from'):
             msg['From'] = mailfrom
-        if not msg.get('date'):
+        if not msg.getheader('date'):
             msg['Date'] = time.ctime(time.time())
         for rcpt, listname, command in listnames:
-            print('sending message to', rcpt, file=DEBUGSTREAM)
+            print >> DEBUGSTREAM, 'sending message to', rcpt
             mlist = mlists.get(listname)
             if not mlist:
                 mlist = MailList.MailList(listname, lock=0)
@@ -611,20 +460,18 @@ class MailmanProxy(PureProxy):
                 msg.Enqueue(mlist, torequest=1)
 
 
-
 class Options:
     setuid = 1
     classname = 'PureProxy'
 
 
-
 def parseargs():
     global DEBUGSTREAM
     try:
         opts, args = getopt.getopt(
             sys.argv[1:], 'nVhc:d',
             ['class=', 'nosetuid', 'version', 'help', 'debug'])
-    except getopt.error as e:
+    except getopt.error, e:
         usage(1, e)
 
     options = Options()
@@ -632,7 +479,7 @@ def parseargs():
         if opt in ('-h', '--help'):
             usage(0)
         elif opt in ('-V', '--version'):
-            print(__version__, file=sys.stderr)
+            print >> sys.stderr, __version__
             sys.exit(0)
         elif opt in ('-n', '--nosetuid'):
             options.setuid = 0
@@ -674,23 +521,9 @@ def parseargs():
     return options
 
 
-
 if __name__ == '__main__':
     options = parseargs()
     # Become nobody
-    if options.setuid:
-        try:
-            import pwd
-        except ImportError:
-            print('Cannot import module "pwd"; try running with -n option.', file=sys.stderr)
-            sys.exit(1)
-        nobody = pwd.getpwnam('nobody')[2]
-        try:
-            os.setuid(nobody)
-        except OSError as e:
-            if e.errno != errno.EPERM: raise
-            print('Cannot setuid "nobody"; try running with -n option.', file=sys.stderr)
-            sys.exit(1)
     classname = options.classname
     if "." in classname:
         lastdot = classname.rfind(".")
@@ -701,6 +534,21 @@ if __name__ == '__main__':
     class_ = getattr(mod, classname)
     proxy = class_((options.localhost, options.localport),
                    (options.remotehost, options.remoteport))
+    if options.setuid:
+        try:
+            import pwd
+        except ImportError:
+            print >> sys.stderr, \
+                  'Cannot import module "pwd"; try running with -n option.'
+            sys.exit(1)
+        nobody = pwd.getpwnam('nobody')[2]
+        try:
+            os.setuid(nobody)
+        except OSError, e:
+            if e.errno != errno.EPERM: raise
+            print >> sys.stderr, \
+                  'Cannot setuid "nobody"; try running with -n option.'
+            sys.exit(1)
     try:
         asyncore.loop()
     except KeyboardInterrupt:

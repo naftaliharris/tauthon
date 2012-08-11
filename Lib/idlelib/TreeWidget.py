@@ -15,7 +15,7 @@
 # - optimize tree redraw after expand of subnode
 
 import os
-from tkinter import *
+from Tkinter import *
 import imp
 
 from idlelib import ZoomHeight
@@ -31,7 +31,7 @@ except NameError:
 if os.path.isdir(_icondir):
     ICONDIR = _icondir
 elif not os.path.isdir(ICONDIR):
-    raise RuntimeError("can't find icon directory (%r)" % (ICONDIR,))
+    raise RuntimeError, "can't find icon directory (%r)" % (ICONDIR,)
 
 def listicons(icondir=ICONDIR):
     """Utility to display the available icons."""

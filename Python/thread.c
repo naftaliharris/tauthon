@@ -23,6 +23,12 @@
 
 #include <stdlib.h>
 
+#ifdef __sgi
+#ifndef HAVE_PTHREAD_H /* XXX Need to check in configure.ac */
+#undef _POSIX_THREADS
+#endif
+#endif
+
 #include "pythread.h"
 
 #ifndef _POSIX_THREADS
@@ -40,7 +46,7 @@
 #endif
 
 /* Check if we're running on HP-UX and _SC_THREADS is defined. If so, then
-   enough of the Posix threads package is implimented to support python
+   enough of the Posix threads package is implemented to support python
    threads.
 
    This is valid for HP-UX 11.23 running on an ia64 system. If needed, add
@@ -95,7 +101,6 @@ PyThread_init_thread(void)
 static size_t _pythread_stacksize = 0;
 
 #ifdef SGI_THREADS
-#error SGI Irix threads are now unsupported, and code will be removed in 3.3.
 #include "thread_sgi.h"
 #endif
 
@@ -104,12 +109,10 @@ static size_t _pythread_stacksize = 0;
 #endif
 
 #ifdef SUN_LWP
-#error SunOS lightweight processes are now unsupported, and code will be removed in 3.3.
 #include "thread_lwp.h"
 #endif
 
 #ifdef HAVE_PTH
-#error GNU pth threads are now unsupported, and code will be removed in 3.3.
 #include "thread_pth.h"
 #undef _POSIX_THREADS
 #endif
@@ -119,7 +122,6 @@ static size_t _pythread_stacksize = 0;
 #endif
 
 #ifdef C_THREADS
-#error Mach C Threads are now unsupported, and code will be removed in 3.3.
 #include "thread_cthread.h"
 #endif
 
@@ -131,8 +133,16 @@ static size_t _pythread_stacksize = 0;
 #include "thread_os2.h"
 #endif
 
+#ifdef BEOS_THREADS
+#include "thread_beos.h"
+#endif
+
 #ifdef PLAN9_THREADS
 #include "thread_plan9.h"
+#endif
+
+#ifdef ATHEOS_THREADS
+#include "thread_atheos.h"
 #endif
 
 /*

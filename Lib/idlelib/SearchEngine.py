@@ -1,6 +1,6 @@
 import re
-from tkinter import *
-import tkinter.messagebox as tkMessageBox
+from Tkinter import *
+import tkMessageBox
 
 def get(root):
     if not hasattr(root, "_searchengine"):
@@ -66,7 +66,7 @@ class SearchEngine:
             flags = flags | re.IGNORECASE
         try:
             prog = re.compile(pat, flags)
-        except re.error as what:
+        except re.error, what:
             try:
                 msg, col = what
             except:

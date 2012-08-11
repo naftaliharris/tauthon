@@ -4,11 +4,8 @@
 extern "C" {
 #endif
 
-PyAPI_FUNC(mod_ty) PyAST_FromNode(
-    const node *n,
-    PyCompilerFlags *flags,
-    const char *filename,       /* decoded from the filesystem encoding */
-    PyArena *arena);
+PyAPI_FUNC(mod_ty) PyAST_FromNode(const node *, PyCompilerFlags *flags,
+				  const char *, PyArena *);
 
 #ifdef __cplusplus
 }

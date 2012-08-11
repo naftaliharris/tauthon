@@ -30,8 +30,9 @@ Each function will be called at most once for each event.
 """
 
 import sys
+import string
 import re
-import tkinter
+import Tkinter
 from idlelib import macosxSupport
 
 # the event type constants, which define the meaning of mc_type
@@ -257,16 +258,19 @@ def _parse_sequence(sequence):
     """
     if not sequence or sequence[0] != '<' or sequence[-1] != '>':
         return None
-    words = sequence[1:-1].split('-')
+    words = string.split(sequence[1:-1], '-')
+
     modifiers = 0
     while words and words[0] in _modifier_names:
         modifiers |= 1 << _modifier_names[words[0]]
         del words[0]
+
     if words and words[0] in _type_names:
         type = _type_names[words[0]]
         del words[0]
     else:
         return None
+
     if _binder_classes[type] is _SimpleBinder:
         if modifiers or words:
             return None
@@ -305,7 +309,7 @@ def MultiCallCreator(widget):
         return _multicall_dict[widget]
 
     class MultiCall (widget):
-        assert issubclass(widget, tkinter.Misc)
+        assert issubclass(widget, Tkinter.Misc)
 
         def __init__(self, *args, **kwargs):
             widget.__init__(self, *args, **kwargs)
@@ -317,8 +321,7 @@ def MultiCallCreator(widget):
                               for i in range(len(_types))]
 
         def bind(self, sequence=None, func=None, add=None):
-            #print("bind(%s, %s, %s)" % (sequence, func, add),
-            #      file=sys.__stderr__)
+            #print "bind(%s, %s, %s) called." % (sequence, func, add)
             if type(sequence) is str and len(sequence) > 2 and \
                sequence[:2] == "<<" and sequence[-2:] == ">>":
                 if sequence in self.__eventinfo:
@@ -346,8 +349,7 @@ def MultiCallCreator(widget):
             return widget.unbind(self, sequence, funcid)
 
         def event_add(self, virtual, *sequences):
-            #print("event_add(%s, %s)" % (repr(virtual), repr(sequences)),
-            #      file=sys.__stderr__)
+            #print "event_add(%s,%s) was called"%(repr(virtual),repr(sequences))
             if virtual not in self.__eventinfo:
                 self.__eventinfo[virtual] = [None, []]
 
@@ -355,7 +357,7 @@ def MultiCallCreator(widget):
             for seq in sequences:
                 triplet = _parse_sequence(seq)
                 if triplet is None:
-                    #print("Tkinter event_add(%s)" % seq, file=sys.__stderr__)
+                    #print >> sys.stderr, "Seq. %s was added by Tkinter."%seq
                     widget.event_add(self, virtual, seq)
                 else:
                     if func is not None:
@@ -369,7 +371,7 @@ def MultiCallCreator(widget):
             for seq in sequences:
                 triplet = _parse_sequence(seq)
                 if triplet is None:
-                    #print("Tkinter event_delete: %s" % seq, file=sys.__stderr__)
+                    #print >> sys.stderr, "Seq. %s was deleted by Tkinter."%seq
                     widget.event_delete(self, virtual, seq)
                 else:
                     if func is not None:
@@ -397,12 +399,12 @@ def MultiCallCreator(widget):
 
 if __name__ == "__main__":
     # Test
-    root = tkinter.Tk()
-    text = MultiCallCreator(tkinter.Text)(root)
+    root = Tkinter.Tk()
+    text = MultiCallCreator(Tkinter.Text)(root)
     text.pack()
     def bindseq(seq, n=[0]):
         def handler(event):
-            print(seq)
+            print seq
         text.bind("<<handler%d>>"%n[0], handler)
         text.event_add("<<handler%d>>"%n[0], seq)
         n[0] += 1

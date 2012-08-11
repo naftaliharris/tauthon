@@ -1,5 +1,5 @@
 import unittest
-from test.support import verbose, run_unittest, strip_python_stderr
+from test.test_support import verbose, run_unittest
 import sys
 import gc
 import weakref
@@ -170,7 +170,7 @@ class GCTests(unittest.TestCase):
         # Tricky: f -> d -> f, code should call d.clear() after the exec to
         # break the cycle.
         d = {}
-        exec("def f(): pass\n", d)
+        exec("def f(): pass\n") in d
         gc.collect()
         del d
         self.assertEqual(gc.collect(), 2)
@@ -411,7 +411,7 @@ class GCTests(unittest.TestCase):
 
         got = gc.get_referents([1, 2], {3: 4}, (0, 0, 0))
         got.sort()
-        self.assertEqual(got, [0, 0] + list(range(5)))
+        self.assertEqual(got, [0, 0] + range(5))
 
         self.assertEqual(gc.get_referents(1, 'a', 4j), [])
 
@@ -426,19 +426,23 @@ class GCTests(unittest.TestCase):
         self.assertFalse(gc.is_tracked(1.0 + 5.0j))
         self.assertFalse(gc.is_tracked(True))
         self.assertFalse(gc.is_tracked(False))
-        self.assertFalse(gc.is_tracked(b"a"))
         self.assertFalse(gc.is_tracked("a"))
-        self.assertFalse(gc.is_tracked(bytearray(b"a")))
+        self.assertFalse(gc.is_tracked(u"a"))
+        self.assertFalse(gc.is_tracked(bytearray("a")))
         self.assertFalse(gc.is_tracked(type))
         self.assertFalse(gc.is_tracked(int))
         self.assertFalse(gc.is_tracked(object))
         self.assertFalse(gc.is_tracked(object()))
 
-        class UserClass:
+        class OldStyle:
+            pass
+        class NewStyle(object):
             pass
         self.assertTrue(gc.is_tracked(gc))
-        self.assertTrue(gc.is_tracked(UserClass))
-        self.assertTrue(gc.is_tracked(UserClass()))
+        self.assertTrue(gc.is_tracked(OldStyle))
+        self.assertTrue(gc.is_tracked(OldStyle()))
+        self.assertTrue(gc.is_tracked(NewStyle))
+        self.assertTrue(gc.is_tracked(NewStyle()))
         self.assertTrue(gc.is_tracked([]))
         self.assertTrue(gc.is_tracked(set()))
 
@@ -465,53 +469,6 @@ class GCTests(unittest.TestCase):
             # If the callback resurrected one of these guys, the instance
             # would be damaged, with an empty __dict__.
             self.assertEqual(x, None)
-
-    def test_garbage_at_shutdown(self):
-        import subprocess
-        code = """if 1:
-            import gc
-            class X:
-                def __init__(self, name):
-                    self.name = name
-                def __repr__(self):
-                    return "<X %%r>" %% self.name
-                def __del__(self):
-                    pass
-
-            x = X('first')
-            x.x = x
-            x.y = X('second')
-            del x
-            gc.set_debug(%s)
-        """
-        def run_command(code):
-            p = subprocess.Popen([sys.executable, "-Wd", "-c", code],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE)
-            stdout, stderr = p.communicate()
-            p.stdout.close()
-            p.stderr.close()
-            self.assertEqual(p.returncode, 0)
-            self.assertEqual(stdout.strip(), b"")
-            return strip_python_stderr(stderr)
-
-        stderr = run_command(code % "0")
-        self.assertIn(b"ResourceWarning: gc: 2 uncollectable objects at "
-                      b"shutdown; use", stderr)
-        self.assertNotIn(b"<X 'first'>", stderr)
-        # With DEBUG_UNCOLLECTABLE, the garbage list gets printed
-        stderr = run_command(code % "gc.DEBUG_UNCOLLECTABLE")
-        self.assertIn(b"ResourceWarning: gc: 2 uncollectable objects at "
-                      b"shutdown", stderr)
-        self.assertTrue(
-            (b"[<X 'first'>, <X 'second'>]" in stderr) or
-            (b"[<X 'second'>, <X 'first'>]" in stderr), stderr)
-        # With DEBUG_SAVEALL, no additional message should get printed
-        # (because gc.garbage also contains normally reclaimable cyclic
-        # references, and its elements get printed at runtime anyway).
-        stderr = run_command(code % "gc.DEBUG_SAVEALL")
-        self.assertNotIn(b"uncollectable objects at shutdown", stderr)
-
 
 class GCTogglingTests(unittest.TestCase):
     def setUp(self):
@@ -671,7 +628,7 @@ def test_main():
         gc.set_debug(debug)
         # test gc.enable() even if GC is disabled by default
         if verbose:
-            print("restoring automatic collection")
+            print "restoring automatic collection"
         # make sure to always test gc.enable()
         gc.enable()
         assert gc.isenabled()

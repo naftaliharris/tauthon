@@ -1,10 +1,9 @@
 """Unit tests for numbers.py."""
 
 import math
-import operator
 import unittest
 from numbers import Complex, Real, Rational, Integral
-from test import support
+from test import test_support
 
 class TestNumbers(unittest.TestCase):
     def test_int(self):
@@ -16,6 +15,16 @@ class TestNumbers(unittest.TestCase):
         self.assertEqual(7, int(7).conjugate())
         self.assertEqual(7, int(7).numerator)
         self.assertEqual(1, int(7).denominator)
+
+    def test_long(self):
+        self.assertTrue(issubclass(long, Integral))
+        self.assertTrue(issubclass(long, Complex))
+
+        self.assertEqual(7, long(7).real)
+        self.assertEqual(0, long(7).imag)
+        self.assertEqual(7, long(7).conjugate())
+        self.assertEqual(7, long(7).numerator)
+        self.assertEqual(1, long(7).denominator)
 
     def test_float(self):
         self.assertFalse(issubclass(float, Rational))
@@ -31,15 +40,12 @@ class TestNumbers(unittest.TestCase):
 
         c1, c2 = complex(3, 2), complex(4,1)
         # XXX: This is not ideal, but see the comment in math_trunc().
-        self.assertRaises(TypeError, math.trunc, c1)
-        self.assertRaises(TypeError, operator.mod, c1, c2)
-        self.assertRaises(TypeError, divmod, c1, c2)
-        self.assertRaises(TypeError, operator.floordiv, c1, c2)
+        self.assertRaises(AttributeError, math.trunc, c1)
         self.assertRaises(TypeError, float, c1)
         self.assertRaises(TypeError, int, c1)
 
 def test_main():
-    support.run_unittest(TestNumbers)
+    test_support.run_unittest(TestNumbers)
 
 
 if __name__ == "__main__":

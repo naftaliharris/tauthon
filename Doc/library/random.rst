@@ -11,10 +11,9 @@
 This module implements pseudo-random number generators for various
 distributions.
 
-For integers, there is uniform selection from a range. For sequences, there is
-uniform selection of a random element, a function to generate a random
-permutation of a list in-place, and a function for random sampling without
-replacement.
+For integers, uniform selection from a range. For sequences, uniform selection
+of a random element, a function to generate a random permutation of a list
+in-place, and a function for random sampling without replacement.
 
 On the real line, there are functions to compute uniform, normal (Gaussian),
 lognormal, negative exponential, gamma, and beta distributions. For generating
@@ -31,43 +30,60 @@ for cryptographic purposes.
 
 The functions supplied by this module are actually bound methods of a hidden
 instance of the :class:`random.Random` class.  You can instantiate your own
-instances of :class:`Random` to get generators that don't share state.
+instances of :class:`Random` to get generators that don't share state.  This is
+especially useful for multi-threaded programs, creating a different instance of
+:class:`Random` for each thread, and using the :meth:`jumpahead` method to make
+it likely that the generated sequences seen by each thread don't overlap.
 
 Class :class:`Random` can also be subclassed if you want to use a different
 basic generator of your own devising: in that case, override the :meth:`random`,
-:meth:`seed`, :meth:`getstate`, and :meth:`setstate` methods.
+:meth:`seed`, :meth:`getstate`, :meth:`setstate` and :meth:`jumpahead` methods.
 Optionally, a new generator can supply a :meth:`getrandbits` method --- this
 allows :meth:`randrange` to produce selections over an arbitrarily large range.
+
+.. versionadded:: 2.4
+   the :meth:`getrandbits` method.
+
+As an example of subclassing, the :mod:`random` module provides the
+:class:`WichmannHill` class that implements an alternative generator in pure
+Python.  The class provides a backward compatible way to reproduce results from
+earlier versions of Python, which used the Wichmann-Hill algorithm as the core
+generator.  Note that this Wichmann-Hill generator can no longer be recommended:
+its period is too short by contemporary standards, and the sequence generated is
+known to fail some stringent randomness tests.  See the references below for a
+recent variant that repairs these flaws.
+
+.. versionchanged:: 2.3
+   MersenneTwister replaced Wichmann-Hill as the default generator.
 
 The :mod:`random` module also provides the :class:`SystemRandom` class which
 uses the system function :func:`os.urandom` to generate random numbers
 from sources provided by the operating system.
 
-
 Bookkeeping functions:
 
-.. function:: seed([x], version=2)
 
-   Initialize the random number generator.
+.. function:: seed([x])
 
-   If *x* is omitted or ``None``, the current system time is used.  If
-   randomness sources are provided by the operating system, they are used
-   instead of the system time (see the :func:`os.urandom` function for details
-   on availability).
+   Initialize the basic random number generator. Optional argument *x* can be any
+   :term:`hashable` object. If *x* is omitted or ``None``, current system time is used;
+   current system time is also used to initialize the generator when the module is
+   first imported.  If randomness sources are provided by the operating system,
+   they are used instead of the system time (see the :func:`os.urandom` function
+   for details on availability).
 
-   If *x* is an int, it is used directly.
-
-   With version 2 (the default), a :class:`str`, :class:`bytes`, or :class:`bytearray`
-   object gets converted to an :class:`int` and all of its bits are used.  With version 1,
-   the :func:`hash` of *x* is used instead.
-
-   .. versionchanged:: 3.2
-      Moved to the version 2 scheme which uses all of the bits in a string seed.
+   .. versionchanged:: 2.4
+      formerly, operating system resources were not used.
 
 .. function:: getstate()
 
    Return an object capturing the current internal state of the generator.  This
    object can be passed to :func:`setstate` to restore the state.
+
+   .. versionadded:: 2.1
+
+   .. versionchanged:: 2.6
+      State values produced in Python 2.6 cannot be loaded into earlier versions.
 
 
 .. function:: setstate(state)
@@ -76,16 +92,37 @@ Bookkeeping functions:
    :func:`setstate` restores the internal state of the generator to what it was at
    the time :func:`setstate` was called.
 
+   .. versionadded:: 2.1
+
+
+.. function:: jumpahead(n)
+
+   Change the internal state to one different from and likely far away from the
+   current state.  *n* is a non-negative integer which is used to scramble the
+   current state vector.  This is most useful in multi-threaded programs, in
+   conjunction with multiple instances of the :class:`Random` class:
+   :meth:`setstate` or :meth:`seed` can be used to force all instances into the
+   same internal state, and then :meth:`jumpahead` can be used to force the
+   instances' states far apart.
+
+   .. versionadded:: 2.1
+
+   .. versionchanged:: 2.3
+      Instead of jumping to a specific state, *n* steps ahead, ``jumpahead(n)``
+      jumps to another state likely to be separated by many steps.
+
 
 .. function:: getrandbits(k)
 
-   Returns a Python integer with *k* random bits. This method is supplied with
-   the MersenneTwister generator and some other generators may also provide it
+   Returns a python :class:`long` int with *k* random bits. This method is supplied
+   with the MersenneTwister generator and some other generators may also provide it
    as an optional part of the API. When available, :meth:`getrandbits` enables
    :meth:`randrange` to handle arbitrarily large ranges.
 
+   .. versionadded:: 2.4
 
 Functions for integers:
+
 
 .. function:: randrange([start,] stop[, step])
 
@@ -93,21 +130,15 @@ Functions for integers:
    equivalent to ``choice(range(start, stop, step))``, but doesn't actually build a
    range object.
 
-   The positional argument pattern matches that of :func:`range`.  Keyword arguments
-   should not be used because the function may use them in unexpected ways.
+   .. versionadded:: 1.5.2
 
-   .. versionchanged:: 3.2
-      :meth:`randrange` is more sophisticated about producing equally distributed
-      values.  Formerly it used a style like ``int(random()*n)`` which could produce
-      slightly uneven distributions.
 
 .. function:: randint(a, b)
 
-   Return a random integer *N* such that ``a <= N <= b``.  Alias for
-   ``randrange(a, b+1)``.
-
+   Return a random integer *N* such that ``a <= N <= b``.
 
 Functions for sequences:
+
 
 .. function:: choice(seq)
 
@@ -128,8 +159,10 @@ Functions for sequences:
 
 .. function:: sample(population, k)
 
-   Return a *k* length list of unique elements chosen from the population sequence
-   or set. Used for random sampling without replacement.
+   Return a *k* length list of unique elements chosen from the population sequence.
+   Used for random sampling without replacement.
+
+   .. versionadded:: 2.3
 
    Returns a new list containing elements from the population while leaving the
    original population unchanged.  The resulting list is in selection order so that
@@ -140,9 +173,9 @@ Functions for sequences:
    Members of the population need not be :term:`hashable` or unique.  If the population
    contains repeats, then each occurrence is a possible selection in the sample.
 
-   To choose a sample from a range of integers, use an :func:`range` object as an
+   To choose a sample from a range of integers, use an :func:`xrange` object as an
    argument.  This is especially fast and space efficient for sampling from a large
-   population:  ``sample(range(10000000), 60)``.
+   population:  ``sample(xrange(10000000), 60)``.
 
 The following functions generate specific real-valued distributions. Function
 parameters are named after the corresponding variables in the distribution's
@@ -163,12 +196,15 @@ be found in any statistics text.
    The end-point value ``b`` may or may not be included in the range
    depending on floating-point rounding in the equation ``a + (b-a) * random()``.
 
+
 .. function:: triangular(low, high, mode)
 
    Return a random floating point number *N* such that ``low <= N <= high`` and
    with the specified *mode* between those bounds.  The *low* and *high* bounds
    default to zero and one.  The *mode* argument defaults to the midpoint
    between the bounds, giving a symmetric distribution.
+
+   .. versionadded:: 2.6
 
 
 .. function:: betavariate(alpha, beta)
@@ -190,6 +226,12 @@ be found in any statistics text.
 
    Gamma distribution.  (*Not* the gamma function!)  Conditions on the
    parameters are ``alpha > 0`` and ``beta > 0``.
+
+   The probability distribution function is::
+
+                 x ** (alpha - 1) * math.exp(-x / beta)
+       pdf(x) =  --------------------------------------
+                   math.gamma(alpha) * beta ** alpha
 
 
 .. function:: gauss(mu, sigma)
@@ -231,16 +273,58 @@ be found in any statistics text.
    parameter.
 
 
-Alternative Generator:
+Alternative Generators:
+
+.. class:: WichmannHill([seed])
+
+   Class that implements the Wichmann-Hill algorithm as the core generator. Has all
+   of the same methods as :class:`Random` plus the :meth:`whseed` method described
+   below.  Because this class is implemented in pure Python, it is not threadsafe
+   and may require locks between calls.  The period of the generator is
+   6,953,607,871,644 which is small enough to require care that two independent
+   random sequences do not overlap.
+
+
+.. function:: whseed([x])
+
+   This is obsolete, supplied for bit-level compatibility with versions of Python
+   prior to 2.1. See :func:`seed` for details.  :func:`whseed` does not guarantee
+   that distinct integer arguments yield distinct internal states, and can yield no
+   more than about 2\*\*24 distinct internal states in all.
+
 
 .. class:: SystemRandom([seed])
 
    Class that uses the :func:`os.urandom` function for generating random numbers
    from sources provided by the operating system. Not available on all systems.
-   Does not rely on software state, and sequences are not reproducible. Accordingly,
-   the :meth:`seed` method has no effect and is ignored.
+   Does not rely on software state and sequences are not reproducible. Accordingly,
+   the :meth:`seed` and :meth:`jumpahead` methods have no effect and are ignored.
    The :meth:`getstate` and :meth:`setstate` methods raise
    :exc:`NotImplementedError` if called.
+
+   .. versionadded:: 2.4
+
+Examples of basic usage::
+
+   >>> random.random()        # Random float x, 0.0 <= x < 1.0
+   0.37444887175646646
+   >>> random.uniform(1, 10)  # Random float x, 1.0 <= x < 10.0
+   1.1800146073117523
+   >>> random.randint(1, 10)  # Integer from 1 to 10, endpoints included
+   7
+   >>> random.randrange(0, 101, 2)  # Even integer from 0 to 100
+   26
+   >>> random.choice('abcdefghij')  # Choose a random element
+   'c'
+
+   >>> items = [1, 2, 3, 4, 5, 6, 7]
+   >>> random.shuffle(items)
+   >>> items
+   [7, 3, 2, 5, 6, 4, 1]
+
+   >>> random.sample([1, 2, 3, 4, 5],  3)  # Choose 3 elements
+   [4, 1, 5]
+
 
 
 .. seealso::
@@ -249,75 +333,10 @@ Alternative Generator:
    equidistributed uniform pseudorandom number generator", ACM Transactions on
    Modeling and Computer Simulation Vol. 8, No. 1, January pp.3-30 1998.
 
+   Wichmann, B. A. & Hill, I. D., "Algorithm AS 183: An efficient and portable
+   pseudo-random number generator", Applied Statistics 31 (1982) 188-190.
 
    `Complementary-Multiply-with-Carry recipe
    <http://code.activestate.com/recipes/576707/>`_ for a compatible alternative
    random number generator with a long period and comparatively simple update
    operations.
-
-
-Notes on Reproducibility
-------------------------
-
-Sometimes it is useful to be able to reproduce the sequences given by a pseudo
-random number generator.  By re-using a seed value, the same sequence should be
-reproducible from run to run as long as multiple threads are not running.
-
-Most of the random module's algorithms and seeding functions are subject to
-change across Python versions, but two aspects are guaranteed not to change:
-
-* If a new seeding method is added, then a backward compatible seeder will be
-  offered.
-
-* The generator's :meth:`random` method will continue to produce the same
-  sequence when the compatible seeder is given the same seed.
-
-.. _random-examples:
-
-Examples and Recipes
---------------------
-
-Basic usage::
-
-   >>> random.random()                      # Random float x, 0.0 <= x < 1.0
-   0.37444887175646646
-
-   >>> random.uniform(1, 10)                # Random float x, 1.0 <= x < 10.0
-   1.1800146073117523
-
-   >>> random.randrange(10)                 # Integer from 0 to 9
-   7
-
-   >>> random.randrange(0, 101, 2)          # Even integer from 0 to 100
-   26
-
-   >>> random.choice('abcdefghij')          # Single random element
-   'c'
-
-   >>> items = [1, 2, 3, 4, 5, 6, 7]
-   >>> random.shuffle(items)
-   >>> items
-   [7, 3, 2, 5, 6, 4, 1]
-
-   >>> random.sample([1, 2, 3, 4, 5],  3)   # Three samples without replacement
-   [4, 1, 5]
-
-A common task is to make a :func:`random.choice` with weighted probababilites.
-
-If the weights are small integer ratios, a simple technique is to build a sample
-population with repeats::
-
-    >>> weighted_choices = [('Red', 3), ('Blue', 2), ('Yellow', 1), ('Green', 4)]
-    >>> population = [val for val, cnt in weighted_choices for i in range(cnt)]
-    >>> random.choice(population)
-    'Green'
-
-A more general approach is to arrange the weights in a cumulative distribution
-with :func:`itertools.accumulate`, and then locate the random value with
-:func:`bisect.bisect`::
-
-    >>> choices, weights = zip(*weighted_choices)
-    >>> cumdist = list(itertools.accumulate(weights))
-    >>> x = random.random() * cumdist[-1]
-    >>> choices[bisect.bisect(cumdist, x)]
-    'Blue'

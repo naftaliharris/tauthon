@@ -1,30 +1,31 @@
 #!/usr/bin/env python
 """ Python Character Mapping Codec for ROT13.
 
-This codec de/encodes from str to str and is therefore usable with
-str.transform() and str.untransform().
+    See http://ucsub.colorado.edu/~kominek/rot13/ for details.
 
-Written by Marc-Andre Lemburg (mal@lemburg.com).
-"""
+    Written by Marc-Andre Lemburg (mal@lemburg.com).
+
+"""#"
 
 import codecs
 
 ### Codec APIs
 
 class Codec(codecs.Codec):
-    def encode(self, input, errors='strict'):
-        return (input.translate(rot13_map), len(input))
 
-    def decode(self, input, errors='strict'):
-        return (input.translate(rot13_map), len(input))
+    def encode(self,input,errors='strict'):
+        return codecs.charmap_encode(input,errors,encoding_map)
+
+    def decode(self,input,errors='strict'):
+        return codecs.charmap_decode(input,errors,decoding_map)
 
 class IncrementalEncoder(codecs.IncrementalEncoder):
     def encode(self, input, final=False):
-        return input.translate(rot13_map)
+        return codecs.charmap_encode(input,self.errors,encoding_map)[0]
 
 class IncrementalDecoder(codecs.IncrementalDecoder):
     def decode(self, input, final=False):
-        return input.translate(rot13_map)
+        return codecs.charmap_decode(input,self.errors,decoding_map)[0]
 
 class StreamWriter(Codec,codecs.StreamWriter):
     pass
@@ -45,10 +46,10 @@ def getregentry():
         streamreader=StreamReader,
     )
 
-### Map
+### Decoding Map
 
-rot13_map = codecs.make_identity_dict(range(256))
-rot13_map.update({
+decoding_map = codecs.make_identity_dict(range(256))
+decoding_map.update({
    0x0041: 0x004e,
    0x0042: 0x004f,
    0x0043: 0x0050,
@@ -102,6 +103,10 @@ rot13_map.update({
    0x0079: 0x006c,
    0x007a: 0x006d,
 })
+
+### Encoding Map
+
+encoding_map = codecs.make_encoding_map(decoding_map)
 
 ### Filter API
 

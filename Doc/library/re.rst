@@ -1,3 +1,4 @@
+
 :mod:`re` --- Regular expression operations
 ===========================================
 
@@ -8,13 +9,8 @@
 
 
 This module provides regular expression matching operations similar to
-those found in Perl.
-
-Both patterns and strings to be searched can be Unicode strings as well as
-8-bit strings. However, Unicode strings and 8-bit strings cannot be mixed:
-that is, you cannot match an Unicode string with a byte pattern or
-vice-versa; similarly, when asking for a substitution, the replacement
-string must be of the same type as both the pattern and the search string.
+those found in Perl. Both patterns and strings to be searched can be
+Unicode strings as well as 8-bit strings.
 
 Regular expressions use the backslash character (``'\'``) to indicate
 special forms or to allow special characters to be used without invoking
@@ -33,9 +29,8 @@ newline.  Usually patterns will be expressed in Python code using this raw
 string notation.
 
 It is important to note that most regular expression operations are available as
-module-level functions and methods on
-:ref:`compiled regular expressions <re-objects>`.  The functions are shortcuts
-that don't require you to compile a regex object first, but miss some
+module-level functions and :class:`RegexObject` methods.  The functions are
+shortcuts that don't require you to compile a regex object first, but miss some
 fine-tuning parameters.
 
 .. seealso::
@@ -161,30 +156,36 @@ The special characters are:
    raw strings for all but the simplest expressions.
 
 ``[]``
-   Used to indicate a set of characters.  Characters can be listed individually, or
-   a range of characters can be indicated by giving two characters and separating
-   them by a ``'-'``.  Special characters are not active inside sets.  For example,
-   ``[akm$]`` will match any of the characters ``'a'``, ``'k'``,
-   ``'m'``, or ``'$'``; ``[a-z]`` will match any lowercase letter, and
-   ``[a-zA-Z0-9]`` matches any letter or digit.  Character classes such
-   as ``\w`` or ``\S`` (defined below) are also acceptable inside a
-   range, although the characters they match depends on whether
-   :const:`ASCII` or  :const:`LOCALE` mode is in force.  If you want to
-   include a ``']'`` or a ``'-'`` inside a set, precede it with a
-   backslash, or place it as the first character.  The pattern ``[]]``
-   will match ``']'``, for example.
+   Used to indicate a set of characters.  In a set:
 
-   You can match the characters not within a range by :dfn:`complementing` the set.
-   This is indicated by including a ``'^'`` as the first character of the set;
-   ``'^'`` elsewhere will simply match the ``'^'`` character.  For example,
-   ``[^5]`` will match any character except ``'5'``, and ``[^^]`` will match any
-   character except ``'^'``.
+   * Characters can be listed individually, e.g. ``[amk]`` will match ``'a'``,
+     ``'m'``, or ``'k'``.
 
-   Note that inside ``[]`` the special forms and special characters lose
-   their meanings and only the syntaxes described here are valid. For
-   example, ``+``, ``*``, ``(``, ``)``, and so on are treated as
-   literals inside ``[]``, and backreferences cannot be used inside
-   ``[]``.
+   * Ranges of characters can be indicated by giving two characters and separating
+     them by a ``'-'``, for example ``[a-z]`` will match any lowercase ASCII letter,
+     ``[0-5][0-9]`` will match all the two-digits numbers from ``00`` to ``59``, and
+     ``[0-9A-Fa-f]`` will match any hexadecimal digit.  If ``-`` is escaped (e.g.
+     ``[a\-z]``) or if it's placed as the first or last character (e.g. ``[a-]``),
+     it will match a literal ``'-'``.
+
+   * Special characters lose their special meaning inside sets.  For example,
+     ``[(+*)]`` will match any of the literal characters ``'('``, ``'+'``,
+     ``'*'``, or ``')'``.
+
+   * Character classes such as ``\w`` or ``\S`` (defined below) are also accepted
+     inside a set, although the characters they match depends on whether
+     :const:`LOCALE` or  :const:`UNICODE` mode is in force.
+
+   * Characters that are not within a range can be matched by :dfn:`complementing`
+     the set.  If the first character of the set is ``'^'``, all the characters
+     that are *not* in the set will be matched.  For example, ``[^5]`` will match
+     any character except ``'5'``, and ``[^^]`` will match any character except
+     ``'^'``.  ``^`` has no special meaning if it's not the first character in
+     the set.
+
+   * To match a literal ``']'`` inside a set, precede it with a backslash, or
+     place it at the beginning of the set.  For example, both ``[()[\]{}]`` and
+     ``[]()[{}]`` will both match a parenthesis.
 
 ``'|'``
    ``A|B``, where A and B can be arbitrary REs, creates a regular expression that
@@ -211,12 +212,12 @@ The special characters are:
    group; ``(?P<name>...)`` is the only exception to this rule. Following are the
    currently supported extensions.
 
-``(?aiLmsux)``
-   (One or more letters from the set ``'a'``, ``'i'``, ``'L'``, ``'m'``,
-   ``'s'``, ``'u'``, ``'x'``.)  The group matches the empty string; the
-   letters set the corresponding flags: :const:`re.A` (ASCII-only matching),
-   :const:`re.I` (ignore case), :const:`re.L` (locale dependent),
-   :const:`re.M` (multi-line), :const:`re.S` (dot matches all),
+``(?iLmsux)``
+   (One or more letters from the set ``'i'``, ``'L'``, ``'m'``, ``'s'``,
+   ``'u'``, ``'x'``.)  The group matches the empty string; the letters
+   set the corresponding flags: :const:`re.I` (ignore case),
+   :const:`re.L` (locale dependent), :const:`re.M` (multi-line),
+   :const:`re.S` (dot matches all), :const:`re.U` (Unicode dependent),
    and :const:`re.X` (verbose), for the entire regular expression. (The
    flags are described in :ref:`contents-of-module-re`.) This
    is useful if you wish to include the flags as part of the regular
@@ -272,7 +273,7 @@ The special characters are:
    lookbehind will back up 3 characters and check if the contained pattern matches.
    The contained pattern must only match strings of some fixed length, meaning that
    ``abc`` or ``a|b`` are allowed, but ``a*`` and ``a{3,4}`` are not.  Note that
-   patterns which start with positive lookbehind assertions will never match at the
+   patterns which start with positive lookbehind assertions will not match at the
    beginning of the string being searched; you will most likely want to use the
    :func:`search` function rather than the :func:`match` function:
 
@@ -295,13 +296,13 @@ The special characters are:
    match at the beginning of the string being searched.
 
 ``(?(id/name)yes-pattern|no-pattern)``
-   Will try to match with ``yes-pattern`` if the group with given *id* or
-   *name* exists, and with ``no-pattern`` if it doesn't. ``no-pattern`` is
-   optional and can be omitted. For example,
-   ``(<)?(\w+@\w+(?:\.\w+)+)(?(1)>|$)`` is a poor email matching pattern, which
-   will match with ``'<user@host.com>'`` as well as ``'user@host.com'``, but
-   not with ``'<user@host.com'`` nor ``'user@host.com>'`` .
+   Will try to match with ``yes-pattern`` if the group with given *id* or *name*
+   exists, and with ``no-pattern`` if it doesn't. ``no-pattern`` is optional and
+   can be omitted. For example,  ``(<)?(\w+@\w+(?:\.\w+)+)(?(1)>)`` is a poor email
+   matching pattern, which will match with ``'<user@host.com>'`` as well as
+   ``'user@host.com'``, but not with ``'<user@host.com'``.
 
+   .. versionadded:: 2.4
 
 The special sequences consist of ``'\'`` and a character from the list below.
 If the ordinary character is not on the list, then the resulting RE will match
@@ -321,82 +322,74 @@ the second character.  For example, ``\$`` matches the character ``'$'``.
    Matches only at the start of the string.
 
 ``\b``
-   Matches the empty string, but only at the beginning or end of a word.
-   A word is defined as a sequence of Unicode alphanumeric or underscore
-   characters, so the end of a word is indicated by whitespace or a
-   non-alphanumeric, non-underscore Unicode character. Note that
-   formally, ``\b`` is defined as the boundary between a ``\w`` and a
-   ``\W`` character (or vice versa). By default Unicode alphanumerics
-   are the ones used, but this can be changed by using the :const:`ASCII`
-   flag.  Inside a character range, ``\b`` represents the backspace
-   character, for compatibility with Python's string literals.
+   Matches the empty string, but only at the beginning or end of a word.  A word is
+   defined as a sequence of alphanumeric or underscore characters, so the end of a
+   word is indicated by whitespace or a non-alphanumeric, non-underscore character.
+   Note that formally, ``\b`` is defined as the boundary between a ``\w`` and
+   a ``\W`` character (or vice versa), or between ``\w`` and the beginning/end
+   of the string, so the precise set of characters deemed to be alphanumeric
+   depends on the values of the ``UNICODE`` and ``LOCALE`` flags.
+   For example, ``r'\bfoo\b'`` matches ``'foo'``, ``'foo.'``, ``'(foo)'``,
+   ``'bar foo baz'`` but not ``'foobar'`` or ``'foo3'``.
+   Inside a character range, ``\b`` represents the backspace character, for compatibility with Python's string literals.
 
 ``\B``
    Matches the empty string, but only when it is *not* at the beginning or end of a
-   word.  This is just the opposite of ``\b``, so word characters are
-   Unicode alphanumerics or the underscore, although this can be changed
-   by using the :const:`ASCII` flag.
+   word.  This means that ``r'py\B'`` matches ``'python'``, ``'py3'``, ``'py2'``,
+   but not ``'py'``, ``'py.'``, or ``'py!'``.
+   ``\B`` is just the opposite of ``\b``, so is also subject to the settings
+   of ``LOCALE`` and ``UNICODE``.
 
 ``\d``
-   For Unicode (str) patterns:
-      Matches any Unicode decimal digit (that is, any character in
-      Unicode character category [Nd]).  This includes ``[0-9]``, and
-      also many other digit characters.  If the :const:`ASCII` flag is
-      used only ``[0-9]`` is matched (but the flag affects the entire
-      regular expression, so in such cases using an explicit ``[0-9]``
-      may be a better choice).
-   For 8-bit (bytes) patterns:
-      Matches any decimal digit; this is equivalent to ``[0-9]``.
+   When the :const:`UNICODE` flag is not specified, matches any decimal digit; this
+   is equivalent to the set ``[0-9]``.  With :const:`UNICODE`, it will match
+   whatever is classified as a decimal digit in the Unicode character properties
+   database.
 
 ``\D``
-   Matches any character which is not a Unicode decimal digit. This is
-   the opposite of ``\d``. If the :const:`ASCII` flag is used this
-   becomes the equivalent of ``[^0-9]`` (but the flag affects the entire
-   regular expression, so in such cases using an explicit ``[^0-9]`` may
-   be a better choice).
+   When the :const:`UNICODE` flag is not specified, matches any non-digit
+   character; this is equivalent to the set  ``[^0-9]``.  With :const:`UNICODE`, it
+   will match  anything other than character marked as digits in the Unicode
+   character  properties database.
 
 ``\s``
-   For Unicode (str) patterns:
-      Matches Unicode whitespace characters (which includes
-      ``[ \t\n\r\f\v]``, and also many other characters, for example the
-      non-breaking spaces mandated by typography rules in many
-      languages). If the :const:`ASCII` flag is used, only
-      ``[ \t\n\r\f\v]`` is matched (but the flag affects the entire
-      regular expression, so in such cases using an explicit
-      ``[ \t\n\r\f\v]`` may be a better choice).
-
-   For 8-bit (bytes) patterns:
-      Matches characters considered whitespace in the ASCII character set;
-      this is equivalent to ``[ \t\n\r\f\v]``.
+   When the :const:`UNICODE` flag is not specified, it matches any whitespace
+   character, this is equivalent to the set ``[ \t\n\r\f\v]``. The
+   :const:`LOCALE` flag has no extra effect on matching of the space.
+   If :const:`UNICODE` is set, this will match the characters ``[ \t\n\r\f\v]``
+   plus whatever is classified as space in the Unicode character properties
+   database.
 
 ``\S``
-   Matches any character which is not a Unicode whitespace character. This is
-   the opposite of ``\s``. If the :const:`ASCII` flag is used this
-   becomes the equivalent of ``[^ \t\n\r\f\v]`` (but the flag affects the entire
-   regular expression, so in such cases using an explicit ``[^ \t\n\r\f\v]`` may
-   be a better choice).
+   When the :const:`UNICODE` flags is not specified, matches any non-whitespace
+   character; this is equivalent to the set ``[^ \t\n\r\f\v]`` The
+   :const:`LOCALE` flag has no extra effect on non-whitespace match.  If
+   :const:`UNICODE` is set, then any character not marked as space in the
+   Unicode character properties database is matched.
+
 
 ``\w``
-   For Unicode (str) patterns:
-      Matches Unicode word characters; this includes most characters
-      that can be part of a word in any language, as well as numbers and
-      the underscore. If the :const:`ASCII` flag is used, only
-      ``[a-zA-Z0-9_]`` is matched (but the flag affects the entire
-      regular expression, so in such cases using an explicit
-      ``[a-zA-Z0-9_]`` may be a better choice).
-   For 8-bit (bytes) patterns:
-      Matches characters considered alphanumeric in the ASCII character set;
-      this is equivalent to ``[a-zA-Z0-9_]``.
+   When the :const:`LOCALE` and :const:`UNICODE` flags are not specified, matches
+   any alphanumeric character and the underscore; this is equivalent to the set
+   ``[a-zA-Z0-9_]``.  With :const:`LOCALE`, it will match the set ``[0-9_]`` plus
+   whatever characters are defined as alphanumeric for the current locale.  If
+   :const:`UNICODE` is set, this will match the characters ``[0-9_]`` plus whatever
+   is classified as alphanumeric in the Unicode character properties database.
 
 ``\W``
-   Matches any character which is not a Unicode word character. This is
-   the opposite of ``\w``. If the :const:`ASCII` flag is used this
-   becomes the equivalent of ``[^a-zA-Z0-9_]`` (but the flag affects the
-   entire regular expression, so in such cases using an explicit
-   ``[^a-zA-Z0-9_]`` may be a better choice).
+   When the :const:`LOCALE` and :const:`UNICODE` flags are not specified, matches
+   any non-alphanumeric character; this is equivalent to the set ``[^a-zA-Z0-9_]``.
+   With :const:`LOCALE`, it will match any character not in the set ``[0-9_]``, and
+   not defined as alphanumeric for the current locale. If :const:`UNICODE` is set,
+   this will match anything other than ``[0-9_]`` plus characters classied as
+   not alphanumeric in the Unicode character properties database.
 
 ``\Z``
    Matches only at the end of the string.
+
+If both :const:`LOCALE` and :const:`UNICODE` flags are included for a
+particular sequence, then :const:`LOCALE` flag takes effect first followed by
+the :const:`UNICODE`.
 
 Most of the standard escapes supported by Python string literals are also
 accepted by the regular expression parser::
@@ -405,35 +398,13 @@ accepted by the regular expression parser::
    \r      \t      \v      \x
    \\
 
+(Note that ``\b`` is used to represent word boundaries, and means "backspace"
+only inside character classes.)
+
 Octal escapes are included in a limited form: If the first digit is a 0, or if
 there are three octal digits, it is considered an octal escape. Otherwise, it is
 a group reference.  As for string literals, octal escapes are always at most
 three digits in length.
-
-
-.. _matching-searching:
-
-Matching vs Searching
----------------------
-
-.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
-
-
-Python offers two different primitive operations based on regular expressions:
-**match** checks for a match only at the beginning of the string, while
-**search** checks for a match anywhere in the string (this is what Perl does
-by default).
-
-Note that match may differ from search even when using a regular expression
-beginning with ``'^'``: ``'^'`` matches only at the start of the string, or in
-:const:`MULTILINE` mode also immediately following a newline.  The "match"
-operation succeeds only if the pattern matches at the start of the string
-regardless of mode, or at the starting position given by the optional *pos*
-argument regardless of whether a newline precedes it.
-
-   >>> re.match("c", "abcdef")  # No match
-   >>> re.search("c", "abcdef") # Match
-   <_sre.SRE_Match object at ...>
 
 
 .. _contents-of-module-re:
@@ -478,36 +449,23 @@ form.
       about compiling regular expressions.
 
 
-.. data:: A
-          ASCII
+.. data:: DEBUG
 
-   Make ``\w``, ``\W``, ``\b``, ``\B``, ``\d``, ``\D``, ``\s`` and ``\S``
-   perform ASCII-only matching instead of full Unicode matching.  This is only
-   meaningful for Unicode patterns, and is ignored for byte patterns.
-
-   Note that for backward compatibility, the :const:`re.U` flag still
-   exists (as well as its synonym :const:`re.UNICODE` and its embedded
-   counterpart ``(?u)``), but these are redundant in Python 3 since
-   matches are Unicode by default for strings (and Unicode matching
-   isn't allowed for bytes).
+   Display debug information about compiled expression.
 
 
 .. data:: I
           IGNORECASE
 
    Perform case-insensitive matching; expressions like ``[A-Z]`` will match
-   lowercase letters, too.  This is not affected by the current locale
-   and works for Unicode characters as expected.
+   lowercase letters, too.  This is not affected by the current locale.
 
 
 .. data:: L
           LOCALE
 
    Make ``\w``, ``\W``, ``\b``, ``\B``, ``\s`` and ``\S`` dependent on the
-   current locale. The use of this flag is discouraged as the locale mechanism
-   is very unreliable, and it only handles one "culture" at a time anyway;
-   you should use Unicode matching instead, which is the default in Python 3
-   for Unicode (str) patterns.
+   current locale.
 
 
 .. data:: M
@@ -528,6 +486,15 @@ form.
    newline; without this flag, ``'.'`` will match anything *except* a newline.
 
 
+.. data:: U
+          UNICODE
+
+   Make ``\w``, ``\W``, ``\b``, ``\B``, ``\d``, ``\D``, ``\s`` and ``\S`` dependent
+   on the Unicode character properties database.
+
+   .. versionadded:: 2.0
+
+
 .. data:: X
           VERBOSE
 
@@ -546,28 +513,27 @@ form.
       b = re.compile(r"\d+\.\d*")
 
 
-
-
 .. function:: search(pattern, string, flags=0)
 
    Scan through *string* looking for a location where the regular expression
-   *pattern* produces a match, and return a corresponding :ref:`match object
-   <match-objects>`.  Return ``None`` if no position in the string matches the
-   pattern; note that this is different from finding a zero-length match at some
-   point in the string.
+   *pattern* produces a match, and return a corresponding :class:`MatchObject`
+   instance. Return ``None`` if no position in the string matches the pattern; note
+   that this is different from finding a zero-length match at some point in the
+   string.
 
 
 .. function:: match(pattern, string, flags=0)
 
    If zero or more characters at the beginning of *string* match the regular
-   expression *pattern*, return a corresponding :ref:`match object
-   <match-objects>`.  Return ``None`` if the string does not match the pattern;
-   note that this is different from a zero-length match.
+   expression *pattern*, return a corresponding :class:`MatchObject` instance.
+   Return ``None`` if the string does not match the pattern; note that this is
+   different from a zero-length match.
 
-   .. note::
+   Note that even in :const:`MULTILINE` mode, :func:`re.match` will only match
+   at the beginning of the string and not at the beginning of each line.
 
-      If you want to locate a match anywhere in *string*, use :func:`search`
-      instead.
+   If you want to locate a match anywhere in *string*, use :func:`search`
+   instead (see also :ref:`search-vs-match`).
 
 
 .. function:: split(pattern, string, maxsplit=0, flags=0)
@@ -576,7 +542,8 @@ form.
    used in *pattern*, then the text of all groups in the pattern are also returned
    as part of the resulting list. If *maxsplit* is nonzero, at most *maxsplit*
    splits occur, and the remainder of the string is returned as the final element
-   of the list. ::
+   of the list.  (Incompatibility note: in the original Python 1.5 release,
+   *maxsplit* was ignored.  This has been fixed in later releases.)
 
       >>> re.split('\W+', 'Words, words, words.')
       ['Words', 'words', 'words', '']
@@ -606,7 +573,7 @@ form.
       >>> re.split("(?m)^$", "foo\n\nbar\n")
       ['foo\n\nbar\n']
 
-   .. versionchanged:: 3.1
+   .. versionchanged:: 2.7
       Added the optional flags argument.
 
 
@@ -619,14 +586,24 @@ form.
    one group.  Empty matches are included in the result unless they touch the
    beginning of another match.
 
+   .. versionadded:: 1.5.2
+
+   .. versionchanged:: 2.4
+      Added the optional flags argument.
+
 
 .. function:: finditer(pattern, string, flags=0)
 
-   Return an :term:`iterator` yielding :ref:`match objects <match-objects>` over
-   all non-overlapping matches for the RE *pattern* in *string*.  The *string*
-   is scanned left-to-right, and matches are returned in the order found.  Empty
+   Return an :term:`iterator` yielding :class:`MatchObject` instances over all
+   non-overlapping matches for the RE *pattern* in *string*.  The *string* is
+   scanned left-to-right, and matches are returned in the order found.  Empty
    matches are included in the result unless they touch the beginning of another
    match.
+
+   .. versionadded:: 2.2
+
+   .. versionchanged:: 2.4
+      Added the optional flags argument.
 
 
 .. function:: sub(pattern, repl, string, count=0, flags=0)
@@ -635,7 +612,7 @@ form.
    of *pattern* in *string* by the replacement *repl*.  If the pattern isn't found,
    *string* is returned unchanged.  *repl* can be a string or a function; if it is
    a string, any backslash escapes in it are processed.  That is, ``\n`` is
-   converted to a single newline character, ``\r`` is converted to a linefeed, and
+   converted to a single newline character, ``\r`` is converted to a carriage return, and
    so forth.  Unknown escapes such as ``\j`` are left alone.  Backreferences, such
    as ``\6``, are replaced with the substring matched by group 6 in the pattern.
    For example:
@@ -674,7 +651,7 @@ form.
    character ``'0'``.  The backreference ``\g<0>`` substitutes in the entire
    substring matched by the RE.
 
-   .. versionchanged:: 3.1
+   .. versionchanged:: 2.7
       Added the optional flags argument.
 
 
@@ -683,7 +660,7 @@ form.
    Perform the same operation as :func:`sub`, but return a tuple ``(new_string,
    number_of_subs_made)``.
 
-   .. versionchanged:: 3.1
+   .. versionchanged:: 2.7
       Added the optional flags argument.
 
 
@@ -712,107 +689,105 @@ form.
 Regular Expression Objects
 --------------------------
 
-Compiled regular expression objects support the following methods and
-attributes.
+.. class:: RegexObject
 
-.. method:: regex.search(string[, pos[, endpos]])
+   The :class:`RegexObject` class supports the following methods and attributes:
 
-   Scan through *string* looking for a location where this regular expression
-   produces a match, and return a corresponding :ref:`match object
-   <match-objects>`.  Return ``None`` if no position in the string matches the
-   pattern; note that this is different from finding a zero-length match at some
-   point in the string.
+   .. method:: RegexObject.search(string[, pos[, endpos]])
 
-   The optional second parameter *pos* gives an index in the string where the
-   search is to start; it defaults to ``0``.  This is not completely equivalent to
-   slicing the string; the ``'^'`` pattern character matches at the real beginning
-   of the string and at positions just after a newline, but not necessarily at the
-   index where the search is to start.
+      Scan through *string* looking for a location where this regular expression
+      produces a match, and return a corresponding :class:`MatchObject` instance.
+      Return ``None`` if no position in the string matches the pattern; note that this
+      is different from finding a zero-length match at some point in the string.
 
-   The optional parameter *endpos* limits how far the string will be searched; it
-   will be as if the string is *endpos* characters long, so only the characters
-   from *pos* to ``endpos - 1`` will be searched for a match.  If *endpos* is less
-   than *pos*, no match will be found, otherwise, if *rx* is a compiled regular
-   expression object, ``rx.search(string, 0, 50)`` is equivalent to
-   ``rx.search(string[:50], 0)``.
+      The optional second parameter *pos* gives an index in the string where the
+      search is to start; it defaults to ``0``.  This is not completely equivalent to
+      slicing the string; the ``'^'`` pattern character matches at the real beginning
+      of the string and at positions just after a newline, but not necessarily at the
+      index where the search is to start.
 
-   >>> pattern = re.compile("d")
-   >>> pattern.search("dog")     # Match at index 0
-   <_sre.SRE_Match object at ...>
-   >>> pattern.search("dog", 1)  # No match; search doesn't include the "d"
+      The optional parameter *endpos* limits how far the string will be searched; it
+      will be as if the string is *endpos* characters long, so only the characters
+      from *pos* to ``endpos - 1`` will be searched for a match.  If *endpos* is less
+      than *pos*, no match will be found, otherwise, if *rx* is a compiled regular
+      expression object, ``rx.search(string, 0, 50)`` is equivalent to
+      ``rx.search(string[:50], 0)``.
+
+      >>> pattern = re.compile("d")
+      >>> pattern.search("dog")     # Match at index 0
+      <_sre.SRE_Match object at ...>
+      >>> pattern.search("dog", 1)  # No match; search doesn't include the "d"
 
 
-.. method:: regex.match(string[, pos[, endpos]])
+   .. method:: RegexObject.match(string[, pos[, endpos]])
 
-   If zero or more characters at the *beginning* of *string* match this regular
-   expression, return a corresponding :ref:`match object <match-objects>`.
-   Return ``None`` if the string does not match the pattern; note that this is
-   different from a zero-length match.
+      If zero or more characters at the *beginning* of *string* match this regular
+      expression, return a corresponding :class:`MatchObject` instance.  Return
+      ``None`` if the string does not match the pattern; note that this is different
+      from a zero-length match.
 
-   The optional *pos* and *endpos* parameters have the same meaning as for the
-   :meth:`~regex.search` method.
+      The optional *pos* and *endpos* parameters have the same meaning as for the
+      :meth:`~RegexObject.search` method.
 
-   .. note::
+      >>> pattern = re.compile("o")
+      >>> pattern.match("dog")      # No match as "o" is not at the start of "dog".
+      >>> pattern.match("dog", 1)   # Match as "o" is the 2nd character of "dog".
+      <_sre.SRE_Match object at ...>
 
       If you want to locate a match anywhere in *string*, use
-      :meth:`~regex.search` instead.
-
-   >>> pattern = re.compile("o")
-   >>> pattern.match("dog")      # No match as "o" is not at the start of "dog".
-   >>> pattern.match("dog", 1)   # Match as "o" is the 2nd character of "dog".
-   <_sre.SRE_Match object at ...>
+      :meth:`~RegexObject.search` instead (see also :ref:`search-vs-match`).
 
 
-.. method:: regex.split(string, maxsplit=0)
+   .. method:: RegexObject.split(string, maxsplit=0)
 
-   Identical to the :func:`split` function, using the compiled pattern.
-
-
-.. method:: regex.findall(string[, pos[, endpos]])
-
-   Similar to the :func:`findall` function, using the compiled pattern, but
-   also accepts optional *pos* and *endpos* parameters that limit the search
-   region like for :meth:`match`.
+      Identical to the :func:`split` function, using the compiled pattern.
 
 
-.. method:: regex.finditer(string[, pos[, endpos]])
+   .. method:: RegexObject.findall(string[, pos[, endpos]])
 
-   Similar to the :func:`finditer` function, using the compiled pattern, but
-   also accepts optional *pos* and *endpos* parameters that limit the search
-   region like for :meth:`match`.
-
-
-.. method:: regex.sub(repl, string, count=0)
-
-   Identical to the :func:`sub` function, using the compiled pattern.
+      Similar to the :func:`findall` function, using the compiled pattern, but
+      also accepts optional *pos* and *endpos* parameters that limit the search
+      region like for :meth:`match`.
 
 
-.. method:: regex.subn(repl, string, count=0)
+   .. method:: RegexObject.finditer(string[, pos[, endpos]])
 
-   Identical to the :func:`subn` function, using the compiled pattern.
-
-
-.. attribute:: regex.flags
-
-   The flags argument used when the RE object was compiled, or ``0`` if no flags
-   were provided.
+      Similar to the :func:`finditer` function, using the compiled pattern, but
+      also accepts optional *pos* and *endpos* parameters that limit the search
+      region like for :meth:`match`.
 
 
-.. attribute:: regex.groups
+   .. method:: RegexObject.sub(repl, string, count=0)
 
-   The number of capturing groups in the pattern.
-
-
-.. attribute:: regex.groupindex
-
-   A dictionary mapping any symbolic group names defined by ``(?P<id>)`` to group
-   numbers.  The dictionary is empty if no symbolic groups were used in the
-   pattern.
+      Identical to the :func:`sub` function, using the compiled pattern.
 
 
-.. attribute:: regex.pattern
+   .. method:: RegexObject.subn(repl, string, count=0)
 
-   The pattern string from which the RE object was compiled.
+      Identical to the :func:`subn` function, using the compiled pattern.
+
+
+   .. attribute:: RegexObject.flags
+
+      The regex matching flags.  This is a combination of the flags given to
+      :func:`.compile` and any ``(?...)`` inline flags in the pattern.
+
+
+   .. attribute:: RegexObject.groups
+
+      The number of capturing groups in the pattern.
+
+
+   .. attribute:: RegexObject.groupindex
+
+      A dictionary mapping any symbolic group names defined by ``(?P<id>)`` to group
+      numbers.  The dictionary is empty if no symbolic groups were used in the
+      pattern.
+
+
+   .. attribute:: RegexObject.pattern
+
+      The pattern string from which the RE object was compiled.
 
 
 .. _match-objects:
@@ -820,182 +795,185 @@ attributes.
 Match Objects
 -------------
 
-Match objects always have a boolean value of :const:`True`, so that you can test
-whether e.g. :func:`match` resulted in a match with a simple if statement.  They
-support the following methods and attributes:
+.. class:: MatchObject
+
+   Match Objects always have a boolean value of :const:`True`, so that you can test
+   whether e.g. :func:`match` resulted in a match with a simple if statement.  They
+   support the following methods and attributes:
 
 
-.. method:: match.expand(template)
+   .. method:: MatchObject.expand(template)
 
-   Return the string obtained by doing backslash substitution on the template
-   string *template*, as done by the :meth:`~regex.sub` method.
-   Escapes such as ``\n`` are converted to the appropriate characters,
-   and numeric backreferences (``\1``, ``\2``) and named backreferences
-   (``\g<1>``, ``\g<name>``) are replaced by the contents of the
-   corresponding group.
-
-
-.. method:: match.group([group1, ...])
-
-   Returns one or more subgroups of the match.  If there is a single argument, the
-   result is a single string; if there are multiple arguments, the result is a
-   tuple with one item per argument. Without arguments, *group1* defaults to zero
-   (the whole match is returned). If a *groupN* argument is zero, the corresponding
-   return value is the entire matching string; if it is in the inclusive range
-   [1..99], it is the string matching the corresponding parenthesized group.  If a
-   group number is negative or larger than the number of groups defined in the
-   pattern, an :exc:`IndexError` exception is raised. If a group is contained in a
-   part of the pattern that did not match, the corresponding result is ``None``.
-   If a group is contained in a part of the pattern that matched multiple times,
-   the last match is returned.
-
-      >>> m = re.match(r"(\w+) (\w+)", "Isaac Newton, physicist")
-      >>> m.group(0)       # The entire match
-      'Isaac Newton'
-      >>> m.group(1)       # The first parenthesized subgroup.
-      'Isaac'
-      >>> m.group(2)       # The second parenthesized subgroup.
-      'Newton'
-      >>> m.group(1, 2)    # Multiple arguments give us a tuple.
-      ('Isaac', 'Newton')
-
-   If the regular expression uses the ``(?P<name>...)`` syntax, the *groupN*
-   arguments may also be strings identifying groups by their group name.  If a
-   string argument is not used as a group name in the pattern, an :exc:`IndexError`
-   exception is raised.
-
-   A moderately complicated example:
-
-      >>> m = re.match(r"(?P<first_name>\w+) (?P<last_name>\w+)", "Malcolm Reynolds")
-      >>> m.group('first_name')
-      'Malcolm'
-      >>> m.group('last_name')
-      'Reynolds'
-
-   Named groups can also be referred to by their index:
-
-      >>> m.group(1)
-      'Malcolm'
-      >>> m.group(2)
-      'Reynolds'
-
-   If a group matches multiple times, only the last match is accessible:
-
-      >>> m = re.match(r"(..)+", "a1b2c3")  # Matches 3 times.
-      >>> m.group(1)                        # Returns only the last match.
-      'c3'
+      Return the string obtained by doing backslash substitution on the template
+      string *template*, as done by the :meth:`~RegexObject.sub` method.  Escapes
+      such as ``\n`` are converted to the appropriate characters, and numeric
+      backreferences (``\1``, ``\2``) and named backreferences (``\g<1>``,
+      ``\g<name>``) are replaced by the contents of the corresponding group.
 
 
-.. method:: match.groups(default=None)
+   .. method:: MatchObject.group([group1, ...])
 
-   Return a tuple containing all the subgroups of the match, from 1 up to however
-   many groups are in the pattern.  The *default* argument is used for groups that
-   did not participate in the match; it defaults to ``None``.
+      Returns one or more subgroups of the match.  If there is a single argument, the
+      result is a single string; if there are multiple arguments, the result is a
+      tuple with one item per argument. Without arguments, *group1* defaults to zero
+      (the whole match is returned). If a *groupN* argument is zero, the corresponding
+      return value is the entire matching string; if it is in the inclusive range
+      [1..99], it is the string matching the corresponding parenthesized group.  If a
+      group number is negative or larger than the number of groups defined in the
+      pattern, an :exc:`IndexError` exception is raised. If a group is contained in a
+      part of the pattern that did not match, the corresponding result is ``None``.
+      If a group is contained in a part of the pattern that matched multiple times,
+      the last match is returned.
 
-   For example:
+         >>> m = re.match(r"(\w+) (\w+)", "Isaac Newton, physicist")
+         >>> m.group(0)       # The entire match
+         'Isaac Newton'
+         >>> m.group(1)       # The first parenthesized subgroup.
+         'Isaac'
+         >>> m.group(2)       # The second parenthesized subgroup.
+         'Newton'
+         >>> m.group(1, 2)    # Multiple arguments give us a tuple.
+         ('Isaac', 'Newton')
 
-      >>> m = re.match(r"(\d+)\.(\d+)", "24.1632")
-      >>> m.groups()
-      ('24', '1632')
+      If the regular expression uses the ``(?P<name>...)`` syntax, the *groupN*
+      arguments may also be strings identifying groups by their group name.  If a
+      string argument is not used as a group name in the pattern, an :exc:`IndexError`
+      exception is raised.
 
-   If we make the decimal place and everything after it optional, not all groups
-   might participate in the match.  These groups will default to ``None`` unless
-   the *default* argument is given:
+      A moderately complicated example:
 
-      >>> m = re.match(r"(\d+)\.?(\d+)?", "24")
-      >>> m.groups()      # Second group defaults to None.
-      ('24', None)
-      >>> m.groups('0')   # Now, the second group defaults to '0'.
-      ('24', '0')
+         >>> m = re.match(r"(?P<first_name>\w+) (?P<last_name>\w+)", "Malcolm Reynolds")
+         >>> m.group('first_name')
+         'Malcolm'
+         >>> m.group('last_name')
+         'Reynolds'
 
+      Named groups can also be referred to by their index:
 
-.. method:: match.groupdict(default=None)
+         >>> m.group(1)
+         'Malcolm'
+         >>> m.group(2)
+         'Reynolds'
 
-   Return a dictionary containing all the *named* subgroups of the match, keyed by
-   the subgroup name.  The *default* argument is used for groups that did not
-   participate in the match; it defaults to ``None``.  For example:
+      If a group matches multiple times, only the last match is accessible:
 
-      >>> m = re.match(r"(?P<first_name>\w+) (?P<last_name>\w+)", "Malcolm Reynolds")
-      >>> m.groupdict()
-      {'first_name': 'Malcolm', 'last_name': 'Reynolds'}
-
-
-.. method:: match.start([group])
-            match.end([group])
-
-   Return the indices of the start and end of the substring matched by *group*;
-   *group* defaults to zero (meaning the whole matched substring). Return ``-1`` if
-   *group* exists but did not contribute to the match.  For a match object *m*, and
-   a group *g* that did contribute to the match, the substring matched by group *g*
-   (equivalent to ``m.group(g)``) is ::
-
-      m.string[m.start(g):m.end(g)]
-
-   Note that ``m.start(group)`` will equal ``m.end(group)`` if *group* matched a
-   null string.  For example, after ``m = re.search('b(c?)', 'cba')``,
-   ``m.start(0)`` is 1, ``m.end(0)`` is 2, ``m.start(1)`` and ``m.end(1)`` are both
-   2, and ``m.start(2)`` raises an :exc:`IndexError` exception.
-
-   An example that will remove *remove_this* from email addresses:
-
-      >>> email = "tony@tiremove_thisger.net"
-      >>> m = re.search("remove_this", email)
-      >>> email[:m.start()] + email[m.end():]
-      'tony@tiger.net'
+         >>> m = re.match(r"(..)+", "a1b2c3")  # Matches 3 times.
+         >>> m.group(1)                        # Returns only the last match.
+         'c3'
 
 
-.. method:: match.span([group])
+   .. method:: MatchObject.groups([default])
 
-   For a match *m*, return the 2-tuple ``(m.start(group), m.end(group))``. Note
-   that if *group* did not contribute to the match, this is ``(-1, -1)``.
-   *group* defaults to zero, the entire match.
+      Return a tuple containing all the subgroups of the match, from 1 up to however
+      many groups are in the pattern.  The *default* argument is used for groups that
+      did not participate in the match; it defaults to ``None``.  (Incompatibility
+      note: in the original Python 1.5 release, if the tuple was one element long, a
+      string would be returned instead.  In later versions (from 1.5.1 on), a
+      singleton tuple is returned in such cases.)
 
+      For example:
 
-.. attribute:: match.pos
+         >>> m = re.match(r"(\d+)\.(\d+)", "24.1632")
+         >>> m.groups()
+         ('24', '1632')
 
-   The value of *pos* which was passed to the :meth:`~regex.search` or
-   :meth:`~regex.match` method of a :ref:`match object <match-objects>`.  This
-   is the index into the string at which the RE engine started looking for a
-   match.
+      If we make the decimal place and everything after it optional, not all groups
+      might participate in the match.  These groups will default to ``None`` unless
+      the *default* argument is given:
 
-
-.. attribute:: match.endpos
-
-   The value of *endpos* which was passed to the :meth:`~regex.search` or
-   :meth:`~regex.match` method of a :ref:`match object <match-objects>`.  This
-   is the index into the string beyond which the RE engine will not go.
-
-
-.. attribute:: match.lastindex
-
-   The integer index of the last matched capturing group, or ``None`` if no group
-   was matched at all. For example, the expressions ``(a)b``, ``((a)(b))``, and
-   ``((ab))`` will have ``lastindex == 1`` if applied to the string ``'ab'``, while
-   the expression ``(a)(b)`` will have ``lastindex == 2``, if applied to the same
-   string.
+         >>> m = re.match(r"(\d+)\.?(\d+)?", "24")
+         >>> m.groups()      # Second group defaults to None.
+         ('24', None)
+         >>> m.groups('0')   # Now, the second group defaults to '0'.
+         ('24', '0')
 
 
-.. attribute:: match.lastgroup
+   .. method:: MatchObject.groupdict([default])
 
-   The name of the last matched capturing group, or ``None`` if the group didn't
-   have a name, or if no group was matched at all.
+      Return a dictionary containing all the *named* subgroups of the match, keyed by
+      the subgroup name.  The *default* argument is used for groups that did not
+      participate in the match; it defaults to ``None``.  For example:
 
-
-.. attribute:: match.re
-
-   The regular expression object whose :meth:`~regex.match` or
-   :meth:`~regex.search` method produced this match instance.
-
-
-.. attribute:: match.string
-
-   The string passed to :meth:`~regex.match` or :meth:`~regex.search`.
+         >>> m = re.match(r"(?P<first_name>\w+) (?P<last_name>\w+)", "Malcolm Reynolds")
+         >>> m.groupdict()
+         {'first_name': 'Malcolm', 'last_name': 'Reynolds'}
 
 
-.. _re-examples:
+   .. method:: MatchObject.start([group])
+               MatchObject.end([group])
 
-Regular Expression Examples
----------------------------
+      Return the indices of the start and end of the substring matched by *group*;
+      *group* defaults to zero (meaning the whole matched substring). Return ``-1`` if
+      *group* exists but did not contribute to the match.  For a match object *m*, and
+      a group *g* that did contribute to the match, the substring matched by group *g*
+      (equivalent to ``m.group(g)``) is ::
+
+         m.string[m.start(g):m.end(g)]
+
+      Note that ``m.start(group)`` will equal ``m.end(group)`` if *group* matched a
+      null string.  For example, after ``m = re.search('b(c?)', 'cba')``,
+      ``m.start(0)`` is 1, ``m.end(0)`` is 2, ``m.start(1)`` and ``m.end(1)`` are both
+      2, and ``m.start(2)`` raises an :exc:`IndexError` exception.
+
+      An example that will remove *remove_this* from email addresses:
+
+         >>> email = "tony@tiremove_thisger.net"
+         >>> m = re.search("remove_this", email)
+         >>> email[:m.start()] + email[m.end():]
+         'tony@tiger.net'
+
+
+   .. method:: MatchObject.span([group])
+
+      For :class:`MatchObject` *m*, return the 2-tuple ``(m.start(group),
+      m.end(group))``. Note that if *group* did not contribute to the match, this is
+      ``(-1, -1)``.  *group* defaults to zero, the entire match.
+
+
+   .. attribute:: MatchObject.pos
+
+      The value of *pos* which was passed to the :meth:`~RegexObject.search` or
+      :meth:`~RegexObject.match` method of the :class:`RegexObject`.  This is the
+      index into the string at which the RE engine started looking for a match.
+
+
+   .. attribute:: MatchObject.endpos
+
+      The value of *endpos* which was passed to the :meth:`~RegexObject.search` or
+      :meth:`~RegexObject.match` method of the :class:`RegexObject`.  This is the
+      index into the string beyond which the RE engine will not go.
+
+
+   .. attribute:: MatchObject.lastindex
+
+      The integer index of the last matched capturing group, or ``None`` if no group
+      was matched at all. For example, the expressions ``(a)b``, ``((a)(b))``, and
+      ``((ab))`` will have ``lastindex == 1`` if applied to the string ``'ab'``, while
+      the expression ``(a)(b)`` will have ``lastindex == 2``, if applied to the same
+      string.
+
+
+   .. attribute:: MatchObject.lastgroup
+
+      The name of the last matched capturing group, or ``None`` if the group didn't
+      have a name, or if no group was matched at all.
+
+
+   .. attribute:: MatchObject.re
+
+      The regular expression object whose :meth:`~RegexObject.match` or
+      :meth:`~RegexObject.search` method produced this :class:`MatchObject`
+      instance.
+
+
+   .. attribute:: MatchObject.string
+
+      The string passed to :meth:`~RegexObject.match` or
+      :meth:`~RegexObject.search`.
+
+
+Examples
+--------
 
 
 Checking For a Pair
@@ -1013,16 +991,16 @@ objects a little more gracefully:
 
 Suppose you are writing a poker program where a player's hand is represented as
 a 5-character string with each character representing a card, "a" for ace, "k"
-for king, "q" for queen, j for jack, "0" for 10, and "1" through "9"
+for king, "q" for queen, "j" for jack, "t" for 10, and "2" through "9"
 representing the card with that value.
 
 To see if a given string is a valid hand, one could do the following:
 
-   >>> valid = re.compile(r"[0-9akqj]{5}$")
-   >>> displaymatch(valid.match("ak05q"))  # Valid.
-   "<Match: 'ak05q', groups=()>"
-   >>> displaymatch(valid.match("ak05e"))  # Invalid.
-   >>> displaymatch(valid.match("ak0"))    # Invalid.
+   >>> valid = re.compile(r"^[a2-9tjqk]{5}$")
+   >>> displaymatch(valid.match("akt5q"))  # Valid.
+   "<Match: 'akt5q', groups=()>"
+   >>> displaymatch(valid.match("akt5e"))  # Invalid.
+   >>> displaymatch(valid.match("akt"))    # Invalid.
    >>> displaymatch(valid.match("727ak"))  # Valid.
    "<Match: '727ak', groups=()>"
 
@@ -1037,7 +1015,8 @@ To match this with a regular expression, one could use backreferences as such:
    "<Match: '354aa', groups=('a',)>"
 
 To find out what card the pair consists of, one could use the
-:meth:`~match.group` method of the match object in the following manner:
+:meth:`~MatchObject.group` method of :class:`MatchObject` in the following
+manner:
 
 .. doctest::
 
@@ -1079,13 +1058,13 @@ expressions.
 +--------------------------------+---------------------------------------------+
 | ``%i``                         | ``[-+]?(0[xX][\dA-Fa-f]+|0[0-7]*|\d+)``     |
 +--------------------------------+---------------------------------------------+
-| ``%o``                         | ``0[0-7]*``                                 |
+| ``%o``                         | ``[-+]?[0-7]+``                             |
 +--------------------------------+---------------------------------------------+
 | ``%s``                         | ``\S+``                                     |
 +--------------------------------+---------------------------------------------+
 | ``%u``                         | ``\d+``                                     |
 +--------------------------------+---------------------------------------------+
-| ``%x``, ``%X``                 | ``0[xX][\dA-Fa-f]+``                        |
+| ``%x``, ``%X``                 | ``[-+]?(0[xX])?[\dA-Fa-f]+``                |
 +--------------------------------+---------------------------------------------+
 
 To extract the filename and numbers from a string like ::
@@ -1101,59 +1080,39 @@ The equivalent regular expression would be ::
    (\S+) - (\d+) errors, (\d+) warnings
 
 
-Avoiding recursion
-^^^^^^^^^^^^^^^^^^
-
-If you create regular expressions that require the engine to perform a lot of
-recursion, you may encounter a :exc:`RuntimeError` exception with the message
-``maximum recursion limit`` exceeded. For example, ::
-
-   >>> s = 'Begin ' + 1000*'a very long string ' + 'end'
-   >>> re.match('Begin (\w| )*? end', s).end()
-   Traceback (most recent call last):
-     File "<stdin>", line 1, in ?
-     File "/usr/local/lib/python3.2/re.py", line 132, in match
-       return _compile(pattern, flags).match(string)
-   RuntimeError: maximum recursion limit exceeded
-
-You can often restructure your regular expression to avoid recursion.
-
-Simple uses of the ``*?`` pattern are special-cased to avoid recursion.  Thus,
-the above regular expression can avoid recursion by being recast as ``Begin
-[a-zA-Z0-9_ ]*?end``.  As a further benefit, such regular expressions will run
-faster than their recursive equivalents.
-
+.. _search-vs-match:
 
 search() vs. match()
 ^^^^^^^^^^^^^^^^^^^^
 
-In a nutshell, :func:`match` only attempts to match a pattern at the beginning
-of a string where :func:`search` will match a pattern anywhere in a string.
-For example:
+.. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
-   >>> re.match("o", "dog")  # No match as "o" is not the first letter of "dog".
-   >>> re.search("o", "dog") # Match as search() looks everywhere in the string.
+Python offers two different primitive operations based on regular expressions:
+:func:`re.match` checks for a match only at the beginning of the string, while
+:func:`re.search` checks for a match anywhere in the string (this is what Perl
+does by default).
+
+For example::
+
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("c", "abcdef") # Match
    <_sre.SRE_Match object at ...>
 
-.. note::
+Regular expressions beginning with ``'^'`` can be used with :func:`search` to
+restrict the match at the beginning of the string::
 
-   The following applies only to regular expression objects like those created
-   with ``re.compile("pattern")``, not the primitives ``re.match(pattern,
-   string)`` or ``re.search(pattern, string)``.
-
-:func:`match` has an optional second parameter that gives an index in the string
-where the search is to start::
-
-   >>> pattern = re.compile("o")
-   >>> pattern.match("dog")      # No match as "o" is not at the start of "dog."
-
-   # Equivalent to the above expression as 0 is the default starting index:
-   >>> pattern.match("dog", 0)
-
-   # Match as "o" is the 2nd character of "dog" (index 0 is the first):
-   >>> pattern.match("dog", 1)
+   >>> re.match("c", "abcdef")  # No match
+   >>> re.search("^c", "abcdef") # No match
+   >>> re.search("^a", "abcdef")  # Match
    <_sre.SRE_Match object at ...>
-   >>> pattern.match("dog", 2)   # No match as "o" is not the 3rd character of "dog."
+
+Note however that in :const:`MULTILINE` mode :func:`match` only matches at the
+beginning of the string, whereas using :func:`search` with a regular expression
+beginning with ``'^'`` will match at the beginning of each line.
+
+   >>> re.match('X', 'A\nB\nX', re.MULTILINE)  # No match
+   >>> re.search('^X', 'A\nB\nX', re.MULTILINE)  # Match
+   <_sre.SRE_Match object at ...>
 
 
 Making a Phonebook
@@ -1167,7 +1126,7 @@ creates a phonebook.
 First, here is the input.  Normally it may come from a file, here we are using
 triple-quoted string syntax:
 
-   >>> input = """Ross McFluff: 834.345.1254 155 Elm Street
+   >>> text = """Ross McFluff: 834.345.1254 155 Elm Street
    ...
    ... Ronald Heathmore: 892.345.3428 436 Finley Avenue
    ... Frank Burger: 925.541.7625 662 South Dogwood Way
@@ -1181,7 +1140,7 @@ into a list with each nonempty line having its own entry:
 .. doctest::
    :options: +NORMALIZE_WHITESPACE
 
-   >>> entries = re.split("\n+", input)
+   >>> entries = re.split("\n+", text)
    >>> entries
    ['Ross McFluff: 834.345.1254 155 Elm Street',
    'Ronald Heathmore: 892.345.3428 436 Finley Avenue',
@@ -1251,14 +1210,14 @@ Finding all Adverbs and their Positions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If one wants more information about all matches of a pattern than the matched
-text, :func:`finditer` is useful as it provides :ref:`match objects
-<match-objects>` instead of strings.  Continuing with the previous example, if
-one was a writer who wanted to find all of the adverbs *and their positions* in
-some text, he or she would use :func:`finditer` in the following manner:
+text, :func:`finditer` is useful as it provides instances of
+:class:`MatchObject` instead of strings.  Continuing with the previous example,
+if one was a writer who wanted to find all of the adverbs *and their positions*
+in some text, he or she would use :func:`finditer` in the following manner:
 
    >>> text = "He was carefully disguised but captured quickly by police."
    >>> for m in re.finditer(r"\w+ly", text):
-   ...     print('%02d-%02d: %s' % (m.start(), m.end(), m.group(0)))
+   ...     print '%02d-%02d: %s' % (m.start(), m.end(), m.group(0))
    07-16: carefully
    40-47: quickly
 
@@ -1285,69 +1244,3 @@ functionally identical:
    <_sre.SRE_Match object at ...>
    >>> re.match("\\\\", r"\\")
    <_sre.SRE_Match object at ...>
-
-
-Writing a Tokenizer
-^^^^^^^^^^^^^^^^^^^
-
-A `tokenizer or scanner <http://en.wikipedia.org/wiki/Lexical_analysis>`_
-analyzes a string to categorize groups of characters.  This is a useful first
-step in writing a compiler or interpreter.
-
-The text categories are specified with regular expressions.  The technique is
-to combine those into a single master regular expression and to loop over
-successive matches::
-
-    Token = collections.namedtuple('Token', 'typ value line column')
-
-    def tokenize(s):
-        keywords = {'IF', 'THEN', 'FOR', 'NEXT', 'GOSUB', 'RETURN'}
-        tok_spec = [
-            ('NUMBER', r'\d+(\.\d*)?'), # Integer or decimal number
-            ('ASSIGN', r':='),          # Assignment operator
-            ('END', ';'),               # Statement terminator
-            ('ID', r'[A-Za-z]+'),       # Identifiers
-            ('OP', r'[+*\/\-]'),        # Arithmetic operators
-            ('NEWLINE', r'\n'),         # Line endings
-            ('SKIP', r'[ \t]'),         # Skip over spaces and tabs
-        ]
-        tok_re = '|'.join('(?P<%s>%s)' % pair for pair in tok_spec)
-        gettok = re.compile(tok_re).match
-        line = 1
-        pos = line_start = 0
-        mo = gettok(s)
-        while mo is not None:
-            typ = mo.lastgroup
-            if typ == 'NEWLINE':
-                line_start = pos
-                line += 1
-            elif typ != 'SKIP':
-                if typ == 'ID' and val in keywords:
-                    typ = val
-                yield Token(typ, mo.group(typ), line, mo.start()-line_start)
-            pos = mo.end()
-            mo = gettok(s, pos)
-        if pos != len(s):
-            raise RuntimeError('Unexpected character %r on line %d' %(s[pos], line))
-
-    >>> statements = '''\
-        total := total + price * quantity;
-        tax := price * 0.05;
-    '''
-    >>> for token in tokenize(statements):
-    ...     print(token)
-    ...
-    Token(typ='ID', value='total', line=1, column=8)
-    Token(typ='ASSIGN', value=':=', line=1, column=14)
-    Token(typ='ID', value='total', line=1, column=17)
-    Token(typ='OP', value='+', line=1, column=23)
-    Token(typ='ID', value='price', line=1, column=25)
-    Token(typ='OP', value='*', line=1, column=31)
-    Token(typ='ID', value='quantity', line=1, column=33)
-    Token(typ='END', value=';', line=1, column=41)
-    Token(typ='ID', value='tax', line=2, column=9)
-    Token(typ='ASSIGN', value=':=', line=2, column=13)
-    Token(typ='ID', value='price', line=2, column=16)
-    Token(typ='OP', value='*', line=2, column=22)
-    Token(typ='NUMBER', value='0.05', line=2, column=24)
-    Token(typ='END', value=';', line=2, column=28)

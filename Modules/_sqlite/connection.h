@@ -1,6 +1,6 @@
 /* connection.h - definitions for the connection type
  *
- * Copyright (C) 2004-2010 Gerhard HÃ¤ring <gh@ghaering.de>
+ * Copyright (C) 2004-2010 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -39,7 +39,7 @@ typedef struct
 
     /* 1 if we are currently within a transaction, i. e. if a BEGIN has been
      * issued */
-    char inTransaction;
+    int inTransaction;
 
     /* the type detection mode. Only 0, PARSE_DECLTYPES, PARSE_COLNAMES or a
      * bitwise combination thereof makes sense */
@@ -55,7 +55,7 @@ typedef struct
     /* None for autocommit, otherwise a PyString with the isolation level */
     PyObject* isolation_level;
 
-    /* NULL for autocommit, otherwise a string with the BEGIN statment; will be
+    /* NULL for autocommit, otherwise a string with the BEGIN statement; will be
      * freed in connection destructor */
     char* begin_statement;
 
@@ -84,7 +84,7 @@ typedef struct
     /* Determines how bytestrings from SQLite are converted to Python objects:
      * - PyUnicode_Type:        Python Unicode objects are constructed from UTF-8 bytestrings
      * - OptimizedUnicode:      Like before, but for ASCII data, only PyStrings are created.
-     * - PyBytes_Type:         PyStrings are created as-is.
+     * - PyString_Type:         PyStrings are created as-is.
      * - Any custom callable:   Any object returned from the callable called with the bytestring
      *                          as single parameter.
      */
@@ -98,6 +98,11 @@ typedef struct
 
     /* a dictionary of registered collation name => collation callable mappings */
     PyObject* collations;
+
+    /* if our connection was created from a APSW connection, we keep a
+     * reference to the APSW connection around and get rid of it in our
+     * destructor */
+    PyObject* apsw_connection;
 
     /* Exception objects */
     PyObject* Warning;

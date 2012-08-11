@@ -20,6 +20,6 @@ class FixXreadlines(fixer_base.BaseFix):
         no_call = results.get("no_call")
 
         if no_call:
-            no_call.replace(Name("__iter__", prefix=no_call.prefix))
+            no_call.replace(Name(u"__iter__", prefix=no_call.prefix))
         else:
             node.replace([x.clone() for x in results["call"]])

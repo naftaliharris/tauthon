@@ -26,15 +26,15 @@ class Test_TestSuite(unittest.TestCase, TestEquality):
     ################################################################
 
     # Used by TestEquality.test_eq
-    eq_pairs = [(unittest.TestSuite(), unittest.TestSuite())
-               ,(unittest.TestSuite(), unittest.TestSuite([]))
-               ,(_mk_TestSuite('test_1'), _mk_TestSuite('test_1'))]
+    eq_pairs = [(unittest.TestSuite(), unittest.TestSuite()),
+                (unittest.TestSuite(), unittest.TestSuite([])),
+               (_mk_TestSuite('test_1'), _mk_TestSuite('test_1'))]
 
     # Used by TestEquality.test_ne
-    ne_pairs = [(unittest.TestSuite(), _mk_TestSuite('test_1'))
-               ,(unittest.TestSuite([]), _mk_TestSuite('test_1'))
-               ,(_mk_TestSuite('test_1', 'test_2'), _mk_TestSuite('test_1', 'test_3'))
-               ,(_mk_TestSuite('test_1'), _mk_TestSuite('test_2'))]
+    ne_pairs = [(unittest.TestSuite(), _mk_TestSuite('test_1')),
+                (unittest.TestSuite([]), _mk_TestSuite('test_1')),
+                (_mk_TestSuite('test_1', 'test_2'), _mk_TestSuite('test_1', 'test_3')),
+                (_mk_TestSuite('test_1'), _mk_TestSuite('test_2'))]
 
     ################################################################
     ### /Set up attributes needed by inherited tests
@@ -361,7 +361,6 @@ class Test_TestSuite(unittest.TestCase, TestEquality):
 
         # reusing results should be permitted even if abominable
         self.assertFalse(result._testRunEntered)
-
 
 
 if __name__ == '__main__':

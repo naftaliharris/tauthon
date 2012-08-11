@@ -1,13 +1,13 @@
 """Tests for distutils.command.install_data."""
-import sys
 import os
+import sys
 import unittest
 
 from distutils.command.install_lib import install_lib
 from distutils.extension import Extension
 from distutils.tests import support
 from distutils.errors import DistutilsOptionError
-from test.support import run_unittest
+from test.test_support import run_unittest
 
 class InstallLibTestCase(support.TempdirManager,
                          support.LoggingSilencer,
@@ -32,9 +32,7 @@ class InstallLibTestCase(support.TempdirManager,
         cmd.finalize_options()
         self.assertEqual(cmd.optimize, 2)
 
-    @unittest.skipUnless(not sys.dont_write_bytecode,
-                         'byte-compile not supported')
-    def test_byte_compile(self):
+    def _setup_byte_compile(self):
         pkg_dir, dist = self.create_dist()
         cmd = install_lib(dist)
         cmd.compile = cmd.optimize = 1
@@ -42,8 +40,15 @@ class InstallLibTestCase(support.TempdirManager,
         f = os.path.join(pkg_dir, 'foo.py')
         self.write_file(f, '# python file')
         cmd.byte_compile([f])
-        self.assertTrue(os.path.exists(os.path.join(pkg_dir, 'foo.pyc')))
-        self.assertTrue(os.path.exists(os.path.join(pkg_dir, 'foo.pyo')))
+        return pkg_dir
+
+    @unittest.skipIf(sys.dont_write_bytecode, 'byte-compile not enabled')
+    def test_byte_compile(self):
+        pkg_dir = self._setup_byte_compile()
+        if sys.flags.optimize < 1:
+            self.assertTrue(os.path.exists(os.path.join(pkg_dir, 'foo.pyc')))
+        else:
+            self.assertTrue(os.path.exists(os.path.join(pkg_dir, 'foo.pyo')))
 
     def test_get_outputs(self):
         pkg_dir, dist = self.create_dist()

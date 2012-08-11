@@ -1,8 +1,8 @@
 import os
 import unittest
 import random
-from test import support
-thread = support.import_module('_thread')
+from test import test_support
+thread = test_support.import_module('thread')
 import time
 import sys
 import weakref
@@ -12,13 +12,15 @@ from test import lock_tests
 NUMTASKS = 10
 NUMTRIPS = 3
 
+
 _print_mutex = thread.allocate_lock()
 
 def verbose_print(arg):
     """Helper function for printing out debugging output."""
-    if support.verbose:
+    if test_support.verbose:
         with _print_mutex:
-            print(arg)
+            print arg
+
 
 class BasicThreadTest(unittest.TestCase):
 
@@ -128,6 +130,29 @@ class ThreadRunningTests(BasicThreadTest):
             time.sleep(0.01)
         self.assertEqual(thread._count(), orig)
 
+    def test_save_exception_state_on_error(self):
+        # See issue #14474
+        def task():
+            started.release()
+            raise SyntaxError
+        def mywrite(self, *args):
+            try:
+                raise ValueError
+            except ValueError:
+                pass
+            real_write(self, *args)
+        c = thread._count()
+        started = thread.allocate_lock()
+        with test_support.captured_output("stderr") as stderr:
+            real_write = stderr.write
+            stderr.write = mywrite
+            started.acquire()
+            thread.start_new_thread(task, ())
+            started.acquire()
+            while thread._count() > c:
+                time.sleep(0.01)
+        self.assertIn("Traceback", stderr.getvalue())
+
 
 class Barrier:
     def __init__(self, num_threads):
@@ -190,6 +215,7 @@ class BarrierTest(BasicThreadTest):
         if finished:
             self.done_mutex.release()
 
+
 class LockTests(lock_tests.LockTests):
     locktype = thread.allocate_lock
 
@@ -200,25 +226,23 @@ class TestForkInThread(unittest.TestCase):
 
     @unittest.skipIf(sys.platform.startswith('win'),
                      "This test is only appropriate for POSIX-like systems.")
-    @support.reap_threads
+    @test_support.reap_threads
     def test_forkinthread(self):
         def thread1():
             try:
                 pid = os.fork() # fork in a thread
             except RuntimeError:
-                os._exit(1) # exit the child
+                sys.exit(0) # exit the child
 
             if pid == 0: # child
-                try:
-                    os.close(self.read_fd)
-                    os.write(self.write_fd, b"OK")
-                finally:
-                    os._exit(0)
+                os.close(self.read_fd)
+                os.write(self.write_fd, "OK")
+                sys.exit(0)
             else: # parent
                 os.close(self.write_fd)
 
         thread.start_new_thread(thread1, ())
-        self.assertEqual(os.read(self.read_fd, 2), b"OK",
+        self.assertEqual(os.read(self.read_fd, 2), "OK",
                          "Unable to fork() in thread")
 
     def tearDown(self):
@@ -234,8 +258,8 @@ class TestForkInThread(unittest.TestCase):
 
 
 def test_main():
-    support.run_unittest(ThreadRunningTests, BarrierTest, LockTests,
-                         TestForkInThread)
+    test_support.run_unittest(ThreadRunningTests, BarrierTest, LockTests,
+                              TestForkInThread)
 
 if __name__ == "__main__":
     test_main()

@@ -2,7 +2,7 @@ from __future__ import nested_scopes
 from __future__ import division
 
 import unittest
-from test import support
+from test import test_support
 
 x = 2
 def nester():
@@ -24,7 +24,7 @@ class TestFuture(unittest.TestCase):
         self.assertEqual(nester(), 3)
 
 def test_main():
-    support.run_unittest(TestFuture)
+    test_support.run_unittest(TestFuture)
 
 if __name__ == "__main__":
     test_main()

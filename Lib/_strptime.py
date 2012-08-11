@@ -14,15 +14,13 @@ import time
 import locale
 import calendar
 from re import compile as re_compile
-from re import IGNORECASE, ASCII
+from re import IGNORECASE
 from re import escape as re_escape
-from datetime import (date as datetime_date,
-                      timedelta as datetime_timedelta,
-                      timezone as datetime_timezone)
+from datetime import date as datetime_date
 try:
-    from _thread import allocate_lock as _thread_allocate_lock
+    from thread import allocate_lock as _thread_allocate_lock
 except:
-    from _dummy_thread import allocate_lock as _thread_allocate_lock
+    from dummy_thread import allocate_lock as _thread_allocate_lock
 
 __all__ = []
 
@@ -109,7 +107,7 @@ class LocaleTime(object):
         # magical; just happened to have used it everywhere else where a
         # static date was needed.
         am_pm = []
-        for hour in (1, 22):
+        for hour in (01,22):
             time_tuple = time.struct_time((1999,3,17,hour,44,55,2,76,0))
             am_pm.append(time.strftime("%p", time_tuple).lower())
         self.am_pm = am_pm
@@ -188,7 +186,7 @@ class TimeRE(dict):
             self.locale_time = locale_time
         else:
             self.locale_time = LocaleTime()
-        base = super()
+        base = super(TimeRE, self)
         base.__init__({
             # The " \d" part of the regex is to make %c from ANSI C work
             'd': r"(?P<d>3[0-1]|[1-2]\d|0[1-9]|[1-9]| [1-9])",
@@ -206,7 +204,6 @@ class TimeRE(dict):
             #XXX: Does 'Y' need to worry about having less or more than
             #     4 digits?
             'Y': r"(?P<Y>\d\d\d\d)",
-            'z': r"(?P<z>[+-]\d\d[0-5]\d)",
             'A': self.__seqToRE(self.locale_time.f_weekday, 'A'),
             'a': self.__seqToRE(self.locale_time.a_weekday, 'a'),
             'B': self.__seqToRE(self.locale_time.f_month[1:], 'B'),
@@ -296,18 +293,9 @@ def _calc_julian_from_U_or_W(year, week_of_year, day_of_week, week_starts_Mon):
 
 
 def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
-    """Return a 2-tuple consisting of a time struct and an int containing
-    the number of microseconds based on the input string and the
-    format string."""
-
-    for index, arg in enumerate([data_string, format]):
-        if not isinstance(arg, str):
-            msg = "strptime() argument {} must be str, not {}"
-            raise TypeError(msg.format(index, type(arg)))
-
+    """Return a time struct based on the input string and the format string."""
     global _TimeRE_cache, _regex_cache
     with _cache_lock:
-
         if _getlang() != _TimeRE_cache.locale_time.lang:
             _TimeRE_cache = TimeRE()
             _regex_cache.clear()
@@ -320,7 +308,7 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
                 format_regex = _TimeRE_cache.compile(format)
             # KeyError raised when a bad format is found; can be specified as
             # \\, in which case it was a stray % but with a space after it
-            except KeyError as err:
+            except KeyError, err:
                 bad_directive = err.args[0]
                 if bad_directive == "\\":
                     bad_directive = "%"
@@ -339,11 +327,10 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
         raise ValueError("unconverted data remains: %s" %
                           data_string[found.end():])
 
-    year = 1900
+    year = None
     month = day = 1
     hour = minute = second = fraction = 0
     tz = -1
-    tzoffset = None
     # Default to -1 to signify that values not known; not critical to have,
     # though
     week_of_year = -1
@@ -352,7 +339,7 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
     # values
     weekday = julian = -1
     found_dict = found.groupdict()
-    for group_key in found_dict.keys():
+    for group_key in found_dict.iterkeys():
         # Directives not explicitly handled below:
         #   c, x, X
         #      handled by making out of other directives
@@ -424,11 +411,6 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
             else:
                 # W starts week on Monday.
                 week_of_year_start = 0
-        elif group_key == 'z':
-            z = found_dict['z']
-            tzoffset = int(z[1:3]) * 60 + int(z[3:5])
-            if z.startswith("-"):
-                tzoffset = -tzoffset
         elif group_key == 'Z':
             # Since -1 is default value only need to worry about setting tz if
             # it can be something other than -1.
@@ -444,6 +426,12 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
                     else:
                         tz = value
                         break
+    leap_year_fix = False
+    if year is None and month == 2 and day == 29:
+        year = 1904  # 1904 is first leap year of 20th century
+        leap_year_fix = True
+    elif year is None:
+        year = 1900
     # If we know the week of the year and what day of that week, we can figure
     # out the Julian day of the year.
     if julian == -1 and week_of_year != -1 and weekday != -1:
@@ -465,35 +453,15 @@ def _strptime(data_string, format="%a %b %d %H:%M:%S %Y"):
         day = datetime_result.day
     if weekday == -1:
         weekday = datetime_date(year, month, day).weekday()
-    # Add timezone info
-    tzname = found_dict.get("Z")
-    if tzoffset is not None:
-        gmtoff = tzoffset * 60
-    else:
-        gmtoff = None
+    if leap_year_fix:
+        # the caller didn't supply a year but asked for Feb 29th. We couldn't
+        # use the default of 1900 for computations. We set it back to ensure
+        # that February 29th is smaller than March 1st.
+        year = 1900
 
-    return (year, month, day,
-            hour, minute, second,
-            weekday, julian, tz, gmtoff, tzname), fraction
+    return (time.struct_time((year, month, day,
+                              hour, minute, second,
+                              weekday, julian, tz)), fraction)
 
 def _strptime_time(data_string, format="%a %b %d %H:%M:%S %Y"):
-    """Return a time struct based on the input string and the
-    format string."""
-    tt = _strptime(data_string, format)[0]
-    return time.struct_time(tt[:9])
-
-def _strptime_datetime(cls, data_string, format="%a %b %d %H:%M:%S %Y"):
-    """Return a class cls instance based on the input string and the
-    format string."""
-    tt, fraction = _strptime(data_string, format)
-    gmtoff, tzname = tt[-2:]
-    args = tt[:6] + (fraction,)
-    if gmtoff is not None:
-        tzdelta = datetime_timedelta(seconds=gmtoff)
-        if tzname:
-            tz = datetime_timezone(tzdelta, tzname)
-        else:
-            tz = datetime_timezone(tzdelta)
-        args += (tz,)
-
-    return cls(*args)
+    return _strptime(data_string, format)[0]

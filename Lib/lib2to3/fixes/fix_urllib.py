@@ -128,7 +128,7 @@ class FixUrllib(FixImports):
                 else:
                     member_name = member.value
                     as_name = None
-                if member_name != ",":
+                if member_name != u",":
                     for change in MAPPING[mod_member.value]:
                         if member_name in change[1]:
                             if change[0] not in mod_dict:

@@ -1,4 +1,3 @@
-#ifndef Py_LIMITED_API
 #ifndef PY_NO_SHORT_FLOAT_REPR
 #ifdef __cplusplus
 extern "C" {
@@ -12,6 +11,5 @@ PyAPI_FUNC(void) _Py_dg_freedtoa(char *s);
 
 #ifdef __cplusplus
 }
-#endif
 #endif
 #endif

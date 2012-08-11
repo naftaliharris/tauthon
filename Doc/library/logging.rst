@@ -21,6 +21,8 @@
    * :ref:`Logging Cookbook <logging-cookbook>`
 
 
+.. versionadded:: 2.3
+
 This module defines functions and classes which implement a flexible event
 logging system for applications and libraries.
 
@@ -49,17 +51,35 @@ listed below.
 Logger Objects
 --------------
 
-Loggers have the following attributes and methods. Note that Loggers are never
+Loggers have the following attributes and methods.  Note that Loggers are never
 instantiated directly, but always through the module-level function
-``logging.getLogger(name)``.
+``logging.getLogger(name)``.  Multiple calls to :func:`getLogger` with the same
+name will always return a reference to the same Logger object.
+
+The ``name`` is potentially a period-separated hierarchical value, like
+``foo.bar.baz`` (though it could also be just plain ``foo``, for example).
+Loggers that are further down in the hierarchical list are children of loggers
+higher up in the list.  For example, given a logger with a name of ``foo``,
+loggers with names of ``foo.bar``, ``foo.bar.baz``, and ``foo.bam`` are all
+descendants of ``foo``.  The logger name hierarchy is analogous to the Python
+package hierarchy, and identical to it if you organise your loggers on a
+per-module basis using the recommended construction
+``logging.getLogger(__name__)``.  That's because in a module, ``__name__``
+is the module's name in the Python package namespace.
 
 .. class:: Logger
 
 .. attribute:: Logger.propagate
 
-   If this evaluates to false, logging messages are not passed by this logger or by
-   its child loggers to the handlers of higher level (ancestor) loggers. The
-   constructor sets this attribute to 1.
+   If this evaluates to true, logging messages are passed by this logger and by
+   its child loggers to the handlers of higher level (ancestor) loggers.
+   Messages are passed directly to the ancestor loggers' handlers - neither the
+   level nor filters of the ancestor loggers in question are considered.
+
+   If this evaluates to false, logging messages are not passed to the handlers
+   of ancestor loggers.
+
+   The constructor sets this attribute to ``True``.
 
 
 .. method:: Logger.setLevel(lvl)
@@ -106,7 +126,7 @@ instantiated directly, but always through the module-level function
    convenience method, useful when the parent logger is named using e.g. ``__name__``
    rather than a literal string.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 
 .. method:: Logger.debug(msg, *args, **kwargs)
@@ -116,31 +136,13 @@ instantiated directly, but always through the module-level function
    *msg* using the string formatting operator. (Note that this means that you can
    use keywords in the format string, together with a single dictionary argument.)
 
-   There are three keyword arguments in *kwargs* which are inspected: *exc_info*
+   There are two keyword arguments in *kwargs* which are inspected: *exc_info*
    which, if it does not evaluate as false, causes exception information to be
    added to the logging message. If an exception tuple (in the format returned by
    :func:`sys.exc_info`) is provided, it is used; otherwise, :func:`sys.exc_info`
    is called to get the exception information.
 
-   The second optional keyword argument is *stack_info*, which defaults to
-   False. If specified as True, stack information is added to the logging
-   message, including the actual logging call. Note that this is not the same
-   stack information as that displayed through specifying *exc_info*: The
-   former is stack frames from the bottom of the stack up to the logging call
-   in the current thread, whereas the latter is information about stack frames
-   which have been unwound, following an exception, while searching for
-   exception handlers.
-
-   You can specify *stack_info* independently of *exc_info*, e.g. to just show
-   how you got to a certain point in your code, even when no exceptions were
-   raised. The stack frames are printed following a header line which says::
-
-       Stack (most recent call last):
-
-   This mimics the `Traceback (most recent call last):` which is used when
-   displaying exception frames.
-
-   The third keyword argument is *extra* which can be used to pass a
+   The second keyword argument is *extra* which can be used to pass a
    dictionary which is used to populate the __dict__ of the LogRecord created for
    the logging event with user-defined attributes. These custom attributes can then
    be used as you like. For example, they could be incorporated into logged
@@ -148,7 +150,7 @@ instantiated directly, but always through the module-level function
 
       FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
       logging.basicConfig(format=FORMAT)
-      d = { 'clientip' : '192.168.0.1', 'user' : 'fbloggs' }
+      d = {'clientip': '192.168.0.1', 'user': 'fbloggs'}
       logger = logging.getLogger('tcpserver')
       logger.warning('Protocol problem: %s', 'connection reset', extra=d)
 
@@ -173,9 +175,6 @@ instantiated directly, but always through the module-level function
    context (such as remote client IP address and authenticated user name, in the
    above example). In such circumstances, it is likely that specialized
    :class:`Formatter`\ s would be used with particular :class:`Handler`\ s.
-
-   .. versionadded:: 3.2
-      The *stack_info* parameter was added.
 
 
 .. method:: Logger.info(msg, *args, **kwargs)
@@ -241,12 +240,14 @@ instantiated directly, but always through the module-level function
    Removes the specified handler *hdlr* from this logger.
 
 
-.. method:: Logger.findCaller(stack_info=False)
+.. method:: Logger.findCaller()
 
    Finds the caller's source filename and line number. Returns the filename, line
-   number, function name and stack information as a 4-element tuple. The stack
-   information is returned as *None* unless *stack_info* is *True*.
+   number and function name as a 3-element tuple.
 
+   .. versionchanged:: 2.4
+      The function name was added. In earlier versions, the filename and line
+      number were returned as a 2-element tuple.
 
 .. method:: Logger.handle(record)
 
@@ -256,22 +257,13 @@ instantiated directly, but always through the module-level function
    Logger-level filtering is applied using :meth:`~Logger.filter`.
 
 
-.. method:: Logger.makeRecord(name, lvl, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None)
+.. method:: Logger.makeRecord(name, lvl, fn, lno, msg, args, exc_info, func=None, extra=None)
 
    This is a factory method which can be overridden in subclasses to create
    specialized :class:`LogRecord` instances.
 
-.. method:: Logger.hasHandlers()
-
-   Checks to see if this logger has any handlers configured. This is done by
-   looking for handlers in this logger and its parents in the logger hierarchy.
-   Returns True if a handler was found, else False. The method stops searching
-   up the hierarchy whenever a logger with the 'propagate' attribute set to
-   False is found - that will be the last logger which is checked for the
-   existence of handlers.
-
-   .. versionadded:: 3.2
-
+   .. versionchanged:: 2.5
+      *func* and *extra* were added.
 
 .. _handler:
 
@@ -359,12 +351,14 @@ subclasses. However, the :meth:`__init__` method in subclasses needs to call
 .. method:: Handler.handleError(record)
 
    This method should be called from handlers when an exception is encountered
-   during an :meth:`emit` call. By default it does nothing, which means that
-   exceptions get silently ignored. This is what is mostly wanted for a logging
-   system - most users will not care about errors in the logging system, they are
-   more interested in application errors. You could, however, replace this with a
-   custom handler if you wish. The specified record is the one which was being
-   processed when the exception occurred.
+   during an :meth:`emit` call. If the module-level attribute
+   ``raiseExceptions`` is ``False``, exceptions get silently ignored. This is
+   what is mostly wanted for a logging system - most users will not care about
+   errors in the logging system, they are more interested in application
+   errors. You could, however, replace this with a custom handler if you wish.
+   The specified record is the one which was being processed when the exception
+   occurred. (The default value of ``raiseExceptions`` is ``True``, as that is
+   more useful during development).
 
 
 .. method:: Handler.format(record)
@@ -398,7 +392,7 @@ A Formatter can be initialized with a format string which makes use of knowledge
 of the :class:`LogRecord` attributes - such as the default value mentioned above
 making use of the fact that the user's message and arguments are pre-formatted
 into a :class:`LogRecord`'s *message* attribute.  This format string contains
-standard Python %-style mapping keys. See section :ref:`old-string-formatting`
+standard Python %-style mapping keys. See section :ref:`string-formatting`
 for more information on string formatting.
 
 The useful mapping keys in a :class:`LogRecord` are given in the section on
@@ -431,9 +425,6 @@ The useful mapping keys in a :class:`LogRecord` are given in the section on
       formatter to handle the event doesn't use the cached value but
       recalculates it afresh.
 
-      If stack information is available, it's appended after the exception
-      information, using :meth:`formatStack` to transform it if necessary.
-
 
    .. method:: formatTime(record, datefmt=None)
 
@@ -445,6 +436,13 @@ The useful mapping keys in a :class:`LogRecord` are given in the section on
       record. Otherwise, the ISO8601 format is used.  The resulting string is
       returned.
 
+      This function uses a user-configurable function to convert the creation
+      time to a tuple. By default, :func:`time.localtime` is used; to change
+      this for a particular formatter instance, set the ``converter`` attribute
+      to a function with the same signature as :func:`time.localtime` or
+      :func:`time.gmtime`. To change it for all formatters, for example if you
+      want all logging times to be shown in GMT, set the ``converter``
+      attribute in the ``Formatter`` class.
 
    .. method:: formatException(exc_info)
 
@@ -452,12 +450,6 @@ The useful mapping keys in a :class:`LogRecord` are given in the section on
       returned by :func:`sys.exc_info`) as a string. This default implementation
       just uses :func:`traceback.print_exception`. The resulting string is
       returned.
-
-   .. method:: formatStack(stack_info)
-
-      Formats the specified stack information (a string as returned by
-      :func:`traceback.print_stack`, but with the last newline removed) as a
-      string. This default implementation just returns the input value.
 
 .. _filter:
 
@@ -495,16 +487,6 @@ been applied to those descendant loggers.
 You don't actually need to subclass ``Filter``: you can pass any instance
 which has a ``filter`` method with the same semantics.
 
-.. versionchanged:: 3.2
-   You don't need to create specialized ``Filter`` classes, or use other
-   classes with a ``filter`` method: you can use a function (or other
-   callable) as a filter. The filtering logic will check to see if the filter
-   object has a ``filter`` attribute: if it does, it's assumed to be a
-   ``Filter`` and its :meth:`~Filter.filter` method is called. Otherwise, it's
-   assumed to be a callable and called with the record as the single
-   parameter. The returned value should conform to that returned by
-   :meth:`~Filter.filter`.
-
 Although filters are used primarily to filter records based on more
 sophisticated criteria than levels, they get to see every record which is
 processed by the handler or logger they're attached to: this can be useful if
@@ -525,7 +507,7 @@ every time something is logged, and can be created manually via
 wire).
 
 
-.. class:: LogRecord(name, level, pathname, lineno, msg, args, exc_info, func=None, sinfo=None)
+.. class:: LogRecord(name, level, pathname, lineno, msg, args, exc_info, func=None)
 
    Contains all the information pertinent to the event being logged.
 
@@ -536,6 +518,9 @@ wire).
    :param name:  The name of the logger used to log the event represented by
                  this LogRecord.
    :param level: The numeric level of the logging event (one of DEBUG, INFO etc.)
+                 Note that this is converted to *two* attributes of the LogRecord:
+                 ``levelno`` for the numeric value and ``levelname`` for the
+                 corresponding level name.
    :param pathname: The full pathname of the source file where the logging call
                     was made.
    :param lineno: The line number in the source file where the logging call was
@@ -548,8 +533,9 @@ wire).
                     or *None* if no exception information is available.
    :param func: The name of the function or method from which the logging call
                 was invoked.
-   :param sinfo: A text string representing stack information from the base of
-                 the stack in the current thread, up to the logging call.
+
+   .. versionchanged:: 2.5
+      *func* was added.
 
    .. method:: getMessage()
 
@@ -559,29 +545,6 @@ wire).
       convert it to a string. This allows use of user-defined classes as
       messages, whose ``__str__`` method can return the actual format string to
       be used.
-
-   .. versionchanged:: 3.2
-      The creation of a ``LogRecord`` has been made more configurable by
-      providing a factory which is used to create the record. The factory can be
-      set using :func:`getLogRecordFactory` and :func:`setLogRecordFactory`
-      (see this for the factory's signature).
-
-   This functionality can be used to inject your own values into a
-   LogRecord at creation time. You can use the following pattern::
-
-      old_factory = logging.getLogRecordFactory()
-
-      def record_factory(*args, **kwargs):
-          record = old_factory(*args, **kwargs)
-          record.custom_attribute = 0xdecafbad
-          return record
-
-      logging.setLogRecordFactory(record_factory)
-
-   With this pattern, multiple factories could be chained, and as long
-   as they don't overwrite each other's attributes or unintentionally
-   overwrite the standard attributes listed above, there should be no
-   surprises.
 
 
 .. _logrecord-attributes:
@@ -596,18 +559,6 @@ attributes.) These attributes can be used to merge data from the record into
 the format string. The following table lists (in alphabetical order) the
 attribute names, their meanings and the corresponding placeholder in a %-style
 format string.
-
-If you are using {}-formatting (:func:`str.format`), you can use
-``{attrname}`` as the placeholder in the format string. If you are using
-$-formatting (:class:`string.Template`), use the form ``${attrname}``. In
-both cases, of course, replace ``attrname`` with the actual attribute name
-you want to use.
-
-In the case of {}-formatting, you can specify formatting flags by placing them
-after the attribute name, separated from it with a colon. For example: a
-placeholder of ``{msecs:03d}`` would format a millisecond value of ``4`` as
-``004``. Refer to the :meth:`str.format` documentation for full details on
-the options available to you.
 
 +----------------+-------------------------+-----------------------------------------------+
 | Attribute name | Format                  | Description                                   |
@@ -670,17 +621,16 @@ the options available to you.
 |                |                         | created, relative to the time the logging     |
 |                |                         | module was loaded.                            |
 +----------------+-------------------------+-----------------------------------------------+
-| stack_info     | You shouldn't need to   | Stack frame information (where available)     |
-|                | format this yourself.   | from the bottom of the stack in the current   |
-|                |                         | thread, up to and including the stack frame   |
-|                |                         | of the logging call which resulted in the     |
-|                |                         | creation of this record.                      |
-+----------------+-------------------------+-----------------------------------------------+
 | thread         | ``%(thread)d``          | Thread ID (if available).                     |
 +----------------+-------------------------+-----------------------------------------------+
 | threadName     | ``%(threadName)s``      | Thread name (if available).                   |
 +----------------+-------------------------+-----------------------------------------------+
 
+.. versionchanged:: 2.5
+   *funcName* was added.
+
+.. versionchanged:: 2.6
+   *processName* was added.
 
 .. _logger-adapter:
 
@@ -690,6 +640,8 @@ LoggerAdapter Objects
 :class:`LoggerAdapter` instances are used to conveniently pass contextual
 information into logging calls. For a usage example , see the section on
 :ref:`adding contextual information to your logging output <context-info>`.
+
+.. versionadded:: 2.6
 
 
 .. class:: LoggerAdapter(logger, extra)
@@ -713,10 +665,9 @@ methods of :class:`Logger`, i.e. :meth:`debug`, :meth:`info`, :meth:`warning`,
 counterparts in :class:`Logger`, so you can use the two types of instances
 interchangeably.
 
-.. versionchanged:: 3.2
-   The :meth:`isEnabledFor`, :meth:`getEffectiveLevel`, :meth:`setLevel` and
-   :meth:`hasHandlers` methods were added to :class:`LoggerAdapter`.  These
-   methods delegate to the underlying logger.
+.. versionchanged:: 2.7
+   The :meth:`isEnabledFor` method was added to :class:`LoggerAdapter`.  This
+   method delegates to the underlying logger.
 
 
 Thread Safety
@@ -740,11 +691,11 @@ In addition to the classes described above, there are a number of module- level
 functions.
 
 
-.. function:: getLogger(name=None)
+.. function:: getLogger([name])
 
-   Return a logger with the specified name or, if name is ``None``, return a
+   Return a logger with the specified name or, if no name is specified, return a
    logger which is the root logger of the hierarchy. If specified, the name is
-   typically a dot-separated hierarchical name like *'a'*, *'a.b'* or *'a.b.c.d'*.
+   typically a dot-separated hierarchical name like *"a"*, *"a.b"* or *"a.b.c.d"*.
    Choice of these names is entirely up to the developer who is using logging.
 
    All calls to this function with a given name return the same logger instance.
@@ -763,59 +714,29 @@ functions.
           # ... override behaviour here
 
 
-.. function:: getLogRecordFactory()
-
-   Return a callable which is used to create a :class:`LogRecord`.
-
-   .. versionadded:: 3.2
-      This function has been provided, along with :func:`setLogRecordFactory`,
-      to allow developers more control over how the :class:`LogRecord`
-      representing a logging event is constructed.
-
-   See :func:`setLogRecordFactory` for more information about the how the
-   factory is called.
-
-.. function:: debug(msg, *args, **kwargs)
+.. function:: debug(msg[, *args[, **kwargs]])
 
    Logs a message with level :const:`DEBUG` on the root logger. The *msg* is the
    message format string, and the *args* are the arguments which are merged into
    *msg* using the string formatting operator. (Note that this means that you can
    use keywords in the format string, together with a single dictionary argument.)
 
-   There are three keyword arguments in *kwargs* which are inspected: *exc_info*
+   There are two keyword arguments in *kwargs* which are inspected: *exc_info*
    which, if it does not evaluate as false, causes exception information to be
    added to the logging message. If an exception tuple (in the format returned by
    :func:`sys.exc_info`) is provided, it is used; otherwise, :func:`sys.exc_info`
    is called to get the exception information.
 
-   The second optional keyword argument is *stack_info*, which defaults to
-   False. If specified as True, stack information is added to the logging
-   message, including the actual logging call. Note that this is not the same
-   stack information as that displayed through specifying *exc_info*: The
-   former is stack frames from the bottom of the stack up to the logging call
-   in the current thread, whereas the latter is information about stack frames
-   which have been unwound, following an exception, while searching for
-   exception handlers.
-
-   You can specify *stack_info* independently of *exc_info*, e.g. to just show
-   how you got to a certain point in your code, even when no exceptions were
-   raised. The stack frames are printed following a header line which says::
-
-       Stack (most recent call last):
-
-   This mimics the `Traceback (most recent call last):` which is used when
-   displaying exception frames.
-
-   The third optional keyword argument is *extra* which can be used to pass a
+   The other optional keyword argument is *extra* which can be used to pass a
    dictionary which is used to populate the __dict__ of the LogRecord created for
    the logging event with user-defined attributes. These custom attributes can then
    be used as you like. For example, they could be incorporated into logged
    messages. For example::
 
-      FORMAT = '%(asctime)-15s %(clientip)s %(user)-8s %(message)s'
+      FORMAT = "%(asctime)-15s %(clientip)s %(user)-8s %(message)s"
       logging.basicConfig(format=FORMAT)
       d = {'clientip': '192.168.0.1', 'user': 'fbloggs'}
-      logging.warning('Protocol problem: %s', 'connection reset', extra=d)
+      logging.warning("Protocol problem: %s", "connection reset", extra=d)
 
    would print something like::
 
@@ -839,40 +760,42 @@ functions.
    above example). In such circumstances, it is likely that specialized
    :class:`Formatter`\ s would be used with particular :class:`Handler`\ s.
 
-   .. versionadded:: 3.2
-      The *stack_info* parameter was added.
+   .. versionchanged:: 2.5
+      *extra* was added.
 
-.. function:: info(msg, *args, **kwargs)
+
+.. function:: info(msg[, *args[, **kwargs]])
 
    Logs a message with level :const:`INFO` on the root logger. The arguments are
    interpreted as for :func:`debug`.
 
 
-.. function:: warning(msg, *args, **kwargs)
+.. function:: warning(msg[, *args[, **kwargs]])
 
    Logs a message with level :const:`WARNING` on the root logger. The arguments are
    interpreted as for :func:`debug`.
 
 
-.. function:: error(msg, *args, **kwargs)
+.. function:: error(msg[, *args[, **kwargs]])
 
    Logs a message with level :const:`ERROR` on the root logger. The arguments are
    interpreted as for :func:`debug`.
 
 
-.. function:: critical(msg, *args, **kwargs)
+.. function:: critical(msg[, *args[, **kwargs]])
 
    Logs a message with level :const:`CRITICAL` on the root logger. The arguments
    are interpreted as for :func:`debug`.
 
 
-.. function:: exception(msg, *args)
+.. function:: exception(msg[, *args])
 
    Logs a message with level :const:`ERROR` on the root logger. The arguments are
    interpreted as for :func:`debug`. Exception info is added to the logging
    message. This function should only be called from an exception handler.
 
-.. function:: log(level, msg, *args, **kwargs)
+
+.. function:: log(level, msg[, *args[, **kwargs]])
 
    Logs a message with level *level* on the root logger. The other arguments are
    interpreted as for :func:`debug`.
@@ -894,7 +817,8 @@ functions.
    effect is to disable all logging calls of severity *lvl* and below, so that
    if you call it with a value of INFO, then all INFO and DEBUG events would be
    discarded, whereas those of severity WARNING and above would be processed
-   according to the logger's effective level.
+   according to the logger's effective level. To undo the effect of a call to
+   ``logging.disable(lvl)``, call ``logging.disable(logging.NOTSET)``.
 
 
 .. function:: addLevelName(lvl, levelName)
@@ -917,7 +841,7 @@ functions.
    have associated levels with names using :func:`addLevelName` then the name you
    have associated with *lvl* is returned. If a numeric value corresponding to one
    of the defined levels is passed in, the corresponding string representation is
-   returned. Otherwise, the string 'Level %s' % lvl is returned.
+   returned. Otherwise, the string "Level %s" % lvl is returned.
 
 
 .. function:: makeLogRecord(attrdict)
@@ -928,7 +852,7 @@ functions.
    it as a :class:`LogRecord` instance at the receiving end.
 
 
-.. function:: basicConfig(**kwargs)
+.. function:: basicConfig([**kwargs])
 
    Does basic configuration for the logging system by creating a
    :class:`StreamHandler` with a default :class:`Formatter` and adding it to the
@@ -938,6 +862,9 @@ functions.
 
    This function does nothing if the root logger already has handlers
    configured for it.
+
+   .. versionchanged:: 2.4
+      Formerly, :func:`basicConfig` did not take any keyword arguments.
 
    PLEASE NOTE: This function should be called from the main thread
    before other threads are started. In versions of Python prior to
@@ -964,12 +891,6 @@ functions.
    +--------------+---------------------------------------------+
    | ``datefmt``  | Use the specified date/time format.         |
    +--------------+---------------------------------------------+
-   | ``style``    | If ``format`` is specified, use this style  |
-   |              | for the format string. One of '%', '{' or   |
-   |              | '$' for %-formatting, :meth:`str.format` or |
-   |              | :class:`string.Template` respectively, and  |
-   |              | defaulting to '%' if not specified.         |
-   +--------------+---------------------------------------------+
    | ``level``    | Set the root logger level to the specified  |
    |              | level.                                      |
    +--------------+---------------------------------------------+
@@ -978,9 +899,6 @@ functions.
    |              | incompatible with 'filename' - if both are  |
    |              | present, 'stream' is ignored.               |
    +--------------+---------------------------------------------+
-
-   .. versionchanged:: 3.2
-      The ``style`` argument was added.
 
 
 .. function:: shutdown()
@@ -999,35 +917,6 @@ functions.
    which need to use custom logger behavior.
 
 
-.. function:: setLogRecordFactory(factory)
-
-   Set a callable which is used to create a :class:`LogRecord`.
-
-   :param factory: The factory callable to be used to instantiate a log record.
-
-   .. versionadded:: 3.2
-      This function has been provided, along with :func:`getLogRecordFactory`, to
-      allow developers more control over how the :class:`LogRecord` representing
-      a logging event is constructed.
-
-   The factory has the following signature:
-
-   ``factory(name, level, fn, lno, msg, args, exc_info, func=None, sinfo=None, **kwargs)``
-
-      :name: The logger name.
-      :level: The logging level (numeric).
-      :fn: The full pathname of the file where the logging call was made.
-      :lno: The line number in the file where the logging call was made.
-      :msg: The logging message.
-      :args: The arguments for the logging message.
-      :exc_info: An exception tuple, or None.
-      :func: The name of the function or method which invoked the logging
-             call.
-      :sinfo: A stack traceback such as is provided by
-              :func:`traceback.print_stack`, showing the call hierarchy.
-      :kwargs: Additional keyword arguments.
-
-
 Integration with the warnings module
 ------------------------------------
 
@@ -1042,11 +931,11 @@ with the :mod:`warnings` module.
    If *capture* is ``True``, warnings issued by the :mod:`warnings` module will
    be redirected to the logging system. Specifically, a warning will be
    formatted using :func:`warnings.formatwarning` and the resulting string
-   logged to a logger named 'py.warnings' with a severity of `WARNING`.
+   logged to a logger named ``'py.warnings'`` with a severity of :const:`WARNING`.
 
    If *capture* is ``False``, the redirection of warnings to the logging system
    will stop, and warnings will be redirected to their original destinations
-   (i.e. those in effect before `captureWarnings(True)` was called).
+   (i.e. those in effect before ``captureWarnings(True)`` was called).
 
 
 .. seealso::

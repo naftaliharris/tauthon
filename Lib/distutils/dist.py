@@ -7,17 +7,22 @@ being built/installed/distributed.
 __revision__ = "$Id$"
 
 import sys, os, re
+from email import message_from_file
 
 try:
     import warnings
 except ImportError:
     warnings = None
 
-from distutils.errors import *
+from distutils.errors import (DistutilsOptionError, DistutilsArgError,
+                              DistutilsModuleError, DistutilsClassError)
 from distutils.fancy_getopt import FancyGetopt, translate_longopt
 from distutils.util import check_environ, strtobool, rfc822_escape
 from distutils import log
 from distutils.debug import DEBUG
+
+# Encoding used for the PKG-INFO files
+PKG_INFO_ENCODING = 'utf-8'
 
 # Regex to define acceptable Distutils command names.  This is not *quite*
 # the same as a Python NAME -- I don't allow leading underscores.  The fact
@@ -53,7 +58,9 @@ class Distribution:
                       ('quiet', 'q', "run quietly (turns verbosity off)"),
                       ('dry-run', 'n', "don't actually do anything"),
                       ('help', 'h', "show detailed help message"),
-                     ]
+                      ('no-user-cfg', None,
+                       'ignore pydistutils.cfg in your home directory'),
+    ]
 
     # 'common_usage' is a short (2-3 line) string describing the common
     # usage of the setup script.
@@ -109,7 +116,8 @@ Common commands: (see '--help-commands' for more)
         ('obsoletes', None,
          "print the list of packages/modules made obsolete")
         ]
-    display_option_names = [translate_longopt(x[0]) for x in display_options]
+    display_option_names = map(lambda x: translate_longopt(x[0]),
+                               display_options)
 
     # negative options are options that exclude other options
     negative_opt = {'quiet': 'verbose'}
@@ -260,6 +268,22 @@ Common commands: (see '--help-commands' for more)
                     else:
                         sys.stderr.write(msg + "\n")
 
+        # no-user-cfg is handled before other command line args
+        # because other args override the config files, and this
+        # one is needed before we can load the config files.
+        # If attrs['script_args'] wasn't passed, assume false.
+        #
+        # This also make sure we just look at the global options
+        self.want_user_cfg = True
+
+        if self.script_args is not None:
+            for arg in self.script_args:
+                if not arg.startswith('-'):
+                    break
+                if arg == '--no-user-cfg':
+                    self.want_user_cfg = False
+                    break
+
         self.finalize_options()
 
     def get_option_dict(self, command):
@@ -277,7 +301,8 @@ Common commands: (see '--help-commands' for more)
         from pprint import pformat
 
         if commands is None:             # dump all command option dicts
-            commands = sorted(self.command_options.keys())
+            commands = self.command_options.keys()
+            commands.sort()
 
         if header is not None:
             self.announce(indent + header)
@@ -311,7 +336,10 @@ Common commands: (see '--help-commands' for more)
         Distutils installation directory (ie. where the top-level
         Distutils __inst__.py file lives), a file in the user's home
         directory named .pydistutils.cfg on Unix and pydistutils.cfg
-        on Windows/Mac, and setup.cfg in the current directory.
+        on Windows/Mac; and setup.cfg in the current directory.
+
+        The file in the user's home directory can be disabled with the
+        --no-user-cfg option.
         """
         files = []
         check_environ()
@@ -331,19 +359,23 @@ Common commands: (see '--help-commands' for more)
             user_filename = "pydistutils.cfg"
 
         # And look for the user config file
-        user_file = os.path.join(os.path.expanduser('~'), user_filename)
-        if os.path.isfile(user_file):
-            files.append(user_file)
+        if self.want_user_cfg:
+            user_file = os.path.join(os.path.expanduser('~'), user_filename)
+            if os.path.isfile(user_file):
+                files.append(user_file)
 
         # All platforms support local setup.cfg
         local_file = "setup.cfg"
         if os.path.isfile(local_file):
             files.append(local_file)
 
+        if DEBUG:
+            self.announce("using config files: %s" % ', '.join(files))
+
         return files
 
     def parse_config_files(self, filenames=None):
-        from configparser import ConfigParser
+        from ConfigParser import ConfigParser
 
         if filenames is None:
             filenames = self.find_config_files()
@@ -383,8 +415,8 @@ Common commands: (see '--help-commands' for more)
                         setattr(self, opt, strtobool(val))
                     else:
                         setattr(self, opt, val)
-                except ValueError as msg:
-                    raise DistutilsOptionError(msg)
+                except ValueError, msg:
+                    raise DistutilsOptionError, msg
 
     # -- Command-line parsing methods ----------------------------------
 
@@ -450,10 +482,10 @@ Common commands: (see '--help-commands' for more)
 
         # Oops, no commands found -- an end-user error
         if not self.commands:
-            raise DistutilsArgError("no commands supplied")
+            raise DistutilsArgError, "no commands supplied"
 
         # All is well: return true
-        return True
+        return 1
 
     def _get_toplevel_options(self):
         """Return the non-display options recognized at the top level.
@@ -481,7 +513,7 @@ Common commands: (see '--help-commands' for more)
         # Pull the current command from the head of the command line
         command = args[0]
         if not command_re.match(command):
-            raise SystemExit("invalid command name '%s'" % command)
+            raise SystemExit, "invalid command name '%s'" % command
         self.commands.append(command)
 
         # Dig up the command class that implements this command, so we
@@ -489,22 +521,23 @@ Common commands: (see '--help-commands' for more)
         # it takes.
         try:
             cmd_class = self.get_command_class(command)
-        except DistutilsModuleError as msg:
-            raise DistutilsArgError(msg)
+        except DistutilsModuleError, msg:
+            raise DistutilsArgError, msg
 
         # Require that the command class be derived from Command -- want
         # to be sure that the basic "command" interface is implemented.
         if not issubclass(cmd_class, Command):
-            raise DistutilsClassError(
-                  "command class %s must subclass Command" % cmd_class)
+            raise DistutilsClassError, \
+                  "command class %s must subclass Command" % cmd_class
 
         # Also make sure that the command object provides a list of its
         # known options.
         if not (hasattr(cmd_class, 'user_options') and
                 isinstance(cmd_class.user_options, list)):
-            raise DistutilsClassError(("command class %s must provide " +
+            raise DistutilsClassError, \
+                  ("command class %s must provide " +
                    "'user_options' attribute (a list of tuples)") % \
-                  cmd_class)
+                  cmd_class
 
         # If the command class has a list of negative alias options,
         # merge it in with the global negative aliases.
@@ -706,7 +739,7 @@ Common commands: (see '--help-commands' for more)
                                 "Standard commands",
                                 max_length)
         if extra_commands:
-            print()
+            print
             self.print_command_list(extra_commands,
                                     "Extra commands",
                                     max_length)
@@ -720,6 +753,7 @@ Common commands: (see '--help-commands' for more)
         """
         # Currently this is only used on Mac OS, for the Mac-only GUI
         # Distutils interface (by Jack Jansen)
+
         import distutils.command
         std_commands = distutils.command.__all__
         is_std = {}
@@ -786,14 +820,15 @@ Common commands: (see '--help-commands' for more)
             try:
                 klass = getattr(module, klass_name)
             except AttributeError:
-                raise DistutilsModuleError(
-                      "invalid command '%s' (no class '%s' in module '%s')"
-                      % (command, klass_name, module_name))
+                raise DistutilsModuleError, \
+                      "invalid command '%s' (no class '%s' in module '%s')" \
+                      % (command, klass_name, module_name)
 
             self.cmdclass[command] = klass
             return klass
 
         raise DistutilsModuleError("invalid command '%s'" % command)
+
 
     def get_command_obj(self, command, create=1):
         """Return the command object for 'command'.  Normally this object
@@ -842,8 +877,7 @@ Common commands: (see '--help-commands' for more)
                 self.announce("    %s = %s (from %s)" % (option, value,
                                                          source))
             try:
-                bool_opts = [translate_longopt(o)
-                             for o in command_obj.boolean_options]
+                bool_opts = map(translate_longopt, command_obj.boolean_options)
             except AttributeError:
                 bool_opts = []
             try:
@@ -860,11 +894,11 @@ Common commands: (see '--help-commands' for more)
                 elif hasattr(command_obj, option):
                     setattr(command_obj, option, value)
                 else:
-                    raise DistutilsOptionError(
-                          "error in %s: command '%s' has no such option '%s'"
-                          % (source, command_name, option))
-            except ValueError as msg:
-                raise DistutilsOptionError(msg)
+                    raise DistutilsOptionError, \
+                          ("error in %s: command '%s' has no such option '%s'"
+                           % (source, command_name, option))
+            except ValueError, msg:
+                raise DistutilsOptionError, msg
 
     def reinitialize_command(self, command, reinit_subcommands=0):
         """Reinitializes a command to the state it was in when first
@@ -989,25 +1023,80 @@ class DistributionMetadata:
                          "provides", "requires", "obsoletes",
                          )
 
-    def __init__ (self):
-        self.name = None
-        self.version = None
-        self.author = None
-        self.author_email = None
+    def __init__(self, path=None):
+        if path is not None:
+            self.read_pkg_file(open(path))
+        else:
+            self.name = None
+            self.version = None
+            self.author = None
+            self.author_email = None
+            self.maintainer = None
+            self.maintainer_email = None
+            self.url = None
+            self.license = None
+            self.description = None
+            self.long_description = None
+            self.keywords = None
+            self.platforms = None
+            self.classifiers = None
+            self.download_url = None
+            # PEP 314
+            self.provides = None
+            self.requires = None
+            self.obsoletes = None
+
+    def read_pkg_file(self, file):
+        """Reads the metadata values from a file object."""
+        msg = message_from_file(file)
+
+        def _read_field(name):
+            value = msg[name]
+            if value == 'UNKNOWN':
+                return None
+            return value
+
+        def _read_list(name):
+            values = msg.get_all(name, None)
+            if values == []:
+                return None
+            return values
+
+        metadata_version = msg['metadata-version']
+        self.name = _read_field('name')
+        self.version = _read_field('version')
+        self.description = _read_field('summary')
+        # we are filling author only.
+        self.author = _read_field('author')
         self.maintainer = None
+        self.author_email = _read_field('author-email')
         self.maintainer_email = None
-        self.url = None
-        self.license = None
-        self.description = None
-        self.long_description = None
-        self.keywords = None
-        self.platforms = None
-        self.classifiers = None
-        self.download_url = None
-        # PEP 314
-        self.provides = None
-        self.requires = None
-        self.obsoletes = None
+        self.url = _read_field('home-page')
+        self.license = _read_field('license')
+
+        if 'download-url' in msg:
+            self.download_url = _read_field('download-url')
+        else:
+            self.download_url = None
+
+        self.long_description = _read_field('description')
+        self.description = _read_field('summary')
+
+        if 'keywords' in msg:
+            self.keywords = _read_field('keywords').split(',')
+
+        self.platforms = _read_list('platform')
+        self.classifiers = _read_list('classifier')
+
+        # PEP 314 - these fields only exist in 1.1
+        if metadata_version == '1.1':
+            self.requires = _read_list('requires')
+            self.provides = _read_list('provides')
+            self.obsoletes = _read_list('obsoletes')
+        else:
+            self.requires = None
+            self.provides = None
+            self.obsoletes = None
 
     def write_pkg_info(self, base_dir):
         """Write the PKG-INFO file into the release tree.
@@ -1022,26 +1111,27 @@ class DistributionMetadata:
         """Write the PKG-INFO format data to a file object.
         """
         version = '1.0'
-        if self.provides or self.requires or self.obsoletes:
+        if (self.provides or self.requires or self.obsoletes or
+            self.classifiers or self.download_url):
             version = '1.1'
 
-        file.write('Metadata-Version: %s\n' % version)
-        file.write('Name: %s\n' % self.get_name() )
-        file.write('Version: %s\n' % self.get_version() )
-        file.write('Summary: %s\n' % self.get_description() )
-        file.write('Home-page: %s\n' % self.get_url() )
-        file.write('Author: %s\n' % self.get_contact() )
-        file.write('Author-email: %s\n' % self.get_contact_email() )
-        file.write('License: %s\n' % self.get_license() )
+        self._write_field(file, 'Metadata-Version', version)
+        self._write_field(file, 'Name', self.get_name())
+        self._write_field(file, 'Version', self.get_version())
+        self._write_field(file, 'Summary', self.get_description())
+        self._write_field(file, 'Home-page', self.get_url())
+        self._write_field(file, 'Author', self.get_contact())
+        self._write_field(file, 'Author-email', self.get_contact_email())
+        self._write_field(file, 'License', self.get_license())
         if self.download_url:
-            file.write('Download-URL: %s\n' % self.download_url)
+            self._write_field(file, 'Download-URL', self.download_url)
 
         long_desc = rfc822_escape(self.get_long_description())
-        file.write('Description: %s\n' % long_desc)
+        self._write_field(file, 'Description', long_desc)
 
         keywords = ','.join(self.get_keywords())
         if keywords:
-            file.write('Keywords: %s\n' % keywords )
+            self._write_field(file, 'Keywords', keywords)
 
         self._write_list(file, 'Platform', self.get_platforms())
         self._write_list(file, 'Classifier', self.get_classifiers())
@@ -1051,9 +1141,19 @@ class DistributionMetadata:
         self._write_list(file, 'Provides', self.get_provides())
         self._write_list(file, 'Obsoletes', self.get_obsoletes())
 
-    def _write_list(self, file, name, values):
+    def _write_field(self, file, name, value):
+        file.write('%s: %s\n' % (name, self._encode_field(value)))
+
+    def _write_list (self, file, name, values):
         for value in values:
-            file.write('%s: %s\n' % (name, value))
+            self._write_field(file, name, value)
+
+    def _encode_field(self, value):
+        if value is None:
+            return None
+        if isinstance(value, unicode):
+            return value.encode(PKG_INFO_ENCODING)
+        return str(value)
 
     # -- Metadata query methods ----------------------------------------
 
@@ -1067,19 +1167,20 @@ class DistributionMetadata:
         return "%s-%s" % (self.get_name(), self.get_version())
 
     def get_author(self):
-        return self.author or "UNKNOWN"
+        return self._encode_field(self.author) or "UNKNOWN"
 
     def get_author_email(self):
         return self.author_email or "UNKNOWN"
 
     def get_maintainer(self):
-        return self.maintainer or "UNKNOWN"
+        return self._encode_field(self.maintainer) or "UNKNOWN"
 
     def get_maintainer_email(self):
         return self.maintainer_email or "UNKNOWN"
 
     def get_contact(self):
-        return self.maintainer or self.author or "UNKNOWN"
+        return (self._encode_field(self.maintainer) or
+                self._encode_field(self.author) or "UNKNOWN")
 
     def get_contact_email(self):
         return self.maintainer_email or self.author_email or "UNKNOWN"
@@ -1092,10 +1193,10 @@ class DistributionMetadata:
     get_licence = get_license
 
     def get_description(self):
-        return self.description or "UNKNOWN"
+        return self._encode_field(self.description) or "UNKNOWN"
 
     def get_long_description(self):
-        return self.long_description or "UNKNOWN"
+        return self._encode_field(self.long_description) or "UNKNOWN"
 
     def get_keywords(self):
         return self.keywords or []

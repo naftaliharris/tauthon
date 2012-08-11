@@ -47,7 +47,7 @@ static void
 Noddy_dealloc(Noddy* self)
 {
     Noddy_clear(self);
-    Py_TYPE(self)->tp_free((PyObject*)self);
+    self->ob_type->tp_free((PyObject*)self);
 }
 
 static PyObject *
@@ -57,14 +57,14 @@ Noddy_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     self = (Noddy *)type->tp_alloc(type, 0);
     if (self != NULL) {
-        self->first = PyUnicode_FromString("");
+        self->first = PyString_FromString("");
         if (self->first == NULL)
           {
             Py_DECREF(self);
             return NULL;
           }
         
-        self->last = PyUnicode_FromString("");
+        self->last = PyString_FromString("");
         if (self->last == NULL)
           {
             Py_DECREF(self);
@@ -124,7 +124,7 @@ Noddy_name(Noddy* self)
     PyObject *args, *result;
 
     if (format == NULL) {
-        format = PyUnicode_FromString("%s %s");
+        format = PyString_FromString("%s %s");
         if (format == NULL)
             return NULL;
     }
@@ -143,7 +143,7 @@ Noddy_name(Noddy* self)
     if (args == NULL)
         return NULL;
 
-    result = PyUnicode_Format(format, args);
+    result = PyString_Format(format, args);
     Py_DECREF(args);
     
     return result;
@@ -157,28 +157,27 @@ static PyMethodDef Noddy_methods[] = {
 };
 
 static PyTypeObject NoddyType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "noddy.Noddy",             /* tp_name */
-    sizeof(Noddy),             /* tp_basicsize */
-    0,                         /* tp_itemsize */
-    (destructor)Noddy_dealloc, /* tp_dealloc */
-    0,                         /* tp_print */
-    0,                         /* tp_getattr */
-    0,                         /* tp_setattr */
-    0,                         /* tp_reserved */
-    0,                         /* tp_repr */
-    0,                         /* tp_as_number */
-    0,                         /* tp_as_sequence */
-    0,                         /* tp_as_mapping */
-    0,                         /* tp_hash  */
-    0,                         /* tp_call */
-    0,                         /* tp_str */
-    0,                         /* tp_getattro */
-    0,                         /* tp_setattro */
-    0,                         /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT |
-        Py_TPFLAGS_BASETYPE |
-        Py_TPFLAGS_HAVE_GC,    /* tp_flags */
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+    "noddy.Noddy",             /*tp_name*/
+    sizeof(Noddy),             /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    (destructor)Noddy_dealloc, /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
     "Noddy objects",           /* tp_doc */
     (traverseproc)Noddy_traverse,   /* tp_traverse */
     (inquiry)Noddy_clear,           /* tp_clear */
@@ -199,27 +198,27 @@ static PyTypeObject NoddyType = {
     Noddy_new,                 /* tp_new */
 };
 
-static PyModuleDef noddy4module = {
-    PyModuleDef_HEAD_INIT,
-    "noddy4",
-    "Example module that creates an extension type.",
-    -1,
-    NULL, NULL, NULL, NULL, NULL
+static PyMethodDef module_methods[] = {
+    {NULL}  /* Sentinel */
 };
 
+#ifndef PyMODINIT_FUNC	/* declarations for DLL import/export */
+#define PyMODINIT_FUNC void
+#endif
 PyMODINIT_FUNC
-PyInit_noddy4(void) 
+initnoddy4(void) 
 {
     PyObject* m;
 
     if (PyType_Ready(&NoddyType) < 0)
-        return NULL;
+        return;
 
-    m = PyModule_Create(&noddy4module);
+    m = Py_InitModule3("noddy4", module_methods,
+                       "Example module that creates an extension type.");
+
     if (m == NULL)
-        return NULL;
+      return;
 
     Py_INCREF(&NoddyType);
     PyModule_AddObject(m, "Noddy", (PyObject *)&NoddyType);
-    return m;
 }

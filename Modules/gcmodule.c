@@ -9,14 +9,9 @@
   Eric Tiedemann, and various others.
 
   http://www.arctrix.com/nas/python/gc/
-
-  The following mailing list threads provide a historical perspective on
-  the design of this module.  Note that a fair amount of refinement has
-  occurred since those discussions.
-
-  http://mail.python.org/pipermail/python-dev/2000-March/002385.html
-  http://mail.python.org/pipermail/python-dev/2000-March/002434.html
-  http://mail.python.org/pipermail/python-dev/2000-March/002497.html
+  http://www.python.org/pipermail/python-dev/2000-March/003869.html
+  http://www.python.org/pipermail/python-dev/2000-March/004010.html
+  http://www.python.org/pipermail/python-dev/2000-March/004022.html
 
   For a highlevel view of the collection process, read the collect
   function.
@@ -116,14 +111,58 @@ static Py_ssize_t long_lived_pending = 0;
     http://mail.python.org/pipermail/python-dev/2008-June/080579.html
 */
 
+/*
+   NOTE: about untracking of mutable objects.
+   
+   Certain types of container cannot participate in a reference cycle, and
+   so do not need to be tracked by the garbage collector. Untracking these
+   objects reduces the cost of garbage collections. However, determining
+   which objects may be untracked is not free, and the costs must be
+   weighed against the benefits for garbage collection.
+
+   There are two possible strategies for when to untrack a container:
+
+   i) When the container is created.
+   ii) When the container is examined by the garbage collector.
+
+   Tuples containing only immutable objects (integers, strings etc, and
+   recursively, tuples of immutable objects) do not need to be tracked.
+   The interpreter creates a large number of tuples, many of which will
+   not survive until garbage collection. It is therefore not worthwhile
+   to untrack eligible tuples at creation time.
+
+   Instead, all tuples except the empty tuple are tracked when created. 
+   During garbage collection it is determined whether any surviving tuples 
+   can be untracked. A tuple can be untracked if all of its contents are 
+   already not tracked. Tuples are examined for untracking in all garbage 
+   collection cycles. It may take more than one cycle to untrack a tuple.
+
+   Dictionaries containing only immutable objects also do not need to be
+   tracked. Dictionaries are untracked when created. If a tracked item is
+   inserted into a dictionary (either as a key or value), the dictionary
+   becomes tracked. During a full garbage collection (all generations),
+   the collector will untrack any dictionaries whose contents are not
+   tracked.
+
+   The module provides the python function is_tracked(obj), which returns
+   the CURRENT tracking status of the object. Subsequent garbage
+   collections may change the tracking status of the object.
+   
+   Untracking of certain containers was introduced in issue #4688, and 
+   the algorithm was refined in response to issue #14775.
+*/
 
 /* set for debugging information */
 #define DEBUG_STATS             (1<<0) /* print collection statistics */
 #define DEBUG_COLLECTABLE       (1<<1) /* print collectable objects */
 #define DEBUG_UNCOLLECTABLE     (1<<2) /* print uncollectable objects */
+#define DEBUG_INSTANCES         (1<<3) /* print instances */
+#define DEBUG_OBJECTS           (1<<4) /* print other objects */
 #define DEBUG_SAVEALL           (1<<5) /* save all garbage in gc.garbage */
 #define DEBUG_LEAK              DEBUG_COLLECTABLE | \
                 DEBUG_UNCOLLECTABLE | \
+                DEBUG_INSTANCES | \
+                DEBUG_OBJECTS | \
                 DEBUG_SAVEALL
 static int debug;
 static PyObject *tmod = NULL;
@@ -437,9 +476,6 @@ move_unreachable(PyGC_Head *young, PyGC_Head *unreachable)
             if (PyTuple_CheckExact(op)) {
                 _PyTuple_MaybeUntrack(op);
             }
-            else if (PyDict_CheckExact(op)) {
-                _PyDict_MaybeUntrack(op);
-            }
         }
         else {
             /* This *may* be unreachable.  To make progress,
@@ -457,14 +493,40 @@ move_unreachable(PyGC_Head *young, PyGC_Head *unreachable)
     }
 }
 
-/* Return true if object has a finalization method. */
+/* Return true if object has a finalization method.
+ * CAUTION:  An instance of an old-style class has to be checked for a
+ *__del__ method, and earlier versions of this used to call PyObject_HasAttr,
+ * which in turn could call the class's __getattr__ hook (if any).  That
+ * could invoke arbitrary Python code, mutating the object graph in arbitrary
+ * ways, and that was the source of some excruciatingly subtle bugs.
+ */
 static int
 has_finalizer(PyObject *op)
 {
-    if (PyGen_CheckExact(op))
+    if (PyInstance_Check(op)) {
+        assert(delstr != NULL);
+        return _PyInstance_Lookup(op, delstr) != NULL;
+    }
+    else if (PyType_HasFeature(op->ob_type, Py_TPFLAGS_HEAPTYPE))
+        return op->ob_type->tp_del != NULL;
+    else if (PyGen_CheckExact(op))
         return PyGen_NeedsFinalizing((PyGenObject *)op);
     else
-        return op->ob_type->tp_del != NULL;
+        return 0;
+}
+
+/* Try to untrack all currently tracked dictionaries */
+static void
+untrack_dicts(PyGC_Head *head)
+{
+    PyGC_Head *next, *gc = head->gc.gc_next;
+    while (gc != head) {
+        PyObject *op = FROM_GC(gc);
+        next = gc->gc.gc_next;
+        if (PyDict_CheckExact(op))
+            _PyDict_MaybeUntrack(op);
+        gc = next;
+    }
 }
 
 /* Move the objects in unreachable with __del__ methods into `finalizers`.
@@ -678,10 +740,29 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 }
 
 static void
+debug_instance(char *msg, PyInstanceObject *inst)
+{
+    char *cname;
+    /* simple version of instance_repr */
+    PyObject *classname = inst->in_class->cl_name;
+    if (classname != NULL && PyString_Check(classname))
+        cname = PyString_AsString(classname);
+    else
+        cname = "?";
+    PySys_WriteStderr("gc: %.100s <%.100s instance at %p>\n",
+                      msg, cname, inst);
+}
+
+static void
 debug_cycle(char *msg, PyObject *op)
 {
-    PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
-                      msg, Py_TYPE(op)->tp_name, op);
+    if ((debug & DEBUG_INSTANCES) && PyInstance_Check(op)) {
+        debug_instance(msg, (PyInstanceObject *)op);
+    }
+    else if (debug & DEBUG_OBJECTS) {
+        PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
+                          msg, Py_TYPE(op)->tp_name, op);
+    }
 }
 
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
@@ -760,7 +841,10 @@ clear_freelists(void)
     (void)PyFrame_ClearFreeList();
     (void)PyCFunction_ClearFreeList();
     (void)PyTuple_ClearFreeList();
+#ifdef Py_USING_UNICODE
     (void)PyUnicode_ClearFreeList();
+#endif
+    (void)PyInt_ClearFreeList();
     (void)PyFloat_ClearFreeList();
 }
 
@@ -798,7 +882,7 @@ collect(int generation)
     double t1 = 0.0;
 
     if (delstr == NULL) {
-        delstr = PyUnicode_InternFromString("__del__");
+        delstr = PyString_InternFromString("__del__");
         if (delstr == NULL)
             Py_FatalError("gc couldn't allocate \"__del__\"");
     }
@@ -857,6 +941,9 @@ collect(int generation)
         gc_list_merge(young, old);
     }
     else {
+        /* We only untrack dicts in full collections, to avoid quadratic
+           dict build-up. See issue #14775. */
+        untrack_dicts(young);
         long_lived_pending = 0;
         long_lived_total = gc_list_size(young);
     }
@@ -935,7 +1022,7 @@ collect(int generation)
 
     if (PyErr_Occurred()) {
         if (gc_str == NULL)
-            gc_str = PyUnicode_FromString("garbage collection");
+            gc_str = PyString_FromString("garbage collection");
         PyErr_WriteUnraisable(gc_str);
         Py_FatalError("unexpected exception during garbage collection");
     }
@@ -1035,7 +1122,7 @@ gc_collect(PyObject *self, PyObject *args, PyObject *kws)
         collecting = 0;
     }
 
-    return PyLong_FromSsize_t(n);
+    return PyInt_FromSsize_t(n);
 }
 
 PyDoc_STRVAR(gc_set_debug__doc__,
@@ -1049,6 +1136,8 @@ PyDoc_STRVAR(gc_set_debug__doc__,
 "  DEBUG_STATS - Print statistics during collection.\n"
 "  DEBUG_COLLECTABLE - Print collectable objects found.\n"
 "  DEBUG_UNCOLLECTABLE - Print unreachable but uncollectable objects found.\n"
+"  DEBUG_INSTANCES - Print instance objects.\n"
+"  DEBUG_OBJECTS - Print objects other than instances.\n"
 "  DEBUG_SAVEALL - Save objects to gc.garbage rather than freeing them.\n"
 "  DEBUG_LEAK - Debug leaking programs (everything but STATS).\n");
 
@@ -1293,36 +1382,27 @@ static PyMethodDef GcMethods[] = {
     {NULL,      NULL}           /* Sentinel */
 };
 
-static struct PyModuleDef gcmodule = {
-    PyModuleDef_HEAD_INIT,
-    "gc",              /* m_name */
-    gc__doc__,         /* m_doc */
-    -1,                /* m_size */
-    GcMethods,         /* m_methods */
-    NULL,              /* m_reload */
-    NULL,              /* m_traverse */
-    NULL,              /* m_clear */
-    NULL               /* m_free */
-};
-
 PyMODINIT_FUNC
-PyInit_gc(void)
+initgc(void)
 {
     PyObject *m;
 
-    m = PyModule_Create(&gcmodule);
-
+    m = Py_InitModule4("gc",
+                          GcMethods,
+                          gc__doc__,
+                          NULL,
+                          PYTHON_API_VERSION);
     if (m == NULL)
-        return NULL;
+        return;
 
     if (garbage == NULL) {
         garbage = PyList_New(0);
         if (garbage == NULL)
-            return NULL;
+            return;
     }
     Py_INCREF(garbage);
     if (PyModule_AddObject(m, "garbage", garbage) < 0)
-        return NULL;
+        return;
 
     /* Importing can't be done in collect() because collect()
      * can be called via PyGC_Collect() in Py_Finalize().
@@ -1336,14 +1416,15 @@ PyInit_gc(void)
             PyErr_Clear();
     }
 
-#define ADD_INT(NAME) if (PyModule_AddIntConstant(m, #NAME, NAME) < 0) return NULL
+#define ADD_INT(NAME) if (PyModule_AddIntConstant(m, #NAME, NAME) < 0) return
     ADD_INT(DEBUG_STATS);
     ADD_INT(DEBUG_COLLECTABLE);
     ADD_INT(DEBUG_UNCOLLECTABLE);
+    ADD_INT(DEBUG_INSTANCES);
+    ADD_INT(DEBUG_OBJECTS);
     ADD_INT(DEBUG_SAVEALL);
     ADD_INT(DEBUG_LEAK);
 #undef ADD_INT
-    return m;
 }
 
 /* API to invoke gc.collect() from C */
@@ -1361,38 +1442,6 @@ PyGC_Collect(void)
     }
 
     return n;
-}
-
-void
-_PyGC_Fini(void)
-{
-    if (!(debug & DEBUG_SAVEALL)
-        && garbage != NULL && PyList_GET_SIZE(garbage) > 0) {
-        char *message;
-        if (debug & DEBUG_UNCOLLECTABLE)
-            message = "gc: %zd uncollectable objects at " \
-                "shutdown";
-        else
-            message = "gc: %zd uncollectable objects at " \
-                "shutdown; use gc.set_debug(gc.DEBUG_UNCOLLECTABLE) to list them";
-        if (PyErr_WarnFormat(PyExc_ResourceWarning, 0, message,
-                             PyList_GET_SIZE(garbage)) < 0)
-            PyErr_WriteUnraisable(NULL);
-        if (debug & DEBUG_UNCOLLECTABLE) {
-            PyObject *repr = NULL, *bytes = NULL;
-            repr = PyObject_Repr(garbage);
-            if (!repr || !(bytes = PyUnicode_EncodeFSDefault(repr)))
-                PyErr_WriteUnraisable(garbage);
-            else {
-                PySys_WriteStderr(
-                    "    %s\n",
-                    PyBytes_AS_STRING(bytes)
-                    );
-            }
-            Py_XDECREF(repr);
-            Py_XDECREF(bytes);
-        }
-    }
 }
 
 /* for debugging */
@@ -1510,4 +1559,12 @@ PyObject_GC_Del(void *op)
         generations[0].count--;
     }
     PyObject_FREE(g);
+}
+
+/* for binary compatibility with 2.2 */
+#undef _PyObject_GC_Del
+void
+_PyObject_GC_Del(PyObject *op)
+{
+    PyObject_GC_Del(op);
 }

@@ -5,6 +5,9 @@
    :synopsis: Locate and run Python modules without importing them first.
 .. moduleauthor:: Nick Coghlan <ncoghlan@gmail.com>
 
+
+.. versionadded:: 2.5
+
 **Source code:** :source:`Lib/runpy.py`
 
 --------------
@@ -35,8 +38,7 @@ The :mod:`runpy` module provides two functions:
    below are defined in the supplied dictionary, those definitions are
    overridden by :func:`run_module`.
 
-   The special global variables ``__name__``, ``__file__``, ``__cached__``,
-   ``__loader__``
+   The special global variables ``__name__``, ``__file__``, ``__loader__``
    and ``__package__`` are set in the globals dictionary before the module
    code is executed (Note that this is a minimal set of variables - other
    variables may be set implicitly as an interpreter implementation detail).
@@ -48,8 +50,6 @@ The :mod:`runpy` module provides two functions:
    ``__file__`` is set to the name provided by the module loader. If the
    loader does not make filename information available, this variable is set
    to :const:`None`.
-
-    ``__cached__`` will be set to ``None``.
 
    ``__loader__`` is set to the :pep:`302` module loader used to retrieve the
    code for the module (This loader may be a wrapper around the standard
@@ -70,11 +70,9 @@ The :mod:`runpy` module provides two functions:
    invoking this function from threaded code.
 
 
-   .. versionchanged:: 3.1
-      Added ability to execute packages by looking for a ``__main__`` submodule.
-
-   .. versionchanged:: 3.2
-      Added ``__cached__`` global variable (see :PEP:`3147`).
+   .. versionchanged:: 2.7
+         Added ability to execute packages by looking for a ``__main__``
+         submodule
 
 
 .. function:: run_path(file_path, init_globals=None, run_name=None)
@@ -130,7 +128,7 @@ The :mod:`runpy` module provides two functions:
    limitations still apply, use of this function in threaded code should be
    either serialised with the import lock or delegated to a separate process.
 
-   .. versionadded:: 3.2
+   .. versionadded:: 2.7
 
 .. seealso::
 

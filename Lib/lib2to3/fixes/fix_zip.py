@@ -29,7 +29,7 @@ class FixZip(fixer_base.ConditionalFix):
             return None
 
         new = node.clone()
-        new.prefix = ""
-        new = Call(Name("list"), [new])
+        new.prefix = u""
+        new = Call(Name(u"list"), [new])
         new.prefix = node.prefix
         return new

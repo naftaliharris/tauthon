@@ -9,7 +9,7 @@ Written by Marc-Andre Lemburg (mal@lemburg.com).
 
 """#"
 
-import test.support, unittest
+import test.test_support, unittest
 
 import codecs
 
@@ -27,30 +27,30 @@ codecname = 'testcodec'
 
 class CharmapCodecTest(unittest.TestCase):
     def test_constructorx(self):
-        self.assertEqual(str(b'abc', codecname), 'abc')
-        self.assertEqual(str(b'xdef', codecname), 'abcdef')
-        self.assertEqual(str(b'defx', codecname), 'defabc')
-        self.assertEqual(str(b'dxf', codecname), 'dabcf')
-        self.assertEqual(str(b'dxfx', codecname), 'dabcfabc')
+        self.assertEqual(unicode('abc', codecname), u'abc')
+        self.assertEqual(unicode('xdef', codecname), u'abcdef')
+        self.assertEqual(unicode('defx', codecname), u'defabc')
+        self.assertEqual(unicode('dxf', codecname), u'dabcf')
+        self.assertEqual(unicode('dxfx', codecname), u'dabcfabc')
 
     def test_encodex(self):
-        self.assertEqual('abc'.encode(codecname), b'abc')
-        self.assertEqual('xdef'.encode(codecname), b'abcdef')
-        self.assertEqual('defx'.encode(codecname), b'defabc')
-        self.assertEqual('dxf'.encode(codecname), b'dabcf')
-        self.assertEqual('dxfx'.encode(codecname), b'dabcfabc')
+        self.assertEqual(u'abc'.encode(codecname), 'abc')
+        self.assertEqual(u'xdef'.encode(codecname), 'abcdef')
+        self.assertEqual(u'defx'.encode(codecname), 'defabc')
+        self.assertEqual(u'dxf'.encode(codecname), 'dabcf')
+        self.assertEqual(u'dxfx'.encode(codecname), 'dabcfabc')
 
     def test_constructory(self):
-        self.assertEqual(str(b'ydef', codecname), 'def')
-        self.assertEqual(str(b'defy', codecname), 'def')
-        self.assertEqual(str(b'dyf', codecname), 'df')
-        self.assertEqual(str(b'dyfy', codecname), 'df')
+        self.assertEqual(unicode('ydef', codecname), u'def')
+        self.assertEqual(unicode('defy', codecname), u'def')
+        self.assertEqual(unicode('dyf', codecname), u'df')
+        self.assertEqual(unicode('dyfy', codecname), u'df')
 
     def test_maptoundefined(self):
-        self.assertRaises(UnicodeError, str, b'abc\001', codecname)
+        self.assertRaises(UnicodeError, unicode, 'abc\001', codecname)
 
 def test_main():
-    test.support.run_unittest(CharmapCodecTest)
+    test.test_support.run_unittest(CharmapCodecTest)
 
 if __name__ == "__main__":
     test_main()

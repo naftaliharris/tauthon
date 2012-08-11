@@ -6,9 +6,10 @@ distribution)."""
 __revision__ = "$Id$"
 
 import os
-from distutils.core import Command
-from distutils.errors import *
+
 from distutils.util import get_platform
+from distutils.core import Command
+from distutils.errors import DistutilsPlatformError, DistutilsOptionError
 
 
 def show_formats():
@@ -39,6 +40,12 @@ class bdist(Command):
                      "[default: dist]"),
                     ('skip-build', None,
                      "skip rebuilding everything (for testing/debugging)"),
+                    ('owner=', 'u',
+                     "Owner name used when creating a tar file"
+                     " [default: current user]"),
+                    ('group=', 'g',
+                     "Group name used when creating a tar file"
+                     " [default: current group]"),
                    ]
 
     boolean_options = ['skip-build']
@@ -80,6 +87,8 @@ class bdist(Command):
         self.formats = None
         self.dist_dir = None
         self.skip_build = 0
+        self.group = None
+        self.owner = None
 
     def finalize_options(self):
         # have to finalize 'plat_name' before 'bdist_base'
@@ -102,9 +111,9 @@ class bdist(Command):
             try:
                 self.formats = [self.default_format[os.name]]
             except KeyError:
-                raise DistutilsPlatformError(
-                      "don't know how to create built distributions "
-                      "on platform %s" % os.name)
+                raise DistutilsPlatformError, \
+                      "don't know how to create built distributions " + \
+                      "on platform %s" % os.name
 
         if self.dist_dir is None:
             self.dist_dir = "dist"
@@ -116,7 +125,7 @@ class bdist(Command):
             try:
                 commands.append(self.format_command[format][0])
             except KeyError:
-                raise DistutilsOptionError("invalid format '%s'" % format)
+                raise DistutilsOptionError, "invalid format '%s'" % format
 
         # Reinitialize and run each command.
         for i in range(len(self.formats)):
@@ -124,6 +133,11 @@ class bdist(Command):
             sub_cmd = self.reinitialize_command(cmd_name)
             if cmd_name not in self.no_format_option:
                 sub_cmd.format = self.formats[i]
+
+            # passing the owner and group names for tar archiving
+            if cmd_name == 'bdist_dumb':
+                sub_cmd.owner = self.owner
+                sub_cmd.group = self.group
 
             # If we're going to need to run this command again, tell it to
             # keep its temporary files around so subsequent runs go faster.

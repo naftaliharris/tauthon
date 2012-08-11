@@ -1,11 +1,12 @@
 import sys
+import io
 import linecache
 import time
 import socket
 import traceback
-import _thread as thread
+import thread
 import threading
-import queue
+import Queue
 
 from idlelib import CallTips
 from idlelib import AutoComplete
@@ -73,14 +74,13 @@ def main(del_exitfunc=False):
         assert(len(sys.argv) > 1)
         port = int(sys.argv[-1])
     except:
-        print("IDLE Subprocess: no IP port passed in sys.argv.",
-              file=sys.__stderr__)
+        print>>sys.stderr, "IDLE Subprocess: no IP port passed in sys.argv."
         return
     sys.argv[:] = [""]
     sockthread = threading.Thread(target=manage_socket,
                                   name='SockThread',
                                   args=((LOCALHOST, port),))
-    sockthread.daemon = True
+    sockthread.setDaemon(True)
     sockthread.start()
     while 1:
         try:
@@ -92,7 +92,7 @@ def main(del_exitfunc=False):
                     continue
             try:
                 seq, request = rpc.request_queue.get(block=True, timeout=0.05)
-            except queue.Empty:
+            except Queue.Empty:
                 continue
             method, args, kwargs = request
             ret = method(*args, **kwargs)
@@ -121,23 +121,22 @@ def manage_socket(address):
         try:
             server = MyRPCServer(address, MyHandler)
             break
-        except socket.error as err:
-            print("IDLE Subprocess: socket error: " + err.args[1] +
-                  ", retrying....", file=sys.__stderr__)
-            socket_error = err
+        except socket.error, err:
+            print>>sys.__stderr__,"IDLE Subprocess: socket error: "\
+                                        + err.args[1] + ", retrying...."
     else:
-        print("IDLE Subprocess: Connection to "
-              "IDLE GUI failed, exiting.", file=sys.__stderr__)
-        show_socket_error(socket_error, address)
+        print>>sys.__stderr__, "IDLE Subprocess: Connection to "\
+                               "IDLE GUI failed, exiting."
+        show_socket_error(err, address)
         global exit_now
         exit_now = True
         return
     server.handle_request() # A single request only
 
 def show_socket_error(err, address):
-    import tkinter
-    import tkinter.messagebox as tkMessageBox
-    root = tkinter.Tk()
+    import Tkinter
+    import tkMessageBox
+    root = Tkinter.Tk()
     root.withdraw()
     if err.args[0] == 61: # connection refused
         msg = "IDLE's subprocess can't connect to %s:%d.  This may be due "\
@@ -158,14 +157,14 @@ def print_exception():
     typ, val, tb = excinfo = sys.exc_info()
     sys.last_type, sys.last_value, sys.last_traceback = excinfo
     tbe = traceback.extract_tb(tb)
-    print('Traceback (most recent call last):', file=efile)
-    exclude = ("run.py", "rpc.py", "threading.py", "queue.py",
+    print>>efile, '\nTraceback (most recent call last):'
+    exclude = ("run.py", "rpc.py", "threading.py", "Queue.py",
                "RemoteDebugger.py", "bdb.py")
     cleanup_traceback(tbe, exclude)
     traceback.print_list(tbe, file=efile)
     lines = traceback.format_exception_only(typ, val)
     for line in lines:
-        print(line, end='', file=efile)
+        print>>efile, line,
 
 def cleanup_traceback(tb, exclude):
     "Remove excluded traces from beginning/end of tb; get cached lines"
@@ -187,7 +186,7 @@ def cleanup_traceback(tb, exclude):
     if len(tb) == 0:
         # exception was in IDLE internals, don't prune!
         tb[:] = orig_tb[:]
-        print("** IDLE Internal Exception: ", file=sys.stderr)
+        print>>sys.stderr, "** IDLE Internal Exception: "
     rpchandler = rpc.objecttable['exec'].rpchandler
     for i in range(len(tb)):
         fn, ln, nm, line = tb[i]
@@ -199,19 +198,25 @@ def cleanup_traceback(tb, exclude):
         tb[i] = fn, ln, nm, line
 
 def flush_stdout():
-    """XXX How to do this now?"""
+    try:
+        if sys.stdout.softspace:
+            sys.stdout.softspace = 0
+            sys.stdout.write("\n")
+    except (AttributeError, EOFError):
+        pass
 
 def exit():
-    """Exit subprocess, possibly after first clearing exit functions.
+    """Exit subprocess, possibly after first deleting sys.exitfunc
 
     If config-main.cfg/.def 'General' 'delete-exitfunc' is True, then any
-    functions registered with atexit will be removed before exiting.
-    (VPython support)
+    sys.exitfunc will be removed before exiting.  (VPython support)
 
     """
     if no_exitfunc:
-        import atexit
-        atexit._clear()
+        try:
+            del sys.exitfunc
+        except AttributeError:
+            pass
     sys.exit(0)
 
 class MyRPCServer(rpc.RPCServer):
@@ -233,17 +238,54 @@ class MyRPCServer(rpc.RPCServer):
             thread.interrupt_main()
         except:
             erf = sys.__stderr__
-            print('\n' + '-'*40, file=erf)
-            print('Unhandled server exception!', file=erf)
-            print('Thread: %s' % threading.current_thread().name, file=erf)
-            print('Client Address: ', client_address, file=erf)
-            print('Request: ', repr(request), file=erf)
+            print>>erf, '\n' + '-'*40
+            print>>erf, 'Unhandled server exception!'
+            print>>erf, 'Thread: %s' % threading.currentThread().getName()
+            print>>erf, 'Client Address: ', client_address
+            print>>erf, 'Request: ', repr(request)
             traceback.print_exc(file=erf)
-            print('\n*** Unrecoverable, server exiting!', file=erf)
-            print('-'*40, file=erf)
+            print>>erf, '\n*** Unrecoverable, server exiting!'
+            print>>erf, '-'*40
             quitting = True
             thread.interrupt_main()
 
+class _RPCFile(io.TextIOBase):
+    """Wrapper class for the RPC proxy to typecheck arguments
+    that may not support pickling. The base class is there only
+    to support type tests; all implementations come from the remote
+    object."""
+
+    def __init__(self, rpc):
+        super.__setattr__(self, 'rpc', rpc)
+
+    def __getattribute__(self, name):
+        # When accessing the 'rpc' attribute, or 'write', use ours
+        if name in ('rpc', 'write', 'writelines'):
+            return io.TextIOBase.__getattribute__(self, name)
+        # Else only look into the remote object only
+        return getattr(self.rpc, name)
+
+    def __setattr__(self, name, value):
+        return setattr(self.rpc, name, value)
+
+    @staticmethod
+    def _ensure_string(func):
+        def f(self, s):
+            if not isinstance(s, basestring):
+                raise TypeError('must be str, not ' + type(s).__name__)
+            return func(self, s)
+        return f
+
+class _RPCOutputFile(_RPCFile):
+    @_RPCFile._ensure_string
+    def write(self, s):
+        return self.rpc.write(s)
+
+class _RPCInputFile(_RPCFile):
+    @_RPCFile._ensure_string
+    def write(self, s):
+        raise io.UnsupportedOperation("not writable")
+    writelines = write
 
 class MyHandler(rpc.RPCHandler):
 
@@ -251,12 +293,10 @@ class MyHandler(rpc.RPCHandler):
         """Override base method"""
         executive = Executive(self)
         self.register("exec", executive)
-        sys.stdin = self.console = self.get_remote_proxy("stdin")
-        sys.stdout = self.get_remote_proxy("stdout")
-        sys.stderr = self.get_remote_proxy("stderr")
-        # page help() text to shell.
-        import pydoc # import must be done here to capture i/o binding
-        pydoc.pager = pydoc.plainpager
+        self.console = self.get_remote_proxy("stdin")
+        sys.stdin = _RPCInputFile(self.console)
+        sys.stdout = _RPCOutputFile(self.get_remote_proxy("stdout"))
+        sys.stderr = _RPCOutputFile(self.get_remote_proxy("stderr"))
         from idlelib import IOBinding
         sys.stdin.encoding = sys.stdout.encoding = \
                              sys.stderr.encoding = IOBinding.encoding
@@ -294,7 +334,7 @@ class Executive(object):
             self.usr_exc_info = None
             interruptable = True
             try:
-                exec(code, self.locals)
+                exec code in self.locals
             finally:
                 interruptable = False
         except:

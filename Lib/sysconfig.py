@@ -5,30 +5,14 @@ import sys
 import os
 from os.path import pardir, realpath
 
-__all__ = [
-    'get_config_h_filename',
-    'get_config_var',
-    'get_config_vars',
-    'get_makefile_filename',
-    'get_path',
-    'get_path_names',
-    'get_paths',
-    'get_platform',
-    'get_python_version',
-    'get_scheme_names',
-    'parse_config_h',
-    ]
-
 _INSTALL_SCHEMES = {
     'posix_prefix': {
         'stdlib': '{base}/lib/python{py_version_short}',
         'platstdlib': '{platbase}/lib/python{py_version_short}',
         'purelib': '{base}/lib/python{py_version_short}/site-packages',
         'platlib': '{platbase}/lib/python{py_version_short}/site-packages',
-        'include':
-            '{base}/include/python{py_version_short}{abiflags}',
-        'platinclude':
-            '{platbase}/include/python{py_version_short}{abiflags}',
+        'include': '{base}/include/python{py_version_short}',
+        'platinclude': '{platbase}/include/python{py_version_short}',
         'scripts': '{base}/bin',
         'data': '{base}',
         },
@@ -142,8 +126,8 @@ _PYTHON_BUILD = is_python_build()
 
 if _PYTHON_BUILD:
     for scheme in ('posix_prefix', 'posix_home'):
-        _INSTALL_SCHEMES[scheme]['include'] = '{srcdir}/Include'
-        _INSTALL_SCHEMES[scheme]['platinclude'] = '{projectbase}/.'
+        _INSTALL_SCHEMES[scheme]['include'] = '{projectbase}/Include'
+        _INSTALL_SCHEMES[scheme]['platinclude'] = '{srcdir}'
 
 def _subst_vars(s, local_vars):
     try:
@@ -151,7 +135,7 @@ def _subst_vars(s, local_vars):
     except KeyError:
         try:
             return s.format(**os.environ)
-        except KeyError as var:
+        except KeyError, var:
             raise AttributeError('{%s}' % var)
 
 def _extend_dict(target_dict, other_dict):
@@ -192,8 +176,9 @@ def _getuserbase():
     if sys.platform == "darwin":
         framework = get_config_var("PYTHONFRAMEWORK")
         if framework:
-            return env_base if env_base else joinuser("~", "Library", framework, "%d.%d"%(
-                sys.version_info[:2]))
+            return env_base if env_base else \
+                               joinuser("~", "Library", framework, "%d.%d"
+                                            % (sys.version_info[:2]))
 
     return env_base if env_base else joinuser("~", ".local")
 
@@ -217,7 +202,7 @@ def _parse_makefile(filename, vars=None):
     done = {}
     notdone = {}
 
-    with open(filename, errors="surrogateescape") as f:
+    with open(filename) as f:
         lines = f.readlines()
 
     for line in lines:
@@ -242,19 +227,11 @@ def _parse_makefile(filename, vars=None):
                     done[n] = v
 
     # do variable interpolation here
-    variables = list(notdone.keys())
-
-    # Variables with a 'PY_' prefix in the makefile. These need to
-    # be made available without that prefix through sysconfig.
-    # Special care is needed to ensure that variable expansion works, even
-    # if the expansion uses the name without a prefix.
-    renamed_variables = ('CFLAGS', 'LDFLAGS', 'CPPFLAGS')
-
-    while len(variables) > 0:
-        for name in tuple(variables):
+    while notdone:
+        for name in notdone.keys():
             value = notdone[name]
             m = _findvar1_rx.search(value) or _findvar2_rx.search(value)
-            if m is not None:
+            if m:
                 n = m.group(1)
                 found = True
                 if n in done:
@@ -265,46 +242,23 @@ def _parse_makefile(filename, vars=None):
                 elif n in os.environ:
                     # do it like make: fall back to environment
                     item = os.environ[n]
-
-                elif n in renamed_variables:
-                    if name.startswith('PY_') and name[3:] in renamed_variables:
-                        item = ""
-
-                    elif 'PY_' + n in notdone:
-                        found = False
-
-                    else:
-                        item = str(done['PY_' + n])
-
                 else:
                     done[n] = item = ""
-
                 if found:
                     after = value[m.end():]
                     value = value[:m.start()] + item + after
                     if "$" in after:
                         notdone[name] = value
                     else:
-                        try:
-                            value = int(value)
+                        try: value = int(value)
                         except ValueError:
                             done[name] = value.strip()
                         else:
                             done[name] = value
-                        variables.remove(name)
-
-                        if name.startswith('PY_') \
-                                and name[3:] in renamed_variables:
-
-                            name = name[3:]
-                            if name not in done:
-                                done[name] = value
-
-
+                        del notdone[name]
             else:
                 # bogus variable reference; just drop it since we can't deal
-                variables.remove(name)
-
+                del notdone[name]
     # strip spurious spaces
     for k, v in done.items():
         if isinstance(v, str):
@@ -315,51 +269,35 @@ def _parse_makefile(filename, vars=None):
     return vars
 
 
-def get_makefile_filename():
-    """Return the path of the Makefile."""
+def _get_makefile_filename():
     if _PYTHON_BUILD:
         return os.path.join(_PROJECT_BASE, "Makefile")
-    return os.path.join(get_path('stdlib'),
-                        'config-{}{}'.format(_PY_VERSION_SHORT, sys.abiflags),
-                        'Makefile')
+    return os.path.join(get_path('platstdlib'), "config", "Makefile")
 
 
 def _init_posix(vars):
     """Initialize the module as appropriate for POSIX systems."""
     # load the installed Makefile:
-    makefile = get_makefile_filename()
+    makefile = _get_makefile_filename()
     try:
         _parse_makefile(makefile, vars)
-    except IOError as e:
+    except IOError, e:
         msg = "invalid Python installation: unable to open %s" % makefile
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
         raise IOError(msg)
+
     # load the installed pyconfig.h:
     config_h = get_config_h_filename()
     try:
         with open(config_h) as f:
             parse_config_h(f, vars)
-    except IOError as e:
+    except IOError, e:
         msg = "invalid Python installation: unable to open %s" % config_h
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
         raise IOError(msg)
-    # On MacOSX we need to check the setting of the environment variable
-    # MACOSX_DEPLOYMENT_TARGET: configure bases some choices on it so
-    # it needs to be compatible.
-    # If it isn't set we set it to the configure-time value
-    if sys.platform == 'darwin' and 'MACOSX_DEPLOYMENT_TARGET' in vars:
-        cfg_target = vars['MACOSX_DEPLOYMENT_TARGET']
-        cur_target = os.getenv('MACOSX_DEPLOYMENT_TARGET', '')
-        if cur_target == '':
-            cur_target = cfg_target
-            os.putenv('MACOSX_DEPLOYMENT_TARGET', cfg_target)
-        elif (list(map(int, cfg_target.split('.'))) >
-              list(map(int, cur_target.split('.')))):
-            msg = ('$MACOSX_DEPLOYMENT_TARGET mismatch: now "%s" but "%s" '
-                   'during configure' % (cur_target, cfg_target))
-            raise IOError(msg)
+
     # On AIX, there are wrong paths to the linker scripts in the Makefile
     # -- these paths are relative to the Python source, but when installed
     # the scripts are in another directory.
@@ -412,7 +350,7 @@ def parse_config_h(fp, vars=None):
     return vars
 
 def get_config_h_filename():
-    """Return the path of pyconfig.h."""
+    """Returns the path of pyconfig.h."""
     if _PYTHON_BUILD:
         if os.name == "nt":
             inc_dir = os.path.join(_PROJECT_BASE, "PC")
@@ -423,17 +361,17 @@ def get_config_h_filename():
     return os.path.join(inc_dir, 'pyconfig.h')
 
 def get_scheme_names():
-    """Return a tuple containing the schemes names."""
-    schemes = list(_INSTALL_SCHEMES.keys())
+    """Returns a tuple containing the schemes names."""
+    schemes = _INSTALL_SCHEMES.keys()
     schemes.sort()
     return tuple(schemes)
 
 def get_path_names():
-    """Return a tuple containing the paths names."""
+    """Returns a tuple containing the paths names."""
     return _SCHEME_KEYS
 
 def get_paths(scheme=_get_default_scheme(), vars=None, expand=True):
-    """Return a mapping containing an install scheme.
+    """Returns a mapping containing an install scheme.
 
     ``scheme`` is the install scheme name. If not provided, it will
     return the default scheme for the current platform.
@@ -444,7 +382,7 @@ def get_paths(scheme=_get_default_scheme(), vars=None, expand=True):
         return _INSTALL_SCHEMES[scheme]
 
 def get_path(name, scheme=_get_default_scheme(), vars=None, expand=True):
-    """Return a path corresponding to the scheme.
+    """Returns a path corresponding to the scheme.
 
     ``scheme`` is the install scheme name.
     """
@@ -475,16 +413,12 @@ def get_config_vars(*args):
         _CONFIG_VARS['base'] = _PREFIX
         _CONFIG_VARS['platbase'] = _EXEC_PREFIX
         _CONFIG_VARS['projectbase'] = _PROJECT_BASE
-        try:
-            _CONFIG_VARS['abiflags'] = sys.abiflags
-        except AttributeError:
-            # sys.abiflags may not be defined on all platforms.
-            _CONFIG_VARS['abiflags'] = ''
 
         if os.name in ('nt', 'os2'):
             _init_non_posix(_CONFIG_VARS)
         if os.name == 'posix':
             _init_posix(_CONFIG_VARS)
+
         # Setting 'userbase' is done below the call to the
         # init function to enable using 'get_config_var' in
         # the init-function.
@@ -492,9 +426,6 @@ def get_config_vars(*args):
 
         if 'srcdir' not in _CONFIG_VARS:
             _CONFIG_VARS['srcdir'] = _PROJECT_BASE
-        else:
-            _CONFIG_VARS['srcdir'] = _safe_realpath(_CONFIG_VARS['srcdir'])
-
 
         # Convert srcdir into an absolute path if it appears necessary.
         # Normally it is relative to the build directory.  However, during
@@ -652,6 +583,11 @@ def get_platform():
         if release[0] >= "5":           # SunOS 5 == Solaris 2
             osname = "solaris"
             release = "%d.%s" % (int(release[0]) - 3, release[2:])
+            # We can't use "platform.architecture()[0]" because a
+            # bootstrap problem. We use a dict to get an error
+            # if some suspicious happens.
+            bitness = {2147483647:"32bit", 9223372036854775807:"64bit"}
+            machine += ".%s" % bitness[sys.maxint]
         # fall through to standard osname-release-machine representation
     elif osname[:4] == "irix":              # could be "irix64"!
         return "%s-%s" % (osname, release)
@@ -671,9 +607,7 @@ def get_platform():
         # machine is going to compile and link as if it were
         # MACOSX_DEPLOYMENT_TARGET.
         cfgvars = get_config_vars()
-        macver = os.environ.get('MACOSX_DEPLOYMENT_TARGET')
-        if not macver:
-            macver = cfgvars.get('MACOSX_DEPLOYMENT_TARGET')
+        macver = cfgvars.get('MACOSX_DEPLOYMENT_TARGET')
 
         if 1:
             # Always calculate the release of the running machine,
@@ -694,7 +628,6 @@ def get_platform():
                     m = re.search(
                             r'<key>ProductUserVisibleVersion</key>\s*' +
                             r'<string>(.*?)</string>', f.read())
-                    f.close()
                     if m is not None:
                         macrelease = '.'.join(m.group(1).split('.')[:2])
                     # else: fall back to the default behaviour
@@ -742,13 +675,13 @@ def get_platform():
                 # On OSX the machine type returned by uname is always the
                 # 32-bit variant, even if the executable architecture is
                 # the 64-bit variant
-                if sys.maxsize >= 2**32:
+                if sys.maxint >= 2**32:
                     machine = 'x86_64'
 
             elif machine in ('PowerPC', 'Power_Macintosh'):
                 # Pick a sane name for the PPC architecture.
                 # See 'i386' case
-                if sys.maxsize >= 2**32:
+                if sys.maxint >= 2**32:
                     machine = 'ppc64'
                 else:
                     machine = 'ppc'
@@ -758,22 +691,3 @@ def get_platform():
 
 def get_python_version():
     return _PY_VERSION_SHORT
-
-def _print_dict(title, data):
-    for index, (key, value) in enumerate(sorted(data.items())):
-        if index == 0:
-            print('{0}: '.format(title))
-        print('\t{0} = "{1}"'.format(key, value))
-
-def _main():
-    """Display all information sysconfig detains."""
-    print('Platform: "{0}"'.format(get_platform()))
-    print('Python version: "{0}"'.format(get_python_version()))
-    print('Current installation scheme: "{0}"'.format(_get_default_scheme()))
-    print('')
-    _print_dict('Paths', get_paths())
-    print('')
-    _print_dict('Variables', get_config_vars())
-
-if __name__ == '__main__':
-    _main()

@@ -1,11 +1,12 @@
 :mod:`modulefinder` --- Find modules used by a script
 =====================================================
 
+.. module:: modulefinder
+   :synopsis: Find modules used by a script.
 .. sectionauthor:: A.M. Kuchling <amk@amk.ca>
 
 
-.. module:: modulefinder
-   :synopsis: Find modules used by a script.
+.. versionadded:: 2.3
 
 **Source code:** :source:`Lib/modulefinder.py`
 
@@ -29,12 +30,12 @@ report of the imported modules will be printed.
    package replaces the :mod:`xml` package.
 
 
-.. class:: ModuleFinder(path=None, debug=0, excludes=[], replace_paths=[])
+.. class:: ModuleFinder([path=None, debug=0, excludes=[], replace_paths=[]])
 
    This class provides :meth:`run_script` and :meth:`report` methods to determine
    the set of modules imported by a script. *path* can be a list of directories to
    search for modules; if not specified, ``sys.path`` is used.  *debug* sets the
-   debugging level; higher values make the class print debugging messages about
+   debugging level; higher values make the class print  debugging messages about
    what it's doing. *excludes* is a list of module names to exclude from the
    analysis. *replace_paths* is a list of ``(oldpath, newpath)`` tuples that will
    be replaced in module paths.
@@ -84,20 +85,20 @@ The script that will output the report of bacon.py::
    finder = ModuleFinder()
    finder.run_script('bacon.py')
 
-   print('Loaded modules:')
-   for name, mod in finder.modules.items():
-       print('%s: ' % name, end='')
-       print(','.join(list(mod.globalnames.keys())[:3]))
+   print 'Loaded modules:'
+   for name, mod in finder.modules.iteritems():
+       print '%s: ' % name,
+       print ','.join(mod.globalnames.keys()[:3])
 
-   print('-'*50)
-   print('Modules not imported:')
-   print('\n'.join(finder.badmodules.keys()))
+   print '-'*50
+   print 'Modules not imported:'
+   print '\n'.join(finder.badmodules.iterkeys())
 
 Sample output (may vary depending on the architecture)::
 
     Loaded modules:
     _types:
-    copyreg:  _inverted_registry,_slotnames,__all__
+    copy_reg:  _inverted_registry,_slotnames,__all__
     sre_compile:  isstring,_sre,_optimize_unicode
     _sre:
     sre_constants:  REPEAT_ONE,makedict,AT_END_LINE

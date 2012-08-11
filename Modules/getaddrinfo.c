@@ -129,12 +129,12 @@ static struct gai_afd {
 #define IN_LOOPBACKNET      127
 #endif
 
-static int get_name(const char *, struct gai_afd *,
+static int get_name Py_PROTO((const char *, struct gai_afd *,
                           struct addrinfo **, char *, struct addrinfo *,
-                          int);
-static int get_addr(const char *, int, struct addrinfo **,
-                        struct addrinfo *, int);
-static int str_isnumber(const char *);
+                          int));
+static int get_addr Py_PROTO((const char *, int, struct addrinfo **,
+                        struct addrinfo *, int));
+static int str_isnumber Py_PROTO((const char *));
 
 static char *ai_errlist[] = {
     "success.",
@@ -430,7 +430,7 @@ getaddrinfo(const char*hostname, const char*servname,
                 break;
 #ifdef ENABLE_IPV6
             case AF_INET6:
-                pfx = ((struct in6_addr *)pton)->s6_addr8[0];
+                pfx = ((struct in6_addr *)pton)->s6_addr[0];
                 if (pfx == 0 || pfx == 0xfe || pfx == 0xff)
                     pai->ai_flags &= ~AI_CANONNAME;
                 break;

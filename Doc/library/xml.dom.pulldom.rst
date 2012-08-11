@@ -5,6 +5,9 @@
    :synopsis: Support for building partial DOM trees from SAX events.
 .. moduleauthor:: Paul Prescod <paul@prescod.net>
 
+
+.. versionadded:: 2.0
+
 **Source code:** :source:`Lib/xml/dom/pulldom.py`
 
 --------------
@@ -13,7 +16,7 @@
 Object Model representation of a document from SAX events.
 
 
-.. class:: PullDOM(documentFactory=None)
+.. class:: PullDOM([documentFactory])
 
    :class:`xml.sax.handler.ContentHandler` implementation that ...
 
@@ -23,17 +26,17 @@ Object Model representation of a document from SAX events.
    ...
 
 
-.. class:: SAX2DOM(documentFactory=None)
+.. class:: SAX2DOM([documentFactory])
 
    :class:`xml.sax.handler.ContentHandler` implementation that ...
 
 
-.. function:: parse(stream_or_string, parser=None, bufsize=None)
+.. function:: parse(stream_or_string[, parser[, bufsize]])
 
    ...
 
 
-.. function:: parseString(string, parser=None)
+.. function:: parseString(string[, parser])
 
    ...
 
@@ -42,8 +45,9 @@ Object Model representation of a document from SAX events.
 
    Default value for the *bufsize* parameter to :func:`parse`.
 
-   The value of this variable can be changed before calling :func:`parse` and
-   the new value will take effect.
+   .. versionchanged:: 2.1
+      The value of this variable can be changed before calling :func:`parse` and the
+      new value will take effect.
 
 
 .. _domeventstream-objects:

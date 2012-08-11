@@ -28,13 +28,13 @@ class FixItertoolsImports(fixer_base.BaseFix):
                 assert child.type == syms.import_as_name
                 name_node = child.children[0]
             member_name = name_node.value
-            if member_name in ('imap', 'izip', 'ifilter'):
+            if member_name in (u'imap', u'izip', u'ifilter'):
                 child.value = None
                 child.remove()
-            elif member_name in ('ifilterfalse', 'izip_longest'):
+            elif member_name in (u'ifilterfalse', u'izip_longest'):
                 node.changed()
-                name_node.value = ('filterfalse' if member_name[1] == 'f'
-                                   else 'zip_longest')
+                name_node.value = (u'filterfalse' if member_name[1] == u'f'
+                                   else u'zip_longest')
 
         # Make sure the import statement is still sane
         children = imports.children[:] or [imports]

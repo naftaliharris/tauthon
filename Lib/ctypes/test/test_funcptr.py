@@ -97,8 +97,8 @@ class CFuncPtrTestCase(unittest.TestCase):
         strchr = lib.my_strchr
         strchr.restype = c_char_p
         strchr.argtypes = (c_char_p, c_char)
-        self.assertEqual(strchr(b"abcdefghi", b"b"), b"bcdefghi")
-        self.assertEqual(strchr(b"abcdefghi", b"x"), None)
+        self.assertEqual(strchr("abcdefghi", "b"), "bcdefghi")
+        self.assertEqual(strchr("abcdefghi", "x"), None)
 
 
         strtok = lib.my_strtok
@@ -111,17 +111,17 @@ class CFuncPtrTestCase(unittest.TestCase):
             size = len(init) + 1
             return (c_char*size)(*init)
 
-        s = b"a\nb\nc"
+        s = "a\nb\nc"
         b = c_string(s)
 
 ##        b = (c_char * (len(s)+1))()
 ##        b.value = s
 
 ##        b = c_string(s)
-        self.assertEqual(strtok(b, b"\n"), b"a")
-        self.assertEqual(strtok(None, b"\n"), b"b")
-        self.assertEqual(strtok(None, b"\n"), b"c")
-        self.assertEqual(strtok(None, b"\n"), None)
+        self.assertEqual(strtok(b, "\n"), "a")
+        self.assertEqual(strtok(None, "\n"), "b")
+        self.assertEqual(strtok(None, "\n"), "c")
+        self.assertEqual(strtok(None, "\n"), None)
 
 if __name__ == '__main__':
     unittest.main()

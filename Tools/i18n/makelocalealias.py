@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
     Convert the X11 locale.alias file into a mapping dictionary suitable
     for locale.py.
@@ -45,25 +45,29 @@ def parse(filename):
     return data
 
 def pprint(data):
-    items = sorted(data.items())
-    for k, v in items:
-        print('    %-40s%r,' % ('%r:' % k, v))
+
+    items = data.items()
+    items.sort()
+    for k,v in items:
+        print '    %-40s%r,' % ('%r:' % k, v)
 
 def print_differences(data, olddata):
-    items = sorted(olddata.items())
+
+    items = olddata.items()
+    items.sort()
     for k, v in items:
-        if k not in data:
-            print('#    removed %r' % k)
+        if not data.has_key(k):
+            print '#    removed %r' % k
         elif olddata[k] != data[k]:
-            print('#    updated %r -> %r to %r' % \
-                  (k, olddata[k], data[k]))
+            print '#    updated %r -> %r to %r' % \
+                  (k, olddata[k], data[k])
         # Additions are not mentioned
 
 if __name__ == '__main__':
     data = locale.locale_alias.copy()
     data.update(parse(LOCALE_ALIAS))
     print_differences(data, locale.locale_alias)
-    print()
-    print('locale_alias = {')
+    print
+    print 'locale_alias = {'
     pprint(data)
-    print('}')
+    print '}'

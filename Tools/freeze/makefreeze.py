@@ -33,7 +33,8 @@ def makefreeze(base, dict, debug=0, entry_point=None, fail_import=()):
     if entry_point is None: entry_point = default_entry_point
     done = []
     files = []
-    mods = sorted(dict.keys())
+    mods = dict.keys()
+    mods.sort()
     for mod in mods:
         m = dict[mod]
         mangled = "__".join(mod.split("."))
@@ -42,7 +43,7 @@ def makefreeze(base, dict, debug=0, entry_point=None, fail_import=()):
             outfp = bkfile.open(base + file, 'w')
             files.append(file)
             if debug:
-                print("freezing", mod, "...")
+                print "freezing", mod, "..."
             str = marshal.dumps(m.__code__)
             size = len(str)
             if m.__path__:
@@ -52,7 +53,7 @@ def makefreeze(base, dict, debug=0, entry_point=None, fail_import=()):
             writecode(outfp, mangled, str)
             outfp.close()
     if debug:
-        print("generating table of frozen modules")
+        print "generating table of frozen modules"
     outfp = bkfile.open(base + 'frozen.c', 'w')
     for mod, mangled, size in done:
         outfp.write('extern unsigned char M_%s[];\n' % mangled)
@@ -80,8 +81,8 @@ def writecode(outfp, mod, str):
     outfp.write('unsigned char M_%s[] = {' % mod)
     for i in range(0, len(str), 16):
         outfp.write('\n\t')
-        for c in bytes(str[i:i+16]):
-            outfp.write('%d,' % c)
+        for c in str[i:i+16]:
+            outfp.write('%d,' % ord(c))
     outfp.write('\n};\n')
 
 ## def writecode(outfp, mod, str):

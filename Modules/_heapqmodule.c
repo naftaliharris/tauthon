@@ -8,6 +8,30 @@ annotated by FranÃ§ois Pinard, and converted to C by Raymond Hettinger.
 
 #include "Python.h"
 
+/* Older implementations of heapq used Py_LE for comparisons.  Now, it uses
+   Py_LT so it will match min(), sorted(), and bisect().  Unfortunately, some
+   client code (Twisted for example) relied on Py_LE, so this little function
+   restores compatibility by trying both.
+*/
+static int
+cmp_lt(PyObject *x, PyObject *y)
+{
+    int cmp;
+    static PyObject *lt = NULL;
+
+    if (lt == NULL) {
+        lt = PyString_FromString("__lt__");
+        if (lt == NULL)
+            return -1;
+    }
+    if (PyObject_HasAttr(x, lt))
+        return PyObject_RichCompareBool(x, y, Py_LT);
+    cmp = PyObject_RichCompareBool(y, x, Py_LE);
+    if (cmp != -1)
+        cmp = 1 - cmp;
+    return cmp;
+}
+
 static int
 _siftdown(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t pos)
 {
@@ -28,7 +52,7 @@ _siftdown(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t pos)
     while (pos > startpos){
         parentpos = (pos - 1) >> 1;
         parent = PyList_GET_ITEM(heap, parentpos);
-        cmp = PyObject_RichCompareBool(newitem, parent, Py_LT);
+        cmp = cmp_lt(newitem, parent);
         if (cmp == -1) {
             Py_DECREF(newitem);
             return -1;
@@ -68,10 +92,9 @@ _siftup(PyListObject *heap, Py_ssize_t pos)
         /* Set childpos to index of smaller child.   */
         rightpos = childpos + 1;
         if (rightpos < endpos) {
-            cmp = PyObject_RichCompareBool(
+            cmp = cmp_lt(
                 PyList_GET_ITEM(heap, childpos),
-                PyList_GET_ITEM(heap, rightpos),
-                Py_LT);
+                PyList_GET_ITEM(heap, rightpos));
             if (cmp == -1) {
                 Py_DECREF(newitem);
                 return -1;
@@ -214,7 +237,7 @@ heappushpop(PyObject *self, PyObject *args)
         return item;
     }
 
-    cmp = PyObject_RichCompareBool(PyList_GET_ITEM(heap, 0), item, Py_LT);
+    cmp = cmp_lt(PyList_GET_ITEM(heap, 0), item);
     if (cmp == -1)
         return NULL;
     if (cmp == 0) {
@@ -313,7 +336,7 @@ nlargest(PyObject *self, PyObject *args)
             else
                 goto sortit;
         }
-        cmp = PyObject_RichCompareBool(sol, elem, Py_LT);
+        cmp = cmp_lt(sol, elem);
         if (cmp == -1) {
             Py_DECREF(elem);
             goto fail;
@@ -368,7 +391,7 @@ _siftdownmax(PyListObject *heap, Py_ssize_t startpos, Py_ssize_t pos)
     while (pos > startpos){
         parentpos = (pos - 1) >> 1;
         parent = PyList_GET_ITEM(heap, parentpos);
-        cmp = PyObject_RichCompareBool(parent, newitem, Py_LT);
+        cmp = cmp_lt(parent, newitem);
         if (cmp == -1) {
             Py_DECREF(newitem);
             return -1;
@@ -408,10 +431,9 @@ _siftupmax(PyListObject *heap, Py_ssize_t pos)
         /* Set childpos to index of smaller child.   */
         rightpos = childpos + 1;
         if (rightpos < endpos) {
-            cmp = PyObject_RichCompareBool(
+            cmp = cmp_lt(
                 PyList_GET_ITEM(heap, rightpos),
-                PyList_GET_ITEM(heap, childpos),
-                Py_LT);
+                PyList_GET_ITEM(heap, childpos));
             if (cmp == -1) {
                 Py_DECREF(newitem);
                 return -1;
@@ -484,7 +506,7 @@ nsmallest(PyObject *self, PyObject *args)
             else
                 goto sortit;
         }
-        cmp = PyObject_RichCompareBool(elem, los, Py_LT);
+        cmp = cmp_lt(elem, los);
         if (cmp == -1) {
             Py_DECREF(elem);
             goto fail;
@@ -571,7 +593,7 @@ maintains the heap invariant!\n");
 PyDoc_STRVAR(__about__,
 "Heap queues\n\
 \n\
-[explanation by Fran\xc3\xa7ois Pinard]\n\
+[explanation by François Pinard]\n\
 \n\
 Heaps are arrays for which a[k] <= a[2*k+1] and a[k] <= a[2*k+2] for\n\
 all k, counting elements from 0.  For the sake of comparison,\n\
@@ -662,29 +684,14 @@ backwards, and this was also used to avoid the rewinding time.\n\
 Believe me, real good tape sorts were quite spectacular to watch!\n\
 From all times, sorting has always been a Great Art! :-)\n");
 
-
-static struct PyModuleDef _heapqmodule = {
-    PyModuleDef_HEAD_INIT,
-    "_heapq",
-    module_doc,
-    -1,
-    heapq_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
 PyMODINIT_FUNC
-PyInit__heapq(void)
+init_heapq(void)
 {
-    PyObject *m, *about;
+    PyObject *m;
 
-    m = PyModule_Create(&_heapqmodule);
+    m = Py_InitModule3("_heapq", heapq_methods, module_doc);
     if (m == NULL)
-        return NULL;
-    about = PyUnicode_DecodeUTF8(__about__, strlen(__about__), NULL);
-    PyModule_AddObject(m, "__about__", about);
-    return m;
+        return;
+    PyModule_AddObject(m, "__about__", PyString_FromString(__about__));
 }
 

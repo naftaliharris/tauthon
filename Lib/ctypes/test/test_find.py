@@ -19,11 +19,11 @@ else:
 ## print, for debugging
 if is_resource_enabled("printing"):
     if lib_gl or lib_glu or lib_gle:
-        print("OpenGL libraries:")
+        print "OpenGL libraries:"
         for item in (("GL", lib_gl),
                      ("GLU", lib_glu),
                      ("gle", lib_gle)):
-            print("\t", item)
+            print "\t", item
 
 
 # On some systems, loading the OpenGL libraries needs the RTLD_GLOBAL mode.

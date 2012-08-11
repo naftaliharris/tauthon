@@ -7,7 +7,6 @@ that name.
 
 import sys
 import os
-import tokenize
 
 __all__ = ["getline", "clearcache", "checkcache"]
 
@@ -46,7 +45,7 @@ def checkcache(filename=None):
     (This is not checked upon each call!)"""
 
     if filename is None:
-        filenames = list(cache.keys())
+        filenames = cache.keys()
     else:
         if filename in cache:
             filenames = [filename]
@@ -110,6 +109,8 @@ def updatecache(filename, module_globals=None):
             return []
 
         for dirname in sys.path:
+            # When using imputil, sys.path may contain things other than
+            # strings; ignore them when it happens.
             try:
                 fullname = os.path.join(dirname, basename)
             except (TypeError, AttributeError):
@@ -123,7 +124,7 @@ def updatecache(filename, module_globals=None):
         else:
             return []
     try:
-        with tokenize.open(fullname) as fp:
+        with open(fullname, 'rU') as fp:
             lines = fp.readlines()
     except IOError:
         return []

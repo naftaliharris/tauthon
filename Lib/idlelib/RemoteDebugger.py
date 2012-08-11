@@ -93,13 +93,16 @@ class IdbAdapter:
         self.idb.set_return(frame)
 
     def get_stack(self, fid, tbid):
+        ##print >>sys.__stderr__, "get_stack(%r, %r)" % (fid, tbid)
         frame = frametable[fid]
         if tbid is None:
             tb = None
         else:
             tb = tracebacktable[tbid]
         stack, i = self.idb.get_stack(frame, tb)
+        ##print >>sys.__stderr__, "get_stack() ->", stack
         stack = [(wrap_frame(frame), k) for frame, k in stack]
+        ##print >>sys.__stderr__, "get_stack() ->", stack
         return stack, i
 
     def run(self, cmd):
@@ -158,20 +161,13 @@ class IdbAdapter:
     #----------called by a DictProxy----------
 
     def dict_keys(self, did):
-        raise NotImplemented("dict_keys not public or pickleable")
-##         dict = dicttable[did]
-##         return dict.keys()
-
-    ### Needed until dict_keys is type is finished and pickealable.
-    ### Will probably need to extend rpc.py:SocketIO._proxify at that time.
-    def dict_keys_list(self, did):
         dict = dicttable[did]
-        return list(dict.keys())
+        return dict.keys()
 
     def dict_item(self, did, key):
         dict = dicttable[did]
         value = dict[key]
-        value = repr(value) ### can't pickle module 'builtins'
+        value = repr(value)
         return value
 
 #----------end class IdbAdapter----------
@@ -209,7 +205,7 @@ class FrameProxy:
 
     def __getattr__(self, name):
         if name[:1] == "_":
-            raise AttributeError(name)
+            raise AttributeError, name
         if name == "f_code":
             return self._get_f_code()
         if name == "f_globals":
@@ -264,21 +260,16 @@ class DictProxy:
         self._oid = oid
         self._did = did
 
-##    def keys(self):
-##        return self._conn.remotecall(self._oid, "dict_keys", (self._did,), {})
-
-    # 'temporary' until dict_keys is a pickleable built-in type
     def keys(self):
-        return self._conn.remotecall(self._oid,
-                                     "dict_keys_list", (self._did,), {})
+        return self._conn.remotecall(self._oid, "dict_keys", (self._did,), {})
 
     def __getitem__(self, key):
         return self._conn.remotecall(self._oid, "dict_item",
                                      (self._did, key), {})
 
     def __getattr__(self, name):
-        ##print("*** Failed DictProxy.__getattr__:", name)
-        raise AttributeError(name)
+        ##print >>sys.__stderr__, "failed DictProxy.__getattr__:", name
+        raise AttributeError, name
 
 
 class GUIAdapter:
@@ -288,7 +279,7 @@ class GUIAdapter:
         self.gui = gui
 
     def interaction(self, message, fid, modified_info):
-        ##print("*** Interaction: (%s, %s, %s)" % (message, fid, modified_info))
+        ##print "interaction: (%s, %s, %s)" % (message, fid, modified_info)
         frame = FrameProxy(self.conn, fid)
         self.gui.interaction(message, frame, modified_info)
 
@@ -301,9 +292,9 @@ class IdbProxy:
         self.shell = shell
 
     def call(self, methodname, *args, **kwargs):
-        ##print("*** IdbProxy.call %s %s %s" % (methodname, args, kwargs))
+        ##print "**IdbProxy.call %s %s %s" % (methodname, args, kwargs)
         value = self.conn.remotecall(self.oid, methodname, args, kwargs)
-        ##print("*** IdbProxy.call %s returns %r" % (methodname, value))
+        ##print "**IdbProxy.call %s returns %r" % (methodname, value)
         return value
 
     def run(self, cmd, locals):

@@ -6,21 +6,16 @@
 from __future__ import print_function
 
 import unittest
-from test import support
+from test import test_support
 
-try:
-    # 3.x
-    from io import StringIO
-except ImportError:
-    # 2.x
-    from StringIO import StringIO
+from StringIO import StringIO
 
 NotDefined = object()
 
 # A dispatch table all 8 combinations of providing
 #  sep, end, and file
 # I use this machinery so that I'm not just passing default
-#  values to print, I'm eiher passing or not passing in the
+#  values to print, I'm either passing or not passing in the
 #  arguments
 dispatch = {
     (False, False, False):
@@ -61,7 +56,7 @@ class TestPrint(unittest.TestCase):
                        end is not NotDefined,
                        file is not NotDefined)]
 
-        with support.captured_stdout() as t:
+        with test_support.captured_stdout() as t:
             fn(args, sep, end, file)
 
         self.assertEqual(t.getvalue(), expected)
@@ -101,18 +96,46 @@ class TestPrint(unittest.TestCase):
         x('*\n', (ClassWith__str__('*'),))
         x('abc 1\n', (ClassWith__str__('abc'), 1))
 
-#        # 2.x unicode tests
-#        x(u'1 2\n', ('1', u'2'))
-#        x(u'u\1234\n', (u'u\1234',))
-#        x(u'  abc 1\n', (' ', ClassWith__str__(u'abc'), 1))
+        # 2.x unicode tests
+        x(u'1 2\n', ('1', u'2'))
+        x(u'u\1234\n', (u'u\1234',))
+        x(u'  abc 1\n', (' ', ClassWith__str__(u'abc'), 1))
 
         # errors
         self.assertRaises(TypeError, print, '', sep=3)
         self.assertRaises(TypeError, print, '', end=3)
         self.assertRaises(AttributeError, print, '', file='')
 
+    def test_mixed_args(self):
+        # If an unicode arg is passed, sep and end should be unicode, too.
+        class Recorder(object):
+
+            def __init__(self, must_be_unicode):
+                self.buf = []
+                self.force_unicode = must_be_unicode
+
+            def write(self, what):
+                if self.force_unicode and not isinstance(what, unicode):
+                    raise AssertionError("{0!r} is not unicode".format(what))
+                self.buf.append(what)
+
+        buf = Recorder(True)
+        print(u'hi', file=buf)
+        self.assertEqual(u''.join(buf.buf), 'hi\n')
+        del buf.buf[:]
+        print(u'hi', u'nothing', file=buf)
+        self.assertEqual(u''.join(buf.buf), 'hi nothing\n')
+        buf = Recorder(False)
+        print('hi', 'bye', end=u'\n', file=buf)
+        self.assertIsInstance(buf.buf[1], unicode)
+        self.assertIsInstance(buf.buf[3], unicode)
+        del buf.buf[:]
+        print(sep=u'x', file=buf)
+        self.assertIsInstance(buf.buf[-1], unicode)
+
+
 def test_main():
-    support.run_unittest(TestPrint)
+    test_support.run_unittest(TestPrint)
 
 if __name__ == "__main__":
     test_main()

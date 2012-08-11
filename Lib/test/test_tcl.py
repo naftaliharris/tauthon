@@ -1,14 +1,13 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import unittest
-import sys
 import os
-from test import support
+from test import test_support
 
 # Skip this test if the _tkinter module wasn't built.
-_tkinter = support.import_module('_tkinter')
+_tkinter = test_support.import_module('_tkinter')
 
-from tkinter import Tcl
+from Tkinter import Tcl
 from _tkinter import TclError
 
 
@@ -120,7 +119,7 @@ class TclTest(unittest.TestCase):
         filename = "doesnotexists"
         try:
             os.remove(filename)
-        except Exception as e:
+        except Exception,e:
             pass
         self.assertRaises(TclError,tcl.evalfile,filename)
 
@@ -128,33 +127,34 @@ class TclTest(unittest.TestCase):
         tcl = self.interp
         self.assertRaises(TclError,tcl.eval,'package require DNE')
 
-    @unittest.skipUnless(sys.platform == 'win32', 'Requires Windows')
     def testLoadWithUNC(self):
+        import sys
+        if sys.platform != 'win32':
+            return
+
         # Build a UNC path from the regular path.
         # Something like
         #   \\%COMPUTERNAME%\c$\python27\python.exe
 
         fullname = os.path.abspath(sys.executable)
         if fullname[1] != ':':
-            raise unittest.SkipTest('Absolute path should have drive part')
+            return
         unc_name = r'\\%s\%s$\%s' % (os.environ['COMPUTERNAME'],
                                     fullname[0],
                                     fullname[3:])
-        if not os.path.exists(unc_name):
-            raise unittest.SkipTest('Cannot connect to UNC Path')
 
-        with support.EnvironmentVarGuard() as env:
+        with test_support.EnvironmentVarGuard() as env:
             env.unset("TCL_LIBRARY")
-            f = os.popen('%s -c "import tkinter; print(tkinter)"' % (unc_name,))
+            f = os.popen('%s -c "import Tkinter; print Tkinter"' % (unc_name,))
 
-        self.assertIn('tkinter', f.read())
+        self.assertTrue('Tkinter.py' in f.read())
         # exit code must be zero
         self.assertEqual(f.close(), None)
 
 
 
 def test_main():
-    support.run_unittest(TclTest, TkinterTest)
+    test_support.run_unittest(TclTest, TkinterTest)
 
 if __name__ == "__main__":
     test_main()

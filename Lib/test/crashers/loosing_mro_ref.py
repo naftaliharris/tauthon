@@ -10,7 +10,7 @@ class MyKey(object):
     def __hash__(self):
         return hash('mykey')
 
-    def __eq__(self, other):
+    def __cmp__(self, other):
         # the following line decrefs the previous X.__mro__
         X.__bases__ = (Base2,)
         # trash all tuples of length 3, to make sure that the items of
@@ -18,7 +18,7 @@ class MyKey(object):
         z = []
         for i in range(1000):
             z.append((i, None, None))
-        return 0
+        return -1
 
 
 class Base(object):
@@ -31,5 +31,5 @@ class Base2(object):
 # there from the beginning :-)
 X = type('X', (Base,), {MyKey(): 5})
 
-print(X.mykey)
+print X.mykey
 # I get a segfault, or a slightly wrong assertion error in a debug build.

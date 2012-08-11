@@ -82,8 +82,8 @@ struct gni_sockinet {
 #define ENI_SALEN       6
 
 /* forward declaration to make gcc happy */
-int getnameinfo(const struct sockaddr *, size_t, char *, size_t,
-                          char *, size_t, int);
+int getnameinfo Py_PROTO((const struct sockaddr *, size_t, char *, size_t,
+                          char *, size_t, int));
 
 int
 getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
@@ -161,7 +161,7 @@ getnameinfo(sa, salen, host, hostlen, serv, servlen, flags)
         break;
 #ifdef ENABLE_IPV6
     case AF_INET6:
-        pfx = ((struct sockaddr_in6 *)sa)->sin6_addr.s6_addr8[0];
+        pfx = ((struct sockaddr_in6 *)sa)->sin6_addr.s6_addr[0];
         if (pfx == 0 || pfx == 0xfe || pfx == 0xff)
             flags |= NI_NUMERICHOST;
         break;

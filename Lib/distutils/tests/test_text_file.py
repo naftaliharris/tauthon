@@ -3,7 +3,7 @@ import os
 import unittest
 from distutils.text_file import TextFile
 from distutils.tests import support
-from test.support import run_unittest
+from test.test_support import run_unittest
 
 TEST_DATA = """# test file
 

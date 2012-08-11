@@ -1,3 +1,4 @@
+
 :mod:`cgitb` --- Traceback manager for CGI scripts
 ==================================================
 
@@ -6,6 +7,8 @@
 .. moduleauthor:: Ka-Ping Yee <ping@lfw.org>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+
+.. versionadded:: 2.2
 
 .. index::
    single: CGI; exceptions
@@ -33,7 +36,7 @@ displayed in the browser and whether the report is logged to a file for later
 analysis.
 
 
-.. function:: enable(display=1, logdir=None, context=5, format="html")
+.. function:: enable([display[, logdir[, context[, format]]]])
 
    .. index:: single: excepthook() (in module sys)
 
@@ -50,7 +53,7 @@ analysis.
    value forces plain text output.  The default value is ``"html"``.
 
 
-.. function:: handler(info=None)
+.. function:: handler([info])
 
    This function handles an exception using the default settings (that is, show a
    report in the browser, but don't log to a file). This can be used when you've

@@ -22,38 +22,48 @@ Introduction to the profilers
    single: deterministic profiling
    single: profiling, deterministic
 
-A :dfn:`profiler` is a program that describes the run time performance of a
-program, providing a variety of statistics.  This documentation describes the
-profiler functionality provided in the modules :mod:`cProfile`, :mod:`profile`
-and :mod:`pstats`.  This profiler provides :dfn:`deterministic profiling` of
-Python programs.  It also provides a series of report generation tools to allow
-users to rapidly examine the results of a profile operation.
+A :dfn:`profiler` is a program that describes the run time performance
+of a program, providing a variety of statistics.  This documentation
+describes the profiler functionality provided in the modules
+:mod:`cProfile`, :mod:`profile` and :mod:`pstats`.  This profiler
+provides :dfn:`deterministic profiling` of Python programs.  It also
+provides a series of report generation tools to allow users to rapidly
+examine the results of a profile operation.
 
-The Python standard library provides two different profilers:
+The Python standard library provides three different profilers:
 
-1. :mod:`cProfile` is recommended for most users; it's a C extension with
-   reasonable overhead that makes it suitable for profiling long-running
-   programs.  Based on :mod:`lsprof`, contributed by Brett Rosen and Ted
-   Czotter.
+#. :mod:`cProfile` is recommended for most users; it's a C extension
+   with reasonable overhead
+   that makes it suitable for profiling long-running programs.
+   Based on :mod:`lsprof`,
+   contributed by Brett Rosen and Ted Czotter.
 
-2. :mod:`profile`, a pure Python module whose interface is imitated by
-   :mod:`cProfile`.  Adds significant overhead to profiled programs.  If you're
-   trying to extend the profiler in some way, the task might be easier with this
-   module.  Copyright © 1994, by InfoSeek Corporation.
+   .. versionadded:: 2.5
+
+#. :mod:`profile`, a pure Python module whose interface is imitated by
+   :mod:`cProfile`.  Adds significant overhead to profiled programs.
+   If you're trying to extend
+   the profiler in some way, the task might be easier with this module.
+
+   .. versionchanged:: 2.4
+      Now also reports the time spent in calls to built-in functions and methods.
+
+#. :mod:`hotshot` was an experimental C module that focused on minimizing
+   the overhead of profiling, at the expense of longer data
+   post-processing times.  It is no longer maintained and may be
+   dropped in a future version of Python.
+
+
+   .. versionchanged:: 2.5
+      The results should be more meaningful than in the past: the timing core
+      contained a critical bug.
 
 The :mod:`profile` and :mod:`cProfile` modules export the same interface, so
 they are mostly interchangeable; :mod:`cProfile` has a much lower overhead but
-is newer and might not be available on all systems.  :mod:`cProfile` is really a
-compatibility layer on top of the internal :mod:`_lsprof` module.
-
-.. note::
-
-   The profiler modules are designed to provide an execution profile for a given
-   program, not for benchmarking purposes (for that, there is :mod:`timeit` for
-   resonably accurate results).  This particularly applies to benchmarking
-   Python code against C code: the profilers introduce overhead for Python code,
-   but not for C-level functions, and so the C code would seem faster than any
-   Python one.
+is newer and might not be available on all systems.
+:mod:`cProfile` is really a compatibility layer on top of the internal
+:mod:`_lsprof` module.  The :mod:`hotshot` module is reserved for specialized
+usage.
 
 
 .. _profile-instant:
@@ -221,15 +231,15 @@ discussion of how to derive "better" profilers from the classes presented, or
 reading the source code for these modules.
 
 
-.. function:: run(command, filename=None, sort=-1)
+.. function:: run(command[, filename])
 
-   This function takes a single argument that can be passed to the :func:`exec`
-   function, and an optional file name.  In all cases this routine attempts to
-   :func:`exec` its first argument, and gather profiling statistics from the
-   execution. If no file name is present, then this function automatically
-   prints a simple profiling report, sorted by the standard name string
-   (file/line/function-name) that is presented in each line.  The following is a
-   typical output from such a call::
+   This function takes a single argument that can be passed to the
+   :keyword:`exec` statement, and an optional file name.  In all cases this
+   routine attempts to :keyword:`exec` its first argument, and gather profiling
+   statistics from the execution. If no file name is present, then this function
+   automatically prints a simple profiling report, sorted by the standard name
+   string (file/line/function-name) that is presented in each line.  The
+   following is a typical output from such a call::
 
             2706 function calls (2004 primitive calls) in 4.504 CPU seconds
 
@@ -250,8 +260,8 @@ reading the source code for these modules.
       for the number of calls,
 
    tottime
-      for the total time spent in the given function (and excluding time made in
-      calls to sub-functions),
+      for the total time spent in the given function (and excluding time made in calls
+      to sub-functions),
 
    percall
       is the quotient of ``tottime`` divided by ``ncalls``
@@ -271,25 +281,24 @@ reading the source code for these modules.
    calls.  Note that when the function does not recurse, these two values are the
    same, and only the single figure is printed.
 
-   If *sort* is given, it can be one of ``'stdname'`` (sort by filename:lineno),
-   ``'calls'`` (sort by number of calls), ``'time'`` (sort by total time) or
-   ``'cumulative'`` (sort by cumulative time).  The default is ``'stdname'``.
 
-
-.. function:: runctx(command, globals, locals, filename=None)
+.. function:: runctx(command, globals, locals[, filename])
 
    This function is similar to :func:`run`, with added arguments to supply the
    globals and locals dictionaries for the *command* string.
 
+Analysis of the profiler data is done using the :class:`Stats` class.
 
-Analysis of the profiler data is done using the :class:`pstats.Stats` class.
+.. note::
+
+   The :class:`Stats` class is defined in the :mod:`pstats` module.
 
 
 .. module:: pstats
    :synopsis: Statistics object for use with the profiler.
 
 
-.. class:: Stats(*filenames, stream=sys.stdout)
+.. class:: Stats(filename, stream=sys.stdout[, ...])
 
    This class constructor creates an instance of a "statistics object" from a
    *filename* (or set of filenames).  :class:`Stats` objects are manipulated by
@@ -306,6 +315,9 @@ Analysis of the profiler data is done using the :class:`pstats.Stats` class.
    existing :class:`Stats` object, the :meth:`add` method can be used.
 
    .. (such as the old system profiler).
+
+   .. versionchanged:: 2.5
+      The *stream* parameter was added.
 
 
 .. _profile-stats:
@@ -329,7 +341,7 @@ The :class:`Stats` Class
    accumulated into a single entry.
 
 
-.. method:: Stats.add(*filenames)
+.. method:: Stats.add(filename[, ...])
 
    This method of the :class:`Stats` class accumulates additional profiling
    information into the current profiling object.  Its arguments should refer to
@@ -345,8 +357,10 @@ The :class:`Stats` Class
    exists.  This is equivalent to the method of the same name on the
    :class:`profile.Profile` and :class:`cProfile.Profile` classes.
 
+   .. versionadded:: 2.3
 
-.. method:: Stats.sort_stats(*keys)
+
+.. method:: Stats.sort_stats(key[, ...])
 
    This method modifies the :class:`Stats` object by sorting it according to the
    supplied criteria.  The argument is typically a string identifying the basis of
@@ -413,7 +427,7 @@ The :class:`Stats` Class
    .. This method is provided primarily for compatibility with the old profiler.
 
 
-.. method:: Stats.print_stats(*restrictions)
+.. method:: Stats.print_stats([restriction, ...])
 
    This method for the :class:`Stats` class prints out a report as described in the
    :func:`profile.run` definition.
@@ -442,7 +456,7 @@ The :class:`Stats` Class
    then proceed to only print the first 10% of them.
 
 
-.. method:: Stats.print_callers(*restrictions)
+.. method:: Stats.print_callers([restriction, ...])
 
    This method for the :class:`Stats` class prints a list of all functions that
    called each function in the profiled database.  The ordering is identical to
@@ -460,7 +474,7 @@ The :class:`Stats` Class
      the current function while it was invoked by this specific caller.
 
 
-.. method:: Stats.print_callees(*restrictions)
+.. method:: Stats.print_callees([restriction, ...])
 
    This method for the :class:`Stats` class prints a list of all function that were
    called by the indicated function.  Aside from this reversal of direction of
@@ -516,7 +530,7 @@ discussion in section Limitations above). ::
    import profile
    pr = profile.Profile()
    for i in range(5):
-       print(pr.calibrate(10000))
+       print pr.calibrate(10000)
 
 The method executes the number of Python calls given by the argument, directly
 and again under the profiler, measuring the time for both. It then computes the
@@ -528,7 +542,7 @@ The object of this exercise is to get a fairly consistent result. If your
 computer is *very* fast, or your timer function has poor resolution, you might
 have to pass 100000, or even 1000000, to get consistent results.
 
-When you have a consistent answer, there are three ways you can use it::
+When you have a consistent answer, there are three ways you can use it: [#]_ ::
 
    import profile
 
@@ -580,7 +594,7 @@ The resulting profiler will then call :func:`your_time_func`.
    timer call, along with the appropriate calibration constant.
 
 :class:`cProfile.Profile`
-   :func:`your_time_func` should return a single number.  If it returns
+   :func:`your_time_func` should return a single number.  If it returns plain
    integers, you can also invoke the class constructor with a second argument
    specifying the real duration of one unit of time.  For example, if
    :func:`your_integer_time_func` returns times measured in thousands of seconds,
@@ -594,25 +608,9 @@ The resulting profiler will then call :func:`your_time_func`.
    source of the internal :mod:`_lsprof` module.
 
 
-Copyright and License Notices
-=============================
+.. rubric:: Footnotes
 
-Copyright © 1994, by InfoSeek Corporation, all rights reserved.
+.. [#] Prior to Python 2.2, it was necessary to edit the profiler source code to
+   embed the bias as a literal number.  You still can, but that method is no longer
+   described, because no longer needed.
 
-Permission to use, copy, modify, and distribute this Python software and its
-associated documentation for any purpose (subject to the restriction in the
-following sentence) without fee is hereby granted, provided that the above
-copyright notice appears in all copies, and that both that copyright notice and
-this permission notice appear in supporting documentation, and that the name of
-InfoSeek not be used in advertising or publicity pertaining to distribution of
-the software without specific, written prior permission.  This permission is
-explicitly restricted to the copying and modification of the software to remain
-in Python, compiled Python, or other languages (such as C) wherein the modified
-or derived code is exclusively imported into a Python module.
-
-INFOSEEK CORPORATION DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
-INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT
-SHALL INFOSEEK CORPORATION BE LIABLE FOR ANY SPECIAL, INDIRECT OR CONSEQUENTIAL
-DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS,
-WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING
-OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

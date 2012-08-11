@@ -89,7 +89,7 @@ any that have been added to the map during asynchronous service) is closed.
    | ``handle_close()``   | Implied by a read event with no data   |
    |                      | available                              |
    +----------------------+----------------------------------------+
-   | ``handle_accepted()``| Implied by a read event on a listening |
+   | ``handle_accept()``  | Implied by a read event on a listening |
    |                      | socket                                 |
    +----------------------+----------------------------------------+
 
@@ -147,21 +147,7 @@ any that have been added to the map during asynchronous service) is closed.
 
       Called on listening channels (passive openers) when a connection can be
       established with a new remote endpoint that has issued a :meth:`connect`
-      call for the local endpoint. Deprecated in version 3.2; use
-      :meth:`handle_accepted` instead.
-
-      .. deprecated:: 3.2
-
-
-   .. method:: handle_accepted(sock, addr)
-
-      Called on listening channels (passive openers) when a connection has been
-      established with a new remote endpoint that has issued a :meth:`connect`
-      call for the local endpoint.  *conn* is a *new* socket object usable to
-      send and receive data on the connection, and *address* is the address
-      bound to the socket on the other end of the connection.
-
-      .. versionadded:: 3.2
+      call for the local endpoint.
 
 
    .. method:: readable()
@@ -243,7 +229,6 @@ any that have been added to the map during asynchronous service) is closed.
       flushed).  Sockets are automatically closed when they are
       garbage-collected.
 
-
 .. class:: dispatcher_with_send()
 
    A :class:`dispatcher` subclass which adds simple buffered output capability,
@@ -252,9 +237,9 @@ any that have been added to the map during asynchronous service) is closed.
 
 .. class:: file_dispatcher()
 
-   A file_dispatcher takes a file descriptor or :term:`file object` along
-   with an optional map argument and wraps it for use with the :c:func:`poll`
-   or :c:func:`loop` functions.  If provided a file object or anything with a
+   A file_dispatcher takes a file descriptor or file object along with an
+   optional map argument and wraps it for use with the :c:func:`poll` or
+   :c:func:`loop` functions.  If provided a file object or anything with a
    :c:func:`fileno` method, that method will be called and passed to the
    :class:`file_wrapper` constructor.  Availability: UNIX.
 
@@ -282,8 +267,7 @@ implement its socket handling::
            asyncore.dispatcher.__init__(self)
            self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
            self.connect( (host, 80) )
-           self.buffer = bytes('GET %s HTTP/1.0\r\nHost: %s\r\n\r\n' %
-                               (path, host), 'ascii')
+           self.buffer = 'GET %s HTTP/1.0\r\n\r\n' % path
 
        def handle_connect(self):
            pass
@@ -292,7 +276,7 @@ implement its socket handling::
            self.close()
 
        def handle_read(self):
-           print(self.recv(8192))
+           print self.recv(8192)
 
        def writable(self):
            return (len(self.buffer) > 0)
@@ -302,8 +286,8 @@ implement its socket handling::
            self.buffer = self.buffer[sent:]
 
 
-    client = HTTPClient('www.python.org', '/')
-    asyncore.loop()
+   client = HTTPClient('www.python.org', '/')
+   asyncore.loop()
 
 .. _asyncore-example-2:
 
@@ -332,9 +316,14 @@ connections and dispatches the incoming connections to a handler::
             self.bind((host, port))
             self.listen(5)
 
-        def handle_accepted(self, sock, addr):
-            print('Incoming connection from %s' % repr(addr))
-            handler = EchoHandler(sock)
+        def handle_accept(self):
+            pair = self.accept()
+            if pair is None:
+                pass
+            else:
+                sock, addr = pair
+                print 'Incoming connection from %s' % repr(addr)
+                handler = EchoHandler(sock)
 
     server = EchoServer('localhost', 8080)
     asyncore.loop()

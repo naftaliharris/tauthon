@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 """\
 List python source files.
@@ -27,13 +27,13 @@ binary_re = re.compile('[\x00-\x08\x0E-\x1F\x7F]')
 debug = False
 
 def print_debug(msg):
-    if debug: print(msg)
+    if debug: print msg
 
 
 def _open(fullpath):
     try:
         size = os.stat(fullpath).st_size
-    except OSError as err: # Permission denied - ignore the file
+    except OSError, err: # Permission denied - ignore the file
         print_debug("%s: permission denied: %s" % (fullpath, err))
         return None
 
@@ -43,7 +43,7 @@ def _open(fullpath):
 
     try:
         return open(fullpath, 'rU')
-    except IOError as err: # Access denied, or a special file - ignore it
+    except IOError, err: # Access denied, or a special file - ignore it
         print_debug("%s: access denied: %s" % (fullpath, err))
         return None
 
@@ -81,7 +81,7 @@ def can_be_compiled(fullpath):
 
     try:
         compile(code, fullpath, "exec")
-    except Exception as err:
+    except Exception, err:
         print_debug("%s: cannot compile: %s" % (fullpath, err))
         return False
 
@@ -124,7 +124,7 @@ def walk_python_files(paths, is_python=looks_like_python, exclude_dirs=None):
 if __name__ == "__main__":
     # Two simple examples/tests
     for fullpath in walk_python_files(['.']):
-        print(fullpath)
-    print("----------")
+        print fullpath
+    print "----------"
     for fullpath in walk_python_files(['.'], is_python=can_be_compiled):
-        print(fullpath)
+        print fullpath

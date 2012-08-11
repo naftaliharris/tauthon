@@ -1,15 +1,19 @@
 """Do a minimal test of all the modules that aren't otherwise tested."""
 
-from test import support
+from test import test_support
 import sys
 import unittest
 
+
 class TestUntestedModules(unittest.TestCase):
     def test_at_least_import_untested_modules(self):
-        with support.check_warnings(quiet=True):
+        with test_support.check_warnings(quiet=True):
+            import CGIHTTPServer
+            import audiodev
             import bdb
             import cgitb
             import code
+            import compileall
 
             import distutils.bcppcompiler
             import distutils.ccompiler
@@ -43,27 +47,50 @@ class TestUntestedModules(unittest.TestCase):
             import encodings
             import formatter
             import getpass
-            import html.entities
+            import htmlentitydefs
+            import ihooks
             import imghdr
+            import imputil
             import keyword
+            import linecache
             import macurl2path
             import mailcap
+            import mimify
+            import nntplib
             import nturl2path
+            import opcode
             import os2emxpath
+            import pdb
+            import posixfile
             import pstats
             import py_compile
+            import rexec
+            import sched
             import sndhdr
+            import statvfs
+            import stringold
+            import sunau
+            import sunaudio
+            import symbol
             import tabnanny
             import timeit
+            import toaiff
+            import token
             try:
                 import tty     # not available on Windows
             except ImportError:
-                if support.verbose:
-                    print("skipping tty")
+                if test_support.verbose:
+                    print "skipping tty"
+
+            # Can't test the "user" module -- if the user has a ~/.pythonrc.py, it
+            # can screw up all sorts of things (esp. if it prints!).
+            #import user
+            import webbrowser
+            import xml
 
 
 def test_main():
-    support.run_unittest(TestUntestedModules)
+    test_support.run_unittest(TestUntestedModules)
 
 if __name__ == "__main__":
     test_main()

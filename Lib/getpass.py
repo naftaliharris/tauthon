@@ -47,7 +47,7 @@ def unix_getpass(prompt='Password: ', stream=None):
         input = tty
         if not stream:
             stream = tty
-    except EnvironmentError as e:
+    except EnvironmentError, e:
         # If that fails, see if stdin can be controlled.
         try:
             fd = sys.stdin.fileno()
@@ -62,7 +62,7 @@ def unix_getpass(prompt='Password: ', stream=None):
         try:
             old = termios.tcgetattr(fd)     # a copy to save
             new = old[:]
-            new[3] &= ~(termios.ECHO|termios.ISIG)  # 3 == 'lflags'
+            new[3] &= ~termios.ECHO  # 3 == 'lflags'
             tcsetattr_flags = termios.TCSAFLUSH
             if hasattr(termios, 'TCSASOFT'):
                 tcsetattr_flags |= termios.TCSASOFT
@@ -72,7 +72,7 @@ def unix_getpass(prompt='Password: ', stream=None):
             finally:
                 termios.tcsetattr(fd, tcsetattr_flags, old)
                 stream.flush()  # issue7208
-        except termios.error as e:
+        except termios.error, e:
             if passwd is not None:
                 # _raw_input succeeded.  The final tcsetattr failed.  Reraise
                 # instead of leaving the terminal in an unknown state.
@@ -92,10 +92,10 @@ def win_getpass(prompt='Password: ', stream=None):
         return fallback_getpass(prompt, stream)
     import msvcrt
     for c in prompt:
-        msvcrt.putwch(c)
+        msvcrt.putch(c)
     pw = ""
     while 1:
-        c = msvcrt.getwch()
+        c = msvcrt.getch()
         if c == '\r' or c == '\n':
             break
         if c == '\003':
@@ -104,8 +104,8 @@ def win_getpass(prompt='Password: ', stream=None):
             pw = pw[:-1]
         else:
             pw = pw + c
-    msvcrt.putwch('\r')
-    msvcrt.putwch('\n')
+    msvcrt.putch('\r')
+    msvcrt.putch('\n')
     return pw
 
 
@@ -114,12 +114,13 @@ def fallback_getpass(prompt='Password: ', stream=None):
                   stacklevel=2)
     if not stream:
         stream = sys.stderr
-    print("Warning: Password input may be echoed.", file=stream)
+    print >>stream, "Warning: Password input may be echoed."
     return _raw_input(prompt, stream)
 
 
 def _raw_input(prompt="", stream=None, input=None):
-    # This doesn't save the string in the GNU readline history.
+    # A raw_input() replacement that doesn't save the string in the
+    # GNU readline history.
     if not stream:
         stream = sys.stderr
     if not input:
@@ -166,7 +167,12 @@ except (ImportError, AttributeError):
     try:
         import msvcrt
     except ImportError:
-        getpass = fallback_getpass
+        try:
+            from EasyDialogs import AskPassword
+        except ImportError:
+            getpass = fallback_getpass
+        else:
+            getpass = AskPassword
     else:
         getpass = win_getpass
 else:

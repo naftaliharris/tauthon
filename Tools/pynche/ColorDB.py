@@ -54,7 +54,7 @@ class ColorDB:
             # get this compiled regular expression from derived class
             mo = self._re.match(line)
             if not mo:
-                print('Error in', fp.name, ' line', lineno, file=sys.stderr)
+                print >> sys.stderr, 'Error in', fp.name, ' line', lineno
                 lineno += 1
                 continue
             # extract the red, green, blue, and name
@@ -66,7 +66,7 @@ class ColorDB:
             # version the `name', or the CapitalizedVersion, etc.
             key = (red, green, blue)
             foundname, aliases = self.__byrgb.get(key, (name, []))
-            if foundname != name and foundname not in aliases:
+            if foundname <> name and foundname not in aliases:
                 aliases.append(name)
             self.__byrgb[key] = (foundname, aliases)
             # add to byname lookup
@@ -122,7 +122,10 @@ class ColorDB:
             self.__allnames = []
             for name, aliases in self.__byrgb.values():
                 self.__allnames.append(name)
-            self.__allnames.sort(key=str.lower)
+            # sort irregardless of case
+            def nocase_cmp(n1, n2):
+                return cmp(n1.lower(), n2.lower())
+            self.__allnames.sort(nocase_cmp)
         return self.__allnames
 
     def aliases_of(self, red, green, blue):
@@ -209,7 +212,7 @@ def rrggbb_to_triplet(color):
     """Converts a #rrggbb color to the tuple (red, green, blue)."""
     rgbtuple = _namedict.get(color)
     if rgbtuple is None:
-        if color[0] != '#':
+        if color[0] <> '#':
             raise BadColor(color)
         red = color[1:3]
         green = color[3:5]
@@ -232,7 +235,7 @@ def triplet_to_rrggbb(rgbtuple):
 
 _maxtuple = (256.0,) * 3
 def triplet_to_fractional_rgb(rgbtuple):
-    return list(map(operator.__div__, rgbtuple, _maxtuple))
+    return map(operator.__div__, rgbtuple, _maxtuple)
 
 
 def triplet_to_brightness(rgbtuple):
@@ -248,26 +251,26 @@ def triplet_to_brightness(rgbtuple):
 if __name__ == '__main__':
     colordb = get_colordb('/usr/openwin/lib/rgb.txt')
     if not colordb:
-        print('No parseable color database found')
+        print 'No parseable color database found'
         sys.exit(1)
     # on my system, this color matches exactly
     target = 'navy'
     red, green, blue = rgbtuple = colordb.find_byname(target)
-    print(target, ':', red, green, blue, triplet_to_rrggbb(rgbtuple))
+    print target, ':', red, green, blue, triplet_to_rrggbb(rgbtuple)
     name, aliases = colordb.find_byrgb(rgbtuple)
-    print('name:', name, 'aliases:', COMMASPACE.join(aliases))
+    print 'name:', name, 'aliases:', COMMASPACE.join(aliases)
     r, g, b = (1, 1, 128)                         # nearest to navy
     r, g, b = (145, 238, 144)                     # nearest to lightgreen
     r, g, b = (255, 251, 250)                     # snow
-    print('finding nearest to', target, '...')
+    print 'finding nearest to', target, '...'
     import time
     t0 = time.time()
     nearest = colordb.nearest(r, g, b)
     t1 = time.time()
-    print('found nearest color', nearest, 'in', t1-t0, 'seconds')
+    print 'found nearest color', nearest, 'in', t1-t0, 'seconds'
     # dump the database
     for n in colordb.unique_names():
         r, g, b = colordb.find_byname(n)
         aliases = colordb.aliases_of(r, g, b)
-        print('%20s: (%3d/%3d/%3d) == %s' % (n, r, g, b,
-                                             SPACE.join(aliases[1:])))
+        print '%20s: (%3d/%3d/%3d) == %s' % (n, r, g, b,
+                                             SPACE.join(aliases[1:]))
