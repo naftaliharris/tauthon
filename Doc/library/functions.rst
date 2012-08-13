@@ -152,10 +152,6 @@ are always available.  They are listed here in alphabetical order.
    1,114,111 (0x10FFFF in base 16).  :exc:`ValueError` will be raised if *i* is
    outside that range.
 
-   Note that on narrow Unicode builds, the result is a string of
-   length two for *i* greater than 65,535 (0xFFFF in hexadecimal).
-
-
 
 .. function:: classmethod(function)
 
@@ -309,17 +305,18 @@ are always available.  They are listed here in alphabetical order.
 
       >>> import struct
       >>> dir()   # show the names in the module namespace
-      ['__builtins__', '__doc__', '__name__', 'struct']
-      >>> dir(struct)   # show the names in the struct module
-      ['Struct', '__builtins__', '__doc__', '__file__', '__name__',
-       '__package__', '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
+      ['__builtins__', '__name__', 'struct']
+      >>> dir(struct)   # show the names in the struct module # doctest: +SKIP
+      ['Struct', '__all__', '__builtins__', '__cached__', '__doc__', '__file__',
+       '__initializing__', '__loader__', '__name__', '__package__',
+       '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
       >>> class Shape(object):
-              def __dir__(self):
-                  return ['area', 'perimeter', 'location']
+      ...     def __dir__(self):
+      ...         return ['area', 'perimeter', 'location']
       >>> s = Shape()
       >>> dir(s)
-      ['area', 'perimeter', 'location']
+      ['area', 'location', 'perimeter']
 
    .. note::
 
@@ -618,9 +615,9 @@ are always available.  They are listed here in alphabetical order.
    to a string (stripping a trailing newline), and returns that.  When EOF is
    read, :exc:`EOFError` is raised.  Example::
 
-      >>> s = input('--> ')
+      >>> s = input('--> ')  # doctest: +SKIP
       --> Monty Python's Flying Circus
-      >>> s
+      >>> s  # doctest: +SKIP
       "Monty Python's Flying Circus"
 
    If the :mod:`readline` module was loaded, then :func:`input` will use it
@@ -790,10 +787,10 @@ are always available.  They are listed here in alphabetical order.
    :meth:`__index__` method that returns an integer.
 
 
-.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True)
+.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)
 
    Open *file* and return a corresponding stream.  If the file cannot be opened,
-   an :exc:`IOError` is raised.
+   an :exc:`OSError` is raised.
 
    *file* is either a string or bytes object giving the pathname (absolute or
    relative to the current working directory) of the file to be opened or
@@ -804,17 +801,20 @@ are always available.  They are listed here in alphabetical order.
    *mode* is an optional string that specifies the mode in which the file is
    opened.  It defaults to ``'r'`` which means open for reading in text mode.
    Other common values are ``'w'`` for writing (truncating the file if it
-   already exists), and ``'a'`` for appending (which on *some* Unix systems,
-   means that *all* writes append to the end of the file regardless of the
-   current seek position).  In text mode, if *encoding* is not specified the
-   encoding used is platform dependent. (For reading and writing raw bytes use
-   binary mode and leave *encoding* unspecified.)  The available modes are:
+   already exists), ``'x'`` for exclusive creation and ``'a'`` for appending
+   (which on *some* Unix systems, means that *all* writes append to the end of
+   the file regardless of the current seek position).  In text mode, if
+   *encoding* is not specified the encoding used is platform dependent:
+   ``locale.getpreferredencoding(False)`` is called to get the current locale
+   encoding. (For reading and writing raw bytes use binary mode and leave
+   *encoding* unspecified.)  The available modes are:
 
    ========= ===============================================================
    Character Meaning
    --------- ---------------------------------------------------------------
    ``'r'``   open for reading (default)
    ``'w'``   open for writing, truncating the file first
+   ``'x'``   open for exclusive creation, failing if the file already exists
    ``'a'``   open for writing, appending to the end of the file if it exists
    ``'b'``   binary mode
    ``'t'``   text mode (default)
@@ -900,6 +900,16 @@ are always available.  They are listed here in alphabetical order.
    closed.  If a filename is given *closefd* has no effect and must be ``True``
    (the default).
 
+   A custom opener can be used by passing a callable as *opener*. The underlying
+   file descriptor for the file object is then obtained by calling *opener* with
+   (*file*, *flags*). *opener* must return an open file descriptor (passing
+   :mod:`os.open` as *opener* results in functionality similar to passing
+   ``None``).
+
+   .. versionchanged:: 3.3
+      The *opener* parameter was added.
+      The ``'x'`` mode was added.
+
    The type of file object returned by the :func:`open` function depends on the
    mode.  When :func:`open` is used to open a file in a text mode (``'w'``,
    ``'r'``, ``'wt'``, ``'rt'``, etc.), it returns a subclass of
@@ -925,6 +935,11 @@ are always available.  They are listed here in alphabetical order.
    (where :func:`open` is declared), :mod:`os`, :mod:`os.path`, :mod:`tempfile`,
    and :mod:`shutil`.
 
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
+      :exc:`FileExistsError` is now raised if the file opened in exclusive
+      creation mode (``'x'``) already exists.
+
 
 .. XXX works for bytes too, but should it?
 .. function:: ord(c)
@@ -934,9 +949,6 @@ are always available.  They are listed here in alphabetical order.
    point of that character.  For example, ``ord('a')`` returns the integer ``97``
    and ``ord('\u2020')`` returns ``8224``.  This is the inverse of :func:`chr`.
 
-   On wide Unicode builds, if the argument length is not one, a
-   :exc:`TypeError` will be raised.  On narrow Unicode builds, strings
-   of length two are accepted when they form a UTF-16 surrogate pair.
 
 .. function:: pow(x, y[, z])
 
@@ -954,7 +966,7 @@ are always available.  They are listed here in alphabetical order.
    must be of integer types, and *y* must be non-negative.
 
 
-.. function:: print([object, ...], *, sep=' ', end='\\n', file=sys.stdout)
+.. function:: print([object, ...], *, sep=' ', end='\\n', file=sys.stdout, flush=False)
 
    Print *object*\(s) to the stream *file*, separated by *sep* and followed by
    *end*.  *sep*, *end* and *file*, if present, must be given as keyword
@@ -967,9 +979,12 @@ are always available.  They are listed here in alphabetical order.
    *end*.
 
    The *file* argument must be an object with a ``write(string)`` method; if it
-   is not present or ``None``, :data:`sys.stdout` will be used. Output buffering
-   is determined by *file*. Use ``file.flush()`` to ensure, for instance,
-   immediate appearance on a screen.
+   is not present or ``None``, :data:`sys.stdout` will be used.  Whether output
+   is buffered is usually determined by *file*, but if the  *flush* keyword
+   argument is true, the stream is forcibly flushed.
+
+   .. versionchanged:: 3.3
+      Added the *flush* keyword argument.
 
 
 .. function:: property(fget=None, fset=None, fdel=None, doc=None)
@@ -1052,7 +1067,9 @@ are always available.  They are listed here in alphabetical order.
    ...]``.  If *step* is positive, the last element is the largest ``start + i *
    step`` less than *stop*; if *step* is negative, the last element is the
    smallest ``start + i * step`` greater than *stop*.  *step* must not be zero
-   (or else :exc:`ValueError` is raised).  Example:
+   (or else :exc:`ValueError` is raised).  Range objects have read-only data
+   attributes :attr:`start`, :attr:`stop` and :attr:`step` which return the
+   argument values (or their default).  Example:
 
       >>> list(range(10))
       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -1089,6 +1106,13 @@ are always available.  They are listed here in alphabetical order.
       >>> r[-1]
       18
 
+   Testing range objects for equality with ``==`` and ``!=`` compares
+   them as sequences.  That is, two range objects are considered equal if
+   they represent the same sequence of values.  (Note that two range
+   objects that compare equal might have different :attr:`start`,
+   :attr:`stop` and :attr:`step` attributes, for example ``range(0) ==
+   range(2, 1, 3)`` or ``range(0, 3, 2) == range(0, 4, 2)``.)
+
    Ranges containing absolute values larger than :data:`sys.maxsize` are permitted
    but some features (such as :func:`len`) will raise :exc:`OverflowError`.
 
@@ -1097,6 +1121,14 @@ are always available.  They are listed here in alphabetical order.
       Support slicing and negative indices.
       Test integers for membership in constant time instead of iterating
       through all items.
+
+   .. versionchanged:: 3.3
+      Define '==' and '!=' to compare range objects based on the
+      sequence of values they define (instead of comparing based on
+      object identity).
+
+   .. versionadded:: 3.3
+      The :attr:`start`, :attr:`stop` and :attr:`step` attributes.
 
 
 .. function:: repr(object)
@@ -1305,10 +1337,12 @@ are always available.  They are listed here in alphabetical order.
    Accordingly, :func:`super` is undefined for implicit lookups using statements or
    operators such as ``super()[name]``.
 
-   Also note that :func:`super` is not limited to use inside methods.  The two
-   argument form specifies the arguments exactly and makes the appropriate
-   references.  The zero argument form automatically searches the stack frame
-   for the class (``__class__``) and the first argument.
+   Also note that, aside from the zero argument form, :func:`super` is not
+   limited to use inside methods.  The two argument form specifies the
+   arguments exactly and makes the appropriate references.  The zero
+   argument form only works inside a class definition, as the compiler fills
+   in the necessary details to correctly retrieve the class being defined,
+   as well as accessing the current instance for ordinary methods.
 
    For practical suggestions on how to design cooperative classes using
    :func:`super`, see `guide to using super()
@@ -1413,7 +1447,7 @@ are always available.  They are listed here in alphabetical order.
       True
 
 
-.. function:: __import__(name, globals={}, locals={}, fromlist=[], level=-1)
+.. function:: __import__(name, globals=None, locals=None, fromlist=(), level=0)
 
    .. index::
       statement: import
@@ -1428,8 +1462,9 @@ are always available.  They are listed here in alphabetical order.
    replaced (by importing the :mod:`builtins` module and assigning to
    ``builtins.__import__``) in order to change semantics of the
    :keyword:`import` statement, but nowadays it is usually simpler to use import
-   hooks (see :pep:`302`).  Direct use of :func:`__import__` is rare, except in
-   cases where you want to import a module whose name is only known at runtime.
+   hooks (see :pep:`302`) to attain the same goals.  Direct use of
+   :func:`__import__` is entirely discouraged in favor of
+   :func:`importlib.import_module`.
 
    The function imports the module *name*, potentially using the given *globals*
    and *locals* to determine how to interpret the name in a package context.
@@ -1438,13 +1473,11 @@ are always available.  They are listed here in alphabetical order.
    not use its *locals* argument at all, and uses its *globals* only to
    determine the package context of the :keyword:`import` statement.
 
-   *level* specifies whether to use absolute or relative imports. ``0``
-   means only perform absolute imports. Positive values for *level* indicate the
-   number of parent directories to search relative to the directory of the
-   module calling :func:`__import__`.  Negative values attempt both an implicit
-   relative import and an absolute import (usage of negative values for *level*
-   are strongly discouraged as future versions of Python do not support such
-   values). Import statements only use values of 0 or greater.
+   *level* specifies whether to use absolute or relative imports. ``0`` (the
+   default) means only perform absolute imports.  Positive values for
+   *level* indicate the number of parent directories to search relative to the
+   directory of the module calling :func:`__import__` (see :pep:`328` for the
+   details).
 
    When the *name* variable is of the form ``package.module``, normally, the
    top-level package (the name up till the first dot) is returned, *not* the
@@ -1476,6 +1509,10 @@ are always available.  They are listed here in alphabetical order.
 
    If you simply want to import a module (potentially within a package) by name,
    use :func:`importlib.import_module`.
+
+   .. versionchanged:: 3.3
+      Negative values for *level* are no longer supported (which also changes
+      the default value to 0).
 
 
 .. rubric:: Footnotes
