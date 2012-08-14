@@ -29,7 +29,7 @@ There are only a few functions special to module objects.
    :c:data:`PyModule_Type`.
 
 
-.. c:function:: PyObject* PyModule_New(const char *name)
+.. c:function:: PyObject* PyModule_NewObject(PyObject *name)
 
    .. index::
       single: __name__ (module attribute)
@@ -39,6 +39,14 @@ There are only a few functions special to module objects.
    Return a new module object with the :attr:`__name__` attribute set to *name*.
    Only the module's :attr:`__doc__` and :attr:`__name__` attributes are filled in;
    the caller is responsible for providing a :attr:`__file__` attribute.
+
+   .. versionadded:: 3.3
+
+
+.. c:function:: PyObject* PyModule_New(const char *name)
+
+   Similar to :c:func:`PyImport_NewObject`, but the name is an UTF-8 encoded
+   string instead of a Unicode object.
 
 
 .. c:function:: PyObject* PyModule_GetDict(PyObject *module)
@@ -52,7 +60,7 @@ There are only a few functions special to module objects.
    manipulate a module's :attr:`__dict__`.
 
 
-.. c:function:: char* PyModule_GetName(PyObject *module)
+.. c:function:: PyObject* PyModule_GetNameObject(PyObject *module)
 
    .. index::
       single: __name__ (module attribute)
@@ -61,15 +69,13 @@ There are only a few functions special to module objects.
    Return *module*'s :attr:`__name__` value.  If the module does not provide one,
    or if it is not a string, :exc:`SystemError` is raised and *NULL* is returned.
 
+   .. versionadded:: 3.3
 
-.. c:function:: char* PyModule_GetFilename(PyObject *module)
 
-   Similar to :c:func:`PyModule_GetFilenameObject` but return the filename
-   encoded to 'utf-8'.
+.. c:function:: char* PyModule_GetName(PyObject *module)
 
-   .. deprecated:: 3.2
-      :c:func:`PyModule_GetFilename` raises :c:type:`UnicodeEncodeError` on
-      unencodable filenames, use :c:func:`PyModule_GetFilenameObject` instead.
+   Similar to :c:func:`PyModule_GetNameObject` but return the name encoded to
+   ``'utf-8'``.
 
 
 .. c:function:: PyObject* PyModule_GetFilenameObject(PyObject *module)
@@ -81,9 +87,19 @@ There are only a few functions special to module objects.
    Return the name of the file from which *module* was loaded using *module*'s
    :attr:`__file__` attribute.  If this is not defined, or if it is not a
    unicode string, raise :exc:`SystemError` and return *NULL*; otherwise return
-   a reference to a :c:type:`PyUnicodeObject`.
+   a reference to a Unicode object.
 
    .. versionadded:: 3.2
+
+
+.. c:function:: char* PyModule_GetFilename(PyObject *module)
+
+   Similar to :c:func:`PyModule_GetFilenameObject` but return the filename
+   encoded to 'utf-8'.
+
+   .. deprecated:: 3.2
+      :c:func:`PyModule_GetFilename` raises :c:type:`UnicodeEncodeError` on
+      unencodable filenames, use :c:func:`PyModule_GetFilenameObject` instead.
 
 
 .. c:function:: void* PyModule_GetState(PyObject *module)
@@ -97,8 +113,28 @@ There are only a few functions special to module objects.
 
    Return a pointer to the :c:type:`PyModuleDef` struct from which the module was
    created, or *NULL* if the module wasn't created with
-   :c:func:`PyModule_Create`.
+   :c:func:`PyModule_Create`.i
 
+.. c:function:: PyObject* PyState_FindModule(PyModuleDef *def)
+
+   Returns the module object that was created from *def* for the current interpreter.
+   This method requires that the module object has been attached to the interpreter state with
+   :c:func:`PyState_AddModule` beforehand. In case the corresponding module object is not
+   found or has not been attached to the interpreter state yet, it returns NULL.
+
+.. c:function:: int PyState_AddModule(PyModuleDef *def, PyObject *module)
+
+   Attaches the module object passed to the function to the interpreter state. This allows
+   the module object to be accessible via
+   :c:func:`PyState_FindModule`.
+
+   .. versionadded:: 3.3
+
+.. c:function:: int PyState_RemoveModule(PyModuleDef *def, PyObject *module)
+
+   Removes the module object created from *def* from the interpreter state.
+
+   .. versionadded:: 3.3
 
 Initializing C modules
 ^^^^^^^^^^^^^^^^^^^^^^
