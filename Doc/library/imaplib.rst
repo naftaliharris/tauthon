@@ -64,14 +64,21 @@ Three exceptions are defined as attributes of the :class:`IMAP4` class:
 There's also a subclass for secure connections:
 
 
-.. class:: IMAP4_SSL(host='', port=IMAP4_SSL_PORT, keyfile=None, certfile=None)
+.. class:: IMAP4_SSL(host='', port=IMAP4_SSL_PORT, keyfile=None, certfile=None, ssl_context=None)
 
    This is a subclass derived from :class:`IMAP4` that connects over an SSL
    encrypted socket (to use this class you need a socket module that was compiled
    with SSL support).  If *host* is not specified, ``''`` (the local host) is used.
    If *port* is omitted, the standard IMAP4-over-SSL port (993) is used.  *keyfile*
    and *certfile* are also optional - they can contain a PEM formatted private key
-   and certificate chain file for the SSL connection.
+   and certificate chain file for the SSL connection. *ssl_context* parameter is a
+   :class:`ssl.SSLContext` object which allows bundling SSL configuration
+   options, certificates and private keys into a single (potentially long-lived)
+   structure. Note that the *keyfile*/*certfile* parameters are mutually exclusive with *ssl_context*,
+   a :class:`ValueError` is thrown if *keyfile*/*certfile* is provided along with *ssl_context*.
+
+   .. versionchanged:: 3.3
+      *ssl_context* parameter added.
 
 
 The second subclass allows for connections created by a child process:
@@ -106,13 +113,15 @@ The following utility functions are defined:
 
 .. function:: Time2Internaldate(date_time)
 
-   Convert *date_time* to an IMAP4 ``INTERNALDATE`` representation.  The
-   return value is a string in the form: ``"DD-Mmm-YYYY HH:MM:SS
-   +HHMM"`` (including double-quotes).  The *date_time* argument can be a
-   number (int or float) representing seconds since epoch (as returned
-   by :func:`time.time`), a 9-tuple representing local time (as returned by
-   :func:`time.localtime`), or a double-quoted string.  In the last case, it
-   is assumed to already be in the correct format.
+   Convert *date_time* to an IMAP4 ``INTERNALDATE`` representation.
+   The return value is a string in the form: ``"DD-Mmm-YYYY HH:MM:SS
+   +HHMM"`` (including double-quotes).  The *date_time* argument can
+   be a number (int or float) representing seconds since epoch (as
+   returned by :func:`time.time`), a 9-tuple representing local time
+   an instance of :class:`time.struct_time` (as returned by
+   :func:`time.localtime`), an aware instance of
+   :class:`datetime.datetime`, or a double-quoted string.  In the last
+   case, it is assumed to already be in the correct format.
 
 Note that IMAP4 message numbers change as the mailbox changes; in particular,
 after an ``EXPUNGE`` command performs deletions the remaining messages are
