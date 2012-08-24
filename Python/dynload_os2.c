@@ -9,13 +9,9 @@
 #include "importdl.h"
 
 
-const struct filedescr _PyImport_DynLoadFiletab[] = {
-    {".pyd", "rb", C_EXTENSION},
-    {".dll", "rb", C_EXTENSION},
-    {0, 0}
-};
+const char *_PyImport_DynLoadFiletab[] = {".pyd", ".dll", NULL};
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
+dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;
