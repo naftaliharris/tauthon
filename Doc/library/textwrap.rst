@@ -12,7 +12,7 @@
 
 The :mod:`textwrap` module provides two convenience functions, :func:`wrap` and
 :func:`fill`, as well as :class:`TextWrapper`, the class that does all the work,
-and a utility function  :func:`dedent`.  If you're just wrapping or filling one
+and two utility functions, :func:`dedent` and :func:`indent`.  If you're just wrapping or filling one
 or two  text strings, the convenience functions should be good enough;
 otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
 
@@ -24,6 +24,9 @@ otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
 
    Optional keyword arguments correspond to the instance attributes of
    :class:`TextWrapper`, documented below.  *width* defaults to ``70``.
+
+   See the :meth:`TextWrapper.wrap` method for additional details on how
+   :func:`wrap` behaves.
 
 
 .. function:: fill(text, width=70, **kwargs)
@@ -45,9 +48,10 @@ Text is preferably wrapped on whitespaces and right after the hyphens in
 hyphenated words; only then will long words be broken if necessary, unless
 :attr:`TextWrapper.break_long_words` is set to false.
 
-An additional utility function, :func:`dedent`, is provided to remove
-indentation from strings that have unwanted whitespace to the left of the text.
-
+Two additional utility function, :func:`dedent` and :func:`indent`, are
+provided to remove indentation from strings that have unwanted whitespace
+to the left of the text and to add an arbitrary prefix to selected lines
+in a block of text.
 
 .. function:: dedent(text)
 
@@ -70,6 +74,32 @@ indentation from strings that have unwanted whitespace to the left of the text.
           '''
           print(repr(s))          # prints '    hello\n      world\n    '
           print(repr(dedent(s)))  # prints 'hello\n  world\n'
+
+
+.. function:: indent(text, prefix, predicate=None)
+
+   Add *prefix* to the beginning of selected lines in *text*.
+
+   Lines are separated by calling ``text.splitlines(True)``.
+
+   By default, *prefix* is added to all lines that do not consist
+   solely of whitespace (including any line endings).
+
+   For example::
+
+      >>> s = 'hello\n\n \nworld'
+      >>> indent(s, '  ')
+      '  hello\n\n \n  world'
+
+   The optional *predicate* argument can be used to control which lines
+   are indented. For example, it is easy to add *prefix* to even empty
+   and whitespace-only lines::
+
+      >>> print(indent(s, '+ ', lambda line: True))
+      + hello
+      +
+      +
+      + world
 
 
 .. class:: TextWrapper(**kwargs)
@@ -107,6 +137,15 @@ indentation from strings that have unwanted whitespace to the left of the text.
       expanded to spaces using the :meth:`expandtabs` method of *text*.
 
 
+   .. attribute:: tabsize
+
+      (default: ``8``) If :attr:`expand_tabs` is true, then all tab characters
+      in *text* will be expanded to zero or more spaces, depending on the
+      current column and the given tab size.
+
+      .. versionadded:: 3.3
+
+
    .. attribute:: replace_whitespace
 
       (default: ``True``) If true, after tab expansion but before wrapping,
@@ -131,15 +170,18 @@ indentation from strings that have unwanted whitespace to the left of the text.
 
    .. attribute:: drop_whitespace
 
-      (default: ``True``) If true, whitespace that, after wrapping, happens to
-      end up at the beginning or end of a line is dropped (leading whitespace in
-      the first line is always preserved, though).
+      (default: ``True``) If true, whitespace at the beginning and ending of
+      every line (after wrapping but before indenting) is dropped.
+      Whitespace at the beginning of the paragraph, however, is not dropped
+      if non-whitespace follows it.  If whitespace being dropped takes up an
+      entire line, the whole line is dropped.
 
 
    .. attribute:: initial_indent
 
       (default: ``''``) String that will be prepended to the first line of
-      wrapped output.  Counts towards the length of the first line.
+      wrapped output.  Counts towards the length of the first line.  The empty
+      string is not indented.
 
 
    .. attribute:: subsequent_indent
@@ -200,8 +242,9 @@ indentation from strings that have unwanted whitespace to the left of the text.
 
       Wraps the single paragraph in *text* (a string) so every line is at most
       :attr:`width` characters long.  All wrapping options are taken from
-      instance attributes of the :class:`TextWrapper` instance. Returns a list
-      of output lines, without final newlines.
+      instance attributes of the :class:`TextWrapper` instance.  Returns a list
+      of output lines, without final newlines.  If the wrapped output has no
+      content, the returned list is empty.
 
 
    .. method:: fill(text)
