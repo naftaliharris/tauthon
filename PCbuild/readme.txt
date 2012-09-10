@@ -1,4 +1,4 @@
-Building Python using VC++ 9.0
+Building Python using VC++ 10.0
 ------------------------------
 
 This directory is used to build Python for Win32 and x64 platforms, e.g. 
@@ -37,7 +37,7 @@ NOTE:
    running a Python core buildbot test slave; see SUBPROJECTS below)
 
 When using the Debug setting, the output files have a _d added to
-their name:  python32_d.dll, python_d.exe, parser_d.pyd, and so on. Both
+their name:  python33_d.dll, python_d.exe, parser_d.pyd, and so on. Both
 the build and rt batch files accept a -d option for debug builds.
 
 The 32bit builds end up in the solution folder PCbuild while the x64 builds
@@ -62,17 +62,11 @@ PC/VS8.0/
 C RUNTIME
 ---------
 
-Visual Studio 2008 uses version 9 of the C runtime (MSVCRT9).  The executables
-are linked to a CRT "side by side" assembly which must be present on the target
-machine.  This is avalible under the VC/Redist folder of your visual studio
-distribution. On XP and later operating systems that support
-side-by-side assemblies it is not enough to have the msvcrt90.dll present,
-it has to be there as a whole assembly, that is, a folder with the .dll
-and a .manifest.  Also, a check is made for the correct version.
-Therefore, one should distribute this assembly with the dlls, and keep
-it in the same directory.  For compatibility with older systems, one should
-also set the PATH to this directory so that the dll can be found.
-For more info, see the Readme in the VC/Redist folder.
+Visual Studio 2010 uses version 10 of the C runtime (MSVCRT9).  The executables
+no longer use the "Side by Side" assemblies used in previous versions of the
+compiler.  This simplifies distribution of applications.
+The run time libraries are avalible under the VC/Redist folder of your visual studio
+distribution. For more info, see the Readme in the VC/Redist folder.
 
 SUBPROJECTS
 -----------
@@ -92,6 +86,9 @@ _socket
 _testcapi
     tests of the Python C API, run via Lib/test/test_capi.py, and
     implemented by module Modules/_testcapimodule.c
+_testbuffer
+    buffer protocol tests, run via Lib/test/test_buffer.py, and
+    implemented by module Modules/_testbuffer.c
 pyexpat
     Python wrapper for accelerated XML parsing, which incorporates stable
     code from the Expat project:  http://sourceforge.net/projects/expat/
@@ -112,9 +109,9 @@ _tkinter
     pre-built Tcl/Tk in either ..\..\tcltk for 32-bit or ..\..\tcltk64 for
     64-bit (relative to this directory).  See below for instructions to build
     Tcl/Tk. 
-bz2
-    Python wrapper for the libbz2 compression library.  Homepage
-        http://sources.redhat.com/bzip2/
+_bz2
+    Python wrapper for the libbzip2 compression library.  Homepage
+        http://www.bzip.org/
     Download the source from the python.org copy into the dist
     directory:
 
@@ -133,13 +130,19 @@ bz2
 
     All of this managed to build libbz2.lib in 
     bzip2-1.0.6\$platform-$configuration\, which the Python project links in.
+_lzma
+    Python wrapper for the liblzma compression library.
+
+    Download the pre-built Windows binaries from http://tukaani.org/xz/, and
+    extract to ..\xz-5.0.3. If you are using a more recent version of liblzma,
+    it will be necessary to rename the directory from xz-<VERSION> to xz-5.0.3.
 
 _ssl
     Python wrapper for the secure sockets library.
 
     Get the source code through
 
-    svn export http://svn.python.org/projects/external/openssl-1.0.0j
+    svn export http://svn.python.org/projects/external/openssl-1.0.1c
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
