@@ -46,7 +46,8 @@ the `Python Package Index <http://pypi.python.org/pypi>`_.
    stdtypes.rst
    exceptions.rst
 
-   strings.rst
+   text.rst
+   binary.rst
    datatypes.rst
    numeric.rst
    functional.rst
@@ -56,7 +57,7 @@ the `Python Package Index <http://pypi.python.org/pypi>`_.
    fileformats.rst
    crypto.rst
    allos.rst
-   someos.rst
+   concurrency.rst
    ipc.rst
    netdata.rst
    markup.rst
