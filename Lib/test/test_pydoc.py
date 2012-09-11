@@ -198,7 +198,7 @@ war</tt></dd></dl>
 missing_pattern = "no Python documentation found for '%s'"
 
 # output pattern for module with bad imports
-badimport_pattern = "problem in %s - ImportError: No module named %s"
+badimport_pattern = "problem in %s - ImportError: No module named %r"
 
 def run_pydoc(module_name, *args, **env):
     """
@@ -236,8 +236,8 @@ def get_pydoc_text(module):
 def print_diffs(text1, text2):
     "Prints unified diffs for two texts"
     # XXX now obsolete, use unittest built-in support
-    lines1 = text1.splitlines(True)
-    lines2 = text2.splitlines(True)
+    lines1 = text1.splitlines(keepends=True)
+    lines2 = text2.splitlines(keepends=True)
     diffs = difflib.unified_diff(lines1, lines2, n=0, fromfile='expected',
                                  tofile='got')
     print('\n' + ''.join(diffs))
@@ -254,6 +254,8 @@ class PydocDocTest(unittest.TestCase):
 
     @unittest.skipIf(sys.flags.optimize >= 2,
                      "Docstrings are omitted with -O2 and above")
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                     'trace function introduces __locals__ unexpectedly')
     def test_html_doc(self):
         result, doc_loc = get_pydoc_html(pydoc_mod)
         mod_file = inspect.getabsfile(pydoc_mod)
@@ -269,6 +271,8 @@ class PydocDocTest(unittest.TestCase):
 
     @unittest.skipIf(sys.flags.optimize >= 2,
                      "Docstrings are omitted with -O2 and above")
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                     'trace function introduces __locals__ unexpectedly')
     def test_text_doc(self):
         result, doc_loc = get_pydoc_text(pydoc_mod)
         expected_text = expected_text_pattern % \
@@ -321,6 +325,8 @@ class PydocDocTest(unittest.TestCase):
 
     @unittest.skipIf(sys.flags.optimize >= 2,
                      'Docstrings are omitted with -O2 and above')
+    @unittest.skipIf(hasattr(sys, 'gettrace') and sys.gettrace(),
+                     'trace function introduces __locals__ unexpectedly')
     def test_help_output_redirect(self):
         # issue 940286, if output is set in Helper, then all output from
         # Helper.help should be redirected
@@ -388,11 +394,10 @@ class PydocImportTest(unittest.TestCase):
         modname = 'testmod_xyzzy'
         testpairs = (
             ('i_am_not_here', 'i_am_not_here'),
-            ('test.i_am_not_here_either', 'i_am_not_here_either'),
-            ('test.i_am_not_here.neither_am_i', 'i_am_not_here.neither_am_i'),
-            ('i_am_not_here.{}'.format(modname),
-             'i_am_not_here.{}'.format(modname)),
-            ('test.{}'.format(modname), modname),
+            ('test.i_am_not_here_either', 'test.i_am_not_here_either'),
+            ('test.i_am_not_here.neither_am_i', 'test.i_am_not_here'),
+            ('i_am_not_here.{}'.format(modname), 'i_am_not_here'),
+            ('test.{}'.format(modname), 'test.{}'.format(modname)),
             )
 
         sourcefn = os.path.join(TESTFN, modname) + os.extsep + "py"
