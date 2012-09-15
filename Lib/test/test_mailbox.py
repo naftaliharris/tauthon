@@ -22,6 +22,10 @@ except ImportError:
 
 class TestBase:
 
+    all_mailbox_types = (mailbox.Message, mailbox.MaildirMessage,
+                         mailbox.mboxMessage, mailbox.MHMessage,
+                         mailbox.BabylMessage, mailbox.MMDFMessage)
+
     def _check_sample(self, msg):
         # Inspect a mailbox.Message representation of the sample message
         self.assertIsInstance(msg, email.message.Message)
@@ -91,14 +95,14 @@ class TestMailbox(TestBase):
             """)
 
     def test_add_invalid_8bit_bytes_header(self):
-        key = self._box.add(self._nonascii_msg.encode('latin1'))
+        key = self._box.add(self._nonascii_msg.encode('latin-1'))
         self.assertEqual(len(self._box), 1)
         self.assertEqual(self._box.get_bytes(key),
-            self._nonascii_msg.encode('latin1'))
+            self._nonascii_msg.encode('latin-1'))
 
     def test_invalid_nonascii_header_as_string(self):
         subj = self._nonascii_msg.splitlines()[1]
-        key = self._box.add(subj.encode('latin1'))
+        key = self._box.add(subj.encode('latin-1'))
         self.assertEqual(self._box.get_string(key),
             'Subject: =?unknown-8bit?b?RmFsaW5hcHThciBo4Xpob3pzeuFsbO104XNz'
             'YWwuIE3hciByZW5kZWx06Ww/?=\n\n')
@@ -930,8 +934,7 @@ class TestMaildir(TestMailbox, unittest.TestCase):
         # the mtime and should cause a re-read. Note that "sleep
         # emulation" is still in effect, as skewfactor is -3.
         filename = os.path.join(self._path, 'cur', 'stray-file')
-        f = open(filename, 'w')
-        f.close()
+        support.create_empty_file(filename)
         os.unlink(filename)
         self._box._refresh()
         self.assertTrue(refreshed())
@@ -1374,6 +1377,14 @@ class TestMessage(TestBase, unittest.TestCase):
         # Initialize with invalid argument
         self.assertRaises(TypeError, lambda: self._factory(object()))
 
+    def test_all_eMM_attribues_exist(self):
+        # Issue 12537
+        eMM = email.message_from_string(_sample_message)
+        msg = self._factory(_sample_message)
+        for attr in eMM.__dict__:
+            self.assertTrue(attr in msg.__dict__,
+                '{} attribute does not exist'.format(attr))
+
     def test_become_message(self):
         # Take on the state of another message
         eMM = email.message_from_string(_sample_message)
@@ -1385,9 +1396,7 @@ class TestMessage(TestBase, unittest.TestCase):
         # Copy self's format-specific data to other message formats.
         # This test is superficial; better ones are in TestMessageConversion.
         msg = self._factory()
-        for class_ in (mailbox.Message, mailbox.MaildirMessage,
-                       mailbox.mboxMessage, mailbox.MHMessage,
-                       mailbox.BabylMessage, mailbox.MMDFMessage):
+        for class_ in self.all_mailbox_types:
             other_msg = class_()
             msg._explain_to(other_msg)
         other_msg = email.message.Message()
@@ -1619,36 +1628,43 @@ class TestMessageConversion(TestBase, unittest.TestCase):
 
     def test_plain_to_x(self):
         # Convert Message to all formats
-        for class_ in (mailbox.Message, mailbox.MaildirMessage,
-                       mailbox.mboxMessage, mailbox.MHMessage,
-                       mailbox.BabylMessage, mailbox.MMDFMessage):
+        for class_ in self.all_mailbox_types:
             msg_plain = mailbox.Message(_sample_message)
             msg = class_(msg_plain)
             self._check_sample(msg)
 
     def test_x_to_plain(self):
         # Convert all formats to Message
-        for class_ in (mailbox.Message, mailbox.MaildirMessage,
-                       mailbox.mboxMessage, mailbox.MHMessage,
-                       mailbox.BabylMessage, mailbox.MMDFMessage):
+        for class_ in self.all_mailbox_types:
             msg = class_(_sample_message)
             msg_plain = mailbox.Message(msg)
             self._check_sample(msg_plain)
 
     def test_x_from_bytes(self):
         # Convert all formats to Message
-        for class_ in (mailbox.Message, mailbox.MaildirMessage,
-                       mailbox.mboxMessage, mailbox.MHMessage,
-                       mailbox.BabylMessage, mailbox.MMDFMessage):
+        for class_ in self.all_mailbox_types:
             msg = class_(_bytes_sample_message)
             self._check_sample(msg)
 
     def test_x_to_invalid(self):
         # Convert all formats to an invalid format
-        for class_ in (mailbox.Message, mailbox.MaildirMessage,
-                       mailbox.mboxMessage, mailbox.MHMessage,
-                       mailbox.BabylMessage, mailbox.MMDFMessage):
+        for class_ in self.all_mailbox_types:
             self.assertRaises(TypeError, lambda: class_(False))
+
+    def test_type_specific_attributes_removed_on_conversion(self):
+        reference = {class_: class_(_sample_message).__dict__
+                        for class_ in self.all_mailbox_types}
+        for class1 in self.all_mailbox_types:
+            for class2 in self.all_mailbox_types:
+                if class1 is class2:
+                    continue
+                source = class1(_sample_message)
+                target = class2(source)
+                type_specific = [a for a in reference[class1]
+                                   if a not in reference[class2]]
+                for attr in type_specific:
+                    self.assertNotIn(attr, target.__dict__,
+                        "while converting {} to {}".format(class1, class2))
 
     def test_maildir_to_maildir(self):
         # Convert MaildirMessage to MaildirMessage
