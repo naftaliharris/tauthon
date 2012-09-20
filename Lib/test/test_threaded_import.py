@@ -11,8 +11,8 @@ import sys
 import time
 import shutil
 import unittest
-from test.support import verbose, import_module, run_unittest, TESTFN
-thread = import_module('_thread')
+from test.support import (
+    verbose, import_module, run_unittest, TESTFN, reap_threads, forget, unlink)
 threading = import_module('threading')
 
 def task(N, done, done_tasks, errors):
@@ -30,7 +30,7 @@ def task(N, done, done_tasks, errors):
     except Exception as e:
         errors.append(e.with_traceback(None))
     finally:
-        done_tasks.append(thread.get_ident())
+        done_tasks.append(threading.get_ident())
         finished = len(done_tasks) == N
         if finished:
             done.set()
@@ -62,7 +62,7 @@ class Finder:
     def __init__(self):
         self.numcalls = 0
         self.x = 0
-        self.lock = thread.allocate_lock()
+        self.lock = threading.Lock()
 
     def find_module(self, name, path=None):
         # Simulate some thread-unsafe behaviour. If calls to find_module()
@@ -113,7 +113,9 @@ class ThreadedImportTests(unittest.TestCase):
             done_tasks = []
             done.clear()
             for i in range(N):
-                thread.start_new_thread(task, (N, done, done_tasks, errors,))
+                t = threading.Thread(target=task,
+                                     args=(N, done, done_tasks, errors,))
+                t.start()
             done.wait(60)
             self.assertFalse(errors)
             if verbose:
@@ -124,7 +126,7 @@ class ThreadedImportTests(unittest.TestCase):
 
     def test_parallel_meta_path(self):
         finder = Finder()
-        sys.meta_path.append(finder)
+        sys.meta_path.insert(0, finder)
         try:
             self.check_parallel_module_init()
             self.assertGreater(finder.numcalls, 0)
@@ -143,7 +145,7 @@ class ThreadedImportTests(unittest.TestCase):
         def path_hook(path):
             finder.find_module('')
             raise ImportError
-        sys.path_hooks.append(path_hook)
+        sys.path_hooks.insert(0, path_hook)
         sys.meta_path.append(flushing_finder)
         try:
             # Flush the cache a first time
@@ -185,7 +187,7 @@ class ThreadedImportTests(unittest.TestCase):
             contents = contents % {'delay': delay}
             with open(os.path.join(TESTFN, name + ".py"), "wb") as f:
                 f.write(contents.encode('utf-8'))
-            self.addCleanup(sys.modules.pop, name, None)
+            self.addCleanup(forget, name)
 
         results = []
         def import_ab():
@@ -202,9 +204,39 @@ class ThreadedImportTests(unittest.TestCase):
         t2.join()
         self.assertEqual(set(results), {'a', 'b'})
 
+    def test_side_effect_import(self):
+        code = """if 1:
+            import threading
+            def target():
+                import random
+            t = threading.Thread(target=target)
+            t.start()
+            t.join()"""
+        sys.path.insert(0, os.curdir)
+        self.addCleanup(sys.path.remove, os.curdir)
+        filename = TESTFN + ".py"
+        with open(filename, "wb") as f:
+            f.write(code.encode('utf-8'))
+        self.addCleanup(unlink, filename)
+        self.addCleanup(forget, TESTFN)
+        __import__(TESTFN)
 
+
+@reap_threads
 def test_main():
-    run_unittest(ThreadedImportTests)
+    old_switchinterval = None
+    # Issue #15599: FreeBSD/KVM cannot handle gil_interval == 1.
+    new_switchinterval = 0.00001 if 'freebsd' in sys.platform else 0.00000001
+    try:
+        old_switchinterval = sys.getswitchinterval()
+        sys.setswitchinterval(new_switchinterval)
+    except AttributeError:
+        pass
+    try:
+        run_unittest(ThreadedImportTests)
+    finally:
+        if old_switchinterval is not None:
+            sys.setswitchinterval(old_switchinterval)
 
 if __name__ == "__main__":
     test_main()
