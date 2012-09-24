@@ -194,35 +194,30 @@ A Simple Hello World Program
 
 ::
 
-   from tkinter import *
+    import tkinter as tk
 
-   class Application(Frame):
-       def say_hi(self):
-           print("hi there, everyone!")
+    class Application(tk.Frame):
+        def __init__(self, master=None):
+            tk.Frame.__init__(self, master)
+            self.pack()
+            self.createWidgets()
 
-       def createWidgets(self):
-           self.QUIT = Button(self)
-           self.QUIT["text"] = "QUIT"
-           self.QUIT["fg"] = "red"
-           self.QUIT["command"] = self.quit
+        def createWidgets(self):
+            self.hi_there = tk.Button(self)
+            self.hi_there["text"] = "Hello World\n(click me)"
+            self.hi_there["command"] = self.say_hi
+            self.hi_there.pack(side="top")
 
-           self.QUIT.pack({"side": "left"})
+            self.QUIT = tk.Button(self, text="QUIT", fg="red",
+                                                command=root.destroy)
+            self.QUIT.pack(side="bottom")
 
-           self.hi_there = Button(self)
-           self.hi_there["text"] = "Hello",
-           self.hi_there["command"] = self.say_hi
+        def say_hi(self):
+            print("hi there, everyone!")
 
-           self.hi_there.pack({"side": "left"})
-
-       def __init__(self, master=None):
-           Frame.__init__(self, master)
-           self.pack()
-           self.createWidgets()
-
-   root = Tk()
-   app = Application(master=root)
-   app.mainloop()
-   root.destroy()
+    root = tk.Tk()
+    app = Application(master=root)
+    app.mainloop()
 
 
 A (Very) Quick Look at Tcl/Tk
@@ -755,21 +750,31 @@ Entry widget indexes (index, view index, etc.)
    displayed.  You can use these :mod:`tkinter` functions to access these special
    points in text widgets:
 
-   AtEnd()
+.. function:: AtEnd()
       refers to the last position in the text
 
-   AtInsert()
+   .. deprecated:: 3.3
+
+.. function:: AtInsert()
       refers to the point where the text cursor is
 
-   AtSelFirst()
+   .. deprecated:: 3.3
+
+.. function:: AtSelFirst()
       indicates the beginning point of the selected text
 
-   AtSelLast()
+   .. deprecated:: 3.3
+
+.. function:: AtSelLast()
       denotes the last point of the selected text and finally
 
-   At(x[, y])
+   .. deprecated:: 3.3
+
+.. function:: At(x[, y])
       refers to the character at pixel location *x*, *y* (with *y* not used in the
       case of a text entry widget, which contains a single line of text).
+
+   .. deprecated:: 3.3
 
 Text widget indexes
    The index notation for Text widgets is very rich and is best described in the Tk
@@ -818,4 +823,3 @@ some widget (e.g. labels, buttons, menus). In these cases, Tk will not keep a
 reference to the image. When the last Python reference to the image object is
 deleted, the image data is deleted as well, and Tk will display an empty box
 wherever the image was used.
-
