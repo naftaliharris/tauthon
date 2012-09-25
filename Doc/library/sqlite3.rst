@@ -369,6 +369,22 @@ Connection Objects
    method with :const:`None` for *handler*.
 
 
+.. method:: Connection.set_trace_callback(trace_callback)
+
+   Registers *trace_callback* to be called for each SQL statement that is
+   actually executed by the SQLite backend.
+
+   The only argument passed to the callback is the statement (as string) that
+   is being executed. The return value of the callback is ignored. Note that
+   the backend does not only run statements passed to the :meth:`Cursor.execute`
+   methods.  Other sources include the transaction management of the Python
+   module and the execution of triggers defined in the current database.
+
+   Passing :const:`None` as *trace_callback* will disable the trace callback.
+
+   .. versionadded:: 3.3
+
+
 .. method:: Connection.enable_load_extension(enabled)
 
    This routine allows/disallows the SQLite engine to load SQLite extensions
@@ -419,10 +435,6 @@ Connection Objects
    data type. By default, this attribute is set to :class:`str` and the
    :mod:`sqlite3` module will return Unicode objects for ``TEXT``. If you want to
    return bytestrings instead, you can set it to :class:`bytes`.
-
-   For efficiency reasons, there's also a way to return :class:`str` objects
-   only for non-ASCII data, and :class:`bytes` otherwise. To activate it, set
-   this attribute to :const:`sqlite3.OptimizedUnicode`.
 
    You can also set it to any other callable that accepts a single bytestring
    parameter and returns the resulting object.
