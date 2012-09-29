@@ -2,20 +2,27 @@
 Python News
 +++++++++++
 
-What's New in Python 3.3.1?
-===========================
+What's New in Python 3.4.0 Alpha 1?
+===================================
 
-*Release date: XX-XXX-2012*
+*Relase date: XX-XXX-2014*
 
 Core and Builtins
 -----------------
 
+- Upgrade Unicode data (UCD) to version 6.2.
+
 Library
 -------
+
+- pty.spawn() now returns the child process status returned by os.waitpid().
 
 - Issue #15756: subprocess.poll() now properly handles errno.ECHILD to
   return a returncode of 0 when the child has already exited or cannot
   be waited on.
+
+Extension Modules
+-----------------
 
 
 What's New in Python 3.3.0?
@@ -188,8 +195,6 @@ Library
 
 - Issue #15544: Fix Decimal.__float__ to work with payload-carrying NaNs.
 
-- Issue #15776: Allow pyvenv to work in existing directory with --clean.
-
 - Issue #15249: BytesGenerator now correctly mangles From lines (when
   requested) even if the body contains undecodable bytes.
 
@@ -205,6 +210,9 @@ Library
   displaying exceptions (Patch by Aaron Iles)
 
 - Issue #13579: string.Formatter now understands the 'a' conversion specifier.
+
+- Issue #15793: Stack corruption in ssl.RAND_egd().
+  Patch by Serhiy Storchaka.
 
 - Issue #15595: Fix subprocess.Popen(universal_newlines=True)
   for certain locales (utf-16 and utf-32 family). Patch by Chris Jerdonek.
@@ -543,6 +551,9 @@ C API
 
 Extension Modules
 -----------------
+
+- Issue #15676: Now "mmap" check for empty files before doing the
+  offset check.  Patch by Steven Willis.
 
 - Issue #6493: An issue in ctypes on Windows that caused structure bitfields
   of type ctypes.c_uint32 and width 32 to incorrectly be set has been fixed.
