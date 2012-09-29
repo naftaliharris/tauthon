@@ -15,7 +15,7 @@ operating system::
 
    >>> import os
    >>> os.getcwd()      # Return the current working directory
-   'C:\\Python33'
+   'C:\\Python34'
    >>> os.chdir('/server/accesslogs')   # Change current working directory
    >>> os.system('mkdir today')   # Run the command mkdir in the system shell
    0
@@ -148,7 +148,7 @@ Internet Access
 
 There are a number of modules for accessing the internet and processing internet
 protocols. Two of the simplest are :mod:`urllib.request` for retrieving data
-from urls and :mod:`smtplib` for sending mail::
+from URLs and :mod:`smtplib` for sending mail::
 
    >>> from urllib.request import urlopen
    >>> for line in urlopen('http://tycho.usno.navy.mil/cgi-bin/timer.pl'):
