@@ -249,7 +249,6 @@ class MimeTypes:
                     yield ctype
                 i += 1
 
-        default_encoding = sys.getdefaultencoding()
         with _winreg.OpenKey(_winreg.HKEY_CLASSES_ROOT,
                              r'MIME\Database\Content Type') as mimedb:
             for ctype in enum_types(mimedb):
@@ -434,6 +433,8 @@ def _default_mime_types():
         '.ksh'    : 'text/plain',
         '.latex'  : 'application/x-latex',
         '.m1v'    : 'video/mpeg',
+        '.m3u'    : 'application/vnd.apple.mpegurl',
+        '.m3u8'   : 'application/vnd.apple.mpegurl',
         '.man'    : 'application/x-troff-man',
         '.me'     : 'application/x-troff-me',
         '.mht'    : 'message/rfc822',
