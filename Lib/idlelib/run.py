@@ -7,6 +7,7 @@ import traceback
 import _thread as thread
 import threading
 import queue
+import tkinter
 
 from idlelib import CallTips
 from idlelib import AutoComplete
@@ -38,6 +39,17 @@ else:
         s += "%s: %s\n" % (category.__name__, message)
         return s
     warnings.formatwarning = idle_formatwarning_subproc
+
+
+tcl = tkinter.Tcl()
+
+
+def handle_tk_events(tcl=tcl):
+    """Process any tk events that are ready to be dispatched if tkinter
+    has been imported, a tcl interpreter has been created and tk has been
+    loaded."""
+    tcl.eval("update")
+
 
 # Thread shared globals: Establish a queue between a subthread (which handles
 # the socket) and the main thread (which runs user code), plus global
@@ -94,6 +106,7 @@ def main(del_exitfunc=False):
             try:
                 seq, request = rpc.request_queue.get(block=True, timeout=0.05)
             except queue.Empty:
+                handle_tk_events()
                 continue
             method, args, kwargs = request
             ret = method(*args, **kwargs)
@@ -295,6 +308,7 @@ class MyHandler(rpc.RPCHandler):
         sys.stdin = _RPCInputFile(self.console)
         sys.stdout = _RPCOutputFile(self.get_remote_proxy("stdout"))
         sys.stderr = _RPCOutputFile(self.get_remote_proxy("stderr"))
+        sys.displayhook = rpc.displayhook
         # page help() text to shell.
         import pydoc # import must be done here to capture i/o binding
         pydoc.pager = pydoc.plainpager
