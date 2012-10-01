@@ -81,8 +81,7 @@ or on combining URL components into a URL string.
    this argument is the empty string.
 
    If the *allow_fragments* argument is false, fragment identifiers are not
-   allowed, even if the URL's addressing scheme normally does support them.  The
-   default value for this argument is :const:`True`.
+   allowed.  The default value for this argument is :const:`True`.
 
    The return value is actually an instance of a subclass of :class:`tuple`.  This
    class has the following additional read-only convenience attributes:
@@ -119,6 +118,11 @@ or on combining URL components into a URL string.
    .. versionchanged:: 3.2
       Added IPv6 URL parsing capabilities.
 
+   .. versionchanged:: 3.3
+      The fragment is now parsed for all URL schemes (unless *allow_fragment* is
+      false), in accordance with :rfc:`3986`.  Previously, a whitelist of
+      schemes that support fragments existed.
+
 
 .. function:: parse_qs(qs, keep_blank_values=False, strict_parsing=False, encoding='utf-8', errors='replace')
 
@@ -141,8 +145,9 @@ or on combining URL components into a URL string.
    percent-encoded sequences into Unicode characters, as accepted by the
    :meth:`bytes.decode` method.
 
-   Use the :func:`urllib.parse.urlencode` function to convert such
-   dictionaries into query strings.
+   Use the :func:`urllib.parse.urlencode` function (with the ``doseq``
+   parameter set to ``True``) to convert such dictionaries into query
+   strings.
 
 
    .. versionchanged:: 3.2

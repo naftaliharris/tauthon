@@ -117,6 +117,35 @@ typedef struct {
 #define Py_TYPE(ob)             (((PyObject*)(ob))->ob_type)
 #define Py_SIZE(ob)             (((PyVarObject*)(ob))->ob_size)
 
+/********************* String Literals ****************************************/
+/* This structure helps managing static strings. The basic usage goes like this:
+   Instead of doing
+
+       r = PyObject_CallMethod(o, "foo", "args", ...);
+
+   do
+
+       _Py_IDENTIFIER(foo);
+       ...
+       r = _PyObject_CallMethodId(o, &PyId_foo, "args", ...);
+
+   PyId_foo is a static variable, either on block level or file level. On first
+   usage, the string "foo" is interned, and the structures are linked. On interpreter
+   shutdown, all strings are released (through _PyUnicode_ClearStaticStrings).
+
+   Alternatively, _Py_static_string allows to choose the variable name.
+   _PyUnicode_FromId returns a borrowed reference to the interned string.
+   _PyObject_{Get,Set,Has}AttrId are __getattr__ versions using _Py_Identifier*.
+*/
+typedef struct _Py_Identifier {
+    struct _Py_Identifier *next;
+    const char* string;
+    PyObject *object;
+} _Py_Identifier;
+
+#define _Py_static_string(varname, value)  static _Py_Identifier varname = { 0, value, 0 }
+#define _Py_IDENTIFIER(varname) _Py_static_string(PyId_##varname, #varname)
+
 /*
 Type objects contain a string containing the type name (to help somewhat
 in debugging), the allocation parameters (see PyObject_New() and
@@ -157,15 +186,16 @@ typedef struct bufferinfo {
     Py_ssize_t *shape;
     Py_ssize_t *strides;
     Py_ssize_t *suboffsets;
-    Py_ssize_t smalltable[2];  /* static store for shape and strides of
-                                  mono-dimensional buffers. */
     void *internal;
 } Py_buffer;
 
 typedef int (*getbufferproc)(PyObject *, Py_buffer *, int);
 typedef void (*releasebufferproc)(PyObject *, Py_buffer *);
 
-    /* Flags for getting buffers */
+/* Maximum number of dimensions */
+#define PyBUF_MAX_NDIM 64
+
+/* Flags for getting buffers */
 #define PyBUF_SIMPLE 0
 #define PyBUF_WRITABLE 0x0001
 /*  we used to include an E, backwards compatible alias  */
@@ -403,6 +433,9 @@ typedef struct{
 } PyType_Spec;
 
 PyAPI_FUNC(PyObject*) PyType_FromSpec(PyType_Spec*);
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03030000
+PyAPI_FUNC(PyObject*) PyType_FromSpecWithBases(PyType_Spec*, PyObject*);
+#endif
 
 #ifndef Py_LIMITED_API
 /* The *real* layout of a type object when allocated on the heap */
@@ -418,7 +451,8 @@ typedef struct _heaptypeobject {
                                       a given operator (e.g. __getitem__).
                                       see add_operators() in typeobject.c . */
     PyBufferProcs as_buffer;
-    PyObject *ht_name, *ht_slots;
+    PyObject *ht_name, *ht_slots, *ht_qualname;
+    struct _dictkeysobject *ht_cached_keys;
     /* here are optional user slots, followed by the members. */
 } PyHeapTypeObject;
 
@@ -448,13 +482,14 @@ PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
                                                PyObject *, PyObject *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *);
-PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, char *, PyObject **);
+PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, _Py_Identifier *);
 PyAPI_FUNC(PyTypeObject *) _PyType_CalculateMetaclass(PyTypeObject *, PyObject *);
 #endif
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
 PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 
 /* Generic operations on objects */
+struct _Py_Identifier;
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(int) PyObject_Print(PyObject *, FILE *, int);
 PyAPI_FUNC(void) _Py_BreakPoint(void);
@@ -472,6 +507,10 @@ PyAPI_FUNC(int) PyObject_HasAttrString(PyObject *, const char *);
 PyAPI_FUNC(PyObject *) PyObject_GetAttr(PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
+PyAPI_FUNC(int) _PyObject_IsAbstract(PyObject *);
+PyAPI_FUNC(PyObject *) _PyObject_GetAttrId(PyObject *, struct _Py_Identifier *);
+PyAPI_FUNC(int) _PyObject_SetAttrId(PyObject *, struct _Py_Identifier *, PyObject *);
+PyAPI_FUNC(int) _PyObject_HasAttrId(PyObject *, struct _Py_Identifier *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *);
 #endif
@@ -482,6 +521,7 @@ PyAPI_FUNC(PyObject *) _PyObject_NextNotImplemented(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_GenericGetAttr(PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_GenericSetAttr(PyObject *,
                                               PyObject *, PyObject *);
+PyAPI_FUNC(int) PyObject_GenericSetDict(PyObject *, PyObject *, void *);
 PyAPI_FUNC(Py_hash_t) PyObject_Hash(PyObject *);
 PyAPI_FUNC(Py_hash_t) PyObject_HashNotImplemented(PyObject *);
 PyAPI_FUNC(int) PyObject_IsTrue(PyObject *);
@@ -498,6 +538,11 @@ PyAPI_FUNC(int)
 _PyObject_GenericSetAttrWithDict(PyObject *, PyObject *,
                                  PyObject *, PyObject *);
 
+/* Helper to look up a builtin object */
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(PyObject *)
+_PyObject_GetBuiltin(const char *name);
+#endif
 
 /* PyObject_Dir(obj) acts like Python builtins.dir(obj), returning a
    list of strings.  PyObject_Dir(NULL) is like builtins.dir(),
@@ -515,6 +560,7 @@ PyAPI_FUNC(void) Py_ReprLeave(PyObject *);
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(Py_hash_t) _Py_HashDouble(double);
 PyAPI_FUNC(Py_hash_t) _Py_HashPointer(void*);
+PyAPI_FUNC(Py_hash_t) _Py_HashBytes(unsigned char*, Py_ssize_t);
 #endif
 
 typedef struct {
@@ -803,6 +849,10 @@ not implemented for a given type combination.
 PyAPI_DATA(PyObject) _Py_NotImplementedStruct; /* Don't use this directly */
 #define Py_NotImplemented (&_Py_NotImplementedStruct)
 
+/* Macro for returning Py_NotImplemented from a function */
+#define Py_RETURN_NOTIMPLEMENTED \
+    return Py_INCREF(Py_NotImplemented), Py_NotImplemented
+
 /* Rich comparison opcodes */
 #define Py_LT 0
 #define Py_LE 1
@@ -912,7 +962,7 @@ with the call stack never exceeding a depth of PyTrash_UNWIND_LEVEL.
 */
 
 /* This is the old private API, invoked by the macros before 3.2.4.
-   Kept for binary compatibility of extensions. */
+   Kept for binary compatibility of extensions using the stable ABI. */
 PyAPI_FUNC(void) _PyTrash_deposit_object(PyObject*);
 PyAPI_FUNC(void) _PyTrash_destroy_chain(void);
 PyAPI_DATA(int) _PyTrash_delete_nesting;
@@ -938,6 +988,14 @@ PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void);
         else \
             _PyTrash_thread_deposit_object((PyObject*)op); \
     } while (0);
+
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(void)
+_PyDebugAllocatorStats(FILE *out, const char *block_name, int num_blocks,
+                       size_t sizeof_block);
+PyAPI_FUNC(void)
+_PyObject_DebugTypeStats(FILE *out);
+#endif /* ifndef Py_LIMITED_API */
 
 #ifdef __cplusplus
 }

@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+import warnings
 from io import StringIO, BytesIO
 
 class HackedSysModule:
@@ -119,9 +120,13 @@ def gen_result(data, environ):
 class CgiTests(unittest.TestCase):
 
     def test_escape(self):
-        self.assertEqual("test &amp; string", cgi.escape("test & string"))
-        self.assertEqual("&lt;test string&gt;", cgi.escape("<test string>"))
-        self.assertEqual("&quot;test string&quot;", cgi.escape('"test string"', True))
+        # cgi.escape() is deprecated.
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', 'cgi\.escape',
+                                     DeprecationWarning)
+            self.assertEqual("test &amp; string", cgi.escape("test & string"))
+            self.assertEqual("&lt;test string&gt;", cgi.escape("<test string>"))
+            self.assertEqual("&quot;test string&quot;", cgi.escape('"test string"', True))
 
     def test_strict(self):
         for orig, expect in parse_strict_test_cases:
@@ -160,13 +165,7 @@ class CgiTests(unittest.TestCase):
             cgi.logfp = None
             cgi.logfile = "/dev/null"
             cgi.initlog("%s", "Testing log 3")
-            def log_cleanup():
-                """Restore the global state of the log vars."""
-                cgi.logfile = ''
-                cgi.logfp.close()
-                cgi.logfp = None
-                cgi.log = cgi.initlog
-            self.addCleanup(log_cleanup)
+            self.addCleanup(cgi.closelog)
             cgi.log("Testing log 4")
 
     def test_fieldstorage_readline(self):
