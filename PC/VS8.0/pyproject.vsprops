@@ -38,7 +38,7 @@
 	/>
 	<UserMacro
 		Name="PyDllName"
-		Value="python32"
+		Value="python34"
 	/>
 	<UserMacro
 		Name="PythonExe"
@@ -58,7 +58,7 @@
 	/>
 	<UserMacro
 		Name="opensslDir"
-		Value="$(externalsDir)\openssl-1.0.0j"
+		Value="$(externalsDir)\openssl-1.0.1c"
 	/>
 	<UserMacro
 		Name="tcltkDir"

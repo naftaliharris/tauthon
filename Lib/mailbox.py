@@ -631,8 +631,7 @@ class _singlefileMailbox(Mailbox):
     def iterkeys(self):
         """Return an iterator over keys."""
         self._lookup()
-        for key in self._toc.keys():
-            yield key
+        yield from self._toc.keys()
 
     def __contains__(self, key):
         """Return True if the keyed message exists, False otherwise."""
@@ -1157,8 +1156,7 @@ class MH(Mailbox):
     def get_sequences(self):
         """Return a name-to-key-list dictionary to define each sequence."""
         results = {}
-        f = open(os.path.join(self._path, '.mh_sequences'), 'r')
-        try:
+        with open(os.path.join(self._path, '.mh_sequences'), 'r', encoding='ASCII') as f:
             all_keys = set(self.keys())
             for line in f:
                 try:
@@ -1177,13 +1175,11 @@ class MH(Mailbox):
                 except ValueError:
                     raise FormatError('Invalid sequence specification: %s' %
                                       line.rstrip())
-        finally:
-            f.close()
         return results
 
     def set_sequences(self, sequences):
         """Set sequences using the given name-to-key-list dictionary."""
-        f = open(os.path.join(self._path, '.mh_sequences'), 'r+')
+        f = open(os.path.join(self._path, '.mh_sequences'), 'r+', encoding='ASCII')
         try:
             os.close(os.open(f.name, os.O_WRONLY | os.O_TRUNC))
             for name, keys in sequences.items():
@@ -1523,9 +1519,10 @@ class Message(email.message.Message):
 
     def _become_message(self, message):
         """Assume the non-format-specific state of message."""
-        for name in ('_headers', '_unixfrom', '_payload', '_charset',
-                     'preamble', 'epilogue', 'defects', '_default_type'):
-            self.__dict__[name] = message.__dict__[name]
+        type_specific = getattr(message, '_type_specific_attributes', [])
+        for name in message.__dict__:
+            if name not in type_specific:
+                self.__dict__[name] = message.__dict__[name]
 
     def _explain_to(self, message):
         """Copy format-specific state to message insofar as possible."""
@@ -1537,6 +1534,8 @@ class Message(email.message.Message):
 
 class MaildirMessage(Message):
     """Message with Maildir-specific properties."""
+
+    _type_specific_attributes = ['_subdir', '_info', '_date']
 
     def __init__(self, message=None):
         """Initialize a MaildirMessage instance."""
@@ -1644,6 +1643,8 @@ class MaildirMessage(Message):
 
 class _mboxMMDFMessage(Message):
     """Message with mbox- or MMDF-specific properties."""
+
+    _type_specific_attributes = ['_from']
 
     def __init__(self, message=None):
         """Initialize an mboxMMDFMessage instance."""
@@ -1760,6 +1761,8 @@ class mboxMessage(_mboxMMDFMessage):
 class MHMessage(Message):
     """Message with MH-specific properties."""
 
+    _type_specific_attributes = ['_sequences']
+
     def __init__(self, message=None):
         """Initialize an MHMessage instance."""
         self._sequences = []
@@ -1829,6 +1832,8 @@ class MHMessage(Message):
 
 class BabylMessage(Message):
     """Message with Babyl-specific properties."""
+
+    _type_specific_attributes = ['_labels', '_visible']
 
     def __init__(self, message=None):
         """Initialize an BabylMessage instance."""

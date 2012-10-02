@@ -16,6 +16,13 @@ import warnings
 import array
 from array import _array_reconstructor as array_reconstructor
 
+try:
+    # Try to determine availability of long long independently
+    # of the array module under test
+    struct.calcsize('@q')
+    have_long_long = True
+except struct.error:
+    have_long_long = False
 
 class ArraySubclass(array.array):
     pass
@@ -26,6 +33,8 @@ class ArraySubclassWithKwargs(array.array):
 
 tests = [] # list to accumulate all tests
 typecodes = "ubBhHiIlLfd"
+if have_long_long:
+    typecodes += 'qQ'
 
 class BadConstructorTest(unittest.TestCase):
 
@@ -209,10 +218,14 @@ class BaseTest(unittest.TestCase):
         self.assertEqual(bi[1], len(a))
 
     def test_byteswap(self):
-        a = array.array(self.typecode, self.example)
+        if self.typecode == 'u':
+            example = '\U00100100'
+        else:
+            example = self.example
+        a = array.array(self.typecode, example)
         self.assertRaises(TypeError, a.byteswap, 42)
         if a.itemsize in (1, 2, 4, 8):
-            b = array.array(self.typecode, self.example)
+            b = array.array(self.typecode, example)
             b.byteswap()
             if a.itemsize==1:
                 self.assertEqual(a, b)
@@ -271,6 +284,20 @@ class BaseTest(unittest.TestCase):
             self.assertEqual(a, b)
             self.assertEqual(a.x, b.x)
             self.assertEqual(type(a), type(b))
+
+    def test_iterator_pickle(self):
+        data = array.array(self.typecode, self.example)
+        orgit = iter(data)
+        d = pickle.dumps(orgit)
+        it = pickle.loads(d)
+        self.assertEqual(type(orgit), type(it))
+        self.assertEqual(list(it), list(data))
+
+        if len(data):
+            it = pickle.loads(d)
+            next(it)
+            d = pickle.dumps(it)
+            self.assertEqual(list(it), list(data)[1:])
 
     def test_insert(self):
         a = array.array(self.typecode, self.example)
@@ -991,14 +1018,14 @@ class BaseTest(unittest.TestCase):
     @support.cpython_only
     def test_sizeof_with_buffer(self):
         a = array.array(self.typecode, self.example)
-        basesize = support.calcvobjsize('4Pi')
+        basesize = support.calcvobjsize('Pn2Pi')
         buffer_size = a.buffer_info()[1] * a.itemsize
         support.check_sizeof(self, a, basesize + buffer_size)
 
     @support.cpython_only
     def test_sizeof_without_buffer(self):
         a = array.array(self.typecode)
-        basesize = support.calcvobjsize('4Pi')
+        basesize = support.calcvobjsize('Pn2Pi')
         support.check_sizeof(self, a, basesize)
 
 
@@ -1018,6 +1045,16 @@ class UnicodeTest(StringTest):
     minitemsize = 2
 
     def test_unicode(self):
+        try:
+            import ctypes
+            sizeof_wchar = ctypes.sizeof(ctypes.c_wchar)
+        except ImportError:
+            import sys
+            if sys.platform == 'win32':
+                sizeof_wchar = 2
+            else:
+                sizeof_wchar = 4
+
         self.assertRaises(TypeError, array.array, 'b', 'foo')
 
         a = array.array('u', '\xa0\xc2\u1234')
@@ -1027,6 +1064,7 @@ class UnicodeTest(StringTest):
         a.fromunicode('\x11abc\xff\u1234')
         s = a.tounicode()
         self.assertEqual(s, '\xa0\xc2\u1234 \x11abc\xff\u1234')
+        self.assertEqual(a.itemsize, sizeof_wchar)
 
         s = '\x00="\'a\\b\x80\xff\u0000\u0001\u1234'
         a = array.array('u', s)
@@ -1217,6 +1255,18 @@ class UnsignedLongTest(UnsignedNumberTest):
     typecode = 'L'
     minitemsize = 4
 tests.append(UnsignedLongTest)
+
+@unittest.skipIf(not have_long_long, 'need long long support')
+class LongLongTest(SignedNumberTest):
+    typecode = 'q'
+    minitemsize = 8
+tests.append(LongLongTest)
+
+@unittest.skipIf(not have_long_long, 'need long long support')
+class UnsignedLongLongTest(UnsignedNumberTest):
+    typecode = 'Q'
+    minitemsize = 8
+tests.append(UnsignedLongLongTest)
 
 class FPTest(NumberTest):
     example = [-42.0, 0, 42, 1e5, -1e10]
