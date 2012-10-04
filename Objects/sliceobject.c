@@ -17,6 +17,17 @@ this type and there is exactly one in existence.
 #include "structmember.h"
 
 static PyObject *
+ellipsis_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    if (PyTuple_GET_SIZE(args) || (kwargs && PyDict_Size(kwargs))) {
+        PyErr_SetString(PyExc_TypeError, "EllipsisType takes no arguments");
+        return NULL;
+    }
+    Py_INCREF(Py_Ellipsis);
+    return Py_Ellipsis;
+}
+
+static PyObject *
 ellipsis_repr(PyObject *op)
 {
     return PyUnicode_FromString("Ellipsis");
@@ -43,6 +54,24 @@ PyTypeObject PyEllipsis_Type = {
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    0,                                  /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    0,                                  /* tp_alloc */
+    ellipsis_new,                       /* tp_new */
 };
 
 PyObject _Py_EllipsisObject = {
@@ -51,19 +80,38 @@ PyObject _Py_EllipsisObject = {
 };
 
 
-/* Slice object implementation
+/* Slice object implementation */
 
-   start, stop, and step are python objects with None indicating no
+/* Using a cache is very effective since typically only a single slice is
+ * created and then deleted again
+ */
+static PySliceObject *slice_cache = NULL;
+void PySlice_Fini(void)
+{
+    PySliceObject *obj = slice_cache;
+    if (obj != NULL) {
+        slice_cache = NULL;
+        PyObject_Del(obj);
+    }
+}
+
+/* start, stop, and step are python objects with None indicating no
    index is present.
 */
 
 PyObject *
 PySlice_New(PyObject *start, PyObject *stop, PyObject *step)
 {
-    PySliceObject *obj = PyObject_New(PySliceObject, &PySlice_Type);
-
-    if (obj == NULL)
-        return NULL;
+    PySliceObject *obj;
+    if (slice_cache != NULL) {
+        obj = slice_cache;
+        slice_cache = NULL;
+        _Py_NewReference((PyObject *)obj);
+    } else {
+        obj = PyObject_New(PySliceObject, &PySlice_Type);
+        if (obj == NULL)
+            return NULL;
+    }
 
     if (step == NULL) step = Py_None;
     Py_INCREF(step);
@@ -231,7 +279,10 @@ slice_dealloc(PySliceObject *r)
     Py_DECREF(r->step);
     Py_DECREF(r->start);
     Py_DECREF(r->stop);
-    PyObject_Del(r);
+    if (slice_cache == NULL)
+        slice_cache = r;
+    else
+        PyObject_Del(r);
 }
 
 static PyObject *
@@ -297,10 +348,8 @@ slice_richcompare(PyObject *v, PyObject *w, int op)
     PyObject *t2;
     PyObject *res;
 
-    if (!PySlice_Check(v) || !PySlice_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PySlice_Check(v) || !PySlice_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     if (v == w) {
         /* XXX Do we really need this shortcut?
