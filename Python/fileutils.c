@@ -3,6 +3,40 @@
 #  include <windows.h>
 #endif
 
+#ifdef HAVE_LANGINFO_H
+#include <langinfo.h>
+#endif
+
+PyObject *
+_Py_device_encoding(int fd)
+{
+#if defined(MS_WINDOWS) || defined(MS_WIN64)
+    UINT cp;
+#endif
+    if (!_PyVerify_fd(fd) || !isatty(fd)) {
+        Py_RETURN_NONE;
+    }
+#if defined(MS_WINDOWS) || defined(MS_WIN64)
+    if (fd == 0)
+        cp = GetConsoleCP();
+    else if (fd == 1 || fd == 2)
+        cp = GetConsoleOutputCP();
+    else
+        cp = 0;
+    /* GetConsoleCP() and GetConsoleOutputCP() return 0 if the application
+       has no console */
+    if (cp != 0)
+        return PyUnicode_FromFormat("cp%u", (unsigned int)cp);
+#elif defined(CODESET)
+    {
+        char *codeset = nl_langinfo(CODESET);
+        if (codeset != NULL && codeset[0] != 0)
+            return PyUnicode_FromString(codeset);
+    }
+#endif
+    Py_RETURN_NONE;
+}
+
 #ifdef HAVE_STAT
 
 /* Decode a byte string from the locale encoding with the
@@ -16,7 +50,9 @@
    Return a pointer to a newly allocated wide character string (use
    PyMem_Free() to free the memory) and write the number of written wide
    characters excluding the null character into *size if size is not NULL, or
-   NULL on error (conversion or memory allocation error).
+   NULL on error (decoding or memory allocation error). If size is not NULL,
+   *size is set to (size_t)-1 on memory error and (size_t)-2 on decoding
+   error.
 
    Conversion errors should never happen, unless there is a bug in the C
    library. */
@@ -82,8 +118,9 @@ _Py_char2wchar(const char* arg, size_t *size)
                since we provide everything that we have -
                unless there is a bug in the C library, or I
                misunderstood how mbrtowc works. */
-            fprintf(stderr, "unexpected mbrtowc result -2\n");
             PyMem_Free(res);
+            if (size != NULL)
+                *size = (size_t)-2;
             return NULL;
         }
         if (converted == (size_t)-1) {
@@ -112,7 +149,8 @@ _Py_char2wchar(const char* arg, size_t *size)
        is ASCII (i.e. escape all bytes > 128. This will still roundtrip
        correctly in the locale's charset, which must be an ASCII superset. */
     res = PyMem_Malloc((strlen(arg)+1)*sizeof(wchar_t));
-    if (!res) goto oom;
+    if (!res)
+        goto oom;
     in = (unsigned char*)arg;
     out = res;
     while(*in)
@@ -126,7 +164,8 @@ _Py_char2wchar(const char* arg, size_t *size)
         *size = out - res;
     return res;
 oom:
-    fprintf(stderr, "out of memory\n");
+    if (size != NULL)
+        *size = (size_t)-1;
     return NULL;
 }
 
@@ -137,10 +176,10 @@ oom:
    This function is the reverse of _Py_char2wchar().
 
    Return a pointer to a newly allocated byte string (use PyMem_Free() to free
-   the memory), or NULL on conversion or memory allocation error.
+   the memory), or NULL on encoding or memory allocation error.
 
    If error_pos is not NULL: *error_pos is the index of the invalid character
-   on conversion error, or (size_t)-1 otherwise. */
+   on encoding error, or (size_t)-1 otherwise. */
 char*
 _Py_wchar2char(const wchar_t *text, size_t *error_pos)
 {
@@ -235,8 +274,8 @@ _Py_wstat(const wchar_t* path, struct stat *buf)
 /* Call _wstat() on Windows, or encode the path to the filesystem encoding and
    call stat() otherwise. Only fill st_mode attribute on Windows.
 
-   Return 0 on success, -1 on _wstat() / stat() error or (if PyErr_Occurred())
-   unicode error. */
+   Return 0 on success, -1 on _wstat() / stat() error, -2 if an exception was
+   raised. */
 
 int
 _Py_stat(PyObject *path, struct stat *statbuf)
@@ -244,8 +283,12 @@ _Py_stat(PyObject *path, struct stat *statbuf)
 #ifdef MS_WINDOWS
     int err;
     struct _stat wstatbuf;
+    wchar_t *wpath;
 
-    err = _wstat(PyUnicode_AS_UNICODE(path), &wstatbuf);
+    wpath = PyUnicode_AsUnicode(path);
+    if (wpath == NULL)
+        return -2;
+    err = _wstat(wpath, &wstatbuf);
     if (!err)
         statbuf->st_mode = wstatbuf.st_mode;
     return err;
@@ -253,7 +296,7 @@ _Py_stat(PyObject *path, struct stat *statbuf)
     int ret;
     PyObject *bytes = PyUnicode_EncodeFSDefault(path);
     if (bytes == NULL)
-        return -1;
+        return -2;
     ret = stat(PyBytes_AS_STRING(bytes), statbuf);
     Py_DECREF(bytes);
     return ret;
@@ -297,18 +340,29 @@ FILE*
 _Py_fopen(PyObject *path, const char *mode)
 {
 #ifdef MS_WINDOWS
+    wchar_t *wpath;
     wchar_t wmode[10];
     int usize;
+
+    if (!PyUnicode_Check(path)) {
+        PyErr_Format(PyExc_TypeError,
+                     "str file path expected under Windows, got %R",
+                     Py_TYPE(path));
+        return NULL;
+    }
+    wpath = PyUnicode_AsUnicode(path);
+    if (wpath == NULL)
+        return NULL;
 
     usize = MultiByteToWideChar(CP_ACP, 0, mode, -1, wmode, sizeof(wmode));
     if (usize == 0)
         return NULL;
 
-    return _wfopen(PyUnicode_AS_UNICODE(path), wmode);
+    return _wfopen(wpath, wmode);
 #else
     FILE *f;
-    PyObject *bytes = PyUnicode_EncodeFSDefault(path);
-    if (bytes == NULL)
+    PyObject *bytes;
+    if (!PyUnicode_FSConverter(path, &bytes))
         return NULL;
     f = fopen(PyBytes_AS_STRING(bytes), mode);
     Py_DECREF(bytes);
@@ -319,7 +373,7 @@ _Py_fopen(PyObject *path, const char *mode)
 #ifdef HAVE_READLINK
 
 /* Read value of symbolic link. Encode the path to the locale encoding, decode
-   the result from the locale encoding. */
+   the result from the locale encoding. Return -1 on error. */
 
 int
 _Py_wreadlink(const wchar_t *path, wchar_t *buf, size_t bufsiz)
@@ -363,7 +417,8 @@ _Py_wreadlink(const wchar_t *path, wchar_t *buf, size_t bufsiz)
 #ifdef HAVE_REALPATH
 
 /* Return the canonicalized absolute pathname. Encode path to the locale
-   encoding, decode the result from the locale encoding. */
+   encoding, decode the result from the locale encoding.
+   Return NULL on error. */
 
 wchar_t*
 _Py_wrealpath(const wchar_t *path,
@@ -401,7 +456,8 @@ _Py_wrealpath(const wchar_t *path,
 #endif
 
 /* Get the current directory. size is the buffer size in wide characters
-   including the null character. Decode the path from the locale encoding. */
+   including the null character. Decode the path from the locale encoding.
+   Return NULL on error. */
 
 wchar_t*
 _Py_wgetcwd(wchar_t *buf, size_t size)
