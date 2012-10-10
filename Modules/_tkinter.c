@@ -323,114 +323,8 @@ WaitForMainloop(TkappObject* self)
 #endif /* WITH_THREAD */
 
 
-static char *
-AsString(PyObject *value, PyObject *tmp)
-{
-    if (PyBytes_Check(value))
-        return PyBytes_AsString(value);
-    else if (PyUnicode_Check(value)) {
-        PyObject *v = PyUnicode_AsUTF8String(value);
-        if (v == NULL)
-            return NULL;
-        if (PyList_Append(tmp, v) != 0) {
-            Py_DECREF(v);
-            return NULL;
-        }
-        Py_DECREF(v);
-        return PyBytes_AsString(v);
-    }
-    else {
-        PyObject *v = PyObject_Str(value);
-        if (v == NULL)
-            return NULL;
-        if (PyList_Append(tmp, v) != 0) {
-            Py_DECREF(v);
-            return NULL;
-        }
-        Py_DECREF(v);
-        return PyBytes_AsString(v);
-    }
-}
-
-
 
 #define ARGSZ 64
-
-static char *
-Merge(PyObject *args)
-{
-    PyObject *tmp = NULL;
-    char *argvStore[ARGSZ];
-    char **argv = NULL;
-    int fvStore[ARGSZ];
-    int *fv = NULL;
-    int argc = 0, fvc = 0, i;
-    char *res = NULL;
-
-    if (!(tmp = PyList_New(0)))
-        return NULL;
-
-    argv = argvStore;
-    fv = fvStore;
-
-    if (args == NULL)
-        argc = 0;
-
-    else if (!PyTuple_Check(args)) {
-        argc = 1;
-        fv[0] = 0;
-        if (!(argv[0] = AsString(args, tmp)))
-            goto finally;
-    }
-    else {
-        argc = PyTuple_Size(args);
-
-        if (argc > ARGSZ) {
-            argv = (char **)ckalloc(argc * sizeof(char *));
-            fv = (int *)ckalloc(argc * sizeof(int));
-            if (argv == NULL || fv == NULL) {
-                PyErr_NoMemory();
-                goto finally;
-            }
-        }
-
-        for (i = 0; i < argc; i++) {
-            PyObject *v = PyTuple_GetItem(args, i);
-            if (PyTuple_Check(v)) {
-                fv[i] = 1;
-                if (!(argv[i] = Merge(v)))
-                    goto finally;
-                fvc++;
-            }
-            else if (v == Py_None) {
-                argc = i;
-                break;
-            }
-            else {
-                fv[i] = 0;
-                if (!(argv[i] = AsString(v, tmp)))
-                    goto finally;
-                fvc++;
-            }
-        }
-    }
-    res = Tcl_Merge(argc, argv);
-    if (res == NULL)
-        PyErr_SetString(Tkinter_TclError, "merge failed");
-
-  finally:
-    for (i = 0; i < fvc; i++)
-        if (fv[i]) {
-            ckfree(argv[i]);
-        }
-    if (argv != argvStore)
-        ckfree(FREECAST argv);
-    if (fv != fvStore)
-        ckfree(FREECAST fv);
-
-    Py_DECREF(tmp);
-    return res;
-}
 
 
 
@@ -442,8 +336,7 @@ Split(char *list)
     PyObject *v;
 
     if (list == NULL) {
-        Py_INCREF(Py_None);
-        return Py_None;
+        Py_RETURN_NONE;
     }
 
     if (Tcl_SplitList((Tcl_Interp *)NULL, list, &argc, &argv) != TCL_OK) {
@@ -1332,42 +1225,6 @@ Tkapp_Call(PyObject *selfptr, PyObject *args)
 
 
 static PyObject *
-Tkapp_GlobalCall(PyObject *self, PyObject *args)
-{
-    /* Could do the same here as for Tkapp_Call(), but this is not used
-       much, so I can't be bothered.  Unfortunately Tcl doesn't export a
-       way for the user to do what all its Global* variants do (save and
-       reset the scope pointer, call the local version, restore the saved
-       scope pointer). */
-
-    char *cmd;
-    PyObject *res = NULL;
-
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "globalcall is deprecated and will be removed in 3.4",
-                     1) < 0)
-        return 0;
-
-    CHECK_TCL_APPARTMENT;
-
-    cmd  = Merge(args);
-    if (cmd) {
-        int err;
-        ENTER_TCL
-        err = Tcl_GlobalEval(Tkapp_Interp(self), cmd);
-        ENTER_OVERLAP
-        if (err == TCL_ERROR)
-            res = Tkinter_Error(self);
-        else
-            res = PyUnicode_FromString(Tkapp_Result(self));
-        LEAVE_OVERLAP_TCL
-        ckfree(cmd);
-    }
-
-    return res;
-}
-
-static PyObject *
 Tkapp_Eval(PyObject *self, PyObject *args)
 {
     char *script;
@@ -1381,34 +1238,6 @@ Tkapp_Eval(PyObject *self, PyObject *args)
 
     ENTER_TCL
     err = Tcl_Eval(Tkapp_Interp(self), script);
-    ENTER_OVERLAP
-    if (err == TCL_ERROR)
-        res = Tkinter_Error(self);
-    else
-        res = PyUnicode_FromString(Tkapp_Result(self));
-    LEAVE_OVERLAP_TCL
-    return res;
-}
-
-static PyObject *
-Tkapp_GlobalEval(PyObject *self, PyObject *args)
-{
-    char *script;
-    PyObject *res = NULL;
-    int err;
-
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "globaleval is deprecated and will be removed in 3.4",
-                     1) < 0)
-        return 0;
-
-    if (!PyArg_ParseTuple(args, "s:globaleval", &script))
-        return NULL;
-
-    CHECK_TCL_APPARTMENT;
-
-    ENTER_TCL
-    err = Tcl_GlobalEval(Tkapp_Interp(self), script);
     ENTER_OVERLAP
     if (err == TCL_ERROR)
         res = Tkinter_Error(self);
@@ -1478,8 +1307,7 @@ Tkapp_AddErrorInfo(PyObject *self, PyObject *args)
     Tcl_AddErrorInfo(Tkapp_Interp(self), msg);
     LEAVE_TCL
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 
@@ -1961,27 +1789,6 @@ Tkapp_Split(PyObject *self, PyObject *args)
     return v;
 }
 
-static PyObject *
-Tkapp_Merge(PyObject *self, PyObject *args)
-{
-    char *s;
-    PyObject *res = NULL;
-
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                     "merge is deprecated and will be removed in 3.4",
-                     1) < 0)
-        return 0;
-
-    s = Merge(args);
-
-    if (s) {
-        res = PyUnicode_FromString(s);
-        ckfree(s);
-    }
-
-    return res;
-}
-
 
 
 /** Tcl Command **/
@@ -2167,8 +1974,7 @@ Tkapp_CreateCommand(PyObject *selfptr, PyObject *args)
         return NULL;
     }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 
@@ -2209,8 +2015,7 @@ Tkapp_DeleteCommand(PyObject *selfptr, PyObject *args)
         PyErr_SetString(Tkinter_TclError, "can't delete Tcl command");
         return NULL;
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 
@@ -2314,8 +2119,7 @@ Tkapp_CreateFileHandler(PyObject *self, PyObject *args)
     ENTER_TCL
     Tcl_CreateFileHandler(tfile, mask, FileHandler, (ClientData) data);
     LEAVE_TCL
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2339,8 +2143,7 @@ Tkapp_DeleteFileHandler(PyObject *self, PyObject *args)
     ENTER_TCL
     Tcl_DeleteFileHandler(tfile);
     LEAVE_TCL
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 #endif /* HAVE_CREATEFILEHANDLER */
 
@@ -2372,8 +2175,7 @@ Tktt_DeleteTimerHandler(PyObject *self, PyObject *args)
         Py_DECREF(func);
         Py_DECREF(v); /* See Tktt_New() */
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyMethodDef Tktt_methods[] =
@@ -2573,8 +2375,7 @@ Tkapp_MainLoop(PyObject *selfptr, PyObject *args)
         excInCmd = valInCmd = trbInCmd = NULL;
         return NULL;
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2600,8 +2401,7 @@ Tkapp_Quit(PyObject *self, PyObject *args)
         return NULL;
 
     quitMainLoop = 1;
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2658,8 +2458,7 @@ Tkapp_TkInit(PyObject *self, PyObject *args)
             return NULL;
         }
     }
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2673,8 +2472,7 @@ Tkapp_WantObjects(PyObject *self, PyObject *args)
         return PyBool_FromLong(((TkappObject*)self)->wantobjects);
     ((TkappObject*)self)->wantobjects = wantobjects;
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2683,8 +2481,7 @@ Tkapp_WillDispatch(PyObject *self, PyObject *args)
 
     ((TkappObject*)self)->dispatching = 1;
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 
@@ -2695,9 +2492,7 @@ static PyMethodDef Tkapp_methods[] =
     {"willdispatch",       Tkapp_WillDispatch, METH_NOARGS},
     {"wantobjects",            Tkapp_WantObjects, METH_VARARGS},
     {"call",                   Tkapp_Call, METH_VARARGS},
-    {"globalcall",             Tkapp_GlobalCall, METH_VARARGS},
     {"eval",                   Tkapp_Eval, METH_VARARGS},
-    {"globaleval",             Tkapp_GlobalEval, METH_VARARGS},
     {"evalfile",               Tkapp_EvalFile, METH_VARARGS},
     {"record",                 Tkapp_Record, METH_VARARGS},
     {"adderrorinfo",       Tkapp_AddErrorInfo, METH_VARARGS},
@@ -2716,7 +2511,6 @@ static PyMethodDef Tkapp_methods[] =
     {"exprboolean",        Tkapp_ExprBoolean, METH_VARARGS},
     {"splitlist",              Tkapp_SplitList, METH_VARARGS},
     {"split",                  Tkapp_Split, METH_VARARGS},
-    {"merge",                  Tkapp_Merge, METH_VARARGS},
     {"createcommand",      Tkapp_CreateCommand, METH_VARARGS},
     {"deletecommand",      Tkapp_DeleteCommand, METH_VARARGS},
 #ifdef HAVE_CREATEFILEHANDLER
@@ -2932,8 +2726,7 @@ Tkinter_setbusywaitinterval(PyObject *self, PyObject *args)
         return NULL;
     }
     Tkinter_busywaitinterval = new_val;
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 static char setbusywaitinterval_doc[] =
@@ -3066,27 +2859,6 @@ DisableEventHook(void)
 }
 
 
-/* all errors will be checked in one fell swoop in init_tkinter() */
-static void
-ins_long(PyObject *d, char *name, long val)
-{
-    PyObject *v = PyLong_FromLong(val);
-    if (v) {
-        PyDict_SetItemString(d, name, v);
-        Py_DECREF(v);
-    }
-}
-static void
-ins_string(PyObject *d, char *name, char *val)
-{
-    PyObject *v = PyUnicode_FromString(val);
-    if (v) {
-        PyDict_SetItemString(d, name, v);
-        Py_DECREF(v);
-    }
-}
-
-
 static struct PyModuleDef _tkintermodule = {
     PyModuleDef_HEAD_INIT,
     "_tkinter",
@@ -3102,7 +2874,7 @@ static struct PyModuleDef _tkintermodule = {
 PyMODINIT_FUNC
 PyInit__tkinter(void)
 {
-    PyObject *m, *d, *uexe, *cexe;
+    PyObject *m, *uexe, *cexe;
 
     if (PyType_Ready(&Tkapp_Type) < 0)
         return NULL;
@@ -3115,32 +2887,32 @@ PyInit__tkinter(void)
     if (m == NULL)
         return NULL;
 
-    d = PyModule_GetDict(m);
     Tkinter_TclError = PyErr_NewException("_tkinter.TclError", NULL, NULL);
-    PyDict_SetItemString(d, "TclError", Tkinter_TclError);
+    Py_INCREF(Tkinter_TclError);
+    PyModule_AddObject(m, "TclError", Tkinter_TclError);
 
-    ins_long(d, "READABLE", TCL_READABLE);
-    ins_long(d, "WRITABLE", TCL_WRITABLE);
-    ins_long(d, "EXCEPTION", TCL_EXCEPTION);
-    ins_long(d, "WINDOW_EVENTS", TCL_WINDOW_EVENTS);
-    ins_long(d, "FILE_EVENTS", TCL_FILE_EVENTS);
-    ins_long(d, "TIMER_EVENTS", TCL_TIMER_EVENTS);
-    ins_long(d, "IDLE_EVENTS", TCL_IDLE_EVENTS);
-    ins_long(d, "ALL_EVENTS", TCL_ALL_EVENTS);
-    ins_long(d, "DONT_WAIT", TCL_DONT_WAIT);
-    ins_string(d, "TK_VERSION", TK_VERSION);
-    ins_string(d, "TCL_VERSION", TCL_VERSION);
+    PyModule_AddIntConstant(m, "READABLE", TCL_READABLE);
+    PyModule_AddIntConstant(m, "WRITABLE", TCL_WRITABLE);
+    PyModule_AddIntConstant(m, "EXCEPTION", TCL_EXCEPTION);
+    PyModule_AddIntConstant(m, "WINDOW_EVENTS", TCL_WINDOW_EVENTS);
+    PyModule_AddIntConstant(m, "FILE_EVENTS", TCL_FILE_EVENTS);
+    PyModule_AddIntConstant(m, "TIMER_EVENTS", TCL_TIMER_EVENTS);
+    PyModule_AddIntConstant(m, "IDLE_EVENTS", TCL_IDLE_EVENTS);
+    PyModule_AddIntConstant(m, "ALL_EVENTS", TCL_ALL_EVENTS);
+    PyModule_AddIntConstant(m, "DONT_WAIT", TCL_DONT_WAIT);
+    PyModule_AddStringConstant(m, "TK_VERSION", TK_VERSION);
+    PyModule_AddStringConstant(m, "TCL_VERSION", TCL_VERSION);
 
-    PyDict_SetItemString(d, "TkappType", (PyObject *)&Tkapp_Type);
+    PyModule_AddObject(m, "TkappType", (PyObject *)&Tkapp_Type);
 
     if (PyType_Ready(&Tktt_Type) < 0) {
         Py_DECREF(m);
         return NULL;
     }
-    PyDict_SetItemString(d, "TkttType", (PyObject *)&Tktt_Type);
+    PyModule_AddObject(m, "TkttType", (PyObject *)&Tktt_Type);
 
     Py_TYPE(&PyTclObject_Type) = &PyType_Type;
-    PyDict_SetItemString(d, "Tcl_Obj", (PyObject *)&PyTclObject_Type);
+    PyModule_AddObject(m, "Tcl_Obj", (PyObject *)&PyTclObject_Type);
 
 #ifdef TK_AQUA
     /* Tk_MacOSXSetupTkNotifier must be called before Tcl's subsystems
