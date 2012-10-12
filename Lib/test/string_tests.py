@@ -28,6 +28,11 @@ class BaseTest(unittest.TestCase):
     # Change in subclasses to change the behaviour of fixtesttype()
     type2test = None
 
+    # Whether the "contained items" of the container are integers in
+    # range(0, 256) (i.e. bytes, bytearray) or strings of length 1
+    # (str)
+    contains_bytes = False
+
     # All tests pass their arguments to the testing methods
     # as str objects. fixtesttype() can be used to propagate
     # these arguments to the appropriate type
@@ -47,11 +52,12 @@ class BaseTest(unittest.TestCase):
             return obj
 
     # check that obj.method(*args) returns result
-    def checkequal(self, result, obj, methodname, *args):
+    def checkequal(self, result, obj, methodname, *args, **kwargs):
         result = self.fixtype(result)
         obj = self.fixtype(obj)
         args = self.fixtype(args)
-        realresult = getattr(obj, methodname)(*args)
+        kwargs = {k: self.fixtype(v) for k,v in kwargs.items()}
+        realresult = getattr(obj, methodname)(*args, **kwargs)
         self.assertEqual(
             result,
             realresult
@@ -116,7 +122,11 @@ class BaseTest(unittest.TestCase):
         self.checkequal(0, '', 'count', 'xx', sys.maxsize, 0)
 
         self.checkraises(TypeError, 'hello', 'count')
-        self.checkraises(TypeError, 'hello', 'count', 42)
+
+        if self.contains_bytes:
+            self.checkequal(0, 'hello', 'count', 42)
+        else:
+            self.checkraises(TypeError, 'hello', 'count', 42)
 
         # For a variety of combinations,
         #    verify that str.count() matches an equivalent function
@@ -162,7 +172,11 @@ class BaseTest(unittest.TestCase):
         self.checkequal( 2, 'rrarrrrrrrrra', 'find', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'find')
-        self.checkraises(TypeError, 'hello', 'find', 42)
+
+        if self.contains_bytes:
+            self.checkequal(-1, 'hello', 'find', 42)
+        else:
+            self.checkraises(TypeError, 'hello', 'find', 42)
 
         self.checkequal(0, '', 'find', '')
         self.checkequal(-1, '', 'find', '', 1, 1)
@@ -216,7 +230,11 @@ class BaseTest(unittest.TestCase):
         self.checkequal( 2, 'rrarrrrrrrrra', 'rfind', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'rfind')
-        self.checkraises(TypeError, 'hello', 'rfind', 42)
+
+        if self.contains_bytes:
+            self.checkequal(-1, 'hello', 'rfind', 42)
+        else:
+            self.checkraises(TypeError, 'hello', 'rfind', 42)
 
         # For a variety of combinations,
         #    verify that str.rfind() matches __contains__
@@ -244,6 +262,9 @@ class BaseTest(unittest.TestCase):
         # issue 7458
         self.checkequal(-1, 'ab', 'rfind', 'xxx', sys.maxsize + 1, 0)
 
+        # issue #15534
+        self.checkequal(0, '<......\u043c...', "rfind", "<")
+
     def test_index(self):
         self.checkequal(0, 'abcdefghiabc', 'index', '')
         self.checkequal(3, 'abcdefghiabc', 'index', 'def')
@@ -263,7 +284,11 @@ class BaseTest(unittest.TestCase):
         self.checkequal( 2, 'rrarrrrrrrrra', 'index', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'index')
-        self.checkraises(TypeError, 'hello', 'index', 42)
+
+        if self.contains_bytes:
+            self.checkraises(ValueError, 'hello', 'index', 42)
+        else:
+            self.checkraises(TypeError, 'hello', 'index', 42)
 
     def test_rindex(self):
         self.checkequal(12, 'abcdefghiabc', 'rindex', '')
@@ -285,7 +310,11 @@ class BaseTest(unittest.TestCase):
         self.checkequal( 2, 'rrarrrrrrrrra', 'rindex', 'a', None, 6)
 
         self.checkraises(TypeError, 'hello', 'rindex')
-        self.checkraises(TypeError, 'hello', 'rindex', 42)
+
+        if self.contains_bytes:
+            self.checkraises(ValueError, 'hello', 'rindex', 42)
+        else:
+            self.checkraises(TypeError, 'hello', 'rindex', 42)
 
     def test_lower(self):
         self.checkequal('hello', 'HeLLo', 'lower')
@@ -363,6 +392,17 @@ class BaseTest(unittest.TestCase):
         self.checkequal(['a']*18 + ['aBLAHa'], ('aBLAH'*20)[:-4],
                         'split', 'BLAH', 18)
 
+        # with keyword args
+        self.checkequal(['a', 'b', 'c', 'd'], 'a|b|c|d', 'split', sep='|')
+        self.checkequal(['a', 'b|c|d'],
+                        'a|b|c|d', 'split', '|', maxsplit=1)
+        self.checkequal(['a', 'b|c|d'],
+                        'a|b|c|d', 'split', sep='|', maxsplit=1)
+        self.checkequal(['a', 'b|c|d'],
+                        'a|b|c|d', 'split', maxsplit=1, sep='|')
+        self.checkequal(['a', 'b c d'],
+                        'a b c d', 'split', maxsplit=1)
+
         # argument type
         self.checkraises(TypeError, 'hello', 'split', 42, 42, 42)
 
@@ -419,6 +459,17 @@ class BaseTest(unittest.TestCase):
         self.checkequal(['a']*20, ('aBLAH'*20)[:-4], 'rsplit', 'BLAH', 19)
         self.checkequal(['aBLAHa'] + ['a']*18, ('aBLAH'*20)[:-4],
                         'rsplit', 'BLAH', 18)
+
+        # with keyword args
+        self.checkequal(['a', 'b', 'c', 'd'], 'a|b|c|d', 'rsplit', sep='|')
+        self.checkequal(['a|b|c', 'd'],
+                        'a|b|c|d', 'rsplit', '|', maxsplit=1)
+        self.checkequal(['a|b|c', 'd'],
+                        'a|b|c|d', 'rsplit', sep='|', maxsplit=1)
+        self.checkequal(['a|b|c', 'd'],
+                        'a|b|c|d', 'rsplit', maxsplit=1, sep='|')
+        self.checkequal(['a b c', 'd'],
+                        'a b c d', 'rsplit', maxsplit=1)
 
         # argument type
         self.checkraises(TypeError, 'hello', 'rsplit', 42, 42, 42)
@@ -549,6 +600,8 @@ class BaseTest(unittest.TestCase):
         EQ("ReyKKjavik", "Reykjavik", "replace", "k", "KK", 1)
         EQ("Reykjavik", "Reykjavik", "replace", "k", "KK", 0)
         EQ("A----B----C----", "A.B.C.", "replace", ".", "----")
+        # issue #15534
+        EQ('...\u043c......&lt;', '...\u043c......<', "replace", "<", "&lt;")
 
         EQ("Reykjavik", "Reykjavik", "replace", "q", "KK")
 
@@ -643,7 +696,7 @@ class CommonTest(BaseTest):
 
         # check that titlecased chars are lowered correctly
         # \u1ffc is the titlecased char
-        self.checkequal('\u1ffc\u1ff3\u1ff3\u1ff3',
+        self.checkequal('\u03a9\u0399\u1ff3\u1ff3\u1ff3',
                         '\u1ff3\u1ff3\u1ffc\u1ffc', 'capitalize')
         # check with cased non-letter chars
         self.checkequal('\u24c5\u24e8\u24e3\u24d7\u24de\u24dd',
@@ -908,7 +961,14 @@ class MixinStrUnicodeUserStringTest:
         self.checkequal(['abc', 'def', 'ghi'], "abc\ndef\r\nghi\n", 'splitlines')
         self.checkequal(['abc', 'def', 'ghi', ''], "abc\ndef\r\nghi\n\r", 'splitlines')
         self.checkequal(['', 'abc', 'def', 'ghi', ''], "\nabc\ndef\r\nghi\n\r", 'splitlines')
-        self.checkequal(['\n', 'abc\n', 'def\r\n', 'ghi\n', '\r'], "\nabc\ndef\r\nghi\n\r", 'splitlines', 1)
+        self.checkequal(['', 'abc', 'def', 'ghi', ''],
+                        "\nabc\ndef\r\nghi\n\r", 'splitlines', False)
+        self.checkequal(['\n', 'abc\n', 'def\r\n', 'ghi\n', '\r'],
+                        "\nabc\ndef\r\nghi\n\r", 'splitlines', True)
+        self.checkequal(['', 'abc', 'def', 'ghi', ''], "\nabc\ndef\r\nghi\n\r",
+                        'splitlines', keepends=False)
+        self.checkequal(['\n', 'abc\n', 'def\r\n', 'ghi\n', '\r'],
+                        "\nabc\ndef\r\nghi\n\r", 'splitlines', keepends=True)
 
         self.checkraises(TypeError, 'abc', 'splitlines', 42, 42)
 
@@ -1142,6 +1202,10 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(TypeError, '%10.*f', '__mod__', ('foo', 42.))
         self.checkraises(ValueError, '%10', '__mod__', (42,))
 
+        # Outrageously large width or precision should raise ValueError.
+        self.checkraises(ValueError, '%%%df' % (2**64), '__mod__', (3.2))
+        self.checkraises(ValueError, '%%.%df' % (2**64), '__mod__', (3.2))
+
         class X(object): pass
         self.checkraises(TypeError, 'abc', '__mod__', X())
 
@@ -1259,6 +1323,9 @@ class MixinStrUnicodeUserStringTest:
                                 x, None, None, None)
         self.assertRaisesRegex(TypeError, r'^endswith\(', s.endswith,
                                 x, None, None, None)
+
+        # issue #15534
+        self.checkequal(10, "...\u043c......<", "find", "<")
 
 
 class MixinStrUnicodeTest:
