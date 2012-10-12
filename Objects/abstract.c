@@ -64,49 +64,70 @@ PyObject_Length(PyObject *o)
 }
 #define PyObject_Length PyObject_Size
 
+int
+_PyObject_HasLen(PyObject *o) {
+    return (Py_TYPE(o)->tp_as_sequence && Py_TYPE(o)->tp_as_sequence->sq_length) ||
+        (Py_TYPE(o)->tp_as_mapping && Py_TYPE(o)->tp_as_mapping->mp_length);
+}
 
 /* The length hint function returns a non-negative value from o.__len__()
-   or o.__length_hint__().  If those methods aren't found or return a negative
-   value, then the defaultvalue is returned.  If one of the calls fails,
+   or o.__length_hint__(). If those methods aren't found the defaultvalue is
+   returned.  If one of the calls fails with an exception other than TypeError
    this function returns -1.
 */
 
 Py_ssize_t
-_PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
+PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
 {
-    static PyObject *hintstrobj = NULL;
-    PyObject *ro, *hintmeth;
-    Py_ssize_t rv;
-
-    /* try o.__len__() */
-    rv = PyObject_Size(o);
-    if (rv >= 0)
-        return rv;
-    if (PyErr_Occurred()) {
-        if (!PyErr_ExceptionMatches(PyExc_TypeError))
+    PyObject *hint, *result;
+    Py_ssize_t res;
+    _Py_IDENTIFIER(__length_hint__);
+    res = PyObject_Length(o);
+    if (res < 0 && PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
             return -1;
+        }
         PyErr_Clear();
     }
-
-    /* try o.__length_hint__() */
-    hintmeth = _PyObject_LookupSpecial(o, "__length_hint__", &hintstrobj);
-    if (hintmeth == NULL) {
-        if (PyErr_Occurred())
-            return -1;
-        else
-            return defaultvalue;
+    else {
+        return res;
     }
-    ro = PyObject_CallFunctionObjArgs(hintmeth, NULL);
-    Py_DECREF(hintmeth);
-    if (ro == NULL) {
-        if (!PyErr_ExceptionMatches(PyExc_TypeError))
+    hint = _PyObject_LookupSpecial(o, &PyId___length_hint__);
+    if (hint == NULL) {
+        if (PyErr_Occurred()) {
             return -1;
-        PyErr_Clear();
+        }
         return defaultvalue;
     }
-    rv = PyLong_Check(ro) ? PyLong_AsSsize_t(ro) : defaultvalue;
-    Py_DECREF(ro);
-    return rv;
+    result = PyObject_CallFunctionObjArgs(hint, NULL);
+    Py_DECREF(hint);
+    if (result == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_TypeError)) {
+            PyErr_Clear();
+            return defaultvalue;
+        }
+        return -1;
+    }
+    else if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return defaultvalue;
+    }
+    if (!PyLong_Check(result)) {
+        PyErr_Format(PyExc_TypeError, "__length_hint__ must be an integer, not %.100s",
+            Py_TYPE(result)->tp_name);
+        Py_DECREF(result);
+        return -1;
+    }
+    res = PyLong_AsSsize_t(result);
+    Py_DECREF(result);
+    if (res < 0 && PyErr_Occurred()) {
+        return -1;
+    }
+    if (res < 0) {
+        PyErr_Format(PyExc_ValueError, "__length_hint__() should return >= 0");
+        return -1;
+    }
+    return res;
 }
 
 PyObject *
@@ -237,7 +258,8 @@ PyObject_AsCharBuffer(PyObject *obj,
     pb = obj->ob_type->tp_as_buffer;
     if (pb == NULL || pb->bf_getbuffer == NULL) {
         PyErr_SetString(PyExc_TypeError,
-                        "expected an object with the buffer interface");
+                        "expected bytes, bytearray "
+                        "or buffer compatible object");
         return -1;
     }
     if ((*pb->bf_getbuffer)(obj, &view, PyBUF_SIMPLE)) return -1;
@@ -331,7 +353,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 {
     if (!PyObject_CheckBuffer(obj)) {
         PyErr_Format(PyExc_TypeError,
-                     "'%100s' does not support the buffer interface",
+                     "'%.100s' does not support the buffer interface",
                      Py_TYPE(obj)->tp_name);
         return -1;
     }
@@ -339,7 +361,7 @@ PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags)
 }
 
 static int
-_IsFortranContiguous(Py_buffer *view)
+_IsFortranContiguous(const Py_buffer *view)
 {
     Py_ssize_t sd, dim;
     int i;
@@ -360,7 +382,7 @@ _IsFortranContiguous(Py_buffer *view)
 }
 
 static int
-_IsCContiguous(Py_buffer *view)
+_IsCContiguous(const Py_buffer *view)
 {
     Py_ssize_t sd, dim;
     int i;
@@ -381,16 +403,16 @@ _IsCContiguous(Py_buffer *view)
 }
 
 int
-PyBuffer_IsContiguous(Py_buffer *view, char fort)
+PyBuffer_IsContiguous(const Py_buffer *view, char order)
 {
 
     if (view->suboffsets != NULL) return 0;
 
-    if (fort == 'C')
+    if (order == 'C')
         return _IsCContiguous(view);
-    else if (fort == 'F')
+    else if (order == 'F')
         return _IsFortranContiguous(view);
-    else if (fort == 'A')
+    else if (order == 'A')
         return (_IsCContiguous(view) || _IsFortranContiguous(view));
     return 0;
 }
@@ -442,62 +464,6 @@ _Py_add_one_to_index_C(int nd, Py_ssize_t *index, const Py_ssize_t *shape)
             index[k] = 0;
         }
     }
-}
-
-  /* view is not checked for consistency in either of these.  It is
-     assumed that the size of the buffer is view->len in
-     view->len / view->itemsize elements.
-  */
-
-int
-PyBuffer_ToContiguous(void *buf, Py_buffer *view, Py_ssize_t len, char fort)
-{
-    int k;
-    void (*addone)(int, Py_ssize_t *, const Py_ssize_t *);
-    Py_ssize_t *indices, elements;
-    char *dest, *ptr;
-
-    if (len > view->len) {
-        len = view->len;
-    }
-
-    if (PyBuffer_IsContiguous(view, fort)) {
-        /* simplest copy is all that is needed */
-        memcpy(buf, view->buf, len);
-        return 0;
-    }
-
-    /* Otherwise a more elaborate scheme is needed */
-
-    /* XXX(nnorwitz): need to check for overflow! */
-    indices = (Py_ssize_t *)PyMem_Malloc(sizeof(Py_ssize_t)*(view->ndim));
-    if (indices == NULL) {
-        PyErr_NoMemory();
-        return -1;
-    }
-    for (k=0; k<view->ndim;k++) {
-        indices[k] = 0;
-    }
-
-    if (fort == 'F') {
-        addone = _Py_add_one_to_index_F;
-    }
-    else {
-        addone = _Py_add_one_to_index_C;
-    }
-    dest = buf;
-    /* XXX : This is not going to be the fastest code in the world
-             several optimizations are possible.
-     */
-    elements = len / view->itemsize;
-    while (elements--) {
-        addone(view->ndim, indices, view->shape);
-        ptr = PyBuffer_GetPointer(view, indices);
-        memcpy(dest, ptr, view->itemsize);
-        dest += view->itemsize;
-    }
-    PyMem_Free(indices);
-    return 0;
 }
 
 int
@@ -648,9 +614,9 @@ PyBuffer_FillContiguousStrides(int nd, Py_ssize_t *shape,
 
 int
 PyBuffer_FillInfo(Py_buffer *view, PyObject *obj, void *buf, Py_ssize_t len,
-              int readonly, int flags)
+                  int readonly, int flags)
 {
-    if (view == NULL) return 0;
+    if (view == NULL) return 0; /* XXX why not -1? */
     if (((flags & PyBUF_WRITABLE) == PyBUF_WRITABLE) &&
         (readonly == 1)) {
         PyErr_SetString(PyExc_BufferError,
@@ -696,16 +662,16 @@ PyObject_Format(PyObject *obj, PyObject *format_spec)
     PyObject *meth;
     PyObject *empty = NULL;
     PyObject *result = NULL;
-    static PyObject *format_cache = NULL;
+    _Py_IDENTIFIER(__format__);
 
     /* If no format_spec is provided, use an empty string */
     if (format_spec == NULL) {
-        empty = PyUnicode_FromUnicode(NULL, 0);
+        empty = PyUnicode_New(0, 0);
         format_spec = empty;
     }
 
     /* Find the (unbound!) __format__ method (a borrowed reference) */
-    meth = _PyObject_LookupSpecial(obj, "__format__", &format_cache);
+    meth = _PyObject_LookupSpecial(obj, &PyId___format__);
     if (meth == NULL) {
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_TypeError,
@@ -792,8 +758,7 @@ binary_op1(PyObject *v, PyObject *w, const int op_slot)
             return x;
         Py_DECREF(x); /* can't do it */
     }
-    Py_INCREF(Py_NotImplemented);
-    return Py_NotImplemented;
+    Py_RETURN_NOTIMPLEMENTED;
 }
 
 static PyObject *
@@ -1268,37 +1233,31 @@ PyNumber_AsSsize_t(PyObject *item, PyObject *err)
 }
 
 
-PyObject *
-_PyNumber_ConvertIntegralToInt(PyObject *integral, const char* error_format)
+/*
+  Returns the Integral instance converted to an int. The instance is expected
+  to be an int or have an __int__ method. Steals integral's
+  reference. error_format will be used to create the TypeError if integral
+  isn't actually an Integral instance. error_format should be a format string
+  that can accept a char* naming integral's type. 
+*/
+static PyObject *
+convert_integral_to_int(PyObject *integral, const char *error_format)
 {
-    static PyObject *int_name = NULL;
-    if (int_name == NULL) {
-        int_name = PyUnicode_InternFromString("__int__");
-        if (int_name == NULL)
-            return NULL;
-    }
-
-    if (integral && !PyLong_Check(integral)) {
-        /* Don't go through tp_as_number->nb_int to avoid
-           hitting the classic class fallback to __trunc__. */
-        PyObject *int_func = PyObject_GetAttr(integral, int_name);
-        if (int_func == NULL) {
-            PyErr_Clear(); /* Raise a different error. */
-            goto non_integral_error;
+    PyNumberMethods *nb;
+    if (PyLong_Check(integral))
+        return integral;
+    nb = Py_TYPE(integral)->tp_as_number;
+    if (nb->nb_int) {
+        PyObject *as_int = nb->nb_int(integral);
+        if (!as_int || PyLong_Check(as_int)) {
+            Py_DECREF(integral);
+            return as_int;
         }
-        Py_DECREF(integral);
-        integral = PyEval_CallObject(int_func, NULL);
-        Py_DECREF(int_func);
-        if (integral && !PyLong_Check(integral)) {
-            goto non_integral_error;
-        }
+        Py_DECREF(as_int);
     }
-    return integral;
-
-non_integral_error:
     PyErr_Format(PyExc_TypeError, error_format, Py_TYPE(integral)->tp_name);
     Py_DECREF(integral);
-    return NULL;
+    return NULL;    
 }
 
 
@@ -1325,16 +1284,10 @@ PyObject *
 PyNumber_Long(PyObject *o)
 {
     PyNumberMethods *m;
-    static PyObject *trunc_name = NULL;
     PyObject *trunc_func;
     const char *buffer;
     Py_ssize_t buffer_len;
-
-    if (trunc_name == NULL) {
-        trunc_name = PyUnicode_InternFromString("__trunc__");
-        if (trunc_name == NULL)
-            return NULL;
-    }
+    _Py_IDENTIFIER(__trunc__);
 
     if (o == NULL)
         return null_error();
@@ -1356,32 +1309,30 @@ PyNumber_Long(PyObject *o)
     }
     if (PyLong_Check(o)) /* An int subclass without nb_int */
         return _PyLong_Copy((PyLongObject *)o);
-    trunc_func = PyObject_GetAttr(o, trunc_name);
+    trunc_func = _PyObject_LookupSpecial(o, &PyId___trunc__);
     if (trunc_func) {
         PyObject *truncated = PyEval_CallObject(trunc_func, NULL);
         PyObject *int_instance;
         Py_DECREF(trunc_func);
         /* __trunc__ is specified to return an Integral type,
-           but long() needs to return a long. */
-        int_instance = _PyNumber_ConvertIntegralToInt(
-            truncated,
+           but int() needs to return a int. */
+        int_instance = convert_integral_to_int(truncated,
             "__trunc__ returned non-Integral (type %.200s)");
         return int_instance;
     }
-    PyErr_Clear();  /* It's not an error if  o.__trunc__ doesn't exist. */
+    if (PyErr_Occurred())
+        return NULL;
 
     if (PyBytes_Check(o))
         /* need to do extra error checking that PyLong_FromString()
-         * doesn't do.  In particular long('9.5') must raise an
+         * doesn't do.  In particular int('9.5') must raise an
          * exception, not truncate the float.
          */
         return long_from_string(PyBytes_AS_STRING(o),
                                 PyBytes_GET_SIZE(o));
     if (PyUnicode_Check(o))
         /* The above check is done in PyLong_FromUnicode(). */
-        return PyLong_FromUnicode(PyUnicode_AS_UNICODE(o),
-                                  PyUnicode_GET_SIZE(o),
-                                  10);
+        return PyLong_FromUnicodeObject(o, 10);
     if (!PyObject_AsCharBuffer(o, &buffer, &buffer_len))
         return long_from_string(buffer, buffer_len);
 
@@ -1757,7 +1708,7 @@ PySequence_Tuple(PyObject *v)
         return NULL;
 
     /* Guess result size and allocate space. */
-    n = _PyObject_LengthHint(v, 10);
+    n = PyObject_LengthHint(v, 10);
     if (n == -1)
         goto Fail;
     result = PyTuple_New(n);
@@ -1986,7 +1937,7 @@ PySequence_Index(PyObject *s, PyObject *o)
 int
 PyMapping_Check(PyObject *o)
 {
-    return      o && o->ob_type->tp_as_mapping &&
+    return o && o->ob_type->tp_as_mapping &&
         o->ob_type->tp_as_mapping->mp_subscript;
 }
 
@@ -2084,10 +2035,11 @@ PyMapping_Keys(PyObject *o)
 {
     PyObject *keys;
     PyObject *fast;
+    _Py_IDENTIFIER(keys);
 
     if (PyDict_CheckExact(o))
         return PyDict_Keys(o);
-    keys = PyObject_CallMethod(o, "keys", NULL);
+    keys = _PyObject_CallMethodId(o, &PyId_keys, NULL);
     if (keys == NULL)
         return NULL;
     fast = PySequence_Fast(keys, "o.keys() are not iterable");
@@ -2100,10 +2052,11 @@ PyMapping_Items(PyObject *o)
 {
     PyObject *items;
     PyObject *fast;
+    _Py_IDENTIFIER(items);
 
     if (PyDict_CheckExact(o))
         return PyDict_Items(o);
-    items = PyObject_CallMethod(o, "items", NULL);
+    items = _PyObject_CallMethodId(o, &PyId_items, NULL);
     if (items == NULL)
         return NULL;
     fast = PySequence_Fast(items, "o.items() are not iterable");
@@ -2116,10 +2069,11 @@ PyMapping_Values(PyObject *o)
 {
     PyObject *values;
     PyObject *fast;
+    _Py_IDENTIFIER(values);
 
     if (PyDict_CheckExact(o))
         return PyDict_Values(o);
-    values = PyObject_CallMethod(o, "values", NULL);
+    values = _PyObject_CallMethodId(o, &PyId_values, NULL);
     if (values == NULL)
         return NULL;
     fast = PySequence_Fast(values, "o.values() are not iterable");
@@ -2225,22 +2179,11 @@ _PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
     return call_function_tail(callable, args);
 }
 
-PyObject *
-PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+static PyObject*
+callmethod(PyObject* func, char *format, va_list va, int is_size_t)
 {
-    va_list va;
-    PyObject *args;
-    PyObject *func = NULL;
     PyObject *retval = NULL;
-
-    if (o == NULL || name == NULL)
-        return null_error();
-
-    func = PyObject_GetAttrString(o, name);
-    if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
-        return 0;
-    }
+    PyObject *args;
 
     if (!PyCallable_Check(func)) {
         type_error("attribute of type '%.200s' is not callable", func);
@@ -2248,9 +2191,10 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
     }
 
     if (format && *format) {
-        va_start(va, format);
-        args = Py_VaBuildValue(format, va);
-        va_end(va);
+        if (is_size_t)
+            args = _Py_VaBuildValue_SizeT(format, va);
+        else
+            args = Py_VaBuildValue(format, va);
     }
     else
         args = PyTuple_New(0);
@@ -2261,6 +2205,48 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
     /* args gets consumed in call_function_tail */
     Py_XDECREF(func);
 
+    return retval;
+}
+
+PyObject *
+PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = PyObject_GetAttrString(o, name);
+    if (func == NULL) {
+        return 0;
+    }
+
+    va_start(va, format);
+    retval = callmethod(func, format, va, 0);
+    va_end(va);
+    return retval;
+}
+
+PyObject *
+_PyObject_CallMethodId(PyObject *o, _Py_Identifier *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval = NULL;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = _PyObject_GetAttrId(o, name);
+    if (func == NULL) {
+        return 0;
+    }
+
+    va_start(va, format);
+    retval = callmethod(func, format, va, 0);
+    va_end(va);
     return retval;
 }
 
@@ -2268,41 +2254,41 @@ PyObject *
 _PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
 {
     va_list va;
-    PyObject *args;
     PyObject *func = NULL;
-    PyObject *retval = NULL;
+    PyObject *retval;
 
     if (o == NULL || name == NULL)
         return null_error();
 
     func = PyObject_GetAttrString(o, name);
     if (func == NULL) {
-        PyErr_SetString(PyExc_AttributeError, name);
         return 0;
     }
-
-    if (!PyCallable_Check(func)) {
-        type_error("attribute of type '%.200s' is not callable", func);
-        goto exit;
-    }
-
-    if (format && *format) {
-        va_start(va, format);
-        args = _Py_VaBuildValue_SizeT(format, va);
-        va_end(va);
-    }
-    else
-        args = PyTuple_New(0);
-
-    retval = call_function_tail(func, args);
-
-  exit:
-    /* args gets consumed in call_function_tail */
-    Py_XDECREF(func);
-
+    va_start(va, format);
+    retval = callmethod(func, format, va, 1);
+    va_end(va);
     return retval;
 }
 
+PyObject *
+_PyObject_CallMethodId_SizeT(PyObject *o, _Py_Identifier *name, char *format, ...)
+{
+    va_list va;
+    PyObject *func = NULL;
+    PyObject *retval;
+
+    if (o == NULL || name == NULL)
+        return null_error();
+
+    func = _PyObject_GetAttrId(o, name);
+    if (func == NULL) {
+        return NULL;
+    }
+    va_start(va, format);
+    retval = callmethod(func, format, va, 1);
+    va_end(va);
+    return retval;
+}
 
 static PyObject *
 objargs_mktuple(va_list va)
@@ -2355,6 +2341,35 @@ PyObject_CallMethodObjArgs(PyObject *callable, PyObject *name, ...)
 }
 
 PyObject *
+_PyObject_CallMethodObjIdArgs(PyObject *callable,
+        struct _Py_Identifier *name, ...)
+{
+    PyObject *args, *tmp;
+    va_list vargs;
+
+    if (callable == NULL || name == NULL)
+        return null_error();
+
+    callable = _PyObject_GetAttrId(callable, name);
+    if (callable == NULL)
+        return NULL;
+
+    /* count the args */
+    va_start(vargs, name);
+    args = objargs_mktuple(vargs);
+    va_end(vargs);
+    if (args == NULL) {
+        Py_DECREF(callable);
+        return NULL;
+    }
+    tmp = PyObject_Call(callable, args, NULL);
+    Py_DECREF(args);
+    Py_DECREF(callable);
+
+    return tmp;
+}
+
+PyObject *
 PyObject_CallFunctionObjArgs(PyObject *callable, ...)
 {
     PyObject *args, *tmp;
@@ -2378,10 +2393,8 @@ PyObject_CallFunctionObjArgs(PyObject *callable, ...)
 
 /* isinstance(), issubclass() */
 
-/* abstract_get_bases() has logically 4 return states, with a sort of 0th
- * state that will almost never happen.
+/* abstract_get_bases() has logically 4 return states:
  *
- * 0. creating the __bases__ static string could get a MemoryError
  * 1. getattr(cls, '__bases__') could raise an AttributeError
  * 2. getattr(cls, '__bases__') could raise some other exception
  * 3. getattr(cls, '__bases__') could return a tuple
@@ -2407,16 +2420,11 @@ PyObject_CallFunctionObjArgs(PyObject *callable, ...)
 static PyObject *
 abstract_get_bases(PyObject *cls)
 {
-    static PyObject *__bases__ = NULL;
+    _Py_IDENTIFIER(__bases__);
     PyObject *bases;
 
-    if (__bases__ == NULL) {
-        __bases__ = PyUnicode_InternFromString("__bases__");
-        if (__bases__ == NULL)
-            return NULL;
-    }
     Py_ALLOW_RECURSION
-    bases = PyObject_GetAttr(cls, __bases__);
+    bases = _PyObject_GetAttrId(cls, &PyId___bases__);
     Py_END_ALLOW_RECURSION
     if (bases == NULL) {
         if (PyErr_ExceptionMatches(PyExc_AttributeError))
@@ -2486,19 +2494,13 @@ static int
 recursive_isinstance(PyObject *inst, PyObject *cls)
 {
     PyObject *icls;
-    static PyObject *__class__ = NULL;
     int retval = 0;
-
-    if (__class__ == NULL) {
-        __class__ = PyUnicode_InternFromString("__class__");
-        if (__class__ == NULL)
-            return -1;
-    }
+    _Py_IDENTIFIER(__class__);
 
     if (PyType_Check(cls)) {
         retval = PyObject_TypeCheck(inst, (PyTypeObject *)cls);
         if (retval == 0) {
-            PyObject *c = PyObject_GetAttr(inst, __class__);
+            PyObject *c = _PyObject_GetAttrId(inst, &PyId___class__);
             if (c == NULL) {
                 if (PyErr_ExceptionMatches(PyExc_AttributeError))
                     PyErr_Clear();
@@ -2519,7 +2521,7 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
         if (!check_class(cls,
             "isinstance() arg 2 must be a type or tuple of types"))
             return -1;
-        icls = PyObject_GetAttr(inst, __class__);
+        icls = _PyObject_GetAttrId(inst, &PyId___class__);
         if (icls == NULL) {
             if (PyErr_ExceptionMatches(PyExc_AttributeError))
                 PyErr_Clear();
@@ -2538,7 +2540,7 @@ recursive_isinstance(PyObject *inst, PyObject *cls)
 int
 PyObject_IsInstance(PyObject *inst, PyObject *cls)
 {
-    static PyObject *name = NULL;
+    _Py_IDENTIFIER(__instancecheck__);
     PyObject *checker;
 
     /* Quick test for an exact match */
@@ -2564,7 +2566,7 @@ PyObject_IsInstance(PyObject *inst, PyObject *cls)
         return r;
     }
 
-    checker = _PyObject_LookupSpecial(cls, "__instancecheck__", &name);
+    checker = _PyObject_LookupSpecial(cls, &PyId___instancecheck__);
     if (checker != NULL) {
         PyObject *res;
         int ok = -1;
@@ -2607,7 +2609,7 @@ recursive_issubclass(PyObject *derived, PyObject *cls)
 int
 PyObject_IsSubclass(PyObject *derived, PyObject *cls)
 {
-    static PyObject *name = NULL;
+    _Py_IDENTIFIER(__subclasscheck__);
     PyObject *checker;
 
     if (PyTuple_Check(cls)) {
@@ -2629,7 +2631,7 @@ PyObject_IsSubclass(PyObject *derived, PyObject *cls)
         return r;
     }
 
-    checker = _PyObject_LookupSpecial(cls, "__subclasscheck__", &name);
+    checker = _PyObject_LookupSpecial(cls, &PyId___subclasscheck__);
     if (checker != NULL) {
         PyObject *res;
         int ok = -1;

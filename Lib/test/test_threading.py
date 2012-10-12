@@ -175,7 +175,7 @@ class ThreadTests(BaseTestCase):
         exception = ctypes.py_object(AsyncExc)
 
         # First check it works when setting the exception from the same thread.
-        tid = _thread.get_ident()
+        tid = threading.get_ident()
 
         try:
             result = set_async_exc(ctypes.c_long(tid), exception)
@@ -204,7 +204,7 @@ class ThreadTests(BaseTestCase):
 
         class Worker(threading.Thread):
             def run(self):
-                self.id = _thread.get_ident()
+                self.id = threading.get_ident()
                 self.finished = False
 
                 try:
@@ -409,6 +409,14 @@ class ThreadTests(BaseTestCase):
         t.daemon = True
         self.assertTrue('daemon' in repr(t))
 
+    def test_deamon_param(self):
+        t = threading.Thread()
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=False)
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=True)
+        self.assertTrue(t.daemon)
+
     @unittest.skipUnless(hasattr(os, 'fork'), 'test needs fork()')
     def test_dummy_thread_after_fork(self):
         # Issue #14308: a dummy thread in the active list doesn't mess up
@@ -443,8 +451,7 @@ class ThreadJoinOnShutdown(BaseTestCase):
     # #12316 and #11870), and fork() from a worker thread is known to trigger
     # problems with some operating systems (issue #3863): skip problematic tests
     # on platforms known to behave badly.
-    platforms_to_skip = ('freebsd4', 'freebsd5', 'freebsd6', 'netbsd5',
-                         'os2emx')
+    platforms_to_skip = ('freebsd4', 'freebsd5', 'freebsd6', 'netbsd5')
 
     def _run_and_join(self, script):
         script = """if 1:
@@ -742,6 +749,10 @@ class ThreadingExceptionTests(BaseTestCase):
         thread.start()
         self.assertRaises(RuntimeError, setattr, thread, "daemon", True)
 
+    def test_releasing_unacquired_lock(self):
+        lock = threading.Lock()
+        self.assertRaises(RuntimeError, lock.release)
+
     @unittest.skipUnless(sys.platform == 'darwin', 'test macosx problem')
     def test_recursion_limit(self):
         # Issue 9670
@@ -803,6 +814,7 @@ class BoundedSemaphoreTests(lock_tests.BoundedSemaphoreTests):
 class BarrierTests(lock_tests.BarrierTests):
     barriertype = staticmethod(threading.Barrier)
 
+
 def test_main():
     test.support.run_unittest(LockTests, PyRLockTests, CRLockTests, EventTests,
                               ConditionAsRLockTests, ConditionTests,
@@ -810,7 +822,7 @@ def test_main():
                               ThreadTests,
                               ThreadJoinOnShutdown,
                               ThreadingExceptionTests,
-                              BarrierTests
+                              BarrierTests,
                               )
 
 if __name__ == "__main__":

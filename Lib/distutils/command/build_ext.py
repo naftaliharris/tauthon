@@ -8,6 +8,7 @@ import sys, os, re
 from distutils.core import Command
 from distutils.errors import *
 from distutils.sysconfig import customize_compiler, get_python_version
+from distutils.sysconfig import get_config_h_filename
 from distutils.dep_util import newer_group
 from distutils.extension import Extension
 from distutils.util import get_platform
@@ -196,8 +197,11 @@ class build_ext(Command):
 
             # Append the source distribution include and library directories,
             # this allows distutils on windows to work in the source tree
-            self.include_dirs.append(os.path.join(sys.exec_prefix, 'PC'))
-            if MSVC_VERSION == 9:
+            self.include_dirs.append(os.path.dirname(get_config_h_filename()))
+            _sys_home = getattr(sys, '_home', None)
+            if _sys_home:
+                self.library_dirs.append(_sys_home)
+            if MSVC_VERSION >= 9:
                 # Use the .lib files for the correct architecture
                 if self.plat_name == 'win32':
                     suffix = ''
@@ -219,11 +223,6 @@ class build_ext(Command):
                 self.library_dirs.append(os.path.join(sys.exec_prefix,
                                          'PC', 'VC6'))
 
-        # OS/2 (EMX) doesn't support Debug vs Release builds, but has the
-        # import libraries in its "Config" subdirectory
-        if os.name == 'os2':
-            self.library_dirs.append(os.path.join(sys.exec_prefix, 'Config'))
-
         # for extensions under Cygwin and AtheOS Python's library directory must be
         # appended to library_dirs
         if sys.platform[:6] == 'cygwin' or sys.platform[:6] == 'atheos':
@@ -239,8 +238,7 @@ class build_ext(Command):
         # for extensions under Linux or Solaris with a shared Python library,
         # Python's library directory must be appended to library_dirs
         sysconfig.get_config_var('Py_ENABLE_SHARED')
-        if ((sys.platform.startswith('linux') or sys.platform.startswith('gnu')
-             or sys.platform.startswith('sunos'))
+        if (sys.platform.startswith(('linux', 'gnu', 'sunos'))
             and sysconfig.get_config_var('Py_ENABLE_SHARED')):
             if sys.executable.startswith(os.path.join(sys.exec_prefix, "bin")):
                 # building third party extensions
@@ -610,9 +608,6 @@ class build_ext(Command):
                     return fn
             else:
                 return "swig.exe"
-        elif os.name == "os2":
-            # assume swig available in the PATH.
-            return "swig.exe"
         else:
             raise DistutilsPlatformError(
                   "I don't know how to find (much less run) SWIG "
@@ -663,9 +658,6 @@ class build_ext(Command):
         """
         from distutils.sysconfig import get_config_var
         ext_path = ext_name.split('.')
-        # OS/2 has an 8 character module (extension) limit :-(
-        if os.name == "os2":
-            ext_path[len(ext_path) - 1] = ext_path[len(ext_path) - 1][:8]
         # extensions in debug_mode are named 'module_d.pyd' under windows
         so_ext = get_config_var('SO')
         if os.name == 'nt' and self.debug:
@@ -686,7 +678,7 @@ class build_ext(Command):
     def get_libraries(self, ext):
         """Return the list of libraries to link against when building a
         shared extension.  On most platforms, this is just 'ext.libraries';
-        on Windows and OS/2, we add the Python library (eg. python20.dll).
+        on Windows, we add the Python library (eg. python20.dll).
         """
         # The python library is always needed on Windows.  For MSVC, this
         # is redundant, since the library is mentioned in a pragma in
@@ -706,19 +698,6 @@ class build_ext(Command):
                 return ext.libraries + [pythonlib]
             else:
                 return ext.libraries
-        elif sys.platform == "os2emx":
-            # EMX/GCC requires the python library explicitly, and I
-            # believe VACPP does as well (though not confirmed) - AIM Apr01
-            template = "python%d%d"
-            # debug versions of the main DLL aren't supported, at least
-            # not at this time - AIM Apr01
-            #if self.debug:
-            #    template = template + '_d'
-            pythonlib = (template %
-                   (sys.hexversion >> 24, (sys.hexversion >> 16) & 0xff))
-            # don't extend ext.libraries, it may be shared with other
-            # extensions, it is a reference to the original list
-            return ext.libraries + [pythonlib]
         elif sys.platform[:6] == "cygwin":
             template = "python%d.%d"
             pythonlib = (template %

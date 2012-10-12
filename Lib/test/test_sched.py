@@ -63,15 +63,39 @@ class TestCase(unittest.TestCase):
 
     def test_queue(self):
         l = []
-        events = []
         fun = lambda x: l.append(x)
         scheduler = sched.scheduler(time.time, time.sleep)
-        self.assertEqual(scheduler._queue, [])
-        for x in [0.05, 0.04, 0.03, 0.02, 0.01]:
-            events.append(scheduler.enterabs(x, 1, fun, (x,)))
-        self.assertEqual(scheduler._queue.sort(), events.sort())
+        now = time.time()
+        e5 = scheduler.enterabs(now + 0.05, 1, fun)
+        e1 = scheduler.enterabs(now + 0.01, 1, fun)
+        e2 = scheduler.enterabs(now + 0.02, 1, fun)
+        e4 = scheduler.enterabs(now + 0.04, 1, fun)
+        e3 = scheduler.enterabs(now + 0.03, 1, fun)
+        # queue property is supposed to return an order list of
+        # upcoming events
+        self.assertEqual(list(scheduler.queue), [e1, e2, e3, e4, e5])
+
+    def test_args_kwargs(self):
+        flag = []
+
+        def fun(*a, **b):
+            flag.append(None)
+            self.assertEqual(a, (1,2,3))
+            self.assertEqual(b, {"foo":1})
+
+        scheduler = sched.scheduler(time.time, time.sleep)
+        z = scheduler.enterabs(0.01, 1, fun, argument=(1,2,3), kwargs={"foo":1})
         scheduler.run()
-        self.assertEqual(scheduler._queue, [])
+        self.assertEqual(flag, [None])
+
+    def test_run_non_blocking(self):
+        l = []
+        fun = lambda x: l.append(x)
+        scheduler = sched.scheduler(time.time, time.sleep)
+        for x in [10, 9, 8, 7, 6]:
+            scheduler.enter(x, 1, fun, (x,))
+        scheduler.run(blocking=False)
+        self.assertEqual(l, [])
 
 
 def test_main():
