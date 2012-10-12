@@ -8,6 +8,7 @@ import sys, os, re
 from distutils.core import Command
 from distutils.errors import *
 from distutils.sysconfig import customize_compiler, get_python_version
+from distutils.sysconfig import get_config_h_filename
 from distutils.dep_util import newer_group
 from distutils.extension import Extension
 from distutils.util import get_platform
@@ -196,8 +197,11 @@ class build_ext(Command):
 
             # Append the source distribution include and library directories,
             # this allows distutils on windows to work in the source tree
-            self.include_dirs.append(os.path.join(sys.exec_prefix, 'PC'))
-            if MSVC_VERSION == 9:
+            self.include_dirs.append(os.path.dirname(get_config_h_filename()))
+            _sys_home = getattr(sys, '_home', None)
+            if _sys_home:
+                self.library_dirs.append(_sys_home)
+            if MSVC_VERSION >= 9:
                 # Use the .lib files for the correct architecture
                 if self.plat_name == 'win32':
                     suffix = ''
@@ -239,8 +243,7 @@ class build_ext(Command):
         # for extensions under Linux or Solaris with a shared Python library,
         # Python's library directory must be appended to library_dirs
         sysconfig.get_config_var('Py_ENABLE_SHARED')
-        if ((sys.platform.startswith('linux') or sys.platform.startswith('gnu')
-             or sys.platform.startswith('sunos'))
+        if (sys.platform.startswith(('linux', 'gnu', 'sunos'))
             and sysconfig.get_config_var('Py_ENABLE_SHARED')):
             if sys.executable.startswith(os.path.join(sys.exec_prefix, "bin")):
                 # building third party extensions
