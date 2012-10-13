@@ -1,11 +1,11 @@
-import unittest
-from test import support, test_genericpath
-
 import itertools
-import posixpath
 import os
+import posixpath
 import sys
+import unittest
+import warnings
 from posixpath import realpath, abspath, dirname, basename
+from test import support, test_genericpath
 
 try:
     import posix
@@ -245,7 +245,9 @@ class PosixPathTest(unittest.TestCase):
 
     def test_ismount(self):
         self.assertIs(posixpath.ismount("/"), True)
-        self.assertIs(posixpath.ismount(b"/"), True)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.assertIs(posixpath.ismount(b"/"), True)
 
     def test_ismount_non_existent(self):
         # Non-existent mountpoint.
