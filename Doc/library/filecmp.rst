@@ -21,11 +21,8 @@ The :mod:`filecmp` module defines the following functions:
    Compare the files named *f1* and *f2*, returning ``True`` if they seem equal,
    ``False`` otherwise.
 
-   Unless *shallow* is given and is false, files with identical :func:`os.stat`
-   signatures are taken to be equal.
-
-   Files that were compared using this function will not be compared again unless
-   their :func:`os.stat` signature changes.
+   If *shallow* is true, files with identical :func:`os.stat` signatures are
+   taken to be equal.  Otherwise, the contents of the files are compared.
 
    Note that no external programs are called from this function, giving it
    portability and efficiency.
@@ -51,22 +48,10 @@ The :mod:`filecmp` module defines the following functions:
    one of the three returned lists.
 
 
-Example::
-
-   >>> import filecmp
-   >>> filecmp.cmp('undoc.rst', 'undoc.rst')
-   True
-   >>> filecmp.cmp('undoc.rst', 'index.rst')
-   False
-
-
 .. _dircmp-objects:
 
 The :class:`dircmp` class
 -------------------------
-
-:class:`dircmp` instances are built using this constructor:
-
 
 .. class:: dircmp(a, b, ignore=None, hide=None)
 
@@ -83,7 +68,7 @@ The :class:`dircmp` class
 
    .. method:: report()
 
-      Print (to ``sys.stdout``) a comparison between *a* and *b*.
+      Print (to :data:`sys.stdout`) a comparison between *a* and *b*.
 
 
    .. method:: report_partial_closure()
