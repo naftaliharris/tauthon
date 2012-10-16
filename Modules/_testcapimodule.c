@@ -22,14 +22,7 @@ static PyObject *TestError;     /* set to exception object in init */
 static PyObject *
 raiseTestError(const char* test_name, const char* msg)
 {
-    char buf[2048];
-
-    if (strlen(test_name) + strlen(msg) > sizeof(buf) - 50)
-        PyErr_SetString(TestError, "internal error msg too large");
-    else {
-        PyOS_snprintf(buf, sizeof(buf), "%s: %s", test_name, msg);
-        PyErr_SetString(TestError, buf);
-    }
+    PyErr_Format(TestError, "%s: %s", test_name, msg);
     return NULL;
 }
 
@@ -43,11 +36,9 @@ static PyObject*
 sizeof_error(const char* fatname, const char* typname,
     int expected, int got)
 {
-    char buf[1024];
-    PyOS_snprintf(buf, sizeof(buf),
-        "%.200s #define == %d but sizeof(%.200s) == %d",
+    PyErr_Format(TestError,
+        "%s #define == %d but sizeof(%s) == %d",
         fatname, expected, typname, got);
-    PyErr_SetString(TestError, buf);
     return (PyObject*)NULL;
 }
 
@@ -280,95 +271,6 @@ test_lazy_hash_inheritance(PyObject* self)
 
     Py_DECREF(obj);
 
-    Py_RETURN_NONE;
-}
-
-
-/* Issue #7385: Check that memoryview() does not crash
- *   when bf_getbuffer returns an error
- */
-
-static int
-broken_buffer_getbuffer(PyObject *self, Py_buffer *view, int flags)
-{
-    PyErr_SetString(
-        TestError,
-        "test_broken_memoryview: expected error in bf_getbuffer");
-    return -1;
-}
-
-static PyBufferProcs memoryviewtester_as_buffer = {
-    (getbufferproc)broken_buffer_getbuffer,     /* bf_getbuffer */
-    0,          /* bf_releasebuffer */
-};
-
-static PyTypeObject _MemoryViewTester_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    "memoryviewtester",         /* Name of this type */
-    sizeof(PyObject),           /* Basic object size */
-    0,                          /* Item size for varobject */
-    (destructor)PyObject_Del, /* tp_dealloc */
-    0,                          /* tp_print */
-    0,                          /* tp_getattr */
-    0,                          /* tp_setattr */
-    0,                          /* tp_compare */
-    0,                          /* tp_repr */
-    0,                          /* tp_as_number */
-    0,                          /* tp_as_sequence */
-    0,                          /* tp_as_mapping */
-    0,                          /* tp_hash */
-    0,                          /* tp_call */
-    0,                          /* tp_str */
-    PyObject_GenericGetAttr,  /* tp_getattro */
-    0,                          /* tp_setattro */
-    &memoryviewtester_as_buffer,                        /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT,         /* tp_flags */
-    0,                          /* tp_doc */
-    0,                          /* tp_traverse */
-    0,                          /* tp_clear */
-    0,                          /* tp_richcompare */
-    0,                          /* tp_weaklistoffset */
-    0,                          /* tp_iter */
-    0,                          /* tp_iternext */
-    0,                          /* tp_methods */
-    0,                          /* tp_members */
-    0,                          /* tp_getset */
-    0,                          /* tp_base */
-    0,                          /* tp_dict */
-    0,                          /* tp_descr_get */
-    0,                          /* tp_descr_set */
-    0,                          /* tp_dictoffset */
-    0,                          /* tp_init */
-    0,                          /* tp_alloc */
-    PyType_GenericNew,                  /* tp_new */
-};
-
-static PyObject*
-test_broken_memoryview(PyObject* self)
-{
-    PyObject *obj = PyObject_New(PyObject, &_MemoryViewTester_Type);
-    PyObject *res;
-
-    if (obj == NULL) {
-        PyErr_Clear();
-        PyErr_SetString(
-            TestError,
-            "test_broken_memoryview: failed to create object");
-        return NULL;
-    }
-
-    res = PyMemoryView_FromObject(obj);
-    if (res || !PyErr_Occurred()){
-        PyErr_SetString(
-            TestError,
-            "test_broken_memoryview: memoryview() didn't raise an Exception");
-        Py_XDECREF(res);
-        Py_DECREF(obj);
-        return NULL;
-    }
-
-    PyErr_Clear();
-    Py_DECREF(obj);
     Py_RETURN_NONE;
 }
 
@@ -778,6 +680,68 @@ test_long_long_and_overflow(PyObject *self)
     return Py_None;
 }
 
+/* Test the PyLong_As{Size,Ssize}_t API. At present this just tests that
+   non-integer arguments are handled correctly. It should be extended to
+   test overflow handling.
+ */
+
+static PyObject *
+test_long_as_size_t(PyObject *self)
+{
+    size_t out_u;
+    Py_ssize_t out_s;
+
+    Py_INCREF(Py_None);
+
+    out_u = PyLong_AsSize_t(Py_None);
+    if (out_u != (size_t)-1 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSize_t(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSize_t(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    out_s = PyLong_AsSsize_t(Py_None);
+    if (out_s != (Py_ssize_t)-1 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSsize_t(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_size_t",
+                              "PyLong_AsSsize_t(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    /* Py_INCREF(Py_None) omitted - we already have a reference to it. */
+    return Py_None;
+}
+
+/* Test the PyLong_AsDouble API. At present this just tests that
+   non-integer arguments are handled correctly.
+ */
+
+static PyObject *
+test_long_as_double(PyObject *self)
+{
+    double out;
+
+    Py_INCREF(Py_None);
+
+    out = PyLong_AsDouble(Py_None);
+    if (out != -1.0 || !PyErr_Occurred())
+        return raiseTestError("test_long_as_double",
+                              "PyLong_AsDouble(None) didn't complain");
+    if (!PyErr_ExceptionMatches(PyExc_TypeError))
+        return raiseTestError("test_long_as_double",
+                              "PyLong_AsDouble(None) raised "
+                              "something other than TypeError");
+    PyErr_Clear();
+
+    /* Py_INCREF(Py_None) omitted - we already have a reference to it. */
+    return Py_None;
+}
+
 /* Test the L code for PyArg_ParseTuple.  This should deliver a PY_LONG_LONG
    for both long and int arguments.  The test may leak a little memory if
    it fails.
@@ -837,7 +801,8 @@ getargs_tuple(PyObject *self, PyObject *args)
 }
 
 /* test PyArg_ParseTupleAndKeywords */
-static PyObject *getargs_keywords(PyObject *self, PyObject *args, PyObject *kwargs)
+static PyObject *
+getargs_keywords(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     static char *keywords[] = {"arg1","arg2","arg3","arg4","arg5", NULL};
     static char *fmt="(ii)i|(i(ii))(iii)i";
@@ -850,6 +815,21 @@ static PyObject *getargs_keywords(PyObject *self, PyObject *args, PyObject *kwar
     return Py_BuildValue("iiiiiiiiii",
         int_args[0], int_args[1], int_args[2], int_args[3], int_args[4],
         int_args[5], int_args[6], int_args[7], int_args[8], int_args[9]);
+}
+
+/* test PyArg_ParseTupleAndKeywords keyword-only arguments */
+static PyObject *
+getargs_keyword_only(PyObject *self, PyObject *args, PyObject *kwargs)
+{
+    static char *keywords[] = {"required", "optional", "keyword_only", NULL};
+    int required = -1;
+    int optional = -1;
+    int keyword_only = -1;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i|i$i", keywords,
+                                     &required, &optional, &keyword_only))
+        return NULL;
+    return Py_BuildValue("iii", required, optional, keyword_only);
 }
 
 /* Functions to call PyArg_ParseTuple with integer format codes,
@@ -936,6 +916,15 @@ getargs_n(PyObject *self, PyObject *args)
     return PyLong_FromSsize_t(value);
 }
 
+static PyObject *
+getargs_p(PyObject *self, PyObject *args)
+{
+    int value;
+    if (!PyArg_ParseTuple(args, "p", &value))
+        return NULL;
+    return PyLong_FromLong(value);
+}
+
 #ifdef HAVE_LONG_LONG
 static PyObject *
 getargs_L(PyObject *self, PyObject *args)
@@ -1009,6 +998,15 @@ test_k_code(PyObject *self)
     Py_DECREF(tuple);
     Py_INCREF(Py_None);
     return Py_None;
+}
+
+static PyObject *
+getargs_c(PyObject *self, PyObject *args)
+{
+    char c;
+    if (!PyArg_ParseTuple(args, "c", &c))
+        return NULL;
+    return PyBytes_FromStringAndSize(&c, 1);
 }
 
 static PyObject *
@@ -1197,50 +1195,72 @@ test_s_code(PyObject *self)
 }
 
 static PyObject *
-test_bug_7414(PyObject *self)
+parse_tuple_and_keywords(PyObject *self, PyObject *args)
 {
-    /* Issue #7414: for PyArg_ParseTupleAndKeywords, 'C' code wasn't being
-       skipped properly in skipitem() */
-    int a = 0, b = 0, result;
-    char *kwlist[] = {"a", "b", NULL};
-    PyObject *tuple = NULL, *dict = NULL, *b_str;
+    PyObject *sub_args;
+    PyObject *sub_kwargs;
+    char *sub_format;
+    PyObject *sub_keywords;
 
-    tuple = PyTuple_New(0);
-    if (tuple == NULL)
-        goto failure;
-    dict = PyDict_New();
-    if (dict == NULL)
-        goto failure;
-    b_str = PyUnicode_FromString("b");
-    if (b_str == NULL)
-        goto failure;
-    result = PyDict_SetItemString(dict, "b", b_str);
-    Py_DECREF(b_str);
-    if (result < 0)
-        goto failure;
+    Py_ssize_t i, size;
+    char *keywords[8 + 1]; /* space for NULL at end */
+    PyObject *o;
+    PyObject *converted[8];
 
-    result = PyArg_ParseTupleAndKeywords(tuple, dict, "|CC",
-                                         kwlist, &a, &b);
-    if (!result)
-        goto failure;
+    int result;
+    PyObject *return_value = NULL;
 
-    if (a != 0)
-        return raiseTestError("test_bug_7414",
-            "C format code not skipped properly");
-    if (b != 'b')
-        return raiseTestError("test_bug_7414",
-            "C format code returned wrong value");
+    double buffers[8][4]; /* double ensures alignment where necessary */
 
-    Py_DECREF(dict);
-    Py_DECREF(tuple);
-    Py_RETURN_NONE;
+    if (!PyArg_ParseTuple(args, "OOyO:parse_tuple_and_keywords",
+        &sub_args, &sub_kwargs,
+        &sub_format, &sub_keywords))
+        return NULL;
 
-  failure:
-    Py_XDECREF(dict);
-    Py_XDECREF(tuple);
-    return NULL;
+    if (!(PyList_CheckExact(sub_keywords) || PyTuple_CheckExact(sub_keywords))) {
+        PyErr_SetString(PyExc_ValueError,
+            "parse_tuple_and_keywords: sub_keywords must be either list or tuple");
+        return NULL;
+    }
+
+    memset(buffers, 0, sizeof(buffers));
+    memset(converted, 0, sizeof(converted));
+    memset(keywords, 0, sizeof(keywords));
+
+    size = PySequence_Fast_GET_SIZE(sub_keywords);
+    if (size > 8) {
+        PyErr_SetString(PyExc_ValueError,
+            "parse_tuple_and_keywords: too many keywords in sub_keywords");
+        goto exit;
+    }
+
+    for (i = 0; i < size; i++) {
+        o = PySequence_Fast_GET_ITEM(sub_keywords, i);
+        if (!PyUnicode_FSConverter(o, (void *)(converted + i))) {
+            PyErr_Format(PyExc_ValueError,
+                "parse_tuple_and_keywords: could not convert keywords[%zd] to narrow string", i);
+            goto exit;
+        }
+        keywords[i] = PyBytes_AS_STRING(converted[i]);
+    }
+
+    result = PyArg_ParseTupleAndKeywords(sub_args, sub_kwargs,
+        sub_format, keywords,
+        buffers + 0, buffers + 1, buffers + 2, buffers + 3,
+        buffers + 4, buffers + 5, buffers + 6, buffers + 7);
+
+    if (result) {
+        return_value = Py_None;
+        Py_INCREF(Py_None);
+    }
+
+exit:
+    size = sizeof(converted) / sizeof(converted[0]);
+    for (i = 0; i < size; i++) {
+        Py_XDECREF(converted[i]);
+    }
+    return return_value;
 }
-
 
 static volatile int x;
 
@@ -1293,7 +1313,7 @@ static PyObject *
 test_Z_code(PyObject *self)
 {
     PyObject *tuple, *obj;
-    Py_UNICODE *value1, *value2;
+    const Py_UNICODE *value1, *value2;
     Py_ssize_t len1, len2;
 
     tuple = PyTuple_New(2);
@@ -1347,6 +1367,7 @@ test_widechar(PyObject *self)
 #if defined(SIZEOF_WCHAR_T) && (SIZEOF_WCHAR_T == 4)
     const wchar_t wtext[2] = {(wchar_t)0x10ABCDu};
     size_t wtextlen = 1;
+    const wchar_t invalid[1] = {(wchar_t)0x110000u};
 #else
     const wchar_t wtext[3] = {(wchar_t)0xDBEAu, (wchar_t)0xDFCDu};
     size_t wtextlen = 2;
@@ -1363,7 +1384,7 @@ test_widechar(PyObject *self)
         return NULL;
     }
 
-    if (PyUnicode_GET_SIZE(wide) != PyUnicode_GET_SIZE(utf8)) {
+    if (PyUnicode_GET_LENGTH(wide) != PyUnicode_GET_LENGTH(utf8)) {
         Py_DECREF(wide);
         Py_DECREF(utf8);
         return raiseTestError("test_widechar",
@@ -1382,6 +1403,23 @@ test_widechar(PyObject *self)
 
     Py_DECREF(wide);
     Py_DECREF(utf8);
+
+#if defined(SIZEOF_WCHAR_T) && (SIZEOF_WCHAR_T == 4)
+    wide = PyUnicode_FromWideChar(invalid, 1);
+    if (wide == NULL)
+        PyErr_Clear();
+    else
+        return raiseTestError("test_widechar",
+                              "PyUnicode_FromWideChar(L\"\\U00110000\", 1) didn't fail");
+
+    wide = PyUnicode_FromUnicode(invalid, 1);
+    if (wide == NULL)
+        PyErr_Clear();
+    else
+        return raiseTestError("test_widechar",
+                              "PyUnicode_FromUnicode(L\"\\U00110000\", 1) didn't fail");
+#endif
+
     Py_RETURN_NONE;
 }
 
@@ -1576,7 +1614,7 @@ test_long_numbits(PyObject *self)
              {-0xfffffffL, 28, -1}};
     int i;
 
-    for (i = 0; i < sizeof(testcases) / sizeof(struct triple); ++i) {
+    for (i = 0; i < Py_ARRAY_LENGTH(testcases); ++i) {
         PyObject *plong = PyLong_FromLong(testcases[i].input);
         size_t nbits = _PyLong_NumBits(plong);
         int sign = _PyLong_Sign(plong);
@@ -1632,6 +1670,29 @@ raise_exception(PyObject *self, PyObject *args)
     return NULL;
 }
 
+static PyObject *
+test_set_exc_info(PyObject *self, PyObject *args)
+{
+    PyObject *orig_exc;
+    PyObject *new_type, *new_value, *new_tb;
+    PyObject *type, *value, *tb;
+    if (!PyArg_ParseTuple(args, "OOO:test_set_exc_info",
+                          &new_type, &new_value, &new_tb))
+        return NULL;
+
+    PyErr_GetExcInfo(&type, &value, &tb);
+
+    Py_INCREF(new_type);
+    Py_INCREF(new_value);
+    Py_INCREF(new_tb);
+    PyErr_SetExcInfo(new_type, new_value, new_tb);
+
+    orig_exc = PyTuple_Pack(3, type ? type : Py_None, value ? value : Py_None, tb ? tb : Py_None);
+    Py_XDECREF(type);
+    Py_XDECREF(value);
+    Py_XDECREF(tb);
+    return orig_exc;
+}
 
 static int test_run_counter = 0;
 
@@ -1786,13 +1847,12 @@ test_string_from_format(PyObject *self, PyObject *args)
 {
     PyObject *result;
     char *msg;
-    static const Py_UNICODE one[] = {'1', 0};
 
 #define CHECK_1_FORMAT(FORMAT, TYPE)                                \
     result = PyUnicode_FromFormat(FORMAT, (TYPE)1);                 \
     if (result == NULL)                                             \
         return NULL;                                                \
-    if (Py_UNICODE_strcmp(PyUnicode_AS_UNICODE(result), one)) {     \
+    if (PyUnicode_CompareWithASCIIString(result, "1")) {     \
         msg = FORMAT " failed at 1";                                \
         goto Fail;                                                  \
     }                                                               \
@@ -2317,12 +2377,58 @@ run_in_subinterp(PyObject *self, PyObject *args)
     PyThreadState_Swap(NULL);
 
     substate = Py_NewInterpreter();
+    if (substate == NULL) {
+        /* Since no new thread state was created, there is no exception to
+           propagate; raise a fresh one after swapping in the old thread
+           state. */
+        PyThreadState_Swap(mainstate);
+        PyErr_SetString(PyExc_RuntimeError, "sub-interpreter creation failed");
+        return NULL;
+    }
     r = PyRun_SimpleString(code);
     Py_EndInterpreter(substate);
 
     PyThreadState_Swap(mainstate);
 
     return PyLong_FromLong(r);
+}
+
+static PyObject *
+test_pytime_object_to_time_t(PyObject *self, PyObject *args)
+{
+    PyObject *obj;
+    time_t sec;
+    if (!PyArg_ParseTuple(args, "O:pytime_object_to_time_t", &obj))
+        return NULL;
+    if (_PyTime_ObjectToTime_t(obj, &sec) == -1)
+        return NULL;
+    return _PyLong_FromTime_t(sec);
+}
+
+static PyObject *
+test_pytime_object_to_timeval(PyObject *self, PyObject *args)
+{
+    PyObject *obj;
+    time_t sec;
+    long usec;
+    if (!PyArg_ParseTuple(args, "O:pytime_object_to_timeval", &obj))
+        return NULL;
+    if (_PyTime_ObjectToTimeval(obj, &sec, &usec) == -1)
+        return NULL;
+    return Py_BuildValue("Nl", _PyLong_FromTime_t(sec), usec);
+}
+
+static PyObject *
+test_pytime_object_to_timespec(PyObject *self, PyObject *args)
+{
+    PyObject *obj;
+    time_t sec;
+    long nsec;
+    if (!PyArg_ParseTuple(args, "O:pytime_object_to_timespec", &obj))
+        return NULL;
+    if (_PyTime_ObjectToTimespec(obj, &sec, &nsec) == -1)
+        return NULL;
+    return Py_BuildValue("Nl", _PyLong_FromTime_t(sec), nsec);
 }
 
 
@@ -2334,14 +2440,15 @@ static PyMethodDef TestMethods[] = {
     {"test_list_api",           (PyCFunction)test_list_api,      METH_NOARGS},
     {"test_dict_iteration",     (PyCFunction)test_dict_iteration,METH_NOARGS},
     {"test_lazy_hash_inheritance",      (PyCFunction)test_lazy_hash_inheritance,METH_NOARGS},
-    {"test_broken_memoryview",          (PyCFunction)test_broken_memoryview,METH_NOARGS},
     {"test_long_api",           (PyCFunction)test_long_api,      METH_NOARGS},
     {"test_long_and_overflow", (PyCFunction)test_long_and_overflow,
      METH_NOARGS},
+    {"test_long_as_double",     (PyCFunction)test_long_as_double,METH_NOARGS},
+    {"test_long_as_size_t",     (PyCFunction)test_long_as_size_t,METH_NOARGS},
     {"test_long_numbits",       (PyCFunction)test_long_numbits,  METH_NOARGS},
     {"test_k_code",             (PyCFunction)test_k_code,        METH_NOARGS},
     {"test_empty_argparse", (PyCFunction)test_empty_argparse,METH_NOARGS},
-    {"test_bug_7414", (PyCFunction)test_bug_7414, METH_NOARGS},
+    {"parse_tuple_and_keywords", parse_tuple_and_keywords, METH_VARARGS},
     {"test_null_strings",       (PyCFunction)test_null_strings,  METH_NOARGS},
     {"test_string_from_format", (PyCFunction)test_string_from_format, METH_NOARGS},
     {"test_with_docstring", (PyCFunction)test_with_docstring, METH_NOARGS,
@@ -2352,6 +2459,8 @@ static PyMethodDef TestMethods[] = {
     {"getargs_tuple",           getargs_tuple,                   METH_VARARGS},
     {"getargs_keywords", (PyCFunction)getargs_keywords,
       METH_VARARGS|METH_KEYWORDS},
+    {"getargs_keyword_only", (PyCFunction)getargs_keyword_only,
+      METH_VARARGS|METH_KEYWORDS},
     {"getargs_b",               getargs_b,                       METH_VARARGS},
     {"getargs_B",               getargs_B,                       METH_VARARGS},
     {"getargs_h",               getargs_h,                       METH_VARARGS},
@@ -2361,6 +2470,7 @@ static PyMethodDef TestMethods[] = {
     {"getargs_i",               getargs_i,                       METH_VARARGS},
     {"getargs_l",               getargs_l,                       METH_VARARGS},
     {"getargs_n",               getargs_n,                       METH_VARARGS},
+    {"getargs_p",               getargs_p,                       METH_VARARGS},
 #ifdef HAVE_LONG_LONG
     {"getargs_L",               getargs_L,                       METH_VARARGS},
     {"getargs_K",               getargs_K,                       METH_VARARGS},
@@ -2369,6 +2479,7 @@ static PyMethodDef TestMethods[] = {
         (PyCFunction)test_long_long_and_overflow, METH_NOARGS},
     {"test_L_code",             (PyCFunction)test_L_code,        METH_NOARGS},
 #endif
+    {"getargs_c",               getargs_c,                       METH_VARARGS},
     {"getargs_s",               getargs_s,                       METH_VARARGS},
     {"getargs_s_star",          getargs_s_star,                  METH_VARARGS},
     {"getargs_s_hash",          getargs_s_hash,                  METH_VARARGS},
@@ -2404,6 +2515,7 @@ static PyMethodDef TestMethods[] = {
 #endif
     {"traceback_print",         traceback_print,                 METH_VARARGS},
     {"exception_print",         exception_print,                 METH_VARARGS},
+    {"set_exc_info",            test_set_exc_info,               METH_VARARGS},
     {"argparsing",              argparsing,                      METH_VARARGS},
     {"code_newempty",           code_newempty,                   METH_VARARGS},
     {"make_exception_with_doc", (PyCFunction)make_exception_with_doc,
@@ -2412,6 +2524,9 @@ static PyMethodDef TestMethods[] = {
      METH_NOARGS},
     {"crash_no_current_thread", (PyCFunction)crash_no_current_thread, METH_NOARGS},
     {"run_in_subinterp",        run_in_subinterp,                METH_VARARGS},
+    {"pytime_object_to_time_t", test_pytime_object_to_time_t,  METH_VARARGS},
+    {"pytime_object_to_timeval", test_pytime_object_to_timeval,  METH_VARARGS},
+    {"pytime_object_to_timespec", test_pytime_object_to_timespec,  METH_VARARGS},
     {NULL, NULL} /* sentinel */
 };
 
@@ -2594,7 +2709,6 @@ PyInit__testcapi(void)
         return NULL;
 
     Py_TYPE(&_HashInheritanceTester_Type)=&PyType_Type;
-    Py_TYPE(&_MemoryViewTester_Type)=&PyType_Type;
 
     Py_TYPE(&test_structmembersType)=&PyType_Type;
     Py_INCREF(&test_structmembersType);
