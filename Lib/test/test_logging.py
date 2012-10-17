@@ -26,6 +26,7 @@ import logging.handlers
 import logging.config
 
 import codecs
+import configparser
 import datetime
 import pickle
 import io
@@ -81,7 +82,7 @@ class BaseTest(unittest.TestCase):
     """Base class for logging tests."""
 
     log_format = "%(name)s -> %(levelname)s: %(message)s"
-    expected_log_pat = r"^([\w.]+) -> ([\w]+): ([\d]+)$"
+    expected_log_pat = r"^([\w.]+) -> (\w+): (\d+)$"
     message_num = 0
 
     def setUp(self):
@@ -150,14 +151,17 @@ class BaseTest(unittest.TestCase):
         finally:
             logging._releaseLock()
 
-    def assert_log_lines(self, expected_values, stream=None):
+    def assert_log_lines(self, expected_values, stream=None, pat=None):
         """Match the collected log lines against the regular expression
         self.expected_log_pat, and compare the extracted group values to
         the expected_values list of tuples."""
         stream = stream or self.stream
-        pat = re.compile(self.expected_log_pat)
+        pat = re.compile(pat or self.expected_log_pat)
         try:
-            stream.reset()
+            if hasattr(stream, 'reset'):
+                stream.reset()
+            elif hasattr(stream, 'seek'):
+                stream.seek(0)
             actual_lines = stream.readlines()
         except AttributeError:
             # StringIO.StringIO lacks a reset() method.
@@ -435,7 +439,7 @@ class CustomLevelsAndFiltersTest(BaseTest):
     """Test various filtering possibilities with custom logging levels."""
 
     # Skip the logger name group.
-    expected_log_pat = r"^[\w.]+ -> ([\w]+): ([\d]+)$"
+    expected_log_pat = r"^[\w.]+ -> (\w+): (\d+)$"
 
     def setUp(self):
         BaseTest.setUp(self)
@@ -996,7 +1000,7 @@ class MemoryHandlerTest(BaseTest):
     """Tests for the MemoryHandler."""
 
     # Do not bother with a logger name group.
-    expected_log_pat = r"^[\w.]+ -> ([\w]+): ([\d]+)$"
+    expected_log_pat = r"^[\w.]+ -> (\w+): (\d+)$"
 
     def setUp(self):
         BaseTest.setUp(self)
@@ -1049,7 +1053,7 @@ class ConfigFileTest(BaseTest):
 
     """Reading logging config from a .ini-style config file."""
 
-    expected_log_pat = r"^([\w]+) \+\+ ([\w]+)$"
+    expected_log_pat = r"^(\w+) \+\+ (\w+)$"
 
     # config0 is a standard configuration.
     config0 = """
@@ -1276,6 +1280,24 @@ class ConfigFileTest(BaseTest):
             # Original logger output is empty.
             self.assert_log_lines([])
 
+    def test_config0_using_cp_ok(self):
+        # A simple config file which overrides the default settings.
+        with captured_stdout() as output:
+            file = io.StringIO(textwrap.dedent(self.config0))
+            cp = configparser.ConfigParser()
+            cp.read_file(file)
+            logging.config.fileConfig(cp)
+            logger = logging.getLogger()
+            # Won't output anything
+            logger.info(self.next_message())
+            # Outputs a message
+            logger.error(self.next_message())
+            self.assert_log_lines([
+                ('ERROR', '2'),
+            ], stream=output)
+            # Original logger output is empty.
+            self.assert_log_lines([])
+
     def test_config1_ok(self, config=config1):
         # A config file defining a sub-parser as well.
         with captured_stdout() as output:
@@ -1428,7 +1450,7 @@ class SocketHandlerTest(BaseTest):
             self.root_logger.exception('Never sent')
         self.root_logger.error('Never sent, either')
         now = time.time()
-        self.assertTrue(self.sock_hdlr.retryTime > now)
+        self.assertGreater(self.sock_hdlr.retryTime, now)
         time.sleep(self.sock_hdlr.retryTime - now + 0.001)
         self.root_logger.error('Nor this')
 
@@ -1754,7 +1776,7 @@ class WarningsTest(BaseTest):
             logger.removeHandler(h)
             s = stream.getvalue()
             h.close()
-            self.assertTrue(s.find("UserWarning: I'm warning you...\n") > 0)
+            self.assertGreater(s.find("UserWarning: I'm warning you...\n"), 0)
 
             #See if an explicit file uses the original implementation
             a_file = io.StringIO()
@@ -1792,7 +1814,7 @@ class ConfigDictTest(BaseTest):
 
     """Reading logging config from a dictionary."""
 
-    expected_log_pat = r"^([\w]+) \+\+ ([\w]+)$"
+    expected_log_pat = r"^(\w+) \+\+ (\w+)$"
 
     # config0 is a standard configuration.
     config0 = {
@@ -2601,10 +2623,10 @@ class ConfigDictTest(BaseTest):
         self.assertRaises(Exception, self.apply_config, self.config13)
 
     @unittest.skipUnless(threading, 'listen() needs threading to work')
-    def setup_via_listener(self, text):
+    def setup_via_listener(self, text, verify=None):
         text = text.encode("utf-8")
         # Ask for a randomly assigned port (by using port 0)
-        t = logging.config.listen(0)
+        t = logging.config.listen(0, verify)
         t.start()
         t.ready.wait()
         # Now get the port allocated
@@ -2664,6 +2686,69 @@ class ConfigDictTest(BaseTest):
             # Original logger output is empty.
             self.assert_log_lines([])
 
+    @unittest.skipUnless(threading, 'Threading required for this test.')
+    def test_listen_verify(self):
+
+        def verify_fail(stuff):
+            return None
+
+        def verify_reverse(stuff):
+            return stuff[::-1]
+
+        logger = logging.getLogger("compiler.parser")
+        to_send = textwrap.dedent(ConfigFileTest.config1)
+        # First, specify a verification function that will fail.
+        # We expect to see no output, since our configuration
+        # never took effect.
+        with captured_stdout() as output:
+            self.setup_via_listener(to_send, verify_fail)
+            # Both will output a message
+            logger.info(self.next_message())
+            logger.error(self.next_message())
+        self.assert_log_lines([], stream=output)
+        # Original logger output has the stuff we logged.
+        self.assert_log_lines([
+            ('INFO', '1'),
+            ('ERROR', '2'),
+        ], pat=r"^[\w.]+ -> (\w+): (\d+)$")
+
+        # Now, perform no verification. Our configuration
+        # should take effect.
+
+        with captured_stdout() as output:
+            self.setup_via_listener(to_send)    # no verify callable specified
+            logger = logging.getLogger("compiler.parser")
+            # Both will output a message
+            logger.info(self.next_message())
+            logger.error(self.next_message())
+        self.assert_log_lines([
+            ('INFO', '3'),
+            ('ERROR', '4'),
+        ], stream=output)
+        # Original logger output still has the stuff we logged before.
+        self.assert_log_lines([
+            ('INFO', '1'),
+            ('ERROR', '2'),
+        ], pat=r"^[\w.]+ -> (\w+): (\d+)$")
+
+        # Now, perform verification which transforms the bytes.
+
+        with captured_stdout() as output:
+            self.setup_via_listener(to_send[::-1], verify_reverse)
+            logger = logging.getLogger("compiler.parser")
+            # Both will output a message
+            logger.info(self.next_message())
+            logger.error(self.next_message())
+        self.assert_log_lines([
+            ('INFO', '5'),
+            ('ERROR', '6'),
+        ], stream=output)
+        # Original logger output still has the stuff we logged before.
+        self.assert_log_lines([
+            ('INFO', '1'),
+            ('ERROR', '2'),
+        ], pat=r"^[\w.]+ -> (\w+): (\d+)$")
+
     def test_baseconfig(self):
         d = {
             'atuple': (1, 2, 3),
@@ -2716,14 +2801,14 @@ class ChildLoggerTest(BaseTest):
         l2 = logging.getLogger('def.ghi')
         c1 = r.getChild('xyz')
         c2 = r.getChild('uvw.xyz')
-        self.assertTrue(c1 is logging.getLogger('xyz'))
-        self.assertTrue(c2 is logging.getLogger('uvw.xyz'))
+        self.assertIs(c1, logging.getLogger('xyz'))
+        self.assertIs(c2, logging.getLogger('uvw.xyz'))
         c1 = l1.getChild('def')
         c2 = c1.getChild('ghi')
         c3 = l1.getChild('def.ghi')
-        self.assertTrue(c1 is logging.getLogger('abc.def'))
-        self.assertTrue(c2 is logging.getLogger('abc.def.ghi'))
-        self.assertTrue(c2 is c3)
+        self.assertIs(c1, logging.getLogger('abc.def'))
+        self.assertIs(c2, logging.getLogger('abc.def.ghi'))
+        self.assertIs(c2, c3)
 
 
 class DerivedLogRecord(logging.LogRecord):
@@ -2766,7 +2851,7 @@ class LogRecordFactoryTest(BaseTest):
 
 class QueueHandlerTest(BaseTest):
     # Do not bother with a logger name group.
-    expected_log_pat = r"^[\w.]+ -> ([\w]+): ([\d]+)$"
+    expected_log_pat = r"^[\w.]+ -> (\w+): (\d+)$"
 
     def setUp(self):
         BaseTest.setUp(self)
@@ -3804,7 +3889,7 @@ class NTEventLogHandlerTest(BaseTest):
         h.handle(r)
         h.close()
         # Now see if the event is recorded
-        self.assertTrue(num_recs < win32evtlog.GetNumberOfEventLogRecords(elh))
+        self.assertLess(num_recs, win32evtlog.GetNumberOfEventLogRecords(elh))
         flags = win32evtlog.EVENTLOG_BACKWARDS_READ | \
                 win32evtlog.EVENTLOG_SEQUENTIAL_READ
         found = False
