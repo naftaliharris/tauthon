@@ -1,8 +1,9 @@
-import sys
+import imp
+import importlib
 import os
 import re
 import string
-import imp
+import sys
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -27,8 +28,7 @@ def _sphinx_version():
     "Format sys.version_info to produce the Sphinx version string used to install the chm docs"
     major, minor, micro, level, serial = sys.version_info
     release = '%s%s' % (major, minor)
-    if micro:
-        release += '%s' % (micro,)
+    release += '%s' % (micro,)
     if level == 'candidate':
         release += 'rc%s' % (serial,)
     elif level != 'final':
@@ -120,7 +120,7 @@ class EditorWindow(object):
 
     def __init__(self, flist=None, filename=None, key=None, root=None):
         if EditorWindow.help_url is None:
-            dochome =  os.path.join(sys.prefix, 'Doc', 'index.html')
+            dochome =  os.path.join(sys.base_prefix, 'Doc', 'index.html')
             if sys.platform.count('linux'):
                 # look for html docs in a couple of standard places
                 pyver = 'python-docs-' + '%s.%s.%s' % sys.version_info[:3]
@@ -131,13 +131,13 @@ class EditorWindow(object):
                     dochome = os.path.join(basepath, pyver,
                                            'Doc', 'index.html')
             elif sys.platform[:3] == 'win':
-                chmfile = os.path.join(sys.prefix, 'Doc',
+                chmfile = os.path.join(sys.base_prefix, 'Doc',
                                        'Python%s.chm' % _sphinx_version())
                 if os.path.isfile(chmfile):
                     dochome = chmfile
             elif macosxSupport.runningAsOSXApp():
                 # documentation is stored inside the python framework
-                dochome = os.path.join(sys.prefix,
+                dochome = os.path.join(sys.base_prefix,
                         'Resources/English.lproj/Documentation/index.html')
             dochome = os.path.normpath(dochome)
             if os.path.isfile(dochome):
@@ -1005,7 +1005,10 @@ class EditorWindow(object):
 
     def load_extension(self, name):
         try:
-            mod = __import__(name, globals(), locals(), [])
+            try:
+                mod = importlib.import_module('.' + name, package=__package__)
+            except ImportError:
+                mod = importlib.import_module(name)
         except ImportError:
             print("\nFailed to import extension: ", name)
             raise
