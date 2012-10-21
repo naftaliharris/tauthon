@@ -1255,6 +1255,12 @@ class AbstractHTTPHandler(BaseHandler):
             raise URLError(err)
         else:
             r = h.getresponse()
+            # If the server does not send us a 'Connection: close' header,
+            # HTTPConnection assumes the socket should be left open. Manually
+            # mark the socket to be closed when this response object goes away.
+            if h.sock:
+                h.sock.close()
+                h.sock = None
 
         r.url = req.get_full_url()
         # This line replaces the .msg attribute of the HTTPResponse
@@ -1658,7 +1664,7 @@ class URLopener:
                 return getattr(self, name)(url)
             else:
                 return getattr(self, name)(url, data)
-        except HTTPError:
+        except (HTTPError, URLError):
             raise
         except socket.error as msg:
             raise IOError('socket error', msg).with_traceback(sys.exc_info()[2])
@@ -1885,7 +1891,7 @@ class URLopener:
         try:
             stats = os.stat(localname)
         except OSError as e:
-            raise URLError(e.errno, e.strerror, e.filename)
+            raise URLError(e.strerror, e.filename)
         size = stats.st_size
         modified = email.utils.formatdate(stats.st_mtime, usegmt=True)
         mtype = mimetypes.guess_type(url)[0]
