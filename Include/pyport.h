@@ -379,9 +379,6 @@ typedef size_t Py_uhash_t;
 #endif
 
 #ifdef HAVE_SYS_STAT_H
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#include <sys/types.h>
-#endif
 #include <sys/stat.h>
 #elif defined(HAVE_STAT_H)
 #include <stat.h>
@@ -866,6 +863,20 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 #else
 #define Py_VA_COPY(x, y) (x) = (y)
 #endif
+#endif
+
+/*
+ * Convenient macros to deal with endianess of the platform. WORDS_BIGENDIAN is
+ * detected by configure and defined in pyconfig.h. The code in pyconfig.h
+ * also also takes care of Apple's universal builds.
+ */
+
+#ifdef WORDS_BIGENDIAN
+#define PY_BIG_ENDIAN 1
+#define PY_LITTLE_ENDIAN 0
+#else
+#define PY_BIG_ENDIAN 0
+#define PY_LITTLE_ENDIAN 1
 #endif
 
 #endif /* Py_PYPORT_H */
