@@ -10,6 +10,12 @@ What's New in Python 3.2.4
 Core and Builtins
 -----------------
 
+- Issue #14700: Fix buggy overflow checks when handling large precisions and
+  widths in old-style and new-style formatting.
+
+- Issue #6074: Ensure cached bytecode files can always be updated by the
+  user that created them, even when the source file is read-only.
+
 - Issue #14783: Improve int() docstring and switch docstrings for str(),
   range(), and slice() to use multi-line signatures.
 
@@ -128,6 +134,22 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #12890: cgitb no longer prints spurious <p> tags in text
+  mode when the logdir option is specified.
+
+- Issue #16250: Fix URLError invocation with proper args.
+
+- Issue #16305: Fix a segmentation fault occurring when interrupting
+  math.factorial.
+
+- Issue #14398: Fix size truncation and overflow bugs in the bz2 module.
+
+- Issue #16220: wsgiref now always calls close() on an iterable response.
+  Patch by Brent Tubbs.
+
+- Issue #16270: urllib may hang when used for retrieving files via FTP by using
+  a context manager.  Patch by Giampaolo Rodola'.
 
 - Issue #16176: Properly identify Windows 8 via platform.platform()
 
@@ -579,6 +601,8 @@ Tests
 Build
 -----
 
+- Issue #16262: fix out-of-src-tree builds, if mercurial is not installed.
+
 - Issue #15923: fix a mistake in asdl_c.py that resulted in a TypeError after
   2801bf875a24 (see #15801).
 
@@ -614,6 +638,9 @@ Build
 
 Documentation
 -------------
+
+- Issue #8040: added a version switcher to the documentation.  Patch by
+  Yury Selivanov.
 
 - Issue #16115: Improve subprocess.Popen() documentation around args, shell,
   and executable arguments.

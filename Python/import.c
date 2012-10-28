@@ -1172,15 +1172,21 @@ write_compiled_module(PyCodeObject *co, char *cpathname, struct stat *srcstat)
     FILE *fp;
     char *dirpath;
     time_t mtime = srcstat->st_mtime;
+    int saved;
 #ifdef MS_WINDOWS   /* since Windows uses different permissions  */
     mode_t mode = srcstat->st_mode & ~S_IEXEC;
+    /* Issue #6074: We ensure user write access, so we can delete it later
+     * when the source file changes. (On POSIX, this only requires write
+     * access to the directory, on Windows, we need write access to the file
+     * as well)
+     */
+    mode |= _S_IWRITE;
 #else
     mode_t mode = srcstat->st_mode & ~S_IXUSR & ~S_IXGRP & ~S_IXOTH;
     mode_t dirmode = (srcstat->st_mode |
                       S_IXUSR | S_IXGRP | S_IXOTH |
                       S_IWUSR | S_IWGRP | S_IWOTH);
 #endif
-    int saved;
 
     /* Ensure that the __pycache__ directory exists. */
     dirpath = rightmost_sep(cpathname);
