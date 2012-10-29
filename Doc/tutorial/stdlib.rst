@@ -15,7 +15,7 @@ operating system::
 
    >>> import os
    >>> os.getcwd()      # Return the current working directory
-   'C:\\Python31'
+   'C:\\Python33'
    >>> os.chdir('/server/accesslogs')   # Change current working directory
    >>> os.system('mkdir today')   # Run the command mkdir in the system shell
    0
@@ -203,7 +203,7 @@ Data Compression
 ================
 
 Common data archiving and compression formats are directly supported by modules
-including: :mod:`zlib`, :mod:`gzip`, :mod:`bz2`, :mod:`zipfile` and
+including: :mod:`zlib`, :mod:`gzip`, :mod:`bz2`, :mod:`lzma`, :mod:`zipfile` and
 :mod:`tarfile`. ::
 
    >>> import zlib
