@@ -180,9 +180,9 @@ typedef unsigned char Py_UCS1;
     } while (0)
 
 /* macros to work with surrogates */
-#define Py_UNICODE_IS_SURROGATE(ch) (0xD800 <= ch && ch <= 0xDFFF)
-#define Py_UNICODE_IS_HIGH_SURROGATE(ch) (0xD800 <= ch && ch <= 0xDBFF)
-#define Py_UNICODE_IS_LOW_SURROGATE(ch) (0xDC00 <= ch && ch <= 0xDFFF)
+#define Py_UNICODE_IS_SURROGATE(ch) (0xD800 <= (ch) && (ch) <= 0xDFFF)
+#define Py_UNICODE_IS_HIGH_SURROGATE(ch) (0xD800 <= (ch) && (ch) <= 0xDBFF)
+#define Py_UNICODE_IS_LOW_SURROGATE(ch) (0xDC00 <= (ch) && (ch) <= 0xDFFF)
 /* Join two surrogate characters and return a single Py_UCS4 value. */
 #define Py_UNICODE_JOIN_SURROGATES(high, low)  \
     (((((Py_UCS4)(high) & 0x03FF) << 10) |      \
@@ -933,12 +933,28 @@ PyAPI_FUNC(int)
 _PyUnicodeWriter_PrepareInternal(_PyUnicodeWriter *writer,
                                  Py_ssize_t length, Py_UCS4 maxchar);
 
+/* Append a Unicode string.
+   Return 0 on success, raise an exception and return -1 on error. */
 PyAPI_FUNC(int)
-_PyUnicodeWriter_WriteStr(_PyUnicodeWriter *writer, PyObject *str);
+_PyUnicodeWriter_WriteStr(_PyUnicodeWriter *writer,
+    PyObject *str               /* Unicode string */
+    );
 
+/* Append a latin1-encoded byte string.
+   Return 0 on success, raise an exception and return -1 on error. */
+PyAPI_FUNC(int)
+_PyUnicodeWriter_WriteCstr(_PyUnicodeWriter *writer,
+    const char *str,            /* latin1-encoded byte string */
+    Py_ssize_t len              /* length in bytes */
+    );
+
+/* Get the value of the write as an Unicode string. Clear the
+   buffer of the writer. Raise an exception and return NULL
+   on error. */
 PyAPI_FUNC(PyObject *)
 _PyUnicodeWriter_Finish(_PyUnicodeWriter *writer);
 
+/* Deallocate memory of a writer (clear its internal buffer). */
 PyAPI_FUNC(void)
 _PyUnicodeWriter_Dealloc(_PyUnicodeWriter *writer);
 #endif
@@ -1950,7 +1966,8 @@ PyAPI_FUNC(PyObject *) PyUnicode_Replace(
     );
 
 /* Compare two strings and return -1, 0, 1 for less than, equal,
-   greater than resp. */
+   greater than resp.
+   Raise an exception and return -1 on error. */
 
 PyAPI_FUNC(int) PyUnicode_Compare(
     PyObject *left,             /* Left string */
