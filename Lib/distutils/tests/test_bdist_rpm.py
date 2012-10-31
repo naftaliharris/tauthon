@@ -28,6 +28,11 @@ class BuildRpmTestCase(support.TempdirManager,
                        unittest.TestCase):
 
     def setUp(self):
+        try:
+            sys.executable.encode("UTF-8")
+        except UnicodeEncodeError:
+            raise unittest.SkipTest("sys.executable is not encodable to UTF-8")
+
         super(BuildRpmTestCase, self).setUp()
         self.old_location = os.getcwd()
         self.old_sys_argv = sys.argv, sys.argv[:]
@@ -42,7 +47,7 @@ class BuildRpmTestCase(support.TempdirManager,
 
         # XXX I am unable yet to make this test work without
         # spurious sdtout/stderr output under Mac OS X
-        if sys.platform != 'linux2':
+        if not sys.platform.startswith('linux'):
             return
 
         # this test will run only if the rpm commands are found
@@ -86,7 +91,7 @@ class BuildRpmTestCase(support.TempdirManager,
 
         # XXX I am unable yet to make this test work without
         # spurious sdtout/stderr output under Mac OS X
-        if sys.platform != 'linux2':
+        if not sys.platform.startswith('linux'):
             return
 
         # http://bugs.python.org/issue1533164
