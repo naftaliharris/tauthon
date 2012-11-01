@@ -443,10 +443,12 @@ multibytecodec_decerror(MultibyteCodec *codec,
         goto errorexit;
     }
 
+    if (PyUnicode_AsUnicode(retuni) == NULL)
+        goto errorexit;
     retunisize = PyUnicode_GET_SIZE(retuni);
     if (retunisize > 0) {
         REQUIRE_DECODEBUFFER(buf, retunisize);
-        memcpy((char *)buf->outbuf, PyUnicode_AS_DATA(retuni),
+        memcpy((char *)buf->outbuf, PyUnicode_AS_UNICODE(retuni),
                         retunisize * Py_UNICODE_SIZE);
         buf->outbuf += retunisize;
     }
@@ -483,6 +485,7 @@ multibytecodec_encode(MultibyteCodec *codec,
         return PyBytes_FromStringAndSize(NULL, 0);
 
     buf.excobj = NULL;
+    buf.outobj = NULL;
     buf.inbuf = buf.inbuf_top = *data;
     buf.inbuf_end = buf.inbuf_top + datalen;
 
@@ -573,8 +576,11 @@ MultibyteCodec_Encode(MultibyteCodecObject *self,
         }
     }
 
-    data = PyUnicode_AS_UNICODE(arg);
-    datalen = PyUnicode_GET_SIZE(arg);
+    data = PyUnicode_AsUnicodeAndSize(arg, &datalen);
+    if (data == NULL) {
+        Py_XDECREF(ucvt);
+        return NULL;
+    }
 
     errorcb = internal_error_callback(errors);
     if (errorcb == NULL) {
@@ -627,7 +633,7 @@ MultibyteCodec_Decode(MultibyteCodecObject *self,
     if (datalen == 0) {
         PyBuffer_Release(&pdata);
         ERROR_DECREF(errorcb);
-        return make_tuple(PyUnicode_FromUnicode(NULL, 0), 0);
+        return make_tuple(PyUnicode_New(0, 0), 0);
     }
 
     buf.excobj = NULL;
@@ -637,6 +643,8 @@ MultibyteCodec_Decode(MultibyteCodecObject *self,
     if (buf.outobj == NULL)
         goto errorexit;
     buf.outbuf = PyUnicode_AS_UNICODE(buf.outobj);
+    if (buf.outbuf == NULL)
+        goto errorexit;
     buf.outbuf_end = buf.outbuf + PyUnicode_GET_SIZE(buf.outobj);
 
     if (self->codec->decinit != NULL &&
@@ -742,6 +750,7 @@ encoder_encode_stateful(MultibyteStatefulEncoderContext *ctx,
     PyObject *ucvt, *r = NULL;
     Py_UNICODE *inbuf, *inbuf_end, *inbuf_tmp = NULL;
     Py_ssize_t datalen, origpending;
+    wchar_t *data;
 
     if (PyUnicode_Check(unistr))
         ucvt = NULL;
@@ -757,7 +766,9 @@ encoder_encode_stateful(MultibyteStatefulEncoderContext *ctx,
         }
     }
 
-    datalen = PyUnicode_GET_SIZE(unistr);
+    data = PyUnicode_AsUnicodeAndSize(unistr, &datalen);
+    if (data == NULL)
+        goto errorexit;
     origpending = ctx->pendingsize;
 
     if (origpending > 0) {
@@ -848,7 +859,9 @@ decoder_prepare_buffer(MultibyteDecodeBuffer *buf, const char *data,
         buf->outobj = PyUnicode_FromUnicode(NULL, size);
         if (buf->outobj == NULL)
             return -1;
-        buf->outbuf = PyUnicode_AS_UNICODE(buf->outobj);
+        buf->outbuf = PyUnicode_AsUnicode(buf->outobj);
+        if (buf->outbuf == NULL)
+            return -1;
         buf->outbuf_end = buf->outbuf +
                           PyUnicode_GET_SIZE(buf->outobj);
     }
@@ -900,11 +913,17 @@ mbiencoder_encode(MultibyteIncrementalEncoderObject *self,
 static PyObject *
 mbiencoder_reset(MultibyteIncrementalEncoderObject *self)
 {
-    if (self->codec->decreset != NULL &&
-        self->codec->decreset(&self->state, self->codec->config) != 0)
-        return NULL;
+    /* Longest output: 4 bytes (b'\x0F\x1F(B') with ISO 2022 */
+    unsigned char buffer[4], *outbuf;
+    Py_ssize_t r;
+    if (self->codec->encreset != NULL) {
+        outbuf = buffer;
+        r = self->codec->encreset(&self->state, self->codec->config,
+                                  &outbuf, sizeof(buffer));
+        if (r != 0)
+            return NULL;
+    }
     self->pendingsize = 0;
-
     Py_RETURN_NONE;
 }
 
@@ -1246,7 +1265,7 @@ mbstreamreader_iread(MultibyteStreamReaderObject *self,
     Py_ssize_t rsize, finalsize = 0;
 
     if (sizehint == 0)
-        return PyUnicode_FromUnicode(NULL, 0);
+        return PyUnicode_New(0, 0);
 
     buf.outobj = buf.excobj = NULL;
     cres = NULL;
@@ -1572,12 +1591,13 @@ mbstreamwriter_iwrite(MultibyteStreamWriterObject *self,
                       PyObject *unistr)
 {
     PyObject *str, *wr;
+    _Py_IDENTIFIER(write);
 
     str = encoder_encode_stateful(STATEFUL_ECTX(self), unistr, 0);
     if (str == NULL)
         return -1;
 
-    wr = PyObject_CallMethod(self->stream, "write", "O", str);
+    wr = _PyObject_CallMethodId(self->stream, &PyId_write, "O", str);
     Py_DECREF(str);
     if (wr == NULL)
         return -1;
@@ -1643,7 +1663,9 @@ mbstreamwriter_reset(MultibyteStreamWriterObject *self)
     assert(PyBytes_Check(pwrt));
     if (PyBytes_Size(pwrt) > 0) {
         PyObject *wr;
-        wr = PyObject_CallMethod(self->stream, "write", "O", pwrt);
+        _Py_IDENTIFIER(write);
+
+        wr = _PyObject_CallMethodId(self->stream, &PyId_write, "O", pwrt);
         if (wr == NULL) {
             Py_DECREF(pwrt);
             return NULL;
