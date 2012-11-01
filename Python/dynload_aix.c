@@ -26,11 +26,7 @@ typedef struct Module {
     void          *entry;
 } Module, *ModulePtr;
 
-const struct filedescr _PyImport_DynLoadFiletab[] = {
-    {".so", "rb", C_EXTENSION},
-    {"module.so", "rb", C_EXTENSION},
-    {0, 0}
-};
+const char *_PyImport_DynLoadFiletab[] = {".so", NULL};
 
 static int
 aix_getoldmodules(void **modlistptr)
@@ -109,6 +105,8 @@ aix_loaderror(const char *pathname)
 {
 
     char *message[1024], errbuf[1024];
+    PyObject *pathname_ob = NULL;
+    PyObject *errbuf_ob = NULL;
     register int i,j;
 
     struct errtab {
@@ -129,7 +127,6 @@ aix_loaderror(const char *pathname)
         {L_ERROR_ERRNO,                 NULL}
     };
 
-#define LOAD_ERRTAB_LEN (sizeof(load_errtab)/sizeof(load_errtab[0]))
 #define ERRBUF_APPEND(s) strncat(errbuf, s, sizeof(errbuf)-strlen(errbuf)-1)
 
     PyOS_snprintf(errbuf, sizeof(errbuf), "from module %.200s ", pathname);
@@ -140,7 +137,7 @@ aix_loaderror(const char *pathname)
     }
     for(i = 0; message[i] && *message[i]; i++) {
         int nerr = atoi(message[i]);
-        for (j=0; j<LOAD_ERRTAB_LEN ; j++) {
+        for (j=0; j < Py_ARRAY_LENGTH(load_errtab); j++) {
             if (nerr == load_errtab[j].errNo && load_errtab[j].errstr)
             ERRBUF_APPEND(load_errtab[j].errstr);
         }
@@ -149,12 +146,16 @@ aix_loaderror(const char *pathname)
         ERRBUF_APPEND("\n");
     }
     errbuf[strlen(errbuf)-1] = '\0';            /* trim off last newline */
-    PyErr_SetString(PyExc_ImportError, errbuf);
+    pathname_ob = PyUnicode_FromString(pathname);
+    errbuf_ob = PyUnicode_FromString(errbuf);
+    PyErr_SetImportError(errbuf_ob, NULL, pathname);
+    Py_DECREF(pathname_ob);
+    Py_DECREF(errbuf_ob);
     return;
 }
 
 
-dl_funcptr _PyImport_GetDynLoadFunc(const char *fqname, const char *shortname,
+dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
                                     const char *pathname, FILE *fp)
 {
     dl_funcptr p;
