@@ -483,6 +483,10 @@ class ModifiedInterpreter(InteractiveInterpreter):
 
     def kill_subprocess(self):
         try:
+            self.rpcclt.listening_sock.close()
+        except AttributeError:  # no socket
+            pass
+        try:
             self.rpcclt.close()
         except AttributeError:  # no socket
             pass
@@ -1010,7 +1014,12 @@ class PyShell(OutputWindow):
                 self.close()
                 return False
         else:
-            nosub = "==== No Subprocess ===="
+            nosub = ("==== No Subprocess ====\n\n" +
+                    "WARNING: Running IDLE without a Subprocess is deprecated\n" +
+                    "and will be removed in a later version. See Help/IDLE Help\n" +
+                    "for details.\n\n")
+            sys.displayhook = rpc.displayhook
+
         self.write("Python %s on %s\n%s\n%s" %
                    (sys.version, sys.platform, self.COPYRIGHT, nosub))
         self.showprompt()
@@ -1233,6 +1242,16 @@ class PyShell(OutputWindow):
         self.set_line_and_column()
 
     def write(self, s, tags=()):
+        if isinstance(s, str) and len(s) and max(s) > '\uffff':
+            # Tk doesn't support outputting non-BMP characters
+            # Let's assume what printed string is not very long,
+            # find first non-BMP character and construct informative
+            # UnicodeEncodeError exception.
+            for start, char in enumerate(s):
+                if char > '\uffff':
+                    break
+            raise UnicodeEncodeError("UCS-2", char, start, start+1,
+                                     'Non-BMP character not supported in Tk')
         try:
             self.text.mark_gravity("iomark", "right")
             count = OutputWindow.write(self, s, tags, "iomark")
@@ -1298,7 +1317,8 @@ USAGE: idle  [-deins] [-t title] [file]*
        idle  [-dns] [-t title] - [arg]*
 
   -h         print this help message and exit
-  -n         run IDLE without a subprocess (see Help/IDLE Help for details)
+  -n         run IDLE without a subprocess (DEPRECATED,
+             see Help/IDLE Help for details)
 
 The following options will override the IDLE 'settings' configuration:
 
@@ -1376,6 +1396,8 @@ def main():
         if o == '-i':
             enable_shell = True
         if o == '-n':
+            print(" Warning: running IDLE without a subprocess is deprecated.",
+                  file=sys.stderr)
             use_subprocess = False
         if o == '-r':
             script = a

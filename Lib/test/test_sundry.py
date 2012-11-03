@@ -9,12 +9,10 @@ class TestUntestedModules(unittest.TestCase):
         with support.check_warnings(quiet=True):
             import bdb
             import cgitb
-            import code
 
             import distutils.bcppcompiler
             import distutils.ccompiler
             import distutils.cygwinccompiler
-            import distutils.emxccompiler
             import distutils.filelist
             if sys.platform.startswith('win'):
                 import distutils.msvccompiler
@@ -49,7 +47,6 @@ class TestUntestedModules(unittest.TestCase):
             import macurl2path
             import mailcap
             import nturl2path
-            import os2emxpath
             import pstats
             import py_compile
             import sndhdr

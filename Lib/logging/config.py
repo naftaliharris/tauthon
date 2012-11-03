@@ -1,4 +1,4 @@
-# Copyright 2001-2010 by Vinay Sajip. All Rights Reserved.
+# Copyright 2001-2012 by Vinay Sajip. All Rights Reserved.
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -19,18 +19,18 @@ Configuration functions for the logging package for Python. The core package
 is based on PEP 282 and comments thereto in comp.lang.python, and influenced
 by Apache's log4j system.
 
-Copyright (C) 2001-2010 Vinay Sajip. All Rights Reserved.
+Copyright (C) 2001-2012 Vinay Sajip. All Rights Reserved.
 
 To use, simply 'import logging' and log away!
 """
 
-import sys, logging, logging.handlers, socket, struct, os, traceback, re
-import types, io
+import sys, logging, logging.handlers, socket, struct, traceback, re
+import io
 
 try:
     import _thread as thread
     import threading
-except ImportError:
+except ImportError: #pragma: no cover
     thread = None
 
 from socketserver import ThreadingTCPServer, StreamRequestHandler
@@ -61,11 +61,14 @@ def fileConfig(fname, defaults=None, disable_existing_loggers=True):
     """
     import configparser
 
-    cp = configparser.ConfigParser(defaults)
-    if hasattr(fname, 'readline'):
-        cp.read_file(fname)
+    if isinstance(fname, configparser.RawConfigParser):
+        cp = fname
     else:
-        cp.read(fname)
+        cp = configparser.ConfigParser(defaults)
+        if hasattr(fname, 'readline'):
+            cp.read_file(fname)
+        else:
+            cp.read(fname)
 
     formatters = _create_formatters(cp)
 
@@ -97,9 +100,6 @@ def _resolve(name):
 
 def _strip_spaces(alist):
     return map(lambda x: x.strip(), alist)
-
-def _encoded(s):
-    return s if isinstance(s, str) else s.encode('utf-8')
 
 def _create_formatters(cp):
     """Create and return formatters"""
@@ -215,7 +215,7 @@ def _install_loggers(cp, handlers, disable_existing):
     #avoid disabling child loggers of explicitly
     #named loggers. With a sorted list it is easier
     #to find the child loggers.
-    existing.sort(key=_encoded)
+    existing.sort()
     #We'll keep the list of existing loggers
     #which are children of named loggers here...
     child_loggers = []
@@ -588,7 +588,7 @@ class DictConfigurator(BaseConfigurator):
                 #avoid disabling child loggers of explicitly
                 #named loggers. With a sorted list it is easier
                 #to find the child loggers.
-                existing.sort(key=_encoded)
+                existing.sort()
                 #We'll keep the list of existing loggers
                 #which are children of named loggers here...
                 child_loggers = []
@@ -776,7 +776,7 @@ def dictConfig(config):
     dictConfigClass(config).configure()
 
 
-def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
+def listen(port=DEFAULT_LOGGING_CONFIG_PORT, verify=None):
     """
     Start up a socket server on the specified port, and listen for new
     configurations.
@@ -785,8 +785,17 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
     Returns a Thread object on which you can call start() to start the server,
     and which you can join() when appropriate. To stop the server, call
     stopListening().
+
+    Use the ``verify`` argument to verify any bytes received across the wire
+    from a client. If specified, it should be a callable which receives a
+    single argument - the bytes of configuration data received across the
+    network - and it should return either ``None``, to indicate that the
+    passed in bytes could not be verified and should be discarded, or a
+    byte string which is then passed to the configuration machinery as
+    normal. Note that you can return transformed bytes, e.g. by decrypting
+    the bytes passed in.
     """
-    if not thread:
+    if not thread: #pragma: no cover
         raise NotImplementedError("listen() needs threading to work")
 
     class ConfigStreamHandler(StreamRequestHandler):
@@ -804,7 +813,6 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
             struct.pack(">L", n), followed by the config file.
             Uses fileConfig() to do the grunt work.
             """
-            import tempfile
             try:
                 conn = self.connection
                 chunk = conn.recv(4)
@@ -813,22 +821,23 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
                     chunk = self.connection.recv(slen)
                     while len(chunk) < slen:
                         chunk = chunk + conn.recv(slen - len(chunk))
-                    chunk = chunk.decode("utf-8")
-                    try:
-                        import json
-                        d =json.loads(chunk)
-                        assert isinstance(d, dict)
-                        dictConfig(d)
-                    except:
-                        #Apply new configuration.
-
-                        file = io.StringIO(chunk)
+                    if self.server.verify is not None:
+                        chunk = self.server.verify(chunk)
+                    if chunk is not None:   # verified, can process
+                        chunk = chunk.decode("utf-8")
                         try:
-                            fileConfig(file)
-                        except (KeyboardInterrupt, SystemExit):
-                            raise
-                        except:
-                            traceback.print_exc()
+                            import json
+                            d =json.loads(chunk)
+                            assert isinstance(d, dict)
+                            dictConfig(d)
+                        except Exception:
+                            #Apply new configuration.
+
+                            file = io.StringIO(chunk)
+                            try:
+                                fileConfig(file)
+                            except Exception:
+                                traceback.print_exc()
                     if self.server.ready:
                         self.server.ready.set()
             except socket.error as e:
@@ -847,13 +856,14 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
         allow_reuse_address = 1
 
         def __init__(self, host='localhost', port=DEFAULT_LOGGING_CONFIG_PORT,
-                     handler=None, ready=None):
+                     handler=None, ready=None, verify=None):
             ThreadingTCPServer.__init__(self, (host, port), handler)
             logging._acquireLock()
             self.abort = 0
             logging._releaseLock()
             self.timeout = 1
             self.ready = ready
+            self.verify = verify
 
         def serve_until_stopped(self):
             import select
@@ -871,16 +881,18 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
 
     class Server(threading.Thread):
 
-        def __init__(self, rcvr, hdlr, port):
+        def __init__(self, rcvr, hdlr, port, verify):
             super(Server, self).__init__()
             self.rcvr = rcvr
             self.hdlr = hdlr
             self.port = port
+            self.verify = verify
             self.ready = threading.Event()
 
         def run(self):
             server = self.rcvr(port=self.port, handler=self.hdlr,
-                               ready=self.ready)
+                               ready=self.ready,
+                               verify=self.verify)
             if self.port == 0:
                 self.port = server.server_address[1]
             self.ready.set()
@@ -890,7 +902,7 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
             logging._releaseLock()
             server.serve_until_stopped()
 
-    return Server(ConfigSocketReceiver, ConfigStreamHandler, port)
+    return Server(ConfigSocketReceiver, ConfigStreamHandler, port, verify)
 
 def stopListening():
     """
