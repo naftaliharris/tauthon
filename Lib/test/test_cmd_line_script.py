@@ -363,14 +363,27 @@ class CmdLineTest(unittest.TestCase):
             self.assertTrue(text[1].startswith('  File '))
             self.assertTrue(text[3].startswith('NameError'))
 
-    def test_non_utf8(self):
+    def test_non_ascii(self):
         # Issue #16218
-        with temp_dir() as script_dir:
-            script_name = _make_test_script(script_dir,
-                    '\udcf1\udcea\udcf0\udce8\udcef\udcf2')
-            self._check_script(script_name, script_name, script_name,
-                               script_dir, None,
-                               importlib.machinery.SourceFileLoader)
+        # non-ascii filename encodable to cp1252, cp932, latin1 and utf8
+        filename = support.TESTFN + '\xa3'
+        try:
+            os.fsencode(filename)
+        except UnicodeEncodeError:
+            self.skipTest(
+                "Filesystem encoding %r cannot encode "
+                "the filename: %a"
+                % (sys.getfilesystemencoding(), filename))
+        source = 'print(ascii(__file__))\n'
+        script_name = _make_test_script(os.curdir, filename, source)
+        self.addCleanup(support.unlink, script_name)
+        rc, stdout, stderr = assert_python_ok(script_name)
+        self.assertEqual(
+            ascii(script_name),
+            stdout.rstrip().decode('ascii'),
+            'stdout=%r stderr=%r' % (stdout, stderr))
+        self.assertEqual(0, rc)
+
 
 def test_main():
     support.run_unittest(CmdLineTest)
