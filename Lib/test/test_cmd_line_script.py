@@ -363,14 +363,19 @@ class CmdLineTest(unittest.TestCase):
             self.assertTrue(text[1].startswith('  File '))
             self.assertTrue(text[3].startswith('NameError'))
 
-    def test_non_utf8(self):
+    @unittest.skipUnless(support.TESTFN_NONASCII, 'need support.TESTFN_NONASCII')
+    def test_non_ascii(self):
         # Issue #16218
-        with temp_dir() as script_dir:
-            script_name = _make_test_script(script_dir,
-                    '\udcf1\udcea\udcf0\udce8\udcef\udcf2')
-            self._check_script(script_name, script_name, script_name,
-                               script_dir, None,
-                               importlib.machinery.SourceFileLoader)
+        source = 'print(ascii(__file__))\n'
+        script_name = _make_test_script(os.curdir, support.TESTFN_NONASCII, source)
+        self.addCleanup(support.unlink, script_name)
+        rc, stdout, stderr = assert_python_ok(script_name)
+        self.assertEqual(
+            ascii(script_name),
+            stdout.rstrip().decode('ascii'),
+            'stdout=%r stderr=%r' % (stdout, stderr))
+        self.assertEqual(0, rc)
+
 
 def test_main():
     support.run_unittest(CmdLineTest)
