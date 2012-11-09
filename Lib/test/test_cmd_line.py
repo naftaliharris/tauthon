@@ -93,15 +93,15 @@ class CmdLineTest(unittest.TestCase):
         # All good if execution is successful
         assert_python_ok('-c', 'pass')
 
-    @unittest.skipIf(sys.getfilesystemencoding() == 'ascii',
-                     'need a filesystem encoding different than ASCII')
+    @unittest.skipUnless(test.support.FS_NONASCII, 'need support.FS_NONASCII')
     def test_non_ascii(self):
         # Test handling of non-ascii data
         if test.support.verbose:
             import locale
             print('locale encoding = %s, filesystem encoding = %s'
                   % (locale.getpreferredencoding(), sys.getfilesystemencoding()))
-        command = "assert(ord('\xe9') == 0xe9)"
+        command = ("assert(ord(%r) == %s)"
+                   % (test.support.FS_NONASCII, ord(test.support.FS_NONASCII)))
         assert_python_ok('-c', command)
 
     # On Windows, pass bytes to subprocess doesn't test how Python decodes the
@@ -216,6 +216,23 @@ class CmdLineTest(unittest.TestCase):
         self.assertIn(path1.encode('ascii'), out)
         self.assertIn(path2.encode('ascii'), out)
 
+    def test_empty_PYTHONPATH_issue16309(self):
+        """On Posix, it is documented that setting PATH to the
+        empty string is equivalent to not setting PATH at all,
+        which is an exception to the rule that in a string like
+        "/bin::/usr/bin" the empty string in the middle gets
+        interpreted as '.'"""
+        code = """if 1:
+            import sys
+            path = ":".join(sys.path)
+            path = path.encode("ascii", "backslashreplace")
+            sys.stdout.buffer.write(path)"""
+        rc1, out1, err1 = assert_python_ok('-c', code, PYTHONPATH="")
+        rc2, out2, err2 = assert_python_ok('-c', code)
+        # regarding to Posix specification, outputs should be equal
+        # for empty and unset PYTHONPATH
+        self.assertEquals(out1, out2)
+
     def test_displayhook_unencodable(self):
         for encoding in ('ascii', 'latin-1', 'utf-8'):
             env = os.environ.copy()
@@ -293,7 +310,7 @@ class CmdLineTest(unittest.TestCase):
         rc, out, err = assert_python_ok('-c', code)
         self.assertEqual(b'', out)
         self.assertRegex(err.decode('ascii', 'ignore'),
-                         'Exception OSError: .* ignored')
+                         'Exception ignored in.*\nOSError: .*')
 
     def test_closed_stdout(self):
         # Issue #13444: if stdout has been explicitly closed, we should

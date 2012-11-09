@@ -22,9 +22,6 @@ import email.generator
 import io
 import contextlib
 try:
-    if sys.platform == 'os2emx':
-        # OS/2 EMX fcntl() not adequate
-        raise ImportError
     import fcntl
 except ImportError:
     fcntl = None
@@ -631,8 +628,7 @@ class _singlefileMailbox(Mailbox):
     def iterkeys(self):
         """Return an iterator over keys."""
         self._lookup()
-        for key in self._toc.keys():
-            yield key
+        yield from self._toc.keys()
 
     def __contains__(self, key):
         """Return True if the keyed message exists, False otherwise."""
@@ -711,8 +707,7 @@ class _singlefileMailbox(Mailbox):
         try:
             os.rename(new_file.name, self._path)
         except OSError as e:
-            if e.errno == errno.EEXIST or \
-              (os.name == 'os2' and e.errno == errno.EACCES):
+            if e.errno == errno.EEXIST:
                 os.remove(self._path)
                 os.rename(new_file.name, self._path)
             else:
@@ -2097,8 +2092,7 @@ def _lock_file(f, dotlock=True):
                     os.rename(pre_lock.name, f.name + '.lock')
                     dotlock_done = True
             except OSError as e:
-                if e.errno == errno.EEXIST or \
-                  (os.name == 'os2' and e.errno == errno.EACCES):
+                if e.errno == errno.EEXIST:
                     os.remove(pre_lock.name)
                     raise ExternalClashError('dot lock unavailable: %s' %
                                              f.name)
