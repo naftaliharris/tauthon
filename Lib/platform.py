@@ -111,6 +111,7 @@ __copyright__ = """
 
 __version__ = '1.0.7'
 
+import collections
 import sys, os, re, subprocess
 
 ### Globals & Constants
@@ -130,15 +131,15 @@ except AttributeError:
 
 ### Platform specific APIs
 
-_libc_search = re.compile(r'(__libc_init)'
-                          '|'
-                          '(GLIBC_([0-9.]+))'
-                          '|'
-                          '(libc(_\w+)?\.so(?:\.(\d[0-9.]*))?)', re.ASCII)
+_libc_search = re.compile(b'(__libc_init)'
+                          b'|'
+                          b'(GLIBC_([0-9.]+))'
+                          b'|'
+                          br'(libc(_\w+)?\.so(?:\.(\d[0-9.]*))?)', re.ASCII)
 
 def libc_ver(executable=sys.executable,lib='',version='',
 
-             chunksize=2048):
+             chunksize=16384):
 
     """ Tries to determine the libc version that the file executable
         (which defaults to the Python interpreter) is linked against.
@@ -159,17 +160,22 @@ def libc_ver(executable=sys.executable,lib='',version='',
         # able to open symlinks for reading
         executable = os.path.realpath(executable)
     f = open(executable,'rb')
-    binary = f.read(chunksize).decode('latin-1')
+    binary = f.read(chunksize)
     pos = 0
     while 1:
-        m = _libc_search.search(binary,pos)
+        if b'libc' in binary or b'GLIBC' in binary:
+            m = _libc_search.search(binary,pos)
+        else:
+            m = None
         if not m:
-            binary = f.read(chunksize).decode('latin-1')
+            binary = f.read(chunksize)
             if not binary:
                 break
             pos = 0
             continue
-        libcinit,glibc,glibcversion,so,threads,soversion = m.groups()
+        libcinit,glibc,glibcversion,so,threads,soversion = [
+            s.decode('latin1') if s is not None else s
+            for s in m.groups()]
         if libcinit and not lib:
             lib = 'libc'
         elif glibc:
@@ -255,7 +261,7 @@ _release_version = re.compile(r'([^0-9]+)'
 _supported_dists = (
     'SuSE', 'debian', 'fedora', 'redhat', 'centos',
     'mandrake', 'mandriva', 'rocks', 'slackware', 'yellowdog', 'gentoo',
-    'UnitedLinux', 'turbolinux')
+    'UnitedLinux', 'turbolinux', 'arch', 'mageia')
 
 def _parse_release_file(firstline):
 
@@ -357,92 +363,13 @@ def dist(distname='',version='',id='',
                               supported_dists=supported_dists,
                               full_distribution_name=0)
 
-class _popen:
-
-    """ Fairly portable (alternative) popen implementation.
-
-        This is mostly needed in case os.popen() is not available, or
-        doesn't work as advertised, e.g. in Win9X GUI programs like
-        PythonWin or IDLE.
-
-        Writing to the pipe is currently not supported.
-
-    """
-    tmpfile = ''
-    pipe = None
-    bufsize = None
-    mode = 'r'
-
-    def __init__(self,cmd,mode='r',bufsize=None):
-
-        if mode != 'r':
-            raise ValueError('popen()-emulation only supports read mode')
-        import tempfile
-        self.tmpfile = tmpfile = tempfile.mktemp()
-        os.system(cmd + ' > %s' % tmpfile)
-        self.pipe = open(tmpfile,'rb')
-        self.bufsize = bufsize
-        self.mode = mode
-
-    def read(self):
-
-        return self.pipe.read()
-
-    def readlines(self):
-
-        if self.bufsize is not None:
-            return self.pipe.readlines()
-
-    def close(self,
-
-              remove=os.unlink,error=os.error):
-
-        if self.pipe:
-            rc = self.pipe.close()
-        else:
-            rc = 255
-        if self.tmpfile:
-            try:
-                remove(self.tmpfile)
-            except error:
-                pass
-        return rc
-
-    # Alias
-    __del__ = close
-
 def popen(cmd, mode='r', bufsize=-1):
 
     """ Portable popen() interface.
     """
-    # Find a working popen implementation preferring win32pipe.popen
-    # over os.popen over _popen
-    popen = None
-    if os.environ.get('OS','') == 'Windows_NT':
-        # On NT win32pipe should work; on Win9x it hangs due to bugs
-        # in the MS C lib (see MS KnowledgeBase article Q150956)
-        try:
-            import win32pipe
-        except ImportError:
-            pass
-        else:
-            popen = win32pipe.popen
-    if popen is None:
-        if hasattr(os,'popen'):
-            popen = os.popen
-            # Check whether it works... it doesn't in GUI programs
-            # on Windows platforms
-            if sys.platform == 'win32': # XXX Others too ?
-                try:
-                    popen('')
-                except os.error:
-                    popen = _popen
-        else:
-            popen = _popen
-    if bufsize is None:
-        return popen(cmd,mode)
-    else:
-        return popen(cmd,mode,bufsize)
+    import warnings
+    warnings.warn('use os.popen instead', DeprecationWarning, stacklevel=2)
+    return os.popen(cmd, mode, bufsize)
 
 def _norm_version(version, build=''):
 
@@ -779,7 +706,7 @@ def _mac_ver_xml():
     pl = plistlib.readPlist(fn)
     release = pl['ProductVersion']
     versioninfo=('', '', '')
-    machine = os.uname()[4]
+    machine = os.uname().machine
     if machine in ('ppc', 'Power Macintosh'):
         # for compatibility with the gestalt based code
         machine = 'PowerPC'
@@ -1004,9 +931,10 @@ def _syscmd_file(target,default=''):
     try:
         proc = subprocess.Popen(['file', target],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
     except (AttributeError,os.error):
         return default
-    output = proc.communicate()[0].decode("latin-1")
+    output = proc.communicate()[0].decode('latin-1')
     rc = proc.wait()
     if not output or rc:
         return default
@@ -1106,6 +1034,9 @@ def architecture(executable=sys.executable,bits='',linkage=''):
     return bits,linkage
 
 ### Portable uname() interface
+
+uname_result = collections.namedtuple("uname_result",
+                    "system node release version machine processor")
 
 _uname_cache = None
 
@@ -1241,7 +1172,7 @@ def uname():
         system = 'Windows'
         release = 'Vista'
 
-    _uname_cache = system,node,release,version,machine,processor
+    _uname_cache = uname_result(system,node,release,version,machine,processor)
     return _uname_cache
 
 ### Direct interfaces to some of the uname() return values
@@ -1253,7 +1184,7 @@ def system():
         An empty string is returned if the value cannot be determined.
 
     """
-    return uname()[0]
+    return uname().system
 
 def node():
 
@@ -1263,7 +1194,7 @@ def node():
         An empty string is returned if the value cannot be determined.
 
     """
-    return uname()[1]
+    return uname().node
 
 def release():
 
@@ -1272,7 +1203,7 @@ def release():
         An empty string is returned if the value cannot be determined.
 
     """
-    return uname()[2]
+    return uname().release
 
 def version():
 
@@ -1281,7 +1212,7 @@ def version():
         An empty string is returned if the value cannot be determined.
 
     """
-    return uname()[3]
+    return uname().version
 
 def machine():
 
@@ -1290,7 +1221,7 @@ def machine():
         An empty string is returned if the value cannot be determined.
 
     """
-    return uname()[4]
+    return uname().machine
 
 def processor():
 
@@ -1302,7 +1233,7 @@ def processor():
         e.g.  NetBSD does this.
 
     """
-    return uname()[5]
+    return uname().processor
 
 ### Various APIs for extracting information from sys.version
 
