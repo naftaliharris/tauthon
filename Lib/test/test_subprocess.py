@@ -1179,7 +1179,7 @@ class POSIXProcessTestCase(BaseTestCase):
         try:
             p = subprocess.Popen([sys.executable, "-c", ""],
                                  preexec_fn=raise_it)
-        except RuntimeError as e:
+        except subprocess.SubprocessError as e:
             self.assertTrue(
                     subprocess._posixsubprocess,
                     "Expected a ValueError from the preexec_fn")
@@ -1198,7 +1198,8 @@ class POSIXProcessTestCase(BaseTestCase):
             def RealPopen(self, *args, **kwargs):
                 subprocess.Popen.__init__(self, *args, **kwargs)
         def raise_it():
-            raise RuntimeError("force the _execute_child() errpipe_data path.")
+            raise subprocess.SubprocessError(
+                    "force the _execute_child() errpipe_data path.")
 
         p = SafeConstructorPopen()
 
@@ -1222,7 +1223,7 @@ class POSIXProcessTestCase(BaseTestCase):
 
         p._execute_child = _test_fds_execute_child_wrapper
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(subprocess.SubprocessError):
             p.RealPopen([sys.executable, "-c", "pass"],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE, preexec_fn=raise_it)
@@ -1582,12 +1583,12 @@ class POSIXProcessTestCase(BaseTestCase):
             # Pure Python implementations keeps the message
             self.assertIsNone(subprocess._posixsubprocess)
             self.assertEqual(str(err), "surrogate:\uDCff")
-        except RuntimeError as err:
+        except subprocess.SubprocessError as err:
             # _posixsubprocess uses a default message
             self.assertIsNotNone(subprocess._posixsubprocess)
             self.assertEqual(str(err), "Exception occurred in preexec_fn.")
         else:
-            self.fail("Expected ValueError or RuntimeError")
+            self.fail("Expected ValueError or subprocess.SubprocessError")
 
     def test_undecodable_env(self):
         for key, value in (('test', 'abc\uDCFF'), ('test\uDCFF', '42')):
