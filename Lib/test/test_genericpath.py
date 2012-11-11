@@ -2,11 +2,12 @@
 Tests common to genericpath, macpath, ntpath and posixpath
 """
 
-import unittest
-from test import support
-import os
 import genericpath
+import os
 import sys
+import unittest
+import warnings
+from test import support
 
 
 def safe_rmdir(dirname):
@@ -145,6 +146,16 @@ class GenericTest(unittest.TestCase):
                 f.close()
             support.unlink(support.TESTFN)
 
+    @unittest.skipUnless(hasattr(os, "pipe"), "requires os.pipe()")
+    def test_exists_fd(self):
+        r, w = os.pipe()
+        try:
+            self.assertTrue(self.pathmodule.exists(r))
+        finally:
+            os.close(r)
+            os.close(w)
+        self.assertFalse(self.pathmodule.exists(r))
+
     def test_isdir(self):
         self.assertIs(self.pathmodule.isdir(support.TESTFN), False)
         f = open(support.TESTFN, "wb")
@@ -258,15 +269,21 @@ class CommonTest(GenericTest):
 
     def test_abspath(self):
         self.assertIn("foo", self.pathmodule.abspath("foo"))
-        self.assertIn(b"foo", self.pathmodule.abspath(b"foo"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.assertIn(b"foo", self.pathmodule.abspath(b"foo"))
 
         # Abspath returns bytes when the arg is bytes
-        for path in (b'', b'foo', b'f\xf2\xf2', b'/foo', b'C:\\'):
-            self.assertIsInstance(self.pathmodule.abspath(path), bytes)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            for path in (b'', b'foo', b'f\xf2\xf2', b'/foo', b'C:\\'):
+                self.assertIsInstance(self.pathmodule.abspath(path), bytes)
 
     def test_realpath(self):
         self.assertIn("foo", self.pathmodule.realpath("foo"))
-        self.assertIn(b"foo", self.pathmodule.realpath(b"foo"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.assertIn(b"foo", self.pathmodule.realpath(b"foo"))
 
     def test_normpath_issue5827(self):
         # Make sure normpath preserves unicode
@@ -282,8 +299,7 @@ class CommonTest(GenericTest):
 
         unicwd = '\xe7w\xf0'
         try:
-            fsencoding = support.TESTFN_ENCODING or "ascii"
-            unicwd.encode(fsencoding)
+            os.fsencode(unicwd)
         except (AttributeError, UnicodeEncodeError):
             # FS encoding is probably ASCII
             pass
@@ -292,12 +308,23 @@ class CommonTest(GenericTest):
                 for path in ('', 'fuu', 'f\xf9\xf9', '/fuu', 'U:\\'):
                     self.assertIsInstance(abspath(path), str)
 
-    @unittest.skipIf(sys.platform == 'darwin',
-        "Mac OS X denies the creation of a directory with an invalid utf8 name")
     def test_nonascii_abspath(self):
-        # Test non-ASCII, non-UTF8 bytes in the path.
-        with support.temp_cwd(b'\xe7w\xf0'):
-            self.test_abspath()
+        if (support.TESTFN_UNDECODABLE
+        # Mac OS X denies the creation of a directory with an invalid
+        # UTF-8 name. Windows allows to create a directory with an
+        # arbitrary bytes name, but fails to enter this directory
+        # (when the bytes name is used).
+        and sys.platform not in ('win32', 'darwin')):
+            name = support.TESTFN_UNDECODABLE
+        elif support.TESTFN_NONASCII:
+            name = support.TESTFN_NONASCII
+        else:
+            self.skipTest("need support.TESTFN_NONASCII")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with support.temp_cwd(name):
+                self.test_abspath()
 
 
 def test_main():

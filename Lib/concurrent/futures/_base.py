@@ -4,7 +4,6 @@
 __author__ = 'Brian Quinlan (brian@sweetapp.com)'
 
 import collections
-import functools
 import logging
 import threading
 import time
@@ -199,8 +198,7 @@ def as_completed(fs, timeout=None):
         waiter = _create_and_install_waiters(fs, _AS_COMPLETED)
 
     try:
-        for future in finished:
-            yield future
+        yield from finished
 
         while pending:
             if timeout is None:
@@ -471,8 +469,8 @@ class Future(object):
                 return True
             else:
                 LOGGER.critical('Future %s in unexpected state: %s',
-                                id(self.future),
-                                self.future._state)
+                                id(self),
+                                self._state)
                 raise RuntimeError('Future in unexpected state')
 
     def set_result(self, result):
@@ -538,15 +536,19 @@ class Executor(object):
 
         fs = [self.submit(fn, *args) for args in zip(*iterables)]
 
-        try:
-            for future in fs:
-                if timeout is None:
-                    yield future.result()
-                else:
-                    yield future.result(end_time - time.time())
-        finally:
-            for future in fs:
-                future.cancel()
+        # Yield must be hidden in closure so that the futures are submitted
+        # before the first iterator value is required.
+        def result_iterator():
+            try:
+                for future in fs:
+                    if timeout is None:
+                        yield future.result()
+                    else:
+                        yield future.result(end_time - time.time())
+            finally:
+                for future in fs:
+                    future.cancel()
+        return result_iterator()
 
     def shutdown(self, wait=True):
         """Clean-up the resources associated with the Executor.

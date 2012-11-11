@@ -17,6 +17,17 @@ this type and there is exactly one in existence.
 #include "structmember.h"
 
 static PyObject *
+ellipsis_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    if (PyTuple_GET_SIZE(args) || (kwargs && PyDict_Size(kwargs))) {
+        PyErr_SetString(PyExc_TypeError, "EllipsisType takes no arguments");
+        return NULL;
+    }
+    Py_INCREF(Py_Ellipsis);
+    return Py_Ellipsis;
+}
+
+static PyObject *
 ellipsis_repr(PyObject *op)
 {
     return PyUnicode_FromString("Ellipsis");
@@ -43,6 +54,24 @@ PyTypeObject PyEllipsis_Type = {
     0,                                  /* tp_setattro */
     0,                                  /* tp_as_buffer */
     Py_TPFLAGS_DEFAULT,                 /* tp_flags */
+    0,                                  /* tp_doc */
+    0,                                  /* tp_traverse */
+    0,                                  /* tp_clear */
+    0,                                  /* tp_richcompare */
+    0,                                  /* tp_weaklistoffset */
+    0,                                  /* tp_iter */
+    0,                                  /* tp_iternext */
+    0,                                  /* tp_methods */
+    0,                                  /* tp_members */
+    0,                                  /* tp_getset */
+    0,                                  /* tp_base */
+    0,                                  /* tp_dict */
+    0,                                  /* tp_descr_get */
+    0,                                  /* tp_descr_set */
+    0,                                  /* tp_dictoffset */
+    0,                                  /* tp_init */
+    0,                                  /* tp_alloc */
+    ellipsis_new,                       /* tp_new */
 };
 
 PyObject _Py_EllipsisObject = {
@@ -51,19 +80,38 @@ PyObject _Py_EllipsisObject = {
 };
 
 
-/* Slice object implementation
+/* Slice object implementation */
 
-   start, stop, and step are python objects with None indicating no
+/* Using a cache is very effective since typically only a single slice is
+ * created and then deleted again
+ */
+static PySliceObject *slice_cache = NULL;
+void PySlice_Fini(void)
+{
+    PySliceObject *obj = slice_cache;
+    if (obj != NULL) {
+        slice_cache = NULL;
+        PyObject_Del(obj);
+    }
+}
+
+/* start, stop, and step are python objects with None indicating no
    index is present.
 */
 
 PyObject *
 PySlice_New(PyObject *start, PyObject *stop, PyObject *step)
 {
-    PySliceObject *obj = PyObject_New(PySliceObject, &PySlice_Type);
-
-    if (obj == NULL)
-        return NULL;
+    PySliceObject *obj;
+    if (slice_cache != NULL) {
+        obj = slice_cache;
+        slice_cache = NULL;
+        _Py_NewReference((PyObject *)obj);
+    } else {
+        obj = PyObject_New(PySliceObject, &PySlice_Type);
+        if (obj == NULL)
+            return NULL;
+    }
 
     if (step == NULL) step = Py_None;
     Py_INCREF(step);
@@ -232,7 +280,10 @@ slice_dealloc(PySliceObject *r)
     Py_DECREF(r->step);
     Py_DECREF(r->start);
     Py_DECREF(r->stop);
-    PyObject_Del(r);
+    if (slice_cache == NULL)
+        slice_cache = r;
+    else
+        PyObject_Del(r);
 }
 
 static PyObject *
@@ -248,24 +299,191 @@ static PyMemberDef slice_members[] = {
     {0}
 };
 
+/* Helper function to convert a slice argument to a PyLong, and raise TypeError
+   with a suitable message on failure. */
+
+static PyObject*
+evaluate_slice_index(PyObject *v)
+{
+    if (PyIndex_Check(v)) {
+        return PyNumber_Index(v);
+    }
+    else {
+        PyErr_SetString(PyExc_TypeError,
+                        "slice indices must be integers or "
+                        "None or have an __index__ method");
+        return NULL;
+    }
+}
+
+/* Implementation of slice.indices. */
+
 static PyObject*
 slice_indices(PySliceObject* self, PyObject* len)
 {
-    Py_ssize_t ilen, start, stop, step, slicelength;
+    PyObject *start=NULL, *stop=NULL, *step=NULL;
+    PyObject *length=NULL, *upper=NULL, *lower=NULL, *zero=NULL;
+    int step_is_negative, cmp;
 
-    ilen = PyNumber_AsSsize_t(len, PyExc_OverflowError);
-
-    if (ilen == -1 && PyErr_Occurred()) {
+    zero = PyLong_FromLong(0L);
+    if (zero == NULL)
         return NULL;
+
+    /* Compute step and length as integers. */
+    length = PyNumber_Index(len);
+    if (length == NULL)
+        goto error;
+
+    if (self->step == Py_None)
+        step = PyLong_FromLong(1L);
+    else
+        step = evaluate_slice_index(self->step);
+    if (step == NULL)
+        goto error;
+
+    /* Raise ValueError for negative length or zero step. */
+    cmp = PyObject_RichCompareBool(length, zero, Py_LT);
+    if (cmp < 0) {
+        goto error;
+    }
+    if (cmp) {
+        PyErr_SetString(PyExc_ValueError,
+                        "length should not be negative");
+        goto error;
     }
 
-    if (PySlice_GetIndicesEx((PyObject*)self, ilen, &start, &stop,
-                             &step, &slicelength) < 0) {
-        return NULL;
+    cmp = PyObject_RichCompareBool(step, zero, Py_EQ);
+    if (cmp < 0) {
+        goto error;
+    }
+    if (cmp) {
+        PyErr_SetString(PyExc_ValueError,
+                        "slice step cannot be zero");
+        goto error;
     }
 
-    return Py_BuildValue("(nnn)", start, stop, step);
+    /* Find lower and upper bounds for start and stop. */
+    step_is_negative = PyObject_RichCompareBool(step, zero, Py_LT);
+    if (step_is_negative < 0) {
+        goto error;
+    }
+    if (step_is_negative) {
+        lower = PyLong_FromLong(-1L);
+        if (lower == NULL)
+            goto error;
+
+        upper = PyNumber_Add(length, lower);
+        if (upper == NULL)
+            goto error;
+    }
+    else {
+        lower = zero;
+        Py_INCREF(lower);
+        upper = length;
+        Py_INCREF(upper);
+    }
+
+    /* Compute start. */
+    if (self->start == Py_None) {
+        start = step_is_negative ? upper : lower;
+        Py_INCREF(start);
+    }
+    else {
+        start = evaluate_slice_index(self->start);
+        if (start == NULL)
+            goto error;
+
+        cmp = PyObject_RichCompareBool(start, zero, Py_LT);
+        if (cmp < 0)
+            goto error;
+        if (cmp) {
+            /* start += length */
+            PyObject *tmp = PyNumber_Add(start, length);
+            Py_DECREF(start);
+            start = tmp;
+            if (start == NULL)
+                goto error;
+
+            cmp = PyObject_RichCompareBool(start, lower, Py_LT);
+            if (cmp < 0)
+                goto error;
+            if (cmp) {
+                Py_INCREF(lower);
+                Py_DECREF(start);
+                start = lower;
+            }
+        }
+        else {
+            cmp = PyObject_RichCompareBool(start, upper, Py_GT);
+            if (cmp < 0)
+                goto error;
+            if (cmp) {
+                Py_INCREF(upper);
+                Py_DECREF(start);
+                start = upper;
+            }
+        }
+    }
+
+    /* Compute stop. */
+    if (self->stop == Py_None) {
+        stop = step_is_negative ? lower : upper;
+        Py_INCREF(stop);
+    }
+    else {
+        stop = evaluate_slice_index(self->stop);
+        if (stop == NULL)
+            goto error;
+
+        cmp = PyObject_RichCompareBool(stop, zero, Py_LT);
+        if (cmp < 0)
+            goto error;
+        if (cmp) {
+            /* stop += length */
+            PyObject *tmp = PyNumber_Add(stop, length);
+            Py_DECREF(stop);
+            stop = tmp;
+            if (stop == NULL)
+                goto error;
+
+            cmp = PyObject_RichCompareBool(stop, lower, Py_LT);
+            if (cmp < 0)
+                goto error;
+            if (cmp) {
+                Py_INCREF(lower);
+                Py_DECREF(stop);
+                stop = lower;
+            }
+        }
+        else {
+            cmp = PyObject_RichCompareBool(stop, upper, Py_GT);
+            if (cmp < 0)
+                goto error;
+            if (cmp) {
+                Py_INCREF(upper);
+                Py_DECREF(stop);
+                stop = upper;
+            }
+        }
+    }
+
+    Py_DECREF(upper);
+    Py_DECREF(lower);
+    Py_DECREF(length);
+    Py_DECREF(zero);
+    return Py_BuildValue("(NNN)", start, stop, step);
+
+  error:
+    Py_XDECREF(start);
+    Py_XDECREF(stop);
+    Py_XDECREF(step);
+    Py_XDECREF(upper);
+    Py_XDECREF(lower);
+    Py_XDECREF(length);
+    Py_XDECREF(zero);
+    return NULL;
 }
+
 
 PyDoc_STRVAR(slice_indices_doc,
 "S.indices(len) -> (start, stop, stride)\n\
@@ -298,10 +516,8 @@ slice_richcompare(PyObject *v, PyObject *w, int op)
     PyObject *t2;
     PyObject *res;
 
-    if (!PySlice_Check(v) || !PySlice_Check(w)) {
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
-    }
+    if (!PySlice_Check(v) || !PySlice_Check(w))
+        Py_RETURN_NOTIMPLEMENTED;
 
     if (v == w) {
         /* XXX Do we really need this shortcut?

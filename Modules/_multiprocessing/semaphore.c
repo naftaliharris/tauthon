@@ -3,7 +3,8 @@
  *
  * semaphore.c
  *
- * Copyright (c) 2006-2008, R Oudkerk --- see COPYING.txt
+ * Copyright (c) 2006-2008, R Oudkerk
+ * Licensed to PSF under a Contributor Agreement.
  */
 
 #include "multiprocessing.h"
@@ -62,7 +63,8 @@ semlock_acquire(SemLockObject *self, PyObject *args, PyObject *kwds)
     int blocking = 1;
     double timeout;
     PyObject *timeout_obj = Py_None;
-    DWORD res, full_msecs, msecs, start, ticks;
+    DWORD res, full_msecs, nhandles;
+    HANDLE handles[2], sigint_event;
 
     static char *kwlist[] = {"block", "timeout", NULL};
 
@@ -96,53 +98,40 @@ semlock_acquire(SemLockObject *self, PyObject *args, PyObject *kwds)
         Py_RETURN_TRUE;
     }
 
-    /* check whether we can acquire without blocking */
+    /* check whether we can acquire without releasing the GIL and blocking */
     if (WaitForSingleObject(self->handle, 0) == WAIT_OBJECT_0) {
         self->last_tid = GetCurrentThreadId();
         ++self->count;
         Py_RETURN_TRUE;
     }
 
-    msecs = full_msecs;
-    start = GetTickCount();
-
-    for ( ; ; ) {
-        HANDLE handles[2] = {self->handle, sigint_event};
-
-        /* do the wait */
-        Py_BEGIN_ALLOW_THREADS
-        ResetEvent(sigint_event);
-        res = WaitForMultipleObjects(2, handles, FALSE, msecs);
-        Py_END_ALLOW_THREADS
-
-        /* handle result */
-        if (res != WAIT_OBJECT_0 + 1)
-            break;
-
-        /* got SIGINT so give signal handler a chance to run */
-        Sleep(1);
-
-        /* if this is main thread let KeyboardInterrupt be raised */
-        if (PyErr_CheckSignals())
-            return NULL;
-
-        /* recalculate timeout */
-        if (msecs != INFINITE) {
-            ticks = GetTickCount();
-            if ((DWORD)(ticks - start) >= full_msecs)
-                Py_RETURN_FALSE;
-            msecs = full_msecs - (ticks - start);
-        }
+    /* prepare list of handles */
+    nhandles = 0;
+    handles[nhandles++] = self->handle;
+    if (_PyOS_IsMainThread()) {
+        sigint_event = _PyOS_SigintEvent();
+        assert(sigint_event != NULL);
+        handles[nhandles++] = sigint_event;
     }
+
+    /* do the wait */
+    Py_BEGIN_ALLOW_THREADS
+    if (sigint_event != NULL)
+        ResetEvent(sigint_event);
+    res = WaitForMultipleObjects(nhandles, handles, FALSE, full_msecs);
+    Py_END_ALLOW_THREADS
 
     /* handle result */
     switch (res) {
     case WAIT_TIMEOUT:
         Py_RETURN_FALSE;
-    case WAIT_OBJECT_0:
+    case WAIT_OBJECT_0 + 0:
         self->last_tid = GetCurrentThreadId();
         ++self->count;
         Py_RETURN_TRUE;
+    case WAIT_OBJECT_0 + 1:
+        errno = EINTR;
+        return PyErr_SetFromErrno(PyExc_IOError);
     case WAIT_FAILED:
         return PyErr_SetFromWindowsErr(0);
     default:
@@ -204,7 +193,7 @@ semlock_release(SemLockObject *self, PyObject *args)
 #ifndef HAVE_SEM_TIMEDWAIT
 #  define sem_timedwait(sem,deadline) sem_timedwait_save(sem,deadline,_save)
 
-int
+static int
 sem_timedwait_save(sem_t *sem, struct timespec *deadline, PyThreadState *_save)
 {
     int res;
@@ -455,7 +444,7 @@ semlock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
   failure:
     if (handle != SEM_FAILED)
         SEM_CLOSE(handle);
-    mp_SetError(NULL, MP_STANDARD_ERROR);
+    _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     return NULL;
 }
 
@@ -483,7 +472,7 @@ semlock_dealloc(SemLockObject* self)
 static PyObject *
 semlock_count(SemLockObject *self)
 {
-    return PyInt_FromLong((long)self->count);
+    return PyLong_FromLong((long)self->count);
 }
 
 static PyObject *
@@ -502,12 +491,12 @@ semlock_getvalue(SemLockObject *self)
 #else
     int sval;
     if (SEM_GETVALUE(self->handle, &sval) < 0)
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     /* some posix implementations use negative numbers to indicate
        the number of waiting threads */
     if (sval < 0)
         sval = 0;
-    return PyInt_FromLong((long)sval);
+    return PyLong_FromLong((long)sval);
 #endif
 }
 
@@ -518,16 +507,16 @@ semlock_iszero(SemLockObject *self)
     if (sem_trywait(self->handle) < 0) {
         if (errno == EAGAIN)
             Py_RETURN_TRUE;
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     } else {
         if (sem_post(self->handle) < 0)
-            return mp_SetError(NULL, MP_STANDARD_ERROR);
+            return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
         Py_RETURN_FALSE;
     }
 #else
     int sval;
     if (SEM_GETVALUE(self->handle, &sval) < 0)
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     return PyBool_FromLong((long)sval == 0);
 #endif
 }
@@ -585,7 +574,7 @@ static PyMemberDef semlock_members[] = {
  * Semaphore type
  */
 
-PyTypeObject SemLockType = {
+PyTypeObject _PyMp_SemLockType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     /* tp_name           */ "_multiprocessing.SemLock",
     /* tp_basicsize      */ sizeof(SemLockObject),

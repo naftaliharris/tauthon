@@ -41,7 +41,7 @@ from types import MethodType as _MethodType, BuiltinMethodType as _BuiltinMethod
 from math import log as _log, exp as _exp, pi as _pi, e as _e, ceil as _ceil
 from math import sqrt as _sqrt, acos as _acos, cos as _cos, sin as _sin
 from os import urandom as _urandom
-from collections import Set as _Set, Sequence as _Sequence
+from collections.abc import Set as _Set, Sequence as _Sequence
 from hashlib import sha512 as _sha512
 
 __all__ = ["Random","seed","random","uniform","randint","choice","sample",
@@ -252,10 +252,11 @@ class Random(_random.Random):
         return seq[i]
 
     def shuffle(self, x, random=None, int=int):
-        """x, random=random.random -> shuffle list x in place; return None.
+        """Shuffle list x in place, and return None.
 
-        Optional arg random is a 0-argument function returning a random
-        float in [0.0, 1.0); by default, the standard random.random.
+        Optional argument random is a 0-argument function returning a
+        random float in [0.0, 1.0); if it is the default None, the
+        standard random.random will be used.
         """
 
         randbelow = self._randbelow

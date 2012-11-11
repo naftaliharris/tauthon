@@ -15,11 +15,11 @@
 #define OFF(x) offsetof(PyFrameObject, x)
 
 static PyMemberDef frame_memberlist[] = {
-    {"f_back",          T_OBJECT,       OFF(f_back),    READONLY},
-    {"f_code",          T_OBJECT,       OFF(f_code),    READONLY},
-    {"f_builtins",      T_OBJECT,       OFF(f_builtins),READONLY},
-    {"f_globals",       T_OBJECT,       OFF(f_globals), READONLY},
-    {"f_lasti",         T_INT,          OFF(f_lasti),   READONLY},
+    {"f_back",          T_OBJECT,       OFF(f_back),      READONLY},
+    {"f_code",          T_OBJECT,       OFF(f_code),      READONLY},
+    {"f_builtins",      T_OBJECT,       OFF(f_builtins),  READONLY},
+    {"f_globals",       T_OBJECT,       OFF(f_globals),   READONLY},
+    {"f_lasti",         T_INT,          OFF(f_lasti),     READONLY},
     {NULL}      /* Sentinel */
 };
 
@@ -466,7 +466,7 @@ static int
 frame_traverse(PyFrameObject *f, visitproc visit, void *arg)
 {
     PyObject **fastlocals, **p;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     Py_VISIT(f->f_back);
     Py_VISIT(f->f_code);
@@ -496,7 +496,7 @@ static void
 frame_clear(PyFrameObject *f)
 {
     PyObject **fastlocals, **p, **oldtop;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     /* Before anything else, make sure that this frame is clearly marked
      * as being defunct!  Else, e.g., a generator reachable from this
@@ -614,10 +614,8 @@ PyFrame_New(PyThreadState *tstate, PyCodeObject *code, PyObject *globals,
         if (builtins) {
             if (PyModule_Check(builtins)) {
                 builtins = PyModule_GetDict(builtins);
-                assert(!builtins || PyDict_Check(builtins));
+                assert(builtins != NULL);
             }
-            else if (!PyDict_Check(builtins))
-                builtins = NULL;
         }
         if (builtins == NULL) {
             /* No builtins!              Make up a minimal one
@@ -636,7 +634,7 @@ PyFrame_New(PyThreadState *tstate, PyCodeObject *code, PyObject *globals,
         /* If we share the globals, we share the builtins.
            Save a lookup and a call. */
         builtins = back->f_builtins;
-        assert(builtins != NULL && PyDict_Check(builtins));
+        assert(builtins != NULL);
         Py_INCREF(builtins);
     }
     if (code->co_zombieframe != NULL) {
@@ -665,11 +663,13 @@ PyFrame_New(PyThreadState *tstate, PyCodeObject *code, PyObject *globals,
             f = free_list;
             free_list = free_list->f_back;
             if (Py_SIZE(f) < extras) {
-                f = PyObject_GC_Resize(PyFrameObject, f, extras);
-                if (f == NULL) {
+                PyFrameObject *new_f = PyObject_GC_Resize(PyFrameObject, f, extras);
+                if (new_f == NULL) {
+                    PyObject_GC_Del(f);
                     Py_DECREF(builtins);
                     return NULL;
                 }
+                f = new_f;
             }
             _Py_NewReference((PyObject *)f);
         }
@@ -848,7 +848,7 @@ PyFrame_FastToLocals(PyFrameObject *f)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
@@ -900,7 +900,7 @@ PyFrame_LocalsToFast(PyFrameObject *f, int clear)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
@@ -955,3 +955,13 @@ PyFrame_Fini(void)
     Py_XDECREF(builtin_object);
     builtin_object = NULL;
 }
+
+/* Print summary info about the state of the optimized allocator */
+void
+_PyFrame_DebugMallocStats(FILE *out)
+{
+    _PyDebugAllocatorStats(out,
+                           "free PyFrameObject",
+                           numfree, sizeof(PyFrameObject));
+}
+
