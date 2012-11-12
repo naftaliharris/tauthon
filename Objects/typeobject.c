@@ -1933,7 +1933,7 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
     return res;
 }
 
-long
+unsigned long
 PyType_GetFlags(PyTypeObject *type)
 {
     return type->tp_flags;
