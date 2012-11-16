@@ -1210,8 +1210,7 @@ def runtest_inner(test, verbose, quiet,
             abstest = 'test.' + test
         with saved_test_environment(test, verbose, quiet) as environment:
             start_time = time.time()
-            the_package = __import__(abstest, globals(), locals(), [])
-            the_module = getattr(the_package, test)
+            the_module = importlib.import_module(abstest)
             # If the test has a test_main, that will run the appropriate
             # tests.  If not, use normal unittest test loading.
             test_runner = getattr(the_module, "test_main", None)
@@ -1620,20 +1619,6 @@ _expectations = (
         test_locale
         test_ossaudiodev
         test_socketserver
-        """),
-    ('os2emx',
-        """
-        test_audioop
-        test_curses
-        test_epoll
-        test_kqueue
-        test_largefile
-        test_mmap
-        test_openpty
-        test_ossaudiodev
-        test_pty
-        test_resource
-        test_signal
         """),
     ('freebsd',
         """
