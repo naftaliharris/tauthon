@@ -2050,6 +2050,103 @@ class TermsizeTests(unittest.TestCase):
         self.assertEqual(expected, actual)
 
 
+class OSErrorTests(unittest.TestCase):
+    def setUp(self):
+        class Str(str):
+            pass
+
+        self.bytes_filenames = []
+        self.unicode_filenames = []
+        if support.TESTFN_UNENCODABLE is not None:
+            decoded = support.TESTFN_UNENCODABLE
+        else:
+            decoded = support.TESTFN
+        self.unicode_filenames.append(decoded)
+        self.unicode_filenames.append(Str(decoded))
+        if support.TESTFN_UNDECODABLE is not None:
+            encoded = support.TESTFN_UNDECODABLE
+        else:
+            encoded = os.fsencode(support.TESTFN)
+        self.bytes_filenames.append(encoded)
+        self.bytes_filenames.append(memoryview(encoded))
+
+        self.filenames = self.bytes_filenames + self.unicode_filenames
+
+    def test_oserror_filename(self):
+        funcs = [
+            (self.filenames, os.chdir,),
+            (self.filenames, os.chmod, 0o777),
+            (self.filenames, os.lstat,),
+            (self.filenames, os.open, os.O_RDONLY),
+            (self.filenames, os.rmdir,),
+            (self.filenames, os.stat,),
+            (self.filenames, os.unlink,),
+        ]
+        if sys.platform == "win32":
+            funcs.extend((
+                (self.bytes_filenames, os.rename, b"dst"),
+                (self.bytes_filenames, os.replace, b"dst"),
+                (self.unicode_filenames, os.rename, "dst"),
+                (self.unicode_filenames, os.replace, "dst"),
+                # Issue #16414: Don't test undecodable names with listdir()
+                # because of a Windows bug.
+                #
+                # With the ANSI code page 932, os.listdir(b'\xe7') return an
+                # empty list (instead of failing), whereas os.listdir(b'\xff')
+                # raises a FileNotFoundError. It looks like a Windows bug:
+                # b'\xe7' directory does not exist, FindFirstFileA(b'\xe7')
+                # fails with ERROR_FILE_NOT_FOUND (2), instead of
+                # ERROR_PATH_NOT_FOUND (3).
+                (self.unicode_filenames, os.listdir,),
+            ))
+        else:
+            funcs.extend((
+                (self.filenames, os.listdir,),
+                (self.filenames, os.rename, "dst"),
+                (self.filenames, os.replace, "dst"),
+            ))
+        if hasattr(os, "chown"):
+            funcs.append((self.filenames, os.chown, 0, 0))
+        if hasattr(os, "lchown"):
+            funcs.append((self.filenames, os.lchown, 0, 0))
+        if hasattr(os, "truncate"):
+            funcs.append((self.filenames, os.truncate, 0))
+        if hasattr(os, "chflags"):
+            funcs.append((self.filenames, os.chflags, 0))
+        if hasattr(os, "lchflags"):
+            funcs.append((self.filenames, os.lchflags, 0))
+        if hasattr(os, "chroot"):
+            funcs.append((self.filenames, os.chroot,))
+        if hasattr(os, "link"):
+            if sys.platform == "win32":
+                funcs.append((self.bytes_filenames, os.link, b"dst"))
+                funcs.append((self.unicode_filenames, os.link, "dst"))
+            else:
+                funcs.append((self.filenames, os.link, "dst"))
+        if hasattr(os, "listxattr"):
+            funcs.extend((
+                (self.filenames, os.listxattr,),
+                (self.filenames, os.getxattr, "user.test"),
+                (self.filenames, os.setxattr, "user.test", b'user'),
+                (self.filenames, os.removexattr, "user.test"),
+            ))
+        if hasattr(os, "lchmod"):
+            funcs.append((self.filenames, os.lchmod, 0o777))
+        if hasattr(os, "readlink"):
+            if sys.platform == "win32":
+                funcs.append((self.unicode_filenames, os.readlink,))
+            else:
+                funcs.append((self.filenames, os.readlink,))
+
+        for filenames, func, *func_args in funcs:
+            for name in filenames:
+                try:
+                    func(name, *func_args)
+                except OSError as err:
+                    self.assertIs(err.filename, name)
+                else:
+                    self.fail("No exception thrown by {}".format(func))
+
 @support.reap_threads
 def test_main():
     support.run_unittest(
@@ -2078,6 +2175,7 @@ def test_main():
         ExtendedAttributeTests,
         Win32DeprecatedBytesAPI,
         TermsizeTests,
+        OSErrorTests,
     )
 
 if __name__ == "__main__":
