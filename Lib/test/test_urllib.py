@@ -270,9 +270,10 @@ Content-Type: text/html; charset=iso-8859-1
 
     def test_missing_localfile(self):
         # Test for #10836
-        # 3.3 - URLError is not captured, explicit IOError is raised.
-        with self.assertRaises(IOError):
+        with self.assertRaises(urllib.error.URLError) as e:
             urlopen('file://localhost/a/file/which/doesnot/exists.py')
+        self.assertTrue(e.exception.filename)
+        self.assertTrue(e.exception.reason)
 
     def test_file_notexists(self):
         fd, tmp_file = tempfile.mkstemp()
@@ -285,20 +286,21 @@ Content-Type: text/html; charset=iso-8859-1
             os.close(fd)
             os.unlink(tmp_file)
         self.assertFalse(os.path.exists(tmp_file))
-        # 3.3 - IOError instead of URLError
-        with self.assertRaises(IOError):
+        with self.assertRaises(urllib.error.URLError):
             urlopen(tmp_fileurl)
 
     def test_ftp_nohost(self):
         test_ftp_url = 'ftp:///path'
-        # 3.3 - IOError instead of URLError
-        with self.assertRaises(IOError):
+        with self.assertRaises(urllib.error.URLError) as e:
             urlopen(test_ftp_url)
+        self.assertFalse(e.exception.filename)
+        self.assertTrue(e.exception.reason)
 
     def test_ftp_nonexisting(self):
-        # 3.3 - IOError instead of URLError
-        with self.assertRaises(IOError):
+        with self.assertRaises(urllib.error.URLError) as e:
             urlopen('ftp://localhost/a/file/which/doesnot/exists.py')
+        self.assertFalse(e.exception.filename)
+        self.assertTrue(e.exception.reason)
 
 
     def test_userpass_inurl(self):
