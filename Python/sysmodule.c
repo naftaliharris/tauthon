@@ -1349,9 +1349,6 @@ static PyStructSequence_Field flags_fields[] = {
     {"no_site",                 "-S"},
     {"ignore_environment",      "-E"},
     {"verbose",                 "-v"},
-#ifdef RISCOS
-    {"riscos_wimp",             "???"},
-#endif
     /* {"unbuffered",                   "-u"}, */
     /* {"skip_first",                   "-x"}, */
     {"bytes_warning",           "-b"},
@@ -1364,11 +1361,7 @@ static PyStructSequence_Desc flags_desc = {
     "sys.flags",        /* name */
     flags__doc__,       /* doc */
     flags_fields,       /* fields */
-#ifdef RISCOS
-    13
-#else
     12
-#endif
 };
 
 static PyObject*
@@ -1393,9 +1386,6 @@ make_flags(void)
     SetFlag(Py_NoSiteFlag);
     SetFlag(Py_IgnoreEnvironmentFlag);
     SetFlag(Py_VerboseFlag);
-#ifdef RISCOS
-    SetFlag(Py_RISCOSWimpFlag);
-#endif
     /* SetFlag(saw_unbuffered_flag); */
     /* SetFlag(skipfirstline); */
     SetFlag(Py_BytesWarningFlag);
@@ -1561,7 +1551,6 @@ PyObject *
 _PySys_Init(void)
 {
     PyObject *m, *v, *sysdict, *version_info;
-    char *s;
 
     m = PyModule_Create(&sysmodule);
     if (m == NULL)
@@ -1638,20 +1627,14 @@ _PySys_Init(void)
                         PyLong_FromLong(0x10FFFF));
     SET_SYS_FROM_STRING("builtin_module_names",
                         list_builtin_module_names());
-    {
-        /* Assumes that longs are at least 2 bytes long.
-           Should be safe! */
-        unsigned long number = 1;
-        char *value;
+#if PY_BIG_ENDIAN
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("big"));
+#else
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("little"));
+#endif
 
-        s = (char *) &number;
-        if (s[0] == 0)
-            value = "big";
-        else
-            value = "little";
-        SET_SYS_FROM_STRING("byteorder",
-                            PyUnicode_FromString(value));
-    }
 #ifdef MS_COREDLL
     SET_SYS_FROM_STRING("dllhandle",
                         PyLong_FromVoidPtr(PyWin_DLLhModule));
