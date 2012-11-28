@@ -1,4 +1,4 @@
-#-*- coding: ISO-8859-1 -*-
+#-*- coding: iso-8859-1 -*-
 # pysqlite2/test/factory.py: tests for the various factories in pysqlite
 #
 # Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
@@ -178,6 +178,8 @@ class TextFactoryTests(unittest.TestCase):
         self.assertTrue(row[0].endswith("reich"), "column must contain original data")
 
     def CheckOptimizedUnicode(self):
+        # In py3k, str objects are always returned when text_factory
+        # is OptimizedUnicode
         self.con.text_factory = sqlite.OptimizedUnicode
         austria = "Österreich"
         germany = "Deutchland"
