@@ -237,7 +237,7 @@ class _ModuleLock:
                     self.wakeup.release()
 
     def __repr__(self):
-        return "_ModuleLock(%r) at %d" % (self.name, id(self))
+        return "_ModuleLock({!r}) at {}".format(self.name, id(self))
 
 
 class _DummyModuleLock:
@@ -258,7 +258,7 @@ class _DummyModuleLock:
         self.count -= 1
 
     def __repr__(self):
-        return "_DummyModuleLock(%r) at %d" % (self.name, id(self))
+        return "_DummyModuleLock({!r}) at {}".format(self.name, id(self))
 
 
 # The following two functions are for consumption by Python/import.c.
@@ -931,6 +931,14 @@ class SourceLoader(_LoaderBasics):
             raise ImportError("Failed to decode source file",
                               name=fullname) from exc
 
+    def compile_source(self, data, path):
+        """Return the code object compiled from source.
+
+        The 'data' argument can be any object type that compile() supports.
+        """
+        return _call_with_frames_removed(compile, data, path, 'exec',
+                                        dont_inherit=True)
+
     def get_code(self, fullname):
         """Concrete implementation of InspectLoader.get_code.
 
@@ -976,9 +984,7 @@ class SourceLoader(_LoaderBasics):
                             raise ImportError(msg.format(bytecode_path),
                                               name=fullname, path=bytecode_path)
         source_bytes = self.get_data(source_path)
-        code_object = _call_with_frames_removed(compile,
-                          source_bytes, source_path, 'exec',
-                          dont_inherit=True)
+        code_object = self.compile_source(source_bytes, source_path)
         _verbose_message('code object from {}', source_path)
         if (not sys.dont_write_bytecode and bytecode_path is not None and
             source_mtime is not None):
@@ -1439,7 +1445,7 @@ class FileFinder:
         return path_hook_for_FileFinder
 
     def __repr__(self):
-        return "FileFinder(%r)" % (self.path,)
+        return "FileFinder({!r})".format(self.path)
 
 
 # Import itself ###############################################################
@@ -1714,7 +1720,7 @@ def _setup(sys_module, _imp_module):
             builtin_module = sys.modules[builtin_name]
         setattr(self_module, builtin_name, builtin_module)
 
-    os_details = ('posix', ['/']), ('nt', ['\\', '/']), ('os2', ['\\', '/'])
+    os_details = ('posix', ['/']), ('nt', ['\\', '/'])
     for builtin_os, path_separators in os_details:
         # Assumption made in _path_join()
         assert all(len(sep) == 1 for sep in path_separators)
@@ -1725,9 +1731,6 @@ def _setup(sys_module, _imp_module):
         else:
             try:
                 os_module = BuiltinImporter.load_module(builtin_os)
-                # TODO: rip out os2 code after 3.3 is released as per PEP 11
-                if builtin_os == 'os2' and 'EMX GCC' in sys.version:
-                    path_sep = path_separators[1]
                 break
             except ImportError:
                 continue
