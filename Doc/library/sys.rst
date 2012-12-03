@@ -839,8 +839,6 @@ always available.
    Windows          ``'win32'``
    Windows/Cygwin   ``'cygwin'``
    Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
    ================ ===========================
 
    .. versionchanged:: 3.3
@@ -1119,7 +1117,6 @@ always available.
    | :const:`name`    | Name of the thread implementation:                      |
    |                  |                                                         |
    |                  |  * ``'nt'``: Windows threads                            |
-   |                  |  * ``'os2'``: OS/2 threads                              |
    |                  |  * ``'pthread'``: POSIX threads                         |
    |                  |  * ``'solaris'``: Solaris threads                       |
    +------------------+---------------------------------------------------------+
