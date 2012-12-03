@@ -148,7 +148,7 @@ Used in:  PY_LONG_LONG
 #define _PyHASH_MULTIPLIER 1000003  /* 0xf4243 */
 
 /* Parameters used for the numeric hash implementation.  See notes for
-   _PyHash_Double in Objects/object.c.  Numeric hashes are based on
+   _Py_HashDouble in Objects/object.c.  Numeric hashes are based on
    reduction modulo the prime 2**_PyHASH_BITS - 1. */
 
 #if SIZEOF_VOID_P >= 8
@@ -662,7 +662,7 @@ extern char * _getpty(int *, int, mode_t, int);
 /* On QNX 6, struct termio must be declared by including sys/termio.h
    if TCGETA, TCSETA, TCSETAW, or TCSETAF are used.  sys/termio.h must
    be included before termios.h or it will generate an error. */
-#ifdef HAVE_SYS_TERMIO_H
+#if defined(HAVE_SYS_TERMIO_H) && !defined(__hpux)
 #include <sys/termio.h>
 #endif
 
