@@ -31,6 +31,9 @@
 #define TYPE_STOPITER           'S'
 #define TYPE_ELLIPSIS           '.'
 #define TYPE_INT                'i'
+/* TYPE_INT64 is deprecated. It is not
+   generated anymore, and support for reading it
+   will be removed in Python 3.4. */
 #define TYPE_INT64              'I'
 #define TYPE_FLOAT              'f'
 #define TYPE_BINARY_FLOAT       'g'
@@ -59,9 +62,9 @@ typedef struct {
     /* If fp == NULL, the following are valid: */
     PyObject *readable;    /* Stream-like object being read from */
     PyObject *str;
+    PyObject *current_filename;
     char *ptr;
     char *end;
-    PyObject *strings; /* dict on marshal, list on unmarshal */
     int version;
 } WFILE;
 
@@ -120,15 +123,6 @@ w_long(long x, WFILE *p)
     w_byte((char)((x>>16) & 0xff), p);
     w_byte((char)((x>>24) & 0xff), p);
 }
-
-#if SIZEOF_LONG > 4
-static void
-w_long64(long x, WFILE *p)
-{
-    w_long(x, p);
-    w_long(x>>32, p);
-}
-#endif
 
 /* We assume that Python longs are stored internally in base some power of
    2**15; for the sake of portability we'll always read and write them in base
@@ -219,8 +213,8 @@ w_object(PyObject *v, WFILE *p)
 #if SIZEOF_LONG > 4
             long y = Py_ARITHMETIC_RIGHT_SHIFT(long, x, 31);
             if (y && y != -1) {
-                w_byte(TYPE_INT64, p);
-                w_long64(x, p);
+                /* Too large for TYPE_INT */
+                w_PyLong((PyLongObject*)v, p);
             }
             else
 #endif
@@ -311,9 +305,7 @@ w_object(PyObject *v, WFILE *p)
     }
     else if (PyUnicode_CheckExact(v)) {
         PyObject *utf8;
-        utf8 = PyUnicode_EncodeUTF8(PyUnicode_AS_UNICODE(v),
-                                    PyUnicode_GET_SIZE(v),
-                                    "surrogatepass");
+        utf8 = PyUnicode_AsEncodedString(v, "utf8", "surrogatepass");
         if (utf8 == NULL) {
             p->depth--;
             p->error = WFERR_UNMARSHALLABLE;
@@ -445,7 +437,6 @@ PyMarshal_WriteLongToFile(long x, FILE *fp, int version)
     wf.fp = fp;
     wf.error = WFERR_OK;
     wf.depth = 0;
-    wf.strings = NULL;
     wf.version = version;
     w_long(x, &wf);
 }
@@ -457,10 +448,8 @@ PyMarshal_WriteObjectToFile(PyObject *x, FILE *fp, int version)
     wf.fp = fp;
     wf.error = WFERR_OK;
     wf.depth = 0;
-    wf.strings = (version > 0) ? PyDict_New() : NULL;
     wf.version = version;
     w_object(x, &wf);
-    Py_XDECREF(wf.strings);
 }
 
 typedef WFILE RFILE; /* Same struct with different invariants */
@@ -485,7 +474,9 @@ r_string(char *s, int n, RFILE *p)
         }
     }
     else {
-        PyObject *data = PyObject_CallMethod(p->readable, "read", "i", n);
+        _Py_IDENTIFIER(read);
+
+        PyObject *data = _PyObject_CallMethodId(p->readable, &PyId_read, "i", n);
         read = 0;
         if (data != NULL) {
             if (!PyBytes_Check(data)) {
@@ -1069,6 +1060,18 @@ r_object(RFILE *p)
             filename = r_object(p);
             if (filename == NULL)
                 goto code_error;
+            if (PyUnicode_CheckExact(filename)) {
+                if (p->current_filename != NULL) {
+                    if (!PyUnicode_Compare(filename, p->current_filename)) {
+                        Py_DECREF(filename);
+                        Py_INCREF(p->current_filename);
+                        filename = p->current_filename;
+                    }
+                }
+                else {
+                    p->current_filename = filename;
+                }
+            }
             name = r_object(p);
             if (name == NULL)
                 goto code_error;
@@ -1131,7 +1134,7 @@ PyMarshal_ReadShortFromFile(FILE *fp)
     assert(fp);
     rf.readable = NULL;
     rf.fp = fp;
-    rf.strings = NULL;
+    rf.current_filename = NULL;
     rf.end = rf.ptr = NULL;
     return r_short(&rf);
 }
@@ -1142,7 +1145,7 @@ PyMarshal_ReadLongFromFile(FILE *fp)
     RFILE rf;
     rf.fp = fp;
     rf.readable = NULL;
-    rf.strings = NULL;
+    rf.current_filename = NULL;
     rf.ptr = rf.end = NULL;
     return r_long(&rf);
 }
@@ -1204,11 +1207,10 @@ PyMarshal_ReadObjectFromFile(FILE *fp)
     PyObject *result;
     rf.fp = fp;
     rf.readable = NULL;
-    rf.strings = PyList_New(0);
+    rf.current_filename = NULL;
     rf.depth = 0;
     rf.ptr = rf.end = NULL;
     result = r_object(&rf);
-    Py_DECREF(rf.strings);
     return result;
 }
 
@@ -1219,12 +1221,11 @@ PyMarshal_ReadObjectFromString(char *str, Py_ssize_t len)
     PyObject *result;
     rf.fp = NULL;
     rf.readable = NULL;
+    rf.current_filename = NULL;
     rf.ptr = str;
     rf.end = str + len;
-    rf.strings = PyList_New(0);
     rf.depth = 0;
     result = r_object(&rf);
-    Py_DECREF(rf.strings);
     return result;
 }
 
@@ -1232,7 +1233,6 @@ PyObject *
 PyMarshal_WriteObjectToString(PyObject *x, int version)
 {
     WFILE wf;
-    PyObject *res = NULL;
 
     wf.fp = NULL;
     wf.readable = NULL;
@@ -1244,9 +1244,7 @@ PyMarshal_WriteObjectToString(PyObject *x, int version)
     wf.error = WFERR_OK;
     wf.depth = 0;
     wf.version = version;
-    wf.strings = (version > 0) ? PyDict_New() : NULL;
     w_object(x, &wf);
-    Py_XDECREF(wf.strings);
     if (wf.str != NULL) {
         char *base = PyBytes_AS_STRING((PyBytesObject *)wf.str);
         if (wf.ptr - base > PY_SSIZE_T_MAX) {
@@ -1268,12 +1266,7 @@ PyMarshal_WriteObjectToString(PyObject *x, int version)
                :"object too deeply nested to marshal");
         return NULL;
     }
-    if (wf.str != NULL) {
-        /* XXX Quick hack -- need to do this differently */
-        res = PyBytes_FromObject(wf.str);
-        Py_DECREF(wf.str);
-    }
-    return res;
+    return wf.str;
 }
 
 /* And an interface for Python programs... */
@@ -1287,12 +1280,14 @@ marshal_dump(PyObject *self, PyObject *args)
     int version = Py_MARSHAL_VERSION;
     PyObject *s;
     PyObject *res;
+    _Py_IDENTIFIER(write);
+
     if (!PyArg_ParseTuple(args, "OO|i:dump", &x, &f, &version))
         return NULL;
     s = PyMarshal_WriteObjectToString(x, version);
     if (s == NULL)
         return NULL;
-    res = PyObject_CallMethod(f, "write", "O", s);
+    res = _PyObject_CallMethodId(f, &PyId_write, "O", s);
     Py_DECREF(s);
     return res;
 }
@@ -1314,6 +1309,7 @@ static PyObject *
 marshal_load(PyObject *self, PyObject *f)
 {
     PyObject *data, *result;
+    _Py_IDENTIFIER(read);
     RFILE rf;
 
     /*
@@ -1321,7 +1317,7 @@ marshal_load(PyObject *self, PyObject *f)
      * This is to ensure that the object passed in at least
      * has a read method which returns bytes.
      */
-    data = PyObject_CallMethod(f, "read", "i", 0);
+    data = _PyObject_CallMethodId(f, &PyId_read, "i", 0);
     if (data == NULL)
         return NULL;
     if (!PyBytes_Check(data)) {
@@ -1331,12 +1327,11 @@ marshal_load(PyObject *self, PyObject *f)
         result = NULL;
     }
     else {
-        rf.strings = PyList_New(0);
         rf.depth = 0;
         rf.fp = NULL;
         rf.readable = f;
+        rf.current_filename = NULL;
         result = read_object(&rf);
-        Py_DECREF(rf.strings);
     }
     Py_DECREF(data);
     return result;
@@ -1389,12 +1384,11 @@ marshal_loads(PyObject *self, PyObject *args)
     n = p.len;
     rf.fp = NULL;
     rf.readable = NULL;
+    rf.current_filename = NULL;
     rf.ptr = s;
     rf.end = s + n;
-    rf.strings = PyList_New(0);
     rf.depth = 0;
     result = read_object(&rf);
-    Py_DECREF(rf.strings);
     PyBuffer_Release(&p);
     return result;
 }
