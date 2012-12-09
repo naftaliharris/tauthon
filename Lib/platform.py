@@ -122,7 +122,7 @@ try:
 except AttributeError:
     # os.devnull was added in Python 2.4, so emulate it for earlier
     # Python versions
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # Use the old CP/M NUL as device name
         DEV_NULL = 'NUL'
     else:
@@ -403,13 +403,13 @@ _ver_output = re.compile(r'(?:([\w ]+) ([\w.]+) '
 
 def _syscmd_ver(system='', release='', version='',
 
-               supported_platforms=('win32','win16','dos','os2')):
+               supported_platforms=('win32','win16','dos')):
 
     """ Tries to figure out the OS version used and returns
         a tuple (system,release,version).
 
         It uses the "ver" shell command for this which is known
-        to exists on Windows, DOS and OS/2. XXX Others too ?
+        to exists on Windows, DOS. XXX Others too ?
 
         In case this fails, the given parameters are used as
         defaults.
@@ -901,7 +901,7 @@ def _syscmd_uname(option,default=''):
 
     """ Interface to the system's uname command.
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     try:
@@ -924,7 +924,7 @@ def _syscmd_file(target,default=''):
         default in case the command should fail.
 
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     target = _follow_symlinks(target)
