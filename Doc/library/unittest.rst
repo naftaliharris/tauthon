@@ -793,11 +793,14 @@ Test cases
       Run the test, collecting the result into the test result object passed as
       *result*.  If *result* is omitted or ``None``, a temporary result
       object is created (by calling the :meth:`defaultTestResult` method) and
-      used. The result object is not returned to :meth:`run`'s caller.
+      used. The result object is returned to :meth:`run`'s caller.
 
       The same effect may be had by simply calling the :class:`TestCase`
       instance.
 
+      .. versionchanged:: 3.3
+         Previous versions of ``run`` did not return the result. Neither did
+         calling an instance.
 
    .. method:: skipTest(reason)
 
@@ -858,10 +861,11 @@ Test cases
    | <TestCase.assertNotIsInstance>`         |                             |               |
    +-----------------------------------------+-----------------------------+---------------+
 
-   All the assert methods (except :meth:`assertRaises`,
-   :meth:`assertRaisesRegex`, :meth:`assertWarns`, :meth:`assertWarnsRegex`)
-   accept a *msg* argument that, if specified, is used as the error message on
-   failure (see also :data:`longMessage`).
+   All the assert methods accept a *msg* argument that, if specified, is used
+   as the error message on failure (see also :data:`longMessage`).
+   Note that the *msg* keyword argument can be passed to :meth:`assertRaises`,
+   :meth:`assertRaisesRegex`, :meth:`assertWarns`, :meth:`assertWarnsRegex`
+   only when they are used as a context manager.
 
    .. method:: assertEqual(first, second, msg=None)
 
@@ -956,7 +960,7 @@ Test cases
    +---------------------------------------------------------+--------------------------------------+------------+
 
    .. method:: assertRaises(exception, callable, *args, **kwds)
-               assertRaises(exception)
+               assertRaises(exception, msg=None)
 
       Test that an exception is raised when *callable* is called with any
       positional or keyword arguments that are also passed to
@@ -965,11 +969,15 @@ Test cases
       To catch any of a group of exceptions, a tuple containing the exception
       classes may be passed as *exception*.
 
-      If only the *exception* argument is given, returns a context manager so
-      that the code under test can be written inline rather than as a function::
+      If only the *exception* and possibly the *msg* arguments are given,
+      return a context manager so that the code under test can be written
+      inline rather than as a function::
 
          with self.assertRaises(SomeException):
              do_something()
+
+      When used as a context manager, :meth:`assertRaises` accepts the
+      additional keyword argument *msg*.
 
       The context manager will store the caught exception object in its
       :attr:`exception` attribute.  This can be useful if the intention
@@ -987,9 +995,12 @@ Test cases
       .. versionchanged:: 3.2
          Added the :attr:`exception` attribute.
 
+      .. versionchanged:: 3.3
+         Added the *msg* keyword argument when used as a context manager.
+
 
    .. method:: assertRaisesRegex(exception, regex, callable, *args, **kwds)
-               assertRaisesRegex(exception, regex)
+               assertRaisesRegex(exception, regex, msg=None)
 
       Like :meth:`assertRaises` but also tests that *regex* matches
       on the string representation of the raised exception.  *regex* may be
@@ -1006,12 +1017,16 @@ Test cases
 
       .. versionadded:: 3.1
          under the name ``assertRaisesRegexp``.
+
       .. versionchanged:: 3.2
          Renamed to :meth:`assertRaisesRegex`.
 
+      .. versionchanged:: 3.3
+         Added the *msg* keyword argument when used as a context manager.
+
 
    .. method:: assertWarns(warning, callable, *args, **kwds)
-               assertWarns(warning)
+               assertWarns(warning, msg=None)
 
       Test that a warning is triggered when *callable* is called with any
       positional or keyword arguments that are also passed to
@@ -1020,11 +1035,15 @@ Test cases
       To catch any of a group of warnings, a tuple containing the warning
       classes may be passed as *warnings*.
 
-      If only the *warning* argument is given, returns a context manager so
-      that the code under test can be written inline rather than as a function::
+      If only the *warning* and possibly the *msg* arguments are given,
+      returns a context manager so that the code under test can be written
+      inline rather than as a function::
 
          with self.assertWarns(SomeWarning):
              do_something()
+
+      When used as a context manager, :meth:`assertRaises` accepts the
+      additional keyword argument *msg*.
 
       The context manager will store the caught warning object in its
       :attr:`warning` attribute, and the source line which triggered the
@@ -1043,9 +1062,12 @@ Test cases
 
       .. versionadded:: 3.2
 
+      .. versionchanged:: 3.3
+         Added the *msg* keyword argument when used as a context manager.
+
 
    .. method:: assertWarnsRegex(warning, regex, callable, *args, **kwds)
-               assertWarnsRegex(warning, regex)
+               assertWarnsRegex(warning, regex, msg=None)
 
       Like :meth:`assertWarns` but also tests that *regex* matches on the
       message of the triggered warning.  *regex* may be a regular expression
@@ -1063,6 +1085,8 @@ Test cases
 
       .. versionadded:: 3.2
 
+      .. versionchanged:: 3.3
+         Added the *msg* keyword argument when used as a context manager.
 
 
    There are also other methods used to perform more specific checks, such as:
@@ -1152,21 +1176,6 @@ Test cases
          :meth:`.assertNotRegex`.
 
 
-   .. method:: assertDictContainsSubset(subset, dictionary, msg=None)
-
-      Tests whether the key/value pairs in *dictionary* are a superset of
-      those in *subset*.  If not, an error message listing the missing keys
-      and mismatched values is generated.
-
-      Note, the arguments are in the opposite order of what the method name
-      dictates.  Instead, consider using the set-methods on :ref:`dictionary
-      views <dict-views>`, for example: ``d.keys() <= e.keys()`` or
-      ``d.items() <= d.items()``.
-
-      .. versionadded:: 3.1
-      .. deprecated:: 3.2
-
-
    .. method:: assertCountEqual(first, second, msg=None)
 
       Test that sequence *first* contains the same elements as *second*,
@@ -1180,21 +1189,6 @@ Test cases
       but works with sequences of unhashable objects as well.
 
       .. versionadded:: 3.2
-
-   .. method:: assertSameElements(first, second, msg=None)
-
-      Test that sequence *first* contains the same elements as *second*,
-      regardless of their order. When they don't, an error message listing
-      the differences between the sequences will be generated.
-
-      Duplicate elements are ignored when comparing *first* and *second*.
-      It is the equivalent of ``assertEqual(set(first), set(second))``
-      but it works with sequences of unhashable objects as well. Because
-      duplicates are ignored, this method has been deprecated in favour of
-      :meth:`assertCountEqual`.
-
-      .. versionadded:: 3.1
-      .. deprecated:: 3.2
 
 
    .. _type-specific-methods:
