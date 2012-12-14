@@ -615,7 +615,7 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
             sys.exit(2)
         from queue import Queue
         from subprocess import Popen, PIPE
-        debug_output_pat = re.compile(r"\[\d+ refs\]$")
+        debug_output_pat = re.compile(r"\[\d+ refs, \d+ blocks\]$")
         output = Queue()
         pending = MultiprocessTests(tests)
         opt_args = support.args_from_interpreter_flags()
@@ -762,20 +762,6 @@ def main(tests=None, testdir=None, verbose=0, quiet=False,
     if skipped and not quiet:
         print(count(len(skipped), "test"), "skipped:")
         printlist(skipped)
-
-        e = _ExpectedSkips()
-        plat = sys.platform
-        if e.isvalid():
-            surprise = set(skipped) - e.getexpected() - set(resource_denieds)
-            if surprise:
-                print(count(len(surprise), "skip"), \
-                      "unexpected on", plat + ":")
-                printlist(surprise)
-            else:
-                print("Those skips are all expected on", plat + ".")
-        else:
-            print("Ask someone to teach regrtest.py about which tests are")
-            print("expected to get skipped on", plat + ".")
 
     if verbose2 and bad:
         print("Re-running failed tests in verbose mode")
@@ -1210,8 +1196,7 @@ def runtest_inner(test, verbose, quiet,
             abstest = 'test.' + test
         with saved_test_environment(test, verbose, quiet) as environment:
             start_time = time.time()
-            the_package = __import__(abstest, globals(), locals(), [])
-            the_module = getattr(the_package, test)
+            the_module = importlib.import_module(abstest)
             # If the test has a test_main, that will run the appropriate
             # tests.  If not, use normal unittest test loading.
             test_runner = getattr(the_module, "test_main", None)
@@ -1335,33 +1320,50 @@ def dash_R(the_module, test, indirect_test, huntrleaks):
             del sys.modules[the_module.__name__]
             exec('import ' + the_module.__name__)
 
-    deltas = []
     nwarmup, ntracked, fname = huntrleaks
     fname = os.path.join(support.SAVEDCWD, fname)
     repcount = nwarmup + ntracked
+    rc_deltas = [0] * repcount
+    alloc_deltas = [0] * repcount
+
     print("beginning", repcount, "repetitions", file=sys.stderr)
     print(("1234567890"*(repcount//10 + 1))[:repcount], file=sys.stderr)
     sys.stderr.flush()
-    dash_R_cleanup(fs, ps, pic, zdc, abcs)
     for i in range(repcount):
-        rc_before = sys.gettotalrefcount()
         run_the_test()
+        alloc_after, rc_after = dash_R_cleanup(fs, ps, pic, zdc, abcs)
         sys.stderr.write('.')
         sys.stderr.flush()
-        dash_R_cleanup(fs, ps, pic, zdc, abcs)
-        rc_after = sys.gettotalrefcount()
         if i >= nwarmup:
-            deltas.append(rc_after - rc_before)
+            rc_deltas[i] = rc_after - rc_before
+            alloc_deltas[i] = alloc_after - alloc_before
+        alloc_before, rc_before = alloc_after, rc_after
     print(file=sys.stderr)
-    if any(deltas):
-        msg = '%s leaked %s references, sum=%s' % (test, deltas, sum(deltas))
-        print(msg, file=sys.stderr)
-        sys.stderr.flush()
-        with open(fname, "a") as refrep:
-            print(msg, file=refrep)
-            refrep.flush()
-        return True
-    return False
+    # These checkers return False on success, True on failure
+    def check_rc_deltas(deltas):
+        return any(deltas)
+    def check_alloc_deltas(deltas):
+        # At least 1/3rd of 0s
+        if 3 * deltas.count(0) < len(deltas):
+            return True
+        # Nothing else than 1s, 0s and -1s
+        if not set(deltas) <= {1,0,-1}:
+            return True
+        return False
+    failed = False
+    for deltas, item_name, checker in [
+        (rc_deltas, 'references', check_rc_deltas),
+        (alloc_deltas, 'memory blocks', check_alloc_deltas)]:
+        if checker(deltas):
+            msg = '%s leaked %s %s, sum=%s' % (
+                test, deltas[nwarmup:], item_name, sum(deltas))
+            print(msg, file=sys.stderr)
+            sys.stderr.flush()
+            with open(fname, "a") as refrep:
+                print(msg, file=refrep)
+                refrep.flush()
+            failed = True
+    return failed
 
 def dash_R_cleanup(fs, ps, pic, zdc, abcs):
     import gc, copyreg
@@ -1427,8 +1429,11 @@ def dash_R_cleanup(fs, ps, pic, zdc, abcs):
     else:
         ctypes._reset_cache()
 
-    # Collect cyclic trash.
+    # Collect cyclic trash and read memory statistics immediately after.
+    func1 = sys.getallocatedblocks
+    func2 = sys.gettotalrefcount
     gc.collect()
+    return func1(), func2()
 
 def warm_caches():
     # char cache
@@ -1471,299 +1476,6 @@ def printlist(x, width=70, indent=4):
     print(fill(' '.join(str(elt) for elt in sorted(x)), width,
                initial_indent=blanks, subsequent_indent=blanks))
 
-# Map sys.platform to a string containing the basenames of tests
-# expected to be skipped on that platform.
-#
-# Special cases:
-#     test_pep277
-#         The _ExpectedSkips constructor adds this to the set of expected
-#         skips if not os.path.supports_unicode_filenames.
-#     test_timeout
-#         Controlled by test_timeout.skip_expected.  Requires the network
-#         resource and a socket module.
-#
-# Tests that are expected to be skipped everywhere except on one platform
-# are also handled separately.
-
-_expectations = (
-    ('win32',
-        """
-        test__locale
-        test_crypt
-        test_curses
-        test_dbm
-        test_devpoll
-        test_fcntl
-        test_fork1
-        test_epoll
-        test_dbm_gnu
-        test_dbm_ndbm
-        test_grp
-        test_ioctl
-        test_largefile
-        test_kqueue
-        test_openpty
-        test_ossaudiodev
-        test_pipes
-        test_poll
-        test_posix
-        test_pty
-        test_pwd
-        test_resource
-        test_signal
-        test_syslog
-        test_threadsignals
-        test_wait3
-        test_wait4
-        """),
-    ('linux',
-        """
-        test_curses
-        test_devpoll
-        test_largefile
-        test_kqueue
-        test_ossaudiodev
-        """),
-    ('unixware',
-        """
-        test_epoll
-        test_largefile
-        test_kqueue
-        test_minidom
-        test_openpty
-        test_pyexpat
-        test_sax
-        test_sundry
-        """),
-    ('openunix',
-        """
-        test_epoll
-        test_largefile
-        test_kqueue
-        test_minidom
-        test_openpty
-        test_pyexpat
-        test_sax
-        test_sundry
-        """),
-    ('sco_sv',
-        """
-        test_asynchat
-        test_fork1
-        test_epoll
-        test_gettext
-        test_largefile
-        test_locale
-        test_kqueue
-        test_minidom
-        test_openpty
-        test_pyexpat
-        test_queue
-        test_sax
-        test_sundry
-        test_thread
-        test_threaded_import
-        test_threadedtempfile
-        test_threading
-        """),
-    ('darwin',
-        """
-        test__locale
-        test_curses
-        test_devpoll
-        test_epoll
-        test_dbm_gnu
-        test_gdb
-        test_largefile
-        test_locale
-        test_minidom
-        test_ossaudiodev
-        test_poll
-        """),
-    ('sunos',
-        """
-        test_curses
-        test_dbm
-        test_epoll
-        test_kqueue
-        test_dbm_gnu
-        test_gzip
-        test_openpty
-        test_zipfile
-        test_zlib
-        """),
-    ('hp-ux',
-        """
-        test_curses
-        test_epoll
-        test_dbm_gnu
-        test_gzip
-        test_largefile
-        test_locale
-        test_kqueue
-        test_minidom
-        test_openpty
-        test_pyexpat
-        test_sax
-        test_zipfile
-        test_zlib
-        """),
-    ('cygwin',
-        """
-        test_curses
-        test_dbm
-        test_devpoll
-        test_epoll
-        test_ioctl
-        test_kqueue
-        test_largefile
-        test_locale
-        test_ossaudiodev
-        test_socketserver
-        """),
-    ('os2emx',
-        """
-        test_audioop
-        test_curses
-        test_epoll
-        test_kqueue
-        test_largefile
-        test_mmap
-        test_openpty
-        test_ossaudiodev
-        test_pty
-        test_resource
-        test_signal
-        """),
-    ('freebsd',
-        """
-        test_devpoll
-        test_epoll
-        test_dbm_gnu
-        test_locale
-        test_ossaudiodev
-        test_pep277
-        test_pty
-        test_socketserver
-        test_tcl
-        test_tk
-        test_ttk_guionly
-        test_ttk_textonly
-        test_timeout
-        test_urllibnet
-        test_multiprocessing
-        """),
-    ('aix',
-        """
-        test_bz2
-        test_epoll
-        test_dbm_gnu
-        test_gzip
-        test_kqueue
-        test_ossaudiodev
-        test_tcl
-        test_tk
-        test_ttk_guionly
-        test_ttk_textonly
-        test_zipimport
-        test_zlib
-        """),
-    ('openbsd',
-        """
-        test_ctypes
-        test_devpoll
-        test_epoll
-        test_dbm_gnu
-        test_locale
-        test_normalization
-        test_ossaudiodev
-        test_pep277
-        test_tcl
-        test_tk
-        test_ttk_guionly
-        test_ttk_textonly
-        test_multiprocessing
-        """),
-    ('netbsd',
-        """
-        test_ctypes
-        test_curses
-        test_devpoll
-        test_epoll
-        test_dbm_gnu
-        test_locale
-        test_ossaudiodev
-        test_pep277
-        test_tcl
-        test_tk
-        test_ttk_guionly
-        test_ttk_textonly
-        test_multiprocessing
-        """),
-)
-
-class _ExpectedSkips:
-    def __init__(self):
-        import os.path
-        from test import test_timeout
-
-        self.valid = False
-        expected = None
-        for item in _expectations:
-            if sys.platform.startswith(item[0]):
-                expected = item[1]
-                break
-        if expected is not None:
-            self.expected = set(expected.split())
-
-            # These are broken tests, for now skipped on every platform.
-            # XXX Fix these!
-            self.expected.add('test_nis')
-
-            # expected to be skipped on every platform, even Linux
-            if not os.path.supports_unicode_filenames:
-                self.expected.add('test_pep277')
-
-            # doctest, profile and cProfile tests fail when the codec for the
-            # fs encoding isn't built in because PyUnicode_Decode() adds two
-            # calls into Python.
-            encs = ("utf-8", "latin-1", "ascii", "mbcs", "utf-16", "utf-32")
-            if sys.getfilesystemencoding().lower() not in encs:
-                self.expected.add('test_profile')
-                self.expected.add('test_cProfile')
-                self.expected.add('test_doctest')
-
-            if test_timeout.skip_expected:
-                self.expected.add('test_timeout')
-
-            if sys.platform != "win32":
-                # test_sqlite is only reliable on Windows where the library
-                # is distributed with Python
-                WIN_ONLY = {"test_unicode_file", "test_winreg",
-                            "test_winsound", "test_startfile",
-                            "test_sqlite", "test_msilib"}
-                self.expected |= WIN_ONLY
-
-            if sys.platform != 'sunos5':
-                self.expected.add('test_nis')
-
-            if support.python_is_optimized():
-                self.expected.add("test_gdb")
-
-            self.valid = True
-
-    def isvalid(self):
-        "Return true iff _ExpectedSkips knows about the current platform."
-        return self.valid
-
-    def getexpected(self):
-        """Return set of test names we expect to skip on current platform.
-
-        self.isvalid() must be true.
-        """
-
-        assert self.isvalid()
-        return self.expected
 
 def _make_temp_dir_for_build(TEMPDIR):
     # When tests are run from the Python build directory, it is best practice
