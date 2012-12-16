@@ -103,7 +103,8 @@ from urllib.error import URLError, HTTPError, ContentTooShortError
 from urllib.parse import (
     urlparse, urlsplit, urljoin, unwrap, quote, unquote,
     splittype, splithost, splitport, splituser, splitpasswd,
-    splitattr, splitquery, splitvalue, splittag, to_bytes, urlunparse)
+    splitattr, splitquery, splitvalue, splittag, to_bytes,
+    unquote_to_bytes, urlunparse)
 from urllib.response import addinfourl, addclosehook
 
 # check for SSL
@@ -121,7 +122,7 @@ __all__ = [
     'HTTPPasswordMgr', 'HTTPPasswordMgrWithDefaultRealm',
     'AbstractBasicAuthHandler', 'HTTPBasicAuthHandler', 'ProxyBasicAuthHandler',
     'AbstractDigestAuthHandler', 'HTTPDigestAuthHandler', 'ProxyDigestAuthHandler',
-    'HTTPHandler', 'FileHandler', 'FTPHandler', 'CacheFTPHandler',
+    'HTTPHandler', 'FileHandler', 'FTPHandler', 'CacheFTPHandler', 'DataHandler',
     'UnknownHandler', 'HTTPErrorProcessor',
     # Functions
     'urlopen', 'install_opener', 'build_opener',
@@ -265,18 +266,37 @@ class Request:
         # unwrap('<URL:type://host/path>') --> 'type://host/path'
         self.full_url = unwrap(url)
         self.full_url, self.fragment = splittag(self.full_url)
-        self.data = data
         self.headers = {}
+        self.unredirected_hdrs = {}
+        self._data = None
+        self.data = data
         self._tunnel_host = None
         for key, value in headers.items():
             self.add_header(key, value)
-        self.unredirected_hdrs = {}
         if origin_req_host is None:
             origin_req_host = request_host(self)
         self.origin_req_host = origin_req_host
         self.unverifiable = unverifiable
         self.method = method
         self._parse()
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        if data != self._data:
+            self._data = data
+            # issue 16464
+            # if we change data we need to remove content-length header
+            # (cause it's most probably calculated for previous value)
+            if self.has_header("Content-length"):
+                self.remove_header("Content-length")
+
+    @data.deleter
+    def data(self):
+        self._data = None
 
     def _parse(self):
         self.type, rest = splittype(self.full_url)
@@ -372,6 +392,10 @@ class Request:
         return self.headers.get(
             header_name,
             self.unredirected_hdrs.get(header_name, default))
+
+    def remove_header(self, header_name):
+        self.headers.pop(header_name, None)
+        self.unredirected_hdrs.pop(header_name, None)
 
     def header_items(self):
         hdrs = self.unredirected_hdrs.copy()
@@ -535,7 +559,8 @@ def build_opener(*handlers):
     opener = OpenerDirector()
     default_classes = [ProxyHandler, UnknownHandler, HTTPHandler,
                        HTTPDefaultErrorHandler, HTTPRedirectHandler,
-                       FTPHandler, FileHandler, HTTPErrorProcessor]
+                       FTPHandler, FileHandler, HTTPErrorProcessor,
+                       DataHandler]
     if hasattr(http.client, "HTTPSConnection"):
         default_classes.append(HTTPSHandler)
     skip = set()
@@ -1255,6 +1280,12 @@ class AbstractHTTPHandler(BaseHandler):
             raise URLError(err)
         else:
             r = h.getresponse()
+            # If the server does not send us a 'Connection: close' header,
+            # HTTPConnection assumes the socket should be left open. Manually
+            # mark the socket to be closed when this response object goes away.
+            if h.sock:
+                h.sock.close()
+                h.sock = None
 
         r.url = req.get_full_url()
         # This line replaces the .msg attribute of the HTTPResponse
@@ -1535,6 +1566,36 @@ class CacheFTPHandler(FTPHandler):
         self.cache.clear()
         self.timeout.clear()
 
+class DataHandler(BaseHandler):
+    def data_open(self, req):
+        # data URLs as specified in RFC 2397.
+        #
+        # ignores POSTed data
+        #
+        # syntax:
+        # dataurl   := "data:" [ mediatype ] [ ";base64" ] "," data
+        # mediatype := [ type "/" subtype ] *( ";" parameter )
+        # data      := *urlchar
+        # parameter := attribute "=" value
+        url = req.full_url
+
+        scheme, data = url.split(":",1)
+        mediatype, data = data.split(",",1)
+
+        # even base64 encoded data URLs might be quoted so unquote in any case:
+        data = unquote_to_bytes(data)
+        if mediatype.endswith(";base64"):
+            data = base64.decodebytes(data)
+            mediatype = mediatype[:-7]
+
+        if not mediatype:
+            mediatype = "text/plain;charset=US-ASCII"
+
+        headers = email.message_from_string("Content-type: %s\nContent-length: %d\n" %
+            (mediatype, len(data)))
+
+        return addinfourl(io.BytesIO(data), headers, url)
+
 
 # Code move from the old urllib module
 
@@ -1658,7 +1719,7 @@ class URLopener:
                 return getattr(self, name)(url)
             else:
                 return getattr(self, name)(url, data)
-        except HTTPError:
+        except (HTTPError, URLError):
             raise
         except socket.error as msg:
             raise IOError('socket error', msg).with_traceback(sys.exc_info()[2])
