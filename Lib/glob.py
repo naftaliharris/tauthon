@@ -26,8 +26,7 @@ def iglob(pathname):
         return
     dirname, basename = os.path.split(pathname)
     if not dirname:
-        for name in glob1(None, basename):
-            yield name
+        yield from glob1(None, basename)
         return
     # `os.path.split()` returns the argument itself as a dirname if it is a
     # drive or UNC path.  Prevent an infinite recursion if a drive or UNC path
