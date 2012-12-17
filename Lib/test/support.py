@@ -93,7 +93,8 @@ def _ignore_deprecated_imports(ignore=True):
     """Context manager to suppress package and module deprecation
     warnings when importing them.
 
-    If ignore is False, this context manager has no effect."""
+    If ignore is False, this context manager has no effect.
+    """
     if ignore:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", ".+ (module|package)",
@@ -103,23 +104,29 @@ def _ignore_deprecated_imports(ignore=True):
         yield
 
 
-def import_module(name, deprecated=False):
+def import_module(name, deprecated=False, *, required_on=()):
     """Import and return the module to be tested, raising SkipTest if
     it is not available.
 
     If deprecated is True, any module or package deprecation messages
-    will be suppressed."""
+    will be suppressed. If a module is required on a platform but optional for
+    others, set required_on to an iterable of platform prefixes which will be
+    compared against sys.platform.
+    """
     with _ignore_deprecated_imports(deprecated):
         try:
             return importlib.import_module(name)
         except ImportError as msg:
+            if sys.platform.startswith(tuple(required_on)):
+                raise
             raise unittest.SkipTest(str(msg))
 
 
 def _save_and_remove_module(name, orig_modules):
     """Helper function to save and remove a module from sys.modules
 
-       Raise ImportError if the module can't be imported."""
+       Raise ImportError if the module can't be imported.
+       """
     # try to import the module and raise an error if it can't be imported
     if name not in sys.modules:
         __import__(name)
@@ -710,6 +717,9 @@ for name in (
     b'\xae\xd5'
     # undecodable from UTF-8 (UNIX and Mac OS X)
     b'\xed\xb2\x80', b'\xed\xb4\x80',
+    # undecodable from shift_jis, cp869, cp874, cp932, cp1250, cp1251, cp1252,
+    # cp1253, cp1254, cp1255, cp1257, cp1258
+    b'\x81\x98',
 ):
     try:
         name.decode(TESTFN_ENCODING)
@@ -1762,7 +1772,7 @@ def strip_python_stderr(stderr):
     This will typically be run on the result of the communicate() method
     of a subprocess.Popen object.
     """
-    stderr = re.sub(br"\[\d+ refs\]\r?\n?", b"", stderr).strip()
+    stderr = re.sub(br"\[\d+ refs, \d+ blocks\]\r?\n?", b"", stderr).strip()
     return stderr
 
 def args_from_interpreter_flags():
