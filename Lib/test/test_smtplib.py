@@ -524,12 +524,6 @@ class DebuggingServerTests(unittest.TestCase):
 
 class NonConnectingTests(unittest.TestCase):
 
-    def setUp(self):
-        smtplib.socket = mock_socket
-
-    def tearDown(self):
-        smtplib.socket = socket
-
     def testNotConnected(self):
         # Test various operations on an unconnected SMTP object that
         # should raise exceptions (at present the attempt in SMTP.send
@@ -541,10 +535,10 @@ class NonConnectingTests(unittest.TestCase):
                           smtp.send, 'test msg')
 
     def testNonnumericPort(self):
-        # check that non-numeric port raises socket.error
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        # check that non-numeric port raises OSError
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost", "bogus")
-        self.assertRaises(mock_socket.error, smtplib.SMTP,
+        self.assertRaises(OSError, smtplib.SMTP,
                           "localhost:bogus")
 
 

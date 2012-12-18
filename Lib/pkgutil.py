@@ -121,8 +121,7 @@ def walk_packages(path=None, prefix='', onerror=None):
                 # don't traverse path items we've seen before
                 path = [p for p in path if not seen(p)]
 
-                for item in walk_packages(path, name+'.', onerror):
-                    yield item
+                yield from walk_packages(path, name+'.', onerror)
 
 
 def iter_modules(path=None, prefix=''):
@@ -456,8 +455,7 @@ def iter_importers(fullname=""):
         if path is None:
             return
     else:
-        for importer in sys.meta_path:
-            yield importer
+        yield from sys.meta_path
         path = sys.path
     for item in path:
         yield get_importer(item)
