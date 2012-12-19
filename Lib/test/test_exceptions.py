@@ -8,8 +8,8 @@ import weakref
 import errno
 
 from test.support import (TESTFN, captured_output, check_impl_detail,
-                          cpython_only, gc_collect, run_unittest, no_tracing,
-                          unlink)
+                          check_warnings, cpython_only, gc_collect, run_unittest,
+                          no_tracing, unlink)
 
 class NaiveException(Exception):
     def __init__(self, x):
@@ -255,11 +255,11 @@ class ExceptionTests(unittest.TestCase):
                  'errno' : 'foo', 'strerror' : 'bar'}),
             (IOError, ('foo', 'bar', 'baz', 'quux'),
                 {'args' : ('foo', 'bar', 'baz', 'quux')}),
-            (EnvironmentError, ('errnoStr', 'strErrorStr', 'filenameStr'),
+            (OSError, ('errnoStr', 'strErrorStr', 'filenameStr'),
                 {'args' : ('errnoStr', 'strErrorStr'),
                  'strerror' : 'strErrorStr', 'errno' : 'errnoStr',
                  'filename' : 'filenameStr'}),
-            (EnvironmentError, (1, 'strErrorStr', 'filenameStr'),
+            (OSError, (1, 'strErrorStr', 'filenameStr'),
                 {'args' : (1, 'strErrorStr'), 'errno' : 1,
                  'strerror' : 'strErrorStr', 'filename' : 'filenameStr'}),
             (SyntaxError, (), {'msg' : None, 'text' : None,
@@ -409,7 +409,7 @@ class ExceptionTests(unittest.TestCase):
         self.assertIsNone(e.__context__)
         self.assertIsNone(e.__cause__)
 
-        class MyException(EnvironmentError):
+        class MyException(OSError):
             pass
 
         e = MyException()
@@ -947,9 +947,10 @@ class ImportErrorTests(unittest.TestCase):
 
     def test_non_str_argument(self):
         # Issue #15778
-        arg = b'abc'
-        exc = ImportError(arg)
-        self.assertEqual(str(arg), str(exc))
+        with check_warnings(('', BytesWarning), quiet=True):
+            arg = b'abc'
+            exc = ImportError(arg)
+            self.assertEqual(str(arg), str(exc))
 
 
 def test_main():
