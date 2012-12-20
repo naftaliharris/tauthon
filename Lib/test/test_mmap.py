@@ -245,7 +245,7 @@ class MmapTests(unittest.TestCase):
 
     def test_bad_file_desc(self):
         # Try opening a bad file descriptor...
-        self.assertRaises(mmap.error, mmap.mmap, -2, 4096)
+        self.assertRaises(OSError, mmap.mmap, -2, 4096)
 
     def test_tougher_find(self):
         # Do a tougher .find() test.  SF bug 515943 pointed out that, in 2.2,
@@ -658,7 +658,7 @@ class MmapTests(unittest.TestCase):
             m = mmap.mmap(f.fileno(), 0)
             f.close()
             try:
-                m.resize(0) # will raise WindowsError
+                m.resize(0) # will raise OSError
             except:
                 pass
             try:
@@ -673,7 +673,7 @@ class MmapTests(unittest.TestCase):
             # parameters to _get_osfhandle.
             s = socket.socket()
             try:
-                with self.assertRaises(mmap.error):
+                with self.assertRaises(OSError):
                     m = mmap.mmap(s.fileno(), 10)
             finally:
                 s.close()
