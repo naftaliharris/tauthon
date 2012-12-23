@@ -56,7 +56,7 @@ class TestEPoll(unittest.TestCase):
         client.setblocking(False)
         try:
             client.connect(('127.0.0.1', self.serverSocket.getsockname()[1]))
-        except socket.error as e:
+        except OSError as e:
             self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             raise AssertionError("Connect should have raised EINPROGRESS")
@@ -86,6 +86,13 @@ class TestEPoll(unittest.TestCase):
         self.assertRaises(TypeError, select.epoll, ())
         self.assertRaises(TypeError, select.epoll, ['foo'])
         self.assertRaises(TypeError, select.epoll, {})
+
+    def test_context_manager(self):
+        with select.epoll(16) as ep:
+            self.assertGreater(ep.fileno(), 0)
+            self.assertFalse(ep.closed)
+        self.assertTrue(ep.closed)
+        self.assertRaises(ValueError, ep.fileno)
 
     def test_add(self):
         server, client = self._connected_pair()

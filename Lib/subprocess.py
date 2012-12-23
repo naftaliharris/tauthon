@@ -396,8 +396,6 @@ if mswindows:
         hStdOutput = None
         hStdError = None
         wShowWindow = 0
-    class pywintypes:
-        error = IOError
 else:
     import select
     _has_poll = hasattr(select, 'poll')
@@ -821,7 +819,7 @@ class Popen(object):
             for f in filter(None, (self.stdin, self.stdout, self.stderr)):
                 try:
                     f.close()
-                except EnvironmentError:
+                except OSError:
                     pass  # Ignore EBADF or other errors.
 
             # Make sure the child pipes are closed as well.
@@ -835,7 +833,7 @@ class Popen(object):
             for fd in to_close:
                 try:
                     os.close(fd)
-                except EnvironmentError:
+                except OSError:
                     pass
 
             raise
@@ -1042,9 +1040,9 @@ class Popen(object):
                 w9xpopen = os.path.join(os.path.dirname(sys.base_exec_prefix),
                                         "w9xpopen.exe")
                 if not os.path.exists(w9xpopen):
-                    raise RuntimeError("Cannot locate w9xpopen.exe, which is "
-                                       "needed for Popen to work with your "
-                                       "shell or platform.")
+                    raise SubprocessError(
+                            "Cannot locate w9xpopen.exe, which is needed for "
+                            "Popen to work with your shell or platform.")
             return w9xpopen
 
 
@@ -1102,12 +1100,6 @@ class Popen(object):
                                          env,
                                          cwd,
                                          startupinfo)
-            except pywintypes.error as e:
-                # Translate pywintypes.error to WindowsError, which is
-                # a subclass of OSError.  FIXME: We should really
-                # translate errno using _sys_errlist (or similar), but
-                # how can this be done from Python?
-                raise WindowsError(*e.args)
             finally:
                 # Child is launched. Close the parent's copy of those pipe
                 # handles that only the child should have open.  You need
@@ -1412,13 +1404,13 @@ class Popen(object):
                     exception_name, hex_errno, err_msg = (
                             errpipe_data.split(b':', 2))
                 except ValueError:
-                    exception_name = b'RuntimeError'
+                    exception_name = b'SubprocessError'
                     hex_errno = b'0'
                     err_msg = (b'Bad exception data from child: ' +
                                repr(errpipe_data))
                 child_exception_type = getattr(
                         builtins, exception_name.decode('ascii'),
-                        RuntimeError)
+                        SubprocessError)
                 err_msg = err_msg.decode(errors="surrogatepass")
                 if issubclass(child_exception_type, OSError) and hex_errno:
                     errno_num = int(hex_errno, 16)
@@ -1448,11 +1440,11 @@ class Popen(object):
                 self.returncode = _WEXITSTATUS(sts)
             else:
                 # Should never happen
-                raise RuntimeError("Unknown child exit status!")
+                raise SubprocessError("Unknown child exit status!")
 
 
         def _internal_poll(self, _deadstate=None, _waitpid=os.waitpid,
-                _WNOHANG=os.WNOHANG, _os_error=os.error):
+                _WNOHANG=os.WNOHANG):
             """Check if child process has terminated.  Returns returncode
             attribute.
 
@@ -1465,7 +1457,7 @@ class Popen(object):
                     pid, sts = _waitpid(self.pid, _WNOHANG)
                     if pid == self.pid:
                         self._handle_exitstatus(sts)
-                except _os_error as e:
+                except OSError as e:
                     if _deadstate is not None:
                         self.returncode = _deadstate
                     elif e.errno == errno.ECHILD:
@@ -1622,7 +1614,7 @@ class Popen(object):
                     raise TimeoutExpired(self.args, orig_timeout)
                 try:
                     ready = poller.poll(timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.args[0] == errno.EINTR:
                         continue
                     raise
@@ -1690,7 +1682,7 @@ class Popen(object):
                     (rlist, wlist, xlist) = \
                         select.select(self._read_set, self._write_set, [],
                                       timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.args[0] == errno.EINTR:
                         continue
                     raise

@@ -196,7 +196,7 @@ def addsitedir(sitedir, known_paths=None):
         known_paths.add(sitedircase)
     try:
         names = os.listdir(sitedir)
-    except os.error:
+    except OSError:
         return
     names = [name for name in names if name.endswith(".pth")]
     for name in sorted(names):
@@ -300,9 +300,7 @@ def getsitepackages(prefixes=None):
             continue
         seen.add(prefix)
 
-        if sys.platform in ('os2emx', 'riscos'):
-            sitepackages.append(os.path.join(prefix, "Lib", "site-packages"))
-        elif os.sep == '/':
+        if os.sep == '/':
             sitepackages.append(os.path.join(prefix, "lib",
                                         "python" + sys.version[:3],
                                         "site-packages"))
@@ -328,23 +326,6 @@ def addsitepackages(known_paths, prefixes=None):
             addsitedir(sitedir, known_paths)
 
     return known_paths
-
-def setBEGINLIBPATH():
-    """The OS/2 EMX port has optional extension modules that do double duty
-    as DLLs (and must use the .DLL file extension) for other extensions.
-    The library search path needs to be amended so these will be found
-    during module import.  Use BEGINLIBPATH so that these are at the start
-    of the library search path.
-
-    """
-    dllpath = os.path.join(sys.prefix, "Lib", "lib-dynload")
-    libpath = os.environ['BEGINLIBPATH'].split(';')
-    if libpath[-1]:
-        libpath.append(dllpath)
-    else:
-        libpath[-1] = dllpath
-    os.environ['BEGINLIBPATH'] = ';'.join(libpath)
-
 
 def setquit():
     """Define new builtins 'quit' and 'exit'.
@@ -593,8 +574,6 @@ def main():
         ENABLE_USER_SITE = check_enableusersite()
     known_paths = addusersitepackages(known_paths)
     known_paths = addsitepackages(known_paths)
-    if sys.platform == 'os2emx':
-        setBEGINLIBPATH()
     setquit()
     setcopyright()
     sethelper()

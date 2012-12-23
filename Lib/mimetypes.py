@@ -243,7 +243,7 @@ class MimeTypes:
             while True:
                 try:
                     ctype = _winreg.EnumKey(mimedb, i)
-                except EnvironmentError:
+                except OSError:
                     break
                 else:
                     yield ctype
@@ -256,7 +256,7 @@ class MimeTypes:
                     with _winreg.OpenKey(mimedb, ctype) as key:
                         suffix, datatype = _winreg.QueryValueEx(key,
                                                                 'Extension')
-                except EnvironmentError:
+                except OSError:
                     continue
                 if datatype != _winreg.REG_SZ:
                     continue
@@ -378,12 +378,14 @@ def _default_mime_types():
         '.taz': '.tar.gz',
         '.tz': '.tar.gz',
         '.tbz2': '.tar.bz2',
+        '.txz': '.tar.xz',
         }
 
     encodings_map = {
         '.gz': 'gzip',
         '.Z': 'compress',
         '.bz2': 'bzip2',
+        '.xz': 'xz',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
