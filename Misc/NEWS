@@ -182,6 +182,8 @@ Library
 - Issue #16443: Add docstrings to regular expression match objects.
   Patch by Anton Kasyanov.
 
+- Issue #15701: Fix HTTPError info method call to return the headers information.
+
 - Issue #16646: ftplib.FTP.makeport() might lose socket error details.
   (patch by Serhiy Storchaka)
 
