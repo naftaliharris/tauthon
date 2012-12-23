@@ -30,9 +30,6 @@ altsep = '/'
 defpath = '.;C:\\bin'
 if 'ce' in sys.builtin_module_names:
     defpath = '\\Windows'
-elif 'os2' in sys.builtin_module_names:
-    # OS/2 w/ VACPP
-    altsep = '/'
 devnull = 'nul'
 
 def _get_empty(path):
@@ -320,12 +317,11 @@ def dirname(p):
 
 def islink(path):
     """Test whether a path is a symbolic link.
-    This will always return false for Windows prior to 6.0
-    and for OS/2.
+    This will always return false for Windows prior to 6.0.
     """
     try:
         st = os.lstat(path)
-    except (os.error, AttributeError):
+    except (OSError, AttributeError):
         return False
     return stat.S_ISLNK(st.st_mode)
 
@@ -335,7 +331,7 @@ def lexists(path):
     """Test whether a path exists.  Returns True for broken symbolic links"""
     try:
         st = os.lstat(path)
-    except (os.error, WindowsError):
+    except OSError:
         return False
     return True
 
@@ -588,7 +584,7 @@ else:  # use native Windows method on Windows
         if path: # Empty path must return current working directory.
             try:
                 path = _getfullpathname(path)
-            except WindowsError:
+            except OSError:
                 pass # Bad path - return unchanged.
         elif isinstance(path, bytes):
             path = os.getcwdb()
