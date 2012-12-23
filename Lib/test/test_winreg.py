@@ -8,7 +8,7 @@ threading = support.import_module("threading")
 from platform import machine
 
 # Do this first so test will be skipped if module doesn't exist
-support.import_module('winreg')
+support.import_module('winreg', required_on=['win'])
 # Now import everything
 from winreg import *
 
@@ -54,13 +54,13 @@ class BaseWinregTests(unittest.TestCase):
     def delete_tree(self, root, subkey):
         try:
             hkey = OpenKey(root, subkey, KEY_ALL_ACCESS)
-        except WindowsError:
+        except OSError:
             # subkey does not exist
             return
         while True:
             try:
                 subsubkey = EnumKey(hkey, 0)
-            except WindowsError:
+            except OSError:
                 # no more subkeys
                 break
             self.delete_tree(hkey, subsubkey)
@@ -97,7 +97,7 @@ class BaseWinregTests(unittest.TestCase):
             QueryInfoKey(int_sub_key)
             self.fail("It appears the CloseKey() function does "
                       "not close the actual key!")
-        except EnvironmentError:
+        except OSError:
             pass
         # ... and close that key that way :-)
         int_key = int(key)
@@ -106,7 +106,7 @@ class BaseWinregTests(unittest.TestCase):
             QueryInfoKey(int_key)
             self.fail("It appears the key.Close() function "
                       "does not close the actual key!")
-        except EnvironmentError:
+        except OSError:
             pass
 
     def _read_test_data(self, root_key, subkeystr="sub_key", OpenKey=OpenKey):
@@ -123,7 +123,7 @@ class BaseWinregTests(unittest.TestCase):
             while 1:
                 try:
                     data = EnumValue(sub_key, index)
-                except EnvironmentError:
+                except OSError:
                     break
                 self.assertEqual(data in test_data, True,
                                  "Didn't read back the correct test data")
@@ -144,7 +144,7 @@ class BaseWinregTests(unittest.TestCase):
         try:
             EnumKey(key, 1)
             self.fail("Was able to get a second key when I only have one!")
-        except EnvironmentError:
+        except OSError:
             pass
 
         key.Close()
@@ -168,7 +168,7 @@ class BaseWinregTests(unittest.TestCase):
             # Shouldnt be able to delete it twice!
             DeleteKey(key, subkeystr)
             self.fail("Deleting the key twice succeeded")
-        except EnvironmentError:
+        except OSError:
             pass
         key.Close()
         DeleteKey(root_key, test_key_name)
@@ -176,7 +176,7 @@ class BaseWinregTests(unittest.TestCase):
         try:
             key = OpenKey(root_key, test_key_name)
             self.fail("Could open the non-existent key")
-        except WindowsError: # Use this error name this time
+        except OSError: # Use this error name this time
             pass
 
     def _test_all(self, root_key, subkeystr="sub_key"):
@@ -227,7 +227,7 @@ class LocalWinregTests(BaseWinregTests):
 
     def test_inexistant_remote_registry(self):
         connect = lambda: ConnectRegistry("abcdefghijkl", HKEY_CURRENT_USER)
-        self.assertRaises(WindowsError, connect)
+        self.assertRaises(OSError, connect)
 
     def testExpandEnvironmentStrings(self):
         r = ExpandEnvironmentStrings("%windir%\\test")
@@ -239,8 +239,8 @@ class LocalWinregTests(BaseWinregTests):
         try:
             with ConnectRegistry(None, HKEY_LOCAL_MACHINE) as h:
                 self.assertNotEqual(h.handle, 0)
-                raise WindowsError
-        except WindowsError:
+                raise OSError
+        except OSError:
             self.assertEqual(h.handle, 0)
 
     def test_changing_value(self):
@@ -375,7 +375,7 @@ class Win64WinregTests(BaseWinregTests):
                 open_fail = lambda: OpenKey(HKEY_CURRENT_USER,
                                             test_reflect_key_name, 0,
                                             KEY_READ | KEY_WOW64_64KEY)
-                self.assertRaises(WindowsError, open_fail)
+                self.assertRaises(OSError, open_fail)
 
             # Now explicitly open the 64-bit version of the key
             with OpenKey(HKEY_CURRENT_USER, test_reflect_key_name, 0,
@@ -415,7 +415,7 @@ class Win64WinregTests(BaseWinregTests):
             open_fail = lambda: OpenKeyEx(HKEY_CURRENT_USER,
                                           test_reflect_key_name, 0,
                                           KEY_READ | KEY_WOW64_64KEY)
-            self.assertRaises(WindowsError, open_fail)
+            self.assertRaises(OSError, open_fail)
 
             # Make sure the 32-bit key is actually there
             with OpenKeyEx(HKEY_CURRENT_USER, test_reflect_key_name, 0,
