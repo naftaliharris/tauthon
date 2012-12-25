@@ -318,9 +318,10 @@ Yield expressions
 
 .. productionlist::
    yield_atom: "(" `yield_expression` ")"
-   yield_expression: "yield" [`expression_list`]
+   yield_expression: "yield" [`expression_list` | "from" `expression`]
 
-The :keyword:`yield` expression is only used when defining a generator function,
+The :keyword:`yield` expression is only used when defining a :term:`generator`
+function,
 and can only be used in the body of a function definition.  Using a
 :keyword:`yield` expression in a function definition is sufficient to cause that
 definition to create a generator function instead of a normal function.
@@ -336,7 +337,10 @@ the internal evaluation stack.  When the execution is resumed by calling one of
 the generator's methods, the function can proceed exactly as if the
 :keyword:`yield` expression was just another external call.  The value of the
 :keyword:`yield` expression after resuming depends on the method which resumed
-the execution.
+the execution. If :meth:`__next__` is used (typically via either a
+:keyword:`for` or the :func:`next` builtin) then the result is :const:`None`,
+otherwise, if :meth:`send` is used, then the result will be the value passed
+in to that method.
 
 .. index:: single: coroutine
 
@@ -346,11 +350,31 @@ suspended.  The only difference is that a generator function cannot control
 where should the execution continue after it yields; the control is always
 transferred to the generator's caller.
 
-The :keyword:`yield` statement is allowed in the :keyword:`try` clause of a
+:keyword:`yield` expressions are allowed in the :keyword:`try` clause of a
 :keyword:`try` ...  :keyword:`finally` construct.  If the generator is not
 resumed before it is finalized (by reaching a zero reference count or by being
 garbage collected), the generator-iterator's :meth:`close` method will be
 called, allowing any pending :keyword:`finally` clauses to execute.
+
+When ``yield from <expr>`` is used, it treats the supplied expression as
+a subiterator. All values produced by that subiterator are passed directly
+to the caller of the current generator's methods. Any values passed in with
+:meth:`send` and any exceptions passed in with :meth:`throw` are passed to
+the underlying iterator if it has the appropriate methods. If this is not the
+case, then :meth:`send` will raise :exc:`AttributeError` or :exc:`TypeError`,
+while :meth:`throw` will just raise the passed in exception immediately.
+
+When the underlying iterator is complete, the :attr:`~StopIteration.value`
+attribute of the raised :exc:`StopIteration` instance becomes the value of
+the yield expression. It can be either set explicitly when raising
+:exc:`StopIteration`, or automatically when the sub-iterator is a generator
+(by returning a value from the sub-generator).
+
+   .. versionchanged:: 3.3
+      Added ``yield from <expr>`` to delegate control flow to a subiterator
+
+The parentheses can be omitted when the :keyword:`yield` expression is the
+sole expression on the right hand side of an assignment statement.
 
 .. index:: object: generator
 
@@ -415,6 +439,12 @@ is already executing raises a :exc:`ValueError` exception.
    other exception, it is propagated to the caller.  :meth:`close` does nothing
    if the generator has already exited due to an exception or normal exit.
 
+
+.. index:: single: yield; examples
+
+Examples
+^^^^^^^^
+
 Here is a simple example that demonstrates the behavior of generators and
 generator functions::
 
@@ -442,6 +472,9 @@ generator functions::
    >>> generator.close()
    Don't forget to clean up when 'close()' is called.
 
+For examples using ``yield from``, see :ref:`pep-380` in "What's New in
+Python."
+
 
 .. seealso::
 
@@ -451,6 +484,10 @@ generator functions::
    :pep:`0342` - Coroutines via Enhanced Generators
       The proposal to enhance the API and syntax of generators, making them
       usable as simple coroutines.
+
+   :pep:`0380` - Syntax for Delegating to a Subgenerator
+      The proposal to introduce the :token:`yield_from` syntax, making delegation
+      to sub-generators easy.
 
 
 .. _primaries:
