@@ -184,7 +184,8 @@ static void sha1_compress(struct sha1_state *sha1, unsigned char *buf)
    Initialize the hash state
    @param sha1   The hash state you wish to initialize
 */
-void sha1_init(struct sha1_state *sha1)
+static void
+sha1_init(struct sha1_state *sha1)
 {
    assert(sha1 != NULL);
    sha1->state[0] = 0x67452301UL;
@@ -202,7 +203,8 @@ void sha1_init(struct sha1_state *sha1)
    @param in     The data to hash
    @param inlen  The length of the data (octets)
 */
-void sha1_process(struct sha1_state *sha1,
+static void
+sha1_process(struct sha1_state *sha1,
                   const unsigned char *in, Py_ssize_t inlen)
 {
     Py_ssize_t n;
@@ -218,7 +220,7 @@ void sha1_process(struct sha1_state *sha1,
            in             += SHA1_BLOCKSIZE;
            inlen          -= SHA1_BLOCKSIZE;
         } else {
-           n = MIN(inlen, (SHA1_BLOCKSIZE - sha1->curlen));
+           n = MIN(inlen, (Py_ssize_t)(SHA1_BLOCKSIZE - sha1->curlen));
            memcpy(sha1->buf + sha1->curlen, in, (size_t)n);
            sha1->curlen   += n;
            in             += n;
@@ -237,7 +239,8 @@ void sha1_process(struct sha1_state *sha1,
    @param sha1  The hash state
    @param out [out] The destination of the hash (20 bytes)
 */
-void sha1_done(struct sha1_state *sha1, unsigned char *out)
+static void
+sha1_done(struct sha1_state *sha1, unsigned char *out)
 {
     int i;
 
@@ -352,7 +355,7 @@ SHA1_hexdigest(SHA1object *self, PyObject *unused)
     unsigned char digest[SHA1_DIGESTSIZE];
     struct sha1_state temp;
     PyObject *retval;
-    Py_UNICODE *hex_digest;
+    Py_UCS1 *hex_digest;
     int i, j;
 
     /* Get the raw (binary) digest value */
@@ -360,25 +363,20 @@ SHA1_hexdigest(SHA1object *self, PyObject *unused)
     sha1_done(&temp, digest);
 
     /* Create a new string */
-    retval = PyUnicode_FromStringAndSize(NULL, SHA1_DIGESTSIZE * 2);
+    retval = PyUnicode_New(SHA1_DIGESTSIZE * 2, 127);
     if (!retval)
             return NULL;
-    hex_digest = PyUnicode_AS_UNICODE(retval);
-    if (!hex_digest) {
-            Py_DECREF(retval);
-            return NULL;
-    }
+    hex_digest = PyUnicode_1BYTE_DATA(retval);
 
     /* Make hex version of the digest */
     for(i=j=0; i<SHA1_DIGESTSIZE; i++) {
-        char c;
+        unsigned char c;
         c = (digest[i] >> 4) & 0xf;
-        c = (c>9) ? c+'a'-10 : c + '0';
-        hex_digest[j++] = c;
+        hex_digest[j++] = Py_hexdigits[c];
         c = (digest[i] & 0xf);
-        c = (c>9) ? c+'a'-10 : c + '0';
-        hex_digest[j++] = c;
+        hex_digest[j++] = Py_hexdigits[c];
     }
+    assert(_PyUnicode_CheckConsistency(retval, 1));
     return retval;
 }
 
