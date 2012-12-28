@@ -13,6 +13,15 @@ static int numfree = 0;
 #define PyCFunction_MAXFREELIST 256
 #endif
 
+/* undefine macro trampoline to PyCFunction_NewEx */
+#undef PyCFunction_New
+
+PyObject *
+PyCFunction_New(PyMethodDef *ml, PyObject *self)
+{
+    return PyCFunction_NewEx(ml, self, NULL);
+}
+
 PyObject *
 PyCFunction_NewEx(PyMethodDef *ml, PyObject *self, PyObject *module)
 {
@@ -345,18 +354,4 @@ _PyCFunction_DebugMallocStats(FILE *out)
     _PyDebugAllocatorStats(out,
                            "free PyCFunction",
                            numfree, sizeof(PyCFunction));
-}
-
-/* PyCFunction_New() is now just a macro that calls PyCFunction_NewEx(),
-   but it's part of the API so we need to keep a function around that
-   existing C extensions can call.
-*/
-
-#undef PyCFunction_New
-PyAPI_FUNC(PyObject *) PyCFunction_New(PyMethodDef *, PyObject *);
-
-PyObject *
-PyCFunction_New(PyMethodDef *ml, PyObject *self)
-{
-    return PyCFunction_NewEx(ml, self, NULL);
 }
