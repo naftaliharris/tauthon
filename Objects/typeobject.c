@@ -1933,7 +1933,7 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
     return res;
 }
 
-long
+unsigned long
 PyType_GetFlags(PyTypeObject *type)
 {
     return type->tp_flags;
@@ -3654,16 +3654,9 @@ object_format(PyObject *self, PyObject *args)
         /* Issue 7994: If we're converting to a string, we
            should reject format specifications */
         if (PyUnicode_GET_LENGTH(format_spec) > 0) {
-            if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "object.__format__ with a non-empty format "
-                             "string is deprecated", 1) < 0) {
-              goto done;
-            }
-            /* Eventually this will become an error:
-               PyErr_Format(PyExc_TypeError,
+            PyErr_SetString(PyExc_TypeError,
                "non-empty format string passed to object.__format__");
-               goto done;
-            */
+            goto done;
         }
 
         result = PyObject_Format(self_as_str, format_spec);
@@ -3818,7 +3811,7 @@ add_methods(PyTypeObject *type, PyMethodDef *meth)
             descr = PyDescr_NewClassMethod(type, meth);
         }
         else if (meth->ml_flags & METH_STATIC) {
-            PyObject *cfunc = PyCFunction_New(meth, (PyObject*)type);
+          PyObject *cfunc = PyCFunction_NewEx(meth, (PyObject*)type, NULL);
             if (cfunc == NULL)
                 return -1;
             descr = PyStaticMethod_New(cfunc);
@@ -4288,13 +4281,11 @@ PyType_Ready(PyTypeObject *type)
     /* Warn for a type that implements tp_compare (now known as
        tp_reserved) but not tp_richcompare. */
     if (type->tp_reserved && !type->tp_richcompare) {
-        int error;
-        error = PyErr_WarnFormat(PyExc_DeprecationWarning, 1,
+        PyErr_Format(PyExc_TypeError,
             "Type %.100s defines tp_reserved (formerly tp_compare) "
             "but not tp_richcompare. Comparisons may not behave as intended.",
             type->tp_name);
-        if (error == -1)
-            goto error;
+        goto error;
     }
 
     /* All done -- set the ready flag */
@@ -4888,7 +4879,7 @@ add_tp_new_wrapper(PyTypeObject *type)
 
     if (_PyDict_GetItemId(type->tp_dict, &PyId___new__) != NULL)
         return 0;
-    func = PyCFunction_New(tp_new_methoddef, (PyObject *)type);
+    func = PyCFunction_NewEx(tp_new_methoddef, (PyObject *)type, NULL);
     if (func == NULL)
         return -1;
     if (_PyDict_SetItemId(type->tp_dict, &PyId___new__, func)) {
