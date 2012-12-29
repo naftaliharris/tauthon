@@ -321,7 +321,7 @@ parameters to be passed in as a tuple acceptable for parsing via
 
 The :const:`METH_KEYWORDS` bit may be set in the third field if keyword
 arguments should be passed to the function.  In this case, the C function should
-accept a third ``PyObject \*`` parameter which will be a dictionary of keywords.
+accept a third ``PyObject *`` parameter which will be a dictionary of keywords.
 Use :c:func:`PyArg_ParseTupleAndKeywords` to parse the arguments to such a
 function.
 
@@ -383,9 +383,6 @@ optionally followed by an import of the module::
           import can be deferred until the embedded script
           imports it. */
        PyImport_ImportModule("spam");
-
-An example may be found in the file :file:`Demo/embed/demo.c` in the Python
-source distribution.
 
 .. note::
 
