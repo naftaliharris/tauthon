@@ -519,6 +519,11 @@ buffered_close(buffered *self, PyObject *args)
 
     res = PyObject_CallMethodObjArgs(self->raw, _PyIO_str_close, NULL);
 
+    if (self->buffer) {
+        PyMem_Free(self->buffer);
+        self->buffer = NULL;
+    }
+
     if (exc != NULL) {
         if (res != NULL) {
             Py_CLEAR(res);
