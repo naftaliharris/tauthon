@@ -190,6 +190,86 @@ class GenericTest(unittest.TestCase):
             support.unlink(support.TESTFN)
             safe_rmdir(support.TESTFN)
 
+    @staticmethod
+    def _create_file(filename):
+        with open(filename, 'wb') as f:
+            f.write(b'foo')
+
+    def test_samefile(self):
+        try:
+            test_fn = support.TESTFN + "1"
+            self._create_file(test_fn)
+            self.assertTrue(self.pathmodule.samefile(test_fn, test_fn))
+            self.assertRaises(TypeError, self.pathmodule.samefile)
+        finally:
+            os.remove(test_fn)
+
+    @support.skip_unless_symlink
+    def test_samefile_on_symlink(self):
+        self._test_samefile_on_link_func(os.symlink)
+
+    def test_samefile_on_link(self):
+        self._test_samefile_on_link_func(os.link)
+
+    def _test_samefile_on_link_func(self, func):
+        try:
+            test_fn1 = support.TESTFN + "1"
+            test_fn2 = support.TESTFN + "2"
+            self._create_file(test_fn1)
+
+            func(test_fn1, test_fn2)
+            self.assertTrue(self.pathmodule.samefile(test_fn1, test_fn2))
+            os.remove(test_fn2)
+
+            self._create_file(test_fn2)
+            self.assertFalse(self.pathmodule.samefile(test_fn1, test_fn2))
+        finally:
+            os.remove(test_fn1)
+            os.remove(test_fn2)
+
+    def test_samestat(self):
+        try:
+            test_fn = support.TESTFN + "1"
+            self._create_file(test_fn)
+            test_fns = [test_fn]*2
+            stats = map(os.stat, test_fns)
+            self.assertTrue(self.pathmodule.samestat(*stats))
+        finally:
+            os.remove(test_fn)
+
+    @support.skip_unless_symlink
+    def test_samestat_on_symlink(self):
+        self._test_samestat_on_link_func(os.symlink)
+
+    def test_samestat_on_link(self):
+        self._test_samestat_on_link_func(os.link)
+
+    def _test_samestat_on_link_func(self, func):
+        try:
+            test_fn1 = support.TESTFN + "1"
+            test_fn2 = support.TESTFN + "2"
+            self._create_file(test_fn1)
+            test_fns = (test_fn1, test_fn2)
+            func(*test_fns)
+            stats = map(os.stat, test_fns)
+            self.assertTrue(self.pathmodule.samestat(*stats))
+            os.remove(test_fn2)
+
+            self._create_file(test_fn2)
+            stats = map(os.stat, test_fns)
+            self.assertFalse(self.pathmodule.samestat(*stats))
+
+            self.assertRaises(TypeError, self.pathmodule.samestat)
+        finally:
+            os.remove(test_fn1)
+            os.remove(test_fn2)
+
+    def test_sameopenfile(self):
+        fname = support.TESTFN + "1"
+        with open(fname, "wb") as a, open(fname, "wb") as b:
+            self.assertTrue(self.pathmodule.sameopenfile(
+                                a.fileno(), b.fileno()))
+
 
 # Following TestCase is not supposed to be run from test_genericpath.
 # It is inherited by other test modules (macpath, ntpath, posixpath).
@@ -308,19 +388,19 @@ class CommonTest(GenericTest):
                 for path in ('', 'fuu', 'f\xf9\xf9', '/fuu', 'U:\\'):
                     self.assertIsInstance(abspath(path), str)
 
-    @unittest.skipIf(sys.platform == 'darwin',
-        "Mac OS X denies the creation of a directory with an invalid utf8 name")
     def test_nonascii_abspath(self):
-        name = b'\xe7w\xf0'
-        if sys.platform == 'win32':
-            try:
-                os.fsdecode(name)
-            except UnicodeDecodeError:
-                self.skipTest("the filename %a is not decodable "
-                              "from the ANSI code page %s"
-                              % (name, sys.getfilesystemencoding()))
+        if (support.TESTFN_UNDECODABLE
+        # Mac OS X denies the creation of a directory with an invalid
+        # UTF-8 name. Windows allows to create a directory with an
+        # arbitrary bytes name, but fails to enter this directory
+        # (when the bytes name is used).
+        and sys.platform not in ('win32', 'darwin')):
+            name = support.TESTFN_UNDECODABLE
+        elif support.TESTFN_NONASCII:
+            name = support.TESTFN_NONASCII
+        else:
+            self.skipTest("need support.TESTFN_NONASCII")
 
-        # Test non-ASCII, non-UTF8 bytes in the path.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             with support.temp_cwd(name):
