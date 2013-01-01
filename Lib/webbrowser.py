@@ -418,11 +418,11 @@ class Grail(BaseBrowser):
             # need to PING each one until we find one that's live
             try:
                 s.connect(fn)
-            except socket.error:
+            except OSError:
                 # no good; attempt to clean it out, but don't fail:
                 try:
                     os.unlink(fn)
-                except IOError:
+                except OSError:
                     pass
             else:
                 return s
@@ -534,7 +534,7 @@ if sys.platform[:3] == "win":
         def open(self, url, new=0, autoraise=True):
             try:
                 os.startfile(url)
-            except WindowsError:
+            except OSError:
                 # [Error 22] No application is associated with the specified
                 # file for this operation: '<URL>'
                 return False
@@ -636,17 +636,6 @@ if sys.platform == 'darwin':
     register("safari", None, MacOSXOSAScript('safari'), -1)
     register("firefox", None, MacOSXOSAScript('firefox'), -1)
     register("MacOSX", None, MacOSXOSAScript('default'), -1)
-
-
-#
-# Platform support for OS/2
-#
-
-if sys.platform[:3] == "os2" and _iscommand("netscape"):
-    _tryorder = []
-    _browsers = {}
-    register("os2netscape", None,
-             GenericBrowser(["start", "netscape", "%s"]), -1)
 
 
 # OK, now that we know what the default preference orders for each
