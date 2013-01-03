@@ -300,25 +300,25 @@ parser_richcompare(PyObject *left, PyObject *right, int op)
 
     /* Convert return value to a Boolean */
     switch (op) {
-    case Py_EQ:
+      case Py_EQ:
         v = TEST_COND(result == 0);
         break;
-    case Py_NE:
+      case Py_NE:
         v = TEST_COND(result != 0);
         break;
-    case Py_LE:
+      case Py_LE:
         v = TEST_COND(result <= 0);
         break;
-    case Py_GE:
+      case Py_GE:
         v = TEST_COND(result >= 0);
         break;
-    case Py_LT:
+      case Py_LT:
         v = TEST_COND(result < 0);
         break;
-    case Py_GT:
+      case Py_GT:
         v = TEST_COND(result > 0);
         break;
-    default:
+      default:
         PyErr_BadArgument();
         return NULL;
     }
@@ -382,40 +382,28 @@ parser_sizeof(PyST_Object *st, void *unused)
 static PyObject*
 parser_st2tuple(PyST_Object *self, PyObject *args, PyObject *kw)
 {
-    PyObject *line_option = 0;
-    PyObject *col_option = 0;
+    int line_info = 0;
+    int col_info = 0;
     PyObject *res = 0;
     int ok;
 
     static char *keywords[] = {"st", "line_info", "col_info", NULL};
 
     if (self == NULL || PyModule_Check(self)) {
-        ok = PyArg_ParseTupleAndKeywords(args, kw, "O!|OO:st2tuple", keywords,
-                                         &PyST_Type, &self, &line_option,
-                                         &col_option);
+        ok = PyArg_ParseTupleAndKeywords(args, kw, "O!|pp:st2tuple", keywords,
+                                         &PyST_Type, &self, &line_info,
+                                         &col_info);
     }
     else
-        ok = PyArg_ParseTupleAndKeywords(args, kw, "|OO:totuple", &keywords[1],
-                                         &line_option, &col_option);
+        ok = PyArg_ParseTupleAndKeywords(args, kw, "|pp:totuple", &keywords[1],
+                                         &line_info, &col_info);
     if (ok != 0) {
-        int lineno = 0;
-        int col_offset = 0;
-        if (line_option != NULL) {
-            lineno = PyObject_IsTrue(line_option);
-            if (lineno < 0)
-                return NULL;
-        }
-        if (col_option != NULL) {
-            col_offset = PyObject_IsTrue(col_option);
-            if (col_offset < 0)
-                return NULL;
-        }
         /*
          *  Convert ST into a tuple representation.  Use Guido's function,
          *  since it's known to work already.
          */
         res = node2tuple(((PyST_Object*)self)->st_node,
-                         PyTuple_New, PyTuple_SetItem, lineno, col_offset);
+                         PyTuple_New, PyTuple_SetItem, line_info, col_info);
     }
     return (res);
 }
@@ -430,39 +418,27 @@ parser_st2tuple(PyST_Object *self, PyObject *args, PyObject *kw)
 static PyObject*
 parser_st2list(PyST_Object *self, PyObject *args, PyObject *kw)
 {
-    PyObject *line_option = 0;
-    PyObject *col_option = 0;
+    int line_info = 0;
+    int col_info = 0;
     PyObject *res = 0;
     int ok;
 
     static char *keywords[] = {"st", "line_info", "col_info", NULL};
 
     if (self == NULL || PyModule_Check(self))
-        ok = PyArg_ParseTupleAndKeywords(args, kw, "O!|OO:st2list", keywords,
-                                         &PyST_Type, &self, &line_option,
-                                         &col_option);
+        ok = PyArg_ParseTupleAndKeywords(args, kw, "O!|pp:st2list", keywords,
+                                         &PyST_Type, &self, &line_info,
+                                         &col_info);
     else
-        ok = PyArg_ParseTupleAndKeywords(args, kw, "|OO:tolist", &keywords[1],
-                                         &line_option, &col_option);
+        ok = PyArg_ParseTupleAndKeywords(args, kw, "|pp:tolist", &keywords[1],
+                                         &line_info, &col_info);
     if (ok) {
-        int lineno = 0;
-        int col_offset = 0;
-        if (line_option != 0) {
-            lineno = PyObject_IsTrue(line_option);
-            if (lineno < 0)
-                return NULL;
-        }
-        if (col_option != 0) {
-            col_offset = PyObject_IsTrue(col_option);
-            if (col_offset < 0)
-                return NULL;
-        }
         /*
          *  Convert ST into a tuple representation.  Use Guido's function,
          *  since it's known to work already.
          */
         res = node2tuple(self->st_node,
-                         PyList_New, PyList_SetItem, lineno, col_offset);
+                         PyList_New, PyList_SetItem, line_info, col_info);
     }
     return (res);
 }
@@ -600,8 +576,10 @@ parser_do_parse(PyObject *args, PyObject *kw, char *argspec, int type)
             if (res)
                 ((PyST_Object *)res)->st_flags.cf_flags = flags & PyCF_MASK;
         }
-        else
+        else {
             PyParser_SetError(&err);
+        }
+        PyParser_ClearError(&err);
     }
     return (res);
 }
@@ -995,6 +973,7 @@ VALIDATER(comp_iter);           VALIDATER(comp_if);
 VALIDATER(testlist_comp);       VALIDATER(yield_expr);
 VALIDATER(or_test);
 VALIDATER(test_nocond);         VALIDATER(lambdef_nocond);
+VALIDATER(yield_arg);
 
 #undef VALIDATER
 
@@ -1655,22 +1634,49 @@ validate_raise_stmt(node *tree)
 }
 
 
-/* yield_expr: 'yield' [testlist]
+/* yield_expr: 'yield' [yield_arg]
  */
 static int
 validate_yield_expr(node *tree)
 {
     int nch = NCH(tree);
-    int res = (validate_ntype(tree, yield_expr)
-               && ((nch == 1) || (nch == 2))
-               && validate_name(CHILD(tree, 0), "yield"));
-
-    if (res && (nch == 2))
-        res = validate_testlist(CHILD(tree, 1));
-
-    return (res);
+    if (nch < 1 || nch > 2)
+        return 0;
+    if (!validate_ntype(tree, yield_expr))
+        return 0;
+    if (!validate_name(CHILD(tree, 0), "yield"))
+        return 0;
+    if (nch == 2) {
+        if (!validate_yield_arg(CHILD(tree, 1)))
+            return 0;
+    }
+    return 1;
 }
 
+/* yield_arg: 'from' test | testlist
+ */
+static int
+validate_yield_arg(node *tree)
+{
+    int nch = NCH(tree);
+    if (!validate_ntype(tree, yield_arg))
+        return 0;
+    switch (nch) {
+      case 1:
+        if (!validate_testlist(CHILD(tree, nch - 1)))
+            return 0;
+        break;
+      case 2:
+        if (!validate_name(CHILD(tree, 0), "from"))
+            return 0;
+        if (!validate_test(CHILD(tree, 1)))
+            return 0;
+        break;
+      default:
+        return 0;
+    }
+    return 1;
+}
 
 /* yield_stmt: yield_expr
  */
@@ -2165,16 +2171,16 @@ validate_comp_op(node *tree)
          */
         tree = CHILD(tree, 0);
         switch (TYPE(tree)) {
-            case LESS:
-            case GREATER:
-            case EQEQUAL:
-            case EQUAL:
-            case LESSEQUAL:
-            case GREATEREQUAL:
-            case NOTEQUAL:
+          case LESS:
+          case GREATER:
+          case EQEQUAL:
+          case EQUAL:
+          case LESSEQUAL:
+          case GREATEREQUAL:
+          case NOTEQUAL:
               res = 1;
               break;
-            case NAME:
+          case NAME:
               res = ((strcmp(STR(tree), "in") == 0)
                      || (strcmp(STR(tree), "is") == 0));
               if (!res) {
@@ -2719,9 +2725,9 @@ validate_argument(node *tree)
 {
     int nch = NCH(tree);
     int res = (validate_ntype(tree, argument)
-               && ((nch == 1) || (nch == 2) || (nch == 3))
-               && validate_test(CHILD(tree, 0)));
-
+               && ((nch == 1) || (nch == 2) || (nch == 3)));
+    if (res) 
+        res = validate_test(CHILD(tree, 0));
     if (res && (nch == 2))
         res = validate_comp_for(CHILD(tree, 1));
     else if (res && (nch == 3))
@@ -3356,10 +3362,13 @@ PyInit_parser(void)
     copyreg = PyImport_ImportModuleNoBlock("copyreg");
     if (copyreg != NULL) {
         PyObject *func, *pickler;
+        _Py_IDENTIFIER(pickle);
+        _Py_IDENTIFIER(sequence2st);
+        _Py_IDENTIFIER(_pickler);
 
-        func = PyObject_GetAttrString(copyreg, "pickle");
-        pickle_constructor = PyObject_GetAttrString(module, "sequence2st");
-        pickler = PyObject_GetAttrString(module, "_pickler");
+        func = _PyObject_GetAttrId(copyreg, &PyId_pickle);
+        pickle_constructor = _PyObject_GetAttrId(module, &PyId_sequence2st);
+        pickler = _PyObject_GetAttrId(module, &PyId__pickler);
         Py_XINCREF(pickle_constructor);
         if ((func != NULL) && (pickle_constructor != NULL)
             && (pickler != NULL)) {
