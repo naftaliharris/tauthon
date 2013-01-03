@@ -213,6 +213,23 @@ class CmdLineTest(unittest.TestCase):
         self.assertIn(path1.encode('ascii'), out)
         self.assertIn(path2.encode('ascii'), out)
 
+    def test_empty_PYTHONPATH_issue16309(self):
+        # On Posix, it is documented that setting PATH to the
+        # empty string is equivalent to not setting PATH at all,
+        # which is an exception to the rule that in a string like
+        # "/bin::/usr/bin" the empty string in the middle gets
+        # interpreted as '.'
+        code = """if 1:
+            import sys
+            path = ":".join(sys.path)
+            path = path.encode("ascii", "backslashreplace")
+            sys.stdout.buffer.write(path)"""
+        rc1, out1, err1 = assert_python_ok('-c', code, PYTHONPATH="")
+        rc2, out2, err2 = assert_python_ok('-c', code)
+        # regarding to Posix specification, outputs should be equal
+        # for empty and unset PYTHONPATH
+        self.assertEqual(out1, out2)
+
     def test_displayhook_unencodable(self):
         for encoding in ('ascii', 'latin-1', 'utf-8'):
             env = os.environ.copy()
@@ -290,7 +307,7 @@ class CmdLineTest(unittest.TestCase):
         rc, out, err = assert_python_ok('-c', code)
         self.assertEqual(b'', out)
         self.assertRegex(err.decode('ascii', 'ignore'),
-                         'Exception OSError: .* ignored')
+                         'Exception ignored in.*\nOSError: .*')
 
     def test_closed_stdout(self):
         # Issue #13444: if stdout has been explicitly closed, we should
