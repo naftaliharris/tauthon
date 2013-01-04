@@ -22,9 +22,6 @@ import email.generator
 import io
 import contextlib
 try:
-    if sys.platform == 'os2emx':
-        # OS/2 EMX fcntl() not adequate
-        raise ImportError
     import fcntl
 except ImportError:
     fcntl = None
@@ -588,7 +585,7 @@ class _singlefileMailbox(Mailbox):
         Mailbox.__init__(self, path, factory, create)
         try:
             f = open(self._path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 if create:
                     f = open(self._path, 'wb+')
@@ -631,8 +628,7 @@ class _singlefileMailbox(Mailbox):
     def iterkeys(self):
         """Return an iterator over keys."""
         self._lookup()
-        for key in self._toc.keys():
-            yield key
+        yield from self._toc.keys()
 
     def __contains__(self, key):
         """Return True if the keyed message exists, False otherwise."""
@@ -711,8 +707,7 @@ class _singlefileMailbox(Mailbox):
         try:
             os.rename(new_file.name, self._path)
         except OSError as e:
-            if e.errno == errno.EEXIST or \
-              (os.name == 'os2' and e.errno == errno.EACCES):
+            if e.errno == errno.EEXIST:
                 os.remove(self._path)
                 os.rename(new_file.name, self._path)
             else:
@@ -993,7 +988,7 @@ class MH(Mailbox):
         path = os.path.join(self._path, str(key))
         try:
             f = open(path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1007,7 +1002,7 @@ class MH(Mailbox):
         path = os.path.join(self._path, str(key))
         try:
             f = open(path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1033,7 +1028,7 @@ class MH(Mailbox):
                 f = open(os.path.join(self._path, str(key)), 'rb+')
             else:
                 f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1060,7 +1055,7 @@ class MH(Mailbox):
                 f = open(os.path.join(self._path, str(key)), 'rb+')
             else:
                 f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1080,7 +1075,7 @@ class MH(Mailbox):
         """Return a file-like representation or raise a KeyError."""
         try:
             f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -2073,7 +2068,7 @@ def _lock_file(f, dotlock=True):
         if fcntl:
             try:
                 fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except IOError as e:
+            except OSError as e:
                 if e.errno in (errno.EAGAIN, errno.EACCES, errno.EROFS):
                     raise ExternalClashError('lockf: lock unavailable: %s' %
                                              f.name)
@@ -2083,7 +2078,7 @@ def _lock_file(f, dotlock=True):
             try:
                 pre_lock = _create_temporary(f.name + '.lock')
                 pre_lock.close()
-            except IOError as e:
+            except OSError as e:
                 if e.errno in (errno.EACCES, errno.EROFS):
                     return  # Without write access, just skip dotlocking.
                 else:
@@ -2097,8 +2092,7 @@ def _lock_file(f, dotlock=True):
                     os.rename(pre_lock.name, f.name + '.lock')
                     dotlock_done = True
             except OSError as e:
-                if e.errno == errno.EEXIST or \
-                  (os.name == 'os2' and e.errno == errno.EACCES):
+                if e.errno == errno.EEXIST:
                     os.remove(pre_lock.name)
                     raise ExternalClashError('dot lock unavailable: %s' %
                                              f.name)
