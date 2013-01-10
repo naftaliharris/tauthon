@@ -47,11 +47,6 @@ extern void bzero(void *, int);
 #include <sys/types.h>
 #endif
 
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#include <sys/time.h>
-#include <utils.h>
-#endif
-
 #ifdef MS_WINDOWS
 #  define WIN32_LEAN_AND_MEAN
 #  include <winsock.h>
@@ -1061,9 +1056,14 @@ static int select_have_broken_poll(void)
 #include <sys/epoll.h>
 #endif
 
+/* default maximum number of events returned by epoll_wait() */
+#define EPOLL_DEFAULT_MAXEVENTS (FD_SETSIZE)
+
 typedef struct {
     PyObject_HEAD
-    SOCKET epfd;                        /* epoll control file descriptor */
+    SOCKET epfd;                    /* epoll control file descriptor */
+    int maxevents;                  /* maximum number of epoll events */
+    struct epoll_event *evs;        /* epoll events buffer */
 } pyEpoll_Object;
 
 static PyTypeObject pyEpoll_Type;
@@ -1119,6 +1119,15 @@ newPyEpoll_Object(PyTypeObject *type, int sizehint, int flags, SOCKET fd)
         PyErr_SetFromErrno(PyExc_OSError);
         return NULL;
     }
+
+    self->maxevents = EPOLL_DEFAULT_MAXEVENTS;
+    self->evs = PyMem_New(struct epoll_event, self->maxevents);
+    if (!self->evs) {
+        Py_DECREF(self);
+        PyErr_NoMemory();
+        return NULL;
+    }
+ 
     return (PyObject *)self;
 }
 
@@ -1145,6 +1154,10 @@ static void
 pyepoll_dealloc(pyEpoll_Object *self)
 {
     (void)pyepoll_internal_close(self);
+    if (self->evs) {
+        PyMem_Free(self->evs);
+        self->evs = NULL;
+    }
     Py_TYPE(self)->tp_free(self);
 }
 
@@ -1325,7 +1338,6 @@ pyepoll_poll(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
     int maxevents = -1;
     int nfds, i;
     PyObject *elist = NULL, *etuple = NULL;
-    struct epoll_event *evs = NULL;
     static char *kwlist[] = {"timeout", "maxevents", NULL};
 
     if (self->epfd < 0)
@@ -1349,24 +1361,27 @@ pyepoll_poll(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
     }
 
     if (maxevents == -1) {
-        maxevents = FD_SETSIZE-1;
-    }
-    else if (maxevents < 1) {
+        maxevents = EPOLL_DEFAULT_MAXEVENTS;
+    } else if (maxevents < 1) {
         PyErr_Format(PyExc_ValueError,
                      "maxevents must be greater than 0, got %d",
                      maxevents);
         return NULL;
     }
+    if (maxevents > self->maxevents) {
+        struct epoll_event *orig_evs = self->evs;
 
-    evs = PyMem_New(struct epoll_event, maxevents);
-    if (evs == NULL) {
-        Py_DECREF(self);
-        PyErr_NoMemory();
-        return NULL;
+        PyMem_RESIZE(self->evs, struct epoll_event, maxevents);
+        if (!self->evs) {
+            self->evs = orig_evs;
+            PyErr_NoMemory();
+            return NULL;
+        }
+        self->maxevents = maxevents;
     }
 
     Py_BEGIN_ALLOW_THREADS
-    nfds = epoll_wait(self->epfd, evs, maxevents, timeout);
+    nfds = epoll_wait(self->epfd, self->evs, self->maxevents, timeout);
     Py_END_ALLOW_THREADS
     if (nfds < 0) {
         PyErr_SetFromErrno(PyExc_OSError);
@@ -1379,7 +1394,7 @@ pyepoll_poll(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
     }
 
     for (i = 0; i < nfds; i++) {
-        etuple = Py_BuildValue("iI", evs[i].data.fd, evs[i].events);
+        etuple = Py_BuildValue("iI", self->evs[i].data.fd, self->evs[i].events);
         if (etuple == NULL) {
             Py_CLEAR(elist);
             goto error;
@@ -1388,7 +1403,6 @@ pyepoll_poll(pyEpoll_Object *self, PyObject *args, PyObject *kwds)
     }
 
     error:
-    PyMem_Free(evs);
     return elist;
 }
 
@@ -1398,6 +1412,24 @@ PyDoc_STRVAR(pyepoll_poll_doc,
 Wait for events on the epoll file descriptor for a maximum time of timeout\n\
 in seconds (as float). -1 makes poll wait indefinitely.\n\
 Up to maxevents are returned to the caller.");
+
+static PyObject *
+pyepoll_enter(pyEpoll_Object *self, PyObject *args)
+{
+    if (self->epfd < 0)
+        return pyepoll_err_closed();
+
+    Py_INCREF(self);
+    return (PyObject *)self;
+}
+
+static PyObject *
+pyepoll_exit(PyObject *self, PyObject *args)
+{
+    _Py_IDENTIFIER(close);
+
+    return _PyObject_CallMethodId(self, &PyId_close, NULL);
+}
 
 static PyMethodDef pyepoll_methods[] = {
     {"fromfd",          (PyCFunction)pyepoll_fromfd,
@@ -1414,6 +1446,10 @@ static PyMethodDef pyepoll_methods[] = {
      METH_VARARGS | METH_KEYWORDS,      pyepoll_unregister_doc},
     {"poll",            (PyCFunction)pyepoll_poll,
      METH_VARARGS | METH_KEYWORDS,      pyepoll_poll_doc},
+    {"__enter__",           (PyCFunction)pyepoll_enter,     METH_NOARGS,
+     NULL},
+    {"__exit__",           (PyCFunction)pyepoll_exit,     METH_VARARGS,
+     NULL},
     {NULL,      NULL},
 };
 

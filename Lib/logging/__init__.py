@@ -67,7 +67,7 @@ else: #pragma: no cover
         """Return the frame object for the caller's stack frame."""
         try:
             raise Exception
-        except:
+        except Exception:
             return sys.exc_info()[2].tb_frame.f_back
 
 # _srcfile is only used in conjunction with sys._getframe().
@@ -879,16 +879,27 @@ class Handler(Filterer):
         The record which was being processed is passed in to this method.
         """
         if raiseExceptions and sys.stderr:  # see issue 13807
-            ei = sys.exc_info()
+            t, v, tb = sys.exc_info()
             try:
-                traceback.print_exception(ei[0], ei[1], ei[2],
-                                          None, sys.stderr)
-                sys.stderr.write('Logged from file %s, line %s\n' % (
-                                 record.filename, record.lineno))
-            except IOError: #pragma: no cover
+                sys.stderr.write('--- Logging error ---\n')
+                traceback.print_exception(t, v, tb, None, sys.stderr)
+                sys.stderr.write('Call stack:\n')
+                # Walk the stack frame up until we're out of logging,
+                # so as to print the calling context.
+                frame = tb.tb_frame
+                while (frame and os.path.dirname(frame.f_code.co_filename) ==
+                       __path__[0]):
+                    frame = frame.f_back
+                if frame:
+                    traceback.print_stack(frame, file=sys.stderr)
+                else:
+                    # couldn't find the right stack frame, for some reason
+                    sys.stderr.write('Logged from file %s, line %s\n' % (
+                                     record.filename, record.lineno))
+            except OSError: #pragma: no cover
                 pass    # see issue 5971
             finally:
-                del ei
+                del t, v, tb
 
 class StreamHandler(Handler):
     """
@@ -938,9 +949,7 @@ class StreamHandler(Handler):
             stream.write(msg)
             stream.write(self.terminator)
             self.flush()
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 class FileHandler(StreamHandler):
@@ -1829,7 +1838,7 @@ def shutdown(handlerList=_handlerList):
                     h.acquire()
                     h.flush()
                     h.close()
-                except (IOError, ValueError):
+                except (OSError, ValueError):
                     # Ignore errors which might be caused
                     # because handlers have been closed but
                     # references to them are still around at
@@ -1837,7 +1846,7 @@ def shutdown(handlerList=_handlerList):
                     pass
                 finally:
                     h.release()
-        except:
+        except: # ignore everything, as we're shutting down
             if raiseExceptions:
                 raise
             #else, swallow
