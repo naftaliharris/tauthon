@@ -110,8 +110,6 @@ def get_python_inc(plat_specific=0, prefix=None):
         return os.path.join(prefix, "include", python_dir)
     elif os.name == "nt":
         return os.path.join(prefix, "include")
-    elif os.name == "os2":
-        return os.path.join(prefix, "Include")
     else:
         raise DistutilsPlatformError(
             "I don't know where Python installs its C header files "
@@ -153,11 +151,6 @@ def get_python_lib(plat_specific=0, standard_lib=0, prefix=None):
                 return prefix
             else:
                 return os.path.join(prefix, "Lib", "site-packages")
-    elif os.name == "os2":
-        if standard_lib:
-            return os.path.join(prefix, "Lib")
-        else:
-            return os.path.join(prefix, "Lib", "site-packages")
     else:
         raise DistutilsPlatformError(
             "I don't know where Python installs its library "
@@ -433,7 +426,7 @@ def _init_posix():
     try:
         filename = get_makefile_filename()
         parse_makefile(filename, g)
-    except IOError as msg:
+    except OSError as msg:
         my_msg = "invalid Python installation: unable to open %s" % filename
         if hasattr(msg, "strerror"):
             my_msg = my_msg + " (%s)" % msg.strerror
@@ -445,7 +438,7 @@ def _init_posix():
         filename = get_config_h_filename()
         with open(filename) as file:
             parse_config_h(file, g)
-    except IOError as msg:
+    except OSError as msg:
         my_msg = "invalid Python installation: unable to open %s" % filename
         if hasattr(msg, "strerror"):
             my_msg = my_msg + " (%s)" % msg.strerror
@@ -487,23 +480,6 @@ def _init_nt():
     g['EXE'] = ".exe"
     g['VERSION'] = get_python_version().replace(".", "")
     g['BINDIR'] = os.path.dirname(os.path.abspath(sys.executable))
-
-    global _config_vars
-    _config_vars = g
-
-
-def _init_os2():
-    """Initialize the module as appropriate for OS/2"""
-    g = {}
-    # set basic install directories
-    g['LIBDEST'] = get_python_lib(plat_specific=0, standard_lib=1)
-    g['BINLIBDEST'] = get_python_lib(plat_specific=1, standard_lib=1)
-
-    # XXX hmmm.. a normal install puts include files here
-    g['INCLUDEPY'] = get_python_inc(plat_specific=0)
-
-    g['SO'] = '.pyd'
-    g['EXE'] = ".exe"
 
     global _config_vars
     _config_vars = g
