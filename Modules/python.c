@@ -43,6 +43,7 @@ main(int argc, char **argv)
     for (i = 0; i < argc; i++) {
         argv_copy[i] = _Py_char2wchar(argv[i], NULL);
         if (!argv_copy[i]) {
+            free(oldloc);
             fprintf(stderr, "Fatal Python error: "
                             "unable to decode the command line argument #%i\n",
                             i + 1);
