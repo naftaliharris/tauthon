@@ -606,8 +606,7 @@ class HelpFormatter(object):
             pass
         else:
             self._indent()
-            for subaction in get_subactions():
-                yield subaction
+            yield from get_subactions()
             self._dedent()
 
     def _split_lines(self, text, width):
@@ -1141,11 +1140,17 @@ class FileType(object):
             same values as the builtin open() function.
         - bufsize -- The file's desired buffer size. Accepts the same values as
             the builtin open() function.
+        - encoding -- The file's encoding. Accepts the same values as the
+            the builtin open() function.
+        - errors -- A string indicating how encoding and decoding errors are to
+            be handled. Accepts the same value as the builtin open() function.
     """
 
-    def __init__(self, mode='r', bufsize=-1):
+    def __init__(self, mode='r', bufsize=-1, encoding=None, errors=None):
         self._mode = mode
         self._bufsize = bufsize
+        self._encoding = encoding
+        self._errors = errors
 
     def __call__(self, string):
         # the special argument "-" means sys.std{in,out}
@@ -1160,14 +1165,18 @@ class FileType(object):
 
         # all other arguments are used as file names
         try:
-            return open(string, self._mode, self._bufsize)
-        except IOError as e:
+            return open(string, self._mode, self._bufsize, self._encoding,
+                        self._errors)
+        except OSError as e:
             message = _("can't open '%s': %s")
             raise ArgumentTypeError(message % (string, e))
 
     def __repr__(self):
         args = self._mode, self._bufsize
-        args_str = ', '.join(repr(arg) for arg in args if arg != -1)
+        kwargs = [('encoding', self._encoding), ('errors', self._errors)]
+        args_str = ', '.join([repr(arg) for arg in args if arg != -1] +
+                             ['%s=%r' % (kw, arg) for kw, arg in kwargs
+                              if arg is not None])
         return '%s(%s)' % (type(self).__name__, args_str)
 
 # ===========================
@@ -2011,7 +2020,7 @@ class ArgumentParser(_AttributeHolder, _ActionsContainer):
                         new_arg_strings.extend(arg_strings)
                     finally:
                         args_file.close()
-                except IOError:
+                except OSError:
                     err = _sys.exc_info()[1]
                     self.error(str(err))
 
