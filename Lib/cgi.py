@@ -80,7 +80,7 @@ def initlog(*allargs):
     if logfile and not logfp:
         try:
             logfp = open(logfile, "a")
-        except IOError:
+        except OSError:
             pass
     if not logfp:
         log = nolog
@@ -949,8 +949,8 @@ def print_directory():
     print("<H3>Current Working Directory:</H3>")
     try:
         pwd = os.getcwd()
-    except os.error as msg:
-        print("os.error:", html.escape(str(msg)))
+    except OSError as msg:
+        print("OSError:", html.escape(str(msg)))
     else:
         print(html.escape(pwd))
     print()
