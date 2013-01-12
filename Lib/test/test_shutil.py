@@ -18,7 +18,8 @@ from shutil import (_make_tarball, _make_zipfile, make_archive,
                     register_archive_format, unregister_archive_format,
                     get_archive_formats, Error, unpack_archive,
                     register_unpack_format, RegistryError,
-                    unregister_unpack_format, get_unpack_formats)
+                    unregister_unpack_format, get_unpack_formats,
+                    SameFileError)
 import tarfile
 import warnings
 
@@ -728,7 +729,7 @@ class TestShutil(unittest.TestCase):
             with open(src, 'w') as f:
                 f.write('cheddar')
             os.link(src, dst)
-            self.assertRaises(shutil.Error, shutil.copyfile, src, dst)
+            self.assertRaises(shutil.SameFileError, shutil.copyfile, src, dst)
             with open(src, 'r') as f:
                 self.assertEqual(f.read(), 'cheddar')
             os.remove(dst)
@@ -748,7 +749,7 @@ class TestShutil(unittest.TestCase):
             # to TESTFN/TESTFN/cheese, while it should point at
             # TESTFN/cheese.
             os.symlink('cheese', dst)
-            self.assertRaises(shutil.Error, shutil.copyfile, src, dst)
+            self.assertRaises(shutil.SameFileError, shutil.copyfile, src, dst)
             with open(src, 'r') as f:
                 self.assertEqual(f.read(), 'cheddar')
             os.remove(dst)
@@ -1255,6 +1256,16 @@ class TestShutil(unittest.TestCase):
         self.assertTrue(os.path.exists(rv))
         self.assertEqual(read_file(src_file), read_file(dst_file))
 
+    def test_copyfile_same_file(self):
+        # copyfile() should raise SameFileError if the source and destination
+        # are the same.
+        src_dir = self.mkdtemp()
+        src_file = os.path.join(src_dir, 'foo')
+        write_file(src_file, 'foo')
+        self.assertRaises(SameFileError, shutil.copyfile, src_file, src_file)
+        # But Error should work too, to stay backward compatible.
+        self.assertRaises(Error, shutil.copyfile, src_file, src_file)
+
     def test_copytree_return_value(self):
         # copytree returns its destination path.
         src_dir = self.mkdtemp()
@@ -1504,7 +1515,7 @@ class TestCopyFile(unittest.TestCase):
             self._exited_with = exc_type, exc_val, exc_tb
             if self._raise_in_exit:
                 self._raised = True
-                raise IOError("Cannot close")
+                raise OSError("Cannot close")
             return self._suppress_at_exit
 
     def tearDown(self):
@@ -1518,12 +1529,12 @@ class TestCopyFile(unittest.TestCase):
     def test_w_source_open_fails(self):
         def _open(filename, mode='r'):
             if filename == 'srcfile':
-                raise IOError('Cannot open "srcfile"')
+                raise OSError('Cannot open "srcfile"')
             assert 0  # shouldn't reach here.
 
         self._set_shutil_open(_open)
 
-        self.assertRaises(IOError, shutil.copyfile, 'srcfile', 'destfile')
+        self.assertRaises(OSError, shutil.copyfile, 'srcfile', 'destfile')
 
     def test_w_dest_open_fails(self):
 
@@ -1533,14 +1544,14 @@ class TestCopyFile(unittest.TestCase):
             if filename == 'srcfile':
                 return srcfile
             if filename == 'destfile':
-                raise IOError('Cannot open "destfile"')
+                raise OSError('Cannot open "destfile"')
             assert 0  # shouldn't reach here.
 
         self._set_shutil_open(_open)
 
         shutil.copyfile('srcfile', 'destfile')
         self.assertTrue(srcfile._entered)
-        self.assertTrue(srcfile._exited_with[0] is IOError)
+        self.assertTrue(srcfile._exited_with[0] is OSError)
         self.assertEqual(srcfile._exited_with[1].args,
                          ('Cannot open "destfile"',))
 
@@ -1562,7 +1573,7 @@ class TestCopyFile(unittest.TestCase):
         self.assertTrue(srcfile._entered)
         self.assertTrue(destfile._entered)
         self.assertTrue(destfile._raised)
-        self.assertTrue(srcfile._exited_with[0] is IOError)
+        self.assertTrue(srcfile._exited_with[0] is OSError)
         self.assertEqual(srcfile._exited_with[1].args,
                          ('Cannot close',))
 
@@ -1580,7 +1591,7 @@ class TestCopyFile(unittest.TestCase):
 
         self._set_shutil_open(_open)
 
-        self.assertRaises(IOError,
+        self.assertRaises(OSError,
                           shutil.copyfile, 'srcfile', 'destfile')
         self.assertTrue(srcfile._entered)
         self.assertTrue(destfile._entered)
