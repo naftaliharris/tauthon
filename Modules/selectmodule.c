@@ -47,11 +47,6 @@ extern void bzero(void *, int);
 #include <sys/types.h>
 #endif
 
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#include <sys/time.h>
-#include <utils.h>
-#endif
-
 #ifdef MS_WINDOWS
 #  define WIN32_LEAN_AND_MEAN
 #  include <winsock.h>
@@ -357,10 +352,13 @@ update_ufd_array(pollObject *self)
 
     i = pos = 0;
     while (PyDict_Next(self->dict, &pos, &key, &value)) {
-        self->ufds[i].fd = PyLong_AsLong(key);
+        assert(i < self->ufd_len);
+        /* Never overflow */
+        self->ufds[i].fd = (int)PyLong_AsLong(key);
         self->ufds[i].events = (short)PyLong_AsLong(value);
         i++;
     }
+    assert(i == self->ufd_len);
     self->ufd_uptodate = 1;
     return 1;
 }
@@ -376,10 +374,11 @@ static PyObject *
 poll_register(pollObject *self, PyObject *args)
 {
     PyObject *o, *key, *value;
-    int fd, events = POLLIN | POLLPRI | POLLOUT;
+    int fd;
+    short events = POLLIN | POLLPRI | POLLOUT;
     int err;
 
-    if (!PyArg_ParseTuple(args, "O|i:register", &o, &events)) {
+    if (!PyArg_ParseTuple(args, "O|h:register", &o, &events)) {
         return NULL;
     }
 
@@ -518,7 +517,7 @@ poll_poll(pollObject *self, PyObject *args)
         tout = PyNumber_Long(tout);
         if (!tout)
             return NULL;
-        timeout = PyLong_AsLong(tout);
+        timeout = _PyLong_AsInt(tout);
         Py_DECREF(tout);
         if (timeout == -1 && PyErr_Occurred())
             return NULL;
@@ -1399,6 +1398,24 @@ Wait for events on the epoll file descriptor for a maximum time of timeout\n\
 in seconds (as float). -1 makes poll wait indefinitely.\n\
 Up to maxevents are returned to the caller.");
 
+static PyObject *
+pyepoll_enter(pyEpoll_Object *self, PyObject *args)
+{
+    if (self->epfd < 0)
+        return pyepoll_err_closed();
+
+    Py_INCREF(self);
+    return (PyObject *)self;
+}
+
+static PyObject *
+pyepoll_exit(PyObject *self, PyObject *args)
+{
+    _Py_IDENTIFIER(close);
+
+    return _PyObject_CallMethodId(self, &PyId_close, NULL);
+}
+
 static PyMethodDef pyepoll_methods[] = {
     {"fromfd",          (PyCFunction)pyepoll_fromfd,
      METH_VARARGS | METH_CLASS, pyepoll_fromfd_doc},
@@ -1414,6 +1431,10 @@ static PyMethodDef pyepoll_methods[] = {
      METH_VARARGS | METH_KEYWORDS,      pyepoll_unregister_doc},
     {"poll",            (PyCFunction)pyepoll_poll,
      METH_VARARGS | METH_KEYWORDS,      pyepoll_poll_doc},
+    {"__enter__",           (PyCFunction)pyepoll_enter,     METH_NOARGS,
+     NULL},
+    {"__exit__",           (PyCFunction)pyepoll_exit,     METH_VARARGS,
+     NULL},
     {NULL,      NULL},
 };
 
