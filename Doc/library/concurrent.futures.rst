@@ -136,20 +136,23 @@ ThreadPoolExecutor Example
            'http://www.bbc.co.uk/',
            'http://some-made-up-domain.com/']
 
+   # Retrieve a single page and report the url and contents
    def load_url(url, timeout):
-       return urllib.request.urlopen(url, timeout=timeout).read()
+       conn = urllib.request.urlopen(url, timeout=timeout)
+       return conn.readall()
 
+   # We can use a with statement to ensure threads are cleaned up promptly
    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-       future_to_url = dict((executor.submit(load_url, url, 60), url)
-                            for url in URLS)
-
+       # Start the load operations and mark each future with its URL
+       future_to_url = {executor.submit(load_url, url, 60):url for url in URLS}
        for future in concurrent.futures.as_completed(future_to_url):
            url = future_to_url[future]
-           if future.exception() is not None:
-               print('%r generated an exception: %s' % (url,
-                                                        future.exception()))
+           try:
+               data = future.result()
+           except Exception as exc:
+               print('%r generated an exception: %s' % (url, exc))
            else:
-               print('%r page is %d bytes' % (url, len(future.result())))
+               print('%r page is %d bytes' % (url, len(data)))
 
 
 ProcessPoolExecutor
@@ -169,6 +172,12 @@ to a :class:`ProcessPoolExecutor` will result in deadlock.
    An :class:`Executor` subclass that executes calls asynchronously using a pool
    of at most *max_workers* processes.  If *max_workers* is ``None`` or not
    given, it will default to the number of processors on the machine.
+
+   .. versionchanged:: 3.3
+      When one of the worker processes terminates abruptly, a
+      :exc:`BrokenProcessPool` error is now raised.  Previously, behaviour
+      was undefined but operations on the executor or its futures would often
+      freeze or deadlock.
 
 
 .. _processpoolexecutor-example:
@@ -371,3 +380,16 @@ Module Functions
    :pep:`3148` -- futures - execute computations asynchronously
       The proposal which described this feature for inclusion in the Python
       standard library.
+
+
+Exception classes
+-----------------
+
+.. exception:: BrokenProcessPool
+
+   Derived from :exc:`RuntimeError`, this exception class is raised when
+   one of the workers of a :class:`ProcessPoolExecutor` has terminated
+   in a non-clean fashion (for example, if it was killed from the outside).
+
+   .. versionadded:: 3.3
+
