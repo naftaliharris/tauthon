@@ -198,8 +198,7 @@ def as_completed(fs, timeout=None):
         waiter = _create_and_install_waiters(fs, _AS_COMPLETED)
 
     try:
-        for future in finished:
-            yield future
+        yield from finished
 
         while pending:
             if timeout is None:
@@ -332,7 +331,7 @@ class Future(object):
         return True
 
     def cancelled(self):
-        """Return True if the future has cancelled."""
+        """Return True if the future was cancelled."""
         with self._condition:
             return self._state in [CANCELLED, CANCELLED_AND_NOTIFIED]
 
