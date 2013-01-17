@@ -8,6 +8,7 @@ import unittest
 from array import array
 from weakref import proxy
 from functools import wraps
+import _testcapi
 
 from test.support import TESTFN, check_warnings, run_unittest, make_bad_fd
 from collections import UserList
@@ -144,16 +145,16 @@ class AutoFileTests(unittest.TestCase):
         # Unix calls dircheck() and returns "[Errno 21]: Is a directory"
         try:
             _FileIO('.', 'r')
-        except IOError as e:
+        except OSError as e:
             self.assertNotEqual(e.errno, 0)
             self.assertEqual(e.filename, ".")
         else:
-            self.fail("Should have raised IOError")
+            self.fail("Should have raised OSError")
 
     @unittest.skipIf(os.name == 'nt', "test only works on a POSIX-like system")
     def testOpenDirFD(self):
         fd = os.open('.', os.O_RDONLY)
-        with self.assertRaises(IOError) as cm:
+        with self.assertRaises(OSError) as cm:
             _FileIO(fd, 'r')
         os.close(fd)
         self.assertEqual(cm.exception.errno, errno.EISDIR)
@@ -171,7 +172,7 @@ class AutoFileTests(unittest.TestCase):
             finally:
                 try:
                     self.f.close()
-                except IOError:
+                except OSError:
                     pass
         return wrapper
 
@@ -183,14 +184,14 @@ class AutoFileTests(unittest.TestCase):
             os.close(f.fileno())
             try:
                 func(self, f)
-            except IOError as e:
+            except OSError as e:
                 self.assertEqual(e.errno, errno.EBADF)
             else:
-                self.fail("Should have raised IOError")
+                self.fail("Should have raised OSError")
             finally:
                 try:
                     self.f.close()
-                except IOError:
+                except OSError:
                     pass
         return wrapper
 
@@ -237,7 +238,7 @@ class AutoFileTests(unittest.TestCase):
     def ReopenForRead(self):
         try:
             self.f.close()
-        except IOError:
+        except OSError:
             pass
         self.f = _FileIO(TESTFN, 'r')
         os.close(self.f.fileno())
@@ -285,7 +286,7 @@ class OtherFileTests(unittest.TestCase):
             if sys.platform != "win32":
                 try:
                     f = _FileIO("/dev/tty", "a")
-                except EnvironmentError:
+                except OSError:
                     # When run in a cron job there just aren't any
                     # ttys, so skip the test.  This also handles other
                     # OS'es that don't support /dev/tty.
@@ -346,7 +347,10 @@ class OtherFileTests(unittest.TestCase):
         self.assertRaises(OSError, _FileIO, make_bad_fd())
         if sys.platform == 'win32':
             import msvcrt
-            self.assertRaises(IOError, msvcrt.get_osfhandle, make_bad_fd())
+            self.assertRaises(OSError, msvcrt.get_osfhandle, make_bad_fd())
+        # Issue 15989
+        self.assertRaises(TypeError, _FileIO, _testcapi.INT_MAX + 1)
+        self.assertRaises(TypeError, _FileIO, _testcapi.INT_MIN - 1)
 
     def testBadModeArgument(self):
         # verify that we get a sensible error message for bad mode argument
