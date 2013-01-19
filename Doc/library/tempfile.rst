@@ -25,7 +25,7 @@ instead a string of six random characters is used.
 
 Also, all the user-callable functions now take additional arguments which
 allow direct control over the location and name of temporary files.  It is
-no longer necessary to use the global *tempdir* and *template* variables.
+no longer necessary to use the global *tempdir* variable.
 To maintain backward compatibility, the argument order is somewhat odd; it
 is recommended to use keyword arguments for clarity.
 
@@ -76,8 +76,7 @@ The module defines the following user-callable items:
    data is spooled in memory until the file size exceeds *max_size*, or
    until the file's :func:`fileno` method is called, at which point the
    contents are written to disk and operation proceeds as with
-   :func:`TemporaryFile`.  Also, it's ``truncate`` method does not
-   accept a ``size`` argument.
+   :func:`TemporaryFile`.
 
    The resulting file has one additional method, :func:`rollover`, which
    causes the file to roll over to an on-disk file regardless of its size.
@@ -86,6 +85,9 @@ The module defines the following user-callable items:
    is either a :class:`StringIO` object or a true file object, depending on
    whether :func:`rollover` has been called. This file-like object can be
    used in a :keyword:`with` statement, just like a normal file.
+
+   .. versionchanged:: 3.3
+      the truncate method now accepts a ``size`` argument.
 
 
 .. function:: TemporaryDirectory(suffix='', prefix='tmp', dir=None)
