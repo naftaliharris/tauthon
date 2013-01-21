@@ -422,7 +422,7 @@ References
 ----------
 
 The :class:`str` type is described in the Python library reference at
-:ref:`typesseq`.
+:ref:`textseq`.
 
 The documentation for the :mod:`unicodedata` module.
 
@@ -618,7 +618,6 @@ Marc-André Lemburg, Martin von Löwis, Chad Whitacre.
    and that the HOWTO only covers 2.x.
 
 .. comment Describe Python 3.x support (new section? new document?)
-.. comment Additional topic: building Python w/ UCS2 or UCS4 support
 .. comment Describe use of codecs.StreamRecoder and StreamReaderWriter
 
 .. comment
@@ -648,5 +647,3 @@ Marc-André Lemburg, Martin von Löwis, Chad Whitacre.
        - [ ] Writing Unicode programs
            - [ ] Do everything in Unicode
            - [ ] Declaring source code encodings (PEP 263)
-       - [ ] Other issues
-           - [ ] Building Python (UCS2, UCS4)
