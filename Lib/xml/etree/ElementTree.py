@@ -461,8 +461,7 @@ class Element:
         if tag is None or self.tag == tag:
             yield self
         for e in self._children:
-            for e in e.iter(tag):
-                yield e
+            yield from e.iter(tag)
 
     # compatibility
     def getiterator(self, tag=None):
@@ -489,8 +488,7 @@ class Element:
         if self.text:
             yield self.text
         for e in self:
-            for s in e.itertext():
-                yield s
+            yield from e.itertext()
             if e.tail:
                 yield e.tail
 
@@ -781,26 +779,26 @@ class ElementTree:
                 )
         return self._root.iterfind(path, namespaces)
 
-    ##
-    # Writes the element tree to a file, as XML.
-    #
-    # @def write(file, **options)
-    # @param file A file name, or a file object opened for writing.
-    # @param **options Options, given as keyword arguments.
-    # @keyparam encoding Optional output encoding (default is US-ASCII).
-    #     Use "unicode" to return a Unicode string.
-    # @keyparam xml_declaration Controls if an XML declaration should
-    #     be added to the file.  Use False for never, True for always,
-    #     None for only if not US-ASCII or UTF-8 or Unicode.  None is default.
-    # @keyparam default_namespace Sets the default XML namespace (for "xmlns").
-    # @keyparam method Optional output method ("xml", "html", "text" or
-    #     "c14n"; default is "xml").
-
     def write(self, file_or_filename,
               encoding=None,
               xml_declaration=None,
               default_namespace=None,
-              method=None):
+              method=None, *,
+              short_empty_elements=True):
+        """Write the element tree to a file, as XML.  'file_or_filename' is a
+           file name or a file object opened for writing.
+           'encoding' is the output encoding (default is US-ASCII).
+           'xml_declaration' controls if an XML declaration should be added
+           to the output.  Use False for never, True for always, None for only
+           if not US-ASCII or UTF-8 or Unicode (default is None).
+           'default_namespace' sets the default XML namespace (for "xmlns").
+           'method' is either "xml" (default), "html", "text" or "c14n".
+           The keyword-only 'short_empty_elements' parameter controls the
+           formatting of elements that contain no content.  If True (default),
+           they are emitted as a single self-closed tag, otherwise they are
+           emitted as a pair of start/end tags.
+
+        """
         if not method:
             method = "xml"
         elif method not in _serialize:
@@ -828,7 +826,8 @@ class ElementTree:
             else:
                 qnames, namespaces = _namespaces(self._root, default_namespace)
                 serialize = _serialize[method]
-                serialize(write, self._root, qnames, namespaces)
+                serialize(write, self._root, qnames, namespaces,
+                          short_empty_elements=short_empty_elements)
 
     def write_c14n(self, file):
         # lxml.etree compatibility.  use output method instead
@@ -950,7 +949,8 @@ def _namespaces(elem, default_namespace=None):
             add_qname(text.text)
     return qnames, namespaces
 
-def _serialize_xml(write, elem, qnames, namespaces):
+def _serialize_xml(write, elem, qnames, namespaces,
+                   short_empty_elements, **kwargs):
     tag = elem.tag
     text = elem.text
     if tag is Comment:
@@ -963,7 +963,8 @@ def _serialize_xml(write, elem, qnames, namespaces):
             if text:
                 write(_escape_cdata(text))
             for e in elem:
-                _serialize_xml(write, e, qnames, None)
+                _serialize_xml(write, e, qnames, None,
+                               short_empty_elements=short_empty_elements)
         else:
             write("<" + tag)
             items = list(elem.items())
@@ -985,12 +986,13 @@ def _serialize_xml(write, elem, qnames, namespaces):
                     else:
                         v = _escape_attrib(v)
                     write(" %s=\"%s\"" % (qnames[k], v))
-            if text or len(elem):
+            if text or len(elem) or not short_empty_elements:
                 write(">")
                 if text:
                     write(_escape_cdata(text))
                 for e in elem:
-                    _serialize_xml(write, e, qnames, None)
+                    _serialize_xml(write, e, qnames, None,
+                                   short_empty_elements=short_empty_elements)
                 write("</" + tag + ">")
             else:
                 write(" />")
@@ -1005,7 +1007,7 @@ try:
 except NameError:
     pass
 
-def _serialize_html(write, elem, qnames, namespaces):
+def _serialize_html(write, elem, qnames, namespaces, **kwargs):
     tag = elem.tag
     text = elem.text
     if tag is Comment:
@@ -1169,9 +1171,11 @@ def _escape_attrib_html(text):
 # @return An (optionally) encoded string containing the XML data.
 # @defreturn string
 
-def tostring(element, encoding=None, method=None):
+def tostring(element, encoding=None, method=None, *,
+             short_empty_elements=True):
     stream = io.StringIO() if encoding == 'unicode' else io.BytesIO()
-    ElementTree(element).write(stream, encoding, method=method)
+    ElementTree(element).write(stream, encoding, method=method,
+                               short_empty_elements=short_empty_elements)
     return stream.getvalue()
 
 ##
@@ -1205,10 +1209,12 @@ class _ListDataStream(io.BufferedIOBase):
     def tell(self):
         return len(self.lst)
 
-def tostringlist(element, encoding=None, method=None):
+def tostringlist(element, encoding=None, method=None, *,
+                 short_empty_elements=True):
     lst = []
     stream = _ListDataStream(lst)
-    ElementTree(element).write(stream, encoding, method=method)
+    ElementTree(element).write(stream, encoding, method=method,
+                               short_empty_elements=short_empty_elements)
     return lst
 
 ##
