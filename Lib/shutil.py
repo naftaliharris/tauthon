@@ -39,28 +39,26 @@ __all__ = ["copyfileobj", "copyfile", "copymode", "copystat", "copy", "copy2",
            "ignore_patterns", "chown", "which"]
            # disk_usage is added later, if available on the platform
 
-class Error(EnvironmentError):
+class Error(OSError):
     pass
 
-class SpecialFileError(EnvironmentError):
+class SameFileError(Error):
+    """Raised when source and destination are the same file."""
+
+class SpecialFileError(OSError):
     """Raised when trying to do a kind of operation (e.g. copying) which is
     not supported on a special file (e.g. a named pipe)"""
 
-class ExecError(EnvironmentError):
+class ExecError(OSError):
     """Raised when a command could not be executed"""
 
-class ReadError(EnvironmentError):
+class ReadError(OSError):
     """Raised when an archive cannot be read"""
 
 class RegistryError(Exception):
     """Raised when a registery operation with the archiving
     and unpacking registeries fails"""
 
-
-try:
-    WindowsError
-except NameError:
-    WindowsError = None
 
 def copyfileobj(fsrc, fdst, length=16*1024):
     """copy data from file-like object fsrc to file-like object fdst"""
@@ -90,7 +88,7 @@ def copyfile(src, dst, *, follow_symlinks=True):
 
     """
     if _samefile(src, dst):
-        raise Error("`%s` and `%s` are the same file" % (src, dst))
+        raise SameFileError("{!r} and {!r} are the same file".format(src, dst))
 
     for fn in [src, dst]:
         try:
@@ -215,6 +213,9 @@ def copy(src, dst, *, follow_symlinks=True):
     If follow_symlinks is false, symlinks won't be followed. This
     resembles GNU's "cp -P src dst".
 
+    If source and destination are the same file, a SameFileError will be
+    raised.
+
     """
     if os.path.isdir(dst):
         dst = os.path.join(dst, os.path.basename(src))
@@ -323,15 +324,13 @@ def copytree(src, dst, symlinks=False, ignore=None, copy_function=copy2,
         # continue with other files
         except Error as err:
             errors.extend(err.args[0])
-        except EnvironmentError as why:
+        except OSError as why:
             errors.append((srcname, dstname, str(why)))
     try:
         copystat(src, dst)
     except OSError as why:
-        if WindowsError is not None and isinstance(why, WindowsError):
-            # Copying file access times may fail on Windows
-            pass
-        else:
+        # Copying file access times may fail on Windows
+        if why.winerror is None:
             errors.append((src, dst, str(why)))
     if errors:
         raise Error(errors)
@@ -350,24 +349,24 @@ def _rmtree_unsafe(path, onerror):
     names = []
     try:
         names = os.listdir(path)
-    except os.error:
+    except OSError:
         onerror(os.listdir, path, sys.exc_info())
     for name in names:
         fullname = os.path.join(path, name)
         try:
             mode = os.lstat(fullname).st_mode
-        except os.error:
+        except OSError:
             mode = 0
         if stat.S_ISDIR(mode):
             _rmtree_unsafe(fullname, onerror)
         else:
             try:
                 os.unlink(fullname)
-            except os.error:
+            except OSError:
                 onerror(os.unlink, fullname, sys.exc_info())
     try:
         os.rmdir(path)
-    except os.error:
+    except OSError:
         onerror(os.rmdir, path, sys.exc_info())
 
 # Version using fd-based APIs to protect against races
@@ -458,7 +457,7 @@ def rmtree(path, ignore_errors=False, onerror=None):
                 _rmtree_safe_fd(fd, path, onerror)
                 try:
                     os.rmdir(path)
-                except os.error:
+                except OSError:
                     onerror(os.rmdir, path, sys.exc_info())
             else:
                 try:
