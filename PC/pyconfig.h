@@ -156,15 +156,9 @@ WIN32 is still required for the locale module.
 #endif /* MS_WIN64 */
 
 /* set the version macros for the windows headers */
-#ifdef MS_WINX64
-/* 64 bit only runs on XP or greater */
+/* Python 3.4+ requires Windows XP or greater */
 #define Py_WINVER 0x0501 /* _WIN32_WINNT_WINXP */
 #define Py_NTDDI NTDDI_WINXP
-#else
-/* Python 2.6+ requires Windows 2000 or greater */
-#define Py_WINVER 0x0500 /* _WIN32_WINNT_WIN2K */
-#define Py_NTDDI NTDDI_WIN2KSP4
-#endif
 
 /* We only set these values when building Python - we don't want to force
    these values on extensions, as that will affect the prototypes and
@@ -324,11 +318,11 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 			their Makefile (other compilers are generally
 			taken care of by distutils.) */
 #			if defined(_DEBUG)
-#				pragma comment(lib,"python33_d.lib")
+#				pragma comment(lib,"python34_d.lib")
 #			elif defined(Py_LIMITED_API)
 #				pragma comment(lib,"python3.lib")
 #			else
-#				pragma comment(lib,"python33.lib")
+#				pragma comment(lib,"python34.lib")
 #			endif /* _DEBUG */
 #		endif /* _MSC_VER */
 #	endif /* Py_BUILD_CORE */

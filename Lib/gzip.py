@@ -294,11 +294,11 @@ class GzipFile(io.BufferedIOBase):
             return False
 
         if magic != b'\037\213':
-            raise IOError('Not a gzipped file')
+            raise OSError('Not a gzipped file')
 
         method, flag, self.mtime = struct.unpack("<BBIxx", self._read_exact(8))
         if method != 8:
-            raise IOError('Unknown compression method')
+            raise OSError('Unknown compression method')
 
         if flag & FEXTRA:
             # Read & discard the extra field, if present
@@ -328,7 +328,7 @@ class GzipFile(io.BufferedIOBase):
         self._check_closed()
         if self.mode != WRITE:
             import errno
-            raise IOError(errno.EBADF, "write() on read-only GzipFile object")
+            raise OSError(errno.EBADF, "write() on read-only GzipFile object")
 
         if self.fileobj is None:
             raise ValueError("write() on closed GzipFile object")
@@ -349,7 +349,7 @@ class GzipFile(io.BufferedIOBase):
         self._check_closed()
         if self.mode != READ:
             import errno
-            raise IOError(errno.EBADF, "read() on write-only GzipFile object")
+            raise OSError(errno.EBADF, "read() on write-only GzipFile object")
 
         if self.extrasize <= 0 and self.fileobj is None:
             return b''
@@ -378,7 +378,7 @@ class GzipFile(io.BufferedIOBase):
         self._check_closed()
         if self.mode != READ:
             import errno
-            raise IOError(errno.EBADF, "read1() on write-only GzipFile object")
+            raise OSError(errno.EBADF, "read1() on write-only GzipFile object")
 
         if self.extrasize <= 0 and self.fileobj is None:
             return b''
@@ -399,7 +399,7 @@ class GzipFile(io.BufferedIOBase):
     def peek(self, n):
         if self.mode != READ:
             import errno
-            raise IOError(errno.EBADF, "peek() on write-only GzipFile object")
+            raise OSError(errno.EBADF, "peek() on write-only GzipFile object")
 
         # Do not return ridiculously small buffers, for one common idiom
         # is to call peek(1) and expect more bytes in return.
@@ -480,10 +480,10 @@ class GzipFile(io.BufferedIOBase):
         # stored is the true file size mod 2**32.
         crc32, isize = struct.unpack("<II", self._read_exact(8))
         if crc32 != self.crc:
-            raise IOError("CRC check failed %s != %s" % (hex(crc32),
+            raise OSError("CRC check failed %s != %s" % (hex(crc32),
                                                          hex(self.crc)))
         elif isize != (self.size & 0xffffffff):
-            raise IOError("Incorrect length of data produced")
+            raise OSError("Incorrect length of data produced")
 
         # Gzip files can be padded with zeroes and still have archives.
         # Consume all zero bytes and set the file position to the first
@@ -532,7 +532,7 @@ class GzipFile(io.BufferedIOBase):
         '''Return the uncompressed stream file position indicator to the
         beginning of the file'''
         if self.mode != READ:
-            raise IOError("Can't rewind in write mode")
+            raise OSError("Can't rewind in write mode")
         self.fileobj.seek(0)
         self._new_member = True
         self.extrabuf = b""
@@ -557,7 +557,7 @@ class GzipFile(io.BufferedIOBase):
                 raise ValueError('Seek from end not supported')
         if self.mode == WRITE:
             if offset < self.offset:
-                raise IOError('Negative seek in write mode')
+                raise OSError('Negative seek in write mode')
             count = offset - self.offset
             chunk = bytes(1024)
             for i in range(count // 1024):
