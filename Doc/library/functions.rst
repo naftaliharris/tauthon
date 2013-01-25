@@ -14,12 +14,12 @@ are always available.  They are listed here in alphabetical order.
 :func:`all`          :func:`dir`        :func:`hex`         :func:`next`      :func:`slice`
 :func:`any`          :func:`divmod`     :func:`id`          :func:`object`    :func:`sorted`
 :func:`ascii`        :func:`enumerate`  :func:`input`       :func:`oct`       :func:`staticmethod`
-:func:`bin`          :func:`eval`       :func:`int`         :func:`open`      :func:`str`
+:func:`bin`          :func:`eval`       :func:`int`         :func:`open`      |func-str|_
 :func:`bool`         :func:`exec`       :func:`isinstance`  :func:`ord`       :func:`sum`
 :func:`bytearray`    :func:`filter`     :func:`issubclass`  :func:`pow`       :func:`super`
-:func:`bytes`        :func:`float`      :func:`iter`        :func:`print`     :func:`tuple`
+:func:`bytes`        :func:`float`      :func:`iter`        :func:`print`     |func-tuple|_
 :func:`callable`     :func:`format`     :func:`len`         :func:`property`  :func:`type`
-:func:`chr`          |func-frozenset|_  :func:`list`        :func:`range`     :func:`vars`
+:func:`chr`          |func-frozenset|_  |func-list|_        |func-range|_     :func:`vars`
 :func:`classmethod`  :func:`getattr`    :func:`locals`      :func:`repr`      :func:`zip`
 :func:`compile`      :func:`globals`    :func:`map`         :func:`reversed`  :func:`__import__`
 :func:`complex`      :func:`hasattr`    :func:`max`         :func:`round`
@@ -33,6 +33,10 @@ are always available.  They are listed here in alphabetical order.
 .. |func-frozenset| replace:: ``frozenset()``
 .. |func-memoryview| replace:: ``memoryview()``
 .. |func-set| replace:: ``set()``
+.. |func-list| replace:: ``list()``
+.. |func-str| replace:: ``str()``
+.. |func-tuple| replace:: ``tuple()``
+.. |func-range| replace:: ``range()``
 
 
 .. function:: abs(x)
@@ -93,6 +97,7 @@ are always available.  They are listed here in alphabetical order.
    .. index:: pair: Boolean; type
 
 
+.. _func-bytearray:
 .. function:: bytearray([source[, encoding[, errors]]])
 
    Return a new array of bytes.  The :class:`bytearray` type is a mutable
@@ -118,7 +123,10 @@ are always available.  They are listed here in alphabetical order.
 
    Without an argument, an array of size 0 is created.
 
+   See also :ref:`binaryseq` and :ref:`typebytearray`.
 
+
+.. _func-bytes:
 .. function:: bytes([source[, encoding[, errors]]])
 
    Return a new "bytes" object, which is an immutable sequence of integers in
@@ -129,6 +137,8 @@ are always available.  They are listed here in alphabetical order.
    Accordingly, constructor arguments are interpreted as for :func:`bytearray`.
 
    Bytes objects can also be created with literals, see :ref:`strings`.
+
+   See also :ref:`binaryseq`, :ref:`typebytes`, and :ref:`bytes-methods`.
 
 
 .. function:: callable(object)
@@ -151,10 +161,6 @@ are always available.  They are listed here in alphabetical order.
    inverse of :func:`ord`.  The valid range for the argument is from 0 through
    1,114,111 (0x10FFFF in base 16).  :exc:`ValueError` will be raised if *i* is
    outside that range.
-
-   Note that on narrow Unicode builds, the result is a string of
-   length two for *i* greater than 65,535 (0xFFFF in hexadecimal).
-
 
 
 .. function:: classmethod(function)
@@ -312,17 +318,18 @@ are always available.  They are listed here in alphabetical order.
 
       >>> import struct
       >>> dir()   # show the names in the module namespace
-      ['__builtins__', '__doc__', '__name__', 'struct']
-      >>> dir(struct)   # show the names in the struct module
-      ['Struct', '__builtins__', '__doc__', '__file__', '__name__',
-       '__package__', '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
+      ['__builtins__', '__name__', 'struct']
+      >>> dir(struct)   # show the names in the struct module # doctest: +SKIP
+      ['Struct', '__all__', '__builtins__', '__cached__', '__doc__', '__file__',
+       '__initializing__', '__loader__', '__name__', '__package__',
+       '_clearcache', 'calcsize', 'error', 'pack', 'pack_into',
        'unpack', 'unpack_from']
       >>> class Shape(object):
-              def __dir__(self):
-                  return ['area', 'perimeter', 'location']
+      ...     def __dir__(self):
+      ...         return ['area', 'perimeter', 'location']
       >>> s = Shape()
       >>> dir(s)
-      ['area', 'perimeter', 'location']
+      ['area', 'location', 'perimeter']
 
    .. note::
 
@@ -515,12 +522,12 @@ are always available.  They are listed here in alphabetical order.
 
    The float type is described in :ref:`typesnumeric`.
 
+   .. index::
+      single: __format__
+      single: string; format() (built-in function)
+
 
 .. function:: format(value[, format_spec])
-
-   .. index::
-      pair: str; format
-      single: __format__
 
    Convert a *value* to a "formatted" representation, as controlled by
    *format_spec*.  The interpretation of *format_spec* will depend on the type
@@ -623,9 +630,9 @@ are always available.  They are listed here in alphabetical order.
    to a string (stripping a trailing newline), and returns that.  When EOF is
    read, :exc:`EOFError` is raised.  Example::
 
-      >>> s = input('--> ')
+      >>> s = input('--> ')  # doctest: +SKIP
       --> Monty Python's Flying Circus
-      >>> s
+      >>> s  # doctest: +SKIP
       "Monty Python's Flying Circus"
 
    If the :mod:`readline` module was loaded, then :func:`input` will use it
@@ -691,6 +698,8 @@ are always available.  They are listed here in alphabetical order.
    *sentinel*, :exc:`StopIteration` will be raised, otherwise the value will
    be returned.
 
+   See also :ref:`typeiter`.
+
    One useful application of the second form of :func:`iter` is to read lines of
    a file until a certain line is reached.  The following example reads a file
    until the :meth:`readline` method returns an empty string::
@@ -706,16 +715,12 @@ are always available.  They are listed here in alphabetical order.
    sequence (string, tuple or list) or a mapping (dictionary).
 
 
+.. _func-list:
 .. function:: list([iterable])
+   :noindex:
 
-   Return a list whose items are the same and in the same order as *iterable*'s
-   items.  *iterable* may be either a sequence, a container that supports
-   iteration, or an iterator object.  If *iterable* is already a list, a copy is
-   made and returned, similar to ``iterable[:]``.  For instance, ``list('abc')``
-   returns ``['a', 'b', 'c']`` and ``list( (1, 2, 3) )`` returns ``[1, 2, 3]``.
-   If no argument is given, returns a new empty list, ``[]``.
-
-   :class:`list` is a mutable sequence type, as documented in :ref:`typesseq`.
+   Rather than being a function, :class:`list` is actually a mutable
+   sequence type, as documented in :ref:`typesseq-list` and :ref:`typesseq`.
 
 
 .. function:: locals()
@@ -814,10 +819,10 @@ are always available.  They are listed here in alphabetical order.
    .. index::
       single: file object; open() built-in function
 
-.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True)
+.. function:: open(file, mode='r', buffering=-1, encoding=None, errors=None, newline=None, closefd=True, opener=None)
 
    Open *file* and return a corresponding :term:`file object`.  If the file
-   cannot be opened, an :exc:`IOError` is raised.
+   cannot be opened, an :exc:`OSError` is raised.
 
    *file* is either a string or bytes object giving the pathname (absolute or
    relative to the current working directory) of the file to be opened or
@@ -828,17 +833,20 @@ are always available.  They are listed here in alphabetical order.
    *mode* is an optional string that specifies the mode in which the file is
    opened.  It defaults to ``'r'`` which means open for reading in text mode.
    Other common values are ``'w'`` for writing (truncating the file if it
-   already exists), and ``'a'`` for appending (which on *some* Unix systems,
-   means that *all* writes append to the end of the file regardless of the
-   current seek position).  In text mode, if *encoding* is not specified the
-   encoding used is platform dependent. (For reading and writing raw bytes use
-   binary mode and leave *encoding* unspecified.)  The available modes are:
+   already exists), ``'x'`` for exclusive creation and ``'a'`` for appending
+   (which on *some* Unix systems, means that *all* writes append to the end of
+   the file regardless of the current seek position).  In text mode, if
+   *encoding* is not specified the encoding used is platform dependent:
+   ``locale.getpreferredencoding(False)`` is called to get the current locale
+   encoding. (For reading and writing raw bytes use binary mode and leave
+   *encoding* unspecified.)  The available modes are:
 
    ========= ===============================================================
    Character Meaning
    --------- ---------------------------------------------------------------
    ``'r'``   open for reading (default)
    ``'w'``   open for writing, truncating the file first
+   ``'x'``   open for exclusive creation, failing if the file already exists
    ``'a'``   open for writing, appending to the end of the file if it exists
    ``'b'``   binary mode
    ``'t'``   text mode (default)
@@ -924,6 +932,29 @@ are always available.  They are listed here in alphabetical order.
    closed.  If a filename is given *closefd* has no effect and must be ``True``
    (the default).
 
+   A custom opener can be used by passing a callable as *opener*. The underlying
+   file descriptor for the file object is then obtained by calling *opener* with
+   (*file*, *flags*). *opener* must return an open file descriptor (passing
+   :mod:`os.open` as *opener* results in functionality similar to passing
+   ``None``).
+
+   The following example uses the :ref:`dir_fd <dir_fd>` parameter of the
+   :func:`os.open` function to open a file relative to a given directory::
+
+      >>> import os
+      >>> dir_fd = os.open('somedir', os.O_RDONLY)
+      >>> def opener(path, flags):
+      ...     return os.open(path, flags, dir_fd=dir_fd)
+      ...
+      >>> with open('spamspam.txt', 'w', opener=opener) as f:
+      ...     print('This will be written to somedir/spamspam.txt', file=f)
+      ...
+      >>> os.close(dir_fd)  # don't leak a file descriptor
+
+   .. versionchanged:: 3.3
+      The *opener* parameter was added.
+      The ``'x'`` mode was added.
+
    The type of :term:`file object` returned by the :func:`open` function
    depends on the mode.  When :func:`open` is used to open a file in a text
    mode (``'w'``, ``'r'``, ``'wt'``, ``'rt'``, etc.), it returns a subclass of
@@ -949,6 +980,11 @@ are always available.  They are listed here in alphabetical order.
    (where :func:`open` is declared), :mod:`os`, :mod:`os.path`, :mod:`tempfile`,
    and :mod:`shutil`.
 
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
+      :exc:`FileExistsError` is now raised if the file opened in exclusive
+      creation mode (``'x'``) already exists.
+
 
 .. XXX works for bytes too, but should it?
 .. function:: ord(c)
@@ -958,9 +994,6 @@ are always available.  They are listed here in alphabetical order.
    point of that character.  For example, ``ord('a')`` returns the integer ``97``
    and ``ord('\u2020')`` returns ``8224``.  This is the inverse of :func:`chr`.
 
-   On wide Unicode builds, if the argument length is not one, a
-   :exc:`TypeError` will be raised.  On narrow Unicode builds, strings
-   of length two are accepted when they form a UTF-16 surrogate pair.
 
 .. function:: pow(x, y[, z])
 
@@ -978,7 +1011,7 @@ are always available.  They are listed here in alphabetical order.
    must be of integer types, and *y* must be non-negative.
 
 
-.. function:: print(*objects, sep=' ', end='\\n', file=sys.stdout)
+.. function:: print(*objects, sep=' ', end='\\n', file=sys.stdout, flush=False)
 
    Print *objects* to the stream *file*, separated by *sep* and followed by
    *end*.  *sep*, *end* and *file*, if present, must be given as keyword
@@ -991,9 +1024,12 @@ are always available.  They are listed here in alphabetical order.
    *end*.
 
    The *file* argument must be an object with a ``write(string)`` method; if it
-   is not present or ``None``, :data:`sys.stdout` will be used. Output buffering
-   is determined by *file*. Use ``file.flush()`` to ensure, for instance,
-   immediate appearance on a screen.
+   is not present or ``None``, :data:`sys.stdout` will be used.  Whether output
+   is buffered is usually determined by *file*, but if the  *flush* keyword
+   argument is true, the stream is forcibly flushed.
+
+   .. versionchanged:: 3.3
+      Added the *flush* keyword argument.
 
 
 .. function:: property(fget=None, fset=None, fdel=None, doc=None)
@@ -1065,63 +1101,13 @@ are always available.  They are listed here in alphabetical order.
    ``fdel`` corresponding to the constructor arguments.
 
 
-.. XXX does accept objects with __index__ too
+.. _func-range:
 .. function:: range(stop)
               range(start, stop[, step])
+   :noindex:
 
-   This is a versatile function to create iterables yielding arithmetic
-   progressions.  It is most often used in :keyword:`for` loops.  The arguments
-   must be integers.  If the *step* argument is omitted, it defaults to ``1``.
-   If the *start* argument is omitted, it defaults to ``0``.  The full form
-   returns an iterable of integers ``[start, start + step, start + 2 * step,
-   ...]``.  If *step* is positive, the last element is the largest ``start + i *
-   step`` less than *stop*; if *step* is negative, the last element is the
-   smallest ``start + i * step`` greater than *stop*.  *step* must not be zero
-   (or else :exc:`ValueError` is raised).  Example:
-
-      >>> list(range(10))
-      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-      >>> list(range(1, 11))
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-      >>> list(range(0, 30, 5))
-      [0, 5, 10, 15, 20, 25]
-      >>> list(range(0, 10, 3))
-      [0, 3, 6, 9]
-      >>> list(range(0, -10, -1))
-      [0, -1, -2, -3, -4, -5, -6, -7, -8, -9]
-      >>> list(range(0))
-      []
-      >>> list(range(1, 0))
-      []
-
-   Range objects implement the :class:`collections.Sequence` ABC, and provide
-   features such as containment tests, element index lookup, slicing and
-   support for negative indices (see :ref:`typesseq`):
-
-      >>> r = range(0, 20, 2)
-      >>> r
-      range(0, 20, 2)
-      >>> 11 in r
-      False
-      >>> 10 in r
-      True
-      >>> r.index(10)
-      5
-      >>> r[5]
-      10
-      >>> r[:5]
-      range(0, 10, 2)
-      >>> r[-1]
-      18
-
-   Ranges containing absolute values larger than :data:`sys.maxsize` are permitted
-   but some features (such as :func:`len`) will raise :exc:`OverflowError`.
-
-   .. versionchanged:: 3.2
-      Implement the Sequence ABC.
-      Support slicing and negative indices.
-      Test integers for membership in constant time instead of iterating
-      through all items.
+   Rather than being a function, :class:`range` is actually an immutable
+   sequence type, as documented in :ref:`typesseq-range` and :ref:`typesseq`.
 
 
 .. function:: repr(object)
@@ -1250,47 +1236,15 @@ are always available.  They are listed here in alphabetical order.
       single: string; str() (built-in function)
 
 
+.. _func-str:
 .. function:: str(object='')
               str(object=b'', encoding='utf-8', errors='strict')
+   :noindex:
 
-   Return a :ref:`string <typesseq>` version of *object*.  If *object* is not
-   provided, returns the empty string.  Otherwise, the behavior of ``str()``
-   depends on whether *encoding* or *errors* is given, as follows.
+   Return a :class:`str` version of *object*.  See :func:`str` for details.
 
-   If neither *encoding* nor *errors* is given, ``str(object)`` returns
-   :meth:`object.__str__() <object.__str__>`, which is the "informal" or nicely
-   printable string representation of *object*.  For string objects, this is
-   the string itself.  If *object* does not have a :meth:`~object.__str__`
-   method, then :func:`str` falls back to returning
-   :meth:`repr(object) <repr>`.
-
-   .. index::
-      single: buffer protocol; str() (built-in function)
-      single: bytes; str() (built-in function)
-
-   If at least one of *encoding* or *errors* is given, *object* should be a
-   :class:`bytes` or :class:`bytearray` object, or more generally any object
-   that supports the :ref:`buffer protocol <bufferobjects>`.  In this case, if
-   *object* is a :class:`bytes` (or :class:`bytearray`) object, then
-   ``str(bytes, encoding, errors)`` is equivalent to
-   :meth:`bytes.decode(encoding, errors) <bytes.decode>`.  Otherwise, the bytes
-   object underlying the buffer object is obtained before calling
-   :meth:`bytes.decode`.  See the :ref:`typesseq` section, the
-   :ref:`typememoryview` section, and :ref:`bufferobjects` for information on
-   buffer objects.
-
-   Passing a :class:`bytes` object to :func:`str` without the *encoding*
-   or *errors* arguments falls under the first case of returning the informal
-   string representation (see also the :option:`-b` command-line option to
-   Python).  For example::
-
-      >>> str(b'Zoot!')
-      "b'Zoot!'"
-
-   ``str`` is a built-in :term:`type`.  For more information on the string
-   type and its methods, see the :ref:`typesseq` and :ref:`string-methods`
-   sections.  To output formatted strings, see the :ref:`string-formatting`
-   section.  In addition, see the :ref:`stringservices` section.
+   ``str`` is the built-in string :term:`class`.  For general information
+   about strings, see :ref:`textseq`.
 
 
 .. function:: sum(iterable[, start])
@@ -1350,26 +1304,24 @@ are always available.  They are listed here in alphabetical order.
    Accordingly, :func:`super` is undefined for implicit lookups using statements or
    operators such as ``super()[name]``.
 
-   Also note that :func:`super` is not limited to use inside methods.  The two
-   argument form specifies the arguments exactly and makes the appropriate
-   references.  The zero argument form automatically searches the stack frame
-   for the class (``__class__``) and the first argument.
+   Also note that, aside from the zero argument form, :func:`super` is not
+   limited to use inside methods.  The two argument form specifies the
+   arguments exactly and makes the appropriate references.  The zero
+   argument form only works inside a class definition, as the compiler fills
+   in the necessary details to correctly retrieve the class being defined,
+   as well as accessing the current instance for ordinary methods.
 
    For practical suggestions on how to design cooperative classes using
    :func:`super`, see `guide to using super()
    <http://rhettinger.wordpress.com/2011/05/26/super-considered-super/>`_.
 
 
+.. _func-tuple:
 .. function:: tuple([iterable])
+   :noindex:
 
-   Return a tuple whose items are the same and in the same order as *iterable*'s
-   items.  *iterable* may be a sequence, a container that supports iteration, or an
-   iterator object. If *iterable* is already a tuple, it is returned unchanged.
-   For instance, ``tuple('abc')`` returns ``('a', 'b', 'c')`` and ``tuple([1, 2,
-   3])`` returns ``(1, 2, 3)``.  If no argument is given, returns a new empty
-   tuple, ``()``.
-
-   :class:`tuple` is an immutable sequence type, as documented in :ref:`typesseq`.
+   Rather than being a function, :class:`tuple` is actually an immutable
+   sequence type, as documented in :ref:`typesseq-tuple` and :ref:`typesseq`.
 
 
 .. function:: type(object)
@@ -1397,6 +1349,8 @@ are always available.  They are listed here in alphabetical order.
       ...     a = 1
       ...
       >>> X = type('X', (object,), dict(a=1))
+
+   See also :ref:`bltin-type-objects`.
 
 
 .. function:: vars([object])
@@ -1454,7 +1408,7 @@ are always available.  They are listed here in alphabetical order.
       True
 
 
-.. function:: __import__(name, globals={}, locals={}, fromlist=[], level=-1)
+.. function:: __import__(name, globals=None, locals=None, fromlist=(), level=0)
 
    .. index::
       statement: import
@@ -1469,8 +1423,9 @@ are always available.  They are listed here in alphabetical order.
    replaced (by importing the :mod:`builtins` module and assigning to
    ``builtins.__import__``) in order to change semantics of the
    :keyword:`import` statement, but nowadays it is usually simpler to use import
-   hooks (see :pep:`302`).  Direct use of :func:`__import__` is rare, except in
-   cases where you want to import a module whose name is only known at runtime.
+   hooks (see :pep:`302`) to attain the same goals.  Direct use of
+   :func:`__import__` is entirely discouraged in favor of
+   :func:`importlib.import_module`.
 
    The function imports the module *name*, potentially using the given *globals*
    and *locals* to determine how to interpret the name in a package context.
@@ -1479,13 +1434,11 @@ are always available.  They are listed here in alphabetical order.
    not use its *locals* argument at all, and uses its *globals* only to
    determine the package context of the :keyword:`import` statement.
 
-   *level* specifies whether to use absolute or relative imports. ``0``
-   means only perform absolute imports. Positive values for *level* indicate the
-   number of parent directories to search relative to the directory of the
-   module calling :func:`__import__`.  Negative values attempt both an implicit
-   relative import and an absolute import (usage of negative values for *level*
-   are strongly discouraged as future versions of Python do not support such
-   values). Import statements only use values of 0 or greater.
+   *level* specifies whether to use absolute or relative imports. ``0`` (the
+   default) means only perform absolute imports.  Positive values for
+   *level* indicate the number of parent directories to search relative to the
+   directory of the module calling :func:`__import__` (see :pep:`328` for the
+   details).
 
    When the *name* variable is of the form ``package.module``, normally, the
    top-level package (the name up till the first dot) is returned, *not* the
@@ -1517,6 +1470,10 @@ are always available.  They are listed here in alphabetical order.
 
    If you simply want to import a module (potentially within a package) by name,
    use :func:`importlib.import_module`.
+
+   .. versionchanged:: 3.3
+      Negative values for *level* are no longer supported (which also changes
+      the default value to 0).
 
 
 .. rubric:: Footnotes
