@@ -60,7 +60,7 @@ extern int _Py_normalize_encoding(const char *, char *, size_t);
    workaround is also enabled on error, for example if getting the locale
    failed.
 
-   Values of locale_is_ascii:
+   Values of force_ascii:
 
        1: the workaround is used: _Py_wchar2char() uses
           encode_ascii_surrogateescape() and _Py_char2wchar() uses
@@ -292,7 +292,7 @@ _Py_char2wchar(const char* arg, size_t *size)
             /* Only use the result if it contains no
                surrogate characters. */
             for (tmp = res; *tmp != 0 &&
-                         (*tmp < 0xd800 || *tmp > 0xdfff); tmp++)
+                         !Py_UNICODE_IS_SURROGATE(*tmp); tmp++)
                 ;
             if (*tmp == 0) {
                 if (size != NULL)
@@ -338,7 +338,7 @@ _Py_char2wchar(const char* arg, size_t *size)
             memset(&mbs, 0, sizeof mbs);
             continue;
         }
-        if (*out >= 0xd800 && *out <= 0xdfff) {
+        if (Py_UNICODE_IS_SURROGATE(*out)) {
             /* Surrogate character.  Escape the original
                byte sequence with surrogateescape. */
             argsize -= converted;
