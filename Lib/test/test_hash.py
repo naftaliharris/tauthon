@@ -45,6 +45,16 @@ class HashEqualityTestCase(unittest.TestCase):
         self.same_hash(int(1.23e300), float(1.23e300))
         self.same_hash(float(0.5), complex(0.5, 0.0))
 
+    def test_unaligned_buffers(self):
+        # The hash function for bytes-like objects shouldn't have
+        # alignment-dependent results (example in issue #16427).
+        b = b"123456789abcdefghijklmnopqrstuvwxyz" * 128
+        for i in range(16):
+            for j in range(16):
+                aligned = b[i:128+j]
+                unaligned = memoryview(b)[i:128+j]
+                self.assertEqual(hash(aligned), hash(unaligned))
+
 
 _default_hash = object.__hash__
 class DefaultHash(object): pass
@@ -113,8 +123,7 @@ class DefaultIterSeq(object):
         return self.seq[index]
 
 class HashBuiltinsTestCase(unittest.TestCase):
-    hashes_to_check = [range(10),
-                       enumerate(range(10)),
+    hashes_to_check = [enumerate(range(10)),
                        iter(DefaultIterSeq()),
                        iter(lambda: 0, 0),
                       ]
@@ -160,8 +169,8 @@ class StringlikeHashRandomizationTests(HashRandomizationTests):
         else:
             known_hash_of_obj = -1600925533
 
-        # Randomization is disabled by default:
-        self.assertEqual(self.get_hash(self.repr_), known_hash_of_obj)
+        # Randomization is enabled by default:
+        self.assertNotEqual(self.get_hash(self.repr_), known_hash_of_obj)
 
         # It can also be disabled by setting the seed to 0:
         self.assertEqual(self.get_hash(self.repr_, seed=0), known_hash_of_obj)
@@ -193,6 +202,12 @@ class BytesHashRandomizationTests(StringlikeHashRandomizationTests):
     def test_empty_string(self):
         self.assertEqual(hash(b""), 0)
 
+class MemoryviewHashRandomizationTests(StringlikeHashRandomizationTests):
+    repr_ = "memoryview(b'abc')"
+
+    def test_empty_string(self):
+        self.assertEqual(hash(memoryview(b"")), 0)
+
 class DatetimeTests(HashRandomizationTests):
     def get_hash_command(self, repr_):
         return 'import datetime; print(hash(%s))' % repr_
@@ -213,6 +228,7 @@ def test_main():
                          HashBuiltinsTestCase,
                          StrHashRandomizationTests,
                          BytesHashRandomizationTests,
+                         MemoryviewHashRandomizationTests,
                          DatetimeDateTests,
                          DatetimeDatetimeTests,
                          DatetimeTimeTests)
