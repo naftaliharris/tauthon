@@ -543,6 +543,10 @@ are always available.  They are listed here in alphabetical order.
    :exc:`TypeError` exception is raised if the method is not found or if either
    the *format_spec* or the return value are not strings.
 
+   .. versionadded:: 3.4
+      ``object().__format__(format_spec)`` raises :exc:`TypeError`
+      if *format_spec* is not empty string.
+
 
 .. _func-frozenset:
 .. function:: frozenset([iterable])
@@ -661,6 +665,12 @@ are always available.  They are listed here in alphabetical order.
 
    The integer type is described in :ref:`typesnumeric`.
 
+   .. versionchanged:: 3.4
+      If *base* is not an instance of :class:`int` and the *base* object has a
+      :meth:`base.__index__ <object.__index__>` method, that method is called
+      to obtain an integer for the base.  Previous versions used
+      :meth:`base.__int__ <object.__int__>` instead of :meth:`base.__index__
+      <object.__index__>`.
 
 .. function:: isinstance(object, classinfo)
 
