@@ -125,7 +125,7 @@ def main():
     # default the exclude list for each platform
     if win: exclude = exclude + [
         'dos', 'dospath', 'mac', 'macpath', 'macfs', 'MACFS', 'posix',
-        'os2', 'ce',
+        'ce',
         ]
 
     fail_import = exclude[:]
@@ -311,7 +311,7 @@ def main():
         try:
             os.mkdir(odir)
             print("Created output directory", odir)
-        except os.error as msg:
+        except OSError as msg:
             usage('%s: mkdir failed (%s)' % (odir, str(msg)))
     base = ''
     if odir:
