@@ -185,14 +185,6 @@ class StartupTests(unittest.TestCase):
                 self.assertTrue(hasattr(module, '__loader__'),
                         '{!r} lacks a __loader__ attribute'.format(name))
 
-def test_main():
-    from test.support import run_unittest
-    run_unittest(ImportModuleTests,
-                 FindLoaderTests,
-                 InvalidateCacheTests,
-                 FrozenImportlibTests,
-                 StartupTests)
-
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
