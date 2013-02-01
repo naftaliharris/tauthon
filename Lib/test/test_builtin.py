@@ -469,6 +469,11 @@ class BuiltinTest(unittest.TestCase):
         self.assertRaises(TypeError, eval, ())
         self.assertRaises(SyntaxError, eval, bom[:2] + b'a')
 
+        class X:
+            def __getitem__(self, key):
+                raise ValueError
+        self.assertRaises(ValueError, eval, "foo", {}, X())
+
     def test_general_eval(self):
         # Tests that general mappings can be used for the locals argument
 
@@ -1481,17 +1486,11 @@ class BuiltinTest(unittest.TestCase):
         # --------------------------------------------------------------------
         # Issue #7994: object.__format__ with a non-empty format string is
         #  deprecated
-        def test_deprecated_format_string(obj, fmt_str, should_raise_warning):
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always", DeprecationWarning)
-                format(obj, fmt_str)
-            if should_raise_warning:
-                self.assertEqual(len(w), 1)
-                self.assertIsInstance(w[0].message, DeprecationWarning)
-                self.assertIn('object.__format__ with a non-empty format '
-                              'string', str(w[0].message))
+        def test_deprecated_format_string(obj, fmt_str, should_raise):
+            if should_raise:
+                self.assertRaises(TypeError, format, obj, fmt_str)
             else:
-                self.assertEqual(len(w), 0)
+                format(obj, fmt_str)
 
         fmt_strs = ['', 's']
 
