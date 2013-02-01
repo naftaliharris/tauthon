@@ -245,7 +245,7 @@ class MmapTests(unittest.TestCase):
 
     def test_bad_file_desc(self):
         # Try opening a bad file descriptor...
-        self.assertRaises(mmap.error, mmap.mmap, -2, 4096)
+        self.assertRaises(OSError, mmap.mmap, -2, 4096)
 
     def test_tougher_find(self):
         # Do a tougher .find() test.  SF bug 515943 pointed out that, in 2.2,
@@ -658,7 +658,7 @@ class MmapTests(unittest.TestCase):
             m = mmap.mmap(f.fileno(), 0)
             f.close()
             try:
-                m.resize(0) # will raise WindowsError
+                m.resize(0) # will raise OSError
             except:
                 pass
             try:
@@ -673,7 +673,7 @@ class MmapTests(unittest.TestCase):
             # parameters to _get_osfhandle.
             s = socket.socket()
             try:
-                with self.assertRaises(mmap.error):
+                with self.assertRaises(OSError):
                     m = mmap.mmap(s.fileno(), 10)
             finally:
                 s.close()
@@ -684,11 +684,11 @@ class MmapTests(unittest.TestCase):
         self.assertTrue(m.closed)
 
     def test_context_manager_exception(self):
-        # Test that the IOError gets passed through
+        # Test that the OSError gets passed through
         with self.assertRaises(Exception) as exc:
             with mmap.mmap(-1, 10) as m:
-                raise IOError
-        self.assertIsInstance(exc.exception, IOError,
+                raise OSError
+        self.assertIsInstance(exc.exception, OSError,
                               "wrong exception raised in context manager")
         self.assertTrue(m.closed, "context manager failed")
 
@@ -709,7 +709,7 @@ class LargeMmapTests(unittest.TestCase):
             f.seek(num_zeroes)
             f.write(tail)
             f.flush()
-        except (IOError, OverflowError):
+        except (OSError, OverflowError):
             f.close()
             raise unittest.SkipTest("filesystem does not have largefile support")
         return f
