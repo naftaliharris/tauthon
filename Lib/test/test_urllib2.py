@@ -124,6 +124,19 @@ def test_request_headers_methods():
     >>> r.get_header("Not-there", "default")
     'default'
 
+    Method r.remove_header should remove items both from r.headers and
+    r.unredirected_hdrs dictionaries
+
+    >>> r.remove_header("Spam-eggs")
+    >>> r.has_header("Spam-eggs")
+    False
+    >>> r.add_unredirected_header("Unredirected-spam", "Eggs")
+    >>> r.has_header("Unredirected-spam")
+    True
+    >>> r.remove_header("Unredirected-spam")
+    >>> r.has_header("Unredirected-spam")
+    False
+
     """
 
 
@@ -302,6 +315,7 @@ class MockHTTPClass:
         self.req_headers = []
         self.data = None
         self.raise_on_endheaders = False
+        self.sock = None
         self._tunnel_headers = {}
 
     def __call__(self, host, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
@@ -330,7 +344,7 @@ class MockHTTPClass:
             self.data = body
         if self.raise_on_endheaders:
             import socket
-            raise socket.error()
+            raise OSError()
     def getresponse(self):
         return MockHTTPResponse(MockFile(), {}, 200, "OK")
 
@@ -831,7 +845,7 @@ class HandlerTests(unittest.TestCase):
                               ("Foo", "bar"), ("Spam", "eggs")])
             self.assertEqual(http.data, data)
 
-        # check socket.error converted to URLError
+        # check OSError converted to URLError
         http.raise_on_endheaders = True
         self.assertRaises(urllib.error.URLError, h.do_open, http, req)
 
@@ -1431,6 +1445,22 @@ class MiscTests(unittest.TestCase):
         self.opener_has_handler(o, MyHTTPHandler)
         self.opener_has_handler(o, MyOtherHTTPHandler)
 
+    @unittest.skipUnless(support.is_resource_enabled('network'),
+                         'test requires network access')
+    def test_issue16464(self):
+        opener = urllib.request.build_opener()
+        request = urllib.request.Request("http://www.python.org/~jeremy/")
+        self.assertEqual(None, request.data)
+
+        opener.open(request, "1".encode("us-ascii"))
+        self.assertEqual(b"1", request.data)
+        self.assertEqual("1", request.get_header("Content-length"))
+
+        opener.open(request, "1234567890".encode("us-ascii"))
+        self.assertEqual(b"1234567890", request.data)
+        self.assertEqual("10", request.get_header("Content-length"))
+
+
     def opener_has_handler(self, opener, handler_class):
         self.assertTrue(any(h.__class__ == handler_class
                             for h in opener.handlers))
@@ -1453,6 +1483,16 @@ class RequestTests(unittest.TestCase):
         self.get.data = "spam"
         self.assertTrue(self.get.data)
         self.assertEqual("POST", self.get.get_method())
+
+    # issue 16464
+    # if we change data we need to remove content-length header
+    # (cause it's most probably calculated for previous value)
+    def test_setting_data_should_remove_content_length(self):
+        self.assertFalse("Content-length" in self.get.unredirected_hdrs)
+        self.get.add_unredirected_header("Content-length", 42)
+        self.assertEqual(42, self.get.unredirected_hdrs["Content-length"])
+        self.get.data = "spam"
+        self.assertFalse("Content-length" in self.get.unredirected_hdrs)
 
     def test_get_full_url(self):
         self.assertEqual("http://www.python.org/~jeremy/",
@@ -1495,34 +1535,22 @@ class RequestTests(unittest.TestCase):
         req = Request(url)
         self.assertEqual(req.get_full_url(), url)
 
-    def test_HTTPError_interface(self):
-        """
-        Issue 13211 reveals that HTTPError didn't implement the URLError
-        interface even though HTTPError is a subclass of URLError.
+def test_HTTPError_interface():
+    """
+    Issue 13211 reveals that HTTPError didn't implement the URLError
+    interface even though HTTPError is a subclass of URLError.
 
-        >>> msg = 'something bad happened'
-        >>> url = code = hdrs = fp = None
-        >>> err = urllib.error.HTTPError(url, code, msg, hdrs, fp)
-        >>> assert hasattr(err, 'reason')
-        >>> err.reason
-        'something bad happened'
-        """
-
-    def test_HTTPError_interface_call(self):
-        """
-        Issue 15701 - HTTPError interface has info method available from URLError
-        """
-        err = urllib.request.HTTPError(msg="something bad happened", url=None,
-                                code=None, hdrs='Content-Length:42', fp=None)
-        self.assertTrue(hasattr(err, 'reason'))
-        assert hasattr(err, 'reason')
-        assert hasattr(err, 'info')
-        assert callable(err.info)
-        try:
-            err.info()
-        except AttributeError:
-            self.fail('err.info call failed.')
-        self.assertEqual(err.info(), "Content-Length:42")
+    >>> msg = 'something bad happened'
+    >>> url = code = fp = None
+    >>> hdrs = 'Content-Length: 42'
+    >>> err = urllib.error.HTTPError(url, code, msg, hdrs, fp)
+    >>> assert hasattr(err, 'reason')
+    >>> err.reason
+    'something bad happened'
+    >>> assert hasattr(err, 'headers')
+    >>> err.headers
+    'Content-Length: 42'
+    """
 
 def test_main(verbose=None):
     from test import test_urllib2
