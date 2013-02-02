@@ -513,7 +513,6 @@ audioop_findfit(PyObject *self, PyObject *args)
 
     best_result = result;
     best_j = 0;
-    j = 0;
 
     for ( j=1; j<=len1-len2; j++) {
         aj_m1 = (double)cp1[j-1];
@@ -599,7 +598,6 @@ audioop_findmax(PyObject *self, PyObject *args)
 
     best_result = result;
     best_j = 0;
-    j = 0;
 
     for ( j=1; j<=len1-len2; j++) {
         aj_m1 = (double)cp1[j-1];
@@ -1110,8 +1108,7 @@ audioop_ratecv(PyObject *self, PyObject *args)
         PyErr_SetString(AudioopError, "# of channels should be >= 1");
         return NULL;
     }
-    bytes_per_frame = size * nchannels;
-    if (bytes_per_frame / nchannels != size) {
+    if (size > INT_MAX / nchannels) {
         /* This overflow test is rigorously correct because
            both multiplicands are >= 1.  Use the argument names
            from the docs for the error msg. */
@@ -1119,6 +1116,7 @@ audioop_ratecv(PyObject *self, PyObject *args)
                         "width * nchannels too big for a C int");
         return NULL;
     }
+    bytes_per_frame = size * nchannels;
     if (weightA < 1 || weightB < 0) {
         PyErr_SetString(AudioopError,
             "weightA should be >= 1, weightB should be >= 0");
@@ -1433,7 +1431,6 @@ audioop_lin2adpcm(PyObject *self, PyObject *args)
     if ( state == Py_None ) {
         /* First time, it seems. Set defaults */
         valpred = 0;
-        step = 7;
         index = 0;
     } else if ( !PyArg_ParseTuple(state, "ii", &valpred, &index) )
         return 0;
@@ -1534,7 +1531,6 @@ audioop_adpcm2lin(PyObject *self, PyObject *args)
     if ( state == Py_None ) {
         /* First time, it seems. Set defaults */
         valpred = 0;
-        step = 7;
         index = 0;
     } else if ( !PyArg_ParseTuple(state, "ii", &valpred, &index) )
         return 0;
