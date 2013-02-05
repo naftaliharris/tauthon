@@ -3,13 +3,13 @@
 
 /* collections module implementation of a deque() datatype
    Written and maintained by Raymond D. Hettinger <python@rcn.com>
-   Copyright (c) 2004 Python Software Foundation.
+   Copyright (c) 2004-2013 Python Software Foundation.
    All rights reserved.
 */
 
 /* The block length may be set to any number over 1.  Larger numbers
  * reduce the number of calls to the memory allocator but take more
- * memory.  Ideally, BLOCKLEN should be set with an eye to the
+ * memory.  Ideally, BLOCKLEN should be set to a multiple of the
  * length of a cache line.
  */
 
@@ -413,10 +413,10 @@ deque_inplace_concat(dequeobject *deque, PyObject *other)
 static int
 _deque_rotate(dequeobject *deque, Py_ssize_t n)
 {
-    Py_ssize_t i, len=deque->len, halflen=(len+1)>>1;
-    PyObject *item, *rv;
+    Py_ssize_t m, len=deque->len, halflen=len>>1;
+    block *prevblock;
 
-    if (len == 0)
+    if (len <= 1)
         return 0;
     if (n > halflen || n < -halflen) {
         n %= len;
@@ -425,24 +425,79 @@ _deque_rotate(dequeobject *deque, Py_ssize_t n)
         else if (n < -halflen)
             n += len;
     }
+    assert(len > 1);
+    assert(-halflen <= n && n <= halflen);
 
-    for (i=0 ; i<n ; i++) {
-        item = deque_pop(deque, NULL);
-        assert (item != NULL);
-        rv = deque_appendleft(deque, item);
-        Py_DECREF(item);
-        if (rv == NULL)
-            return -1;
-        Py_DECREF(rv);
+    deque->state++;
+    while (n > 0) {
+        if (deque->leftindex == 0) {
+            block *b = newblock(NULL, deque->leftblock, len);
+            if (b == NULL)
+                return -1;
+            assert(deque->leftblock->leftlink == NULL);
+            deque->leftblock->leftlink = b;
+            deque->leftblock = b;
+            deque->leftindex = BLOCKLEN;
+        }
+        assert(deque->leftindex > 0);
+
+        m = n;
+        if (m > deque->rightindex + 1)
+            m = deque->rightindex + 1;
+        if (m > deque->leftindex)
+            m = deque->leftindex;
+        assert (m > 0 && m <= len);
+        memcpy(&deque->leftblock->data[deque->leftindex - m],
+               &deque->rightblock->data[deque->rightindex + 1 - m],
+               m * sizeof(PyObject *));
+        deque->rightindex -= m;
+        deque->leftindex -= m;
+        n -= m;
+
+        if (deque->rightindex == -1) {
+            assert(deque->rightblock != NULL);
+            prevblock = deque->rightblock->leftlink;
+            assert(deque->leftblock != deque->rightblock);
+            freeblock(deque->rightblock);
+            prevblock->rightlink = NULL;
+            deque->rightblock = prevblock;
+            deque->rightindex = BLOCKLEN - 1;
+        }
     }
-    for (i=0 ; i>n ; i--) {
-        item = deque_popleft(deque, NULL);
-        assert (item != NULL);
-        rv = deque_append(deque, item);
-        Py_DECREF(item);
-        if (rv == NULL)
-            return -1;
-        Py_DECREF(rv);
+    while (n < 0) {
+        if (deque->rightindex == BLOCKLEN - 1) {
+            block *b = newblock(deque->rightblock, NULL, len);
+            if (b == NULL)
+                return -1;
+            assert(deque->rightblock->rightlink == NULL);
+            deque->rightblock->rightlink = b;
+            deque->rightblock = b;
+            deque->rightindex = -1;
+        }
+        assert (deque->rightindex < BLOCKLEN - 1);
+
+        m = -n;
+        if (m > BLOCKLEN - deque->leftindex)
+            m = BLOCKLEN - deque->leftindex;
+        if (m > BLOCKLEN - 1 - deque->rightindex)
+            m = BLOCKLEN - 1 - deque->rightindex;
+        assert (m > 0 && m <= len);
+        memcpy(&deque->rightblock->data[deque->rightindex + 1],
+               &deque->leftblock->data[deque->leftindex],
+               m * sizeof(PyObject *));
+        deque->leftindex += m;
+        deque->rightindex += m;
+        n += m;
+
+        if (deque->leftindex == BLOCKLEN) {
+            assert(deque->leftblock != deque->rightblock);
+            prevblock = deque->leftblock->rightlink;
+            freeblock(deque->leftblock);
+            assert(prevblock != NULL);
+            prevblock->leftlink = NULL;
+            deque->leftblock = prevblock;
+            deque->leftindex = 0;
+        }
     }
     return 0;
 }
