@@ -390,7 +390,7 @@ The built-in function :func:`len` returns the length of a string::
 
 .. seealso::
 
-   :ref:`typesseq`
+   :ref:`textseq`
       Strings are examples of *sequence types*, and support the common
       operations supported by such types.
 
@@ -600,19 +600,19 @@ This example introduces several new features.
   guess when you have typed the last line).  Note that each line within a basic
   block must be indented by the same amount.
 
-* The :func:`print` function writes the value of the expression(s) it is
-  given.  It differs from just writing the expression you want to write (as we did
-  earlier in the calculator examples) in the way it handles multiple
-  expressions, floating point quantities,
-  and strings.  Strings are printed without quotes, and a space is inserted
-  between items, so you can format things nicely, like this::
+* The :func:`print` function writes the value of the argument(s) it is given.
+  It differs from just writing the expression you want to write (as we did
+  earlier in the calculator examples) in the way it handles multiple arguments,
+  floating point quantities, and strings.  Strings are printed without quotes,
+  and a space is inserted between items, so you can format things nicely, like
+  this::
 
      >>> i = 256*256
      >>> print('The value of i is', i)
      The value of i is 65536
 
-  The keyword *end* can be used to avoid the newline after the output, or end
-  the output with a different string::
+  The keyword argument *end* can be used to avoid the newline after the output,
+  or end the output with a different string::
 
      >>> a, b = 0, 1
      >>> while b < 1000:
