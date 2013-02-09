@@ -149,7 +149,7 @@ class TestRandomNameSequence(BaseTestCase):
                 # via any bugs above
                 try:
                     os.kill(pid, signal.SIGKILL)
-                except EnvironmentError:
+                except OSError:
                     pass
             os.close(read_fd)
             os.close(write_fd)
@@ -188,7 +188,7 @@ class TestCandidateTempdirList(BaseTestCase):
 
             try:
                 dirname = os.getcwd()
-            except (AttributeError, os.error):
+            except (AttributeError, OSError):
                 dirname = os.curdir
 
             self.assertIn(dirname, cand)
@@ -276,7 +276,7 @@ class TestMkstempInner(BaseTestCase):
         file = self.do_create()
         mode = stat.S_IMODE(os.stat(file.name).st_mode)
         expected = 0o600
-        if sys.platform in ('win32', 'os2emx'):
+        if sys.platform == 'win32':
             # There's no distinction among 'user', 'group' and 'world';
             # replicate the 'user' bits.
             user = expected >> 6
@@ -310,7 +310,7 @@ class TestMkstempInner(BaseTestCase):
         # On Windows a spawn* /path/ with embedded spaces shouldn't be quoted,
         # but an arg with embedded spaces should be decorated with double
         # quotes on each end
-        if sys.platform in ('win32',):
+        if sys.platform == 'win32':
             decorated = '"%s"' % sys.executable
             tester = '"%s"' % tester
         else:
@@ -479,7 +479,7 @@ class TestMkdtemp(BaseTestCase):
             mode = stat.S_IMODE(os.stat(dir).st_mode)
             mode &= 0o777 # Mask off sticky bits inherited from /tmp
             expected = 0o700
-            if sys.platform in ('win32', 'os2emx'):
+            if sys.platform == 'win32':
                 # There's no distinction among 'user', 'group' and 'world';
                 # replicate the 'user' bits.
                 user = expected >> 6
@@ -963,7 +963,7 @@ class TestTemporaryDirectory(BaseTestCase):
         # (noted as part of Issue #10188)
         with tempfile.TemporaryDirectory() as nonexistent:
             pass
-        with self.assertRaises(os.error):
+        with self.assertRaises(OSError):
             tempfile.TemporaryDirectory(dir=nonexistent)
 
     def test_explicit_cleanup(self):
