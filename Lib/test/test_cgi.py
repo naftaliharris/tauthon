@@ -4,6 +4,7 @@ import os
 import sys
 import tempfile
 import unittest
+import warnings
 from collections import namedtuple
 from io import StringIO, BytesIO
 
@@ -137,9 +138,13 @@ class CgiTests(unittest.TestCase):
         self.assertTrue(fs)
 
     def test_escape(self):
-        self.assertEqual("test &amp; string", cgi.escape("test & string"))
-        self.assertEqual("&lt;test string&gt;", cgi.escape("<test string>"))
-        self.assertEqual("&quot;test string&quot;", cgi.escape('"test string"', True))
+        # cgi.escape() is deprecated.
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', 'cgi\.escape',
+                                     DeprecationWarning)
+            self.assertEqual("test &amp; string", cgi.escape("test & string"))
+            self.assertEqual("&lt;test string&gt;", cgi.escape("<test string>"))
+            self.assertEqual("&quot;test string&quot;", cgi.escape('"test string"', True))
 
     def test_strict(self):
         for orig, expect in parse_strict_test_cases:
@@ -169,8 +174,7 @@ class CgiTests(unittest.TestCase):
 
     def test_log(self):
         cgi.log("Testing")
-        cgi.logfile = "fail/"
-        cgi.initlog("%s", "Testing initlog")
+
         cgi.logfp = StringIO()
         cgi.initlog("%s", "Testing initlog 1")
         cgi.log("%s", "Testing log 2")
@@ -179,13 +183,7 @@ class CgiTests(unittest.TestCase):
             cgi.logfp = None
             cgi.logfile = "/dev/null"
             cgi.initlog("%s", "Testing log 3")
-            def log_cleanup():
-                """Restore the global state of the log vars."""
-                cgi.logfile = ''
-                cgi.logfp.close()
-                cgi.logfp = None
-                cgi.log = cgi.initlog
-            self.addCleanup(log_cleanup)
+            self.addCleanup(cgi.closelog)
             cgi.log("Testing log 4")
 
     def test_fieldstorage_readline(self):

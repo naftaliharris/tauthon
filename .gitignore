@@ -15,6 +15,7 @@ Doc/tools/jinja2/
 Doc/tools/pygments/
 Doc/tools/sphinx/
 Lib/lib2to3/*.pickle
+Lib/_sysconfigdata.py
 Lib/plat-mac/errors.rsrc.df.rsrc
 Makefile
 Makefile.pre
@@ -24,6 +25,7 @@ Modules/Setup.config
 Modules/Setup.local
 Modules/config.c
 Modules/ld_so_aix
+Modules/_freeze_importlib
 Modules/_testembed
 PCbuild/*.bsc
 PCbuild/*.dll
@@ -37,7 +39,6 @@ PCbuild/Win32-temp-*
 PCbuild/amd64/
 .purify
 Parser/pgen
-Parser/pgen.stamp
 __pycache__
 autom4te.cache
 build/
