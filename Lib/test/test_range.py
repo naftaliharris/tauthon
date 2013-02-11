@@ -313,7 +313,7 @@ class RangeTest(unittest.TestCase):
         self.assertRaises(TypeError, range, IN())
 
         # Test use of user-defined classes in slice indices.
-        self.assertEqual(list(range(10)[:I(5)]), list(range(5)))
+        self.assertEqual(range(10)[:I(5)], range(5))
 
         with self.assertRaises(RuntimeError):
             range(0, 10)[:IX()]
