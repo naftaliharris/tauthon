@@ -9,6 +9,8 @@ from wsgiref.simple_server import WSGIServer, WSGIRequestHandler, demo_app
 from wsgiref.simple_server import make_server
 from io import StringIO, BytesIO, BufferedReader
 from socketserver import BaseServer
+from platform import python_implementation
+
 import os
 import re
 import sys
@@ -100,9 +102,11 @@ def compare_generic_iter(make_it,match):
 class IntegrationTests(TestCase):
 
     def check_hello(self, out, has_length=True):
+        pyver = (python_implementation() + "/" +
+                sys.version.split()[0])
         self.assertEqual(out,
             ("HTTP/1.0 200 OK\r\n"
-            "Server: WSGIServer/0.2 Python/"+sys.version.split()[0]+"\r\n"
+            "Server: WSGIServer/0.2 " + pyver +"\r\n"
             "Content-Type: text/plain\r\n"
             "Date: Mon, 05 Jun 2006 18:49:54 GMT\r\n" +
             (has_length and  "Content-Length: 13\r\n" or "") +
@@ -156,9 +160,11 @@ class IntegrationTests(TestCase):
         out, err = run_amock(validator(app))
         self.assertTrue(err.endswith('"GET / HTTP/1.0" 200 4\n'))
         ver = sys.version.split()[0].encode('ascii')
+        py  = python_implementation().encode('ascii')
+        pyver = py + b"/" + ver
         self.assertEqual(
                 b"HTTP/1.0 200 OK\r\n"
-                b"Server: WSGIServer/0.2 Python/" + ver + b"\r\n"
+                b"Server: WSGIServer/0.2 "+ pyver + b"\r\n"
                 b"Content-Type: text/plain; charset=utf-8\r\n"
                 b"Date: Wed, 24 Dec 2008 13:29:32 GMT\r\n"
                 b"\r\n"
