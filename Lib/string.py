@@ -508,15 +508,15 @@ def capitalize(s):
     return s.capitalize()
 
 # Substring replacement (global)
-def replace(s, old, new, maxsplit=-1):
-    """replace (str, old, new[, maxsplit]) -> string
+def replace(s, old, new, maxreplace=-1):
+    """replace (str, old, new[, maxreplace]) -> string
 
     Return a copy of string str with all occurrences of substring
-    old replaced by new. If the optional argument maxsplit is
-    given, only the first maxsplit occurrences are replaced.
+    old replaced by new. If the optional argument maxreplace is
+    given, only the first maxreplace occurrences are replaced.
 
     """
-    return s.replace(old, new, maxsplit)
+    return s.replace(old, new, maxreplace)
 
 
 # Try importing optional built-in module "strop" -- if it exists,
@@ -601,13 +601,13 @@ class Formatter(object):
 
     def convert_field(self, value, conversion):
         # do any conversion on the resulting object
-        if conversion == 'r':
-            return repr(value)
+        if conversion is None:
+            return value
         elif conversion == 's':
             return str(value)
-        elif conversion is None:
-            return value
-        raise ValueError("Unknown converion specifier {0!s}".format(conversion))
+        elif conversion == 'r':
+            return repr(value)
+        raise ValueError("Unknown conversion specifier {0!s}".format(conversion))
 
 
     # returns an iterable that contains tuples of the form:

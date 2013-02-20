@@ -63,7 +63,7 @@ class Complex(Number):
 
     @abstractproperty
     def imag(self):
-        """Retrieve the real component of this number.
+        """Retrieve the imaginary component of this number.
 
         This should subclass Real.
         """
@@ -303,7 +303,7 @@ class Integral(Rational):
         raise NotImplementedError
 
     def __index__(self):
-        """index(self)"""
+        """Called whenever an index is needed, such as in slicing"""
         return long(self)
 
     @abstractmethod

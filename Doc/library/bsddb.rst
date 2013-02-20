@@ -7,7 +7,7 @@
 .. sectionauthor:: Skip Montanaro <skip@pobox.com>
 
 .. deprecated:: 2.6
-    The :mod:`bsddb` module has been deprecated for removal in Python 3.0.
+    The :mod:`bsddb` module has been removed in Python 3.
 
 
 The :mod:`bsddb` module provides an interface to the Berkeley DB library.  Users
@@ -54,7 +54,7 @@ arguments should be used in most instances.
    optional *flag* identifies the mode used to open the file.  It may be ``'r'``
    (read only), ``'w'`` (read-write) , ``'c'`` (read-write - create if necessary;
    the default) or ``'n'`` (read-write - truncate to zero length).  The other
-   arguments are rarely used and are just passed to the low-level :cfunc:`dbopen`
+   arguments are rarely used and are just passed to the low-level :c:func:`dbopen`
    function.  Consult the Berkeley DB documentation for their use and
    interpretation.
 
@@ -86,7 +86,7 @@ arguments should be used in most instances.
    This is present *only* to allow backwards compatibility with systems which ship
    with the old Berkeley DB 1.85 database library.  The :mod:`bsddb185` module
    should never be used directly in new code. The module has been removed in
-   Python 3.0.  If you find you still need it look in PyPI.
+   Python 3.  If you find you still need it look in PyPI.
 
 
 .. seealso::

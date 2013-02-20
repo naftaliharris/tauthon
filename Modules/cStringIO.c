@@ -127,12 +127,16 @@ IO_cgetval(PyObject *self) {
 static PyObject *
 IO_getval(IOobject *self, PyObject *args) {
     PyObject *use_pos=Py_None;
+    int b;
     Py_ssize_t s;
 
     if (!IO__opencheck(self)) return NULL;
     if (!PyArg_UnpackTuple(args,"getval", 0, 1,&use_pos)) return NULL;
 
-    if (PyObject_IsTrue(use_pos)) {
+    b = PyObject_IsTrue(use_pos);
+    if (b < 0)
+        return NULL;
+    if (b) {
               s=self->pos;
               if (s > self->string_size) s=self->string_size;
     }
@@ -166,10 +170,15 @@ IO_cread(PyObject *self, char **output, Py_ssize_t  n) {
         n = l;
         if (n < 0) n=0;
     }
+    if (n > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "length too large");
+        return -1;
+    }
 
     *output=((IOobject*)self)->buf + ((IOobject*)self)->pos;
     ((IOobject*)self)->pos += n;
-    return n;
+    return (int)n;
 }
 
 static PyObject *
@@ -188,26 +197,30 @@ PyDoc_STRVAR(IO_readline__doc__, "readline() -- Read one line");
 
 static int
 IO_creadline(PyObject *self, char **output) {
-    char *n, *s;
-    Py_ssize_t l;
+    char *n, *start, *end;
+    Py_ssize_t len;
 
     if (!IO__opencheck(IOOOBJECT(self))) return -1;
 
-    for (n = ((IOobject*)self)->buf + ((IOobject*)self)->pos,
-           s = ((IOobject*)self)->buf + ((IOobject*)self)->string_size;
-         n < s && *n != '\n'; n++);
+    n = start = ((IOobject*)self)->buf + ((IOobject*)self)->pos;
+    end = ((IOobject*)self)->buf + ((IOobject*)self)->string_size;
+    while (n < end && *n != '\n')
+        n++;
 
-    if (n < s) n++;
+    if (n < end) n++;
 
-    *output=((IOobject*)self)->buf + ((IOobject*)self)->pos;
-    l = n - ((IOobject*)self)->buf - ((IOobject*)self)->pos;
+    len = n - start;
+    if (len > INT_MAX)
+        len = INT_MAX;
 
-    assert(IOOOBJECT(self)->pos <= PY_SSIZE_T_MAX - l);
+    *output=start;
+
+    assert(IOOOBJECT(self)->pos <= PY_SSIZE_T_MAX - len);
     assert(IOOOBJECT(self)->pos >= 0);
     assert(IOOOBJECT(self)->string_size >= 0);
 
-    ((IOobject*)self)->pos += l;
-    return (int)l;
+    ((IOobject*)self)->pos += len;
+    return (int)len;
 }
 
 static PyObject *
@@ -235,9 +248,9 @@ IO_readlines(IOobject *self, PyObject *args) {
     int n;
     char *output;
     PyObject *result, *line;
-    int hint = 0, length = 0;
+    Py_ssize_t hint = 0, length = 0;
 
-    if (!PyArg_ParseTuple(args, "|i:readlines", &hint)) return NULL;
+    if (!PyArg_ParseTuple(args, "|n:readlines", &hint)) return NULL;
 
     result = PyList_New(0);
     if (!result)
@@ -339,12 +352,12 @@ IO_iternext(Iobject *self)
 
 /* Read-write object methods */
 
-PyDoc_STRVAR(O_seek__doc__,
+PyDoc_STRVAR(IO_seek__doc__,
 "seek(position)       -- set the current position\n"
 "seek(position, mode) -- mode 0: absolute; 1: relative; 2: relative to EOF");
 
 static PyObject *
-O_seek(Oobject *self, PyObject *args) {
+IO_seek(Iobject *self, PyObject *args) {
     Py_ssize_t position;
     int mode = 0;
 
@@ -359,24 +372,9 @@ O_seek(Oobject *self, PyObject *args) {
         position += self->pos;
     }
 
-    if (position > self->buf_size) {
-              char *newbuf;
-              self->buf_size*=2;
-              if (self->buf_size <= position) self->buf_size=position+1;
-              newbuf = (char*) realloc(self->buf,self->buf_size);
-              if (!newbuf) {
-                  free(self->buf);
-                  self->buf = 0;
-                  self->buf_size=self->pos=0;
-                  return PyErr_NoMemory();
-                }
-              self->buf = newbuf;
-      }
-    else if (position < 0) position=0;
+    if (position < 0) position=0;
 
     self->pos=position;
-
-    while (--position >= self->string_size) self->buf[position]=0;
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -388,42 +386,64 @@ PyDoc_STRVAR(O_write__doc__,
 
 
 static int
-O_cwrite(PyObject *self, const char *c, Py_ssize_t  l) {
-    Py_ssize_t newl;
+O_cwrite(PyObject *self, const char *c, Py_ssize_t  len) {
+    Py_ssize_t newpos;
     Oobject *oself;
     char *newbuf;
 
     if (!IO__opencheck(IOOOBJECT(self))) return -1;
     oself = (Oobject *)self;
 
-    newl = oself->pos+l;
-    if (newl >= oself->buf_size) {
-        oself->buf_size *= 2;
-        if (oself->buf_size <= newl) {
-            assert(newl + 1 < INT_MAX);
-            oself->buf_size = (int)(newl+1);
+    if (len > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "length too large");
+        return -1;
+    }
+    assert(len >= 0);
+    if (oself->pos >= PY_SSIZE_T_MAX - len) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "new position too large");
+        return -1;
+    }
+    newpos = oself->pos + len;
+    if (newpos >= oself->buf_size) {
+        size_t newsize = oself->buf_size;
+        newsize *= 2;
+        if (newsize <= (size_t)newpos || newsize > PY_SSIZE_T_MAX) {
+            assert(newpos < PY_SSIZE_T_MAX - 1);
+            newsize = newpos + 1;
         }
-        newbuf = (char*)realloc(oself->buf, oself->buf_size);
+        newbuf = (char*)realloc(oself->buf, newsize);
         if (!newbuf) {
             PyErr_SetString(PyExc_MemoryError,"out of memory");
-            free(oself->buf);
-            oself->buf = 0;
-            oself->buf_size = oself->pos = 0;
             return -1;
-          }
+        }
+        oself->buf_size = (Py_ssize_t)newsize;
         oself->buf = newbuf;
-      }
+    }
 
-    memcpy(oself->buf+oself->pos,c,l);
+    if (oself->string_size < oself->pos) {
+        /* In case of overseek, pad with null bytes the buffer region between
+           the end of stream and the current position.
 
-    assert(oself->pos + l < INT_MAX);
-    oself->pos += (int)l;
+          0   lo      string_size                           hi
+          |   |<---used--->|<----------available----------->|
+          |   |            <--to pad-->|<---to write--->    |
+          0   buf                   position
+        */
+        memset(oself->buf + oself->string_size, '\0',
+               (oself->pos - oself->string_size) * sizeof(char));
+    }
+
+    memcpy(oself->buf + oself->pos, c, len);
+
+    oself->pos = newpos;
 
     if (oself->string_size < oself->pos) {
         oself->string_size = oself->pos;
     }
 
-    return (int)l;
+    return (int)len;
 }
 
 static PyObject *
@@ -497,12 +517,12 @@ static struct PyMethodDef O_methods[] = {
   {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
+  {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},
   {"tell",      (PyCFunction)IO_tell,     METH_NOARGS,  IO_tell__doc__},
   {"truncate",  (PyCFunction)IO_truncate, METH_VARARGS, IO_truncate__doc__},
 
   /* Read-write StringIO specific  methods: */
   {"close",      (PyCFunction)O_close,      METH_NOARGS,  O_close__doc__},
-  {"seek",       (PyCFunction)O_seek,       METH_VARARGS, O_seek__doc__},
   {"write",      (PyCFunction)O_write,      METH_VARARGS, O_write__doc__},
   {"writelines", (PyCFunction)O_writelines, METH_O,       O_writelines__doc__},
   {NULL,         NULL}          /* sentinel */
@@ -595,26 +615,6 @@ I_close(Iobject *self, PyObject *unused) {
     return Py_None;
 }
 
-static PyObject *
-I_seek(Iobject *self, PyObject *args) {
-    Py_ssize_t position;
-    int mode = 0;
-
-    if (!IO__opencheck(IOOOBJECT(self))) return NULL;
-    if (!PyArg_ParseTuple(args, "n|i:seek", &position, &mode))
-        return NULL;
-
-    if (mode == 2) position += self->string_size;
-    else if (mode == 1) position += self->pos;
-
-    if (position < 0) position=0;
-
-    self->pos=position;
-
-    Py_INCREF(Py_None);
-    return Py_None;
-}
-
 static struct PyMethodDef I_methods[] = {
   /* Common methods: */
   {"flush",     (PyCFunction)IO_flush,    METH_NOARGS,  IO_flush__doc__},
@@ -624,12 +624,12 @@ static struct PyMethodDef I_methods[] = {
   {"readline",  (PyCFunction)IO_readline, METH_VARARGS, IO_readline__doc__},
   {"readlines", (PyCFunction)IO_readlines,METH_VARARGS, IO_readlines__doc__},
   {"reset",     (PyCFunction)IO_reset,    METH_NOARGS,  IO_reset__doc__},
+  {"seek",      (PyCFunction)IO_seek,     METH_VARARGS, IO_seek__doc__},
   {"tell",      (PyCFunction)IO_tell,     METH_NOARGS,  IO_tell__doc__},
   {"truncate",  (PyCFunction)IO_truncate, METH_VARARGS, IO_truncate__doc__},
 
   /* Read-only StringIO specific  methods: */
   {"close",     (PyCFunction)I_close,    METH_NOARGS,  O_close__doc__},
-  {"seek",      (PyCFunction)I_seek,     METH_VARARGS, O_seek__doc__},
   {NULL,        NULL}
 };
 
@@ -683,7 +683,11 @@ newIobject(PyObject *s) {
   char *buf;
   Py_ssize_t size;
 
-  if (PyObject_AsReadBuffer(s, (const void **)&buf, &size)) {
+  if (PyUnicode_Check(s)) {
+    if (PyObject_AsCharBuffer(s, (const char **)&buf, &size) != 0)
+      return NULL;
+  }
+  else if (PyObject_AsReadBuffer(s, (const void **)&buf, &size)) {
     PyErr_Format(PyExc_TypeError, "expected read buffer, %.200s found",
                  s->ob_type->tp_name);
     return NULL;
@@ -761,8 +765,8 @@ initcStringIO(void) {
   Py_TYPE(&Otype)=&PyType_Type;
   if (PyType_Ready(&Otype) < 0) return;
   if (PyType_Ready(&Itype) < 0) return;
-  PyDict_SetItemString(d,"cStringIO_CAPI",
-                       v = PyCObject_FromVoidPtr(&CAPI,NULL));
+  v = PyCapsule_New(&CAPI, PycStringIO_CAPSULE_NAME, NULL);
+  PyDict_SetItemString(d,"cStringIO_CAPI", v);
   Py_XDECREF(v);
 
   /* Export Types */

@@ -1,3 +1,5 @@
+.. _sortinghowto:
+
 Sorting HOW TO
 **************
 
@@ -6,8 +8,8 @@ Sorting HOW TO
 
 
 Python lists have a built-in :meth:`list.sort` method that modifies the list
-in-place and a :func:`sorted` built-in function that builds a new sorted list
-from an iterable.
+in-place.  There is also a :func:`sorted` built-in function that builds a new
+sorted list from an iterable.
 
 In this document, we explore the various techniques for sorting data using Python.
 
@@ -109,11 +111,20 @@ sort by *grade* then by *age*:
     >>> sorted(student_objects, key=attrgetter('grade', 'age'))
     [('john', 'A', 15), ('dave', 'B', 10), ('jane', 'B', 12)]
 
+The :func:`operator.methodcaller` function makes method calls with fixed
+parameters for each object being sorted.  For example, the :meth:`str.count`
+method could be used to compute message priority by counting the
+number of exclamation marks in a message:
+
+    >>> messages = ['critical!!!', 'hurry!', 'standby', 'immediate!!']
+    >>> sorted(messages, key=methodcaller('count', '!'))
+    ['standby', 'hurry!', 'immediate!!', 'critical!!!']
+
 Ascending and Descending
 ========================
 
 Both :meth:`list.sort` and :func:`sorted` accept a *reverse* parameter with a
-boolean value. This is using to flag descending sorts. For example, to get the
+boolean value. This is used to flag descending sorts. For example, to get the
 student data in reverse *age* order:
 
     >>> sorted(student_tuples, key=itemgetter(2), reverse=True)
@@ -199,11 +210,11 @@ there was no :func:`sorted` builtin and :meth:`list.sort` took no keyword
 arguments. Instead, all of the Py2.x versions supported a *cmp* parameter to
 handle user specified comparison functions.
 
-In Py3.0, the *cmp* parameter was removed entirely (as part of a larger effort to
+In Python 3, the *cmp* parameter was removed entirely (as part of a larger effort to
 simplify and unify the language, eliminating the conflict between rich
 comparisons and the :meth:`__cmp__` magic method).
 
-In Py2.x, sort allowed an optional function which can be called for doing the
+In Python 2, :meth:`~list.sort` allowed an optional function which can be called for doing the
 comparisons. That function should take two arguments to be compared and then
 return a negative value for less-than, return zero if they are equal, or return
 a positive value for greater-than. For example, we can do:
@@ -257,21 +268,29 @@ Odd and Ends
 * For locale aware sorting, use :func:`locale.strxfrm` for a key function or
   :func:`locale.strcoll` for a comparison function.
 
-* The *reverse* parameter still maintains sort stability (i.e. records with
-  equal keys retain the original order). Interestingly, that effect can be
+* The *reverse* parameter still maintains sort stability (so that records with
+  equal keys retain their original order). Interestingly, that effect can be
   simulated without the parameter by using the builtin :func:`reversed` function
   twice:
 
     >>> data = [('red', 1), ('blue', 1), ('red', 2), ('blue', 2)]
     >>> assert sorted(data, reverse=True) == list(reversed(sorted(reversed(data))))
 
-* The sort routines are guaranteed to use :meth:`__lt__` when making comparisons
-  between two objects. So, it is easy to add a standard sort order to a class by
-  defining an :meth:`__lt__` method::
+* To create a standard sort order for a class, just add the appropriate rich
+  comparison methods:
 
+    >>> Student.__eq__ = lambda self, other: self.age == other.age
+    >>> Student.__ne__ = lambda self, other: self.age != other.age
     >>> Student.__lt__ = lambda self, other: self.age < other.age
+    >>> Student.__le__ = lambda self, other: self.age <= other.age
+    >>> Student.__gt__ = lambda self, other: self.age > other.age
+    >>> Student.__ge__ = lambda self, other: self.age >= other.age
     >>> sorted(student_objects)
     [('dave', 'B', 10), ('jane', 'B', 12), ('john', 'A', 15)]
+
+  For general purpose comparisons, the recommended approach is to define all six
+  rich comparison operators.  The :func:`functools.total_ordering` class
+  decorator makes this easy to implement.
 
 * Key functions need not depend directly on the objects being sorted. A key
   function can also access external resources. For instance, if the student grades
@@ -279,6 +298,6 @@ Odd and Ends
   names:
 
     >>> students = ['dave', 'john', 'jane']
-    >>> newgrades = {'john': 'F', 'jane':'A', 'dave': 'C'}
-    >>> sorted(students, key=newgrades.__getitem__)
+    >>> grades = {'john': 'F', 'jane':'A', 'dave': 'C'}
+    >>> sorted(students, key=grades.__getitem__)
     ['jane', 'dave', 'john']

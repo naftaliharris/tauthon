@@ -9,6 +9,14 @@ __revision__ = "$Id$"
 
 import string, re
 
+try:
+    _unicode = unicode
+except NameError:
+    # If Python is built without Unicode support, the unicode type
+    # will not exist. Fake one.
+    class _unicode(object):
+        pass
+
 # Do the right thing with boolean values for all known Python versions
 # (so this module can be copied to projects that don't depend on Python
 # 2.3, e.g. Optik and Docutils) by uncommenting the block of code below.
@@ -147,7 +155,7 @@ class TextWrapper:
         if self.replace_whitespace:
             if isinstance(text, str):
                 text = text.translate(self.whitespace_trans)
-            elif isinstance(text, unicode):
+            elif isinstance(text, _unicode):
                 text = text.translate(self.unicode_whitespace_trans)
         return text
 
@@ -156,7 +164,7 @@ class TextWrapper:
         """_split(text : string) -> [string]
 
         Split the text to wrap into indivisible chunks.  Chunks are
-        not quite the same as words; see wrap_chunks() for full
+        not quite the same as words; see _wrap_chunks() for full
         details.  As an example, the text
           Look, goof-ball -- use the -b option!
         breaks into the following chunks:
@@ -167,7 +175,7 @@ class TextWrapper:
           'use', ' ', 'the', ' ', '-b', ' ', option!'
         otherwise.
         """
-        if isinstance(text, unicode):
+        if isinstance(text, _unicode):
             if self.break_on_hyphens:
                 pat = self.wordsep_re_uni
             else:
@@ -191,9 +199,9 @@ class TextWrapper:
         space to two.
         """
         i = 0
-        pat = self.sentence_end_re
+        patsearch = self.sentence_end_re.search
         while i < len(chunks)-1:
-            if chunks[i+1] == " " and pat.search(chunks[i]):
+            if chunks[i+1] == " " and patsearch(chunks[i]):
                 chunks[i+1] = "  "
                 i += 2
             else:

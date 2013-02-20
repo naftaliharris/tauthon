@@ -14,11 +14,11 @@ The :mod:`os` module provides dozens of functions for interacting with the
 operating system::
 
    >>> import os
-   >>> os.system('time 0:02')
-   0
    >>> os.getcwd()      # Return the current working directory
    'C:\\Python26'
-   >>> os.chdir('/server/accesslogs')
+   >>> os.chdir('/server/accesslogs')   # Change current working directory
+   >>> os.system('mkdir today')   # Run the command mkdir in the system shell
+   0
 
 Be sure to use the ``import os`` style instead of ``from os import *``.  This
 will keep :func:`os.open` from shadowing the built-in :func:`open` function which
@@ -72,7 +72,7 @@ three`` at the command line::
 
 The :mod:`getopt` module processes *sys.argv* using the conventions of the Unix
 :func:`getopt` function.  More powerful and flexible command line processing is
-provided by the :mod:`optparse` module.
+provided by the :mod:`argparse` module.
 
 
 .. _tut-stderr:
@@ -145,7 +145,7 @@ Internet Access
 ===============
 
 There are a number of modules for accessing the internet and processing internet
-protocols. Two of the simplest are :mod:`urllib2` for retrieving data from urls
+protocols. Two of the simplest are :mod:`urllib2` for retrieving data from URLs
 and :mod:`smtplib` for sending mail::
 
    >>> import urllib2

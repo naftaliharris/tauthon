@@ -30,10 +30,13 @@ SCRIPT = sys.argv[0]
 VERSION = "2.6"
 
 # The Unicode Database
-UNIDATA_VERSION = "5.1.0"
+UNIDATA_VERSION = "5.2.0"
 UNICODE_DATA = "UnicodeData%s.txt"
 COMPOSITION_EXCLUSIONS = "CompositionExclusions%s.txt"
 EASTASIAN_WIDTH = "EastAsianWidth%s.txt"
+UNIHAN = "Unihan%s.txt"
+DERIVEDNORMALIZATION_PROPS = "DerivedNormalizationProps%s.txt"
+LINE_BREAK = "LineBreak%s.txt"
 
 old_versions = ["3.2.0"]
 
@@ -48,6 +51,8 @@ BIDIRECTIONAL_NAMES = [ "", "L", "LRE", "LRO", "R", "AL", "RLE", "RLO",
 
 EASTASIANWIDTH_NAMES = [ "F", "H", "W", "Na", "A", "N" ]
 
+MANDATORY_LINE_BREAKS = [ "BK", "CR", "LF", "NL" ]
+
 # note: should match definitions in Objects/unicodectype.c
 ALPHA_MASK = 0x01
 DECIMAL_MASK = 0x02
@@ -58,6 +63,7 @@ SPACE_MASK = 0x20
 TITLE_MASK = 0x40
 UPPER_MASK = 0x80
 NODELTA_MASK = 0x100
+NUMERIC_MASK = 0x200
 
 def maketables(trace=0):
 
@@ -66,7 +72,10 @@ def maketables(trace=0):
     version = ""
     unicode = UnicodeData(UNICODE_DATA % version,
                           COMPOSITION_EXCLUSIONS % version,
-                          EASTASIAN_WIDTH % version)
+                          EASTASIAN_WIDTH % version,
+                          UNIHAN % version,
+                          DERIVEDNORMALIZATION_PROPS % version,
+                          LINE_BREAK % version)
 
     print len(filter(None, unicode.table)), "characters"
 
@@ -74,7 +83,8 @@ def maketables(trace=0):
         print "--- Reading", UNICODE_DATA % ("-"+version), "..."
         old_unicode = UnicodeData(UNICODE_DATA % ("-"+version),
                                   COMPOSITION_EXCLUSIONS % ("-"+version),
-                                  EASTASIAN_WIDTH % ("-"+version))
+                                  EASTASIAN_WIDTH % ("-"+version),
+                                  UNIHAN % ("-"+version))
         print len(filter(None, old_unicode.table)), "characters"
         merge_old_version(version, unicode, old_unicode)
 
@@ -87,7 +97,7 @@ def maketables(trace=0):
 
 def makeunicodedata(unicode, trace):
 
-    dummy = (0, 0, 0, 0, 0)
+    dummy = (0, 0, 0, 0, 0, 0)
     table = [dummy]
     cache = {0: dummy}
     index = [0] * len(unicode.chars)
@@ -107,8 +117,10 @@ def makeunicodedata(unicode, trace):
             bidirectional = BIDIRECTIONAL_NAMES.index(record[4])
             mirrored = record[9] == "Y"
             eastasianwidth = EASTASIANWIDTH_NAMES.index(record[15])
+            normalizationquickcheck = record[17]
             item = (
-                category, combining, bidirectional, mirrored, eastasianwidth
+                category, combining, bidirectional, mirrored, eastasianwidth,
+                normalizationquickcheck
                 )
             # add entry to index and item tables
             i = cache.get(item)
@@ -148,8 +160,7 @@ def makeunicodedata(unicode, trace):
                 prefix = i
                 assert prefix < 256
                 # content
-                decomp = [prefix + (len(decomp)<<8)] +\
-                         map(lambda s: int(s, 16), decomp)
+                decomp = [prefix + (len(decomp)<<8)] + [int(s, 16) for s in decomp]
                 # Collect NFC pairs
                 if not prefix and len(decomp) == 3 and \
                    char not in unicode.exclusions and \
@@ -222,7 +233,7 @@ def makeunicodedata(unicode, trace):
     print >>fp, \
           "const _PyUnicode_DatabaseRecord _PyUnicode_Database_Records[] = {"
     for item in table:
-        print >>fp, "    {%d, %d, %d, %d, %d}," % item
+        print >>fp, "    {%d, %d, %d, %d, %d, %d}," % item
     print >>fp, "};"
     print >>fp
 
@@ -348,6 +359,9 @@ def makeunicodetype(unicode, trace):
     table = [dummy]
     cache = {0: dummy}
     index = [0] * len(unicode.chars)
+    numeric = {}
+    spaces = []
+    linebreaks = []
 
     for char in unicode.chars:
         record = unicode.table[char]
@@ -355,16 +369,19 @@ def makeunicodetype(unicode, trace):
             # extract database properties
             category = record[2]
             bidirectional = record[4]
+            properties = record[16]
             flags = 0
             delta = True
             if category in ["Lm", "Lt", "Lu", "Ll", "Lo"]:
                 flags |= ALPHA_MASK
             if category == "Ll":
                 flags |= LOWER_MASK
-            if category == "Zl" or bidirectional == "B":
+            if 'Line_Break' in properties or bidirectional == "B":
                 flags |= LINEBREAK_MASK
+                linebreaks.append(char)
             if category == "Zs" or bidirectional in ("WS", "B", "S"):
                 flags |= SPACE_MASK
+                spaces.append(char)
             if category == "Lt":
                 flags |= TITLE_MASK
             if category == "Lu":
@@ -407,6 +424,9 @@ def makeunicodetype(unicode, trace):
             if record[7]:
                 flags |= DIGIT_MASK
                 digit = int(record[7])
+            if record[8]:
+                flags |= NUMERIC_MASK
+                numeric.setdefault(record[8], []).append(char)
             item = (
                 upper, lower, title, decimal, digit, flags
                 )
@@ -418,6 +438,9 @@ def makeunicodetype(unicode, trace):
             index[char] = i
 
     print len(table), "unique character type entries"
+    print sum(map(len, numeric.values())), "numeric code points"
+    print len(spaces), "whitespace code points"
+    print len(linebreaks), "linebreak code points"
 
     print "--- Writing", FILE, "..."
 
@@ -438,6 +461,100 @@ def makeunicodetype(unicode, trace):
     print >>fp, "#define SHIFT", shift
     Array("index1", index1).dump(fp, trace)
     Array("index2", index2).dump(fp, trace)
+
+    # Generate code for _PyUnicode_ToNumeric()
+    numeric_items = sorted(numeric.items())
+    print >>fp, '/* Returns the numeric value as double for Unicode characters'
+    print >>fp, ' * having this property, -1.0 otherwise.'
+    print >>fp, ' */'
+    print >>fp, 'double _PyUnicode_ToNumeric(Py_UNICODE ch)'
+    print >>fp, '{'
+    print >>fp, '    switch (ch) {'
+    for value, codepoints in numeric_items:
+        # Turn text into float literals
+        parts = value.split('/')
+        parts = [repr(float(part)) for part in parts]
+        value = '/'.join(parts)
+
+        haswide = False
+        hasnonewide = False
+        codepoints.sort()
+        for codepoint in codepoints:
+            if codepoint < 0x10000:
+                hasnonewide = True
+            if codepoint >= 0x10000 and not haswide:
+                print >>fp, '#ifdef Py_UNICODE_WIDE'
+                haswide = True
+            print >>fp, '    case 0x%04X:' % (codepoint,)
+        if haswide and hasnonewide:
+            print >>fp, '#endif'
+        print >>fp, '        return (double) %s;' % (value,)
+        if haswide and not hasnonewide:
+            print >>fp, '#endif'
+    print >>fp,'    }'
+    print >>fp,'    return -1.0;'
+    print >>fp,'}'
+    print >>fp
+
+    # Generate code for _PyUnicode_IsWhitespace()
+    print >>fp, "/* Returns 1 for Unicode characters having the bidirectional"
+    print >>fp, " * type 'WS', 'B' or 'S' or the category 'Zs', 0 otherwise."
+    print >>fp, " */"
+    print >>fp, 'int _PyUnicode_IsWhitespace(register const Py_UNICODE ch)'
+    print >>fp, '{'
+    print >>fp, '#ifdef WANT_WCTYPE_FUNCTIONS'
+    print >>fp, '    return iswspace(ch);'
+    print >>fp, '#else'
+    print >>fp, '    switch (ch) {'
+
+    haswide = False
+    hasnonewide = False
+    for codepoint in sorted(spaces):
+        if codepoint < 0x10000:
+            hasnonewide = True
+        if codepoint >= 0x10000 and not haswide:
+            print >>fp, '#ifdef Py_UNICODE_WIDE'
+            haswide = True
+        print >>fp, '    case 0x%04X:' % (codepoint,)
+    if haswide and hasnonewide:
+        print >>fp, '#endif'
+    print >>fp, '        return 1;'
+    if haswide and not hasnonewide:
+        print >>fp, '#endif'
+
+    print >>fp,'    }'
+    print >>fp,'    return 0;'
+    print >>fp, '#endif'
+    print >>fp,'}'
+    print >>fp
+
+    # Generate code for _PyUnicode_IsLinebreak()
+    print >>fp, "/* Returns 1 for Unicode characters having the line break"
+    print >>fp, " * property 'BK', 'CR', 'LF' or 'NL' or having bidirectional"
+    print >>fp, " * type 'B', 0 otherwise."
+    print >>fp, " */"
+    print >>fp, 'int _PyUnicode_IsLinebreak(register const Py_UNICODE ch)'
+    print >>fp, '{'
+    print >>fp, '    switch (ch) {'
+    haswide = False
+    hasnonewide = False
+    for codepoint in sorted(linebreaks):
+        if codepoint < 0x10000:
+            hasnonewide = True
+        if codepoint >= 0x10000 and not haswide:
+            print >>fp, '#ifdef Py_UNICODE_WIDE'
+            haswide = True
+        print >>fp, '    case 0x%04X:' % (codepoint,)
+    if haswide and hasnonewide:
+        print >>fp, '#endif'
+    print >>fp, '        return 1;'
+    if haswide and not hasnonewide:
+        print >>fp, '#endif'
+
+    print >>fp,'    }'
+    print >>fp,'    return 0;'
+    print >>fp,'}'
+    print >>fp
 
     fp.close()
 
@@ -486,12 +603,10 @@ def makeunicodename(unicode, trace):
     wordlist = words.items()
 
     # sort on falling frequency, then by name
-    def cmpwords((aword, alist),(bword, blist)):
-        r = -cmp(len(alist),len(blist))
-        if r:
-            return r
-        return cmp(aword, bword)
-    wordlist.sort(cmpwords)
+    def word_key(a):
+        aword, alist = a
+        return -len(alist), aword
+    wordlist.sort(key=word_key)
 
     # figure out how many phrasebook escapes we need
     escapes = 0
@@ -515,7 +630,7 @@ def makeunicodename(unicode, trace):
     # length (to maximize overlap)
 
     wordlist, wordtail = wordlist[:short], wordlist[short:]
-    wordtail.sort(lambda a, b: len(b[0])-len(a[0]))
+    wordtail.sort(key=lambda a: a[0], reverse=True)
     wordlist.extend(wordtail)
 
     # generate lexicon from words
@@ -656,12 +771,11 @@ def merge_old_version(version, new, old):
                     elif k == 8:
                         # print "NUMERIC",hex(i), `old.table[i][k]`, new.table[i][k]
                         # Since 0 encodes "no change", the old value is better not 0
-                        assert value != "0" and value != "-1"
                         if not value:
                             numeric_changes[i] = -1
                         else:
-                            assert re.match("^[0-9]+$", value)
-                            numeric_changes[i] = int(value)
+                            numeric_changes[i] = float(value)
+                            assert numeric_changes[i] not in (0, -1)
                     elif k == 9:
                         if value == 'Y':
                             mirrored_changes[i] = '1'
@@ -679,6 +793,9 @@ def merge_old_version(version, new, old):
                     elif k == 14:
                         # change to simple titlecase mapping; ignore
                         pass
+                    elif k == 16:
+                        # change to properties; not yet
+                        pass
                     else:
                         class Difference(Exception):pass
                         raise Difference, (hex(i), k, old.table[i], new.table[i])
@@ -694,11 +811,16 @@ def merge_old_version(version, new, old):
 
 # load a unicode-data file from disk
 
-import sys
-
 class UnicodeData:
+    # Record structure:
+    # [ID, name, category, combining, bidi, decomp,  (6)
+    #  decimal, digit, numeric, bidi-mirrored, Unicode-1-name, (11)
+    #  ISO-comment, uppercase, lowercase, titlecase, ea-width, (16)
+    #  properties] (17)
 
-    def __init__(self, filename, exclusions, eastasianwidth, expand=1):
+    def __init__(self, filename, exclusions, eastasianwidth, unihan,
+                 derivednormalizationprops=None, linebreakprops=None,
+                 expand=1):
         self.changed = []
         file = open(filename)
         table = [None] * 0x110000
@@ -761,6 +883,58 @@ class UnicodeData:
         for i in range(0, 0x110000):
             if table[i] is not None:
                 table[i].append(widths[i])
+
+        for i in range(0, 0x110000):
+            if table[i] is not None:
+                table[i].append(set())
+        if linebreakprops:
+            for s in open(linebreakprops):
+                s = s.partition('#')[0]
+                s = [i.strip() for i in s.split(';')]
+                if len(s) < 2 or s[1] not in MANDATORY_LINE_BREAKS:
+                    continue
+                if '..' not in s[0]:
+                    first = last = int(s[0], 16)
+                else:
+                    first, last = [int(c, 16) for c in s[0].split('..')]
+                for char in range(first, last+1):
+                    table[char][-1].add('Line_Break')
+
+        if derivednormalizationprops:
+            quickchecks = [0] * 0x110000 # default is Yes
+            qc_order = 'NFD_QC NFKD_QC NFC_QC NFKC_QC'.split()
+            for s in open(derivednormalizationprops):
+                if '#' in s:
+                    s = s[:s.index('#')]
+                s = [i.strip() for i in s.split(';')]
+                if len(s) < 2 or s[1] not in qc_order:
+                    continue
+                quickcheck = 'MN'.index(s[2]) + 1 # Maybe or No
+                quickcheck_shift = qc_order.index(s[1])*2
+                quickcheck <<= quickcheck_shift
+                if '..' not in s[0]:
+                    first = last = int(s[0], 16)
+                else:
+                    first, last = [int(c, 16) for c in s[0].split('..')]
+                for char in range(first, last+1):
+                    assert not (quickchecks[char]>>quickcheck_shift)&3
+                    quickchecks[char] |= quickcheck
+            for i in range(0, 0x110000):
+                if table[i] is not None:
+                    table[i].append(quickchecks[i])
+
+        for line in open(unihan):
+            if not line.startswith('U+'):
+                continue
+            code, tag, value = line.split(None, 3)[:3]
+            if tag not in ('kAccountingNumeric', 'kPrimaryNumeric',
+                           'kOtherNumeric'):
+                continue
+            value = value.strip().replace(',', '')
+            i = int(code[2:], 16)
+            # Patch the numeric field
+            if table[i] is not None:
+                table[i][8] = value
 
     def uselatin1(self):
         # restrict character range to ISO Latin 1
@@ -911,7 +1085,6 @@ def splitbins(t, trace=0):
     you'll get.
     """
 
-    import sys
     if trace:
         def dump(t1, t2, shift, bytes):
             print >>sys.stderr, "%d+%d bins at shift %d; %d bytes" % (

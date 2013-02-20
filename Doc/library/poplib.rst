@@ -1,4 +1,3 @@
-
 :mod:`poplib` --- POP3 protocol client
 ======================================
 
@@ -8,6 +7,10 @@
 .. revised by ESR, January 2000
 
 .. index:: pair: POP3; protocol
+
+**Source code:** :source:`Lib/poplib.py`
+
+--------------
 
 This module defines a class, :class:`POP3`, which encapsulates a connection to a
 POP3 server and implements the protocol as defined in :rfc:`1725`.  The
@@ -21,7 +24,7 @@ quality of POP3 servers varies widely, and too many are quite poor. If your
 mailserver supports IMAP, you would be better off using the
 :class:`imaplib.IMAP4` class, as IMAP servers tend to be better implemented.
 
-A single class is provided by the :mod:`poplib` module:
+The :mod:`poplib` module provides two classes:
 
 
 .. class:: POP3(host[, port[, timeout]])
@@ -99,7 +102,7 @@ An :class:`POP3` instance has the following methods:
 .. method:: POP3.pass_(password)
 
    Send password, response includes message count and mailbox size. Note: the
-   mailbox on the server is locked until :meth:`quit` is called.
+   mailbox on the server is locked until :meth:`~poplib.quit` is called.
 
 
 .. method:: POP3.apop(user, secret)

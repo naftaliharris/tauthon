@@ -8,6 +8,7 @@
 #include "eval.h"
 
 #include <ctype.h>
+#include <float.h> /* for DBL_MANT_DIG and friends */
 
 #ifdef RISCOS
 #include "unixstuff.h"
@@ -52,8 +53,12 @@ builtin___import__(PyObject *self, PyObject *args, PyObject *kwds)
 PyDoc_STRVAR(import_doc,
 "__import__(name, globals={}, locals={}, fromlist=[], level=-1) -> module\n\
 \n\
-Import a module.  The globals are only used to determine the context;\n\
-they are not modified.  The locals are currently unused.  The fromlist\n\
+Import a module. Because this function is meant for use by the Python\n\
+interpreter and not for general use it is better to use\n\
+importlib.import_module() to programmatically import a module.\n\
+\n\
+The globals argument is only used to determine the context;\n\
+they are not modified.  The locals argument is unused.  The fromlist\n\
 should be a list of names to emulate ``from name import ...'', or an\n\
 empty list to emulate ``import name''.\n\
 When importing a module from a package, note that __import__('A.B', ...)\n\
@@ -115,7 +120,8 @@ builtin_all(PyObject *self, PyObject *v)
 PyDoc_STRVAR(all_doc,
 "all(iterable) -> bool\n\
 \n\
-Return True if bool(x) is True for all values x in the iterable.");
+Return True if bool(x) is True for all values x in the iterable.\n\
+If the iterable is empty, return True.");
 
 static PyObject *
 builtin_any(PyObject *self, PyObject *v)
@@ -157,7 +163,8 @@ builtin_any(PyObject *self, PyObject *v)
 PyDoc_STRVAR(any_doc,
 "any(iterable) -> bool\n\
 \n\
-Return True if bool(x) is True for any x in the iterable.");
+Return True if bool(x) is True for any x in the iterable.\n\
+If the iterable is empty, return False.");
 
 static PyObject *
 builtin_apply(PyObject *self, PyObject *args)
@@ -223,9 +230,6 @@ Return the binary representation of an integer or long integer.");
 static PyObject *
 builtin_callable(PyObject *self, PyObject *v)
 {
-    if (PyErr_WarnPy3k("callable() not supported in 3.x; "
-                       "use isinstance(x, collections.Callable)", 1) < 0)
-        return NULL;
     return PyBool_FromLong((long)PyCallable_Check(v));
 }
 
@@ -311,7 +315,7 @@ builtin_filter(PyObject *self, PyObject *args)
             ok = PyObject_IsTrue(good);
             Py_DECREF(good);
         }
-        if (ok) {
+        if (ok > 0) {
             if (j < len)
                 PyList_SET_ITEM(result, j, item);
             else {
@@ -322,8 +326,11 @@ builtin_filter(PyObject *self, PyObject *args)
             }
             ++j;
         }
-        else
+        else {
             Py_DECREF(item);
+            if (ok < 0)
+                goto Fail_result_it;
+        }
     }
 
 
@@ -518,6 +525,8 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
             mod_ty mod;
 
             arena = PyArena_New();
+            if (arena == NULL)
+                return NULL;
             mod = PyAST_obj2mod(cmd, arena, mode);
             if (mod == NULL) {
                 PyArena_Free(arena);
@@ -603,7 +612,7 @@ builtin_divmod(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(divmod_doc,
-"divmod(x, y) -> (div, mod)\n\
+"divmod(x, y) -> (quotient, remainder)\n\
 \n\
 Return the tuple ((x-x%y)/y, x%y).  Invariant: div*y + mod == x.");
 
@@ -1489,7 +1498,7 @@ PyDoc_STRVAR(open_doc,
 "open(name[, mode[, buffering]]) -> file object\n\
 \n\
 Open a file using the file() type, returns a file object.  This is the\n\
-preferred way to open a file.");
+preferred way to open a file.  See file.__doc__ for further information.");
 
 
 static PyObject *
@@ -1580,6 +1589,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
             Py_CLEAR(str_newline);
             return NULL;
         }
+#ifdef Py_USING_UNICODE
         unicode_newline = PyUnicode_FromString("\n");
         if (unicode_newline == NULL) {
             Py_CLEAR(str_newline);
@@ -1593,6 +1603,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
             Py_CLEAR(unicode_space);
             return NULL;
         }
+#endif
     }
     if (!PyArg_ParseTupleAndKeywords(dummy_args, kwds, "|OOO:print",
                                      kwlist, &sep, &end, &file))
@@ -1796,7 +1807,7 @@ handle_range_longs(PyObject *self, PyObject *args)
     PyObject *curnum = NULL;
     PyObject *v = NULL;
     long bign;
-    int i, n;
+    Py_ssize_t i, n;
     int cmp_result;
 
     PyObject *zero = PyLong_FromLong(0);
@@ -1864,7 +1875,7 @@ handle_range_longs(PyObject *self, PyObject *args)
         Py_DECREF(neg_step);
     }
 
-    n = (int)bign;
+    n = (Py_ssize_t)bign;
     if (bign < 0 || (long)n != bign) {
         PyErr_SetString(PyExc_OverflowError,
                         "range() result has too many items");
@@ -1944,7 +1955,7 @@ builtin_range(PyObject *self, PyObject *args)
 {
     long ilow = 0, ihigh = 0, istep = 1;
     long bign;
-    int i, n;
+    Py_ssize_t i, n;
 
     PyObject *v;
 
@@ -1973,7 +1984,7 @@ builtin_range(PyObject *self, PyObject *args)
         bign = get_len_of_range(ilow, ihigh, istep);
     else
         bign = get_len_of_range(ihigh, ilow, -istep);
-    n = (int)bign;
+    n = (Py_ssize_t)bign;
     if (bign < 0 || (long)n != bign) {
         PyErr_SetString(PyExc_OverflowError,
                         "range() result has too many items");
@@ -1995,7 +2006,8 @@ builtin_range(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(range_doc,
-"range([start,] stop[, step]) -> list of integers\n\
+"range(stop) -> list of integers\n\
+range(start, stop[, step]) -> list of integers\n\
 \n\
 Return a list containing an arithmetic progression of integers.\n\
 range(i, j) returns [i, i+1, i+2, ..., j-1]; start (!) defaults to 0.\n\
@@ -2151,36 +2163,47 @@ For most object types, eval(repr(object)) == object.");
 static PyObject *
 builtin_round(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    double number, abs_number, abs_result;
-    double f;
-    int ndigits = 0;
-    int i;
+    double x;
+    PyObject *o_ndigits = NULL;
+    Py_ssize_t ndigits;
     static char *kwlist[] = {"number", "ndigits", 0};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "d|i:round",
-        kwlist, &number, &ndigits))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "d|O:round",
+        kwlist, &x, &o_ndigits))
         return NULL;
-    f = 1.0;
-    i = abs(ndigits);
-    while  (--i >= 0)
-        f = f*10.0;
-    if (ndigits < 0)
-        number /= f;
-    else
-        number *= f;
 
-    /* round `number` to nearest integer, rounding halves away from zero */
-    abs_number = fabs(number);
-    abs_result = floor(abs_number);
-    if (abs_number - abs_result >= 0.5)
-        abs_result += 1.0;
-    number = copysign(abs_result, number);
+    if (o_ndigits == NULL) {
+        /* second argument defaults to 0 */
+        ndigits = 0;
+    }
+    else {
+        /* interpret 2nd argument as a Py_ssize_t; clip on overflow */
+        ndigits = PyNumber_AsSsize_t(o_ndigits, NULL);
+        if (ndigits == -1 && PyErr_Occurred())
+            return NULL;
+    }
 
-    if (ndigits < 0)
-        number *= f;
+    /* nans, infinities and zeros round to themselves */
+    if (!Py_IS_FINITE(x) || x == 0.0)
+        return PyFloat_FromDouble(x);
+
+    /* Deal with extreme values for ndigits. For ndigits > NDIGITS_MAX, x
+       always rounds to itself.  For ndigits < NDIGITS_MIN, x always
+       rounds to +-0.0.  Here 0.30103 is an upper bound for log10(2). */
+#define NDIGITS_MAX ((int)((DBL_MANT_DIG-DBL_MIN_EXP) * 0.30103))
+#define NDIGITS_MIN (-(int)((DBL_MAX_EXP + 1) * 0.30103))
+    if (ndigits > NDIGITS_MAX)
+        /* return x */
+        return PyFloat_FromDouble(x);
+    else if (ndigits < NDIGITS_MIN)
+        /* return 0.0, but with sign of x */
+        return PyFloat_FromDouble(0.0*x);
     else
-        number /= f;
-    return PyFloat_FromDouble(number);
+        /* finite x, and ndigits is not unreasonably large */
+        /* _Py_double_round is defined in floatobject.c */
+        return _Py_double_round(x, (int)ndigits);
+#undef NDIGITS_MAX
+#undef NDIGITS_MIN
 }
 
 PyDoc_STRVAR(round_doc,
@@ -2388,6 +2411,15 @@ builtin_sum(PyObject *self, PyObject *args)
             }
             break;
         }
+        /* It's tempting to use PyNumber_InPlaceAdd instead of
+           PyNumber_Add here, to avoid quadratic running time
+           when doing 'sum(list_of_lists, [])'.  However, this
+           would produce a change in behaviour: a snippet like
+
+             empty = []
+             sum([[x] for x in range(10)], empty)
+
+           would change the value of empty. */
         temp = PyNumber_Add(result, item);
         Py_DECREF(result);
         Py_DECREF(item);
@@ -2477,8 +2509,10 @@ builtin_zip(PyObject *self, PyObject *args)
     len = -1;           /* unknown */
     for (i = 0; i < itemsize; ++i) {
         PyObject *item = PyTuple_GET_ITEM(args, i);
-        Py_ssize_t thislen = _PyObject_LengthHint(item, -1);
+        Py_ssize_t thislen = _PyObject_LengthHint(item, -2);
         if (thislen < 0) {
+            if (thislen == -1)
+                return NULL;
             len = -1;
             break;
         }
@@ -2664,7 +2698,7 @@ _PyBuiltin_Init(void)
     SETBUILTIN("True",                  Py_True);
     SETBUILTIN("basestring",            &PyBaseString_Type);
     SETBUILTIN("bool",                  &PyBool_Type);
-    /*          SETBUILTIN("memoryview",        &PyMemoryView_Type); */
+    SETBUILTIN("memoryview",        &PyMemoryView_Type);
     SETBUILTIN("bytearray",             &PyByteArray_Type);
     SETBUILTIN("bytes",                 &PyString_Type);
     SETBUILTIN("buffer",                &PyBuffer_Type);
@@ -2758,12 +2792,15 @@ filtertuple(PyObject *func, PyObject *tuple)
         }
         ok = PyObject_IsTrue(good);
         Py_DECREF(good);
-        if (ok) {
+        if (ok > 0) {
             if (PyTuple_SetItem(result, j++, item) < 0)
                 goto Fail_1;
         }
-        else
+        else {
             Py_DECREF(item);
+            if (ok < 0)
+                goto Fail_1;
+        }
     }
 
     if (_PyTuple_Resize(&result, j) < 0)
@@ -2825,7 +2862,7 @@ filterstring(PyObject *func, PyObject *strobj)
             ok = PyObject_IsTrue(good);
             Py_DECREF(good);
         }
-        if (ok) {
+        if (ok > 0) {
             Py_ssize_t reslen;
             if (!PyString_Check(item)) {
                 PyErr_SetString(PyExc_TypeError, "can't filter str to str:"
@@ -2891,6 +2928,8 @@ filterstring(PyObject *func, PyObject *strobj)
                     }
         }
         Py_DECREF(item);
+        if (ok < 0)
+            goto Fail_1;
     }
 
     if (j < outlen)
@@ -2951,7 +2990,7 @@ filterunicode(PyObject *func, PyObject *strobj)
             ok = PyObject_IsTrue(good);
             Py_DECREF(good);
         }
-        if (ok) {
+        if (ok > 0) {
             Py_ssize_t reslen;
             if (!PyUnicode_Check(item)) {
                 PyErr_SetString(PyExc_TypeError,
@@ -3006,6 +3045,8 @@ filterunicode(PyObject *func, PyObject *strobj)
                     }
         }
         Py_DECREF(item);
+        if (ok < 0)
+            goto Fail_1;
     }
 
     if (j < outlen)

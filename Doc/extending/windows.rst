@@ -98,8 +98,8 @@ described here are distributed with the Python sources in the
    it.  Copy your C sources into it.  Note that the module source file name does
    not necessarily have to match the module name, but the name of the
    initialization function should match the module name --- you can only import a
-   module :mod:`spam` if its initialization function is called :cfunc:`initspam`,
-   and it should call :cfunc:`Py_InitModule` with the string ``"spam"`` as its
+   module :mod:`spam` if its initialization function is called :c:func:`initspam`,
+   and it should call :c:func:`Py_InitModule` with the string ``"spam"`` as its
    first argument (use the minimal :file:`example.c` in this directory as a guide).
    By convention, it lives in a file called :file:`spam.c` or :file:`spammodule.c`.
    The output file should be called :file:`spam.pyd` (in Release mode) or
@@ -114,7 +114,7 @@ described here are distributed with the Python sources in the
    Now your options are:
 
 #. Copy :file:`example.sln` and :file:`example.vcproj`, rename them to
-      :file:`spam.\*`, and edit them by hand, or
+   :file:`spam.\*`, and edit them by hand, or
 
 #. Create a brand new project; instructions are below.
 
@@ -175,16 +175,16 @@ If your module creates a new type, you may have trouble with this line::
 
    PyObject_HEAD_INIT(&PyType_Type)
 
-Change it to::
+Static type object initializers in extension modules may cause
+compiles to fail with an error message like "initializer not a
+constant".  This shows up when building DLL under MSVC.  Change it to::
 
    PyObject_HEAD_INIT(NULL)
 
 and add the following to the module initialization function::
 
-   MyObject_Type.ob_type = &PyType_Type;
-
-Refer to section 3 of the `Python FAQ <http://www.python.org/doc/faq>`_ for
-details on why you must do this.
+   if (PyType_Ready(&MyObject_Type) < 0)
+        return NULL;
 
 
 .. _dynamic-linking:
@@ -263,7 +263,7 @@ use these commands::
 
 The first command created three files: :file:`spam.obj`, :file:`spam.dll` and
 :file:`spam.lib`.  :file:`Spam.dll` does not contain any Python functions (such
-as :cfunc:`PyArg_ParseTuple`), but it does know how to find the Python code
+as :c:func:`PyArg_ParseTuple`), but it does know how to find the Python code
 thanks to :file:`pythonXY.lib`.
 
 The second command created :file:`ni.dll` (and :file:`.obj` and :file:`.lib`),

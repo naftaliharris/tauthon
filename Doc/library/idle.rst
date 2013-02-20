@@ -154,25 +154,75 @@ The rest of this menu lists the names of all open windows; select one to bring
 it to the foreground (deiconifying it if necessary).
 
 
-Debug menu (in the Python Shell window only)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Debug menu
+^^^^^^^^^^
+
+* in the Python Shell window only
 
 Go to file/line
-   look around the insert point for a filename and linenumber, open the file, and
-   show the line.
+   Look around the insert point for a filename and line number, open the file,
+   and show the line.  Useful to view the source lines referenced in an
+   exception traceback.
 
-Open stack viewer
-   show the stack traceback of the last exception
+Debugger
+   Run commands in the shell under the debugger.
 
-Debugger toggle
-   Run commands in the shell under the debugger
+Stack viewer
+   Show the stack traceback of the last exception.
 
-JIT Stack viewer toggle
-   Open stack viewer on traceback
+Auto-open Stack Viewer
+   Open stack viewer on traceback.
 
 .. index::
    single: stack viewer
    single: debugger
+
+
+Edit context menu
+^^^^^^^^^^^^^^^^^
+
+* Right-click in Edit window (Control-click on OS X)
+
+Cut
+   Copy selection into system-wide clipboard; then delete selection
+
+Copy
+   Copy selection into system-wide clipboard
+
+Paste
+   Insert system-wide clipboard into window
+
+Set Breakpoint
+   Sets a breakpoint.  Breakpoints are only enabled when the debugger is open.
+
+Clear Breakpoint
+   Clears the breakpoint on that line.
+
+.. index::
+   single: Cut
+   single: Copy
+   single: Paste
+   single: Set Breakpoint
+   single: Clear Breakpoint
+   single: breakpoints
+
+
+Shell context menu
+^^^^^^^^^^^^^^^^^^
+
+* Right-click in Python Shell window (Control-click on OS X)
+
+Cut
+   Copy selection into system-wide clipboard; then delete selection
+
+Copy
+   Copy selection into system-wide clipboard
+
+Paste
+   Insert system-wide clipboard into window
+
+Go to file/line
+   Same as in Debug menu.
 
 
 Basic editing and navigation
@@ -286,13 +336,13 @@ Command line usage
 
 If there are arguments:
 
-#. If :option:`-e` is used, arguments are files opened for editing and
+#. If ``-e`` is used, arguments are files opened for editing and
    ``sys.argv`` reflects the arguments passed to IDLE itself.
 
-#. Otherwise, if :option:`-c` is used, all arguments are placed in
+#. Otherwise, if ``-c`` is used, all arguments are placed in
    ``sys.argv[1:...]``, with ``sys.argv[0]`` set to ``'-c'``.
 
-#. Otherwise, if neither :option:`-e` nor :option:`-c` is used, the first
+#. Otherwise, if neither ``-e`` nor ``-c`` is used, the first
    argument is a script which is executed with the remaining arguments in
    ``sys.argv[1:...]``  and ``sys.argv[0]`` set to the script name.  If the script
    name is '-', no script is executed but an interactive Python session is started;

@@ -38,7 +38,7 @@
 	/>
 	<UserMacro
 		Name="PyDllName"
-		Value="python26"
+		Value="python27"
 	/>
 	<UserMacro
 		Name="PythonExe"
@@ -74,15 +74,15 @@
 	/>
 	<UserMacro
 		Name="sqlite3Dir"
-		Value="$(externalsDir)\sqlite-3.5.9"
+		Value="$(externalsDir)\sqlite-3.6.21"
 	/>
 	<UserMacro
 		Name="bz2Dir"
-		Value="$(externalsDir)\bzip2-1.0.5"
+		Value="$(externalsDir)\bzip2-1.0.6"
 	/>
 	<UserMacro
 		Name="opensslDir"
-		Value="$(externalsDir)\openssl-0.9.8l"
+		Value="$(externalsDir)\openssl-0.9.8x"
 	/>
 	<UserMacro
 		Name="tcltkDir"

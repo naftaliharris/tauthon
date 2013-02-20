@@ -122,8 +122,8 @@ The IDE
 =======
 
 MacPython ships with the standard IDLE development environment. A good
-introduction to using IDLE can be found at http://hkn.eecs.berkeley.edu/
-dyoo/python/idle_intro/index.html.
+introduction to using IDLE can be found at
+http://hkn.eecs.berkeley.edu/~dyoo/python/idle_intro/index.html.
 
 
 .. _mac-package-manager:
@@ -175,20 +175,6 @@ applications to other users.
 The standard tool for deploying standalone Python applications on the Mac is
 :program:`py2app`. More information on installing and using py2app can be found
 at http://undefined.org/python/#py2app.
-
-
-Application Scripting
-=====================
-
-Python can also be used to script other Mac applications via Apple's Open
-Scripting Architecture (OSA); see http://appscript.sourceforge.net. Appscript is
-a high-level, user-friendly Apple event bridge that allows you to control
-scriptable Mac OS X applications using ordinary Python scripts. Appscript makes
-Python a serious alternative to Apple's own *AppleScript* language for
-automating your Mac. A related package, *PyOSA*, is an OSA language component
-for the Python scripting language, allowing Python code to be executed by any
-OSA-enabled application (Script Editor, Mail, iTunes, etc.). PyOSA makes Python
-a full peer to AppleScript.
 
 
 Other Resources

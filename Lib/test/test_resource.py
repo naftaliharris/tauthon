@@ -1,8 +1,8 @@
 import unittest
 from test import test_support
-
-import resource
 import time
+
+resource = test_support.import_module('resource')
 
 # This test is checking a few specific problem spots with the resource module.
 
@@ -102,6 +102,23 @@ class ResourceTest(unittest.TestCase):
             usageboth = resource.getrusage(resource.RUSAGE_BOTH)
         except (ValueError, AttributeError):
             pass
+
+    # Issue 6083: Reference counting bug
+    def test_setrusage_refcount(self):
+        try:
+            limits = resource.getrlimit(resource.RLIMIT_CPU)
+        except AttributeError:
+            pass
+        else:
+            class BadSequence:
+                def __len__(self):
+                    return 2
+                def __getitem__(self, key):
+                    if key in (0, 1):
+                        return len(tuple(range(1000000)))
+                    raise IndexError
+
+            resource.setrlimit(resource.RLIMIT_CPU, BadSequence())
 
 def test_main(verbose=None):
     test_support.run_unittest(ResourceTest)

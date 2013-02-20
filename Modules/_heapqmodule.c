@@ -2,7 +2,7 @@
 
 C implementation derived directly from heapq.py in Py2.3
 which was written by Kevin O'Connor, augmented by Tim Peters,
-annotated by François Pinard, and converted to C by Raymond Hettinger.
+annotated by FranÃ§ois Pinard, and converted to C by Raymond Hettinger.
 
 */
 
@@ -11,7 +11,7 @@ annotated by François Pinard, and converted to C by Raymond Hettinger.
 /* Older implementations of heapq used Py_LE for comparisons.  Now, it uses
    Py_LT so it will match min(), sorted(), and bisect().  Unfortunately, some
    client code (Twisted for example) relied on Py_LE, so this little function
-   restores compatability by trying both.
+   restores compatibility by trying both.
 */
 static int
 cmp_lt(PyObject *x, PyObject *y)
@@ -141,7 +141,7 @@ heappush(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(heappush_doc,
-"Push item onto heap, maintaining the heap invariant.");
+"heappush(heap, item) -> None. Push item onto heap, maintaining the heap invariant.");
 
 static PyObject *
 heappop(PyObject *self, PyObject *heap)
@@ -209,7 +209,7 @@ heapreplace(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(heapreplace_doc,
-"Pop and return the current smallest value, and add the new item.\n\
+"heapreplace(heap, item) -> value. Pop and return the current smallest value, and add the new item.\n\
 \n\
 This is more efficient than heappop() followed by heappush(), and can be\n\
 more appropriate when using a fixed-size heap.  Note that the value\n\
@@ -256,7 +256,7 @@ heappushpop(PyObject *self, PyObject *args)
 }
 
 PyDoc_STRVAR(heappushpop_doc,
-"Push item on the heap, then pop and return the smallest item\n\
+"heappushpop(heap, item) -> value. Push item on the heap, then pop and return the smallest item\n\
 from the heap. The combined action runs more efficiently than\n\
 heappush() followed by a separate call to heappop().");
 

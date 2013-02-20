@@ -1,8 +1,8 @@
 """Tests for distutils.command.bdist_wininst."""
 import unittest
-import os
 
-from distutils.dist import Distribution
+from test.test_support import run_unittest
+
 from distutils.command.bdist_wininst import bdist_wininst
 from distutils.tests import support
 
@@ -15,10 +15,7 @@ class BuildWinInstTestCase(support.TempdirManager,
         # issue5731: command was broken on non-windows platforms
         # this test makes sure it works now for every platform
         # let's create a command
-        tmp_dir = self.mkdtemp()
-        pkg_dir = os.path.join(tmp_dir, 'foo')
-        os.mkdir(pkg_dir)
-        dist = Distribution()
+        pkg_pth, dist = self.create_dist()
         cmd = bdist_wininst(dist)
         cmd.ensure_finalized()
 
@@ -26,10 +23,10 @@ class BuildWinInstTestCase(support.TempdirManager,
         # and make sure it finds it and returns its content
         # no matter what platform we have
         exe_file = cmd.get_exe_bytes()
-        self.assert_(len(exe_file) > 10)
+        self.assertTrue(len(exe_file) > 10)
 
 def test_suite():
     return unittest.makeSuite(BuildWinInstTestCase)
 
 if __name__ == '__main__':
-    test_support.run_unittest(test_suite())
+    run_unittest(test_suite())

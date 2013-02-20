@@ -23,6 +23,28 @@ del sys.modules['bisect']
 import bisect as c_bisect
 
 
+class Range(object):
+    """A trivial xrange()-like object without any integer width limitations."""
+    def __init__(self, start, stop):
+        self.start = start
+        self.stop = stop
+        self.last_insert = None
+
+    def __len__(self):
+        return self.stop - self.start
+
+    def __getitem__(self, idx):
+        n = self.stop - self.start
+        if idx < 0:
+            idx += n
+        if idx >= n:
+            raise IndexError(idx)
+        return self.start + idx
+
+    def insert(self, idx, item):
+        self.last_insert = idx, item
+
+
 class TestBisect(unittest.TestCase):
     module = None
 
@@ -122,6 +144,35 @@ class TestBisect(unittest.TestCase):
         self.assertRaises(ValueError, mod.insort_left, [1, 2, 3], 5, -1, 3),
         self.assertRaises(ValueError, mod.insort_right, [1, 2, 3], 5, -1, 3),
 
+    def test_large_range(self):
+        # Issue 13496
+        mod = self.module
+        n = sys.maxsize
+        try:
+            data = xrange(n-1)
+        except OverflowError:
+            self.skipTest("can't create a xrange() object of size `sys.maxsize`")
+        self.assertEqual(mod.bisect_left(data, n-3), n-3)
+        self.assertEqual(mod.bisect_right(data, n-3), n-2)
+        self.assertEqual(mod.bisect_left(data, n-3, n-10, n), n-3)
+        self.assertEqual(mod.bisect_right(data, n-3, n-10, n), n-2)
+
+    def test_large_pyrange(self):
+        # Same as above, but without C-imposed limits on range() parameters
+        mod = self.module
+        n = sys.maxsize
+        data = Range(0, n-1)
+        self.assertEqual(mod.bisect_left(data, n-3), n-3)
+        self.assertEqual(mod.bisect_right(data, n-3), n-2)
+        self.assertEqual(mod.bisect_left(data, n-3, n-10, n), n-3)
+        self.assertEqual(mod.bisect_right(data, n-3, n-10, n), n-2)
+        x = n - 100
+        mod.insort_left(data, x, x - 50, x + 50)
+        self.assertEqual(data.last_insert, (x, x))
+        x = n - 200
+        mod.insort_right(data, x, x - 50, x + 50)
+        self.assertEqual(data.last_insert, (x + 1, x))
+
     def test_random(self, n=25):
         from random import randrange
         for i in xrange(n):
@@ -130,14 +181,14 @@ class TestBisect(unittest.TestCase):
             elem = randrange(-1, n+1)
             ip = self.module.bisect_left(data, elem)
             if ip < len(data):
-                self.failUnless(elem <= data[ip])
+                self.assertTrue(elem <= data[ip])
             if ip > 0:
-                self.failUnless(data[ip-1] < elem)
+                self.assertTrue(data[ip-1] < elem)
             ip = self.module.bisect_right(data, elem)
             if ip < len(data):
-                self.failUnless(elem < data[ip])
+                self.assertTrue(elem < data[ip])
             if ip > 0:
-                self.failUnless(data[ip-1] <= elem)
+                self.assertTrue(data[ip-1] <= elem)
 
     def test_optionalSlicing(self):
         for func, data, elem, expected in self.precomputedCases:
@@ -146,15 +197,15 @@ class TestBisect(unittest.TestCase):
                 for hi in xrange(3,8):
                     hi = min(len(data), hi)
                     ip = func(data, elem, lo, hi)
-                    self.failUnless(lo <= ip <= hi)
+                    self.assertTrue(lo <= ip <= hi)
                     if func is self.module.bisect_left and ip < hi:
-                        self.failUnless(elem <= data[ip])
+                        self.assertTrue(elem <= data[ip])
                     if func is self.module.bisect_left and ip > lo:
-                        self.failUnless(data[ip-1] < elem)
+                        self.assertTrue(data[ip-1] < elem)
                     if func is self.module.bisect_right and ip < hi:
-                        self.failUnless(elem < data[ip])
+                        self.assertTrue(elem < data[ip])
                     if func is self.module.bisect_right and ip > lo:
-                        self.failUnless(data[ip-1] <= elem)
+                        self.assertTrue(data[ip-1] <= elem)
                     self.assertEqual(ip, max(lo, min(hi, expected)))
 
     def test_backcompatibility(self):
@@ -191,7 +242,7 @@ class TestInsort(unittest.TestCase):
                 else:
                     f = self.module.insort_right
                 f(insorted, digit)
-        self.assertEqual(sorted(insorted), insorted)
+            self.assertEqual(sorted(insorted), insorted)
 
     def test_backcompatibility(self):
         self.assertEqual(self.module.insort, self.module.insort_right)

@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <string.h>
+
 #include "pyconfig.h"
 
 /* comp.sources.misc strtod(), as posted in comp.lang.tcl,
@@ -77,7 +80,7 @@ double strtod(char *str, char **ptr)
     dp = buffer;
     *dp++ = '0'; *dp++ = '.';
     buforg = dp, buflim = buffer+48;
-    for (save = sp; c = *sp; sp++)
+    for (save = sp; (c = *sp); sp++)
         if (c == '.') {
         if (dotseen) break;
         dotseen++;

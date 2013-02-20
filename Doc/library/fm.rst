@@ -8,7 +8,7 @@
    :deprecated:
 
 .. deprecated:: 2.6
-   The :mod:`fm` module has been deprecated for removal in Python 3.0.
+   The :mod:`fm` module has been removed in Python 3.
 
 
 
@@ -30,7 +30,7 @@ It supports the following operations:
 
 .. function:: init()
 
-   Initialization function. Calls :cfunc:`fminit`. It is normally not necessary to
+   Initialization function. Calls :c:func:`fminit`. It is normally not necessary to
    call this function, since it is called automatically the first time the
    :mod:`fm` module is imported.
 
@@ -43,7 +43,7 @@ It supports the following operations:
 .. function:: enumerate()
 
    Returns a list of available font names. This is an interface to
-   :cfunc:`fmenumerate`.
+   :c:func:`fmenumerate`.
 
 
 .. function:: prstr(string)

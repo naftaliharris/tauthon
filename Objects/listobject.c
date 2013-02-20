@@ -11,7 +11,7 @@
 /* Ensure ob_item has room for at least newsize elements, and set
  * ob_size to newsize.  If newsize > ob_size on entry, the content
  * of the new slots at exit is undefined heap trash; it's the caller's
- * responsiblity to overwrite them with sane values.
+ * responsibility to overwrite them with sane values.
  * The number of allocated elements may grow, shrink, or stay the same.
  * Failure is impossible if newsize <= self.allocated on entry, although
  * that partly relies on an assumption that the system realloc() never
@@ -58,7 +58,7 @@ list_resize(PyListObject *self, Py_ssize_t newsize)
     if (newsize == 0)
         new_allocated = 0;
     items = self->ob_item;
-    if (new_allocated <= ((~(size_t)0) / sizeof(PyObject *)))
+    if (new_allocated <= (PY_SIZE_MAX / sizeof(PyObject *)))
         PyMem_RESIZE(items, PyObject *, new_allocated);
     else
         items = NULL;
@@ -183,9 +183,12 @@ PyList_GetItem(PyObject *op, Py_ssize_t i)
         return NULL;
     }
     if (i < 0 || i >= Py_SIZE(op)) {
-        if (indexerr == NULL)
+        if (indexerr == NULL) {
             indexerr = PyString_FromString(
                 "list index out of range");
+            if (indexerr == NULL)
+                return NULL;
+        }
         PyErr_SetObject(PyExc_IndexError, indexerr);
         return NULL;
     }
@@ -447,9 +450,12 @@ static PyObject *
 list_item(PyListObject *a, Py_ssize_t i)
 {
     if (i < 0 || i >= Py_SIZE(a)) {
-        if (indexerr == NULL)
+        if (indexerr == NULL) {
             indexerr = PyString_FromString(
                 "list index out of range");
+            if (indexerr == NULL)
+                return NULL;
+        }
         PyErr_SetObject(PyExc_IndexError, indexerr);
         return NULL;
     }
@@ -545,9 +551,9 @@ list_repeat(PyListObject *a, Py_ssize_t n)
     PyObject *elem;
     if (n < 0)
         n = 0;
-    size = Py_SIZE(a) * n;
-    if (n && size/n != Py_SIZE(a))
+    if (n > 0 && Py_SIZE(a) > PY_SSIZE_T_MAX / n)
         return PyErr_NoMemory();
+    size = Py_SIZE(a) * n;
     if (size == 0)
         return PyList_New(0);
     np = (PyListObject *) PyList_New(size);
@@ -2270,7 +2276,8 @@ static PyObject *
 listindex(PyListObject *self, PyObject *args)
 {
     Py_ssize_t i, start=0, stop=Py_SIZE(self);
-    PyObject *v;
+    PyObject *v, *format_tuple, *err_string;
+    static PyObject *err_format = NULL;
 
     if (!PyArg_ParseTuple(args, "O|O&O&:index", &v,
                                 _PyEval_SliceIndex, &start,
@@ -2293,7 +2300,20 @@ listindex(PyListObject *self, PyObject *args)
         else if (cmp < 0)
             return NULL;
     }
-    PyErr_SetString(PyExc_ValueError, "list.index(x): x not in list");
+    if (err_format == NULL) {
+        err_format = PyString_FromString("%r is not in list");
+        if (err_format == NULL)
+            return NULL;
+    }
+    format_tuple = PyTuple_Pack(1, v);
+    if (format_tuple == NULL)
+        return NULL;
+    err_string = PyString_Format(err_format, format_tuple);
+    Py_DECREF(format_tuple);
+    if (err_string == NULL)
+        return NULL;
+    PyErr_SetObject(PyExc_ValueError, err_string);
+    Py_DECREF(err_string);
     return NULL;
 }
 

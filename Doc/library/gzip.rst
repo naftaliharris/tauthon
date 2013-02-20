@@ -4,6 +4,10 @@
 .. module:: gzip
    :synopsis: Interfaces for gzip compression and decompression using file objects.
 
+**Source code:** :source:`Lib/gzip.py`
+
+--------------
+
 This module provides a simple interface to compress and decompress files just
 like the GNU programs :program:`gzip` and :program:`gunzip` would.
 
@@ -18,13 +22,10 @@ Note that additional file formats which can be decompressed by the
 :program:`gzip` and :program:`gunzip` programs, such  as those produced by
 :program:`compress` and :program:`pack`, are not supported by this module.
 
-For other archive formats, see the :mod:`bz2`, :mod:`zipfile`, and
-:mod:`tarfile` modules.
-
 The module defines the following items:
 
 
-.. class:: GzipFile([filename[, mode[, compresslevel[, fileobj]]]])
+.. class:: GzipFile([filename[, mode[, compresslevel[, fileobj[, mtime]]]]])
 
    Constructor for the :class:`GzipFile` class, which simulates most of the methods
    of a file object, with the exception of the :meth:`readinto` and
@@ -48,9 +49,19 @@ The module defines the following items:
    not given, the 'b' flag will be added to the mode to ensure the file is opened
    in binary mode for cross-platform portability.
 
-   The *compresslevel* argument is an integer from ``1`` to ``9`` controlling the
-   level of compression; ``1`` is fastest and produces the least compression, and
-   ``9`` is slowest and produces the most compression.  The default is ``9``.
+   The *compresslevel* argument is an integer from ``0`` to ``9`` controlling
+   the level of compression; ``1`` is fastest and produces the least
+   compression, and ``9`` is slowest and produces the most compression. ``0``
+   is no compression. The default is ``9``.
+
+   The *mtime* argument is an optional numeric timestamp to be written to
+   the stream when compressing.  All :program:`gzip` compressed streams are
+   required to contain a timestamp.  If omitted or ``None``, the current
+   time is used.  This module ignores the timestamp when decompressing;
+   however, some programs, such as :program:`gunzip`\ , make use of it.
+   The format of the timestamp is the same as that of the return value of
+   ``time.time()`` and of the ``st_mtime`` attribute of the object returned
+   by ``os.stat()``.
 
    Calling a :class:`GzipFile` object's :meth:`close` method does not close
    *fileobj*, since you might wish to append more material after the compressed
@@ -58,7 +69,14 @@ The module defines the following items:
    writing as *fileobj*, and retrieve the resulting memory buffer using the
    :class:`StringIO` object's :meth:`getvalue` method.
 
-   :class:`GzipFile` supports iteration.
+   :class:`GzipFile` supports iteration and the :keyword:`with` statement.
+
+   .. versionchanged:: 2.7
+      Support for the :keyword:`with` statement was added.
+
+   .. versionchanged:: 2.7
+      Support for zero-padded files was added.
+
 
 .. function:: open(filename[, mode[, compresslevel]])
 

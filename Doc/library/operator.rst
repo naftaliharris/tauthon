@@ -12,11 +12,11 @@
    from operator import itemgetter
 
 
-The :mod:`operator` module exports a set of functions implemented in C
-corresponding to the intrinsic operators of Python.  For example,
-``operator.add(x, y)`` is equivalent to the expression ``x+y``.  The function
-names are those used for special class methods; variants without leading and
-trailing ``__`` are also provided for convenience.
+The :mod:`operator` module exports a set of efficient functions corresponding to
+the intrinsic operators of Python.  For example, ``operator.add(x, y)`` is
+equivalent to the expression ``x+y``.  The function names are those used for
+special class methods; variants without leading and trailing ``__`` are also
+provided for convenience.
 
 The functions fall into categories that perform object comparisons, logical
 operations, mathematical operations, sequence operations, and abstract type
@@ -241,7 +241,7 @@ Operations which work with sequences (some of them with mappings too) include:
    Delete the slice of *a* from index *b* to index *c-1*.
 
    .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use :func:`delitem` with a slice
+      This function is removed in Python 3.x.  Use :func:`delitem` with a slice
       index.
 
 
@@ -257,7 +257,7 @@ Operations which work with sequences (some of them with mappings too) include:
    Return the slice of *a* from index *b* to index *c-1*.
 
    .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use :func:`getitem` with a slice
+      This function is removed in Python 3.x.  Use :func:`getitem` with a slice
       index.
 
 
@@ -269,8 +269,8 @@ Operations which work with sequences (some of them with mappings too) include:
 .. function:: repeat(a, b)
               __repeat__(a, b)
 
-   .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use :func:`__mul__` instead.
+   .. deprecated:: 2.7
+      Use :func:`__mul__` instead.
 
    Return ``a * b`` where *a* is a sequence and *b* is an integer.
 
@@ -295,7 +295,7 @@ Operations which work with sequences (some of them with mappings too) include:
    Set the slice of *a* from index *b* to index *c-1* to the sequence *v*.
 
    .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use :func:`setitem` with a slice
+      This function is removed in Python 3.x.  Use :func:`setitem` with a slice
       index.
 
 Example use of operator functions::
@@ -399,8 +399,8 @@ example, the :term:`statement` ``x += y`` is equivalent to
 .. function:: irepeat(a, b)
               __irepeat__(a, b)
 
-   .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use :func:`__imul__` instead.
+   .. deprecated:: 2.7
+      Use :func:`__imul__` instead.
 
    ``a = irepeat(a, b)`` is equivalent to ``a *= b`` where *a* is a sequence and
    *b* is an integer.
@@ -458,8 +458,8 @@ abstract base classes instead (see :mod:`collections` and
 
 .. function:: isMappingType(obj)
 
-   .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use ``isinstance(x, collections.Mapping)`` instead.
+   .. deprecated:: 2.7
+      Use ``isinstance(x, collections.Mapping)`` instead.
 
    Returns true if the object *obj* supports the mapping interface. This is true for
    dictionaries and all instance objects defining :meth:`__getitem__`.
@@ -467,8 +467,8 @@ abstract base classes instead (see :mod:`collections` and
 
 .. function:: isNumberType(obj)
 
-   .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use ``isinstance(x, numbers.Number)`` instead.
+   .. deprecated:: 2.7
+      Use ``isinstance(x, numbers.Number)`` instead.
 
    Returns true if the object *obj* represents a number.  This is true for all
    numeric types implemented in C.
@@ -476,8 +476,8 @@ abstract base classes instead (see :mod:`collections` and
 
 .. function:: isSequenceType(obj)
 
-   .. deprecated:: 2.6
-      This function is removed in Python 3.0.  Use ``isinstance(x, collections.Sequence)`` instead.
+   .. deprecated:: 2.7
+      Use ``isinstance(x, collections.Sequence)`` instead.
 
    Returns true if the object *obj* supports the sequence protocol. This returns true
    for all objects which define sequence methods in C, and for all instance objects
@@ -496,7 +496,23 @@ expect a function argument.
    attribute is requested, returns a tuple of attributes. After,
    ``f = attrgetter('name')``, the call ``f(b)`` returns ``b.name``.  After,
    ``f = attrgetter('name', 'date')``, the call ``f(b)`` returns ``(b.name,
-   b.date)``.
+   b.date)``.  Equivalent to::
+
+      def attrgetter(*items):
+          if len(items) == 1:
+              attr = items[0]
+              def g(obj):
+                  return resolve_attr(obj, attr)
+          else:
+              def g(obj):
+                  return tuple(resolve_att(obj, attr) for attr in items)
+          return g
+
+      def resolve_attr(obj, attr):
+          for name in attr.split("."):
+              obj = getattr(obj, name)
+          return obj
+
 
    The attribute names can also contain dots; after ``f = attrgetter('date.month')``,
    the call ``f(b)`` returns ``b.date.month``.
@@ -516,15 +532,15 @@ expect a function argument.
    operand's :meth:`__getitem__` method.  If multiple items are specified,
    returns a tuple of lookup values.  Equivalent to::
 
-        def itemgetter(*items):
-            if len(items) == 1:
-                item = items[0]
-                def g(obj):
-                    return obj[item]
-            else:
-                def g(obj):
-                    return tuple(obj[item] for item in items)
-            return g
+      def itemgetter(*items):
+          if len(items) == 1:
+              item = items[0]
+              def g(obj):
+                  return obj[item]
+          else:
+              def g(obj):
+                  return tuple(obj[item] for item in items)
+          return g
 
    The items can be any type accepted by the operand's :meth:`__getitem__`
    method.  Dictionaries accept any hashable value.  Lists, tuples, and
@@ -545,12 +561,12 @@ expect a function argument.
    Example of using :func:`itemgetter` to retrieve specific fields from a
    tuple record:
 
-       >>> inventory = [('apple', 3), ('banana', 2), ('pear', 5), ('orange', 1)]
-       >>> getcount = itemgetter(1)
-       >>> map(getcount, inventory)
-       [3, 2, 5, 1]
-       >>> sorted(inventory, key=getcount)
-       [('orange', 1), ('banana', 2), ('apple', 3), ('pear', 5)]
+      >>> inventory = [('apple', 3), ('banana', 2), ('pear', 5), ('orange', 1)]
+      >>> getcount = itemgetter(1)
+      >>> map(getcount, inventory)
+      [3, 2, 5, 1]
+      >>> sorted(inventory, key=getcount)
+      [('orange', 1), ('banana', 2), ('apple', 3), ('pear', 5)]
 
 
 .. function:: methodcaller(name[, args...])
@@ -559,7 +575,12 @@ expect a function argument.
    additional arguments and/or keyword arguments are given, they will be given
    to the method as well.  After ``f = methodcaller('name')``, the call ``f(b)``
    returns ``b.name()``.  After ``f = methodcaller('name', 'foo', bar=1)``, the
-   call ``f(b)`` returns ``b.name('foo', bar=1)``.
+   call ``f(b)`` returns ``b.name('foo', bar=1)``.  Equivalent to::
+
+      def methodcaller(name, *args, **kwargs):
+          def caller(obj):
+              return getattr(obj, name)(*args, **kwargs)
+          return caller
 
    .. versionadded:: 2.6
 

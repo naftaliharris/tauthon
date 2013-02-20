@@ -1,6 +1,6 @@
 # Augmented assignment test.
 
-from test.test_support import run_unittest, _check_py3k_warnings
+from test.test_support import run_unittest, check_py3k_warnings
 import unittest
 
 
@@ -19,10 +19,13 @@ class AugAssignTest(unittest.TestCase):
         x /= 2
         if 1/2 == 0:
             # classic division
-            self.assertEquals(x, 3)
+            self.assertEqual(x, 3)
         else:
             # new-style division (with -Qnew)
-            self.assertEquals(x, 3.0)
+            self.assertEqual(x, 3.0)
+
+    def test_with_unpacking(self):
+        self.assertRaises(SyntaxError, compile, "x, b += 3", "<test>", "exec")
 
     def testInList(self):
         x = [2]
@@ -37,9 +40,9 @@ class AugAssignTest(unittest.TestCase):
         x[0] ^= 1
         x[0] /= 2
         if 1/2 == 0:
-            self.assertEquals(x[0], 3)
+            self.assertEqual(x[0], 3)
         else:
-            self.assertEquals(x[0], 3.0)
+            self.assertEqual(x[0], 3.0)
 
     def testInDict(self):
         x = {0: 2}
@@ -54,24 +57,24 @@ class AugAssignTest(unittest.TestCase):
         x[0] ^= 1
         x[0] /= 2
         if 1/2 == 0:
-            self.assertEquals(x[0], 3)
+            self.assertEqual(x[0], 3)
         else:
-            self.assertEquals(x[0], 3.0)
+            self.assertEqual(x[0], 3.0)
 
     def testSequences(self):
         x = [1,2]
         x += [3,4]
         x *= 2
 
-        self.assertEquals(x, [1, 2, 3, 4, 1, 2, 3, 4])
+        self.assertEqual(x, [1, 2, 3, 4, 1, 2, 3, 4])
 
         x = [1, 2, 3]
         y = x
         x[1:2] *= 2
         y[1:2] += [1]
 
-        self.assertEquals(x, [1, 2, 1, 2, 3])
-        self.assert_(x is y)
+        self.assertEqual(x, [1, 2, 1, 2, 3])
+        self.assertTrue(x is y)
 
     def testCustomMethods1(self):
 
@@ -96,24 +99,24 @@ class AugAssignTest(unittest.TestCase):
         y = x
         x += 10
 
-        self.assert_(isinstance(x, aug_test))
-        self.assert_(y is not x)
-        self.assertEquals(x.val, 11)
+        self.assertIsInstance(x, aug_test)
+        self.assertTrue(y is not x)
+        self.assertEqual(x.val, 11)
 
         x = aug_test2(2)
         y = x
         x += 10
 
-        self.assert_(y is x)
-        self.assertEquals(x.val, 12)
+        self.assertTrue(y is x)
+        self.assertEqual(x.val, 12)
 
         x = aug_test3(3)
         y = x
         x += 10
 
-        self.assert_(isinstance(x, aug_test3))
-        self.assert_(y is not x)
-        self.assertEquals(x.val, 13)
+        self.assertIsInstance(x, aug_test3)
+        self.assertTrue(y is not x)
+        self.assertEqual(x.val, 13)
 
 
     def testCustomMethods2(test_self):
@@ -281,7 +284,7 @@ class AugAssignTest(unittest.TestCase):
         1 << x
         x <<= 1
 
-        test_self.assertEquals(output, '''\
+        test_self.assertEqual(output, '''\
 __add__ called
 __radd__ called
 __iadd__ called
@@ -321,7 +324,7 @@ __ilshift__ called
 '''.splitlines())
 
 def test_main():
-    with _check_py3k_warnings(("classic int division", DeprecationWarning)):
+    with check_py3k_warnings(("classic int division", DeprecationWarning)):
         run_unittest(AugAssignTest)
 
 if __name__ == '__main__':

@@ -82,24 +82,29 @@ static PyTypeObject *type_list;
    garbage itself. If unlist_types_without_objects
    is set, they will be removed from the type_list
    once the last object is deallocated. */
-int unlist_types_without_objects;
-extern int tuple_zero_allocs, fast_tuple_allocs;
-extern int quick_int_allocs, quick_neg_int_allocs;
-extern int null_strings, one_strings;
+static int unlist_types_without_objects;
+extern Py_ssize_t tuple_zero_allocs, fast_tuple_allocs;
+extern Py_ssize_t quick_int_allocs, quick_neg_int_allocs;
+extern Py_ssize_t null_strings, one_strings;
 void
 dump_counts(FILE* f)
 {
     PyTypeObject *tp;
 
     for (tp = type_list; tp; tp = tp->tp_next)
-        fprintf(f, "%s alloc'd: %d, freed: %d, max in use: %d\n",
+        fprintf(f, "%s alloc'd: %" PY_FORMAT_SIZE_T "d, "
+            "freed: %" PY_FORMAT_SIZE_T "d, "
+            "max in use: %" PY_FORMAT_SIZE_T "d\n",
             tp->tp_name, tp->tp_allocs, tp->tp_frees,
             tp->tp_maxalloc);
-    fprintf(f, "fast tuple allocs: %d, empty: %d\n",
+    fprintf(f, "fast tuple allocs: %" PY_FORMAT_SIZE_T "d, "
+        "empty: %" PY_FORMAT_SIZE_T "d\n",
         fast_tuple_allocs, tuple_zero_allocs);
-    fprintf(f, "fast int allocs: pos: %d, neg: %d\n",
+    fprintf(f, "fast int allocs: pos: %" PY_FORMAT_SIZE_T "d, "
+        "neg: %" PY_FORMAT_SIZE_T "d\n",
         quick_int_allocs, quick_neg_int_allocs);
-    fprintf(f, "null strings: %d, 1-strings: %d\n",
+    fprintf(f, "null strings: %" PY_FORMAT_SIZE_T "d, "
+        "1-strings: %" PY_FORMAT_SIZE_T "d\n",
         null_strings, one_strings);
 }
 
@@ -469,7 +474,7 @@ PyObject_Unicode(PyObject *v)
     PyObject *func;
     PyObject *str;
     int unicode_method_found = 0;
-    static PyObject *unicodestr;
+    static PyObject *unicodestr = NULL;
 
     if (v == NULL) {
         res = PyString_FromString("<NULL>");
@@ -483,15 +488,14 @@ PyObject_Unicode(PyObject *v)
         return v;
     }
 
-    /* Try the __unicode__ method */
-    if (unicodestr == NULL) {
-        unicodestr= PyString_InternFromString("__unicode__");
-        if (unicodestr == NULL)
-            return NULL;
-    }
     if (PyInstance_Check(v)) {
         /* We're an instance of a classic class */
         /* Try __unicode__ from the instance -- alas we have no type */
+        if (!unicodestr) {
+            unicodestr = PyString_InternFromString("__unicode__");
+            if (!unicodestr)
+                return NULL;
+        }
         func = PyObject_GetAttr(v, unicodestr);
         if (func != NULL) {
             unicode_method_found = 1;
@@ -503,16 +507,15 @@ PyObject_Unicode(PyObject *v)
         }
     }
     else {
-        /* Not a classic class instance, try __unicode__ from type */
-        /* _PyType_Lookup doesn't create a reference */
-        func = _PyType_Lookup(Py_TYPE(v), unicodestr);
+        /* Not a classic class instance, try __unicode__. */
+        func = _PyObject_LookupSpecial(v, "__unicode__", &unicodestr);
         if (func != NULL) {
             unicode_method_found = 1;
-            res = PyObject_CallFunctionObjArgs(func, v, NULL);
+            res = PyObject_CallFunctionObjArgs(func, NULL);
+            Py_DECREF(func);
         }
-        else {
-            PyErr_Clear();
-        }
+        else if (PyErr_Occurred())
+            return NULL;
     }
 
     /* Didn't find __unicode__ */
@@ -1027,15 +1030,18 @@ _Py_HashDouble(double v)
      * of mapping keys will turn out weird.
      */
 
+    if (!Py_IS_FINITE(v)) {
+        if (Py_IS_INFINITY(v))
+            return v < 0 ? -271828 : 314159;
+        else
+            return 0;
+    }
     fractpart = modf(v, &intpart);
     if (fractpart == 0.0) {
         /* This must return the same hash as an equal int or long. */
         if (intpart > LONG_MAX/2 || -intpart > LONG_MAX/2) {
             /* Convert to long and use its hash. */
             PyObject *plong;                    /* converted to Python long */
-            if (Py_IS_INFINITY(intpart))
-                /* can't convert to long int -- arbitrary */
-                v = v < 0 ? -271828.0 : 314159.0;
             plong = PyLong_FromDouble(v);
             if (plong == NULL)
                 return -1;
@@ -1074,23 +1080,15 @@ _Py_HashDouble(double v)
 long
 _Py_HashPointer(void *p)
 {
-#if SIZEOF_LONG >= SIZEOF_VOID_P
-    return (long)p;
-#else
-    /* convert to a Python long and hash that */
-    PyObject* longobj;
     long x;
-
-    if ((longobj = PyLong_FromVoidPtr(p)) == NULL) {
-        x = -1;
-        goto finally;
-    }
-    x = PyObject_Hash(longobj);
-
-finally:
-    Py_XDECREF(longobj);
+    size_t y = (size_t)p;
+    /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
+       excessive hash collisions for dicts and sets */
+    y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
+    x = (long)y;
+    if (x == -1)
+        x = -2;
     return x;
-#endif
 }
 
 long
@@ -1309,10 +1307,24 @@ PyObject_SelfIter(PyObject *obj)
     return obj;
 }
 
+/* Helper used when the __next__ method is removed from a type:
+   tp_iternext is never NULL and can be safely called without checking
+   on every iteration.
+ */
+
+PyObject *
+_PyObject_NextNotImplemented(PyObject *self)
+{
+    PyErr_Format(PyExc_TypeError,
+                 "'%.200s' object is not iterable",
+                 Py_TYPE(self)->tp_name);
+    return NULL;
+}
+
 /* Generic GetAttr functions - put these in your tp_[gs]etattro slot */
 
 PyObject *
-PyObject_GenericGetAttr(PyObject *obj, PyObject *name)
+_PyObject_GenericGetAttrWithDict(PyObject *obj, PyObject *name, PyObject *dict)
 {
     PyTypeObject *tp = Py_TYPE(obj);
     PyObject *descr = NULL;
@@ -1390,36 +1402,37 @@ PyObject_GenericGetAttr(PyObject *obj, PyObject *name)
         }
     }
 
-    /* Inline _PyObject_GetDictPtr */
-    dictoffset = tp->tp_dictoffset;
-    if (dictoffset != 0) {
-        PyObject *dict;
-        if (dictoffset < 0) {
-            Py_ssize_t tsize;
-            size_t size;
+    if (dict == NULL) {
+        /* Inline _PyObject_GetDictPtr */
+        dictoffset = tp->tp_dictoffset;
+        if (dictoffset != 0) {
+            if (dictoffset < 0) {
+                Py_ssize_t tsize;
+                size_t size;
 
-            tsize = ((PyVarObject *)obj)->ob_size;
-            if (tsize < 0)
-                tsize = -tsize;
-            size = _PyObject_VAR_SIZE(tp, tsize);
+                tsize = ((PyVarObject *)obj)->ob_size;
+                if (tsize < 0)
+                    tsize = -tsize;
+                size = _PyObject_VAR_SIZE(tp, tsize);
 
-            dictoffset += (long)size;
-            assert(dictoffset > 0);
-            assert(dictoffset % SIZEOF_VOID_P == 0);
-        }
-        dictptr = (PyObject **) ((char *)obj + dictoffset);
-        dict = *dictptr;
-        if (dict != NULL) {
-            Py_INCREF(dict);
-            res = PyDict_GetItem(dict, name);
-            if (res != NULL) {
-                Py_INCREF(res);
-                Py_XDECREF(descr);
-                Py_DECREF(dict);
-                goto done;
+                dictoffset += (long)size;
+                assert(dictoffset > 0);
+                assert(dictoffset % SIZEOF_VOID_P == 0);
             }
-            Py_DECREF(dict);
+            dictptr = (PyObject **) ((char *)obj + dictoffset);
+            dict = *dictptr;
         }
+    }
+    if (dict != NULL) {
+        Py_INCREF(dict);
+        res = PyDict_GetItem(dict, name);
+        if (res != NULL) {
+            Py_INCREF(res);
+            Py_XDECREF(descr);
+            Py_DECREF(dict);
+            goto done;
+        }
+        Py_DECREF(dict);
     }
 
     if (f != NULL) {
@@ -1442,8 +1455,15 @@ PyObject_GenericGetAttr(PyObject *obj, PyObject *name)
     return res;
 }
 
+PyObject *
+PyObject_GenericGetAttr(PyObject *obj, PyObject *name)
+{
+    return _PyObject_GenericGetAttrWithDict(obj, name, NULL);
+}
+
 int
-PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value)
+_PyObject_GenericSetAttrWithDict(PyObject *obj, PyObject *name,
+                                 PyObject *value, PyObject *dict)
 {
     PyTypeObject *tp = Py_TYPE(obj);
     PyObject *descr;
@@ -1489,26 +1509,28 @@ PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value)
         }
     }
 
-    dictptr = _PyObject_GetDictPtr(obj);
-    if (dictptr != NULL) {
-        PyObject *dict = *dictptr;
-        if (dict == NULL && value != NULL) {
-            dict = PyDict_New();
-            if (dict == NULL)
-                goto done;
-            *dictptr = dict;
+    if (dict == NULL) {
+        dictptr = _PyObject_GetDictPtr(obj);
+        if (dictptr != NULL) {
+            dict = *dictptr;
+            if (dict == NULL && value != NULL) {
+                dict = PyDict_New();
+                if (dict == NULL)
+                    goto done;
+                *dictptr = dict;
+            }
         }
-        if (dict != NULL) {
-            Py_INCREF(dict);
-            if (value == NULL)
-                res = PyDict_DelItem(dict, name);
-            else
-                res = PyDict_SetItem(dict, name, value);
-            if (res < 0 && PyErr_ExceptionMatches(PyExc_KeyError))
-                PyErr_SetObject(PyExc_AttributeError, name);
-            Py_DECREF(dict);
-            goto done;
-        }
+    }
+    if (dict != NULL) {
+        Py_INCREF(dict);
+        if (value == NULL)
+            res = PyDict_DelItem(dict, name);
+        else
+            res = PyDict_SetItem(dict, name, value);
+        if (res < 0 && PyErr_ExceptionMatches(PyExc_KeyError))
+            PyErr_SetObject(PyExc_AttributeError, name);
+        Py_DECREF(dict);
+        goto done;
     }
 
     if (f != NULL) {
@@ -1530,6 +1552,13 @@ PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value)
     Py_DECREF(name);
     return res;
 }
+
+int
+PyObject_GenericSetAttr(PyObject *obj, PyObject *name, PyObject *value)
+{
+    return _PyObject_GenericSetAttrWithDict(obj, name, value, NULL);
+}
+
 
 /* Test a value used as condition, e.g., in a for or if statement.
    Return -1 if an error occurred */
@@ -1883,13 +1912,26 @@ static PyObject *
 _dir_object(PyObject *obj)
 {
     PyObject *result = NULL;
-    PyObject *dirfunc = PyObject_GetAttrString((PyObject *)obj->ob_type,
-                                               "__dir__");
+    static PyObject *dir_str = NULL;
+    PyObject *dirfunc;
 
     assert(obj);
+    if (PyInstance_Check(obj)) {
+        dirfunc = PyObject_GetAttrString(obj, "__dir__");
+        if (dirfunc == NULL) {
+            if (PyErr_ExceptionMatches(PyExc_AttributeError))
+                PyErr_Clear();
+            else
+                return NULL;
+        }
+    }
+    else {
+        dirfunc = _PyObject_LookupSpecial(obj, "__dir__", &dir_str);
+        if (PyErr_Occurred())
+            return NULL;
+    }
     if (dirfunc == NULL) {
         /* use default implementation */
-        PyErr_Clear();
         if (PyModule_Check(obj))
             result = _specialized_dir_module(obj);
         else if (PyType_Check(obj) || PyClass_Check(obj))
@@ -1899,7 +1941,7 @@ _dir_object(PyObject *obj)
     }
     else {
         /* use __dir__ */
-        result = PyObject_CallFunctionObjArgs(dirfunc, obj, NULL);
+        result = PyObject_CallFunctionObjArgs(dirfunc, NULL);
         Py_DECREF(dirfunc);
         if (result == NULL)
             return NULL;
@@ -2074,8 +2116,10 @@ _Py_ReadyTypes(void)
     if (PyType_Ready(&PySet_Type) < 0)
         Py_FatalError("Can't initialize set type");
 
+#ifdef Py_USING_UNICODE
     if (PyType_Ready(&PyUnicode_Type) < 0)
         Py_FatalError("Can't initialize unicode type");
+#endif
 
     if (PyType_Ready(&PySlice_Type) < 0)
         Py_FatalError("Can't initialize slice type");
@@ -2105,6 +2149,9 @@ _Py_ReadyTypes(void)
 
     if (PyType_Ready(&PyProperty_Type) < 0)
         Py_FatalError("Can't initialize property type");
+
+    if (PyType_Ready(&PyMemoryView_Type) < 0)
+        Py_FatalError("Can't initialize memoryview type");
 
     if (PyType_Ready(&PyTuple_Type) < 0)
         Py_FatalError("Can't initialize tuple type");
@@ -2153,6 +2200,21 @@ _Py_ReadyTypes(void)
 
     if (PyType_Ready(&PyMemberDescr_Type) < 0)
         Py_FatalError("Can't initialize member descriptor type");
+
+    if (PyType_Ready(&PyFile_Type) < 0)
+        Py_FatalError("Can't initialize file type");
+
+    if (PyType_Ready(&PyCapsule_Type) < 0)
+        Py_FatalError("Can't initialize capsule type");
+
+    if (PyType_Ready(&PyCell_Type) < 0)
+        Py_FatalError("Can't initialize cell type");
+
+    if (PyType_Ready(&PyCallIter_Type) < 0)
+        Py_FatalError("Can't initialize call iter type");
+
+    if (PyType_Ready(&PySeqIter_Type) < 0)
+        Py_FatalError("Can't initialize sequence iterator type");
 }
 
 
@@ -2259,6 +2321,10 @@ _Py_GetObjects(PyObject *self, PyObject *args)
 }
 
 #endif
+
+
+/* Hack to force loading of capsule.o */
+PyTypeObject *_Py_capsule_hack = &PyCapsule_Type;
 
 
 /* Hack to force loading of cobject.o */
@@ -2379,6 +2445,18 @@ _PyTrash_deposit_object(PyObject *op)
     _PyTrash_delete_later = op;
 }
 
+/* The equivalent API, using per-thread state recursion info */
+void
+_PyTrash_thread_deposit_object(PyObject *op)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    assert(PyObject_IS_GC(op));
+    assert(_Py_AS_GC(op)->gc.gc_refs == _PyGC_REFS_UNTRACKED);
+    assert(op->ob_refcnt == 0);
+    _Py_AS_GC(op)->gc.gc_prev = (PyGC_Head *) tstate->trash_delete_later;
+    tstate->trash_delete_later = op;
+}
+
 /* Dealloccate all the objects in the _PyTrash_delete_later list.  Called when
  * the call-stack unwinds again.
  */
@@ -2402,6 +2480,31 @@ _PyTrash_destroy_chain(void)
         ++_PyTrash_delete_nesting;
         (*dealloc)(op);
         --_PyTrash_delete_nesting;
+    }
+}
+
+/* The equivalent API, using per-thread state recursion info */
+void
+_PyTrash_thread_destroy_chain(void)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    while (tstate->trash_delete_later) {
+        PyObject *op = tstate->trash_delete_later;
+        destructor dealloc = Py_TYPE(op)->tp_dealloc;
+
+        tstate->trash_delete_later =
+            (PyObject*) _Py_AS_GC(op)->gc.gc_prev;
+
+        /* Call the deallocator directly.  This used to try to
+         * fool Py_DECREF into calling it indirectly, but
+         * Py_DECREF was already called on this object, and in
+         * assorted non-release builds calling Py_DECREF again ends
+         * up distorting allocation statistics.
+         */
+        assert(op->ob_refcnt == 0);
+        ++tstate->trash_delete_nesting;
+        (*dealloc)(op);
+        --tstate->trash_delete_nesting;
     }
 }
 

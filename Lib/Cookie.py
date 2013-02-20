@@ -258,6 +258,11 @@ _Translator       = {
     '\033' : '\\033',  '\034' : '\\034',  '\035' : '\\035',
     '\036' : '\\036',  '\037' : '\\037',
 
+    # Because of the way browsers really handle cookies (as opposed
+    # to what the RFC says) we also encode , and ;
+
+    ',' : '\\054', ';' : '\\073',
+
     '"' : '\\"',       '\\' : '\\\\',
 
     '\177' : '\\177',  '\200' : '\\200',  '\201' : '\\201',
@@ -385,7 +390,7 @@ def _getdate(future=0, weekdayname=_weekdayname, monthname=_monthname):
     from time import gmtime, time
     now = time()
     year, month, day, hh, mm, ss, wd, y, z = gmtime(now + future)
-    return "%s, %02d-%3s-%4d %02d:%02d:%02d GMT" % \
+    return "%s, %02d %3s %4d %02d:%02d:%02d GMT" % \
            (weekdayname[wd], day, monthname[month], year, hh, mm, ss)
 
 
@@ -477,7 +482,7 @@ class Morsel(dict):
         document.cookie = \"%s\";
         // end hiding -->
         </script>
-        """ % ( self.OutputString(attrs), )
+        """ % ( self.OutputString(attrs).replace('"',r'\"'), )
     # end js_output()
 
     def OutputString(self, attrs=None):
@@ -534,7 +539,7 @@ _CookiePattern = re.compile(
     r"(?P<val>"                   # Start of group 'val'
     r'"(?:[^\\"]|\\.)*"'            # Any doublequoted string
     r"|"                            # or
-    r"\w{3},\s[\w\d-]{9,11}\s[\d:]{8}\sGMT" # Special case for "expires" attr
+    r"\w{3},\s[\s\w\d-]{9,11}\s[\d:]{8}\sGMT" # Special case for "expires" attr
     r"|"                            # or
     ""+ _LegalCharsPatt +"*"        # Any word or empty string
     r")"                          # End of group 'val'

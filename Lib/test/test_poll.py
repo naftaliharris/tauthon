@@ -1,12 +1,13 @@
 # Test case for the os.poll() function
 
 import os, select, random, unittest
-from test.test_support import TestSkipped, TESTFN, run_unittest
+import _testcapi
+from test.test_support import TESTFN, run_unittest
 
 try:
     select.poll
 except AttributeError:
-    raise TestSkipped, "select.poll not defined -- skipping test_poll"
+    raise unittest.SkipTest, "select.poll not defined -- skipping test_poll"
 
 
 def find_ready_matching(ready, flag):
@@ -149,6 +150,15 @@ class PollTests(unittest.TestCase):
         x = 2 + 3
         if x != 5:
             self.fail('Overflow must have occurred')
+
+        pollster = select.poll()
+        # Issue 15989
+        self.assertRaises(OverflowError, pollster.register, 0,
+                          _testcapi.SHRT_MAX + 1)
+        self.assertRaises(OverflowError, pollster.register, 0,
+                          _testcapi.USHRT_MAX + 1)
+        self.assertRaises(OverflowError, pollster.poll, _testcapi.INT_MAX + 1)
+        self.assertRaises(OverflowError, pollster.poll, _testcapi.UINT_MAX + 1)
 
 def test_main():
     run_unittest(PollTests)

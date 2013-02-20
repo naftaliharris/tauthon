@@ -129,6 +129,7 @@ newossobject(PyObject *arg)
     }
 
     if (ioctl(fd, SNDCTL_DSP_GETFMTS, &afmts) == -1) {
+        close(fd);
         PyErr_SetFromErrnoWithFilename(PyExc_IOError, devicename);
         return NULL;
     }
@@ -425,6 +426,11 @@ oss_writeall(oss_audio_t *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "s#:write", &cp, &size))
         return NULL;
 
+    if (!_PyIsSelectable_fd(self->fd)) {
+        PyErr_SetString(PyExc_ValueError,
+                        "file descriptor out of range for select");
+        return NULL;
+    }
     /* use select to wait for audio device to be available */
     FD_ZERO(&write_set_fds);
     FD_SET(self->fd, &write_set_fds);

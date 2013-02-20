@@ -41,7 +41,7 @@ for name in anydbm._names:
     try:
         # Silence Py3k warning
         mod = test.test_support.import_module(name, deprecated=True)
-    except test.test_support.TestSkipped:
+    except unittest.SkipTest:
         continue
 
     def test_whichdb_name(self, name=name, mod=mod):

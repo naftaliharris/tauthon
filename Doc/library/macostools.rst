@@ -15,7 +15,7 @@ files, so it should not be used on UFS partitions.
 
 .. note::
 
-   This module has been removed in Python 3.0.
+   This module has been removed in Python 3.
 
 
 
@@ -75,7 +75,7 @@ have incompatible behaviour in some cases.
 
 
 :mod:`findertools` --- The :program:`finder`'s Apple Events interface
-=====================================================================
+======================================================================
 
 .. module:: findertools
    :platform: Mac

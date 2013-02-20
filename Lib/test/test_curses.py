@@ -9,24 +9,26 @@
 # Only called, not tested: getmouse(), ungetmouse()
 #
 
-import curses, sys, tempfile, os
-import curses.panel
+import sys, tempfile, os
 
 # Optionally test curses module.  This currently requires that the
 # 'curses' resource be given on the regrtest command line using the -u
 # option.  If not available, nothing after this line will be executed.
 
-from test.test_support import requires, TestSkipped
+import unittest
+from test.test_support import requires, import_module
 requires('curses')
+curses = import_module('curses')
+curses.panel = import_module('curses.panel')
 
 
 # XXX: if newterm was supported we could use it instead of initscr and not exit
 term = os.environ.get('TERM')
 if not term or term == 'unknown':
-    raise TestSkipped, "$TERM=%r, calling initscr() may cause exit" % term
+    raise unittest.SkipTest, "$TERM=%r, calling initscr() may cause exit" % term
 
 if sys.platform == "cygwin":
-    raise TestSkipped("cygwin's curses mostly just hangs")
+    raise unittest.SkipTest("cygwin's curses mostly just hangs")
 
 def window_funcs(stdscr):
     "Test the methods of windows"
@@ -276,7 +278,7 @@ if __name__ == '__main__':
     unit_tests()
 else:
     if not sys.__stdout__.isatty():
-        raise TestSkipped("sys.__stdout__ is not a tty")
+        raise unittest.SkipTest("sys.__stdout__ is not a tty")
     # testing setupterm() inside initscr/endwin
     # causes terminal breakage
     curses.setupterm(fd=sys.__stdout__.fileno())

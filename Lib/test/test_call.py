@@ -12,7 +12,7 @@ class CFunctionCalls(unittest.TestCase):
         self.assertRaises(TypeError, {}.has_key)
 
     def test_varargs1(self):
-        with test_support._check_py3k_warnings():
+        with test_support.check_py3k_warnings():
             {}.has_key(0)
 
     def test_varargs2(self):
@@ -25,12 +25,12 @@ class CFunctionCalls(unittest.TestCase):
             pass
 
     def test_varargs1_ext(self):
-        with test_support._check_py3k_warnings():
+        with test_support.check_py3k_warnings():
             {}.has_key(*(0,))
 
     def test_varargs2_ext(self):
         try:
-            with test_support._check_py3k_warnings():
+            with test_support.check_py3k_warnings():
                 {}.has_key(*(1, 2))
         except TypeError:
             pass

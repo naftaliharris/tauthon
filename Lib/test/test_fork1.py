@@ -1,21 +1,19 @@
 """This test checks for correct fork() behavior.
 """
 
-import errno
 import imp
 import os
 import signal
 import sys
 import time
-import threading
 
 from test.fork_wait import ForkWait
-from test.test_support import TestSkipped, run_unittest, reap_children
+from test.test_support import run_unittest, reap_children, get_attribute, import_module
+threading = import_module('threading')
 
-try:
-    os.fork
-except AttributeError:
-    raise TestSkipped, "os.fork not defined -- skipping test_fork1"
+#Skip test if fork does not exist.
+get_attribute(os, 'fork')
+
 
 class ForkTest(ForkWait):
     def wait_impl(self, cpid):

@@ -8,7 +8,6 @@ from __future__ import print_function
 import unittest
 from test import test_support
 
-import sys
 from StringIO import StringIO
 
 NotDefined = object()
@@ -16,7 +15,7 @@ NotDefined = object()
 # A dispatch table all 8 combinations of providing
 #  sep, end, and file
 # I use this machinery so that I'm not just passing default
-#  values to print, I'm eiher passing or not passing in the
+#  values to print, I'm either passing or not passing in the
 #  arguments
 dispatch = {
     (False, False, False):
@@ -128,11 +127,11 @@ class TestPrint(unittest.TestCase):
         self.assertEqual(u''.join(buf.buf), 'hi nothing\n')
         buf = Recorder(False)
         print('hi', 'bye', end=u'\n', file=buf)
-        self.assertTrue(isinstance(buf.buf[1], unicode))
-        self.assertTrue(isinstance(buf.buf[3], unicode))
+        self.assertIsInstance(buf.buf[1], unicode)
+        self.assertIsInstance(buf.buf[3], unicode)
         del buf.buf[:]
         print(sep=u'x', file=buf)
-        self.assertTrue(isinstance(buf.buf[-1], unicode))
+        self.assertIsInstance(buf.buf[-1], unicode)
 
 
 def test_main():

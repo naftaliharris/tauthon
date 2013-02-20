@@ -14,15 +14,19 @@ Currently, the HOWTOs are:
    :maxdepth: 1
 
    advocacy.rst
+   pyporting.rst
    cporting.rst
    curses.rst
    descriptor.rst
    doanddont.rst
    functional.rst
+   logging.rst
+   logging-cookbook.rst
    regex.rst
    sockets.rst
    sorting.rst
    unicode.rst
    urllib2.rst
    webservers.rst
+   argparse.rst
 

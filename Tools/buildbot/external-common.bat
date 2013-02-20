@@ -4,7 +4,7 @@
 cd ..
 @rem XXX: If you need to force the buildbots to start from a fresh environment, uncomment
 @rem the following, check it in, then check it out, comment it out, then check it back in.
-@rem if exist bzip2-1.0.5 rd /s/q bzip2-1.0.5
+@rem if exist bzip2-1.0.6 rd /s/q bzip2-1.0.6
 @rem if exist tcltk rd /s/q tcltk
 @rem if exist tcltk64 rd /s/q tcltk64
 @rem if exist tcl8.4.12 rd /s/q tcl8.4.12
@@ -15,13 +15,13 @@ cd ..
 @rem if exist tk-8.4.18.1 rd /s/q tk-8.4.18.1
 @rem if exist db-4.4.20 rd /s/q db-4.4.20
 @rem if exist db-4.7.25.0 rd /s/q db-4.7.25.0
-@rem if exist openssl-0.9.8l rd /s/q openssl-0.9.8l
-@rem if exist sqlite-3.5.9 rd /s/q sqlite-3.5.9    
+@rem if exist openssl-0.9.8x rd /s/q openssl-0.9.8x
+@rem if exist sqlite-3.6.21 rd /s/q sqlite-3.6.21    
 
 @rem bzip
-if not exist bzip2-1.0.5 (
-   rd /s/q bzip2-1.0.3
-  svn export http://svn.python.org/projects/external/bzip2-1.0.5
+if not exist bzip2-1.0.6 (
+   rd /s/q bzip2-1.0.5
+  svn export http://svn.python.org/projects/external/bzip2-1.0.6
 )
 
 @rem Berkeley DB
@@ -29,7 +29,7 @@ if exist db-4.4.20 rd /s/q db-4.4.20
 if not exist db-4.7.25.0 svn export http://svn.python.org/projects/external/db-4.7.25.0
 
 @rem OpenSSL
-if not exist openssl-0.9.8l svn export http://svn.python.org/projects/external/openssl-0.9.8l
+if not exist openssl-0.9.8x svn export http://svn.python.org/projects/external/openssl-0.9.8x
 
 @rem tcl/tk
 if not exist tcl-8.5.2.1 (
@@ -39,7 +39,7 @@ if not exist tcl-8.5.2.1 (
 if not exist tk-8.5.2.0 svn export http://svn.python.org/projects/external/tk-8.5.2.0
 
 @rem sqlite3
-if not exist sqlite-3.5.9 (
+if not exist sqlite-3.6.21 (
   rd /s/q sqlite-source-3.3.4
-  svn export http://svn.python.org/projects/external/sqlite-3.5.9
+  svn export http://svn.python.org/projects/external/sqlite-3.6.21
 )

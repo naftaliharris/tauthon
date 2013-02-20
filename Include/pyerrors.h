@@ -185,11 +185,12 @@ PyAPI_FUNC(PyObject *) PyErr_NoMemory(void);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrno(PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilenameObject(
     PyObject *, PyObject *);
-PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilename(PyObject *, char *);
-#ifdef Py_WIN_WIDE_FILENAMES
+PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithFilename(
+    PyObject *, const char *);
+#ifdef MS_WINDOWS
 PyAPI_FUNC(PyObject *) PyErr_SetFromErrnoWithUnicodeFilename(
-    PyObject *, Py_UNICODE *);
-#endif /* Py_WIN_WIDE_FILENAMES */
+    PyObject *, const Py_UNICODE *);
+#endif /* MS_WINDOWS */
 
 PyAPI_FUNC(PyObject *) PyErr_Format(PyObject *, const char *, ...)
                         Py_GCC_ATTRIBUTE((format(printf, 2, 3)));
@@ -199,19 +200,15 @@ PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilenameObject(
     int, const char *);
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithFilename(
     int, const char *);
-#ifdef Py_WIN_WIDE_FILENAMES
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErrWithUnicodeFilename(
     int, const Py_UNICODE *);
-#endif /* Py_WIN_WIDE_FILENAMES */
 PyAPI_FUNC(PyObject *) PyErr_SetFromWindowsErr(int);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilenameObject(
     PyObject *,int, PyObject *);
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithFilename(
     PyObject *,int, const char *);
-#ifdef Py_WIN_WIDE_FILENAMES
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErrWithUnicodeFilename(
     PyObject *,int, const Py_UNICODE *);
-#endif /* Py_WIN_WIDE_FILENAMES */
 PyAPI_FUNC(PyObject *) PyErr_SetExcFromWindowsErr(PyObject *, int);
 #endif /* MS_WINDOWS */
 
@@ -223,8 +220,10 @@ PyAPI_FUNC(void) _PyErr_BadInternalCall(char *filename, int lineno);
 #define PyErr_BadInternalCall() _PyErr_BadInternalCall(__FILE__, __LINE__)
 
 /* Function to create a new exception */
-PyAPI_FUNC(PyObject *) PyErr_NewException(char *name, PyObject *base,
-                                         PyObject *dict);
+PyAPI_FUNC(PyObject *) PyErr_NewException(
+    char *name, PyObject *base, PyObject *dict);
+PyAPI_FUNC(PyObject *) PyErr_NewExceptionWithDoc(
+    char *name, char *doc, PyObject *base, PyObject *dict);
 PyAPI_FUNC(void) PyErr_WriteUnraisable(PyObject *);
 
 /* In sigcheck.c or signalmodule.c */

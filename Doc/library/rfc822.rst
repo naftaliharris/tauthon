@@ -10,7 +10,7 @@
 .. deprecated:: 2.3
    The :mod:`email` package should be used in preference to the :mod:`rfc822`
    module.  This module is present only to maintain backward compatibility, and
-   has been removed in 3.0.
+   has been removed in Python 3.
 
 This module defines a class, :class:`Message`, which represents an "email
 message" as defined by the Internet standard :rfc:`2822`. [#]_  Such messages
@@ -42,8 +42,8 @@ various end-user mail programs.
    from a buffered stream.
 
    The optional *seekable* argument is provided as a workaround for certain stdio
-   libraries in which :cfunc:`tell` discards buffered data before discovering that
-   the :cfunc:`lseek` system call doesn't work.  For maximum portability, you
+   libraries in which :c:func:`tell` discards buffered data before discovering that
+   the :c:func:`lseek` system call doesn't work.  For maximum portability, you
    should set the seekable argument to zero to prevent that initial :meth:`tell`
    when passing in an unseekable object such as a file object created from a socket
    object.

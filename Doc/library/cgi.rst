@@ -13,6 +13,10 @@
    single: URL
    single: Common Gateway Interface
 
+**Source code:** :source:`Lib/cgi.py`
+
+--------------
+
 Support module for Common Gateway Interface (CGI) scripts.
 
 This module defines a number of utilities for use by CGI scripts written in
@@ -280,10 +284,10 @@ These are useful if you want more control, or if you want to employ some of the
 algorithms implemented in this module in other circumstances.
 
 
-.. function:: parse(fp[, keep_blank_values[, strict_parsing]])
+.. function:: parse(fp[, environ[, keep_blank_values[, strict_parsing]]])
 
    Parse a query in the environment or from a file (the file defaults to
-   ``sys.stdin``).  The *keep_blank_values* and *strict_parsing* parameters are
+   ``sys.stdin`` and environment defaults to ``os.environ``).  The *keep_blank_values* and *strict_parsing* parameters are
    passed to :func:`urlparse.parse_qs` unchanged.
 
 
@@ -354,7 +358,7 @@ algorithms implemented in this module in other circumstances.
    that single quotes are never translated.
 
    If the value to be quoted might include single- or double-quote characters,
-   or both, consider using the :func:`quoteattr` function in the
+   or both, consider using the :func:`~xml.sax.saxutils.quoteattr` function in the
    :mod:`xml.sax.saxutils` module instead.
 
 

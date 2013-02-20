@@ -22,7 +22,6 @@ extern "C" {
 
 #define UNARY_INVERT	15
 
-#define LIST_APPEND	18
 #define BINARY_POWER	19
 
 #define BINARY_MULTIPLY	20
@@ -89,6 +88,7 @@ extern "C" {
 #define DELETE_NAME	91	/* "" */
 #define UNPACK_SEQUENCE	92	/* Number of sequence items */
 #define FOR_ITER	93
+#define LIST_APPEND	94
 
 #define STORE_ATTR	95	/* Index in name list */
 #define DELETE_ATTR	96	/* "" */
@@ -99,16 +99,20 @@ extern "C" {
 #define LOAD_NAME	101	/* Index in name list */
 #define BUILD_TUPLE	102	/* Number of tuple items */
 #define BUILD_LIST	103	/* Number of list items */
-#define BUILD_MAP	104	/* Always zero for now */
-#define LOAD_ATTR	105	/* Index in name list */
-#define COMPARE_OP	106	/* Comparison operator */
-#define IMPORT_NAME	107	/* Index in name list */
-#define IMPORT_FROM	108	/* Index in name list */
-
+#define BUILD_SET	104     /* Number of set items */
+#define BUILD_MAP	105	/* Always zero for now */
+#define LOAD_ATTR	106	/* Index in name list */
+#define COMPARE_OP	107	/* Comparison operator */
+#define IMPORT_NAME	108	/* Index in name list */
+#define IMPORT_FROM	109	/* Index in name list */
 #define JUMP_FORWARD	110	/* Number of bytes to skip */
-#define JUMP_IF_FALSE	111	/* "" */
-#define JUMP_IF_TRUE	112	/* "" */
-#define JUMP_ABSOLUTE	113	/* Target byte offset from beginning of code */
+
+#define JUMP_IF_FALSE_OR_POP 111 /* Target byte offset from beginning
+                                    of code */
+#define JUMP_IF_TRUE_OR_POP 112	/* "" */
+#define JUMP_ABSOLUTE	113	/* "" */
+#define POP_JUMP_IF_FALSE 114	/* "" */
+#define POP_JUMP_IF_TRUE 115	/* "" */
 
 #define LOAD_GLOBAL	116	/* Index in name list */
 
@@ -138,8 +142,13 @@ extern "C" {
 #define CALL_FUNCTION_KW           141	/* #args + (#kwargs<<8) */
 #define CALL_FUNCTION_VAR_KW       142	/* #args + (#kwargs<<8) */
 
+#define SETUP_WITH 143
+
 /* Support for opargs more than 16 bits long */
-#define EXTENDED_ARG  143
+#define EXTENDED_ARG  145
+
+#define SET_ADD         146
+#define MAP_ADD         147
 
 
 enum cmp_op {PyCmp_LT=Py_LT, PyCmp_LE=Py_LE, PyCmp_EQ=Py_EQ, PyCmp_NE=Py_NE, PyCmp_GT=Py_GT, PyCmp_GE=Py_GE,

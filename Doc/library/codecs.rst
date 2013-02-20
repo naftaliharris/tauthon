@@ -759,9 +759,9 @@ Encodings and Unicode
 ---------------------
 
 Unicode strings are stored internally as sequences of codepoints (to be precise
-as :ctype:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
-via :option:`--enable-unicode=ucs2` or :option:`--enable-unicode=ucs4`, with the
-former being the default) :ctype:`Py_UNICODE` is either a 16-bit or 32-bit data
+as :c:type:`Py_UNICODE` arrays). Depending on the way Python is compiled (either
+via ``--enable-unicode=ucs2`` or ``--enable-unicode=ucs4``, with the
+former being the default) :c:type:`Py_UNICODE` is either a 16-bit or 32-bit data
 type. Once a Unicode object is used outside of CPU and memory, CPU endianness
 and how these arrays are stored as bytes become an issue.  Transforming a
 unicode object into a sequence of bytes is called encoding and recreating the
@@ -782,27 +782,28 @@ e.g. :file:`encodings/cp1252.py` (which is an encoding that is used primarily on
 Windows). There's a string constant with 256 characters that shows you which
 character is mapped to which byte value.
 
-All of these encodings can only encode 256 of the 65536 (or 1114111) codepoints
+All of these encodings can only encode 256 of the 1114112 codepoints
 defined in unicode. A simple and straightforward way that can store each Unicode
-code point, is to store each codepoint as two consecutive bytes. There are two
-possibilities: Store the bytes in big endian or in little endian order. These
-two encodings are called UTF-16-BE and UTF-16-LE respectively. Their
-disadvantage is that if e.g. you use UTF-16-BE on a little endian machine you
-will always have to swap bytes on encoding and decoding. UTF-16 avoids this
-problem: Bytes will always be in natural endianness. When these bytes are read
+code point, is to store each codepoint as four consecutive bytes. There are two
+possibilities: store the bytes in big endian or in little endian order. These
+two encodings are called ``UTF-32-BE`` and ``UTF-32-LE`` respectively. Their
+disadvantage is that if e.g. you use ``UTF-32-BE`` on a little endian machine you
+will always have to swap bytes on encoding and decoding. ``UTF-32`` avoids this
+problem: bytes will always be in natural endianness. When these bytes are read
 by a CPU with a different endianness, then bytes have to be swapped though. To
-be able to detect the endianness of a UTF-16 byte sequence, there's the so
-called BOM (the "Byte Order Mark"). This is the Unicode character ``U+FEFF``.
-This character will be prepended to every UTF-16 byte sequence. The byte swapped
-version of this character (``0xFFFE``) is an illegal character that may not
-appear in a Unicode text. So when the first character in an UTF-16 byte sequence
+be able to detect the endianness of a ``UTF-16`` or ``UTF-32`` byte sequence,
+there's the so called BOM ("Byte Order Mark"). This is the Unicode character
+``U+FEFF``. This character can be prepended to every ``UTF-16`` or ``UTF-32``
+byte sequence. The byte swapped version of this character (``0xFFFE``) is an
+illegal character that may not appear in a Unicode text. So when the
+first character in an ``UTF-16`` or ``UTF-32`` byte sequence
 appears to be a ``U+FFFE`` the bytes have to be swapped on decoding.
-Unfortunately upto Unicode 4.0 the character ``U+FEFF`` had a second purpose as
-a ``ZERO WIDTH NO-BREAK SPACE``: A character that has no width and doesn't allow
+Unfortunately the character ``U+FEFF`` had a second purpose as
+a ``ZERO WIDTH NO-BREAK SPACE``: a character that has no width and doesn't allow
 a word to be split. It can e.g. be used to give hints to a ligature algorithm.
 With Unicode 4.0 using ``U+FEFF`` as a ``ZERO WIDTH NO-BREAK SPACE`` has been
 deprecated (with ``U+2060`` (``WORD JOINER``) assuming this role). Nevertheless
-Unicode software still must be able to handle ``U+FEFF`` in both roles: As a BOM
+Unicode software still must be able to handle ``U+FEFF`` in both roles: as a BOM
 it's a device to determine the storage layout of the encoded bytes, and vanishes
 once the byte sequence has been decoded into a Unicode string; as a ``ZERO WIDTH
 NO-BREAK SPACE`` it's a normal character that will be decoded like any other.
@@ -810,8 +811,8 @@ NO-BREAK SPACE`` it's a normal character that will be decoded like any other.
 There's another encoding that is able to encoding the full range of Unicode
 characters: UTF-8. UTF-8 is an 8-bit encoding, which means there are no issues
 with byte order in UTF-8. Each byte in a UTF-8 byte sequence consists of two
-parts: Marker bits (the most significant bits) and payload bits. The marker bits
-are a sequence of zero to six 1 bits followed by a 0 bit. Unicode characters are
+parts: marker bits (the most significant bits) and payload bits. The marker bits
+are a sequence of zero to four ``1`` bits followed by a ``0`` bit. Unicode characters are
 encoded like this (with x being payload bits, which when concatenated give the
 Unicode character):
 
@@ -824,12 +825,7 @@ Unicode character):
 +-----------------------------------+----------------------------------------------+
 | ``U-00000800`` ... ``U-0000FFFF`` | 1110xxxx 10xxxxxx 10xxxxxx                   |
 +-----------------------------------+----------------------------------------------+
-| ``U-00010000`` ... ``U-001FFFFF`` | 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx          |
-+-----------------------------------+----------------------------------------------+
-| ``U-00200000`` ... ``U-03FFFFFF`` | 111110xx 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx |
-+-----------------------------------+----------------------------------------------+
-| ``U-04000000`` ... ``U-7FFFFFFF`` | 1111110x 10xxxxxx 10xxxxxx 10xxxxxx 10xxxxxx |
-|                                   | 10xxxxxx                                     |
+| ``U-00010000`` ... ``U-0010FFFF`` | 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx          |
 +-----------------------------------+----------------------------------------------+
 
 The least significant bit of the Unicode character is the rightmost x bit.
@@ -854,13 +850,14 @@ map to
    | RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
    | INVERTED QUESTION MARK
 
-in iso-8859-1), this increases the probability that a utf-8-sig encoding can be
+in iso-8859-1), this increases the probability that a ``utf-8-sig`` encoding can be
 correctly guessed from the byte sequence. So here the BOM is not used to be able
 to determine the byte order used for generating the byte sequence, but as a
 signature that helps in guessing the encoding. On encoding the utf-8-sig codec
 will write ``0xef``, ``0xbb``, ``0xbf`` as the first three bytes to the file. On
-decoding utf-8-sig will skip those three bytes if they appear as the first three
-bytes in the file.
+decoding ``utf-8-sig`` will skip those three bytes if they appear as the first
+three bytes in the file.  In UTF-8, the use of the BOM is discouraged and
+should generally be avoided.
 
 
 .. _standard-encodings:
@@ -908,6 +905,8 @@ particular, the following variants typically exist:
 | cp500           | EBCDIC-CP-BE, EBCDIC-CP-CH,    | Western Europe                 |
 |                 | IBM500                         |                                |
 +-----------------+--------------------------------+--------------------------------+
+| cp720           |                                | Arabic                         |
++-----------------+--------------------------------+--------------------------------+
 | cp737           |                                | Greek                          |
 +-----------------+--------------------------------+--------------------------------+
 | cp775           | IBM775                         | Baltic languages               |
@@ -922,6 +921,8 @@ particular, the following variants typically exist:
 | cp856           |                                | Hebrew                         |
 +-----------------+--------------------------------+--------------------------------+
 | cp857           | 857, IBM857                    | Turkish                        |
++-----------------+--------------------------------+--------------------------------+
+| cp858           | 858, IBM858                    | Western Europe                 |
 +-----------------+--------------------------------+--------------------------------+
 | cp860           | 860, IBM860                    | Portuguese                     |
 +-----------------+--------------------------------+--------------------------------+
@@ -1197,14 +1198,20 @@ the user: The application should transparently convert Unicode domain labels to
 IDNA on the wire, and convert back ACE labels to Unicode before presenting them
 to the user.
 
-Python supports this conversion in several ways: The ``idna`` codec allows to
-convert between Unicode and the ACE. Furthermore, the :mod:`socket` module
+Python supports this conversion in several ways:  the ``idna`` codec performs
+conversion between Unicode and ACE, separating an input string into labels
+based on the separator characters defined in `section 3.1`_ (1) of :rfc:`3490`
+and converting each label to ACE as required, and conversely separating an input
+byte string into labels based on the ``.`` separator and converting any ACE
+labels found into unicode.  Furthermore, the :mod:`socket` module
 transparently converts Unicode host names to ACE, so that applications need not
 be concerned about converting host names themselves when they pass them to the
 socket module. On top of that, modules that have host names as function
 parameters, such as :mod:`httplib` and :mod:`ftplib`, accept Unicode host names
 (:mod:`httplib` then also transparently sends an IDNA hostname in the
 :mailheader:`Host` field if it sends that field at all).
+
+.. _section 3.1: http://tools.ietf.org/html/rfc3490#section-3.1
 
 When receiving host names from the wire (such as in reverse name lookup), no
 automatic conversion to Unicode is performed: Applications wishing to present

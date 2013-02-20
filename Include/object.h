@@ -159,11 +159,11 @@ typedef Py_ssize_t (*writebufferproc)(PyObject *, Py_ssize_t, void **);
 typedef Py_ssize_t (*segcountproc)(PyObject *, Py_ssize_t *);
 typedef Py_ssize_t (*charbufferproc)(PyObject *, Py_ssize_t, char **);
 
-/* Py3k buffer interface */
 
+/* Py3k buffer interface */
 typedef struct bufferinfo {
     void *buf;
-    PyObject *obj;        /* borrowed reference */
+    PyObject *obj;        /* owned reference */
     Py_ssize_t len;
     Py_ssize_t itemsize;  /* This is Py_ssize_t so it can be
                              pointed to by strides in simple case.*/
@@ -173,6 +173,8 @@ typedef struct bufferinfo {
     Py_ssize_t *shape;
     Py_ssize_t *strides;
     Py_ssize_t *suboffsets;
+    Py_ssize_t smalltable[2];  /* static store for shape and strides of
+                                  mono-dimensional buffers. */
     void *internal;
 } Py_buffer;
 
@@ -449,6 +451,7 @@ PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t);
 PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
                                                PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) _PyType_Lookup(PyTypeObject *, PyObject *);
+PyAPI_FUNC(PyObject *) _PyObject_LookupSpecial(PyObject *, char *, PyObject **);
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
 PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
 
@@ -473,6 +476,7 @@ PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
 PyAPI_FUNC(PyObject **) _PyObject_GetDictPtr(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_SelfIter(PyObject *);
+PyAPI_FUNC(PyObject *) _PyObject_NextNotImplemented(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_GenericGetAttr(PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_GenericSetAttr(PyObject *,
                                               PyObject *, PyObject *);
@@ -488,6 +492,13 @@ PyAPI_FUNC(void) PyObject_ClearWeakRefs(PyObject *);
 
 /* A slot function whose address we need to compare */
 extern int _PyObject_SlotCompare(PyObject *, PyObject *);
+/* Same as PyObject_Generic{Get,Set}Attr, but passing the attributes
+   dict as the last parameter. */
+PyAPI_FUNC(PyObject *)
+_PyObject_GenericGetAttrWithDict(PyObject *, PyObject *, PyObject *);
+PyAPI_FUNC(int)
+_PyObject_GenericSetAttrWithDict(PyObject *, PyObject *,
+                                 PyObject *, PyObject *);
 
 
 /* PyObject_Dir(obj) acts like Python __builtin__.dir(obj), returning a
@@ -756,11 +767,13 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
     ((PyObject*)(op))->ob_refcnt++)
 
 #define Py_DECREF(op)                                   \
-    if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA           \
-        --((PyObject*)(op))->ob_refcnt != 0)                    \
-        _Py_CHECK_REFCNT(op)                            \
-    else                                                \
-        _Py_Dealloc((PyObject *)(op))
+    do {                                                \
+        if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
+        --((PyObject*)(op))->ob_refcnt != 0)            \
+            _Py_CHECK_REFCNT(op)                        \
+        else                                            \
+        _Py_Dealloc((PyObject *)(op));                  \
+    } while (0)
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
  * and tp_dealloc implementatons.
@@ -806,8 +819,8 @@ PyAPI_FUNC(void) _Py_AddToAllObjects(PyObject *, int force);
     } while (0)
 
 /* Macros to use in case the object pointer may be NULL: */
-#define Py_XINCREF(op) if ((op) == NULL) ; else Py_INCREF(op)
-#define Py_XDECREF(op) if ((op) == NULL) ; else Py_DECREF(op)
+#define Py_XINCREF(op) do { if ((op) == NULL) ; else Py_INCREF(op); } while (0)
+#define Py_XDECREF(op) do { if ((op) == NULL) ; else Py_DECREF(op); } while (0)
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
@@ -958,24 +971,33 @@ chain of N deallocations is broken into N / PyTrash_UNWIND_LEVEL pieces,
 with the call stack never exceeding a depth of PyTrash_UNWIND_LEVEL.
 */
 
+/* This is the old private API, invoked by the macros before 2.7.4.
+   Kept for binary compatibility of extensions. */
 PyAPI_FUNC(void) _PyTrash_deposit_object(PyObject*);
 PyAPI_FUNC(void) _PyTrash_destroy_chain(void);
 PyAPI_DATA(int) _PyTrash_delete_nesting;
 PyAPI_DATA(PyObject *) _PyTrash_delete_later;
 
+/* The new thread-safe private API, invoked by the macros below. */
+PyAPI_FUNC(void) _PyTrash_thread_deposit_object(PyObject*);
+PyAPI_FUNC(void) _PyTrash_thread_destroy_chain(void);
+
 #define PyTrash_UNWIND_LEVEL 50
 
 #define Py_TRASHCAN_SAFE_BEGIN(op) \
-    if (_PyTrash_delete_nesting < PyTrash_UNWIND_LEVEL) { \
-        ++_PyTrash_delete_nesting;
-        /* The body of the deallocator is here. */
+    do { \
+        PyThreadState *_tstate = PyThreadState_GET(); \
+        if (_tstate->trash_delete_nesting < PyTrash_UNWIND_LEVEL) { \
+            ++_tstate->trash_delete_nesting;
+            /* The body of the deallocator is here. */
 #define Py_TRASHCAN_SAFE_END(op) \
-        --_PyTrash_delete_nesting; \
-        if (_PyTrash_delete_later && _PyTrash_delete_nesting <= 0) \
-            _PyTrash_destroy_chain(); \
-    } \
-    else \
-        _PyTrash_deposit_object((PyObject*)op);
+            --_tstate->trash_delete_nesting; \
+            if (_tstate->trash_delete_later && _tstate->trash_delete_nesting <= 0) \
+                _PyTrash_thread_destroy_chain(); \
+        } \
+        else \
+            _PyTrash_thread_deposit_object((PyObject*)op); \
+    } while (0);
 
 #ifdef __cplusplus
 }

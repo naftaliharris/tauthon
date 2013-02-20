@@ -3,6 +3,7 @@
 from ctypes import *
 from ctypes.test import is_resource_enabled
 import unittest, sys
+from test import test_support as support
 
 import _ctypes_test
 
@@ -17,8 +18,8 @@ if sys.platform == "win32" and sizeof(c_void_p) == sizeof(c_int):
             # ValueError: Procedure probably called with not enough arguments (4 bytes missing)
             self.assertRaises(ValueError, IsWindow)
 
-            # This one should succeeed...
-            self.failUnlessEqual(0, IsWindow(0))
+            # This one should succeed...
+            self.assertEqual(0, IsWindow(0))
 
             # ValueError: Procedure probably called with too many arguments (8 bytes in excess)
             self.assertRaises(ValueError, IsWindow, 0, 0, 0)
@@ -49,18 +50,20 @@ if sys.platform == "win32":
     class TestWintypes(unittest.TestCase):
         def test_HWND(self):
             from ctypes import wintypes
-            self.failUnlessEqual(sizeof(wintypes.HWND), sizeof(c_void_p))
+            self.assertEqual(sizeof(wintypes.HWND), sizeof(c_void_p))
 
         def test_PARAM(self):
             from ctypes import wintypes
-            self.failUnlessEqual(sizeof(wintypes.WPARAM),
+            self.assertEqual(sizeof(wintypes.WPARAM),
                                  sizeof(c_void_p))
-            self.failUnlessEqual(sizeof(wintypes.LPARAM),
+            self.assertEqual(sizeof(wintypes.LPARAM),
                                  sizeof(c_void_p))
 
         def test_COMError(self):
             from _ctypes import COMError
-            self.assertEqual(COMError.__doc__, "Raised when a COM method call failed.")
+            if support.HAVE_DOCSTRINGS:
+                self.assertEqual(COMError.__doc__,
+                                 "Raised when a COM method call failed.")
 
             ex = COMError(-1, "text", ("details",))
             self.assertEqual(ex.hresult, -1)
@@ -84,7 +87,7 @@ class Structures(unittest.TestCase):
 
         pt = POINT(10, 10)
         rect = RECT(0, 0, 20, 20)
-        self.failUnlessEqual(1, dll.PointInRect(byref(rect), pt))
+        self.assertEqual(1, dll.PointInRect(byref(rect), pt))
 
 if __name__ == '__main__':
     unittest.main()

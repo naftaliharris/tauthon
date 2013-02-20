@@ -59,24 +59,24 @@ they appear in the sequence.  For example (no pun intended):
 ::
 
    >>> # Measure some strings:
-   ... a = ['cat', 'window', 'defenestrate']
-   >>> for x in a:
-   ...     print x, len(x)
+   ... words = ['cat', 'window', 'defenestrate']
+   >>> for w in words:
+   ...     print w, len(w)
    ...
    cat 3
    window 6
    defenestrate 12
 
-It is not safe to modify the sequence being iterated over in the loop (this can
-only happen for mutable sequence types, such as lists).  If you need to modify
-the list you are iterating over (for example, to duplicate selected items) you
-must iterate over a copy.  The slice notation makes this particularly
-convenient::
+If you need to modify the sequence you are iterating over while inside the loop
+(for example to duplicate selected items), it is recommended that you first
+make a copy.  Iterating over a sequence does not implicitly make a copy.  The
+slice notation makes this especially convenient::
 
-   >>> for x in a[:]: # make a slice copy of the entire list
-   ...    if len(x) > 6: a.insert(0, x)
+   >>> for w in words[:]:  # Loop over a slice copy of the entire list.
+   ...     if len(w) > 6:
+   ...         words.insert(0, w)
    ...
-   >>> a
+   >>> words
    ['defenestrate', 'cat', 'window', 'defenestrate']
 
 
@@ -129,9 +129,6 @@ function, see :ref:`tut-loopidioms`.
 The :keyword:`break` statement, like in C, breaks out of the smallest enclosing
 :keyword:`for` or :keyword:`while` loop.
 
-The :keyword:`continue` statement, also borrowed from C, continues with the next
-iteration of the loop.
-
 Loop statements may have an ``else`` clause; it is executed when the loop
 terminates through exhaustion of the list (with :keyword:`for`) or when the
 condition becomes false (with :keyword:`while`), but not when the loop is
@@ -155,6 +152,33 @@ following loop, which searches for prime numbers::
    7 is a prime number
    8 equals 2 * 4
    9 equals 3 * 3
+
+(Yes, this is the correct code.  Look closely: the ``else`` clause belongs to
+the :keyword:`for` loop, **not** the :keyword:`if` statement.)
+
+When used with a loop, the ``else`` clause has more in common with the
+``else`` clause of a :keyword:`try` statement than it does that of
+:keyword:`if` statements: a :keyword:`try` statement's ``else`` clause runs
+when no exception occurs, and a loop's ``else`` clause runs when no ``break``
+occurs. For more on the :keyword:`try` statement and exceptions, see
+:ref:`tut-handling`.
+
+The :keyword:`continue` statement, also borrowed from C, continues with the next
+iteration of the loop::
+
+    >>> for num in range(2, 10):
+    ...     if num % 2 == 0:
+    ...         print "Found an even number", num
+    ...         continue
+    ...     print "Found a number", num
+    Found an even number 2
+    Found a number 3
+    Found an even number 4
+    Found a number 5
+    Found an even number 6
+    Found a number 7
+    Found an even number 8
+    Found a number 9
 
 
 .. _tut-pass:
@@ -380,8 +404,8 @@ write the function like this instead::
 Keyword Arguments
 -----------------
 
-Functions can also be called using keyword arguments of the form ``keyword =
-value``.  For instance, the following function::
+Functions can also be called using :term:`keyword arguments <keyword argument>`
+of the form ``kwarg=value``.  For instance, the following function::
 
    def parrot(voltage, state='a stiff', action='voom', type='Norwegian Blue'):
        print "-- This parrot wouldn't", action,
@@ -389,26 +413,31 @@ value``.  For instance, the following function::
        print "-- Lovely plumage, the", type
        print "-- It's", state, "!"
 
-could be called in any of the following ways::
+accepts one required argument (``voltage``) and three optional arguments
+(``state``, ``action``, and ``type``).  This function can be called in any
+of the following ways::
 
-   parrot(1000)
-   parrot(action = 'VOOOOOM', voltage = 1000000)
-   parrot('a thousand', state = 'pushing up the daisies')
-   parrot('a million', 'bereft of life', 'jump')
+   parrot(1000)                                          # 1 positional argument
+   parrot(voltage=1000)                                  # 1 keyword argument
+   parrot(voltage=1000000, action='VOOOOOM')             # 2 keyword arguments
+   parrot(action='VOOOOOM', voltage=1000000)             # 2 keyword arguments
+   parrot('a million', 'bereft of life', 'jump')         # 3 positional arguments
+   parrot('a thousand', state='pushing up the daisies')  # 1 positional, 1 keyword
 
-but the following calls would all be invalid::
+but all the following calls would be invalid::
 
    parrot()                     # required argument missing
-   parrot(voltage=5.0, 'dead')  # non-keyword argument following keyword
-   parrot(110, voltage=220)     # duplicate value for argument
-   parrot(actor='John Cleese')  # unknown keyword
+   parrot(voltage=5.0, 'dead')  # non-keyword argument after a keyword argument
+   parrot(110, voltage=220)     # duplicate value for the same argument
+   parrot(actor='John Cleese')  # unknown keyword argument
 
-In general, an argument list must have any positional arguments followed by any
-keyword arguments, where the keywords must be chosen from the formal parameter
-names.  It's not important whether a formal parameter has a default value or
-not.  No argument may receive a value more than once --- formal parameter names
-corresponding to positional arguments cannot be used as keywords in the same
-calls. Here's an example that fails due to this restriction::
+In a function call, keyword arguments must follow positional arguments.
+All the keyword arguments passed must match one of the arguments
+accepted by the function (e.g. ``actor`` is not a valid argument for the
+``parrot`` function), and their order is not important.  This also includes
+non-optional arguments (e.g. ``parrot(voltage=1000)`` is valid too).
+No argument may receive a value more than once.
+Here's an example that fails due to this restriction::
 
    >>> def function(a):
    ...     pass
@@ -429,11 +458,12 @@ function like this::
    def cheeseshop(kind, *arguments, **keywords):
        print "-- Do you have any", kind, "?"
        print "-- I'm sorry, we're all out of", kind
-       for arg in arguments: print arg
+       for arg in arguments:
+           print arg
        print "-" * 40
-       keys = keywords.keys()
-       keys.sort()
-       for kw in keys: print kw, ":", keywords[kw]
+       keys = sorted(keywords.keys())
+       for kw in keys:
+           print kw, ":", keywords[kw]
 
 It could be called like this::
 
@@ -454,10 +484,9 @@ and of course it would print::
    shopkeeper : Michael Palin
    sketch : Cheese Shop Sketch
 
-Note that the :meth:`sort` method of the list of keyword argument names is
-called before printing the contents of the ``keywords`` dictionary; if this is
-not done, the order in which the arguments are printed is undefined.
-
+Note that the list of keyword argument names is created by sorting the result
+of the keywords dictionary's ``keys()`` method before printing its contents;
+if this is not done, the order in which the arguments are printed is undefined.
 
 .. _tut-arbitraryargs:
 

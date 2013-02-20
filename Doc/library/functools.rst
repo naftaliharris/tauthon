@@ -1,15 +1,18 @@
-:mod:`functools` --- Higher order functions and operations on callable objects
+:mod:`functools` --- Higher-order functions and operations on callable objects
 ==============================================================================
 
 .. module:: functools
-   :synopsis: Higher order functions and operations on callable objects.
+   :synopsis: Higher-order functions and operations on callable objects.
 .. moduleauthor:: Peter Harris <scav@blueyonder.co.uk>
 .. moduleauthor:: Raymond Hettinger <python@rcn.com>
 .. moduleauthor:: Nick Coghlan <ncoghlan@gmail.com>
 .. sectionauthor:: Peter Harris <scav@blueyonder.co.uk>
 
-
 .. versionadded:: 2.5
+
+**Source code:** :source:`Lib/functools.py`
+
+--------------
 
 The :mod:`functools` module is for higher-order functions: functions that act on
 or return other functions. In general, any callable object can be treated as a
@@ -17,6 +20,49 @@ function for the purposes of this module.
 
 The :mod:`functools` module defines the following functions:
 
+..  function:: cmp_to_key(func)
+
+   Transform an old-style comparison function to a key function.  Used with
+   tools that accept key functions (such as :func:`sorted`, :func:`min`,
+   :func:`max`, :func:`heapq.nlargest`, :func:`heapq.nsmallest`,
+   :func:`itertools.groupby`).  This function is primarily used as a transition
+   tool for programs being converted to Python 3 where comparison functions are
+   no longer supported.
+
+   A comparison function is any callable that accept two arguments, compares them,
+   and returns a negative number for less-than, zero for equality, or a positive
+   number for greater-than.  A key function is a callable that accepts one
+   argument and returns another value that indicates the position in the desired
+   collation sequence.
+
+   Example::
+
+       sorted(iterable, key=cmp_to_key(locale.strcoll))  # locale-aware sort order
+
+   .. versionadded:: 2.7
+
+.. function:: total_ordering(cls)
+
+   Given a class defining one or more rich comparison ordering methods, this
+   class decorator supplies the rest.  This simplifies the effort involved
+   in specifying all of the possible rich comparison operations:
+
+   The class must define one of :meth:`__lt__`, :meth:`__le__`,
+   :meth:`__gt__`, or :meth:`__ge__`.
+   In addition, the class should supply an :meth:`__eq__` method.
+
+   For example::
+
+       @total_ordering
+       class Student:
+           def __eq__(self, other):
+               return ((self.lastname.lower(), self.firstname.lower()) ==
+                       (other.lastname.lower(), other.firstname.lower()))
+           def __lt__(self, other):
+               return ((self.lastname.lower(), self.firstname.lower()) <
+                       (other.lastname.lower(), other.firstname.lower()))
+
+   .. versionadded:: 2.7
 
 .. function:: reduce(function, iterable[, initializer])
 

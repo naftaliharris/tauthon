@@ -137,12 +137,14 @@ Verify that syntax error's are raised for genexps used as lvalues
     >>> (y for y in (1,2)) = 10
     Traceback (most recent call last):
        ...
-    SyntaxError: can't assign to generator expression (<doctest test.test_genexps.__test__.doctests[40]>, line 1)
+      File "<doctest test.test_genexps.__test__.doctests[40]>", line 1
+    SyntaxError: can't assign to generator expression
 
     >>> (y for y in (1,2)) += 10
     Traceback (most recent call last):
        ...
-    SyntaxError: augmented assignment to generator expression not possible (<doctest test.test_genexps.__test__.doctests[41]>, line 1)
+      File "<doctest test.test_genexps.__test__.doctests[41]>", line 1
+    SyntaxError: can't assign to generator expression
 
 
 ########### Tests borrowed from or inspired by test_generators.py ############
@@ -221,7 +223,8 @@ Check that generator attributes are present
     >>> set(attr for attr in dir(g) if not attr.startswith('__')) >= expected
     True
 
-    >>> print g.next.__doc__
+    >>> from test.test_support import HAVE_DOCSTRINGS
+    >>> print(g.next.__doc__ if HAVE_DOCSTRINGS else 'x.next() -> the next value, or raise StopIteration')
     x.next() -> the next value, or raise StopIteration
     >>> import types
     >>> isinstance(g, types.GeneratorType)

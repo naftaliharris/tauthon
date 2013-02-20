@@ -6,7 +6,7 @@
    :deprecated:
 
 .. deprecated:: 2.6
-   The :mod:`new` module has been removed in Python 3.0.  Use the :mod:`types`
+   The :mod:`new` module has been removed in Python 3.  Use the :mod:`types`
    module's classes instead.
 
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
@@ -48,7 +48,7 @@ The :mod:`new` module defines the following functions:
 
 .. function:: code(argcount, nlocals, stacksize, flags, codestring, constants, names, varnames, filename, name, firstlineno, lnotab)
 
-   This function is an interface to the :cfunc:`PyCode_New` C function.
+   This function is an interface to the :c:func:`PyCode_New` C function.
 
    .. XXX This is still undocumented!
 

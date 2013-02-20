@@ -50,8 +50,15 @@ Notes on the availability of these functions:
 .. data:: name
 
    The name of the operating system dependent module imported.  The following
-   names have currently been registered: ``'posix'``, ``'nt'``, ``'mac'``,
+   names have currently been registered: ``'posix'``, ``'nt'``,
    ``'os2'``, ``'ce'``, ``'java'``, ``'riscos'``.
+
+   .. seealso::
+      :attr:`sys.platform` has a finer granularity.  :func:`os.uname` gives
+      system-dependent version information.
+
+      The :mod:`platform` module provides detailed checks for the
+      system's identity.
 
 
 .. _os-procinfo:
@@ -65,7 +72,7 @@ process and user.
 
 .. data:: environ
 
-   A mapping object representing the string environment. For example,
+   A :term:`mapping` object representing the string environment. For example,
    ``environ['HOME']`` is the pathname of your home directory (on some platforms),
    and is equivalent to ``getenv("HOME")`` in C.
 
@@ -87,7 +94,7 @@ process and user.
 
       On some platforms, including FreeBSD and Mac OS X, setting ``environ`` may
       cause memory leaks.  Refer to the system documentation for
-      :cfunc:`putenv`.
+      :c:func:`putenv`.
 
    If :func:`putenv` is not provided, a modified copy of this mapping  may be
    passed to the appropriate process-creation functions to cause  child processes
@@ -150,6 +157,31 @@ process and user.
 
    Availability: Unix.
 
+   .. note:: On Mac OS X, :func:`getgroups` behavior differs somewhat from
+      other Unix platforms. If the Python interpreter was built with a
+      deployment target of :const:`10.5` or earlier, :func:`getgroups` returns
+      the list of effective group ids associated with the current user process;
+      this list is limited to a system-defined number of entries, typically 16,
+      and may be modified by calls to :func:`setgroups` if suitably privileged.
+      If built with a deployment target greater than :const:`10.5`,
+      :func:`getgroups` returns the current group access list for the user
+      associated with the effective user id of the process; the group access
+      list may change over the lifetime of the process, it is not affected by
+      calls to :func:`setgroups`, and its length is not limited to 16.  The
+      deployment target value, :const:`MACOSX_DEPLOYMENT_TARGET`, can be
+      obtained with :func:`sysconfig.get_config_var`.
+
+
+.. function:: initgroups(username, gid)
+
+   Call the system initgroups() to initialize the group access list with all of
+   the groups of which the specified username is a member, plus the specified
+   group id.
+
+   Availability: Unix.
+
+   .. versionadded:: 2.7
+
 
 .. function:: getlogin()
 
@@ -197,6 +229,26 @@ process and user.
    Return the parent's process id.
 
    Availability: Unix.
+
+
+.. function:: getresuid()
+
+   Return a tuple (ruid, euid, suid) denoting the current process's
+   real, effective, and saved user ids.
+
+   Availability: Unix.
+
+   .. versionadded:: 2.7
+
+
+.. function:: getresgid()
+
+   Return a tuple (rgid, egid, sgid) denoting the current process's
+   real, effective, and saved group ids.
+
+   Availability: Unix.
+
+   .. versionadded:: 2.7
 
 
 .. function:: getuid()
@@ -268,10 +320,14 @@ process and user.
 
    .. versionadded:: 2.2
 
+   .. note:: On Mac OS X, the length of *groups* may not exceed the
+      system-defined maximum number of effective group ids, typically 16.
+      See the documentation for :func:`getgroups` for cases where it may not
+      return the same group list set by calling setgroups().
 
 .. function:: setpgrp()
 
-   Call the system call :cfunc:`setpgrp` or :cfunc:`setpgrp(0, 0)` depending on
+   Call the system call :c:func:`setpgrp` or :c:func:`setpgrp(0, 0)` depending on
    which version is implemented (if any).  See the Unix manual for the semantics.
 
    Availability: Unix.
@@ -279,16 +335,9 @@ process and user.
 
 .. function:: setpgid(pid, pgrp)
 
-   Call the system call :cfunc:`setpgid` to set the process group id of the
+   Call the system call :c:func:`setpgid` to set the process group id of the
    process with id *pid* to the process group with id *pgrp*.  See the Unix manual
    for the semantics.
-
-   Availability: Unix.
-
-
-.. function:: setreuid(ruid, euid)
-
-   Set the current process's real and effective user ids.
 
    Availability: Unix.
 
@@ -300,9 +349,34 @@ process and user.
    Availability: Unix.
 
 
+.. function:: setresgid(rgid, egid, sgid)
+
+   Set the current process's real, effective, and saved group ids.
+
+   Availability: Unix.
+
+   .. versionadded:: 2.7
+
+
+.. function:: setresuid(ruid, euid, suid)
+
+   Set the current process's real, effective, and saved user ids.
+
+   Availability: Unix.
+
+   .. versionadded:: 2.7
+
+
+.. function:: setreuid(ruid, euid)
+
+   Set the current process's real and effective user ids.
+
+   Availability: Unix.
+
+
 .. function:: getsid(pid)
 
-   Call the system call :cfunc:`getsid`.  See the Unix manual for the semantics.
+   Call the system call :c:func:`getsid`.  See the Unix manual for the semantics.
 
    Availability: Unix.
 
@@ -311,7 +385,7 @@ process and user.
 
 .. function:: setsid()
 
-   Call the system call :cfunc:`setsid`.  See the Unix manual for the semantics.
+   Call the system call :c:func:`setsid`.  See the Unix manual for the semantics.
 
    Availability: Unix.
 
@@ -329,7 +403,7 @@ process and user.
 .. function:: strerror(code)
 
    Return the error message corresponding to the error code in *code*.
-   On platforms where :cfunc:`strerror` returns ``NULL`` when given an unknown
+   On platforms where :c:func:`strerror` returns ``NULL`` when given an unknown
    error number, :exc:`ValueError` is raised.
 
    Availability: Unix, Windows.
@@ -398,7 +472,7 @@ These functions create new file objects. (See also :func:`open`.)
 
    .. versionchanged:: 2.5
       On Unix, when the *mode* argument starts with ``'a'``, the *O_APPEND* flag is
-      set on the file descriptor (which the :cfunc:`fdopen` implementation already
+      set on the file descriptor (which the :c:func:`fdopen` implementation already
       does on most platforms).
 
 
@@ -421,7 +495,7 @@ These functions create new file objects. (See also :func:`open`.)
 
    .. versionchanged:: 2.0
       This function worked unreliably under Windows in earlier versions of Python.
-      This was due to the use of the :cfunc:`_popen` function from the libraries
+      This was due to the use of the :c:func:`_popen` function from the libraries
       provided with Windows.  Newer versions of Python do not use the broken
       implementation from the Windows libraries.
 
@@ -625,7 +699,7 @@ as internal buffering of data.
 
 .. function:: fstat(fd)
 
-   Return status for file descriptor *fd*, like :func:`stat`.
+   Return status for file descriptor *fd*, like :func:`~os.stat`.
 
    Availability: Unix, Windows.
 
@@ -641,7 +715,7 @@ as internal buffering of data.
 .. function:: fsync(fd)
 
    Force write of file with filedescriptor *fd* to disk.  On Unix, this calls the
-   native :cfunc:`fsync` function; on Windows, the MS :cfunc:`_commit` function.
+   native :c:func:`fsync` function; on Windows, the MS :c:func:`_commit` function.
 
    If you're starting with a Python file object *f*, first do ``f.flush()``, and
    then do ``os.fsync(f.fileno())``, to ensure that all internal buffers associated
@@ -682,7 +756,9 @@ as internal buffering of data.
           SEEK_END
 
    Parameters to the :func:`lseek` function. Their values are 0, 1, and 2,
-   respectively. Availability: Windows, Unix.
+   respectively.
+
+   Availability: Windows, Unix.
 
    .. versionadded:: 2.5
 
@@ -865,7 +941,26 @@ Files and Directories
       Using :func:`access` to check if a user is authorized to e.g. open a file
       before actually doing so using :func:`open` creates a security hole,
       because the user might exploit the short time interval between checking
-      and opening the file to manipulate it.
+      and opening the file to manipulate it. It's preferable to use :term:`EAFP`
+      techniques. For example::
+
+         if os.access("myfile", os.R_OK):
+             with open("myfile") as fp:
+                 return fp.read()
+         return "some default data"
+
+      is better written as::
+
+         try:
+             fp = open("myfile")
+         except IOError as e:
+             if e.errno == errno.EACCES:
+                 return "some default data"
+             # Not a permission error.
+             raise
+         else:
+             with fp:
+                 return fp.read()
 
    .. note::
 
@@ -939,16 +1034,18 @@ Files and Directories
    Set the flags of *path* to the numeric *flags*. *flags* may take a combination
    (bitwise OR) of the following values (as defined in the :mod:`stat` module):
 
-   * ``UF_NODUMP``
-   * ``UF_IMMUTABLE``
-   * ``UF_APPEND``
-   * ``UF_OPAQUE``
-   * ``UF_NOUNLINK``
-   * ``SF_ARCHIVED``
-   * ``SF_IMMUTABLE``
-   * ``SF_APPEND``
-   * ``SF_NOUNLINK``
-   * ``SF_SNAPSHOT``
+   * :data:`stat.UF_NODUMP`
+   * :data:`stat.UF_IMMUTABLE`
+   * :data:`stat.UF_APPEND`
+   * :data:`stat.UF_OPAQUE`
+   * :data:`stat.UF_NOUNLINK`
+   * :data:`stat.UF_COMPRESSED`
+   * :data:`stat.UF_HIDDEN`
+   * :data:`stat.SF_ARCHIVED`
+   * :data:`stat.SF_IMMUTABLE`
+   * :data:`stat.SF_APPEND`
+   * :data:`stat.SF_NOUNLINK`
+   * :data:`stat.SF_SNAPSHOT`
 
    Availability: Unix.
 
@@ -1063,9 +1160,10 @@ Files and Directories
 
 .. function:: lstat(path)
 
-   Like :func:`stat`, but do not follow symbolic links.  This is an alias for
-   :func:`stat` on platforms that do not support symbolic links, such as
-   Windows.
+   Perform the equivalent of an :c:func:`lstat` system call on the given path.
+   Similar to :func:`~os.stat`, but does not follow symbolic links.  On
+   platforms that do not support symbolic links, this is an alias for
+   :func:`~os.stat`.
 
 
 .. function:: mkfifo(path[, mode])
@@ -1083,7 +1181,7 @@ Files and Directories
    doesn't open the FIFO --- it just creates the rendezvous point.
 
 
-.. function:: mknod(filename[, mode=0600, device])
+.. function:: mknod(filename[, mode=0600[, device=0]])
 
    Create a filesystem node (file, device special file or named pipe) named
    *filename*. *mode* specifies both the permissions to use and the type of node to
@@ -1100,7 +1198,7 @@ Files and Directories
 .. function:: major(device)
 
    Extract the device major number from a raw device number (usually the
-   :attr:`st_dev` or :attr:`st_rdev` field from :ctype:`stat`).
+   :attr:`st_dev` or :attr:`st_rdev` field from :c:type:`stat`).
 
    .. versionadded:: 2.3
 
@@ -1108,7 +1206,7 @@ Files and Directories
 .. function:: minor(device)
 
    Extract the device minor number from a raw device number (usually the
-   :attr:`st_dev` or :attr:`st_rdev` field from :ctype:`stat`).
+   :attr:`st_dev` or :attr:`st_rdev` field from :c:type:`stat`).
 
    .. versionadded:: 2.3
 
@@ -1124,7 +1222,8 @@ Files and Directories
 
    Create a directory named *path* with numeric mode *mode*. The default *mode* is
    ``0777`` (octal).  On some systems, *mode* is ignored.  Where it is used, the
-   current umask value is first masked out.
+   current umask value is first masked out.  If the directory already exists,
+   :exc:`OSError` is raised.
 
    It is also possible to create temporary directories; see the
    :mod:`tempfile` module's :func:`tempfile.mkdtemp` function.
@@ -1139,7 +1238,7 @@ Files and Directories
       single: UNC paths; and os.makedirs()
 
    Recursive directory creation function.  Like :func:`mkdir`, but makes all
-   intermediate-level directories needed to contain the leaf directory.  Throws an
+   intermediate-level directories needed to contain the leaf directory.  Raises an
    :exc:`error` exception if the leaf directory already exists or cannot be
    created.  The default *mode* is ``0777`` (octal).  On some systems, *mode* is
    ignored. Where it is used, the current umask value is first masked out.
@@ -1262,23 +1361,23 @@ Files and Directories
 
 .. function:: stat(path)
 
-   Perform a :cfunc:`stat` system call on the given path.  The return value is an
-   object whose attributes correspond to the members of the :ctype:`stat`
-   structure, namely: :attr:`st_mode` (protection bits), :attr:`st_ino` (inode
-   number), :attr:`st_dev` (device), :attr:`st_nlink` (number of hard links),
-   :attr:`st_uid` (user id of owner), :attr:`st_gid` (group id of owner),
-   :attr:`st_size` (size of file, in bytes), :attr:`st_atime` (time of most recent
-   access), :attr:`st_mtime` (time of most recent content modification),
-   :attr:`st_ctime` (platform dependent; time of most recent metadata change on
-   Unix, or the time of creation on Windows)::
+   Perform the equivalent of a :c:func:`stat` system call on the given path.
+   (This function follows symlinks; to stat a symlink use :func:`lstat`.)
 
-      >>> import os
-      >>> statinfo = os.stat('somefile.txt')
-      >>> statinfo
-      (33188, 422511L, 769L, 1, 1032, 100, 926L, 1105022698,1105022732, 1105022732)
-      >>> statinfo.st_size
-      926L
-      >>>
+   The return value is an object whose attributes correspond to the members
+   of the :c:type:`stat` structure, namely:
+
+   * :attr:`st_mode` - protection bits,
+   * :attr:`st_ino` - inode number,
+   * :attr:`st_dev` - device,
+   * :attr:`st_nlink` - number of hard links,
+   * :attr:`st_uid` - user id of owner,
+   * :attr:`st_gid` - group id of owner,
+   * :attr:`st_size` - size of file, in bytes,
+   * :attr:`st_atime` - time of most recent access,
+   * :attr:`st_mtime` - time of most recent content modification,
+   * :attr:`st_ctime` - platform dependent; time of most recent metadata change on
+     Unix, or the time of creation on Windows)
 
    .. versionchanged:: 2.3
       If :func:`stat_float_times` returns ``True``, the time values are floats, measuring
@@ -1287,39 +1386,61 @@ Files and Directories
       discussion.
 
    On some Unix systems (such as Linux), the following attributes may also be
-   available: :attr:`st_blocks` (number of blocks allocated for file),
-   :attr:`st_blksize` (filesystem blocksize), :attr:`st_rdev` (type of device if an
-   inode device). :attr:`st_flags` (user defined flags for file).
+   available:
+
+   * :attr:`st_blocks` - number of blocks allocated for file
+   * :attr:`st_blksize` - filesystem blocksize
+   * :attr:`st_rdev` - type of device if an inode device
+   * :attr:`st_flags` - user defined flags for file
 
    On other Unix systems (such as FreeBSD), the following attributes may be
-   available (but may be only filled out if root tries to use them): :attr:`st_gen`
-   (file generation number), :attr:`st_birthtime` (time of file creation).
+   available (but may be only filled out if root tries to use them):
+
+   * :attr:`st_gen` - file generation number
+   * :attr:`st_birthtime` - time of file creation
 
    On Mac OS systems, the following attributes may also be available:
-   :attr:`st_rsize`, :attr:`st_creator`, :attr:`st_type`.
 
-   On RISCOS systems, the following attributes are also available: :attr:`st_ftype`
-   (file type), :attr:`st_attrs` (attributes), :attr:`st_obtype` (object type).
+   * :attr:`st_rsize`
+   * :attr:`st_creator`
+   * :attr:`st_type`
 
-   .. index:: module: stat
+   On RISCOS systems, the following attributes are also available:
 
-   For backward compatibility, the return value of :func:`stat` is also accessible
-   as a tuple of at least 10 integers giving the most important (and portable)
-   members of the :ctype:`stat` structure, in the order :attr:`st_mode`,
-   :attr:`st_ino`, :attr:`st_dev`, :attr:`st_nlink`, :attr:`st_uid`,
-   :attr:`st_gid`, :attr:`st_size`, :attr:`st_atime`, :attr:`st_mtime`,
-   :attr:`st_ctime`. More items may be added at the end by some implementations.
-   The standard module :mod:`stat` defines functions and constants that are useful
-   for extracting information from a :ctype:`stat` structure. (On Windows, some
-   items are filled with dummy values.)
+   * :attr:`st_ftype` (file type)
+   * :attr:`st_attrs` (attributes)
+   * :attr:`st_obtype` (object type).
 
    .. note::
 
-      The exact meaning and resolution of the :attr:`st_atime`, :attr:`st_mtime`, and
-      :attr:`st_ctime` members depends on the operating system and the file system.
-      For example, on Windows systems using the FAT or FAT32 file systems,
-      :attr:`st_mtime` has 2-second resolution, and :attr:`st_atime` has only 1-day
-      resolution.  See your operating system documentation for details.
+      The exact meaning and resolution of the :attr:`st_atime`,
+      :attr:`st_mtime`, and :attr:`st_ctime` attributes depend on the operating
+      system and the file system. For example, on Windows systems using the FAT
+      or FAT32 file systems, :attr:`st_mtime` has 2-second resolution, and
+      :attr:`st_atime` has only 1-day resolution.  See your operating system
+      documentation for details.
+
+   For backward compatibility, the return value of :func:`~os.stat` is also accessible
+   as a tuple of at least 10 integers giving the most important (and portable)
+   members of the :c:type:`stat` structure, in the order :attr:`st_mode`,
+   :attr:`st_ino`, :attr:`st_dev`, :attr:`st_nlink`, :attr:`st_uid`,
+   :attr:`st_gid`, :attr:`st_size`, :attr:`st_atime`, :attr:`st_mtime`,
+   :attr:`st_ctime`. More items may be added at the end by some implementations.
+
+   .. index:: module: stat
+
+   The standard module :mod:`stat` defines functions and constants that are useful
+   for extracting information from a :c:type:`stat` structure. (On Windows, some
+   items are filled with dummy values.)
+
+   Example::
+
+      >>> import os
+      >>> statinfo = os.stat('somefile.txt')
+      >>> statinfo
+      (33188, 422511, 769, 1, 1032, 100, 926, 1105022698,1105022732, 1105022732)
+      >>> statinfo.st_size
+      926
 
    Availability: Unix, Windows.
 
@@ -1333,7 +1454,7 @@ Files and Directories
 .. function:: stat_float_times([newvalue])
 
    Determine whether :class:`stat_result` represents time stamps as float objects.
-   If *newvalue* is ``True``, future calls to :func:`stat` return floats, if it is
+   If *newvalue* is ``True``, future calls to :func:`~os.stat` return floats, if it is
    ``False``, future calls return ints. If *newvalue* is omitted, return the
    current setting.
 
@@ -1358,9 +1479,9 @@ Files and Directories
 
 .. function:: statvfs(path)
 
-   Perform a :cfunc:`statvfs` system call on the given path.  The return value is
+   Perform a :c:func:`statvfs` system call on the given path.  The return value is
    an object whose attributes describe the filesystem on the given path, and
-   correspond to the members of the :ctype:`statvfs` structure, namely:
+   correspond to the members of the :c:type:`statvfs` structure, namely:
    :attr:`f_bsize`, :attr:`f_frsize`, :attr:`f_blocks`, :attr:`f_bfree`,
    :attr:`f_bavail`, :attr:`f_files`, :attr:`f_ffree`, :attr:`f_favail`,
    :attr:`f_flag`, :attr:`f_namemax`.
@@ -1370,7 +1491,7 @@ Files and Directories
    For backward compatibility, the return value is also accessible as a tuple whose
    values correspond to the attributes, in the order given above. The standard
    module :mod:`statvfs` defines constants that are useful for extracting
-   information from a :ctype:`statvfs` structure when accessing it as a sequence;
+   information from a :c:type:`statvfs` structure when accessing it as a sequence;
    this remains useful when writing code that needs to work with versions of Python
    that don't support accessing the fields as attributes.
 
@@ -1453,8 +1574,8 @@ Files and Directories
    respectively. Whether a directory can be given for *path* depends on whether
    the operating system implements directories as files (for example, Windows
    does not).  Note that the exact times you set here may not be returned by a
-   subsequent :func:`stat` call, depending on the resolution with which your
-   operating system records access and modification times; see :func:`stat`.
+   subsequent :func:`~os.stat` call, depending on the resolution with which your
+   operating system records access and modification times; see :func:`~os.stat`.
 
    .. versionchanged:: 2.0
       Added support for ``None`` for *times*.
@@ -1462,7 +1583,7 @@ Files and Directories
    Availability: Unix, Windows.
 
 
-.. function:: walk(top[, topdown=True [, onerror=None[, followlinks=False]]])
+.. function:: walk(top, topdown=True, onerror=None, followlinks=False)
 
    .. index::
       single: directory; walking
@@ -1495,7 +1616,7 @@ Files and Directories
    ineffective, because in bottom-up mode the directories in *dirnames* are
    generated before *dirpath* itself is generated.
 
-   By default errors from the :func:`listdir` call are ignored.  If optional
+   By default, errors from the :func:`listdir` call are ignored.  If optional
    argument *onerror* is specified, it should be a function; it will be called with
    one argument, an :exc:`OSError` instance.  It can report the error to continue
    with the walk, or raise the exception to abort the walk.  Note that the filename
@@ -1561,7 +1682,7 @@ The various :func:`exec\*` functions take a list of arguments for the new
 program loaded into the process.  In each case, the first of these arguments is
 passed to the new program as its own name rather than as an argument a user may
 have typed on a command line.  For the C programmer, this is the ``argv[0]``
-passed to a program's :cfunc:`main`.  For example, ``os.execv('/bin/echo',
+passed to a program's :c:func:`main`.  For example, ``os.execv('/bin/echo',
 ['foo', 'bar'])`` will only print ``bar`` on standard output; ``foo`` will seem
 to be ignored.
 
@@ -1570,8 +1691,9 @@ to be ignored.
 
    Generate a :const:`SIGABRT` signal to the current process.  On Unix, the default
    behavior is to produce a core dump; on Windows, the process immediately returns
-   an exit code of ``3``.  Be aware that programs which use :func:`signal.signal`
-   to register a handler for :const:`SIGABRT` will behave differently.
+   an exit code of ``3``.  Be aware that calling this function will not call the
+   Python signal handler registered for :const:`SIGABRT` with
+   :func:`signal.signal`.
 
    Availability: Unix, Windows.
 
@@ -1627,15 +1749,15 @@ to be ignored.
 
 .. function:: _exit(n)
 
-   Exit to the system with status *n*, without calling cleanup handlers, flushing
+   Exit the process with status *n*, without calling cleanup handlers, flushing
    stdio buffers, etc.
 
    Availability: Unix, Windows.
 
    .. note::
 
-      The standard way to exit is ``sys.exit(n)``. :func:`_exit` should normally only
-      be used in the child process after a :func:`fork`.
+      The standard way to exit is ``sys.exit(n)``.  :func:`_exit` should
+      normally only be used in the child process after a :func:`fork`.
 
 The following exit codes are defined and can be used with :func:`_exit`,
 although they are not required.  These are typically used for system programs
@@ -1838,7 +1960,16 @@ written in Python, such as a mail server's external command delivery program.
 
    Send signal *sig* to the process *pid*.  Constants for the specific signals
    available on the host platform are defined in the :mod:`signal` module.
-   Availability: Unix.
+
+   Windows: The :data:`signal.CTRL_C_EVENT` and
+   :data:`signal.CTRL_BREAK_EVENT` signals are special signals which can
+   only be sent to console processes which share a common console window,
+   e.g., some subprocesses. Any other value for *sig* will cause the process
+   to be unconditionally killed by the TerminateProcess API, and the exit code
+   will be set to *sig*. The Windows version of :func:`kill` additionally takes
+   process handles to be killed.
+
+   .. versionadded:: 2.7 Windows support
 
 
 .. function:: killpg(pgid, sig)
@@ -1939,7 +2070,9 @@ written in Python, such as a mail server's external command delivery program.
       os.spawnvpe(os.P_WAIT, 'cp', L, os.environ)
 
    Availability: Unix, Windows.  :func:`spawnlp`, :func:`spawnlpe`, :func:`spawnvp`
-   and :func:`spawnvpe` are not available on Windows.
+   and :func:`spawnvpe` are not available on Windows.  :func:`spawnle` and
+   :func:`spawnve` are not thread-safe on Windows; we advise you to use the
+   :mod:`subprocess` module instead.
 
    .. versionadded:: 1.6
 
@@ -2002,7 +2135,7 @@ written in Python, such as a mail server's external command delivery program.
    There is no option to wait for the application to close, and no way to retrieve
    the application's exit status.  The *path* parameter is relative to the current
    directory.  If you want to use an absolute path, make sure the first character
-   is not a slash (``'/'``); the underlying Win32 :cfunc:`ShellExecute` function
+   is not a slash (``'/'``); the underlying Win32 :c:func:`ShellExecute` function
    doesn't work if it is.  Use the :func:`os.path.normpath` function to ensure that
    the path is properly encoded for Win32.
 
@@ -2017,13 +2150,13 @@ written in Python, such as a mail server's external command delivery program.
 .. function:: system(command)
 
    Execute the command (a string) in a subshell.  This is implemented by calling
-   the Standard C function :cfunc:`system`, and has the same limitations.
+   the Standard C function :c:func:`system`, and has the same limitations.
    Changes to :data:`sys.stdin`, etc. are not reflected in the environment of the
    executed command.
 
    On Unix, the return value is the exit status of the process encoded in the
    format specified for :func:`wait`.  Note that POSIX does not specify the meaning
-   of the return value of the C :cfunc:`system` function, so the return value of
+   of the return value of the C :c:func:`system` function, so the return value of
    the Python function is system-dependent.
 
    On Windows, the return value is that returned by the system shell after running
@@ -2093,7 +2226,7 @@ written in Python, such as a mail server's external command delivery program.
    with :const:`P_NOWAIT` return suitable process handles.
 
 
-.. function:: wait3([options])
+.. function:: wait3(options)
 
    Similar to :func:`waitpid`, except no process id argument is given and a
    3-element tuple containing the child's process id, exit status indication, and
@@ -2373,5 +2506,7 @@ Miscellaneous Functions
    system this will query /dev/urandom, and on Windows it will use CryptGenRandom.
    If a randomness source is not found, :exc:`NotImplementedError` will be raised.
 
-   .. versionadded:: 2.4
+   For an easy-to-use interface to the random number generator
+   provided by your platform, please see :class:`random.SystemRandom`.
 
+   .. versionadded:: 2.4

@@ -9,14 +9,15 @@
 
 .. note::
    The :mod:`urllib2` module has been split across several modules in
-   Python 3.0 named :mod:`urllib.request` and :mod:`urllib.error`.
+   Python 3 named :mod:`urllib.request` and :mod:`urllib.error`.
    The :term:`2to3` tool will automatically adapt imports when converting
-   your sources to 3.0.
+   your sources to Python 3.
 
 
 The :mod:`urllib2` module defines functions and classes which help in opening
 URLs (mostly HTTP) in a complex world --- basic and digest authentication,
 redirections, cookies and more.
+
 
 The :mod:`urllib2` module defines the following functions:
 
@@ -25,18 +26,22 @@ The :mod:`urllib2` module defines the following functions:
 
    Open the URL *url*, which can be either a string or a :class:`Request` object.
 
+   .. warning::
+      HTTPS requests do not do any verification of the server's certificate.
+
    *data* may be a string specifying additional data to send to the server, or
    ``None`` if no such data is needed.  Currently HTTP requests are the only ones
    that use *data*; the HTTP request will be a POST instead of a GET when the
    *data* parameter is provided.  *data* should be a buffer in the standard
    :mimetype:`application/x-www-form-urlencoded` format.  The
    :func:`urllib.urlencode` function takes a mapping or sequence of 2-tuples and
-   returns a string in this format.
+   returns a string in this format. urllib2 module sends HTTP/1.1 requests with
+   ``Connection:close`` header included.
 
    The optional *timeout* parameter specifies a timeout in seconds for blocking
    operations like the connection attempt (if not specified, the global default
-   timeout setting will be used).  This actually only works for HTTP, HTTPS,
-   FTP and FTPS connections.
+   timeout setting will be used).  This actually only works for HTTP, HTTPS and
+   FTP connections.
 
    This function returns a file-like object with two additional methods:
 
@@ -46,6 +51,8 @@ The :mod:`urllib2` module defines the following functions:
    * :meth:`info` --- return the meta-information of the page, such as headers,
      in the form of an :class:`mimetools.Message` instance
      (see `Quick Reference to HTTP Headers <http://www.cs.tut.fi/~jkorpela/http.html>`_)
+
+   * :meth:`getcode` --- return the HTTP status code of the response.
 
    Raises :exc:`URLError` on errors.
 
@@ -85,7 +92,7 @@ The :mod:`urllib2` module defines the following functions:
    :class:`HTTPSHandler` will also be added.
 
    Beginning in Python 2.3, a :class:`BaseHandler` subclass may also change its
-   :attr:`handler_order` member variable to modify its position in the handlers
+   :attr:`handler_order` attribute to modify its position in the handlers
    list.
 
 The following exceptions are raised as appropriate:
@@ -116,7 +123,10 @@ The following exceptions are raised as appropriate:
       This numeric value corresponds to a value found in the dictionary of
       codes as found in :attr:`BaseHTTPServer.BaseHTTPRequestHandler.responses`.
 
+   .. attribute:: reason
 
+      The reason for this error.  It can be a message string or another exception
+      instance.
 
 The following classes are provided:
 
@@ -292,6 +302,11 @@ The following classes are provided:
    A catch-all class to handle unknown URLs.
 
 
+.. class:: HTTPErrorProcessor()
+
+   Process HTTP error responses.
+
+
 .. _request-objects:
 
 Request Objects
@@ -370,6 +385,17 @@ so all must be overridden in subclasses.
    Return the selector --- the part of the URL that is sent to the server.
 
 
+.. method:: Request.get_header(header_name, default=None)
+
+   Return the value of the given header. If the header is not present, return
+   the default value.
+
+
+.. method:: Request.header_items()
+
+   Return a list of tuples (header_name, header_value) of the Request headers.
+
+
 .. method:: Request.set_proxy(host, type)
 
    Prepare the request by connecting to a proxy server. The *host* and *type* will
@@ -428,7 +454,7 @@ OpenerDirector Objects
    optional *timeout* parameter specifies a timeout in seconds for blocking
    operations like the connection attempt (if not specified, the global default
    timeout setting will be used). The timeout feature actually works only for
-   HTTP, HTTPS, FTP and FTPS connections).
+   HTTP, HTTPS and FTP connections).
 
    .. versionchanged:: 2.6
       *timeout* was added.
@@ -490,7 +516,7 @@ intended for direct use:
 
    Remove any parents.
 
-The following members and methods should only be used by classes derived from
+The following attributes and methods should only be used by classes derived from
 :class:`BaseHandler`.
 
 .. note::
@@ -876,7 +902,7 @@ HTTPErrorProcessor Objects
 .. versionadded:: 2.4
 
 
-.. method:: HTTPErrorProcessor.unknown_open()
+.. method:: HTTPErrorProcessor.http_response()
 
    Process HTTP error responses.
 
@@ -887,6 +913,12 @@ HTTPErrorProcessor Objects
    :meth:`OpenerDirector.error`.  Eventually,
    :class:`urllib2.HTTPDefaultErrorHandler` will raise an :exc:`HTTPError` if no
    other handler handles the error.
+
+.. method:: HTTPErrorProcessor.https_response()
+
+   Process HTTPS error responses.
+
+   The behavior is same as :meth:`http_response`.
 
 
 .. _urllib2-examples:

@@ -8,12 +8,12 @@
    :deprecated:
 
 .. deprecated:: 2.6
-    The :mod:`dl` module has been removed in Python 3.0. Use the :mod:`ctypes`
+    The :mod:`dl` module has been removed in Python 3. Use the :mod:`ctypes`
     module instead.
 
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 
-The :mod:`dl` module defines an interface to the :cfunc:`dlopen` function, which
+The :mod:`dl` module defines an interface to the :c:func:`dlopen` function, which
 is the most common interface on Unix platforms for handling dynamically linked
 libraries. It allows the program to call arbitrary functions in such a library.
 
@@ -105,10 +105,10 @@ Dl objects, as returned by :func:`.open` above, have the following methods:
    Call the function named *name* in the referenced shared object. The arguments
    must be either Python integers, which will be  passed as is, Python strings, to
    which a pointer will be passed,  or ``None``, which will be passed as *NULL*.
-   Note that  strings should only be passed to functions as :ctype:`const char\*`,
+   Note that  strings should only be passed to functions as :c:type:`const char\*`,
    as Python will not like its string mutated.
 
    There must be at most 10 arguments, and arguments not given will be treated as
-   ``None``. The function's return value must be a C :ctype:`long`, which is a
+   ``None``. The function's return value must be a C :c:type:`long`, which is a
    Python integer.
 

@@ -24,7 +24,7 @@
 #include <stdlib.h>
 
 #ifdef __sgi
-#ifndef HAVE_PTHREAD_H /* XXX Need to check in configure.in */
+#ifndef HAVE_PTHREAD_H /* XXX Need to check in configure.ac */
 #undef _POSIX_THREADS
 #endif
 #endif
@@ -46,7 +46,7 @@
 #endif
 
 /* Check if we're running on HP-UX and _SC_THREADS is defined. If so, then
-   enough of the Posix threads package is implimented to support python
+   enough of the Posix threads package is implemented to support python
    threads.
 
    This is valid for HP-UX 11.23 running on an ia64 system. If needed, add
@@ -135,10 +135,6 @@ static size_t _pythread_stacksize = 0;
 
 #ifdef BEOS_THREADS
 #include "thread_beos.h"
-#endif
-
-#ifdef WINCE_THREADS
-#include "thread_wince.h"
 #endif
 
 #ifdef PLAN9_THREADS

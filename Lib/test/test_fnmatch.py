@@ -15,12 +15,12 @@ class FnmatchTestCase(unittest.TestCase):
     def check_match(self, filename, pattern, should_match=1, fn=fnmatch):
         if should_match:
             self.assertTrue(fn(filename, pattern),
-                            "expected %r to match pattern %r"
-                            % (filename, pattern))
+                         "expected %r to match pattern %r"
+                         % (filename, pattern))
         else:
             self.assertTrue(not fn(filename, pattern),
-                            "expected %r not to match pattern %r"
-                            % (filename, pattern))
+                         "expected %r not to match pattern %r"
+                         % (filename, pattern))
 
     def test_fnmatch(self):
         check = self.check_match
@@ -62,7 +62,7 @@ class FnmatchTestCase(unittest.TestCase):
         for i in range(_MAXCACHE + 1):
             fnmatch('foo', '?' * i)
 
-        self.assertTrue(len(_cache) <= _MAXCACHE)
+        self.assertLessEqual(len(_cache), _MAXCACHE)
 
 def test_main():
     test_support.run_unittest(FnmatchTestCase)

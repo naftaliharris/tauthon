@@ -55,7 +55,7 @@ PC/VC6/
     Visual C++ 6.0
 PC/VS7.1/
     Visual Studio 2003 (7.1)
-PCbuild8/
+PC/VS8.0/
     Visual Studio 2005 (8.0)
 
 
@@ -107,7 +107,7 @@ _bsddb
     Wraps Berkeley DB 4.7.25, which is currently built by _bsddb.vcproj.
     project (see below).
 _sqlite3
-    Wraps SQLite 3.5.9, which is currently built by sqlite3.vcproj (see below).
+    Wraps SQLite 3.6.21, which is currently built by sqlite3.vcproj (see below).
 _tkinter
     Wraps the Tk windowing system.  Unlike _bsddb and _sqlite3, there's no
     corresponding tcltk.vcproj-type project that builds Tcl/Tk from vcproj's
@@ -121,28 +121,28 @@ bz2
     Download the source from the python.org copy into the dist
     directory:
 
-    svn export http://svn.python.org/projects/external/bzip2-1.0.5
+    svn export http://svn.python.org/projects/external/bzip2-1.0.6
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
     above via subversion. **
 
     A custom pre-link step in the bz2 project settings should manage to
-    build bzip2-1.0.5\libbz2.lib by magic before bz2.pyd (or bz2_d.pyd) is
+    build bzip2-1.0.6\libbz2.lib by magic before bz2.pyd (or bz2_d.pyd) is
     linked in PCbuild\.
     However, the bz2 project is not smart enough to remove anything under
-    bzip2-1.0.5\ when you do a clean, so if you want to rebuild bzip2.lib
-    you need to clean up bzip2-1.0.5\ by hand.
+    bzip2-1.0.6\ when you do a clean, so if you want to rebuild bzip2.lib
+    you need to clean up bzip2-1.0.6\ by hand.
 
     All of this managed to build libbz2.lib in 
-    bzip2-1.0.5\$platform-$configuration\, which the Python project links in.
+    bzip2-1.0.6\$platform-$configuration\, which the Python project links in.
 
 _ssl
     Python wrapper for the secure sockets library.
 
     Get the source code through
 
-    svn export http://svn.python.org/projects/external/openssl-0.9.8l
+    svn export http://svn.python.org/projects/external/openssl-0.9.8x
 
     ** NOTE: if you use the Tools\buildbot\external(-amd64).bat approach for
     obtaining external sources then you don't need to manually get the source
@@ -159,7 +159,7 @@ _ssl
     nasmw.exe.
 
     You can also install ActivePerl from
-        http://www.activestate.com/Products/ActivePerl/
+        http://www.activestate.com/activeperl/
     if you like to use the official sources instead of the files from 
     python's subversion repository. The svn version contains pre-build
     makefiles and assembly files.

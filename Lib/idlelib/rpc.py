@@ -169,7 +169,7 @@ class SocketIO(object):
             how, (oid, methodname, args, kwargs) = request
         except TypeError:
             return ("ERROR", "Bad request format")
-        if not self.objtable.has_key(oid):
+        if oid not in self.objtable:
             return ("ERROR", "Unknown object id: %r" % (oid,))
         obj = self.objtable[oid]
         if methodname == "__methods__":
@@ -304,7 +304,7 @@ class SocketIO(object):
             # wait for notification from socket handling thread
             cvar = self.cvars[myseq]
             cvar.acquire()
-            while not self.responses.has_key(myseq):
+            while myseq not in self.responses:
                 cvar.wait()
             response = self.responses[myseq]
             self.debug("_getresponse:%s: thread woke up: response: %s" %
@@ -518,8 +518,6 @@ class RPCClient(SocketIO):
 
     def __init__(self, address, family=socket.AF_INET, type=socket.SOCK_STREAM):
         self.listening_sock = socket.socket(family, type)
-        self.listening_sock.setsockopt(socket.SOL_SOCKET,
-                                       socket.SO_REUSEADDR, 1)
         self.listening_sock.bind(address)
         self.listening_sock.listen(1)
 
@@ -552,7 +550,7 @@ class RPCProxy(object):
             return MethodProxy(self.sockio, self.oid, name)
         if self.__attributes is None:
             self.__getattributes()
-        if self.__attributes.has_key(name):
+        if name in self.__attributes:
             value = self.sockio.remotecall(self.oid, '__getattribute__',
                                            (name,), {})
             return value
@@ -572,7 +570,7 @@ def _getmethods(obj, methods):
     # Adds names to dictionary argument 'methods'
     for name in dir(obj):
         attr = getattr(obj, name)
-        if callable(attr):
+        if hasattr(attr, '__call__'):
             methods[name] = 1
     if type(obj) == types.InstanceType:
         _getmethods(obj.__class__, methods)
@@ -583,7 +581,7 @@ def _getmethods(obj, methods):
 def _getattributes(obj, attributes):
     for name in dir(obj):
         attr = getattr(obj, name)
-        if not callable(attr):
+        if not hasattr(attr, '__call__'):
             attributes[name] = 1
 
 class MethodProxy(object):
@@ -599,4 +597,4 @@ class MethodProxy(object):
 
 
 # XXX KBK 09Sep03  We need a proper unit test for this module.  Previously
-#                  existing test code was removed at Rev 1.27.
+#                  existing test code was removed at Rev 1.27 (r34098).

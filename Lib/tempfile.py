@@ -29,6 +29,7 @@ __all__ = [
 
 # Imports.
 
+import io as _io
 import os as _os
 import errno as _errno
 from random import Random as _Random
@@ -118,8 +119,15 @@ class _RandomNameSequence:
 
     def __init__(self):
         self.mutex = _allocate_lock()
-        self.rng = _Random()
         self.normcase = _os.path.normcase
+
+    @property
+    def rng(self):
+        cur_pid = _os.getpid()
+        if cur_pid != getattr(self, '_rng_pid', None):
+            self._rng = _Random()
+            self._rng_pid = cur_pid
+        return self._rng
 
     def __iter__(self):
         return self
@@ -186,14 +194,17 @@ def _get_default_tempdir():
             name = namer.next()
             filename = _os.path.join(dir, name)
             try:
-                fd = _os.open(filename, flags, 0600)
-                fp = _os.fdopen(fd, 'w')
-                fp.write('blat')
-                fp.close()
-                _os.unlink(filename)
-                del fp, fd
+                fd = _os.open(filename, flags, 0o600)
+                try:
+                    try:
+                        with _io.open(fd, 'wb', closefd=False) as fp:
+                            fp.write(b'blat')
+                    finally:
+                        _os.close(fd)
+                finally:
+                    _os.unlink(filename)
                 return dir
-            except (OSError, IOError), e:
+            except (OSError, IOError) as e:
                 if e[0] != _errno.EEXIST:
                     break # no point trying more names in this directory
                 pass
@@ -411,6 +422,9 @@ class _TemporaryFileWrapper:
             result = self.file.__exit__(exc, value, tb)
             self.close()
             return result
+    else:
+        def __exit__(self, exc, value, tb):
+            self.file.__exit__(exc, value, tb)
 
 
 def NamedTemporaryFile(mode='w+b', bufsize=-1, suffix="",
@@ -536,10 +550,6 @@ class SpooledTemporaryFile:
     def closed(self):
         return self._file.closed
 
-    @property
-    def encoding(self):
-        return self._file.encoding
-
     def fileno(self):
         self.rollover()
         return self._file.fileno()
@@ -552,15 +562,17 @@ class SpooledTemporaryFile:
 
     @property
     def mode(self):
-        return self._file.mode
+        try:
+            return self._file.mode
+        except AttributeError:
+            return self._TemporaryFileArgs[0]
 
     @property
     def name(self):
-        return self._file.name
-
-    @property
-    def newlines(self):
-        return self._file.newlines
+        try:
+            return self._file.name
+        except AttributeError:
+            return None
 
     def next(self):
         return self._file.next
@@ -600,4 +612,7 @@ class SpooledTemporaryFile:
         return rv
 
     def xreadlines(self, *args):
-        return self._file.xreadlines(*args)
+        try:
+            return self._file.xreadlines(*args)
+        except AttributeError:
+            return iter(self._file.readlines(*args))

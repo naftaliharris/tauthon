@@ -86,6 +86,7 @@ static char *usage_3 = "\
          can be supplied multiple times to increase verbosity\n\
 -V     : print the Python version number and exit (also --version)\n\
 -W arg : warning control; arg is action:message:category:module:lineno\n\
+         also PYTHONWARNINGS=arg\n\
 -x     : skip first line of source, allowing use of non-Unix forms of #!cmd\n\
 ";
 static char *usage_4 = "\
@@ -263,6 +264,7 @@ Py_Main(int argc, char **argv)
 
     /* Hash randomization needed early for all string operations
        (including -W and -X options). */
+    _PyOS_opterr = 0;  /* prevent printing the error in 1st pass */
     while ((c = _PyOS_GetOpt(argc, argv, PROGRAM_OPTS)) != EOF) {
         if (c == 'm' || c == 'c') {
             /* -c / -m is the last option: following arguments are
@@ -445,6 +447,10 @@ Py_Main(int argc, char **argv)
         return 0;
     }
 
+    if (Py_Py3kWarningFlag && !Py_TabcheckFlag)
+        /* -3 implies -t (but not -tt) */
+        Py_TabcheckFlag = 1;
+
     if (!Py_InspectFlag &&
         (p = Py_GETENV("PYTHONINSPECT")) && *p != '\0')
         Py_InspectFlag = 1;
@@ -455,6 +461,21 @@ Py_Main(int argc, char **argv)
     if (!Py_NoUserSiteDirectory &&
         (p = Py_GETENV("PYTHONNOUSERSITE")) && *p != '\0')
         Py_NoUserSiteDirectory = 1;
+
+    if ((p = Py_GETENV("PYTHONWARNINGS")) && *p != '\0') {
+        char *buf, *warning;
+
+        buf = (char *)malloc(strlen(p) + 1);
+        if (buf == NULL)
+            Py_FatalError(
+               "not enough memory to copy PYTHONWARNINGS");
+        strcpy(buf, p);
+        for (warning = strtok(buf, ",");
+             warning != NULL;
+             warning = strtok(NULL, ","))
+            PySys_AddWarnOption(warning);
+        free(buf);
+    }
 
     if (command == NULL && module == NULL && _PyOS_optind < argc &&
         strcmp(argv[_PyOS_optind], "-") != 0)
@@ -540,7 +561,9 @@ Py_Main(int argc, char **argv)
 
     if (module != NULL) {
         /* Backup _PyOS_optind and force sys.argv[0] = '-c'
-           so that PySys_SetArgv correctly sets sys.path[0] to ''*/
+           so that PySys_SetArgv correctly sets sys.path[0] to ''
+           rather than looking for a file called "-m". See
+           tracker issue #8202 for details. */
         _PyOS_optind--;
         argv[_PyOS_optind] = "-c";
     }
@@ -561,7 +584,7 @@ Py_Main(int argc, char **argv)
         sts = PyRun_SimpleStringFlags(command, &cf) != 0;
         free(command);
     } else if (module) {
-        sts = RunModule(module, 1);
+        sts = (RunModule(module, 1) != 0);
         free(module);
     }
     else {
