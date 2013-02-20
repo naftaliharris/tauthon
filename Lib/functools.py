@@ -11,7 +11,10 @@
 __all__ = ['update_wrapper', 'wraps', 'WRAPPER_ASSIGNMENTS', 'WRAPPER_UPDATES',
            'total_ordering', 'cmp_to_key', 'lru_cache', 'reduce', 'partial']
 
-from _functools import partial, reduce
+try:
+    from _functools import reduce
+except ImportError:
+    pass
 from collections import namedtuple
 try:
     from _thread import allocate_lock as Lock
@@ -137,6 +140,29 @@ except ImportError:
 
 
 ################################################################################
+### partial() argument application
+################################################################################
+
+def partial(func, *args, **keywords):
+    """new function with partial application of the given arguments
+    and keywords.
+    """
+    def newfunc(*fargs, **fkeywords):
+        newkeywords = keywords.copy()
+        newkeywords.update(fkeywords)
+        return func(*(args + fargs), **newkeywords)
+    newfunc.func = func
+    newfunc.args = args
+    newfunc.keywords = keywords
+    return newfunc
+
+try:
+    from _functools import partial
+except ImportError:
+    pass
+
+
+################################################################################
 ### LRU Cache function decorator
 ################################################################################
 
@@ -202,9 +228,8 @@ def lru_cache(maxsize=128, typed=False):
     PREV, NEXT, KEY, RESULT = 0, 1, 2, 3   # names for the link fields
 
     def decorating_function(user_function):
-
         cache = {}
-        hits = misses = currsize = 0
+        hits = misses = 0
         full = False
         cache_get = cache.get    # bound method to lookup a key or return None
         lock = Lock()            # because linkedlist updates aren't threadsafe
@@ -224,7 +249,7 @@ def lru_cache(maxsize=128, typed=False):
 
             def wrapper(*args, **kwds):
                 # simple caching without ordering or size limit
-                nonlocal hits, misses, currsize
+                nonlocal hits, misses
                 key = make_key(args, kwds, typed)
                 result = cache_get(key, sentinel)
                 if result is not sentinel:
@@ -233,14 +258,13 @@ def lru_cache(maxsize=128, typed=False):
                 result = user_function(*args, **kwds)
                 cache[key] = result
                 misses += 1
-                currsize += 1
                 return result
 
         else:
 
             def wrapper(*args, **kwds):
                 # size limited caching that tracks accesses by recency
-                nonlocal root, hits, misses, currsize, full
+                nonlocal root, hits, misses, full
                 key = make_key(args, kwds, typed)
                 with lock:
                     link = cache_get(key)
@@ -277,23 +301,22 @@ def lru_cache(maxsize=128, typed=False):
                         last = root[PREV]
                         link = [last, root, key, result]
                         cache[key] = last[NEXT] = root[PREV] = link
-                        currsize += 1
-                        full = (currsize == maxsize)
+                        full = (len(cache) == maxsize)
                     misses += 1
                 return result
 
         def cache_info():
             """Report cache statistics"""
             with lock:
-                return _CacheInfo(hits, misses, maxsize, currsize)
+                return _CacheInfo(hits, misses, maxsize, len(cache))
 
         def cache_clear():
             """Clear the cache and cache statistics"""
-            nonlocal hits, misses, currsize, full
+            nonlocal hits, misses, full
             with lock:
                 cache.clear()
                 root[:] = [root, root, None, None]
-                hits = misses = currsize = 0
+                hits = misses = 0
                 full = False
 
         wrapper.cache_info = cache_info
