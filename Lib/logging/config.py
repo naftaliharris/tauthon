@@ -24,13 +24,13 @@ Copyright (C) 2001-2010 Vinay Sajip. All Rights Reserved.
 To use, simply 'import logging' and log away!
 """
 
-import sys, logging, logging.handlers, socket, struct, os, traceback, re
-import types, io
+import sys, logging, logging.handlers, socket, struct, traceback, re
+import io
 
 try:
     import _thread as thread
     import threading
-except ImportError:
+except ImportError: #pragma: no cover
     thread = None
 
 from socketserver import ThreadingTCPServer, StreamRequestHandler
@@ -97,9 +97,6 @@ def _resolve(name):
 
 def _strip_spaces(alist):
     return map(lambda x: x.strip(), alist)
-
-def _encoded(s):
-    return s if isinstance(s, str) else s.encode('utf-8')
 
 def _create_formatters(cp):
     """Create and return formatters"""
@@ -215,7 +212,7 @@ def _install_loggers(cp, handlers, disable_existing):
     #avoid disabling child loggers of explicitly
     #named loggers. With a sorted list it is easier
     #to find the child loggers.
-    existing.sort(key=_encoded)
+    existing.sort()
     #We'll keep the list of existing loggers
     #which are children of named loggers here...
     child_loggers = []
@@ -588,7 +585,7 @@ class DictConfigurator(BaseConfigurator):
                 #avoid disabling child loggers of explicitly
                 #named loggers. With a sorted list it is easier
                 #to find the child loggers.
-                existing.sort(key=_encoded)
+                existing.sort()
                 #We'll keep the list of existing loggers
                 #which are children of named loggers here...
                 child_loggers = []
@@ -786,7 +783,7 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
     and which you can join() when appropriate. To stop the server, call
     stopListening().
     """
-    if not thread:
+    if not thread: #pragma: no cover
         raise NotImplementedError("listen() needs threading to work")
 
     class ConfigStreamHandler(StreamRequestHandler):
@@ -804,7 +801,6 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
             struct.pack(">L", n), followed by the config file.
             Uses fileConfig() to do the grunt work.
             """
-            import tempfile
             try:
                 conn = self.connection
                 chunk = conn.recv(4)
@@ -825,7 +821,7 @@ def listen(port=DEFAULT_LOGGING_CONFIG_PORT):
                         file = io.StringIO(chunk)
                         try:
                             fileConfig(file)
-                        except (KeyboardInterrupt, SystemExit):
+                        except (KeyboardInterrupt, SystemExit): #pragma: no cover
                             raise
                         except:
                             traceback.print_exc()
