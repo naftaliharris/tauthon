@@ -481,6 +481,10 @@ class ModifiedInterpreter(InteractiveInterpreter):
 
     def kill_subprocess(self):
         try:
+            self.rpcclt.listening_sock.close()
+        except AttributeError:  # no socket
+            pass
+        try:
             self.rpcclt.close()
         except AttributeError:  # no socket
             pass
@@ -1009,6 +1013,8 @@ class PyShell(OutputWindow):
                 return False
         else:
             nosub = "==== No Subprocess ===="
+            sys.displayhook = rpc.displayhook
+
         self.write("Python %s on %s\n%s\n%s" %
                    (sys.version, sys.platform, self.COPYRIGHT, nosub))
         self.showprompt()
@@ -1231,6 +1237,16 @@ class PyShell(OutputWindow):
         self.set_line_and_column()
 
     def write(self, s, tags=()):
+        if isinstance(s, str) and len(s) and max(s) > '\uffff':
+            # Tk doesn't support outputting non-BMP characters
+            # Let's assume what printed string is not very long,
+            # find first non-BMP character and construct informative
+            # UnicodeEncodeError exception.
+            for start, char in enumerate(s):
+                if char > '\uffff':
+                    break
+            raise UnicodeEncodeError("UCS-2", char, start, start+1,
+                                     'Non-BMP character not supported in Tk')
         try:
             self.text.mark_gravity("iomark", "right")
             count = OutputWindow.write(self, s, tags, "iomark")
