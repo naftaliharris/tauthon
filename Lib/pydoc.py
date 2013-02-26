@@ -223,7 +223,7 @@ def synopsis(filename, cache={}):
     if lastupdate is None or lastupdate < mtime:
         try:
             file = tokenize.open(filename)
-        except IOError:
+        except OSError:
             # module can't be opened, so skip it
             return None
         binary_suffixes = importlib.machinery.BYTECODE_SUFFIXES[:]
@@ -1393,7 +1393,7 @@ def getpager():
             return lambda text: pipepager(text, os.environ['PAGER'])
     if os.environ.get('TERM') in ('dumb', 'emacs'):
         return plainpager
-    if sys.platform == 'win32' or sys.platform.startswith('os2'):
+    if sys.platform == 'win32':
         return lambda text: tempfilepager(plain(text), 'more <')
     if hasattr(os, 'system') and os.system('(less) 2>/dev/null') == 0:
         return lambda text: pipepager(text, 'less')
@@ -1419,16 +1419,15 @@ def pipepager(text, cmd):
     try:
         pipe.write(text)
         pipe.close()
-    except IOError:
+    except OSError:
         pass # Ignore broken pipes caused by quitting the pager program.
 
 def tempfilepager(text, cmd):
     """Page through text by invoking a program on a temporary file."""
     import tempfile
     filename = tempfile.mktemp()
-    file = open(filename, 'w')
-    file.write(text)
-    file.close()
+    with open(filename, 'w') as file:
+        file.write(text)
     try:
         os.system(cmd + ' "' + filename + '"')
     finally:
@@ -1847,10 +1846,10 @@ Enter the name of any module, keyword, or topic to get help on writing
 Python programs and using Python modules.  To quit this help utility and
 return to the interpreter, just type "quit".
 
-To get a list of available modules, keywords, or topics, type "modules",
-"keywords", or "topics".  Each module also comes with a one-line summary
-of what it does; to list the modules whose summaries contain a given word
-such as "spam", type "modules spam".
+To get a list of available modules, keywords, symbols, or topics, type
+"modules", "keywords", "symbols", or "topics".  Each module also comes
+with a one-line summary of what it does; to list the modules whose name
+or summary contain a given string such as "spam", type "modules spam".
 ''' % tuple([sys.version[:3]]*2))
 
     def list(self, items, columns=4, width=80):
@@ -1955,9 +1954,10 @@ module "pydoc_data.topics" could not be found.
     def listmodules(self, key=''):
         if key:
             self.output.write('''
-Here is a list of matching modules.  Enter any module name to get more help.
+Here is a list of modules whose name or summary contains '{}'.
+If there are any, enter a module name to get more help.
 
-''')
+'''.format(key))
             apropos(key)
         else:
             self.output.write('''
@@ -1976,7 +1976,7 @@ Please wait a moment while I gather a list of all available modules...
             self.list(modules.keys())
             self.output.write('''
 Enter any module name to get more help.  Or, type "modules spam" to search
-for modules whose descriptions contain the word "spam".
+for modules whose name or summary contain the string "spam".
 ''')
 
 help = Helper()
