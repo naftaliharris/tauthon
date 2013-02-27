@@ -3,13 +3,13 @@
 
 /* collections module implementation of a deque() datatype
    Written and maintained by Raymond D. Hettinger <python@rcn.com>
-   Copyright (c) 2004 Python Software Foundation.
+   Copyright (c) 2004-2013 Python Software Foundation.
    All rights reserved.
 */
 
 /* The block length may be set to any number over 1.  Larger numbers
  * reduce the number of calls to the memory allocator but take more
- * memory.  Ideally, BLOCKLEN should be set with an eye to the
+ * memory.  Ideally, (BLOCKLEN+2) should be set to a multiple of the
  * length of a cache line.
  */
 
@@ -71,7 +71,7 @@ newblock(block *leftlink, block *rightlink, Py_ssize_t len) {
         return NULL;
     }
     if (numfreeblocks) {
-        numfreeblocks -= 1;
+        numfreeblocks--;
         b = freeblocks[numfreeblocks];
     } else {
         b = PyMem_Malloc(sizeof(block));
