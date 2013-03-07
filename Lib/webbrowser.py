@@ -230,7 +230,7 @@ class UnixBrowser(BaseBrowser):
         cmdline = [self.name] + raise_opt + args
 
         if remote or self.background:
-            inout = io.open(os.devnull, "r+")
+            inout = subprocess.DEVNULL
         else:
             # for TTY browsers, we need stdin/out
             inout = None
@@ -238,17 +238,14 @@ class UnixBrowser(BaseBrowser):
                              stdout=(self.redirect_stdout and inout or None),
                              stderr=inout, start_new_session=True)
         if remote:
-            # wait five seconds. If the subprocess is not finished, the
+            # wait at most five seconds. If the subprocess is not finished, the
             # remote invocation has (hopefully) started a new instance.
-            time.sleep(1)
-            rc = p.poll()
-            if rc is None:
-                time.sleep(4)
-                rc = p.poll()
-                if rc is None:
-                    return True
-            # if remote call failed, open() will try direct invocation
-            return not rc
+            try:
+                rc = p.wait(5)
+                # if remote call failed, open() will try direct invocation
+                return not rc
+            except subprocess.TimeoutExpired:
+                return True
         elif self.background:
             if p.poll() is None:
                 return True
@@ -306,6 +303,18 @@ class Galeon(UnixBrowser):
     background = True
 
 
+class Chrome(UnixBrowser):
+    "Launcher class for Google Chrome browser."
+
+    remote_args = ['%action', '%s']
+    remote_action = ""
+    remote_action_newwin = "--new-window"
+    remote_action_newtab = ""
+    background = True
+
+Chromium = Chrome
+
+
 class Opera(UnixBrowser):
     "Launcher class for Opera browser."
 
@@ -345,7 +354,7 @@ class Konqueror(BaseBrowser):
         else:
             action = "openURL"
 
-        devnull = io.open(os.devnull, "r+")
+        devnull = subprocess.DEVNULL
         # if possible, put browser in separate process group, so
         # keyboard interrupts don't affect browser as well as Python
         setsid = getattr(os, 'setsid', None)
@@ -443,6 +452,14 @@ class Grail(BaseBrowser):
 
 def register_X_browsers():
 
+    # use xdg-open if around
+    if _iscommand("xdg-open"):
+        register("xdg-open", None, BackgroundBrowser("xdg-open"))
+
+    # The default GNOME3 browser
+    if "GNOME_DESKTOP_SESSION_ID" in os.environ and _iscommand("gvfs-open"):
+        register("gvfs-open", None, BackgroundBrowser("gvfs-open"))
+
     # The default GNOME browser
     if "GNOME_DESKTOP_SESSION_ID" in os.environ and _iscommand("gnome-open"):
         register("gnome-open", None, BackgroundBrowser("gnome-open"))
@@ -472,6 +489,11 @@ def register_X_browsers():
     # Skipstone, another Gtk/Mozilla based browser
     if _iscommand("skipstone"):
         register("skipstone", None, BackgroundBrowser("skipstone"))
+
+    # Google Chrome/Chromium browsers
+    for browser in ("google-chrome", "chrome", "chromium", "chromium-browser"):
+        if _iscommand(browser):
+            register(browser, None, Chrome(browser))
 
     # Opera, quite popular
     if _iscommand("opera"):
