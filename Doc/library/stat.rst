@@ -104,6 +104,16 @@ Example::
    if __name__ == '__main__':
        walktree(sys.argv[1], visitfile)
 
+An additional utility function is provided to covert a file's mode in a human
+readable string:
+
+.. function:: filemode(mode)
+
+   Convert a file's mode to a string of the form '-rwxrwxrwx'.
+
+   .. versionadded:: 3.3
+
+
 All the variables below are simply symbolic indexes into the 10-tuple returned
 by :func:`os.stat`, :func:`os.fstat` or :func:`os.lstat`.
 
@@ -171,10 +181,6 @@ on the implementation of the underlying system call.
 The variables below define the flags used in the :data:`ST_MODE` field.
 
 Use of the functions above is more portable than use of the first set of flags:
-
-.. data:: S_IFMT
-
-   Bit mask for the file type bit fields.
 
 .. data:: S_IFSOCK
 
@@ -344,4 +350,3 @@ The following flags can be used in the *flags* argument of :func:`os.chflags`:
    The file is a snapshot file.
 
 See the \*BSD or Mac OS systems man page :manpage:`chflags(2)` for more information.
-
