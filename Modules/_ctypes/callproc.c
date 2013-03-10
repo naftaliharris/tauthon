@@ -257,18 +257,18 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
            to a virtual address for which it does not
            have the appropriate access. */
         if (pr->ExceptionInformation[0] == 0)
-            PyErr_Format(PyExc_WindowsError,
+            PyErr_Format(PyExc_OSError,
                          "exception: access violation reading %p",
                          pr->ExceptionInformation[1]);
         else
-            PyErr_Format(PyExc_WindowsError,
+            PyErr_Format(PyExc_OSError,
                          "exception: access violation writing %p",
                          pr->ExceptionInformation[1]);
         break;
 
     case EXCEPTION_BREAKPOINT:
         /* A breakpoint was encountered. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: breakpoint encountered");
         break;
 
@@ -278,14 +278,14 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
            alignment. For example, 16-bit values must be
            aligned on 2-byte boundaries, 32-bit values on
            4-byte boundaries, and so on. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: datatype misalignment");
         break;
 
     case EXCEPTION_SINGLE_STEP:
         /* A trace trap or other single-instruction mechanism
            signaled that one instruction has been executed. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: single step");
         break;
 
@@ -293,7 +293,7 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
         /* The thread attempted to access an array element
            that is out of bounds, and the underlying hardware
            supports bounds checking. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: array bounds exceeded");
         break;
 
@@ -302,28 +302,28 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
            is denormal. A denormal value is one that is too
            small to represent as a standard floating-point
            value. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: floating-point operand denormal");
         break;
 
     case EXCEPTION_FLT_DIVIDE_BY_ZERO:
         /* The thread attempted to divide a floating-point
            value by a floating-point divisor of zero. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: float divide by zero");
         break;
 
     case EXCEPTION_FLT_INEXACT_RESULT:
         /* The result of a floating-point operation cannot be
            represented exactly as a decimal fraction. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: float inexact");
         break;
 
     case EXCEPTION_FLT_INVALID_OPERATION:
         /* This exception represents any floating-point
            exception not included in this list. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: float invalid operation");
         break;
 
@@ -331,21 +331,21 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
         /* The exponent of a floating-point operation is
            greater than the magnitude allowed by the
            corresponding type. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: float overflow");
         break;
 
     case EXCEPTION_FLT_STACK_CHECK:
         /* The stack overflowed or underflowed as the result
            of a floating-point operation. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: stack over/underflow");
         break;
 
     case EXCEPTION_STACK_OVERFLOW:
         /* The stack overflowed or underflowed as the result
            of a floating-point operation. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: stack overflow");
         break;
 
@@ -353,21 +353,21 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
         /* The exponent of a floating-point operation is less
            than the magnitude allowed by the corresponding
            type. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: float underflow");
         break;
 
     case EXCEPTION_INT_DIVIDE_BY_ZERO:
         /* The thread attempted to divide an integer value by
            an integer divisor of zero. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: integer divide by zero");
         break;
 
     case EXCEPTION_INT_OVERFLOW:
         /* The result of an integer operation caused a carry
            out of the most significant bit of the result. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: integer overflow");
         break;
 
@@ -375,14 +375,14 @@ static void SetException(DWORD code, EXCEPTION_RECORD *pr)
         /* The thread attempted to execute an instruction
            whose operation is not allowed in the current
            machine mode. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: priviledged instruction");
         break;
 
     case EXCEPTION_NONCONTINUABLE_EXCEPTION:
         /* The thread attempted to continue execution after a
            noncontinuable exception occurred. */
-        PyErr_SetString(PyExc_WindowsError,
+        PyErr_SetString(PyExc_OSError,
                         "exception: nocontinuable");
         break;
 
@@ -1096,9 +1096,7 @@ PyObject *_ctypes_callproc(PPROC pProc,
         if (argtypes && argtype_count > i) {
             PyObject *v;
             converter = PyTuple_GET_ITEM(argtypes, i);
-            v = PyObject_CallFunctionObjArgs(converter,
-                                               arg,
-                                               NULL);
+            v = PyObject_CallFunctionObjArgs(converter, arg, NULL);
             if (v == NULL) {
                 _ctypes_extend_error(PyExc_ArgError, "argument %d: ", i+1);
                 goto cleanup;
@@ -1263,62 +1261,6 @@ static PyObject *free_library(PyObject *self, PyObject *args)
     return Py_None;
 }
 
-/* obsolete, should be removed */
-/* Only used by sample code (in samples\Windows\COM.py) */
-static PyObject *
-call_commethod(PyObject *self, PyObject *args)
-{
-    IUnknown *pIunk;
-    int index;
-    PyObject *arguments;
-    PPROC *lpVtbl;
-    PyObject *result;
-    CDataObject *pcom;
-    PyObject *argtypes = NULL;
-
-    if (!PyArg_ParseTuple(args,
-                          "OiO!|O!",
-                          &pcom, &index,
-                          &PyTuple_Type, &arguments,
-                          &PyTuple_Type, &argtypes))
-        return NULL;
-
-    if (argtypes && (PyTuple_GET_SIZE(arguments) != PyTuple_GET_SIZE(argtypes))) {
-        PyErr_Format(PyExc_TypeError,
-                     "Method takes %d arguments (%d given)",
-                     PyTuple_GET_SIZE(argtypes), PyTuple_GET_SIZE(arguments));
-        return NULL;
-    }
-
-    if (!CDataObject_Check(pcom) || (pcom->b_size != sizeof(void *))) {
-        PyErr_Format(PyExc_TypeError,
-                     "COM Pointer expected instead of %s instance",
-                     Py_TYPE(pcom)->tp_name);
-        return NULL;
-    }
-
-    if ((*(void **)(pcom->b_ptr)) == NULL) {
-        PyErr_SetString(PyExc_ValueError,
-                        "The COM 'this' pointer is NULL");
-        return NULL;
-    }
-
-    pIunk = (IUnknown *)(*(void **)(pcom->b_ptr));
-    lpVtbl = (PPROC *)(pIunk->lpVtbl);
-
-    result =  _ctypes_callproc(lpVtbl[index],
-                        arguments,
-#ifdef MS_WIN32
-                        pIunk,
-                        NULL,
-#endif
-                        FUNCFLAG_HRESULT, /* flags */
-                argtypes, /* self->argtypes */
-                NULL, /* self->restype */
-                NULL); /* checker */
-    return result;
-}
-
 static char copy_com_pointer_doc[] =
 "CopyComPointer(src, dst) -> HRESULT value\n";
 
@@ -1480,9 +1422,9 @@ call_cdeclfunction(PyObject *self, PyObject *args)
                         NULL,
 #endif
                         FUNCFLAG_CDECL, /* flags */
-                NULL, /* self->argtypes */
-                NULL, /* self->restype */
-                NULL); /* checker */
+                        NULL, /* self->argtypes */
+                        NULL, /* self->restype */
+                        NULL); /* checker */
     return result;
 }
 
@@ -1813,7 +1755,6 @@ PyMethodDef _ctypes_module_methods[] = {
     {"FormatError", format_error, METH_VARARGS, format_error_doc},
     {"LoadLibrary", load_library, METH_VARARGS, load_library_doc},
     {"FreeLibrary", free_library, METH_VARARGS, free_library_doc},
-    {"call_commethod", call_commethod, METH_VARARGS },
     {"_check_HRESULT", check_hresult, METH_VARARGS},
 #else
     {"dlopen", py_dl_open, METH_VARARGS,

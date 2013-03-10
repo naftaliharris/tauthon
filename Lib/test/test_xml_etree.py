@@ -1569,6 +1569,11 @@ class ElementFindTest(unittest.TestCase):
         self.assertEqual(e.find('./tag[last()-1]').attrib['class'], 'c')
         self.assertEqual(e.find('./tag[last()-2]').attrib['class'], 'b')
 
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[0]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[-1]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[last()-0]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[last()+1]')
+
     def test_findall(self):
         e = ET.XML(SAMPLE_XML)
         e[2] = ET.XML(SAMPLE_SECTION)
@@ -2155,6 +2160,18 @@ class IOTest(unittest.TestCase):
         self.assertEqual(
             ET.tostring(root, 'utf-16'),
             b''.join(ET.tostringlist(root, 'utf-16')))
+
+    def test_short_empty_elements(self):
+        root = ET.fromstring('<tag>a<x />b<y></y>c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode'),
+            '<tag>a<x />b<y />c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode', short_empty_elements=True),
+            '<tag>a<x />b<y />c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode', short_empty_elements=False),
+            '<tag>a<x></x>b<y></y>c</tag>')
 
 
 class ParseErrorTest(unittest.TestCase):
