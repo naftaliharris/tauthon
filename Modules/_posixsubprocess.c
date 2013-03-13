@@ -47,7 +47,9 @@ static int
 _enable_gc(PyObject *gc_module)
 {
     PyObject *result;
-    result = PyObject_CallMethod(gc_module, "enable", NULL);
+    _Py_IDENTIFIER(enable);
+
+    result = _PyObject_CallMethodId(gc_module, &PyId_enable, NULL);
     if (result == NULL)
         return 1;
     Py_DECREF(result);
@@ -78,7 +80,7 @@ _pos_int_from_ascii(char *name)
  * that properly supports /dev/fd.
  */
 static int
-_is_fdescfs_mounted_on_dev_fd()
+_is_fdescfs_mounted_on_dev_fd(void)
 {
     struct stat dev_stat;
     struct stat dev_fd_stat;
@@ -174,17 +176,11 @@ _close_fds_by_brute_force(int start_fd, int end_fd, PyObject *py_fds_to_keep)
  * This structure is very old and stable: It will not change unless the kernel
  * chooses to break compatibility with all existing binaries.  Highly Unlikely.
  */
-struct linux_dirent {
-#if defined(__x86_64__) && defined(__ILP32__)
-   /* Support the wacky x32 ABI (fake 32-bit userspace speaking to x86_64
-    * kernel interfaces) - https://sites.google.com/site/x32abi/ */
+struct linux_dirent64 {
    unsigned long long d_ino;
-   unsigned long long d_off;
-#else
-   unsigned long  d_ino;        /* Inode number */
-   unsigned long  d_off;        /* Offset to next linux_dirent */
-#endif
+   long long d_off;
    unsigned short d_reclen;     /* Length of this linux_dirent */
+   unsigned char  d_type;
    char           d_name[256];  /* Filename (null-terminated) */
 };
 
@@ -226,16 +222,16 @@ _close_open_fd_range_safe(int start_fd, int end_fd, PyObject* py_fds_to_keep)
         _close_fds_by_brute_force(start_fd, end_fd, py_fds_to_keep);
         return;
     } else {
-        char buffer[sizeof(struct linux_dirent)];
+        char buffer[sizeof(struct linux_dirent64)];
         int bytes;
-        while ((bytes = syscall(SYS_getdents, fd_dir_fd,
-                                (struct linux_dirent *)buffer,
+        while ((bytes = syscall(SYS_getdents64, fd_dir_fd,
+                                (struct linux_dirent64 *)buffer,
                                 sizeof(buffer))) > 0) {
-            struct linux_dirent *entry;
+            struct linux_dirent64 *entry;
             int offset;
             for (offset = 0; offset < bytes; offset += entry->d_reclen) {
                 int fd;
-                entry = (struct linux_dirent *)(buffer + offset);
+                entry = (struct linux_dirent64 *)(buffer + offset);
                 if ((fd = _pos_int_from_ascii(entry->d_name)) < 0)
                     continue;  /* Not a number. */
                 if (fd != fd_dir_fd && fd >= start_fd && fd < end_fd &&
@@ -506,7 +502,7 @@ static PyObject *
 subprocess_fork_exec(PyObject* self, PyObject *args)
 {
     PyObject *gc_module = NULL;
-    PyObject *executable_list, *py_close_fds, *py_fds_to_keep;
+    PyObject *executable_list, *py_fds_to_keep;
     PyObject *env_list, *preexec_fn;
     PyObject *process_args, *converted_args = NULL, *fast_args = NULL;
     PyObject *preexec_fn_args_tuple = NULL;
@@ -521,17 +517,14 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
     Py_ssize_t arg_num;
 
     if (!PyArg_ParseTuple(
-            args, "OOOOOOiiiiiiiiiiO:fork_exec",
-            &process_args, &executable_list, &py_close_fds, &py_fds_to_keep,
+            args, "OOpOOOiiiiiiiiiiO:fork_exec",
+            &process_args, &executable_list, &close_fds, &py_fds_to_keep,
             &cwd_obj, &env_list,
             &p2cread, &p2cwrite, &c2pread, &c2pwrite,
             &errread, &errwrite, &errpipe_read, &errpipe_write,
             &restore_signals, &call_setsid, &preexec_fn))
         return NULL;
 
-    close_fds = PyObject_IsTrue(py_close_fds);
-    if (close_fds < 0)
-        return NULL;
     if (close_fds && errpipe_write < 3) {  /* precondition */
         PyErr_SetString(PyExc_ValueError, "errpipe_write must be >= 3");
         return NULL;
@@ -548,10 +541,13 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
     /* We need to call gc.disable() when we'll be calling preexec_fn */
     if (preexec_fn != Py_None) {
         PyObject *result;
+        _Py_IDENTIFIER(isenabled);
+        _Py_IDENTIFIER(disable);
+        
         gc_module = PyImport_ImportModule("gc");
         if (gc_module == NULL)
             return NULL;
-        result = PyObject_CallMethod(gc_module, "isenabled", NULL);
+        result = _PyObject_CallMethodId(gc_module, &PyId_isenabled, NULL);
         if (result == NULL) {
             Py_DECREF(gc_module);
             return NULL;
@@ -562,7 +558,7 @@ subprocess_fork_exec(PyObject* self, PyObject *args)
             Py_DECREF(gc_module);
             return NULL;
         }
-        result = PyObject_CallMethod(gc_module, "disable", NULL);
+        result = _PyObject_CallMethodId(gc_module, &PyId_disable, NULL);
         if (result == NULL) {
             Py_DECREF(gc_module);
             return NULL;
