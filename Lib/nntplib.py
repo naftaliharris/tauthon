@@ -359,7 +359,7 @@ class _NNTPBase:
         if is_connected():
             try:
                 self.quit()
-            except (socket.error, EOFError):
+            except (OSError, EOFError):
                 pass
             finally:
                 if is_connected():
@@ -947,7 +947,7 @@ class _NNTPBase:
                 if auth:
                     user = auth[0]
                     password = auth[2]
-        except IOError:
+        except OSError:
             pass
         # Perform NNTP authentication if needed.
         if not user:
