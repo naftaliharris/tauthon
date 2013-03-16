@@ -6,6 +6,7 @@ import marshal
 import sys
 import unittest
 import os
+import types
 
 class HelperMixin:
     def helper(self, sample, *extra):
@@ -113,6 +114,22 @@ class CodeTestCase(unittest.TestCase):
         count = 5000    # more than MAX_MARSHAL_STACK_DEPTH
         codes = (ExceptionTestCase.test_exceptions.__code__,) * count
         marshal.loads(marshal.dumps(codes))
+
+    def test_different_filenames(self):
+        co1 = compile("x", "f1", "exec")
+        co2 = compile("y", "f2", "exec")
+        co1, co2 = marshal.loads(marshal.dumps((co1, co2)))
+        self.assertEqual(co1.co_filename, "f1")
+        self.assertEqual(co2.co_filename, "f2")
+
+    @support.cpython_only
+    def test_same_filename_used(self):
+        s = """def f(): pass\ndef g(): pass"""
+        co = compile(s, "myfile", "exec")
+        co = marshal.loads(marshal.dumps(co))
+        for obj in co.co_consts:
+            if isinstance(obj, types.CodeType):
+                self.assertIs(co.co_filename, obj.co_filename)
 
 class ContainerTestCase(unittest.TestCase, HelperMixin):
     d = {'astring': 'foo@bar.baz.spam',
@@ -263,7 +280,6 @@ class BugsTestCase(unittest.TestCase):
         self.assertRaises(TypeError, marshal.loads, unicode_string)
 
 LARGE_SIZE = 2**31
-character_size = 4 if sys.maxunicode > 0xFFFF else 2
 pointer_size = 8 if sys.maxsize > 0xFFFFFFFF else 4
 
 class NullWriter:
@@ -279,7 +295,7 @@ class LargeValuesTestCase(unittest.TestCase):
     def test_bytes(self, size):
         self.check_unmarshallable(b'x' * size)
 
-    @support.bigmemtest(size=LARGE_SIZE, memuse=character_size, dry_run=False)
+    @support.bigmemtest(size=LARGE_SIZE, memuse=1, dry_run=False)
     def test_str(self, size):
         self.check_unmarshallable('x' * size)
 

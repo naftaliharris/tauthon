@@ -510,10 +510,7 @@ def read_decimalnl_short(f):
     elif s == b"01":
         return True
 
-    try:
-        return int(s)
-    except OverflowError:
-        return int(s)
+    return int(s)
 
 def read_decimalnl_long(f):
     r"""
@@ -1642,6 +1639,8 @@ opcodes = [
       is pushed on the stack.
 
       NOTE:  checks for __safe_for_unpickling__ went away in Python 2.3.
+      NOTE:  the distinction between old-style and new-style classes does
+             not make sense in Python 3.
       """),
 
     I(name='OBJ',
