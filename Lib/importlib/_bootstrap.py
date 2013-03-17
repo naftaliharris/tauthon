@@ -48,13 +48,7 @@ def _w_long(x):
     XXX Temporary until marshal's long functions are exposed.
 
     """
-    x = int(x)
-    int_bytes = []
-    int_bytes.append(x & 0xFF)
-    int_bytes.append((x >> 8) & 0xFF)
-    int_bytes.append((x >> 16) & 0xFF)
-    int_bytes.append((x >> 24) & 0xFF)
-    return bytearray(int_bytes)
+    return (int(x) & 0xFFFFFFFF).to_bytes(4, 'little')
 
 
 # TODO: Expose from marshal
@@ -64,35 +58,25 @@ def _r_long(int_bytes):
     XXX Temporary until marshal's long function are exposed.
 
     """
-    x = int_bytes[0]
-    x |= int_bytes[1] << 8
-    x |= int_bytes[2] << 16
-    x |= int_bytes[3] << 24
-    return x
+    return int.from_bytes(int_bytes, 'little')
 
 
 def _path_join(*path_parts):
     """Replacement for os.path.join()."""
-    new_parts = []
-    for part in path_parts:
-        if not part:
-            continue
-        new_parts.append(part)
-        if part[-1] not in path_separators:
-            new_parts.append(path_sep)
-    return ''.join(new_parts[:-1])  # Drop superfluous path separator.
+    return path_sep.join([part.rstrip(path_separators)
+                          for part in path_parts if part])
 
 
 def _path_split(path):
     """Replacement for os.path.split()."""
+    if len(path_separators) == 1:
+        front, _, tail = path.rpartition(path_sep)
+        return front, tail
     for x in reversed(path):
         if x in path_separators:
-            sep = x
-            break
-    else:
-        sep = path_sep
-    front, _, tail = path.rpartition(sep)
-    return front, tail
+            front, tail = path.rsplit(x, maxsplit=1)
+            return front, tail
+    return '', path
 
 
 def _path_is_mode_type(path, mode):
@@ -237,7 +221,7 @@ class _ModuleLock:
                     self.wakeup.release()
 
     def __repr__(self):
-        return "_ModuleLock(%r) at %d" % (self.name, id(self))
+        return "_ModuleLock({!r}) at {}".format(self.name, id(self))
 
 
 class _DummyModuleLock:
@@ -258,7 +242,7 @@ class _DummyModuleLock:
         self.count -= 1
 
     def __repr__(self):
-        return "_DummyModuleLock(%r) at %d" % (self.name, id(self))
+        return "_DummyModuleLock({!r}) at {}".format(self.name, id(self))
 
 
 # The following two functions are for consumption by Python/import.c.
@@ -396,14 +380,16 @@ Known values:
                      3210 (added size modulo 2**32 to the pyc header)
     Python 3.3a1  3220 (changed PEP 380 implementation)
     Python 3.3a4  3230 (revert changes to implicit __class__ closure)
+    Python 3.4a1  3250 (evaluate positional default arguments before
+                       keyword-only defaults)
 
 MAGIC must change whenever the bytecode emitted by the compiler may no
 longer be understood by older implementations of the eval loop (usually
 due to the addition of new opcodes).
 
 """
-_RAW_MAGIC_NUMBER = 3230 | ord('\r') << 16 | ord('\n') << 24
-_MAGIC_BYTES = bytes(_RAW_MAGIC_NUMBER >> n & 0xff for n in range(0, 25, 8))
+_MAGIC_BYTES = (3250).to_bytes(2, 'little') + b'\r\n'
+_RAW_MAGIC_NUMBER = int.from_bytes(_MAGIC_BYTES, 'little')
 
 _PYCACHE = '__pycache__'
 
@@ -508,7 +494,7 @@ def set_loader(fxn):
     """Set __loader__ on the returned module."""
     def set_loader_wrapper(self, *args, **kwargs):
         module = fxn(self, *args, **kwargs)
-        if not hasattr(module, '__loader__'):
+        if getattr(module, '__loader__', None) is None:
             module.__loader__ = self
         return module
     _wrap(set_loader_wrapper, fxn)
@@ -623,6 +609,80 @@ def _find_module_shim(self, fullname):
     return loader
 
 
+def _validate_bytecode_header(data, source_stats=None, name=None, path=None):
+    """Validate the header of the passed-in bytecode against source_stats (if
+    given) and returning the bytecode that can be compiled by compile().
+
+    All other arguments are used to enhance error reporting.
+
+    ImportError is raised when the magic number is incorrect or the bytecode is
+    found to be stale. EOFError is raised when the data is found to be
+    truncated.
+
+    """
+    exc_details = {}
+    if name is not None:
+        exc_details['name'] = name
+    else:
+        # To prevent having to make all messages have a conditional name.
+        name = '<bytecode>'
+    if path is not None:
+        exc_details['path'] = path
+    magic = data[:4]
+    raw_timestamp = data[4:8]
+    raw_size = data[8:12]
+    if magic != _MAGIC_BYTES:
+        msg = 'bad magic number in {!r}: {!r}'.format(name, magic)
+        raise ImportError(msg, **exc_details)
+    elif len(raw_timestamp) != 4:
+        message = 'incomplete timestamp in {!r}'.format(name)
+        _verbose_message(message)
+        raise EOFError(message)
+    elif len(raw_size) != 4:
+        message = 'incomplete size in {!r}'.format(name)
+        _verbose_message(message)
+        raise EOFError(message)
+    if source_stats is not None:
+        try:
+            source_mtime = int(source_stats['mtime'])
+        except KeyError:
+            pass
+        else:
+            if _r_long(raw_timestamp) != source_mtime:
+                message = 'bytecode is stale for {!r}'.format(name)
+                _verbose_message(message)
+                raise ImportError(message, **exc_details)
+        try:
+            source_size = source_stats['size'] & 0xFFFFFFFF
+        except KeyError:
+            pass
+        else:
+            if _r_long(raw_size) != source_size:
+                raise ImportError("bytecode is stale for {!r}".format(name),
+                                  **exc_details)
+    return data[12:]
+
+
+def _compile_bytecode(data, name=None, bytecode_path=None, source_path=None):
+    """Compile bytecode as returned by _validate_bytecode_header()."""
+    code = marshal.loads(data)
+    if isinstance(code, _code_type):
+        _verbose_message('code object from {!r}', bytecode_path)
+        if source_path is not None:
+            _imp._fix_co_filename(code, source_path)
+        return code
+    else:
+        raise ImportError("Non-code object in {!r}".format(bytecode_path),
+                          name=name, path=bytecode_path)
+
+def _code_to_bytecode(code, mtime=0, source_size=0):
+    """Compile a code object into bytecode for writing out to a byte-compiled
+    file."""
+    data = bytearray(_MAGIC_BYTES)
+    data.extend(_w_long(mtime))
+    data.extend(_w_long(source_size))
+    data.extend(marshal.dumps(code))
+    return data
 
 
 # Loaders #####################################################################
@@ -755,7 +815,7 @@ class WindowsRegistryFinder:
     def _open_registry(cls, key):
         try:
             return _winreg.OpenKey(_winreg.HKEY_CURRENT_USER, key)
-        except WindowsError:
+        except OSError:
             return _winreg.OpenKey(_winreg.HKEY_LOCAL_MACHINE, key)
 
     @classmethod
@@ -769,7 +829,7 @@ class WindowsRegistryFinder:
         try:
             with cls._open_registry(key) as hkey:
                 filepath = _winreg.QueryValue(hkey, "")
-        except WindowsError:
+        except OSError:
             return None
         return filepath
 
@@ -801,51 +861,6 @@ class _LoaderBasics:
         tail_name = fullname.rpartition('.')[2]
         return filename_base == '__init__' and tail_name != '__init__'
 
-    def _bytes_from_bytecode(self, fullname, data, bytecode_path, source_stats):
-        """Return the marshalled bytes from bytecode, verifying the magic
-        number, timestamp and source size along the way.
-
-        If source_stats is None then skip the timestamp check.
-
-        """
-        magic = data[:4]
-        raw_timestamp = data[4:8]
-        raw_size = data[8:12]
-        if magic != _MAGIC_BYTES:
-            msg = 'bad magic number in {!r}: {!r}'.format(fullname, magic)
-            raise ImportError(msg, name=fullname, path=bytecode_path)
-        elif len(raw_timestamp) != 4:
-            message = 'bad timestamp in {}'.format(fullname)
-            _verbose_message(message)
-            raise EOFError(message)
-        elif len(raw_size) != 4:
-            message = 'bad size in {}'.format(fullname)
-            _verbose_message(message)
-            raise EOFError(message)
-        if source_stats is not None:
-            try:
-                source_mtime = int(source_stats['mtime'])
-            except KeyError:
-                pass
-            else:
-                if _r_long(raw_timestamp) != source_mtime:
-                    message = 'bytecode is stale for {}'.format(fullname)
-                    _verbose_message(message)
-                    raise ImportError(message, name=fullname,
-                                      path=bytecode_path)
-            try:
-                source_size = source_stats['size'] & 0xFFFFFFFF
-            except KeyError:
-                pass
-            else:
-                if _r_long(raw_size) != source_size:
-                    raise ImportError(
-                        "bytecode is stale for {}".format(fullname),
-                        name=fullname, path=bytecode_path)
-        # Can't return the code object as errors from marshal loading need to
-        # propagate even when source is available.
-        return data[12:]
-
     @module_for_loader
     def _load_module(self, module, *, sourceless=False):
         """Helper for load_module able to handle either source or sourceless
@@ -860,12 +875,9 @@ class _LoaderBasics:
                 module.__cached__ = module.__file__
         else:
             module.__cached__ = module.__file__
-        module.__package__ = name
         if self.is_package(name):
             module.__path__ = [_path_split(module.__file__)[0]]
-        else:
-            module.__package__ = module.__package__.rpartition('.')[0]
-        module.__loader__ = self
+        # __package__ and __loader set by @module_for_loader.
         _call_with_frames_removed(exec, code_object, module.__dict__)
         return module
 
@@ -915,7 +927,7 @@ class SourceLoader(_LoaderBasics):
         path = self.get_filename(fullname)
         try:
             source_bytes = self.get_data(path)
-        except IOError as exc:
+        except OSError as exc:
             raise ImportError("source not available through get_data()",
                               name=fullname) from exc
         readsource = _io.BytesIO(source_bytes).readline
@@ -930,6 +942,14 @@ class SourceLoader(_LoaderBasics):
         except UnicodeDecodeError as exc:
             raise ImportError("Failed to decode source file",
                               name=fullname) from exc
+
+    def source_to_code(self, data, path, *, _optimize=-1):
+        """Return the code object compiled from source.
+
+        The 'data' argument can be any object type that compile() supports.
+        """
+        return _call_with_frames_removed(compile, data, path, 'exec',
+                                        dont_inherit=True, optimize=_optimize)
 
     def get_code(self, fullname):
         """Concrete implementation of InspectLoader.get_code.
@@ -953,39 +973,28 @@ class SourceLoader(_LoaderBasics):
                 source_mtime = int(st['mtime'])
                 try:
                     data = self.get_data(bytecode_path)
-                except IOError:
+                except OSError:
                     pass
                 else:
                     try:
-                        bytes_data = self._bytes_from_bytecode(fullname, data,
-                                                               bytecode_path,
-                                                               st)
+                        bytes_data = _validate_bytecode_header(data,
+                                source_stats=st, name=fullname,
+                                path=bytecode_path)
                     except (ImportError, EOFError):
                         pass
                     else:
                         _verbose_message('{} matches {}', bytecode_path,
                                         source_path)
-                        found = marshal.loads(bytes_data)
-                        if isinstance(found, _code_type):
-                            _imp._fix_co_filename(found, source_path)
-                            _verbose_message('code object from {}',
-                                            bytecode_path)
-                            return found
-                        else:
-                            msg = "Non-code object in {}"
-                            raise ImportError(msg.format(bytecode_path),
-                                              name=fullname, path=bytecode_path)
+                        return _compile_bytecode(bytes_data, name=fullname,
+                                                 bytecode_path=bytecode_path,
+                                                 source_path=source_path)
         source_bytes = self.get_data(source_path)
-        code_object = _call_with_frames_removed(compile,
-                          source_bytes, source_path, 'exec',
-                          dont_inherit=True)
+        code_object = self.source_to_code(source_bytes, source_path)
         _verbose_message('code object from {}', source_path)
         if (not sys.dont_write_bytecode and bytecode_path is not None and
-            source_mtime is not None):
-            data = bytearray(_MAGIC_BYTES)
-            data.extend(_w_long(source_mtime))
-            data.extend(_w_long(len(source_bytes)))
-            data.extend(marshal.dumps(code_object))
+                source_mtime is not None):
+            data = _code_to_bytecode(code_object, source_mtime,
+                    len(source_bytes))
             try:
                 self._cache_bytecode(source_path, bytecode_path, data)
                 _verbose_message('wrote {!r}', bytecode_path)
@@ -1092,14 +1101,8 @@ class SourcelessFileLoader(FileLoader, _LoaderBasics):
     def get_code(self, fullname):
         path = self.get_filename(fullname)
         data = self.get_data(path)
-        bytes_data = self._bytes_from_bytecode(fullname, data, path, None)
-        found = marshal.loads(bytes_data)
-        if isinstance(found, _code_type):
-            _verbose_message('code object from {!r}', path)
-            return found
-        else:
-            raise ImportError("Non-code object in {}".format(path),
-                              name=fullname, path=path)
+        bytes_data = _validate_bytecode_header(data, name=fullname, path=path)
+        return _compile_bytecode(bytes_data, name=fullname, bytecode_path=path)
 
     def get_source(self, fullname):
         """Return None as there is no source code."""
@@ -1419,7 +1422,7 @@ class FileFinder:
                 lower_suffix_contents.add(new_name)
             self._path_cache = lower_suffix_contents
         if sys.platform.startswith(_CASE_INSENSITIVE_PLATFORMS):
-            self._relaxed_path_cache = set(fn.lower() for fn in contents)
+            self._relaxed_path_cache = {fn.lower() for fn in contents}
 
     @classmethod
     def path_hook(cls, *loader_details):
@@ -1440,7 +1443,7 @@ class FileFinder:
         return path_hook_for_FileFinder
 
     def __repr__(self):
-        return "FileFinder(%r)" % (self.path,)
+        return "FileFinder({!r})".format(self.path)
 
 
 # Import itself ###############################################################
@@ -1545,7 +1548,7 @@ def _find_and_load_unlocked(name, import_):
         except AttributeError:
             pass
     # Set loader if need be.
-    if not hasattr(module, '__loader__'):
+    if getattr(module, '__loader__', None) is None:
         try:
             module.__loader__ = loader
         except AttributeError:
@@ -1720,7 +1723,7 @@ def _setup(sys_module, _imp_module):
             builtin_module = sys.modules[builtin_name]
         setattr(self_module, builtin_name, builtin_module)
 
-    os_details = ('posix', ['/']), ('nt', ['\\', '/']), ('os2', ['\\', '/'])
+    os_details = ('posix', ['/']), ('nt', ['\\', '/'])
     for builtin_os, path_separators in os_details:
         # Assumption made in _path_join()
         assert all(len(sep) == 1 for sep in path_separators)
@@ -1731,9 +1734,6 @@ def _setup(sys_module, _imp_module):
         else:
             try:
                 os_module = BuiltinImporter.load_module(builtin_os)
-                # TODO: rip out os2 code after 3.3 is released as per PEP 11
-                if builtin_os == 'os2' and 'EMX GCC' in sys.version:
-                    path_sep = path_separators[1]
                 break
             except ImportError:
                 continue
@@ -1755,7 +1755,7 @@ def _setup(sys_module, _imp_module):
     setattr(self_module, '_thread', thread_module)
     setattr(self_module, '_weakref', weakref_module)
     setattr(self_module, 'path_sep', path_sep)
-    setattr(self_module, 'path_separators', set(path_separators))
+    setattr(self_module, 'path_separators', ''.join(path_separators))
     # Constants
     setattr(self_module, '_relax_case', _make_relax_case())
     EXTENSION_SUFFIXES.extend(_imp.extension_suffixes())
