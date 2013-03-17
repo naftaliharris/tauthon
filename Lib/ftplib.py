@@ -39,9 +39,10 @@ python ftplib.py -d localhost -l -p -l
 import os
 import sys
 import socket
+import warnings
 from socket import _GLOBAL_DEFAULT_TIMEOUT
 
-__all__ = ["FTP","Netrc"]
+__all__ = ["FTP", "Netrc"]
 
 # Magic number from <socket.h>
 MSG_OOB = 0x1                           # Process data out of band
@@ -61,7 +62,7 @@ class error_proto(Error): pass          # response does not begin with [1-5]
 
 # All exceptions (hopefully) that may be raised here and that aren't
 # (always) programming errors on our side
-all_errors = (Error, IOError, EOFError)
+all_errors = (Error, OSError, EOFError)
 
 
 # Line terminators (we always output CRLF, but accept any of CRLF, CR, LF)
@@ -123,7 +124,7 @@ class FTP:
         if self.sock is not None:
             try:
                 self.quit()
-            except (socket.error, EOFError):
+            except (OSError, EOFError):
                 pass
             finally:
                 if self.sock is not None:
@@ -183,7 +184,8 @@ class FTP:
     # Internal: send one line to the server, appending CRLF
     def putline(self, line):
         line = line + CRLF
-        if self.debugging > 1: print('*put*', self.sanitize(line))
+        if self.debugging > 1:
+            print('*put*', self.sanitize(line))
         self.sock.sendall(line.encode(self.encoding))
 
     # Internal: send one command to the server (through putline())
@@ -197,9 +199,12 @@ class FTP:
         line = self.file.readline()
         if self.debugging > 1:
             print('*get*', self.sanitize(line))
-        if not line: raise EOFError
-        if line[-2:] == CRLF: line = line[:-2]
-        elif line[-1:] in CRLF: line = line[:-1]
+        if not line:
+            raise EOFError
+        if line[-2:] == CRLF:
+            line = line[:-2]
+        elif line[-1:] in CRLF:
+            line = line[:-1]
         return line
 
     # Internal: get a response from the server, which may possibly
@@ -222,7 +227,8 @@ class FTP:
     # Raise various errors if the response indicates an error
     def getresp(self):
         resp = self.getmultiline()
-        if self.debugging: print('*resp*', self.sanitize(resp))
+        if self.debugging:
+            print('*resp*', self.sanitize(resp))
         self.lastresp = resp[:3]
         c = resp[:1]
         if c in {'1', '2', '3'}:
@@ -246,7 +252,8 @@ class FTP:
         IP and Synch; that doesn't seem to work with the servers I've
         tried.  Instead, just send the ABOR command as OOB data.'''
         line = b'ABOR' + B_CRLF
-        if self.debugging > 1: print('*put urgent*', self.sanitize(line))
+        if self.debugging > 1:
+            print('*put urgent*', self.sanitize(line))
         self.sock.sendall(line, MSG_OOB)
         resp = self.getmultiline()
         if resp[:3] not in {'426', '225', '226'}:
@@ -295,7 +302,7 @@ class FTP:
             try:
                 sock = socket.socket(af, socktype, proto)
                 sock.bind(sa)
-            except socket.error as _:
+            except OSError as _:
                 err = _
                 if sock:
                     sock.close()
@@ -306,8 +313,8 @@ class FTP:
             if err is not None:
                 raise err
             else:
-                raise socket.error("getaddrinfo returns an empty list")
-            raise socket.error(msg)
+                raise OSError("getaddrinfo returns an empty list")
+            raise OSError(msg)
         sock.listen(1)
         port = sock.getsockname()[1] # Get proper port
         host = self.sock.getsockname()[0] # Get proper host
@@ -387,9 +394,12 @@ class FTP:
 
     def login(self, user = '', passwd = '', acct = ''):
         '''Login, default anonymous.'''
-        if not user: user = 'anonymous'
-        if not passwd: passwd = ''
-        if not acct: acct = ''
+        if not user:
+            user = 'anonymous'
+        if not passwd:
+            passwd = ''
+        if not acct:
+            acct = ''
         if user == 'anonymous' and passwd in {'', '-'}:
             # If there is no anonymous ftp password specified
             # then we'll just use anonymous@
@@ -400,8 +410,10 @@ class FTP:
             #   host or country.
             passwd = passwd + 'anonymous@'
         resp = self.sendcmd('USER ' + user)
-        if resp[0] == '3': resp = self.sendcmd('PASS ' + passwd)
-        if resp[0] == '3': resp = self.sendcmd('ACCT ' + acct)
+        if resp[0] == '3':
+            resp = self.sendcmd('PASS ' + passwd)
+        if resp[0] == '3':
+            resp = self.sendcmd('ACCT ' + acct)
         if resp[0] != '2':
             raise error_reply(resp)
         return resp
@@ -427,6 +439,9 @@ class FTP:
                 if not data:
                     break
                 callback(data)
+            # shutdown ssl layer
+            if isinstance(conn, _SSLSocket):
+                conn.unwrap()
         return self.voidresp()
 
     def retrlines(self, cmd, callback = None):
@@ -441,13 +456,15 @@ class FTP:
         Returns:
           The response code.
         """
-        if callback is None: callback = print_line
+        if callback is None:
+            callback = print_line
         resp = self.sendcmd('TYPE A')
         with self.transfercmd(cmd) as conn, \
                  conn.makefile('r', encoding=self.encoding) as fp:
             while 1:
                 line = fp.readline()
-                if self.debugging > 2: print('*retr*', repr(line))
+                if self.debugging > 2:
+                    print('*retr*', repr(line))
                 if not line:
                     break
                 if line[-2:] == CRLF:
@@ -455,6 +472,9 @@ class FTP:
                 elif line[-1:] == '\n':
                     line = line[:-1]
                 callback(line)
+            # shutdown ssl layer
+            if isinstance(conn, _SSLSocket):
+                conn.unwrap()
         return self.voidresp()
 
     def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
@@ -476,9 +496,14 @@ class FTP:
         with self.transfercmd(cmd, rest) as conn:
             while 1:
                 buf = fp.read(blocksize)
-                if not buf: break
+                if not buf:
+                    break
                 conn.sendall(buf)
-                if callback: callback(buf)
+                if callback:
+                    callback(buf)
+            # shutdown ssl layer
+            if isinstance(conn, _SSLSocket):
+                conn.unwrap()
         return self.voidresp()
 
     def storlines(self, cmd, fp, callback=None):
@@ -497,12 +522,17 @@ class FTP:
         with self.transfercmd(cmd) as conn:
             while 1:
                 buf = fp.readline()
-                if not buf: break
+                if not buf:
+                    break
                 if buf[-2:] != B_CRLF:
                     if buf[-1] in B_CRLF: buf = buf[:-1]
                     buf = buf + B_CRLF
                 conn.sendall(buf)
-                if callback: callback(buf)
+                if callback:
+                    callback(buf)
+            # shutdown ssl layer
+            if isinstance(conn, _SSLSocket):
+                conn.unwrap()
         return self.voidresp()
 
     def acct(self, password):
@@ -637,8 +667,10 @@ class FTP:
 try:
     import ssl
 except ImportError:
-    pass
+    _SSLSocket = None
 else:
+    _SSLSocket = ssl.SSLSocket
+
     class FTP_TLS(FTP):
         '''A FTP subclass which adds TLS support to FTP as described
         in RFC-4217.
@@ -753,69 +785,6 @@ else:
                                            ssl_version=self.ssl_version)
             return conn, size
 
-        def retrbinary(self, cmd, callback, blocksize=8192, rest=None):
-            self.voidcmd('TYPE I')
-            with self.transfercmd(cmd, rest) as conn:
-                while 1:
-                    data = conn.recv(blocksize)
-                    if not data:
-                        break
-                    callback(data)
-                # shutdown ssl layer
-                if isinstance(conn, ssl.SSLSocket):
-                    conn.unwrap()
-            return self.voidresp()
-
-        def retrlines(self, cmd, callback = None):
-            if callback is None: callback = print_line
-            resp = self.sendcmd('TYPE A')
-            conn = self.transfercmd(cmd)
-            fp = conn.makefile('r', encoding=self.encoding)
-            with fp, conn:
-                while 1:
-                    line = fp.readline()
-                    if self.debugging > 2: print('*retr*', repr(line))
-                    if not line:
-                        break
-                    if line[-2:] == CRLF:
-                        line = line[:-2]
-                    elif line[-1:] == '\n':
-                        line = line[:-1]
-                    callback(line)
-                # shutdown ssl layer
-                if isinstance(conn, ssl.SSLSocket):
-                    conn.unwrap()
-            return self.voidresp()
-
-        def storbinary(self, cmd, fp, blocksize=8192, callback=None, rest=None):
-            self.voidcmd('TYPE I')
-            with self.transfercmd(cmd, rest) as conn:
-                while 1:
-                    buf = fp.read(blocksize)
-                    if not buf: break
-                    conn.sendall(buf)
-                    if callback: callback(buf)
-                # shutdown ssl layer
-                if isinstance(conn, ssl.SSLSocket):
-                    conn.unwrap()
-            return self.voidresp()
-
-        def storlines(self, cmd, fp, callback=None):
-            self.voidcmd('TYPE A')
-            with self.transfercmd(cmd) as conn:
-                while 1:
-                    buf = fp.readline()
-                    if not buf: break
-                    if buf[-2:] != B_CRLF:
-                        if buf[-1] in B_CRLF: buf = buf[:-1]
-                        buf = buf + B_CRLF
-                    conn.sendall(buf)
-                    if callback: callback(buf)
-                # shutdown ssl layer
-                if isinstance(conn, ssl.SSLSocket):
-                    conn.unwrap()
-            return self.voidresp()
-
         def abort(self):
             # overridden as we can't pass MSG_OOB flag to sendall()
             line = b'ABOR' + B_CRLF
@@ -826,7 +795,7 @@ else:
             return resp
 
     __all__.append('FTP_TLS')
-    all_errors = (Error, IOError, EOFError, ssl.SSLError)
+    all_errors = (Error, OSError, EOFError, ssl.SSLError)
 
 
 _150_re = None
@@ -923,7 +892,8 @@ def print_line(line):
 
 def ftpcp(source, sourcename, target, targetname = '', type = 'I'):
     '''Copy file from one FTP-instance to another.'''
-    if not targetname: targetname = sourcename
+    if not targetname:
+        targetname = sourcename
     type = 'TYPE ' + type
     source.voidcmd(type)
     target.voidcmd(type)
@@ -933,9 +903,11 @@ def ftpcp(source, sourcename, target, targetname = '', type = 'I'):
     # transfer request.
     # So: STOR before RETR, because here the target is a "user".
     treply = target.sendcmd('STOR ' + targetname)
-    if treply[:3] not in {'125', '150'}: raise error_proto  # RFC 959
+    if treply[:3] not in {'125', '150'}:
+        raise error_proto  # RFC 959
     sreply = source.sendcmd('RETR ' + sourcename)
-    if sreply[:3] not in {'125', '150'}: raise error_proto  # RFC 959
+    if sreply[:3] not in {'125', '150'}:
+        raise error_proto  # RFC 959
     source.voidresp()
     target.voidresp()
 
@@ -953,19 +925,22 @@ class Netrc:
     __defacct = None
 
     def __init__(self, filename=None):
+        warnings.warn("This class is deprecated, use the netrc module instead",
+                      DeprecationWarning, 2)
         if filename is None:
             if "HOME" in os.environ:
                 filename = os.path.join(os.environ["HOME"],
                                         ".netrc")
             else:
-                raise IOError("specify file to load or set $HOME")
+                raise OSError("specify file to load or set $HOME")
         self.__hosts = {}
         self.__macros = {}
         fp = open(filename, "r")
         in_macro = 0
         while 1:
             line = fp.readline()
-            if not line: break
+            if not line:
+                break
             if in_macro and line.strip():
                 macro_lines.append(line)
                 continue
@@ -1074,7 +1049,7 @@ def test():
     userid = passwd = acct = ''
     try:
         netrc = Netrc(rcfile)
-    except IOError:
+    except OSError:
         if rcfile is not None:
             sys.stderr.write("Could not open account file"
                              " -- using anonymous login.")
