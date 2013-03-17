@@ -34,7 +34,7 @@ def delete_files():
         test.support.unlink(f)
 
 
-class AnyDBMTestCase(unittest.TestCase):
+class AnyDBMTestCase:
     _dict = {'0': b'',
              'a': b'Python:',
              'b': b'Programming',
@@ -71,8 +71,8 @@ class AnyDBMTestCase(unittest.TestCase):
         f.close()
 
     def test_anydbm_creation_n_file_exists_with_invalid_contents(self):
-        with open(_fname, "w") as w:
-            pass # create an empty file
+        # create an empty file
+        test.support.create_empty_file(_fname)
 
         f = dbm.open(_fname, 'n')
         self.addCleanup(f.close)
@@ -119,10 +119,6 @@ class AnyDBMTestCase(unittest.TestCase):
 
 
 class WhichDBTestCase(unittest.TestCase):
-    # Actual test methods are added to namespace after class definition.
-    def __init__(self, *args):
-        unittest.TestCase.__init__(self, *args)
-
     def test_whichdb(self):
         for module in dbm_iterator():
             # Check whether whichdb correctly guesses module name
@@ -169,12 +165,16 @@ class WhichDBTestCase(unittest.TestCase):
         self.d.close()
 
 
-def test_main():
-    classes = [WhichDBTestCase]
+def load_tests(loader, tests, pattern):
+    classes = []
     for mod in dbm_iterator():
-        classes.append(type("TestCase-" + mod.__name__, (AnyDBMTestCase,),
+        classes.append(type("TestCase-" + mod.__name__,
+                            (AnyDBMTestCase, unittest.TestCase),
                             {'module': mod}))
-    test.support.run_unittest(*classes)
+    suites = [unittest.makeSuite(c) for c in classes]
+
+    tests.addTests(suites)
+    return tests
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
