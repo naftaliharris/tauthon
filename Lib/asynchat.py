@@ -49,18 +49,6 @@ import socket
 import asyncore
 from collections import deque
 
-def buffer(obj, start=None, stop=None):
-    # if memoryview objects gain slicing semantics,
-    # this function will change for the better
-    # memoryview used for the TypeError
-    memoryview(obj)
-    if start == None:
-        start = 0
-    if stop == None:
-        stop = len(obj)
-    x = obj[start:stop]
-    ## print("buffer type is: %s"%(type(x),))
-    return x
 
 class async_chat (asyncore.dispatcher):
     """This is an abstract class.  You must derive from this class, and add
@@ -68,14 +56,14 @@ class async_chat (asyncore.dispatcher):
 
     # these are overridable defaults
 
-    ac_in_buffer_size       = 4096
-    ac_out_buffer_size      = 4096
+    ac_in_buffer_size       = 65536
+    ac_out_buffer_size      = 65536
 
     # we don't want to enable the use of encoding by default, because that is a
     # sign of an application bug that we don't want to pass silently
 
     use_encoding            = 0
-    encoding                = 'latin1'
+    encoding                = 'latin-1'
 
     def __init__ (self, sock=None, map=None):
         # for string terminator matching
@@ -126,7 +114,7 @@ class async_chat (asyncore.dispatcher):
 
         try:
             data = self.recv (self.ac_in_buffer_size)
-        except socket.error as why:
+        except OSError as why:
             self.handle_error()
             return
 
@@ -240,7 +228,7 @@ class async_chat (asyncore.dispatcher):
             # handle classic producer behavior
             obs = self.ac_out_buffer_size
             try:
-                data = buffer(first, 0, obs)
+                data = first[:obs]
             except TypeError:
                 data = first.more()
                 if data:
@@ -255,7 +243,7 @@ class async_chat (asyncore.dispatcher):
             # send the data
             try:
                 num_sent = self.send(data)
-            except socket.error:
+            except OSError:
                 self.handle_error()
                 return
 

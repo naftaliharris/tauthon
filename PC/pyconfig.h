@@ -156,15 +156,9 @@ WIN32 is still required for the locale module.
 #endif /* MS_WIN64 */
 
 /* set the version macros for the windows headers */
-#ifdef MS_WINX64
-/* 64 bit only runs on XP or greater */
+/* Python 3.4+ requires Windows XP or greater */
 #define Py_WINVER 0x0501 /* _WIN32_WINNT_WINXP */
 #define Py_NTDDI NTDDI_WINXP
-#else
-/* Python 2.6+ requires Windows 2000 or greater */
-#define Py_WINVER 0x0500 /* _WIN32_WINNT_WIN2K */
-#define Py_NTDDI NTDDI_WIN2KSP4
-#endif
 
 /* We only set these values when building Python - we don't want to force
    these values on extensions, as that will affect the prototypes and
@@ -199,8 +193,10 @@ typedef _W64 int ssize_t;
 #define HAVE_SSIZE_T 1
 
 #if defined(MS_WIN32) && !defined(MS_WIN64)
-#ifdef _M_IX86
+#if defined(_M_IX86)
 #define COMPILER _Py_PASTE_VERSION("32 bit (Intel)")
+#elif defined(_M_ARM)
+#define COMPILER _Py_PASTE_VERSION("32 bit (ARM)")
 #else
 #define COMPILER _Py_PASTE_VERSION("32 bit (Unknown)")
 #endif
@@ -215,13 +211,18 @@ typedef int pid_t;
 #define copysign _copysign
 #define hypot _hypot
 
-#endif /* _MSC_VER */
+/* Side by Side assemblies supported in VS 2005 and VS 2008 but not 2010*/
+#if _MSC_VER >= 1400 && _MSC_VER < 1600
+#define HAVE_SXS 1
+#endif
 
 /* define some ANSI types that are not defined in earlier Win headers */
-#if defined(_MSC_VER) && _MSC_VER >= 1200
+#if _MSC_VER >= 1200
 /* This file only exists in VC 6.0 or higher */
 #include <basetsd.h>
 #endif
+
+#endif /* _MSC_VER */
 
 /* ------------------------------------------------------------------------*/
 /* The Borland compiler defines __BORLANDC__ */
@@ -319,11 +320,11 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 			their Makefile (other compilers are generally
 			taken care of by distutils.) */
 #			if defined(_DEBUG)
-#				pragma comment(lib,"python32_d.lib")
+#				pragma comment(lib,"python34_d.lib")
 #			elif defined(Py_LIMITED_API)
 #				pragma comment(lib,"python3.lib")
 #			else
-#				pragma comment(lib,"python32.lib")
+#				pragma comment(lib,"python34.lib")
 #			endif /* _DEBUG */
 #		endif /* _MSC_VER */
 #	endif /* Py_BUILD_CORE */
@@ -550,10 +551,6 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 /* Define if you want to use the GNU readline library */
 /* #define WITH_READLINE 1 */
 
-/* Define as the size of the unicode type. */
-/* This is enough for unicodeobject.h to do the "right thing" on Windows. */
-#define Py_UNICODE_SIZE 2
-
 /* Use Python's own small-block memory-allocator. */
 #define WITH_PYMALLOC 1
 
@@ -713,9 +710,6 @@ Py_NO_ENABLE_SHARED to find out.  Also support MS_NO_COREDLL for b/w compat */
 
 /* Define if you have the <sys/utsname.h> header file.  */
 /* #define HAVE_SYS_UTSNAME_H 1 */
-
-/* Define if you have the <thread.h> header file.  */
-/* #undef HAVE_THREAD_H */
 
 /* Define if you have the <unistd.h> header file.  */
 /* #define HAVE_UNISTD_H 1 */

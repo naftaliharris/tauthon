@@ -136,12 +136,12 @@ class Test_Csv(unittest.TestCase):
                 return 10;
             def __getitem__(self, i):
                 if i > 2:
-                    raise IOError
-        self.assertRaises(IOError, self._write_test, BadList(), '')
+                    raise OSError
+        self.assertRaises(OSError, self._write_test, BadList(), '')
         class BadItem:
             def __str__(self):
-                raise IOError
-        self.assertRaises(IOError, self._write_test, [BadItem()], '')
+                raise OSError
+        self.assertRaises(OSError, self._write_test, [BadItem()], '')
 
     def test_write_bigfield(self):
         # This exercises the buffer realloc functionality
@@ -186,9 +186,9 @@ class Test_Csv(unittest.TestCase):
     def test_writerows(self):
         class BrokenFile:
             def write(self, buf):
-                raise IOError
+                raise OSError
         writer = csv.writer(BrokenFile())
-        self.assertRaises(IOError, writer.writerows, [['a']])
+        self.assertRaises(OSError, writer.writerows, [['a']])
 
         with TemporaryFile("w+", newline='') as fileobj:
             writer = csv.writer(fileobj)
@@ -196,6 +196,17 @@ class Test_Csv(unittest.TestCase):
             writer.writerows([['a','b'],['c','d']])
             fileobj.seek(0)
             self.assertEqual(fileobj.read(), "a,b\r\nc,d\r\n")
+
+    @support.cpython_only
+    def test_writerows_legacy_strings(self):
+        import _testcapi
+
+        c = _testcapi.unicode_legacy_string('a')
+        with TemporaryFile("w+", newline='') as fileobj:
+            writer = csv.writer(fileobj)
+            writer.writerows([[c]])
+            fileobj.seek(0)
+            self.assertEqual(fileobj.read(), "a\r\n")
 
     def _read_test(self, input, expect, **kwargs):
         reader = csv.reader(input, **kwargs)

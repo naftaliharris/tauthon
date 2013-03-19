@@ -6,6 +6,19 @@ Object Protocol
 ===============
 
 
+.. c:var:: PyObject* Py_NotImplemented
+
+   The ``NotImplemented`` singleton, used to signal that an operation is
+   not implemented for the given type combination.
+
+
+.. c:macro:: Py_RETURN_NOTIMPLEMENTED
+
+   Properly handle returning :c:data:`Py_NotImplemented` from within a C
+   function (that is, increment the reference count of NotImplemented and
+   return it).
+
+
 .. c:function:: int PyObject_Print(PyObject *o, FILE *fp, int flags)
 
    Print an object *o*, on file *fp*.  Returns ``-1`` on error.  The flags argument
@@ -88,6 +101,22 @@ Object Protocol
    This is the equivalent of the Python statement ``del o.attr_name``.
 
 
+.. c:function:: PyObject* PyType_GenericGetDict(PyObject *o, void *context)
+
+   A generic implementation for the getter of a ``__dict__`` descriptor. It
+   creates the dictionary if necessary.
+
+   .. versionadded:: 3.3
+
+
+.. c:function:: int PyType_GenericSetDict(PyObject *o, void *context)
+
+   A generic implementation for the setter of a ``__dict__`` descriptor. This
+   implementation does not allow the dictionary to be deleted.
+
+   .. versionadded:: 3.3
+
+
 .. c:function:: PyObject* PyObject_RichCompare(PyObject *o1, PyObject *o2, int opid)
 
    Compare the values of *o1* and *o2* using the operation specified by *opid*,
@@ -131,10 +160,10 @@ Object Protocol
    a string similar to that returned by :c:func:`PyObject_Repr` in Python 2.
    Called by the :func:`ascii` built-in function.
 
+   .. index:: string; PyObject_Str (C function)
+
 
 .. c:function:: PyObject* PyObject_Str(PyObject *o)
-
-   .. index:: builtin: str
 
    Compute a string representation of object *o*.  Returns the string
    representation on success, *NULL* on failure.  This is the equivalent of the
@@ -312,6 +341,15 @@ is considered sufficient for this determination.
    and mapping protocols, the sequence length is returned.  On error, ``-1`` is
    returned.  This is the equivalent to the Python expression ``len(o)``.
 
+
+.. c:function:: Py_ssize_t PyObject_LengthHint(PyObject *o, Py_ssize_t default)
+
+   Return an estimated length for the object *o*. First trying to return its
+   actual length, then an estimate using ``__length_hint__``, and finally
+   returning the default value. On error ``-1`` is returned. This is the
+   equivalent to the Python expression ``operator.length_hint(o, default)``.
+
+   .. versionadded:: 3.4
 
 .. c:function:: PyObject* PyObject_GetItem(PyObject *o, PyObject *key)
 

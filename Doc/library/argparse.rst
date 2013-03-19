@@ -371,16 +371,16 @@ formatter_class
 ^^^^^^^^^^^^^^^
 
 :class:`ArgumentParser` objects allow the help formatting to be customized by
-specifying an alternate formatting class.  Currently, there are three such
+specifying an alternate formatting class.  Currently, there are four such
 classes:
 
 .. class:: RawDescriptionHelpFormatter
            RawTextHelpFormatter
            ArgumentDefaultsHelpFormatter
+           MetavarTypeHelpFormatter
 
-The first two allow more control over how textual descriptions are displayed,
-while the last automatically adds information about argument default values.
-
+:class:`RawDescriptionHelpFormatter` and :class:`RawTextHelpFormatter` give
+more control over how textual descriptions are displayed.
 By default, :class:`ArgumentParser` objects line-wrap the description_ and
 epilog_ texts in command-line help messages::
 
@@ -433,8 +433,8 @@ should not be line-wrapped::
 :class:`RawTextHelpFormatter` maintains whitespace for all sorts of help text,
 including argument descriptions.
 
-The other formatter class available, :class:`ArgumentDefaultsHelpFormatter`,
-will add information about the default value of each of the arguments::
+:class:`ArgumentDefaultsHelpFormatter` automatically adds information about
+default values to each of the argument help messages::
 
    >>> parser = argparse.ArgumentParser(
    ...     prog='PROG',
@@ -450,6 +450,25 @@ will add information about the default value of each of the arguments::
    optional arguments:
     -h, --help  show this help message and exit
     --foo FOO   FOO! (default: 42)
+
+:class:`MetavarTypeHelpFormatter` uses the name of the type_ argument for each
+argument as the display name for its values (rather than using the dest_
+as the regular formatter does)::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     formatter_class=argparse.MetavarTypeHelpFormatter)
+   >>> parser.add_argument('--foo', type=int)
+   >>> parser.add_argument('bar', type=float)
+   >>> parser.print_help()
+   usage: PROG [-h] [--foo int] float
+
+   positional arguments:
+     float
+
+   optional arguments:
+     -h, --help  show this help message and exit
+     --foo int
 
 
 conflict_handler
@@ -957,9 +976,9 @@ See the section on the default_ keyword argument for information on when the
 ``type`` argument is applied to default arguments.
 
 To ease the use of various types of files, the argparse module provides the
-factory FileType which takes the ``mode=`` and ``bufsize=`` arguments of the
-:func:`open` function.  For example, ``FileType('w')`` can be used to create a
-writable file::
+factory FileType which takes the ``mode=``, ``bufsize=``, ``encoding=`` and
+``errors=`` arguments of the :func:`open` function.  For example,
+``FileType('w')`` can be used to create a writable file::
 
    >>> parser = argparse.ArgumentParser()
    >>> parser.add_argument('bar', type=argparse.FileType('w'))
@@ -1599,17 +1618,19 @@ Sub-commands
 FileType objects
 ^^^^^^^^^^^^^^^^
 
-.. class:: FileType(mode='r', bufsize=None)
+.. class:: FileType(mode='r', bufsize=-1, encoding=None, errors=None)
 
    The :class:`FileType` factory creates objects that can be passed to the type
    argument of :meth:`ArgumentParser.add_argument`.  Arguments that have
-   :class:`FileType` objects as their type will open command-line arguments as files
-   with the requested modes and buffer sizes::
+   :class:`FileType` objects as their type will open command-line arguments as
+   files with the requested modes, buffer sizes, encodings and error handling
+   (see the :func:`open` function for more details)::
 
       >>> parser = argparse.ArgumentParser()
-      >>> parser.add_argument('--output', type=argparse.FileType('wb', 0))
-      >>> parser.parse_args(['--output', 'out'])
-      Namespace(output=<_io.BufferedWriter name='out'>)
+      >>> parser.add_argument('--raw', type=argparse.FileType('wb', 0))
+      >>> parser.add_argument('out', type=argparse.FileType('w', encoding='UTF-8'))
+      >>> parser.parse_args(['--raw', 'raw.dat', 'file.txt'])
+      Namespace(out=<_io.TextIOWrapper name='file.txt' mode='w' encoding='UTF-8'>, raw=<_io.FileIO name='raw.dat' mode='wb'>)
 
    FileType objects understand the pseudo-argument ``'-'`` and automatically
    convert this into ``sys.stdin`` for readable :class:`FileType` objects and

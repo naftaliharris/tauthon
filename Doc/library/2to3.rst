@@ -264,8 +264,7 @@ and off individually.  They are described here in more detail.
 
 .. 2to3fixer:: long
 
-   Strips the ``L`` prefix on long literals and renames :class:`long` to
-   :class:`int`.
+   Renames :class:`long` to :class:`int`.
 
 .. 2to3fixer:: map
 
@@ -342,6 +341,10 @@ and off individually.  They are described here in more detail.
 .. 2to3fixer:: reduce
 
    Handles the move of :func:`reduce` to :func:`functools.reduce`.
+
+.. 2to3fixer:: reload
+
+   Converts :func:`reload` to :func:`imp.reload`.
 
 .. 2to3fixer:: renames
 

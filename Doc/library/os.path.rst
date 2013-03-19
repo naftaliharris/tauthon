@@ -42,7 +42,6 @@ the :mod:`glob` module.)
    * :mod:`posixpath` for UNIX-style paths
    * :mod:`ntpath` for Windows paths
    * :mod:`macpath` for old-style MacOS paths
-   * :mod:`os2emxpath` for OS/2 EMX paths
 
 
 .. function:: abspath(path)
@@ -77,10 +76,15 @@ the :mod:`glob` module.)
 
 .. function:: exists(path)
 
-   Return ``True`` if *path* refers to an existing path.  Returns ``False`` for
-   broken symbolic links. On some platforms, this function may return ``False`` if
-   permission is not granted to execute :func:`os.stat` on the requested file, even
+   Return ``True`` if *path* refers to an existing path or an open
+   file descriptor.  Returns ``False`` for broken symbolic links.  On
+   some platforms, this function may return ``False`` if permission is
+   not granted to execute :func:`os.stat` on the requested file, even
    if the *path* physically exists.
+
+   .. versionchanged:: 3.3
+      *path* can now be an integer: ``True`` is returned if it is an
+       open file descriptor, ``False`` otherwise.
 
 
 .. function:: lexists(path)
@@ -126,7 +130,7 @@ the :mod:`glob` module.)
 
    Return the time of last access of *path*.  The return value is a number giving
    the number of seconds since the epoch (see the  :mod:`time` module).  Raise
-   :exc:`os.error` if the file does not exist or is inaccessible.
+   :exc:`OSError` if the file does not exist or is inaccessible.
 
    If :func:`os.stat_float_times` returns True, the result is a floating point
    number.
@@ -136,7 +140,7 @@ the :mod:`glob` module.)
 
    Return the time of last modification of *path*.  The return value is a number
    giving the number of seconds since the epoch (see the  :mod:`time` module).
-   Raise :exc:`os.error` if the file does not exist or is inaccessible.
+   Raise :exc:`OSError` if the file does not exist or is inaccessible.
 
    If :func:`os.stat_float_times` returns True, the result is a floating point
    number.
@@ -147,13 +151,13 @@ the :mod:`glob` module.)
    Return the system's ctime which, on some systems (like Unix) is the time of the
    last change, and, on others (like Windows), is the creation time for *path*.
    The return value is a number giving the number of seconds since the epoch (see
-   the  :mod:`time` module).  Raise :exc:`os.error` if the file does not exist or
+   the  :mod:`time` module).  Raise :exc:`OSError` if the file does not exist or
    is inaccessible.
 
 
 .. function:: getsize(path)
 
-   Return the size, in bytes, of *path*.  Raise :exc:`os.error` if the file does
+   Return the size, in bytes, of *path*.  Raise :exc:`OSError` if the file does
    not exist or is inaccessible.
 
 
@@ -243,14 +247,13 @@ the :mod:`glob` module.)
    On Unix, this is determined by the device number and i-node number and raises an
    exception if a :func:`os.stat` call on either pathname fails.
 
-   On Windows, two files are the same if they resolve to the same final path
-   name using the Windows API call GetFinalPathNameByHandle. This function
-   raises an exception if handles cannot be obtained to either file.
-
    Availability: Unix, Windows.
 
    .. versionchanged:: 3.2
       Added Windows support.
+
+   .. versionchanged:: 3.4
+      Windows now uses the same implementation as all other platforms.
 
 
 .. function:: sameopenfile(fp1, fp2)
@@ -259,7 +262,8 @@ the :mod:`glob` module.)
 
    Availability: Unix, Windows.
 
-   .. versionchanged:: 3.2 Added Windows support.
+   .. versionchanged:: 3.2
+      Added Windows support.
 
 
 .. function:: samestat(stat1, stat2)
@@ -269,7 +273,10 @@ the :mod:`glob` module.)
    :func:`stat`.  This function implements the underlying comparison used by
    :func:`samefile` and :func:`sameopenfile`.
 
-   Availability: Unix.
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      Added Windows support.
 
 
 .. function:: split(path)

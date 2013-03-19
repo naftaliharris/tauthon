@@ -53,6 +53,10 @@ def get_platform ():
             return 'win-ia64'
         return sys.platform
 
+    # Set for cross builds explicitly
+    if "_PYTHON_HOST_PLATFORM" in os.environ:
+        return os.environ["_PYTHON_HOST_PLATFORM"]
+
     if os.name != "posix" or not hasattr(os, 'uname'):
         # XXX what about the architecture? NT is Intel or Alpha,
         # Mac OS is M68k or PPC, etc.
@@ -150,12 +154,6 @@ def change_root (new_root, pathname):
             path = path[1:]
         return os.path.join(new_root, path)
 
-    elif os.name == 'os2':
-        (drive, path) = os.path.splitdrive(pathname)
-        if path[0] == os.sep:
-            path = path[1:]
-        return os.path.join(new_root, path)
-
     else:
         raise DistutilsPlatformError("nothing known about platform '%s'" % os.name)
 
@@ -209,8 +207,8 @@ def subst_vars (s, local_vars):
 
 
 def grok_environment_error (exc, prefix="error: "):
-    """Generate a useful error message from an EnvironmentError (IOError or
-    OSError) exception object.  Handles Python 1.5.1 and 1.5.2 styles, and
+    """Generate a useful error message from an OSError
+    exception object.  Handles Python 1.5.1 and 1.5.2 styles, and
     does what it can to deal with exception objects that don't have a
     filename (which happens when the error is due to a two-file operation,
     such as 'rename()' or 'link()'.  Returns the error message as a string

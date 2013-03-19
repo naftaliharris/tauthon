@@ -520,12 +520,12 @@ class TextIOTestMixin:
     def test_relative_seek(self):
         memio = self.ioclass()
 
-        self.assertRaises(IOError, memio.seek, -1, 1)
-        self.assertRaises(IOError, memio.seek, 3, 1)
-        self.assertRaises(IOError, memio.seek, -3, 1)
-        self.assertRaises(IOError, memio.seek, -1, 2)
-        self.assertRaises(IOError, memio.seek, 1, 1)
-        self.assertRaises(IOError, memio.seek, 1, 2)
+        self.assertRaises(OSError, memio.seek, -1, 1)
+        self.assertRaises(OSError, memio.seek, 3, 1)
+        self.assertRaises(OSError, memio.seek, -3, 1)
+        self.assertRaises(OSError, memio.seek, -1, 2)
+        self.assertRaises(OSError, memio.seek, 1, 1)
+        self.assertRaises(OSError, memio.seek, 1, 2)
 
     def test_textio_properties(self):
         memio = self.ioclass()
@@ -658,7 +658,7 @@ class CBytesIOTest(PyBytesIOTest):
 
     @support.cpython_only
     def test_sizeof(self):
-        basesize = support.calcobjsize('P2PP2PP')
+        basesize = support.calcobjsize('P2nN2Pn')
         check = self.check_sizeof
         self.assertEqual(object.__sizeof__(io.BytesIO()), basesize)
         check(io.BytesIO(), basesize )

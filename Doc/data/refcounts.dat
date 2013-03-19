@@ -220,6 +220,11 @@ PyDict_GetItemString:PyObject*::0:
 PyDict_GetItemString:PyObject*:p:0:
 PyDict_GetItemString:char*:key::
 
+PyDict_SetDefault:PyObject*::0:
+PyDict_SetDefault:PyObject*:p:0:
+PyDict_SetDefault:PyObject*:key:0:conditionally +1 if inserted into the dict
+PyDict_SetDefault:PyObject*:default:0:conditionally +1 if inserted into the dict
+
 PyDict_Items:PyObject*::+1:
 PyDict_Items:PyObject*:p:0:
 
@@ -464,6 +469,11 @@ PyFunction_GetModule:PyObject*:op:0:
 PyFunction_New:PyObject*::+1:
 PyFunction_New:PyObject*:code:+1:
 PyFunction_New:PyObject*:globals:+1:
+
+PyFunction_NewWithQualName:PyObject*::+1:
+PyFunction_NewWithQualName:PyObject*:code:+1:
+PyFunction_NewWithQualName:PyObject*:globals:+1:
+PyFunction_NewWithQualName:PyObject*:qualname:+1:
 
 PyFunction_SetClosure:int:::
 PyFunction_SetClosure:PyObject*:op:0:

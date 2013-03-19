@@ -5,6 +5,7 @@ import os
 import io
 import socket
 import array
+import sys
 
 import urllib.request
 # The proxy bypass method imported below has logic specific to the OSX
@@ -18,6 +19,22 @@ import urllib.error
 # parse_keqv_list, parse_http_list, HTTPDigestAuthHandler
 
 class TrivialTests(unittest.TestCase):
+
+    def test___all__(self):
+        # Verify which names are exposed
+        for module in 'request', 'response', 'parse', 'error', 'robotparser':
+            context = {}
+            exec('from urllib.%s import *' % module, context)
+            del context['__builtins__']
+            if module == 'request' and os.name == 'nt':
+                u, p = context.pop('url2pathname'), context.pop('pathname2url')
+                self.assertEqual(u.__module__, 'nturl2path')
+                self.assertEqual(p.__module__, 'nturl2path')
+            for k, v in context.items():
+                self.assertEqual(v.__module__, 'urllib.%s' % module,
+                    "%r is exposed in 'urllib.%s' but defined in %r" %
+                    (k, module, v.__module__))
+
     def test_trivial(self):
         # A couple trivial tests
 
@@ -109,6 +126,19 @@ def test_request_headers_methods():
     None
     >>> r.get_header("Not-there", "default")
     'default'
+
+    Method r.remove_header should remove items both from r.headers and
+    r.unredirected_hdrs dictionaries
+
+    >>> r.remove_header("Spam-eggs")
+    >>> r.has_header("Spam-eggs")
+    False
+    >>> r.add_unredirected_header("Unredirected-spam", "Eggs")
+    >>> r.has_header("Unredirected-spam")
+    True
+    >>> r.remove_header("Unredirected-spam")
+    >>> r.has_header("Unredirected-spam")
+    False
 
     """
 
@@ -288,6 +318,7 @@ class MockHTTPClass:
         self.req_headers = []
         self.data = None
         self.raise_on_endheaders = False
+        self.sock = None
         self._tunnel_headers = {}
 
     def __call__(self, host, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
@@ -316,7 +347,7 @@ class MockHTTPClass:
             self.data = body
         if self.raise_on_endheaders:
             import socket
-            raise socket.error()
+            raise OSError()
     def getresponse(self):
         return MockHTTPResponse(MockFile(), {}, 200, "OK")
 
@@ -539,10 +570,6 @@ class OpenerDirectorTests(unittest.TestCase):
         self.assertRaises(urllib.error.URLError, o.open, req)
         self.assertEqual(o.calls, [(handlers[0], "http_open", (req,), {})])
 
-##     def test_error(self):
-##         # XXX this doesn't actually seem to be used in standard library,
-##         #  but should really be tested anyway...
-
     def test_http_error(self):
         # XXX http_error_default
         # http errors are a special case
@@ -569,6 +596,7 @@ class OpenerDirectorTests(unittest.TestCase):
             handler, method_name, args = expected
             self.assertEqual((handler, method_name), got[:2])
             self.assertEqual(args, got[2])
+
 
     def test_processors(self):
         # *_request / *_response methods get called appropriately
@@ -605,10 +633,9 @@ class OpenerDirectorTests(unittest.TestCase):
                 self.assertTrue(args[1] is None or
                              isinstance(args[1], MockResponse))
 
-
 def sanepathname2url(path):
     try:
-        path.encode("utf8")
+        path.encode("utf-8")
     except UnicodeEncodeError:
         raise unittest.SkipTest("path is not encodable to utf8")
     urlpath = urllib.request.pathname2url(path)
@@ -800,7 +827,7 @@ class HandlerTests(unittest.TestCase):
                               ("Foo", "bar"), ("Spam", "eggs")])
             self.assertEqual(http.data, data)
 
-        # check socket.error converted to URLError
+        # check OSError converted to URLError
         http.raise_on_endheaders = True
         self.assertRaises(urllib.error.URLError, h.do_open, http, req)
 
@@ -960,8 +987,8 @@ class HandlerTests(unittest.TestCase):
         newreq = h.http_request(req)
         self.assertIs(cj.ach_req, req)
         self.assertIs(cj.ach_req, newreq)
-        self.assertEqual(req.get_origin_req_host(), "example.com")
-        self.assertFalse(req.is_unverifiable())
+        self.assertEqual(req.origin_req_host, "example.com")
+        self.assertFalse(req.unverifiable)
         newr = h.http_response(req, r)
         self.assertIs(cj.ec_req, req)
         self.assertIs(cj.ec_r, r)
@@ -993,7 +1020,7 @@ class HandlerTests(unittest.TestCase):
                 try:
                     self.assertEqual(o.req.get_method(), "GET")
                 except AttributeError:
-                    self.assertFalse(o.req.has_data())
+                    self.assertFalse(o.req.data)
 
                 # now it's a GET, there should not be headers regarding content
                 # (possibly dragged from before being a POST)
@@ -1109,9 +1136,9 @@ class HandlerTests(unittest.TestCase):
         handlers = add_ordered_mock_handlers(o, meth_spec)
 
         req = Request("http://acme.example.com/")
-        self.assertEqual(req.get_host(), "acme.example.com")
+        self.assertEqual(req.host, "acme.example.com")
         r = o.open(req)
-        self.assertEqual(req.get_host(), "proxy.example.com:3128")
+        self.assertEqual(req.host, "proxy.example.com:3128")
 
         self.assertEqual([(handlers[0], "http_open")],
                          [tup[0:2] for tup in o.calls])
@@ -1122,13 +1149,13 @@ class HandlerTests(unittest.TestCase):
         ph = urllib.request.ProxyHandler(dict(http="proxy.example.com"))
         o.add_handler(ph)
         req = Request("http://www.perl.org/")
-        self.assertEqual(req.get_host(), "www.perl.org")
+        self.assertEqual(req.host, "www.perl.org")
         r = o.open(req)
-        self.assertEqual(req.get_host(), "proxy.example.com")
+        self.assertEqual(req.host, "proxy.example.com")
         req = Request("http://www.python.org")
-        self.assertEqual(req.get_host(), "www.python.org")
+        self.assertEqual(req.host, "www.python.org")
         r = o.open(req)
-        self.assertEqual(req.get_host(), "www.python.org")
+        self.assertEqual(req.host, "www.python.org")
         del os.environ['no_proxy']
 
     def test_proxy_no_proxy_all(self):
@@ -1137,9 +1164,9 @@ class HandlerTests(unittest.TestCase):
         ph = urllib.request.ProxyHandler(dict(http="proxy.example.com"))
         o.add_handler(ph)
         req = Request("http://www.python.org")
-        self.assertEqual(req.get_host(), "www.python.org")
+        self.assertEqual(req.host, "www.python.org")
         r = o.open(req)
-        self.assertEqual(req.get_host(), "www.python.org")
+        self.assertEqual(req.host, "www.python.org")
         del os.environ['no_proxy']
 
 
@@ -1153,9 +1180,9 @@ class HandlerTests(unittest.TestCase):
         handlers = add_ordered_mock_handlers(o, meth_spec)
 
         req = Request("https://www.example.com/")
-        self.assertEqual(req.get_host(), "www.example.com")
+        self.assertEqual(req.host, "www.example.com")
         r = o.open(req)
-        self.assertEqual(req.get_host(), "proxy.example.com:3128")
+        self.assertEqual(req.host, "proxy.example.com:3128")
         self.assertEqual([(handlers[0], "https_open")],
                          [tup[0:2] for tup in o.calls])
 
@@ -1168,7 +1195,7 @@ class HandlerTests(unittest.TestCase):
         req = Request("https://www.example.com/")
         req.add_header("Proxy-Authorization","FooBar")
         req.add_header("User-Agent","Grail")
-        self.assertEqual(req.get_host(), "www.example.com")
+        self.assertEqual(req.host, "www.example.com")
         self.assertIsNone(req._tunnel_host)
         r = o.open(req)
         # Verify Proxy-Authorization gets tunneled to request.
@@ -1179,9 +1206,11 @@ class HandlerTests(unittest.TestCase):
         self.assertIn(("User-Agent","Grail"),
                       https_handler.httpconn.req_headers)
         self.assertIsNotNone(req._tunnel_host)
-        self.assertEqual(req.get_host(), "proxy.example.com:3128")
+        self.assertEqual(req.host, "proxy.example.com:3128")
         self.assertEqual(req.get_header("Proxy-authorization"),"FooBar")
 
+    # TODO: This should be only for OSX
+    @unittest.skipUnless(sys.platform == 'darwin', "only relevant for OSX")
     def test_osx_proxy_bypass(self):
         bypass = {
             'exclude_simple': False,
@@ -1301,6 +1330,26 @@ class HandlerTests(unittest.TestCase):
         # _test_basic_auth called .open() twice)
         self.assertEqual(opener.recorded, ["digest", "basic"]*2)
 
+    def test_unsupported_auth_digest_handler(self):
+        opener = OpenerDirector()
+        # While using DigestAuthHandler
+        digest_auth_handler = urllib.request.HTTPDigestAuthHandler(None)
+        http_handler = MockHTTPHandler(
+            401, 'WWW-Authenticate: Kerberos\r\n\r\n')
+        opener.add_handler(digest_auth_handler)
+        opener.add_handler(http_handler)
+        self.assertRaises(ValueError,opener.open,"http://www.example.com")
+
+    def test_unsupported_auth_basic_handler(self):
+        # While using BasicAuthHandler
+        opener = OpenerDirector()
+        basic_auth_handler = urllib.request.HTTPBasicAuthHandler(None)
+        http_handler = MockHTTPHandler(
+            401, 'WWW-Authenticate: NTLM\r\n\r\n')
+        opener.add_handler(basic_auth_handler)
+        opener.add_handler(http_handler)
+        self.assertRaises(ValueError,opener.open,"http://www.example.com")
+
     def _test_basic_auth(self, opener, auth_handler, auth_header,
                          realm, http_handler, password_manager,
                          request_url, protected_url):
@@ -1338,7 +1387,12 @@ class HandlerTests(unittest.TestCase):
         self.assertEqual(len(http_handler.requests), 1)
         self.assertFalse(http_handler.requests[0].has_header(auth_header))
 
+
 class MiscTests(unittest.TestCase):
+
+    def opener_has_handler(self, opener, handler_class):
+        self.assertTrue(any(h.__class__ == handler_class
+                            for h in opener.handlers))
 
     def test_build_opener(self):
         class MyHTTPHandler(urllib.request.HTTPHandler): pass
@@ -1377,9 +1431,37 @@ class MiscTests(unittest.TestCase):
         self.opener_has_handler(o, MyHTTPHandler)
         self.opener_has_handler(o, MyOtherHTTPHandler)
 
-    def opener_has_handler(self, opener, handler_class):
-        self.assertTrue(any(h.__class__ == handler_class
-                            for h in opener.handlers))
+    @unittest.skipUnless(support.is_resource_enabled('network'),
+                         'test requires network access')
+    def test_issue16464(self):
+        opener = urllib.request.build_opener()
+        request = urllib.request.Request("http://www.python.org/~jeremy/")
+        self.assertEqual(None, request.data)
+
+        opener.open(request, "1".encode("us-ascii"))
+        self.assertEqual(b"1", request.data)
+        self.assertEqual("1", request.get_header("Content-length"))
+
+        opener.open(request, "1234567890".encode("us-ascii"))
+        self.assertEqual(b"1234567890", request.data)
+        self.assertEqual("10", request.get_header("Content-length"))
+
+    def test_HTTPError_interface(self):
+        """
+        Issue 13211 reveals that HTTPError didn't implement the URLError
+        interface even though HTTPError is a subclass of URLError.
+
+        >>> msg = 'something bad happened'
+        >>> url = code = fp = None
+        >>> hdrs = 'Content-Length: 42'
+        >>> err = urllib.error.HTTPError(url, code, msg, hdrs, fp)
+        >>> assert hasattr(err, 'reason')
+        >>> err.reason
+        'something bad happened'
+        >>> assert hasattr(err, 'headers')
+        >>> err.headers
+        'Content-Length: 42'
+        """
 
 class RequestTests(unittest.TestCase):
 
@@ -1393,80 +1475,63 @@ class RequestTests(unittest.TestCase):
         self.assertEqual("POST", self.post.get_method())
         self.assertEqual("GET", self.get.get_method())
 
-    def test_add_data(self):
-        self.assertFalse(self.get.has_data())
+    def test_data(self):
+        self.assertFalse(self.get.data)
         self.assertEqual("GET", self.get.get_method())
-        self.get.add_data("spam")
-        self.assertTrue(self.get.has_data())
+        self.get.data = "spam"
+        self.assertTrue(self.get.data)
         self.assertEqual("POST", self.get.get_method())
+
+    # issue 16464
+    # if we change data we need to remove content-length header
+    # (cause it's most probably calculated for previous value)
+    def test_setting_data_should_remove_content_length(self):
+        self.assertFalse("Content-length" in self.get.unredirected_hdrs)
+        self.get.add_unredirected_header("Content-length", 42)
+        self.assertEqual(42, self.get.unredirected_hdrs["Content-length"])
+        self.get.data = "spam"
+        self.assertFalse("Content-length" in self.get.unredirected_hdrs)
 
     def test_get_full_url(self):
         self.assertEqual("http://www.python.org/~jeremy/",
                          self.get.get_full_url())
 
     def test_selector(self):
-        self.assertEqual("/~jeremy/", self.get.get_selector())
+        self.assertEqual("/~jeremy/", self.get.selector)
         req = Request("http://www.python.org/")
-        self.assertEqual("/", req.get_selector())
+        self.assertEqual("/", req.selector)
 
     def test_get_type(self):
-        self.assertEqual("http", self.get.get_type())
+        self.assertEqual("http", self.get.type)
 
     def test_get_host(self):
-        self.assertEqual("www.python.org", self.get.get_host())
+        self.assertEqual("www.python.org", self.get.host)
 
     def test_get_host_unquote(self):
         req = Request("http://www.%70ython.org/")
-        self.assertEqual("www.python.org", req.get_host())
+        self.assertEqual("www.python.org", req.host)
 
     def test_proxy(self):
         self.assertFalse(self.get.has_proxy())
         self.get.set_proxy("www.perl.org", "http")
         self.assertTrue(self.get.has_proxy())
-        self.assertEqual("www.python.org", self.get.get_origin_req_host())
-        self.assertEqual("www.perl.org", self.get.get_host())
+        self.assertEqual("www.python.org", self.get.origin_req_host)
+        self.assertEqual("www.perl.org", self.get.host)
 
     def test_wrapped_url(self):
         req = Request("<URL:http://www.python.org>")
-        self.assertEqual("www.python.org", req.get_host())
+        self.assertEqual("www.python.org", req.host)
 
     def test_url_fragment(self):
         req = Request("http://www.python.org/?qs=query#fragment=true")
-        self.assertEqual("/?qs=query", req.get_selector())
+        self.assertEqual("/?qs=query", req.selector)
         req = Request("http://www.python.org/#fun=true")
-        self.assertEqual("/", req.get_selector())
+        self.assertEqual("/", req.selector)
 
         # Issue 11703: geturl() omits fragment in the original URL.
         url = 'http://docs.python.org/library/urllib2.html#OK'
         req = Request(url)
         self.assertEqual(req.get_full_url(), url)
-
-    def test_HTTPError_interface(self):
-        """
-        Issue 13211 reveals that HTTPError didn't implement the URLError
-        interface even though HTTPError is a subclass of URLError.
-
-        >>> err = urllib.error.HTTPError(msg='something bad happened', url=None, code=None, hdrs=None, fp=None)
-        >>> assert hasattr(err, 'reason')
-        >>> err.reason
-        'something bad happened'
-        """
-
-    def test_HTTPError_interface_call(self):
-        """
-        Issue 15701 - HTTPError interface has info method available from URLError
-        """
-        err = urllib.request.HTTPError(msg="something bad happened", url=None,
-                                code=None, hdrs='Content-Length:42', fp=None)
-        self.assertTrue(hasattr(err, 'reason'))
-        assert hasattr(err, 'reason')
-        assert hasattr(err, 'info')
-        assert callable(err.info)
-        try:
-            err.info()
-        except AttributeError:
-            self.fail('err.info call failed.')
-        self.assertEqual(err.info(), "Content-Length:42")
 
 def test_main(verbose=None):
     from test import test_urllib2

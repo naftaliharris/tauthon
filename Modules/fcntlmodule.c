@@ -325,11 +325,6 @@ fcntl_lockf(PyObject *self, PyObject *args)
                           &lenobj, &startobj, &whence))
         return NULL;
 
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-    PyErr_SetString(PyExc_NotImplementedError,
-                    "lockf not supported on OS/2 (EMX)");
-    return NULL;
-#else
 #ifndef LOCK_SH
 #define LOCK_SH         1       /* shared lock */
 #define LOCK_EX         2       /* exclusive lock */
@@ -383,7 +378,6 @@ fcntl_lockf(PyObject *self, PyObject *args)
     }
     Py_INCREF(Py_None);
     return Py_None;
-#endif  /* defined(PYOS_OS2) && defined(PYCC_GCC) */
 }
 
 PyDoc_STRVAR(lockf_doc,
@@ -467,6 +461,9 @@ all_ins(PyObject* d)
 #ifdef F_DUPFD
     if (ins(d, "F_DUPFD", (long)F_DUPFD)) return -1;
 #endif
+#ifdef F_DUPFD_CLOEXEC
+    if (ins(d, "F_DUPFD_CLOEXEC", (long)F_DUPFD_CLOEXEC)) return -1;
+#endif
 #ifdef F_GETFD
     if (ins(d, "F_GETFD", (long)F_GETFD)) return -1;
 #endif
@@ -540,9 +537,12 @@ all_ins(PyObject* d)
     if (ins(d, "F_SHLCK", (long)F_SHLCK)) return -1;
 #endif
 
-/* OS X (and maybe others) let you tell the storage device to flush to physical media */
+/* OS X specifics */
 #ifdef F_FULLFSYNC
     if (ins(d, "F_FULLFSYNC", (long)F_FULLFSYNC)) return -1;
+#endif
+#ifdef F_NOCACHE
+    if (ins(d, "F_NOCACHE", (long)F_NOCACHE)) return -1;
 #endif
 
 /* For F_{GET|SET}FL */

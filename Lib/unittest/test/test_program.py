@@ -64,6 +64,41 @@ class Test_TestProgram(unittest.TestCase):
             return self.suiteClass(
                 [self.loadTestsFromTestCase(Test_TestProgram.FooBar)])
 
+        def loadTestsFromNames(self, names, module):
+            return self.suiteClass(
+                [self.loadTestsFromTestCase(Test_TestProgram.FooBar)])
+
+    def test_defaultTest_with_string(self):
+        class FakeRunner(object):
+            def run(self, test):
+                self.test = test
+                return True
+
+        old_argv = sys.argv
+        sys.argv = ['faketest']
+        runner = FakeRunner()
+        program = unittest.TestProgram(testRunner=runner, exit=False,
+                                       defaultTest='unittest.test',
+                                       testLoader=self.FooBarLoader())
+        sys.argv = old_argv
+        self.assertEquals(('unittest.test',), program.testNames)
+
+    def test_defaultTest_with_iterable(self):
+        class FakeRunner(object):
+            def run(self, test):
+                self.test = test
+                return True
+
+        old_argv = sys.argv
+        sys.argv = ['faketest']
+        runner = FakeRunner()
+        program = unittest.TestProgram(
+            testRunner=runner, exit=False,
+            defaultTest=['unittest.test', 'unittest.test2'],
+            testLoader=self.FooBarLoader())
+        sys.argv = old_argv
+        self.assertEquals(['unittest.test', 'unittest.test2'],
+                          program.testNames)
 
     def test_NonExit(self):
         program = unittest.main(exit=False,
@@ -130,23 +165,6 @@ class TestCommandLineArgs(unittest.TestCase):
         FakeRunner.initArgs = None
         FakeRunner.test = None
         FakeRunner.raiseError = False
-
-    def testHelpAndUnknown(self):
-        program = self.program
-        def usageExit(msg=None):
-            program.msg = msg
-            program.exit = True
-        program.usageExit = usageExit
-
-        for opt in '-h', '-H', '--help':
-            program.exit = False
-            program.parseArgs([None, opt])
-            self.assertTrue(program.exit)
-            self.assertIsNone(program.msg)
-
-        program.parseArgs([None, '-$'])
-        self.assertTrue(program.exit)
-        self.assertIsNotNone(program.msg)
 
     def testVerbosity(self):
         program = self.program

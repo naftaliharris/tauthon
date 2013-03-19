@@ -329,7 +329,7 @@ def _find_mac(command, args, hw_identifiers, get_index):
                         if words[i] in hw_identifiers:
                             return int(
                                 words[get_index(i)].replace(':', ''), 16)
-        except IOError:
+        except OSError:
             continue
     return None
 
@@ -371,7 +371,7 @@ def _ipconfig_getnode():
     for dir in dirs:
         try:
             pipe = os.popen(os.path.join(dir, 'ipconfig') + ' /all')
-        except IOError:
+        except OSError:
             continue
         else:
             for line in pipe:
@@ -440,7 +440,7 @@ try:
     import sys
     if sys.platform == 'darwin':
         import os
-        if int(os.uname()[2].split('.')[0]) >= 9:
+        if int(os.uname().release.split('.')[0]) >= 9:
             _uuid_generate_random = _uuid_generate_time = None
 
     # On Windows prior to 2000, UuidCreate gives a UUID containing the

@@ -1,4 +1,4 @@
-from test.support import findfile, run_unittest, TESTFN, captured_stdout, unlink
+from test.support import findfile, run_unittest, TESTFN, unlink
 import unittest
 import os
 import io
@@ -42,6 +42,18 @@ class AIFCTest(unittest.TestCase):
             f.getparams(),
             (2, 2, 48000, 14400, b'NONE', b'not compressed'),
             )
+
+    def test_context_manager(self):
+        with open(self.sndfilepath, 'rb') as testfile:
+            with aifc.open(testfile) as f:
+                pass
+            self.assertEqual(testfile.closed, True)
+        with open(TESTFN, 'wb') as testfile:
+            with self.assertRaises(aifc.Error):
+                with aifc.open(testfile, 'wb') as fout:
+                    pass
+            self.assertEqual(testfile.closed, True)
+            fout.close() # do nothing
 
     def test_read(self):
         f = self.f = aifc.open(self.sndfilepath)
@@ -214,11 +226,8 @@ class AIFCLowLevelTest(unittest.TestCase):
         b += b'COMM' + struct.pack('>LhlhhLL', 18, 0, 0, 0, 0, 0, 0)
         b += b'SSND' + struct.pack('>L', 8) + b'\x00' * 8
         b += b'MARK' + struct.pack('>LhB', 3, 1, 1)
-        with captured_stdout() as s:
+        with self.assertWarns(UserWarning):
             f = aifc.open(io.BytesIO(b))
-        self.assertEqual(
-            s.getvalue(),
-            'Warning: MARK chunk contains only 0 markers instead of 1\n')
         self.assertEqual(f.getmarkers(), None)
 
     def test_read_comm_kludge_compname_even(self):
@@ -226,9 +235,8 @@ class AIFCLowLevelTest(unittest.TestCase):
         b += b'COMM' + struct.pack('>LhlhhLL', 18, 0, 0, 0, 0, 0, 0)
         b += b'NONE' + struct.pack('B', 4) + b'even' + b'\x00'
         b += b'SSND' + struct.pack('>L', 8) + b'\x00' * 8
-        with captured_stdout() as s:
+        with self.assertWarns(UserWarning):
             f = aifc.open(io.BytesIO(b))
-        self.assertEqual(s.getvalue(), 'Warning: bad COMM chunk size\n')
         self.assertEqual(f.getcompname(), b'even')
 
     def test_read_comm_kludge_compname_odd(self):
@@ -236,9 +244,8 @@ class AIFCLowLevelTest(unittest.TestCase):
         b += b'COMM' + struct.pack('>LhlhhLL', 18, 0, 0, 0, 0, 0, 0)
         b += b'NONE' + struct.pack('B', 3) + b'odd'
         b += b'SSND' + struct.pack('>L', 8) + b'\x00' * 8
-        with captured_stdout() as s:
+        with self.assertWarns(UserWarning):
             f = aifc.open(io.BytesIO(b))
-        self.assertEqual(s.getvalue(), 'Warning: bad COMM chunk size\n')
         self.assertEqual(f.getcompname(), b'odd')
 
     def test_write_params_raises(self):
@@ -324,12 +331,14 @@ class AIFCLowLevelTest(unittest.TestCase):
 
     def test_write_aiff_by_extension(self):
         sampwidth = 2
-        fout = self.fout = aifc.open(TESTFN + '.aiff', 'wb')
+        filename = TESTFN + '.aiff'
+        fout = self.fout = aifc.open(filename, 'wb')
+        self.addCleanup(unlink, filename)
         fout.setparams((1, sampwidth, 1, 1, b'ULAW', b''))
         frames = b'\x00' * fout.getnchannels() * sampwidth
         fout.writeframes(frames)
         fout.close()
-        f = self.f = aifc.open(TESTFN + '.aiff', 'rb')
+        f = self.f = aifc.open(filename, 'rb')
         self.assertEqual(f.getcomptype(), b'NONE')
         f.close()
 

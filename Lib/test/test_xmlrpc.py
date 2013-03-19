@@ -24,6 +24,8 @@ alist = [{'astring': 'foo@bar.baz.spam',
           'ashortlong': 2,
           'anotherlist': ['.zyx.41'],
           'abase64': xmlrpclib.Binary(b"my dog has fleas"),
+          'b64bytes': b"my dog has fleas",
+          'b64bytearray': bytearray(b"my dog has fleas"),
           'boolean': False,
           'unicode': '\u4000\u6000\u8000',
           'ukey\u4000': 'regular value',
@@ -44,27 +46,54 @@ class XMLRPCTestCase(unittest.TestCase):
     def test_dump_bare_datetime(self):
         # This checks that an unwrapped datetime.date object can be handled
         # by the marshalling code.  This can't be done via test_dump_load()
-        # since with use_datetime set to 1 the unmarshaller would create
+        # since with use_builtin_types set to 1 the unmarshaller would create
         # datetime objects for the 'datetime[123]' keys as well
         dt = datetime.datetime(2005, 2, 10, 11, 41, 23)
+        self.assertEqual(dt, xmlrpclib.DateTime('20050210T11:41:23'))
         s = xmlrpclib.dumps((dt,))
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=1)
-        self.assertEqual(newdt, dt)
-        self.assertEqual(m, None)
 
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=0)
-        self.assertEqual(newdt, xmlrpclib.DateTime('20050210T11:41:23'))
+        result, m = xmlrpclib.loads(s, use_builtin_types=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_builtin_types=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_datetime=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_datetime=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
+
 
     def test_datetime_before_1900(self):
         # same as before but with a date before 1900
         dt = datetime.datetime(1,  2, 10, 11, 41, 23)
+        self.assertEqual(dt, xmlrpclib.DateTime('00010210T11:41:23'))
         s = xmlrpclib.dumps((dt,))
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=1)
-        self.assertEqual(newdt, dt)
-        self.assertEqual(m, None)
 
-        (newdt,), m = xmlrpclib.loads(s, use_datetime=0)
-        self.assertEqual(newdt, xmlrpclib.DateTime('00010210T11:41:23'))
+        result, m = xmlrpclib.loads(s, use_builtin_types=True)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), datetime.datetime)
+        self.assertIsNone(m)
+
+        result, m = xmlrpclib.loads(s, use_builtin_types=False)
+        (newdt,) = result
+        self.assertEqual(newdt, dt)
+        self.assertIs(type(newdt), xmlrpclib.DateTime)
+        self.assertIsNone(m)
 
     def test_bug_1164912 (self):
         d = xmlrpclib.DateTime()
@@ -125,6 +154,22 @@ class XMLRPCTestCase(unittest.TestCase):
         self.assertRaises(OverflowError, m.dump_int,
                           xmlrpclib.MININT-1, dummy_write)
 
+    def test_dump_double(self):
+        xmlrpclib.dumps((float(2 ** 34),))
+        xmlrpclib.dumps((float(xmlrpclib.MAXINT),
+                         float(xmlrpclib.MININT)))
+        xmlrpclib.dumps((float(xmlrpclib.MAXINT + 42),
+                         float(xmlrpclib.MININT - 42)))
+
+        def dummy_write(s):
+            pass
+
+        m = xmlrpclib.Marshaller()
+        m.dump_double(xmlrpclib.MAXINT, dummy_write)
+        m.dump_double(xmlrpclib.MININT, dummy_write)
+        m.dump_double(xmlrpclib.MAXINT + 42, dummy_write)
+        m.dump_double(xmlrpclib.MININT - 42, dummy_write)
+
     def test_dump_none(self):
         value = alist + [None]
         arg1 = (alist + [None],)
@@ -133,15 +178,31 @@ class XMLRPCTestCase(unittest.TestCase):
                           xmlrpclib.loads(strg)[0][0])
         self.assertRaises(TypeError, xmlrpclib.dumps, (arg1,))
 
+    def test_dump_bytes(self):
+        sample = b"my dog has fleas"
+        self.assertEqual(sample, xmlrpclib.Binary(sample))
+        for type_ in bytes, bytearray, xmlrpclib.Binary:
+            value = type_(sample)
+            s = xmlrpclib.dumps((value,))
+
+            result, m = xmlrpclib.loads(s, use_builtin_types=True)
+            (newvalue,) = result
+            self.assertEqual(newvalue, sample)
+            self.assertIs(type(newvalue), bytes)
+            self.assertIsNone(m)
+
+            result, m = xmlrpclib.loads(s, use_builtin_types=False)
+            (newvalue,) = result
+            self.assertEqual(newvalue, sample)
+            self.assertIs(type(newvalue), xmlrpclib.Binary)
+            self.assertIsNone(m)
+
     def test_get_host_info(self):
         # see bug #3613, this raised a TypeError
         transp = xmlrpc.client.Transport()
         self.assertEqual(transp.get_host_info("user@host.tld"),
                           ('host.tld',
                            [('Authorization', 'Basic dXNlcg==')], {}))
-
-    def test_dump_bytes(self):
-        self.assertRaises(TypeError, xmlrpclib.dumps, (b"my dog has fleas",))
 
     def test_ssl_presence(self):
         try:
@@ -154,7 +215,7 @@ class XMLRPCTestCase(unittest.TestCase):
             xmlrpc.client.ServerProxy('https://localhost:9999').bad_function()
         except NotImplementedError:
             self.assertFalse(has_ssl, "xmlrpc client's error with SSL support")
-        except socket.error:
+        except OSError:
             self.assertTrue(has_ssl)
 
 class HelperTestCase(unittest.TestCase):
@@ -431,7 +492,7 @@ def is_unavailable_exception(e):
             return True
         exc_mess = e.headers.get('X-exception')
     except AttributeError:
-        # Ignore socket.errors here.
+        # Ignore OSErrors here.
         exc_mess = str(e)
 
     if exc_mess and 'temporarily unavailable' in exc_mess.lower():
@@ -446,7 +507,7 @@ def make_request_and_skipIf(condition, reason):
         def make_request_and_skip(self):
             try:
                 xmlrpclib.ServerProxy(URL).my_function()
-            except (xmlrpclib.ProtocolError, socket.error) as e:
+            except (xmlrpclib.ProtocolError, OSError) as e:
                 if not is_unavailable_exception(e):
                     raise
             raise unittest.SkipTest(reason)
@@ -484,7 +545,7 @@ class SimpleServerTestCase(BaseServerTestCase):
         try:
             p = xmlrpclib.ServerProxy(URL)
             self.assertEqual(p.pow(6,8), 6**8)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -497,7 +558,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             p = xmlrpclib.ServerProxy(URL)
             self.assertEqual(p.add(start_string, end_string),
                              start_string + end_string)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -523,7 +584,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             p = xmlrpclib.ServerProxy(URL)
             meth = p.system.listMethods()
             self.assertEqual(set(meth), expected_methods)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -536,7 +597,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             p = xmlrpclib.ServerProxy(URL)
             divhelp = p.system.methodHelp('div')
             self.assertEqual(divhelp, 'This is the div function')
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -550,7 +611,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             p = xmlrpclib.ServerProxy(URL)
             myfunction = p.system.methodHelp('my_function')
             self.assertEqual(myfunction, 'This is my function')
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -563,7 +624,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             p = xmlrpclib.ServerProxy(URL)
             divsig = p.system.methodSignature('div')
             self.assertEqual(divsig, 'signatures not supported')
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -580,7 +641,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             self.assertEqual(add_result, 2+3)
             self.assertEqual(pow_result, 6**8)
             self.assertEqual(div_result, 127//42)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -601,7 +662,7 @@ class SimpleServerTestCase(BaseServerTestCase):
             self.assertEqual(result.results[0]['faultString'],
                 '<class \'Exception\'>:method "this_is_not_exists" '
                 'is not supported')
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -854,7 +915,7 @@ class FailingServerTestCase(unittest.TestCase):
         try:
             p = xmlrpclib.ServerProxy(URL)
             self.assertEqual(p.pow(6,8), 6**8)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e):
                 # protocol error; provide additional information in test output
@@ -867,7 +928,7 @@ class FailingServerTestCase(unittest.TestCase):
         try:
             p = xmlrpclib.ServerProxy(URL)
             p.pow(6,8)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e) and hasattr(e, "headers"):
                 # The two server-side error headers shouldn't be sent back in this case
@@ -887,7 +948,7 @@ class FailingServerTestCase(unittest.TestCase):
         try:
             p = xmlrpclib.ServerProxy(URL)
             p.pow(6,8)
-        except (xmlrpclib.ProtocolError, socket.error) as e:
+        except (xmlrpclib.ProtocolError, OSError) as e:
             # ignore failures due to non-blocking socket 'unavailable' errors
             if not is_unavailable_exception(e) and hasattr(e, "headers"):
                 # We should get error info in the response
@@ -980,10 +1041,44 @@ class CGIHandlerTestCase(unittest.TestCase):
             len(content))
 
 
+class UseBuiltinTypesTestCase(unittest.TestCase):
+
+    def test_use_builtin_types(self):
+        # SimpleXMLRPCDispatcher.__init__ accepts use_builtin_types, which
+        # makes all dispatch of binary data as bytes instances, and all
+        # dispatch of datetime argument as datetime.datetime instances.
+        self.log = []
+        expected_bytes = b"my dog has fleas"
+        expected_date = datetime.datetime(2008, 5, 26, 18, 25, 12)
+        marshaled = xmlrpclib.dumps((expected_bytes, expected_date), 'foobar')
+        def foobar(*args):
+            self.log.extend(args)
+        handler = xmlrpc.server.SimpleXMLRPCDispatcher(
+            allow_none=True, encoding=None, use_builtin_types=True)
+        handler.register_function(foobar)
+        handler._marshaled_dispatch(marshaled)
+        self.assertEqual(len(self.log), 2)
+        mybytes, mydate = self.log
+        self.assertEqual(self.log, [expected_bytes, expected_date])
+        self.assertIs(type(mydate), datetime.datetime)
+        self.assertIs(type(mybytes), bytes)
+
+    def test_cgihandler_has_use_builtin_types_flag(self):
+        handler = xmlrpc.server.CGIXMLRPCRequestHandler(use_builtin_types=True)
+        self.assertTrue(handler.use_builtin_types)
+
+    def test_xmlrpcserver_has_use_builtin_types_flag(self):
+        server = xmlrpc.server.SimpleXMLRPCServer(("localhost", 0),
+            use_builtin_types=True)
+        server.server_close()
+        self.assertTrue(server.use_builtin_types)
+
+
 @support.reap_threads
 def test_main():
     xmlrpc_tests = [XMLRPCTestCase, HelperTestCase, DateTimeTestCase,
          BinaryTestCase, FaultTestCase]
+    xmlrpc_tests.append(UseBuiltinTypesTestCase)
     xmlrpc_tests.append(SimpleServerTestCase)
     xmlrpc_tests.append(KeepaliveServerTestCase1)
     xmlrpc_tests.append(KeepaliveServerTestCase2)

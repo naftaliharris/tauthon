@@ -65,17 +65,17 @@ static PyObject *garbage = NULL;
 /* Python string to use if unhandled exception occurs */
 static PyObject *gc_str = NULL;
 
-/* Python string used to look for __del__ attribute. */
-static PyObject *delstr = NULL;
+/* a list of callbacks to be invoked when collection is performed */
+static PyObject *callbacks = NULL;
 
-/* This is the number of objects who survived the last full collection. It
+/* This is the number of objects that survived the last full collection. It
    approximates the number of long lived objects tracked by the GC.
 
    (by "full collection", we mean a collection of the oldest generation).
 */
 static Py_ssize_t long_lived_total = 0;
 
-/* This is the number of objects who survived all "non-full" collections,
+/* This is the number of objects that survived all "non-full" collections,
    and are awaiting to undergo a full collection for the first time.
 
 */
@@ -167,6 +167,18 @@ static Py_ssize_t long_lived_pending = 0;
                 DEBUG_SAVEALL
 static int debug;
 static PyObject *tmod = NULL;
+
+/* Running stats per generation */
+struct gc_generation_stats {
+    /* total number of collections */
+    Py_ssize_t collections;
+    /* total number of collected objects */
+    Py_ssize_t collected;
+    /* total number of uncollectable objects (put into gc.garbage) */
+    Py_ssize_t uncollectable;
+};
+
+static struct gc_generation_stats generation_stats[NUM_GENERATIONS];
 
 /*--------------------------------------------------------------------------
 gc_refs values.
@@ -731,8 +743,8 @@ handle_weakrefs(PyGC_Head *unreachable, PyGC_Head *old)
 static void
 debug_cycle(char *msg, PyObject *op)
 {
-    PySys_WriteStderr("gc: %.100s <%.100s %p>\n",
-                      msg, Py_TYPE(op)->tp_name, op);
+    PySys_FormatStderr("gc: %s <%s %p>\n",
+                       msg, Py_TYPE(op)->tp_name, op);
 }
 
 /* Handle uncollectable garbage (cycles with finalizers, and stuff reachable
@@ -813,6 +825,9 @@ clear_freelists(void)
     (void)PyTuple_ClearFreeList();
     (void)PyUnicode_ClearFreeList();
     (void)PyFloat_ClearFreeList();
+    (void)PyList_ClearFreeList();
+    (void)PyDict_ClearFreeList();
+    (void)PySet_ClearFreeList();
 }
 
 static double
@@ -820,7 +835,9 @@ get_time(void)
 {
     double result = 0;
     if (tmod != NULL) {
-        PyObject *f = PyObject_CallMethod(tmod, "time", NULL);
+        _Py_IDENTIFIER(time);
+
+        PyObject *f = _PyObject_CallMethodId(tmod, &PyId_time, NULL);
         if (f == NULL) {
             PyErr_Clear();
         }
@@ -836,7 +853,7 @@ get_time(void)
 /* This is the main function.  Read this to understand how the
  * collection process works. */
 static Py_ssize_t
-collect(int generation)
+collect(int generation, Py_ssize_t *n_collected, Py_ssize_t *n_uncollectable)
 {
     int i;
     Py_ssize_t m = 0; /* # objects collected */
@@ -847,12 +864,7 @@ collect(int generation)
     PyGC_Head finalizers;  /* objects with, & reachable from, __del__ */
     PyGC_Head *gc;
     double t1 = 0.0;
-
-    if (delstr == NULL) {
-        delstr = PyUnicode_InternFromString("__del__");
-        if (delstr == NULL)
-            Py_FatalError("gc couldn't allocate \"__del__\"");
-    }
+    struct gc_generation_stats *stats = &generation_stats[generation];
 
     if (debug & DEBUG_STATS) {
         PySys_WriteStderr("gc: collecting generation %d...\n",
@@ -993,7 +1005,66 @@ collect(int generation)
         PyErr_WriteUnraisable(gc_str);
         Py_FatalError("unexpected exception during garbage collection");
     }
+
+    /* Update stats */
+    if (n_collected)
+        *n_collected = m;
+    if (n_uncollectable)
+        *n_uncollectable = n;
+    stats->collections++;
+    stats->collected += m;
+    stats->uncollectable += n;
     return n+m;
+}
+
+/* Invoke progress callbacks to notify clients that garbage collection
+ * is starting or stopping
+ */
+static void
+invoke_gc_callback(const char *phase, int generation,
+                   Py_ssize_t collected, Py_ssize_t uncollectable)
+{
+    Py_ssize_t i;
+    PyObject *info = NULL;
+
+    /* we may get called very early */
+    if (callbacks == NULL)
+        return;
+    /* The local variable cannot be rebound, check it for sanity */
+    assert(callbacks != NULL && PyList_CheckExact(callbacks));
+    if (PyList_GET_SIZE(callbacks) != 0) {
+        info = Py_BuildValue("{sisnsn}",
+            "generation", generation,
+            "collected", collected,
+            "uncollectable", uncollectable);
+        if (info == NULL) {
+            PyErr_WriteUnraisable(NULL);
+            return;
+        }
+    }
+    for (i=0; i<PyList_GET_SIZE(callbacks); i++) {
+        PyObject *r, *cb = PyList_GET_ITEM(callbacks, i);
+        Py_INCREF(cb); /* make sure cb doesn't go away */
+        r = PyObject_CallFunction(cb, "sO", phase, info);
+        Py_XDECREF(r);
+        if (r == NULL)
+            PyErr_WriteUnraisable(cb);
+        Py_DECREF(cb);
+    }
+    Py_XDECREF(info);
+}
+
+/* Perform garbage collection of a generation and invoke
+ * progress callbacks.
+ */
+static Py_ssize_t
+collect_with_callback(int generation)
+{
+    Py_ssize_t result, collected, uncollectable;
+    invoke_gc_callback("start", generation, 0, 0);
+    result = collect(generation, &collected, &uncollectable);
+    invoke_gc_callback("stop", generation, collected, uncollectable);
+    return result;
 }
 
 static Py_ssize_t
@@ -1014,7 +1085,7 @@ collect_generations(void)
             if (i == NUM_GENERATIONS - 1
                 && long_lived_pending < long_lived_total / 4)
                 continue;
-            n = collect(i);
+            n = collect_with_callback(i);
             break;
         }
     }
@@ -1085,7 +1156,7 @@ gc_collect(PyObject *self, PyObject *args, PyObject *kws)
         n = 0; /* already collecting, don't do anything */
     else {
         collecting = 1;
-        n = collect(genarg);
+        n = collect_with_callback(genarg);
         collecting = 0;
     }
 
@@ -1289,6 +1360,52 @@ gc_get_objects(PyObject *self, PyObject *noargs)
     return result;
 }
 
+PyDoc_STRVAR(gc_get_stats__doc__,
+"get_stats() -> [...]\n"
+"\n"
+"Return a list of dictionaries containing per-generation statistics.\n");
+
+static PyObject *
+gc_get_stats(PyObject *self, PyObject *noargs)
+{
+    int i;
+    PyObject *result;
+    struct gc_generation_stats stats[NUM_GENERATIONS], *st;
+
+    /* To get consistent values despite allocations while constructing
+       the result list, we use a snapshot of the running stats. */
+    for (i = 0; i < NUM_GENERATIONS; i++) {
+        stats[i] = generation_stats[i];
+    }
+
+    result = PyList_New(0);
+    if (result == NULL)
+        return NULL;
+
+    for (i = 0; i < NUM_GENERATIONS; i++) {
+        PyObject *dict;
+        st = &stats[i];
+        dict = Py_BuildValue("{snsnsn}",
+                             "collections", st->collections,
+                             "collected", st->collected,
+                             "uncollectable", st->uncollectable
+                            );
+        if (dict == NULL)
+            goto error;
+        if (PyList_Append(result, dict)) {
+            Py_DECREF(dict);
+            goto error;
+        }
+        Py_DECREF(dict);
+    }
+    return result;
+
+error:
+    Py_XDECREF(result);
+    return NULL;
+}
+
+
 PyDoc_STRVAR(gc_is_tracked__doc__,
 "is_tracked(obj) -> bool\n"
 "\n"
@@ -1339,6 +1456,7 @@ static PyMethodDef GcMethods[] = {
     {"collect",            (PyCFunction)gc_collect,
         METH_VARARGS | METH_KEYWORDS,           gc_collect__doc__},
     {"get_objects",    gc_get_objects,METH_NOARGS,  gc_get_objects__doc__},
+    {"get_stats",      gc_get_stats, METH_NOARGS, gc_get_stats__doc__},
     {"is_tracked",     gc_is_tracked, METH_O,       gc_is_tracked__doc__},
     {"get_referrers",  gc_get_referrers, METH_VARARGS,
         gc_get_referrers__doc__},
@@ -1378,6 +1496,15 @@ PyInit_gc(void)
     if (PyModule_AddObject(m, "garbage", garbage) < 0)
         return NULL;
 
+    if (callbacks == NULL) {
+        callbacks = PyList_New(0);
+        if (callbacks == NULL)
+            return NULL;
+    }
+    Py_INCREF(callbacks);
+    if (PyModule_AddObject(m, "callbacks", callbacks) < 0)
+        return NULL;
+
     /* Importing can't be done in collect() because collect()
      * can be called via PyGC_Collect() in Py_Finalize().
      * This wouldn't be a problem, except that <initialized> is
@@ -1410,7 +1537,7 @@ PyGC_Collect(void)
         n = 0; /* already collecting, don't do anything */
     else {
         collecting = 1;
-        n = collect(NUM_GENERATIONS - 1);
+        n = collect_with_callback(NUM_GENERATIONS - 1);
         collecting = 0;
     }
 
@@ -1447,6 +1574,7 @@ _PyGC_Fini(void)
             Py_XDECREF(bytes);
         }
     }
+    Py_CLEAR(callbacks);
 }
 
 /* for debugging */

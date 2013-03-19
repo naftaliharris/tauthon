@@ -9,12 +9,6 @@ import unittest
 from test import support
 from test.test_importhooks import ImportHooksBaseTestCase, test_src, test_co
 
-# some tests can be ran even without zlib
-try:
-    import zlib
-except ImportError:
-    zlib = None
-
 from zipfile import ZipFile, ZipInfo, ZIP_STORED, ZIP_DEFLATED
 
 import zipimport
@@ -25,7 +19,7 @@ import io
 from traceback import extract_tb, extract_stack, print_tb
 raise_src = 'def do_raise(): raise TypeError\n'
 
-def make_pyc(co, mtime):
+def make_pyc(co, mtime, size):
     data = marshal.dumps(co)
     if type(mtime) is type(0.0):
         # Mac mtimes need a bit of special casing
@@ -33,14 +27,14 @@ def make_pyc(co, mtime):
             mtime = int(mtime)
         else:
             mtime = int(-0x100000000 + int(mtime))
-    pyc = imp.get_magic() + struct.pack("<i", int(mtime)) + data
+    pyc = imp.get_magic() + struct.pack("<ii", int(mtime), size & 0xFFFFFFFF) + data
     return pyc
 
 def module_path_to_dotted_name(path):
     return path.replace(os.sep, '.')
 
 NOW = time.time()
-test_pyc = make_pyc(test_co, NOW)
+test_pyc = make_pyc(test_co, NOW, len(test_src))
 
 
 TESTMOD = "ziptestmodule"
@@ -202,6 +196,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             for name, (mtime, data) in files.items():
                 zinfo = ZipInfo(name, time.localtime(mtime))
                 zinfo.compress_type = self.compression
+                zinfo.comment = b"spam"
                 z.writestr(zinfo, data)
             z.close()
 
@@ -210,6 +205,10 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             self.assertEqual(zi.is_package(TESTPACK), True)
             mod = zi.load_module(TESTPACK)
             self.assertEqual(zi.get_filename(TESTPACK), mod.__file__)
+
+            existing_pack_path = __import__(TESTPACK).__path__[0]
+            expected_path_path = os.path.join(TEMP_ZIP, TESTPACK)
+            self.assertEqual(existing_pack_path, expected_path_path)
 
             self.assertEqual(zi.is_package(packdir + '__init__'), False)
             self.assertEqual(zi.is_package(packdir + TESTPACK2), True)
@@ -247,6 +246,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             for name, (mtime, data) in files.items():
                 zinfo = ZipInfo(name, time.localtime(mtime))
                 zinfo.compress_type = self.compression
+                zinfo.comment = b"eggs"
                 z.writestr(zinfo, data)
             z.close()
 
@@ -299,7 +299,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             return __file__
         if __loader__.get_data("some.data") != b"some data":
             raise AssertionError("bad data")\n"""
-        pyc = make_pyc(compile(src, "<???>", "exec"), NOW)
+        pyc = make_pyc(compile(src, "<???>", "exec"), NOW, len(src))
         files = {TESTMOD + pyc_ext: (NOW, pyc),
                  "some.data": (NOW, "some data")}
         self.doTest(pyc_ext, files, TESTMOD)
@@ -319,7 +319,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
         self.doTest(".py", files, TESTMOD, call=self.assertModuleSource)
 
     def testGetCompiledSource(self):
-        pyc = make_pyc(compile(test_src, "<???>", "exec"), NOW)
+        pyc = make_pyc(compile(test_src, "<???>", "exec"), NOW, len(test_src))
         files = {TESTMOD + ".py": (NOW, test_src),
                  TESTMOD + pyc_ext: (NOW, pyc)}
         self.doTest(pyc_ext, files, TESTMOD, call=self.assertModuleSource)
@@ -392,7 +392,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             os.remove(filename)
 
 
-@unittest.skipUnless(zlib, "requires zlib")
+@support.requires_zlib
 class CompressedZipImportTestCase(UncompressedZipImportTestCase):
     compression = ZIP_DEFLATED
 
@@ -417,7 +417,7 @@ class BadFileZipImportTestCase(unittest.TestCase):
 
     def testEmptyFile(self):
         support.unlink(TESTMOD)
-        open(TESTMOD, 'w+').close()
+        support.create_empty_file(TESTMOD)
         self.assertZipFailure(TESTMOD)
 
     def testFileUnreadable(self):
@@ -461,7 +461,7 @@ class BadFileZipImportTestCase(unittest.TestCase):
 
             self.assertRaises(error, z.load_module, 'abc')
             self.assertRaises(error, z.get_code, 'abc')
-            self.assertRaises(IOError, z.get_data, 'abc')
+            self.assertRaises(OSError, z.get_data, 'abc')
             self.assertRaises(error, z.get_source, 'abc')
             self.assertRaises(error, z.is_package, 'abc')
         finally:

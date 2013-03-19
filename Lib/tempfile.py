@@ -10,8 +10,6 @@ This module also provides some data items to the user:
 
   TMP_MAX  - maximum number of names that will be tried before
              giving up.
-  template - the default prefix for all temporary names.
-             You may change this to control the default prefix.
   tempdir  - If this is set to a string before the first use of
              any routine from this module, it will be considered as
              another candidate location to store temporary files.
@@ -45,7 +43,7 @@ else:
     def _set_cloexec(fd):
         try:
             flags = _fcntl.fcntl(fd, _fcntl.F_GETFD, 0)
-        except IOError:
+        except OSError:
             pass
         else:
             # flags read successfully, modify
@@ -60,6 +58,8 @@ except ImportError:
 _allocate_lock = _thread.allocate_lock
 
 _text_openflags = _os.O_RDWR | _os.O_CREAT | _os.O_EXCL
+if hasattr(_os, 'O_CLOEXEC'):
+    _text_openflags |= _os.O_CLOEXEC
 if hasattr(_os, 'O_NOINHERIT'):
     _text_openflags |= _os.O_NOINHERIT
 if hasattr(_os, 'O_NOFOLLOW'):
@@ -74,6 +74,8 @@ if hasattr(_os, 'TMP_MAX'):
 else:
     TMP_MAX = 10000
 
+# Although it does not have an underscore for historical reasons, this
+# variable is an internal implementation detail (see issue 10354).
 template = "tmp"
 
 # Internal routines.
@@ -85,19 +87,16 @@ if hasattr(_os, "lstat"):
 elif hasattr(_os, "stat"):
     _stat = _os.stat
 else:
-    # Fallback.  All we need is something that raises os.error if the
+    # Fallback.  All we need is something that raises OSError if the
     # file doesn't exist.
     def _stat(fn):
-        try:
-            f = open(fn)
-        except IOError:
-            raise _os.error
+        f = open(fn)
         f.close()
 
 def _exists(fn):
     try:
         _stat(fn)
-    except _os.error:
+    except OSError:
         return False
     else:
         return True
@@ -149,7 +148,7 @@ def _candidate_tempdir_list():
     # As a last resort, the current directory.
     try:
         dirlist.append(_os.getcwd())
-    except (AttributeError, _os.error):
+    except (AttributeError, OSError):
         dirlist.append(_os.curdir)
 
     return dirlist
@@ -184,12 +183,13 @@ def _get_default_tempdir():
                 finally:
                     _os.unlink(filename)
                 return dir
-            except (OSError, IOError) as e:
-                if e.args[0] != _errno.EEXIST:
-                    break # no point trying more names in this directory
+            except FileExistsError:
                 pass
-    raise IOError(_errno.ENOENT,
-                  "No usable temporary directory found in %s" % dirlist)
+            except OSError:
+                break   # no point trying more names in this directory
+    raise FileNotFoundError(_errno.ENOENT,
+                            "No usable temporary directory found in %s" %
+                            dirlist)
 
 _name_sequence = None
 
@@ -219,12 +219,11 @@ def _mkstemp_inner(dir, pre, suf, flags):
             fd = _os.open(file, flags, 0o600)
             _set_cloexec(fd)
             return (fd, _os.path.abspath(file))
-        except OSError as e:
-            if e.errno == _errno.EEXIST:
-                continue # try again
-            raise
+        except FileExistsError:
+            continue    # try again
 
-    raise IOError(_errno.EEXIST, "No usable temporary file name found")
+    raise FileExistsError(_errno.EEXIST,
+                          "No usable temporary file name found")
 
 
 # User visible interfaces.
@@ -308,12 +307,11 @@ def mkdtemp(suffix="", prefix=template, dir=None):
         try:
             _os.mkdir(file, 0o700)
             return file
-        except OSError as e:
-            if e.errno == _errno.EEXIST:
-                continue # try again
-            raise
+        except FileExistsError:
+            continue    # try again
 
-    raise IOError(_errno.EEXIST, "No usable temporary directory name found")
+    raise FileExistsError(_errno.EEXIST,
+                          "No usable temporary directory name found")
 
 def mktemp(suffix="", prefix=template, dir=None):
     """User-callable function to return a unique temporary file name.  The
@@ -342,7 +340,8 @@ def mktemp(suffix="", prefix=template, dir=None):
         if not _exists(file):
             return file
 
-    raise IOError(_errno.EEXIST, "No usable temporary filename found")
+    raise FileExistsError(_errno.EEXIST,
+                          "No usable temporary filename found")
 
 
 class _TemporaryFileWrapper:
@@ -608,8 +607,13 @@ class SpooledTemporaryFile:
     def tell(self):
         return self._file.tell()
 
-    def truncate(self):
-        self._file.truncate()
+    def truncate(self, size=None):
+        if size is None:
+            self._file.truncate()
+        else:
+            if size > self._max_size:
+                self.rollover()
+            self._file.truncate(size)
 
     def write(self, s):
         file = self._file
@@ -682,7 +686,6 @@ class TemporaryDirectory(object):
     _islink = staticmethod(_os.path.islink)
     _remove = staticmethod(_os.remove)
     _rmdir = staticmethod(_os.rmdir)
-    _os_error = _os.error
     _warn = _warnings.warn
 
     def _rmtree(self, path):
@@ -692,16 +695,16 @@ class TemporaryDirectory(object):
             fullname = self._path_join(path, name)
             try:
                 isdir = self._isdir(fullname) and not self._islink(fullname)
-            except self._os_error:
+            except OSError:
                 isdir = False
             if isdir:
                 self._rmtree(fullname)
             else:
                 try:
                     self._remove(fullname)
-                except self._os_error:
+                except OSError:
                     pass
         try:
             self._rmdir(path)
-        except self._os_error:
+        except OSError:
             pass

@@ -106,7 +106,8 @@ def socket(family=None, type=None, proto=None):
     return MockSocket()
 
 
-def create_connection(address, timeout=socket_module._GLOBAL_DEFAULT_TIMEOUT):
+def create_connection(address, timeout=socket_module._GLOBAL_DEFAULT_TIMEOUT,
+                      source_address=None):
     try:
         int_port = int(address[1])
     except ValueError:
@@ -139,12 +140,8 @@ def gethostbyname(name):
     return ""
 
 
-class gaierror(Exception):
-    pass
-
-
-class error(Exception):
-    pass
+gaierror = socket_module.gaierror
+error = socket_module.error
 
 
 # Constants

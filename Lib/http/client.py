@@ -141,6 +141,9 @@ UNPROCESSABLE_ENTITY = 422
 LOCKED = 423
 FAILED_DEPENDENCY = 424
 UPGRADE_REQUIRED = 426
+PRECONDITION_REQUIRED = 428
+TOO_MANY_REQUESTS = 429
+REQUEST_HEADER_FIELDS_TOO_LARGE = 431
 
 # server error
 INTERNAL_SERVER_ERROR = 500
@@ -151,6 +154,7 @@ GATEWAY_TIMEOUT = 504
 HTTP_VERSION_NOT_SUPPORTED = 505
 INSUFFICIENT_STORAGE = 507
 NOT_EXTENDED = 510
+NETWORK_AUTHENTICATION_REQUIRED = 511
 
 # Mapping status codes to official W3C names
 responses = {
@@ -192,6 +196,9 @@ responses = {
     415: 'Unsupported Media Type',
     416: 'Requested Range Not Satisfiable',
     417: 'Expectation Failed',
+    428: 'Precondition Required',
+    429: 'Too Many Requests',
+    431: 'Request Header Fields Too Large',
 
     500: 'Internal Server Error',
     501: 'Not Implemented',
@@ -199,6 +206,7 @@ responses = {
     503: 'Service Unavailable',
     504: 'Gateway Timeout',
     505: 'HTTP Version Not Supported',
+    511: 'Network Authentication Required',
 }
 
 # maximal amount of data to read at one time in _safe_read
@@ -259,8 +267,6 @@ def parse_headers(fp, _class=HTTPMessage):
     return email.parser.Parser(_class=_class).parsestr(hstring)
 
 
-_strict_sentinel = object()
-
 class HTTPResponse(io.RawIOBase):
 
     # See RFC 2616 sec 19.6 and RFC 1945 sec 6 for details.
@@ -270,7 +276,7 @@ class HTTPResponse(io.RawIOBase):
     # text following RFC 2047.  The basic status line parsing only
     # accepts iso-8859-1.
 
-    def __init__(self, sock, debuglevel=0, strict=_strict_sentinel, method=None, url=None):
+    def __init__(self, sock, debuglevel=0, method=None, url=None):
         # If the response includes a content-length header, we need to
         # make sure that the client doesn't read more than the
         # specified number of bytes.  If it does, it will block until
@@ -280,10 +286,6 @@ class HTTPResponse(io.RawIOBase):
         # clients unless they know what they are doing.
         self.fp = sock.makefile("rb")
         self.debuglevel = debuglevel
-        if strict is not _strict_sentinel:
-            warnings.warn("the 'strict' argument isn't supported anymore; "
-                "http.client now always assumes HTTP/1.x compliant servers.",
-                DeprecationWarning, 2)
         self._method = method
 
         # The HTTPResponse object is returned via urllib.  The clients
@@ -489,11 +491,17 @@ class HTTPResponse(io.RawIOBase):
             self._close_conn()
             return b""
 
-        if self.chunked:
-            return self._read_chunked(amt)
+        if amt is not None:
+            # Amount is given, so call base class version
+            # (which is implemented in terms of self.readinto)
+            return super(HTTPResponse, self).read(amt)
+        else:
+            # Amount is not given (unbounded read) so we must check self.length
+            # and self.chunked
 
-        if amt is None:
-            # unbounded read
+            if self.chunked:
+                return self._readall_chunked()
+
             if self.length is None:
                 s = self.fp.read()
             else:
@@ -506,66 +514,53 @@ class HTTPResponse(io.RawIOBase):
             self._close_conn()        # we read everything
             return s
 
+    def readinto(self, b):
+        if self.fp is None:
+            return 0
+
+        if self._method == "HEAD":
+            self._close_conn()
+            return 0
+
+        if self.chunked:
+            return self._readinto_chunked(b)
+
         if self.length is not None:
-            if amt > self.length:
+            if len(b) > self.length:
                 # clip the read to the "end of response"
-                amt = self.length
+                b = memoryview(b)[0:self.length]
 
         # we do not use _safe_read() here because this may be a .will_close
         # connection, and the user is reading more bytes than will be provided
         # (for example, reading in 1k chunks)
-        s = self.fp.read(amt)
-        if not s:
+        n = self.fp.readinto(b)
+        if not n:
             # Ideally, we would raise IncompleteRead if the content-length
             # wasn't satisfied, but it might break compatibility.
             self._close_conn()
         elif self.length is not None:
-            self.length -= len(s)
+            self.length -= n
             if not self.length:
                 self._close_conn()
+        return n
 
-        return s
+    def _read_next_chunk_size(self):
+        # Read the next chunk size from the file
+        line = self.fp.readline(_MAXLINE + 1)
+        if len(line) > _MAXLINE:
+            raise LineTooLong("chunk size")
+        i = line.find(b";")
+        if i >= 0:
+            line = line[:i] # strip chunk-extensions
+        try:
+            return int(line, 16)
+        except ValueError:
+            # close the connection as protocol synchronisation is
+            # probably lost
+            self._close_conn()
+            raise
 
-    def _read_chunked(self, amt):
-        assert self.chunked != _UNKNOWN
-        chunk_left = self.chunk_left
-        value = []
-        while True:
-            if chunk_left is None:
-                line = self.fp.readline(_MAXLINE + 1)
-                if len(line) > _MAXLINE:
-                    raise LineTooLong("chunk size")
-                i = line.find(b";")
-                if i >= 0:
-                    line = line[:i] # strip chunk-extensions
-                try:
-                    chunk_left = int(line, 16)
-                except ValueError:
-                    # close the connection as protocol synchronisation is
-                    # probably lost
-                    self._close_conn()
-                    raise IncompleteRead(b''.join(value))
-                if chunk_left == 0:
-                    break
-            if amt is None:
-                value.append(self._safe_read(chunk_left))
-            elif amt < chunk_left:
-                value.append(self._safe_read(amt))
-                self.chunk_left = chunk_left - amt
-                return b''.join(value)
-            elif amt == chunk_left:
-                value.append(self._safe_read(amt))
-                self._safe_read(2)  # toss the CRLF at the end of the chunk
-                self.chunk_left = None
-                return b''.join(value)
-            else:
-                value.append(self._safe_read(chunk_left))
-                amt -= chunk_left
-
-            # we read the whole chunk, get another
-            self._safe_read(2)      # toss the CRLF at the end of the chunk
-            chunk_left = None
-
+    def _read_and_discard_trailer(self):
         # read and discard trailer up to the CRLF terminator
         ### note: we shouldn't have any trailers!
         while True:
@@ -579,10 +574,71 @@ class HTTPResponse(io.RawIOBase):
             if line in (b'\r\n', b'\n', b''):
                 break
 
+    def _readall_chunked(self):
+        assert self.chunked != _UNKNOWN
+        chunk_left = self.chunk_left
+        value = []
+        while True:
+            if chunk_left is None:
+                try:
+                    chunk_left = self._read_next_chunk_size()
+                    if chunk_left == 0:
+                        break
+                except ValueError:
+                    raise IncompleteRead(b''.join(value))
+            value.append(self._safe_read(chunk_left))
+
+            # we read the whole chunk, get another
+            self._safe_read(2)      # toss the CRLF at the end of the chunk
+            chunk_left = None
+
+        self._read_and_discard_trailer()
+
         # we read everything; close the "file"
         self._close_conn()
 
         return b''.join(value)
+
+    def _readinto_chunked(self, b):
+        assert self.chunked != _UNKNOWN
+        chunk_left = self.chunk_left
+
+        total_bytes = 0
+        mvb = memoryview(b)
+        while True:
+            if chunk_left is None:
+                try:
+                    chunk_left = self._read_next_chunk_size()
+                    if chunk_left == 0:
+                        break
+                except ValueError:
+                    raise IncompleteRead(bytes(b[0:total_bytes]))
+
+            if len(mvb) < chunk_left:
+                n = self._safe_readinto(mvb)
+                self.chunk_left = chunk_left - n
+                return total_bytes + n
+            elif len(mvb) == chunk_left:
+                n = self._safe_readinto(mvb)
+                self._safe_read(2)  # toss the CRLF at the end of the chunk
+                self.chunk_left = None
+                return total_bytes + n
+            else:
+                temp_mvb = mvb[0:chunk_left]
+                n = self._safe_readinto(temp_mvb)
+                mvb = mvb[n:]
+                total_bytes += n
+
+            # we read the whole chunk, get another
+            self._safe_read(2)      # toss the CRLF at the end of the chunk
+            chunk_left = None
+
+        self._read_and_discard_trailer()
+
+        # we read everything; close the "file"
+        self._close_conn()
+
+        return total_bytes
 
     def _safe_read(self, amt):
         """Read the number of bytes requested, compensating for partial reads.
@@ -606,6 +662,22 @@ class HTTPResponse(io.RawIOBase):
             s.append(chunk)
             amt -= len(chunk)
         return b"".join(s)
+
+    def _safe_readinto(self, b):
+        """Same as _safe_read, but for reading into a buffer."""
+        total_bytes = 0
+        mvb = memoryview(b)
+        while total_bytes < len(b):
+            if MAXAMOUNT < len(mvb):
+                temp_mvb = mvb[0:MAXAMOUNT]
+                n = self.fp.readinto(temp_mvb)
+            else:
+                n = self.fp.readinto(mvb)
+            if not n:
+                raise IncompleteRead(bytes(mvb[0:total_bytes]), len(b))
+            mvb = mvb[n:]
+            total_bytes += n
+        return total_bytes
 
     def fileno(self):
         return self.fp.fileno()
@@ -650,13 +722,17 @@ class HTTPConnection:
     default_port = HTTP_PORT
     auto_open = 1
     debuglevel = 0
+    # TCP Maximum Segment Size (MSS) is determined by the TCP stack on
+    # a per-connection basis.  There is no simple and efficient
+    # platform independent mechanism for determining the MSS, so
+    # instead a reasonable estimate is chosen.  The getsockopt()
+    # interface using the TCP_MAXSEG parameter may be a suitable
+    # approach on some operating systems. A value of 16KiB is chosen
+    # as a reasonable estimate of the maximum MSS.
+    mss = 16384
 
-    def __init__(self, host, port=None, strict=_strict_sentinel,
-                 timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None):
-        if strict is not _strict_sentinel:
-            warnings.warn("the 'strict' argument isn't supported anymore; "
-                "http.client now always assumes HTTP/1.x compliant servers.",
-                DeprecationWarning, 2)
+    def __init__(self, host, port=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                 source_address=None):
         self.timeout = timeout
         self.source_address = source_address
         self.sock = None
@@ -713,7 +789,7 @@ class HTTPConnection:
         self.send(connect_bytes)
         for header, value in self._tunnel_headers.items():
             header_str = "%s: %s\r\n" % (header, value)
-            header_bytes = header_str.encode("latin1")
+            header_bytes = header_str.encode("latin-1")
             self.send(header_bytes)
         self.send(b'\r\n')
 
@@ -722,8 +798,8 @@ class HTTPConnection:
 
         if code != 200:
             self.close()
-            raise socket.error("Tunnel connection failed: %d %s" % (code,
-                                                                    message.strip()))
+            raise OSError("Tunnel connection failed: %d %s" % (code,
+                                                               message.strip()))
         while True:
             line = response.fp.readline(_MAXLINE + 1)
             if len(line) > _MAXLINE:
@@ -817,8 +893,11 @@ class HTTPConnection:
         del self._buffer[:]
         # If msg and message_body are sent in a single send() call,
         # it will avoid performance problems caused by the interaction
-        # between delayed ack and the Nagle algorithm.
-        if isinstance(message_body, bytes):
+        # between delayed ack and the Nagle algorithm. However,
+        # there is no performance gain if the message is larger
+        # than MSS (and there is a memory penalty for the message
+        # copy).
+        if isinstance(message_body, bytes) and len(message_body) < self.mss:
             msg += message_body
             message_body = None
         self.send(msg)
@@ -956,7 +1035,7 @@ class HTTPConnection:
         values = list(values)
         for i, one_value in enumerate(values):
             if hasattr(one_value, 'encode'):
-                values[i] = one_value.encode('latin1')
+                values[i] = one_value.encode('latin-1')
             elif isinstance(one_value, int):
                 values[i] = str(one_value).encode('ascii')
         value = b'\r\n\t'.join(values)
@@ -1088,9 +1167,10 @@ else:
         # XXX Should key_file and cert_file be deprecated in favour of context?
 
         def __init__(self, host, port=None, key_file=None, cert_file=None,
-                     strict=_strict_sentinel, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
-                     source_address=None, *, context=None, check_hostname=None):
-            super(HTTPSConnection, self).__init__(host, port, strict, timeout,
+                     timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                     source_address=None, *, context=None,
+                     check_hostname=None):
+            super(HTTPSConnection, self).__init__(host, port, timeout,
                                                   source_address)
             self.key_file = key_file
             self.cert_file = cert_file

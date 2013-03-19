@@ -120,6 +120,10 @@ been GPL-compatible; the table below summarizes the various releases.
 +----------------+--------------+------------+------------+-----------------+
 | 3.2.3          | 3.2.2        | 2012       | PSF        | yes             |
 +----------------+--------------+------------+------------+-----------------+
+| 3.3.0          | 3.2          | 2012       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
+| 3.4.0          | 3.3.0        | 2014       | PSF        | yes             |
++----------------+--------------+------------+------------+-----------------+
 
 .. note::
 
@@ -148,7 +152,7 @@ Terms and conditions for accessing or otherwise using Python
    analyze, test, perform and/or display publicly, prepare derivative works,
    distribute, and otherwise use Python |release| alone or in any derivative
    version, provided, however, that PSF's License Agreement and PSF's notice of
-   copyright, i.e., "Copyright © 2001-2012 Python Software Foundation; All Rights
+   copyright, i.e., "Copyright © 2001-2013 Python Software Foundation; All Rights
    Reserved" are retained in Python |release| alone or in any derivative version
    prepared by Licensee.
 
@@ -652,6 +656,25 @@ The :mod:`select` and contains the following notice for the kqueue interface::
   LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
   OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
   SUCH DAMAGE.
+
+
+SHA-3
+-----
+
+The module :mod:`_sha3` and :mod:`hashlib` are using the reference
+implementation of Keccak. The files at :file:`Modules/_sha3/keccak/` contain
+the following note::
+
+  The Keccak sponge function, designed by Guido Bertoni, Joan Daemen,
+  Michaël Peeters and Gilles Van Assche. For more information, feedback or
+  questions, please refer to our website: http://keccak.noekeon.org/
+
+  Implementation by the designers,
+  hereby denoted as "the implementer".
+
+  To the extent possible under law, the implementer has waived all copyright
+  and related or neighboring rights to the source code in this file.
+  http://creativecommons.org/publicdomain/zero/1.0/
 
 
 strtod and dtoa

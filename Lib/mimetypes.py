@@ -243,13 +243,12 @@ class MimeTypes:
             while True:
                 try:
                     ctype = _winreg.EnumKey(mimedb, i)
-                except EnvironmentError:
+                except OSError:
                     break
                 else:
                     yield ctype
                 i += 1
 
-        default_encoding = sys.getdefaultencoding()
         with _winreg.OpenKey(_winreg.HKEY_CLASSES_ROOT,
                              r'MIME\Database\Content Type') as mimedb:
             for ctype in enum_types(mimedb):
@@ -257,7 +256,7 @@ class MimeTypes:
                     with _winreg.OpenKey(mimedb, ctype) as key:
                         suffix, datatype = _winreg.QueryValueEx(key,
                                                                 'Extension')
-                except EnvironmentError:
+                except OSError:
                     continue
                 if datatype != _winreg.REG_SZ:
                     continue
@@ -360,7 +359,7 @@ def init(files=None):
 def read_mime_types(file):
     try:
         f = open(file)
-    except IOError:
+    except OSError:
         return None
     db = MimeTypes()
     db.readfp(f, True)
@@ -379,12 +378,14 @@ def _default_mime_types():
         '.taz': '.tar.gz',
         '.tz': '.tar.gz',
         '.tbz2': '.tar.bz2',
+        '.txz': '.tar.xz',
         }
 
     encodings_map = {
         '.gz': 'gzip',
         '.Z': 'compress',
         '.bz2': 'bzip2',
+        '.xz': 'xz',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
@@ -434,6 +435,8 @@ def _default_mime_types():
         '.ksh'    : 'text/plain',
         '.latex'  : 'application/x-latex',
         '.m1v'    : 'video/mpeg',
+        '.m3u'    : 'application/vnd.apple.mpegurl',
+        '.m3u8'   : 'application/vnd.apple.mpegurl',
         '.man'    : 'application/x-troff-man',
         '.me'     : 'application/x-troff-me',
         '.mht'    : 'message/rfc822',

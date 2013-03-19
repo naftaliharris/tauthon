@@ -78,6 +78,9 @@ def get_msvcr():
         elif msc_ver == '1500':
             # VS2008 / MSVC 9.0
             return ['msvcr90']
+        elif msc_ver == '1600':
+            # VS2010 / MSVC 10.0
+            return ['msvcr100']
         else:
             raise ValueError("Unknown MS Compiler version %s " % msc_ver)
 
@@ -356,7 +359,7 @@ def check_config_h():
                 return CONFIG_H_NOTOK, "'%s' does not mention '__GNUC__'" % fn
         finally:
             config_h.close()
-    except IOError as exc:
+    except OSError as exc:
         return (CONFIG_H_UNCERTAIN,
                 "couldn't read '%s': %s" % (fn, exc.strerror))
 

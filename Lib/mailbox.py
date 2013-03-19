@@ -22,9 +22,6 @@ import email.generator
 import io
 import contextlib
 try:
-    if sys.platform == 'os2emx':
-        # OS/2 EMX fcntl() not adequate
-        raise ImportError
     import fcntl
 except ImportError:
     fcntl = None
@@ -337,11 +334,8 @@ class Maildir(Mailbox):
         # This overrides an inapplicable implementation in the superclass.
         try:
             self.remove(key)
-        except KeyError:
+        except (KeyError, FileNotFoundError):
             pass
-        except OSError as e:
-            if e.errno != errno.ENOENT:
-                raise
 
     def __setitem__(self, key, message):
         """Replace the keyed message; raise KeyError if it doesn't exist."""
@@ -369,14 +363,11 @@ class Maildir(Mailbox):
     def get_message(self, key):
         """Return a Message representation or raise a KeyError."""
         subpath = self._lookup(key)
-        f = open(os.path.join(self._path, subpath), 'rb')
-        try:
+        with open(os.path.join(self._path, subpath), 'rb') as f:
             if self._factory:
                 msg = self._factory(f)
             else:
                 msg = MaildirMessage(f)
-        finally:
-            f.close()
         subdir, name = os.path.split(subpath)
         msg.set_subdir(subdir)
         if self.colon in name:
@@ -386,11 +377,8 @@ class Maildir(Mailbox):
 
     def get_bytes(self, key):
         """Return a bytes representation or raise a KeyError."""
-        f = open(os.path.join(self._path, self._lookup(key)), 'rb')
-        try:
+        with open(os.path.join(self._path, self._lookup(key)), 'rb') as f:
             return f.read().replace(linesep, b'\n')
-        finally:
-            f.close()
 
     def get_file(self, key):
         """Return a file-like representation or raise a KeyError."""
@@ -502,16 +490,12 @@ class Maildir(Mailbox):
         path = os.path.join(self._path, 'tmp', uniq)
         try:
             os.stat(path)
-        except OSError as e:
-            if e.errno == errno.ENOENT:
-                Maildir._count += 1
-                try:
-                    return _create_carefully(path)
-                except OSError as e:
-                    if e.errno != errno.EEXIST:
-                        raise
-            else:
-                raise
+        except FileNotFoundError:
+            Maildir._count += 1
+            try:
+                return _create_carefully(path)
+            except FileExistsError:
+                pass
 
         # Fall through to here if stat succeeded or open raised EEXIST.
         raise ExternalClashError('Name clash prevented file creation: %s' %
@@ -588,7 +572,7 @@ class _singlefileMailbox(Mailbox):
         Mailbox.__init__(self, path, factory, create)
         try:
             f = open(self._path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 if create:
                     f = open(self._path, 'wb+')
@@ -631,8 +615,7 @@ class _singlefileMailbox(Mailbox):
     def iterkeys(self):
         """Return an iterator over keys."""
         self._lookup()
-        for key in self._toc.keys():
-            yield key
+        yield from self._toc.keys()
 
     def __contains__(self, key):
         """Return True if the keyed message exists, False otherwise."""
@@ -710,13 +693,9 @@ class _singlefileMailbox(Mailbox):
         os.chmod(new_file.name, mode)
         try:
             os.rename(new_file.name, self._path)
-        except OSError as e:
-            if e.errno == errno.EEXIST or \
-              (os.name == 'os2' and e.errno == errno.EACCES):
-                os.remove(self._path)
-                os.rename(new_file.name, self._path)
-            else:
-                raise
+        except FileExistsError:
+            os.remove(self._path)
+            os.rename(new_file.name, self._path)
         self._file = open(self._path, 'rb+')
         self._toc = new_toc
         self._pending = False
@@ -993,7 +972,7 @@ class MH(Mailbox):
         path = os.path.join(self._path, str(key))
         try:
             f = open(path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1007,7 +986,7 @@ class MH(Mailbox):
         path = os.path.join(self._path, str(key))
         try:
             f = open(path, 'rb+')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1033,12 +1012,12 @@ class MH(Mailbox):
                 f = open(os.path.join(self._path, str(key)), 'rb+')
             else:
                 f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
                 raise
-        try:
+        with f:
             if self._locked:
                 _lock_file(f)
             try:
@@ -1046,8 +1025,6 @@ class MH(Mailbox):
             finally:
                 if self._locked:
                     _unlock_file(f)
-        finally:
-            f.close()
         for name, key_list in self.get_sequences().items():
             if key in key_list:
                 msg.add_sequence(name)
@@ -1060,12 +1037,12 @@ class MH(Mailbox):
                 f = open(os.path.join(self._path, str(key)), 'rb+')
             else:
                 f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
                 raise
-        try:
+        with f:
             if self._locked:
                 _lock_file(f)
             try:
@@ -1073,14 +1050,12 @@ class MH(Mailbox):
             finally:
                 if self._locked:
                     _unlock_file(f)
-        finally:
-            f.close()
 
     def get_file(self, key):
         """Return a file-like representation or raise a KeyError."""
         try:
             f = open(os.path.join(self._path, str(key)), 'rb')
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError('No message with key: %s' % key)
             else:
@@ -1157,8 +1132,7 @@ class MH(Mailbox):
     def get_sequences(self):
         """Return a name-to-key-list dictionary to define each sequence."""
         results = {}
-        f = open(os.path.join(self._path, '.mh_sequences'), 'r')
-        try:
+        with open(os.path.join(self._path, '.mh_sequences'), 'r', encoding='ASCII') as f:
             all_keys = set(self.keys())
             for line in f:
                 try:
@@ -1177,13 +1151,11 @@ class MH(Mailbox):
                 except ValueError:
                     raise FormatError('Invalid sequence specification: %s' %
                                       line.rstrip())
-        finally:
-            f.close()
         return results
 
     def set_sequences(self, sequences):
         """Set sequences using the given name-to-key-list dictionary."""
-        f = open(os.path.join(self._path, '.mh_sequences'), 'r+')
+        f = open(os.path.join(self._path, '.mh_sequences'), 'r+', encoding='ASCII')
         try:
             os.close(os.open(f.name, os.O_WRONLY | os.O_TRUNC))
             for name, keys in sequences.items():
@@ -1523,9 +1495,10 @@ class Message(email.message.Message):
 
     def _become_message(self, message):
         """Assume the non-format-specific state of message."""
-        for name in ('_headers', '_unixfrom', '_payload', '_charset',
-                     'preamble', 'epilogue', 'defects', '_default_type'):
-            self.__dict__[name] = message.__dict__[name]
+        type_specific = getattr(message, '_type_specific_attributes', [])
+        for name in message.__dict__:
+            if name not in type_specific:
+                self.__dict__[name] = message.__dict__[name]
 
     def _explain_to(self, message):
         """Copy format-specific state to message insofar as possible."""
@@ -1537,6 +1510,8 @@ class Message(email.message.Message):
 
 class MaildirMessage(Message):
     """Message with Maildir-specific properties."""
+
+    _type_specific_attributes = ['_subdir', '_info', '_date']
 
     def __init__(self, message=None):
         """Initialize a MaildirMessage instance."""
@@ -1644,6 +1619,8 @@ class MaildirMessage(Message):
 
 class _mboxMMDFMessage(Message):
     """Message with mbox- or MMDF-specific properties."""
+
+    _type_specific_attributes = ['_from']
 
     def __init__(self, message=None):
         """Initialize an mboxMMDFMessage instance."""
@@ -1760,6 +1737,8 @@ class mboxMessage(_mboxMMDFMessage):
 class MHMessage(Message):
     """Message with MH-specific properties."""
 
+    _type_specific_attributes = ['_sequences']
+
     def __init__(self, message=None):
         """Initialize an MHMessage instance."""
         self._sequences = []
@@ -1829,6 +1808,8 @@ class MHMessage(Message):
 
 class BabylMessage(Message):
     """Message with Babyl-specific properties."""
+
+    _type_specific_attributes = ['_labels', '_visible']
 
     def __init__(self, message=None):
         """Initialize an BabylMessage instance."""
@@ -2067,7 +2048,7 @@ def _lock_file(f, dotlock=True):
         if fcntl:
             try:
                 fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except IOError as e:
+            except OSError as e:
                 if e.errno in (errno.EAGAIN, errno.EACCES, errno.EROFS):
                     raise ExternalClashError('lockf: lock unavailable: %s' %
                                              f.name)
@@ -2077,7 +2058,7 @@ def _lock_file(f, dotlock=True):
             try:
                 pre_lock = _create_temporary(f.name + '.lock')
                 pre_lock.close()
-            except IOError as e:
+            except OSError as e:
                 if e.errno in (errno.EACCES, errno.EROFS):
                     return  # Without write access, just skip dotlocking.
                 else:
@@ -2090,14 +2071,10 @@ def _lock_file(f, dotlock=True):
                 else:
                     os.rename(pre_lock.name, f.name + '.lock')
                     dotlock_done = True
-            except OSError as e:
-                if e.errno == errno.EEXIST or \
-                  (os.name == 'os2' and e.errno == errno.EACCES):
-                    os.remove(pre_lock.name)
-                    raise ExternalClashError('dot lock unavailable: %s' %
-                                             f.name)
-                else:
-                    raise
+            except FileExistsError:
+                os.remove(pre_lock.name)
+                raise ExternalClashError('dot lock unavailable: %s' %
+                                         f.name)
     except:
         if fcntl:
             fcntl.lockf(f, fcntl.LOCK_UN)

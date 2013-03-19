@@ -52,6 +52,37 @@ PROTOCOL_SSLv2
 PROTOCOL_SSLv3
 PROTOCOL_SSLv23
 PROTOCOL_TLSv1
+
+The following constants identify various SSL alert message descriptions as per
+http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-6
+
+ALERT_DESCRIPTION_CLOSE_NOTIFY
+ALERT_DESCRIPTION_UNEXPECTED_MESSAGE
+ALERT_DESCRIPTION_BAD_RECORD_MAC
+ALERT_DESCRIPTION_RECORD_OVERFLOW
+ALERT_DESCRIPTION_DECOMPRESSION_FAILURE
+ALERT_DESCRIPTION_HANDSHAKE_FAILURE
+ALERT_DESCRIPTION_BAD_CERTIFICATE
+ALERT_DESCRIPTION_UNSUPPORTED_CERTIFICATE
+ALERT_DESCRIPTION_CERTIFICATE_REVOKED
+ALERT_DESCRIPTION_CERTIFICATE_EXPIRED
+ALERT_DESCRIPTION_CERTIFICATE_UNKNOWN
+ALERT_DESCRIPTION_ILLEGAL_PARAMETER
+ALERT_DESCRIPTION_UNKNOWN_CA
+ALERT_DESCRIPTION_ACCESS_DENIED
+ALERT_DESCRIPTION_DECODE_ERROR
+ALERT_DESCRIPTION_DECRYPT_ERROR
+ALERT_DESCRIPTION_PROTOCOL_VERSION
+ALERT_DESCRIPTION_INSUFFICIENT_SECURITY
+ALERT_DESCRIPTION_INTERNAL_ERROR
+ALERT_DESCRIPTION_USER_CANCELLED
+ALERT_DESCRIPTION_NO_RENEGOTIATION
+ALERT_DESCRIPTION_UNSUPPORTED_EXTENSION
+ALERT_DESCRIPTION_CERTIFICATE_UNOBTAINABLE
+ALERT_DESCRIPTION_UNRECOGNIZED_NAME
+ALERT_DESCRIPTION_BAD_CERTIFICATE_STATUS_RESPONSE
+ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
+ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 """
 
 import textwrap
@@ -60,24 +91,29 @@ import re
 import _ssl             # if we can't import it, let the error propagate
 
 from _ssl import OPENSSL_VERSION_NUMBER, OPENSSL_VERSION_INFO, OPENSSL_VERSION
-from _ssl import _SSLContext, SSLError
-from _ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
-from _ssl import OP_ALL, OP_NO_SSLv2, OP_NO_SSLv3, OP_NO_TLSv1
-from _ssl import RAND_status, RAND_egd, RAND_add
+from _ssl import _SSLContext
 from _ssl import (
-    SSL_ERROR_ZERO_RETURN,
-    SSL_ERROR_WANT_READ,
-    SSL_ERROR_WANT_WRITE,
-    SSL_ERROR_WANT_X509_LOOKUP,
-    SSL_ERROR_SYSCALL,
-    SSL_ERROR_SSL,
-    SSL_ERROR_WANT_CONNECT,
-    SSL_ERROR_EOF,
-    SSL_ERROR_INVALID_ERROR_CODE,
+    SSLError, SSLZeroReturnError, SSLWantReadError, SSLWantWriteError,
+    SSLSyscallError, SSLEOFError,
     )
-from _ssl import HAS_SNI
-from _ssl import PROTOCOL_SSLv3, PROTOCOL_SSLv23, PROTOCOL_TLSv1
+from _ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
+from _ssl import RAND_status, RAND_egd, RAND_add, RAND_bytes, RAND_pseudo_bytes
+
+def _import_symbols(prefix):
+    for n in dir(_ssl):
+        if n.startswith(prefix):
+            globals()[n] = getattr(_ssl, n)
+
+_import_symbols('OP_')
+_import_symbols('ALERT_DESCRIPTION_')
+_import_symbols('SSL_ERROR_')
+
+from _ssl import HAS_SNI, HAS_ECDH, HAS_NPN
+
+from _ssl import (PROTOCOL_SSLv3, PROTOCOL_SSLv23,
+                  PROTOCOL_TLSv1)
 from _ssl import _OPENSSL_API_VERSION
+
 
 _PROTOCOL_NAMES = {
     PROTOCOL_TLSv1: "TLSv1",
@@ -93,11 +129,18 @@ else:
     _PROTOCOL_NAMES[PROTOCOL_SSLv2] = "SSLv2"
 
 from socket import getnameinfo as _getnameinfo
-from socket import error as socket_error
-from socket import socket, AF_INET, SOCK_STREAM
+from socket import socket, AF_INET, SOCK_STREAM, create_connection
 import base64        # for DER-to-PEM translation
 import traceback
 import errno
+
+
+socket_error = OSError  # keep that public name in module namespace
+
+if _ssl.HAS_TLS_UNIQUE:
+    CHANNEL_BINDING_TYPES = ['tls-unique']
+else:
+    CHANNEL_BINDING_TYPES = []
 
 # Disable weak or insecure ciphers by default
 # (OpenSSL's default setting is 'DEFAULT:!aNULL:!eNULL')
@@ -167,7 +210,7 @@ class SSLContext(_SSLContext):
     """An SSLContext holds various SSL-related configuration options and
     data, such as certificates and possibly a private key."""
 
-    __slots__ = ('protocol',)
+    __slots__ = ('protocol', '__weakref__')
 
     def __new__(cls, protocol, *args, **kwargs):
         self = _SSLContext.__new__(cls, protocol)
@@ -188,6 +231,17 @@ class SSLContext(_SSLContext):
                          server_hostname=server_hostname,
                          _context=self)
 
+    def set_npn_protocols(self, npn_protocols):
+        protos = bytearray()
+        for protocol in npn_protocols:
+            b = bytes(protocol, 'ascii')
+            if len(b) == 0 or len(b) > 255:
+                raise SSLError('NPN protocols must be 1 to 255 in length')
+            protos.append(len(b))
+            protos.extend(b)
+
+        self._set_npn_protocols(protos)
+
 
 class SSLSocket(socket):
     """This class implements a subtype of socket.socket that wraps
@@ -199,12 +253,12 @@ class SSLSocket(socket):
                  ssl_version=PROTOCOL_SSLv23, ca_certs=None,
                  do_handshake_on_connect=True,
                  family=AF_INET, type=SOCK_STREAM, proto=0, fileno=None,
-                 suppress_ragged_eofs=True, ciphers=None,
+                 suppress_ragged_eofs=True, npn_protocols=None, ciphers=None,
                  server_hostname=None,
                  _context=None):
 
         if _context:
-            self.context = _context
+            self._context = _context
         else:
             if server_side and not certfile:
                 raise ValueError("certfile must be specified for server-side "
@@ -213,14 +267,16 @@ class SSLSocket(socket):
                 raise ValueError("certfile must be specified")
             if certfile and not keyfile:
                 keyfile = certfile
-            self.context = SSLContext(ssl_version)
-            self.context.verify_mode = cert_reqs
+            self._context = SSLContext(ssl_version)
+            self._context.verify_mode = cert_reqs
             if ca_certs:
-                self.context.load_verify_locations(ca_certs)
+                self._context.load_verify_locations(ca_certs)
             if certfile:
-                self.context.load_cert_chain(certfile, keyfile)
+                self._context.load_cert_chain(certfile, keyfile)
+            if npn_protocols:
+                self._context.set_npn_protocols(npn_protocols)
             if ciphers:
-                self.context.set_ciphers(ciphers)
+                self._context.set_ciphers(ciphers)
             self.keyfile = keyfile
             self.certfile = certfile
             self.cert_reqs = cert_reqs
@@ -245,7 +301,7 @@ class SSLSocket(socket):
             # see if it's connected
             try:
                 sock.getpeername()
-            except socket_error as e:
+            except OSError as e:
                 if e.errno != errno.ENOTCONN:
                     raise
             else:
@@ -262,7 +318,7 @@ class SSLSocket(socket):
         if connected:
             # create the SSL object
             try:
-                self._sslobj = self.context._wrap_socket(self, server_side,
+                self._sslobj = self._context._wrap_socket(self, server_side,
                                                          server_hostname)
                 if do_handshake_on_connect:
                     timeout = self.gettimeout()
@@ -271,9 +327,17 @@ class SSLSocket(socket):
                         raise ValueError("do_handshake_on_connect should not be specified for non-blocking sockets")
                     self.do_handshake()
 
-            except socket_error as x:
+            except OSError as x:
                 self.close()
                 raise x
+    @property
+    def context(self):
+        return self._context
+
+    @context.setter
+    def context(self, ctx):
+        self._context = ctx
+        self._sslobj.context = ctx
 
     def dup(self):
         raise NotImplemented("Can't dup() %s instances" %
@@ -319,12 +383,26 @@ class SSLSocket(socket):
         self._checkClosed()
         return self._sslobj.peer_certificate(binary_form)
 
+    def selected_npn_protocol(self):
+        self._checkClosed()
+        if not self._sslobj or not _ssl.HAS_NPN:
+            return None
+        else:
+            return self._sslobj.selected_npn_protocol()
+
     def cipher(self):
         self._checkClosed()
         if not self._sslobj:
             return None
         else:
             return self._sslobj.cipher()
+
+    def compression(self):
+        self._checkClosed()
+        if not self._sslobj:
+            return None
+        else:
+            return self._sslobj.compression()
 
     def send(self, data, flags=0):
         self._checkClosed()
@@ -357,6 +435,12 @@ class SSLSocket(socket):
             return socket.sendto(self, data, flags_or_addr)
         else:
             return socket.sendto(self, data, flags_or_addr, addr)
+
+    def sendmsg(self, *args, **kwargs):
+        # Ensure programs don't send data unencrypted if they try to
+        # use this method.
+        raise NotImplementedError("sendmsg not allowed on instances of %s" %
+                                  self.__class__)
 
     def sendall(self, data, flags=0):
         self._checkClosed()
@@ -416,6 +500,14 @@ class SSLSocket(socket):
         else:
             return socket.recvfrom_into(self, buffer, nbytes, flags)
 
+    def recvmsg(self, *args, **kwargs):
+        raise NotImplementedError("recvmsg not allowed on instances of %s" %
+                                  self.__class__)
+
+    def recvmsg_into(self, *args, **kwargs):
+        raise NotImplementedError("recvmsg_into not allowed on instances of "
+                                  "%s" % self.__class__)
+
     def pending(self):
         self._checkClosed()
         if self._sslobj:
@@ -471,7 +563,7 @@ class SSLSocket(socket):
                     self.do_handshake()
                 self._connected = True
             return rc
-        except socket_error:
+        except OSError:
             self._sslobj = None
             raise
 
@@ -497,16 +589,28 @@ class SSLSocket(socket):
                     server_side=True)
         return newsock, addr
 
-    def __del__(self):
-        # sys.stderr.write("__del__ on %s\n" % repr(self))
-        self._real_close()
+    def get_channel_binding(self, cb_type="tls-unique"):
+        """Get channel binding data for current connection.  Raise ValueError
+        if the requested `cb_type` is not supported.  Return bytes of the data
+        or None if the data is not available (e.g. before the handshake).
+        """
+        if cb_type not in CHANNEL_BINDING_TYPES:
+            raise ValueError("Unsupported channel binding type")
+        if cb_type != "tls-unique":
+            raise NotImplementedError(
+                            "{0} channel binding type not implemented"
+                            .format(cb_type))
+        if self._sslobj is None:
+            return None
+        return self._sslobj.tls_unique_cb()
 
 
 def wrap_socket(sock, keyfile=None, certfile=None,
                 server_side=False, cert_reqs=CERT_NONE,
                 ssl_version=PROTOCOL_SSLv23, ca_certs=None,
                 do_handshake_on_connect=True,
-                suppress_ragged_eofs=True, ciphers=None):
+                suppress_ragged_eofs=True,
+                ciphers=None):
 
     return SSLSocket(sock=sock, keyfile=keyfile, certfile=certfile,
                      server_side=server_side, cert_reqs=cert_reqs,
@@ -561,9 +665,9 @@ def get_server_certificate(addr, ssl_version=PROTOCOL_SSLv3, ca_certs=None):
         cert_reqs = CERT_REQUIRED
     else:
         cert_reqs = CERT_NONE
-    s = wrap_socket(socket(), ssl_version=ssl_version,
+    s = create_connection(addr)
+    s = wrap_socket(s, ssl_version=ssl_version,
                     cert_reqs=cert_reqs, ca_certs=ca_certs)
-    s.connect(addr)
     dercert = s.getpeercert(True)
     s.close()
     return DER_cert_to_PEM_cert(dercert)

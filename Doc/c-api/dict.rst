@@ -36,11 +36,11 @@ Dictionary Objects
    Return a new empty dictionary, or *NULL* on failure.
 
 
-.. c:function:: PyObject* PyDictProxy_New(PyObject *dict)
+.. c:function:: PyObject* PyDictProxy_New(PyObject *mapping)
 
-   Return a proxy object for a mapping which enforces read-only behavior.
-   This is normally used to create a proxy to prevent modification of the
-   dictionary for non-dynamic class types.
+   Return a :class:`types.MappingProxyType` object for a mapping which
+   enforces read-only behavior.  This is normally used to create a view to
+   prevent modification of the dictionary for non-dynamic class types.
 
 
 .. c:function:: void PyDict_Clear(PyObject *p)
@@ -108,6 +108,15 @@ Dictionary Objects
 
    This is the same as :c:func:`PyDict_GetItem`, but *key* is specified as a
    :c:type:`char\*`, rather than a :c:type:`PyObject\*`.
+
+
+.. c:function:: PyObject* PyDict_SetDefault(PyObject *p, PyObject *key, PyObject *default)
+
+   This is the same as the Python-level :meth:`dict.setdefault`.  If present, it
+   returns the value corresponding to *key* from the dictionary *p*.  If the key
+   is not in the dict, it is inserted with value *defaultobj* and *defaultobj*
+   is returned.  This function evaluates the hash function of *key* only once,
+   instead of evaluating it independently for the lookup and the insertion.
 
 
 .. c:function:: PyObject* PyDict_Items(PyObject *p)
@@ -209,3 +218,10 @@ Dictionary Objects
           for key, value in seq2:
               if override or key not in a:
                   a[key] = value
+
+
+.. c:function:: int PyDict_ClearFreeList()
+
+   Clear the free list. Return the total number of freed items.
+
+   .. versionadded:: 3.3

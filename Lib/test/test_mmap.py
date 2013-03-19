@@ -245,7 +245,7 @@ class MmapTests(unittest.TestCase):
 
     def test_bad_file_desc(self):
         # Try opening a bad file descriptor...
-        self.assertRaises(mmap.error, mmap.mmap, -2, 4096)
+        self.assertRaises(OSError, mmap.mmap, -2, 4096)
 
     def test_tougher_find(self):
         # Do a tougher .find() test.  SF bug 515943 pointed out that, in 2.2,
@@ -417,6 +417,35 @@ class MmapTests(unittest.TestCase):
             m[x] = b
             self.assertEqual(m[x], b)
 
+    def test_read_all(self):
+        m = mmap.mmap(-1, 16)
+        self.addCleanup(m.close)
+
+        # With no parameters, or None or a negative argument, reads all
+        m.write(bytes(range(16)))
+        m.seek(0)
+        self.assertEqual(m.read(), bytes(range(16)))
+        m.seek(8)
+        self.assertEqual(m.read(), bytes(range(8, 16)))
+        m.seek(16)
+        self.assertEqual(m.read(), b'')
+        m.seek(3)
+        self.assertEqual(m.read(None), bytes(range(3, 16)))
+        m.seek(4)
+        self.assertEqual(m.read(-1), bytes(range(4, 16)))
+        m.seek(5)
+        self.assertEqual(m.read(-2), bytes(range(5, 16)))
+        m.seek(9)
+        self.assertEqual(m.read(-42), bytes(range(9, 16)))
+
+    def test_read_invalid_arg(self):
+        m = mmap.mmap(-1, 16)
+        self.addCleanup(m.close)
+
+        self.assertRaises(TypeError, m.read, 'foo')
+        self.assertRaises(TypeError, m.read, 5.5)
+        self.assertRaises(TypeError, m.read, [1, 2, 3])
+
     def test_extended_getslice(self):
         # Test extended slicing by comparing with list slicing.
         s = bytes(reversed(range(256)))
@@ -543,8 +572,7 @@ class MmapTests(unittest.TestCase):
         f.close()
 
     def test_error(self):
-        self.assertTrue(issubclass(mmap.error, EnvironmentError))
-        self.assertIn("mmap.error", str(mmap.error))
+        self.assertIs(mmap.error, OSError)
 
     def test_io_methods(self):
         data = b"0123456789"
@@ -630,7 +658,7 @@ class MmapTests(unittest.TestCase):
             m = mmap.mmap(f.fileno(), 0)
             f.close()
             try:
-                m.resize(0) # will raise WindowsError
+                m.resize(0) # will raise OSError
             except:
                 pass
             try:
@@ -645,7 +673,7 @@ class MmapTests(unittest.TestCase):
             # parameters to _get_osfhandle.
             s = socket.socket()
             try:
-                with self.assertRaises(mmap.error):
+                with self.assertRaises(OSError):
                     m = mmap.mmap(s.fileno(), 10)
             finally:
                 s.close()
@@ -656,11 +684,11 @@ class MmapTests(unittest.TestCase):
         self.assertTrue(m.closed)
 
     def test_context_manager_exception(self):
-        # Test that the IOError gets passed through
+        # Test that the OSError gets passed through
         with self.assertRaises(Exception) as exc:
             with mmap.mmap(-1, 10) as m:
-                raise IOError
-        self.assertIsInstance(exc.exception, IOError,
+                raise OSError
+        self.assertIsInstance(exc.exception, OSError,
                               "wrong exception raised in context manager")
         self.assertTrue(m.closed, "context manager failed")
 
@@ -681,7 +709,7 @@ class LargeMmapTests(unittest.TestCase):
             f.seek(num_zeroes)
             f.write(tail)
             f.flush()
-        except (IOError, OverflowError):
+        except (OSError, OverflowError):
             f.close()
             raise unittest.SkipTest("filesystem does not have largefile support")
         return f

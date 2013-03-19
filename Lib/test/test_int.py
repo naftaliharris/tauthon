@@ -2,7 +2,6 @@ import sys
 
 import unittest
 from test import support
-from test.support import run_unittest
 
 L = [
         ('0', 0),
@@ -226,6 +225,9 @@ class IntTestCases(unittest.TestCase):
         self.assertIs(int(b'10'), 10)
         self.assertIs(int(b'-1'), -1)
 
+    def test_no_args(self):
+        self.assertEqual(int(), 0)
+
     def test_keyword_args(self):
         # Test invoking int() using keyword arguments.
         self.assertEqual(int(x=1.2), 1)
@@ -233,6 +235,68 @@ class IntTestCases(unittest.TestCase):
         self.assertEqual(int(x='100', base=2), 4)
         self.assertRaises(TypeError, int, base=10)
         self.assertRaises(TypeError, int, base=0)
+
+    def test_int_base_limits(self):
+        """Testing the supported limits of the int() base parameter."""
+        self.assertEqual(int('0', 5), 0)
+        with self.assertRaises(ValueError):
+            int('0', 1)
+        with self.assertRaises(ValueError):
+            int('0', 37)
+        with self.assertRaises(ValueError):
+            int('0', -909)  # An old magic value base from Python 2.
+        with self.assertRaises(ValueError):
+            int('0', base=0-(2**234))
+        with self.assertRaises(ValueError):
+            int('0', base=2**234)
+        # Bases 2 through 36 are supported.
+        for base in range(2,37):
+            self.assertEqual(int('0', base=base), 0)
+
+    def test_int_base_bad_types(self):
+        """Not integer types are not valid bases; issue16772."""
+        with self.assertRaises(TypeError):
+            int('0', 5.5)
+        with self.assertRaises(TypeError):
+            int('0', 5.0)
+
+    def test_int_base_indexable(self):
+        class MyIndexable(object):
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        # Check out of range bases.
+        for base in 2**100, -2**100, 1, 37:
+            with self.assertRaises(ValueError):
+                int('43', base)
+
+        # Check in-range bases.
+        self.assertEqual(int('101', base=MyIndexable(2)), 5)
+        self.assertEqual(int('101', base=MyIndexable(10)), 101)
+        self.assertEqual(int('101', base=MyIndexable(36)), 1 + 36**2)
+
+    def test_non_numeric_input_types(self):
+        # Test possible non-numeric types for the argument x, including
+        # subclasses of the explicitly documented accepted types.
+        class CustomStr(str): pass
+        class CustomBytes(bytes): pass
+        class CustomByteArray(bytearray): pass
+
+        values = [b'100',
+                  bytearray(b'100'),
+                  CustomStr('100'),
+                  CustomBytes(b'100'),
+                  CustomByteArray(b'100')]
+
+        for x in values:
+            msg = 'x has type %s' % type(x).__name__
+            self.assertEqual(int(x), 100, msg=msg)
+            self.assertEqual(int(x, 2), 4, msg=msg)
+
+    def test_string_float(self):
+        self.assertRaises(ValueError, int, '1.2')
 
     def test_intconversion(self):
         # Test __int__()
@@ -318,6 +382,18 @@ class IntTestCases(unittest.TestCase):
                     self.fail("Failed to raise TypeError with %s" %
                               ((base, trunc_result_base),))
 
+                # Regression test for bugs.python.org/issue16060.
+                class BadInt(trunc_result_base):
+                    def __int__(self):
+                        return 42.0
+
+                class TruncReturnsBadInt(base):
+                    def __trunc__(self):
+                        return BadInt()
+
+                with self.assertRaises(TypeError):
+                    int(TruncReturnsBadInt())
+
     def test_error_message(self):
         testlist = ('\xbd', '123\xbd', '  123 456  ')
         for s in testlist:
@@ -329,7 +405,7 @@ class IntTestCases(unittest.TestCase):
                 self.fail("Expected int(%r) to raise a ValueError", s)
 
 def test_main():
-    run_unittest(IntTestCases)
+    support.run_unittest(IntTestCases)
 
 if __name__ == "__main__":
     test_main()
