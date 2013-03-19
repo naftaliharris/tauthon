@@ -378,6 +378,21 @@ always available.
    .. versionadded:: 3.1
 
 
+.. function:: getallocatedblocks()
+
+   Return the number of memory blocks currently allocated by the interpreter,
+   regardless of their size.  This function is mainly useful for tracking
+   and debugging memory leaks.  Because of the interpreter's internal
+   caches, the result can vary from call to call; you may have to call
+   :func:`_clear_type_cache()` and :func:`gc.collect()` to get more
+   predictable results.
+
+   If a Python build or implementation cannot reasonably compute this
+   information, :func:`getallocatedblocks()` is allowed to return 0 instead.
+
+   .. versionadded:: 3.4
+
+
 .. function:: getcheckinterval()
 
    Return the interpreter's "check interval"; see :func:`setcheckinterval`.
@@ -805,8 +820,6 @@ always available.
    Windows          ``'win32'``
    Windows/Cygwin   ``'cygwin'``
    Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
    ================ ===========================
 
    .. versionchanged:: 3.3
@@ -1085,7 +1098,6 @@ always available.
    | :const:`name`    | Name of the thread implementation:                      |
    |                  |                                                         |
    |                  |  * ``'nt'``: Windows threads                            |
-   |                  |  * ``'os2'``: OS/2 threads                              |
    |                  |  * ``'pthread'``: POSIX threads                         |
    |                  |  * ``'solaris'``: Solaris threads                       |
    +------------------+---------------------------------------------------------+

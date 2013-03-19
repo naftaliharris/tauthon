@@ -18,7 +18,7 @@ urlopen(url, data=None) -- Basic usage is the same as original
 urllib.  pass the url and optionally data to post to an HTTP URL, and
 get a file-like object back.  One difference is that you can also pass
 a Request instance instead of URL.  Raises a URLError (subclass of
-IOError); for HTTP errors, raises an HTTPError, which can also be
+OSError); for HTTP errors, raises an HTTPError, which can also be
 treated as a valid response.
 
 build_opener -- Function that creates a new OpenerDirector instance.
@@ -103,7 +103,8 @@ from urllib.error import URLError, HTTPError, ContentTooShortError
 from urllib.parse import (
     urlparse, urlsplit, urljoin, unwrap, quote, unquote,
     splittype, splithost, splitport, splituser, splitpasswd,
-    splitattr, splitquery, splitvalue, splittag, to_bytes, urlunparse)
+    splitattr, splitquery, splitvalue, splittag, to_bytes,
+    unquote_to_bytes, urlunparse)
 from urllib.response import addinfourl, addclosehook
 
 # check for SSL
@@ -121,7 +122,7 @@ __all__ = [
     'HTTPPasswordMgr', 'HTTPPasswordMgrWithDefaultRealm',
     'AbstractBasicAuthHandler', 'HTTPBasicAuthHandler', 'ProxyBasicAuthHandler',
     'AbstractDigestAuthHandler', 'HTTPDigestAuthHandler', 'ProxyDigestAuthHandler',
-    'HTTPHandler', 'FileHandler', 'FTPHandler', 'CacheFTPHandler',
+    'HTTPHandler', 'FileHandler', 'FTPHandler', 'CacheFTPHandler', 'DataHandler',
     'UnknownHandler', 'HTTPErrorProcessor',
     # Functions
     'urlopen', 'install_opener', 'build_opener',
@@ -231,7 +232,7 @@ def urlcleanup():
     for temp_file in _url_tempfiles:
         try:
             os.unlink(temp_file)
-        except EnvironmentError:
+        except OSError:
             pass
 
     del _url_tempfiles[:]
@@ -265,18 +266,37 @@ class Request:
         # unwrap('<URL:type://host/path>') --> 'type://host/path'
         self.full_url = unwrap(url)
         self.full_url, self.fragment = splittag(self.full_url)
-        self.data = data
         self.headers = {}
+        self.unredirected_hdrs = {}
+        self._data = None
+        self.data = data
         self._tunnel_host = None
         for key, value in headers.items():
             self.add_header(key, value)
-        self.unredirected_hdrs = {}
         if origin_req_host is None:
             origin_req_host = request_host(self)
         self.origin_req_host = origin_req_host
         self.unverifiable = unverifiable
         self.method = method
         self._parse()
+
+    @property
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, data):
+        if data != self._data:
+            self._data = data
+            # issue 16464
+            # if we change data we need to remove content-length header
+            # (cause it's most probably calculated for previous value)
+            if self.has_header("Content-length"):
+                self.remove_header("Content-length")
+
+    @data.deleter
+    def data(self):
+        self._data = None
 
     def _parse(self):
         self.type, rest = splittype(self.full_url)
@@ -300,50 +320,6 @@ class Request:
             return '%s#%s' % (self.full_url, self.fragment)
         else:
             return self.full_url
-
-    # Begin deprecated methods
-
-    def add_data(self, data):
-        msg = "Request.add_data method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        self.data = data
-
-    def has_data(self):
-        msg = "Request.has_data method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.data is not None
-
-    def get_data(self):
-        msg = "Request.get_data method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.data
-
-    def get_type(self):
-        msg = "Request.get_type method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.type
-
-    def get_host(self):
-        msg = "Request.get_host method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.host
-
-    def get_selector(self):
-        msg = "Request.get_selector method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.selector
-
-    def is_unverifiable(self):
-        msg = "Request.is_unverifiable method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.unverifiable
-
-    def get_origin_req_host(self):
-        msg = "Request.get_origin_req_host method is deprecated."
-        warnings.warn(msg, DeprecationWarning, stacklevel=1)
-        return self.origin_req_host
-
-    # End deprecated methods
 
     def set_proxy(self, host, type):
         if self.type == 'https' and not self._tunnel_host:
@@ -372,6 +348,10 @@ class Request:
         return self.headers.get(
             header_name,
             self.unredirected_hdrs.get(header_name, default))
+
+    def remove_header(self, header_name):
+        self.headers.pop(header_name, None)
+        self.unredirected_hdrs.pop(header_name, None)
 
     def header_items(self):
         hdrs = self.unredirected_hdrs.copy()
@@ -535,7 +515,8 @@ def build_opener(*handlers):
     opener = OpenerDirector()
     default_classes = [ProxyHandler, UnknownHandler, HTTPHandler,
                        HTTPDefaultErrorHandler, HTTPRedirectHandler,
-                       FTPHandler, FileHandler, HTTPErrorProcessor]
+                       FTPHandler, FileHandler, HTTPErrorProcessor,
+                       DataHandler]
     if hasattr(http.client, "HTTPSConnection"):
         default_classes.append(HTTPSHandler)
     skip = set()
@@ -1250,11 +1231,17 @@ class AbstractHTTPHandler(BaseHandler):
 
         try:
             h.request(req.get_method(), req.selector, req.data, headers)
-        except socket.error as err: # timeout error
+        except OSError as err: # timeout error
             h.close()
             raise URLError(err)
         else:
             r = h.getresponse()
+            # If the server does not send us a 'Connection: close' header,
+            # HTTPConnection assumes the socket should be left open. Manually
+            # mark the socket to be closed when this response object goes away.
+            if h.sock:
+                h.sock.close()
+                h.sock = None
 
         r.url = req.get_full_url()
         # This line replaces the .msg attribute of the HTTPResponse
@@ -1449,7 +1436,7 @@ class FTPHandler(BaseHandler):
 
         try:
             host = socket.gethostbyname(host)
-        except socket.error as msg:
+        except OSError as msg:
             raise URLError(msg)
         path, attrs = splitattr(req.selector)
         dirs = path.split('/')
@@ -1534,6 +1521,36 @@ class CacheFTPHandler(FTPHandler):
             conn.close()
         self.cache.clear()
         self.timeout.clear()
+
+class DataHandler(BaseHandler):
+    def data_open(self, req):
+        # data URLs as specified in RFC 2397.
+        #
+        # ignores POSTed data
+        #
+        # syntax:
+        # dataurl   := "data:" [ mediatype ] [ ";base64" ] "," data
+        # mediatype := [ type "/" subtype ] *( ";" parameter )
+        # data      := *urlchar
+        # parameter := attribute "=" value
+        url = req.full_url
+
+        scheme, data = url.split(":",1)
+        mediatype, data = data.split(",",1)
+
+        # even base64 encoded data URLs might be quoted so unquote in any case:
+        data = unquote_to_bytes(data)
+        if mediatype.endswith(";base64"):
+            data = base64.decodebytes(data)
+            mediatype = mediatype[:-7]
+
+        if not mediatype:
+            mediatype = "text/plain;charset=US-ASCII"
+
+        headers = email.message_from_string("Content-type: %s\nContent-length: %d\n" %
+            (mediatype, len(data)))
+
+        return addinfourl(io.BytesIO(data), headers, url)
 
 
 # Code move from the old urllib module
@@ -1658,20 +1675,20 @@ class URLopener:
                 return getattr(self, name)(url)
             else:
                 return getattr(self, name)(url, data)
-        except HTTPError:
+        except (HTTPError, URLError):
             raise
-        except socket.error as msg:
-            raise IOError('socket error', msg).with_traceback(sys.exc_info()[2])
+        except OSError as msg:
+            raise OSError('socket error', msg).with_traceback(sys.exc_info()[2])
 
     def open_unknown(self, fullurl, data=None):
         """Overridable interface to open unknown URL type."""
         type, url = splittype(fullurl)
-        raise IOError('url error', 'unknown url type', type)
+        raise OSError('url error', 'unknown url type', type)
 
     def open_unknown_proxy(self, proxy, fullurl, data=None):
         """Overridable interface to open unknown URL type."""
         type, url = splittype(fullurl)
-        raise IOError('url error', 'invalid proxy for %s' % type, proxy)
+        raise OSError('url error', 'invalid proxy for %s' % type, proxy)
 
     # External interface
     def retrieve(self, url, filename=None, reporthook=None, data=None):
@@ -1687,7 +1704,7 @@ class URLopener:
                 hdrs = fp.info()
                 fp.close()
                 return url2pathname(splithost(url1)[1]), hdrs
-            except IOError as msg:
+            except OSError as msg:
                 pass
         fp = self.open(url, data)
         try:
@@ -1780,7 +1797,7 @@ class URLopener:
                 if proxy_bypass(realhost):
                     host = realhost
 
-        if not host: raise IOError('http error', 'no host given')
+        if not host: raise OSError('http error', 'no host given')
 
         if proxy_passwd:
             proxy_passwd = unquote(proxy_passwd)
@@ -1853,7 +1870,7 @@ class URLopener:
         return self.http_error_default(url, fp, errcode, errmsg, headers)
 
     def http_error_default(self, url, fp, errcode, errmsg, headers):
-        """Default error handler: close the connection and raise IOError."""
+        """Default error handler: close the connection and raise OSError."""
         fp.close()
         raise HTTPError(url, errcode, errmsg, headers, None)
 
@@ -1980,7 +1997,7 @@ class URLopener:
         try:
             [type, data] = url.split(',', 1)
         except ValueError:
-            raise IOError('data error', 'bad data URL')
+            raise OSError('data error', 'bad data URL')
         if not type:
             type = 'text/plain;charset=US-ASCII'
         semi = type.rfind(';')
@@ -2426,7 +2443,7 @@ def _proxy_bypass_macosx_sysconf(host, proxy_settings):
                 try:
                     hostIP = socket.gethostbyname(hostonly)
                     hostIP = ip2num(hostIP)
-                except socket.error:
+                except OSError:
                     continue
 
             base = ip2num(m.group(1))
@@ -2512,7 +2529,7 @@ elif os.name == 'nt':
                         proxies['https'] = 'https://%s' % proxyServer
                         proxies['ftp'] = 'ftp://%s' % proxyServer
             internetSettings.Close()
-        except (WindowsError, ValueError, TypeError):
+        except (OSError, ValueError, TypeError):
             # Either registry key not found etc, or the value in an
             # unexpected format.
             # proxies already set up to be empty so nothing to do
@@ -2542,7 +2559,7 @@ elif os.name == 'nt':
             proxyOverride = str(winreg.QueryValueEx(internetSettings,
                                                      'ProxyOverride')[0])
             # ^^^^ Returned as Unicode but problems if not converted to ASCII
-        except WindowsError:
+        except OSError:
             return 0
         if not proxyEnable or not proxyOverride:
             return 0
@@ -2553,13 +2570,13 @@ elif os.name == 'nt':
             addr = socket.gethostbyname(rawHost)
             if addr != rawHost:
                 host.append(addr)
-        except socket.error:
+        except OSError:
             pass
         try:
             fqdn = socket.getfqdn(rawHost)
             if fqdn != rawHost:
                 host.append(fqdn)
-        except socket.error:
+        except OSError:
             pass
         # make a check value list from the registry entry: replace the
         # '<local>' string by the localhost entry and the corresponding
