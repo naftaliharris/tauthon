@@ -90,7 +90,7 @@ Functions
 
    Find the loader for a module, optionally within the specified *path*. If the
    module is in :attr:`sys.modules`, then ``sys.modules[name].__loader__`` is
-   returned (unless the loader would be ``None``, in which case
+   returned (unless the loader would be ``None`` or is not set, in which case
    :exc:`ValueError` is raised). Otherwise a search using :attr:`sys.meta_path`
    is done. ``None`` is returned if no loader is found.
 
@@ -98,6 +98,12 @@ Functions
    loading them and that may not be desired. To properly import a submodule you
    will need to import all parent packages of the submodule and use the correct
    argument to *path*.
+
+   .. versionadded:: 3.3
+
+   .. versionchanged:: 3.4
+      If ``__loader__`` is not set, raise :exc:`ValueError`, just like when the
+      attribute is set to ``None``.
 
 .. function:: invalidate_caches()
 
@@ -132,8 +138,6 @@ ABC hierarchy::
                +-- ExecutionLoader --+
                                      +-- FileLoader
                                      +-- SourceLoader
-                                          +-- PyLoader (deprecated)
-                                          +-- PyPycLoader (deprecated)
 
 
 .. class:: Finder
@@ -366,10 +370,12 @@ ABC hierarchy::
     * :meth:`ResourceLoader.get_data`
     * :meth:`ExecutionLoader.get_filename`
           Should only return the path to the source file; sourceless
-          loading is not supported.
+          loading is not supported (see :class:`SourcelessLoader` if that
+          functionality is required)
 
     The abstract methods defined by this class are to add optional bytecode
-    file support. Not implementing these optional methods causes the loader to
+    file support. Not implementing these optional methods (or causing them to
+    raise :exc:`NotImplementedError`) causes the loader to
     only work with source code. Implementing the methods allows the loader to
     work with source *and* bytecode files; it does not allow for *sourceless*
     loading where only bytecode is provided.  Bytecode files are an
@@ -409,6 +415,17 @@ ABC hierarchy::
         When writing to the path fails because the path is read-only
         (:attr:`errno.EACCES`), do not propagate the exception.
 
+    .. method:: source_to_code(data, path)
+
+        Create a code object from Python source.
+
+        The *data* argument can be whatever the :func:`compile` function
+        supports (i.e. string or bytes). The *path* argument should be
+        the "path" to where the source code originated from, which can be an
+        abstract concept (e.g. location in a zip file).
+
+        .. versionadded:: 3.4
+
     .. method:: get_code(fullname)
 
         Concrete implementation of :meth:`InspectLoader.get_code`.
@@ -428,142 +445,6 @@ ABC hierarchy::
         :meth:`ExecutionLoader.get_filename`) is a file named
         ``__init__`` when the file extension is removed **and** the module name
         itself does not end in ``__init__``.
-
-
-.. class:: PyLoader
-
-    An abstract base class inheriting from
-    :class:`ExecutionLoader` and
-    :class:`ResourceLoader` designed to ease the loading of
-    Python source modules (bytecode is not handled; see
-    :class:`SourceLoader` for a source/bytecode ABC). A subclass
-    implementing this ABC will only need to worry about exposing how the source
-    code is stored; all other details for loading Python source code will be
-    handled by the concrete implementations of key methods.
-
-    .. deprecated:: 3.2
-        This class has been deprecated in favor of :class:`SourceLoader` and is
-        slated for removal in Python 3.4. See below for how to create a
-        subclass that is compatible with Python 3.1 onwards.
-
-    If compatibility with Python 3.1 is required, then use the following idiom
-    to implement a subclass that will work with Python 3.1 onwards (make sure
-    to implement :meth:`ExecutionLoader.get_filename`)::
-
-        try:
-            from importlib.abc import SourceLoader
-        except ImportError:
-            from importlib.abc import PyLoader as SourceLoader
-
-
-        class CustomLoader(SourceLoader):
-            def get_filename(self, fullname):
-                """Return the path to the source file."""
-                # Implement ...
-
-            def source_path(self, fullname):
-                """Implement source_path in terms of get_filename."""
-                try:
-                    return self.get_filename(fullname)
-                except ImportError:
-                    return None
-
-            def is_package(self, fullname):
-                """Implement is_package by looking for an __init__ file
-                name as returned by get_filename."""
-                filename = os.path.basename(self.get_filename(fullname))
-                return os.path.splitext(filename)[0] == '__init__'
-
-
-    .. method:: source_path(fullname)
-
-        An abstract method that returns the path to the source code for a
-        module. Should return ``None`` if there is no source code.
-        Raises :exc:`ImportError` if the loader knows it cannot handle the
-        module.
-
-    .. method:: get_filename(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.ExecutionLoader.get_filename` that
-        relies on :meth:`source_path`. If :meth:`source_path` returns
-        ``None``, then :exc:`ImportError` is raised.
-
-    .. method:: load_module(fullname)
-
-        A concrete implementation of :meth:`importlib.abc.Loader.load_module`
-        that loads Python source code. All needed information comes from the
-        abstract methods required by this ABC. The only pertinent assumption
-        made by this method is that when loading a package
-        :attr:`__path__` is set to ``[os.path.dirname(__file__)]``.
-
-    .. method:: get_code(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.InspectLoader.get_code` that creates code objects
-        from Python source code, by requesting the source code (using
-        :meth:`source_path` and :meth:`get_data`) and compiling it with the
-        built-in :func:`compile` function.
-
-    .. method:: get_source(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.InspectLoader.get_source`. Uses
-        :meth:`importlib.abc.ResourceLoader.get_data` and :meth:`source_path`
-        to get the source code.  It tries to guess the source encoding using
-        :func:`tokenize.detect_encoding`.
-
-
-.. class:: PyPycLoader
-
-    An abstract base class inheriting from :class:`PyLoader`.
-    This ABC is meant to help in creating loaders that support both Python
-    source and bytecode.
-
-    .. deprecated:: 3.2
-        This class has been deprecated in favor of :class:`SourceLoader` and to
-        properly support :pep:`3147`. If compatibility is required with
-        Python 3.1, implement both :class:`SourceLoader` and :class:`PyLoader`;
-        instructions on how to do so are included in the documentation for
-        :class:`PyLoader`. Do note that this solution will not support
-        sourceless/bytecode-only loading; only source *and* bytecode loading.
-
-    .. versionchanged:: 3.3
-       Updated to parse (but not use) the new source size field in bytecode
-       files when reading and to write out the field properly when writing.
-
-    .. method:: source_mtime(fullname)
-
-        An abstract method which returns the modification time for the source
-        code of the specified module. The modification time should be an
-        integer. If there is no source code, return ``None``. If the
-        module cannot be found then :exc:`ImportError` is raised.
-
-    .. method:: bytecode_path(fullname)
-
-        An abstract method which returns the path to the bytecode for the
-        specified module, if it exists. It returns ``None``
-        if no bytecode exists (yet).
-        Raises :exc:`ImportError` if the loader knows it cannot handle the
-        module.
-
-    .. method:: get_filename(fullname)
-
-        A concrete implementation of
-        :meth:`ExecutionLoader.get_filename` that relies on
-        :meth:`PyLoader.source_path` and :meth:`bytecode_path`.
-        If :meth:`source_path` returns a path, then that value is returned.
-        Else if :meth:`bytecode_path` returns a path, that path will be
-        returned. If a path is not available from both methods,
-        :exc:`ImportError` is raised.
-
-    .. method:: write_bytecode(fullname, bytecode)
-
-        An abstract method which has the loader write *bytecode* for future
-        use. If the bytecode is written, return ``True``. Return
-        ``False`` if the bytecode could not be written. This method
-        should not be called if :data:`sys.dont_write_bytecode` is true.
-        The *bytecode* argument should be a bytes string or bytes array.
 
 
 :mod:`importlib.machinery` -- Importers and path hooks
@@ -898,6 +779,10 @@ an :term:`importer`.
 
       It is recommended that :func:`module_for_loader` be used over this
       decorator as it subsumes this functionality.
+
+   .. versionchanged:: 3.4
+      Set ``__loader__`` if set to ``None`` as well if the attribute does not
+      exist.
 
 
 .. decorator:: set_package
