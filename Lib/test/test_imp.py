@@ -219,6 +219,20 @@ class ImportTests(unittest.TestCase):
         mod = imp.load_module(example, *x)
         self.assertEqual(mod.__name__, example)
 
+    def test_issue16421_multiple_modules_in_one_dll(self):
+        # Issue 16421: loading several modules from the same compiled file fails
+        m = '_testimportmultiple'
+        fileobj, pathname, description = imp.find_module(m)
+        fileobj.close()
+        mod0 = imp.load_dynamic(m, pathname)
+        mod1 = imp.load_dynamic('_testimportmultiple_foo', pathname)
+        mod2 = imp.load_dynamic('_testimportmultiple_bar', pathname)
+        self.assertEqual(mod0.__name__, m)
+        self.assertEqual(mod1.__name__, '_testimportmultiple_foo')
+        self.assertEqual(mod2.__name__, '_testimportmultiple_bar')
+        with self.assertRaises(ImportError):
+            imp.load_dynamic('nonexistent', pathname)
+
     def test_load_dynamic_ImportError_path(self):
         # Issue #1559549 added `name` and `path` attributes to ImportError
         # in order to provide better detail. Issue #10854 implemented those
