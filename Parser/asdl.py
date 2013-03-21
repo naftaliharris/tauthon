@@ -158,10 +158,18 @@ class ASDLParser(spark.GenericParser, object):
                                   msg="expected attributes, found %s" % id)
         return Sum(sum, attributes)
 
-    def p_product(self, info):
+    def p_product_0(self, info):
         " product ::= ( fields ) "
         _0, fields, _1 = info
         return Product(fields)
+
+    def p_product_1(self, info):
+        " product ::= ( fields ) Id ( fields ) "
+        _0, fields, _1, id, _2, attributes, _3 = info
+        if id.value != "attributes":
+            raise ASDLSyntaxError(id.lineno,
+                                  msg="expected attributes, found %s" % id)
+        return Product(fields, attributes)
 
     def p_sum_0(self, constructor):
         " sum ::= constructor "
@@ -222,7 +230,7 @@ class ASDLParser(spark.GenericParser, object):
         " field ::= Id ? "
         return Field(type[0], opt=True)
 
-builtin_types = ("identifier", "string", "bytes", "int", "object")
+builtin_types = ("identifier", "string", "bytes", "int", "object", "singleton")
 
 # below is a collection of classes to capture the AST of an AST :-)
 # not sure if any of the methods are useful yet, but I'm adding them
@@ -289,11 +297,15 @@ class Sum(AST):
             return "Sum(%s, %s)" % (self.types, self.attributes)
 
 class Product(AST):
-    def __init__(self, fields):
+    def __init__(self, fields, attributes=None):
         self.fields = fields
+        self.attributes = attributes or []
 
     def __repr__(self):
-        return "Product(%s)" % self.fields
+        if self.attributes is None:
+            return "Product(%s)" % self.fields
+        else:
+            return "Product(%s, %s)" % (self.fields, self.attributes)
 
 class VisitorBase(object):
 
