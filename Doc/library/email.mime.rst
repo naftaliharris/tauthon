@@ -175,7 +175,7 @@ Here are the classes:
 
 .. currentmodule:: email.mime.text
 
-.. class:: MIMEText(_text, _subtype='plain', _charset='us-ascii')
+.. class:: MIMEText(_text, _subtype='plain', _charset=None)
 
    Module: :mod:`email.mime.text`
 
@@ -185,7 +185,8 @@ Here are the classes:
    minor type and defaults to :mimetype:`plain`.  *_charset* is the character
    set of the text and is passed as an argument to the
    :class:`~email.mime.nonmultipart.MIMENonMultipart` constructor; it defaults
-   to ``us-ascii``.
+   to ``us-ascii`` if the string contains only ``ascii`` codepoints, and
+   ``utf-8`` otherwise.
 
    Unless the *_charset* argument is explicitly set to ``None``, the
    MIMEText object created will have both a :mailheader:`Content-Type` header
@@ -196,4 +197,3 @@ Here are the classes:
    ``Content-Transfer-Encoding`` header, after which a ``set_payload`` call
    will automatically encode the new payload (and add a new
    :mailheader:`Content-Transfer-Encoding` header).
-

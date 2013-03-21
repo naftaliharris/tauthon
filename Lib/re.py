@@ -223,12 +223,14 @@ def template(pattern, flags=0):
     return _compile(pattern, flags|T)
 
 _alphanum_str = frozenset(
-    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+    "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
 _alphanum_bytes = frozenset(
-    b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
+    b"_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890")
 
 def escape(pattern):
-    "Escape all non-alphanumeric characters in pattern."
+    """
+    Escape all the characters in pattern except ASCII letters, numbers and '_'.
+    """
     if isinstance(pattern, str):
         alphanum = _alphanum_str
         s = list(pattern)
@@ -263,7 +265,6 @@ _cache_repl = {}
 _pattern_type = type(sre_compile.compile("", 0))
 
 _MAXCACHE = 512
-
 def _compile(pattern, flags):
     # internal: compile pattern
     try:

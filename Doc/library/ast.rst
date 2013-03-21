@@ -96,9 +96,6 @@ Node classes
 Abstract Grammar
 ----------------
 
-The module defines a string constant ``__version__`` which is the decimal
-Subversion revision number of the file shown below.
-
 The abstract grammar is currently defined as follows:
 
 .. literalinclude:: ../../Parser/Python.asdl
