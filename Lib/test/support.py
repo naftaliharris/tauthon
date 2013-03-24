@@ -93,7 +93,8 @@ def _ignore_deprecated_imports(ignore=True):
     """Context manager to suppress package and module deprecation
     warnings when importing them.
 
-    If ignore is False, this context manager has no effect."""
+    If ignore is False, this context manager has no effect.
+    """
     if ignore:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", ".+ (module|package)",
@@ -103,23 +104,29 @@ def _ignore_deprecated_imports(ignore=True):
         yield
 
 
-def import_module(name, deprecated=False):
+def import_module(name, deprecated=False, *, required_on=()):
     """Import and return the module to be tested, raising SkipTest if
     it is not available.
 
     If deprecated is True, any module or package deprecation messages
-    will be suppressed."""
+    will be suppressed. If a module is required on a platform but optional for
+    others, set required_on to an iterable of platform prefixes which will be
+    compared against sys.platform.
+    """
     with _ignore_deprecated_imports(deprecated):
         try:
             return importlib.import_module(name)
         except ImportError as msg:
+            if sys.platform.startswith(tuple(required_on)):
+                raise
             raise unittest.SkipTest(str(msg))
 
 
 def _save_and_remove_module(name, orig_modules):
     """Helper function to save and remove a module from sys.modules
 
-       Raise ImportError if the module can't be imported."""
+       Raise ImportError if the module can't be imported.
+       """
     # try to import the module and raise an error if it can't be imported
     if name not in sys.modules:
         __import__(name)
@@ -284,25 +291,20 @@ else:
 def unlink(filename):
     try:
         _unlink(filename)
-    except OSError as error:
-        # The filename need not exist.
-        if error.errno not in (errno.ENOENT, errno.ENOTDIR):
-            raise
+    except (FileNotFoundError, NotADirectoryError):
+        pass
 
 def rmdir(dirname):
     try:
         _rmdir(dirname)
-    except OSError as error:
-        # The directory need not exist.
-        if error.errno != errno.ENOENT:
-            raise
+    except FileNotFoundError:
+        pass
 
 def rmtree(path):
     try:
         _rmtree(path)
-    except OSError as error:
-        if error.errno != errno.ENOENT:
-            raise
+    except FileNotFoundError:
+        pass
 
 def make_legacy_pyc(source):
     """Move a PEP 3147 pyc/pyo file to its legacy pyc/pyo location.
@@ -489,7 +491,7 @@ def find_unused_port(family=socket.AF_INET, socktype=socket.SOCK_STREAM):
     the SO_REUSEADDR socket option having different semantics on Windows versus
     Unix/Linux.  On Unix, you can't have two AF_INET SOCK_STREAM sockets bind,
     listen and then accept connections on identical host/ports.  An EADDRINUSE
-    socket.error will be raised at some point (depending on the platform and
+    OSError will be raised at some point (depending on the platform and
     the order bind and listen were called on each socket).
 
     However, on Windows, if SO_REUSEADDR is set on the sockets, no EADDRINUSE
@@ -563,7 +565,7 @@ def _is_ipv6_enabled():
             sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
             sock.bind(('::1', 0))
             return True
-        except (socket.error, socket.gaierror):
+        except OSError:
             pass
         finally:
             if sock:
@@ -1090,9 +1092,9 @@ class TransientResource(object):
 # Context managers that raise ResourceDenied when various issues
 # with the Internet connection manifest themselves as exceptions.
 # XXX deprecate these and use transient_internet() instead
-time_out = TransientResource(IOError, errno=errno.ETIMEDOUT)
-socket_peer_reset = TransientResource(socket.error, errno=errno.ECONNRESET)
-ioerror_peer_reset = TransientResource(IOError, errno=errno.ECONNRESET)
+time_out = TransientResource(OSError, errno=errno.ETIMEDOUT)
+socket_peer_reset = TransientResource(OSError, errno=errno.ECONNRESET)
+ioerror_peer_reset = TransientResource(OSError, errno=errno.ECONNRESET)
 
 
 @contextlib.contextmanager
@@ -1138,17 +1140,17 @@ def transient_internet(resource_name, *, timeout=30.0, errnos=()):
         if timeout is not None:
             socket.setdefaulttimeout(timeout)
         yield
-    except IOError as err:
+    except OSError as err:
         # urllib can wrap original socket errors multiple times (!), we must
         # unwrap to get at the original error.
         while True:
             a = err.args
-            if len(a) >= 1 and isinstance(a[0], IOError):
+            if len(a) >= 1 and isinstance(a[0], OSError):
                 err = a[0]
             # The error can also be wrapped as args[1]:
             #    except socket.error as msg:
-            #        raise IOError('socket error', msg).with_traceback(sys.exc_info()[2])
-            elif len(a) >= 2 and isinstance(a[1], IOError):
+            #        raise OSError('socket error', msg).with_traceback(sys.exc_info()[2])
+            elif len(a) >= 2 and isinstance(a[1], OSError):
                 err = a[1]
             else:
                 break
@@ -1775,7 +1777,7 @@ def strip_python_stderr(stderr):
     This will typically be run on the result of the communicate() method
     of a subprocess.Popen object.
     """
-    stderr = re.sub(br"\[\d+ refs\]\r?\n?", b"", stderr).strip()
+    stderr = re.sub(br"\[\d+ refs, \d+ blocks\]\r?\n?", b"", stderr).strip()
     return stderr
 
 def args_from_interpreter_flags():
