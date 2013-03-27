@@ -16,7 +16,7 @@ authentication, redirections, cookies and more.
 The :mod:`urllib.request` module defines the following functions:
 
 
-.. function:: urlopen(url, data=None[, timeout], *, cafile=None, capath=None)
+.. function:: urlopen(url, data=None[, timeout], *, cafile=None, capath=None, cadefault=True)
 
    Open the URL *url*, which can be either a string or a
    :class:`Request` object.
@@ -53,9 +53,15 @@ The :mod:`urllib.request` module defines the following functions:
    point to a directory of hashed certificate files.  More information can
    be found in :meth:`ssl.SSLContext.load_verify_locations`.
 
+   The *cadefault* parameter specifies whether to fall back to loading a
+   default certificate store defined by the underlying OpenSSL library if the
+   *cafile* and *capath* parameters are omitted.  This will only work on
+   some non-Windows platforms.
+
    .. warning::
-      If neither *cafile* nor *capath* is specified, an HTTPS request
-      will not do any verification of the server's certificate.
+      If neither *cafile* nor *capath* is specified, and *cadefault* is False,
+      an HTTPS request will not do any verification of the server's
+      certificate.
 
    For http and https urls, this function returns a
    :class:`http.client.HTTPResponse` object which has the following
@@ -99,6 +105,9 @@ The :mod:`urllib.request` module defines the following functions:
 
    .. versionadded:: 3.2
       *data* can be an iterable object.
+
+   .. versionchanged:: 3.3
+      *cadefault* was added.
 
 .. function:: install_opener(opener)
 
@@ -153,7 +162,7 @@ The :mod:`urllib.request` module defines the following functions:
 
 The following classes are provided:
 
-.. class:: Request(url, data=None, headers={}, origin_req_host=None, unverifiable=False)
+.. class:: Request(url, data=None, headers={}, origin_req_host=None, unverifiable=False, method=None)
 
    This class is an abstraction of a URL request.
 
@@ -205,6 +214,13 @@ The following classes are provided:
    approve.  For example, if the request is for an image in an HTML
    document, and the user had no option to approve the automatic
    fetching of the image, this should be true.
+
+   *method* should be a string that indicates the HTTP request method that
+   will be used (e.g. ``'HEAD'``).  Its value is stored in the
+   :attr:`~Request.method` attribute and is used by :meth:`get_method()`.
+
+   .. versionchanged:: 3.3
+      :attr:`Request.method` argument is added to the Request class.
 
 
 .. class:: OpenerDirector()
@@ -271,10 +287,11 @@ The following classes are provided:
 
 .. class:: HTTPBasicAuthHandler(password_mgr=None)
 
-   Handle authentication with the remote host. *password_mgr*, if given, should be
-   something that is compatible with :class:`HTTPPasswordMgr`; refer to section
-   :ref:`http-password-mgr` for information on the interface that must be
-   supported.
+   Handle authentication with the remote host. *password_mgr*, if given, should
+   be something that is compatible with :class:`HTTPPasswordMgr`; refer to
+   section :ref:`http-password-mgr` for information on the interface that must
+   be supported. HTTPBasicAuthHandler will raise a :exc:`ValueError` when
+   presented with a wrong Authentication scheme.
 
 
 .. class:: ProxyBasicAuthHandler(password_mgr=None)
@@ -296,10 +313,19 @@ The following classes are provided:
 
 .. class:: HTTPDigestAuthHandler(password_mgr=None)
 
-   Handle authentication with the remote host. *password_mgr*, if given, should be
-   something that is compatible with :class:`HTTPPasswordMgr`; refer to section
-   :ref:`http-password-mgr` for information on the interface that must be
-   supported.
+   Handle authentication with the remote host. *password_mgr*, if given, should
+   be something that is compatible with :class:`HTTPPasswordMgr`; refer to
+   section :ref:`http-password-mgr` for information on the interface that must
+   be supported. When both Digest Authentication Handler and Basic
+   Authentication Handler are both added, Digest Authentication is always tried
+   first. If the Digest Authentication returns a 40x response again, it is sent
+   to Basic Authentication handler to Handle.  This Handler method will raise a
+   :exc:`ValueError` when presented with an authentication scheme other than
+   Digest or Basic.
+
+   .. versionchanged:: 3.3
+      Raise :exc:`ValueError` on unsupported Authentication Scheme.
+
 
 
 .. class:: ProxyDigestAuthHandler(password_mgr=None)
@@ -390,27 +416,25 @@ request.
    boolean, indicates whether the request is unverifiable as defined
    by RFC 2965.
 
-.. method:: Request.add_data(data)
+.. attribute:: Request.method
 
-   Set the :class:`Request` data to *data*.  This is ignored by all handlers except
-   HTTP handlers --- and there it should be a byte string, and will change the
-   request to be ``POST`` rather than ``GET``.
+   The HTTP request method to use.  This value is used by
+   :meth:`~Request.get_method` to override the computed HTTP request
+   method that would otherwise be returned.  This attribute is initialized with
+   the value of the *method* argument passed to the constructor.
+
+   .. versionadded:: 3.3
 
 
 .. method:: Request.get_method()
 
-   Return a string indicating the HTTP request method.  This is only meaningful for
-   HTTP requests, and currently always returns ``'GET'`` or ``'POST'``.
+   Return a string indicating the HTTP request method.  If
+   :attr:`Request.method` is not ``None``, return its value, otherwise return
+   ``'GET'`` if :attr:`Request.data` is ``None``, or ``'POST'`` if it's not.
+   This is only meaningful for HTTP requests.
 
-
-.. method:: Request.has_data()
-
-   Return whether the instance has a non-\ ``None`` data.
-
-
-.. method:: Request.get_data()
-
-   Return the instance's data.
+   .. versionchanged:: 3.3
+      get_method now looks at the value of :attr:`Request.method`.
 
 
 .. method:: Request.add_header(key, val)
@@ -440,20 +464,60 @@ request.
    Return the URL given in the constructor.
 
 
+.. method:: Request.set_proxy(host, type)
+
+   Prepare the request by connecting to a proxy server. The *host* and *type* will
+   replace those of the instance, and the instance's selector will be the original
+   URL given in the constructor.
+
+
+.. method:: Request.add_data(data)
+
+   Set the :class:`Request` data to *data*.  This is ignored by all handlers except
+   HTTP handlers --- and there it should be a byte string, and will change the
+   request to be ``POST`` rather than ``GET``.  Deprecated in 3.3, use
+   :attr:`Request.data`.
+
+   .. deprecated-removed:: 3.3 3.4
+
+
+.. method:: Request.has_data()
+
+   Return whether the instance has a non-\ ``None`` data. Deprecated in 3.3,
+   use :attr:`Request.data`.
+
+   .. deprecated-removed:: 3.3 3.4
+
+
+.. method:: Request.get_data()
+
+   Return the instance's data.  Deprecated in 3.3, use :attr:`Request.data`.
+
+   .. deprecated-removed:: 3.3 3.4
+
+
 .. method:: Request.get_type()
 
-   Return the type of the URL --- also known as the scheme.
+   Return the type of the URL --- also known as the scheme.  Deprecated in 3.3,
+   use :attr:`Request.type`.
+
+   .. deprecated-removed:: 3.3 3.4
 
 
 .. method:: Request.get_host()
 
-   Return the host to which a connection will be made.
+   Return the host to which a connection will be made. Deprecated in 3.3, use
+   :attr:`Request.host`.
+
+   .. deprecated-removed:: 3.3 3.4
 
 
 .. method:: Request.get_selector()
 
    Return the selector --- the part of the URL that is sent to the server.
+   Deprecated in 3.3, use :attr:`Request.selector`.
 
+   .. deprecated-removed:: 3.3 3.4
 
 .. method:: Request.get_header(header_name, default=None)
 
@@ -468,21 +532,22 @@ request.
 
 .. method:: Request.set_proxy(host, type)
 
-   Prepare the request by connecting to a proxy server. The *host* and *type* will
-   replace those of the instance, and the instance's selector will be the original
-   URL given in the constructor.
-
-
 .. method:: Request.get_origin_req_host()
 
-   Return the request-host of the origin transaction, as defined by :rfc:`2965`.
-   See the documentation for the :class:`Request` constructor.
+   Return the request-host of the origin transaction, as defined by
+   :rfc:`2965`.  See the documentation for the :class:`Request` constructor.
+   Deprecated in 3.3, use :attr:`Request.origin_req_host`.
+
+   .. deprecated-removed:: 3.3 3.4
 
 
 .. method:: Request.is_unverifiable()
 
    Return whether the request is unverifiable, as defined by RFC 2965. See the
-   documentation for the :class:`Request` constructor.
+   documentation for the :class:`Request` constructor.  Deprecated in 3.3, use
+   :attr:`Request.unverifiable`.
+
+   .. deprecated-removed:: 3.3 3.4
 
 
 .. _opener-director-objects:
@@ -1044,6 +1109,15 @@ The code for the sample CGI used in the above example is::
    data = sys.stdin.read()
    print('Content-type: text-plain\n\nGot Data: "%s"' % data)
 
+Here is an example of doing a ``PUT`` request using :class:`Request`::
+
+    import urllib.request
+    DATA=b'some data'
+    req = urllib.request.Request(url='http://localhost:8080', data=DATA,method='PUT')
+    f = urllib.request.urlopen(req)
+    print(f.status)
+    print(f.reason)
+
 Use of Basic HTTP Authentication::
 
    import urllib.request
@@ -1146,16 +1220,14 @@ The following functions and classes are ported from the Python 2 module
 ``urllib`` (as opposed to ``urllib2``).  They might become deprecated at
 some point in the future.
 
-
 .. function:: urlretrieve(url, filename=None, reporthook=None, data=None)
 
-   Copy a network object denoted by a URL to a local file, if necessary. If the URL
-   points to a local file, or a valid cached copy of the object exists, the object
-   is not copied.  Return a tuple ``(filename, headers)`` where *filename* is the
+   Copy a network object denoted by a URL to a local file. If the URL
+   points to a local file, the object will not be copied unless filename is supplied.
+   Return a tuple ``(filename, headers)`` where *filename* is the
    local file name under which the object can be found, and *headers* is whatever
    the :meth:`info` method of the object returned by :func:`urlopen` returned (for
-   a remote object, possibly cached). Exceptions are the same as for
-   :func:`urlopen`.
+   a remote object). Exceptions are the same as for :func:`urlopen`.
 
    The second argument, if present, specifies the file location to copy to (if
    absent, the location will be a tempfile with a generated name). The third
@@ -1165,6 +1237,13 @@ some point in the future.
    transferred so far, a block size in bytes, and the total size of the file.  The
    third argument may be ``-1`` on older FTP servers which do not return a file
    size in response to a retrieval request.
+
+   The following example illustrates the most common usage scenario::
+
+      >>> import urllib.request
+      >>> local_filename, headers = urllib.request.urlretrieve('http://python.org/')
+      >>> html = open(local_filename)
+      >>> html.close()
 
    If the *url* uses the :file:`http:` scheme identifier, the optional *data*
    argument may be given to specify a ``POST`` request (normally the request
@@ -1178,22 +1257,24 @@ some point in the future.
    the  download is interrupted.
 
    The *Content-Length* is treated as a lower bound: if there's more data  to read,
-   :func:`urlretrieve` reads more data, but if less data is available,  it raises
-   the exception.
+   urlretrieve reads more data, but if less data is available,  it raises the
+   exception.
 
    You can still retrieve the downloaded data in this case, it is stored  in the
    :attr:`content` attribute of the exception instance.
 
-   If no *Content-Length* header was supplied, :func:`urlretrieve` can not check
-   the size of the data it has downloaded, and just returns it.  In this case
-   you just have to assume that the download was successful.
+   If no *Content-Length* header was supplied, urlretrieve can not check the size
+   of the data it has downloaded, and just returns it.  In this case you just have
+   to assume that the download was successful.
 
 .. function:: urlcleanup()
 
-   Clear the cache that may have been built up by previous calls to
-   :func:`urlretrieve`.
+   Cleans up temporary files that may have been left behind by previous
+   calls to :func:`urlretrieve`.
 
 .. class:: URLopener(proxies=None, **x509)
+
+   .. deprecated:: 3.3
 
    Base class for opening and reading URLs.  Unless you need to support opening
    objects using schemes other than :file:`http:`, :file:`ftp:`, or :file:`file:`,
@@ -1215,7 +1296,7 @@ some point in the future.
    *key_file* and *cert_file* are supported to provide an  SSL key and certificate;
    both are needed to support client authentication.
 
-   :class:`URLopener` objects will raise an :exc:`IOError` exception if the server
+   :class:`URLopener` objects will raise an :exc:`OSError` exception if the server
    returns an error code.
 
     .. method:: open(fullurl, data=None)
@@ -1243,7 +1324,8 @@ some point in the future.
        *filename* is not given, the filename is the output of :func:`tempfile.mktemp`
        with a suffix that matches the suffix of the last path component of the input
        URL.  If *reporthook* is given, it must be a function accepting three numeric
-       parameters.  It will be called after each chunk of data is read from the
+       parameters: A chunk number, the maximum size chunks are read in and the total size of the download
+       (-1 if unknown).  It will be called once at the start and after each chunk of data is read from the
        network.  *reporthook* is ignored for local URLs.
 
        If the *url* uses the :file:`http:` scheme identifier, the optional *data*
@@ -1262,6 +1344,8 @@ some point in the future.
 
 
 .. class:: FancyURLopener(...)
+
+   .. deprecated:: 3.3
 
    :class:`FancyURLopener` subclasses :class:`URLopener` providing default handling
    for the following HTTP response codes: 301, 302, 303, 307 and 401.  For the 30x
