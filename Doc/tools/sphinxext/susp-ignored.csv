@@ -231,6 +231,7 @@ library/pdb,,:lineno,filename:lineno
 library/pdb,,:lineno,[filename:lineno | bpnumber [bpnumber ...]]
 library/pickle,,:memory,"conn = sqlite3.connect("":memory:"")"
 library/posix,,`,"CFLAGS=""`getconf LFS_CFLAGS`"" OPT=""-g -O2 $CFLAGS"""
+library/pprint,,::,"'Programming Language :: Python :: 2 :: Only'],"
 library/pprint,209,::,"'classifiers': ['Development Status :: 4 - Beta',"
 library/pprint,209,::,"'Intended Audience :: Developers',"
 library/pprint,209,::,"'License :: OSI Approved :: MIT License',"
@@ -258,6 +259,7 @@ library/sqlite3,,:age,"cur.execute(""select * from people where name_last=:who a
 library/sqlite3,,:age,"select name_last, age from people where name_last=:who and age=:age"
 library/sqlite3,,:memory,
 library/sqlite3,,:who,"cur.execute(""select * from people where name_last=:who and age=:age"", {""who"": who, ""age"": age})"
+library/sqlite3,,:path,"db = sqlite3.connect('file:path/to/database?mode=ro', uri=True)"
 library/ssl,,:My,"Organizational Unit Name (eg, section) []:My Group"
 library/ssl,,:My,"Organization Name (eg, company) [Internet Widgits Pty Ltd]:My Organization, Inc."
 library/ssl,,:myserver,"Common Name (eg, YOUR name) []:myserver.mygroup.myorganization.com"
