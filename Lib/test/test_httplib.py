@@ -27,8 +27,10 @@ class FakeSocket:
         self.text = text
         self.fileclass = fileclass
         self.data = b''
+        self.sendall_calls = 0
 
     def sendall(self, data):
+        self.sendall_calls += 1
         self.data += data
 
     def makefile(self, mode, bufsize=None):
@@ -45,7 +47,7 @@ class EPipeSocket(FakeSocket):
 
     def sendall(self, data):
         if self.pipe_trigger in data:
-            raise socket.error(errno.EPIPE, "gotcha")
+            raise OSError(errno.EPIPE, "gotcha")
         self.data += data
 
     def close(self):
@@ -567,7 +569,7 @@ class BasicTest(TestCase):
             b"Content-Length")
         conn = client.HTTPConnection("example.com")
         conn.sock = sock
-        self.assertRaises(socket.error,
+        self.assertRaises(OSError,
                           lambda: conn.request("PUT", "/url", "body"))
         resp = conn.getresponse()
         self.assertEqual(401, resp.status)
@@ -612,6 +614,28 @@ class BasicTest(TestCase):
         self.assertFalse(resp.closed)
         resp.close()
         self.assertTrue(resp.closed)
+
+    def test_delayed_ack_opt(self):
+        # Test that Nagle/delayed_ack optimistaion works correctly.
+
+        # For small payloads, it should coalesce the body with
+        # headers, resulting in a single sendall() call
+        conn = client.HTTPConnection('example.com')
+        sock = FakeSocket(None)
+        conn.sock = sock
+        body = b'x' * (conn.mss - 1)
+        conn.request('POST', '/', body)
+        self.assertEqual(sock.sendall_calls, 1)
+
+        # For large payloads, it should send the headers and
+        # then the body, resulting in more than one sendall()
+        # call
+        conn = client.HTTPConnection('example.com')
+        sock = FakeSocket(None)
+        conn.sock = sock
+        body = b'x' * conn.mss
+        conn.request('POST', '/', body)
+        self.assertGreater(sock.sendall_calls, 1)
 
 class OfflineTest(TestCase):
     def test_responses(self):
@@ -703,7 +727,7 @@ class HTTPSTest(TestCase):
 
     def make_server(self, certfile):
         from test.ssl_servers import make_https_server
-        return make_https_server(self, certfile)
+        return make_https_server(self, certfile=certfile)
 
     def test_attributes(self):
         # simple test to check it's storing the timeout
