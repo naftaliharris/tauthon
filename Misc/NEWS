@@ -1,6 +1,21 @@
 Python News
 +++++++++++
 
+What's New in Python 2.7.5?
+===========================
+
+*Release date: XXXX-XX-XX*
+
+Core and Builtins
+-----------------
+
+Library
+-------
+
+- Issue #17526: fix an IndexError raised while passing code without filename to
+  inspect.findsource().  Initial patch by Tyler Doyle.
+
+
 What's New in Python 2.7.4?
 ===========================
 
@@ -247,6 +262,9 @@ Core and Builtins
 Library
 -------
 
+- Issue #12718: Fix interaction with winpdb overriding __import__ by setting
+  importer attribute on BaseConfigurator instance.
+  
 - Issue #17521: Corrected non-enabling of logger following two calls to
   fileConfig().
 
