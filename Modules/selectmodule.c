@@ -343,10 +343,13 @@ update_ufd_array(pollObject *self)
 
     i = pos = 0;
     while (PyDict_Next(self->dict, &pos, &key, &value)) {
-        self->ufds[i].fd = PyInt_AsLong(key);
+        assert(i < self->ufd_len);
+        /* Never overflow */
+        self->ufds[i].fd = (int)PyInt_AsLong(key);
         self->ufds[i].events = (short)PyInt_AsLong(value);
         i++;
     }
+    assert(i == self->ufd_len);
     self->ufd_uptodate = 1;
     return 1;
 }
@@ -362,10 +365,11 @@ static PyObject *
 poll_register(pollObject *self, PyObject *args)
 {
     PyObject *o, *key, *value;
-    int fd, events = POLLIN | POLLPRI | POLLOUT;
+    int fd;
+    short events = POLLIN | POLLPRI | POLLOUT;
     int err;
 
-    if (!PyArg_ParseTuple(args, "O|i:register", &o, &events)) {
+    if (!PyArg_ParseTuple(args, "O|h:register", &o, &events)) {
         return NULL;
     }
 
@@ -503,7 +507,7 @@ poll_poll(pollObject *self, PyObject *args)
         tout = PyNumber_Int(tout);
         if (!tout)
             return NULL;
-        timeout = PyInt_AsLong(tout);
+        timeout = _PyInt_AsInt(tout);
         Py_DECREF(tout);
         if (timeout == -1 && PyErr_Occurred())
             return NULL;
@@ -1733,7 +1737,7 @@ descriptors can be used.");
 
 static PyMethodDef select_methods[] = {
     {"select",          select_select,  METH_VARARGS,   select_doc},
-#ifdef HAVE_POLL
+#if defined(HAVE_POLL) && !defined(HAVE_BROKEN_POLL)
     {"poll",            select_poll,    METH_NOARGS,    poll_doc},
 #endif /* HAVE_POLL */
     {0,         0},     /* sentinel */
@@ -1765,7 +1769,7 @@ initselect(void)
     PyModule_AddIntConstant(m, "PIPE_BUF", PIPE_BUF);
 #endif
 
-#if defined(HAVE_POLL)
+#if defined(HAVE_POLL) && !defined(HAVE_BROKEN_POLL)
 #ifdef __APPLE__
     if (select_have_broken_poll()) {
         if (PyObject_DelAttrString(m, "poll") == -1) {

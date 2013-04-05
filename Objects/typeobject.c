@@ -2897,14 +2897,14 @@ object_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
             type->tp_init != object_init)
         {
             err = PyErr_WarnEx(PyExc_DeprecationWarning,
-                       "object.__new__() takes no parameters",
+                       "object() takes no parameters",
                        1);
         }
         else if (type->tp_new != object_new ||
                  type->tp_init == object_init)
         {
             PyErr_SetString(PyExc_TypeError,
-                "object.__new__() takes no parameters");
+                "object() takes no parameters");
             err = -1;
         }
     }
@@ -6679,8 +6679,8 @@ super_init(PyObject *self, PyObject *args, PyObject *kwds)
 }
 
 PyDoc_STRVAR(super_doc,
-"super(type) -> unbound super object\n"
 "super(type, obj) -> bound super object; requires isinstance(obj, type)\n"
+"super(type) -> unbound super object\n"
 "super(type, type2) -> bound super object; requires issubclass(type2, type)\n"
 "Typical use to call a cooperative superclass method:\n"
 "class C(B):\n"

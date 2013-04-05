@@ -5,6 +5,9 @@
 .. module:: math
    :synopsis: Mathematical functions (sin() etc.).
 
+.. testsetup::
+
+   from math import fsum
 
 This module is always available.  It provides access to the mathematical
 functions defined by the C standard.
@@ -208,6 +211,10 @@ Power and logarithmic functions
    when ``x`` is a zero or a NaN.  If both ``x`` and ``y`` are finite,
    ``x`` is negative, and ``y`` is not an integer then ``pow(x, y)``
    is undefined, and raises :exc:`ValueError`.
+
+   Unlike the built-in ``**`` operator, :func:`math.pow` converts both
+   its arguments to type :class:`float`.  Use ``**`` or the built-in
+   :func:`pow` function for computing exact integer powers.
 
    .. versionchanged:: 2.6
       The outcome of ``1**nan`` and ``nan**0`` was undefined.

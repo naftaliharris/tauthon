@@ -63,6 +63,8 @@ The logging functions are named after the level or severity of the events
 they are used to track. The standard levels and their applicability are
 described below (in increasing order of severity):
 
+.. tabularcolumns:: |l|L|
+
 +--------------+---------------------------------------------+
 | Level        | When it's used                              |
 +==============+=============================================+
@@ -330,6 +332,9 @@ of components: loggers, handlers, filters, and formatters.
   to output.
 * Formatters specify the layout of log records in the final output.
 
+Log event information is passed between loggers, handlers, filters and
+formatters in a :class:`LogRecord` instance.
+
 Logging is performed by calling methods on instances of the :class:`Logger`
 class (hereafter called :dfn:`loggers`). Each instance has a name, and they are
 conceptually arranged in a namespace hierarchy using dots (periods) as
@@ -374,6 +379,13 @@ You can change this by passing a format string to :func:`basicConfig` with the
 *format* keyword argument. For all options regarding how a format string is
 constructed, see :ref:`formatter-objects`.
 
+Logging Flow
+^^^^^^^^^^^^
+
+The flow of log event information in loggers and handlers is illustrated in the
+following diagram.
+
+.. image:: logging_flow.png
 
 Loggers
 ^^^^^^^
@@ -728,12 +740,11 @@ Configuring Logging for a Library
 When developing a library which uses logging, you should take care to
 document how the library uses logging - for example, the names of loggers
 used. Some consideration also needs to be given to its logging configuration.
-If the using application does not use logging, and library code makes logging
-calls, then (as described in the previous section) events of severity
-``WARNING`` and greater will be printed to ``sys.stderr``. This is regarded as
-the best default behaviour.
+If the using application does not configure logging, and library code makes
+logging calls, then (as described in the previous section) an error message
+will be printed to ``sys.stderr``.
 
-If for some reason you *don't* want these messages printed in the absence of
+If for some reason you *don't* want this message printed in the absence of
 any logging configuration, you can attach a do-nothing handler to the top-level
 logger for your library. This avoids the message being printed, since a handler
 will be always be found for the library's events: it just doesn't produce any
@@ -745,7 +756,7 @@ handlers, as normal.
 A do-nothing handler is included in the logging package:
 :class:`~logging.NullHandler` (since Python 2.7). An instance of this handler
 could be added to the top-level logger of the logging namespace used by the
-library (*if* you want to prevent your library's logged events being output to
+library (*if* you want to prevent an error message being output to
 ``sys.stderr`` in the absence of logging configuration). If all logging by a
 library *foo* is done using loggers with names matching 'foo.x', 'foo.x.y',
 etc. then the code::
@@ -757,13 +768,14 @@ should have the desired effect. If an organisation produces a number of
 libraries, then the logger name specified can be 'orgname.foo' rather than
 just 'foo'.
 
-**PLEASE NOTE:** It is strongly advised that you *do not add any handlers other
-than* :class:`~logging.NullHandler` *to your library's loggers*. This is
-because the configuration of handlers is the prerogative of the application
-developer who uses your library. The application developer knows their target
-audience and what handlers are most appropriate for their application: if you
-add handlers 'under the hood', you might well interfere with their ability to
-carry out unit tests and deliver logs which suit their requirements.
+.. note:: It is strongly advised that you *do not add any handlers other
+   than* :class:`~logging.NullHandler` *to your library's loggers*. This is
+   because the configuration of handlers is the prerogative of the application
+   developer who uses your library. The application developer knows their
+   target audience and what handlers are most appropriate for their
+   application: if you add handlers 'under the hood', you might well interfere
+   with their ability to carry out unit tests and deliver logs which suit their
+   requirements.
 
 
 Logging Levels
@@ -940,10 +952,10 @@ The default implementation of :meth:`handleError` in :class:`Handler` checks
 to see if a module-level variable, :data:`raiseExceptions`, is set. If set, a
 traceback is printed to :data:`sys.stderr`. If not set, the exception is swallowed.
 
-**Note:** The default value of :data:`raiseExceptions` is ``True``. This is because
-during development, you typically want to be notified of any exceptions that
-occur. It's advised that you set :data:`raiseExceptions` to ``False`` for production
-usage.
+.. note:: The default value of :data:`raiseExceptions` is ``True``. This is
+   because during development, you typically want to be notified of any
+   exceptions that occur. It's advised that you set :data:`raiseExceptions` to
+   ``False`` for production usage.
 
 .. currentmodule:: logging
 

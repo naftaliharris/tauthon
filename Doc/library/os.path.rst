@@ -16,6 +16,11 @@ write files see :func:`open`, and for accessing the filesystem see the
    :func:`splitunc` and :func:`ismount` do handle them correctly.
 
 
+Unlike a unix shell, Python does not do any *automatic* path expansions.
+Functions such as :func:`expanduser` and :func:`expandvars` can be invoked
+explicitly when an application desires shell-like path expansion.  (See also
+the :mod:`glob` module.)
+
 .. note::
 
    Since different operating systems have different path name conventions, there
@@ -214,13 +219,11 @@ write files see :func:`open`, and for accessing the filesystem see the
 
 .. function:: normpath(path)
 
-   Normalize a pathname.  This collapses redundant separators and up-level
-   references so that ``A//B``, ``A/B/``, ``A/./B`` and ``A/foo/../B`` all become
-   ``A/B``.
-
-   It does not normalize the case (use :func:`normcase` for that).  On Windows, it
-   converts forward slashes to backward slashes. It should be understood that this
-   may change the meaning of the path if it contains symbolic links!
+   Normalize a pathname by collapsing redundant separators and up-level
+   references so that ``A//B``, ``A/B/``, ``A/./B`` and ``A/foo/../B`` all
+   become ``A/B``.  This string manipulation may change the meaning of a path
+   that contains symbolic links.  On Windows, it converts forward slashes to
+   backward slashes. To normalize case, use :func:`normcase`.
 
 
 .. function:: realpath(path)

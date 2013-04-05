@@ -31,10 +31,10 @@ The :mod:`dummy_threading` module is provided for situations where
 
 .. impl-detail::
 
-   Due to the :term:`Global Interpreter Lock`, in CPython only one thread
+   In CPython, due to the :term:`Global Interpreter Lock`, only one thread
    can execute Python code at once (even though certain performance-oriented
    libraries might overcome this limitation).
-   If you want your application to make better of use of the computational
+   If you want your application to make better use of the computational
    resources of multi-core machines, you are advised to use
    :mod:`multiprocessing`. However, threading is still an appropriate model
    if you want to run multiple I/O-bound tasks simultaneously.
@@ -246,6 +246,12 @@ A thread can be flagged as a "daemon thread".  The significance of this flag is
 that the entire Python program exits when only daemon threads are left.  The
 initial value is inherited from the creating thread.  The flag can be set
 through the :attr:`daemon` property.
+
+.. note::
+   Daemon threads are abruptly stopped at shutdown.  Their resources (such
+   as open files, database transactions, etc.) may not be released properly.
+   If you want your threads to stop gracefully, make them non-daemonic and
+   use a suitable signalling mechanism such as an :class:`Event`.
 
 There is a "main thread" object; this corresponds to the initial thread of
 control in the Python program.  It is not a daemon thread.

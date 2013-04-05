@@ -4,7 +4,9 @@
 Programming FAQ
 ===============
 
-.. contents::
+.. only:: html
+
+   .. contents::
 
 General Questions
 =================
@@ -350,6 +352,58 @@ for all global references, you'd be using ``global`` all the time.  You'd have
 to declare as global every reference to a built-in function or to a component of
 an imported module.  This clutter would defeat the usefulness of the ``global``
 declaration for identifying side-effects.
+
+
+Why do lambdas defined in a loop with different values all return the same result?
+----------------------------------------------------------------------------------
+
+Assume you use a for loop to define a few different lambdas (or even plain
+functions), e.g.::
+
+   squares = []
+   for x in range(5):
+      squares.append(lambda: x**2)
+
+This gives you a list that contains 5 lambdas that calculate ``x**2``.  You
+might expect that, when called, they would return, respectively, ``0``, ``1``,
+``4``, ``9``, and ``16``.  However, when you actually try you will see that
+they all return ``16``::
+
+   >>> squares[2]()
+   16
+   >>> squares[4]()
+   16
+
+This happens because ``x`` is not local to the lambdas, but is defined in
+the outer scope, and it is accessed when the lambda is called --- not when it
+is defined.  At the end of the loop, the value of ``x`` is ``4``, so all the
+functions now return ``4**2``, i.e. ``16``.  You can also verify this by
+changing the value of ``x`` and see how the results of the lambdas change::
+
+   >>> x = 8
+   >>> squares[2]()
+   64
+
+In order to avoid this, you need to save the values in variables local to the
+lambdas, so that they don't rely on the value of the global ``x``::
+
+   squares = []
+   for x in range(5):
+      squares.append(lambda n=x: n**2)
+
+Here, ``n=x`` creates a new variable ``n`` local to the lambda and computed
+when the lambda is defined so that it has the same value that ``x`` had at
+that point in the loop.  This means that the value of ``n`` will be ``0``
+in the first lambda, ``1`` in the second, ``2`` in the third, and so on.
+Therefore each lambda will now return the correct result::
+
+   >>> squares[2]()
+   4
+   >>> squares[4]()
+   16
+
+Note that this behaviour is not peculiar to lambdas, but applies to regular
+functions too.
 
 
 How do I share global variables across modules?
@@ -716,52 +770,6 @@ Yes, this feature was added in Python 2.5. The syntax would be as follows::
    small = x if x < y else y
 
 For versions previous to 2.5 the answer would be 'No'.
-
-.. XXX remove rest?
-
-In many cases you can mimic ``a ? b : c`` with ``a and b or c``, but there's a
-flaw: if *b* is zero (or empty, or ``None`` -- anything that tests false) then
-*c* will be selected instead.  In many cases you can prove by looking at the
-code that this can't happen (e.g. because *b* is a constant or has a type that
-can never be false), but in general this can be a problem.
-
-Tim Peters (who wishes it was Steve Majewski) suggested the following solution:
-``(a and [b] or [c])[0]``.  Because ``[b]`` is a singleton list it is never
-false, so the wrong path is never taken; then applying ``[0]`` to the whole
-thing gets the *b* or *c* that you really wanted.  Ugly, but it gets you there
-in the rare cases where it is really inconvenient to rewrite your code using
-'if'.
-
-The best course is usually to write a simple ``if...else`` statement.  Another
-solution is to implement the ``?:`` operator as a function::
-
-   def q(cond, on_true, on_false):
-       if cond:
-           if not isfunction(on_true):
-               return on_true
-           else:
-               return on_true()
-       else:
-           if not isfunction(on_false):
-               return on_false
-           else:
-               return on_false()
-
-In most cases you'll pass b and c directly: ``q(a, b, c)``.  To avoid evaluating
-b or c when they shouldn't be, encapsulate them within a lambda function, e.g.:
-``q(a, lambda: b, lambda: c)``.
-
-It has been asked *why* Python has no if-then-else expression.  There are
-several answers: many languages do just fine without one; it can easily lead to
-less readable code; no sufficiently "Pythonic" syntax has been discovered; a
-search of the standard library found remarkably few places where using an
-if-then-else expression would make the code more understandable.
-
-In 2002, :pep:`308` was written proposing several possible syntaxes and the
-community was asked to vote on the issue.  The vote was inconclusive.  Most
-people liked one of the syntaxes, but also hated other syntaxes; many votes
-implied that people preferred no ternary operator rather than having a syntax
-they hated.
 
 
 Is it possible to write obfuscated one-liners in Python?

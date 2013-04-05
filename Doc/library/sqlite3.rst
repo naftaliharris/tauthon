@@ -118,6 +118,24 @@ Module functions and constants
 ------------------------------
 
 
+.. data:: version
+
+   The version number of this module, as a string. This is not the version of
+   the SQLite library.
+
+.. data:: version_info
+
+   The version number of this module, as a tuple of integers. This is not the
+   version of the SQLite library.
+
+.. data:: sqlite_version
+
+   The version number of the run-time SQLite library, as a string.
+
+.. data:: sqlite_version_info
+
+   The version number of the run-time SQLite library, as a tuple of integers.
+
 .. data:: PARSE_DECLTYPES
 
    This constant is meant to be used with the *detect_types* parameter of the
@@ -813,6 +831,10 @@ experimental SQLite date/time functions.
 The following example demonstrates this.
 
 .. literalinclude:: ../includes/sqlite3/pysqlite_datetime.py
+
+If a timestamp stored in SQLite has a fractional part longer than 6
+numbers, its value will be truncated to microsecond precision by the
+timestamp converter.
 
 
 .. _sqlite3-controlling-transactions:

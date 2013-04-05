@@ -524,7 +524,7 @@ SRE_COUNT(SRE_STATE* state, SRE_CODE* pattern, Py_ssize_t maxcount)
     Py_ssize_t i;
 
     /* adjust end */
-    if (maxcount < end - ptr && maxcount != 65535)
+    if (maxcount < end - ptr && maxcount != SRE_MAXREPEAT)
         end = ptr + maxcount;
 
     switch (pattern[0]) {
@@ -1139,7 +1139,7 @@ entrance:
             } else {
                 /* general case */
                 LASTMARK_SAVE();
-                while ((Py_ssize_t)ctx->pattern[2] == 65535
+                while ((Py_ssize_t)ctx->pattern[2] == SRE_MAXREPEAT
                        || ctx->count <= (Py_ssize_t)ctx->pattern[2]) {
                     state->ptr = ctx->ptr;
                     DO_JUMP(JUMP_MIN_REPEAT_ONE,jump_min_repeat_one,
@@ -1225,7 +1225,7 @@ entrance:
             }
 
             if ((ctx->count < ctx->u.rep->pattern[2] ||
-                ctx->u.rep->pattern[2] == 65535) &&
+                ctx->u.rep->pattern[2] == SRE_MAXREPEAT) &&
                 state->ptr != ctx->u.rep->last_ptr) {
                 /* we may have enough matches, but if we can
                    match another item, do so */
@@ -1302,13 +1302,18 @@ entrance:
 
             LASTMARK_RESTORE();
 
-            if (ctx->count >= ctx->u.rep->pattern[2]
-                && ctx->u.rep->pattern[2] != 65535)
+            if ((ctx->count >= ctx->u.rep->pattern[2]
+                && ctx->u.rep->pattern[2] != SRE_MAXREPEAT) ||
+                state->ptr == ctx->u.rep->last_ptr)
                 RETURN_FAILURE;
 
             ctx->u.rep->count = ctx->count;
+            /* zero-width match protection */
+            DATA_PUSH(&ctx->u.rep->last_ptr);
+            ctx->u.rep->last_ptr = state->ptr;
             DO_JUMP(JUMP_MIN_UNTIL_3,jump_min_until_3,
                     ctx->u.rep->pattern+3);
+            DATA_POP(&ctx->u.rep->last_ptr);
             if (ret) {
                 RETURN_ON_ERROR(ret);
                 RETURN_SUCCESS;
@@ -1636,7 +1641,7 @@ static PyObject*pattern_scanner(PatternObject*, PyObject*);
 static PyObject *
 sre_codesize(PyObject* self, PyObject *unused)
 {
-    return PyLong_FromSize_t(sizeof(SRE_CODE));
+    return PyInt_FromSize_t(sizeof(SRE_CODE));
 }
 
 static PyObject *
@@ -3042,7 +3047,7 @@ _validate_inner(SRE_CODE *code, SRE_CODE *end, Py_ssize_t groups)
                 GET_ARG; max = arg;
                 if (min > max)
                     FAIL;
-                if (max > 65535)
+                if (max > SRE_MAXREPEAT)
                     FAIL;
                 if (!_validate_inner(code, code+skip-4, groups))
                     FAIL;
@@ -3061,7 +3066,7 @@ _validate_inner(SRE_CODE *code, SRE_CODE *end, Py_ssize_t groups)
                 GET_ARG; max = arg;
                 if (min > max)
                     FAIL;
-                if (max > 65535)
+                if (max > SRE_MAXREPEAT)
                     FAIL;
                 if (!_validate_inner(code, code+skip-3, groups))
                     FAIL;
@@ -3389,7 +3394,7 @@ match_start(MatchObject* self, PyObject* args)
     }
 
     /* mark is -1 if group is undefined */
-    return PyLong_FromSsize_t(self->mark[index*2]);
+    return PyInt_FromSsize_t(self->mark[index*2]);
 }
 
 static PyObject*
@@ -3412,7 +3417,7 @@ match_end(MatchObject* self, PyObject* args)
     }
 
     /* mark is -1 if group is undefined */
-    return PyLong_FromSsize_t(self->mark[index*2+1]);
+    return PyInt_FromSsize_t(self->mark[index*2+1]);
 }
 
 LOCAL(PyObject*)
@@ -3602,7 +3607,7 @@ static PyObject *
 match_lastindex_get(MatchObject *self)
 {
     if (self->lastindex >= 0)
-        return PyLong_FromSsize_t(self->lastindex);
+        return PyInt_FromSsize_t(self->lastindex);
     Py_INCREF(Py_None);
     return Py_None;
 }
@@ -3935,6 +3940,12 @@ PyMODINIT_FUNC init_sre(void)
     x = PyInt_FromLong(sizeof(SRE_CODE));
     if (x) {
         PyDict_SetItemString(d, "CODESIZE", x);
+        Py_DECREF(x);
+    }
+
+    x = PyLong_FromUnsignedLong(SRE_MAXREPEAT);
+    if (x) {
+        PyDict_SetItemString(d, "MAXREPEAT", x);
         Py_DECREF(x);
     }
 
