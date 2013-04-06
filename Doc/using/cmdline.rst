@@ -358,15 +358,23 @@ Miscellaneous options
 .. cmdoption:: -X
 
    Reserved for various implementation-specific options.  CPython currently
-   defines just one, you can use ``-X faulthandler`` to enable
-   :mod:`faulthandler`. It also allows to pass arbitrary values and retrieve
-   them through the :data:`sys._xoptions` dictionary.
+   defines two possible values:
+
+   * ``-X faulthandler`` to enable :mod:`faulthandler`;
+   * ``-X showrefcount`` to enable the output of the total reference count
+     and memory blocks (only works on debug builds);
+
+   It also allows to pass arbitrary values and retrieve them through the
+   :data:`sys._xoptions` dictionary.
 
    .. versionchanged:: 3.2
       It is now allowed to pass :option:`-X` with CPython.
 
    .. versionadded:: 3.3
       The ``-X faulthandler`` option.
+
+   .. versionadded:: 3.4
+      The ``-X showrefcount`` option.
 
 
 Options you shouldn't use
