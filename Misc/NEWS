@@ -2,6 +2,53 @@
 Python News
 +++++++++++
 
+What's New in Python 3.3.2?
+===========================
+
+.. *Release date: XXXX-XX-XX*
+
+*Not yet released, see sections below for changes released in 3.3.1*
+
+Core and Builtins
+-----------------
+
+- Issue #17619: Make input() check for Ctrl-C correctly on Windows.
+
+- Issue #17610: Don't rely on non-standard behavior of the C qsort() function.
+
+- Issue #17357: Add missing verbosity output when using -v/-vv.
+
+Library
+-------
+
+- Issue #17572: Avoid chained exceptions while passing bad directives to
+  time.strptime().  Initial patch by Claudiu Popa.
+
+- Issue #17625: In IDLE, close the replace dialog after it is used.
+
+- Issue #14254: IDLE now handles readline correctly across shell restarts.
+
+- Issue #17614: IDLE no longer raises exception when quickly closing a file.
+
+- Issue #6698: IDLE now opens just an editor window when configured to do so.
+
+- Issue #8900: Using keyboard shortcuts in IDLE to open a file no longer
+  raises an exception.
+
+- Issue #6649: Fixed missing exit status in IDLE. Patch by Guilherme Polo.
+
+- Issue #17435: threading.Timer's __init__ method no longer uses mutable
+  default values for the args and kwargs parameters.
+
+- Issue #17526: fix an IndexError raised while passing code without filename to
+  inspect.findsource().  Initial patch by Tyler Doyle.
+
+Documentation
+-------------
+
+- Issue #15940: Specify effect of locale on time functions.
+
+
 What's New in Python 3.3.1?
 ===========================
 
@@ -20,8 +67,6 @@ Library
 
 What's New in Python 3.3.1 release candidate 1?
 ===============================================
-
-.. *Not yet released, see sections below for changes released in 3.3.0*
 
 *Release date: 24-Mar-2013*
 
@@ -211,6 +256,8 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #17540: Added style to formatter configuration by dict.
 
 - Issue #17536: Add to webbrowser's browser list: www-browser, x-www-browser,
   iceweasel, iceape.
@@ -827,6 +874,8 @@ Tests
 Build
 -----
 
+- Issue #17550: Fix the --enable-profiling configure switch.
+
 - Issue #17425: Build with openssl 1.0.1d on Windows.
 
 - Issue #16754: Fix the incorrect shared library extension on linux. Introduce
@@ -891,6 +940,8 @@ Tools/Demos
 
 Documentation
 -------------
+
+- Issue 17538: Document XML vulnerabilties
 
 - Issue #16642: sched.scheduler timefunc initial default is time.monotonic.
   Patch by Ramchandra Apte

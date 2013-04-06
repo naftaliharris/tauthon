@@ -21,6 +21,13 @@ supports writing XML-RPC client code; it handles all the details of translating
 between conformable Python objects and XML on the wire.
 
 
+.. warning::
+
+   The :mod:`xmlrpc.client` module is not secure against maliciously
+   constructed data.  If you need to parse untrusted or unauthenticated data see
+   :ref:`xml-vulnerabilities`.
+
+
 .. class:: ServerProxy(uri, transport=None, encoding=None, verbose=False, \
                        allow_none=False, use_datetime=False, \
                        use_builtin_types=False)
@@ -64,6 +71,8 @@ between conformable Python objects and XML on the wire.
    arguments and return Python basic types and classes.  Types that are conformable
    (e.g. that can be marshalled through XML), include the following (and except
    where noted, they are unmarshalled as the same Python type):
+
+   .. tabularcolumns:: |l|L|
 
    +---------------------------------+---------------------------------------------+
    | Name                            | Meaning                                     |

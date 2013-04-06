@@ -1,3 +1,10 @@
+What's New in IDLE 3.3.2?
+=========================
+
+- Issue #17390: Display Python version on Idle title bar.
+  Initial patch by Edmond Burnett.
+
+
 What's New in IDLE 3.3.1?
 =========================
 
@@ -12,6 +19,8 @@ What's New in IDLE 3.3.1?
 
 What's New in IDLE 3.3.0?
 =========================
+
+- Issue #17625: Close the replace dialog after it is used.
 
 - Issue #7163: Propagate return value of sys.stdout.write.
 
@@ -868,8 +877,4 @@ What's New in IDLEfork 0.9 Alpha 1?
 --------------------------------------------------------------------
 Refer to HISTORY.txt for additional information on earlier releases.
 --------------------------------------------------------------------
-
-
-
-
 
