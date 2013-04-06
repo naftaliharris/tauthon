@@ -12,7 +12,6 @@ __all__ = [ 'Client', 'Listener', 'Pipe', 'wait' ]
 import io
 import os
 import sys
-import pickle
 import select
 import socket
 import struct
@@ -132,22 +131,22 @@ class _ConnectionBase:
 
     def _check_closed(self):
         if self._handle is None:
-            raise IOError("handle is closed")
+            raise OSError("handle is closed")
 
     def _check_readable(self):
         if not self._readable:
-            raise IOError("connection is write-only")
+            raise OSError("connection is write-only")
 
     def _check_writable(self):
         if not self._writable:
-            raise IOError("connection is read-only")
+            raise OSError("connection is read-only")
 
     def _bad_message_length(self):
         if self._writable:
             self._readable = False
         else:
             self.close()
-        raise IOError("bad message length")
+        raise OSError("bad message length")
 
     @property
     def closed(self):
@@ -202,9 +201,7 @@ class _ConnectionBase:
         """Send a (picklable) object"""
         self._check_closed()
         self._check_writable()
-        buf = io.BytesIO()
-        ForkingPickler(buf, pickle.HIGHEST_PROTOCOL).dump(obj)
-        self._send_bytes(buf.getbuffer())
+        self._send_bytes(ForkingPickler.dumps(obj))
 
     def recv_bytes(self, maxlength=None):
         """
@@ -249,7 +246,7 @@ class _ConnectionBase:
         self._check_closed()
         self._check_readable()
         buf = self._recv_bytes()
-        return pickle.loads(buf.getbuffer())
+        return ForkingPickler.loads(buf.getbuffer())
 
     def poll(self, timeout=0.0):
         """Whether there is any input available to be read"""
@@ -317,7 +314,7 @@ if _winapi:
                             return f
                         elif err == _winapi.ERROR_MORE_DATA:
                             return self._get_more_data(ov, maxsize)
-                except IOError as e:
+                except OSError as e:
                     if e.winerror == _winapi.ERROR_BROKEN_PIPE:
                         raise EOFError
                     else:
@@ -383,7 +380,7 @@ class Connection(_ConnectionBase):
                 if remaining == size:
                     raise EOFError
                 else:
-                    raise IOError("got end of file during message")
+                    raise OSError("got end of file during message")
             buf.write(chunk)
             remaining -= n
         return buf
@@ -443,7 +440,7 @@ class Listener(object):
         Returns a `Connection` object.
         '''
         if self._listener is None:
-            raise IOError('listener is closed')
+            raise OSError('listener is closed')
         c = self._listener.accept()
         if self._authkey:
             deliver_challenge(c, self._authkey)
@@ -676,7 +673,7 @@ if sys.platform == 'win32':
                     0, _winapi.NULL, _winapi.OPEN_EXISTING,
                     _winapi.FILE_FLAG_OVERLAPPED, _winapi.NULL
                     )
-            except WindowsError as e:
+            except OSError as e:
                 if e.winerror not in (_winapi.ERROR_SEM_TIMEOUT,
                                       _winapi.ERROR_PIPE_BUSY) or _check_timeout(t):
                     raise
