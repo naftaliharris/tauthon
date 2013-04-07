@@ -196,6 +196,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             for name, (mtime, data) in files.items():
                 zinfo = ZipInfo(name, time.localtime(mtime))
                 zinfo.compress_type = self.compression
+                zinfo.comment = b"spam"
                 z.writestr(zinfo, data)
             z.close()
 
@@ -245,6 +246,7 @@ class UncompressedZipImportTestCase(ImportHooksBaseTestCase):
             for name, (mtime, data) in files.items():
                 zinfo = ZipInfo(name, time.localtime(mtime))
                 zinfo.compress_type = self.compression
+                zinfo.comment = b"eggs"
                 z.writestr(zinfo, data)
             z.close()
 
@@ -459,7 +461,7 @@ class BadFileZipImportTestCase(unittest.TestCase):
 
             self.assertRaises(error, z.load_module, 'abc')
             self.assertRaises(error, z.get_code, 'abc')
-            self.assertRaises(IOError, z.get_data, 'abc')
+            self.assertRaises(OSError, z.get_data, 'abc')
             self.assertRaises(error, z.get_source, 'abc')
             self.assertRaises(error, z.is_package, 'abc')
         finally:
