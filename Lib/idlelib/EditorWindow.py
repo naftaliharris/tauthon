@@ -542,7 +542,7 @@ class EditorWindow(object):
         if sys.platform[:3] == 'win':
             try:
                 os.startfile(self.help_url)
-            except WindowsError as why:
+            except OSError as why:
                 tkMessageBox.showerror(title='Document Start Failure',
                     message=str(why), parent=self.text)
         else:
@@ -852,7 +852,7 @@ class EditorWindow(object):
             if sys.platform[:3] == 'win':
                 try:
                     os.startfile(helpfile)
-                except WindowsError as why:
+                except OSError as why:
                     tkMessageBox.showerror(title='Document Start Failure',
                         message=str(why), parent=self.text)
             else:
@@ -886,7 +886,7 @@ class EditorWindow(object):
             with open(self.recent_files_path, 'w',
                         encoding='utf_8', errors='replace') as rf_file:
                 rf_file.writelines(rf_list)
-        except IOError as err:
+        except OSError as err:
             if not getattr(self.root, "recentfilelist_error_displayed", False):
                 self.root.recentfilelist_error_displayed = True
                 tkMessageBox.showerror(title='IDLE Error',
@@ -1433,6 +1433,7 @@ class EditorWindow(object):
     def tabify_region_event(self, event):
         head, tail, chars, lines = self.get_region()
         tabwidth = self._asktabwidth()
+        if tabwidth is None: return
         for pos in range(len(lines)):
             line = lines[pos]
             if line:
@@ -1444,6 +1445,7 @@ class EditorWindow(object):
     def untabify_region_event(self, event):
         head, tail, chars, lines = self.get_region()
         tabwidth = self._asktabwidth()
+        if tabwidth is None: return
         for pos in range(len(lines)):
             lines[pos] = lines[pos].expandtabs(tabwidth)
         self.set_region(head, tail, chars, lines)
@@ -1537,7 +1539,7 @@ class EditorWindow(object):
             parent=self.text,
             initialvalue=self.indentwidth,
             minvalue=2,
-            maxvalue=16) or self.tabwidth
+            maxvalue=16)
 
     # Guess indentwidth from text content.
     # Return guessed indentwidth.  This should not be believed unless

@@ -248,8 +248,11 @@ _Py_Mangle(PyObject *privateobj, PyObject *ident)
     }
     plen -= ipriv;
 
-    assert(1 <= PY_SSIZE_T_MAX - nlen);
-    assert(1 + nlen <= PY_SSIZE_T_MAX - plen);
+    if (plen + nlen >= PY_SSIZE_T_MAX - 1) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "private identifier too large to be mangled");
+        return NULL;
+    }
 
     maxchar = PyUnicode_MAX_CHAR_VALUE(ident);
     if (PyUnicode_MAX_CHAR_VALUE(privateobj) > maxchar)
@@ -1498,15 +1501,15 @@ compiler_visit_annotations(struct compiler *c, arguments_ty args,
 
     if (compiler_visit_argannotations(c, args->args, names))
         goto error;
-    if (args->varargannotation &&
-        compiler_visit_argannotation(c, args->vararg,
-                                     args->varargannotation, names))
+    if (args->vararg && args->vararg->annotation &&
+        compiler_visit_argannotation(c, args->vararg->arg,
+                                     args->vararg->annotation, names))
         goto error;
     if (compiler_visit_argannotations(c, args->kwonlyargs, names))
         goto error;
-    if (args->kwargannotation &&
-        compiler_visit_argannotation(c, args->kwarg,
-                                     args->kwargannotation, names))
+    if (args->kwarg && args->kwarg->annotation &&
+        compiler_visit_argannotation(c, args->kwarg->arg,
+                                     args->kwarg->annotation, names))
         goto error;
 
     if (!return_str) {
@@ -1565,6 +1568,8 @@ compiler_function(struct compiler *c, stmt_ty s)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
@@ -1572,8 +1577,6 @@ compiler_function(struct compiler *c, stmt_ty s)
             return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     num_annotations = compiler_visit_annotations(c, args, returns);
     if (num_annotations < 0)
         return 0;
@@ -1794,14 +1797,14 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, COMPILER_SCOPE_FUNCTION,
                               (void *)e, e->lineno))
         return 0;
@@ -2635,6 +2638,10 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     if (!mangled)
         return 0;
 
+    assert(PyUnicode_CompareWithASCIIString(name, "None") &&
+           PyUnicode_CompareWithASCIIString(name, "True") &&
+           PyUnicode_CompareWithASCIIString(name, "False"));
+
     op = 0;
     optype = OP_NAME;
     scope = PyST_GetScope(c->u->u_ste, mangled);
@@ -3194,12 +3201,18 @@ expr_constant(struct compiler *c, expr_ty e)
     case Name_kind:
         /* optimize away names that can't be reassigned */
         id = PyUnicode_AsUTF8(e->v.Name.id);
-        if (strcmp(id, "True") == 0) return 1;
-        if (strcmp(id, "False") == 0) return 0;
-        if (strcmp(id, "None") == 0) return 0;
-        if (strcmp(id, "__debug__") == 0)
-            return ! c->c_optimize;
-        /* fall through */
+        if (id && strcmp(id, "__debug__") == 0)
+            return !c->c_optimize;
+        return -1;
+    case NameConstant_kind: {
+        PyObject *o = e->v.NameConstant.value;
+        if (o == Py_None)
+            return 0;
+        else if (o == Py_True)
+            return 1;
+        else if (o == Py_False)
+            return 0;
+    }
     default:
         return -1;
     }
@@ -3374,6 +3387,9 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
         break;
     case Ellipsis_kind:
         ADDOP_O(c, LOAD_CONST, Py_Ellipsis, consts);
+        break;
+    case NameConstant_kind:
+        ADDOP_O(c, LOAD_CONST, e->v.NameConstant.value, consts);
         break;
     /* The following exprs can be assignment targets. */
     case Attribute_kind:
