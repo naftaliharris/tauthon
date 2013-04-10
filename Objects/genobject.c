@@ -176,7 +176,7 @@ gen_yf(PyGenObject *gen)
     PyObject *yf = NULL;
     PyFrameObject *f = gen->gi_frame;
 
-    if (f) {
+    if (f && f->f_stacktop) {
         PyObject *bytecode = f->f_code->co_code;
         unsigned char *code = (unsigned char *)PyBytes_AS_STRING(bytecode);
 
