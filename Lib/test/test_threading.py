@@ -452,7 +452,7 @@ class ThreadJoinOnShutdown(BaseTestCase):
     # problems with some operating systems (issue #3863): skip problematic tests
     # on platforms known to behave badly.
     platforms_to_skip = ('freebsd4', 'freebsd5', 'freebsd6', 'netbsd5',
-                         'os2emx', 'hp-ux11')
+                         'hp-ux11')
 
     def _run_and_join(self, script):
         script = """if 1:
@@ -754,7 +754,8 @@ class ThreadingExceptionTests(BaseTestCase):
         lock = threading.Lock()
         self.assertRaises(RuntimeError, lock.release)
 
-    @unittest.skipUnless(sys.platform == 'darwin', 'test macosx problem')
+    @unittest.skipUnless(sys.platform == 'darwin' and test.support.python_is_optimized(),
+                         'test macosx problem')
     def test_recursion_limit(self):
         # Issue 9670
         # test that excessive recursion within a non-main thread causes
