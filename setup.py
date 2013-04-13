@@ -588,6 +588,8 @@ class PyBuildExt(build_ext):
                                depends=['testcapi_long.h']) )
         # Python PEP-3118 (buffer protocol) test module
         exts.append( Extension('_testbuffer', ['_testbuffer.c']) )
+        # Test loading multiple modules from one compiled file (http://bugs.python.org/issue16421)
+        exts.append( Extension('_testimportmultiple', ['_testimportmultiple.c']) )
         # profiler (_lsprof is for cProfile.py)
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database
@@ -784,10 +786,10 @@ class PyBuildExt(build_ext):
                     for line in incfile:
                         m = openssl_ver_re.match(line)
                         if m:
-                            openssl_ver = eval(m.group(1))
+                            openssl_ver = int(m.group(1), 16)
+                            break
             except IOError as msg:
                 print("IOError while reading opensshv.h:", msg)
-                pass
 
         #print('openssl_ver = 0x%08x' % openssl_ver)
         min_openssl_ver = 0x00907000
@@ -820,6 +822,15 @@ class PyBuildExt(build_ext):
                                depends=['hashlib.h']) )
         exts.append( Extension('_sha1', ['sha1module.c'],
                                depends=['hashlib.h']) )
+
+        # SHA-3 (Keccak) module
+        sha3_depends = ['hashlib.h']
+        keccak = os.path.join(os.getcwd(), srcdir, 'Modules', '_sha3',
+                              'keccak')
+        for pattern in ('*.c', '*.h', '*.macros'):
+            sha3_depends.extend(glob(os.path.join(keccak, pattern)))
+        exts.append(Extension("_sha3", ["_sha3/sha3module.c"],
+                              depends=sha3_depends))
 
         # Modules that provide persistent dictionary-like semantics.  You will
         # probably want to arrange for at least one of them to be available on
@@ -2112,7 +2123,7 @@ is also usable as an extension language for applications that need a
 programmable interface.
 
 The Python implementation is portable: it runs on many brands of UNIX,
-on Windows, DOS, OS/2, Mac, Amiga... If your favorite system isn't
+on Windows, DOS, Mac, Amiga... If your favorite system isn't
 listed here, it may still be supported, if there's a C compiler for
 it. Ask around on comp.lang.python -- or just try compiling Python
 yourself.
