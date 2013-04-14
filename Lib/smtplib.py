@@ -66,7 +66,7 @@ bCRLF = b"\r\n"
 OLDSTYLE_AUTH = re.compile(r"auth=(.*)", re.I)
 
 # Exception classes used by this module.
-class SMTPException(Exception):
+class SMTPException(IOError):
     """Base class for all exceptions raised by this module."""
 
 class SMTPServerDisconnected(SMTPException):
@@ -310,7 +310,7 @@ class SMTP:
                 try:
                     port = int(port)
                 except ValueError:
-                    raise socket.error("nonnumeric port")
+                    raise OSError("nonnumeric port")
         if not port:
             port = self.default_port
         if self.debuglevel > 0:
@@ -331,7 +331,7 @@ class SMTP:
                 s = s.encode("ascii")
             try:
                 self.sock.sendall(s)
-            except socket.error:
+            except OSError:
                 self.close()
                 raise SMTPServerDisconnected('Server not connected')
         else:
@@ -364,7 +364,7 @@ class SMTP:
         while 1:
             try:
                 line = self.file.readline()
-            except socket.error as e:
+            except OSError as e:
                 self.close()
                 raise SMTPServerDisconnected("Connection unexpectedly closed: "
                                              + str(e))
@@ -930,7 +930,7 @@ class LMTP(SMTP):
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.file = None
             self.sock.connect(host)
-        except socket.error:
+        except OSError:
             if self.debuglevel > 0:
                 print('connect fail:', host, file=stderr)
             if self.sock:
