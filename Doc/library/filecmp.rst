@@ -55,27 +55,24 @@ The :class:`dircmp` class
 
 .. class:: dircmp(a, b, ignore=None, hide=None)
 
-   Construct a new directory comparison object, to compare the directories *a* and
-   *b*. *ignore* is a list of names to ignore, and defaults to ``['RCS', 'CVS',
-   'tags']``. *hide* is a list of names to hide, and defaults to ``[os.curdir,
-   os.pardir]``.
+   Construct a new directory comparison object, to compare the directories *a*
+   and *b*.  *ignore* is a list of names to ignore, and defaults to
+   :attr:`filecmp.DEFAULT_IGNORES`.  *hide* is a list of names to hide, and
+   defaults to ``[os.curdir, os.pardir]``.
 
    The :class:`dircmp` class compares files by doing *shallow* comparisons
    as described for :func:`filecmp.cmp`.
 
    The :class:`dircmp` class provides the following methods:
 
-
    .. method:: report()
 
       Print (to :data:`sys.stdout`) a comparison between *a* and *b*.
-
 
    .. method:: report_partial_closure()
 
       Print a comparison between *a* and *b* and common immediate
       subdirectories.
-
 
    .. method:: report_full_closure()
 
@@ -133,7 +130,7 @@ The :class:`dircmp` class
 
    .. attribute:: common_files
 
-      Files in both *a* and *b*
+      Files in both *a* and *b*.
 
 
    .. attribute:: common_funny
@@ -163,6 +160,12 @@ The :class:`dircmp` class
 
       A dictionary mapping names in :attr:`common_dirs` to :class:`dircmp`
       objects.
+
+.. attribute:: DEFAULT_IGNORES
+
+   .. versionadded:: 3.4
+
+   List of directories ignored by :class:`dircmp` by default.
 
 
 Here is a simplified example of using the ``subdirs`` attribute to search
