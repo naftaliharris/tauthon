@@ -38,7 +38,7 @@ def compile_dir(dir, maxlevels=10, ddir=None, force=False, rx=None,
         print('Listing {!r}...'.format(dir))
     try:
         names = os.listdir(dir)
-    except os.error:
+    except OSError:
         print("Can't list {!r}".format(dir))
         names = []
     names.sort()
@@ -106,7 +106,7 @@ def compile_file(fullname, ddir=None, force=False, rx=None, quiet=False,
                         actual = chandle.read(8)
                     if expect == actual:
                         return success
-                except IOError:
+                except OSError:
                     pass
             if not quiet:
                 print('Compiling {!r}...'.format(fullname))
@@ -124,7 +124,7 @@ def compile_file(fullname, ddir=None, force=False, rx=None, quiet=False,
                 msg = msg.decode(sys.stdout.encoding)
                 print(msg)
                 success = 0
-            except (SyntaxError, UnicodeError, IOError) as e:
+            except (SyntaxError, UnicodeError, OSError) as e:
                 if quiet:
                     print('*** Error compiling {!r}...'.format(fullname))
                 else:
@@ -209,7 +209,7 @@ def main():
             with (sys.stdin if args.flist=='-' else open(args.flist)) as f:
                 for line in f:
                     compile_dests.append(line.strip())
-        except EnvironmentError:
+        except OSError:
             print("Error reading file list {}".format(args.flist))
             return False
 
