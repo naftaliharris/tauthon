@@ -151,6 +151,9 @@ class Random(_random.Random):
 
 ## -------------------- pickle support  -------------------
 
+    # Issue 17489: Since __reduce__ was defined to fix #759889 this is no
+    # longer called; we leave it here because it has been here since random was
+    # rewritten back in 2001 and why risk breaking something.
     def __getstate__(self): # for pickle
         return self.getstate()
 
@@ -252,10 +255,11 @@ class Random(_random.Random):
         return seq[i]
 
     def shuffle(self, x, random=None, int=int):
-        """x, random=random.random -> shuffle list x in place; return None.
+        """Shuffle list x in place, and return None.
 
-        Optional arg random is a 0-argument function returning a random
-        float in [0.0, 1.0); by default, the standard random.random.
+        Optional argument random is a 0-argument function returning a
+        random float in [0.0, 1.0); if it is the default None, the
+        standard random.random will be used.
         """
 
         randbelow = self._randbelow

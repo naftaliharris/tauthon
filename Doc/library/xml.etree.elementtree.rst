@@ -397,6 +397,9 @@ Functions
 
       If you need a fully populated element, look for "end" events instead.
 
+   .. note::
+      For real event-driven parsing, see :class:`IncrementalParser`.
+
 
 .. function:: parse(source, parser=None)
 
@@ -437,28 +440,38 @@ Functions
    arguments.  Returns an element instance.
 
 
-.. function:: tostring(element, encoding="us-ascii", method="xml")
+.. function:: tostring(element, encoding="us-ascii", method="xml", *, \
+                       short_empty_elements=True)
 
    Generates a string representation of an XML element, including all
    subelements.  *element* is an :class:`Element` instance.  *encoding* [1]_ is
    the output encoding (default is US-ASCII).  Use ``encoding="unicode"`` to
    generate a Unicode string (otherwise, a bytestring is generated).  *method*
    is either ``"xml"``, ``"html"`` or ``"text"`` (default is ``"xml"``).
+   *short_empty_elements* has the same meaning as in :meth:`ElementTree.write`.
    Returns an (optionally) encoded string containing the XML data.
 
+   .. versionadded:: 3.4
+      The *short_empty_elements* parameter.
 
-.. function:: tostringlist(element, encoding="us-ascii", method="xml")
+
+.. function:: tostringlist(element, encoding="us-ascii", method="xml", *, \
+                           short_empty_elements=True)
 
    Generates a string representation of an XML element, including all
    subelements.  *element* is an :class:`Element` instance.  *encoding* [1]_ is
    the output encoding (default is US-ASCII).  Use ``encoding="unicode"`` to
    generate a Unicode string (otherwise, a bytestring is generated).  *method*
    is either ``"xml"``, ``"html"`` or ``"text"`` (default is ``"xml"``).
+   *short_empty_elements* has the same meaning as in :meth:`ElementTree.write`.
    Returns a list of (optionally) encoded strings containing the XML data.
    It does not guarantee any specific sequence, except that
    ``"".join(tostringlist(element)) == tostring(element)``.
 
    .. versionadded:: 3.2
+
+   .. versionadded:: 3.4
+      The *short_empty_elements* parameter.
 
 
 .. function:: XML(text, parser=None)
@@ -751,7 +764,8 @@ ElementTree Objects
 
 
    .. method:: write(file, encoding="us-ascii", xml_declaration=None, \
-                     default_namespace=None, method="xml")
+                     default_namespace=None, method="xml", *, \
+                     short_empty_elements=True)
 
       Writes the element tree to a file, as XML.  *file* is a file name, or a
       :term:`file object` opened for writing.  *encoding* [1]_ is the output
@@ -762,6 +776,10 @@ ElementTree Objects
       *default_namespace* sets the default XML namespace (for "xmlns").
       *method* is either ``"xml"``, ``"html"`` or ``"text"`` (default is
       ``"xml"``).
+      The keyword-only *short_empty_elements* parameter controls the formatting
+      of elements that contain no content.  If *True* (the default), they are
+      emitted as a single self-closed tag, otherwise they are emitted as a pair
+      of start/end tags.
 
       The output is either a string (:class:`str`) or binary (:class:`bytes`).
       This is controlled by the *encoding* argument.  If *encoding* is
@@ -769,6 +787,9 @@ ElementTree Objects
       this may conflict with the type of *file* if it's an open
       :term:`file object`; make sure you do not try to write a string to a
       binary stream and vice versa.
+
+   .. versionadded:: 3.4
+      The *short_empty_elements* parameter.
 
 
 This is the XML file that is going to be manipulated::
@@ -813,6 +834,48 @@ QName Objects
    is given, the URI part of a QName.  If *tag* is given, the first argument is
    interpreted as an URI, and this argument is interpreted as a local name.
    :class:`QName` instances are opaque.
+
+
+IncrementalParser Objects
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+.. class:: IncrementalParser(events=None, parser=None)
+
+   An incremental, event-driven parser suitable for non-blocking applications.
+   *events* is a list of events to report back.  The supported events are the
+   strings ``"start"``, ``"end"``, ``"start-ns"`` and ``"end-ns"`` (the "ns"
+   events are used to get detailed namespace information).  If *events* is
+   omitted, only ``"end"`` events are reported.  *parser* is an optional
+   parser instance.  If not given, the standard :class:`XMLParser` parser is
+   used.
+
+   .. method:: data_received(data)
+
+      Feed the given bytes data to the incremental parser.
+
+   .. method:: eof_received()
+
+      Signal the incremental parser that the data stream is terminated.
+
+   .. method:: events()
+
+      Iterate over the events which have been encountered in the data fed
+      to the parser.  This method yields ``(event, elem)`` pairs, where
+      *event* is a string representing the type of event (e.g. ``"end"``)
+      and *elem* is the encountered :class:`Element` object.
+
+   .. note::
+
+      :class:`IncrementalParser` only guarantees that it has seen the ">"
+      character of a starting tag when it emits a "start" event, so the
+      attributes are defined, but the contents of the text and tail attributes
+      are undefined at that point.  The same applies to the element children;
+      they may or may not be present.
+
+      If you need a fully populated element, look for "end" events instead.
+
+   .. versionadded:: 3.4
 
 
 .. _elementtree-treebuilder-objects:
