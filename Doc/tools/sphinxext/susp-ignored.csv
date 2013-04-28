@@ -162,17 +162,9 @@ library/os.path,,:foo,c:foo
 library/pdb,,:lineno,filename:lineno
 library/pickle,,:memory,"conn = sqlite3.connect("":memory:"")"
 library/posix,,`,"CFLAGS=""`getconf LFS_CFLAGS`"" OPT=""-g -O2 $CFLAGS"""
-library/pprint,209,::,"'classifiers': ['Development Status :: 4 - Beta',"
-library/pprint,209,::,"'Intended Audience :: Developers',"
-library/pprint,209,::,"'License :: OSI Approved :: MIT License',"
-library/pprint,209,::,"'Natural Language :: English',"
-library/pprint,209,::,"'Operating System :: OS Independent',"
-library/pprint,209,::,"'Programming Language :: Python',"
-library/pprint,209,::,"'Programming Language :: Python :: 2',"
-library/pprint,209,::,"'Programming Language :: Python :: 2.6',"
-library/pprint,209,::,"'Programming Language :: Python :: 2.7',"
-library/pprint,209,::,"'Topic :: Software Development :: Libraries',"
-library/pprint,209,::,"'Topic :: Software Development :: Libraries :: Python Modules'],"
+library/pprint,,::,"'Programming Language :: Python :: 2 :: Only'],"
+library/pprint,,::,"'Programming Language :: Python :: 2.6',"
+library/pprint,,::,"'Programming Language :: Python :: 2.7',"
 library/profile,,:lineno,filename:lineno(function)
 library/pyexpat,,:elem1,<py:elem1 />
 library/pyexpat,,:py,"xmlns:py = ""http://www.python.org/ns/"">"
@@ -184,6 +176,7 @@ library/socket,,:len,fds.fromstring(cmsg_data[:len(cmsg_data) - (len(cmsg_data) 
 library/sqlite3,,:age,"cur.execute(""select * from people where name_last=:who and age=:age"", {""who"": who, ""age"": age})"
 library/sqlite3,,:memory,
 library/sqlite3,,:who,"cur.execute(""select * from people where name_last=:who and age=:age"", {""who"": who, ""age"": age})"
+library/sqlite3,,:path,"db = sqlite3.connect('file:path/to/database?mode=ro', uri=True)"
 library/ssl,,:My,"Organizational Unit Name (eg, section) []:My Group"
 library/ssl,,:My,"Organization Name (eg, company) [Internet Widgits Pty Ltd]:My Organization, Inc."
 library/ssl,,:myserver,"Common Name (eg, YOUR name) []:myserver.mygroup.myorganization.com"
