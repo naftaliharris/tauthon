@@ -118,7 +118,8 @@ ConfigParser -- responsible for parsing a list of
         between keys and values are surrounded by spaces.
 """
 
-from collections import MutableMapping, OrderedDict as _default_dict, _ChainMap
+from collections.abc import MutableMapping
+from collections import OrderedDict as _default_dict, ChainMap as _ChainMap
 import functools
 import io
 import itertools
@@ -455,7 +456,7 @@ class ExtendedInterpolation(Interpolation):
         tmp_value = self._KEYCRE.sub('', tmp_value) # valid syntax
         if '$' in tmp_value:
             raise ValueError("invalid interpolation syntax in %r at "
-                             "position %d" % (value, tmp_value.find('%')))
+                             "position %d" % (value, tmp_value.find('$')))
         return value
 
     def _interpolate_some(self, parser, option, accum, rest, section, map,
@@ -959,7 +960,9 @@ class RawConfigParser(MutableMapping):
 
         # XXX this is not atomic if read_dict fails at any point. Then again,
         # no update method in configparser is atomic in this implementation.
-        if key in self._sections:
+        if key == self.default_section:
+            self._defaults.clear()
+        elif key in self._sections:
             self._sections[key].clear()
         self.read_dict({key: value})
 
@@ -1005,18 +1008,26 @@ class RawConfigParser(MutableMapping):
         indent_level = 0
         e = None                              # None, or an exception
         for lineno, line in enumerate(fp, start=1):
-            comment_start = None
+            comment_start = sys.maxsize
             # strip inline comments
-            for prefix in self._inline_comment_prefixes:
-                index = line.find(prefix)
-                if index == 0 or (index > 0 and line[index-1].isspace()):
-                    comment_start = index
-                    break
+            inline_prefixes = {p: -1 for p in self._inline_comment_prefixes}
+            while comment_start == sys.maxsize and inline_prefixes:
+                next_prefixes = {}
+                for prefix, index in inline_prefixes.items():
+                    index = line.find(prefix, index+1)
+                    if index == -1:
+                        continue
+                    next_prefixes[prefix] = index
+                    if index == 0 or (index > 0 and line[index-1].isspace()):
+                        comment_start = min(comment_start, index)
+                inline_prefixes = next_prefixes
             # strip full line comments
             for prefix in self._comment_prefixes:
                 if line.strip().startswith(prefix):
                     comment_start = 0
                     break
+            if comment_start == sys.maxsize:
+                comment_start = None
             value = line[:comment_start].strip()
             if not value:
                 if self._empty_lines_in_values:

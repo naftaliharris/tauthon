@@ -40,7 +40,7 @@ The :mod:`functools` module defines the following functions:
    .. versionadded:: 3.2
 
 
-.. decorator:: lru_cache(maxsize=100)
+.. decorator:: lru_cache(maxsize=128, typed=False)
 
    Decorator to wrap a function with a memoizing callable that saves up to the
    *maxsize* most recent calls.  It can save time when an expensive or I/O bound
@@ -49,8 +49,13 @@ The :mod:`functools` module defines the following functions:
    Since a dictionary is used to cache results, the positional and keyword
    arguments to the function must be hashable.
 
-   If *maxsize* is set to None, the LRU feature is disabled and the cache
-   can grow without bound.
+   If *maxsize* is set to None, the LRU feature is disabled and the cache can
+   grow without bound.  The LRU feature performs best when *maxsize* is a
+   power-of-two.
+
+   If *typed* is set to True, function arguments of different types will be
+   cached separately.  For example, ``f(3)`` and ``f(3.0)`` will be treated
+   as distinct calls with distinct results.
 
    To help measure the effectiveness of the cache and tune the *maxsize*
    parameter, the wrapped function is instrumented with a :func:`cache_info`
@@ -67,14 +72,14 @@ The :mod:`functools` module defines the following functions:
 
    An `LRU (least recently used) cache
    <http://en.wikipedia.org/wiki/Cache_algorithms#Least_Recently_Used>`_ works
-   best when more recent calls are the best predictors of upcoming calls (for
-   example, the most popular articles on a news server tend to change daily).
+   best when the most recent calls are the best predictors of upcoming calls (for
+   example, the most popular articles on a news server tend to change each day).
    The cache's size limit assures that the cache does not grow without bound on
    long-running processes such as web servers.
 
    Example of an LRU cache for static web content::
 
-        @lru_cache(maxsize=20)
+        @lru_cache(maxsize=32)
         def get_pep(num):
             'Retrieve text of a Python Enhancement Proposal'
             resource = 'http://www.python.org/dev/peps/pep-%04d/' % num
@@ -88,8 +93,8 @@ The :mod:`functools` module defines the following functions:
         ...     pep = get_pep(n)
         ...     print(n, len(pep))
 
-        >>> print(get_pep.cache_info())
-        CacheInfo(hits=3, misses=8, maxsize=20, currsize=8)
+        >>> get_pep.cache_info()
+        CacheInfo(hits=3, misses=8, maxsize=32, currsize=8)
 
    Example of efficiently computing
    `Fibonacci numbers <http://en.wikipedia.org/wiki/Fibonacci_number>`_
@@ -103,13 +108,16 @@ The :mod:`functools` module defines the following functions:
                 return n
             return fib(n-1) + fib(n-2)
 
-        >>> print([fib(n) for n in range(16)])
+        >>> [fib(n) for n in range(16)]
         [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610]
 
-        >>> print(fib.cache_info())
+        >>> fib.cache_info()
         CacheInfo(hits=28, misses=16, maxsize=None, currsize=16)
 
    .. versionadded:: 3.2
+
+   .. versionchanged:: 3.3
+      Added the *typed* option.
 
 .. decorator:: total_ordering
 

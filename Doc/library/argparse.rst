@@ -137,356 +137,39 @@ ArgumentParser objects
                           argument_default=None, conflict_handler='error', \
                           add_help=True)
 
-   Create a new :class:`ArgumentParser` object.  Each parameter has its own more
-   detailed description below, but in short they are:
+   Create a new :class:`ArgumentParser` object. All parameters should be passed
+   as keyword arguments. Each parameter has its own more detailed description
+   below, but in short they are:
 
-   * description_ - Text to display before the argument help.
+   * prog_ - The name of the program (default: ``sys.argv[0]``)
 
-   * epilog_ - Text to display after the argument help.
+   * usage_ - The string describing the program usage (default: generated from
+     arguments added to parser)
 
-   * add_help_ - Add a -h/--help option to the parser. (default: ``True``)
+   * description_ - Text to display before the argument help (default: none)
 
-   * argument_default_ - Set the global default value for arguments.
-     (default: ``None``)
+   * epilog_ - Text to display after the argument help (default: none)
 
    * parents_ - A list of :class:`ArgumentParser` objects whose arguments should
-     also be included.
+     also be included
 
-   * prefix_chars_ - The set of characters that prefix optional arguments.
+   * formatter_class_ - A class for customizing the help output
+
+   * prefix_chars_ - The set of characters that prefix optional arguments
      (default: '-')
 
    * fromfile_prefix_chars_ - The set of characters that prefix files from
-     which additional arguments should be read. (default: ``None``)
+     which additional arguments should be read (default: ``None``)
 
-   * formatter_class_ - A class for customizing the help output.
+   * argument_default_ - The global default value for arguments
+     (default: ``None``)
 
-   * conflict_handler_ - Usually unnecessary, defines strategy for resolving
-     conflicting optionals.
+   * conflict_handler_ - The strategy for resolving conflicting optionals
+     (usually unnecessary)
 
-   * prog_ - The name of the program (default:
-     ``sys.argv[0]``)
-
-   * usage_ - The string describing the program usage (default: generated)
+   * add_help_ - Add a -h/--help option to the parser (default: ``True``)
 
 The following sections describe how each of these are used.
-
-
-description
-^^^^^^^^^^^
-
-Most calls to the :class:`ArgumentParser` constructor will use the
-``description=`` keyword argument.  This argument gives a brief description of
-what the program does and how it works.  In help messages, the description is
-displayed between the command-line usage string and the help messages for the
-various arguments::
-
-   >>> parser = argparse.ArgumentParser(description='A foo that bars')
-   >>> parser.print_help()
-   usage: argparse.py [-h]
-
-   A foo that bars
-
-   optional arguments:
-    -h, --help  show this help message and exit
-
-By default, the description will be line-wrapped so that it fits within the
-given space.  To change this behavior, see the formatter_class_ argument.
-
-
-epilog
-^^^^^^
-
-Some programs like to display additional description of the program after the
-description of the arguments.  Such text can be specified using the ``epilog=``
-argument to :class:`ArgumentParser`::
-
-   >>> parser = argparse.ArgumentParser(
-   ...     description='A foo that bars',
-   ...     epilog="And that's how you'd foo a bar")
-   >>> parser.print_help()
-   usage: argparse.py [-h]
-
-   A foo that bars
-
-   optional arguments:
-    -h, --help  show this help message and exit
-
-   And that's how you'd foo a bar
-
-As with the description_ argument, the ``epilog=`` text is by default
-line-wrapped, but this behavior can be adjusted with the formatter_class_
-argument to :class:`ArgumentParser`.
-
-
-add_help
-^^^^^^^^
-
-By default, ArgumentParser objects add an option which simply displays
-the parser's help message. For example, consider a file named
-``myprogram.py`` containing the following code::
-
-   import argparse
-   parser = argparse.ArgumentParser()
-   parser.add_argument('--foo', help='foo help')
-   args = parser.parse_args()
-
-If ``-h`` or ``--help`` is supplied at the command line, the ArgumentParser
-help will be printed::
-
-   $ python myprogram.py --help
-   usage: myprogram.py [-h] [--foo FOO]
-
-   optional arguments:
-    -h, --help  show this help message and exit
-    --foo FOO   foo help
-
-Occasionally, it may be useful to disable the addition of this help option.
-This can be achieved by passing ``False`` as the ``add_help=`` argument to
-:class:`ArgumentParser`::
-
-   >>> parser = argparse.ArgumentParser(prog='PROG', add_help=False)
-   >>> parser.add_argument('--foo', help='foo help')
-   >>> parser.print_help()
-   usage: PROG [--foo FOO]
-
-   optional arguments:
-    --foo FOO  foo help
-
-The help option is typically ``-h/--help``. The exception to this is
-if the ``prefix_chars=`` is specified and does not include ``-``, in
-which case ``-h`` and ``--help`` are not valid options.  In
-this case, the first character in ``prefix_chars`` is used to prefix
-the help options::
-
-   >>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='+/')
-   >>> parser.print_help()
-   usage: PROG [+h]
-
-   optional arguments:
-     +h, ++help  show this help message and exit
-
-
-prefix_chars
-^^^^^^^^^^^^
-
-Most command-line options will use ``-`` as the prefix, e.g. ``-f/--foo``.
-Parsers that need to support different or additional prefix
-characters, e.g. for options
-like ``+f`` or ``/foo``, may specify them using the ``prefix_chars=`` argument
-to the ArgumentParser constructor::
-
-   >>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='-+')
-   >>> parser.add_argument('+f')
-   >>> parser.add_argument('++bar')
-   >>> parser.parse_args('+f X ++bar Y'.split())
-   Namespace(bar='Y', f='X')
-
-The ``prefix_chars=`` argument defaults to ``'-'``. Supplying a set of
-characters that does not include ``-`` will cause ``-f/--foo`` options to be
-disallowed.
-
-
-fromfile_prefix_chars
-^^^^^^^^^^^^^^^^^^^^^
-
-Sometimes, for example when dealing with a particularly long argument lists, it
-may make sense to keep the list of arguments in a file rather than typing it out
-at the command line.  If the ``fromfile_prefix_chars=`` argument is given to the
-:class:`ArgumentParser` constructor, then arguments that start with any of the
-specified characters will be treated as files, and will be replaced by the
-arguments they contain.  For example::
-
-   >>> with open('args.txt', 'w') as fp:
-   ...    fp.write('-f\nbar')
-   >>> parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
-   >>> parser.add_argument('-f')
-   >>> parser.parse_args(['-f', 'foo', '@args.txt'])
-   Namespace(f='bar')
-
-Arguments read from a file must by default be one per line (but see also
-:meth:`~ArgumentParser.convert_arg_line_to_args`) and are treated as if they
-were in the same place as the original file referencing argument on the command
-line.  So in the example above, the expression ``['-f', 'foo', '@args.txt']``
-is considered equivalent to the expression ``['-f', 'foo', '-f', 'bar']``.
-
-The ``fromfile_prefix_chars=`` argument defaults to ``None``, meaning that
-arguments will never be treated as file references.
-
-
-argument_default
-^^^^^^^^^^^^^^^^
-
-Generally, argument defaults are specified either by passing a default to
-:meth:`~ArgumentParser.add_argument` or by calling the
-:meth:`~ArgumentParser.set_defaults` methods with a specific set of name-value
-pairs.  Sometimes however, it may be useful to specify a single parser-wide
-default for arguments.  This can be accomplished by passing the
-``argument_default=`` keyword argument to :class:`ArgumentParser`.  For example,
-to globally suppress attribute creation on :meth:`~ArgumentParser.parse_args`
-calls, we supply ``argument_default=SUPPRESS``::
-
-   >>> parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
-   >>> parser.add_argument('--foo')
-   >>> parser.add_argument('bar', nargs='?')
-   >>> parser.parse_args(['--foo', '1', 'BAR'])
-   Namespace(bar='BAR', foo='1')
-   >>> parser.parse_args([])
-   Namespace()
-
-
-parents
-^^^^^^^
-
-Sometimes, several parsers share a common set of arguments. Rather than
-repeating the definitions of these arguments, a single parser with all the
-shared arguments and passed to ``parents=`` argument to :class:`ArgumentParser`
-can be used.  The ``parents=`` argument takes a list of :class:`ArgumentParser`
-objects, collects all the positional and optional actions from them, and adds
-these actions to the :class:`ArgumentParser` object being constructed::
-
-   >>> parent_parser = argparse.ArgumentParser(add_help=False)
-   >>> parent_parser.add_argument('--parent', type=int)
-
-   >>> foo_parser = argparse.ArgumentParser(parents=[parent_parser])
-   >>> foo_parser.add_argument('foo')
-   >>> foo_parser.parse_args(['--parent', '2', 'XXX'])
-   Namespace(foo='XXX', parent=2)
-
-   >>> bar_parser = argparse.ArgumentParser(parents=[parent_parser])
-   >>> bar_parser.add_argument('--bar')
-   >>> bar_parser.parse_args(['--bar', 'YYY'])
-   Namespace(bar='YYY', parent=None)
-
-Note that most parent parsers will specify ``add_help=False``.  Otherwise, the
-:class:`ArgumentParser` will see two ``-h/--help`` options (one in the parent
-and one in the child) and raise an error.
-
-.. note::
-   You must fully initialize the parsers before passing them via ``parents=``.
-   If you change the parent parsers after the child parser, those changes will
-   not be reflected in the child.
-
-
-formatter_class
-^^^^^^^^^^^^^^^
-
-:class:`ArgumentParser` objects allow the help formatting to be customized by
-specifying an alternate formatting class.  Currently, there are three such
-classes:
-
-.. class:: RawDescriptionHelpFormatter
-           RawTextHelpFormatter
-           ArgumentDefaultsHelpFormatter
-
-The first two allow more control over how textual descriptions are displayed,
-while the last automatically adds information about argument default values.
-
-By default, :class:`ArgumentParser` objects line-wrap the description_ and
-epilog_ texts in command-line help messages::
-
-   >>> parser = argparse.ArgumentParser(
-   ...     prog='PROG',
-   ...     description='''this description
-   ...         was indented weird
-   ...             but that is okay''',
-   ...     epilog='''
-   ...             likewise for this epilog whose whitespace will
-   ...         be cleaned up and whose words will be wrapped
-   ...         across a couple lines''')
-   >>> parser.print_help()
-   usage: PROG [-h]
-
-   this description was indented weird but that is okay
-
-   optional arguments:
-    -h, --help  show this help message and exit
-
-   likewise for this epilog whose whitespace will be cleaned up and whose words
-   will be wrapped across a couple lines
-
-Passing :class:`RawDescriptionHelpFormatter` as ``formatter_class=``
-indicates that description_ and epilog_ are already correctly formatted and
-should not be line-wrapped::
-
-   >>> parser = argparse.ArgumentParser(
-   ...     prog='PROG',
-   ...     formatter_class=argparse.RawDescriptionHelpFormatter,
-   ...     description=textwrap.dedent('''\
-   ...         Please do not mess up this text!
-   ...         --------------------------------
-   ...             I have indented it
-   ...             exactly the way
-   ...             I want it
-   ...         '''))
-   >>> parser.print_help()
-   usage: PROG [-h]
-
-   Please do not mess up this text!
-   --------------------------------
-      I have indented it
-      exactly the way
-      I want it
-
-   optional arguments:
-    -h, --help  show this help message and exit
-
-:class:`RawTextHelpFormatter` maintains whitespace for all sorts of help text,
-including argument descriptions.
-
-The other formatter class available, :class:`ArgumentDefaultsHelpFormatter`,
-will add information about the default value of each of the arguments::
-
-   >>> parser = argparse.ArgumentParser(
-   ...     prog='PROG',
-   ...     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-   >>> parser.add_argument('--foo', type=int, default=42, help='FOO!')
-   >>> parser.add_argument('bar', nargs='*', default=[1, 2, 3], help='BAR!')
-   >>> parser.print_help()
-   usage: PROG [-h] [--foo FOO] [bar [bar ...]]
-
-   positional arguments:
-    bar         BAR! (default: [1, 2, 3])
-
-   optional arguments:
-    -h, --help  show this help message and exit
-    --foo FOO   FOO! (default: 42)
-
-
-conflict_handler
-^^^^^^^^^^^^^^^^
-
-:class:`ArgumentParser` objects do not allow two actions with the same option
-string.  By default, :class:`ArgumentParser` objects raises an exception if an
-attempt is made to create an argument with an option string that is already in
-use::
-
-   >>> parser = argparse.ArgumentParser(prog='PROG')
-   >>> parser.add_argument('-f', '--foo', help='old foo help')
-   >>> parser.add_argument('--foo', help='new foo help')
-   Traceback (most recent call last):
-    ..
-   ArgumentError: argument --foo: conflicting option string(s): --foo
-
-Sometimes (e.g. when using parents_) it may be useful to simply override any
-older arguments with the same option string.  To get this behavior, the value
-``'resolve'`` can be supplied to the ``conflict_handler=`` argument of
-:class:`ArgumentParser`::
-
-   >>> parser = argparse.ArgumentParser(prog='PROG', conflict_handler='resolve')
-   >>> parser.add_argument('-f', '--foo', help='old foo help')
-   >>> parser.add_argument('--foo', help='new foo help')
-   >>> parser.print_help()
-   usage: PROG [-h] [-f FOO] [--foo FOO]
-
-   optional arguments:
-    -h, --help  show this help message and exit
-    -f FOO      old foo help
-    --foo FOO   new foo help
-
-Note that :class:`ArgumentParser` objects only remove an action if all of its
-option strings are overridden.  So, in the example above, the old ``-f/--foo``
-action is retained as the ``-f`` action, because only the ``--foo`` option
-string was overridden.
 
 
 prog
@@ -582,6 +265,343 @@ The default message can be overridden with the ``usage=`` keyword argument::
 
 The ``%(prog)s`` format specifier is available to fill in the program name in
 your usage messages.
+
+
+description
+^^^^^^^^^^^
+
+Most calls to the :class:`ArgumentParser` constructor will use the
+``description=`` keyword argument.  This argument gives a brief description of
+what the program does and how it works.  In help messages, the description is
+displayed between the command-line usage string and the help messages for the
+various arguments::
+
+   >>> parser = argparse.ArgumentParser(description='A foo that bars')
+   >>> parser.print_help()
+   usage: argparse.py [-h]
+
+   A foo that bars
+
+   optional arguments:
+    -h, --help  show this help message and exit
+
+By default, the description will be line-wrapped so that it fits within the
+given space.  To change this behavior, see the formatter_class_ argument.
+
+
+epilog
+^^^^^^
+
+Some programs like to display additional description of the program after the
+description of the arguments.  Such text can be specified using the ``epilog=``
+argument to :class:`ArgumentParser`::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     description='A foo that bars',
+   ...     epilog="And that's how you'd foo a bar")
+   >>> parser.print_help()
+   usage: argparse.py [-h]
+
+   A foo that bars
+
+   optional arguments:
+    -h, --help  show this help message and exit
+
+   And that's how you'd foo a bar
+
+As with the description_ argument, the ``epilog=`` text is by default
+line-wrapped, but this behavior can be adjusted with the formatter_class_
+argument to :class:`ArgumentParser`.
+
+
+parents
+^^^^^^^
+
+Sometimes, several parsers share a common set of arguments. Rather than
+repeating the definitions of these arguments, a single parser with all the
+shared arguments and passed to ``parents=`` argument to :class:`ArgumentParser`
+can be used.  The ``parents=`` argument takes a list of :class:`ArgumentParser`
+objects, collects all the positional and optional actions from them, and adds
+these actions to the :class:`ArgumentParser` object being constructed::
+
+   >>> parent_parser = argparse.ArgumentParser(add_help=False)
+   >>> parent_parser.add_argument('--parent', type=int)
+
+   >>> foo_parser = argparse.ArgumentParser(parents=[parent_parser])
+   >>> foo_parser.add_argument('foo')
+   >>> foo_parser.parse_args(['--parent', '2', 'XXX'])
+   Namespace(foo='XXX', parent=2)
+
+   >>> bar_parser = argparse.ArgumentParser(parents=[parent_parser])
+   >>> bar_parser.add_argument('--bar')
+   >>> bar_parser.parse_args(['--bar', 'YYY'])
+   Namespace(bar='YYY', parent=None)
+
+Note that most parent parsers will specify ``add_help=False``.  Otherwise, the
+:class:`ArgumentParser` will see two ``-h/--help`` options (one in the parent
+and one in the child) and raise an error.
+
+.. note::
+   You must fully initialize the parsers before passing them via ``parents=``.
+   If you change the parent parsers after the child parser, those changes will
+   not be reflected in the child.
+
+
+formatter_class
+^^^^^^^^^^^^^^^
+
+:class:`ArgumentParser` objects allow the help formatting to be customized by
+specifying an alternate formatting class.  Currently, there are four such
+classes:
+
+.. class:: RawDescriptionHelpFormatter
+           RawTextHelpFormatter
+           ArgumentDefaultsHelpFormatter
+           MetavarTypeHelpFormatter
+
+:class:`RawDescriptionHelpFormatter` and :class:`RawTextHelpFormatter` give
+more control over how textual descriptions are displayed.
+By default, :class:`ArgumentParser` objects line-wrap the description_ and
+epilog_ texts in command-line help messages::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     description='''this description
+   ...         was indented weird
+   ...             but that is okay''',
+   ...     epilog='''
+   ...             likewise for this epilog whose whitespace will
+   ...         be cleaned up and whose words will be wrapped
+   ...         across a couple lines''')
+   >>> parser.print_help()
+   usage: PROG [-h]
+
+   this description was indented weird but that is okay
+
+   optional arguments:
+    -h, --help  show this help message and exit
+
+   likewise for this epilog whose whitespace will be cleaned up and whose words
+   will be wrapped across a couple lines
+
+Passing :class:`RawDescriptionHelpFormatter` as ``formatter_class=``
+indicates that description_ and epilog_ are already correctly formatted and
+should not be line-wrapped::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     formatter_class=argparse.RawDescriptionHelpFormatter,
+   ...     description=textwrap.dedent('''\
+   ...         Please do not mess up this text!
+   ...         --------------------------------
+   ...             I have indented it
+   ...             exactly the way
+   ...             I want it
+   ...         '''))
+   >>> parser.print_help()
+   usage: PROG [-h]
+
+   Please do not mess up this text!
+   --------------------------------
+      I have indented it
+      exactly the way
+      I want it
+
+   optional arguments:
+    -h, --help  show this help message and exit
+
+:class:`RawTextHelpFormatter` maintains whitespace for all sorts of help text,
+including argument descriptions.
+
+:class:`ArgumentDefaultsHelpFormatter` automatically adds information about
+default values to each of the argument help messages::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+   >>> parser.add_argument('--foo', type=int, default=42, help='FOO!')
+   >>> parser.add_argument('bar', nargs='*', default=[1, 2, 3], help='BAR!')
+   >>> parser.print_help()
+   usage: PROG [-h] [--foo FOO] [bar [bar ...]]
+
+   positional arguments:
+    bar         BAR! (default: [1, 2, 3])
+
+   optional arguments:
+    -h, --help  show this help message and exit
+    --foo FOO   FOO! (default: 42)
+
+:class:`MetavarTypeHelpFormatter` uses the name of the type_ argument for each
+argument as the display name for its values (rather than using the dest_
+as the regular formatter does)::
+
+   >>> parser = argparse.ArgumentParser(
+   ...     prog='PROG',
+   ...     formatter_class=argparse.MetavarTypeHelpFormatter)
+   >>> parser.add_argument('--foo', type=int)
+   >>> parser.add_argument('bar', type=float)
+   >>> parser.print_help()
+   usage: PROG [-h] [--foo int] float
+
+   positional arguments:
+     float
+
+   optional arguments:
+     -h, --help  show this help message and exit
+     --foo int
+
+
+prefix_chars
+^^^^^^^^^^^^
+
+Most command-line options will use ``-`` as the prefix, e.g. ``-f/--foo``.
+Parsers that need to support different or additional prefix
+characters, e.g. for options
+like ``+f`` or ``/foo``, may specify them using the ``prefix_chars=`` argument
+to the ArgumentParser constructor::
+
+   >>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='-+')
+   >>> parser.add_argument('+f')
+   >>> parser.add_argument('++bar')
+   >>> parser.parse_args('+f X ++bar Y'.split())
+   Namespace(bar='Y', f='X')
+
+The ``prefix_chars=`` argument defaults to ``'-'``. Supplying a set of
+characters that does not include ``-`` will cause ``-f/--foo`` options to be
+disallowed.
+
+
+fromfile_prefix_chars
+^^^^^^^^^^^^^^^^^^^^^
+
+Sometimes, for example when dealing with a particularly long argument lists, it
+may make sense to keep the list of arguments in a file rather than typing it out
+at the command line.  If the ``fromfile_prefix_chars=`` argument is given to the
+:class:`ArgumentParser` constructor, then arguments that start with any of the
+specified characters will be treated as files, and will be replaced by the
+arguments they contain.  For example::
+
+   >>> with open('args.txt', 'w') as fp:
+   ...    fp.write('-f\nbar')
+   >>> parser = argparse.ArgumentParser(fromfile_prefix_chars='@')
+   >>> parser.add_argument('-f')
+   >>> parser.parse_args(['-f', 'foo', '@args.txt'])
+   Namespace(f='bar')
+
+Arguments read from a file must by default be one per line (but see also
+:meth:`~ArgumentParser.convert_arg_line_to_args`) and are treated as if they
+were in the same place as the original file referencing argument on the command
+line.  So in the example above, the expression ``['-f', 'foo', '@args.txt']``
+is considered equivalent to the expression ``['-f', 'foo', '-f', 'bar']``.
+
+The ``fromfile_prefix_chars=`` argument defaults to ``None``, meaning that
+arguments will never be treated as file references.
+
+
+argument_default
+^^^^^^^^^^^^^^^^
+
+Generally, argument defaults are specified either by passing a default to
+:meth:`~ArgumentParser.add_argument` or by calling the
+:meth:`~ArgumentParser.set_defaults` methods with a specific set of name-value
+pairs.  Sometimes however, it may be useful to specify a single parser-wide
+default for arguments.  This can be accomplished by passing the
+``argument_default=`` keyword argument to :class:`ArgumentParser`.  For example,
+to globally suppress attribute creation on :meth:`~ArgumentParser.parse_args`
+calls, we supply ``argument_default=SUPPRESS``::
+
+   >>> parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
+   >>> parser.add_argument('--foo')
+   >>> parser.add_argument('bar', nargs='?')
+   >>> parser.parse_args(['--foo', '1', 'BAR'])
+   Namespace(bar='BAR', foo='1')
+   >>> parser.parse_args([])
+   Namespace()
+
+
+conflict_handler
+^^^^^^^^^^^^^^^^
+
+:class:`ArgumentParser` objects do not allow two actions with the same option
+string.  By default, :class:`ArgumentParser` objects raises an exception if an
+attempt is made to create an argument with an option string that is already in
+use::
+
+   >>> parser = argparse.ArgumentParser(prog='PROG')
+   >>> parser.add_argument('-f', '--foo', help='old foo help')
+   >>> parser.add_argument('--foo', help='new foo help')
+   Traceback (most recent call last):
+    ..
+   ArgumentError: argument --foo: conflicting option string(s): --foo
+
+Sometimes (e.g. when using parents_) it may be useful to simply override any
+older arguments with the same option string.  To get this behavior, the value
+``'resolve'`` can be supplied to the ``conflict_handler=`` argument of
+:class:`ArgumentParser`::
+
+   >>> parser = argparse.ArgumentParser(prog='PROG', conflict_handler='resolve')
+   >>> parser.add_argument('-f', '--foo', help='old foo help')
+   >>> parser.add_argument('--foo', help='new foo help')
+   >>> parser.print_help()
+   usage: PROG [-h] [-f FOO] [--foo FOO]
+
+   optional arguments:
+    -h, --help  show this help message and exit
+    -f FOO      old foo help
+    --foo FOO   new foo help
+
+Note that :class:`ArgumentParser` objects only remove an action if all of its
+option strings are overridden.  So, in the example above, the old ``-f/--foo``
+action is retained as the ``-f`` action, because only the ``--foo`` option
+string was overridden.
+
+
+add_help
+^^^^^^^^
+
+By default, ArgumentParser objects add an option which simply displays
+the parser's help message. For example, consider a file named
+``myprogram.py`` containing the following code::
+
+   import argparse
+   parser = argparse.ArgumentParser()
+   parser.add_argument('--foo', help='foo help')
+   args = parser.parse_args()
+
+If ``-h`` or ``--help`` is supplied at the command line, the ArgumentParser
+help will be printed::
+
+   $ python myprogram.py --help
+   usage: myprogram.py [-h] [--foo FOO]
+
+   optional arguments:
+    -h, --help  show this help message and exit
+    --foo FOO   foo help
+
+Occasionally, it may be useful to disable the addition of this help option.
+This can be achieved by passing ``False`` as the ``add_help=`` argument to
+:class:`ArgumentParser`::
+
+   >>> parser = argparse.ArgumentParser(prog='PROG', add_help=False)
+   >>> parser.add_argument('--foo', help='foo help')
+   >>> parser.print_help()
+   usage: PROG [--foo FOO]
+
+   optional arguments:
+    --foo FOO  foo help
+
+The help option is typically ``-h/--help``. The exception to this is
+if the ``prefix_chars=`` is specified and does not include ``-``, in
+which case ``-h`` and ``--help`` are not valid options.  In
+this case, the first character in ``prefix_chars`` is used to prefix
+the help options::
+
+   >>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='+/')
+   >>> parser.print_help()
+   usage: PROG [-h]
+
+   optional arguments:
+     -h, --help  show this help message and exit
 
 
 The add_argument() method
