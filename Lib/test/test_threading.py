@@ -175,7 +175,7 @@ class ThreadTests(BaseTestCase):
         exception = ctypes.py_object(AsyncExc)
 
         # First check it works when setting the exception from the same thread.
-        tid = _thread.get_ident()
+        tid = threading.get_ident()
 
         try:
             result = set_async_exc(ctypes.c_long(tid), exception)
@@ -204,7 +204,7 @@ class ThreadTests(BaseTestCase):
 
         class Worker(threading.Thread):
             def run(self):
-                self.id = _thread.get_ident()
+                self.id = threading.get_ident()
                 self.finished = False
 
                 try:
@@ -409,6 +409,14 @@ class ThreadTests(BaseTestCase):
         t.daemon = True
         self.assertTrue('daemon' in repr(t))
 
+    def test_deamon_param(self):
+        t = threading.Thread()
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=False)
+        self.assertFalse(t.daemon)
+        t = threading.Thread(daemon=True)
+        self.assertTrue(t.daemon)
+
     @unittest.skipUnless(hasattr(os, 'fork'), 'test needs fork()')
     def test_dummy_thread_after_fork(self):
         # Issue #14308: a dummy thread in the active list doesn't mess up
@@ -444,7 +452,7 @@ class ThreadJoinOnShutdown(BaseTestCase):
     # problems with some operating systems (issue #3863): skip problematic tests
     # on platforms known to behave badly.
     platforms_to_skip = ('freebsd4', 'freebsd5', 'freebsd6', 'netbsd5',
-                         'os2emx')
+                         'os2emx', 'hp-ux11')
 
     def _run_and_join(self, script):
         script = """if 1:
@@ -742,7 +750,12 @@ class ThreadingExceptionTests(BaseTestCase):
         thread.start()
         self.assertRaises(RuntimeError, setattr, thread, "daemon", True)
 
-    @unittest.skipUnless(sys.platform == 'darwin', 'test macosx problem')
+    def test_releasing_unacquired_lock(self):
+        lock = threading.Lock()
+        self.assertRaises(RuntimeError, lock.release)
+
+    @unittest.skipUnless(sys.platform == 'darwin' and test.support.python_is_optimized(),
+                         'test macosx problem')
     def test_recursion_limit(self):
         # Issue 9670
         # test that excessive recursion within a non-main thread causes
@@ -774,6 +787,32 @@ class ThreadingExceptionTests(BaseTestCase):
         self.assertEqual(p.returncode, 0, "Unexpected error: " + stderr.decode())
         self.assertEqual(data, expected_output)
 
+class TimerTests(BaseTestCase):
+
+    def setUp(self):
+        BaseTestCase.setUp(self)
+        self.callback_args = []
+        self.callback_event = threading.Event()
+
+    def test_init_immutable_default_args(self):
+        # Issue 17435: constructor defaults were mutable objects, they could be
+        # mutated via the object attributes and affect other Timer objects.
+        timer1 = threading.Timer(0.01, self._callback_spy)
+        timer1.start()
+        self.callback_event.wait()
+        timer1.args.append("blah")
+        timer1.kwargs["foo"] = "bar"
+        self.callback_event.clear()
+        timer2 = threading.Timer(0.01, self._callback_spy)
+        timer2.start()
+        self.callback_event.wait()
+        self.assertEqual(len(self.callback_args), 2)
+        self.assertEqual(self.callback_args, [((), {}), ((), {})])
+
+    def _callback_spy(self, *args, **kwargs):
+        self.callback_args.append((args[:], kwargs.copy()))
+        self.callback_event.set()
+
 class LockTests(lock_tests.LockTests):
     locktype = staticmethod(threading.Lock)
 
@@ -803,15 +842,5 @@ class BoundedSemaphoreTests(lock_tests.BoundedSemaphoreTests):
 class BarrierTests(lock_tests.BarrierTests):
     barriertype = staticmethod(threading.Barrier)
 
-def test_main():
-    test.support.run_unittest(LockTests, PyRLockTests, CRLockTests, EventTests,
-                              ConditionAsRLockTests, ConditionTests,
-                              SemaphoreTests, BoundedSemaphoreTests,
-                              ThreadTests,
-                              ThreadJoinOnShutdown,
-                              ThreadingExceptionTests,
-                              BarrierTests
-                              )
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
