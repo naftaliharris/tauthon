@@ -11,7 +11,10 @@
 __all__ = ['update_wrapper', 'wraps', 'WRAPPER_ASSIGNMENTS', 'WRAPPER_UPDATES',
            'total_ordering', 'cmp_to_key', 'lru_cache', 'reduce', 'partial']
 
-from _functools import partial, reduce
+try:
+    from _functools import reduce
+except ImportError:
+    pass
 from collections import namedtuple
 try:
     from _thread import RLock
@@ -140,6 +143,29 @@ except ImportError:
 
 
 ################################################################################
+### partial() argument application
+################################################################################
+
+def partial(func, *args, **keywords):
+    """new function with partial application of the given arguments
+    and keywords.
+    """
+    def newfunc(*fargs, **fkeywords):
+        newkeywords = keywords.copy()
+        newkeywords.update(fkeywords)
+        return func(*(args + fargs), **newkeywords)
+    newfunc.func = func
+    newfunc.args = args
+    newfunc.keywords = keywords
+    return newfunc
+
+try:
+    from _functools import partial
+except ImportError:
+    pass
+
+
+################################################################################
 ### LRU Cache function decorator
 ################################################################################
 
@@ -220,7 +246,6 @@ def lru_cache(maxsize=128, typed=False):
     PREV, NEXT, KEY, RESULT = 0, 1, 2, 3   # names for the link fields
 
     def decorating_function(user_function):
-
         cache = {}
         hits = misses = 0
         full = False

@@ -869,25 +869,19 @@ do_markup(SubString *input, PyObject *args, PyObject *kwargs,
     SubString literal;
     SubString field_name;
     SubString format_spec;
-    Py_UCS4 conversion, maxchar;
-    Py_ssize_t sublen;
-    int err;
+    Py_UCS4 conversion;
 
     MarkupIterator_init(&iter, input->str, input->start, input->end);
     while ((result = MarkupIterator_next(&iter, &literal, &field_present,
                                          &field_name, &format_spec,
                                          &conversion,
                                          &format_spec_needs_expanding)) == 2) {
-        sublen = literal.end - literal.start;
-        if (sublen) {
-            maxchar = _PyUnicode_FindMaxChar(literal.str,
-                                             literal.start, literal.end);
-            err = _PyUnicodeWriter_Prepare(writer, sublen, maxchar);
-            if (err == -1)
+        if (literal.end != literal.start) {
+            if (!field_present && iter.str.start == iter.str.end)
+                writer->overallocate = 0;
+            if (_PyUnicodeWriter_WriteSubstring(writer, literal.str,
+                                                literal.start, literal.end) < 0)
                 return 0;
-            _PyUnicode_FastCopyCharacters(writer->buffer, writer->pos,
-                                          literal.str, literal.start, sublen);
-            writer->pos += sublen;
         }
 
         if (field_present) {
@@ -912,7 +906,6 @@ build_string(SubString *input, PyObject *args, PyObject *kwargs,
              int recursion_depth, AutoNumber *auto_number)
 {
     _PyUnicodeWriter writer;
-    Py_ssize_t minlen;
 
     /* check the recursion level */
     if (recursion_depth <= 0) {
@@ -921,8 +914,9 @@ build_string(SubString *input, PyObject *args, PyObject *kwargs,
         return NULL;
     }
 
-    minlen = PyUnicode_GET_LENGTH(input->str) + 100;
-    _PyUnicodeWriter_Init(&writer, minlen);
+    _PyUnicodeWriter_Init(&writer);
+    writer.overallocate = 1;
+    writer.min_length = PyUnicode_GET_LENGTH(input->str) + 100;
 
     if (!do_markup(input, args, kwargs, &writer, recursion_depth,
                    auto_number)) {
