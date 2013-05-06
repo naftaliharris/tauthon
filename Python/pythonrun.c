@@ -35,12 +35,30 @@
 #define PATH_MAX MAXPATHLEN
 #endif
 
+#ifdef Py_REF_DEBUG
+static
+void _print_total_refs(void) {
+    PyObject *xoptions, *key, *value;
+    xoptions = PySys_GetXOptions();
+    if (xoptions == NULL)
+        return;
+    key = PyUnicode_FromString("showrefcount");
+    if (key == NULL)
+        return;
+    value = PyDict_GetItem(xoptions, key);
+    Py_DECREF(key);
+    if (value == Py_True)
+        fprintf(stderr,
+                "[%" PY_FORMAT_SIZE_T "d refs, "
+                "%" PY_FORMAT_SIZE_T "d blocks]\n",
+                _Py_GetRefTotal(), _Py_GetAllocatedBlocks());
+}
+#endif
+
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
 #else /* Py_REF_DEBUG */
-#define PRINT_TOTAL_REFS() fprintf(stderr,                              \
-                   "[%" PY_FORMAT_SIZE_T "d refs]\n",                   \
-                   _Py_GetRefTotal())
+#define PRINT_TOTAL_REFS() _print_total_refs()
 #endif
 
 #ifdef __cplusplus
@@ -827,7 +845,7 @@ Py_GetPythonHome(void)
 static void
 initmain(PyInterpreterState *interp)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *loader;
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         Py_FatalError("can't create __main__ module");
@@ -848,7 +866,8 @@ initmain(PyInterpreterState *interp)
      * be set if __main__ gets further initialized later in the startup
      * process.
      */
-    if (PyDict_GetItemString(d, "__loader__") == NULL) {
+    loader = PyDict_GetItemString(d, "__loader__");
+    if (loader == NULL || loader == Py_None) {
         PyObject *loader = PyObject_GetAttrString(interp->importlib,
                                                   "BuiltinImporter");
         if (loader == NULL) {
