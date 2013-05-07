@@ -139,6 +139,7 @@ PyAPI_FUNC(PyThreadState *) _PyThreadState_Prealloc(PyInterpreterState *);
 PyAPI_FUNC(void) _PyThreadState_Init(PyThreadState *);
 PyAPI_FUNC(void) PyThreadState_Clear(PyThreadState *);
 PyAPI_FUNC(void) PyThreadState_Delete(PyThreadState *);
+PyAPI_FUNC(void) _PyThreadState_DeleteExcept(PyThreadState *tstate);
 #ifdef WITH_THREAD
 PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void);
 PyAPI_FUNC(void) _PyGILState_Reinit(void);
@@ -211,6 +212,11 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
    on the main thread.
 */
 PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
+
+/* Helper/diagnostic function - return 1 if the current thread
+ * currently holds the GIL, 0 otherwise
+ */
+PyAPI_FUNC(int) PyGILState_Check(void);
 
 #endif   /* #ifdef WITH_THREAD */
 

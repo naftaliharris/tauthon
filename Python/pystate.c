@@ -414,6 +414,53 @@ PyThreadState_DeleteCurrent()
 #endif /* WITH_THREAD */
 
 
+/*
+ * Delete all thread states except the one passed as argument.
+ * Note that, if there is a current thread state, it *must* be the one
+ * passed as argument.  Also, this won't touch any other interpreters
+ * than the current one, since we don't know which thread state should
+ * be kept in those other interpreteres.
+ */
+void
+_PyThreadState_DeleteExcept(PyThreadState *tstate)
+{
+    PyInterpreterState *interp = tstate->interp;
+    PyThreadState *p, *next, *garbage;
+    HEAD_LOCK();
+    /* Remove all thread states, except tstate, from the linked list of
+       thread states.  This will allow calling PyThreadState_Clear()
+       without holding the lock.
+       XXX This would be simpler with a doubly-linked list. */
+    garbage = interp->tstate_head;
+    interp->tstate_head = tstate;
+    if (garbage == tstate) {
+        garbage = garbage->next;
+        tstate->next = NULL;
+    }
+    else {
+        for (p = garbage; p; p = p->next) {
+            if (p->next == tstate) {
+                p->next = tstate->next;
+                tstate->next = NULL;
+                break;
+            }
+        }
+    }
+    if (tstate->next != NULL)
+        Py_FatalError("_PyThreadState_DeleteExcept: tstate not found "
+                      "in interpreter thread states");
+    HEAD_UNLOCK();
+    /* Clear and deallocate all stale thread states.  Even if this
+       executes Python code, we should be safe since it executes
+       in the current thread, not one of the stale threads. */
+    for (p = garbage; p; p = next) {
+        next = p->next;
+        PyThreadState_Clear(p);
+        free(p);
+    }
+}
+
+
 PyThreadState *
 PyThreadState_Get(void)
 {
@@ -695,6 +742,15 @@ PyGILState_GetThisThreadState(void)
     if (autoInterpreterState == NULL)
         return NULL;
     return (PyThreadState *)PyThread_get_key_value(autoTLSkey);
+}
+
+int
+PyGILState_Check(void)
+{
+    /* can't use PyThreadState_Get() since it will assert that it has the GIL */
+    PyThreadState *tstate = (PyThreadState*)_Py_atomic_load_relaxed(
+        &_PyThreadState_Current);
+    return tstate && (tstate == PyGILState_GetThisThreadState());
 }
 
 PyGILState_STATE
