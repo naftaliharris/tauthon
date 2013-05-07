@@ -176,7 +176,7 @@ class IMAP4:
         except Exception:
             try:
                 self.shutdown()
-            except socket.error:
+            except OSError:
                 pass
             raise
 
@@ -269,7 +269,7 @@ class IMAP4:
         self.file.close()
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
-        except socket.error as e:
+        except OSError as e:
             # The server might already have closed the connection
             if e.errno != errno.ENOTCONN:
                 raise
@@ -903,7 +903,7 @@ class IMAP4:
 
         try:
             self.send(data + CRLF)
-        except (socket.error, OSError) as val:
+        except OSError as val:
             raise self.abort('socket error: %s' % val)
 
         if literal is None:
@@ -928,7 +928,7 @@ class IMAP4:
             try:
                 self.send(literal)
                 self.send(CRLF)
-            except (socket.error, OSError) as val:
+            except OSError as val:
                 raise self.abort('socket error: %s' % val)
 
             if not literator:
