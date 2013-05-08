@@ -235,6 +235,14 @@ their character equivalents.
 
 .. XXX: find a better, readable, example
 
+.. function:: length_hint(obj, default=0)
+
+   Return an estimated length for the object *o*. First trying to return its
+   actual length, then an estimate using :meth:`object.__length_hint__`, and
+   finally returning the default value.
+
+   .. versionadded:: 3.4
+
 The :mod:`operator` module also defines tools for generalized attribute and item
 lookups.  These are useful for making fast field extractors as arguments for
 :func:`map`, :func:`sorted`, :meth:`itertools.groupby`, or other functions that
