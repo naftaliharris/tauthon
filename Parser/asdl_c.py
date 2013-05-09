@@ -209,6 +209,11 @@ class StructVisitor(EmitVisitor):
         self.emit("struct _%(name)s {" % locals(), depth)
         for f in product.fields:
             self.visit(f, depth + 1)
+        for field in product.attributes:
+            # rudimentary attribute handling
+            type = str(field.type)
+            assert type in asdl.builtin_types, type
+            self.emit("%s %s;" % (type, field.name), depth + 1);
         self.emit("};", depth)
         self.emit("", depth)
 
@@ -493,7 +498,11 @@ class Obj2ModVisitor(PickleVisitor):
 
     def visitField(self, field, name, sum=None, prod=None, depth=0):
         ctype = get_c_type(field.type)
-        self.emit("if (_PyObject_HasAttrId(obj, &PyId_%s)) {" % field.name, depth)
+        if field.opt:
+            check = "exists_not_none(obj, &PyId_%s)" % (field.name,)
+        else:
+            check = "_PyObject_HasAttrId(obj, &PyId_%s)" % (field.name,)
+        self.emit("if (%s) {" % (check,), depth, reflow=False)
         self.emit("int res;", depth+1)
         if field.seq:
             self.emit("Py_ssize_t len;", depth+1)
@@ -559,6 +568,13 @@ class PyTypesDeclareVisitor(PickleVisitor):
     def visitProduct(self, prod, name):
         self.emit("static PyTypeObject *%s_type;" % name, 0)
         self.emit("static PyObject* ast2obj_%s(void*);" % name, 0)
+        if prod.attributes:
+            for a in prod.attributes:
+                self.emit_identifier(a.name)
+            self.emit("static char *%s_attributes[] = {" % name, 0)
+            for a in prod.attributes:
+                self.emit('"%s",' % a.name, 1)
+            self.emit("};", 0)
         if prod.fields:
             for f in prod.fields:
                 self.emit_identifier(f.name)
@@ -820,6 +836,7 @@ static PyObject* ast2obj_object(void *o)
     Py_INCREF((PyObject*)o);
     return (PyObject*)o;
 }
+#define ast2obj_singleton ast2obj_object
 #define ast2obj_identifier ast2obj_object
 #define ast2obj_string ast2obj_object
 #define ast2obj_bytes ast2obj_object
@@ -830,6 +847,17 @@ static PyObject* ast2obj_int(long b)
 }
 
 /* Conversion Python -> AST */
+
+static int obj2ast_singleton(PyObject *obj, PyObject** out, PyArena* arena)
+{
+    if (obj != Py_None && obj != Py_True && obj != Py_False) {
+        PyErr_SetString(PyExc_ValueError,
+                        "AST singleton must be True, False, or None");
+        return 1;
+    }
+    *out = obj;
+    return 0;
+}
 
 static int obj2ast_object(PyObject* obj, PyObject** out, PyArena* arena)
 {
@@ -901,6 +929,19 @@ static int add_ast_fields(void)
     return 0;
 }
 
+static int exists_not_none(PyObject *obj, _Py_Identifier *id)
+{
+    int isnone;
+    PyObject *attr = _PyObject_GetAttrId(obj, id);
+    if (!attr) {
+        PyErr_Clear();
+        return 0;
+    }
+    isnone = attr == Py_None;
+    Py_DECREF(attr);
+    return !isnone;
+}
+
 """, 0, reflow=False)
 
         self.emit("static int init_types(void)",0)
@@ -922,6 +963,11 @@ static int add_ast_fields(void)
         self.emit('%s_type = make_type("%s", &AST_type, %s, %d);' %
                         (name, name, fields, len(prod.fields)), 1)
         self.emit("if (!%s_type) return 0;" % name, 1)
+        if prod.attributes:
+            self.emit("if (!add_attributes(%s_type, %s_attributes, %d)) return 0;" %
+                            (name, name, len(prod.attributes)), 1)
+        else:
+            self.emit("if (!add_attributes(%s_type, NULL, 0)) return 0;" % name, 1)
 
     def visitSum(self, sum, name):
         self.emit('%s_type = make_type("%s", &AST_type, NULL, 0);' %
@@ -1077,6 +1123,12 @@ class ObjVisitor(PickleVisitor):
         self.emit("if (!result) return NULL;", 1)
         for field in prod.fields:
             self.visitField(field, name, 1, True)
+        for a in prod.attributes:
+            self.emit("value = ast2obj_%s(o->%s);" % (a.type, a.name), 1)
+            self.emit("if (!value) goto failed;", 1)
+            self.emit('if (_PyObject_SetAttrId(result, &PyId_%s, value) < 0)' % a.name, 1)
+            self.emit('goto failed;', 2)
+            self.emit('Py_DECREF(value);', 1)
         self.func_end()
 
     def visitConstructor(self, cons, enum, name):
