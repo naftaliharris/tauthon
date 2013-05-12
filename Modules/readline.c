@@ -70,6 +70,10 @@ on_completion_display_matches_hook(char **matches,
                                    int num_matches, int max_length);
 #endif
 
+/* Memory allocated for rl_completer_word_break_characters
+   (see issue #17289 for the motivation). */
+static char *completer_word_break_characters;
+
 /* Exported function to send one line to readline's init file parser */
 
 static PyObject *
@@ -235,10 +239,9 @@ set_hook(const char *funcname, PyObject **hook_var, PyObject *args)
         Py_XDECREF(tmp);
     }
     else {
-        PyOS_snprintf(buf, sizeof(buf),
-                      "set_%.50s(func): argument not callable",
-                      funcname);
-        PyErr_SetString(PyExc_TypeError, buf);
+        PyErr_Format(PyExc_TypeError,
+                     "set_%.50s(func): argument not callable",
+                     funcname);
         return NULL;
     }
     Py_RETURN_NONE;
@@ -369,12 +372,20 @@ set_completer_delims(PyObject *self, PyObject *args)
 {
     char *break_chars;
 
-    if(!PyArg_ParseTuple(args, "s:set_completer_delims", &break_chars)) {
+    if (!PyArg_ParseTuple(args, "s:set_completer_delims", &break_chars)) {
         return NULL;
     }
-    free((void*)rl_completer_word_break_characters);
-    rl_completer_word_break_characters = strdup(break_chars);
-    Py_RETURN_NONE;
+    /* Keep a reference to the allocated memory in the module state in case
+       some other module modifies rl_completer_word_break_characters
+       (see issue #17289). */
+    free(completer_word_break_characters);
+    completer_word_break_characters = strdup(break_chars);
+    if (completer_word_break_characters) {
+        rl_completer_word_break_characters = completer_word_break_characters;
+        Py_RETURN_NONE;
+    }
+    else
+        return PyErr_NoMemory();
 }
 
 PyDoc_STRVAR(doc_set_completer_delims,
@@ -892,7 +903,7 @@ setup_readline(void)
 #endif
 
 #ifdef __APPLE__
-    /* the libedit readline emulation resets key bindings etc 
+    /* the libedit readline emulation resets key bindings etc
      * when calling rl_initialize.  So call it upfront
      */
     if (using_libedit_emulation)
@@ -919,7 +930,8 @@ setup_readline(void)
     /* Set our completion function */
     rl_attempted_completion_function = (CPPFunction *)flex_complete;
     /* Set Python word break characters */
-    rl_completer_word_break_characters =
+    completer_word_break_characters =
+        rl_completer_word_break_characters =
         strdup(" \t\n`~!@#$%^&*()-=+[{]}\\|;:'\",<>/?");
         /* All nonalphanums except '.' */
 
@@ -932,11 +944,11 @@ setup_readline(void)
      */
 #ifdef __APPLE__
     if (using_libedit_emulation)
-	rl_read_init_file(NULL);
+        rl_read_init_file(NULL);
     else
 #endif /* __APPLE__ */
         rl_initialize();
-    
+
     RESTORE_LOCALE(saved_locale)
 }
 
@@ -1174,8 +1186,6 @@ PyInit_readline(void)
 
     if (m == NULL)
         return NULL;
-
-
 
     PyOS_ReadlineFunctionPointer = call_readline;
     setup_readline();

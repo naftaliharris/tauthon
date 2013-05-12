@@ -2,11 +2,12 @@
 Tests common to genericpath, macpath, ntpath and posixpath
 """
 
-import unittest
-from test import support
-import os
 import genericpath
+import os
 import sys
+import unittest
+import warnings
+from test import support
 
 
 def safe_rmdir(dirname):
@@ -16,9 +17,7 @@ def safe_rmdir(dirname):
         pass
 
 
-class GenericTest(unittest.TestCase):
-    # The path module to be tested
-    pathmodule = genericpath
+class GenericTest:
     common_attributes = ['commonprefix', 'getsize', 'getatime', 'getctime',
                          'getmtime', 'exists', 'isdir', 'isfile']
     attributes = []
@@ -145,6 +144,16 @@ class GenericTest(unittest.TestCase):
                 f.close()
             support.unlink(support.TESTFN)
 
+    @unittest.skipUnless(hasattr(os, "pipe"), "requires os.pipe()")
+    def test_exists_fd(self):
+        r, w = os.pipe()
+        try:
+            self.assertTrue(self.pathmodule.exists(r))
+        finally:
+            os.close(r)
+            os.close(w)
+        self.assertFalse(self.pathmodule.exists(r))
+
     def test_isdir(self):
         self.assertIs(self.pathmodule.isdir(support.TESTFN), False)
         f = open(support.TESTFN, "wb")
@@ -179,13 +188,16 @@ class GenericTest(unittest.TestCase):
             support.unlink(support.TESTFN)
             safe_rmdir(support.TESTFN)
 
+class TestGenericTest(GenericTest, unittest.TestCase):
+    # Issue 16852: GenericTest can't inherit from unittest.TestCase
+    # for test discovery purposes; CommonTest inherits from GenericTest
+    # and is only meant to be inherited by others.
+    pathmodule = genericpath
 
 # Following TestCase is not supposed to be run from test_genericpath.
 # It is inherited by other test modules (macpath, ntpath, posixpath).
 
 class CommonTest(GenericTest):
-    # The path module to be tested
-    pathmodule = None
     common_attributes = GenericTest.common_attributes + [
         # Properties
         'curdir', 'pardir', 'extsep', 'sep',
@@ -258,15 +270,21 @@ class CommonTest(GenericTest):
 
     def test_abspath(self):
         self.assertIn("foo", self.pathmodule.abspath("foo"))
-        self.assertIn(b"foo", self.pathmodule.abspath(b"foo"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.assertIn(b"foo", self.pathmodule.abspath(b"foo"))
 
         # Abspath returns bytes when the arg is bytes
-        for path in (b'', b'foo', b'f\xf2\xf2', b'/foo', b'C:\\'):
-            self.assertIsInstance(self.pathmodule.abspath(path), bytes)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            for path in (b'', b'foo', b'f\xf2\xf2', b'/foo', b'C:\\'):
+                self.assertIsInstance(self.pathmodule.abspath(path), bytes)
 
     def test_realpath(self):
         self.assertIn("foo", self.pathmodule.realpath("foo"))
-        self.assertIn(b"foo", self.pathmodule.realpath(b"foo"))
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            self.assertIn(b"foo", self.pathmodule.realpath(b"foo"))
 
     def test_normpath_issue5827(self):
         # Make sure normpath preserves unicode
@@ -282,8 +300,7 @@ class CommonTest(GenericTest):
 
         unicwd = '\xe7w\xf0'
         try:
-            fsencoding = support.TESTFN_ENCODING or "ascii"
-            unicwd.encode(fsencoding)
+            os.fsencode(unicwd)
         except (AttributeError, UnicodeEncodeError):
             # FS encoding is probably ASCII
             pass
@@ -305,13 +322,12 @@ class CommonTest(GenericTest):
         else:
             self.skipTest("need support.TESTFN_NONASCII")
 
-        with support.temp_cwd(name):
-            self.test_abspath()
-
-
-def test_main():
-    support.run_unittest(GenericTest)
+        # Test non-ASCII, non-UTF8 bytes in the path.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with support.temp_cwd(name):
+                self.test_abspath()
 
 
 if __name__=="__main__":
-    test_main()
+    unittest.main()

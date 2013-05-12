@@ -1,8 +1,9 @@
-import sys
+import imp
+import importlib
 import os
 import re
 import string
-import imp
+import sys
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -27,8 +28,7 @@ def _sphinx_version():
     "Format sys.version_info to produce the Sphinx version string used to install the chm docs"
     major, minor, micro, level, serial = sys.version_info
     release = '%s%s' % (major, minor)
-    if micro:
-        release += '%s' % (micro,)
+    release += '%s' % (micro,)
     if level == 'candidate':
         release += 'rc%s' % (serial,)
     elif level != 'final':
@@ -120,7 +120,7 @@ class EditorWindow(object):
 
     def __init__(self, flist=None, filename=None, key=None, root=None):
         if EditorWindow.help_url is None:
-            dochome =  os.path.join(sys.prefix, 'Doc', 'index.html')
+            dochome =  os.path.join(sys.base_prefix, 'Doc', 'index.html')
             if sys.platform.count('linux'):
                 # look for html docs in a couple of standard places
                 pyver = 'python-docs-' + '%s.%s.%s' % sys.version_info[:3]
@@ -131,13 +131,13 @@ class EditorWindow(object):
                     dochome = os.path.join(basepath, pyver,
                                            'Doc', 'index.html')
             elif sys.platform[:3] == 'win':
-                chmfile = os.path.join(sys.prefix, 'Doc',
+                chmfile = os.path.join(sys.base_prefix, 'Doc',
                                        'Python%s.chm' % _sphinx_version())
                 if os.path.isfile(chmfile):
                     dochome = chmfile
             elif macosxSupport.runningAsOSXApp():
                 # documentation is stored inside the python framework
-                dochome = os.path.join(sys.prefix,
+                dochome = os.path.join(sys.base_prefix,
                         'Resources/English.lproj/Documentation/index.html')
             dochome = os.path.normpath(dochome)
             if os.path.isfile(dochome):
@@ -316,11 +316,10 @@ class EditorWindow(object):
                     self.good_load = True
                     is_py_src = self.ispythonsource(filename)
                     self.set_indentation_params(is_py_src)
-                    if is_py_src:
-                        self.color = color = self.ColorDelegator()
-                        per.insertfilter(color)
             else:
                 io.set_filename(filename)
+                self.good_load = True
+
         self.ResetColorizer()
         self.saved_change_hook()
         self.update_recent_files_list()
@@ -479,7 +478,12 @@ class EditorWindow(object):
         if iswin:
             self.text.config(cursor="arrow")
 
-        for label, eventname, verify_state in self.rmenu_specs:
+        for item in self.rmenu_specs:
+            try:
+                label, eventname, verify_state = item
+            except ValueError: # see issue1207589
+                continue
+
             if verify_state is None:
                 continue
             state = getattr(self, verify_state)()
@@ -497,7 +501,8 @@ class EditorWindow(object):
 
     def make_rmenu(self):
         rmenu = Menu(self.text, tearoff=0)
-        for label, eventname, _ in self.rmenu_specs:
+        for item in self.rmenu_specs:
+            label, eventname = item[0], item[1]
             if label is not None:
                 def command(text=self.text, eventname=eventname):
                     text.event_generate(eventname)
@@ -1041,7 +1046,10 @@ class EditorWindow(object):
 
     def load_extension(self, name):
         try:
-            mod = __import__(name, globals(), locals(), [])
+            try:
+                mod = importlib.import_module('.' + name, package=__package__)
+            except ImportError:
+                mod = importlib.import_module(name)
         except ImportError:
             print("\nFailed to import extension: ", name)
             raise
@@ -1430,6 +1438,7 @@ class EditorWindow(object):
     def tabify_region_event(self, event):
         head, tail, chars, lines = self.get_region()
         tabwidth = self._asktabwidth()
+        if tabwidth is None: return
         for pos in range(len(lines)):
             line = lines[pos]
             if line:
@@ -1441,6 +1450,7 @@ class EditorWindow(object):
     def untabify_region_event(self, event):
         head, tail, chars, lines = self.get_region()
         tabwidth = self._asktabwidth()
+        if tabwidth is None: return
         for pos in range(len(lines)):
             lines[pos] = lines[pos].expandtabs(tabwidth)
         self.set_region(head, tail, chars, lines)
@@ -1534,7 +1544,7 @@ class EditorWindow(object):
             parent=self.text,
             initialvalue=self.indentwidth,
             minvalue=2,
-            maxvalue=16) or self.tabwidth
+            maxvalue=16)
 
     # Guess indentwidth from text content.
     # Return guessed indentwidth.  This should not be believed unless
