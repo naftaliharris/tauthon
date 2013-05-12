@@ -118,6 +118,15 @@ class RequestHdrsTests(unittest.TestCase):
         self.assertIsNone(req.get_header("Not-there"))
         self.assertEqual(req.get_header("Not-there", "default"), "default")
 
+        req.remove_header("Spam-eggs")
+        self.assertFalse(req.has_header("Spam-eggs"))
+
+        req.add_unredirected_header("Unredirected-spam", "Eggs")
+        self.assertTrue(req.has_header("Unredirected-spam"))
+
+        req.remove_header("Unredirected-spam")
+        self.assertFalse(req.has_header("Unredirected-spam"))
+
 
     def test_password_manager(self):
         mgr = urllib.request.HTTPPasswordMgr()
@@ -283,6 +292,7 @@ class MockHTTPClass:
         self.req_headers = []
         self.data = None
         self.raise_on_endheaders = False
+        self.sock = None
         self._tunnel_headers = {}
 
     def __call__(self, host, timeout=socket._GLOBAL_DEFAULT_TIMEOUT):
@@ -310,8 +320,7 @@ class MockHTTPClass:
         if body:
             self.data = body
         if self.raise_on_endheaders:
-            import socket
-            raise socket.error()
+            raise OSError()
     def getresponse(self):
         return MockHTTPResponse(MockFile(), {}, 200, "OK")
 
@@ -596,27 +605,6 @@ class OpenerDirectorTests(unittest.TestCase):
                 self.assertTrue(args[1] is None or
                              isinstance(args[1], MockResponse))
 
-    def test_method_deprecations(self):
-        req = Request("http://www.example.com")
-
-        with self.assertWarns(DeprecationWarning):
-            req.add_data("data")
-        with self.assertWarns(DeprecationWarning):
-            req.get_data()
-        with self.assertWarns(DeprecationWarning):
-            req.has_data()
-        with self.assertWarns(DeprecationWarning):
-            req.get_host()
-        with self.assertWarns(DeprecationWarning):
-            req.get_selector()
-        with self.assertWarns(DeprecationWarning):
-            req.is_unverifiable()
-        with self.assertWarns(DeprecationWarning):
-            req.get_origin_req_host()
-        with self.assertWarns(DeprecationWarning):
-            req.get_type()
-
-
 def sanepathname2url(path):
     try:
         path.encode("utf-8")
@@ -811,7 +799,7 @@ class HandlerTests(unittest.TestCase):
                               ("Foo", "bar"), ("Spam", "eggs")])
             self.assertEqual(http.data, data)
 
-        # check socket.error converted to URLError
+        # check OSError converted to URLError
         http.raise_on_endheaders = True
         self.assertRaises(urllib.error.URLError, h.do_open, http, req)
 
@@ -915,6 +903,30 @@ class HandlerTests(unittest.TestCase):
             ds_req.set_proxy("someproxy:3128",None)
             p_ds_req = h.do_request_(ds_req)
             self.assertEqual(p_ds_req.unredirected_hdrs["Host"],"example.com")
+
+    def test_full_url_setter(self):
+        # Checks to ensure that components are set correctly after setting the
+        # full_url of a Request object
+
+        urls = [
+            'http://example.com?foo=bar#baz',
+            'http://example.com?foo=bar&spam=eggs#bash',
+            'http://example.com',
+        ]
+
+        # testing a reusable request instance, but the url parameter is
+        # required, so just use a dummy one to instantiate
+        r = Request('http://example.com')
+        for url in urls:
+            r.full_url = url
+            self.assertEqual(r.get_full_url(), url)
+
+    def test_full_url_deleter(self):
+        r = Request('http://www.example.com')
+        del r.full_url
+        self.assertIsNone(r.full_url)
+        self.assertIsNone(r.fragment)
+        self.assertEqual(r.selector, '')
 
     def test_fixpath_in_weirdurls(self):
         # Issue4493: urllib2 to supply '/' when to urls where path does not
@@ -1415,6 +1427,21 @@ class MiscTests(unittest.TestCase):
         self.opener_has_handler(o, MyHTTPHandler)
         self.opener_has_handler(o, MyOtherHTTPHandler)
 
+    @unittest.skipUnless(support.is_resource_enabled('network'),
+                         'test requires network access')
+    def test_issue16464(self):
+        opener = urllib.request.build_opener()
+        request = urllib.request.Request("http://www.python.org/~jeremy/")
+        self.assertEqual(None, request.data)
+
+        opener.open(request, "1".encode("us-ascii"))
+        self.assertEqual(b"1", request.data)
+        self.assertEqual("1", request.get_header("Content-length"))
+
+        opener.open(request, "1234567890".encode("us-ascii"))
+        self.assertEqual(b"1234567890", request.data)
+        self.assertEqual("10", request.get_header("Content-length"))
+
     def test_HTTPError_interface(self):
         """
         Issue 13211 reveals that HTTPError didn't implement the URLError
@@ -1426,11 +1453,10 @@ class MiscTests(unittest.TestCase):
         err = urllib.error.HTTPError(url, code, msg, hdrs, fp)
         self.assertTrue(hasattr(err, 'reason'))
         self.assertEqual(err.reason, 'something bad happened')
-        self.assertTrue(hasattr(err, 'hdrs'))
-        self.assertEqual(err.hdrs, 'Content-Length: 42')
+        self.assertTrue(hasattr(err, 'headers'))
+        self.assertEqual(err.headers, 'Content-Length: 42')
         expected_errmsg = 'HTTP Error %s: %s' % (err.code, err.msg)
         self.assertEqual(str(err), expected_errmsg)
-
 
 class RequestTests(unittest.TestCase):
 
@@ -1450,6 +1476,25 @@ class RequestTests(unittest.TestCase):
         self.get.data = "spam"
         self.assertTrue(self.get.data)
         self.assertEqual("POST", self.get.get_method())
+
+    # issue 16464
+    # if we change data we need to remove content-length header
+    # (cause it's most probably calculated for previous value)
+    def test_setting_data_should_remove_content_length(self):
+        self.assertNotIn("Content-length", self.get.unredirected_hdrs)
+        self.get.add_unredirected_header("Content-length", 42)
+        self.assertEqual(42, self.get.unredirected_hdrs["Content-length"])
+        self.get.data = "spam"
+        self.assertNotIn("Content-length", self.get.unredirected_hdrs)
+
+    # issue 17485 same for deleting data.
+    def test_deleting_data_should_remove_content_length(self):
+        self.assertNotIn("Content-length", self.get.unredirected_hdrs)
+        self.get.data = 'foo'
+        self.get.add_unredirected_header("Content-length", 3)
+        self.assertEqual(3, self.get.unredirected_hdrs["Content-length"])
+        del self.get.data
+        self.assertNotIn("Content-length", self.get.unredirected_hdrs)
 
     def test_get_full_url(self):
         self.assertEqual("http://www.python.org/~jeremy/",
@@ -1491,22 +1536,6 @@ class RequestTests(unittest.TestCase):
         url = 'http://docs.python.org/library/urllib2.html#OK'
         req = Request(url)
         self.assertEqual(req.get_full_url(), url)
-
-    def test_HTTPError_interface_call(self):
-        """
-        Issue 15701 - HTTPError interface has info method available from URLError
-        """
-        err = urllib.request.HTTPError(msg="something bad happened", url=None,
-                                code=None, hdrs='Content-Length:42', fp=None)
-        self.assertTrue(hasattr(err, 'reason'))
-        assert hasattr(err, 'reason')
-        assert hasattr(err, 'info')
-        assert callable(err.info)
-        try:
-            err.info()
-        except AttributeError:
-            self.fail('err.info call failed.')
-        self.assertEqual(err.info(), "Content-Length:42")
 
 def test_main(verbose=None):
     from test import test_urllib2

@@ -378,6 +378,9 @@
     <ClInclude Include="..\Objects\stringlib\partition.h">
       <Filter>Objects</Filter>
     </ClInclude>
+    <ClInclude Include="..\Objects\stringlib\replace.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
     <ClInclude Include="..\Objects\stringlib\split.h">
       <Filter>Objects</Filter>
     </ClInclude>
@@ -498,7 +501,7 @@
     <ClCompile Include="..\Modules\mmapmodule.c">
       <Filter>Modules</Filter>
     </ClCompile>
-    <ClCompile Include="..\Modules\operator.c">
+    <ClCompile Include="..\Modules\_operator.c">
       <Filter>Modules</Filter>
     </ClCompile>
     <ClCompile Include="..\Modules\parsermodule.c">
