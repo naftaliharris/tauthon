@@ -54,7 +54,7 @@ Notes on the availability of these functions:
 
    The name of the operating system dependent module imported.  The following
    names have currently been registered: ``'posix'``, ``'nt'``, ``'mac'``,
-   ``'os2'``, ``'ce'``, ``'java'``.
+   ``'ce'``, ``'java'``.
 
    .. seealso::
       :attr:`sys.platform` has a finer granularity.  :func:`os.uname` gives
@@ -999,9 +999,8 @@ as internal buffering of data.
    On Mac OS X and FreeBSD, a value of 0 for *nbytes* specifies to send until
    the end of *in* is reached.
 
-   On Solaris, *out* may be the file descriptor of a regular file or the file
-   descriptor of a socket. On all other platforms, *out* must be the file
-   descriptor of an open socket.
+   All platforms support sockets as *out* file descriptor, and some platforms
+   allow other types (e.g. regular file, pipe) as well.
 
    Availability: Unix.
 
@@ -1137,6 +1136,7 @@ or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Window
           O_DIRECTORY
           O_NOFOLLOW
           O_NOATIME
+          O_PATH
 
    These constants are GNU extensions and not present if they are not defined by
    the C library.

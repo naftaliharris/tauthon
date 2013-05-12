@@ -32,9 +32,9 @@ digests.  The modern term is secure hash.
 
 There is one constructor method named for each type of :dfn:`hash`.  All return
 a hash object with the same simple interface. For example: use :func:`sha1` to
-create a SHA1 hash object. You can now feed this object with objects conforming
-to the buffer interface (normally :class:`bytes` objects) using the
-:meth:`update` method.  At any point you can ask it for the :dfn:`digest` of the
+create a SHA1 hash object. You can now feed this object with :term:`bytes-like
+object`\ s (normally :class:`bytes`) using the :meth:`update` method.
+At any point you can ask it for the :dfn:`digest` of the
 concatenation of the data fed to it so far using the :meth:`digest` or
 :meth:`hexdigest` methods.
 
@@ -51,9 +51,13 @@ concatenation of the data fed to it so far using the :meth:`digest` or
 .. index:: single: OpenSSL; (use in module hashlib)
 
 Constructors for hash algorithms that are always present in this module are
-:func:`md5`, :func:`sha1`, :func:`sha224`, :func:`sha256`, :func:`sha384`, and
-:func:`sha512`.  Additional algorithms may also be available depending upon the
-OpenSSL library that Python uses on your platform.
+:func:`md5`, :func:`sha1`, :func:`sha224`, :func:`sha256`, :func:`sha384`,
+:func:`sha512`, :func:`sha3_224`, :func:`sha3_256`, :func:`sha3_384`, and
+:func:`sha3_512`. Additional algorithms may also be available depending upon
+the OpenSSL library that Python uses on your platform.
+
+   .. versionchanged:: 3.4
+      Add sha3 family of hash algorithms.
 
 For example, to obtain the digest of the byte string ``b'Nobody inspects the
 spammish repetition'``::

@@ -112,6 +112,38 @@ class TestChainMap(unittest.TestCase):
         self.assertEqual(dict(d), dict(a=1, b=2, c=30))
         self.assertEqual(dict(d.items()), dict(a=1, b=2, c=30))
 
+    def test_new_child(self):
+        'Tests for changes for issue #16613.'
+        c = ChainMap()
+        c['a'] = 1
+        c['b'] = 2
+        m = {'b':20, 'c': 30}
+        d = c.new_child(m)
+        self.assertEqual(d.maps, [{'b':20, 'c':30}, {'a':1, 'b':2}])  # check internal state
+        self.assertIs(m, d.maps[0])
+
+        # Use a different map than a dict
+        class lowerdict(dict):
+            def __getitem__(self, key):
+                if isinstance(key, str):
+                    key = key.lower()
+                return dict.__getitem__(self, key)
+            def __contains__(self, key):
+                if isinstance(key, str):
+                    key = key.lower()
+                return dict.__contains__(self, key)
+
+        c = ChainMap()
+        c['a'] = 1
+        c['b'] = 2
+        m = lowerdict(b=20, c=30)
+        d = c.new_child(m)
+        self.assertIs(m, d.maps[0])
+        for key in 'abc':                                             # check contains
+            self.assertIn(key, d)
+        for k, v in dict(a=1, B=20, C=30, z=100).items():             # check get
+            self.assertEqual(d.get(k, 100), v)
+
 
 ################################################################################
 ### Named Tuples
@@ -273,6 +305,7 @@ class TestNamedTuple(unittest.TestCase):
                 q = loads(dumps(p, protocol))
                 self.assertEqual(p, q)
                 self.assertEqual(p._fields, q._fields)
+                self.assertNotIn(b'OrderedDict', dumps(p, protocol))
 
     def test_copy(self):
         p = TestNT(x=10, y=20, z=30)

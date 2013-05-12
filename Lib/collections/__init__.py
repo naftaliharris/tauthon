@@ -12,7 +12,7 @@ from operator import itemgetter as _itemgetter, eq as _eq
 from keyword import iskeyword as _iskeyword
 import sys as _sys
 import heapq as _heapq
-from weakref import proxy as _proxy
+from _weakref import proxy as _proxy
 from itertools import repeat as _repeat, chain as _chain, starmap as _starmap
 from reprlib import recursive_repr as _recursive_repr
 
@@ -280,6 +280,10 @@ class {typename}(tuple):
     def __getnewargs__(self):
         'Return self as a plain tuple.  Used by copy and pickle.'
         return tuple(self)
+
+    def __getstate__(self):
+        'Exclude the OrderedDict from pickling'
+        return None
 
 {field_defs}
 '''
@@ -816,9 +820,14 @@ class ChainMap(MutableMapping):
 
     __copy__ = copy
 
-    def new_child(self):                        # like Django's Context.push()
-        'New ChainMap with a new dict followed by all previous maps.'
-        return self.__class__({}, *self.maps)
+    def new_child(self, m=None):                # like Django's Context.push()
+        '''
+        New ChainMap with a new map followed by all previous maps. If no
+        map is provided, an empty dict is used.
+        '''
+        if m is None:
+            m = {}
+        return self.__class__(m, *self.maps)
 
     @property
     def parents(self):                          # like Django's Context.pop()

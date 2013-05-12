@@ -35,12 +35,30 @@
 #define PATH_MAX MAXPATHLEN
 #endif
 
+#ifdef Py_REF_DEBUG
+static
+void _print_total_refs(void) {
+    PyObject *xoptions, *key, *value;
+    xoptions = PySys_GetXOptions();
+    if (xoptions == NULL)
+        return;
+    key = PyUnicode_FromString("showrefcount");
+    if (key == NULL)
+        return;
+    value = PyDict_GetItem(xoptions, key);
+    Py_DECREF(key);
+    if (value == Py_True)
+        fprintf(stderr,
+                "[%" PY_FORMAT_SIZE_T "d refs, "
+                "%" PY_FORMAT_SIZE_T "d blocks]\n",
+                _Py_GetRefTotal(), _Py_GetAllocatedBlocks());
+}
+#endif
+
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
 #else /* Py_REF_DEBUG */
-#define PRINT_TOTAL_REFS() fprintf(stderr,                              \
-                   "[%" PY_FORMAT_SIZE_T "d refs]\n",                   \
-                   _Py_GetRefTotal())
+#define PRINT_TOTAL_REFS() _print_total_refs()
 #endif
 
 #ifdef __cplusplus
@@ -506,9 +524,6 @@ Py_Finalize(void)
     /* Disable signal handling */
     PyOS_FiniInterrupts();
 
-    /* Clear type lookup cache */
-    PyType_ClearCache();
-
     /* Collect garbage.  This may call finalizers; it's nice to call these
      * before all modules are destroyed.
      * XXX If a __del__ or weakref callback is triggered here, and tries to
@@ -529,10 +544,6 @@ Py_Finalize(void)
     while (PyGC_Collect() > 0)
         /* nothing */;
 #endif
-    /* We run this while most interpreter state is still alive, so that
-       debug information can be printed out */
-    _PyGC_Fini();
-
     /* Destroy all modules */
     PyImport_Cleanup();
 
@@ -561,6 +572,9 @@ Py_Finalize(void)
     /* Destroy the database used by _PyImport_{Fixup,Find}Extension */
     _PyImport_Fini();
 
+    /* Cleanup typeobject.c's internal caches. */
+    _PyType_Fini();
+
     /* unload faulthandler module */
     _PyFaulthandler_Fini();
 
@@ -581,7 +595,7 @@ Py_Finalize(void)
         _Py_PrintReferences(stderr);
 #endif /* Py_TRACE_REFS */
 
-    /* Clear interpreter state */
+    /* Clear interpreter state and all thread states. */
     PyInterpreterState_Clear(interp);
 
     /* Now we decref the exception classes.  After this point nothing
@@ -597,10 +611,6 @@ Py_Finalize(void)
     _PyGILState_Fini();
 #endif /* WITH_THREAD */
 
-    /* Delete current thread */
-    PyThreadState_Swap(NULL);
-    PyInterpreterState_Delete(interp);
-
     /* Sundry finalizers */
     PyMethod_Fini();
     PyFrame_Fini();
@@ -614,9 +624,14 @@ Py_Finalize(void)
     PyFloat_Fini();
     PyDict_Fini();
     PySlice_Fini();
+    _PyGC_Fini();
 
     /* Cleanup Unicode implementation */
     _PyUnicode_Fini();
+
+    /* Delete current thread. After this, many C API calls become crashy. */
+    PyThreadState_Swap(NULL);
+    PyInterpreterState_Delete(interp);
 
     /* reset file system default encoding */
     if (!Py_HasFileSystemDefaultEncoding && Py_FileSystemDefaultEncoding) {
@@ -827,7 +842,7 @@ Py_GetPythonHome(void)
 static void
 initmain(PyInterpreterState *interp)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *loader;
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         Py_FatalError("can't create __main__ module");
@@ -848,7 +863,8 @@ initmain(PyInterpreterState *interp)
      * be set if __main__ gets further initialized later in the startup
      * process.
      */
-    if (PyDict_GetItemString(d, "__loader__") == NULL) {
+    loader = PyDict_GetItemString(d, "__loader__");
+    if (loader == NULL || loader == Py_None) {
         PyObject *loader = PyObject_GetAttrString(interp->importlib,
                                                   "BuiltinImporter");
         if (loader == NULL) {

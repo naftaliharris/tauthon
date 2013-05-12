@@ -1160,7 +1160,9 @@ class PyUnicodeObjectPtr(PyObjectPtr):
         # Convert the int code points to unicode characters, and generate a
         # local unicode instance.
         # This splits surrogate pairs if sizeof(Py_UNICODE) is 2 here (in gdb).
-        result = u''.join([_unichr(ucs) for ucs in Py_UNICODEs])
+        result = u''.join([
+            (_unichr(ucs) if ucs <= 0x10ffff else '\ufffd')
+            for ucs in Py_UNICODEs])
         return result
 
     def write_repr(self, out, visited):
@@ -1460,7 +1462,7 @@ class Frame(object):
         # This assumes the _POSIX_THREADS version of Python/ceval_gil.h:
         name = self._gdbframe.name()
         if name:
-            return name.startswith('pthread_cond_timedwait')
+            return 'pthread_cond_timedwait' in name
 
     def is_gc_collect(self):
         '''Is this frame "collect" within the garbage-collector?'''

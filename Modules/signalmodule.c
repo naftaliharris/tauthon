@@ -9,7 +9,7 @@
 #endif
 
 #ifdef MS_WINDOWS
-#include <Windows.h>
+#include <windows.h>
 #ifdef HAVE_PROCESS_H
 #include <process.h>
 #endif
@@ -35,11 +35,6 @@
 
 #ifndef SIG_ERR
 #define SIG_ERR ((PyOS_sighandler_t)(-1))
-#endif
-
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#define NSIG 12
-#include <process.h>
 #endif
 
 #ifndef NSIG
@@ -344,7 +339,10 @@ signal_signal(PyObject *self, PyObject *args)
     Handlers[sig_num].tripped = 0;
     Py_INCREF(obj);
     Handlers[sig_num].func = obj;
-    return old_handler;
+    if (old_handler != NULL)
+        return old_handler;
+    else
+        Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(signal_doc,
@@ -372,8 +370,13 @@ signal_getsignal(PyObject *self, PyObject *args)
         return NULL;
     }
     old_handler = Handlers[sig_num].func;
-    Py_INCREF(old_handler);
-    return old_handler;
+    if (old_handler != NULL) {
+        Py_INCREF(old_handler);
+        return old_handler;
+    }
+    else {
+        Py_RETURN_NONE;
+    }
 }
 
 PyDoc_STRVAR(getsignal_doc,
