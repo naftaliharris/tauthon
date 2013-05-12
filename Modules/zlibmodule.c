@@ -161,7 +161,7 @@ PyZlib_compress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     zst.avail_out = length + length/1000 + 12 + 1;
 
@@ -251,7 +251,7 @@ PyZlib_decompress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     if (r_strlen <= 0)
         r_strlen = 1;
@@ -573,7 +573,7 @@ save_unconsumed_input(compobject *self, int err)
             Py_ssize_t old_size = PyBytes_GET_SIZE(self->unused_data);
             Py_ssize_t new_size;
             PyObject *new_data;
-            if (self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
+            if ((Py_ssize_t)self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
                 PyErr_NoMemory();
                 return -1;
             }

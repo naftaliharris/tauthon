@@ -501,6 +501,9 @@
 /* Define to 1 if you have the `linkat' function. */
 #undef HAVE_LINKAT
 
+/* Define to 1 if you have the <linux/can/bcm.h> header file. */
+#undef HAVE_LINUX_CAN_BCM_H
+
 /* Define to 1 if you have the <linux/can.h> header file. */
 #undef HAVE_LINUX_CAN_H
 
@@ -1114,6 +1117,9 @@
 
 /* Define to 1 if you have the `wcsxfrm' function. */
 #undef HAVE_WCSXFRM
+
+/* Define to 1 if you have the `wmemcmp' function. */
+#undef HAVE_WMEMCMP
 
 /* Define if tzset() actually switches the local timezone in a meaningful way.
    */

@@ -56,6 +56,7 @@ John Aycock
 Donovan Baarda
 Arne Babenhauserheide
 Attila Babo
+Matt Bachmann
 Marcin Bachry
 Alfonso Baciero
 Dwayne Bailey
@@ -120,6 +121,7 @@ Philippe Biondi
 Michael Birtwell
 Stuart Bishop
 Roy Bixler
+Daniel Black
 Jonathan Black
 Renaud Blanch
 Mike Bland
@@ -149,8 +151,10 @@ Monty Brandenberg
 Georg Brandl
 Christopher Brannon
 Terrence Brannon
+Sven Brauch
 Erik Bray
 Brian Brazil
+Demian Brecht
 Dave Brennan
 Tom Bridgman
 Anthony Briggs
@@ -222,6 +226,7 @@ David Cinege
 Craig Citro
 Gilles Civario
 Chris Clark
+Laurie Clark-Michalek
 Mike Clarkson
 Andrew Clegg
 Brad Clements
@@ -319,6 +324,7 @@ Quinn Dunkan
 Robin Dunn
 Luke Dunstan
 Virgil Dupras
+Bruno Dupuis
 Andy Dustman
 Gary Duzan
 Eugene Dvurechenski
@@ -341,6 +347,7 @@ David Ely
 Jeff Epler
 Jeff McNeil
 Tom Epperly
+Gökcen Eraslan
 Stoffel Erasmus
 Jürgen A. Erhard
 Michael Ernst
@@ -451,6 +458,7 @@ Eric Groo
 Dag Gruneau
 Filip Gruszczyński
 Thomas Guettler
+Anuj Gupta
 Michael Guravage
 Lars Gustäbel
 Thomas Güttler
@@ -461,6 +469,7 @@ Paul ten Hagen
 Rasmus Hahn
 Peter Haight
 Václav Haisman
+Zbigniew Halas
 Walker Hale IV
 Bob Halley
 Jesse Hallio
@@ -589,6 +598,7 @@ Orjan Johansen
 Fredrik Johansson
 Gregory K. Johnson
 Kent Johnson
+Michael Johnson
 Simon Johnston
 Matt Joiner
 Thomas Jollans
@@ -606,6 +616,7 @@ Sijin Joseph
 Andreas Jung
 Tattoo Mabonzo K.
 Bohuslav Kabrda
+Alexey Kachayev
 Bob Kahn
 Kurt B. Kaiser
 Tamito Kajiyama
@@ -682,6 +693,7 @@ Vladimir Kushnir
 Erno Kuusela
 Ross Lagerwall
 Cameron Laird
+David Lam
 Thomas Lamb
 Jean-Baptiste "Jiba" Lamy
 Ronan Lamy
@@ -718,6 +730,7 @@ Tshepang Lekhonkhobe
 Marc-André Lemburg
 John Lenton
 Kostyantyn Leschenko
+Benno Leslie
 Christopher Tur Lesniewski-Laas
 Alain Leufroy
 Mark Levinson
@@ -744,6 +757,7 @@ Hugo Lopes Tavares
 Anne Lord
 Tom Loredo
 Justin Love
+Ned Jackson Lovely
 Jason Lowe
 Tony Lownds
 Ray Loyzaga
@@ -751,6 +765,7 @@ Lukas Lueg
 Loren Luke
 Fredrik Lundh
 Mark Lutz
+Taras Lyapun
 Jim Lynch
 Mikael Lyngvig
 Martin von Löwis
@@ -764,6 +779,7 @@ Don MacMillen
 Steve Majewski
 Grzegorz Makarewicz
 David Malcolm
+Greg Malcolm
 Ken Manheimer
 Vladimir Marangozov
 Colin Marc
@@ -784,6 +800,7 @@ Laura Matson
 Graham Matthews
 Dieter Maurer
 Daniel May
+Lucas Maystre
 Arnaud Mazin
 Rebecca McCreary
 Kirk McDonald
@@ -840,6 +857,7 @@ Ross Moore
 Ben Morgan
 Derek Morr
 James A Morrison
+Martin Morrison
 Derek McTavish Mounce
 Alessandro Moura
 Pablo Mouzo
@@ -913,6 +931,7 @@ Mike Pall
 Todd R. Palmer
 Juan David Ibáñez Palomar
 Jan Palus
+Mathias Panzenböck
 M. Papillon
 Peter Parente
 Alexandre Parenteau
@@ -921,6 +940,7 @@ William Park
 Heikki Partanen
 Harri Pasanen
 Gaël Pasgrimaud
+Ashish Nitin Patil
 Randy Pausch
 Samuele Pedroni
 Justin Peel
@@ -939,6 +959,7 @@ Tim Peters
 Benjamin Peterson
 Joe Peterson
 Chris Petrilli
+Roumen Petrov
 Bjorn Pettersen
 Justin D. Pettit
 Ronny Pfannschmidt
@@ -959,6 +980,7 @@ Antoine Pitrou
 Jean-François Piéronne
 Oleg Plakhotnyuk
 Remi Pointel
+Ariel Poliak
 Guilherme Polo
 Michael Pomraning
 Iustin Pop
@@ -969,6 +991,7 @@ Amrit Prem
 Paul Prescod
 Donovan Preston
 Paul Price
+Iuliia Proskurnia
 Jyrki Pulliainen
 Steve Purcell
 Eduardo Pérez
@@ -977,6 +1000,7 @@ Pierre Quentel
 Brian Quinlan
 Anders Qvist
 Thomas Rachel
+Ram Rachum
 Jérôme Radix
 Burton Radons
 Jeff Ramnani
@@ -1012,7 +1036,7 @@ Nicholas Riley
 Jean-Claude Rimbault
 Vlad Riscutia
 Wes Rishel
-Dan Riti
+Daniel Riti
 Juan M. Bello Rivas
 Davide Rizzo
 Anthony Roach
@@ -1137,6 +1161,7 @@ George Sipe
 J. Sipprell
 Kragen Sitaker
 Michael Sloan
+Václav Šmilauer
 Christopher Smith
 Eric V. Smith
 Gregory P. Smith
@@ -1200,12 +1225,14 @@ Amy Taylor
 Monty Taylor
 Anatoly Techtonik
 Mikhail Terekhov
+Victor Terrón
 Richard M. Tew
 Tobias Thelen
 Lowe Thiderman
 Nicolas M. Thiéry
 James Thomas
 Robin Thomas
+Brian Thorne
 Stephen Thorne
 Jeremy Thurgood
 Eric Tiedemann
@@ -1338,6 +1365,7 @@ Steven Work
 Gordon Worley
 Darren Worrall
 Thomas Wouters
+Daniel Wozniak
 Heiko Wundram
 Doug Wyatt
 Robert Xiao
@@ -1350,6 +1378,7 @@ Bob Yodlowski
 Danny Yoo
 Rory Yorke
 George Yoshida
+Kazuhiro Yoshida
 Masazumi Yoshikawa
 Arnaud Ysmal
 Bernard Yue
