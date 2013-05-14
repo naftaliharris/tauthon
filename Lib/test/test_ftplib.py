@@ -321,7 +321,7 @@ if ssl is not None:
                 elif err.args[0] == ssl.SSL_ERROR_EOF:
                     return self.handle_close()
                 raise
-            except socket.error as err:
+            except OSError as err:
                 if err.args[0] == errno.ECONNABORTED:
                     return self.handle_close()
             else:
@@ -335,7 +335,7 @@ if ssl is not None:
                 if err.args[0] in (ssl.SSL_ERROR_WANT_READ,
                                    ssl.SSL_ERROR_WANT_WRITE):
                     return
-            except socket.error as err:
+            except OSError as err:
                 # Any "socket error" corresponds to a SSL_ERROR_SYSCALL return
                 # from OpenSSL's SSL_shutdown(), corresponding to a
                 # closed socket condition. See also:
@@ -482,7 +482,7 @@ class TestFTPClass(TestCase):
 
     def test_all_errors(self):
         exceptions = (ftplib.error_reply, ftplib.error_temp, ftplib.error_perm,
-                      ftplib.error_proto, ftplib.Error, IOError, EOFError)
+                      ftplib.error_proto, ftplib.Error, OSError, EOFError)
         for x in exceptions:
             try:
                 raise x('exception not included in all_errors set')
@@ -680,7 +680,7 @@ class TestFTPClass(TestCase):
                 return False
             try:
                 self.client.sendcmd('noop')
-            except (socket.error, EOFError):
+            except (OSError, EOFError):
                 return False
             return True
 
@@ -725,7 +725,7 @@ class TestFTPClass(TestCase):
                                 source_address=(HOST, port))
             self.assertEqual(self.client.sock.getsockname()[1], port)
             self.client.quit()
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.EADDRINUSE:
                 self.skipTest("couldn't bind to port %d" % port)
             raise
@@ -736,7 +736,7 @@ class TestFTPClass(TestCase):
         try:
             with self.client.transfercmd('list') as sock:
                 self.assertEqual(sock.getsockname()[1], port)
-        except IOError as e:
+        except OSError as e:
             if e.errno == errno.EADDRINUSE:
                 self.skipTest("couldn't bind to port %d" % port)
             raise
@@ -989,8 +989,19 @@ class TestTimeouts(TestCase):
         ftp.close()
 
 
+class TestNetrcDeprecation(TestCase):
+
+    def test_deprecation(self):
+        with support.temp_cwd(), support.EnvironmentVarGuard() as env:
+            env['HOME'] = os.getcwd()
+            open('.netrc', 'w').close()
+            with self.assertWarns(DeprecationWarning):
+                ftplib.Netrc()
+
+
+
 def test_main():
-    tests = [TestFTPClass, TestTimeouts]
+    tests = [TestFTPClass, TestTimeouts, TestNetrcDeprecation]
     if support.IPV6_ENABLED:
         tests.append(TestIPv6Environment)
 
