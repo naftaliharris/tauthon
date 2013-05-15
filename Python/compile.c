@@ -535,6 +535,37 @@ compiler_enter_scope(struct compiler *c, identifier name,
         compiler_unit_free(u);
         return 0;
     }
+    if (u->u_ste->ste_needs_class_closure) {
+        /* Cook up a implicit __class__ cell. */
+        _Py_IDENTIFIER(__class__);
+        PyObject *tuple, *name, *zero;
+        int res;
+        assert(u->u_scope_type == COMPILER_SCOPE_CLASS);
+        assert(PyDict_Size(u->u_cellvars) == 0);
+        name = _PyUnicode_FromId(&PyId___class__);
+        if (!name) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        tuple = PyTuple_Pack(2, name, Py_TYPE(name));
+        if (!tuple) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        zero = PyLong_FromLong(0);
+        if (!zero) {
+            Py_DECREF(tuple);
+            compiler_unit_free(u);
+            return 0;
+        }
+        res = PyDict_SetItem(u->u_cellvars, tuple, zero);
+        Py_DECREF(tuple);
+        Py_DECREF(zero);
+        if (res < 0) {
+            compiler_unit_free(u);
+            return 0;
+        }
+    }
 
     u->u_freevars = dictbytype(u->u_ste->ste_symbols, FREE, DEF_FREE_CLASS,
                                PyDict_Size(u->u_cellvars));
@@ -970,6 +1001,7 @@ opcode_stack_effect(int opcode, int oparg)
         case LOAD_CLOSURE:
             return 1;
         case LOAD_DEREF:
+        case LOAD_CLASSDEREF:
             return 1;
         case STORE_DEREF:
             return -1;
@@ -1330,6 +1362,9 @@ compiler_mod(struct compiler *c, mod_ty mod)
 static int
 get_ref_type(struct compiler *c, PyObject *name)
 {
+    if (c->u->u_scope_type == COMPILER_SCOPE_CLASS &&
+        !PyUnicode_CompareWithASCIIString(name, "__class__"))
+        return CELL;
     int scope = PyST_GetScope(c->u->u_ste, name);
     if (scope == 0) {
         char buf[350];
@@ -1501,15 +1536,15 @@ compiler_visit_annotations(struct compiler *c, arguments_ty args,
 
     if (compiler_visit_argannotations(c, args->args, names))
         goto error;
-    if (args->varargannotation &&
-        compiler_visit_argannotation(c, args->vararg,
-                                     args->varargannotation, names))
+    if (args->vararg && args->vararg->annotation &&
+        compiler_visit_argannotation(c, args->vararg->arg,
+                                     args->vararg->annotation, names))
         goto error;
     if (compiler_visit_argannotations(c, args->kwonlyargs, names))
         goto error;
-    if (args->kwargannotation &&
-        compiler_visit_argannotation(c, args->kwarg,
-                                     args->kwargannotation, names))
+    if (args->kwarg && args->kwarg->annotation &&
+        compiler_visit_argannotation(c, args->kwarg->arg,
+                                     args->kwarg->annotation, names))
         goto error;
 
     if (!return_str) {
@@ -1568,6 +1603,8 @@ compiler_function(struct compiler *c, stmt_ty s)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
@@ -1575,8 +1612,6 @@ compiler_function(struct compiler *c, stmt_ty s)
             return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     num_annotations = compiler_visit_annotations(c, args, returns);
     if (num_annotations < 0)
         return 0;
@@ -1703,23 +1738,23 @@ compiler_class(struct compiler *c, stmt_ty s)
             compiler_exit_scope(c);
             return 0;
         }
-        /* return the (empty) __class__ cell */
-        str = PyUnicode_InternFromString("__class__");
-        if (str == NULL) {
-            compiler_exit_scope(c);
-            return 0;
-        }
-        i = compiler_lookup_arg(c->u->u_cellvars, str);
-        Py_DECREF(str);
-        if (i == -1) {
-            /* This happens when nobody references the cell */
-            PyErr_Clear();
-            /* Return None */
-            ADDOP_O(c, LOAD_CONST, Py_None, consts);
-        }
-        else {
+        if (c->u->u_ste->ste_needs_class_closure) {
+            /* return the (empty) __class__ cell */
+            str = PyUnicode_InternFromString("__class__");
+            if (str == NULL) {
+                compiler_exit_scope(c);
+                return 0;
+            }
+            i = compiler_lookup_arg(c->u->u_cellvars, str);
+            Py_DECREF(str);
+            assert(i == 0);
             /* Return the cell where to store __class__ */
             ADDOP_I(c, LOAD_CLOSURE, i);
+        }
+        else {
+            assert(PyDict_Size(c->u->u_cellvars) == 0);
+            /* This happens when nobody references the cell. Return None. */
+            ADDOP_O(c, LOAD_CONST, Py_None, consts);
         }
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
         /* create the code object */
@@ -1797,14 +1832,14 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     if (!compiler_enter_scope(c, name, COMPILER_SCOPE_FUNCTION,
                               (void *)e, e->lineno))
         return 0;
@@ -2638,6 +2673,10 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     if (!mangled)
         return 0;
 
+    assert(PyUnicode_CompareWithASCIIString(name, "None") &&
+           PyUnicode_CompareWithASCIIString(name, "True") &&
+           PyUnicode_CompareWithASCIIString(name, "False"));
+
     op = 0;
     optype = OP_NAME;
     scope = PyST_GetScope(c->u->u_ste, mangled);
@@ -2673,7 +2712,9 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     switch (optype) {
     case OP_DEREF:
         switch (ctx) {
-        case Load: op = LOAD_DEREF; break;
+        case Load:
+            op = (c->u->u_ste->ste_type == ClassBlock) ? LOAD_CLASSDEREF : LOAD_DEREF;
+            break;
         case Store: op = STORE_DEREF; break;
         case AugLoad:
         case AugStore:
@@ -3197,12 +3238,18 @@ expr_constant(struct compiler *c, expr_ty e)
     case Name_kind:
         /* optimize away names that can't be reassigned */
         id = PyUnicode_AsUTF8(e->v.Name.id);
-        if (strcmp(id, "True") == 0) return 1;
-        if (strcmp(id, "False") == 0) return 0;
-        if (strcmp(id, "None") == 0) return 0;
-        if (strcmp(id, "__debug__") == 0)
-            return ! c->c_optimize;
-        /* fall through */
+        if (id && strcmp(id, "__debug__") == 0)
+            return !c->c_optimize;
+        return -1;
+    case NameConstant_kind: {
+        PyObject *o = e->v.NameConstant.value;
+        if (o == Py_None)
+            return 0;
+        else if (o == Py_True)
+            return 1;
+        else if (o == Py_False)
+            return 0;
+    }
     default:
         return -1;
     }
@@ -3377,6 +3424,9 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
         break;
     case Ellipsis_kind:
         ADDOP_O(c, LOAD_CONST, Py_Ellipsis, consts);
+        break;
+    case NameConstant_kind:
+        ADDOP_O(c, LOAD_CONST, e->v.NameConstant.value, consts);
         break;
     /* The following exprs can be assignment targets. */
     case Attribute_kind:

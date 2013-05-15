@@ -339,10 +339,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 
      PyAPI_FUNC(PyObject *) PyObject_CallMethodObjArgs(PyObject *o,
                                                        PyObject *method, ...);
-     PyAPI_FUNC(PyObject *) _PyObject_CallMethodObjIdArgs(PyObject *o,
+     PyAPI_FUNC(PyObject *) _PyObject_CallMethodIdObjArgs(PyObject *o,
                                                struct _Py_Identifier *method,
                                                ...);
-
 
        /*
      Call the method named m of object o with a variable number of
@@ -404,8 +403,9 @@ xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx*/
 #define PyObject_Length PyObject_Size
 
 #ifndef Py_LIMITED_API
-     PyAPI_FUNC(Py_ssize_t) _PyObject_LengthHint(PyObject *o, Py_ssize_t);
+     PyAPI_FUNC(int) _PyObject_HasLen(PyObject *o);
 #endif
+PyAPI_FUNC(Py_ssize_t) PyObject_LengthHint(PyObject *o, Py_ssize_t);
 
        /*
      Guess the size of object o using len(o) or o.__length_hint__().
