@@ -34,6 +34,14 @@ def _make_failed_test(classname, methodname, exception, suiteClass):
     TestClass = type(classname, (case.TestCase,), attrs)
     return suiteClass((TestClass(methodname),))
 
+def _make_skipped_test(methodname, exception, suiteClass):
+    @case.skip(str(exception))
+    def testSkipped(self):
+        pass
+    attrs = {methodname: testSkipped}
+    TestClass = type("ModuleSkipped", (case.TestCase,), attrs)
+    return suiteClass((TestClass(methodname),))
+
 def _jython_aware_splitext(path):
     if path.lower().endswith('$py.class'):
         return path[:-9]
@@ -169,6 +177,9 @@ class TestLoader(object):
         The pattern is deliberately not stored as a loader attribute so that
         packages can continue discovery themselves. top_level_dir is stored so
         load_tests does not need to pass this argument in to loader.discover().
+
+        Paths are sorted before being imported to ensure reproducible execution
+        order even on filesystems with non-alphabetical ordering like ext3/4.
         """
         set_implicit_top = False
         if top_level_dir is None and self._top_level_dir is not None:
@@ -245,7 +256,7 @@ class TestLoader(object):
 
     def _find_tests(self, start_dir, pattern):
         """Used by discovery. Yields test suites it loads."""
-        paths = os.listdir(start_dir)
+        paths = sorted(os.listdir(start_dir))
 
         for path in paths:
             full_path = os.path.join(start_dir, path)
@@ -259,6 +270,8 @@ class TestLoader(object):
                 name = self._get_name_from_path(full_path)
                 try:
                     module = self._get_module_from_name(name)
+                except case.SkipTest as e:
+                    yield _make_skipped_test(name, e, self.suiteClass)
                 except:
                     yield _make_failed_import_test(name, self.suiteClass)
                 else:
@@ -291,8 +304,7 @@ class TestLoader(object):
                         # tests loaded from package file
                         yield tests
                     # recurse into the package
-                    for test in self._find_tests(full_path, pattern):
-                        yield test
+                    yield from self._find_tests(full_path, pattern)
                 else:
                     try:
                         yield load_tests(self, tests, pattern)
