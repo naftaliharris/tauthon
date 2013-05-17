@@ -3,7 +3,7 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.3)
+m4_define(PYTHON_VERSION, 3.4)
 
 AC_PREREQ(2.65)
 
@@ -917,6 +917,7 @@ fi
 
 # Other platforms follow
 if test $enable_shared = "yes"; then
+  PY_ENABLE_SHARED=1
   AC_DEFINE(Py_ENABLE_SHARED, 1, [Defined if Python is built as a shared library.])
   case $ac_sys_system in
     CYGWIN*)
@@ -972,6 +973,7 @@ if test $enable_shared = "yes"; then
 
   esac
 else # shared is disabled
+  PY_ENABLE_SHARED=0
   case $ac_sys_system in
     CYGWIN*)
           BLDLIBRARY='$(LIBRARY)'
@@ -1125,6 +1127,8 @@ AC_SUBST(UNIVERSAL_ARCH_FLAGS)
 # tweak BASECFLAGS based on compiler and platform
 case $GCC in
 yes)
+    BASECFLAGS="$BASECFLAGS -Werror=declaration-after-statement"
+
     # Python doesn't violate C99 aliasing rules, but older versions of
     # GCC produce warnings for legal Python code.  Enable
     # -fno-strict-aliasing on versions of GCC that support but produce
@@ -1324,24 +1328,6 @@ fi
 if test "$ac_arch_flags"
 then
 	BASECFLAGS="$BASECFLAGS $ac_arch_flags"
-fi
-
-# Check whether GCC supports PyArg_ParseTuple format
-if test "$GCC" = "yes"
-then
-  AC_MSG_CHECKING(whether gcc supports ParseTuple __format__)
-  save_CFLAGS=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wformat"
-  AC_COMPILE_IFELSE([
-    AC_LANG_PROGRAM([[void f(char*,...)__attribute((format(PyArg_ParseTuple, 1, 2)));]], [[]])
-  ],[
-    AC_DEFINE(HAVE_ATTRIBUTE_FORMAT_PARSETUPLE, 1,
-      [Define if GCC supports __attribute__((format(PyArg_ParseTuple, 2, 3)))])
-    AC_MSG_RESULT(yes)
-  ],[
-    AC_MSG_RESULT(no)
-  ])
-  CFLAGS=$save_CFLAGS
 fi
 
 # On some compilers, pthreads are available without further options
@@ -1566,7 +1552,7 @@ AC_CHECK_HEADERS(linux/netlink.h,,,[
 ])
 
 # On Linux, can.h and can/raw.h require sys/socket.h
-AC_CHECK_HEADERS(linux/can.h linux/can/raw.h,,,[
+AC_CHECK_HEADERS(linux/can.h linux/can/raw.h linux/can/bcm.h,,,[
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
@@ -2814,7 +2800,7 @@ AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
  sigtimedwait sigwait sigwaitinfo snprintf strftime strlcpy symlinkat sync \
  sysconf tcgetpgrp tcsetpgrp tempnam timegm times tmpfile tmpnam tmpnam_r \
  truncate uname unlinkat unsetenv utimensat utimes waitid waitpid wait3 wait4 \
- wcscoll wcsftime wcsxfrm writev _getpty)
+ wcscoll wcsftime wcsxfrm wmemcmp writev _getpty)
 
 AC_CHECK_DECL(dirfd,
     AC_DEFINE(HAVE_DIRFD, 1,
@@ -3954,6 +3940,11 @@ AC_MSG_CHECKING(LDVERSION)
 LDVERSION='$(VERSION)$(ABIFLAGS)'
 AC_MSG_RESULT($LDVERSION)
 
+dnl define LIBPL after ABIFLAGS and LDVERSION is defined.
+AC_SUBST(PY_ENABLE_SHARED)
+LIBPL="${prefix}/lib/python${VERSION}/config-${LDVERSION}"
+AC_SUBST(LIBPL)
+
 # Check whether right shifting a negative integer extends the sign bit
 # or fills with zeros (like the Cray J90, according to Tim Peters).
 AC_MSG_CHECKING(whether right shift extends the sign bit)
@@ -4633,7 +4624,7 @@ if test "$have_gcc_asm_for_x87" = yes; then
 fi
 
 # generate output files
-AC_CONFIG_FILES(Makefile.pre Modules/Setup.config Misc/python.pc)
+AC_CONFIG_FILES(Makefile.pre Modules/Setup.config Misc/python.pc Misc/python-config.sh)
 AC_CONFIG_FILES([Modules/ld_so_aix], [chmod +x Modules/ld_so_aix])
 AC_OUTPUT
 
