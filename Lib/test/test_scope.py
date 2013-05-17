@@ -715,6 +715,19 @@ class ScopeTests(unittest.TestCase):
         def b():
             global a
 
+    def testClassNamespaceOverridesClosure(self):
+        # See #17853.
+        x = 42
+        class X:
+            locals()["x"] = 43
+            y = x
+        self.assertEqual(X.y, 43)
+        class X:
+            locals()["x"] = 43
+            del x
+        self.assertFalse(hasattr(X, "x"))
+        self.assertEqual(x, 42)
+
     @cpython_only
     def testCellLeak(self):
         # Issue 17927.
@@ -742,10 +755,6 @@ class ScopeTests(unittest.TestCase):
         ref = weakref.ref(tester)
         del tester
         self.assertIsNone(ref())
-
-    def test__Class__Global(self):
-        s = "class X:\n    global __class__\n    def f(self): super()"
-        self.assertRaises(SyntaxError, exec, s)
 
 
 def test_main():
