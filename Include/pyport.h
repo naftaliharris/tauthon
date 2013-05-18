@@ -392,9 +392,6 @@ typedef size_t Py_uhash_t;
 #endif
 
 #ifdef HAVE_SYS_STAT_H
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#include <sys/types.h>
-#endif
 #include <sys/stat.h>
 #elif defined(HAVE_STAT_H)
 #include <stat.h>
@@ -835,15 +832,6 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 #endif
 
 /*
- * Add PyArg_ParseTuple format where available.
- */
-#ifdef HAVE_ATTRIBUTE_FORMAT_PARSETUPLE
-#define Py_FORMAT_PARSETUPLE(func,p1,p2) __attribute__((format(func,p1,p2)))
-#else
-#define Py_FORMAT_PARSETUPLE(func,p1,p2)
-#endif
-
-/*
  * Specify alignment on compilers that support it.
  */
 #if defined(__GNUC__) && __GNUC__ >= 3
@@ -879,6 +867,20 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 #else
 #define Py_VA_COPY(x, y) (x) = (y)
 #endif
+#endif
+
+/*
+ * Convenient macros to deal with endianness of the platform. WORDS_BIGENDIAN is
+ * detected by configure and defined in pyconfig.h. The code in pyconfig.h
+ * also takes care of Apple's universal builds.
+ */
+
+#ifdef WORDS_BIGENDIAN
+#define PY_BIG_ENDIAN 1
+#define PY_LITTLE_ENDIAN 0
+#else
+#define PY_BIG_ENDIAN 0
+#define PY_LITTLE_ENDIAN 1
 #endif
 
 #endif /* Py_PYPORT_H */
