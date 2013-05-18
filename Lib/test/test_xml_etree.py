@@ -903,6 +903,134 @@ class ElementTreeTest(unittest.TestCase):
                 self.assertEqual(serialized, expected)
 
 
+class IncrementalParserTest(unittest.TestCase):
+
+    def _feed(self, parser, data, chunk_size=None):
+        if chunk_size is None:
+            parser.data_received(data)
+        else:
+            for i in range(0, len(data), chunk_size):
+                parser.data_received(data[i:i+chunk_size])
+
+    def assert_event_tags(self, parser, expected):
+        events = parser.events()
+        self.assertEqual([(action, elem.tag) for action, elem in events],
+                         expected)
+
+    def test_simple_xml(self):
+        for chunk_size in (None, 1, 5):
+            with self.subTest(chunk_size=chunk_size):
+                parser = ET.IncrementalParser()
+                self.assert_event_tags(parser, [])
+                self._feed(parser, "<!-- comment -->\n", chunk_size)
+                self.assert_event_tags(parser, [])
+                self._feed(parser,
+                           "<root>\n  <element key='value'>text</element",
+                           chunk_size)
+                self.assert_event_tags(parser, [])
+                self._feed(parser, ">\n", chunk_size)
+                self.assert_event_tags(parser, [('end', 'element')])
+                self._feed(parser, "<element>text</element>tail\n", chunk_size)
+                self._feed(parser, "<empty-element/>\n", chunk_size)
+                self.assert_event_tags(parser, [
+                    ('end', 'element'),
+                    ('end', 'empty-element'),
+                    ])
+                self._feed(parser, "</root>\n", chunk_size)
+                self.assert_event_tags(parser, [('end', 'root')])
+                # Receiving EOF sets the `root` attribute
+                self.assertIs(parser.root, None)
+                parser.eof_received()
+                self.assertEqual(parser.root.tag, 'root')
+
+    def test_data_received_while_iterating(self):
+        parser = ET.IncrementalParser()
+        it = parser.events()
+        self._feed(parser, "<root>\n  <element key='value'>text</element>\n")
+        action, elem = next(it)
+        self.assertEqual((action, elem.tag), ('end', 'element'))
+        self._feed(parser, "</root>\n")
+        action, elem = next(it)
+        self.assertEqual((action, elem.tag), ('end', 'root'))
+        with self.assertRaises(StopIteration):
+            next(it)
+
+    def test_simple_xml_with_ns(self):
+        parser = ET.IncrementalParser()
+        self.assert_event_tags(parser, [])
+        self._feed(parser, "<!-- comment -->\n")
+        self.assert_event_tags(parser, [])
+        self._feed(parser, "<root xmlns='namespace'>\n")
+        self.assert_event_tags(parser, [])
+        self._feed(parser, "<element key='value'>text</element")
+        self.assert_event_tags(parser, [])
+        self._feed(parser, ">\n")
+        self.assert_event_tags(parser, [('end', '{namespace}element')])
+        self._feed(parser, "<element>text</element>tail\n")
+        self._feed(parser, "<empty-element/>\n")
+        self.assert_event_tags(parser, [
+            ('end', '{namespace}element'),
+            ('end', '{namespace}empty-element'),
+            ])
+        self._feed(parser, "</root>\n")
+        self.assert_event_tags(parser, [('end', '{namespace}root')])
+        # Receiving EOF sets the `root` attribute
+        self.assertIs(parser.root, None)
+        parser.eof_received()
+        self.assertEqual(parser.root.tag, '{namespace}root')
+
+    def test_events(self):
+        parser = ET.IncrementalParser(events=())
+        self._feed(parser, "<root/>\n")
+        self.assert_event_tags(parser, [])
+
+        parser = ET.IncrementalParser(events=('start', 'end'))
+        self._feed(parser, "<!-- comment -->\n")
+        self.assert_event_tags(parser, [])
+        self._feed(parser, "<root>\n")
+        self.assert_event_tags(parser, [('start', 'root')])
+        self._feed(parser, "<element key='value'>text</element")
+        self.assert_event_tags(parser, [('start', 'element')])
+        self._feed(parser, ">\n")
+        self.assert_event_tags(parser, [('end', 'element')])
+        self._feed(parser,
+                   "<element xmlns='foo'>text<empty-element/></element>tail\n")
+        self.assert_event_tags(parser, [
+            ('start', '{foo}element'),
+            ('start', '{foo}empty-element'),
+            ('end', '{foo}empty-element'),
+            ('end', '{foo}element'),
+            ])
+        self._feed(parser, "</root>")
+        parser.eof_received()
+        self.assertIs(parser.root, None)
+        self.assert_event_tags(parser, [('end', 'root')])
+        self.assertEqual(parser.root.tag, 'root')
+
+        parser = ET.IncrementalParser(events=('start',))
+        self._feed(parser, "<!-- comment -->\n")
+        self.assert_event_tags(parser, [])
+        self._feed(parser, "<root>\n")
+        self.assert_event_tags(parser, [('start', 'root')])
+        self._feed(parser, "<element key='value'>text</element")
+        self.assert_event_tags(parser, [('start', 'element')])
+        self._feed(parser, ">\n")
+        self.assert_event_tags(parser, [])
+        self._feed(parser,
+                   "<element xmlns='foo'>text<empty-element/></element>tail\n")
+        self.assert_event_tags(parser, [
+            ('start', '{foo}element'),
+            ('start', '{foo}empty-element'),
+            ])
+        self._feed(parser, "</root>")
+        parser.eof_received()
+        self.assertEqual(parser.root.tag, 'root')
+
+    def test_unknown_event(self):
+        with self.assertRaises(ValueError):
+            ET.IncrementalParser(events=('start', 'end', 'bogus'))
+
+
 #
 # xinclude tests (samples from appendix C of the xinclude specification)
 
@@ -1406,6 +1534,7 @@ class BugsTest(unittest.TestCase):
         ET.register_namespace('test10777', 'http://myuri/')
         ET.register_namespace('test10777', 'http://myuri/')
 
+
 # --------------------------------------------------------------------
 
 
@@ -1568,6 +1697,11 @@ class ElementFindTest(unittest.TestCase):
         self.assertEqual(e.find('./tag[last()]').attrib['class'], 'd')
         self.assertEqual(e.find('./tag[last()-1]').attrib['class'], 'c')
         self.assertEqual(e.find('./tag[last()-2]').attrib['class'], 'b')
+
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[0]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[-1]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[last()-0]')
+        self.assertRaisesRegex(SyntaxError, 'XPath', e.find, './tag[last()+1]')
 
     def test_findall(self):
         e = ET.XML(SAMPLE_XML)
@@ -2162,6 +2296,18 @@ class IOTest(unittest.TestCase):
             ET.tostring(root, 'utf-16'),
             b''.join(ET.tostringlist(root, 'utf-16')))
 
+    def test_short_empty_elements(self):
+        root = ET.fromstring('<tag>a<x />b<y></y>c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode'),
+            '<tag>a<x />b<y />c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode', short_empty_elements=True),
+            '<tag>a<x />b<y />c</tag>')
+        self.assertEqual(
+            ET.tostring(root, 'unicode', short_empty_elements=False),
+            '<tag>a<x></x>b<y></y>c</tag>')
+
 
 class ParseErrorTest(unittest.TestCase):
     def test_subclass(self):
@@ -2290,6 +2436,7 @@ def test_main(module=None):
         ElementSlicingTest,
         BasicElementTest,
         ElementTreeTest,
+        IncrementalParserTest,
         IOTest,
         ParseErrorTest,
         XIncludeTest,
