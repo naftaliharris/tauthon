@@ -92,6 +92,13 @@ class BaseHTTPServerTestCase(BaseTestCase):
         def do_KEYERROR(self):
             self.send_error(999)
 
+        def do_NOTFOUND(self):
+            self.send_error(404)
+
+        def do_EXPLAINERROR(self):
+            self.send_error(999, "Short Message",
+                            "This is a long \n explaination")
+
         def do_CUSTOM(self):
             self.send_response(999)
             self.send_header('Content-Type', 'text/html')
@@ -203,6 +210,12 @@ class BaseHTTPServerTestCase(BaseTestCase):
         res = self.con.getresponse()
         self.assertEqual(res.status, 999)
 
+    def test_return_explain_error(self):
+        self.con.request('EXPLAINERROR', '/')
+        res = self.con.getresponse()
+        self.assertEqual(res.status, 999)
+        self.assertTrue(int(res.getheader('Content-Length')))
+
     def test_latin1_header(self):
         self.con.request('LATINONEHEADER', '/', headers={
             'X-Special-Incoming':       'Ärger mit Unicode'
@@ -210,6 +223,14 @@ class BaseHTTPServerTestCase(BaseTestCase):
         res = self.con.getresponse()
         self.assertEqual(res.getheader('X-Special'), 'Dängerous Mind')
         self.assertEqual(res.read(), 'Ärger mit Unicode'.encode('utf-8'))
+
+    def test_error_content_length(self):
+        # Issue #16088: standard error responses should have a content-length
+        self.con.request('NOTFOUND', '/')
+        res = self.con.getresponse()
+        self.assertEqual(res.status, 404)
+        data = res.read()
+        self.assertEqual(int(res.getheader('Content-Length')), len(data))
 
 
 class SimpleHTTPServerTestCase(BaseTestCase):
