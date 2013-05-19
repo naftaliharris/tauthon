@@ -52,25 +52,6 @@ _INSTALL_SCHEMES = {
         'scripts': '{base}/Scripts',
         'data': '{base}',
         },
-    'os2': {
-        'stdlib': '{installed_base}/Lib',
-        'platstdlib': '{base}/Lib',
-        'purelib': '{base}/Lib/site-packages',
-        'platlib': '{base}/Lib/site-packages',
-        'include': '{installed_base}/Include',
-        'platinclude': '{installed_base}/Include',
-        'scripts': '{base}/Scripts',
-        'data': '{base}',
-        },
-    'os2_home': {
-        'stdlib': '{userbase}/lib/python{py_version_short}',
-        'platstdlib': '{userbase}/lib/python{py_version_short}',
-        'purelib': '{userbase}/lib/python{py_version_short}/site-packages',
-        'platlib': '{userbase}/lib/python{py_version_short}/site-packages',
-        'include': '{userbase}/include/python{py_version_short}',
-        'scripts': '{userbase}/bin',
-        'data': '{userbase}',
-        },
     'nt_user': {
         'stdlib': '{userbase}/Python{py_version_nodot}',
         'platstdlib': '{userbase}/Python{py_version_nodot}',
@@ -210,7 +191,6 @@ def _getuserbase():
     def joinuser(*args):
         return os.path.expanduser(os.path.join(*args))
 
-    # what about 'os2emx', 'riscos' ?
     if os.name == "nt":
         base = os.environ.get("APPDATA") or "~"
         if env_base:
@@ -369,21 +349,21 @@ def _generate_posix_vars():
     makefile = get_makefile_filename()
     try:
         _parse_makefile(makefile, vars)
-    except IOError as e:
+    except OSError as e:
         msg = "invalid Python installation: unable to open %s" % makefile
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
-        raise IOError(msg)
+        raise OSError(msg)
     # load the installed pyconfig.h:
     config_h = get_config_h_filename()
     try:
         with open(config_h) as f:
             parse_config_h(f, vars)
-    except IOError as e:
+    except OSError as e:
         msg = "invalid Python installation: unable to open %s" % config_h
         if hasattr(e, "strerror"):
             msg = msg + " (%s)" % e.strerror
-        raise IOError(msg)
+        raise OSError(msg)
     # On AIX, there are wrong paths to the linker scripts in the Makefile
     # -- these paths are relative to the Python source, but when installed
     # the scripts are in another directory.
@@ -436,7 +416,6 @@ def _init_non_posix(vars):
     vars['LIBDEST'] = get_path('stdlib')
     vars['BINLIBDEST'] = get_path('platstdlib')
     vars['INCLUDEPY'] = get_path('include')
-    vars['SO'] = '.pyd'
     vars['EXT_SUFFIX'] = '.pyd'
     vars['EXE'] = '.exe'
     vars['VERSION'] = _PY_VERSION_SHORT_NO_DOT
@@ -552,7 +531,7 @@ def get_config_vars(*args):
             # sys.abiflags may not be defined on all platforms.
             _CONFIG_VARS['abiflags'] = ''
 
-        if os.name in ('nt', 'os2'):
+        if os.name == 'nt':
             _init_non_posix(_CONFIG_VARS)
         if os.name == 'posix':
             _init_posix(_CONFIG_VARS)
