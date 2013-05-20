@@ -204,8 +204,11 @@ _PyImport_ReInitLock(void)
     if (import_lock_level > 1) {
         /* Forked as a side effect of import */
         long me = PyThread_get_thread_ident();
-        PyThread_acquire_lock(import_lock, 0);
-        /* XXX: can the previous line fail? */
+        /* The following could fail if the lock is already held, but forking as
+           a side-effect of an import is a) rare, b) nuts, and c) difficult to
+           do thanks to the lock only being held when doing individual module
+           locks per import. */
+        PyThread_acquire_lock(import_lock, NOWAIT_LOCK);
         import_lock_thread = me;
         import_lock_level--;
     } else {
@@ -292,6 +295,30 @@ static char* sys_files[] = {
     NULL
 };
 
+static int
+is_essential_module(PyObject *name)
+{
+    Py_ssize_t name_len;
+    char *name_str = PyUnicode_AsUTF8AndSize(name, &name_len);
+
+    if (name_str == NULL) {
+        PyErr_Clear();
+        return 0;
+    }
+    if (strcmp(name_str, "builtins") == 0)
+        return 1;
+    if (strcmp(name_str, "sys") == 0)
+        return 1;
+    /* These are all needed for stderr to still function */
+    if (strcmp(name_str, "codecs") == 0)
+        return 1;
+    if (strcmp(name_str, "_codecs") == 0)
+        return 1;
+    if (strncmp(name_str, "encodings.", 10) == 0)
+        return 1;
+    return 0;
+}
+
 
 /* Un-initialize things, as good as we can */
 
@@ -371,9 +398,7 @@ PyImport_Cleanup(void)
             if (value->ob_refcnt != 1)
                 continue;
             if (PyUnicode_Check(key) && PyModule_Check(value)) {
-                if (PyUnicode_CompareWithASCIIString(key, "builtins") == 0)
-                    continue;
-                if (PyUnicode_CompareWithASCIIString(key, "sys") == 0)
+                if (is_essential_module(key))
                     continue;
                 if (Py_VerboseFlag)
                     PySys_FormatStderr(
@@ -389,9 +414,7 @@ PyImport_Cleanup(void)
     pos = 0;
     while (PyDict_Next(modules, &pos, &key, &value)) {
         if (PyUnicode_Check(key) && PyModule_Check(value)) {
-            if (PyUnicode_CompareWithASCIIString(key, "builtins") == 0)
-                continue;
-            if (PyUnicode_CompareWithASCIIString(key, "sys") == 0)
+            if (is_essential_module(key))
                 continue;
             if (Py_VerboseFlag)
                 PySys_FormatStderr("# cleanup[2] %U\n", key);
@@ -400,24 +423,28 @@ PyImport_Cleanup(void)
         }
     }
 
-    /* Next, delete sys and builtins (in that order) */
-    value = PyDict_GetItemString(modules, "sys");
-    if (value != NULL && PyModule_Check(value)) {
-        if (Py_VerboseFlag)
-            PySys_WriteStderr("# cleanup sys\n");
-        _PyModule_Clear(value);
-        PyDict_SetItemString(modules, "sys", Py_None);
-    }
-    value = PyDict_GetItemString(modules, "builtins");
-    if (value != NULL && PyModule_Check(value)) {
-        if (Py_VerboseFlag)
-            PySys_WriteStderr("# cleanup builtins\n");
-        _PyModule_Clear(value);
-        PyDict_SetItemString(modules, "builtins", Py_None);
+    /* Collect garbage remaining after deleting the modules. Mostly
+       reference cycles created by classes. */
+    PyGC_Collect();
+
+    /* Dump GC stats before it's too late, since it uses the warnings
+       machinery. */
+    _PyGC_DumpShutdownStats();
+
+    /* Next, delete all remaining modules */
+    pos = 0;
+    while (PyDict_Next(modules, &pos, &key, &value)) {
+        if (PyUnicode_Check(key) && PyModule_Check(value)) {
+            if (Py_VerboseFlag)
+                PySys_FormatStderr("# cleanup[3] %U\n", key);
+            _PyModule_Clear(value);
+            PyDict_SetItem(modules, key, Py_None);
+        }
     }
 
     /* Finally, clear and delete the modules directory */
     PyDict_Clear(modules);
+    _PyGC_CollectNoFail();
     interp->modules = NULL;
     Py_DECREF(modules);
 }
@@ -451,12 +478,12 @@ PyImport_GetMagicTag(void)
 
 /* Magic for extension modules (built-in as well as dynamically
    loaded).  To prevent initializing an extension module more than
-   once, we keep a static dictionary 'extensions' keyed by module name
-   (for built-in modules) or by filename (for dynamically loaded
-   modules), containing these modules.  A copy of the module's
-   dictionary is stored by calling _PyImport_FixupExtensionObject()
-   immediately after the module initialization function succeeds.  A
-   copy can be retrieved from there by calling
+   once, we keep a static dictionary 'extensions' keyed by the tuple
+   (module name, module name)  (for built-in modules) or by
+   (filename, module name) (for dynamically loaded modules), containing these
+   modules.  A copy of the module's dictionary is stored by calling
+   _PyImport_FixupExtensionObject() immediately after the module initialization
+   function succeeds.  A copy can be retrieved from there by calling
    _PyImport_FindExtensionObject().
 
    Modules which do support multiple initialization set their m_size
@@ -469,8 +496,9 @@ int
 _PyImport_FixupExtensionObject(PyObject *mod, PyObject *name,
                                PyObject *filename)
 {
-    PyObject *modules, *dict;
+    PyObject *modules, *dict, *key;
     struct PyModuleDef *def;
+    int res;
     if (extensions == NULL) {
         extensions = PyDict_New();
         if (extensions == NULL)
@@ -507,7 +535,13 @@ _PyImport_FixupExtensionObject(PyObject *mod, PyObject *name,
         if (def->m_base.m_copy == NULL)
             return -1;
     }
-    PyDict_SetItem(extensions, filename, (PyObject*)def);
+    key = PyTuple_Pack(2, filename, name);
+    if (key == NULL)
+        return -1;
+    res = PyDict_SetItem(extensions, key, (PyObject *)def);
+    Py_DECREF(key);
+    if (res < 0)
+        return -1;
     return 0;
 }
 
@@ -527,11 +561,15 @@ _PyImport_FixupBuiltin(PyObject *mod, char *name)
 PyObject *
 _PyImport_FindExtensionObject(PyObject *name, PyObject *filename)
 {
-    PyObject *mod, *mdict;
+    PyObject *mod, *mdict, *key;
     PyModuleDef* def;
     if (extensions == NULL)
         return NULL;
-    def = (PyModuleDef*)PyDict_GetItem(extensions, filename);
+    key = PyTuple_Pack(2, filename, name);
+    if (key == NULL)
+        return NULL;
+    def = (PyModuleDef *)PyDict_GetItem(extensions, key);
+    Py_DECREF(key);
     if (def == NULL)
         return NULL;
     if (def->m_size == -1) {
@@ -690,7 +728,7 @@ PyImport_ExecCodeModuleWithPathnames(char *name, PyObject *co, char *pathname,
                           "no interpreter!");
         }
 
-        pathobj = _PyObject_CallMethodObjIdArgs(interp->importlib,
+        pathobj = _PyObject_CallMethodIdObjArgs(interp->importlib,
                                                 &PyId__get_sourcefile, cpathobj,
                                                 NULL);
         if (pathobj == NULL)
@@ -832,7 +870,7 @@ imp_fix_co_filename(PyObject *self, PyObject *args)
 
 
 /* Forward */
-static struct _frozen * find_frozen(PyObject *);
+static const struct _frozen * find_frozen(PyObject *);
 
 
 /* Helper to test for built-in module */
@@ -969,10 +1007,10 @@ init_builtin(PyObject *name)
 
 /* Frozen modules */
 
-static struct _frozen *
+static const struct _frozen *
 find_frozen(PyObject *name)
 {
-    struct _frozen *p;
+    const struct _frozen *p;
 
     if (name == NULL)
         return NULL;
@@ -989,7 +1027,7 @@ find_frozen(PyObject *name)
 static PyObject *
 get_frozen_object(PyObject *name)
 {
-    struct _frozen *p = find_frozen(name);
+    const struct _frozen *p = find_frozen(name);
     int size;
 
     if (p == NULL) {
@@ -1013,7 +1051,7 @@ get_frozen_object(PyObject *name)
 static PyObject *
 is_frozen_package(PyObject *name)
 {
-    struct _frozen *p = find_frozen(name);
+    const struct _frozen *p = find_frozen(name);
     int size;
 
     if (p == NULL) {
@@ -1040,7 +1078,7 @@ is_frozen_package(PyObject *name)
 int
 PyImport_ImportFrozenModuleObject(PyObject *name)
 {
-    struct _frozen *p;
+    const struct _frozen *p;
     PyObject *co, *m, *path;
     int ispackage;
     int size;
@@ -1427,7 +1465,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
         }
         if (initializing > 0) {
             /* _bootstrap._lock_unlock_module() releases the import lock */
-            value = _PyObject_CallMethodObjIdArgs(interp->importlib,
+            value = _PyObject_CallMethodIdObjArgs(interp->importlib,
                                             &PyId__lock_unlock_module, abs_name,
                                             NULL);
             if (value == NULL)
@@ -1445,7 +1483,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
     }
     else {
         /* _bootstrap._find_and_load() releases the import lock */
-        mod = _PyObject_CallMethodObjIdArgs(interp->importlib,
+        mod = _PyObject_CallMethodIdObjArgs(interp->importlib,
                                             &PyId__find_and_load, abs_name,
                                             builtins_import, NULL);
         if (mod == NULL) {
@@ -1514,7 +1552,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
         }
     }
     else {
-        final_mod = _PyObject_CallMethodObjIdArgs(interp->importlib,
+        final_mod = _PyObject_CallMethodIdObjArgs(interp->importlib,
                                                   &PyId__handle_fromlist, mod,
                                                   fromlist, builtins_import,
                                                   NULL);
@@ -1768,7 +1806,7 @@ static PyObject *
 imp_is_frozen(PyObject *self, PyObject *args)
 {
     PyObject *name;
-    struct _frozen *p;
+    const struct _frozen *p;
     if (!PyArg_ParseTuple(args, "U:is_frozen", &name))
         return NULL;
     p = find_frozen(name);
