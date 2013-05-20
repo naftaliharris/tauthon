@@ -5,6 +5,7 @@
 import io
 import os
 import shlex
+import shutil
 import sys
 import stat
 import subprocess
@@ -83,7 +84,7 @@ def _synthesize(browser, update_tryorder=1):
 
     """
     cmd = browser.split()[0]
-    if not _iscommand(cmd):
+    if not shutil.which(cmd):
         return [None, None]
     name = os.path.basename(cmd)
     try:
@@ -100,38 +101,6 @@ def _synthesize(browser, update_tryorder=1):
         register(browser, None, controller, update_tryorder)
         return [None, controller]
     return [None, None]
-
-
-if sys.platform[:3] == "win":
-    def _isexecutable(cmd):
-        cmd = cmd.lower()
-        if os.path.isfile(cmd) and cmd.endswith((".exe", ".bat")):
-            return True
-        for ext in ".exe", ".bat":
-            if os.path.isfile(cmd + ext):
-                return True
-        return False
-else:
-    def _isexecutable(cmd):
-        if os.path.isfile(cmd):
-            mode = os.stat(cmd)[stat.ST_MODE]
-            if mode & stat.S_IXUSR or mode & stat.S_IXGRP or mode & stat.S_IXOTH:
-                return True
-        return False
-
-def _iscommand(cmd):
-    """Return True if cmd is executable or can be found on the executable
-    search path."""
-    if _isexecutable(cmd):
-        return True
-    path = os.environ.get("PATH")
-    if not path:
-        return False
-    for d in path.split(os.pathsep):
-        exe = os.path.join(d, cmd)
-        if _isexecutable(exe):
-            return True
-    return False
 
 
 # General parent classes
@@ -418,11 +387,11 @@ class Grail(BaseBrowser):
             # need to PING each one until we find one that's live
             try:
                 s.connect(fn)
-            except socket.error:
+            except OSError:
                 # no good; attempt to clean it out, but don't fail:
                 try:
                     os.unlink(fn)
-                except IOError:
+                except OSError:
                     pass
             else:
                 return s
@@ -453,22 +422,22 @@ class Grail(BaseBrowser):
 def register_X_browsers():
 
     # use xdg-open if around
-    if _iscommand("xdg-open"):
+    if shutil.which("xdg-open"):
         register("xdg-open", None, BackgroundBrowser("xdg-open"))
 
     # The default GNOME3 browser
-    if "GNOME_DESKTOP_SESSION_ID" in os.environ and _iscommand("gvfs-open"):
+    if "GNOME_DESKTOP_SESSION_ID" in os.environ and shutil.which("gvfs-open"):
         register("gvfs-open", None, BackgroundBrowser("gvfs-open"))
 
     # The default GNOME browser
-    if "GNOME_DESKTOP_SESSION_ID" in os.environ and _iscommand("gnome-open"):
+    if "GNOME_DESKTOP_SESSION_ID" in os.environ and shutil.which("gnome-open"):
         register("gnome-open", None, BackgroundBrowser("gnome-open"))
 
     # The default KDE browser
-    if "KDE_FULL_SESSION" in os.environ and _iscommand("kfmclient"):
+    if "KDE_FULL_SESSION" in os.environ and shutil.which("kfmclient"):
         register("kfmclient", Konqueror, Konqueror("kfmclient"))
 
-    if _iscommand("x-www-browser"):
+    if shutil.which("x-www-browser"):
         register("x-www-browser", None, BackgroundBrowser("x-www-browser"))
 
     # The Mozilla/Netscape browsers
@@ -476,39 +445,39 @@ def register_X_browsers():
                     "mozilla-firebird", "firebird",
                     "iceweasel", "iceape",
                     "seamonkey", "mozilla", "netscape"):
-        if _iscommand(browser):
+        if shutil.which(browser):
             register(browser, None, Mozilla(browser))
 
     # Konqueror/kfm, the KDE browser.
-    if _iscommand("kfm"):
+    if shutil.which("kfm"):
         register("kfm", Konqueror, Konqueror("kfm"))
-    elif _iscommand("konqueror"):
+    elif shutil.which("konqueror"):
         register("konqueror", Konqueror, Konqueror("konqueror"))
 
     # Gnome's Galeon and Epiphany
     for browser in ("galeon", "epiphany"):
-        if _iscommand(browser):
+        if shutil.which(browser):
             register(browser, None, Galeon(browser))
 
     # Skipstone, another Gtk/Mozilla based browser
-    if _iscommand("skipstone"):
+    if shutil.which("skipstone"):
         register("skipstone", None, BackgroundBrowser("skipstone"))
 
     # Google Chrome/Chromium browsers
     for browser in ("google-chrome", "chrome", "chromium", "chromium-browser"):
-        if _iscommand(browser):
+        if shutil.which(browser):
             register(browser, None, Chrome(browser))
 
     # Opera, quite popular
-    if _iscommand("opera"):
+    if shutil.which("opera"):
         register("opera", None, Opera("opera"))
 
     # Next, Mosaic -- old but still in use.
-    if _iscommand("mosaic"):
+    if shutil.which("mosaic"):
         register("mosaic", None, BackgroundBrowser("mosaic"))
 
     # Grail, the Python browser. Does anybody still use it?
-    if _iscommand("grail"):
+    if shutil.which("grail"):
         register("grail", Grail, None)
 
 # Prefer X browsers if present
@@ -517,18 +486,18 @@ if os.environ.get("DISPLAY"):
 
 # Also try console browsers
 if os.environ.get("TERM"):
-    if _iscommand("www-browser"):
+    if shutil.which("www-browser"):
         register("www-browser", None, GenericBrowser("www-browser"))
     # The Links/elinks browsers <http://artax.karlin.mff.cuni.cz/~mikulas/links/>
-    if _iscommand("links"):
+    if shutil.which("links"):
         register("links", None, GenericBrowser("links"))
-    if _iscommand("elinks"):
+    if shutil.which("elinks"):
         register("elinks", None, Elinks("elinks"))
     # The Lynx browser <http://lynx.isc.org/>, <http://lynx.browser.org/>
-    if _iscommand("lynx"):
+    if shutil.which("lynx"):
         register("lynx", None, GenericBrowser("lynx"))
     # The w3m browser <http://w3m.sourceforge.net/>
-    if _iscommand("w3m"):
+    if shutil.which("w3m"):
         register("w3m", None, GenericBrowser("w3m"))
 
 #
@@ -540,7 +509,7 @@ if sys.platform[:3] == "win":
         def open(self, url, new=0, autoraise=True):
             try:
                 os.startfile(url)
-            except WindowsError:
+            except OSError:
                 # [Error 22] No application is associated with the specified
                 # file for this operation: '<URL>'
                 return False
@@ -558,7 +527,7 @@ if sys.platform[:3] == "win":
                             "Internet Explorer\\IEXPLORE.EXE")
     for browser in ("firefox", "firebird", "seamonkey", "mozilla",
                     "netscape", "opera", iexplore):
-        if _iscommand(browser):
+        if shutil.which(browser):
             register(browser, None, BackgroundBrowser(browser))
 
 #
@@ -642,17 +611,6 @@ if sys.platform == 'darwin':
     register("safari", None, MacOSXOSAScript('safari'), -1)
     register("firefox", None, MacOSXOSAScript('firefox'), -1)
     register("MacOSX", None, MacOSXOSAScript('default'), -1)
-
-
-#
-# Platform support for OS/2
-#
-
-if sys.platform[:3] == "os2" and _iscommand("netscape"):
-    _tryorder = []
-    _browsers = {}
-    register("os2netscape", None,
-             GenericBrowser(["start", "netscape", "%s"]), -1)
 
 
 # OK, now that we know what the default preference orders for each
