@@ -54,7 +54,7 @@ Notes on the availability of these functions:
 
    The name of the operating system dependent module imported.  The following
    names have currently been registered: ``'posix'``, ``'nt'``, ``'mac'``,
-   ``'os2'``, ``'ce'``, ``'java'``.
+   ``'ce'``, ``'java'``.
 
    .. seealso::
       :attr:`sys.platform` has a finer granularity.  :func:`os.uname` gives
@@ -1136,6 +1136,7 @@ or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Window
           O_DIRECTORY
           O_NOFOLLOW
           O_NOATIME
+          O_PATH
 
    These constants are GNU extensions and not present if they are not defined by
    the C library.
@@ -3154,10 +3155,6 @@ operating system.
    Return the set of CPUs the process with PID *pid* (or the current process
    if zero) is restricted to.
 
-   .. seealso::
-      :func:`multiprocessing.cpu_count` returns the number of CPUs in the
-      system.
-
 
 .. _os-path:
 
@@ -3193,6 +3190,13 @@ Miscellaneous System Information
    determine the set of names known to the system.
 
    Availability: Unix.
+
+
+.. function:: cpu_count()
+
+   Return the number of CPUs in the system. Returns None if undetermined.
+
+   .. versionadded:: 3.4
 
 
 .. function:: getloadavg()
