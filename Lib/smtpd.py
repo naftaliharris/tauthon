@@ -137,7 +137,7 @@ class SMTPChannel(asynchat.async_chat):
         self.num_bytes = 0
         try:
             self.peer = conn.getpeername()
-        except socket.error as err:
+        except OSError as err:
             # a race condition  may occur if the other end is closing
             # before we can get the peername
             self.close()
@@ -668,7 +668,7 @@ class PureProxy(SMTPServer):
         except smtplib.SMTPRecipientsRefused as e:
             print('got SMTPRecipientsRefused', file=DEBUGSTREAM)
             refused = e.recipients
-        except (socket.error, smtplib.SMTPException) as e:
+        except (OSError, smtplib.SMTPException) as e:
             print('got', e.__class__, file=DEBUGSTREAM)
             # All recipients were refused.  If the exception had an associated
             # error code, use it.  Otherwise,fake it with a non-triggering
@@ -850,8 +850,7 @@ if __name__ == '__main__':
         nobody = pwd.getpwnam('nobody')[2]
         try:
             os.setuid(nobody)
-        except OSError as e:
-            if e.errno != errno.EPERM: raise
+        except PermissionError:
             print('Cannot setuid "nobody"; try running with -n option.', file=sys.stderr)
             sys.exit(1)
     try:

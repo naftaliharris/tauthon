@@ -84,7 +84,6 @@ def_op('BINARY_XOR', 65)
 def_op('BINARY_OR', 66)
 def_op('INPLACE_POWER', 67)
 def_op('GET_ITER', 68)
-def_op('STORE_LOCALS', 69)
 
 def_op('PRINT_EXPR', 70)
 def_op('LOAD_BUILD_CLASS', 71)
@@ -178,6 +177,9 @@ jrel_op('SETUP_WITH', 143)
 def_op('LIST_APPEND', 145)
 def_op('SET_ADD', 146)
 def_op('MAP_ADD', 147)
+
+def_op('LOAD_CLASSDEREF', 148)
+hasfree.append(148)
 
 def_op('EXTENDED_ARG', 144)
 EXTENDED_ARG = 144
