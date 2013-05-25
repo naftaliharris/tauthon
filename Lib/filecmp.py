@@ -13,10 +13,14 @@ import os
 import stat
 from itertools import filterfalse
 
-__all__ = ["cmp", "dircmp", "cmpfiles"]
+__all__ = ['cmp', 'dircmp', 'cmpfiles', 'DEFAULT_IGNORES']
 
 _cache = {}
 BUFSIZE = 8*1024
+
+DEFAULT_IGNORES = [
+    'RCS', 'CVS', 'tags', '.git', '.hg', '.bzr', '_darcs', '__pycache__']
+
 
 def cmp(f1, f2, shallow=True):
     """Compare two files.
@@ -80,7 +84,7 @@ class dircmp:
     dircmp(a, b, ignore=None, hide=None)
       A and B are directories.
       IGNORE is a list of names to ignore,
-        defaults to ['RCS', 'CVS', 'tags'].
+        defaults to DEFAULT_IGNORES.
       HIDE is a list of names to hide,
         defaults to [os.curdir, os.pardir].
 
@@ -116,7 +120,7 @@ class dircmp:
         else:
             self.hide = hide
         if ignore is None:
-            self.ignore = ['RCS', 'CVS', 'tags'] # Names ignored in comparison
+            self.ignore = DEFAULT_IGNORES
         else:
             self.ignore = ignore
 
@@ -147,12 +151,12 @@ class dircmp:
             ok = 1
             try:
                 a_stat = os.stat(a_path)
-            except os.error as why:
+            except OSError as why:
                 # print('Can\'t stat', a_path, ':', why.args[1])
                 ok = 0
             try:
                 b_stat = os.stat(b_path)
-            except os.error as why:
+            except OSError as why:
                 # print('Can\'t stat', b_path, ':', why.args[1])
                 ok = 0
 
@@ -268,7 +272,7 @@ def cmpfiles(a, b, common, shallow=True):
 def _cmp(a, b, sh, abs=abs, cmp=cmp):
     try:
         return not abs(cmp(a, b, sh))
-    except os.error:
+    except OSError:
         return 2
 
 

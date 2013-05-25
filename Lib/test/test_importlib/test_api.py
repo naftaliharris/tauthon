@@ -1,6 +1,7 @@
 from . import util
 import imp
 import importlib
+from importlib import _bootstrap
 from importlib import machinery
 import sys
 from test import support
@@ -115,6 +116,20 @@ class FindLoaderTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 importlib.find_loader(name)
 
+    def test_sys_modules_loader_is_not_set(self):
+        # Should raise ValueError
+        # Issue #17099
+        name = 'some_mod'
+        with util.uncache(name):
+            module = imp.new_module(name)
+            try:
+                del module.__loader__
+            except AttributeError:
+                pass
+            sys.modules[name] = module
+            with self.assertRaises(ValueError):
+                importlib.find_loader(name)
+
     def test_success(self):
         # Return the loader found on sys.meta_path.
         name = 'some_mod'
@@ -182,21 +197,13 @@ class StartupTests(unittest.TestCase):
         # Issue #17098: all modules should have __loader__ defined.
         for name, module in sys.modules.items():
             if isinstance(module, types.ModuleType):
-                if name in sys.builtin_module_names:
-                    self.assertEqual(importlib.machinery.BuiltinImporter,
-                                     module.__loader__)
-                elif imp.is_frozen(name):
-                    self.assertEqual(importlib.machinery.FrozenImporter,
-                                     module.__loader__)
-
-def test_main():
-    from test.support import run_unittest
-    run_unittest(ImportModuleTests,
-                 FindLoaderTests,
-                 InvalidateCacheTests,
-                 FrozenImportlibTests,
-                 StartupTests)
+                self.assertTrue(hasattr(module, '__loader__'),
+                                '{!r} lacks a __loader__ attribute'.format(name))
+                if importlib.machinery.BuiltinImporter.find_module(name):
+                    self.assertIsNot(module.__loader__, None)
+                elif importlib.machinery.FrozenImporter.find_module(name):
+                    self.assertIsNot(module.__loader__, None)
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
