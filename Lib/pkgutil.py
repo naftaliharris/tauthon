@@ -121,8 +121,7 @@ def walk_packages(path=None, prefix='', onerror=None):
                 # don't traverse path items we've seen before
                 path = [p for p in path if not seen(p)]
 
-                for item in walk_packages(path, name+'.', onerror):
-                    yield item
+                yield from walk_packages(path, name+'.', onerror)
 
 
 def iter_modules(path=None, prefix=''):
@@ -350,9 +349,8 @@ class ImpLoader:
                     self.file.close()
             elif mod_type==imp.PY_COMPILED:
                 if os.path.exists(self.filename[:-1]):
-                    f = open(self.filename[:-1], 'r')
-                    self.source = f.read()
-                    f.close()
+                    with open(self.filename[:-1], 'r') as f:
+                        self.source = f.read()
             elif mod_type==imp.PKG_DIRECTORY:
                 self.source = self._get_delegate().get_source()
         return self.source
@@ -456,8 +454,7 @@ def iter_importers(fullname=""):
         if path is None:
             return
     else:
-        for importer in sys.meta_path:
-            yield importer
+        yield from sys.meta_path
         path = sys.path
     for item in path:
         yield get_importer(item)
@@ -589,16 +586,16 @@ def extend_path(path, name):
         if os.path.isfile(pkgfile):
             try:
                 f = open(pkgfile)
-            except IOError as msg:
+            except OSError as msg:
                 sys.stderr.write("Can't open %s: %s\n" %
                                  (pkgfile, msg))
             else:
-                for line in f:
-                    line = line.rstrip('\n')
-                    if not line or line.startswith('#'):
-                        continue
-                    path.append(line) # Don't check for existence!
-                f.close()
+                with f:
+                    for line in f:
+                        line = line.rstrip('\n')
+                        if not line or line.startswith('#'):
+                            continue
+                        path.append(line) # Don't check for existence!
 
     return path
 
