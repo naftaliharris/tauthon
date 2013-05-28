@@ -33,7 +33,7 @@ if not hasattr(select, "epoll"):
 
 try:
     select.epoll()
-except IOError as e:
+except OSError as e:
     if e.errno == errno.ENOSYS:
         raise unittest.SkipTest("kernel doesn't support epoll()")
     raise
@@ -56,7 +56,7 @@ class TestEPoll(unittest.TestCase):
         client.setblocking(False)
         try:
             client.connect(('127.0.0.1', self.serverSocket.getsockname()[1]))
-        except socket.error as e:
+        except OSError as e:
             self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             raise AssertionError("Connect should have raised EINPROGRESS")
@@ -87,6 +87,13 @@ class TestEPoll(unittest.TestCase):
         self.assertRaises(TypeError, select.epoll, ['foo'])
         self.assertRaises(TypeError, select.epoll, {})
 
+    def test_context_manager(self):
+        with select.epoll(16) as ep:
+            self.assertGreater(ep.fileno(), 0)
+            self.assertFalse(ep.closed)
+        self.assertTrue(ep.closed)
+        self.assertRaises(ValueError, ep.fileno)
+
     def test_add(self):
         server, client = self._connected_pair()
 
@@ -115,12 +122,12 @@ class TestEPoll(unittest.TestCase):
             # ValueError: file descriptor cannot be a negative integer (-1)
             self.assertRaises(ValueError, ep.register, -1,
                 select.EPOLLIN | select.EPOLLOUT)
-            # IOError: [Errno 9] Bad file descriptor
-            self.assertRaises(IOError, ep.register, 10000,
+            # OSError: [Errno 9] Bad file descriptor
+            self.assertRaises(OSError, ep.register, 10000,
                 select.EPOLLIN | select.EPOLLOUT)
             # registering twice also raises an exception
             ep.register(server, select.EPOLLIN | select.EPOLLOUT)
-            self.assertRaises(IOError, ep.register, server,
+            self.assertRaises(OSError, ep.register, server,
                 select.EPOLLIN | select.EPOLLOUT)
         finally:
             ep.close()
@@ -142,7 +149,7 @@ class TestEPoll(unittest.TestCase):
         ep.close()
         try:
             ep2.poll(1, 4)
-        except IOError as e:
+        except OSError as e:
             self.assertEqual(e.args[0], errno.EBADF, e)
         else:
             self.fail("epoll on closed fd didn't raise EBADF")
