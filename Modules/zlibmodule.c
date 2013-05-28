@@ -161,7 +161,7 @@ PyZlib_compress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     zst.avail_out = length + length/1000 + 12 + 1;
 
@@ -251,7 +251,7 @@ PyZlib_decompress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     if (r_strlen <= 0)
         r_strlen = 1;
@@ -573,7 +573,7 @@ save_unconsumed_input(compobject *self, int err)
             Py_ssize_t old_size = PyBytes_GET_SIZE(self->unused_data);
             Py_ssize_t new_size;
             PyObject *new_data;
-            if (self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
+            if ((Py_ssize_t)self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
                 PyErr_NoMemory();
                 return -1;
             }
@@ -1266,20 +1266,20 @@ PyInit_zlib(void)
         Py_INCREF(ZlibError);
         PyModule_AddObject(m, "error", ZlibError);
     }
-    PyModule_AddIntConstant(m, "MAX_WBITS", MAX_WBITS);
-    PyModule_AddIntConstant(m, "DEFLATED", DEFLATED);
-    PyModule_AddIntConstant(m, "DEF_MEM_LEVEL", DEF_MEM_LEVEL);
-    PyModule_AddIntConstant(m, "Z_BEST_SPEED", Z_BEST_SPEED);
-    PyModule_AddIntConstant(m, "Z_BEST_COMPRESSION", Z_BEST_COMPRESSION);
-    PyModule_AddIntConstant(m, "Z_DEFAULT_COMPRESSION", Z_DEFAULT_COMPRESSION);
-    PyModule_AddIntConstant(m, "Z_FILTERED", Z_FILTERED);
-    PyModule_AddIntConstant(m, "Z_HUFFMAN_ONLY", Z_HUFFMAN_ONLY);
-    PyModule_AddIntConstant(m, "Z_DEFAULT_STRATEGY", Z_DEFAULT_STRATEGY);
+    PyModule_AddIntMacro(m, MAX_WBITS);
+    PyModule_AddIntMacro(m, DEFLATED);
+    PyModule_AddIntMacro(m, DEF_MEM_LEVEL);
+    PyModule_AddIntMacro(m, Z_BEST_SPEED);
+    PyModule_AddIntMacro(m, Z_BEST_COMPRESSION);
+    PyModule_AddIntMacro(m, Z_DEFAULT_COMPRESSION);
+    PyModule_AddIntMacro(m, Z_FILTERED);
+    PyModule_AddIntMacro(m, Z_HUFFMAN_ONLY);
+    PyModule_AddIntMacro(m, Z_DEFAULT_STRATEGY);
 
-    PyModule_AddIntConstant(m, "Z_FINISH", Z_FINISH);
-    PyModule_AddIntConstant(m, "Z_NO_FLUSH", Z_NO_FLUSH);
-    PyModule_AddIntConstant(m, "Z_SYNC_FLUSH", Z_SYNC_FLUSH);
-    PyModule_AddIntConstant(m, "Z_FULL_FLUSH", Z_FULL_FLUSH);
+    PyModule_AddIntMacro(m, Z_FINISH);
+    PyModule_AddIntMacro(m, Z_NO_FLUSH);
+    PyModule_AddIntMacro(m, Z_SYNC_FLUSH);
+    PyModule_AddIntMacro(m, Z_FULL_FLUSH);
 
     ver = PyUnicode_FromString(ZLIB_VERSION);
     if (ver != NULL)
