@@ -362,7 +362,7 @@ typedef struct _typeobject {
     PyBufferProcs *tp_as_buffer;
 
     /* Flags to define presence of optional/expanded features */
-    long tp_flags;
+    unsigned long tp_flags;
 
     const char *tp_doc; /* Documentation string */
 
@@ -428,7 +428,7 @@ typedef struct{
     const char* name;
     int basicsize;
     int itemsize;
-    int flags;
+    unsigned int flags;
     PyType_Slot *slots; /* terminated by slot==0. */
 } PyType_Spec;
 
@@ -470,7 +470,7 @@ PyAPI_DATA(PyTypeObject) PyType_Type; /* built-in 'type' */
 PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
 PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
 
-PyAPI_FUNC(long) PyType_GetFlags(PyTypeObject*);
+PyAPI_FUNC(unsigned long) PyType_GetFlags(PyTypeObject*);
 
 #define PyType_Check(op) \
     PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS)
@@ -603,44 +603,43 @@ given type object has a specified feature.
 */
 
 /* Set if the type object is dynamically allocated */
-#define Py_TPFLAGS_HEAPTYPE (1L<<9)
+#define Py_TPFLAGS_HEAPTYPE (1UL << 9)
 
 /* Set if the type allows subclassing */
-#define Py_TPFLAGS_BASETYPE (1L<<10)
+#define Py_TPFLAGS_BASETYPE (1UL << 10)
 
 /* Set if the type is 'ready' -- fully initialized */
-#define Py_TPFLAGS_READY (1L<<12)
+#define Py_TPFLAGS_READY (1UL << 12)
 
 /* Set while the type is being 'readied', to prevent recursive ready calls */
-#define Py_TPFLAGS_READYING (1L<<13)
+#define Py_TPFLAGS_READYING (1UL << 13)
 
 /* Objects support garbage collection (see objimp.h) */
-#define Py_TPFLAGS_HAVE_GC (1L<<14)
+#define Py_TPFLAGS_HAVE_GC (1UL << 14)
 
 /* These two bits are preserved for Stackless Python, next after this is 17 */
 #ifdef STACKLESS
-#define Py_TPFLAGS_HAVE_STACKLESS_EXTENSION (3L<<15)
+#define Py_TPFLAGS_HAVE_STACKLESS_EXTENSION (3UL << 15)
 #else
 #define Py_TPFLAGS_HAVE_STACKLESS_EXTENSION 0
 #endif
 
 /* Objects support type attribute cache */
-#define Py_TPFLAGS_HAVE_VERSION_TAG   (1L<<18)
-#define Py_TPFLAGS_VALID_VERSION_TAG  (1L<<19)
+#define Py_TPFLAGS_HAVE_VERSION_TAG   (1UL << 18)
+#define Py_TPFLAGS_VALID_VERSION_TAG  (1UL << 19)
 
 /* Type is abstract and cannot be instantiated */
-#define Py_TPFLAGS_IS_ABSTRACT (1L<<20)
+#define Py_TPFLAGS_IS_ABSTRACT (1UL << 20)
 
 /* These flags are used to determine if a type is a subclass. */
-#define Py_TPFLAGS_INT_SUBCLASS         (1L<<23)
-#define Py_TPFLAGS_LONG_SUBCLASS        (1L<<24)
-#define Py_TPFLAGS_LIST_SUBCLASS        (1L<<25)
-#define Py_TPFLAGS_TUPLE_SUBCLASS       (1L<<26)
-#define Py_TPFLAGS_BYTES_SUBCLASS       (1L<<27)
-#define Py_TPFLAGS_UNICODE_SUBCLASS     (1L<<28)
-#define Py_TPFLAGS_DICT_SUBCLASS        (1L<<29)
-#define Py_TPFLAGS_BASE_EXC_SUBCLASS    (1L<<30)
-#define Py_TPFLAGS_TYPE_SUBCLASS        (1L<<31)
+#define Py_TPFLAGS_LONG_SUBCLASS        (1UL << 24)
+#define Py_TPFLAGS_LIST_SUBCLASS        (1UL << 25)
+#define Py_TPFLAGS_TUPLE_SUBCLASS       (1UL << 26)
+#define Py_TPFLAGS_BYTES_SUBCLASS       (1UL << 27)
+#define Py_TPFLAGS_UNICODE_SUBCLASS     (1UL << 28)
+#define Py_TPFLAGS_DICT_SUBCLASS        (1UL << 29)
+#define Py_TPFLAGS_BASE_EXC_SUBCLASS    (1UL << 30)
+#define Py_TPFLAGS_TYPE_SUBCLASS        (1UL << 31)
 
 #define Py_TPFLAGS_DEFAULT  ( \
                  Py_TPFLAGS_HAVE_STACKLESS_EXTENSION | \
@@ -681,12 +680,6 @@ is not considered to be a reference to the type object, to save
 complications in the deallocation function.  (This is actually a
 decision that's up to the implementer of each new type so if you want,
 you can count such references to the type object.)
-
-*** WARNING*** The Py_DECREF macro must have a side-effect-free argument
-since it may evaluate its argument multiple times.  (The alternative
-would be to mace it a proper function or assign it to a global temporary
-variable first, both of which are slower; and in a multi-threaded
-environment the global variable trick is not safe.)
 */
 
 /* First define a pile of simple helper macros, one set per special
@@ -765,15 +758,16 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
 
 #define Py_INCREF(op) (                         \
     _Py_INC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-    ((PyObject*)(op))->ob_refcnt++)
+    ((PyObject *)(op))->ob_refcnt++)
 
 #define Py_DECREF(op)                                   \
     do {                                                \
+        PyObject *_py_decref_tmp = (PyObject *)(op);    \
         if (_Py_DEC_REFTOTAL  _Py_REF_DEBUG_COMMA       \
-        --((PyObject*)(op))->ob_refcnt != 0)            \
-            _Py_CHECK_REFCNT(op)                        \
+        --(_py_decref_tmp)->ob_refcnt != 0)             \
+            _Py_CHECK_REFCNT(_py_decref_tmp)            \
         else                                            \
-        _Py_Dealloc((PyObject *)(op));                  \
+        _Py_Dealloc(_py_decref_tmp);                    \
     } while (0)
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
@@ -812,16 +806,27 @@ PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
  */
 #define Py_CLEAR(op)                            \
     do {                                        \
-        if (op) {                               \
-            PyObject *_py_tmp = (PyObject *)(op);               \
+        PyObject *_py_tmp = (PyObject *)(op);   \
+        if (_py_tmp != NULL) {                  \
             (op) = NULL;                        \
             Py_DECREF(_py_tmp);                 \
         }                                       \
     } while (0)
 
 /* Macros to use in case the object pointer may be NULL: */
-#define Py_XINCREF(op) do { if ((op) == NULL) ; else Py_INCREF(op); } while (0)
-#define Py_XDECREF(op) do { if ((op) == NULL) ; else Py_DECREF(op); } while (0)
+#define Py_XINCREF(op)                                \
+    do {                                              \
+        PyObject *_py_xincref_tmp = (PyObject *)(op); \
+        if (_py_xincref_tmp != NULL)                  \
+            Py_INCREF(_py_xincref_tmp);               \
+    } while (0)                                    
+
+#define Py_XDECREF(op)                                \
+    do {                                              \
+        PyObject *_py_xdecref_tmp = (PyObject *)(op); \
+        if (_py_xdecref_tmp != NULL)                  \
+            Py_DECREF(_py_xdecref_tmp);               \
+    } while (0)
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
