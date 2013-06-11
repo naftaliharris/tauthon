@@ -26,7 +26,8 @@ probably additional platforms, as long as OpenSSL is installed on that platform.
 
    Some behavior may be platform dependent, since calls are made to the
    operating system socket APIs.  The installed version of OpenSSL may also
-   cause variations in behavior.
+   cause variations in behavior. For example, TLSv1.1 and TLSv1.2 come with
+   openssl version 1.0.1.
 
 This section documents the objects and functions in the ``ssl`` module; for more
 general information about TLS, SSL, and certificates, the reader is referred to
@@ -177,14 +178,16 @@ instead.
 
      .. table::
 
-       ========================  =========  =========  ==========  =========
-        *client* / **server**    **SSLv2**  **SSLv3**  **SSLv23**  **TLSv1**
-       ------------------------  ---------  ---------  ----------  ---------
-        *SSLv2*                    yes        no         yes         no
-        *SSLv3*                    no         yes        yes         no
-        *SSLv23*                   yes        no         yes         no
-        *TLSv1*                    no         no         yes         yes
-       ========================  =========  =========  ==========  =========
+       ========================  =========  =========  ==========  =========  ===========  ===========
+        *client* / **server**    **SSLv2**  **SSLv3**  **SSLv23**  **TLSv1**  **TLSv1.1**  **TLSv1.2**
+       ------------------------  ---------  ---------  ----------  ---------  -----------  -----------
+        *SSLv2*                    yes        no         yes         no         no         no
+        *SSLv3*                    no         yes        yes         no         no         no
+        *SSLv23*                   yes        no         yes         no         no         no
+        *TLSv1*                    no         no         yes         yes        no         no
+        *TLSv1.1*                  no         no         yes         no         yes        no
+        *TLSv1.2*                  no         no         yes         no         no         yes
+       ========================  =========  =========  ==========  =========  ===========  ===========
 
    .. note::
 
@@ -340,6 +343,37 @@ Certificate handling
    Given a certificate as an ASCII PEM string, returns a DER-encoded sequence of
    bytes for that same certificate.
 
+.. function:: get_default_verify_paths()
+
+   Returns a named tuple with paths to OpenSSL's default cafile and capath.
+   The paths are the same as used by
+   :meth:`SSLContext.set_default_verify_paths`. The return value is a
+   :term:`named tuple` ``DefaultVerifyPaths``:
+
+   * :attr:`cafile` - resolved path to cafile or None if the file doesn't exist,
+   * :attr:`capath` - resolved path to capath or None if the directory doesn't exist,
+   * :attr:`openssl_cafile_env` - OpenSSL's environment key that points to a cafile,
+   * :attr:`openssl_cafile` - hard coded path to a cafile,
+   * :attr:`openssl_capath_env` - OpenSSL's environment key that points to a capath,
+   * :attr:`openssl_capath` - hard coded path to a capath directory
+
+   .. versionadded:: 3.4
+
+.. function:: enum_cert_store(store_name, cert_type='certificate')
+
+   Retrieve certificates from Windows' system cert store. *store_name* may be
+   one of ``CA``, ``ROOT`` or ``MY``. Windows may provide additional cert
+   stores, too. *cert_type* is either ``certificate`` for X.509 certificates
+   or ``crl`` for X.509 certificate revocation lists.
+
+   The function returns a list of (bytes, encoding_type) tuples. The
+   encoding_type flag can be interpreted with :const:`X509_ASN_ENCODING` or
+   :const:`PKCS_7_ASN_ENCODING`.
+
+   Availability: Windows.
+
+   .. versionadded:: 3.4
+
 Constants
 ^^^^^^^^^
 
@@ -401,9 +435,25 @@ Constants
 
 .. data:: PROTOCOL_TLSv1
 
-   Selects TLS version 1 as the channel encryption protocol.  This is the most
+   Selects TLS version 1.0 as the channel encryption protocol.
+
+.. data:: PROTOCOL_TLSv1_1
+
+
+   Selects TLS version 1.1 as the channel encryption protocol.
+   Available only with openssl version 1.0.1+.
+
+   .. versionadded:: 3.4
+
+.. data:: PROTOCOL_TLSv1_2
+
+
+   Selects TLS version 1.2 as the channel encryption protocol. This is the most
    modern version, and probably the best choice for maximum protection, if both
    sides can speak it.
+   Available only with openssl version 1.0.1+.
+
+   .. versionadded:: 3.4
 
 .. data:: OP_ALL
 
@@ -436,6 +486,22 @@ Constants
    choosing TLSv1 as the protocol version.
 
    .. versionadded:: 3.2
+
+.. data:: OP_NO_TLSv1_1
+
+   Prevents a TLSv1.1 connection. This option is only applicable in conjunction
+   with :const:`PROTOCOL_SSLv23`. It prevents the peers from choosing TLSv1.1 as
+   the protocol version. Available only with openssl version 1.0.1+.
+
+   .. versionadded:: 3.4
+
+.. data:: OP_NO_TLSv1_2
+
+   Prevents a TLSv1.2 connection. This option is only applicable in conjunction
+   with :const:`PROTOCOL_SSLv23`. It prevents the peers from choosing TLSv1.2 as
+   the protocol version. Available only with openssl version 1.0.1+.
+
+   .. versionadded:: 3.4
 
 .. data:: OP_CIPHER_SERVER_PREFERENCE
 
@@ -532,6 +598,28 @@ Constants
     '0x9080bf'
 
    .. versionadded:: 3.2
+
+.. data:: ALERT_DESCRIPTION_HANDSHAKE_FAILURE
+          ALERT_DESCRIPTION_INTERNAL_ERROR
+          ALERT_DESCRIPTION_*
+
+   Alert Descriptions from :rfc:`5246` and others. The `IANA TLS Alert Registry
+   <http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-6>`_
+   contains this list and references to the RFCs where their meaning is defined.
+
+   Used as the return value of the callback function in
+   :meth:`SSLContext.set_servername_callback`.
+
+   .. versionadded:: 3.4
+
+.. data:: X509_ASN_ENCODING
+          PKCS_7_ASN_ENCODING
+
+   Encoding flags for :func:`enum_cert_store`.
+
+   Availability: Windows.
+
+   .. versionadded:: 3.4
 
 
 SSL Sockets
@@ -785,6 +873,56 @@ to speed up repeated connections from the same clients.
    False.
 
    .. versionadded:: 3.3
+
+.. method:: SSLContext.set_servername_callback(server_name_callback)
+
+   Register a callback function that will be called after the TLS Client Hello
+   handshake message has been received by the SSL/TLS server when the TLS client
+   specifies a server name indication. The server name indication mechanism
+   is specified in :rfc:`6066` section 3 - Server Name Indication.
+
+   Only one callback can be set per ``SSLContext``.  If *server_name_callback*
+   is ``None`` then the callback is disabled. Calling this function a
+   subsequent time will disable the previously registered callback.
+
+   The callback function, *server_name_callback*, will be called with three
+   arguments; the first being the :class:`ssl.SSLSocket`, the second is a string
+   that represents the server name that the client is intending to communicate
+   (or :const:`None` if the TLS Client Hello does not contain a server name)
+   and the third argument is the original :class:`SSLContext`. The server name
+   argument is the IDNA decoded server name.
+
+   A typical use of this callback is to change the :class:`ssl.SSLSocket`'s
+   :attr:`SSLSocket.context` attribute to a new object of type
+   :class:`SSLContext` representing a certificate chain that matches the server
+   name.
+
+   Due to the early negotiation phase of the TLS connection, only limited
+   methods and attributes are usable like
+   :meth:`SSLSocket.selected_npn_protocol` and :attr:`SSLSocket.context`.
+   :meth:`SSLSocket.getpeercert`, :meth:`SSLSocket.getpeercert`,
+   :meth:`SSLSocket.cipher` and :meth:`SSLSocket.compress` methods require that
+   the TLS connection has progressed beyond the TLS Client Hello and therefore
+   will not contain return meaningful values nor can they be called safely.
+
+   The *server_name_callback* function must return ``None`` to allow the
+   TLS negotiation to continue.  If a TLS failure is required, a constant
+   :const:`ALERT_DESCRIPTION_* <ALERT_DESCRIPTION_INTERNAL_ERROR>` can be
+   returned.  Other return values will result in a TLS fatal error with
+   :const:`ALERT_DESCRIPTION_INTERNAL_ERROR`.
+
+   If there is a IDNA decoding error on the server name, the TLS connection
+   will terminate with an :const:`ALERT_DESCRIPTION_INTERNAL_ERROR` fatal TLS
+   alert message to the client.
+
+   If an exception is raised from the *server_name_callback* function the TLS
+   connection will terminate with a fatal TLS alert message
+   :const:`ALERT_DESCRIPTION_HANDSHAKE_FAILURE`.
+
+   This method will raise :exc:`NotImplementedError` if the OpenSSL library
+   had OPENSSL_NO_TLSEXT defined when it was built.
+
+   .. versionadded:: 3.4
 
 .. method:: SSLContext.load_dh_params(dhfile)
 
@@ -1319,3 +1457,12 @@ use the ``openssl ciphers`` command on your system.
 
    `RFC 4366: Transport Layer Security (TLS) Extensions <http://www.ietf.org/rfc/rfc4366>`_
        Blake-Wilson et. al.
+
+   `RFC 5246: The Transport Layer Security (TLS) Protocol Version 1.2 <http://www.ietf.org/rfc/rfc5246>`_
+       T. Dierks et. al.
+
+   `RFC 6066: Transport Layer Security (TLS) Extensions <http://www.ietf.org/rfc/rfc6066>`_
+       D. Eastlake
+
+   `IANA TLS: Transport Layer Security (TLS) Parameters <http://www.iana.org/assignments/tls-parameters/tls-parameters.xml>`_
+       IANA

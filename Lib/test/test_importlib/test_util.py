@@ -2,22 +2,98 @@ from importlib import util
 from . import util as test_util
 import imp
 import sys
+from test import support
 import types
 import unittest
+import warnings
+
+
+class ModuleToLoadTests(unittest.TestCase):
+
+    module_name = 'ModuleManagerTest_module'
+
+    def setUp(self):
+        support.unload(self.module_name)
+        self.addCleanup(support.unload, self.module_name)
+
+    def test_new_module(self):
+        # Test a new module is created, inserted into sys.modules, has
+        # __initializing__ set to True after entering the context manager,
+        # and __initializing__ set to False after exiting.
+        with util.module_to_load(self.module_name) as module:
+            self.assertIn(self.module_name, sys.modules)
+            self.assertIs(sys.modules[self.module_name], module)
+            self.assertTrue(module.__initializing__)
+        self.assertFalse(module.__initializing__)
+
+    def test_new_module_failed(self):
+        # Test the module is removed from sys.modules.
+        try:
+            with util.module_to_load(self.module_name) as module:
+                self.assertIn(self.module_name, sys.modules)
+                raise exception
+        except Exception:
+            self.assertNotIn(self.module_name, sys.modules)
+        else:
+            self.fail('importlib.util.module_to_load swallowed an exception')
+
+    def test_reload(self):
+        # Test that the same module is in sys.modules.
+        created_module = imp.new_module(self.module_name)
+        sys.modules[self.module_name] = created_module
+        with util.module_to_load(self.module_name) as module:
+            self.assertIs(module, created_module)
+
+    def test_reload_failed(self):
+        # Test that the module was left in sys.modules.
+        created_module = imp.new_module(self.module_name)
+        sys.modules[self.module_name] = created_module
+        try:
+            with util.module_to_load(self.module_name) as module:
+                raise Exception
+        except Exception:
+            self.assertIn(self.module_name, sys.modules)
+        else:
+            self.fail('importlib.util.module_to_load swallowed an exception')
+
+    def test_reset_name(self):
+        # If reset_name is true then module.__name__ = name, else leave it be.
+        odd_name = 'not your typical name'
+        created_module = imp.new_module(self.module_name)
+        created_module.__name__ = odd_name
+        sys.modules[self.module_name] = created_module
+        with util.module_to_load(self.module_name) as module:
+            self.assertEqual(module.__name__, self.module_name)
+        created_module.__name__ = odd_name
+        with util.module_to_load(self.module_name, reset_name=False) as module:
+            self.assertEqual(module.__name__, odd_name)
 
 
 class ModuleForLoaderTests(unittest.TestCase):
 
     """Tests for importlib.util.module_for_loader."""
 
+    @staticmethod
+    def module_for_loader(func):
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', PendingDeprecationWarning)
+            return util.module_for_loader(func)
+
+    def test_warning(self):
+        # Should raise a PendingDeprecationWarning when used.
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', PendingDeprecationWarning)
+            with self.assertRaises(PendingDeprecationWarning):
+                func = util.module_for_loader(lambda x: x)
+
     def return_module(self, name):
-        fxn = util.module_for_loader(lambda self, module: module)
+        fxn = self.module_for_loader(lambda self, module: module)
         return fxn(self, name)
 
     def raise_exception(self, name):
         def to_wrap(self, module):
             raise ImportError
-        fxn = util.module_for_loader(to_wrap)
+        fxn = self.module_for_loader(to_wrap)
         try:
             fxn(self, name)
         except ImportError:
@@ -35,12 +111,23 @@ class ModuleForLoaderTests(unittest.TestCase):
 
     def test_reload(self):
         # Test that a module is reused if already in sys.modules.
+        class FakeLoader:
+            def is_package(self, name):
+                return True
+            @self.module_for_loader
+            def load_module(self, module):
+                return module
         name = 'a.b.c'
         module = imp.new_module('a.b.c')
+        module.__loader__ = 42
+        module.__package__ = 42
         with test_util.uncache(name):
             sys.modules[name] = module
-            returned_module = self.return_module(name)
+            loader = FakeLoader()
+            returned_module = loader.load_module(name)
             self.assertIs(returned_module, sys.modules[name])
+            self.assertEqual(module.__loader__, loader)
+            self.assertEqual(module.__package__, name)
 
     def test_new_module_failure(self):
         # Test that a module is removed from sys.modules if added but an
@@ -61,7 +148,7 @@ class ModuleForLoaderTests(unittest.TestCase):
 
     def test_decorator_attrs(self):
         def fxn(self, module): pass
-        wrapped = util.module_for_loader(fxn)
+        wrapped = self.module_for_loader(fxn)
         self.assertEqual(wrapped.__name__, fxn.__name__)
         self.assertEqual(wrapped.__qualname__, fxn.__qualname__)
 
@@ -87,7 +174,7 @@ class ModuleForLoaderTests(unittest.TestCase):
                 self._pkg = is_package
             def is_package(self, name):
                 return self._pkg
-            @util.module_for_loader
+            @self.module_for_loader
             def load_module(self, module):
                 return module
 
@@ -162,6 +249,37 @@ class SetPackageTests(unittest.TestCase):
         self.assertEqual(wrapped.__qualname__, fxn.__qualname__)
 
 
+class SetLoaderTests(unittest.TestCase):
+
+    """Tests importlib.util.set_loader()."""
+
+    class DummyLoader:
+        @util.set_loader
+        def load_module(self, module):
+            return self.module
+
+    def test_no_attribute(self):
+        loader = self.DummyLoader()
+        loader.module = imp.new_module('blah')
+        try:
+            del loader.module.__loader__
+        except AttributeError:
+            pass
+        self.assertEqual(loader, loader.load_module('blah').__loader__)
+
+    def test_attribute_is_None(self):
+        loader = self.DummyLoader()
+        loader.module = imp.new_module('blah')
+        loader.module.__loader__ = None
+        self.assertEqual(loader, loader.load_module('blah').__loader__)
+
+    def test_not_reset(self):
+        loader = self.DummyLoader()
+        loader.module = imp.new_module('blah')
+        loader.module.__loader__ = 42
+        self.assertEqual(42, loader.load_module('blah').__loader__)
+
+
 class ResolveNameTests(unittest.TestCase):
 
     """Tests importlib.util.resolve_name()."""
@@ -195,14 +313,5 @@ class ResolveNameTests(unittest.TestCase):
             util.resolve_name('..bacon', 'spam')
 
 
-def test_main():
-    from test import support
-    support.run_unittest(
-            ModuleForLoaderTests,
-            SetPackageTests,
-            ResolveNameTests
-        )
-
-
 if __name__ == '__main__':
-    test_main()
+    unittest.main()

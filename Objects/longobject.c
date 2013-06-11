@@ -89,11 +89,6 @@ maybe_small_long(PyLongObject *v)
  */
 #define FIVEARY_CUTOFF 8
 
-#undef MIN
-#undef MAX
-#define MAX(x, y) ((x) < (y) ? (y) : (x))
-#define MIN(x, y) ((x) > (y) ? (y) : (x))
-
 #define SIGCHECK(PyTryBlock)                    \
     do {                                        \
         if (PyErr_CheckSignals()) PyTryBlock    \
@@ -954,9 +949,6 @@ PyObject *
 PyLong_FromVoidPtr(void *p)
 {
 #if SIZEOF_VOID_P <= SIZEOF_LONG
-    /* special-case null pointer */
-    if (!p)
-        return PyLong_FromLong(0);
     return PyLong_FromUnsignedLong((unsigned long)(Py_uintptr_t)p);
 #else
 
@@ -966,9 +958,6 @@ PyLong_FromVoidPtr(void *p)
 #if SIZEOF_LONG_LONG < SIZEOF_VOID_P
 #   error "PyLong_FromVoidPtr: sizeof(PY_LONG_LONG) < sizeof(void*)"
 #endif
-    /* special-case null pointer */
-    if (!p)
-        return PyLong_FromLong(0);
     return PyLong_FromUnsignedLongLong((unsigned PY_LONG_LONG)(Py_uintptr_t)p);
 #endif /* SIZEOF_VOID_P <= SIZEOF_LONG */
 
@@ -1014,7 +1003,6 @@ PyLong_AsVoidPtr(PyObject *vv)
  * rewritten to use the newer PyLong_{As,From}ByteArray API.
  */
 
-#define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0-(unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
 /* Create a new long int object from a C PY_LONG_LONG int. */
@@ -1167,7 +1155,6 @@ PyLong_AsLongLong(PyObject *vv)
 {
     PyLongObject *v;
     PY_LONG_LONG bytes;
-    int one = 1;
     int res;
 
     if (vv == NULL) {
@@ -1202,7 +1189,7 @@ PyLong_AsLongLong(PyObject *vv)
     case 1: return v->ob_digit[0];
     }
     res = _PyLong_AsByteArray((PyLongObject *)vv, (unsigned char *)&bytes,
-                              SIZEOF_LONG_LONG, IS_LITTLE_ENDIAN, 1);
+                              SIZEOF_LONG_LONG, PY_LITTLE_ENDIAN, 1);
 
     /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
     if (res < 0)
@@ -1219,7 +1206,6 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
 {
     PyLongObject *v;
     unsigned PY_LONG_LONG bytes;
-    int one = 1;
     int res;
 
     if (vv == NULL) {
@@ -1238,7 +1224,7 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
     }
 
     res = _PyLong_AsByteArray((PyLongObject *)vv, (unsigned char *)&bytes,
-                              SIZEOF_LONG_LONG, IS_LITTLE_ENDIAN, 0);
+                              SIZEOF_LONG_LONG, PY_LITTLE_ENDIAN, 0);
 
     /* Plan 9 can't handle PY_LONG_LONG in ? : expressions */
     if (res < 0)
@@ -1314,7 +1300,6 @@ PyLong_AsUnsignedLongLongMask(register PyObject *op)
         return (unsigned PY_LONG_LONG)-1;
     }
 }
-#undef IS_LITTLE_ENDIAN
 
 /* Get a C long long int from a long int object or any object that has an
    __int__ method.
@@ -1676,7 +1661,6 @@ long_to_decimal_string_internal(PyObject *aa,
         else                                                          \
             p = (TYPE*)PyUnicode_DATA(str) + strlen;                  \
                                                                       \
-        *p = '\0';                                                    \
         /* pout[0] through pout[size-2] contribute exactly            \
            _PyLong_DECIMAL_SHIFT digits each */                       \
         for (i=0; i < size - 1; i++) {                                \
@@ -3040,7 +3024,7 @@ kmul_split(PyLongObject *n,
     Py_ssize_t size_lo, size_hi;
     const Py_ssize_t size_n = ABS(Py_SIZE(n));
 
-    size_lo = MIN(size_n, size);
+    size_lo = Py_MIN(size_n, size);
     size_hi = size_n - size_lo;
 
     if ((hi = _PyLong_New(size_hi)) == NULL)
@@ -3311,7 +3295,7 @@ k_lopsided_mul(PyLongObject *a, PyLongObject *b)
     nbdone = 0;
     while (bsize > 0) {
         PyLongObject *product;
-        const Py_ssize_t nbtouse = MIN(bsize, asize);
+        const Py_ssize_t nbtouse = Py_MIN(bsize, asize);
 
         /* Multiply the next slice of b by a. */
         memcpy(bslice->ob_digit, b->ob_digit + nbdone,
@@ -3602,7 +3586,7 @@ long_true_divide(PyObject *v, PyObject *w)
         goto underflow_or_zero;
 
     /* Choose value for shift; see comments for step 1 above. */
-    shift = MAX(diff, DBL_MIN_EXP) - DBL_MANT_DIG - 2;
+    shift = Py_MAX(diff, DBL_MIN_EXP) - DBL_MANT_DIG - 2;
 
     inexact = 0;
 
@@ -3673,7 +3657,7 @@ long_true_divide(PyObject *v, PyObject *w)
     x_bits = (x_size-1)*PyLong_SHIFT+bits_in_digit(x->ob_digit[x_size-1]);
 
     /* The number of extra bits that have to be rounded away. */
-    extra_bits = MAX(x_bits, DBL_MIN_EXP - shift) - DBL_MANT_DIG;
+    extra_bits = Py_MAX(x_bits, DBL_MIN_EXP - shift) - DBL_MANT_DIG;
     assert(extra_bits == 2 || extra_bits == 3);
 
     /* Round by directly modifying the low digit of x. */
@@ -4101,7 +4085,7 @@ v_complement(digit *z, digit *a, Py_ssize_t m)
 
 static PyObject *
 long_bitwise(PyLongObject *a,
-             int op,  /* '&', '|', '^' */
+             char op,  /* '&', '|', '^' */
              PyLongObject *b)
 {
     int nega, negb, negz;
@@ -4276,8 +4260,7 @@ static PyObject *
 long_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     PyObject *obase = NULL, *x = NULL;
-    long base;
-    int overflow;
+    Py_ssize_t base;
     static char *kwlist[] = {"x", "base", 0};
 
     if (type != &PyLong_Type)
@@ -4296,10 +4279,10 @@ long_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (obase == NULL)
         return PyNumber_Long(x);
 
-    base = PyLong_AsLongAndOverflow(obase, &overflow);
+    base = PyNumber_AsSsize_t(obase, NULL);
     if (base == -1 && PyErr_Occurred())
         return NULL;
-    if (overflow || (base != 0 && base < 2) || base > 36) {
+    if ((base != 0 && base < 2) || base > 36) {
         PyErr_SetString(PyExc_ValueError,
                         "int() base must be >= 2 and <= 36");
         return NULL;
@@ -4391,7 +4374,7 @@ long__format__(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
 
-    _PyUnicodeWriter_Init(&writer, 0);
+    _PyUnicodeWriter_Init(&writer);
     ret = _PyLong_FormatAdvancedWriter(
         &writer,
         self,

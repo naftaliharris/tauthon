@@ -158,14 +158,48 @@ class ProcessTestCase(BaseTestCase):
                 stderr=subprocess.STDOUT)
         self.assertIn(b'BDFL', output)
 
+    def test_check_output_stdin_arg(self):
+        # check_output() can be called with stdin set to a file
+        tf = tempfile.TemporaryFile()
+        self.addCleanup(tf.close)
+        tf.write(b'pear')
+        tf.seek(0)
+        output = subprocess.check_output(
+                [sys.executable, "-c",
+                 "import sys; sys.stdout.write(sys.stdin.read().upper())"],
+                stdin=tf)
+        self.assertIn(b'PEAR', output)
+
+    def test_check_output_input_arg(self):
+        # check_output() can be called with input set to a string
+        output = subprocess.check_output(
+                [sys.executable, "-c",
+                 "import sys; sys.stdout.write(sys.stdin.read().upper())"],
+                input=b'pear')
+        self.assertIn(b'PEAR', output)
+
     def test_check_output_stdout_arg(self):
-        # check_output() function stderr redirected to stdout
+        # check_output() refuses to accept 'stdout' argument
         with self.assertRaises(ValueError) as c:
             output = subprocess.check_output(
                     [sys.executable, "-c", "print('will not be run')"],
                     stdout=sys.stdout)
             self.fail("Expected ValueError when stdout arg supplied.")
         self.assertIn('stdout', c.exception.args[0])
+
+    def test_check_output_stdin_with_input_arg(self):
+        # check_output() refuses to accept 'stdin' with 'input'
+        tf = tempfile.TemporaryFile()
+        self.addCleanup(tf.close)
+        tf.write(b'pear')
+        tf.seek(0)
+        with self.assertRaises(ValueError) as c:
+            output = subprocess.check_output(
+                    [sys.executable, "-c", "print('will not be run')"],
+                    stdin=tf, input=b'hare')
+            self.fail("Expected ValueError when stdin and input args supplied.")
+        self.assertIn('stdin', c.exception.args[0])
+        self.assertIn('input', c.exception.args[0])
 
     def test_check_output_timeout(self):
         # check_output() function with timeout arg
@@ -977,8 +1011,7 @@ class ProcessTestCase(BaseTestCase):
         # value for that limit, but Windows has 2048, so we loop
         # 1024 times (each call leaked two fds).
         for i in range(1024):
-            # Windows raises IOError.  Others raise OSError.
-            with self.assertRaises(EnvironmentError) as c:
+            with self.assertRaises(OSError) as c:
                 subprocess.Popen(['nonexisting_i_hope'],
                                  stdout=subprocess.PIPE,
                                  stderr=subprocess.PIPE)
@@ -1231,7 +1264,7 @@ class POSIXProcessTestCase(BaseTestCase):
         try:
             p = subprocess.Popen([sys.executable, "-c", ""],
                                  preexec_fn=raise_it)
-        except RuntimeError as e:
+        except subprocess.SubprocessError as e:
             self.assertTrue(
                     subprocess._posixsubprocess,
                     "Expected a ValueError from the preexec_fn")
@@ -1271,9 +1304,10 @@ class POSIXProcessTestCase(BaseTestCase):
         """Issue16140: Don't double close pipes on preexec error."""
 
         def raise_it():
-            raise RuntimeError("force the _execute_child() errpipe_data path.")
+            raise subprocess.SubprocessError(
+                    "force the _execute_child() errpipe_data path.")
 
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(subprocess.SubprocessError):
             self._TestExecuteChildPopen(
                         self, [sys.executable, "-c", "pass"],
                         stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -1636,12 +1670,12 @@ class POSIXProcessTestCase(BaseTestCase):
             # Pure Python implementations keeps the message
             self.assertIsNone(subprocess._posixsubprocess)
             self.assertEqual(str(err), "surrogate:\uDCff")
-        except RuntimeError as err:
+        except subprocess.SubprocessError as err:
             # _posixsubprocess uses a default message
             self.assertIsNotNone(subprocess._posixsubprocess)
             self.assertEqual(str(err), "Exception occurred in preexec_fn.")
         else:
-            self.fail("Expected ValueError or RuntimeError")
+            self.fail("Expected ValueError or subprocess.SubprocessError")
 
     def test_undecodable_env(self):
         for key, value in (('test', 'abc\uDCFF'), ('test\uDCFF', '42')):
@@ -1928,7 +1962,7 @@ class POSIXProcessTestCase(BaseTestCase):
         # let some time for the process to exit, and create a new Popen: this
         # should trigger the wait() of p
         time.sleep(0.2)
-        with self.assertRaises(EnvironmentError) as c:
+        with self.assertRaises(OSError) as c:
             with subprocess.Popen(['nonexisting_i_hope'],
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE) as proc:
