@@ -68,7 +68,15 @@ class ImportTests(unittest.TestCase):
     def tearDown(self):
         unload(TESTFN)
 
-    setUp = tearDown
+    def test_import_raises_ModuleNotFoundError(self):
+        with self.assertRaises(ModuleNotFoundError):
+            import something_that_should_not_exist_anywhere
+
+    def test_from_import_raises_ModuleNotFoundError(self):
+        with self.assertRaises(ModuleNotFoundError):
+            from something_that_should_not_exist_anywhere import blah
+        with self.assertRaises(ModuleNotFoundError):
+            from importlib import something_that_should_not_exist_anywhere
 
     def test_case_sensitivity(self):
         # Brief digression to test that import is case-sensitive:  if we got
@@ -126,16 +134,6 @@ class ImportTests(unittest.TestCase):
                     test_with_extension(ext)
         finally:
             del sys.path[0]
-
-    @skip_if_dont_write_bytecode
-    def test_bug7732(self):
-        source = TESTFN + '.py'
-        os.mkdir(source)
-        try:
-            self.assertRaisesRegex(ImportError, '^No module',
-                imp.find_module, TESTFN, ["."])
-        finally:
-            os.rmdir(source)
 
     def test_module_with_large_stack(self, module='longlist'):
         # Regression test for http://bugs.python.org/issue561858.
@@ -497,7 +495,7 @@ func_filename = func.__code__.co_filename
             header = f.read(12)
             code = marshal.load(f)
         constants = list(code.co_consts)
-        foreign_code = test_main.__code__
+        foreign_code = importlib.import_module.__code__
         pos = constants.index(1)
         constants[pos] = foreign_code
         code = type(code)(code.co_argcount, code.co_kwonlyargcount,
@@ -1024,16 +1022,5 @@ class ImportTracebackTests(unittest.TestCase):
             importlib.SourceLoader.load_module = old_load_module
 
 
-def test_main(verbose=None):
-    run_unittest(ImportTests, PycacheTests, FilePermissionTests,
-                 PycRewritingTests, PathsTests, RelativeImportTests,
-                 OverridingImportBuiltinTests,
-                 ImportlibBootstrapTests,
-                 TestSymbolicallyLinkedPackage,
-                 ImportTracebackTests)
-
-
 if __name__ == '__main__':
-    # Test needs to be a package, so we can do relative imports.
-    from test.test_import import test_main
-    test_main()
+    unittest.main()

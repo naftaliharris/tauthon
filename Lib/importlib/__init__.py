@@ -14,7 +14,7 @@ import sys
 
 try:
     import _frozen_importlib as _bootstrap
-except ImportError:
+except ModuleNotFoundError:
     from . import _bootstrap
     _bootstrap._setup(sys, _imp)
 else:
@@ -68,6 +68,8 @@ def find_loader(name, path=None):
             return loader
     except KeyError:
         pass
+    except AttributeError:
+        raise ValueError('{}.__loader__ is not set'.format(name))
     return _bootstrap._find_module(name, path)
 
 

@@ -53,6 +53,7 @@ Richard Chamberlain, for the first implementation of textdoc.
 
 import builtins
 import imp
+import importlib._bootstrap
 import importlib.machinery
 import inspect
 import io
@@ -226,7 +227,7 @@ def synopsis(filename, cache={}):
     if lastupdate is None or lastupdate < mtime:
         try:
             file = tokenize.open(filename)
-        except IOError:
+        except OSError:
             # module can't be opened, so skip it
             return None
         binary_suffixes = importlib.machinery.BYTECODE_SUFFIXES[:]
@@ -269,18 +270,17 @@ def importfile(path):
     """Import a Python source file or compiled file given its path."""
     magic = imp.get_magic()
     with open(path, 'rb') as file:
-        if file.read(len(magic)) == magic:
-            kind = imp.PY_COMPILED
-        else:
-            kind = imp.PY_SOURCE
-        file.seek(0)
-        filename = os.path.basename(path)
-        name, ext = os.path.splitext(filename)
-        try:
-            module = imp.load_module(name, file, path, (ext, 'r', kind))
-        except:
-            raise ErrorDuringImport(path, sys.exc_info())
-    return module
+        is_bytecode = magic == file.read(len(magic))
+    filename = os.path.basename(path)
+    name, ext = os.path.splitext(filename)
+    if is_bytecode:
+        loader = importlib._bootstrap.SourcelessFileLoader(name, path)
+    else:
+        loader = importlib._bootstrap.SourceFileLoader(name, path)
+    try:
+        return loader.load_module(name)
+    except:
+        raise ErrorDuringImport(path, sys.exc_info())
 
 def safeimport(path, forceload=0, cache={}):
     """Import a module; handle errors; return None if the module isn't found.
@@ -317,7 +317,7 @@ def safeimport(path, forceload=0, cache={}):
         elif exc is SyntaxError:
             # A SyntaxError occurred before we could execute the module.
             raise ErrorDuringImport(value.filename, info)
-        elif exc is ImportError and value.name == path:
+        elif issubclass(exc, ImportError) and value.name == path:
             # No such module in the path.
             return None
         else:
@@ -1396,7 +1396,7 @@ def getpager():
             return lambda text: pipepager(text, os.environ['PAGER'])
     if os.environ.get('TERM') in ('dumb', 'emacs'):
         return plainpager
-    if sys.platform == 'win32' or sys.platform.startswith('os2'):
+    if sys.platform == 'win32':
         return lambda text: tempfilepager(plain(text), 'more <')
     if hasattr(os, 'system') and os.system('(less) 2>/dev/null') == 0:
         return lambda text: pipepager(text, 'less')
@@ -1422,16 +1422,15 @@ def pipepager(text, cmd):
     try:
         pipe.write(text)
         pipe.close()
-    except IOError:
+    except OSError:
         pass # Ignore broken pipes caused by quitting the pager program.
 
 def tempfilepager(text, cmd):
     """Page through text by invoking a program on a temporary file."""
     import tempfile
     filename = tempfile.mktemp()
-    file = open(filename, 'w')
-    file.write(text)
-    file.close()
+    with open(filename, 'w') as file:
+        file.write(text)
     try:
         os.system(cmd + ' "' + filename + '"')
     finally:
@@ -1850,10 +1849,10 @@ Enter the name of any module, keyword, or topic to get help on writing
 Python programs and using Python modules.  To quit this help utility and
 return to the interpreter, just type "quit".
 
-To get a list of available modules, keywords, or topics, type "modules",
-"keywords", or "topics".  Each module also comes with a one-line summary
-of what it does; to list the modules whose summaries contain a given word
-such as "spam", type "modules spam".
+To get a list of available modules, keywords, symbols, or topics, type
+"modules", "keywords", "symbols", or "topics".  Each module also comes
+with a one-line summary of what it does; to list the modules whose name
+or summary contain a given string such as "spam", type "modules spam".
 ''' % tuple([sys.version[:3]]*2))
 
     def list(self, items, columns=4, width=80):
@@ -1894,7 +1893,7 @@ Here is a list of available topics.  Enter any topic name to get more help.
     def showtopic(self, topic, more_xrefs=''):
         try:
             import pydoc_data.topics
-        except ImportError:
+        except ModuleNotFoundError:
             self.output.write('''
 Sorry, topic and keyword documentation is not available because the
 module "pydoc_data.topics" could not be found.
@@ -1934,7 +1933,7 @@ module "pydoc_data.topics" could not be found.
         """
         try:
             import pydoc_data.topics
-        except ImportError:
+        except ModuleNotFoundError:
             return('''
 Sorry, topic and keyword documentation is not available because the
 module "pydoc_data.topics" could not be found.
@@ -1958,9 +1957,10 @@ module "pydoc_data.topics" could not be found.
     def listmodules(self, key=''):
         if key:
             self.output.write('''
-Here is a list of matching modules.  Enter any module name to get more help.
+Here is a list of modules whose name or summary contains '{}'.
+If there are any, enter a module name to get more help.
 
-''')
+'''.format(key))
             apropos(key)
         else:
             self.output.write('''
@@ -1979,34 +1979,10 @@ Please wait a moment while I gather a list of all available modules...
             self.list(modules.keys())
             self.output.write('''
 Enter any module name to get more help.  Or, type "modules spam" to search
-for modules whose descriptions contain the word "spam".
+for modules whose name or summary contain the string "spam".
 ''')
 
 help = Helper()
-
-class Scanner:
-    """A generic tree iterator."""
-    def __init__(self, roots, children, descendp):
-        self.roots = roots[:]
-        self.state = []
-        self.children = children
-        self.descendp = descendp
-
-    def next(self):
-        if not self.state:
-            if not self.roots:
-                return None
-            root = self.roots.pop(0)
-            self.state = [(root, self.children(root))]
-        node, children = self.state[-1]
-        if not children:
-            self.state.pop()
-            return self.next()
-        child = children.pop(0)
-        if self.descendp(child):
-            self.state.append((child, self.children(child)))
-        return child
-
 
 class ModuleScanner:
     """An interruptible scanner that searches module synopses."""
