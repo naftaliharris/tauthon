@@ -12,20 +12,19 @@ from _imp import (lock_held, acquire_lock, release_lock,
                   _fix_co_filename)
 try:
     from _imp import load_dynamic
-except ImportError:
+except ModuleNotFoundError:
     # Platform doesn't support dynamic loading.
     load_dynamic = None
 
-# Directly exposed by this module
-from importlib._bootstrap import new_module
-from importlib._bootstrap import cache_from_source, source_from_cache
+from importlib._bootstrap import SourcelessFileLoader, _ERR_MSG
 
-
-from importlib import _bootstrap
 from importlib import machinery
+from importlib import util
+import importlib
 import os
 import sys
 import tokenize
+import types
 import warnings
 
 
@@ -42,14 +41,60 @@ PY_CODERESOURCE = 8
 IMP_HOOK = 9
 
 
+def new_module(name):
+    """**DEPRECATED**
+
+    Create a new module.
+
+    The module is not entered into sys.modules.
+
+    """
+    return types.ModuleType(name)
+
+
 def get_magic():
-    """Return the magic number for .pyc or .pyo files."""
-    return _bootstrap._MAGIC_BYTES
+    """**DEPRECATED**
+
+    Return the magic number for .pyc or .pyo files.
+    """
+    return util.MAGIC_NUMBER
 
 
 def get_tag():
     """Return the magic tag for .pyc or .pyo files."""
     return sys.implementation.cache_tag
+
+
+def cache_from_source(path, debug_override=None):
+    """**DEPRECATED**
+
+    Given the path to a .py file, return the path to its .pyc/.pyo file.
+
+    The .py file does not need to exist; this simply returns the path to the
+    .pyc/.pyo file calculated as if the .py file were imported.  The extension
+    will be .pyc unless sys.flags.optimize is non-zero, then it will be .pyo.
+
+    If debug_override is not None, then it must be a boolean and is used in
+    place of sys.flags.optimize.
+
+    If sys.implementation.cache_tag is None then NotImplementedError is raised.
+
+    """
+    return util.cache_from_source(path, debug_override)
+
+
+def source_from_cache(path):
+    """**DEPRECATED**
+
+    Given the path to a .pyc./.pyo file, return the path to its .py file.
+
+    The .pyc/.pyo file does not need to exist; this simply returns the path to
+    the .py file calculated to correspond to the .pyc/.pyo file.  If path does
+    not conform to PEP 3147 format, ValueError will be raised. If
+    sys.implementation.cache_tag is None then NotImplementedError is raised.
+
+    """
+    return util.source_from_cache(path)
 
 
 def get_suffixes():
@@ -101,7 +146,7 @@ class _HackedGetData:
             return super().get_data(path)
 
 
-class _LoadSourceCompatibility(_HackedGetData, _bootstrap.SourceFileLoader):
+class _LoadSourceCompatibility(_HackedGetData, machinery.SourceFileLoader):
 
     """Compatibility support for implementing load_source()."""
 
@@ -115,12 +160,11 @@ def load_source(name, pathname, file=None):
     module = sys.modules[name]
     # To allow reloading to potentially work, use a non-hacked loader which
     # won't rely on a now-closed file object.
-    module.__loader__ = _bootstrap.SourceFileLoader(name, pathname)
+    module.__loader__ = machinery.SourceFileLoader(name, pathname)
     return module
 
 
-class _LoadCompiledCompatibility(_HackedGetData,
-        _bootstrap.SourcelessFileLoader):
+class _LoadCompiledCompatibility(_HackedGetData, SourcelessFileLoader):
 
     """Compatibility support for implementing load_compiled()."""
 
@@ -134,7 +178,7 @@ def load_compiled(name, pathname, file=None):
     module = sys.modules[name]
     # To allow reloading to potentially work, use a non-hacked loader which
     # won't rely on a now-closed file object.
-    module.__loader__ = _bootstrap.SourcelessFileLoader(name, pathname)
+    module.__loader__ = SourcelessFileLoader(name, pathname)
     return module
 
 
@@ -152,7 +196,7 @@ def load_package(name, path):
                 break
         else:
             raise ValueError('{!r} is not a package'.format(path))
-    return _bootstrap.SourceFileLoader(name, path).load_module(name)
+    return machinery.SourceFileLoader(name, path).load_module(name)
 
 
 def load_module(name, file, filename, details):
@@ -236,7 +280,7 @@ def find_module(name, path=None):
                 continue
             break  # Break out of outer loop when breaking out of inner loop.
     else:
-        raise ImportError(_bootstrap._ERR_MSG.format(name), name=name)
+        raise ImportError(_ERR_MSG.format(name), name=name)
 
     encoding = None
     if mode == 'U':
@@ -246,31 +290,12 @@ def find_module(name, path=None):
     return file, file_path, (suffix, mode, type_)
 
 
-_RELOADING = {}
-
 def reload(module):
-    """Reload the module and return it.
+    """**DEPRECATED**
+
+    Reload the module and return it.
 
     The module must have been successfully imported before.
 
     """
-    if not module or type(module) != type(sys):
-        raise TypeError("reload() argument must be module")
-    name = module.__name__
-    if name not in sys.modules:
-        msg = "module {} not in sys.modules"
-        raise ImportError(msg.format(name), name=name)
-    if name in _RELOADING:
-        return _RELOADING[name]
-    _RELOADING[name] = module
-    try:
-        parent_name = name.rpartition('.')[0]
-        if parent_name and parent_name not in sys.modules:
-            msg = "parent {!r} not in sys.modules"
-            raise ImportError(msg.format(parentname), name=parent_name)
-        return module.__loader__.load_module(name)
-    finally:
-        try:
-            del _RELOADING[name]
-        except KeyError:
-            pass
+    return importlib.reload(module)
