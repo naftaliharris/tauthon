@@ -149,7 +149,7 @@ import sys
 try:
     from collections import namedtuple as _namedtuple
     DecimalTuple = _namedtuple('DecimalTuple', 'sign digits exponent')
-except ImportError:
+except ModuleNotFoundError:
     DecimalTuple = lambda *args: args
 
 # Rounding
@@ -430,7 +430,7 @@ _rounding_modes = (ROUND_DOWN, ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_CEILING,
 
 try:
     import threading
-except ImportError:
+except ModuleNotFoundError:
     # Python was compiled without threads; create a mock object instead
     class MockThreading(object):
         def local(self, sys=sys):
@@ -703,8 +703,7 @@ class Decimal(object):
 
         raise TypeError("Cannot convert %r to Decimal" % value)
 
-    # @classmethod, but @decorator is not valid Python 2.3 syntax, so
-    # don't use it (see notes on Py2.3 compatibility at top of file)
+    @classmethod
     def from_float(cls, f):
         """Converts a float to a decimal number, exactly.
 
@@ -743,7 +742,6 @@ class Decimal(object):
             return result
         else:
             return cls(result)
-    from_float = classmethod(from_float)
 
     def _isnan(self):
         """Returns whether the number is not actually one.
@@ -6149,7 +6147,7 @@ del re
 # don't care too much if locale isn't present.
 try:
     import locale as _locale
-except ImportError:
+except ModuleNotFoundError:
     pass
 
 def _parse_format_specifier(format_spec, _localeconv=None):
@@ -6393,7 +6391,7 @@ del sys
 
 try:
     import _decimal
-except ImportError:
+except ModuleNotFoundError:
     pass
 else:
     s1 = set(dir())

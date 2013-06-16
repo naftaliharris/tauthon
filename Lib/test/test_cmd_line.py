@@ -62,6 +62,34 @@ class CmdLineTest(unittest.TestCase):
         opts = eval(out.splitlines()[0])
         self.assertEqual(opts, {'a': True, 'b': 'c,d=e'})
 
+    def test_showrefcount(self):
+        def run_python(*args):
+            # this is similar to assert_python_ok but doesn't strip
+            # the refcount from stderr.  It can be replaced once
+            # assert_python_ok stops doing that.
+            cmd = [sys.executable]
+            cmd.extend(args)
+            PIPE = subprocess.PIPE
+            p = subprocess.Popen(cmd, stdout=PIPE, stderr=PIPE)
+            out, err = p.communicate()
+            p.stdout.close()
+            p.stderr.close()
+            rc = p.returncode
+            self.assertEqual(rc, 0)
+            return rc, out, err
+        code = 'import sys; print(sys._xoptions)'
+        # normally the refcount is hidden
+        rc, out, err = run_python('-c', code)
+        self.assertEqual(out.rstrip(), b'{}')
+        self.assertEqual(err, b'')
+        # "-X showrefcount" shows the refcount, but only in debug builds
+        rc, out, err = run_python('-X', 'showrefcount', '-c', code)
+        self.assertEqual(out.rstrip(), b"{'showrefcount': True}")
+        if hasattr(sys, 'gettotalrefcount'):  # debug build
+            self.assertRegex(err, br'^\[\d+ refs, \d+ blocks\]')
+        else:
+            self.assertEqual(err, b'')
+
     def test_run_module(self):
         # Test expected operation of the '-m' switch
         # Switch needs an argument
@@ -70,9 +98,9 @@ class CmdLineTest(unittest.TestCase):
         assert_python_failure('-m', 'fnord43520xyz')
         # Check the runpy module also gives an error for
         # a nonexistent module
-        assert_python_failure('-m', 'runpy', 'fnord43520xyz'),
+        assert_python_failure('-m', 'runpy', 'fnord43520xyz')
         # All good if module is located and run successfully
-        assert_python_ok('-m', 'timeit', '-n', '1'),
+        assert_python_ok('-m', 'timeit', '-n', '1')
 
     def test_run_module_bug1764407(self):
         # -m and -i need to play well together
@@ -213,6 +241,23 @@ class CmdLineTest(unittest.TestCase):
         self.assertIn(path1.encode('ascii'), out)
         self.assertIn(path2.encode('ascii'), out)
 
+    def test_empty_PYTHONPATH_issue16309(self):
+        # On Posix, it is documented that setting PATH to the
+        # empty string is equivalent to not setting PATH at all,
+        # which is an exception to the rule that in a string like
+        # "/bin::/usr/bin" the empty string in the middle gets
+        # interpreted as '.'
+        code = """if 1:
+            import sys
+            path = ":".join(sys.path)
+            path = path.encode("ascii", "backslashreplace")
+            sys.stdout.buffer.write(path)"""
+        rc1, out1, err1 = assert_python_ok('-c', code, PYTHONPATH="")
+        rc2, out2, err2 = assert_python_ok('-c', code)
+        # regarding to Posix specification, outputs should be equal
+        # for empty and unset PYTHONPATH
+        self.assertEqual(out1, out2)
+
     def test_displayhook_unencodable(self):
         for encoding in ('ascii', 'latin-1', 'utf-8'):
             env = os.environ.copy()
@@ -290,7 +335,7 @@ class CmdLineTest(unittest.TestCase):
         rc, out, err = assert_python_ok('-c', code)
         self.assertEqual(b'', out)
         self.assertRegex(err.decode('ascii', 'ignore'),
-                         'Exception OSError: .* ignored')
+                         'Exception ignored in.*\nOSError: .*')
 
     def test_closed_stdout(self):
         # Issue #13444: if stdout has been explicitly closed, we should
