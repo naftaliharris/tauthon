@@ -1871,7 +1871,7 @@ static PyObject*
 pattern_match(PatternObject* self, PyObject* args, PyObject* kw)
 {
     SRE_STATE state;
-    int status;
+    Py_ssize_t status;
 
     PyObject* string;
     Py_ssize_t start = 0;
@@ -2040,7 +2040,7 @@ pattern_findall(PatternObject* self, PyObject* args, PyObject* kw)
 {
     SRE_STATE state;
     PyObject* list;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t i, b, e;
 
     PyObject* string;
@@ -2166,7 +2166,7 @@ pattern_split(PatternObject* self, PyObject* args, PyObject* kw)
     SRE_STATE state;
     PyObject* list;
     PyObject* item;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t n;
     Py_ssize_t i;
     void* last;
@@ -2282,7 +2282,7 @@ pattern_subx(PatternObject* self, PyObject* ptemplate, PyObject* string,
     PyObject* args;
     PyObject* match;
     void* ptr;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t n;
     Py_ssize_t i, b, e;
     int logical_charsize, charsize;
@@ -2301,7 +2301,7 @@ pattern_subx(PatternObject* self, PyObject* ptemplate, PyObject* string,
         ptr = getstring(ptemplate, &n, &logical_charsize, &charsize, &view);
         b = charsize;
         if (ptr) {
-            literal = sre_literal_template(b, ptr, n);
+            literal = sre_literal_template(charsize, ptr, n);
         } else {
             PyErr_Clear();
             literal = 0;
@@ -3767,7 +3767,7 @@ scanner_match(ScannerObject* self, PyObject *unused)
 {
     SRE_STATE* state = &self->state;
     PyObject* match;
-    int status;
+    Py_ssize_t status;
 
     state_reset(state);
 
@@ -3798,7 +3798,7 @@ scanner_search(ScannerObject* self, PyObject *unused)
 {
     SRE_STATE* state = &self->state;
     PyObject* match;
-    int status;
+    Py_ssize_t status;
 
     state_reset(state);
 
