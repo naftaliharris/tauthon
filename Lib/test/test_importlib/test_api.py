@@ -1,6 +1,7 @@
 from . import util
-import imp
+
 import importlib
+from importlib import _bootstrap
 from importlib import machinery
 import sys
 from test import support
@@ -98,7 +99,7 @@ class FindLoaderTests(unittest.TestCase):
         # If a module with __loader__ is in sys.modules, then return it.
         name = 'some_mod'
         with util.uncache(name):
-            module = imp.new_module(name)
+            module = types.ModuleType(name)
             loader = 'a loader!'
             module.__loader__ = loader
             sys.modules[name] = module
@@ -109,8 +110,22 @@ class FindLoaderTests(unittest.TestCase):
         # If sys.modules[name].__loader__ is None, raise ValueError.
         name = 'some_mod'
         with util.uncache(name):
-            module = imp.new_module(name)
+            module = types.ModuleType(name)
             module.__loader__ = None
+            sys.modules[name] = module
+            with self.assertRaises(ValueError):
+                importlib.find_loader(name)
+
+    def test_sys_modules_loader_is_not_set(self):
+        # Should raise ValueError
+        # Issue #17099
+        name = 'some_mod'
+        with util.uncache(name):
+            module = types.ModuleType(name)
+            try:
+                del module.__loader__
+            except AttributeError:
+                pass
             sys.modules[name] = module
             with self.assertRaises(ValueError):
                 importlib.find_loader(name)
@@ -134,6 +149,18 @@ class FindLoaderTests(unittest.TestCase):
     def test_nothing(self):
         # None is returned upon failure to find a loader.
         self.assertIsNone(importlib.find_loader('nevergoingtofindthismodule'))
+
+
+class ReloadTests(unittest.TestCase):
+
+    """Test module reloading for builtin and extension modules."""
+
+    def test_reload_modules(self):
+        for mod in ('tokenize', 'time', 'marshal'):
+            with self.subTest(module=mod):
+                with support.CleanImport(mod):
+                    module = importlib.import_module(mod)
+                    importlib.reload(module)
 
 
 class InvalidateCacheTests(unittest.TestCase):
@@ -162,7 +189,7 @@ class InvalidateCacheTests(unittest.TestCase):
     def test_method_lacking(self):
         # There should be no issues if the method is not defined.
         key = 'gobbledeegook'
-        sys.path_importer_cache[key] = imp.NullImporter('abc')
+        sys.path_importer_cache[key] = None
         self.addCleanup(lambda: sys.path_importer_cache.__delitem__(key))
         importlib.invalidate_caches()  # Shouldn't trigger an exception.
 
@@ -182,21 +209,13 @@ class StartupTests(unittest.TestCase):
         # Issue #17098: all modules should have __loader__ defined.
         for name, module in sys.modules.items():
             if isinstance(module, types.ModuleType):
-                if name in sys.builtin_module_names:
-                    self.assertEqual(importlib.machinery.BuiltinImporter,
-                                     module.__loader__)
-                elif imp.is_frozen(name):
-                    self.assertEqual(importlib.machinery.FrozenImporter,
-                                     module.__loader__)
-
-def test_main():
-    from test.support import run_unittest
-    run_unittest(ImportModuleTests,
-                 FindLoaderTests,
-                 InvalidateCacheTests,
-                 FrozenImportlibTests,
-                 StartupTests)
+                self.assertTrue(hasattr(module, '__loader__'),
+                                '{!r} lacks a __loader__ attribute'.format(name))
+                if importlib.machinery.BuiltinImporter.find_module(name):
+                    self.assertIsNot(module.__loader__, None)
+                elif importlib.machinery.FrozenImporter.find_module(name):
+                    self.assertIsNot(module.__loader__, None)
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
