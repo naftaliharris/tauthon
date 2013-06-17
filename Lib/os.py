@@ -1,9 +1,9 @@
 r"""OS routines for Mac, NT, or Posix depending on what system we're on.
 
 This exports:
-  - all functions from posix, nt, os2, or ce, e.g. unlink, stat, etc.
+  - all functions from posix, nt or ce, e.g. unlink, stat, etc.
   - os.path is either posixpath or ntpath
-  - os.name is either 'posix', 'nt', 'os2' or 'ce'.
+  - os.name is either 'posix', 'nt' or 'ce'.
   - os.curdir is a string representing the current directory ('.' or ':')
   - os.pardir is a string representing the parent directory ('..' or '::')
   - os.sep is the (or a most common) pathname separator ('/' or ':' or '\\')
@@ -52,13 +52,13 @@ if 'posix' in _names:
     try:
         from posix import _exit
         __all__.append('_exit')
-    except ImportError:
+    except ModuleNotFoundError:
         pass
     import posixpath as path
 
     try:
         from posix import _have_functions
-    except ImportError:
+    except ModuleNotFoundError:
         pass
 
 elif 'nt' in _names:
@@ -68,7 +68,7 @@ elif 'nt' in _names:
     try:
         from nt import _exit
         __all__.append('_exit')
-    except ImportError:
+    except ModuleNotFoundError:
         pass
     import ntpath as path
 
@@ -78,31 +78,7 @@ elif 'nt' in _names:
 
     try:
         from nt import _have_functions
-    except ImportError:
-        pass
-
-elif 'os2' in _names:
-    name = 'os2'
-    linesep = '\r\n'
-    from os2 import *
-    try:
-        from os2 import _exit
-        __all__.append('_exit')
-    except ImportError:
-        pass
-    if sys.version.find('EMX GCC') == -1:
-        import ntpath as path
-    else:
-        import os2emxpath as path
-        from _emx_link import link
-
-    import os2
-    __all__.extend(_get_exports_list(os2))
-    del os2
-
-    try:
-        from os2 import _have_functions
-    except ImportError:
+    except ModuleNotFoundError:
         pass
 
 elif 'ce' in _names:
@@ -112,7 +88,7 @@ elif 'ce' in _names:
     try:
         from ce import _exit
         __all__.append('_exit')
-    except ImportError:
+    except ModuleNotFoundError:
         pass
     # We can use the standard Windows path.
     import ntpath as path
@@ -123,11 +99,11 @@ elif 'ce' in _names:
 
     try:
         from ce import _have_functions
-    except ImportError:
+    except ModuleNotFoundError:
         pass
 
 else:
-    raise ImportError('no os specific module found')
+    raise ModuleNotFoundError('no os specific module found')
 
 sys.modules['os.path'] = path
 from os.path import (curdir, pardir, sep, pathsep, defpath, extsep, altsep,
@@ -256,10 +232,9 @@ def makedirs(name, mode=0o777, exist_ok=False):
     if head and tail and not path.exists(head):
         try:
             makedirs(head, mode, exist_ok)
-        except OSError as e:
+        except FileExistsError:
             # be happy if someone already created the path
-            if e.errno != errno.EEXIST:
-                raise
+            pass
         cdir = curdir
         if isinstance(tail, bytes):
             cdir = bytes(curdir, 'ASCII')
@@ -302,7 +277,7 @@ def removedirs(name):
     while head and tail:
         try:
             rmdir(head)
-        except error:
+        except OSError:
             break
         head, tail = path.split(head)
 
@@ -329,7 +304,7 @@ def renames(old, new):
     if head and tail:
         try:
             removedirs(head)
-        except error:
+        except OSError:
             pass
 
 __all__.extend(["makedirs", "removedirs", "renames"])
@@ -365,7 +340,7 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
 
     By default errors from the os.listdir() call are ignored.  If
     optional arg 'onerror' is specified, it should be a function; it
-    will be called with one argument, an os.error instance.  It can
+    will be called with one argument, an OSError instance.  It can
     report the error to continue with the walk, or raise the exception
     to abort the walk.  Note that the filename is available as the
     filename attribute of the exception object.
@@ -399,10 +374,10 @@ def walk(top, topdown=True, onerror=None, followlinks=False):
     # minor reason when (say) a thousand readable directories are still
     # left to visit.  That logic is copied here.
     try:
-        # Note that listdir and error are globals in this module due
+        # Note that listdir is global in this module due
         # to earlier import-*.
         names = listdir(top)
-    except error as err:
+    except OSError as err:
         if onerror is not None:
             onerror(err)
         return
@@ -504,7 +479,7 @@ if {open, stat} <= supports_dir_fd and {listdir, stat} <= supports_fd:
             try:
                 orig_st = stat(name, dir_fd=topfd, follow_symlinks=follow_symlinks)
                 dirfd = open(name, O_RDONLY, dir_fd=topfd)
-            except error as err:
+            except OSError as err:
                 if onerror is not None:
                     onerror(err)
                 return
@@ -599,7 +574,7 @@ def _execvpe(file, args, env=None):
         fullname = path.join(dir, file)
         try:
             exec_func(fullname, *argrest)
-        except error as e:
+        except OSError as e:
             last_exc = e
             tb = sys.exc_info()[2]
             if (e.errno != errno.ENOENT and e.errno != errno.ENOTDIR
@@ -716,17 +691,19 @@ try:
 except NameError:
     _putenv = lambda key, value: None
 else:
-    __all__.append("putenv")
+    if "putenv" not in __all__:
+        __all__.append("putenv")
 
 try:
     _unsetenv = unsetenv
 except NameError:
     _unsetenv = lambda key: _putenv(key, "")
 else:
-    __all__.append("unsetenv")
+    if "unsetenv" not in __all__:
+        __all__.append("unsetenv")
 
 def _createenviron():
-    if name in ('os2', 'nt'):
+    if name == 'nt':
         # Where Env Var Names Must Be UPPERCASE
         def check_str(value):
             if not isinstance(value, str):
@@ -766,7 +743,7 @@ def getenv(key, default=None):
     key, default and the result are str."""
     return environ.get(key, default)
 
-supports_bytes_environ = name not in ('os2', 'nt')
+supports_bytes_environ = (name != 'nt')
 __all__.extend(("getenv", "supports_bytes_environ"))
 
 if supports_bytes_environ:
@@ -865,7 +842,7 @@ if _exists("fork") and not _exists("spawnv") and _exists("execv"):
                 elif WIFEXITED(sts):
                     return WEXITSTATUS(sts)
                 else:
-                    raise error("Not stopped, signaled or exited???")
+                    raise OSError("Not stopped, signaled or exited???")
 
     def spawnv(mode, file, args):
         """spawnv(mode, file, args) -> integer
@@ -908,6 +885,10 @@ If mode == P_WAIT return the process's exit code if it exits normally;
 otherwise return -SIG, where SIG is the signal that killed it. """
         return _spawnvef(mode, file, args, env, execvpe)
 
+
+    __all__.extend(["spawnv", "spawnve", "spawnvp", "spawnvpe"])
+
+
 if _exists("spawnv"):
     # These aren't supplied by the basic Windows code
     # but can be easily implemented in Python
@@ -933,7 +914,7 @@ otherwise return -SIG, where SIG is the signal that killed it. """
         return spawnve(mode, file, args[:-1], env)
 
 
-    __all__.extend(["spawnv", "spawnve", "spawnl", "spawnle",])
+    __all__.extend(["spawnl", "spawnle"])
 
 
 if _exists("spawnvp"):
@@ -961,7 +942,8 @@ otherwise return -SIG, where SIG is the signal that killed it. """
         return spawnvpe(mode, file, args[:-1], env)
 
 
-    __all__.extend(["spawnvp", "spawnvpe", "spawnlp", "spawnlpe",])
+    __all__.extend(["spawnlp", "spawnlpe"])
+
 
 import copyreg as _copyreg
 
