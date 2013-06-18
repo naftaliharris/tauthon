@@ -65,13 +65,6 @@ def _compile(code, pattern, flags):
         elif op in REPEATING_CODES:
             if flags & SRE_FLAG_TEMPLATE:
                 raise error("internal: unsupported template operator")
-                emit(OPCODES[REPEAT])
-                skip = _len(code); emit(0)
-                emit(av[0])
-                emit(av[1])
-                _compile(code, av[2], flags)
-                emit(OPCODES[SUCCESS])
-                code[skip] = _len(code) - skip
             elif _simple(av) and op is not REPEAT:
                 if op is MAX_REPEAT:
                     emit(OPCODES[REPEAT_ONE])
@@ -302,7 +295,7 @@ def _mk_bitmap(bits):
 def _optimize_unicode(charset, fixup):
     try:
         import array
-    except ImportError:
+    except ModuleNotFoundError:
         return charset
     charmap = [0]*65536
     negate = 0
