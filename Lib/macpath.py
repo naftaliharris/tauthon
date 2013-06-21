@@ -127,7 +127,7 @@ def lexists(path):
 
     try:
         st = os.lstat(path)
-    except os.error:
+    except OSError:
         return False
     return True
 
@@ -187,7 +187,7 @@ def realpath(path):
     path = abspath(path)
     try:
         import Carbon.File
-    except ImportError:
+    except ModuleNotFoundError:
         return path
     if not path:
         return path
