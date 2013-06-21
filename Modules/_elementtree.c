@@ -1,62 +1,21 @@
-/*
- * ElementTree
- * $Id: _elementtree.c 3473 2009-01-11 22:53:55Z fredrik $
+/*--------------------------------------------------------------------
+ * Licensed to PSF under a Contributor Agreement.
+ * See http://www.python.org/psf/license for licensing details.
  *
- * elementtree accelerator
- *
- * History:
- * 1999-06-20 fl  created (as part of sgmlop)
- * 2001-05-29 fl  effdom edition
- * 2003-02-27 fl  elementtree edition (alpha)
- * 2004-06-03 fl  updates for elementtree 1.2
- * 2005-01-05 fl  major optimization effort
- * 2005-01-11 fl  first public release (cElementTree 0.8)
- * 2005-01-12 fl  split element object into base and extras
- * 2005-01-13 fl  use tagged pointers for tail/text (cElementTree 0.9)
- * 2005-01-17 fl  added treebuilder close method
- * 2005-01-17 fl  fixed crash in getchildren
- * 2005-01-18 fl  removed observer api, added iterparse (cElementTree 0.9.3)
- * 2005-01-23 fl  revised iterparse api; added namespace event support (0.9.8)
- * 2005-01-26 fl  added VERSION module property (cElementTree 1.0)
- * 2005-01-28 fl  added remove method (1.0.1)
- * 2005-03-01 fl  added iselement function; fixed makeelement aliasing (1.0.2)
- * 2005-03-13 fl  export Comment and ProcessingInstruction/PI helpers
- * 2005-03-26 fl  added Comment and PI support to XMLParser
- * 2005-03-27 fl  event optimizations; complain about bogus events
- * 2005-08-08 fl  fixed read error handling in parse
- * 2005-08-11 fl  added runtime test for copy workaround (1.0.3)
- * 2005-12-13 fl  added expat_capi support (for xml.etree) (1.0.4)
- * 2005-12-16 fl  added support for non-standard encodings
- * 2006-03-08 fl  fixed a couple of potential null-refs and leaks
- * 2006-03-12 fl  merge in 2.5 ssize_t changes
- * 2007-08-25 fl  call custom builder's close method from XMLParser
- * 2007-08-31 fl  added iter, extend from ET 1.3
- * 2007-09-01 fl  fixed ParseError exception, setslice source type, etc
- * 2007-09-03 fl  fixed handling of negative insert indexes
- * 2007-09-04 fl  added itertext from ET 1.3
- * 2007-09-06 fl  added position attribute to ParseError exception
- * 2008-06-06 fl  delay error reporting in iterparse (from Hrvoje Niksic)
- *
+ * _elementtree - C accelerator for xml.etree.ElementTree
  * Copyright (c) 1999-2009 by Secret Labs AB.  All rights reserved.
  * Copyright (c) 1999-2009 by Fredrik Lundh.
  *
  * info@pythonware.com
  * http://www.pythonware.com
+ *--------------------------------------------------------------------
  */
-
-/* Licensed to PSF under a Contributor Agreement. */
-/* See http://www.python.org/psf/license for licensing details. */
 
 #include "Python.h"
 #include "structmember.h"
 
-#define VERSION "1.0.6"
-
 /* -------------------------------------------------------------------- */
 /* configuration */
-
-/* Leave defined to include the expat-based XMLParser type */
-#define USE_EXPAT
 
 /* An element can hold this many children without extra memory
    allocations. */
@@ -340,6 +299,7 @@ get_attrib_from_keywords(PyObject *kwds)
 
     Py_DECREF(attrib_str);
 
+    /* attrib can be NULL if PyDict_New failed */
     if (attrib)
         PyDict_Update(attrib, kwds);
     return attrib;
@@ -2685,8 +2645,6 @@ static PyTypeObject TreeBuilder_Type = {
 /* ==================================================================== */
 /* the expat interface */
 
-#if defined(USE_EXPAT)
-
 #include "expat.h"
 #include "pyexpat.h"
 static struct PyExpat_CAPI *expat_capi;
@@ -3369,10 +3327,9 @@ xmlparser_feed(XMLParserObject* self, PyObject* arg)
 }
 
 static PyObject*
-xmlparser_parse(XMLParserObject* self, PyObject* args)
+xmlparser_parse_whole(XMLParserObject* self, PyObject* args)
 {
-    /* (internal) parse until end of input stream */
-
+    /* (internal) parse the whole input, until end of stream */
     PyObject* reader;
     PyObject* buffer;
     PyObject* temp;
@@ -3453,14 +3410,14 @@ static PyObject*
 xmlparser_setevents(XMLParserObject *self, PyObject* args)
 {
     /* activate element event reporting */
+    Py_ssize_t i, seqlen;
+    TreeBuilderObject *target;
 
-    Py_ssize_t i;
-    TreeBuilderObject* target;
-
-    PyObject* events; /* event collector */
-    PyObject* event_set = Py_None;
-    if (!PyArg_ParseTuple(args, "O!|O:_setevents",  &PyList_Type, &events,
-                          &event_set))
+    PyObject *events_queue;
+    PyObject *events_to_report = Py_None;
+    PyObject *events_seq;
+    if (!PyArg_ParseTuple(args, "O!|O:_setevents",  &PyList_Type, &events_queue,
+                          &events_to_report))
         return NULL;
 
     if (!TreeBuilder_CheckExact(self->target)) {
@@ -3474,9 +3431,9 @@ xmlparser_setevents(XMLParserObject *self, PyObject* args)
 
     target = (TreeBuilderObject*) self->target;
 
-    Py_INCREF(events);
+    Py_INCREF(events_queue);
     Py_XDECREF(target->events);
-    target->events = events;
+    target->events = events_queue;
 
     /* clear out existing events */
     Py_CLEAR(target->start_event_obj);
@@ -3484,75 +3441,71 @@ xmlparser_setevents(XMLParserObject *self, PyObject* args)
     Py_CLEAR(target->start_ns_event_obj);
     Py_CLEAR(target->end_ns_event_obj);
 
-    if (event_set == Py_None) {
+    if (events_to_report == Py_None) {
         /* default is "end" only */
         target->end_event_obj = PyUnicode_FromString("end");
         Py_RETURN_NONE;
     }
 
-    if (!PyTuple_Check(event_set)) /* FIXME: handle arbitrary sequences */
-        goto error;
+    if (!(events_seq = PySequence_Fast(events_to_report,
+                                       "events must be a sequence"))) {
+        return NULL;
+    }
 
-    for (i = 0; i < PyTuple_GET_SIZE(event_set); i++) {
-        PyObject* item = PyTuple_GET_ITEM(event_set, i);
-        char* event;
-        if (PyUnicode_Check(item)) {
-            event = _PyUnicode_AsString(item);
-            if (event == NULL)
-                goto error;
-        } else if (PyBytes_Check(item))
-            event = PyBytes_AS_STRING(item);
-        else {
-            goto error;
+    seqlen = PySequence_Size(events_seq);
+    for (i = 0; i < seqlen; ++i) {
+        PyObject *event_name_obj = PySequence_Fast_GET_ITEM(events_seq, i);
+        char *event_name = NULL;
+        if (PyUnicode_Check(event_name_obj)) {
+            event_name = _PyUnicode_AsString(event_name_obj);
+        } else if (PyBytes_Check(event_name_obj)) {
+            event_name = PyBytes_AS_STRING(event_name_obj);
         }
-        if (strcmp(event, "start") == 0) {
-            Py_INCREF(item);
-            target->start_event_obj = item;
-        } else if (strcmp(event, "end") == 0) {
-            Py_INCREF(item);
+
+        if (event_name == NULL) {
+            Py_DECREF(events_seq);
+            PyErr_Format(PyExc_ValueError, "invalid events sequence");
+            return NULL;
+        } else if (strcmp(event_name, "start") == 0) {
+            Py_INCREF(event_name_obj);
+            target->start_event_obj = event_name_obj;
+        } else if (strcmp(event_name, "end") == 0) {
+            Py_INCREF(event_name_obj);
             Py_XDECREF(target->end_event_obj);
-            target->end_event_obj = item;
-        } else if (strcmp(event, "start-ns") == 0) {
-            Py_INCREF(item);
+            target->end_event_obj = event_name_obj;
+        } else if (strcmp(event_name, "start-ns") == 0) {
+            Py_INCREF(event_name_obj);
             Py_XDECREF(target->start_ns_event_obj);
-            target->start_ns_event_obj = item;
+            target->start_ns_event_obj = event_name_obj;
             EXPAT(SetNamespaceDeclHandler)(
                 self->parser,
                 (XML_StartNamespaceDeclHandler) expat_start_ns_handler,
                 (XML_EndNamespaceDeclHandler) expat_end_ns_handler
                 );
-        } else if (strcmp(event, "end-ns") == 0) {
-            Py_INCREF(item);
+        } else if (strcmp(event_name, "end-ns") == 0) {
+            Py_INCREF(event_name_obj);
             Py_XDECREF(target->end_ns_event_obj);
-            target->end_ns_event_obj = item;
+            target->end_ns_event_obj = event_name_obj;
             EXPAT(SetNamespaceDeclHandler)(
                 self->parser,
                 (XML_StartNamespaceDeclHandler) expat_start_ns_handler,
                 (XML_EndNamespaceDeclHandler) expat_end_ns_handler
                 );
         } else {
-            PyErr_Format(
-                PyExc_ValueError,
-                "unknown event '%s'", event
-                );
+            Py_DECREF(events_seq);
+            PyErr_Format(PyExc_ValueError, "unknown event '%s'", event_name);
             return NULL;
         }
     }
 
+    Py_DECREF(events_seq);
     Py_RETURN_NONE;
-
-  error:
-    PyErr_SetString(
-        PyExc_TypeError,
-        "invalid event tuple"
-        );
-    return NULL;
 }
 
 static PyMethodDef xmlparser_methods[] = {
     {"feed", (PyCFunction) xmlparser_feed, METH_O},
     {"close", (PyCFunction) xmlparser_close, METH_VARARGS},
-    {"_parse", (PyCFunction) xmlparser_parse, METH_VARARGS},
+    {"_parse_whole", (PyCFunction) xmlparser_parse_whole, METH_VARARGS},
     {"_setevents", (PyCFunction) xmlparser_setevents, METH_VARARGS},
     {"doctype", (PyCFunction) xmlparser_doctype, METH_VARARGS},
     {NULL, NULL}
@@ -3624,8 +3577,6 @@ static PyTypeObject XMLParser_Type = {
     0,                                              /* tp_free */
 };
 
-#endif
-
 /* ==================================================================== */
 /* python module interface */
 
@@ -3657,10 +3608,8 @@ PyInit__elementtree(void)
         return NULL;
     if (PyType_Ready(&Element_Type) < 0)
         return NULL;
-#if defined(USE_EXPAT)
     if (PyType_Ready(&XMLParser_Type) < 0)
         return NULL;
-#endif
 
     m = PyModule_Create(&_elementtreemodule);
     if (!m)
@@ -3703,10 +3652,8 @@ PyInit__elementtree(void)
     Py_INCREF((PyObject *)&TreeBuilder_Type);
     PyModule_AddObject(m, "TreeBuilder", (PyObject *)&TreeBuilder_Type);
 
-#if defined(USE_EXPAT)
     Py_INCREF((PyObject *)&XMLParser_Type);
     PyModule_AddObject(m, "XMLParser", (PyObject *)&XMLParser_Type);
-#endif
 
     return m;
 }
