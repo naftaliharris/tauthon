@@ -219,10 +219,6 @@ typedef size_t Py_uhash_t;
 /* Smallest negative value of type Py_ssize_t. */
 #define PY_SSIZE_T_MIN (-PY_SSIZE_T_MAX-1)
 
-#if SIZEOF_PID_T > SIZEOF_LONG
-#   error "Python doesn't support sizeof(pid_t) > sizeof(long)"
-#endif
-
 /* PY_FORMAT_SIZE_T is a platform-specific modifier for use in a printf
  * format to convert an argument with the width of a size_t or Py_ssize_t.
  * C99 introduced "z" for this purpose, but not all platforms support that;
@@ -392,17 +388,20 @@ typedef size_t Py_uhash_t;
 #endif
 
 #ifdef HAVE_SYS_STAT_H
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#include <sys/types.h>
-#endif
 #include <sys/stat.h>
 #elif defined(HAVE_STAT_H)
 #include <stat.h>
 #endif
 
-#if defined(PYCC_VACPP)
+#ifndef S_IFMT
 /* VisualAge C/C++ Failed to Define MountType Field in sys/stat.h */
-#define S_IFMT (S_IFDIR|S_IFCHR|S_IFREG)
+#define S_IFMT 0170000
+#endif
+
+#ifndef S_IFLNK
+/* Windows doesn't define S_IFLNK but posixmodule.c maps
+ * IO_REPARSE_TAG_SYMLINK to S_IFLNK */
+#  define S_IFLNK 0120000
 #endif
 
 #ifndef S_ISREG
@@ -413,6 +412,9 @@ typedef size_t Py_uhash_t;
 #define S_ISDIR(x) (((x) & S_IFMT) == S_IFDIR)
 #endif
 
+#ifndef S_ISCHR
+#define S_ISCHR(x) (((x) & S_IFMT) == S_IFCHR)
+#endif
 
 #ifdef __cplusplus
 /* Move this down here since some C++ #include's don't like to be included
@@ -835,15 +837,6 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 #endif
 
 /*
- * Add PyArg_ParseTuple format where available.
- */
-#ifdef HAVE_ATTRIBUTE_FORMAT_PARSETUPLE
-#define Py_FORMAT_PARSETUPLE(func,p1,p2) __attribute__((format(func,p1,p2)))
-#else
-#define Py_FORMAT_PARSETUPLE(func,p1,p2)
-#endif
-
-/*
  * Specify alignment on compilers that support it.
  */
 #if defined(__GNUC__) && __GNUC__ >= 3
@@ -879,6 +872,20 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 #else
 #define Py_VA_COPY(x, y) (x) = (y)
 #endif
+#endif
+
+/*
+ * Convenient macros to deal with endianness of the platform. WORDS_BIGENDIAN is
+ * detected by configure and defined in pyconfig.h. The code in pyconfig.h
+ * also takes care of Apple's universal builds.
+ */
+
+#ifdef WORDS_BIGENDIAN
+#define PY_BIG_ENDIAN 1
+#define PY_LITTLE_ENDIAN 0
+#else
+#define PY_BIG_ENDIAN 0
+#define PY_LITTLE_ENDIAN 1
 #endif
 
 #endif /* Py_PYPORT_H */

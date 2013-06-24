@@ -1,7 +1,7 @@
 from .. import util as importlib_test_util
 from . import util
-import imp
 import sys
+import types
 import unittest
 
 
@@ -22,6 +22,17 @@ class APITest(unittest.TestCase):
     """Test API-specific details for __import__ (e.g. raising the right
     exception when passing in an int for the module name)."""
 
+    def test_raises_ModuleNotFoundError(self):
+        with self.assertRaises(ModuleNotFoundError):
+            util.import_('some module that does not exist')
+
+    def test_raises_ModuleNotFoundError_for_None(self):
+        # None in sys.modules should raise ModuleNotFoundError.
+        with importlib_test_util.uncache('not_here'):
+            sys.modules['not_here'] = None
+            with self.assertRaises(ModuleNotFoundError):
+                util.import_('not_here')
+
     def test_name_requires_rparition(self):
         # Raise TypeError if a non-string is passed in for the module name.
         with self.assertRaises(TypeError):
@@ -37,7 +48,7 @@ class APITest(unittest.TestCase):
     def test_nonexistent_fromlist_entry(self):
         # If something in fromlist doesn't exist, that's okay.
         # issue15715
-        mod = imp.new_module('fine')
+        mod = types.ModuleType('fine')
         mod.__path__ = ['XXX']
         with importlib_test_util.import_state(meta_path=[BadLoaderFinder]):
             with importlib_test_util.uncache('fine'):
@@ -48,7 +59,7 @@ class APITest(unittest.TestCase):
         # If something in fromlist triggers an exception not related to not
         # existing, let that exception propagate.
         # issue15316
-        mod = imp.new_module('fine')
+        mod = types.ModuleType('fine')
         mod.__path__ = ['XXX']
         with importlib_test_util.import_state(meta_path=[BadLoaderFinder]):
             with importlib_test_util.uncache('fine'):
