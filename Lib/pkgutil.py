@@ -1,12 +1,13 @@
 """Utilities to support packages."""
 
-import os
-import sys
+from functools import singledispatch as simplegeneric
 import importlib
-import imp
+import importlib.util
+import os
 import os.path
-from warnings import warn
+import sys
 from types import ModuleType
+import warnings
 
 __all__ = [
     'get_importer', 'iter_importers', 'get_loader', 'find_loader',
@@ -20,51 +21,11 @@ def read_code(stream):
     import marshal
 
     magic = stream.read(4)
-    if magic != imp.get_magic():
+    if magic != importlib.util.MAGIC_NUMBER:
         return None
 
     stream.read(8) # Skip timestamp and size
     return marshal.load(stream)
-
-
-def simplegeneric(func):
-    """Make a trivial single-dispatch generic function"""
-    registry = {}
-    def wrapper(*args, **kw):
-        ob = args[0]
-        try:
-            cls = ob.__class__
-        except AttributeError:
-            cls = type(ob)
-        try:
-            mro = cls.__mro__
-        except AttributeError:
-            try:
-                class cls(cls, object):
-                    pass
-                mro = cls.__mro__[1:]
-            except TypeError:
-                mro = object,   # must be an ExtensionClass or some such  :(
-        for t in mro:
-            if t in registry:
-                return registry[t](*args, **kw)
-        else:
-            return func(*args, **kw)
-    try:
-        wrapper.__name__ = func.__name__
-    except (TypeError, AttributeError):
-        pass    # Python 2.3 doesn't allow functions to be renamed
-
-    def register(typ, func=None):
-        if func is None:
-            return lambda f: register(typ, f)
-        registry[typ] = func
-        return func
-
-    wrapper.__dict__ = func.__dict__
-    wrapper.__doc__ = func.__doc__
-    wrapper.register = register
-    return wrapper
 
 
 def walk_packages(path=None, prefix='', onerror=None):
@@ -121,8 +82,7 @@ def walk_packages(path=None, prefix='', onerror=None):
                 # don't traverse path items we've seen before
                 path = [p for p in path if not seen(p)]
 
-                for item in walk_packages(path, name+'.', onerror):
-                    yield item
+                yield from walk_packages(path, name+'.', onerror)
 
 
 def iter_modules(path=None, prefix=''):
@@ -149,13 +109,12 @@ def iter_modules(path=None, prefix=''):
                 yield i, name, ispkg
 
 
-#@simplegeneric
+@simplegeneric
 def iter_importer_modules(importer, prefix=''):
     if not hasattr(importer, 'iter_modules'):
         return []
     return importer.iter_modules(prefix)
 
-iter_importer_modules = simplegeneric(iter_importer_modules)
 
 # Implement a file walker for the normal importlib path hook
 def _iter_file_finder_modules(importer, prefix=''):
@@ -201,6 +160,13 @@ def _iter_file_finder_modules(importer, prefix=''):
 iter_importer_modules.register(
     importlib.machinery.FileFinder, _iter_file_finder_modules)
 
+
+def _import_imp():
+    global imp
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', PendingDeprecationWarning)
+        imp = importlib.import_module('imp')
+
 class ImpImporter:
     """PEP 302 Importer that wraps Python's "classic" import algorithm
 
@@ -213,8 +179,10 @@ class ImpImporter:
     """
 
     def __init__(self, path=None):
-        warn("This emulation is deprecated, use 'importlib' instead",
+        global imp
+        warnings.warn("This emulation is deprecated, use 'importlib' instead",
              DeprecationWarning)
+        _import_imp()
         self.path = path
 
     def find_module(self, fullname, path=None):
@@ -279,8 +247,9 @@ class ImpLoader:
     code = source = None
 
     def __init__(self, fullname, file, filename, etc):
-        warn("This emulation is deprecated, use 'importlib' instead",
-             DeprecationWarning)
+        warnings.warn("This emulation is deprecated, use 'importlib' instead",
+                      DeprecationWarning)
+        _import_imp()
         self.file = file
         self.filename = filename
         self.fullname = fullname
@@ -350,9 +319,8 @@ class ImpLoader:
                     self.file.close()
             elif mod_type==imp.PY_COMPILED:
                 if os.path.exists(self.filename[:-1]):
-                    f = open(self.filename[:-1], 'r')
-                    self.source = f.read()
-                    f.close()
+                    with open(self.filename[:-1], 'r') as f:
+                        self.source = f.read()
             elif mod_type==imp.PKG_DIRECTORY:
                 self.source = self._get_delegate().get_source()
         return self.source
@@ -456,8 +424,7 @@ def iter_importers(fullname=""):
         if path is None:
             return
     else:
-        for importer in sys.meta_path:
-            yield importer
+        yield from sys.meta_path
         path = sys.path
     for item in path:
         yield get_importer(item)
@@ -589,16 +556,16 @@ def extend_path(path, name):
         if os.path.isfile(pkgfile):
             try:
                 f = open(pkgfile)
-            except IOError as msg:
+            except OSError as msg:
                 sys.stderr.write("Can't open %s: %s\n" %
                                  (pkgfile, msg))
             else:
-                for line in f:
-                    line = line.rstrip('\n')
-                    if not line or line.startswith('#'):
-                        continue
-                    path.append(line) # Don't check for existence!
-                f.close()
+                with f:
+                    for line in f:
+                        line = line.rstrip('\n')
+                        if not line or line.startswith('#'):
+                            continue
+                        path.append(line) # Don't check for existence!
 
     return path
 
