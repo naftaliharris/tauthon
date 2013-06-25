@@ -61,7 +61,6 @@ else:
                                               lineno, line=line))
         except OSError:
             pass  ## file (probably __stderr__) is invalid, warning dropped.
-    warnings.showwarning = idle_showwarning
     def idle_formatwarning(message, category, filename, lineno, line=None):
         """Format warnings the IDLE way"""
         s = "\nWarning (from warnings module):\n"
@@ -73,7 +72,6 @@ else:
             s += "    %s\n" % line
         s += "%s: %s\n>>> " % (category.__name__, message)
         return s
-    warnings.formatwarning = idle_formatwarning
 
 def extended_linecache_checkcache(filename=None,
                                   orig_checkcache=linecache.checkcache):
@@ -399,7 +397,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
             try:
                 self.rpcclt = MyRPCClient(addr)
                 break
-            except socket.error as err:
+            except OSError as err:
                 pass
         else:
             self.display_port_binding_error()
@@ -1014,7 +1012,10 @@ class PyShell(OutputWindow):
                 self.close()
                 return False
         else:
-            nosub = "==== No Subprocess ===="
+            nosub = ("==== No Subprocess ====\n\n" +
+                    "WARNING: Running IDLE without a Subprocess is deprecated\n" +
+                    "and will be removed in a later version. See Help/IDLE Help\n" +
+                    "for details.\n\n")
             sys.displayhook = rpc.displayhook
 
         self.write("Python %s on %s\n%s\n%s" %
@@ -1372,7 +1373,8 @@ USAGE: idle  [-deins] [-t title] [file]*
        idle  [-dns] [-t title] - [arg]*
 
   -h         print this help message and exit
-  -n         run IDLE without a subprocess (see Help/IDLE Help for details)
+  -n         run IDLE without a subprocess (DEPRECATED,
+             see Help/IDLE Help for details)
 
 The following options will override the IDLE 'settings' configuration:
 
@@ -1421,6 +1423,9 @@ echo "import sys; print(sys.argv)" | idle - "foobar"
 def main():
     global flist, root, use_subprocess
 
+    warnings.showwarning = idle_showwarning
+    warnings.formatwarning = idle_formatwarning
+
     use_subprocess = True
     enable_shell = False
     enable_edit = False
@@ -1449,6 +1454,8 @@ def main():
         if o == '-i':
             enable_shell = True
         if o == '-n':
+            print(" Warning: running IDLE without a subprocess is deprecated.",
+                  file=sys.stderr)
             use_subprocess = False
         if o == '-r':
             script = a
