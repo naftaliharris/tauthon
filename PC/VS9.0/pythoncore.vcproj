@@ -1119,7 +1119,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\Modules\operator.c"
+				RelativePath="..\..\Modules\_operator.c"
 				>
 			</File>
 			<File
@@ -1152,6 +1152,10 @@
 			</File>
 			<File
 				RelativePath="..\..\Modules\signalmodule.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\Modules\_stat.c"
 				>
 			</File>
 			<File
@@ -1584,6 +1588,10 @@
 			</File>
 			<File
 				RelativePath="..\..\Objects\rangeobject.c"
+				>
+			</File>
+			<File
+				RelativePath="..\..\Objects\stringlib\replace.h"
 				>
 			</File>
 			<File
