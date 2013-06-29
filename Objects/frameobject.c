@@ -7,11 +7,6 @@
 #include "opcode.h"
 #include "structmember.h"
 
-#undef MIN
-#undef MAX
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 #define OFF(x) offsetof(PyFrameObject, x)
 
 static PyMemberDef frame_memberlist[] = {
@@ -160,8 +155,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 
     /* We're now ready to look at the bytecode. */
     PyBytes_AsStringAndSize(f->f_code->co_code, (char **)&code, &code_len);
-    min_addr = MIN(new_lasti, f->f_lasti);
-    max_addr = MAX(new_lasti, f->f_lasti);
+    min_addr = Py_MIN(new_lasti, f->f_lasti);
+    max_addr = Py_MAX(new_lasti, f->f_lasti);
 
     /* You can't jump onto a line with an 'except' statement on it -
      * they expect to have an exception on the top of the stack, which
@@ -293,7 +288,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
             break;
         }
 
-        min_delta_iblock = MIN(min_delta_iblock, delta_iblock);
+        min_delta_iblock = Py_MIN(min_delta_iblock, delta_iblock);
 
         if (op >= HAVE_ARGUMENT) {
             addr += 2;
@@ -466,7 +461,7 @@ static int
 frame_traverse(PyFrameObject *f, visitproc visit, void *arg)
 {
     PyObject **fastlocals, **p;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     Py_VISIT(f->f_back);
     Py_VISIT(f->f_code);
@@ -496,7 +491,7 @@ static void
 frame_clear(PyFrameObject *f)
 {
     PyObject **fastlocals, **p, **oldtop;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     /* Before anything else, make sure that this frame is clearly marked
      * as being defunct!  Else, e.g., a generator reachable from this
@@ -848,7 +843,7 @@ PyFrame_FastToLocals(PyFrameObject *f)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
@@ -900,7 +895,7 @@ PyFrame_LocalsToFast(PyFrameObject *f, int clear)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
