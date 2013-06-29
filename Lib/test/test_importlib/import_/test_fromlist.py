@@ -1,7 +1,6 @@
 """Test that the semantics relating to the 'fromlist' argument are correct."""
 from .. import util
 from . import util as import_util
-import imp
 import unittest
 
 class ReturnValue(unittest.TestCase):
@@ -69,16 +68,16 @@ class HandlingFromlist(unittest.TestCase):
                 self.assertTrue(hasattr(module, 'module'))
                 self.assertEqual(module.module.__name__, 'pkg.module')
 
-    def test_module_from_package_triggers_ImportError(self):
-        # If a submodule causes an ImportError because it tries to import
-        # a module which doesn't exist, that should let the ImportError
+    def test_module_from_package_triggers_ModuleNotFoundError(self):
+        # If a submodule causes an ModuleNotFoundError because it tries to import
+        # a module which doesn't exist, that should let the ModuleNotFoundError
         # propagate.
         def module_code():
             import i_do_not_exist
         with util.mock_modules('pkg.__init__', 'pkg.mod',
                                module_code={'pkg.mod': module_code}) as importer:
             with util.import_state(meta_path=[importer]):
-                with self.assertRaises(ImportError) as exc:
+                with self.assertRaises(ModuleNotFoundError) as exc:
                     import_util.import_('pkg', fromlist=['mod'])
                 self.assertEqual('i_do_not_exist', exc.exception.name)
 
