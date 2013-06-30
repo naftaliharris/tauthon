@@ -710,6 +710,13 @@ ComplexExtendsException(PyExc_Exception, ImportError,
                         "module.");
 
 /*
+ *    ModuleNotFoundError extends ImportError
+ */
+
+MiddlingExtendsException(PyExc_ImportError, ModuleNotFoundError, ImportError,
+                         "Module not found.");
+
+/*
  *    OSError extends Exception
  */
 
@@ -2327,7 +2334,7 @@ PyObject *PyExc_RecursionErrorInst = NULL;
     }
 
 #ifdef MS_WINDOWS
-#include <Winsock2.h>
+#include <winsock2.h>
 /* The following constants were added to errno.h in VS2010 but have
    preferred WSA equivalents. */
 #undef EADDRINUSE
@@ -2395,6 +2402,7 @@ _PyExc_Init(PyObject *bltinmod)
     PRE_INIT(SystemExit)
     PRE_INIT(KeyboardInterrupt)
     PRE_INIT(ImportError)
+    PRE_INIT(ModuleNotFoundError)
     PRE_INIT(OSError)
     PRE_INIT(EOFError)
     PRE_INIT(RuntimeError)
@@ -2465,6 +2473,7 @@ _PyExc_Init(PyObject *bltinmod)
     POST_INIT(SystemExit)
     POST_INIT(KeyboardInterrupt)
     POST_INIT(ImportError)
+    POST_INIT(ModuleNotFoundError)
     POST_INIT(OSError)
     INIT_ALIAS(EnvironmentError, OSError)
     INIT_ALIAS(IOError, OSError)
