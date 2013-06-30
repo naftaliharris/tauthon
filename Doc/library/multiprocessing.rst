@@ -720,6 +720,9 @@ Miscellaneous
    Return the number of CPUs in the system.  May raise
    :exc:`NotImplementedError`.
 
+   .. seealso::
+      :func:`os.cpu_count`
+
 .. function:: current_process()
 
    Return the :class:`Process` object corresponding to the current process.
@@ -1661,7 +1664,7 @@ with the :class:`Pool` class.
    callbacks and has a parallel map implementation.
 
    *processes* is the number of worker processes to use.  If *processes* is
-   ``None`` then the number returned by :func:`cpu_count` is used.  If
+   ``None`` then the number returned by :func:`os.cpu_count` is used.  If
    *initializer* is not ``None`` then each worker process will call
    ``initializer(*initargs)`` when it starts.
 
