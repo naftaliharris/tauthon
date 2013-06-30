@@ -17,7 +17,7 @@ __all__ = ["normcase","isabs","join","splitdrive","split","splitext",
            "ismount", "expanduser","expandvars","normpath","abspath",
            "splitunc","curdir","pardir","sep","pathsep","defpath","altsep",
            "extsep","devnull","realpath","supports_unicode_filenames","relpath",
-           "samefile", "sameopenfile",]
+           "samefile", "sameopenfile", "samestat",]
 
 # strings representing various path-related bits and pieces
 # These are primarily for export; internally, they are hardcoded.
@@ -30,9 +30,6 @@ altsep = '/'
 defpath = '.;C:\\bin'
 if 'ce' in sys.builtin_module_names:
     defpath = '\\Windows'
-elif 'os2' in sys.builtin_module_names:
-    # OS/2 w/ VACPP
-    altsep = '/'
 devnull = 'nul'
 
 def _get_empty(path):
@@ -320,12 +317,11 @@ def dirname(p):
 
 def islink(path):
     """Test whether a path is a symbolic link.
-    This will always return false for Windows prior to 6.0
-    and for OS/2.
+    This will always return false for Windows prior to 6.0.
     """
     try:
         st = os.lstat(path)
-    except (os.error, AttributeError):
+    except (OSError, AttributeError):
         return False
     return stat.S_ISLNK(st.st_mode)
 
@@ -335,7 +331,7 @@ def lexists(path):
     """Test whether a path exists.  Returns True for broken symbolic links"""
     try:
         st = os.lstat(path)
-    except (os.error, WindowsError):
+    except OSError:
         return False
     return True
 
@@ -570,7 +566,7 @@ def normpath(path):
 try:
     from nt import _getfullpathname
 
-except ImportError: # not running on Windows - mock up something sensible
+except ModuleNotFoundError: # not running on Windows - mock up something sensible
     def abspath(path):
         """Return the absolute version of a path."""
         if not isabs(path):
@@ -588,7 +584,7 @@ else:  # use native Windows method on Windows
         if path: # Empty path must return current working directory.
             try:
                 path = _getfullpathname(path)
-            except WindowsError:
+            except OSError:
                 pass # Bad path - return unchanged.
         elif isinstance(path, bytes):
             path = os.getcwdb()
@@ -656,23 +652,6 @@ except (AttributeError, ImportError):
     def _getfinalpathname(f):
         return normcase(abspath(f))
 
-def samefile(f1, f2):
-    "Test whether two pathnames reference the same actual file"
-    return _getfinalpathname(f1) == _getfinalpathname(f2)
-
-
-try:
-    from nt import _getfileinformation
-except ImportError:
-    # On other operating systems, just return the fd and see that
-    # it compares equal in sameopenfile.
-    def _getfileinformation(fd):
-        return fd
-
-def sameopenfile(f1, f2):
-    """Test whether two file objects reference the same file"""
-    return _getfileinformation(f1) == _getfileinformation(f2)
-
 
 try:
     # The genericpath.isdir implementation uses os.stat and checks the mode
@@ -680,6 +659,6 @@ try:
     # This is overkill on Windows - just pass the path to GetFileAttributes
     # and check the attribute from there.
     from nt import _isdir as isdir
-except ImportError:
+except ModuleNotFoundError:
     # Use genericpath.isdir as imported above.
     pass
