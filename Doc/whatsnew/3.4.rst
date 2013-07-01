@@ -1,0 +1,329 @@
+****************************
+  What's New In Python 3.4
+****************************
+
+.. :Author: Someone <email>
+   (uncomment if there is a principal author)
+
+.. Rules for maintenance:
+
+   * Anyone can add text to this document, but the maintainer reserves the
+   right to rewrite any additions. In particular, for obscure or esoteric
+   features, the maintainer may reduce any addition to a simple reference to
+   the new documentation rather than explaining the feature inline.
+
+   * While the maintainer will periodically go through Misc/NEWS
+   and add changes, it's best not to rely on this. We know from experience
+   that any changes that aren't in the What's New documentation around the
+   time of the original release will remain largely unknown to the community
+   for years, even if they're added later. We also know from experience that
+   other priorities can arise, and the maintainer will run out of time to do
+   updates - in such cases, end users will be much better served by partial
+   notifications that at least give a hint about new features to
+   investigate.
+
+   * This is not a complete list of every single change; completeness
+   is the purpose of Misc/NEWS. The What's New should focus on changes that
+   are visible to Python *users* and that *require* a feature release (i.e.
+   most bug fixes should only be recorded in Misc/NEWS)
+
+   * PEPs should not be marked Final until they have an entry in What's New.
+   A placeholder entry that is just a section header and a link to the PEP
+   (e.g ":pep:`397` has been implemented") is acceptable. If a PEP has been
+   implemented and noted in What's New, don't forget to mark it as Final!
+
+   * If you want to draw your new text to the attention of the
+   maintainer, add 'XXX' to the beginning of the paragraph or
+   section.
+
+   * It's OK to add just a very brief note about a change.  For
+   example: "The :ref:`~socket.transmogrify()` function was added to the
+   :mod:`socket` module."  The maintainer will research the change and
+   write the necessary text (if appropriate). The advantage of doing this
+   is that even if no more descriptive text is ever added, readers will at
+   least have a notification that the new feature exists and a link to the
+   relevant documentation.
+
+   * You can comment out your additions if you like, but it's not
+   necessary (especially when a final release is some months away).
+
+   * Credit the author of a patch or bugfix.   Just the name is
+   sufficient; the e-mail address isn't necessary.
+
+   * It's helpful to add the bug/patch number as a comment:
+
+   The :ref:`~socket.transmogrify()` function was added to the
+   :mod:`socket` module. (Contributed by P.Y. Developer in :issue:`12345`.)
+
+   This saves the maintainer the effort of going through the Mercurial log
+   when researching a change.
+
+   * Cross referencing tip: :ref:`mod.attr` will display as ``mod.attr``,
+   while :ref:`~mod.attr` will display as ``attr``.
+
+This article explains the new features in Python 3.4, compared to 3.3.
+
+.. Python 3.4 was released on TBD.
+
+For full details, see the
+`changelog <http://docs.python.org/3.4/whatsnew/changelog.html>`_.
+
+.. note:: Prerelease users should be aware that this document is currently in
+   draft form. It will be updated substantially as Python 3.4 moves towards
+   release, so it's worth checking back even after reading earlier versions.
+
+
+.. seealso::
+
+   .. :pep:`4XX` - Python 3.4 Release Schedule
+
+
+Summary -- Release highlights
+=============================
+
+.. This section singles out the most important changes in Python 3.4.
+   Brevity is key.
+
+New syntax features:
+
+* None yet.
+
+New library modules:
+
+* :mod:`enum`: Implementation of the :pep:`435`.
+
+New built-in features:
+
+* None yet.
+
+Implementation improvements:
+
+* A more efficient :mod:`marshal` format <http://bugs.python.org/issue16475>.
+
+Significantly Improved Library Modules:
+
+* SHA-3 (Keccak) support for :mod:`hashlib`.
+* TLSv1.1 and TLSv1.2 support for :mod:`ssl`.
+
+Security improvements:
+
+* None yet.
+
+Please read on for a comprehensive list of user-facing changes.
+
+
+.. PEP-sized items next.
+
+.. _pep-4XX:
+
+.. PEP 4XX: Example PEP
+.. ====================
+
+
+.. (Implemented by Foo Bar.)
+
+.. .. seealso::
+
+   :pep:`4XX` - Example PEP
+      PEP written by Example Author
+
+
+
+
+Other Language Changes
+======================
+
+Some smaller changes made to the core Python language are:
+
+* Unicode database updated to UCD version 6.2.
+
+* Import now raises the new exception :exc:`ModuleNotFoundError` (subclass of
+  :exc:`ImportError`) when it cannot find something.
+
+* :func:`min` and :func:`max` now accept a *default* argument that can be used
+  to specify the value they return if the iterable they are evaluating has no
+  elements.  Contributed by Julian Berman in :issue:`18111`.
+
+
+New Modules
+===========
+
+.. module name
+.. -----------
+
+* None yet.
+
+
+Improved Modules
+================
+
+
+dis
+---
+
+The :mod:`dis` module is now built around an :class:`Instruction` class that
+provides details of individual bytecode operations and a
+:func:`get_instructions` iterator that emits the Instruction stream for a
+given piece of Python code. The various display tools in the :mod:`dis`
+module have been updated to be based on these new components.
+
+The new :class:`dis.Bytecode` class provides an object-oriented API for
+inspecting bytecode, both in human-readable form and for iterating over
+instructions.
+
+(Contributed by Nick Coghlan, Ryan Kelly and Thomas Kluyver in :issue:`11816`)
+
+doctest
+-------
+
+Added :data:`~doctest.FAIL_FAST` flag to halt test running as soon as the first
+failure is detected.  (Contributed by R. David Murray and Daniel Urban in
+:issue:`16522`.)
+
+Updated the doctest command line interface to use :mod:`argparse`, and added
+``-o`` and ``-f`` options to the interface.  ``-o`` allows doctest options to
+be specified on the command line, and ``-f`` is a shorthand for ``-o
+FAIL_FAST`` (to parallel the similar option supported by the :mod:`unittest`
+CLI).  (Contributed by R. David Murray in :issue:`11390`.)
+
+
+functools
+---------
+
+New :func:`functools.singledispatch` decorator: see the :pep:`443`.
+
+smtplib
+-------
+
+:exc:`~smtplib.SMTPException` is now a subclass of :exc:`OSError`, which allows
+both socket level errors and SMTP protocol level errors to be caught in one
+try/except statement by code that only cares whether or not an error occurred.
+(:issue:`2118`).
+
+ssl
+---
+
+TLSv1.1 and TLSv1.2 support (Contributed by Michele Orrù and Antoine Pitrou
+in :issue:`16692`)
+
+New diagnostic functions :func:`~ssl.get_default_verify_paths`,
+:meth:`~ssl.SSLContext.cert_store_stats` and
+:meth:`~ssl.SSLContext.get_ca_certs`
+
+Add :func:`ssl.enum_cert_store` to retrieve certificates and CRL from Windows'
+cert store.
+
+(Contributed by Christian Heimes in :issue:`18143`, :issue:`18147` and
+:issue:`17134`)
+
+wave
+----
+
+The :meth:`~wave.getparams` method now returns a namedtuple rather than a
+plain tuple.  (Contributed by Claudiu Popa in :issue:`17487`.)
+
+stat
+---
+
+The stat module is now backed by a C implementation in :mod:`_stat`. A C
+implementation is required as most of the values aren't standardized and
+platform-dependent.  (Contributed by Christian Heimes in :issue:`11016`.)
+
+Optimizations
+=============
+
+Major performance enhancements have been added:
+
+* The UTF-32 decoder is now 3x to 4x faster.
+
+
+Build and C API Changes
+=======================
+
+Changes to Python's build process and to the C API include:
+
+* None yet.
+
+
+Deprecated
+==========
+
+Unsupported Operating Systems
+-----------------------------
+
+* None yet.
+
+
+Deprecated Python modules, functions and methods
+------------------------------------------------
+
+* :meth:`difflib.SequenceMatcher.isbjunk` and
+  :meth:`difflib.SequenceMatcher.isbpopular` were removed: use ``x in sm.bjunk`` and
+  ``x in sm.bpopular``, where *sm* is a :class:`~difflib.SequenceMatcher` object.
+
+* :func:`importlib.util.module_for_loader` is pending deprecation. Using
+  :func:`importlib.util.module_to_load` and
+  :meth:`importlib.abc.Loader.init_module_attrs` allows subclasses of a loader
+  to more easily customize module loading.
+
+* The :mod:`imp` module is pending deprecation. To keep compatibility with
+  Python 2/3 code bases, the module's removal is currently not scheduled.
+
+
+Deprecated functions and types of the C API
+-------------------------------------------
+
+* None yet.
+
+
+Deprecated features
+-------------------
+
+* None yet.
+
+
+Porting to Python 3.4
+=====================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+* The ABCs defined in :mod:`importlib.abc` now either raise the appropriate
+  exception or return a default value instead of raising
+  :exc:`NotImplementedError` blindly. This will only affect code calling
+  :func:`super` and falling through all the way to the ABCs. For compatibility,
+  catch both :exc:`NotImplementedError` or the appropriate exception as needed.
+
+* The module type now initializes the :attr:`__package__` and :attr:`__loader__`
+  attributes to ``None`` by default. To determine if these attributes were set
+  in a backwards-compatible fashion, use e.g.
+  ``getattr(module, '__loader__', None) is not None``.
+
+* :meth:`importlib.util.module_for_loader` now sets ``__loader__`` and
+  ``__package__`` unconditionally to properly support reloading. If this is not
+  desired then you will need to set these attributes manually. You can use
+  :func:`importlib.util.module_to_load` for module management.
+
+* Import now resets relevant attributes (e.g. ``__name__``, ``__loader__``,
+  ``__package__``, ``__file__``, ``__cached__``) unconditionally when reloading.
+
+* Frozen packages no longer set ``__path__`` to a list containg the package name
+  but an empty list instead. Determing if a module is a package should be done
+  using ``hasattr(module, '__path__')``.
+
+* :c:func:`PyErr_SetImportError` now sets :exc:`TypeError` when its **msg**
+  argument is not set. Previously only ``NULL`` was returned.
+
+* :func:`py_compile.compile` now raises :exc:`FileExistsError` if the file path
+  it would write to is a symlink or a non-regular file. This is to act as a
+  warning that import will overwrite those files with a regular file regardless
+  of what type of file path they were originally.
+
+* :meth:`importlib.abc.SourceLoader.get_source` no longer raises
+  :exc:`ImportError` when the source code being loaded triggers a
+  :exc:`SyntaxError` or :exc:`UnicodeDecodeError`. As :exc:`ImportError` is
+  meant to be raised only when source code cannot be found but it should, it was
+  felt to be over-reaching/overloading of that meaning when the source code is
+  found but improperly structured. If you were catching ImportError before and
+  wish to continue to ignore syntax or decoding issues, catch all three
+  exceptions now.
