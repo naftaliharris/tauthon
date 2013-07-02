@@ -131,7 +131,7 @@ class HelperFunctionsTests(unittest.TestCase):
             re.escape(os.path.join(pth_dir, pth_fn)))
         # XXX: ditto previous XXX comment.
         self.assertRegex(err_out.getvalue(), 'Traceback')
-        self.assertRegex(err_out.getvalue(), 'ImportError')
+        self.assertRegex(err_out.getvalue(), 'ModuleNotFoundError')
 
     @unittest.skipIf(sys.platform == "win32", "Windows does not raise an "
                       "error for file paths containing null characters")
@@ -222,11 +222,7 @@ class HelperFunctionsTests(unittest.TestCase):
         site.PREFIXES = ['xoxo']
         dirs = site.getsitepackages()
 
-        if sys.platform in ('os2emx', 'riscos'):
-            self.assertEqual(len(dirs), 1)
-            wanted = os.path.join('xoxo', 'Lib', 'site-packages')
-            self.assertEqual(dirs[0], wanted)
-        elif (sys.platform == "darwin" and
+        if (sys.platform == "darwin" and
             sysconfig.get_config_var("PYTHONFRAMEWORK")):
             # OS X framework builds
             site.PREFIXES = ['Python.framework']
@@ -405,8 +401,6 @@ class ImportSideEffectTests(unittest.TestCase):
             else:
                 self.fail("sitecustomize not imported automatically")
 
-def test_main():
-    run_unittest(HelperFunctionsTests, ImportSideEffectTests)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

@@ -36,7 +36,7 @@ from random import Random as _Random
 
 try:
     import fcntl as _fcntl
-except ImportError:
+except ModuleNotFoundError:
     def _set_cloexec(fd):
         pass
 else:
@@ -53,11 +53,13 @@ else:
 
 try:
     import _thread
-except ImportError:
+except ModuleNotFoundError:
     import _dummy_thread as _thread
 _allocate_lock = _thread.allocate_lock
 
 _text_openflags = _os.O_RDWR | _os.O_CREAT | _os.O_EXCL
+if hasattr(_os, 'O_CLOEXEC'):
+    _text_openflags |= _os.O_CLOEXEC
 if hasattr(_os, 'O_NOINHERIT'):
     _text_openflags |= _os.O_NOINHERIT
 if hasattr(_os, 'O_NOFOLLOW'):
@@ -684,7 +686,6 @@ class TemporaryDirectory(object):
     _islink = staticmethod(_os.path.islink)
     _remove = staticmethod(_os.remove)
     _rmdir = staticmethod(_os.rmdir)
-    _os_error = OSError
     _warn = _warnings.warn
 
     def _rmtree(self, path):
@@ -694,16 +695,16 @@ class TemporaryDirectory(object):
             fullname = self._path_join(path, name)
             try:
                 isdir = self._isdir(fullname) and not self._islink(fullname)
-            except self._os_error:
+            except OSError:
                 isdir = False
             if isdir:
                 self._rmtree(fullname)
             else:
                 try:
                     self._remove(fullname)
-                except self._os_error:
+                except OSError:
                     pass
         try:
             self._rmdir(path)
-        except self._os_error:
+        except OSError:
             pass

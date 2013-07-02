@@ -13,7 +13,7 @@ EMPTYSTRING = b''
 
 try:
     from binascii import a2b_qp, b2a_qp
-except ImportError:
+except ModuleNotFoundError:
     a2b_qp = None
     b2a_qp = None
 
@@ -223,7 +223,7 @@ def main():
         else:
             try:
                 fp = open(file, "rb")
-            except IOError as msg:
+            except OSError as msg:
                 sys.stderr.write("%s: can't open (%s)\n" % (file, msg))
                 sts = 1
                 continue

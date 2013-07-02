@@ -16,7 +16,7 @@ def showwarning(message, category, filename, lineno, file=None, line=None):
         file = sys.stderr
     try:
         file.write(formatwarning(message, category, filename, lineno, line))
-    except IOError:
+    except OSError:
         pass # the file (probably stderr) is invalid - this warning gets lost.
 
 def formatwarning(message, category, filename, lineno, line=None):
@@ -144,8 +144,8 @@ def _getcategory(category):
         module = category[:i]
         klass = category[i+1:]
         try:
-            m = __import__(module, None, None, [klass])
-        except ImportError:
+            m = __import__(module, fromlist[klass])
+        except ModuleNotFoundError:
             raise _OptionError("invalid module name: %r" % (module,))
         try:
             cat = getattr(m, klass)
@@ -362,7 +362,7 @@ try:
     defaultaction = _defaultaction
     onceregistry = _onceregistry
     _warnings_defaults = True
-except ImportError:
+except ModuleNotFoundError:
     filters = []
     defaultaction = "default"
     onceregistry = {}

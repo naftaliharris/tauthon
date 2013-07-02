@@ -54,7 +54,8 @@ More condensed:
 
 # This tuple and __get_builtin_constructor() must be modified if a new
 # always available algorithm is added.
-__always_supported = ('md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512')
+__always_supported = ('md5', 'sha1', 'sha224', 'sha256', 'sha384', 'sha512',
+                      'sha3_224', 'sha3_256', 'sha3_384', 'sha3_512')
 
 algorithms_guaranteed = set(__always_supported)
 algorithms_available = set(__always_supported)
@@ -85,7 +86,19 @@ def __get_builtin_constructor(name):
                 return _sha512.sha512
             elif bs == '384':
                 return _sha512.sha384
-    except ImportError:
+        elif name in {'sha3_224', 'sha3_256', 'sha3_384', 'sha3_512',
+                      'SHA3_224', 'SHA3_256', 'SHA3_384', 'SHA3_512'}:
+            import _sha3
+            bs = name[5:]
+            if bs == '224':
+                return _sha3.sha3_224
+            elif bs == '256':
+                return _sha3.sha3_256
+            elif bs == '384':
+                return _sha3.sha3_384
+            elif bs == '512':
+                return _sha3.sha3_512
+    except ModuleNotFoundError:
         pass  # no extension module, this hash is unsupported.
 
     raise ValueError('unsupported hash type ' + name)
@@ -130,7 +143,7 @@ try:
     __get_hash = __get_openssl_constructor
     algorithms_available = algorithms_available.union(
             _hashlib.openssl_md_meth_names)
-except ImportError:
+except ModuleNotFoundError:
     new = __py_new
     __get_hash = __get_builtin_constructor
 

@@ -1,7 +1,7 @@
 # We import importlib *ASAP* in order to test #15386
 import importlib
+import importlib.util
 import builtins
-import imp
 from test.test_importlib.import_ import util as importlib_util
 import marshal
 import os
@@ -68,7 +68,15 @@ class ImportTests(unittest.TestCase):
     def tearDown(self):
         unload(TESTFN)
 
-    setUp = tearDown
+    def test_import_raises_ModuleNotFoundError(self):
+        with self.assertRaises(ModuleNotFoundError):
+            import something_that_should_not_exist_anywhere
+
+    def test_from_import_raises_ModuleNotFoundError(self):
+        with self.assertRaises(ModuleNotFoundError):
+            from something_that_should_not_exist_anywhere import blah
+        with self.assertRaises(ModuleNotFoundError):
+            from importlib import something_that_should_not_exist_anywhere
 
     def test_case_sensitivity(self):
         # Brief digression to test that import is case-sensitive:  if we got
@@ -126,16 +134,6 @@ class ImportTests(unittest.TestCase):
                     test_with_extension(ext)
         finally:
             del sys.path[0]
-
-    @skip_if_dont_write_bytecode
-    def test_bug7732(self):
-        source = TESTFN + '.py'
-        os.mkdir(source)
-        try:
-            self.assertRaisesRegex(ImportError, '^No module',
-                imp.find_module, TESTFN, ["."])
-        finally:
-            os.rmdir(source)
 
     def test_module_with_large_stack(self, module='longlist'):
         # Regression test for http://bugs.python.org/issue561858.
@@ -223,7 +221,7 @@ class ImportTests(unittest.TestCase):
             with open(source, "w") as f:
                 f.write("a = 10\nb=20//0\n")
 
-            self.assertRaises(ZeroDivisionError, imp.reload, mod)
+            self.assertRaises(ZeroDivisionError, importlib.reload, mod)
             # But we still expect the module to be in sys.modules.
             mod = sys.modules.get(TESTFN)
             self.assertIsNot(mod, None, "expected module to be in sys.modules")
@@ -289,7 +287,7 @@ class ImportTests(unittest.TestCase):
             import sys
             class C:
                def __del__(self):
-                  import imp
+                  import importlib
             sys.argv.insert(0, C())
             """))
         script_helper.assert_python_ok(testfn)
@@ -300,7 +298,7 @@ class ImportTests(unittest.TestCase):
         sys.path.insert(0, os.curdir)
         try:
             source = TESTFN + ".py"
-            compiled = imp.cache_from_source(source)
+            compiled = importlib.util.cache_from_source(source)
             with open(source, 'w') as f:
                 pass
             try:
@@ -341,7 +339,7 @@ class FilePermissionTests(unittest.TestCase):
     def test_creation_mode(self):
         mask = 0o022
         with temp_umask(mask), _ready_to_import() as (name, path):
-            cached_path = imp.cache_from_source(path)
+            cached_path = importlib.util.cache_from_source(path)
             module = __import__(name)
             if not os.path.exists(cached_path):
                 self.fail("__import__ did not result in creation of "
@@ -359,7 +357,7 @@ class FilePermissionTests(unittest.TestCase):
         # permissions of .pyc should match those of .py, regardless of mask
         mode = 0o600
         with temp_umask(0o022), _ready_to_import() as (name, path):
-            cached_path = imp.cache_from_source(path)
+            cached_path = importlib.util.cache_from_source(path)
             os.chmod(path, mode)
             __import__(name)
             if not os.path.exists(cached_path):
@@ -374,7 +372,7 @@ class FilePermissionTests(unittest.TestCase):
     def test_cached_readonly(self):
         mode = 0o400
         with temp_umask(0o022), _ready_to_import() as (name, path):
-            cached_path = imp.cache_from_source(path)
+            cached_path = importlib.util.cache_from_source(path)
             os.chmod(path, mode)
             __import__(name)
             if not os.path.exists(cached_path):
@@ -414,7 +412,7 @@ class FilePermissionTests(unittest.TestCase):
                 bytecode_only = path + "c"
             else:
                 bytecode_only = path + "o"
-            os.rename(imp.cache_from_source(path), bytecode_only)
+            os.rename(importlib.util.cache_from_source(path), bytecode_only)
             m = __import__(name)
             self.assertEqual(m.x, 'rewritten')
 
@@ -436,7 +434,7 @@ func_filename = func.__code__.co_filename
 """
     dir_name = os.path.abspath(TESTFN)
     file_name = os.path.join(dir_name, module_name) + os.extsep + "py"
-    compiled_name = imp.cache_from_source(file_name)
+    compiled_name = importlib.util.cache_from_source(file_name)
 
     def setUp(self):
         self.sys_path = sys.path[:]
@@ -497,7 +495,7 @@ func_filename = func.__code__.co_filename
             header = f.read(12)
             code = marshal.load(f)
         constants = list(code.co_consts)
-        foreign_code = test_main.__code__
+        foreign_code = importlib.import_module.__code__
         pos = constants.index(1)
         constants[pos] = foreign_code
         code = type(code)(code.co_argcount, code.co_kwonlyargcount,
@@ -639,7 +637,7 @@ class OverridingImportBuiltinTests(unittest.TestCase):
 class PycacheTests(unittest.TestCase):
     # Test the various PEP 3147 related behaviors.
 
-    tag = imp.get_tag()
+    tag = sys.implementation.cache_tag
 
     def _clean(self):
         forget(TESTFN)
@@ -687,7 +685,7 @@ class PycacheTests(unittest.TestCase):
         # With PEP 3147 cache layout, removing the source but leaving the pyc
         # file does not satisfy the import.
         __import__(TESTFN)
-        pyc_file = imp.cache_from_source(self.source)
+        pyc_file = importlib.util.cache_from_source(self.source)
         self.assertTrue(os.path.exists(pyc_file))
         os.remove(self.source)
         forget(TESTFN)
@@ -712,7 +710,7 @@ class PycacheTests(unittest.TestCase):
     def test___cached__(self):
         # Modules now also have an __cached__ that points to the pyc file.
         m = __import__(TESTFN)
-        pyc_file = imp.cache_from_source(TESTFN + '.py')
+        pyc_file = importlib.util.cache_from_source(TESTFN + '.py')
         self.assertEqual(m.__cached__, os.path.join(os.curdir, pyc_file))
 
     @skip_if_dont_write_bytecode
@@ -747,10 +745,10 @@ class PycacheTests(unittest.TestCase):
             pass
         importlib.invalidate_caches()
         m = __import__('pep3147.foo')
-        init_pyc = imp.cache_from_source(
+        init_pyc = importlib.util.cache_from_source(
             os.path.join('pep3147', '__init__.py'))
         self.assertEqual(m.__cached__, os.path.join(os.curdir, init_pyc))
-        foo_pyc = imp.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        foo_pyc = importlib.util.cache_from_source(os.path.join('pep3147', 'foo.py'))
         self.assertEqual(sys.modules['pep3147.foo'].__cached__,
                          os.path.join(os.curdir, foo_pyc))
 
@@ -774,10 +772,10 @@ class PycacheTests(unittest.TestCase):
         unload('pep3147')
         importlib.invalidate_caches()
         m = __import__('pep3147.foo')
-        init_pyc = imp.cache_from_source(
+        init_pyc = importlib.util.cache_from_source(
             os.path.join('pep3147', '__init__.py'))
         self.assertEqual(m.__cached__, os.path.join(os.curdir, init_pyc))
-        foo_pyc = imp.cache_from_source(os.path.join('pep3147', 'foo.py'))
+        foo_pyc = importlib.util.cache_from_source(os.path.join('pep3147', 'foo.py'))
         self.assertEqual(sys.modules['pep3147.foo'].__cached__,
                          os.path.join(os.curdir, foo_pyc))
 
@@ -861,7 +859,6 @@ class ImportlibBootstrapTests(unittest.TestCase):
         from importlib import machinery
         mod = sys.modules['_frozen_importlib']
         self.assertIs(machinery.FileFinder, mod.FileFinder)
-        self.assertIs(imp.new_module, mod.new_module)
 
 
 class ImportTracebackTests(unittest.TestCase):
@@ -1024,16 +1021,5 @@ class ImportTracebackTests(unittest.TestCase):
             importlib.SourceLoader.load_module = old_load_module
 
 
-def test_main(verbose=None):
-    run_unittest(ImportTests, PycacheTests, FilePermissionTests,
-                 PycRewritingTests, PathsTests, RelativeImportTests,
-                 OverridingImportBuiltinTests,
-                 ImportlibBootstrapTests,
-                 TestSymbolicallyLinkedPackage,
-                 ImportTracebackTests)
-
-
 if __name__ == '__main__':
-    # Test needs to be a package, so we can do relative imports.
-    from test.test_import import test_main
-    test_main()
+    unittest.main()

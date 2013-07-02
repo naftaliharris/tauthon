@@ -52,10 +52,46 @@ PROTOCOL_SSLv2
 PROTOCOL_SSLv3
 PROTOCOL_SSLv23
 PROTOCOL_TLSv1
+PROTOCOL_TLSv1_1
+PROTOCOL_TLSv1_2
+
+The following constants identify various SSL alert message descriptions as per
+http://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-6
+
+ALERT_DESCRIPTION_CLOSE_NOTIFY
+ALERT_DESCRIPTION_UNEXPECTED_MESSAGE
+ALERT_DESCRIPTION_BAD_RECORD_MAC
+ALERT_DESCRIPTION_RECORD_OVERFLOW
+ALERT_DESCRIPTION_DECOMPRESSION_FAILURE
+ALERT_DESCRIPTION_HANDSHAKE_FAILURE
+ALERT_DESCRIPTION_BAD_CERTIFICATE
+ALERT_DESCRIPTION_UNSUPPORTED_CERTIFICATE
+ALERT_DESCRIPTION_CERTIFICATE_REVOKED
+ALERT_DESCRIPTION_CERTIFICATE_EXPIRED
+ALERT_DESCRIPTION_CERTIFICATE_UNKNOWN
+ALERT_DESCRIPTION_ILLEGAL_PARAMETER
+ALERT_DESCRIPTION_UNKNOWN_CA
+ALERT_DESCRIPTION_ACCESS_DENIED
+ALERT_DESCRIPTION_DECODE_ERROR
+ALERT_DESCRIPTION_DECRYPT_ERROR
+ALERT_DESCRIPTION_PROTOCOL_VERSION
+ALERT_DESCRIPTION_INSUFFICIENT_SECURITY
+ALERT_DESCRIPTION_INTERNAL_ERROR
+ALERT_DESCRIPTION_USER_CANCELLED
+ALERT_DESCRIPTION_NO_RENEGOTIATION
+ALERT_DESCRIPTION_UNSUPPORTED_EXTENSION
+ALERT_DESCRIPTION_CERTIFICATE_UNOBTAINABLE
+ALERT_DESCRIPTION_UNRECOGNIZED_NAME
+ALERT_DESCRIPTION_BAD_CERTIFICATE_STATUS_RESPONSE
+ALERT_DESCRIPTION_BAD_CERTIFICATE_HASH_VALUE
+ALERT_DESCRIPTION_UNKNOWN_PSK_IDENTITY
 """
 
 import textwrap
 import re
+import sys
+import os
+import collections
 
 import _ssl             # if we can't import it, let the error propagate
 
@@ -66,34 +102,22 @@ from _ssl import (
     SSLSyscallError, SSLEOFError,
     )
 from _ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
-from _ssl import (
-    OP_ALL, OP_NO_SSLv2, OP_NO_SSLv3, OP_NO_TLSv1,
-    OP_CIPHER_SERVER_PREFERENCE, OP_SINGLE_DH_USE
-    )
-try:
-    from _ssl import OP_NO_COMPRESSION
-except ImportError:
-    pass
-try:
-    from _ssl import OP_SINGLE_ECDH_USE
-except ImportError:
-    pass
 from _ssl import RAND_status, RAND_egd, RAND_add, RAND_bytes, RAND_pseudo_bytes
-from _ssl import (
-    SSL_ERROR_ZERO_RETURN,
-    SSL_ERROR_WANT_READ,
-    SSL_ERROR_WANT_WRITE,
-    SSL_ERROR_WANT_X509_LOOKUP,
-    SSL_ERROR_SYSCALL,
-    SSL_ERROR_SSL,
-    SSL_ERROR_WANT_CONNECT,
-    SSL_ERROR_EOF,
-    SSL_ERROR_INVALID_ERROR_CODE,
-    )
+
+def _import_symbols(prefix):
+    for n in dir(_ssl):
+        if n.startswith(prefix):
+            globals()[n] = getattr(_ssl, n)
+
+_import_symbols('OP_')
+_import_symbols('ALERT_DESCRIPTION_')
+_import_symbols('SSL_ERROR_')
+
 from _ssl import HAS_SNI, HAS_ECDH, HAS_NPN
-from _ssl import (PROTOCOL_SSLv3, PROTOCOL_SSLv23,
-                  PROTOCOL_TLSv1)
+
+from _ssl import PROTOCOL_SSLv3, PROTOCOL_SSLv23, PROTOCOL_TLSv1
 from _ssl import _OPENSSL_API_VERSION
+
 
 _PROTOCOL_NAMES = {
     PROTOCOL_TLSv1: "TLSv1",
@@ -103,17 +127,30 @@ _PROTOCOL_NAMES = {
 try:
     from _ssl import PROTOCOL_SSLv2
     _SSLv2_IF_EXISTS = PROTOCOL_SSLv2
-except ImportError:
+except ModuleNotFoundError:
     _SSLv2_IF_EXISTS = None
 else:
     _PROTOCOL_NAMES[PROTOCOL_SSLv2] = "SSLv2"
 
+try:
+    from _ssl import PROTOCOL_TLSv1_1, PROTOCOL_TLSv1_2
+except ModuleNotFoundError:
+    pass
+else:
+    _PROTOCOL_NAMES[PROTOCOL_TLSv1_1] = "TLSv1.1"
+    _PROTOCOL_NAMES[PROTOCOL_TLSv1_2] = "TLSv1.2"
+
+if sys.platform == "win32":
+    from _ssl import enum_cert_store, X509_ASN_ENCODING, PKCS_7_ASN_ENCODING
+
 from socket import getnameinfo as _getnameinfo
-from socket import error as socket_error
 from socket import socket, AF_INET, SOCK_STREAM, create_connection
 import base64        # for DER-to-PEM translation
 import traceback
 import errno
+
+
+socket_error = OSError  # keep that public name in module namespace
 
 if _ssl.HAS_TLS_UNIQUE:
     CHANNEL_BINDING_TYPES = ['tls-unique']
@@ -191,11 +228,29 @@ def match_hostname(cert, hostname):
             "subjectAltName fields were found")
 
 
+DefaultVerifyPaths = collections.namedtuple("DefaultVerifyPaths",
+    "cafile capath openssl_cafile_env openssl_cafile openssl_capath_env "
+    "openssl_capath")
+
+def get_default_verify_paths():
+    """Return paths to default cafile and capath.
+    """
+    parts = _ssl.get_default_verify_paths()
+
+    # environment vars shadow paths
+    cafile = os.environ.get(parts[0], parts[1])
+    capath = os.environ.get(parts[2], parts[3])
+
+    return DefaultVerifyPaths(cafile if os.path.isfile(cafile) else None,
+                              capath if os.path.isdir(capath) else None,
+                              *parts)
+
+
 class SSLContext(_SSLContext):
     """An SSLContext holds various SSL-related configuration options and
     data, such as certificates and possibly a private key."""
 
-    __slots__ = ('protocol',)
+    __slots__ = ('protocol', '__weakref__')
 
     def __new__(cls, protocol, *args, **kwargs):
         self = _SSLContext.__new__(cls, protocol)
@@ -243,7 +298,7 @@ class SSLSocket(socket):
                  _context=None):
 
         if _context:
-            self.context = _context
+            self._context = _context
         else:
             if server_side and not certfile:
                 raise ValueError("certfile must be specified for server-side "
@@ -252,16 +307,16 @@ class SSLSocket(socket):
                 raise ValueError("certfile must be specified")
             if certfile and not keyfile:
                 keyfile = certfile
-            self.context = SSLContext(ssl_version)
-            self.context.verify_mode = cert_reqs
+            self._context = SSLContext(ssl_version)
+            self._context.verify_mode = cert_reqs
             if ca_certs:
-                self.context.load_verify_locations(ca_certs)
+                self._context.load_verify_locations(ca_certs)
             if certfile:
-                self.context.load_cert_chain(certfile, keyfile)
+                self._context.load_cert_chain(certfile, keyfile)
             if npn_protocols:
-                self.context.set_npn_protocols(npn_protocols)
+                self._context.set_npn_protocols(npn_protocols)
             if ciphers:
-                self.context.set_ciphers(ciphers)
+                self._context.set_ciphers(ciphers)
             self.keyfile = keyfile
             self.certfile = certfile
             self.cert_reqs = cert_reqs
@@ -275,7 +330,6 @@ class SSLSocket(socket):
         self.server_hostname = server_hostname
         self.do_handshake_on_connect = do_handshake_on_connect
         self.suppress_ragged_eofs = suppress_ragged_eofs
-        connected = False
         if sock is not None:
             socket.__init__(self,
                             family=sock.family,
@@ -283,19 +337,21 @@ class SSLSocket(socket):
                             proto=sock.proto,
                             fileno=sock.fileno())
             self.settimeout(sock.gettimeout())
-            # see if it's connected
-            try:
-                sock.getpeername()
-            except socket_error as e:
-                if e.errno != errno.ENOTCONN:
-                    raise
-            else:
-                connected = True
             sock.detach()
         elif fileno is not None:
             socket.__init__(self, fileno=fileno)
         else:
             socket.__init__(self, family=family, type=type, proto=proto)
+
+        # See if we are connected
+        try:
+            self.getpeername()
+        except OSError as e:
+            if e.errno != errno.ENOTCONN:
+                raise
+            connected = False
+        else:
+            connected = True
 
         self._closed = False
         self._sslobj = None
@@ -303,7 +359,7 @@ class SSLSocket(socket):
         if connected:
             # create the SSL object
             try:
-                self._sslobj = self.context._wrap_socket(self, server_side,
+                self._sslobj = self._context._wrap_socket(self, server_side,
                                                          server_hostname)
                 if do_handshake_on_connect:
                     timeout = self.gettimeout()
@@ -312,9 +368,18 @@ class SSLSocket(socket):
                         raise ValueError("do_handshake_on_connect should not be specified for non-blocking sockets")
                     self.do_handshake()
 
-            except socket_error as x:
+            except OSError as x:
                 self.close()
                 raise x
+
+    @property
+    def context(self):
+        return self._context
+
+    @context.setter
+    def context(self, ctx):
+        self._context = ctx
+        self._sslobj.context = ctx
 
     def dup(self):
         raise NotImplemented("Can't dup() %s instances" %
@@ -323,6 +388,14 @@ class SSLSocket(socket):
     def _checkClosed(self, msg=None):
         # raise an exception here if you wish to check for spurious closes
         pass
+
+    def _check_connected(self):
+        if not self._connected:
+            # getpeername() will raise ENOTCONN if the socket is really
+            # not connected; note that we can be connected even without
+            # _connected being set, e.g. if connect() first returned
+            # EAGAIN.
+            self.getpeername()
 
     def read(self, len=0, buffer=None):
         """Read up to LEN bytes and return them.
@@ -358,6 +431,7 @@ class SSLSocket(socket):
         certificate was provided, but not validated."""
 
         self._checkClosed()
+        self._check_connected()
         return self._sslobj.peer_certificate(binary_form)
 
     def selected_npn_protocol(self):
@@ -388,18 +462,17 @@ class SSLSocket(socket):
                 raise ValueError(
                     "non-zero flags not allowed in calls to send() on %s" %
                     self.__class__)
-            while True:
-                try:
-                    v = self._sslobj.write(data)
-                except SSLError as x:
-                    if x.args[0] == SSL_ERROR_WANT_READ:
-                        return 0
-                    elif x.args[0] == SSL_ERROR_WANT_WRITE:
-                        return 0
-                    else:
-                        raise
+            try:
+                v = self._sslobj.write(data)
+            except SSLError as x:
+                if x.args[0] == SSL_ERROR_WANT_READ:
+                    return 0
+                elif x.args[0] == SSL_ERROR_WANT_WRITE:
+                    return 0
                 else:
-                    return v
+                    raise
+            else:
+                return v
         else:
             return socket.send(self, data, flags)
 
@@ -507,12 +580,11 @@ class SSLSocket(socket):
 
     def _real_close(self):
         self._sslobj = None
-        # self._closed = True
         socket._real_close(self)
 
     def do_handshake(self, block=False):
         """Perform a TLS/SSL handshake."""
-
+        self._check_connected()
         timeout = self.gettimeout()
         try:
             if timeout == 0.0 and block:
@@ -536,11 +608,11 @@ class SSLSocket(socket):
                 rc = None
                 socket.connect(self, addr)
             if not rc:
+                self._connected = True
                 if self.do_handshake_on_connect:
                     self.do_handshake()
-                self._connected = True
             return rc
-        except socket_error:
+        except OSError:
             self._sslobj = None
             raise
 

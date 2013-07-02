@@ -175,6 +175,9 @@ check_output(*popenargs, **kwargs):
 
     >>> output = subprocess.check_output(["ls", "-l", "/dev/null"])
 
+    There is an additional optional argument, "input", allowing you to
+    pass a string to the subprocess's stdin.  If you use this argument
+    you may not also use the Popen constructor's "stdin" argument.
 
 Exceptions
 ----------
@@ -350,7 +353,7 @@ import warnings
 import errno
 try:
     from time import monotonic as _time
-except ImportError:
+except ModuleNotFoundError:
     from time import time as _time
 
 # Exception classes used by this module.
@@ -395,8 +398,6 @@ if mswindows:
         hStdOutput = None
         hStdError = None
         wShowWindow = 0
-    class pywintypes:
-        error = IOError
 else:
     import select
     _has_poll = hasattr(select, 'poll')
@@ -565,14 +566,31 @@ def check_output(*popenargs, timeout=None, **kwargs):
     ...              stderr=STDOUT)
     b'ls: non_existent_file: No such file or directory\n'
 
+    There is an additional optional argument, "input", allowing you to
+    pass a string to the subprocess's stdin.  If you use this argument
+    you may not also use the Popen constructor's "stdin" argument, as
+    it too will be used internally.  Example:
+
+    >>> check_output(["sed", "-e", "s/foo/bar/"],
+    ...              input=b"when in the course of fooman events\n")
+    b'when in the course of barman events\n'
+
     If universal_newlines=True is passed, the return value will be a
     string rather than bytes.
     """
     if 'stdout' in kwargs:
         raise ValueError('stdout argument not allowed, it will be overridden.')
+    if 'input' in kwargs:
+        if 'stdin' in kwargs:
+            raise ValueError('stdin and input arguments may not both be used.')
+        inputdata = kwargs['input']
+        del kwargs['input']
+        kwargs['stdin'] = PIPE
+    else:
+        inputdata = None
     with Popen(*popenargs, stdout=PIPE, **kwargs) as process:
         try:
-            output, unused_err = process.communicate(timeout=timeout)
+            output, unused_err = process.communicate(inputdata, timeout=timeout)
         except TimeoutExpired:
             process.kill()
             output, unused_err = process.communicate()
@@ -824,7 +842,7 @@ class Popen(object):
             for f in filter(None, (self.stdin, self.stdout, self.stderr)):
                 try:
                     f.close()
-                except EnvironmentError:
+                except OSError:
                     pass  # Ignore EBADF or other errors.
 
             if not self._closed_child_pipe_fds:
@@ -840,7 +858,7 @@ class Popen(object):
                 for fd in to_close:
                     try:
                         os.close(fd)
-                    except EnvironmentError:
+                    except OSError:
                         pass
 
             raise
@@ -904,7 +922,7 @@ class Popen(object):
                 if input:
                     try:
                         self.stdin.write(input)
-                    except IOError as e:
+                    except OSError as e:
                         if e.errno != errno.EPIPE and e.errno != errno.EINVAL:
                             raise
                 self.stdin.close()
@@ -1036,23 +1054,6 @@ class Popen(object):
             return Handle(h)
 
 
-        def _find_w9xpopen(self):
-            """Find and return absolut path to w9xpopen.exe"""
-            w9xpopen = os.path.join(
-                            os.path.dirname(_winapi.GetModuleFileName(0)),
-                                    "w9xpopen.exe")
-            if not os.path.exists(w9xpopen):
-                # Eeek - file-not-found - possibly an embedding
-                # situation - see if we can locate it in sys.exec_prefix
-                w9xpopen = os.path.join(os.path.dirname(sys.base_exec_prefix),
-                                        "w9xpopen.exe")
-                if not os.path.exists(w9xpopen):
-                    raise RuntimeError("Cannot locate w9xpopen.exe, which is "
-                                       "needed for Popen to work with your "
-                                       "shell or platform.")
-            return w9xpopen
-
-
         def _execute_child(self, args, executable, preexec_fn, close_fds,
                            pass_fds, cwd, env,
                            startupinfo, creationflags, shell,
@@ -1081,21 +1082,6 @@ class Popen(object):
                 startupinfo.wShowWindow = _winapi.SW_HIDE
                 comspec = os.environ.get("COMSPEC", "cmd.exe")
                 args = '{} /c "{}"'.format (comspec, args)
-                if (_winapi.GetVersion() >= 0x80000000 or
-                        os.path.basename(comspec).lower() == "command.com"):
-                    # Win9x, or using command.com on NT. We need to
-                    # use the w9xpopen intermediate program. For more
-                    # information, see KB Q150956
-                    # (http://web.archive.org/web/20011105084002/http://support.microsoft.com/support/kb/articles/Q150/9/56.asp)
-                    w9xpopen = self._find_w9xpopen()
-                    args = '"%s" %s' % (w9xpopen, args)
-                    # Not passing CREATE_NEW_CONSOLE has been known to
-                    # cause random failures on win9x.  Specifically a
-                    # dialog: "Your program accessed mem currently in
-                    # use at xxx" and a hopeful warning about the
-                    # stability of your system.  Cost is Ctrl+C won't
-                    # kill children.
-                    creationflags |= _winapi.CREATE_NEW_CONSOLE
 
             # Start the process
             try:
@@ -1107,12 +1093,6 @@ class Popen(object):
                                          env,
                                          cwd,
                                          startupinfo)
-            except pywintypes.error as e:
-                # Translate pywintypes.error to WindowsError, which is
-                # a subclass of OSError.  FIXME: We should really
-                # translate errno using _sys_errlist (or similar), but
-                # how can this be done from Python?
-                raise WindowsError(*e.args)
             finally:
                 # Child is launched. Close the parent's copy of those pipe
                 # handles that only the child should have open.  You need
@@ -1197,7 +1177,7 @@ class Popen(object):
                 if input is not None:
                     try:
                         self.stdin.write(input)
-                    except IOError as e:
+                    except OSError as e:
                         if e.errno != errno.EPIPE:
                             raise
                 self.stdin.close()
@@ -1421,13 +1401,13 @@ class Popen(object):
                     exception_name, hex_errno, err_msg = (
                             errpipe_data.split(b':', 2))
                 except ValueError:
-                    exception_name = b'RuntimeError'
+                    exception_name = b'SubprocessError'
                     hex_errno = b'0'
                     err_msg = (b'Bad exception data from child: ' +
                                repr(errpipe_data))
                 child_exception_type = getattr(
                         builtins, exception_name.decode('ascii'),
-                        RuntimeError)
+                        SubprocessError)
                 err_msg = err_msg.decode(errors="surrogatepass")
                 if issubclass(child_exception_type, OSError) and hex_errno:
                     errno_num = int(hex_errno, 16)
@@ -1457,11 +1437,11 @@ class Popen(object):
                 self.returncode = _WEXITSTATUS(sts)
             else:
                 # Should never happen
-                raise RuntimeError("Unknown child exit status!")
+                raise SubprocessError("Unknown child exit status!")
 
 
         def _internal_poll(self, _deadstate=None, _waitpid=os.waitpid,
-                _WNOHANG=os.WNOHANG, _os_error=os.error, _ECHILD=errno.ECHILD):
+                _WNOHANG=os.WNOHANG, _ECHILD=errno.ECHILD):
             """Check if child process has terminated.  Returns returncode
             attribute.
 
@@ -1474,7 +1454,7 @@ class Popen(object):
                     pid, sts = _waitpid(self.pid, _WNOHANG)
                     if pid == self.pid:
                         self._handle_exitstatus(sts)
-                except _os_error as e:
+                except OSError as e:
                     if _deadstate is not None:
                         self.returncode = _deadstate
                     elif e.errno == _ECHILD:
@@ -1631,7 +1611,7 @@ class Popen(object):
                     raise TimeoutExpired(self.args, orig_timeout)
                 try:
                     ready = poller.poll(timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.args[0] == errno.EINTR:
                         continue
                     raise
@@ -1699,7 +1679,7 @@ class Popen(object):
                     (rlist, wlist, xlist) = \
                         select.select(self._read_set, self._write_set, [],
                                       timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.args[0] == errno.EINTR:
                         continue
                     raise

@@ -588,7 +588,7 @@ PyObject *PyErr_SetExcFromWindowsErr(PyObject *exc, int ierr)
 
 PyObject *PyErr_SetFromWindowsErr(int ierr)
 {
-    return PyErr_SetExcFromWindowsErrWithFilename(PyExc_WindowsError,
+    return PyErr_SetExcFromWindowsErrWithFilename(PyExc_OSError,
                                                   ierr, NULL);
 }
 PyObject *PyErr_SetFromWindowsErrWithFilename(
@@ -597,7 +597,7 @@ PyObject *PyErr_SetFromWindowsErrWithFilename(
 {
     PyObject *name = filename ? PyUnicode_DecodeFSDefault(filename) : NULL;
     PyObject *result = PyErr_SetExcFromWindowsErrWithFilenameObject(
-                                                  PyExc_WindowsError,
+                                                  PyExc_OSError,
                                                   ierr, name);
     Py_XDECREF(name);
     return result;
@@ -611,7 +611,7 @@ PyObject *PyErr_SetFromWindowsErrWithUnicodeFilename(
                      PyUnicode_FromUnicode(filename, wcslen(filename)) :
              NULL;
     PyObject *result = PyErr_SetExcFromWindowsErrWithFilenameObject(
-                                                  PyExc_WindowsError,
+                                                  PyExc_OSError,
                                                   ierr, name);
     Py_XDECREF(name);
     return result;
@@ -619,12 +619,25 @@ PyObject *PyErr_SetFromWindowsErrWithUnicodeFilename(
 #endif /* MS_WINDOWS */
 
 PyObject *
-PyErr_SetImportError(PyObject *msg, PyObject *name, PyObject *path)
+PyErr_SetImportErrorSubclass(PyObject *exception, PyObject *msg,
+    PyObject *name, PyObject *path)
 {
+    int issubclass;
     PyObject *args, *kwargs, *error;
 
-    if (msg == NULL)
+    issubclass = PyObject_IsSubclass(exception, PyExc_ImportError);
+    if (issubclass < 0) {
         return NULL;
+    }
+    else if (!issubclass) {
+        PyErr_SetString(PyExc_TypeError, "expected a subclass of ImportError");
+        return NULL;
+    }
+
+    if (msg == NULL) {
+        PyErr_SetString(PyExc_TypeError, "expected a message argument");
+        return NULL;
+    }
 
     args = PyTuple_New(1);
     if (args == NULL)
@@ -649,7 +662,7 @@ PyErr_SetImportError(PyObject *msg, PyObject *name, PyObject *path)
     PyDict_SetItemString(kwargs, "name", name);
     PyDict_SetItemString(kwargs, "path", path);
 
-    error = PyObject_Call(PyExc_ImportError, args, kwargs);
+    error = PyObject_Call(exception, args, kwargs);
     if (error != NULL) {
         PyErr_SetObject((PyObject *)Py_TYPE(error), error);
         Py_DECREF(error);
@@ -659,6 +672,12 @@ PyErr_SetImportError(PyObject *msg, PyObject *name, PyObject *path)
     Py_DECREF(kwargs);
 
     return NULL;
+}
+
+PyObject *
+PyErr_SetImportError(PyObject *msg, PyObject *name, PyObject *path)
+{
+    return PyErr_SetImportErrorSubclass(PyExc_ImportError, msg, name, path);
 }
 
 void
@@ -798,7 +817,12 @@ PyErr_WriteUnraisable(PyObject *obj)
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
     if (f != NULL && f != Py_None) {
-        PyFile_WriteString("Exception ", f);
+        if (obj) {
+            PyFile_WriteString("Exception ignored in: ", f);
+            PyFile_WriteObject(obj, f, 0);
+            PyFile_WriteString("\n", f);
+        }
+        PyTraceBack_Print(tb, f);
         if (t) {
             PyObject* moduleName;
             char* className;
@@ -828,15 +852,11 @@ PyErr_WriteUnraisable(PyObject *obj)
                 PyFile_WriteString(className, f);
             if (v && v != Py_None) {
                 PyFile_WriteString(": ", f);
-                PyFile_WriteObject(v, f, 0);
+                PyFile_WriteObject(v, f, Py_PRINT_RAW);
             }
+            PyFile_WriteString("\n", f);
             Py_XDECREF(moduleName);
         }
-        if (obj) {
-            PyFile_WriteString(" in ", f);
-            PyFile_WriteObject(obj, f, 0);
-        }
-        PyFile_WriteString(" ignored\n", f);
         PyErr_Clear(); /* Just in case */
     }
     Py_XDECREF(t);
