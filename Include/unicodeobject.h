@@ -180,9 +180,9 @@ typedef unsigned char Py_UCS1;
     } while (0)
 
 /* macros to work with surrogates */
-#define Py_UNICODE_IS_SURROGATE(ch) (0xD800 <= ch && ch <= 0xDFFF)
-#define Py_UNICODE_IS_HIGH_SURROGATE(ch) (0xD800 <= ch && ch <= 0xDBFF)
-#define Py_UNICODE_IS_LOW_SURROGATE(ch) (0xDC00 <= ch && ch <= 0xDFFF)
+#define Py_UNICODE_IS_SURROGATE(ch) (0xD800 <= (ch) && (ch) <= 0xDFFF)
+#define Py_UNICODE_IS_HIGH_SURROGATE(ch) (0xD800 <= (ch) && (ch) <= 0xDBFF)
+#define Py_UNICODE_IS_LOW_SURROGATE(ch) (0xDC00 <= (ch) && (ch) <= 0xDFFF)
 /* Join two surrogate characters and return a single Py_UCS4 value. */
 #define Py_UNICODE_JOIN_SURROGATES(high, low)  \
     (((((Py_UCS4)(high) & 0x03FF) << 10) |      \
@@ -898,22 +898,28 @@ typedef struct {
     Py_UCS4 maxchar;
     Py_ssize_t size;
     Py_ssize_t pos;
-    /* minimum length of the buffer when overallocation is enabled,
-       see _PyUnicodeWriter_Init() */
+
+    /* minimum number of allocated characters (default: 0) */
     Py_ssize_t min_length;
+
+    /* minimum character (default: 127, ASCII) */
+    Py_UCS4 min_char;
+
+    /* If non-zero, overallocate the buffer by 25% (default: 0). */
     unsigned char overallocate;
+
     /* If readonly is 1, buffer is a shared string (cannot be modified)
        and size is set to 0. */
     unsigned char readonly;
 } _PyUnicodeWriter ;
 
 /* Initialize a Unicode writer.
-
-   If min_length is greater than zero, _PyUnicodeWriter_Prepare()
-   overallocates the buffer and min_length is the minimum length in characters
-   of the buffer. */
+ *
+ * By default, the minimum buffer size is 0 character and overallocation is
+ * disabled. Set min_length, min_char and overallocate attributes to control
+ * the allocation of the buffer. */
 PyAPI_FUNC(void)
-_PyUnicodeWriter_Init(_PyUnicodeWriter *writer, Py_ssize_t min_length);
+_PyUnicodeWriter_Init(_PyUnicodeWriter *writer);
 
 /* Prepare the buffer to write 'length' characters
    with the specified maximum character.
@@ -933,12 +939,44 @@ PyAPI_FUNC(int)
 _PyUnicodeWriter_PrepareInternal(_PyUnicodeWriter *writer,
                                  Py_ssize_t length, Py_UCS4 maxchar);
 
+/* Append a Unicode character.
+   Return 0 on success, raise an exception and return -1 on error. */
 PyAPI_FUNC(int)
-_PyUnicodeWriter_WriteStr(_PyUnicodeWriter *writer, PyObject *str);
+_PyUnicodeWriter_WriteChar(_PyUnicodeWriter *writer,
+    Py_UCS4 ch
+    );
 
+/* Append a Unicode string.
+   Return 0 on success, raise an exception and return -1 on error. */
+PyAPI_FUNC(int)
+_PyUnicodeWriter_WriteStr(_PyUnicodeWriter *writer,
+    PyObject *str               /* Unicode string */
+    );
+
+/* Append a substring of a Unicode string.
+   Return 0 on success, raise an exception and return -1 on error. */
+PyAPI_FUNC(int)
+_PyUnicodeWriter_WriteSubstring(_PyUnicodeWriter *writer,
+    PyObject *str,              /* Unicode string */
+    Py_ssize_t start,
+    Py_ssize_t end
+    );
+
+/* Append a latin1-encoded byte string.
+   Return 0 on success, raise an exception and return -1 on error. */
+PyAPI_FUNC(int)
+_PyUnicodeWriter_WriteCstr(_PyUnicodeWriter *writer,
+    const char *str,            /* latin1-encoded byte string */
+    Py_ssize_t len              /* length in bytes */
+    );
+
+/* Get the value of the writer as an Unicode string. Clear the
+   buffer of the writer. Raise an exception and return NULL
+   on error. */
 PyAPI_FUNC(PyObject *)
 _PyUnicodeWriter_Finish(_PyUnicodeWriter *writer);
 
+/* Deallocate memory of a writer (clear its internal buffer). */
 PyAPI_FUNC(void)
 _PyUnicodeWriter_Dealloc(_PyUnicodeWriter *writer);
 #endif
@@ -1726,7 +1764,7 @@ PyAPI_FUNC(PyObject*) PyUnicode_DecodeLocale(
 /* Encode a Unicode object to the current locale encoding. The encoder is
    strict is *surrogateescape* is equal to zero, otherwise the
    "surrogateescape" error handler is used. Return a bytes object. The string
-   cannot contain embedded null characters.. */
+   cannot contain embedded null characters. */
 
 PyAPI_FUNC(PyObject*) PyUnicode_EncodeLocale(
     PyObject *unicode,
@@ -1950,7 +1988,8 @@ PyAPI_FUNC(PyObject *) PyUnicode_Replace(
     );
 
 /* Compare two strings and return -1, 0, 1 for less than, equal,
-   greater than resp. */
+   greater than resp.
+   Raise an exception and return -1 on error. */
 
 PyAPI_FUNC(int) PyUnicode_Compare(
     PyObject *left,             /* Left string */
