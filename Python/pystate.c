@@ -213,7 +213,10 @@ new_threadstate(PyInterpreterState *interp, int init)
             _PyThreadState_Init(tstate);
 
         HEAD_LOCK();
+        tstate->prev = NULL;
         tstate->next = interp->tstate_head;
+        if (tstate->next)
+            tstate->next->prev = tstate;
         interp->tstate_head = tstate;
         HEAD_UNLOCK();
     }
@@ -349,35 +352,18 @@ static void
 tstate_delete_common(PyThreadState *tstate)
 {
     PyInterpreterState *interp;
-    PyThreadState **p;
-    PyThreadState *prev_p = NULL;
     if (tstate == NULL)
         Py_FatalError("PyThreadState_Delete: NULL tstate");
     interp = tstate->interp;
     if (interp == NULL)
         Py_FatalError("PyThreadState_Delete: NULL interp");
     HEAD_LOCK();
-    for (p = &interp->tstate_head; ; p = &(*p)->next) {
-        if (*p == NULL)
-            Py_FatalError(
-                "PyThreadState_Delete: invalid tstate");
-        if (*p == tstate)
-            break;
-        /* Sanity check.  These states should never happen but if
-         * they do we must abort.  Otherwise we'll end up spinning in
-         * in a tight loop with the lock held.  A similar check is done
-         * in thread.c find_key().  */
-        if (*p == prev_p)
-            Py_FatalError(
-                "PyThreadState_Delete: small circular list(!)"
-                " and tstate not found.");
-        prev_p = *p;
-        if ((*p)->next == interp->tstate_head)
-            Py_FatalError(
-                "PyThreadState_Delete: circular list(!) and"
-                " tstate not found.");
-    }
-    *p = tstate->next;
+    if (tstate->prev)
+        tstate->prev->next = tstate->next;
+    else
+        interp->tstate_head = tstate->next;
+    if (tstate->next)
+        tstate->next->prev = tstate->prev;
     HEAD_UNLOCK();
     free(tstate);
 }
@@ -412,6 +398,43 @@ PyThreadState_DeleteCurrent()
     PyEval_ReleaseLock();
 }
 #endif /* WITH_THREAD */
+
+
+/*
+ * Delete all thread states except the one passed as argument.
+ * Note that, if there is a current thread state, it *must* be the one
+ * passed as argument.  Also, this won't touch any other interpreters
+ * than the current one, since we don't know which thread state should
+ * be kept in those other interpreteres.
+ */
+void
+_PyThreadState_DeleteExcept(PyThreadState *tstate)
+{
+    PyInterpreterState *interp = tstate->interp;
+    PyThreadState *p, *next, *garbage;
+    HEAD_LOCK();
+    /* Remove all thread states, except tstate, from the linked list of
+       thread states.  This will allow calling PyThreadState_Clear()
+       without holding the lock. */
+    garbage = interp->tstate_head;
+    if (garbage == tstate)
+        garbage = tstate->next;
+    if (tstate->prev)
+        tstate->prev->next = tstate->next;
+    if (tstate->next)
+        tstate->next->prev = tstate->prev;
+    tstate->prev = tstate->next = NULL;
+    interp->tstate_head = tstate;
+    HEAD_UNLOCK();
+    /* Clear and deallocate all stale thread states.  Even if this
+       executes Python code, we should be safe since it executes
+       in the current thread, not one of the stale threads. */
+    for (p = garbage; p; p = next) {
+        next = p->next;
+        PyThreadState_Clear(p);
+        free(p);
+    }
+}
 
 
 PyThreadState *
@@ -695,6 +718,15 @@ PyGILState_GetThisThreadState(void)
     if (autoInterpreterState == NULL)
         return NULL;
     return (PyThreadState *)PyThread_get_key_value(autoTLSkey);
+}
+
+int
+PyGILState_Check(void)
+{
+    /* can't use PyThreadState_Get() since it will assert that it has the GIL */
+    PyThreadState *tstate = (PyThreadState*)_Py_atomic_load_relaxed(
+        &_PyThreadState_Current);
+    return tstate && (tstate == PyGILState_GetThisThreadState());
 }
 
 PyGILState_STATE

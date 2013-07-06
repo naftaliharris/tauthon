@@ -761,7 +761,7 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
         for (i = start; i < end; i++) {
             /* object is guaranteed to be "ready" */
             Py_UCS4 ch = PyUnicode_READ_CHAR(object, i);
-            if (ch < 0xd800 || ch > 0xdfff) {
+            if (!Py_UNICODE_IS_SURROGATE(ch)) {
                 /* Not a surrogate, fail with original exception */
                 PyErr_SetObject(PyExceptionInstance_Class(exc), exc);
                 Py_DECREF(res);
@@ -797,7 +797,7 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
             (p[2] & 0xc0) == 0x80) {
             /* it's a three-byte code */
             ch = ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6) + (p[2] & 0x3f);
-            if (ch < 0xd800 || ch > 0xdfff)
+            if (!Py_UNICODE_IS_SURROGATE(ch))
                 /* it's not a surrogate - fail */
                 ch = 0;
         }
@@ -1026,7 +1026,7 @@ static int _PyCodecRegistry_Init(void)
 
     if (interp->codec_error_registry) {
         for (i = 0; i < Py_ARRAY_LENGTH(methods); ++i) {
-            PyObject *func = PyCFunction_New(&methods[i].def, NULL);
+            PyObject *func = PyCFunction_NewEx(&methods[i].def, NULL, NULL);
             int res;
             if (!func)
                 Py_FatalError("can't initialize codec error registry");
