@@ -9,6 +9,10 @@
  #endif
 #endif
 
+#ifdef MS_WINDOWS
+#include <windows.h>
+#endif
+
 #ifdef WITH_VALGRIND
 #include <valgrind/valgrind.h>
 
@@ -525,6 +529,15 @@ static size_t ntimes_arena_allocated = 0;
 /* High water mark (max value ever seen) for narenas_currently_allocated. */
 static size_t narenas_highwater = 0;
 
+static Py_ssize_t _Py_AllocatedBlocks = 0;
+
+Py_ssize_t
+_Py_GetAllocatedBlocks(void)
+{
+    return _Py_AllocatedBlocks;
+}
+
+
 /* Allocate a new arena.  If we run out of memory, return NULL.  Else
  * allocate a new arena, and return the address of an arena_object
  * describing the new arena.  It's expected that the caller will set
@@ -589,7 +602,11 @@ new_arena(void)
     arenaobj = unused_arena_objects;
     unused_arena_objects = arenaobj->nextarena;
     assert(arenaobj->address == 0);
-#ifdef ARENAS_USE_MMAP
+#ifdef MS_WINDOWS
+    address = (void*)VirtualAlloc(NULL, ARENA_SIZE,
+                                 MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    err = (address == NULL);
+#elif defined(ARENAS_USE_MMAP)
     address = mmap(NULL, ARENA_SIZE, PROT_READ|PROT_WRITE,
                                    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
     err = (address == MAP_FAILED);
@@ -769,6 +786,8 @@ PyObject_Malloc(size_t nbytes)
     poolp next;
     uint size;
 
+    _Py_AllocatedBlocks++;
+
 #ifdef WITH_VALGRIND
     if (UNLIKELY(running_on_valgrind == -1))
         running_on_valgrind = RUNNING_ON_VALGRIND;
@@ -782,8 +801,10 @@ PyObject_Malloc(size_t nbytes)
      * things without checking for overflows or negatives.
      * As size_t is unsigned, checking for nbytes < 0 is not required.
      */
-    if (nbytes > PY_SSIZE_T_MAX)
+    if (nbytes > PY_SSIZE_T_MAX) {
+        _Py_AllocatedBlocks--;
         return NULL;
+    }
 
     /*
      * This implicitly redirects malloc(0).
@@ -901,6 +922,7 @@ PyObject_Malloc(size_t nbytes)
                  * and free list are already initialized.
                  */
                 bp = pool->freeblock;
+                assert(bp != NULL);
                 pool->freeblock = *(block **)bp;
                 UNLOCK();
                 return (void *)bp;
@@ -958,7 +980,12 @@ redirect:
      */
     if (nbytes == 0)
         nbytes = 1;
-    return (void *)malloc(nbytes);
+    {
+        void *result = malloc(nbytes);
+        if (!result)
+            _Py_AllocatedBlocks--;
+        return result;
+    }
 }
 
 /* free */
@@ -977,6 +1004,8 @@ PyObject_Free(void *p)
 
     if (p == NULL)      /* free(NULL) has no effect */
         return;
+
+    _Py_AllocatedBlocks--;
 
 #ifdef WITH_VALGRIND
     if (UNLIKELY(running_on_valgrind > 0))
@@ -1072,7 +1101,9 @@ PyObject_Free(void *p)
                 unused_arena_objects = ao;
 
                 /* Free the entire arena. */
-#ifdef ARENAS_USE_MMAP
+#ifdef MS_WINDOWS
+                VirtualFree((void *)ao->address, 0, MEM_RELEASE);
+#elif defined(ARENAS_USE_MMAP)
                 munmap((void *)ao->address, ARENA_SIZE);
 #else
                 free((void *)ao->address);
@@ -1297,6 +1328,13 @@ PyObject_Free(void *p)
 {
     PyMem_FREE(p);
 }
+
+Py_ssize_t
+_Py_GetAllocatedBlocks(void)
+{
+    return 0;
+}
+
 #endif /* WITH_PYMALLOC */
 
 #ifdef PYMALLOC_DEBUG

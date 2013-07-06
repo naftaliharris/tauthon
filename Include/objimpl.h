@@ -98,6 +98,8 @@ PyAPI_FUNC(void *) PyObject_Malloc(size_t);
 PyAPI_FUNC(void *) PyObject_Realloc(void *, size_t);
 PyAPI_FUNC(void) PyObject_Free(void *);
 
+/* This function returns the number of allocated memory blocks, regardless of size */
+PyAPI_FUNC(Py_ssize_t) _Py_GetAllocatedBlocks(void);
 
 /* Macros */
 #ifdef WITH_PYMALLOC
@@ -230,6 +232,10 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
 /* C equivalent of gc.collect(). */
 PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void);
 
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(Py_ssize_t) _PyGC_CollectNoFail(void);
+#endif
+
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
 
@@ -249,7 +255,7 @@ typedef union _gc_head {
         union _gc_head *gc_prev;
         Py_ssize_t gc_refs;
     } gc;
-    long double dummy;  /* force worst-case alignment */
+    double dummy;  /* force worst-case alignment */
 } PyGC_Head;
 
 extern PyGC_Head *_PyGC_generation0;
