@@ -64,49 +64,70 @@ PyObject_Length(PyObject *o)
 }
 #define PyObject_Length PyObject_Size
 
+int
+_PyObject_HasLen(PyObject *o) {
+    return (Py_TYPE(o)->tp_as_sequence && Py_TYPE(o)->tp_as_sequence->sq_length) ||
+        (Py_TYPE(o)->tp_as_mapping && Py_TYPE(o)->tp_as_mapping->mp_length);
+}
 
 /* The length hint function returns a non-negative value from o.__len__()
-   or o.__length_hint__().  If those methods aren't found or return a negative
-   value, then the defaultvalue is returned.  If one of the calls fails,
+   or o.__length_hint__(). If those methods aren't found the defaultvalue is
+   returned.  If one of the calls fails with an exception other than TypeError
    this function returns -1.
 */
 
 Py_ssize_t
-_PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
+PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
 {
+    PyObject *hint, *result;
+    Py_ssize_t res;
     _Py_IDENTIFIER(__length_hint__);
-    PyObject *ro, *hintmeth;
-    Py_ssize_t rv;
-
-    /* try o.__len__() */
-    rv = PyObject_Size(o);
-    if (rv >= 0)
-        return rv;
-    if (PyErr_Occurred()) {
-        if (!PyErr_ExceptionMatches(PyExc_TypeError))
+    res = PyObject_Length(o);
+    if (res < 0 && PyErr_Occurred()) {
+        if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
             return -1;
+        }
         PyErr_Clear();
     }
-
-    /* try o.__length_hint__() */
-    hintmeth = _PyObject_LookupSpecial(o, &PyId___length_hint__);
-    if (hintmeth == NULL) {
-        if (PyErr_Occurred())
-            return -1;
-        else
-            return defaultvalue;
+    else {
+        return res;
     }
-    ro = PyObject_CallFunctionObjArgs(hintmeth, NULL);
-    Py_DECREF(hintmeth);
-    if (ro == NULL) {
-        if (!PyErr_ExceptionMatches(PyExc_TypeError))
+    hint = _PyObject_LookupSpecial(o, &PyId___length_hint__);
+    if (hint == NULL) {
+        if (PyErr_Occurred()) {
             return -1;
-        PyErr_Clear();
+        }
         return defaultvalue;
     }
-    rv = PyLong_Check(ro) ? PyLong_AsSsize_t(ro) : defaultvalue;
-    Py_DECREF(ro);
-    return rv;
+    result = PyObject_CallFunctionObjArgs(hint, NULL);
+    Py_DECREF(hint);
+    if (result == NULL) {
+        if (PyErr_ExceptionMatches(PyExc_TypeError)) {
+            PyErr_Clear();
+            return defaultvalue;
+        }
+        return -1;
+    }
+    else if (result == Py_NotImplemented) {
+        Py_DECREF(result);
+        return defaultvalue;
+    }
+    if (!PyLong_Check(result)) {
+        PyErr_Format(PyExc_TypeError, "__length_hint__ must be an integer, not %.100s",
+            Py_TYPE(result)->tp_name);
+        Py_DECREF(result);
+        return -1;
+    }
+    res = PyLong_AsSsize_t(result);
+    Py_DECREF(result);
+    if (res < 0 && PyErr_Occurred()) {
+        return -1;
+    }
+    if (res < 0) {
+        PyErr_Format(PyExc_ValueError, "__length_hint__() should return >= 0");
+        return -1;
+    }
+    return res;
 }
 
 PyObject *
@@ -1689,7 +1710,7 @@ PySequence_Tuple(PyObject *v)
         return NULL;
 
     /* Guess result size and allocate space. */
-    n = _PyObject_LengthHint(v, 10);
+    n = PyObject_LengthHint(v, 10);
     if (n == -1)
         goto Fail;
     result = PyTuple_New(n);
@@ -2121,7 +2142,7 @@ call_function_tail(PyObject *callable, PyObject *args)
 }
 
 PyObject *
-PyObject_CallFunction(PyObject *callable, char *format, ...)
+PyObject_CallFunction(PyObject *callable, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2141,7 +2162,7 @@ PyObject_CallFunction(PyObject *callable, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
+_PyObject_CallFunction_SizeT(PyObject *callable, const char *format, ...)
 {
     va_list va;
     PyObject *args;
@@ -2161,7 +2182,7 @@ _PyObject_CallFunction_SizeT(PyObject *callable, char *format, ...)
 }
 
 static PyObject*
-callmethod(PyObject* func, char *format, va_list va, int is_size_t)
+callmethod(PyObject* func, const char *format, va_list va, int is_size_t)
 {
     PyObject *retval = NULL;
     PyObject *args;
@@ -2190,7 +2211,7 @@ callmethod(PyObject* func, char *format, va_list va, int is_size_t)
 }
 
 PyObject *
-PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
+PyObject_CallMethod(PyObject *o, const char *name, const char *format, ...)
 {
     va_list va;
     PyObject *func = NULL;
@@ -2211,7 +2232,8 @@ PyObject_CallMethod(PyObject *o, char *name, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallMethodId(PyObject *o, _Py_Identifier *name, char *format, ...)
+_PyObject_CallMethodId(PyObject *o, _Py_Identifier *name,
+                       const char *format, ...)
 {
     va_list va;
     PyObject *func = NULL;
@@ -2232,7 +2254,8 @@ _PyObject_CallMethodId(PyObject *o, _Py_Identifier *name, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
+_PyObject_CallMethod_SizeT(PyObject *o, const char *name,
+                           const char *format, ...)
 {
     va_list va;
     PyObject *func = NULL;
@@ -2252,7 +2275,8 @@ _PyObject_CallMethod_SizeT(PyObject *o, char *name, char *format, ...)
 }
 
 PyObject *
-_PyObject_CallMethodId_SizeT(PyObject *o, _Py_Identifier *name, char *format, ...)
+_PyObject_CallMethodId_SizeT(PyObject *o, _Py_Identifier *name,
+                             const char *format, ...)
 {
     va_list va;
     PyObject *func = NULL;
@@ -2322,7 +2346,7 @@ PyObject_CallMethodObjArgs(PyObject *callable, PyObject *name, ...)
 }
 
 PyObject *
-_PyObject_CallMethodObjIdArgs(PyObject *callable,
+_PyObject_CallMethodIdObjArgs(PyObject *callable,
         struct _Py_Identifier *name, ...)
 {
     PyObject *args, *tmp;

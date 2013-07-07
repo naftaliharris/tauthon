@@ -22,7 +22,9 @@
 #  define FAULTHANDLER_USER
 #endif
 
-#define PUTS(fd, str) write(fd, str, strlen(str))
+/* cast size_t to int because write() takes an int on Windows
+   (anyway, the length is smaller than 30 characters) */
+#define PUTS(fd, str) write(fd, str, (int)strlen(str))
 
 #ifdef HAVE_SIGACTION
 typedef struct sigaction _Py_sighandler_t;
@@ -79,9 +81,6 @@ typedef struct {
 static user_signal_t *user_signals;
 
 /* the following macros come from Python: Modules/signalmodule.c */
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#define NSIG 12
-#endif
 #ifndef NSIG
 # if defined(_NSIG)
 #  define NSIG _NSIG            /* For BSD/SysV */
@@ -448,7 +447,7 @@ faulthandler_thread(void *unused)
         /* get the thread holding the GIL, NULL if no thread hold the GIL */
         current = _Py_atomic_load_relaxed(&_PyThreadState_Current);
 
-        write(thread.fd, thread.header, thread.header_len);
+        write(thread.fd, thread.header, (int)thread.header_len);
 
         errmsg = _Py_DumpTracebackThreads(thread.fd, thread.interp, current);
         ok = (errmsg == NULL);

@@ -112,6 +112,38 @@ class TestChainMap(unittest.TestCase):
         self.assertEqual(dict(d), dict(a=1, b=2, c=30))
         self.assertEqual(dict(d.items()), dict(a=1, b=2, c=30))
 
+    def test_new_child(self):
+        'Tests for changes for issue #16613.'
+        c = ChainMap()
+        c['a'] = 1
+        c['b'] = 2
+        m = {'b':20, 'c': 30}
+        d = c.new_child(m)
+        self.assertEqual(d.maps, [{'b':20, 'c':30}, {'a':1, 'b':2}])  # check internal state
+        self.assertIs(m, d.maps[0])
+
+        # Use a different map than a dict
+        class lowerdict(dict):
+            def __getitem__(self, key):
+                if isinstance(key, str):
+                    key = key.lower()
+                return dict.__getitem__(self, key)
+            def __contains__(self, key):
+                if isinstance(key, str):
+                    key = key.lower()
+                return dict.__contains__(self, key)
+
+        c = ChainMap()
+        c['a'] = 1
+        c['b'] = 2
+        m = lowerdict(b=20, c=30)
+        d = c.new_child(m)
+        self.assertIs(m, d.maps[0])
+        for key in 'abc':                                             # check contains
+            self.assertIn(key, d)
+        for k, v in dict(a=1, B=20, C=30, z=100).items():             # check get
+            self.assertEqual(d.get(k, 100), v)
+
 
 ################################################################################
 ### Named Tuples
@@ -1213,9 +1245,18 @@ class TestOrderedDict(unittest.TestCase):
         # do not save instance dictionary if not needed
         pairs = [('c', 1), ('b', 2), ('a', 3), ('d', 4), ('e', 5), ('f', 6)]
         od = OrderedDict(pairs)
-        self.assertEqual(len(od.__reduce__()), 2)
+        self.assertIsNone(od.__reduce__()[2])
         od.x = 10
-        self.assertEqual(len(od.__reduce__()), 3)
+        self.assertIsNotNone(od.__reduce__()[2])
+
+    def test_pickle_recursive(self):
+        od = OrderedDict()
+        od[1] = od
+        for proto in range(-1, pickle.HIGHEST_PROTOCOL + 1):
+            dup = pickle.loads(pickle.dumps(od, proto))
+            self.assertIsNot(dup, od)
+            self.assertEqual(list(dup.keys()), [1])
+            self.assertIs(dup[1], dup)
 
     def test_repr(self):
         od = OrderedDict([('c', 1), ('b', 2), ('a', 3), ('d', 4), ('e', 5), ('f', 6)])
