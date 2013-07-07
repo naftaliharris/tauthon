@@ -1,6 +1,6 @@
 
 /* Return the initial module search path. */
-/* Used by DOS, OS/2, Windows 3.1, Windows 95/98, Windows NT. */
+/* Used by DOS, Windows 3.1, Windows 95/98, Windows NT. */
 
 /* ----------------------------------------------------------------
    PATH RULES FOR WINDOWS:
@@ -434,7 +434,7 @@ find_env_config_value(FILE * env_file, const wchar_t * key, wchar_t * value)
         char * p = fgets(buffer, MAXPATHLEN*2, env_file);
         wchar_t tmpbuffer[MAXPATHLEN*2+1];
         PyObject * decoded;
-        int n;
+        size_t n;
 
         if (p == NULL)
             break;
