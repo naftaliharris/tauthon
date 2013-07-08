@@ -1732,20 +1732,20 @@ class ContextManagerTest(unittest.TestCase):
         self.assertTrue(tar.closed, "context manager failed")
 
     def test_closed(self):
-        # The __enter__() method is supposed to raise IOError
+        # The __enter__() method is supposed to raise OSError
         # if the TarFile object is already closed.
         tar = tarfile.open(tarname)
         tar.close()
-        with self.assertRaises(IOError):
+        with self.assertRaises(OSError):
             with tar:
                 pass
 
     def test_exception(self):
-        # Test if the IOError exception is passed through properly.
+        # Test if the OSError exception is passed through properly.
         with self.assertRaises(Exception) as exc:
             with tarfile.open(tarname) as tar:
-                raise IOError
-        self.assertIsInstance(exc.exception, IOError,
+                raise OSError
+        self.assertIsInstance(exc.exception, OSError,
                               "wrong exception raised in context manager")
         self.assertTrue(tar.closed, "context manager failed")
 

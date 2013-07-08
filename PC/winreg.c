@@ -938,7 +938,7 @@ Reg2Py(BYTE *retDataBuf, DWORD retDataSize, DWORD typ)
                 wchar_t *data = (wchar_t *)retDataBuf;
                 int len = retDataSize / 2;
                 int s = countStrings(data, len);
-                wchar_t **str = (wchar_t **)malloc(sizeof(wchar_t *)*s);
+                wchar_t **str = (wchar_t **)PyMem_Malloc(sizeof(wchar_t *)*s);
                 if (str == NULL)
                     return PyErr_NoMemory();
 
@@ -959,7 +959,7 @@ Reg2Py(BYTE *retDataBuf, DWORD retDataSize, DWORD typ)
                                    index,
                                    PyUnicode_FromWideChar(str[index], len));
                 }
-                free(str);
+                PyMem_Free(str);
 
                 break;
             }
@@ -1794,9 +1794,9 @@ PyMODINIT_FUNC PyInit_winreg(void)
     if (PyDict_SetItemString(d, "HKEYType",
                              (PyObject *)&PyHKEY_Type) != 0)
         return NULL;
-    Py_INCREF(PyExc_WindowsError);
+    Py_INCREF(PyExc_OSError);
     if (PyDict_SetItemString(d, "error",
-                             PyExc_WindowsError) != 0)
+                             PyExc_OSError) != 0)
         return NULL;
 
     /* Add the relevant constants */
