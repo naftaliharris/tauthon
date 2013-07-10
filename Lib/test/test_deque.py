@@ -536,15 +536,15 @@ class TestBasic(unittest.TestCase):
 
     @support.cpython_only
     def test_sizeof(self):
-        BLOCKLEN = 62
+        BLOCKLEN = 64
         basesize = support.calcobjsize('2P4nlP')
         blocksize = struct.calcsize('2P%dP' % BLOCKLEN)
         self.assertEqual(object.__sizeof__(deque()), basesize)
         check = self.check_sizeof
         check(deque(), basesize + blocksize)
         check(deque('a'), basesize + blocksize)
-        check(deque('a' * (BLOCKLEN // 2)), basesize + blocksize)
-        check(deque('a' * (BLOCKLEN // 2 + 1)), basesize + 2 * blocksize)
+        check(deque('a' * (BLOCKLEN - 1)), basesize + blocksize)
+        check(deque('a' * BLOCKLEN), basesize + 2 * blocksize)
         check(deque('a' * (42 * BLOCKLEN)), basesize + 43 * blocksize)
 
 class TestVariousIteratorArgs(unittest.TestCase):

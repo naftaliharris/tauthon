@@ -39,8 +39,7 @@ Compact encoding::
 Pretty printing::
 
     >>> import json
-    >>> print(json.dumps({'4': 5, '6': 7}, sort_keys=True,
-    ...                  indent=4, separators=(',', ': ')))
+    >>> print(json.dumps({'4': 5, '6': 7}, sort_keys=True, indent=4))
     {
         "4": 5,
         "6": 7
@@ -146,13 +145,12 @@ def dump(obj, fp, skipkeys=False, ensure_ascii=True, check_circular=True,
     If ``indent`` is a non-negative integer, then JSON array elements and
     object members will be pretty-printed with that indent level. An indent
     level of 0 will only insert newlines. ``None`` is the most compact
-    representation.  Since the default item separator is ``', '``,  the
-    output might include trailing whitespace when ``indent`` is specified.
-    You can use ``separators=(',', ': ')`` to avoid this.
+    representation.
 
-    If ``separators`` is an ``(item_separator, dict_separator)`` tuple
-    then it will be used instead of the default ``(', ', ': ')`` separators.
-    ``(',', ':')`` is the most compact JSON representation.
+    If specified, ``separators`` should be an ``(item_separator, key_separator)``
+    tuple.  The default is ``(', ', ': ')`` if *indent* is ``None`` and
+    ``(',', ': ')`` otherwise.  To get the most compact JSON representation,
+    you should specify ``(',', ':')`` to eliminate whitespace.
 
     ``default(obj)`` is a function that should return a serializable version
     of obj or raise TypeError. The default simply raises TypeError.
@@ -209,13 +207,12 @@ def dumps(obj, skipkeys=False, ensure_ascii=True, check_circular=True,
     If ``indent`` is a non-negative integer, then JSON array elements and
     object members will be pretty-printed with that indent level. An indent
     level of 0 will only insert newlines. ``None`` is the most compact
-    representation.  Since the default item separator is ``', '``,  the
-    output might include trailing whitespace when ``indent`` is specified.
-    You can use ``separators=(',', ': ')`` to avoid this.
+    representation.
 
-    If ``separators`` is an ``(item_separator, dict_separator)`` tuple
-    then it will be used instead of the default ``(', ', ': ')`` separators.
-    ``(',', ':')`` is the most compact JSON representation.
+    If specified, ``separators`` should be an ``(item_separator, key_separator)``
+    tuple.  The default is ``(', ', ': ')`` if *indent* is ``None`` and
+    ``(',', ': ')`` otherwise.  To get the most compact JSON representation,
+    you should specify ``(',', ':')`` to eliminate whitespace.
 
     ``default(obj)`` is a function that should return a serializable version
     of obj or raise TypeError. The default simply raises TypeError.
