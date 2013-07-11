@@ -91,23 +91,12 @@
 #define MP_SOCKET_ERROR (-1002)
 #define MP_EXCEPTION_HAS_BEEN_SET (-1003)
 
-PyObject *mp_SetError(PyObject *Type, int num);
+PyObject *_PyMp_SetError(PyObject *Type, int num);
 
 /*
  * Externs - not all will really exist on all platforms
  */
 
-extern PyObject *BufferTooShort;
-extern PyTypeObject SemLockType;
-extern PyTypeObject PipeConnectionType;
-
-/*
- * Miscellaneous
- */
-
-#ifndef MIN
-#  define MIN(x, y) ((x) < (y) ? x : y)
-#  define MAX(x, y) ((x) > (y) ? x : y)
-#endif
+extern PyTypeObject _PyMp_SemLockType;
 
 #endif /* MULTIPROCESSING_H */
