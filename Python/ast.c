@@ -109,22 +109,14 @@ validate_arguments(arguments_ty args)
 {
     if (!validate_args(args->args))
         return 0;
-    if (args->varargannotation) {
-        if (!args->vararg) {
-            PyErr_SetString(PyExc_ValueError, "varargannotation but no vararg on arguments");
-            return 0;
-        }
-        if (!validate_expr(args->varargannotation, Load))
+    if (args->vararg && args->vararg->annotation
+        && !validate_expr(args->vararg->annotation, Load)) {
             return 0;
     }
     if (!validate_args(args->kwonlyargs))
         return 0;
-    if (args->kwargannotation) {
-        if (!args->kwarg) {
-            PyErr_SetString(PyExc_ValueError, "kwargannotation but no kwarg on arguments");
-            return 0;
-        }
-        if (!validate_expr(args->kwargannotation, Load))
+    if (args->kwarg && args->kwarg->annotation 
+        && !validate_expr(args->kwarg->annotation, Load)) {
             return 0;
     }
     if (asdl_seq_LEN(args->defaults) > asdl_seq_LEN(args->args)) {
@@ -282,6 +274,7 @@ validate_expr(expr_ty exp, expr_context_ty ctx)
         return validate_exprs(exp->v.Tuple.elts, ctx, 0);
     /* These last cases don't have any checking. */
     case Name_kind:
+    case NameConstant_kind:
     case Ellipsis_kind:
         return 1;
     default:
@@ -903,7 +896,7 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
             break;
         case Name_kind:
             if (ctx == Store) {
-                if (forbidden_name(c, e->v.Name.id, n, 1))
+                if (forbidden_name(c, e->v.Name.id, n, 0))
                     return 0; /* forbidden_name() calls ast_error() */
             }
             e->v.Name.ctx = ctx;
@@ -954,6 +947,9 @@ set_context(struct compiling *c, expr_ty e, expr_context_ty ctx, const node *n)
         case Str_kind:
         case Bytes_kind:
             expr_name = "literal";
+            break;
+        case NameConstant_kind:
+            expr_name = "keyword";
             break;
         case Ellipsis_kind:
             expr_name = "Ellipsis";
@@ -1119,6 +1115,7 @@ ast_for_arg(struct compiling *c, const node *n)
     identifier name;
     expr_ty annotation = NULL;
     node *ch;
+    arg_ty tmp;
 
     assert(TYPE(n) == tfpdef || TYPE(n) == vfpdef);
     ch = CHILD(n, 0);
@@ -1134,7 +1131,13 @@ ast_for_arg(struct compiling *c, const node *n)
             return NULL;
     }
 
-    return arg(name, annotation, c->c_arena);
+    tmp = arg(name, annotation, c->c_arena);
+    if (!tmp)
+        return NULL;
+
+    tmp->lineno = LINENO(n);
+    tmp->col_offset = n->n_col_offset;
+    return tmp;
 }
 
 /* returns -1 if failed to handle keyword only arguments
@@ -1230,15 +1233,13 @@ ast_for_arguments(struct compiling *c, const node *n)
     int i, j, k, nposargs = 0, nkwonlyargs = 0;
     int nposdefaults = 0, found_default = 0;
     asdl_seq *posargs, *posdefaults, *kwonlyargs, *kwdefaults;
-    identifier vararg = NULL, kwarg = NULL;
+    arg_ty vararg = NULL, kwarg = NULL;
     arg_ty arg;
-    expr_ty varargannotation = NULL, kwargannotation = NULL;
     node *ch;
 
     if (TYPE(n) == parameters) {
         if (NCH(n) == 2) /* () as argument list */
-            return arguments(NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                             NULL, c->c_arena);
+            return arguments(NULL, NULL, NULL, NULL, NULL, NULL, c->c_arena);
         n = CHILD(n, 1);
     }
     assert(TYPE(n) == typedargslist || TYPE(n) == varargslist);
@@ -1344,17 +1345,10 @@ ast_for_arguments(struct compiling *c, const node *n)
                     i = res; /* res has new position to process */
                 }
                 else {
-                    vararg = NEW_IDENTIFIER(CHILD(ch, 0));
+                    vararg = ast_for_arg(c, ch);
                     if (!vararg)
                         return NULL;
-                    if (forbidden_name(c, vararg, CHILD(ch, 0), 0))
-                        return NULL;
-                    if (NCH(ch) > 1) {
-                        /* there is an annotation on the vararg */
-                        varargannotation = ast_for_expr(c, CHILD(ch, 2));
-                        if (!varargannotation)
-                            return NULL;
-                    }
+
                     i += 3;
                     if (i < NCH(n) && (TYPE(CHILD(n, i)) == tfpdef
                                     || TYPE(CHILD(n, i)) == vfpdef)) {
@@ -1369,16 +1363,8 @@ ast_for_arguments(struct compiling *c, const node *n)
             case DOUBLESTAR:
                 ch = CHILD(n, i+1);  /* tfpdef */
                 assert(TYPE(ch) == tfpdef || TYPE(ch) == vfpdef);
-                kwarg = NEW_IDENTIFIER(CHILD(ch, 0));
+                kwarg = ast_for_arg(c, ch);
                 if (!kwarg)
-                    return NULL;
-                if (NCH(ch) > 1) {
-                    /* there is an annotation on the kwarg */
-                    kwargannotation = ast_for_expr(c, CHILD(ch, 2));
-                    if (!kwargannotation)
-                        return NULL;
-                }
-                if (forbidden_name(c, kwarg, CHILD(ch, 0), 0))
                     return NULL;
                 i += 3;
                 break;
@@ -1389,8 +1375,7 @@ ast_for_arguments(struct compiling *c, const node *n)
                 return NULL;
         }
     }
-    return arguments(posargs, vararg, varargannotation, kwonlyargs, kwarg,
-                    kwargannotation, posdefaults, kwdefaults, c->c_arena);
+    return arguments(posargs, vararg, kwonlyargs, kwdefaults, kwarg, posdefaults, c->c_arena);
 }
 
 static expr_ty
@@ -1555,8 +1540,7 @@ ast_for_lambdef(struct compiling *c, const node *n)
     expr_ty expression;
 
     if (NCH(n) == 3) {
-        args = arguments(NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-                         NULL, c->c_arena);
+        args = arguments(NULL, NULL, NULL, NULL, NULL, NULL, c->c_arena);
         if (!args)
             return NULL;
         expression = ast_for_expr(c, CHILD(n, 2));
@@ -1819,11 +1803,21 @@ ast_for_atom(struct compiling *c, const node *n)
 
     switch (TYPE(ch)) {
     case NAME: {
-        /* All names start in Load context, but may later be
-           changed. */
-        PyObject *name = NEW_IDENTIFIER(ch);
+        PyObject *name;
+        const char *s = STR(ch);
+        size_t len = strlen(s);
+        if (len >= 4 && len <= 5) {
+            if (!strcmp(s, "None"))
+                return NameConstant(Py_None, LINENO(n), n->n_col_offset, c->c_arena);
+            if (!strcmp(s, "True"))
+                return NameConstant(Py_True, LINENO(n), n->n_col_offset, c->c_arena);
+            if (!strcmp(s, "False"))
+                return NameConstant(Py_False, LINENO(n), n->n_col_offset, c->c_arena);
+        }
+        name = new_identifier(s, c);
         if (!name)
             return NULL;
+        /* All names start in Load context, but may later be changed. */
         return Name(name, Load, LINENO(n), n->n_col_offset, c->c_arena);
     }
     case STRING: {
@@ -2093,15 +2087,22 @@ ast_for_trailer(struct compiling *c, const node *n, expr_ty left_expr)
         if (NCH(n) == 2)
             return Call(left_expr, NULL, NULL, NULL, NULL, LINENO(n),
                         n->n_col_offset, c->c_arena);
-        else
-            return ast_for_call(c, CHILD(n, 1), left_expr);
+        else {
+            expr_ty tmp = ast_for_call(c, CHILD(n, 1), left_expr);
+            if (!tmp)
+                return NULL;
+
+            tmp->lineno = LINENO(n);
+            tmp->col_offset = n->n_col_offset;
+            return tmp;
+        }
     }
     else if (TYPE(CHILD(n, 0)) == DOT ) {
         PyObject *attr_id = NEW_IDENTIFIER(CHILD(n, 1));
         if (!attr_id)
             return NULL;
         return Attribute(left_expr, attr_id, Load,
-                         LINENO(n), n->n_col_offset, c->c_arena);
+                         LINENO(CHILD(n, 1)), CHILD(n, 1)->n_col_offset, c->c_arena);
     }
     else {
         REQ(CHILD(n, 0), LSQB);
@@ -2202,8 +2203,6 @@ ast_for_power(struct compiling *c, const node *n)
         tmp = ast_for_trailer(c, ch, e);
         if (!tmp)
             return NULL;
-        tmp->lineno = e->lineno;
-        tmp->col_offset = e->col_offset;
         e = tmp;
     }
     if (TYPE(CHILD(n, NCH(n) - 1)) == factor) {
