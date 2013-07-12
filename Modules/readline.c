@@ -84,12 +84,12 @@ parse_and_bind(PyObject *self, PyObject *args)
         return NULL;
     /* Make a copy -- rl_parse_and_bind() modifies its argument */
     /* Bernard Herzog */
-    copy = malloc(1 + strlen(s));
+    copy = PyMem_Malloc(1 + strlen(s));
     if (copy == NULL)
         return PyErr_NoMemory();
     strcpy(copy, s);
     rl_parse_and_bind(copy);
-    free(copy); /* Free the copy */
+    PyMem_Free(copy); /* Free the copy */
     Py_RETURN_NONE;
 }
 
@@ -913,10 +913,6 @@ setup_readline(void)
     using_history();
 
     rl_readline_name = "python";
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-    /* Allow $if term= in .inputrc to work */
-    rl_terminal_name = getenv("TERM");
-#endif
     /* Force rebind of TAB to insert-tab */
     rl_bind_key('\t', rl_insert);
     /* Bind both ESC-TAB and ESC-ESC to the completion function */
