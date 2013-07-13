@@ -35,12 +35,30 @@
 #define PATH_MAX MAXPATHLEN
 #endif
 
+#ifdef Py_REF_DEBUG
+static
+void _print_total_refs(void) {
+    PyObject *xoptions, *key, *value;
+    xoptions = PySys_GetXOptions();
+    if (xoptions == NULL)
+        return;
+    key = PyUnicode_FromString("showrefcount");
+    if (key == NULL)
+        return;
+    value = PyDict_GetItem(xoptions, key);
+    Py_DECREF(key);
+    if (value == Py_True)
+        fprintf(stderr,
+                "[%" PY_FORMAT_SIZE_T "d refs, "
+                "%" PY_FORMAT_SIZE_T "d blocks]\n",
+                _Py_GetRefTotal(), _Py_GetAllocatedBlocks());
+}
+#endif
+
 #ifndef Py_REF_DEBUG
 #define PRINT_TOTAL_REFS()
 #else /* Py_REF_DEBUG */
-#define PRINT_TOTAL_REFS() fprintf(stderr,                              \
-                   "[%" PY_FORMAT_SIZE_T "d refs]\n",                   \
-                   _Py_GetRefTotal())
+#define PRINT_TOTAL_REFS() _print_total_refs()
 #endif
 
 #ifdef __cplusplus
@@ -156,7 +174,7 @@ get_codec_name(const char *encoding)
     name_utf8 = _PyUnicode_AsString(name);
     if (name_utf8 == NULL)
         goto error;
-    name_str = strdup(name_utf8);
+    name_str = _PyMem_RawStrdup(name_utf8);
     Py_DECREF(name);
     if (name_str == NULL) {
         PyErr_NoMemory();
@@ -526,10 +544,6 @@ Py_Finalize(void)
     while (PyGC_Collect() > 0)
         /* nothing */;
 #endif
-    /* We run this while most interpreter state is still alive, so that
-       debug information can be printed out */
-    _PyGC_Fini();
-
     /* Destroy all modules */
     PyImport_Cleanup();
 
@@ -592,11 +606,6 @@ Py_Finalize(void)
 
     _PyExc_Fini();
 
-    /* Cleanup auto-thread-state */
-#ifdef WITH_THREAD
-    _PyGILState_Fini();
-#endif /* WITH_THREAD */
-
     /* Sundry finalizers */
     PyMethod_Fini();
     PyFrame_Fini();
@@ -610,17 +619,14 @@ Py_Finalize(void)
     PyFloat_Fini();
     PyDict_Fini();
     PySlice_Fini();
+    _PyGC_Fini();
 
     /* Cleanup Unicode implementation */
     _PyUnicode_Fini();
 
-    /* Delete current thread. After this, many C API calls become crashy. */
-    PyThreadState_Swap(NULL);
-    PyInterpreterState_Delete(interp);
-
     /* reset file system default encoding */
     if (!Py_HasFileSystemDefaultEncoding && Py_FileSystemDefaultEncoding) {
-        free((char*)Py_FileSystemDefaultEncoding);
+        PyMem_RawFree((char*)Py_FileSystemDefaultEncoding);
         Py_FileSystemDefaultEncoding = NULL;
     }
 
@@ -631,6 +637,15 @@ Py_Finalize(void)
     */
 
     PyGrammar_RemoveAccelerators(&_PyParser_Grammar);
+
+    /* Cleanup auto-thread-state */
+#ifdef WITH_THREAD
+    _PyGILState_Fini();
+#endif /* WITH_THREAD */
+
+    /* Delete current thread. After this, many C API calls become crashy. */
+    PyThreadState_Swap(NULL);
+    PyInterpreterState_Delete(interp);
 
 #ifdef Py_TRACE_REFS
     /* Display addresses (& refcnts) of all objects still alive.
@@ -827,7 +842,7 @@ Py_GetPythonHome(void)
 static void
 initmain(PyInterpreterState *interp)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *loader;
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         Py_FatalError("can't create __main__ module");
@@ -848,7 +863,8 @@ initmain(PyInterpreterState *interp)
      * be set if __main__ gets further initialized later in the startup
      * process.
      */
-    if (PyDict_GetItemString(d, "__loader__") == NULL) {
+    loader = PyDict_GetItemString(d, "__loader__");
+    if (loader == NULL || loader == Py_None) {
         PyObject *loader = PyObject_GetAttrString(interp->importlib,
                                                   "BuiltinImporter");
         if (loader == NULL) {
@@ -1065,7 +1081,11 @@ initstdio(void)
     encoding = Py_GETENV("PYTHONIOENCODING");
     errors = NULL;
     if (encoding) {
-        encoding = strdup(encoding);
+        encoding = _PyMem_Strdup(encoding);
+        if (encoding == NULL) {
+            PyErr_NoMemory();
+            goto error;
+        }
         errors = strchr(encoding, ':');
         if (errors) {
             *errors = '\0';
@@ -1124,10 +1144,10 @@ initstdio(void)
        when import.c tries to write to stderr in verbose mode. */
     encoding_attr = PyObject_GetAttrString(std, "encoding");
     if (encoding_attr != NULL) {
-        const char * encoding;
-        encoding = _PyUnicode_AsString(encoding_attr);
-        if (encoding != NULL) {
-            PyObject *codec_info = _PyCodec_Lookup(encoding);
+        const char * std_encoding;
+        std_encoding = _PyUnicode_AsString(encoding_attr);
+        if (std_encoding != NULL) {
+            PyObject *codec_info = _PyCodec_Lookup(std_encoding);
             Py_XDECREF(codec_info);
         }
         Py_DECREF(encoding_attr);
@@ -1144,8 +1164,7 @@ initstdio(void)
         status = -1;
     }
 
-    if (encoding)
-        free(encoding);
+    PyMem_Free(encoding);
     Py_XDECREF(bimod);
     Py_XDECREF(iomod);
     return status;
