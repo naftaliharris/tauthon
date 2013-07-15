@@ -122,7 +122,7 @@ try:
 except AttributeError:
     # os.devnull was added in Python 2.4, so emulate it for earlier
     # Python versions
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # Use the old CP/M NUL as device name
         DEV_NULL = 'NUL'
     else:
@@ -316,7 +316,7 @@ def linux_distribution(distname='', version='', id='',
     """
     try:
         etc = os.listdir('/etc')
-    except os.error:
+    except OSError:
         # Probably not a Unix system
         return distname,version,id
     etc.sort()
@@ -403,13 +403,13 @@ _ver_output = re.compile(r'(?:([\w ]+) ([\w.]+) '
 
 def _syscmd_ver(system='', release='', version='',
 
-               supported_platforms=('win32','win16','dos','os2')):
+               supported_platforms=('win32','win16','dos')):
 
     """ Tries to figure out the OS version used and returns
         a tuple (system,release,version).
 
         It uses the "ver" shell command for this which is known
-        to exists on Windows, DOS and OS/2. XXX Others too ?
+        to exists on Windows, DOS. XXX Others too ?
 
         In case this fails, the given parameters are used as
         defaults.
@@ -424,13 +424,10 @@ def _syscmd_ver(system='', release='', version='',
             pipe = popen(cmd)
             info = pipe.read()
             if pipe.close():
-                raise os.error('command failed')
+                raise OSError('command failed')
             # XXX How can I suppress shell errors from being written
             #     to stderr ?
-        except os.error as why:
-            #print 'Command %s failed: %s' % (cmd,why)
-            continue
-        except IOError as why:
+        except OSError as why:
             #print 'Command %s failed: %s' % (cmd,why)
             continue
         else:
@@ -581,7 +578,7 @@ def win32_ver(release='',version='',csd='',ptype=''):
                     # Discard any type that isn't REG_SZ
                     if type == REG_SZ and name.find("Server") != -1:
                         product_type = VER_NT_SERVER
-                except WindowsError:
+                except OSError:
                     # Use default of VER_NT_WORKSTATION
                     pass
 
@@ -882,7 +879,7 @@ def _node(default=''):
         return default
     try:
         return socket.gethostname()
-    except socket.error:
+    except OSError:
         # Still not working...
         return default
 
@@ -901,12 +898,12 @@ def _syscmd_uname(option,default=''):
 
     """ Interface to the system's uname command.
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     try:
         f = os.popen('uname %s 2> %s' % (option, DEV_NULL))
-    except (AttributeError,os.error):
+    except (AttributeError, OSError):
         return default
     output = f.read().strip()
     rc = f.close()
@@ -924,7 +921,7 @@ def _syscmd_file(target,default=''):
         default in case the command should fail.
 
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     target = _follow_symlinks(target)
@@ -932,7 +929,7 @@ def _syscmd_file(target,default=''):
         proc = subprocess.Popen(['file', target],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    except (AttributeError,os.error):
+    except (AttributeError, OSError):
         return default
     output = proc.communicate()[0].decode('latin-1')
     rc = proc.wait()
