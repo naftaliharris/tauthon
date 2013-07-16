@@ -22,14 +22,10 @@
 #include <crtdbg.h>
 #endif
 
-#if (defined(PYOS_OS2) && !defined(PYCC_GCC)) || defined(MS_WINDOWS)
+#if defined(MS_WINDOWS)
 #define PYTHONHOMEHELP "<prefix>\\lib"
 #else
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#define PYTHONHOMEHELP "<prefix>/Lib"
-#else
 #define PYTHONHOMEHELP "<prefix>/pythonX.X"
-#endif
 #endif
 
 #include "pygetopt.h"
@@ -164,6 +160,32 @@ static void RunStartupFile(PyCompilerFlags *cf)
     }
 }
 
+static void RunInteractiveHook(void)
+{
+    PyObject *sys, *hook, *result;
+    sys = PyImport_ImportModule("sys");
+    if (sys == NULL)
+        goto error;
+    hook = PyObject_GetAttrString(sys, "__interactivehook__");
+    Py_DECREF(sys);
+    if (hook == NULL)
+        PyErr_Clear();
+    else {
+        result = PyObject_CallObject(hook, NULL);
+        Py_DECREF(hook);
+        if (result == NULL)
+            goto error;
+        else
+            Py_DECREF(result);
+    }
+    return;
+
+error:
+    PySys_WriteStderr("Failed calling sys.__interactivehook__\n");
+    PyErr_Print();
+    PyErr_Clear();
+}
+
 
 static int RunModule(wchar_t *modname, int set_argv0)
 {
@@ -171,17 +193,20 @@ static int RunModule(wchar_t *modname, int set_argv0)
     runpy = PyImport_ImportModule("runpy");
     if (runpy == NULL) {
         fprintf(stderr, "Could not import runpy module\n");
+        PyErr_Print();
         return -1;
     }
     runmodule = PyObject_GetAttrString(runpy, "_run_module_as_main");
     if (runmodule == NULL) {
         fprintf(stderr, "Could not access runpy._run_module_as_main\n");
+        PyErr_Print();
         Py_DECREF(runpy);
         return -1;
     }
     module = PyUnicode_FromWideChar(modname, wcslen(modname));
     if (module == NULL) {
         fprintf(stderr, "Could not convert module name to unicode\n");
+        PyErr_Print();
         Py_DECREF(runpy);
         Py_DECREF(runmodule);
         return -1;
@@ -190,6 +215,7 @@ static int RunModule(wchar_t *modname, int set_argv0)
     if (runargs == NULL) {
         fprintf(stderr,
             "Could not create arguments for runpy._run_module_as_main\n");
+        PyErr_Print();
         Py_DECREF(runpy);
         Py_DECREF(runmodule);
         Py_DECREF(module);
@@ -365,7 +391,7 @@ Py_Main(int argc, wchar_t **argv)
                command to interpret. */
 
             len = wcslen(_PyOS_optarg) + 1 + 1;
-            command = (wchar_t *)malloc(sizeof(wchar_t) * len);
+            command = (wchar_t *)PyMem_RawMalloc(sizeof(wchar_t) * len);
             if (command == NULL)
                 Py_FatalError(
                    "not enough memory to copy -c argument");
@@ -474,7 +500,7 @@ Py_Main(int argc, wchar_t **argv)
         return usage(0, argv[0]);
 
     if (version) {
-        fprintf(stderr, "Python %s\n", PY_VERSION);
+        printf("Python %s\n", PY_VERSION);
         return 0;
     }
 
@@ -494,7 +520,7 @@ Py_Main(int argc, wchar_t **argv)
         *wp != L'\0') {
         wchar_t *buf, *warning;
 
-        buf = (wchar_t *)malloc((wcslen(wp) + 1) * sizeof(wchar_t));
+        buf = (wchar_t *)PyMem_RawMalloc((wcslen(wp) + 1) * sizeof(wchar_t));
         if (buf == NULL)
             Py_FatalError(
                "not enough memory to copy PYTHONWARNINGS");
@@ -504,7 +530,7 @@ Py_Main(int argc, wchar_t **argv)
              warning = wcstok(NULL, L",")) {
             PySys_AddWarnOption(warning);
         }
-        free(buf);
+        PyMem_RawFree(buf);
     }
 #else
     if ((p = Py_GETENV("PYTHONWARNINGS")) && *p != '\0') {
@@ -513,12 +539,12 @@ Py_Main(int argc, wchar_t **argv)
 
         /* settle for strtok here as there's no one standard
            C89 wcstok */
-        buf = (char *)malloc(strlen(p) + 1);
+        buf = (char *)PyMem_RawMalloc(strlen(p) + 1);
         if (buf == NULL)
             Py_FatalError(
                "not enough memory to copy PYTHONWARNINGS");
         strcpy(buf, p);
-        oldloc = strdup(setlocale(LC_ALL, NULL));
+        oldloc = _PyMem_RawStrdup(setlocale(LC_ALL, NULL));
         setlocale(LC_ALL, "");
         for (p = strtok(buf, ","); p != NULL; p = strtok(NULL, ",")) {
 #ifdef __APPLE__
@@ -536,8 +562,8 @@ Py_Main(int argc, wchar_t **argv)
             Py_DECREF(unicode);
         }
         setlocale(LC_ALL, oldloc);
-        free(oldloc);
-        free(buf);
+        PyMem_RawFree(oldloc);
+        PyMem_RawFree(buf);
     }
 #endif
 
@@ -607,7 +633,7 @@ Py_Main(int argc, wchar_t **argv)
         wchar_t* buffer;
         size_t len = strlen(p) + 1;
 
-        buffer = malloc(len * sizeof(wchar_t));
+        buffer = PyMem_RawMalloc(len * sizeof(wchar_t));
         if (buffer == NULL) {
             Py_FatalError(
                "not enough memory to copy PYTHONEXECUTABLE");
@@ -681,7 +707,7 @@ Py_Main(int argc, wchar_t **argv)
 
     if (command) {
         sts = run_command(command, &cf);
-        free(command);
+        PyMem_RawFree(command);
     } else if (module) {
         sts = (RunModule(module, 1) != 0);
     }
@@ -690,6 +716,7 @@ Py_Main(int argc, wchar_t **argv)
         if (filename == NULL && stdin_is_interactive) {
             Py_InspectFlag = 0; /* do exit on SystemExit */
             RunStartupFile(&cf);
+            RunInteractiveHook();
         }
         /* XXX */
 
@@ -755,6 +782,7 @@ Py_Main(int argc, wchar_t **argv)
     if (Py_InspectFlag && stdin_is_interactive &&
         (filename != NULL || command != NULL || module != NULL)) {
         Py_InspectFlag = 0;
+        RunInteractiveHook();
         /* XXX */
         sts = PyRun_AnyFileFlags(stdin, "<stdin>", &cf) != 0;
     }
