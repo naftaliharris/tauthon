@@ -273,7 +273,7 @@ class Telnet:
         """Write a string to the socket, doubling any IAC characters.
 
         Can block if the connection is blocked.  May raise
-        socket.error if the connection is closed.
+        OSError if the connection is closed.
 
         """
         if IAC in buffer:
@@ -313,7 +313,7 @@ class Telnet:
             while i < 0 and not self.eof:
                 try:
                     ready = poller.poll(call_timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.errno == errno.EINTR:
                         if timeout is not None:
                             elapsed = time() - time_start
@@ -683,7 +683,7 @@ class Telnet:
             while not m and not self.eof:
                 try:
                     ready = poller.poll(call_timeout)
-                except select.error as e:
+                except OSError as e:
                     if e.errno == errno.EINTR:
                         if timeout is not None:
                             elapsed = time() - time_start

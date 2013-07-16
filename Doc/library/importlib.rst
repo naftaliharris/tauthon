@@ -90,7 +90,7 @@ Functions
 
    Find the loader for a module, optionally within the specified *path*. If the
    module is in :attr:`sys.modules`, then ``sys.modules[name].__loader__`` is
-   returned (unless the loader would be ``None``, in which case
+   returned (unless the loader would be ``None`` or is not set, in which case
    :exc:`ValueError` is raised). Otherwise a search using :attr:`sys.meta_path`
    is done. ``None`` is returned if no loader is found.
 
@@ -98,6 +98,12 @@ Functions
    loading them and that may not be desired. To properly import a submodule you
    will need to import all parent packages of the submodule and use the correct
    argument to *path*.
+
+   .. versionadded:: 3.3
+
+   .. versionchanged:: 3.4
+      If ``__loader__`` is not set, raise :exc:`ValueError`, just like when the
+      attribute is set to ``None``.
 
 .. function:: invalidate_caches()
 
@@ -108,6 +114,73 @@ Functions
    guarantee all finders will notice the new module's existence.
 
    .. versionadded:: 3.3
+
+.. function:: reload(module)
+
+   Reload a previously imported *module*.  The argument must be a module object,
+   so it must have been successfully imported before.  This is useful if you
+   have edited the module source file using an external editor and want to try
+   out the new version without leaving the Python interpreter.  The return value
+   is the module object (the same as the *module* argument).
+
+   When :func:`.reload` is executed:
+
+   * Python modules' code is recompiled and the module-level code re-executed,
+     defining a new set of objects which are bound to names in the module's
+     dictionary by reusing the :term:`loader` which originally loaded the
+     module.  The ``init`` function of extension modules is not called a second
+     time.
+
+   * As with all other objects in Python the old objects are only reclaimed
+     after their reference counts drop to zero.
+
+   * The names in the module namespace are updated to point to any new or
+     changed objects.
+
+   * Other references to the old objects (such as names external to the module) are
+     not rebound to refer to the new objects and must be updated in each namespace
+     where they occur if that is desired.
+
+   There are a number of other caveats:
+
+   If a module is syntactically correct but its initialization fails, the first
+   :keyword:`import` statement for it does not bind its name locally, but does
+   store a (partially initialized) module object in ``sys.modules``.  To reload
+   the module you must first :keyword:`import` it again (this will bind the name
+   to the partially initialized module object) before you can :func:`reload` it.
+
+   When a module is reloaded, its dictionary (containing the module's global
+   variables) is retained.  Redefinitions of names will override the old
+   definitions, so this is generally not a problem.  If the new version of a
+   module does not define a name that was defined by the old version, the old
+   definition remains.  This feature can be used to the module's advantage if it
+   maintains a global table or cache of objects --- with a :keyword:`try`
+   statement it can test for the table's presence and skip its initialization if
+   desired::
+
+      try:
+          cache
+      except NameError:
+          cache = {}
+
+   It is legal though generally not very useful to reload built-in or
+   dynamically loaded modules (this is not true for e.g. :mod:`sys`,
+   :mod:`__main__`, :mod:`__builtin__` and other key modules where reloading is
+   frowned upon). In many cases, however, extension modules are not designed to
+   be initialized more than once, and may fail in arbitrary ways when reloaded.
+
+   If a module imports objects from another module using :keyword:`from` ...
+   :keyword:`import` ..., calling :func:`reload` for the other module does not
+   redefine the objects imported from it --- one way around this is to
+   re-execute the :keyword:`from` statement, another is to use :keyword:`import`
+   and qualified names (*module.name*) instead.
+
+   If a module instantiates instances of a class, reloading the module that
+   defines the class does not affect the method definitions of the instances ---
+   they continue to use the old class definition.  The same is true for derived
+   classes.
+
+   .. versionadded:: 3.4
 
 
 :mod:`importlib.abc` -- Abstract base classes related to import
@@ -132,8 +205,6 @@ ABC hierarchy::
                +-- ExecutionLoader --+
                                      +-- FileLoader
                                      +-- SourceLoader
-                                          +-- PyLoader (deprecated)
-                                          +-- PyPycLoader (deprecated)
 
 
 .. class:: Finder
@@ -148,6 +219,10 @@ ABC hierarchy::
       An abstact method for finding a :term:`loader` for the specified
       module.  Originally specified in :pep:`302`, this method was meant
       for use in :data:`sys.meta_path` and in the path-based import subsystem.
+
+      .. versionchanged:: 3.4
+         Returns ``None`` when called instead of raising
+         :exc:`NotImplementedError`.
 
 
 .. class:: MetaPathFinder
@@ -165,11 +240,18 @@ ABC hierarchy::
       will be the value of :attr:`__path__` from the parent
       package. If a loader cannot be found, ``None`` is returned.
 
+      .. versionchanged:: 3.4
+         Returns ``None`` when called instead of raising
+         :exc:`NotImplementedError`.
+
    .. method:: invalidate_caches()
 
       An optional method which, when called, should invalidate any internal
       cache used by the finder. Used by :func:`importlib.invalidate_caches`
       when invalidating the caches of all finders on :data:`sys.meta_path`.
+
+      .. versionchanged:: 3.4
+         Returns ``None`` when called instead of ``NotImplemented``.
 
 
 .. class:: PathEntryFinder
@@ -178,7 +260,7 @@ ABC hierarchy::
    it bears some similarities to :class:`MetaPathFinder`, ``PathEntryFinder``
    is meant for use only within the path-based import subsystem provided
    by :class:`PathFinder`. This ABC is a subclass of :class:`Finder` for
-   compatibility.
+   compatibility reasons only.
 
    .. versionadded:: 3.3
 
@@ -190,9 +272,12 @@ ABC hierarchy::
       package. The loader may be ``None`` while specifying ``portion`` to
       signify the contribution of the file system locations to a namespace
       package. An empty list can be used for ``portion`` to signify the loader
-      is not part of a package. If ``loader`` is ``None`` and ``portion`` is
-      the empty list then no loader or location for a namespace package were
-      found (i.e. failure to find anything for the module).
+      is not part of a namespace package. If ``loader`` is ``None`` and
+      ``portion`` is the empty list then no loader or location for a namespace
+      package were found (i.e. failure to find anything for the module).
+
+      .. versionchanged:: 3.4
+         Returns ``(None, [])`` instead of raising :exc:`NotImplementedError`.
 
    .. method:: find_module(fullname)
 
@@ -224,12 +309,11 @@ ABC hierarchy::
         from the import. If the loader inserted a module and the load fails, it
         must be removed by the loader from :data:`sys.modules`; modules already
         in :data:`sys.modules` before the loader began execution should be left
-        alone. The :func:`importlib.util.module_for_loader` decorator handles
-        all of these details.
+        alone (see :func:`importlib.util.module_to_load`).
 
         The loader should set several attributes on the module.
         (Note that some of these attributes can change when a module is
-        reloaded.)
+        reloaded; see :meth:`init_module_attrs`):
 
         - :attr:`__name__`
             The name of the module.
@@ -249,20 +333,39 @@ ABC hierarchy::
         - :attr:`__package__`
             The parent package for the module/package. If the module is
             top-level then it has a value of the empty string. The
-            :func:`importlib.util.set_package` decorator can handle the details
-            for :attr:`__package__`.
+            :func:`importlib.util.module_for_loader` decorator can handle the
+            details for :attr:`__package__`.
 
         - :attr:`__loader__`
-            The loader used to load the module.
-            (This is not set by the built-in import machinery,
-            but it should be set whenever a :term:`loader` is used.)
+            The loader used to load the module. The
+            :func:`importlib.util.module_for_loader` decorator can handle the
+            details for :attr:`__package__`.
+
+        .. versionchanged:: 3.4
+           Raise :exc:`ImportError` when called instead of
+           :exc:`NotImplementedError`.
 
     .. method:: module_repr(module)
 
-        An abstract method which when implemented calculates and returns the
-        given module's repr, as a string.
+        An optional method which when implemented calculates and returns the
+        given module's repr, as a string. The module type's default repr() will
+        use the result of this method as appropriate.
 
-        .. versionadded: 3.3
+        .. versionadded:: 3.3
+
+        .. versionchanged:: 3.4
+           Made optional instead of an abstractmethod.
+
+    .. method:: init_module_attrs(module)
+
+        Set the :attr:`__loader__` attribute on the module.
+
+        Subclasses overriding this method should set whatever appropriate
+        attributes it can, getting the module's name from :attr:`__name__` when
+        needed. All values should also be overridden so that reloading works as
+        expected.
+
+        .. versionadded:: 3.4
 
 
 .. class:: ResourceLoader
@@ -281,6 +384,9 @@ ABC hierarchy::
         be found. The *path* is expected to be constructed using a module's
         :attr:`__file__` attribute or an item from a package's :attr:`__path__`.
 
+        .. versionchanged:: 3.4
+           Raises :exc:`IOError` instead of :exc:`NotImplementedError`.
+
 
 .. class:: InspectLoader
 
@@ -289,13 +395,20 @@ ABC hierarchy::
 
     .. method:: get_code(fullname)
 
-        An abstract method to return the :class:`code` object for a module.
-        ``None`` is returned if the module does not have a code object
+        Return the code object for a module.
+        ``None`` should be returned if the module does not have a code object
         (e.g. built-in module).  :exc:`ImportError` is raised if loader cannot
         find the requested module.
 
+        .. note::
+           While the method has a default implementation, it is suggested that
+           it be overridden if possible for performance.
+
         .. index::
            single: universal newlines; importlib.abc.InspectLoader.get_source method
+
+        .. versionchanged:: 3.4
+           No longer abstract and a concrete implementation is provided.
 
     .. method:: get_source(fullname)
 
@@ -305,11 +418,40 @@ ABC hierarchy::
         if no source is available (e.g. a built-in module). Raises
         :exc:`ImportError` if the loader cannot find the module specified.
 
+        .. versionchanged:: 3.4
+           Raises :exc:`ImportError` instead of :exc:`NotImplementedError`.
+
     .. method:: is_package(fullname)
 
         An abstract method to return a true value if the module is a package, a
         false value otherwise. :exc:`ImportError` is raised if the
         :term:`loader` cannot find the module.
+
+        .. versionchanged:: 3.4
+           Raises :exc:`ImportError` instead of :exc:`NotImplementedError`.
+
+    .. method:: source_to_code(data, path='<string>')
+
+        Create a code object from Python source.
+
+        The *data* argument can be whatever the :func:`compile` function
+        supports (i.e. string or bytes). The *path* argument should be
+        the "path" to where the source code originated from, which can be an
+        abstract concept (e.g. location in a zip file).
+
+        .. versionadded:: 3.4
+
+    .. method:: init_module_attrs(module)
+
+        Set the :attr:`__package__` attribute and :attr:`__path__` attribute to
+        the empty list if appropriate along with what
+        :meth:`importlib.abc.Loader.init_module_attrs` sets.
+
+        .. versionadded:: 3.4
+
+    .. method:: load_module(fullname)
+
+        Implementation of :meth:`Loader.load_module`.
 
 
 .. class:: ExecutionLoader
@@ -327,6 +469,18 @@ ABC hierarchy::
         If source code is available, then the method should return the path to
         the source file, regardless of whether a bytecode was used to load the
         module.
+
+        .. versionchanged:: 3.4
+           Raises :exc:`ImportError` instead of :exc:`NotImplementedError`.
+
+    .. method:: init_module_attrs(module)
+
+        Set :attr:`__file__` and if initializing a package then set
+        :attr:`__path__` to ``[os.path.dirname(__file__)]`` along with
+        all attributes set by
+        :meth:`importlib.abc.InspectLoader.init_module_attrs`.
+
+        .. versionadded:: 3.4
 
 
 .. class:: FileLoader(fullname, path)
@@ -358,7 +512,7 @@ ABC hierarchy::
 
    .. method:: get_data(path)
 
-      Returns the open, binary file for *path*.
+      Reads *path* as a binary file and returns the bytes from it.
 
 
 .. class:: SourceLoader
@@ -373,7 +527,8 @@ ABC hierarchy::
           loading is not supported.
 
     The abstract methods defined by this class are to add optional bytecode
-    file support. Not implementing these optional methods causes the loader to
+    file support. Not implementing these optional methods (or causing them to
+    raise :exc:`NotImplementedError`) causes the loader to
     only work with source code. Implementing the methods allows the loader to
     work with source *and* bytecode files; it does not allow for *sourceless*
     loading where only bytecode is provided.  Bytecode files are an
@@ -390,9 +545,12 @@ ABC hierarchy::
         - ``'size'`` (optional): the size in bytes of the source code.
 
         Any other keys in the dictionary are ignored, to allow for future
-        extensions.
+        extensions. If the path cannot be handled, :exc:`IOError` is raised.
 
         .. versionadded:: 3.3
+
+        .. versionchanged:: 3.4
+           Raise :exc:`IOError` instead of :exc:`NotImplementedError`.
 
     .. method:: path_mtime(path)
 
@@ -402,7 +560,10 @@ ABC hierarchy::
         .. deprecated:: 3.3
            This method is deprecated in favour of :meth:`path_stats`.  You don't
            have to implement it, but it is still available for compatibility
-           purposes.
+           purposes. Raise :exc:`IOError` if the path cannot be handled.
+
+          .. versionchanged:: 3.4
+             Raise :exc:`IOError` instead of :exc:`NotImplementedError`.
 
     .. method:: set_data(path, data)
 
@@ -413,6 +574,9 @@ ABC hierarchy::
         When writing to the path fails because the path is read-only
         (:attr:`errno.EACCES`/:exc:`PermissionError`), do not propagate the
         exception.
+
+        .. versionchanged:: 3.4
+           No longer raises :exc:`NotImplementedError` when called.
 
     .. method:: get_code(fullname)
 
@@ -434,141 +598,13 @@ ABC hierarchy::
         ``__init__`` when the file extension is removed **and** the module name
         itself does not end in ``__init__``.
 
+    .. method:: init_module_attr(module)
 
-.. class:: PyLoader
+        Set :attr:`__cached__` using :func:`imp.cache_from_source`. Other
+        attributes set by
+        :meth:`importlib.abc.ExecutionLoader.init_module_attrs`.
 
-    An abstract base class inheriting from
-    :class:`ExecutionLoader` and
-    :class:`ResourceLoader` designed to ease the loading of
-    Python source modules (bytecode is not handled; see
-    :class:`SourceLoader` for a source/bytecode ABC). A subclass
-    implementing this ABC will only need to worry about exposing how the source
-    code is stored; all other details for loading Python source code will be
-    handled by the concrete implementations of key methods.
-
-    .. deprecated:: 3.2
-        This class has been deprecated in favor of :class:`SourceLoader` and is
-        slated for removal in Python 3.4. See below for how to create a
-        subclass that is compatible with Python 3.1 onwards.
-
-    If compatibility with Python 3.1 is required, then use the following idiom
-    to implement a subclass that will work with Python 3.1 onwards (make sure
-    to implement :meth:`ExecutionLoader.get_filename`)::
-
-        try:
-            from importlib.abc import SourceLoader
-        except ImportError:
-            from importlib.abc import PyLoader as SourceLoader
-
-
-        class CustomLoader(SourceLoader):
-            def get_filename(self, fullname):
-                """Return the path to the source file."""
-                # Implement ...
-
-            def source_path(self, fullname):
-                """Implement source_path in terms of get_filename."""
-                try:
-                    return self.get_filename(fullname)
-                except ImportError:
-                    return None
-
-            def is_package(self, fullname):
-                """Implement is_package by looking for an __init__ file
-                name as returned by get_filename."""
-                filename = os.path.basename(self.get_filename(fullname))
-                return os.path.splitext(filename)[0] == '__init__'
-
-
-    .. method:: source_path(fullname)
-
-        An abstract method that returns the path to the source code for a
-        module. Should return ``None`` if there is no source code.
-        Raises :exc:`ImportError` if the loader knows it cannot handle the
-        module.
-
-    .. method:: get_filename(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.ExecutionLoader.get_filename` that
-        relies on :meth:`source_path`. If :meth:`source_path` returns
-        ``None``, then :exc:`ImportError` is raised.
-
-    .. method:: load_module(fullname)
-
-        A concrete implementation of :meth:`importlib.abc.Loader.load_module`
-        that loads Python source code. All needed information comes from the
-        abstract methods required by this ABC. The only pertinent assumption
-        made by this method is that when loading a package
-        :attr:`__path__` is set to ``[os.path.dirname(__file__)]``.
-
-    .. method:: get_code(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.InspectLoader.get_code` that creates code objects
-        from Python source code, by requesting the source code (using
-        :meth:`source_path` and :meth:`get_data`) and compiling it with the
-        built-in :func:`compile` function.
-
-    .. method:: get_source(fullname)
-
-        A concrete implementation of
-        :meth:`importlib.abc.InspectLoader.get_source`. Uses
-        :meth:`importlib.abc.ResourceLoader.get_data` and :meth:`source_path`
-        to get the source code.  It tries to guess the source encoding using
-        :func:`tokenize.detect_encoding`.
-
-
-.. class:: PyPycLoader
-
-    An abstract base class inheriting from :class:`PyLoader`.
-    This ABC is meant to help in creating loaders that support both Python
-    source and bytecode.
-
-    .. deprecated:: 3.2
-        This class has been deprecated in favor of :class:`SourceLoader` and to
-        properly support :pep:`3147`. If compatibility is required with
-        Python 3.1, implement both :class:`SourceLoader` and :class:`PyLoader`;
-        instructions on how to do so are included in the documentation for
-        :class:`PyLoader`. Do note that this solution will not support
-        sourceless/bytecode-only loading; only source *and* bytecode loading.
-
-    .. versionchanged:: 3.3
-       Updated to parse (but not use) the new source size field in bytecode
-       files when reading and to write out the field properly when writing.
-
-    .. method:: source_mtime(fullname)
-
-        An abstract method which returns the modification time for the source
-        code of the specified module. The modification time should be an
-        integer. If there is no source code, return ``None``. If the
-        module cannot be found then :exc:`ImportError` is raised.
-
-    .. method:: bytecode_path(fullname)
-
-        An abstract method which returns the path to the bytecode for the
-        specified module, if it exists. It returns ``None``
-        if no bytecode exists (yet).
-        Raises :exc:`ImportError` if the loader knows it cannot handle the
-        module.
-
-    .. method:: get_filename(fullname)
-
-        A concrete implementation of
-        :meth:`ExecutionLoader.get_filename` that relies on
-        :meth:`PyLoader.source_path` and :meth:`bytecode_path`.
-        If :meth:`source_path` returns a path, then that value is returned.
-        Else if :meth:`bytecode_path` returns a path, that path will be
-        returned. If a path is not available from both methods,
-        :exc:`ImportError` is raised.
-
-    .. method:: write_bytecode(fullname, bytecode)
-
-        An abstract method which has the loader write *bytecode* for future
-        use. If the bytecode is written, return ``True``. Return
-        ``False`` if the bytecode could not be written. This method
-        should not be called if :data:`sys.dont_write_bytecode` is true.
-        The *bytecode* argument should be a bytes string or bytes array.
+        .. versionadded:: 3.4
 
 
 :mod:`importlib.machinery` -- Importers and path hooks
@@ -844,6 +880,51 @@ find and load modules.
 This module contains the various objects that help in the construction of
 an :term:`importer`.
 
+.. attribute:: MAGIC_NUMBER
+
+   The bytes which represent the bytecode version number. If you need help with
+   loading/writing bytecode then consider :class:`importlib.abc.SourceLoader`.
+
+   .. versionadded:: 3.4
+
+.. function:: cache_from_source(path, debug_override=None)
+
+   Return the :pep:`3147` path to the byte-compiled file associated with the
+   source *path*.  For example, if *path* is ``/foo/bar/baz.py`` the return
+   value would be ``/foo/bar/__pycache__/baz.cpython-32.pyc`` for Python 3.2.
+   The ``cpython-32`` string comes from the current magic tag (see
+   :func:`get_tag`; if :attr:`sys.implementation.cache_tag` is not defined then
+   :exc:`NotImplementedError` will be raised).  The returned path will end in
+   ``.pyc`` when ``__debug__`` is True or ``.pyo`` for an optimized Python
+   (i.e. ``__debug__`` is False).  By passing in True or False for
+   *debug_override* you can override the system's value for ``__debug__`` for
+   extension selection.
+
+   *path* need not exist.
+
+   .. versionadded:: 3.4
+
+
+.. function:: source_from_cache(path)
+
+   Given the *path* to a :pep:`3147` file name, return the associated source code
+   file path.  For example, if *path* is
+   ``/foo/bar/__pycache__/baz.cpython-32.pyc`` the returned path would be
+   ``/foo/bar/baz.py``.  *path* need not exist, however if it does not conform
+   to :pep:`3147` format, a ``ValueError`` is raised. If
+   :attr:`sys.implementation.cache_tag` is not defined,
+   :exc:`NotImplementedError` is raised.
+
+   .. versionadded:: 3.4
+
+.. function:: decode_source(source_bytes)
+
+   Decode the given bytes representing source code and return it as a string
+   with universal newlines (as required by
+   :meth:`importlib.abc.InspectLoader.get_source`).
+
+   .. versionadded:: 3.4
+
 .. function:: resolve_name(name, package)
 
    Resolve a relative module name to an absolute one.
@@ -860,9 +941,23 @@ an :term:`importer`.
 
    .. versionadded:: 3.3
 
+.. function:: module_to_load(name, *, reset_name=True)
+
+    Returns a :term:`context manager` which provides the module to load. The
+    module will either come from :attr:`sys.modules` in the case of reloading or
+    a fresh module if loading a new module. Proper cleanup of
+    :attr:`sys.modules` occurs if the module was new and an exception was
+    raised.
+
+    If **reset_name** is true and the module requested is being reloaded then
+    the module's :attr:`__name__` attribute will
+    be reset to **name**, else it will be left untouched.
+
+    .. versionadded:: 3.4
+
 .. decorator:: module_for_loader
 
-    A :term:`decorator` for a :term:`loader` method,
+    A :term:`decorator` for :meth:`importlib.abc.Loader.load_module`
     to handle selecting the proper
     module object to load with. The decorated method is expected to have a call
     signature taking two positional arguments
@@ -873,55 +968,54 @@ an :term:`importer`.
 
     The decorated method will take in the **name** of the module to be loaded
     as expected for a :term:`loader`. If the module is not found in
-    :data:`sys.modules` then a new one is constructed with its
-    :attr:`__name__` attribute set to **name**, :attr:`__loader__` set to
-    **self**, and :attr:`__package__` set if
-    :meth:`importlib.abc.InspectLoader.is_package` is defined for **self** and
-    does not raise :exc:`ImportError` for **name**. If a new module is not
-    needed then the module found in :data:`sys.modules` will be passed into the
-    method.
+    :data:`sys.modules` then a new one is constructed. Regardless of where the
+    module came from, :attr:`__loader__` set to **self** and :attr:`__package__`
+    is set based on what :meth:`importlib.abc.InspectLoader.is_package` returns
+    (if available). These attributes are set unconditionally to support
+    reloading.
 
     If an exception is raised by the decorated method and a module was added to
     :data:`sys.modules` it will be removed to prevent a partially initialized
     module from being in left in :data:`sys.modules`. If the module was already
     in :data:`sys.modules` then it is left alone.
 
-    Use of this decorator handles all the details of which module object a
-    loader should initialize as specified by :pep:`302` as best as possible.
-
     .. versionchanged:: 3.3
        :attr:`__loader__` and :attr:`__package__` are automatically set
        (when possible).
 
+    .. versionchanged:: 3.4
+       Set :attr:`__name__`, :attr:`__loader__` :attr:`__package__`
+       unconditionally to support reloading.
+
+    .. deprecated:: 3.4
+        For the benefit of :term:`loader` subclasses, please use
+        :func:`module_to_load` and
+        :meth:`importlib.abc.Loader.init_module_attrs` instead.
+
 .. decorator:: set_loader
 
-    A :term:`decorator` for a :term:`loader` method,
-    to set the :attr:`__loader__`
-    attribute on loaded modules. If the attribute is already set the decorator
-    does nothing. It is assumed that the first positional argument to the
-    wrapped method (i.e. ``self``) is what :attr:`__loader__` should be set to.
+   A :term:`decorator` for :meth:`importlib.abc.Loader.load_module`
+   to set the :attr:`__loader__`
+   attribute on the returned module. If the attribute is already set the
+   decorator does nothing. It is assumed that the first positional argument to
+   the wrapped method (i.e. ``self``) is what :attr:`__loader__` should be set
+   to.
 
    .. note::
+      As this decorator sets :attr:`__loader__` after loading the module, it is
+      recommended to use :meth:`importlib.abc.Loader.init_module_attrs` instead
+      when appropriate.
 
-      It is recommended that :func:`module_for_loader` be used over this
-      decorator as it subsumes this functionality.
-
+   .. versionchanged:: 3.4
+      Set ``__loader__`` if set to ``None``, as if the attribute does not
+      exist.
 
 .. decorator:: set_package
 
-    A :term:`decorator` for a :term:`loader` to set the :attr:`__package__`
-    attribute on the module returned by the loader. If :attr:`__package__` is
-    set and has a value other than ``None`` it will not be changed.
-    Note that the module returned by the loader is what has the attribute
-    set on and not the module found in :data:`sys.modules`.
-
-    Reliance on this decorator is discouraged when it is possible to set
-    :attr:`__package__` before importing. By
-    setting it beforehand the code for the module is executed with the
-    attribute set and thus can be used by global level code during
-    initialization.
+   A :term:`decorator` for :meth:`importlib.abc.Loader.load_module` to set the :attr:`__package__` attribute on the returned module. If :attr:`__package__`
+   is set and has a value other than ``None`` it will not be changed.
 
    .. note::
-
-      It is recommended that :func:`module_for_loader` be used over this
-      decorator as it subsumes this functionality.
+      As this decorator sets :attr:`__package__` after loading the module, it is
+      recommended to use :meth:`importlib.abc.Loader.init_module_attrs` instead
+      when appropriate.
