@@ -144,7 +144,7 @@ ZipFile Objects
    and should be :const:`ZIP_STORED`, :const:`ZIP_DEFLATED`,
    :const:`ZIP_BZIP2` or :const:`ZIP_LZMA`; unrecognized
    values will cause :exc:`RuntimeError` to be raised.  If :const:`ZIP_DEFLATED`,
-   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponded module
+   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponding module
    (:mod:`zlib`, :mod:`bz2` or :mod:`lzma`) is not available, :exc:`RuntimeError`
    is also raised. The default is :const:`ZIP_STORED`.  If *allowZip64* is
    ``True`` zipfile will create ZIP files that use the ZIP64 extensions when
@@ -265,10 +265,8 @@ ZipFile Objects
       Never extract archives from untrusted sources without prior inspection.
       It is possible that files are created outside of *path*, e.g. members
       that have absolute filenames starting with ``"/"`` or filenames with two
-      dots ``".."``.
-
-   .. versionchanged:: 3.3.1
-      The zipfile module attempts to prevent that.  See :meth:`extract` note.
+      dots ``".."``.  This module attempts to prevent that.
+      See :meth:`extract` note.
 
 
 .. method:: ZipFile.printdir()

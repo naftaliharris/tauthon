@@ -15,9 +15,6 @@ try:
 except ImportError:
     threading = None
 
-if sys.platform in ('os2', 'riscos'):
-    raise unittest.SkipTest("Can't test signal on %s" % sys.platform)
-
 
 class HandlerBCalled(Exception):
     pass
@@ -36,7 +33,7 @@ def exit_subprocess():
 def ignoring_eintr(__func, *args, **kwargs):
     try:
         return __func(*args, **kwargs)
-    except EnvironmentError as e:
+    except OSError as e:
         if e.errno != errno.EINTR:
             raise
         return None
@@ -309,10 +306,10 @@ class WakeupSignalTests(unittest.TestCase):
             # We attempt to get a signal during the select call
             try:
                 select.select([read], [], [], TIMEOUT_FULL)
-            except select.error:
+            except OSError:
                 pass
             else:
-                raise Exception("select.error not raised")
+                raise Exception("OSError not raised")
             after_time = time.time()
             dt = after_time - before_time
             if dt >= TIMEOUT_HALF:

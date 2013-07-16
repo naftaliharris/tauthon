@@ -1456,8 +1456,10 @@ pmerge(PyObject *acc, PyObject* to_merge) {
        that is not included in acc.
     */
     remain = (int *)PyMem_MALLOC(SIZEOF_INT*to_merge_size);
-    if (remain == NULL)
+    if (remain == NULL) {
+        PyErr_NoMemory();
         return -1;
+    }
     for (i = 0; i < to_merge_size; i++)
         remain[i] = 0;
 
@@ -1489,7 +1491,7 @@ pmerge(PyObject *acc, PyObject* to_merge) {
         }
         ok = PyList_Append(acc, candidate);
         if (ok < 0) {
-            PyMem_Free(remain);
+            PyMem_FREE(remain);
             return -1;
         }
         for (j = 0; j < to_merge_size; j++) {
@@ -1949,7 +1951,7 @@ type_init(PyObject *cls, PyObject *args, PyObject *kwds)
     return res;
 }
 
-long
+unsigned long
 PyType_GetFlags(PyTypeObject *type)
 {
     return type->tp_flags;
@@ -2290,8 +2292,10 @@ type_new(PyTypeObject *metatype, PyObject *args, PyObject *kwds)
             /* Silently truncate the docstring if it contains null bytes. */
             len = strlen(doc_str);
             tp_doc = (char *)PyObject_MALLOC(len + 1);
-            if (tp_doc == NULL)
+            if (tp_doc == NULL) {
+                PyErr_NoMemory();
                 goto error;
+            }
             memcpy(tp_doc, doc_str, len + 1);
             type->tp_doc = tp_doc;
         }
@@ -2411,7 +2415,7 @@ PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)
     char *s;
     char *res_start = (char*)res;
     PyType_Slot *slot;
-    
+
     /* Set the type name and qualname */
     s = strrchr(spec->name, '.');
     if (s == NULL)
@@ -2432,7 +2436,7 @@ PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)
     type->tp_name = spec->name;
     if (!type->tp_name)
         goto fail;
-    
+
     /* Adjust for empty tuple bases */
     if (!bases) {
         base = &PyBaseObject_Type;
@@ -2494,8 +2498,10 @@ PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)
         if (slot->slot == Py_tp_doc) {
             size_t len = strlen(slot->pfunc)+1;
             char *tp_doc = PyObject_MALLOC(len);
-            if (tp_doc == NULL)
+            if (tp_doc == NULL) {
+                PyErr_NoMemory();
                 goto fail;
+            }
             memcpy(tp_doc, slot->pfunc, len);
             type->tp_doc = tp_doc;
         }
@@ -2516,7 +2522,7 @@ PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)
     /* Set type.__module__ */
     s = strrchr(spec->name, '.');
     if (s != NULL)
-        _PyDict_SetItemId(type->tp_dict, &PyId___module__, 
+        _PyDict_SetItemId(type->tp_dict, &PyId___module__,
             PyUnicode_FromStringAndSize(
                 spec->name, (Py_ssize_t)(s - spec->name)));
 
@@ -3669,16 +3675,9 @@ object_format(PyObject *self, PyObject *args)
         /* Issue 7994: If we're converting to a string, we
            should reject format specifications */
         if (PyUnicode_GET_LENGTH(format_spec) > 0) {
-            if (PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "object.__format__ with a non-empty format "
-                             "string is deprecated", 1) < 0) {
-              goto done;
-            }
-            /* Eventually this will become an error:
-               PyErr_Format(PyExc_TypeError,
+            PyErr_SetString(PyExc_TypeError,
                "non-empty format string passed to object.__format__");
-               goto done;
-            */
+            goto done;
         }
 
         result = PyObject_Format(self_as_str, format_spec);
@@ -3833,7 +3832,7 @@ add_methods(PyTypeObject *type, PyMethodDef *meth)
             descr = PyDescr_NewClassMethod(type, meth);
         }
         else if (meth->ml_flags & METH_STATIC) {
-            PyObject *cfunc = PyCFunction_New(meth, (PyObject*)type);
+          PyObject *cfunc = PyCFunction_NewEx(meth, (PyObject*)type, NULL);
             if (cfunc == NULL)
                 return -1;
             descr = PyStaticMethod_New(cfunc);
@@ -4303,13 +4302,11 @@ PyType_Ready(PyTypeObject *type)
     /* Warn for a type that implements tp_compare (now known as
        tp_reserved) but not tp_richcompare. */
     if (type->tp_reserved && !type->tp_richcompare) {
-        int error;
-        error = PyErr_WarnFormat(PyExc_DeprecationWarning, 1,
+        PyErr_Format(PyExc_TypeError,
             "Type %.100s defines tp_reserved (formerly tp_compare) "
             "but not tp_richcompare. Comparisons may not behave as intended.",
             type->tp_name);
-        if (error == -1)
-            goto error;
+        goto error;
     }
 
     /* All done -- set the ready flag */
@@ -4338,6 +4335,8 @@ add_subclass(PyTypeObject *base, PyTypeObject *type)
     }
     assert(PyList_Check(list));
     newobj = PyWeakref_NewRef((PyObject *)type, NULL);
+    if (newobj == NULL)
+        return -1;
     i = PyList_GET_SIZE(list);
     while (--i >= 0) {
         ref = PyList_GET_ITEM(list, i);
@@ -4903,7 +4902,7 @@ add_tp_new_wrapper(PyTypeObject *type)
 
     if (_PyDict_GetItemId(type->tp_dict, &PyId___new__) != NULL)
         return 0;
-    func = PyCFunction_New(tp_new_methoddef, (PyObject *)type);
+    func = PyCFunction_NewEx(tp_new_methoddef, (PyObject *)type, NULL);
     if (func == NULL)
         return -1;
     if (_PyDict_SetItemId(type->tp_dict, &PyId___new__, func)) {
@@ -5281,29 +5280,12 @@ slot_tp_str(PyObject *self)
     _Py_IDENTIFIER(__str__);
 
     func = lookup_method(self, &PyId___str__);
-    if (func != NULL) {
+    if (func == NULL)
+        return NULL;
         res = PyEval_CallObject(func, NULL);
         Py_DECREF(func);
         return res;
     }
-    else {
-        /* PyObject *ress; */
-        PyErr_Clear();
-        res = slot_tp_repr(self);
-        if (!res)
-            return NULL;
-        /* XXX this is non-sensical. Why should we return
-           a bytes object from __str__. Is this code even
-           used? - mvl */
-        assert(0);
-        return res;
-        /*
-        ress = _PyUnicode_AsDefaultEncodedString(res);
-        Py_DECREF(res);
-        return ress;
-        */
-    }
-}
 
 static Py_hash_t
 slot_tp_hash(PyObject *self)
