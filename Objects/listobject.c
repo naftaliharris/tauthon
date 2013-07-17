@@ -826,7 +826,7 @@ listextend(PyListObject *self, PyObject *b)
     iternext = *it->ob_type->tp_iternext;
 
     /* Guess a result list size. */
-    n = _PyObject_LengthHint(b, 8);
+    n = PyObject_LengthHint(b, 8);
     if (n == -1) {
         Py_DECREF(it);
         return NULL;
@@ -871,8 +871,10 @@ listextend(PyListObject *self, PyObject *b)
     }
 
     /* Cut back result list if initial guess was too large. */
-    if (Py_SIZE(self) < self->allocated)
-        list_resize(self, Py_SIZE(self));  /* shrinking can't fail */
+    if (Py_SIZE(self) < self->allocated) {
+        if (list_resize(self, Py_SIZE(self)) < 0)
+            goto error;
+    }
 
     Py_DECREF(it);
     Py_RETURN_NONE;
@@ -925,8 +927,10 @@ listpop(PyListObject *self, PyObject *args)
     v = self->ob_item[i];
     if (i == Py_SIZE(self) - 1) {
         status = list_resize(self, Py_SIZE(self) - 1);
-        assert(status >= 0);
-        return v; /* and v now owns the reference the list had */
+        if (status >= 0)
+            return v; /* and v now owns the reference the list had */
+        else
+            return NULL;
     }
     Py_INCREF(v);
     status = list_ass_slice(self, i, i+1, (PyObject *)NULL);
@@ -2660,7 +2664,7 @@ PyTypeObject PyList_Type = {
 
 typedef struct {
     PyObject_HEAD
-    long it_index;
+    Py_ssize_t it_index;
     PyListObject *it_seq; /* Set to NULL when iterator is exhausted */
 } listiterobject;
 
@@ -2797,7 +2801,7 @@ listiter_reduce(listiterobject *it)
 static PyObject *
 listiter_setstate(listiterobject *it, PyObject *state)
 {
-    long index = PyLong_AsLong(state);
+    Py_ssize_t index = PyLong_AsSsize_t(state);
     if (index == -1 && PyErr_Occurred())
         return NULL;
     if (it->it_seq != NULL) {
@@ -2958,7 +2962,7 @@ listiter_reduce_general(void *_it, int forward)
     if (forward) {
         listiterobject *it = (listiterobject *)_it;
         if (it->it_seq)
-            return Py_BuildValue("N(O)l", _PyObject_GetBuiltin("iter"),
+            return Py_BuildValue("N(O)n", _PyObject_GetBuiltin("iter"),
                                  it->it_seq, it->it_index);
     } else {
         listreviterobject *it = (listreviterobject *)_it;
