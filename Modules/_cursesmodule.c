@@ -168,10 +168,6 @@ static char *screen_encoding = NULL;
                         "must call start_color() first");       \
         return 0; }
 
-#ifndef MIN
-#define MIN(x,y) ((x) < (y) ? (x) : (y))
-#endif
-
 /* Utility Functions */
 
 /*
@@ -533,7 +529,7 @@ PyCursesWindow_New(WINDOW *win, const char *encoding)
     wo = PyObject_NEW(PyCursesWindowObject, &PyCursesWindow_Type);
     if (wo == NULL) return NULL;
     wo->win = win;
-    wo->encoding = strdup(encoding);
+    wo->encoding = _PyMem_Strdup(encoding);
     if (wo->encoding == NULL) {
         Py_DECREF(wo);
         PyErr_NoMemory();
@@ -547,7 +543,7 @@ PyCursesWindow_Dealloc(PyCursesWindowObject *wo)
 {
     if (wo->win != stdscr) delwin(wo->win);
     if (wo->encoding != NULL)
-        free(wo->encoding);
+        PyMem_Free(wo->encoding);
     PyObject_DEL(wo);
 }
 
@@ -1212,7 +1208,7 @@ PyCursesWindow_GetStr(PyCursesWindowObject *self, PyObject *args)
         if (!PyArg_ParseTuple(args,"i;n", &n))
             return NULL;
         Py_BEGIN_ALLOW_THREADS
-        rtn2 = wgetnstr(self->win,rtn,MIN(n, 1023));
+        rtn2 = wgetnstr(self->win, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
         break;
     case 2:
@@ -1232,11 +1228,11 @@ PyCursesWindow_GetStr(PyCursesWindowObject *self, PyObject *args)
 #ifdef STRICT_SYSV_CURSES
         Py_BEGIN_ALLOW_THREADS
         rtn2 = wmove(self->win,y,x)==ERR ? ERR :
-        wgetnstr(self->win, rtn, MIN(n, 1023));
+        wgetnstr(self->win, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
 #else
         Py_BEGIN_ALLOW_THREADS
-        rtn2 = mvwgetnstr(self->win, y, x, rtn, MIN(n, 1023));
+        rtn2 = mvwgetnstr(self->win, y, x, rtn, Py_MIN(n, 1023));
         Py_END_ALLOW_THREADS
 #endif
         break;
@@ -1374,7 +1370,7 @@ PyCursesWindow_InStr(PyCursesWindowObject *self, PyObject *args)
     case 1:
         if (!PyArg_ParseTuple(args,"i;n", &n))
             return NULL;
-        rtn2 = winnstr(self->win,rtn,MIN(n,1023));
+        rtn2 = winnstr(self->win, rtn, Py_MIN(n, 1023));
         break;
     case 2:
         if (!PyArg_ParseTuple(args,"ii;y,x",&y,&x))
@@ -1384,7 +1380,7 @@ PyCursesWindow_InStr(PyCursesWindowObject *self, PyObject *args)
     case 3:
         if (!PyArg_ParseTuple(args, "iii;y,x,n", &y, &x, &n))
             return NULL;
-        rtn2 = mvwinnstr(self->win, y, x, rtn, MIN(n,1023));
+        rtn2 = mvwinnstr(self->win, y, x, rtn, Py_MIN(n,1023));
         break;
     default:
         PyErr_SetString(PyExc_TypeError, "instr requires 0 or 3 arguments");
@@ -1942,13 +1938,13 @@ PyCursesWindow_set_encoding(PyCursesWindowObject *self, PyObject *value)
     ascii = PyUnicode_AsASCIIString(value);
     if (ascii == NULL)
         return -1;
-    encoding = strdup(PyBytes_AS_STRING(ascii));
+    encoding = _PyMem_Strdup(PyBytes_AS_STRING(ascii));
     Py_DECREF(ascii);
     if (encoding == NULL) {
         PyErr_NoMemory();
         return -1;
     }
-    free(self->encoding);
+    PyMem_Free(self->encoding);
     self->encoding = encoding;
     return 0;
 }
@@ -3410,7 +3406,7 @@ PyInit__curses(void)
                 continue;
             if (strncmp(key_n,"KEY_F(",6)==0) {
                 char *p1, *p2;
-                key_n2 = malloc(strlen(key_n)+1);
+                key_n2 = PyMem_Malloc(strlen(key_n)+1);
                 if (!key_n2) {
                     PyErr_NoMemory();
                     break;
@@ -3429,7 +3425,7 @@ PyInit__curses(void)
                 key_n2 = key_n;
             SetDictInt(key_n2,key);
             if (key_n2 != key_n)
-                free(key_n2);
+                PyMem_Free(key_n2);
         }
 #endif
         SetDictInt("KEY_MIN", KEY_MIN);

@@ -6,7 +6,7 @@ XXX references to utf-8 need further investigation.
 import io
 import os
 import re
-import imp
+import importlib.util
 import sys
 import time
 import stat
@@ -164,7 +164,7 @@ def _check_zipfile(fp):
     try:
         if _EndRecData(fp):
             return True         # file has correct magic number
-    except IOError:
+    except OSError:
         pass
     return False
 
@@ -180,7 +180,7 @@ def is_zipfile(filename):
         else:
             with open(filename, "rb") as fp:
                 result = _check_zipfile(fp)
-    except IOError:
+    except OSError:
         pass
     return result
 
@@ -190,7 +190,7 @@ def _EndRecData64(fpin, offset, endrec):
     """
     try:
         fpin.seek(offset - sizeEndCentDir64Locator, 2)
-    except IOError:
+    except OSError:
         # If the seek fails, the file is not large enough to contain a ZIP64
         # end-of-archive record, so just return the end record we were given.
         return endrec
@@ -242,7 +242,7 @@ def _EndRecData(fpin):
     # file if this is the case).
     try:
         fpin.seek(-sizeEndCentDir, 2)
-    except IOError:
+    except OSError:
         return None
     data = fpin.read()
     if (len(data) == sizeEndCentDir and
@@ -910,7 +910,7 @@ class ZipFile:
             modeDict = {'r' : 'rb', 'w': 'wb', 'a' : 'r+b'}
             try:
                 self.fp = io.open(file, modeDict[mode])
-            except IOError:
+            except OSError:
                 if mode == 'a':
                     mode = key = 'w'
                     self.fp = io.open(file, modeDict[mode])
@@ -961,7 +961,7 @@ class ZipFile:
         fp = self.fp
         try:
             endrec = _EndRecData(fp)
-        except IOError:
+        except OSError:
             raise BadZipFile("File is not a zip file")
         if not endrec:
             raise BadZipFile("File is not a zip file")
@@ -1645,8 +1645,8 @@ class PyZipFile(ZipFile):
         file_py  = pathname + ".py"
         file_pyc = pathname + ".pyc"
         file_pyo = pathname + ".pyo"
-        pycache_pyc = imp.cache_from_source(file_py, True)
-        pycache_pyo = imp.cache_from_source(file_py, False)
+        pycache_pyc = importlib.util.cache_from_source(file_py, True)
+        pycache_pyo = importlib.util.cache_from_source(file_py, False)
         if self._optimize == -1:
             # legacy mode: use whatever file is present
             if (os.path.isfile(file_pyo) and

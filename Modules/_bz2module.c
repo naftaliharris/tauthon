@@ -36,8 +36,6 @@
 #define RELEASE_LOCK(obj)
 #endif
 
-#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
-
 
 typedef struct {
     PyObject_HEAD
@@ -149,7 +147,7 @@ compress(BZ2Compressor *c, char *data, size_t len, int action)
     c->bzs.next_in = data;
     c->bzs.avail_in = 0;
     c->bzs.next_out = PyBytes_AS_STRING(result);
-    c->bzs.avail_out = PyBytes_GET_SIZE(result);
+    c->bzs.avail_out = SMALLCHUNK;
     for (;;) {
         char *this_out;
         int bzerror;
@@ -157,7 +155,7 @@ compress(BZ2Compressor *c, char *data, size_t len, int action)
         /* On a 64-bit system, len might not fit in avail_in (an unsigned int).
            Do compression in chunks of no more than UINT_MAX bytes each. */
         if (c->bzs.avail_in == 0 && len > 0) {
-            c->bzs.avail_in = MIN(len, UINT_MAX);
+            c->bzs.avail_in = (unsigned int)Py_MIN(len, UINT_MAX);
             len -= c->bzs.avail_in;
         }
 
@@ -173,7 +171,7 @@ compress(BZ2Compressor *c, char *data, size_t len, int action)
                 c->bzs.next_out = PyBytes_AS_STRING(result) + data_size;
                 buffer_left = PyBytes_GET_SIZE(result) - data_size;
             }
-            c->bzs.avail_out = MIN(buffer_left, UINT_MAX);
+            c->bzs.avail_out = (unsigned int)Py_MIN(buffer_left, UINT_MAX);
         }
 
         Py_BEGIN_ALLOW_THREADS
@@ -250,6 +248,24 @@ BZ2Compressor_flush(BZ2Compressor *self, PyObject *noargs)
     return result;
 }
 
+static void*
+BZ2_Malloc(void* ctx, int items, int size)
+{
+    if (items < 0 || size < 0)
+        return NULL;
+    if ((size_t)items > (size_t)PY_SSIZE_T_MAX / (size_t)size)
+        return NULL;
+    /* PyMem_Malloc() cannot be used: compress() and decompress()
+       release the GIL */
+    return PyMem_RawMalloc(items * size);
+}
+
+static void
+BZ2_Free(void* ctx, void *ptr)
+{
+    PyMem_RawFree(ptr);
+}
+
 static int
 BZ2Compressor_init(BZ2Compressor *self, PyObject *args, PyObject *kwargs)
 {
@@ -272,6 +288,9 @@ BZ2Compressor_init(BZ2Compressor *self, PyObject *args, PyObject *kwargs)
     }
 #endif
 
+    self->bzs.opaque = NULL;
+    self->bzs.bzalloc = BZ2_Malloc;
+    self->bzs.bzfree = BZ2_Free;
     bzerror = BZ2_bzCompressInit(&self->bzs, compresslevel, 0, 0);
     if (catch_bz2_error(bzerror))
         goto error;
@@ -370,10 +389,10 @@ decompress(BZ2Decompressor *d, char *data, size_t len)
     d->bzs.next_in = data;
     /* On a 64-bit system, len might not fit in avail_in (an unsigned int).
        Do decompression in chunks of no more than UINT_MAX bytes each. */
-    d->bzs.avail_in = MIN(len, UINT_MAX);
+    d->bzs.avail_in = (unsigned int)Py_MIN(len, UINT_MAX);
     len -= d->bzs.avail_in;
     d->bzs.next_out = PyBytes_AS_STRING(result);
-    d->bzs.avail_out = PyBytes_GET_SIZE(result);
+    d->bzs.avail_out = SMALLCHUNK;
     for (;;) {
         char *this_out;
         int bzerror;
@@ -399,7 +418,7 @@ decompress(BZ2Decompressor *d, char *data, size_t len)
         if (d->bzs.avail_in == 0) {
             if (len == 0)
                 break;
-            d->bzs.avail_in = MIN(len, UINT_MAX);
+            d->bzs.avail_in = (unsigned int)Py_MIN(len, UINT_MAX);
             len -= d->bzs.avail_in;
         }
         if (d->bzs.avail_out == 0) {
@@ -410,7 +429,7 @@ decompress(BZ2Decompressor *d, char *data, size_t len)
                 d->bzs.next_out = PyBytes_AS_STRING(result) + data_size;
                 buffer_left = PyBytes_GET_SIZE(result) - data_size;
             }
-            d->bzs.avail_out = MIN(buffer_left, UINT_MAX);
+            d->bzs.avail_out = (unsigned int)Py_MIN(buffer_left, UINT_MAX);
         }
     }
     if (data_size != PyBytes_GET_SIZE(result))
