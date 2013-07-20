@@ -56,8 +56,8 @@ class async_chat (asyncore.dispatcher):
 
     # these are overridable defaults
 
-    ac_in_buffer_size       = 4096
-    ac_out_buffer_size      = 4096
+    ac_in_buffer_size       = 65536
+    ac_out_buffer_size      = 65536
 
     # we don't want to enable the use of encoding by default, because that is a
     # sign of an application bug that we don't want to pass silently
@@ -114,7 +114,7 @@ class async_chat (asyncore.dispatcher):
 
         try:
             data = self.recv (self.ac_in_buffer_size)
-        except socket.error as why:
+        except OSError as why:
             self.handle_error()
             return
 
@@ -243,7 +243,7 @@ class async_chat (asyncore.dispatcher):
             # send the data
             try:
                 num_sent = self.send(data)
-            except socket.error:
+            except OSError:
                 self.handle_error()
                 return
 

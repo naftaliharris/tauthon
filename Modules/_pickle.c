@@ -436,6 +436,7 @@ PyMemoTable_Copy(PyMemoTable *self)
     new->mt_table = PyMem_MALLOC(self->mt_allocated * sizeof(PyMemoEntry));
     if (new->mt_table == NULL) {
         PyMem_FREE(new);
+        PyErr_NoMemory();
         return NULL;
     }
     for (i = 0; i < self->mt_allocated; i++) {
@@ -529,7 +530,7 @@ _PyMemoTable_ResizeTable(PyMemoTable *self, Py_ssize_t min_size)
     oldtable = self->mt_table;
     self->mt_table = PyMem_MALLOC(new_size * sizeof(PyMemoEntry));
     if (self->mt_table == NULL) {
-        PyMem_FREE(oldtable);
+        self->mt_table = oldtable;
         PyErr_NoMemory();
         return -1;
     }
@@ -774,17 +775,14 @@ _Pickler_New(void)
     self->fast_nesting = 0;
     self->fix_imports = 0;
     self->fast_memo = NULL;
-
-    self->memo = PyMemoTable_New();
-    if (self->memo == NULL) {
-        Py_DECREF(self);
-        return NULL;
-    }
     self->max_output_len = WRITE_BUF_SIZE;
     self->output_len = 0;
+
+    self->memo = PyMemoTable_New();
     self->output_buffer = PyBytes_FromStringAndSize(NULL,
                                                     self->max_output_len);
-    if (self->output_buffer == NULL) {
+
+    if (self->memo == NULL || self->output_buffer == NULL) {
         Py_DECREF(self);
         return NULL;
     }
@@ -1006,8 +1004,10 @@ _Unpickler_CopyLine(UnpicklerObject *self, char *line, Py_ssize_t len,
                     char **result)
 {
     char *input_line = PyMem_Realloc(self->input_line, len + 1);
-    if (input_line == NULL)
+    if (input_line == NULL) {
+        PyErr_NoMemory();
         return -1;
+    }
 
     memcpy(input_line, line, len);
     input_line[len] = '\0';
@@ -1104,8 +1104,10 @@ static PyObject **
 _Unpickler_NewMemo(Py_ssize_t new_size)
 {
     PyObject **memo = PyMem_MALLOC(new_size * sizeof(PyObject *));
-    if (memo == NULL)
+    if (memo == NULL) {
+        PyErr_NoMemory();
         return NULL;
+    }
     memset(memo, 0, new_size * sizeof(PyObject *));
     return memo;
 }
@@ -1136,20 +1138,6 @@ _Unpickler_New(void)
     if (self == NULL)
         return NULL;
 
-    self->stack = (Pdata *)Pdata_New();
-    if (self->stack == NULL) {
-        Py_DECREF(self);
-        return NULL;
-    }
-    memset(&self->buffer, 0, sizeof(Py_buffer));
-
-    self->memo_size = 32;
-    self->memo = _Unpickler_NewMemo(self->memo_size);
-    if (self->memo == NULL) {
-        Py_DECREF(self);
-        return NULL;
-    }
-
     self->arg = NULL;
     self->pers_func = NULL;
     self->input_buffer = NULL;
@@ -1167,6 +1155,15 @@ _Unpickler_New(void)
     self->marks_size = 0;
     self->proto = 0;
     self->fix_imports = 0;
+    memset(&self->buffer, 0, sizeof(Py_buffer));
+    self->memo_size = 32;
+    self->memo = _Unpickler_NewMemo(self->memo_size);
+    self->stack = (Pdata *)Pdata_New();
+
+    if (self->memo == NULL || self->stack == NULL) {
+        Py_DECREF(self);
+        return NULL;
+    }
 
     return self;
 }
@@ -1213,8 +1210,8 @@ _Unpickler_SetInputEncoding(UnpicklerObject *self,
     if (errors == NULL)
         errors = "strict";
 
-    self->encoding = strdup(encoding);
-    self->errors = strdup(errors);
+    self->encoding = _PyMem_Strdup(encoding);
+    self->errors = _PyMem_Strdup(errors);
     if (self->encoding == NULL || self->errors == NULL) {
         PyErr_NoMemory();
         return -1;
@@ -1364,8 +1361,10 @@ whichmodule(PyObject *global, PyObject *global_name)
 
   search:
     modules_dict = PySys_GetObject("modules");
-    if (modules_dict == NULL)
+    if (modules_dict == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "unable to get sys.modules");
         return NULL;
+    }
 
     i = 0;
     module_name = NULL;
@@ -1748,8 +1747,10 @@ save_bytes(PicklerObject *self, PyObject *obj)
                 return -1;
             if (latin1 == NULL) {
                 latin1 = PyUnicode_InternFromString("latin1");
-                if (latin1 == NULL)
+                if (latin1 == NULL) {
+                    Py_DECREF(unicode_str);
                     return -1;
+                }
             }
             reduce_value = Py_BuildValue("(O(OO))",
                                          codecs_encode, unicode_str, latin1);
@@ -1873,63 +1874,97 @@ done:
 }
 
 static int
+write_utf8(PicklerObject *self, char *data, Py_ssize_t size)
+{
+    char pdata[5];
+
+#if SIZEOF_SIZE_T > 4
+    if (size > 0xffffffffUL) {
+        /* string too large */
+        PyErr_SetString(PyExc_OverflowError,
+                        "cannot serialize a string larger than 4GiB");
+        return -1;
+    }
+#endif
+
+    pdata[0] = BINUNICODE;
+    pdata[1] = (unsigned char)(size & 0xff);
+    pdata[2] = (unsigned char)((size >> 8) & 0xff);
+    pdata[3] = (unsigned char)((size >> 16) & 0xff);
+    pdata[4] = (unsigned char)((size >> 24) & 0xff);
+
+    if (_Pickler_Write(self, pdata, sizeof(pdata)) < 0)
+        return -1;
+
+    if (_Pickler_Write(self, data, size) < 0)
+        return -1;
+
+    return 0;
+}
+
+static int
+write_unicode_binary(PicklerObject *self, PyObject *obj)
+{
+    PyObject *encoded = NULL;
+    Py_ssize_t size;
+    char *data;
+    int r;
+
+    if (PyUnicode_READY(obj))
+        return -1;
+
+    data = PyUnicode_AsUTF8AndSize(obj, &size);
+    if (data != NULL)
+        return write_utf8(self, data, size);
+
+    /* Issue #8383: for strings with lone surrogates, fallback on the
+       "surrogatepass" error handler. */
+    PyErr_Clear();
+    encoded = PyUnicode_AsEncodedString(obj, "utf-8", "surrogatepass");
+    if (encoded == NULL)
+        return -1;
+
+    r = write_utf8(self, PyBytes_AS_STRING(encoded),
+                   PyBytes_GET_SIZE(encoded));
+    Py_DECREF(encoded);
+    return r;
+}
+
+static int
 save_unicode(PicklerObject *self, PyObject *obj)
 {
-    Py_ssize_t size;
-    PyObject *encoded = NULL;
-
     if (self->bin) {
-        char pdata[5];
-
-        encoded = PyUnicode_AsEncodedString(obj, "utf-8", "surrogatepass");
-        if (encoded == NULL)
-            goto error;
-
-        size = PyBytes_GET_SIZE(encoded);
-        if (size > 0xffffffffL) {
-            PyErr_SetString(PyExc_OverflowError,
-                            "cannot serialize a string larger than 4 GiB");
-            goto error;          /* string too large */
-        }
-
-        pdata[0] = BINUNICODE;
-        pdata[1] = (unsigned char)(size & 0xff);
-        pdata[2] = (unsigned char)((size >> 8) & 0xff);
-        pdata[3] = (unsigned char)((size >> 16) & 0xff);
-        pdata[4] = (unsigned char)((size >> 24) & 0xff);
-
-        if (_Pickler_Write(self, pdata, 5) < 0)
-            goto error;
-
-        if (_Pickler_Write(self, PyBytes_AS_STRING(encoded), size) < 0)
-            goto error;
+        if (write_unicode_binary(self, obj) < 0)
+            return -1;
     }
     else {
+        PyObject *encoded;
+        Py_ssize_t size;
         const char unicode_op = UNICODE;
 
         encoded = raw_unicode_escape(obj);
         if (encoded == NULL)
-            goto error;
+            return -1;
 
-        if (_Pickler_Write(self, &unicode_op, 1) < 0)
-            goto error;
+        if (_Pickler_Write(self, &unicode_op, 1) < 0) {
+            Py_DECREF(encoded);
+            return -1;
+        }
 
         size = PyBytes_GET_SIZE(encoded);
-        if (_Pickler_Write(self, PyBytes_AS_STRING(encoded), size) < 0)
-            goto error;
+        if (_Pickler_Write(self, PyBytes_AS_STRING(encoded), size) < 0) {
+            Py_DECREF(encoded);
+            return -1;
+        }
+        Py_DECREF(encoded);
 
         if (_Pickler_Write(self, "\n", 1) < 0)
-            goto error;
+            return -1;
     }
     if (memo_put(self, obj) < 0)
-        goto error;
+        return -1;
 
-    Py_DECREF(encoded);
     return 0;
-
-  error:
-    Py_XDECREF(encoded);
-    return -1;
 }
 
 /* A helper for save_tuple.  Push the len elements in tuple t on the stack. */
@@ -4171,36 +4206,23 @@ load_string(UnpicklerObject *self)
 
     if ((len = _Unpickler_Readline(self, &s)) < 0)
         return -1;
-    if (len < 2)
-        return bad_readline();
-    if ((s = strdup(s)) == NULL) {
-        PyErr_NoMemory();
-        return -1;
-    }
-
+    /* Strip the newline */
+    len--;
     /* Strip outermost quotes */
-    while (len > 0 && s[len - 1] <= ' ')
-        len--;
-    if (len > 1 && s[0] == '"' && s[len - 1] == '"') {
-        s[len - 1] = '\0';
-        p = s + 1;
-        len -= 2;
-    }
-    else if (len > 1 && s[0] == '\'' && s[len - 1] == '\'') {
-        s[len - 1] = '\0';
+    if (len >= 2 && s[0] == s[len - 1] && (s[0] == '\'' || s[0] == '"')) {
         p = s + 1;
         len -= 2;
     }
     else {
-        free(s);
-        PyErr_SetString(PyExc_ValueError, "insecure string pickle");
+        PyErr_SetString(UnpicklingError,
+                        "the STRING opcode argument must be quoted");
         return -1;
     }
+    assert(len >= 0);
 
     /* Use the PyBytes API to decode the string, since that is what is used
        to encode, and then coerce the result to Unicode. */
     bytes = PyBytes_DecodeEscape(p, len, NULL, 0, NULL);
-    free(s);
     if (bytes == NULL)
         return -1;
     str = PyUnicode_FromEncodedObject(bytes, self->encoding, self->errors);
@@ -4226,8 +4248,7 @@ load_binbytes(UnpicklerObject *self)
     if (x < 0) {
         PyErr_Format(PyExc_OverflowError,
                      "BINBYTES exceeds system's maximum size of %zd bytes",
-                     PY_SSIZE_T_MAX
-                    );
+                     PY_SSIZE_T_MAX);
         return -1;
     }
 
@@ -4351,8 +4372,7 @@ load_binunicode(UnpicklerObject *self)
     if (size < 0) {
         PyErr_Format(PyExc_OverflowError,
                      "BINUNICODE exceeds system's maximum size of %zd bytes",
-                     PY_SSIZE_T_MAX
-                    );
+                     PY_SSIZE_T_MAX);
         return -1;
     }
 
@@ -5524,8 +5544,10 @@ Unpickler_find_class(UnpicklerObject *self, PyObject *args)
     }
 
     modules_dict = PySys_GetObject("modules");
-    if (modules_dict == NULL)
+    if (modules_dict == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "unable to get sys.modules");
         return NULL;
+    }
 
     module = PyDict_GetItemWithError(modules_dict, module_name);
     if (module == NULL) {
@@ -5569,8 +5591,8 @@ Unpickler_dealloc(UnpicklerObject *self)
     _Unpickler_MemoCleanup(self);
     PyMem_Free(self->marks);
     PyMem_Free(self->input_line);
-    free(self->encoding);
-    free(self->errors);
+    PyMem_Free(self->encoding);
+    PyMem_Free(self->errors);
 
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -5606,9 +5628,9 @@ Unpickler_clear(UnpicklerObject *self)
     self->marks = NULL;
     PyMem_Free(self->input_line);
     self->input_line = NULL;
-    free(self->encoding);
+    PyMem_Free(self->encoding);
     self->encoding = NULL;
-    free(self->errors);
+    PyMem_Free(self->errors);
     self->errors = NULL;
 
     return 0;
