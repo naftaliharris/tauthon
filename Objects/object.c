@@ -377,6 +377,14 @@ PyObject_Repr(PyObject *v)
     if (Py_TYPE(v)->tp_repr == NULL)
         return PyUnicode_FromFormat("<%s object at %p>",
                                     v->ob_type->tp_name, v);
+
+#ifdef Py_DEBUG
+    /* PyObject_Repr() must not be called with an exception set,
+       because it may clear it (directly or indirectly) and so the
+       caller looses its exception */
+    assert(!PyErr_Occurred());
+#endif
+
     res = (*v->ob_type->tp_repr)(v);
     if (res == NULL)
         return NULL;
@@ -408,6 +416,7 @@ PyObject_Str(PyObject *v)
 #endif
     if (v == NULL)
         return PyUnicode_FromString("<NULL>");
+
     if (PyUnicode_CheckExact(v)) {
 #ifndef Py_DEBUG
         if (PyUnicode_READY(v) < 0)
@@ -418,6 +427,13 @@ PyObject_Str(PyObject *v)
     }
     if (Py_TYPE(v)->tp_str == NULL)
         return PyObject_Repr(v);
+
+#ifdef Py_DEBUG
+    /* PyObject_Str() must not be called with an exception set,
+       because it may clear it (directly or indirectly) and so the
+       caller looses its exception */
+    assert(!PyErr_Occurred());
+#endif
 
     /* It is possible for a type to have a tp_str representation that loops
        infinitely. */
@@ -450,6 +466,9 @@ PyObject_ASCII(PyObject *v)
     repr = PyObject_Repr(v);
     if (repr == NULL)
         return NULL;
+
+    if (PyUnicode_IS_ASCII(repr))
+        return repr;
 
     /* repr is guaranteed to be a PyUnicode object by PyObject_Repr */
     ascii = _PyUnicode_AsASCIIString(repr, "backslashreplace");
@@ -1524,12 +1543,21 @@ notimplemented_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
     Py_RETURN_NOTIMPLEMENTED;
 }
 
+static void
+notimplemented_dealloc(PyObject* ignore)
+{
+    /* This should never get called, but we also don't want to SEGV if
+     * we accidentally decref NotImplemented out of existence.
+     */
+    Py_FatalError("deallocating NotImplemented");
+}
+
 static PyTypeObject PyNotImplemented_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "NotImplementedType",
     0,
     0,
-    none_dealloc,       /*tp_dealloc*/ /*never called*/
+    notimplemented_dealloc,       /*tp_dealloc*/ /*never called*/
     0,                  /*tp_print*/
     0,                  /*tp_getattr*/
     0,                  /*tp_setattr*/
@@ -1699,15 +1727,6 @@ _Py_ReadyTypes(void)
     if (PyType_Ready(&PyMemberDescr_Type) < 0)
         Py_FatalError("Can't initialize member descriptor type");
 
-    if (PyType_Ready(&PyFilter_Type) < 0)
-        Py_FatalError("Can't initialize filter type");
-
-    if (PyType_Ready(&PyMap_Type) < 0)
-        Py_FatalError("Can't initialize map type");
-
-    if (PyType_Ready(&PyZip_Type) < 0)
-        Py_FatalError("Can't initialize zip type");
-
     if (PyType_Ready(&_PyNamespace_Type) < 0)
         Py_FatalError("Can't initialize namespace type");
 
@@ -1856,26 +1875,6 @@ PyTypeObject *_PyCapsule_hack = &PyCapsule_Type;
 Py_ssize_t (*_Py_abstract_hack)(PyObject *) = PyObject_Size;
 
 
-/* Python's malloc wrappers (see pymem.h) */
-
-void *
-PyMem_Malloc(size_t nbytes)
-{
-    return PyMem_MALLOC(nbytes);
-}
-
-void *
-PyMem_Realloc(void *p, size_t nbytes)
-{
-    return PyMem_REALLOC(p, nbytes);
-}
-
-void
-PyMem_Free(void *p)
-{
-    PyMem_FREE(p);
-}
-
 void
 _PyObject_DebugTypeStats(FILE *out)
 {
@@ -1927,7 +1926,8 @@ Py_ReprEnter(PyObject *obj)
         if (PyList_GET_ITEM(list, i) == obj)
             return 1;
     }
-    PyList_Append(list, obj);
+    if (PyList_Append(list, obj) < 0)
+        return -1;
     return 0;
 }
 
@@ -1937,13 +1937,18 @@ Py_ReprLeave(PyObject *obj)
     PyObject *dict;
     PyObject *list;
     Py_ssize_t i;
+    PyObject *error_type, *error_value, *error_traceback;
+
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
 
     dict = PyThreadState_GetDict();
     if (dict == NULL)
-        return;
+        goto finally;
+
     list = PyDict_GetItemString(dict, KEY);
     if (list == NULL || !PyList_Check(list))
-        return;
+        goto finally;
+
     i = PyList_GET_SIZE(list);
     /* Count backwards because we always expect obj to be list[-1] */
     while (--i >= 0) {
@@ -1952,6 +1957,10 @@ Py_ReprLeave(PyObject *obj)
             break;
         }
     }
+
+finally:
+    /* ignore exceptions because there is no way to report them. */
+    PyErr_Restore(error_type, error_value, error_traceback);
 }
 
 /* Trashcan support. */

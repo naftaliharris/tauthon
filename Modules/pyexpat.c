@@ -10,6 +10,9 @@
 
 #define FIX_TRACE
 
+static XML_Memory_Handling_Suite ExpatMemoryHandler = {
+    PyObject_Malloc, PyObject_Realloc, PyObject_Free};
+
 enum HandlerTypes {
     StartElement,
     EndElement,
@@ -399,6 +402,10 @@ static void
 my_CharacterDataHandler(void *userData, const XML_Char *data, int len)
 {
     xmlparseobject *self = (xmlparseobject *) userData;
+
+    if (PyErr_Occurred())
+        return;
+
     if (self->buffer == NULL)
         call_character_handler(self, data, len);
     else {
@@ -432,6 +439,9 @@ my_StartElementHandler(void *userData,
     if (have_handler(self, StartElement)) {
         PyObject *container, *rv, *args;
         int i, max;
+
+        if (PyErr_Occurred())
+            return;
 
         if (flush_character_buffer(self) < 0)
             return;
@@ -516,6 +526,8 @@ my_##NAME##Handler PARAMS {\
     INIT \
 \
     if (have_handler(self, NAME)) { \
+        if (PyErr_Occurred()) \
+            return RETURN; \
         if (flush_character_buffer(self) < 0) \
             return RETURN; \
         args = Py_BuildValue PARAM_FORMAT ;\
@@ -629,6 +641,9 @@ my_ElementDeclHandler(void *userData,
     if (have_handler(self, ElementDecl)) {
         PyObject *rv = NULL;
         PyObject *modelobj, *nameobj;
+
+        if (PyErr_Occurred())
+            return;
 
         if (flush_character_buffer(self) < 0)
             goto finally;
@@ -997,7 +1012,7 @@ xmlparse_ExternalEntityParserCreate(xmlparseobject *self, PyObject *args)
     PyObject_GC_Track(new_parser);
 
     if (self->buffer != NULL) {
-        new_parser->buffer = malloc(new_parser->buffer_size);
+        new_parser->buffer = PyMem_Malloc(new_parser->buffer_size);
         if (new_parser->buffer == NULL) {
             Py_DECREF(new_parser);
             return PyErr_NoMemory();
@@ -1014,7 +1029,7 @@ xmlparse_ExternalEntityParserCreate(xmlparseobject *self, PyObject *args)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    new_parser->handlers = malloc(sizeof(PyObject *) * i);
+    new_parser->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
     if (!new_parser->handlers) {
         Py_DECREF(new_parser);
         return PyErr_NoMemory();
@@ -1122,14 +1137,19 @@ PyUnknownEncodingHandler(void *encodingHandlerData,
     void *data;
     unsigned int kind;
 
+    if (PyErr_Occurred())
+        return XML_STATUS_ERROR;
+
     if (template_buffer[1] == 0) {
         for (i = 0; i < 256; i++)
             template_buffer[i] = i;
     }
 
     u = PyUnicode_Decode((char*) template_buffer, 256, name, "replace");
-    if (u == NULL || PyUnicode_READY(u))
+    if (u == NULL || PyUnicode_READY(u)) {
+        Py_XDECREF(u);
         return XML_STATUS_ERROR;
+    }
 
     if (PyUnicode_GET_LENGTH(u) != 256) {
         Py_DECREF(u);
@@ -1175,11 +1195,18 @@ newxmlparseobject(char *encoding, char *namespace_separator, PyObject *intern)
     self->in_callback = 0;
     self->ns_prefixes = 0;
     self->handlers = NULL;
-    if (namespace_separator != NULL) {
-        self->itself = XML_ParserCreateNS(encoding, *namespace_separator);
-    }
-    else {
-        self->itself = XML_ParserCreate(encoding);
+    self->intern = intern;
+    Py_XINCREF(self->intern);
+    PyObject_GC_Track(self);
+
+    /* namespace_separator is either NULL or contains one char + \0 */
+    self->itself = XML_ParserCreate_MM(encoding, &ExpatMemoryHandler,
+                                       namespace_separator);
+    if (self->itself == NULL) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "XML_ParserCreate failed");
+        Py_DECREF(self);
+        return NULL;
     }
 #if ((XML_MAJOR_VERSION >= 2) && (XML_MINOR_VERSION >= 1)) || defined(XML_HAS_SET_HASH_SALT)
     /* This feature was added upstream in libexpat 2.1.0.  Our expat copy
@@ -1188,15 +1215,6 @@ newxmlparseobject(char *encoding, char *namespace_separator, PyObject *intern)
     XML_SetHashSalt(self->itself,
                     (unsigned long)_Py_HashSecret.prefix);
 #endif
-    self->intern = intern;
-    Py_XINCREF(self->intern);
-    PyObject_GC_Track(self);
-    if (self->itself == NULL) {
-        PyErr_SetString(PyExc_RuntimeError,
-                        "XML_ParserCreate failed");
-        Py_DECREF(self);
-        return NULL;
-    }
     XML_SetUserData(self->itself, (void *)self);
     XML_SetUnknownEncodingHandler(self->itself,
                   (XML_UnknownEncodingHandler) PyUnknownEncodingHandler, NULL);
@@ -1204,7 +1222,7 @@ newxmlparseobject(char *encoding, char *namespace_separator, PyObject *intern)
     for (i = 0; handler_info[i].name != NULL; i++)
         /* do nothing */;
 
-    self->handlers = malloc(sizeof(PyObject *) * i);
+    self->handlers = PyMem_Malloc(sizeof(PyObject *) * i);
     if (!self->handlers) {
         Py_DECREF(self);
         return PyErr_NoMemory();
@@ -1231,11 +1249,11 @@ xmlparse_dealloc(xmlparseobject *self)
             self->handlers[i] = NULL;
             Py_XDECREF(temp);
         }
-        free(self->handlers);
+        PyMem_Free(self->handlers);
         self->handlers = NULL;
     }
     if (self->buffer != NULL) {
-        free(self->buffer);
+        PyMem_Free(self->buffer);
         self->buffer = NULL;
     }
     Py_XDECREF(self->intern);
@@ -1435,7 +1453,7 @@ xmlparse_setattro(xmlparseobject *self, PyObject *name, PyObject *v)
             return -1;
         if (b) {
             if (self->buffer == NULL) {
-                self->buffer = malloc(self->buffer_size);
+                self->buffer = PyMem_Malloc(self->buffer_size);
                 if (self->buffer == NULL) {
                     PyErr_NoMemory();
                     return -1;
@@ -1446,7 +1464,7 @@ xmlparse_setattro(xmlparseobject *self, PyObject *name, PyObject *v)
         else if (self->buffer != NULL) {
             if (flush_character_buffer(self) < 0)
                 return -1;
-            free(self->buffer);
+            PyMem_Free(self->buffer);
             self->buffer = NULL;
         }
         return 0;
@@ -1508,9 +1526,9 @@ xmlparse_setattro(xmlparseobject *self, PyObject *name, PyObject *v)
             }
         }
         /* free existing buffer */
-        free(self->buffer);
+        PyMem_Free(self->buffer);
       }
-      self->buffer = malloc(new_buffer_size);
+      self->buffer = PyMem_Malloc(new_buffer_size);
       if (self->buffer == NULL) {
         PyErr_NoMemory();
         return -1;
