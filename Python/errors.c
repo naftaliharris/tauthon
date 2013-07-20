@@ -71,6 +71,11 @@ PyErr_SetObject(PyObject *exception, PyObject *value)
         if (value == NULL || !PyExceptionInstance_Check(value)) {
             /* We must normalize the value right now */
             PyObject *args, *fixed_value;
+#ifdef Py_DEBUG
+            /* in debug mode, PyEval_EvalFrameEx() fails with an assertion
+               error if an exception is set when it is called */
+            PyErr_Clear();
+#endif
             if (value == NULL || value == Py_None)
                 args = PyTuple_New(0);
             else if (PyTuple_Check(value)) {
@@ -227,12 +232,21 @@ PyErr_NormalizeException(PyObject **exc, PyObject **val, PyObject **tb)
        value will be an instance.
     */
     if (PyExceptionClass_Check(type)) {
+        int is_subclass;
+        if (inclass) {
+            is_subclass = PyObject_IsSubclass(inclass, type);
+            if (is_subclass < 0)
+                goto finally;
+        }
+        else
+            is_subclass = 0;
+
         /* if the value was not an instance, or is not an instance
            whose class is (or is derived from) type, then use the
            value as an argument to instantiation of the type
            class.
         */
-        if (!inclass || !PyObject_IsSubclass(inclass, type)) {
+        if (!inclass || !is_subclass) {
             PyObject *args, *res;
 
             if (value == Py_None)
@@ -588,7 +602,7 @@ PyObject *PyErr_SetExcFromWindowsErr(PyObject *exc, int ierr)
 
 PyObject *PyErr_SetFromWindowsErr(int ierr)
 {
-    return PyErr_SetExcFromWindowsErrWithFilename(PyExc_WindowsError,
+    return PyErr_SetExcFromWindowsErrWithFilename(PyExc_OSError,
                                                   ierr, NULL);
 }
 PyObject *PyErr_SetFromWindowsErrWithFilename(
@@ -597,7 +611,7 @@ PyObject *PyErr_SetFromWindowsErrWithFilename(
 {
     PyObject *name = filename ? PyUnicode_DecodeFSDefault(filename) : NULL;
     PyObject *result = PyErr_SetExcFromWindowsErrWithFilenameObject(
-                                                  PyExc_WindowsError,
+                                                  PyExc_OSError,
                                                   ierr, name);
     Py_XDECREF(name);
     return result;
@@ -611,7 +625,7 @@ PyObject *PyErr_SetFromWindowsErrWithUnicodeFilename(
                      PyUnicode_FromUnicode(filename, wcslen(filename)) :
              NULL;
     PyObject *result = PyErr_SetExcFromWindowsErrWithFilenameObject(
-                                                  PyExc_WindowsError,
+                                                  PyExc_OSError,
                                                   ierr, name);
     Py_XDECREF(name);
     return result;
@@ -646,8 +660,11 @@ PyErr_SetImportError(PyObject *msg, PyObject *name, PyObject *path)
 
     Py_INCREF(msg);
     PyTuple_SET_ITEM(args, 0, msg);
-    PyDict_SetItemString(kwargs, "name", name);
-    PyDict_SetItemString(kwargs, "path", path);
+
+    if (PyDict_SetItemString(kwargs, "name", name) < 0)
+        return NULL;
+    if (PyDict_SetItemString(kwargs, "path", path) < 0)
+        return NULL;
 
     error = PyObject_Call(PyExc_ImportError, args, kwargs);
     if (error != NULL) {
@@ -675,6 +692,7 @@ _PyErr_BadInternalCall(const char *filename, int lineno)
 void
 PyErr_BadInternalCall(void)
 {
+    assert(0 && "bad argument to internal function");
     PyErr_Format(PyExc_SystemError,
                  "bad argument to internal function");
 }
@@ -692,6 +710,12 @@ PyErr_Format(PyObject *exception, const char *format, ...)
     va_start(vargs, format);
 #else
     va_start(vargs);
+#endif
+
+#ifdef Py_DEBUG
+    /* in debug mode, PyEval_EvalFrameEx() fails with an assertion error
+       if an exception is set when it is called */
+    PyErr_Clear();
 #endif
 
     string = PyUnicode_FromFormatV(format, vargs);
@@ -798,7 +822,12 @@ PyErr_WriteUnraisable(PyObject *obj)
     PyErr_Fetch(&t, &v, &tb);
     f = PySys_GetObject("stderr");
     if (f != NULL && f != Py_None) {
-        PyFile_WriteString("Exception ", f);
+        if (obj) {
+            PyFile_WriteString("Exception ignored in: ", f);
+            PyFile_WriteObject(obj, f, 0);
+            PyFile_WriteString("\n", f);
+        }
+        PyTraceBack_Print(tb, f);
         if (t) {
             PyObject* moduleName;
             char* className;
@@ -828,15 +857,11 @@ PyErr_WriteUnraisable(PyObject *obj)
                 PyFile_WriteString(className, f);
             if (v && v != Py_None) {
                 PyFile_WriteString(": ", f);
-                PyFile_WriteObject(v, f, 0);
+                PyFile_WriteObject(v, f, Py_PRINT_RAW);
             }
+            PyFile_WriteString("\n", f);
             Py_XDECREF(moduleName);
         }
-        if (obj) {
-            PyFile_WriteString(" in ", f);
-            PyFile_WriteObject(obj, f, 0);
-        }
-        PyFile_WriteString(" ignored\n", f);
         PyErr_Clear(); /* Just in case */
     }
     Py_XDECREF(t);

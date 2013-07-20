@@ -2,20 +2,6 @@
 #include "structmember.h"
 #include "accu.h"
 
-#if PY_VERSION_HEX < 0x02060000 && !defined(Py_TYPE)
-#define Py_TYPE(ob)     (((PyObject*)(ob))->ob_type)
-#endif
-#if PY_VERSION_HEX < 0x02050000 && !defined(PY_SSIZE_T_MIN)
-typedef int Py_ssize_t;
-#define PY_SSIZE_T_MAX INT_MAX
-#define PY_SSIZE_T_MIN INT_MIN
-#define PyInt_FromSsize_t PyInt_FromLong
-#define PyInt_AsSsize_t PyInt_AsLong
-#endif
-#ifndef Py_IS_FINITE
-#define Py_IS_FINITE(X) (!Py_IS_INFINITY(X) && !Py_IS_NAN(X))
-#endif
-
 #ifdef __GNUC__
 #define UNUSED __attribute__((__unused__))
 #else
@@ -129,32 +115,11 @@ static void
 raise_errmsg(char *msg, PyObject *s, Py_ssize_t end);
 static PyObject *
 encoder_encode_string(PyEncoderObject *s, PyObject *obj);
-static int
-_convertPyInt_AsSsize_t(PyObject *o, Py_ssize_t *size_ptr);
-static PyObject *
-_convertPyInt_FromSsize_t(Py_ssize_t *size_ptr);
 static PyObject *
 encoder_encode_float(PyEncoderObject *s, PyObject *obj);
 
 #define S_CHAR(c) (c >= ' ' && c <= '~' && c != '\\' && c != '"')
 #define IS_WHITESPACE(c) (((c) == ' ') || ((c) == '\t') || ((c) == '\n') || ((c) == '\r'))
-
-static int
-_convertPyInt_AsSsize_t(PyObject *o, Py_ssize_t *size_ptr)
-{
-    /* PyObject to Py_ssize_t converter */
-    *size_ptr = PyLong_AsSsize_t(o);
-    if (*size_ptr == -1 && PyErr_Occurred())
-        return 0;
-    return 1;
-}
-
-static PyObject *
-_convertPyInt_FromSsize_t(Py_ssize_t *size_ptr)
-{
-    /* Py_ssize_t to PyObject converter */
-    return PyLong_FromSsize_t(*size_ptr);
-}
 
 static Py_ssize_t
 ascii_escape_unichar(Py_UCS4 c, unsigned char *output, Py_ssize_t chars)
@@ -174,14 +139,13 @@ ascii_escape_unichar(Py_UCS4 c, unsigned char *output, Py_ssize_t chars)
         default:
             if (c >= 0x10000) {
                 /* UTF-16 surrogate pair */
-                Py_UCS4 v = c - 0x10000;
-                c = 0xd800 | ((v >> 10) & 0x3ff);
+                Py_UCS4 v = Py_UNICODE_HIGH_SURROGATE(c);
                 output[chars++] = 'u';
-                output[chars++] = Py_hexdigits[(c >> 12) & 0xf];
-                output[chars++] = Py_hexdigits[(c >>  8) & 0xf];
-                output[chars++] = Py_hexdigits[(c >>  4) & 0xf];
-                output[chars++] = Py_hexdigits[(c      ) & 0xf];
-                c = 0xdc00 | (v & 0x3ff);
+                output[chars++] = Py_hexdigits[(v >> 12) & 0xf];
+                output[chars++] = Py_hexdigits[(v >>  8) & 0xf];
+                output[chars++] = Py_hexdigits[(v >>  4) & 0xf];
+                output[chars++] = Py_hexdigits[(v      ) & 0xf];
+                c = Py_UNICODE_LOW_SURROGATE(c);
                 output[chars++] = '\\';
             }
             output[chars++] = 'u';
@@ -268,10 +232,20 @@ raise_errmsg(char *msg, PyObject *s, Py_ssize_t end)
         if (errmsg_fn == NULL)
             return;
     }
-    pymsg = PyObject_CallFunction(errmsg_fn, "(zOO&)", msg, s, _convertPyInt_FromSsize_t, &end);
+    pymsg = PyObject_CallFunction(errmsg_fn, "(zOn)", msg, s, end);
     if (pymsg) {
         PyErr_SetObject(PyExc_ValueError, pymsg);
         Py_DECREF(pymsg);
+    }
+}
+
+static void
+raise_stop_iteration(Py_ssize_t idx)
+{
+    PyObject *value = PyLong_FromSsize_t(idx);
+    if (value != NULL) {
+        PyErr_SetObject(PyExc_StopIteration, value);
+        Py_DECREF(value);
     }
 }
 
@@ -344,7 +318,7 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
     buf = PyUnicode_DATA(pystr);
     kind = PyUnicode_KIND(pystr);
 
-    if (end < 0 || len <= end) {
+    if (end < 0 || len < end) {
         PyErr_SetString(PyExc_ValueError, "end is out of bounds");
         goto bail;
     }
@@ -433,7 +407,7 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
                 }
             }
             /* Surrogate pair */
-            if ((c & 0xfc00) == 0xd800) {
+            if (Py_UNICODE_IS_HIGH_SURROGATE(c)) {
                 Py_UCS4 c2 = 0;
                 if (end + 6 >= len) {
                     raise_errmsg("Unpaired high surrogate", pystr, end - 5);
@@ -464,13 +438,13 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
                             goto bail;
                     }
                 }
-                if ((c2 & 0xfc00) != 0xdc00) {
+                if (!Py_UNICODE_IS_LOW_SURROGATE(c2)) {
                     raise_errmsg("Unpaired high surrogate", pystr, end - 5);
                     goto bail;
                 }
-                c = 0x10000 + (((c - 0xd800) << 10) | (c2 - 0xdc00));
+                c = Py_UNICODE_JOIN_SURROGATES(c, c2);
             }
-            else if ((c & 0xfc00) == 0xdc00) {
+            else if (Py_UNICODE_IS_LOW_SURROGATE(c)) {
                 raise_errmsg("Unpaired low surrogate", pystr, end - 5);
                 goto bail;
             }
@@ -527,7 +501,7 @@ py_scanstring(PyObject* self UNUSED, PyObject *args)
     Py_ssize_t end;
     Py_ssize_t next_end = -1;
     int strict = 1;
-    if (!PyArg_ParseTuple(args, "OO&|i:scanstring", &pystr, _convertPyInt_AsSsize_t, &end, &strict)) {
+    if (!PyArg_ParseTuple(args, "On|i:scanstring", &pystr, &end, &strict)) {
         return NULL;
     }
     if (PyUnicode_Check(pystr)) {
@@ -642,12 +616,12 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
     while (idx <= end_idx && IS_WHITESPACE(PyUnicode_READ(kind,str, idx))) idx++;
 
     /* only loop if the object is non-empty */
-    if (idx <= end_idx && PyUnicode_READ(kind, str, idx) != '}') {
-        while (idx <= end_idx) {
+    if (idx > end_idx || PyUnicode_READ(kind, str, idx) != '}') {
+        while (1) {
             PyObject *memokey;
 
             /* read key */
-            if (PyUnicode_READ(kind, str, idx) != '"') {
+            if (idx > end_idx || PyUnicode_READ(kind, str, idx) != '"') {
                 raise_errmsg("Expecting property name enclosed in double quotes", pystr, idx);
                 goto bail;
             }
@@ -704,11 +678,9 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
             while (idx <= end_idx && IS_WHITESPACE(PyUnicode_READ(kind, str, idx))) idx++;
 
             /* bail if the object is closed or we didn't get the , delimiter */
-            if (idx > end_idx) break;
-            if (PyUnicode_READ(kind, str, idx) == '}') {
+            if (idx <= end_idx && PyUnicode_READ(kind, str, idx) == '}')
                 break;
-            }
-            else if (PyUnicode_READ(kind, str, idx) != ',') {
+            if (idx > end_idx || PyUnicode_READ(kind, str, idx) != ',') {
                 raise_errmsg("Expecting ',' delimiter", pystr, idx);
                 goto bail;
             }
@@ -717,12 +689,6 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
             /* skip whitespace after , delimiter */
             while (idx <= end_idx && IS_WHITESPACE(PyUnicode_READ(kind, str, idx))) idx++;
         }
-    }
-
-    /* verify that idx < end_idx, str[idx] should be '}' */
-    if (idx > end_idx || PyUnicode_READ(kind, str, idx) != '}') {
-        raise_errmsg("Expecting object", pystr, end_idx);
-        goto bail;
     }
 
     *next_idx_ptr = idx + 1;
@@ -776,8 +742,8 @@ _parse_array_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssi
     while (idx <= end_idx && IS_WHITESPACE(PyUnicode_READ(kind, str, idx))) idx++;
 
     /* only loop if the array is non-empty */
-    if (idx <= end_idx && PyUnicode_READ(kind, str, idx) != ']') {
-        while (idx <= end_idx) {
+    if (idx > end_idx || PyUnicode_READ(kind, str, idx) != ']') {
+        while (1) {
 
             /* read any JSON term  */
             val = scan_once_unicode(s, pystr, idx, &next_idx);
@@ -794,11 +760,9 @@ _parse_array_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssi
             while (idx <= end_idx && IS_WHITESPACE(PyUnicode_READ(kind, str, idx))) idx++;
 
             /* bail if the array is closed or we didn't get the , delimiter */
-            if (idx > end_idx) break;
-            if (PyUnicode_READ(kind, str, idx) == ']') {
+            if (idx <= end_idx && PyUnicode_READ(kind, str, idx) == ']')
                 break;
-            }
-            else if (PyUnicode_READ(kind, str, idx) != ',') {
+            if (idx > end_idx || PyUnicode_READ(kind, str, idx) != ',') {
                 raise_errmsg("Expecting ',' delimiter", pystr, idx);
                 goto bail;
             }
@@ -811,7 +775,7 @@ _parse_array_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssi
 
     /* verify that idx < end_idx, PyUnicode_READ(kind, str, idx) should be ']' */
     if (idx > end_idx || PyUnicode_READ(kind, str, idx) != ']') {
-        raise_errmsg("Expecting object", pystr, end_idx);
+        raise_errmsg("Expecting value", pystr, end_idx);
         goto bail;
     }
     *next_idx_ptr = idx + 1;
@@ -879,7 +843,7 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
     if (PyUnicode_READ(kind, str, idx) == '-') {
         idx++;
         if (idx > end_idx) {
-            PyErr_SetNone(PyExc_StopIteration);
+            raise_stop_iteration(start);
             return NULL;
         }
     }
@@ -895,7 +859,7 @@ _match_number_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t start, Py_
     }
     /* no integer digits, error */
     else {
-        PyErr_SetNone(PyExc_StopIteration);
+        raise_stop_iteration(start);
         return NULL;
     }
 
@@ -988,7 +952,7 @@ scan_once_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssize_
     length = PyUnicode_GET_LENGTH(pystr);
 
     if (idx >= length) {
-        PyErr_SetNone(PyExc_StopIteration);
+        raise_stop_iteration(idx);
         return NULL;
     }
 
@@ -1090,7 +1054,7 @@ scanner_call(PyObject *self, PyObject *args, PyObject *kwds)
     PyScannerObject *s;
     assert(PyScanner_Check(self));
     s = (PyScannerObject *)self;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO&:scan_once", kwlist, &pystr, _convertPyInt_AsSsize_t, &idx))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "On:scan_once", kwlist, &pystr, &idx))
         return NULL;
 
     if (PyUnicode_Check(pystr)) {
@@ -1291,8 +1255,8 @@ encoder_call(PyObject *self, PyObject *args, PyObject *kwds)
 
     assert(PyEncoder_Check(self));
     s = (PyEncoderObject *)self;
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "OO&:_iterencode", kwlist,
-        &obj, _convertPyInt_AsSsize_t, &indent_level))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "On:_iterencode", kwlist,
+        &obj, &indent_level))
         return NULL;
     if (_PyAccu_Init(&acc))
         return NULL;
