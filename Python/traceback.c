@@ -13,7 +13,7 @@
 
 #define OFF(x) offsetof(PyTracebackObject, x)
 
-#define PUTS(fd, str) write(fd, str, strlen(str))
+#define PUTS(fd, str) write(fd, str, (int)strlen(str))
 #define MAX_STRING_LENGTH 500
 #define MAX_FRAME_DEPTH 100
 #define MAX_NTHREADS 100
@@ -246,10 +246,12 @@ _Py_DisplaySourceLine(PyObject *f, PyObject *filename, int lineno, int indent)
     binary = _PyObject_CallMethodId(io, &PyId_open, "Os", filename, "rb");
 
     if (binary == NULL) {
+        PyErr_Clear();
+
         binary = _Py_FindSourceFile(filename, buf, sizeof(buf), io);
         if (binary == NULL) {
             Py_DECREF(io);
-            return 0;
+            return -1;
         }
     }
 
