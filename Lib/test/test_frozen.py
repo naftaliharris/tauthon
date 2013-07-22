@@ -36,7 +36,7 @@ class FrozenTests(unittest.TestCase):
             else:
                 expect.add('spam')
                 self.assertEqual(set(dir(__phello__)), expect)
-            self.assertEqual(__phello__.__path__, [__phello__.__name__])
+            self.assertEqual(__phello__.__path__, [])
             self.assertEqual(stdout.getvalue(), 'Hello world!\n')
 
         with captured_stdout() as stdout:
@@ -72,8 +72,6 @@ class FrozenTests(unittest.TestCase):
         del sys.modules['__phello__']
         del sys.modules['__phello__.spam']
 
-def test_main():
-    run_unittest(FrozenTests)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
