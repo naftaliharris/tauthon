@@ -43,6 +43,18 @@ class AIFCTest(unittest.TestCase):
             (2, 2, 48000, 14400, b'NONE', b'not compressed'),
             )
 
+    def test_context_manager(self):
+        with open(self.sndfilepath, 'rb') as testfile:
+            with aifc.open(testfile) as f:
+                pass
+            self.assertEqual(testfile.closed, True)
+        with open(TESTFN, 'wb') as testfile:
+            with self.assertRaises(aifc.Error):
+                with aifc.open(testfile, 'wb') as fout:
+                    pass
+            self.assertEqual(testfile.closed, True)
+            fout.close() # do nothing
+
     def test_read(self):
         f = self.f = aifc.open(self.sndfilepath)
         self.assertEqual(f.readframes(0), b'')
@@ -319,12 +331,14 @@ class AIFCLowLevelTest(unittest.TestCase):
 
     def test_write_aiff_by_extension(self):
         sampwidth = 2
-        fout = self.fout = aifc.open(TESTFN + '.aiff', 'wb')
+        filename = TESTFN + '.aiff'
+        fout = self.fout = aifc.open(filename, 'wb')
+        self.addCleanup(unlink, filename)
         fout.setparams((1, sampwidth, 1, 1, b'ULAW', b''))
         frames = b'\x00' * fout.getnchannels() * sampwidth
         fout.writeframes(frames)
         fout.close()
-        f = self.f = aifc.open(TESTFN + '.aiff', 'rb')
+        f = self.f = aifc.open(filename, 'rb')
         self.assertEqual(f.getcomptype(), b'NONE')
         f.close()
 
