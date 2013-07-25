@@ -57,6 +57,11 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     }
     func = PyTuple_GET_ITEM(args, 0); /* Better be callable */
+    if (!PyFunction_Check(func)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "__build__class__: func must be a function");
+        return NULL;
+    }
     name = PyTuple_GET_ITEM(args, 1);
     if (!PyUnicode_Check(name)) {
         PyErr_SetString(PyExc_TypeError,
@@ -155,7 +160,9 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
         Py_DECREF(bases);
         return NULL;
     }
-    cell = PyObject_CallFunctionObjArgs(func, ns, NULL);
+    cell = PyEval_EvalCodeEx(PyFunction_GET_CODE(func), PyFunction_GET_GLOBALS(func), ns,
+                             NULL, 0, NULL, 0, NULL, 0, NULL,
+                             PyFunction_GET_CLOSURE(func));
     if (cell != NULL) {
         PyObject *margs;
         margs = PyTuple_Pack(3, name, bases, ns);
@@ -659,7 +666,7 @@ builtin_compile(PyObject *self, PyObject *args, PyObject *kwds)
         goto finally;
     }
 
-    str = source_as_string(cmd, "compile", "string, bytes, AST or code", &cf);
+    str = source_as_string(cmd, "compile", "string, bytes or AST", &cf);
     if (str == NULL)
         goto error;
 
@@ -1322,26 +1329,35 @@ static PyObject *
 min_max(PyObject *args, PyObject *kwds, int op)
 {
     PyObject *v, *it, *item, *val, *maxitem, *maxval, *keyfunc=NULL;
+    PyObject *emptytuple, *defaultval = NULL;
+    static char *kwlist[] = {"key", "default", NULL};
     const char *name = op == Py_LT ? "min" : "max";
+    const int positional = PyTuple_Size(args) > 1;
+    int ret;
 
-    if (PyTuple_Size(args) > 1)
+    if (positional)
         v = args;
     else if (!PyArg_UnpackTuple(args, (char *)name, 1, 1, &v))
         return NULL;
 
-    if (kwds != NULL && PyDict_Check(kwds) && PyDict_Size(kwds)) {
-        keyfunc = PyDict_GetItemString(kwds, "key");
-        if (PyDict_Size(kwds)!=1  ||  keyfunc == NULL) {
-            PyErr_Format(PyExc_TypeError,
-                "%s() got an unexpected keyword argument", name);
-            return NULL;
-        }
-        Py_INCREF(keyfunc);
+    emptytuple = PyTuple_New(0);
+    if (emptytuple == NULL)
+        return NULL;
+    ret = PyArg_ParseTupleAndKeywords(emptytuple, kwds, "|$OO", kwlist,
+                                      &keyfunc, &defaultval);
+    Py_DECREF(emptytuple);
+    if (!ret)
+        return NULL;
+
+    if (positional && defaultval != NULL) {
+        PyErr_Format(PyExc_TypeError,
+                        "Cannot specify a default for %s() with multiple "
+                        "positional arguments", name);
+        return NULL;
     }
 
     it = PyObject_GetIter(v);
     if (it == NULL) {
-        Py_XDECREF(keyfunc);
         return NULL;
     }
 
@@ -1385,14 +1401,18 @@ min_max(PyObject *args, PyObject *kwds, int op)
     if (PyErr_Occurred())
         goto Fail_it;
     if (maxval == NULL) {
-        PyErr_Format(PyExc_ValueError,
-                     "%s() arg is an empty sequence", name);
         assert(maxitem == NULL);
+        if (defaultval != NULL) {
+            Py_INCREF(defaultval);
+            maxitem = defaultval;
+        } else {
+            PyErr_Format(PyExc_ValueError,
+                         "%s() arg is an empty sequence", name);
+        }
     }
     else
         Py_DECREF(maxval);
     Py_DECREF(it);
-    Py_XDECREF(keyfunc);
     return maxitem;
 
 Fail_it_item_and_val:
@@ -1403,7 +1423,6 @@ Fail_it:
     Py_XDECREF(maxval);
     Py_XDECREF(maxitem);
     Py_DECREF(it);
-    Py_XDECREF(keyfunc);
     return NULL;
 }
 
@@ -1531,6 +1550,11 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
         return NULL;
     if (file == NULL || file == Py_None) {
         file = PySys_GetObject("stdout");
+        if (file == NULL) {
+            PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
+            return NULL;
+        }
+
         /* sys.stdout may be None when FILE* stdout isn't connected */
         if (file == Py_None)
             Py_RETURN_NONE;
@@ -1810,10 +1834,10 @@ For most object types, eval(repr(object)) == object.");
 static PyObject *
 builtin_round(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    static PyObject *round_str = NULL;
     PyObject *ndigits = NULL;
     static char *kwlist[] = {"number", "ndigits", 0};
-    PyObject *number, *round;
+    PyObject *number, *round, *result;
+    _Py_IDENTIFIER(__round__);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:round",
                                      kwlist, &number, &ndigits))
@@ -1824,24 +1848,21 @@ builtin_round(PyObject *self, PyObject *args, PyObject *kwds)
             return NULL;
     }
 
-    if (round_str == NULL) {
-        round_str = PyUnicode_InternFromString("__round__");
-        if (round_str == NULL)
-            return NULL;
-    }
-
-    round = _PyType_Lookup(Py_TYPE(number), round_str);
+    round = _PyObject_LookupSpecial(number, &PyId___round__);
     if (round == NULL) {
-        PyErr_Format(PyExc_TypeError,
-                     "type %.100s doesn't define __round__ method",
-                     Py_TYPE(number)->tp_name);
+        if (!PyErr_Occurred())
+            PyErr_Format(PyExc_TypeError,
+                         "type %.100s doesn't define __round__ method",
+                         Py_TYPE(number)->tp_name);
         return NULL;
     }
 
     if (ndigits == NULL)
-        return PyObject_CallFunction(round, "O", number);
+        result = PyObject_CallFunctionObjArgs(round, NULL);
     else
-        return PyObject_CallFunction(round, "OO", number, ndigits);
+        result = PyObject_CallFunctionObjArgs(round, ndigits, NULL);
+    Py_DECREF(round);
+    return result;
 }
 
 PyDoc_STRVAR(round_doc,
@@ -2408,6 +2429,12 @@ PyObject *
 _PyBuiltin_Init(void)
 {
     PyObject *mod, *dict, *debug;
+
+    if (PyType_Ready(&PyFilter_Type) < 0 ||
+        PyType_Ready(&PyMap_Type) < 0 ||
+        PyType_Ready(&PyZip_Type) < 0)
+        return NULL;
+
     mod = PyModule_Create(&builtinsmodule);
     if (mod == NULL)
         return NULL;
