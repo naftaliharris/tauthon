@@ -305,9 +305,9 @@ PyDict_Fini(void)
  * #define USABLE_FRACTION(n) (((n) >> 1) + ((n) >> 2) - ((n) >> 3))
 */
 
-/* GROWTH_RATE. Growth rate upon hitting maximum load. 
- * Currently set to used*2 + capacity/2. 
- * This means that dicts double in size when growing without deletions, 
+/* GROWTH_RATE. Growth rate upon hitting maximum load.
+ * Currently set to used*2 + capacity/2.
+ * This means that dicts double in size when growing without deletions,
  * but have more head room when the number of deletions is on a par with the
  * number of insertions.
  * Raising this to used*4 doubles memory consumption depending on the size of
@@ -389,6 +389,7 @@ static PyObject *
 new_dict(PyDictKeysObject *keys, PyObject **values)
 {
     PyDictObject *mp;
+    assert(keys != NULL);
     if (numfree) {
         mp = free_list[--numfree];
         assert (mp != NULL);
@@ -431,7 +432,10 @@ new_dict_with_shared_keys(PyDictKeysObject *keys)
 PyObject *
 PyDict_New(void)
 {
-    return new_dict(new_keys_object(PyDict_MINSIZE_COMBINED), NULL);
+    PyDictKeysObject *keys = new_keys_object(PyDict_MINSIZE_COMBINED);
+    if (keys == NULL)
+        return NULL;
+    return new_dict(keys, NULL);
 }
 
 /*
@@ -1391,7 +1395,7 @@ dict_dealloc(PyDictObject *mp)
         }
         DK_DECREF(keys);
     }
-    else {
+    else if (keys != NULL) {
         assert(keys->dk_refcnt == 1);
         DK_DECREF(keys);
     }
@@ -1439,6 +1443,9 @@ dict_repr(PyDictObject *mp)
         Py_INCREF(value);
         s = PyObject_Repr(key);
         PyUnicode_Append(&s, colon);
+        if (s == NULL)
+            goto Done;
+
         PyUnicode_AppendAndDel(&s, PyObject_Repr(value));
         Py_DECREF(key);
         Py_DECREF(value);
@@ -2118,13 +2125,18 @@ dict_equal(PyDictObject *a, PyDictObject *b)
         if (aval != NULL) {
             int cmp;
             PyObject *bval;
+            PyObject **vaddr;
             PyObject *key = ep->me_key;
             /* temporarily bump aval's refcount to ensure it stays
                alive until we're done with it */
             Py_INCREF(aval);
             /* ditto for key */
             Py_INCREF(key);
-            bval = PyDict_GetItemWithError((PyObject *)b, key);
+            /* reuse the known hash value */
+            if ((b->ma_keys->dk_lookup)(b, key, ep->me_hash, &vaddr) == NULL)
+                bval = NULL;
+            else
+                bval = *vaddr;
             Py_DECREF(key);
             if (bval == NULL) {
                 Py_DECREF(aval);
@@ -2210,19 +2222,19 @@ dict_get(register PyDictObject *mp, PyObject *args)
     return val;
 }
 
-static PyObject *
-dict_setdefault(register PyDictObject *mp, PyObject *args)
+PyObject *
+PyDict_SetDefault(PyObject *d, PyObject *key, PyObject *defaultobj)
 {
-    PyObject *key;
-    PyObject *failobj = Py_None;
+    PyDictObject *mp = (PyDictObject *)d;
     PyObject *val = NULL;
     Py_hash_t hash;
     PyDictKeyEntry *ep;
     PyObject **value_addr;
 
-    if (!PyArg_UnpackTuple(args, "setdefault", 1, 2, &key, &failobj))
+    if (!PyDict_Check(d)) {
+        PyErr_BadInternalCall();
         return NULL;
-
+    }
     if (!PyUnicode_CheckExact(key) ||
         (hash = ((PyASCIIObject *) key)->hash) == -1) {
         hash = PyObject_Hash(key);
@@ -2240,20 +2252,32 @@ dict_setdefault(register PyDictObject *mp, PyObject *args)
                 return NULL;
             ep = find_empty_slot(mp, key, hash, &value_addr);
         }
-        Py_INCREF(failobj);
+        Py_INCREF(defaultobj);
         Py_INCREF(key);
-        MAINTAIN_TRACKING(mp, key, failobj);
+        MAINTAIN_TRACKING(mp, key, defaultobj);
         ep->me_key = key;
         ep->me_hash = hash;
-        *value_addr = failobj;
-        val = failobj;
+        *value_addr = defaultobj;
+        val = defaultobj;
         mp->ma_keys->dk_usable--;
         mp->ma_used++;
     }
-    Py_INCREF(val);
     return val;
 }
 
+static PyObject *
+dict_setdefault(PyDictObject *mp, PyObject *args)
+{
+    PyObject *key, *val;
+    PyObject *defaultobj = Py_None;
+
+    if (!PyArg_UnpackTuple(args, "setdefault", 1, 2, &key, &defaultobj))
+        return NULL;
+
+    val = PyDict_SetDefault((PyObject *)mp, key, defaultobj);
+    Py_XINCREF(val);
+    return val;
+}
 
 static PyObject *
 dict_clear(register PyDictObject *mp)
@@ -2460,10 +2484,10 @@ PyDoc_STRVAR(popitem__doc__,
 2-tuple; but raise KeyError if D is empty.");
 
 PyDoc_STRVAR(update__doc__,
-"D.update([E, ]**F) -> None.  Update D from dict/iterable E and F.\n"
-"If E present and has a .keys() method, does:     for k in E: D[k] = E[k]\n\
-If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v\n\
-In either case, this is followed by: for k in F: D[k] = F[k]");
+"D.update([E, ]**F) -> None.  Update D from dict/iterable E and F.\n\
+If E is present and has a .keys() method, then does:  for k in E: D[k] = E[k]\n\
+If E is present and lacks a .keys() method, then does:  for k, v in E: D[k] = v\n\
+In either case, this is followed by: for k in F:  D[k] = F[k]");
 
 PyDoc_STRVAR(fromkeys__doc__,
 "dict.fromkeys(S[,v]) -> New dict with keys from S and values equal to v.\n\
@@ -2568,22 +2592,23 @@ static PyObject *
 dict_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     PyObject *self;
+    PyDictObject *d;
 
     assert(type != NULL && type->tp_alloc != NULL);
     self = type->tp_alloc(type, 0);
-    if (self != NULL) {
-        PyDictObject *d = (PyDictObject *)self;
-        d->ma_keys = new_keys_object(PyDict_MINSIZE_COMBINED);
-        /* XXX - Should we raise a no-memory error? */
-        if (d->ma_keys == NULL) {
-            DK_INCREF(Py_EMPTY_KEYS);
-            d->ma_keys = Py_EMPTY_KEYS;
-            d->ma_values = empty_values;
-        }
-        d->ma_used = 0;
-        /* The object has been implicitly tracked by tp_alloc */
-        if (type == &PyDict_Type)
-            _PyObject_GC_UNTRACK(d);
+    if (self == NULL)
+        return NULL;
+    d = (PyDictObject *)self;
+
+    /* The object has been implicitly tracked by tp_alloc */
+    if (type == &PyDict_Type)
+        _PyObject_GC_UNTRACK(d);
+
+    d->ma_used = 0;
+    d->ma_keys = new_keys_object(PyDict_MINSIZE_COMBINED);
+    if (d->ma_keys == NULL) {
+        Py_DECREF(self);
+        return NULL;
     }
     return self;
 }
@@ -2659,8 +2684,10 @@ _PyDict_GetItemId(PyObject *dp, struct _Py_Identifier *key)
 {
     PyObject *kv;
     kv = _PyUnicode_FromId(key); /* borrowed */
-    if (kv == NULL)
+    if (kv == NULL) {
+        PyErr_Clear();
         return NULL;
+    }
     return PyDict_GetItem(dp, kv);
 }
 
@@ -2671,8 +2698,10 @@ PyDict_GetItemString(PyObject *v, const char *key)
 {
     PyObject *kv, *rv;
     kv = PyUnicode_FromString(key);
-    if (kv == NULL)
+    if (kv == NULL) {
+        PyErr_Clear();
         return NULL;
+    }
     rv = PyDict_GetItem(v, kv);
     Py_DECREF(kv);
     return rv;

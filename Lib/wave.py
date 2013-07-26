@@ -18,7 +18,7 @@ This returns an instance of a class with the following public methods:
       getcomptype()   -- returns compression type ('NONE' for linear samples)
       getcompname()   -- returns human-readable version of
                          compression type ('not compressed' linear samples)
-      getparams()     -- returns a tuple consisting of all of the
+      getparams()     -- returns a namedtuple consisting of all of the
                          above in the above order
       getmarkers()    -- returns None (for compatibility with the
                          aifc module)
@@ -82,14 +82,13 @@ WAVE_FORMAT_PCM = 0x0001
 
 _array_fmts = None, 'b', 'h', None, 'l'
 
-# Determine endian-ness
 import struct
-if struct.pack("h", 1) == b"\000\001":
-    big_endian = 1
-else:
-    big_endian = 0
-
+import sys
 from chunk import Chunk
+from collections import namedtuple
+
+_result = namedtuple('params',
+                     'nchannels sampwidth framerate nframes comptype compname')
 
 class Wave_read:
     """Variables used in this class:
@@ -206,9 +205,9 @@ class Wave_read:
         return self._compname
 
     def getparams(self):
-        return self.getnchannels(), self.getsampwidth(), \
-               self.getframerate(), self.getnframes(), \
-               self.getcomptype(), self.getcompname()
+        return _result(self.getnchannels(), self.getsampwidth(),
+                       self.getframerate(), self.getnframes(),
+                       self.getcomptype(), self.getcompname())
 
     def getmarkers(self):
         return None
@@ -231,7 +230,7 @@ class Wave_read:
             self._data_seek_needed = 0
         if nframes == 0:
             return b''
-        if self._sampwidth > 1 and big_endian:
+        if self._sampwidth > 1 and sys.byteorder == 'big':
             # unfortunately the fromfile() method does not take
             # something that only looks like a file object, so
             # we have to reach into the innards of the chunk object
@@ -398,8 +397,8 @@ class Wave_write:
     def getparams(self):
         if not self._nchannels or not self._sampwidth or not self._framerate:
             raise Error('not all parameters set')
-        return self._nchannels, self._sampwidth, self._framerate, \
-              self._nframes, self._comptype, self._compname
+        return _result(self._nchannels, self._sampwidth, self._framerate,
+              self._nframes, self._comptype, self._compname)
 
     def setmark(self, id, pos, name):
         raise Error('setmark() not supported')
@@ -418,7 +417,7 @@ class Wave_write:
         nframes = len(data) // (self._sampwidth * self._nchannels)
         if self._convert:
             data = self._convert(data)
-        if self._sampwidth > 1 and big_endian:
+        if self._sampwidth > 1 and sys.byteorder == 'big':
             import array
             data = array.array(_array_fmts[self._sampwidth], data)
             data.byteswap()
