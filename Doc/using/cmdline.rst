@@ -147,7 +147,12 @@ source.
 
 If no interface option is given, :option:`-i` is implied, ``sys.argv[0]`` is
 an empty string (``""``) and the current directory will be added to the
-start of :data:`sys.path`.
+start of :data:`sys.path`.  Also, tab-completion and history editing is
+automatically enabled, if available on your platform (see
+:ref:`rlcompleter-config`).
+
+.. versionchanged:: 3.4
+   Automatic enabling of tab-completion and history editing.
 
 .. seealso::  :ref:`tut-invoking`
 
@@ -358,15 +363,23 @@ Miscellaneous options
 .. cmdoption:: -X
 
    Reserved for various implementation-specific options.  CPython currently
-   defines just one, you can use ``-X faulthandler`` to enable
-   :mod:`faulthandler`. It also allows to pass arbitrary values and retrieve
-   them through the :data:`sys._xoptions` dictionary.
+   defines two possible values:
+
+   * ``-X faulthandler`` to enable :mod:`faulthandler`;
+   * ``-X showrefcount`` to enable the output of the total reference count
+     and memory blocks (only works on debug builds);
+
+   It also allows to pass arbitrary values and retrieve them through the
+   :data:`sys._xoptions` dictionary.
 
    .. versionchanged:: 3.2
       It is now allowed to pass :option:`-X` with CPython.
 
    .. versionadded:: 3.3
       The ``-X faulthandler`` option.
+
+   .. versionadded:: 3.4
+      The ``-X showrefcount`` option.
 
 
 Options you shouldn't use
@@ -430,7 +443,7 @@ conflict.
    is executed in the same namespace where interactive commands are executed so
    that objects defined or imported in it can be used without qualification in
    the interactive session.  You can also change the prompts :data:`sys.ps1` and
-   :data:`sys.ps2` in this file.
+   :data:`sys.ps2` and the hook :data:`sys.__interactivehook__` in this file.
 
 
 .. envvar:: PYTHONY2K
