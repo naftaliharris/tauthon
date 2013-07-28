@@ -94,51 +94,27 @@ PyObject_{New, NewVar, Del}.
    the object gets initialized via PyObject_{Init, InitVar} after obtaining
    the raw memory.
 */
-PyAPI_FUNC(void *) PyObject_Malloc(size_t);
-PyAPI_FUNC(void *) PyObject_Realloc(void *, size_t);
-PyAPI_FUNC(void) PyObject_Free(void *);
+PyAPI_FUNC(void *) PyObject_Malloc(size_t size);
+PyAPI_FUNC(void *) PyObject_Realloc(void *ptr, size_t new_size);
+PyAPI_FUNC(void) PyObject_Free(void *ptr);
 
+/* This function returns the number of allocated memory blocks, regardless of size */
+PyAPI_FUNC(Py_ssize_t) _Py_GetAllocatedBlocks(void);
 
 /* Macros */
 #ifdef WITH_PYMALLOC
 #ifndef Py_LIMITED_API
 PyAPI_FUNC(void) _PyObject_DebugMallocStats(FILE *out);
 #endif /* #ifndef Py_LIMITED_API */
-#ifdef PYMALLOC_DEBUG   /* WITH_PYMALLOC && PYMALLOC_DEBUG */
-PyAPI_FUNC(void *) _PyObject_DebugMalloc(size_t nbytes);
-PyAPI_FUNC(void *) _PyObject_DebugRealloc(void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyObject_DebugFree(void *p);
-PyAPI_FUNC(void) _PyObject_DebugDumpAddress(const void *p);
-PyAPI_FUNC(void) _PyObject_DebugCheckAddress(const void *p);
-PyAPI_FUNC(void *) _PyObject_DebugMallocApi(char api, size_t nbytes);
-PyAPI_FUNC(void *) _PyObject_DebugReallocApi(char api, void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyObject_DebugFreeApi(char api, void *p);
-PyAPI_FUNC(void) _PyObject_DebugCheckAddressApi(char api, const void *p);
-PyAPI_FUNC(void *) _PyMem_DebugMalloc(size_t nbytes);
-PyAPI_FUNC(void *) _PyMem_DebugRealloc(void *p, size_t nbytes);
-PyAPI_FUNC(void) _PyMem_DebugFree(void *p);
-#define PyObject_MALLOC         _PyObject_DebugMalloc
-#define PyObject_Malloc         _PyObject_DebugMalloc
-#define PyObject_REALLOC        _PyObject_DebugRealloc
-#define PyObject_Realloc        _PyObject_DebugRealloc
-#define PyObject_FREE           _PyObject_DebugFree
-#define PyObject_Free           _PyObject_DebugFree
+#endif
 
-#else   /* WITH_PYMALLOC && ! PYMALLOC_DEBUG */
+/* Macros */
 #define PyObject_MALLOC         PyObject_Malloc
 #define PyObject_REALLOC        PyObject_Realloc
 #define PyObject_FREE           PyObject_Free
-#endif
-
-#else   /* ! WITH_PYMALLOC */
-#define PyObject_MALLOC         PyMem_MALLOC
-#define PyObject_REALLOC        PyMem_REALLOC
-#define PyObject_FREE           PyMem_FREE
-
-#endif  /* WITH_PYMALLOC */
-
 #define PyObject_Del            PyObject_Free
-#define PyObject_DEL            PyObject_FREE
+#define PyObject_DEL            PyObject_Free
+
 
 /*
  * Generic object allocator interface
@@ -222,6 +198,26 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
    constructor you would start directly with PyObject_Init/InitVar
 */
 
+#ifndef Py_LIMITED_API
+typedef struct {
+    /* user context passed as the first argument to the 2 functions */
+    void *ctx;
+
+    /* allocate an arena of size bytes */
+    void* (*alloc) (void *ctx, size_t size);
+
+    /* free an arena */
+    void (*free) (void *ctx, void *ptr, size_t size);
+} PyObjectArenaAllocator;
+
+/* Get the arena allocator. */
+PyAPI_FUNC(void) PyObject_GetArenaAllocator(PyObjectArenaAllocator *allocator);
+
+/* Set the arena allocator. */
+PyAPI_FUNC(void) PyObject_SetArenaAllocator(PyObjectArenaAllocator *allocator);
+#endif
+
+
 /*
  * Garbage Collection Support
  * ==========================
@@ -229,6 +225,10 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
 
 /* C equivalent of gc.collect(). */
 PyAPI_FUNC(Py_ssize_t) PyGC_Collect(void);
+
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(Py_ssize_t) _PyGC_CollectNoFail(void);
+#endif
 
 /* Test if a type has a GC head */
 #define PyType_IS_GC(t) PyType_HasFeature((t), Py_TPFLAGS_HAVE_GC)
@@ -249,7 +249,7 @@ typedef union _gc_head {
         union _gc_head *gc_prev;
         Py_ssize_t gc_refs;
     } gc;
-    long double dummy;  /* force worst-case alignment */
+    double dummy;  /* force worst-case alignment */
 } PyGC_Head;
 
 extern PyGC_Head *_PyGC_generation0;
