@@ -1424,6 +1424,20 @@ test_widechar(PyObject *self)
     else
         return raiseTestError("test_widechar",
                               "PyUnicode_FromUnicode(L\"\\U00110000\", 1) didn't fail");
+
+    wide = PyUnicode_FromUnicode(NULL, 1);
+    if (wide == NULL)
+        return NULL;
+    PyUnicode_AS_UNICODE(wide)[0] = invalid[0];
+    if (_PyUnicode_Ready(wide) < 0) {
+        Py_DECREF(wide);
+        PyErr_Clear();
+    }
+    else {
+        Py_DECREF(wide);
+        return raiseTestError("test_widechar",
+                              "PyUnicode_Ready() didn't fail");
+    }
 #endif
 
     Py_RETURN_NONE;
@@ -2477,6 +2491,282 @@ test_pytime_object_to_timespec(PyObject *self, PyObject *args)
     return Py_BuildValue("Nl", _PyLong_FromTime_t(sec), nsec);
 }
 
+static void
+slot_tp_del(PyObject *self)
+{
+    _Py_IDENTIFIER(__tp_del__);
+    PyObject *del, *res;
+    PyObject *error_type, *error_value, *error_traceback;
+
+    /* Temporarily resurrect the object. */
+    assert(self->ob_refcnt == 0);
+    self->ob_refcnt = 1;
+
+    /* Save the current exception, if any. */
+    PyErr_Fetch(&error_type, &error_value, &error_traceback);
+
+    /* Execute __del__ method, if any. */
+    del = _PyObject_LookupSpecial(self, &PyId___tp_del__);
+    if (del != NULL) {
+        res = PyEval_CallObject(del, NULL);
+        if (res == NULL)
+            PyErr_WriteUnraisable(del);
+        else
+            Py_DECREF(res);
+        Py_DECREF(del);
+    }
+
+    /* Restore the saved exception. */
+    PyErr_Restore(error_type, error_value, error_traceback);
+
+    /* Undo the temporary resurrection; can't use DECREF here, it would
+     * cause a recursive call.
+     */
+    assert(self->ob_refcnt > 0);
+    if (--self->ob_refcnt == 0)
+        return;         /* this is the normal path out */
+
+    /* __del__ resurrected it!  Make it look like the original Py_DECREF
+     * never happened.
+     */
+    {
+        Py_ssize_t refcnt = self->ob_refcnt;
+        _Py_NewReference(self);
+        self->ob_refcnt = refcnt;
+    }
+    assert(!PyType_IS_GC(Py_TYPE(self)) ||
+           _Py_AS_GC(self)->gc.gc_refs != _PyGC_REFS_UNTRACKED);
+    /* If Py_REF_DEBUG, _Py_NewReference bumped _Py_RefTotal, so
+     * we need to undo that. */
+    _Py_DEC_REFTOTAL;
+    /* If Py_TRACE_REFS, _Py_NewReference re-added self to the object
+     * chain, so no more to do there.
+     * If COUNT_ALLOCS, the original decref bumped tp_frees, and
+     * _Py_NewReference bumped tp_allocs:  both of those need to be
+     * undone.
+     */
+#ifdef COUNT_ALLOCS
+    --Py_TYPE(self)->tp_frees;
+    --Py_TYPE(self)->tp_allocs;
+#endif
+}
+
+static PyObject *
+with_tp_del(PyObject *self, PyObject *args)
+{
+    PyObject *obj;
+    PyTypeObject *tp;
+
+    if (!PyArg_ParseTuple(args, "O:with_tp_del", &obj))
+        return NULL;
+    tp = (PyTypeObject *) obj;
+    if (!PyType_Check(obj) || !PyType_HasFeature(tp, Py_TPFLAGS_HEAPTYPE)) {
+        PyErr_Format(PyExc_TypeError,
+                     "heap type expected, got %R", obj);
+        return NULL;
+    }
+    tp->tp_del = slot_tp_del;
+    Py_INCREF(obj);
+    return obj;
+}
+
+static PyObject *
+_test_incref(PyObject *ob)
+{
+    Py_INCREF(ob);
+    return ob;
+}
+
+static PyObject *
+test_xincref_doesnt_leak(PyObject *ob)
+{
+    PyObject *obj = PyLong_FromLong(0);
+    Py_XINCREF(_test_incref(obj));
+    Py_DECREF(obj);
+    Py_DECREF(obj);
+    Py_DECREF(obj);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_incref_doesnt_leak(PyObject *ob)
+{
+    PyObject *obj = PyLong_FromLong(0);
+    Py_INCREF(_test_incref(obj));
+    Py_DECREF(obj);
+    Py_DECREF(obj);
+    Py_DECREF(obj);
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_xdecref_doesnt_leak(PyObject *ob)
+{
+    Py_XDECREF(PyLong_FromLong(0));
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_decref_doesnt_leak(PyObject *ob)
+{
+    Py_DECREF(PyLong_FromLong(0));
+    Py_RETURN_NONE;
+}
+
+static PyObject *
+test_pymem_alloc0(PyObject *self)
+{
+    void *ptr;
+
+    ptr = PyMem_Malloc(0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyMem_Malloc(0) returns NULL");
+        return NULL;
+    }
+    PyMem_Free(ptr);
+
+    ptr = PyObject_Malloc(0);
+    if (ptr == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "PyObject_Malloc(0) returns NULL");
+        return NULL;
+    }
+    PyObject_Free(ptr);
+
+    Py_RETURN_NONE;
+}
+
+typedef struct {
+    PyMemAllocator alloc;
+
+    size_t malloc_size;
+    void *realloc_ptr;
+    size_t realloc_new_size;
+    void *free_ptr;
+} alloc_hook_t;
+
+static void* hook_malloc (void* ctx, size_t size)
+{
+    alloc_hook_t *hook = (alloc_hook_t *)ctx;
+    hook->malloc_size = size;
+    return hook->alloc.malloc(hook->alloc.ctx, size);
+}
+
+static void* hook_realloc (void* ctx, void* ptr, size_t new_size)
+{
+    alloc_hook_t *hook = (alloc_hook_t *)ctx;
+    hook->realloc_ptr = ptr;
+    hook->realloc_new_size = new_size;
+    return hook->alloc.realloc(hook->alloc.ctx, ptr, new_size);
+}
+
+static void hook_free (void *ctx, void *ptr)
+{
+    alloc_hook_t *hook = (alloc_hook_t *)ctx;
+    hook->free_ptr = ptr;
+    hook->alloc.free(hook->alloc.ctx, ptr);
+}
+
+static PyObject *
+test_setallocators(PyMemAllocatorDomain domain)
+{
+    PyObject *res = NULL;
+    const char *error_msg;
+    alloc_hook_t hook;
+    PyMemAllocator alloc;
+    size_t size, size2;
+    void *ptr, *ptr2;
+
+    hook.malloc_size = 0;
+    hook.realloc_ptr = NULL;
+    hook.realloc_new_size = 0;
+    hook.free_ptr = NULL;
+
+    alloc.ctx = &hook;
+    alloc.malloc = &hook_malloc;
+    alloc.realloc = &hook_realloc;
+    alloc.free = &hook_free;
+    PyMem_GetAllocator(domain, &hook.alloc);
+    PyMem_SetAllocator(domain, &alloc);
+
+    size = 42;
+    switch(domain)
+    {
+    case PYMEM_DOMAIN_RAW: ptr = PyMem_RawMalloc(size); break;
+    case PYMEM_DOMAIN_MEM: ptr = PyMem_Malloc(size); break;
+    case PYMEM_DOMAIN_OBJ: ptr = PyObject_Malloc(size); break;
+    default: ptr = NULL; break;
+    }
+
+    if (ptr == NULL) {
+        error_msg = "malloc failed";
+        goto fail;
+    }
+
+    if (hook.malloc_size != size) {
+        error_msg = "malloc invalid size";
+        goto fail;
+    }
+
+    size2 = 200;
+    switch(domain)
+    {
+    case PYMEM_DOMAIN_RAW: ptr2 = PyMem_RawRealloc(ptr, size2); break;
+    case PYMEM_DOMAIN_MEM: ptr2 = PyMem_Realloc(ptr, size2); break;
+    case PYMEM_DOMAIN_OBJ: ptr2 = PyObject_Realloc(ptr, size2); break;
+    }
+
+    if (ptr2 == NULL) {
+        error_msg = "realloc failed";
+        goto fail;
+    }
+
+    if (hook.realloc_ptr != ptr
+        || hook.realloc_new_size != size2) {
+        error_msg = "realloc invalid parameters";
+        goto fail;
+    }
+
+    switch(domain)
+    {
+    case PYMEM_DOMAIN_RAW: PyMem_RawFree(ptr2); break;
+    case PYMEM_DOMAIN_MEM: PyMem_Free(ptr2); break;
+    case PYMEM_DOMAIN_OBJ: PyObject_Free(ptr2); break;
+    }
+
+    if (hook.free_ptr != ptr2) {
+        error_msg = "free invalid pointer";
+        goto fail;
+    }
+
+    Py_INCREF(Py_None);
+    res = Py_None;
+    goto finally;
+
+fail:
+    PyErr_SetString(PyExc_RuntimeError, error_msg);
+
+finally:
+    PyMem_SetAllocator(domain, &hook.alloc);
+    return res;
+}
+
+static PyObject *
+test_pymem_setrawallocators(PyObject *self)
+{
+    return test_setallocators(PYMEM_DOMAIN_RAW);
+}
+
+static PyObject *
+test_pymem_setallocators(PyObject *self)
+{
+    return test_setallocators(PYMEM_DOMAIN_MEM);
+}
+
+static PyObject *
+test_pyobject_setallocators(PyObject *self)
+{
+    return test_setallocators(PYMEM_DOMAIN_OBJ);
+}
 
 static PyMethodDef TestMethods[] = {
     {"raise_exception",         raise_exception,                 METH_VARARGS},
@@ -2487,6 +2777,10 @@ static PyMethodDef TestMethods[] = {
     {"test_dict_iteration",     (PyCFunction)test_dict_iteration,METH_NOARGS},
     {"test_lazy_hash_inheritance",      (PyCFunction)test_lazy_hash_inheritance,METH_NOARGS},
     {"test_long_api",           (PyCFunction)test_long_api,      METH_NOARGS},
+    {"test_xincref_doesnt_leak",(PyCFunction)test_xincref_doesnt_leak,      METH_NOARGS},
+    {"test_incref_doesnt_leak", (PyCFunction)test_incref_doesnt_leak,      METH_NOARGS},
+    {"test_xdecref_doesnt_leak",(PyCFunction)test_xdecref_doesnt_leak,      METH_NOARGS},
+    {"test_decref_doesnt_leak", (PyCFunction)test_decref_doesnt_leak,      METH_NOARGS},
     {"test_long_and_overflow", (PyCFunction)test_long_and_overflow,
      METH_NOARGS},
     {"test_long_as_double",     (PyCFunction)test_long_as_double,METH_NOARGS},
@@ -2574,6 +2868,15 @@ static PyMethodDef TestMethods[] = {
     {"pytime_object_to_time_t", test_pytime_object_to_time_t,  METH_VARARGS},
     {"pytime_object_to_timeval", test_pytime_object_to_timeval,  METH_VARARGS},
     {"pytime_object_to_timespec", test_pytime_object_to_timespec,  METH_VARARGS},
+    {"with_tp_del",             with_tp_del,                     METH_VARARGS},
+    {"test_pymem",
+     (PyCFunction)test_pymem_alloc0, METH_NOARGS},
+    {"test_pymem_alloc0",
+     (PyCFunction)test_pymem_setrawallocators, METH_NOARGS},
+    {"test_pymem_setallocators",
+     (PyCFunction)test_pymem_setallocators, METH_NOARGS},
+    {"test_pyobject_setallocators",
+     (PyCFunction)test_pyobject_setallocators, METH_NOARGS},
     {NULL, NULL} /* sentinel */
 };
 
