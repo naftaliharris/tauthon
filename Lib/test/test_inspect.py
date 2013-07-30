@@ -8,6 +8,7 @@ import datetime
 import collections
 import os
 import shutil
+import functools
 from os.path import normcase
 
 from test.support import run_unittest, TESTFN, DirsOnSysPath
@@ -401,14 +402,14 @@ class TestBuggyCases(GetSourceBase):
             unicodedata.__file__[-4:] in (".pyc", ".pyo"),
         "unicodedata is not an external binary module")
     def test_findsource_binary(self):
-        self.assertRaises(IOError, inspect.getsource, unicodedata)
-        self.assertRaises(IOError, inspect.findsource, unicodedata)
+        self.assertRaises(OSError, inspect.getsource, unicodedata)
+        self.assertRaises(OSError, inspect.findsource, unicodedata)
 
     def test_findsource_code_in_linecache(self):
         lines = ["x=1"]
         co = compile(lines[0], "_dynamically_created_file", "exec")
-        self.assertRaises(IOError, inspect.findsource, co)
-        self.assertRaises(IOError, inspect.getsource, co)
+        self.assertRaises(OSError, inspect.findsource, co)
+        self.assertRaises(OSError, inspect.getsource, co)
         linecache.cache[co.co_filename] = (1, None, lines, co.co_filename)
         try:
             self.assertEqual(inspect.findsource(co), (lines,0))
@@ -1719,6 +1720,17 @@ class TestSignatureObject(unittest.TestCase):
                          ((('b', ..., ..., "positional_or_keyword"),),
                           ...))
 
+        # Test we handle __signature__ partway down the wrapper stack
+        def wrapped_foo_call():
+            pass
+        wrapped_foo_call.__wrapped__ = Foo.__call__
+
+        self.assertEqual(self.signature(wrapped_foo_call),
+                         ((('a', ..., ..., "positional_or_keyword"),
+                           ('b', ..., ..., "positional_or_keyword")),
+                          ...))
+
+
     def test_signature_on_class(self):
         class C:
             def __init__(self, a):
@@ -1833,6 +1845,10 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(Wrapped),
                          ((('a', ..., ..., "positional_or_keyword"),),
                           ...))
+        # wrapper loop:
+        Wrapped.__wrapped__ = Wrapped
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            self.signature(Wrapped)
 
     def test_signature_on_lambdas(self):
         self.assertEqual(self.signature((lambda a=10: a)),
@@ -2284,6 +2300,62 @@ class TestBoundArguments(unittest.TestCase):
         self.assertNotEqual(ba, ba4)
 
 
+class TestUnwrap(unittest.TestCase):
+
+    def test_unwrap_one(self):
+        def func(a, b):
+            return a + b
+        wrapper = functools.lru_cache(maxsize=20)(func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_unwrap_several(self):
+        def func(a, b):
+            return a + b
+        wrapper = func
+        for __ in range(10):
+            @functools.wraps(wrapper)
+            def wrapper():
+                pass
+        self.assertIsNot(wrapper.__wrapped__, func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_stop(self):
+        def func1(a, b):
+            return a + b
+        @functools.wraps(func1)
+        def func2():
+            pass
+        @functools.wraps(func2)
+        def wrapper():
+            pass
+        func2.stop_here = 1
+        unwrapped = inspect.unwrap(wrapper,
+                                   stop=(lambda f: hasattr(f, "stop_here")))
+        self.assertIs(unwrapped, func2)
+
+    def test_cycle(self):
+        def func1(): pass
+        func1.__wrapped__ = func1
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+
+        def func2(): pass
+        func2.__wrapped__ = func1
+        func1.__wrapped__ = func2
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func2)
+
+    def test_unhashable(self):
+        def func(): pass
+        func.__wrapped__ = None
+        class C:
+            __hash__ = None
+            __wrapped__ = func
+        self.assertIsNone(inspect.unwrap(C()))
+
+
 def test_main():
     run_unittest(
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
@@ -2291,7 +2363,7 @@ def test_main():
         TestGetcallargsFunctions, TestGetcallargsMethods,
         TestGetcallargsUnboundMethods, TestGetattrStatic, TestGetGeneratorState,
         TestNoEOL, TestSignatureObject, TestSignatureBind, TestParameterObject,
-        TestBoundArguments, TestGetClosureVars
+        TestBoundArguments, TestGetClosureVars, TestUnwrap
     )
 
 if __name__ == "__main__":
