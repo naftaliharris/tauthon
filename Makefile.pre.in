@@ -127,7 +127,6 @@ CONFINCLUDEPY=	$(CONFINCLUDEDIR)/python$(LDVERSION)
 # Symbols used for using shared libraries
 SHLIB_SUFFIX=	@SHLIB_SUFFIX@
 EXT_SUFFIX=	@EXT_SUFFIX@
-SO=		$(SHLIB_SUFFIX)
 LDSHARED=	@LDSHARED@ $(PY_LDFLAGS)
 BLDSHARED=	@BLDSHARED@ $(PY_LDFLAGS)
 LDCXXSHARED=	@LDCXXSHARED@
@@ -211,6 +210,12 @@ HOST_GNU_TYPE=	@host@
 # The task to run while instrument when building the profile-opt target
 PROFILE_TASK=	$(srcdir)/Tools/pybench/pybench.py -n 2 --with-gc --with-syscheck
 #PROFILE_TASK=	$(srcdir)/Lib/test/regrtest.py
+
+# report files for gcov / lcov coverage report
+COVERAGE_INFO=	$(abs_builddir)/coverage.info
+COVERAGE_REPORT=$(abs_builddir)/lcov-report
+COVERAGE_REPORT_OPTIONS=--no-branch-coverage --title "CPython lcov report"
+
 
 # === Definitions added by makesetup ===
 
@@ -440,7 +445,7 @@ LIBRARY_OBJS=	\
 
 # Default target
 all:		build_all
-build_all:	$(BUILDPYTHON) oldsharedmods sharedmods gdbhooks Modules/_testembed
+build_all:	$(BUILDPYTHON) oldsharedmods sharedmods gdbhooks Modules/_testembed python-config
 
 # Compile a binary with gcc profile guided optimization.
 profile-opt:
@@ -464,11 +469,48 @@ run_profile_task:
 build_all_use_profile:
 	$(MAKE) all CFLAGS="$(CFLAGS) -fprofile-use -fprofile-correction"
 
+# Compile and run with gcov
+.PHONY=coverage coverage-lcov coverage-report
 coverage:
 	@echo "Building with support for coverage checking:"
-	$(MAKE) clean
+	$(MAKE) clean profile-removal
 	$(MAKE) all CFLAGS="$(CFLAGS) -O0 -pg -fprofile-arcs -ftest-coverage" LIBS="$(LIBS) -lgcov"
 
+coverage-lcov:
+	@echo "Creating Coverage HTML report with LCOV:"
+	@rm -f $(COVERAGE_INFO)
+	@rm -rf $(COVERAGE_REPORT)
+	@lcov --capture --directory $(abs_builddir) \
+	    --base-directory $(realpath $(abs_builddir)) \
+	    --path $(realpath $(abs_srcdir)) \
+	    --output-file $(COVERAGE_INFO)
+	: # remove 3rd party modules and system headers
+	@lcov --remove $(COVERAGE_INFO) \
+	    '*/Modules/_ctypes/libffi*/*' \
+	    '*/Modules/_sha3/keccak/*' \
+	    '*/Modules/_decimal/libmpdec/*' \
+	    '*/Modules/expat/*' \
+	    '*/Modules/zlib/*' \
+	    '*/Include/*' \
+	    '/usr/include/*' \
+	    '/usr/local/include/*' \
+	    --output-file $(COVERAGE_INFO)
+	@genhtml $(COVERAGE_INFO) --output-directory $(COVERAGE_REPORT) \
+	    $(COVERAGE_REPORT_OPTIONS)
+	@echo
+	@echo "lcov report at $(COVERAGE_REPORT)/index.html"
+	@echo
+
+coverage-report:
+	: # force rebuilding of parser and importlib
+	@touch $(GRAMMAR_INPUT)
+	@touch $(srcdir)/Lib/importlib/_bootstrap.py
+	: # build with coverage info
+	$(MAKE) coverage
+	: # run tests, ignore failures
+	$(TESTRUNNER) $(TESTOPTS) || true
+	: # build lcov report
+	$(MAKE) coverage-lcov
 
 # Build the interpreter
 $(BUILDPYTHON):	Modules/python.o $(LIBRARY) $(LDLIBRARY) $(PY3LIBRARY)
@@ -708,27 +750,31 @@ Objects/unicodectype.o:	$(srcdir)/Objects/unicodectype.c \
 				$(srcdir)/Objects/unicodetype_db.h
 
 BYTESTR_DEPS = \
-		$(srcdir)/Include/bytes_methods.h \
 		$(srcdir)/Objects/stringlib/count.h \
 		$(srcdir)/Objects/stringlib/ctype.h \
-		$(srcdir)/Objects/stringlib/eq.h \
 		$(srcdir)/Objects/stringlib/fastsearch.h \
 		$(srcdir)/Objects/stringlib/find.h \
-		$(srcdir)/Objects/stringlib/find_max_char.h \
+		$(srcdir)/Objects/stringlib/join.h \
 		$(srcdir)/Objects/stringlib/partition.h \
 		$(srcdir)/Objects/stringlib/split.h \
 		$(srcdir)/Objects/stringlib/stringdefs.h \
-		$(srcdir)/Objects/stringlib/transmogrify.h \
-		$(srcdir)/Objects/stringlib/unicodedefs.h \
-		$(srcdir)/Objects/stringlib/localeutil.h \
-		$(srcdir)/Objects/stringlib/undef.h
+		$(srcdir)/Objects/stringlib/transmogrify.h
 
-UNICODE_DEPS = $(BYTESTR_DEPS) \
+UNICODE_DEPS = \
 		$(srcdir)/Objects/stringlib/asciilib.h \
 		$(srcdir)/Objects/stringlib/codecs.h \
+		$(srcdir)/Objects/stringlib/count.h \
+		$(srcdir)/Objects/stringlib/fastsearch.h \
+		$(srcdir)/Objects/stringlib/find.h \
+		$(srcdir)/Objects/stringlib/find_max_char.h \
+		$(srcdir)/Objects/stringlib/localeutil.h \
+		$(srcdir)/Objects/stringlib/partition.h \
+		$(srcdir)/Objects/stringlib/replace.h \
+		$(srcdir)/Objects/stringlib/split.h \
 		$(srcdir)/Objects/stringlib/ucs1lib.h \
 		$(srcdir)/Objects/stringlib/ucs2lib.h \
 		$(srcdir)/Objects/stringlib/ucs4lib.h \
+		$(srcdir)/Objects/stringlib/undef.h \
 		$(srcdir)/Objects/stringlib/unicode_format.h \
 		$(srcdir)/Objects/stringlib/unicodedefs.h
 
@@ -745,9 +791,6 @@ $(OPCODETARGETS_H): $(OPCODETARGETGEN_FILES)
 	$(OPCODETARGETGEN) $(OPCODETARGETS_H)
 
 Python/ceval.o: $(OPCODETARGETS_H) $(srcdir)/Python/ceval_gil.h
-
-Python/formatter_unicode.o: $(srcdir)/Python/formatter_unicode.c \
-				$(BYTESTR_DEPS)
 
 Python/frozen.o: Python/importlib.h
 
@@ -945,7 +988,7 @@ altbininstall: $(BUILDPYTHON)
 		fi; \
 		(cd $(DESTDIR)$(BINDIR); $(LN) python$(LDVERSION)$(EXE) python$(VERSION)$(EXE)); \
 	fi
-	if test -f $(LDLIBRARY); then \
+	if test -f $(LDLIBRARY) && test "$(PYTHONFRAMEWORKDIR)" = "no-framework" ; then \
 		if test -n "$(DLLLIBRARY)" ; then \
 			$(INSTALL_SHARED) $(DLLLIBRARY) $(DESTDIR)$(BINDIR); \
 		else \
@@ -1152,10 +1195,12 @@ $(srcdir)/Lib/$(PLATDIR):
 	fi; \
 	cd $(srcdir)/Lib/$(PLATDIR); $(RUNSHARED) ./regen
 
-python-config: $(srcdir)/Misc/python-config.in
+python-config: $(srcdir)/Misc/python-config.in Misc/python-config.sh
 	# Substitution happens here, as the completely-expanded BINDIR
 	# is not available in configure
-	sed -e "s,@EXENAME@,$(BINDIR)/python$(LDVERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config
+	sed -e "s,@EXENAME@,$(BINDIR)/python$(LDVERSION)$(EXE)," < $(srcdir)/Misc/python-config.in >python-config.py
+	# Replace makefile compat. variable references with shell script compat. ones; $(VAR) -> ${VAR}
+	sed -e 's,\$$(\([A-Za-z0-9_]*\)),\$$\{\1\},g' < Misc/python-config.sh >python-config
 
 # Install the include files
 INCLDIRSTOMAKE=$(INCLUDEDIR) $(CONFINCLUDEDIR) $(INCLUDEPY) $(CONFINCLUDEPY)
@@ -1213,8 +1258,8 @@ libainstall:	all python-config
 	$(INSTALL_DATA) Misc/python.pc $(DESTDIR)$(LIBPC)/python-$(VERSION).pc
 	$(INSTALL_SCRIPT) $(srcdir)/Modules/makesetup $(DESTDIR)$(LIBPL)/makesetup
 	$(INSTALL_SCRIPT) $(srcdir)/install-sh $(DESTDIR)$(LIBPL)/install-sh
+	$(INSTALL_SCRIPT) python-config.py $(DESTDIR)$(LIBPL)/python-config.py
 	$(INSTALL_SCRIPT) python-config $(DESTDIR)$(BINDIR)/python$(LDVERSION)-config
-	rm python-config
 	@if [ -s Modules/python.exp -a \
 		"`echo $(MACHDEP) | sed 's/^\(...\).*/\1/'`" = "aix" ]; then \
 		echo; echo "Installing support files for building shared extension modules on AIX:"; \
@@ -1394,6 +1439,8 @@ clean: pycremoval
 
 profile-removal:
 	find . -name '*.gc??' -exec rm -f {} ';'
+	rm -f $(COVERAGE_INFO)
+	rm -rf $(COVERAGE_REPORT)
 
 clobber: clean profile-removal
 	-rm -f $(BUILDPYTHON) $(PGEN) $(LIBRARY) $(LDLIBRARY) $(DLLLIBRARY) \
@@ -1401,6 +1448,7 @@ clobber: clean profile-removal
 		config.cache config.log pyconfig.h Modules/config.c
 	-rm -rf build platform
 	-rm -rf $(PYTHONFRAMEWORKDIR)
+	-rm -f python-config.py python-config
 
 # Make things extra clean, before making a distribution:
 # remove all generated files, even Makefile[.pre]

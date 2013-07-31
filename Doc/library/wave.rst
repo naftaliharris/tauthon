@@ -39,6 +39,11 @@ The :mod:`wave` module defines the following function and exception:
    :meth:`close` method is called; it is the caller's responsibility to close
    the file object.
 
+   The :func:`.open` function may be used in a :keyword:`with` statement.  When
+   the :keyword:`with` block completes, the :meth:`Wave_read.close()
+   <wave.Wave_read.close>` or :meth:`Wave_write.close()
+   <wave.Wave_write.close()>` method is called.
+
 
 .. function:: openfp(file, mode)
 
@@ -98,8 +103,9 @@ Wave_read objects, as returned by :func:`.open`, have the following methods:
 
 .. method:: Wave_read.getparams()
 
-   Returns a tuple ``(nchannels, sampwidth, framerate, nframes, comptype,
-   compname)``, equivalent to output of the :meth:`get\*` methods.
+   Returns a :func:`~collections.namedtuple` ``(nchannels, sampwidth,
+   framerate, nframes, comptype, compname)``, equivalent to output of the
+   :meth:`get\*` methods.
 
 
 .. method:: Wave_read.readframes(n)

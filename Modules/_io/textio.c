@@ -173,7 +173,8 @@ PyTypeObject PyTextIOBase_Type = {
     0,                          /*tp_getattro*/
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,  /*tp_flags*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
+        | Py_TPFLAGS_HAVE_FINALIZE,  /*tp_flags*/
     textiobase_doc,             /* tp_doc */
     0,                          /* tp_traverse */
     0,                          /* tp_clear */
@@ -192,6 +193,16 @@ PyTypeObject PyTextIOBase_Type = {
     0,                          /* tp_init */
     0,                          /* tp_alloc */
     0,                          /* tp_new */
+    0,                          /* tp_free */
+    0,                          /* tp_is_gc */
+    0,                          /* tp_bases */
+    0,                          /* tp_mro */
+    0,                          /* tp_cache */
+    0,                          /* tp_subclasses */
+    0,                          /* tp_weaklist */
+    0,                          /* tp_del */
+    0,                          /* tp_version_tag */
+    0,                          /* tp_finalize */
 };
 
 
@@ -691,7 +702,7 @@ typedef struct
     char seekable;
     char has_read1;
     char telling;
-    char deallocating;
+    char finalizing;
     /* Specialized encoding func (see below) */
     encodefunc_t encodefunc;
     /* Whether or not it's the start of the stream */
@@ -758,7 +769,7 @@ utf16_encode(textio *self, PyObject *text)
 {
     if (!self->encoding_start_of_stream) {
         /* Skip the BOM and use native byte ordering */
-#if defined(WORDS_BIGENDIAN)
+#if PY_BIG_ENDIAN
         return utf16be_encode(self, text);
 #else
         return utf16le_encode(self, text);
@@ -787,7 +798,7 @@ utf32_encode(textio *self, PyObject *text)
 {
     if (!self->encoding_start_of_stream) {
         /* Skip the BOM and use native byte ordering */
-#if defined(WORDS_BIGENDIAN)
+#if PY_BIG_ENDIAN
         return utf32be_encode(self, text);
 #else
         return utf32le_encode(self, text);
@@ -1112,8 +1123,6 @@ textiowrapper_init(textio *self, PyObject *args, PyObject *kwds)
 static int
 _textiowrapper_clear(textio *self)
 {
-    if (self->ok && _PyIOBase_finalize((PyObject *) self) < 0)
-        return -1;
     self->ok = 0;
     Py_CLEAR(self->buffer);
     Py_CLEAR(self->encoding);
@@ -1131,9 +1140,10 @@ _textiowrapper_clear(textio *self)
 static void
 textiowrapper_dealloc(textio *self)
 {
-    self->deallocating = 1;
-    if (_textiowrapper_clear(self) < 0)
+    self->finalizing = 1;
+    if (_PyIOBase_finalize((PyObject *) self) < 0)
         return;
+    _textiowrapper_clear(self);
     _PyObject_GC_UNTRACK(self);
     if (self->weakreflist != NULL)
         PyObject_ClearWeakRefs((PyObject *)self);
@@ -1937,10 +1947,7 @@ typedef struct {
 
 #define COOKIE_BUF_LEN      (sizeof(Py_off_t) + 3 * sizeof(int) + sizeof(char))
 
-#if defined(WORDS_BIGENDIAN)
-
-# define IS_LITTLE_ENDIAN   0
-
+#if PY_BIG_ENDIAN
 /* We want the least significant byte of start_pos to also be the least
    significant byte of the cookie, which means that in big-endian mode we
    must copy the fields in reverse order. */
@@ -1952,9 +1959,6 @@ typedef struct {
 # define OFF_NEED_EOF       0
 
 #else
-
-# define IS_LITTLE_ENDIAN   1
-
 /* Little-endian mode: the least significant byte of start_pos will
    naturally end up the least significant byte of the cookie. */
 
@@ -1975,7 +1979,7 @@ textiowrapper_parse_cookie(cookie_type *cookie, PyObject *cookieObj)
         return -1;
 
     if (_PyLong_AsByteArray(cookieLong, buffer, sizeof(buffer),
-                            IS_LITTLE_ENDIAN, 0) < 0) {
+                            PY_LITTLE_ENDIAN, 0) < 0) {
         Py_DECREF(cookieLong);
         return -1;
     }
@@ -2001,9 +2005,9 @@ textiowrapper_build_cookie(cookie_type *cookie)
     memcpy(buffer + OFF_CHARS_TO_SKIP, &cookie->chars_to_skip, sizeof(cookie->chars_to_skip));
     memcpy(buffer + OFF_NEED_EOF, &cookie->need_eof, sizeof(cookie->need_eof));
 
-    return _PyLong_FromByteArray(buffer, sizeof(buffer), IS_LITTLE_ENDIAN, 0);
+    return _PyLong_FromByteArray(buffer, sizeof(buffer),
+                                 PY_LITTLE_ENDIAN, 0);
 }
-#undef IS_LITTLE_ENDIAN
 
 static int
 _textiowrapper_decoder_setstate(textio *self, cookie_type *cookie)
@@ -2353,7 +2357,7 @@ textiowrapper_tell(textio *self, PyObject *args)
 
     /* Note our initial start point. */
     cookie.start_pos += skip_bytes;
-    cookie.chars_to_skip = chars_to_skip;
+    cookie.chars_to_skip = Py_SAFE_DOWNCAST(chars_to_skip, Py_ssize_t, int);
     if (chars_to_skip == 0)
         goto finally;
 
@@ -2579,7 +2583,7 @@ textiowrapper_close(textio *self, PyObject *args)
     }
     else {
         PyObject *exc = NULL, *val, *tb;
-        if (self->deallocating) {
+        if (self->finalizing) {
             res = _PyObject_CallMethodId(self->buffer, &PyId__dealloc_warn, "O", self);
             if (res)
                 Py_DECREF(res);
@@ -2740,6 +2744,7 @@ static PyMemberDef textiowrapper_members[] = {
     {"encoding", T_OBJECT, offsetof(textio, encoding), READONLY},
     {"buffer", T_OBJECT, offsetof(textio, buffer), READONLY},
     {"line_buffering", T_BOOL, offsetof(textio, line_buffering), READONLY},
+    {"_finalizing", T_BOOL, offsetof(textio, finalizing), 0},
     {NULL}
 };
 
@@ -2776,7 +2781,7 @@ PyTypeObject PyTextIOWrapper_Type = {
     0,                          /*tp_setattro*/
     0,                          /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE
-            | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+        | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_HAVE_FINALIZE, /*tp_flags*/
     textiowrapper_doc,          /* tp_doc */
     (traverseproc)textiowrapper_traverse, /* tp_traverse */
     (inquiry)textiowrapper_clear, /* tp_clear */
@@ -2795,4 +2800,14 @@ PyTypeObject PyTextIOWrapper_Type = {
     (initproc)textiowrapper_init, /* tp_init */
     0,                          /* tp_alloc */
     PyType_GenericNew,          /* tp_new */
+    0,                          /* tp_free */
+    0,                          /* tp_is_gc */
+    0,                          /* tp_bases */
+    0,                          /* tp_mro */
+    0,                          /* tp_cache */
+    0,                          /* tp_subclasses */
+    0,                          /* tp_weaklist */
+    0,                          /* tp_del */
+    0,                          /* tp_version_tag */
+    0,                          /* tp_finalize */
 };

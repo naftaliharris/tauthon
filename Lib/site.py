@@ -58,13 +58,17 @@ Note that bletch is omitted because it doesn't exist; bar precedes foo
 because bar.pth comes alphabetically before foo.pth; and spam is
 omitted because it is not mentioned in either path configuration file.
 
-After these path manipulations, an attempt is made to import a module
+The readline module is also automatically configured to enable
+completion for systems that support it.  This can be overriden in
+sitecustomize, usercustomize or PYTHONSTARTUP.
+
+After these operations, an attempt is made to import a module
 named sitecustomize, which can perform arbitrary additional
 site-specific customizations.  If this import fails with an
 ImportError exception, it is silently ignored.
-
 """
 
+import atexit
 import sys
 import os
 import re
@@ -81,6 +85,25 @@ ENABLE_USER_SITE = None
 # functions, through the main() function when Python starts.
 USER_SITE = None
 USER_BASE = None
+
+
+_no_builtin = object()
+
+def _patch_builtins(**items):
+    # When patching builtins, we make some objects almost immortal
+    # (builtins are only reclaimed at the very end of the interpreter
+    #  shutdown sequence).  To avoid keeping to many references alive,
+    # we register callbacks to undo our builtins additions.
+    old_items = {k: getattr(builtins, k, _no_builtin) for k in items}
+    def unpatch(old_items=old_items):
+        for k, v in old_items.items():
+            if v is _no_builtin:
+                delattr(builtins, k)
+            else:
+                setattr(builtins, k, v)
+    for k, v in items.items():
+        setattr(builtins, k, v)
+    atexit.register(unpatch)
 
 
 def makepath(*paths):
@@ -146,14 +169,14 @@ def addpackage(sitedir, name, known_paths):
        and add that to known_paths, or execute it if it starts with 'import '.
     """
     if known_paths is None:
-        _init_pathinfo()
+        known_paths = _init_pathinfo()
         reset = 1
     else:
         reset = 0
     fullname = os.path.join(sitedir, name)
     try:
         f = open(fullname, "r")
-    except IOError:
+    except OSError:
         return
     with f:
         for n, line in enumerate(f):
@@ -196,7 +219,7 @@ def addsitedir(sitedir, known_paths=None):
         known_paths.add(sitedircase)
     try:
         names = os.listdir(sitedir)
-    except os.error:
+    except OSError:
         return
     names = [name for name in names if name.endswith(".pth")]
     for name in sorted(names):
@@ -300,9 +323,7 @@ def getsitepackages(prefixes=None):
             continue
         seen.add(prefix)
 
-        if sys.platform in ('os2emx', 'riscos'):
-            sitepackages.append(os.path.join(prefix, "Lib", "site-packages"))
-        elif os.sep == '/':
+        if os.sep == '/':
             sitepackages.append(os.path.join(prefix, "lib",
                                         "python" + sys.version[:3],
                                         "site-packages"))
@@ -328,23 +349,6 @@ def addsitepackages(known_paths, prefixes=None):
             addsitedir(sitedir, known_paths)
 
     return known_paths
-
-def setBEGINLIBPATH():
-    """The OS/2 EMX port has optional extension modules that do double duty
-    as DLLs (and must use the .DLL file extension) for other extensions.
-    The library search path needs to be amended so these will be found
-    during module import.  Use BEGINLIBPATH so that these are at the start
-    of the library search path.
-
-    """
-    dllpath = os.path.join(sys.prefix, "Lib", "lib-dynload")
-    libpath = os.environ['BEGINLIBPATH'].split(';')
-    if libpath[-1]:
-        libpath.append(dllpath)
-    else:
-        libpath[-1] = dllpath
-    os.environ['BEGINLIBPATH'] = ';'.join(libpath)
-
 
 def setquit():
     """Define new builtins 'quit' and 'exit'.
@@ -373,8 +377,7 @@ def setquit():
             except:
                 pass
             raise SystemExit(code)
-    builtins.quit = Quitter('quit')
-    builtins.exit = Quitter('exit')
+    _patch_builtins(quit=Quitter('quit'), exit=Quitter('exit'))
 
 
 class _Printer(object):
@@ -398,11 +401,10 @@ class _Printer(object):
             for filename in self.__files:
                 filename = os.path.join(dir, filename)
                 try:
-                    fp = open(filename, "r")
-                    data = fp.read()
-                    fp.close()
+                    with open(filename, "r") as fp:
+                        data = fp.read()
                     break
-                except IOError:
+                except OSError:
                     pass
             if data:
                 break
@@ -440,20 +442,20 @@ class _Printer(object):
 
 def setcopyright():
     """Set 'copyright' and 'credits' in builtins"""
-    builtins.copyright = _Printer("copyright", sys.copyright)
+    _patch_builtins(copyright=_Printer("copyright", sys.copyright))
     if sys.platform[:4] == 'java':
-        builtins.credits = _Printer(
+        _patch_builtins(credits=_Printer(
             "credits",
-            "Jython is maintained by the Jython developers (www.jython.org).")
+            "Jython is maintained by the Jython developers (www.jython.org)."))
     else:
-        builtins.credits = _Printer("credits", """\
+        _patch_builtins(credits=_Printer("credits", """\
     Thanks to CWI, CNRI, BeOpen.com, Zope Corporation and a cast of thousands
-    for supporting Python development.  See www.python.org for more information.""")
+    for supporting Python development.  See www.python.org for more information."""))
     here = os.path.dirname(os.__file__)
-    builtins.license = _Printer(
+    _patch_builtins(license=_Printer(
         "license", "See http://www.python.org/%.3s/license.html" % sys.version,
         ["LICENSE.txt", "LICENSE"],
-        [os.path.join(here, os.pardir), here, os.curdir])
+        [os.path.join(here, os.pardir), here, os.curdir]))
 
 
 class _Helper(object):
@@ -470,7 +472,49 @@ class _Helper(object):
         return pydoc.help(*args, **kwds)
 
 def sethelper():
-    builtins.help = _Helper()
+    _patch_builtins(help=_Helper())
+
+def enablerlcompleter():
+    """Enable default readline configuration on interactive prompts, by
+    registering a sys.__interactivehook__.
+
+    If the readline module can be imported, the hook will set the Tab key
+    as completion key and register ~/.python_history as history file.
+    This can be overriden in the sitecustomize or usercustomize module,
+    or in a PYTHONSTARTUP file.
+    """
+    def register_readline():
+        import atexit
+        try:
+            import readline
+            import rlcompleter
+        except ImportError:
+            return
+
+        # Reading the initialization (config) file may not be enough to set a
+        # completion key, so we set one first and then read the file
+        if 'libedit' in getattr(readline, '__doc__', ''):
+            readline.parse_and_bind('bind ^I rl_complete')
+        else:
+            readline.parse_and_bind('tab: complete')
+
+        try:
+            readline.read_init_file()
+        except OSError:
+            # An OSError here could have many causes, but the most likely one
+            # is that there's no .inputrc file (or .editrc file in the case of
+            # Mac OS X + libedit) in the expected location.  In that case, we
+            # want to ignore the exception.
+            pass
+
+        history = os.path.join(os.path.expanduser('~'), '.python_history')
+        try:
+            readline.read_history_file(history)
+        except IOError:
+            pass
+        atexit.register(readline.write_history_file, history)
+
+    sys.__interactivehook__ = register_readline
 
 def aliasmbcs():
     """On Windows, some default encodings are not provided by Python,
@@ -588,11 +632,10 @@ def main():
         ENABLE_USER_SITE = check_enableusersite()
     known_paths = addusersitepackages(known_paths)
     known_paths = addsitepackages(known_paths)
-    if sys.platform == 'os2emx':
-        setBEGINLIBPATH()
     setquit()
     setcopyright()
     sethelper()
+    enablerlcompleter()
     aliasmbcs()
     execsitecustomize()
     if ENABLE_USER_SITE:

@@ -7,7 +7,9 @@
 # Licensed to PSF under a Contributor Agreement.
 #
 
+import io
 import os
+import pickle
 import sys
 import signal
 import errno
@@ -43,6 +45,15 @@ class ForkingPickler(Pickler):
     @classmethod
     def register(cls, type, reduce):
         cls._extra_reducers[type] = reduce
+
+    @staticmethod
+    def dumps(obj):
+        buf = io.BytesIO()
+        ForkingPickler(buf, pickle.HIGHEST_PROTOCOL).dump(obj)
+        return buf.getbuffer()
+
+    loads = pickle.loads
+
 
 def _reduce_method(m):
     if m.__self__ is None:
@@ -113,7 +124,7 @@ if sys.platform != 'win32':
                 while True:
                     try:
                         pid, sts = os.waitpid(self.pid, flag)
-                    except os.error as e:
+                    except OSError as e:
                         if e.errno == errno.EINTR:
                             continue
                         # Child process not yet created. See #1731717
@@ -438,7 +449,8 @@ def prepare(data):
         elif main_name != 'ipython':
             # Main modules not actually called __main__.py may
             # contain additional code that should still be executed
-            import imp
+            import importlib
+            import types
 
             if main_path is None:
                 dirs = None
@@ -448,27 +460,18 @@ def prepare(data):
                 dirs = [os.path.dirname(main_path)]
 
             assert main_name not in sys.modules, main_name
-            file, path_name, etc = imp.find_module(main_name, dirs)
+            sys.modules.pop('__mp_main__', None)
+            # We should not try to load __main__
+            # since that would execute 'if __name__ == "__main__"'
+            # clauses, potentially causing a psuedo fork bomb.
+            loader = importlib.find_loader(main_name, path=dirs)
+            main_module = types.ModuleType(main_name)
             try:
-                # We would like to do "imp.load_module('__main__', ...)"
-                # here.  However, that would cause 'if __name__ ==
-                # "__main__"' clauses to be executed.
-                main_module = imp.load_module(
-                    '__parents_main__', file, path_name, etc
-                    )
-            finally:
-                if file:
-                    file.close()
+                loader.init_module_attrs(main_module)
+            except AttributeError:  # init_module_attrs is optional
+                pass
+            main_module.__name__ = '__mp_main__'
+            code = loader.get_code(main_name)
+            exec(code, main_module.__dict__)
 
-            sys.modules['__main__'] = main_module
-            main_module.__name__ = '__main__'
-
-            # Try to make the potentially picklable objects in
-            # sys.modules['__main__'] realize they are in the main
-            # module -- somewhat ugly.
-            for obj in list(main_module.__dict__.values()):
-                try:
-                    if obj.__module__ == '__parents_main__':
-                        obj.__module__ = '__main__'
-                except Exception:
-                    pass
+            sys.modules['__main__'] = sys.modules['__mp_main__'] = main_module
