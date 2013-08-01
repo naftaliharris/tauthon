@@ -41,6 +41,7 @@ typedef struct _symtable_entry {
     PyObject *ste_name;      /* string: name of current block */
     PyObject *ste_varnames;  /* list of function parameters */
     PyObject *ste_children;  /* list of child blocks */
+    PyObject *ste_directives;/* locations of global and nonlocal statements */
     _Py_block_ty ste_type;   /* module, class, or function */
     int ste_unoptimized;     /* false if namespace is optimized */
     int ste_nested;      /* true if block is nested */
@@ -52,6 +53,9 @@ typedef struct _symtable_entry {
     unsigned ste_varkeywords : 1; /* true if block has varkeywords */
     unsigned ste_returns_value : 1;  /* true if namespace uses return with
                                         an argument */
+    unsigned ste_needs_class_closure : 1; /* for class scopes, true if a
+                                             closure over __class__
+                                             should be created */
     int ste_lineno;          /* first line of block */
     int ste_col_offset;      /* offset of first line of block */
     int ste_opt_lineno;      /* lineno of last exec or import * */
