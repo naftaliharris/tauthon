@@ -1789,6 +1789,7 @@ order (MRO) for bases """
             ("__trunc__", int, zero, set(), {}),
             ("__ceil__", math.ceil, zero, set(), {}),
             ("__dir__", dir, empty_seq, set(), {}),
+            ("__round__", round, zero, set(), {}),
             ]
 
         class Checker(object):
@@ -2249,7 +2250,9 @@ order (MRO) for bases """
         minstance = M("m")
         minstance.b = 2
         minstance.a = 1
-        names = [x for x in dir(minstance) if x not in ["__name__", "__doc__"]]
+        default_attributes = ['__name__', '__doc__', '__package__',
+                              '__loader__']
+        names = [x for x in dir(minstance) if x not in default_attributes]
         self.assertEqual(names, ['a', 'b'])
 
         class M2(M):
@@ -3733,18 +3736,8 @@ order (MRO) for bases """
         # bug).
         del c
 
-        # If that didn't blow up, it's also interesting to see whether clearing
-        # the last container slot works: that will attempt to delete c again,
-        # which will cause c to get appended back to the container again
-        # "during" the del.  (On non-CPython implementations, however, __del__
-        # is typically not called again.)
         support.gc_collect()
         self.assertEqual(len(C.container), 1)
-        del C.container[-1]
-        if support.check_impl_detail():
-            support.gc_collect()
-            self.assertEqual(len(C.container), 1)
-            self.assertEqual(C.container[-1].attr, 42)
 
         # Make c mortal again, so that the test framework with -l doesn't report
         # it as a leak.
