@@ -1,7 +1,5 @@
-from test.support import TESTFN, run_unittest
-import os
+from test.support import TESTFN, unlink
 import wave
-import struct
 import unittest
 
 nchannels = 2
@@ -17,10 +15,7 @@ class TestWave(unittest.TestCase):
     def tearDown(self):
         if self.f is not None:
             self.f.close()
-        try:
-            os.remove(TESTFN)
-        except OSError:
-            pass
+        unlink(TESTFN)
 
     def test_it(self, test_rounding=False):
         self.f = wave.open(TESTFN, 'wb')
@@ -58,9 +53,66 @@ class TestWave(unittest.TestCase):
         output = b'\0' * nframes * nchannels * sampwidth
         self.f.writeframes(output)
 
+    def test_getparams(self):
+        self.f = wave.open(TESTFN, 'wb')
+        self.f.setnchannels(nchannels)
+        self.f.setsampwidth(sampwidth)
+        self.f.setframerate(framerate)
+        self.f.close()
 
-def test_main():
-    run_unittest(TestWave)
+        self.f = wave.open(TESTFN, 'rb')
+        params = self.f.getparams()
+        self.assertEqual(params.nchannels, self.f.getnchannels())
+        self.assertEqual(params.nframes, self.f.getnframes())
+        self.assertEqual(params.sampwidth, self.f.getsampwidth())
+        self.assertEqual(params.framerate, self.f.getframerate())
+        self.assertEqual(params.comptype, self.f.getcomptype())
+        self.assertEqual(params.compname, self.f.getcompname())
+
+    def test_wave_write_context_manager_calls_close(self):
+        # Close checks for a minimum header and will raise an error
+        # if it is not set, so this proves that close is called.
+        with self.assertRaises(wave.Error):
+            with wave.open(TESTFN, 'wb') as f:
+                pass
+        print('in test:', f._file)
+        with self.assertRaises(wave.Error):
+            with open(TESTFN, 'wb') as testfile:
+                with wave.open(testfile):
+                    pass
+
+    def test_context_manager_with_open_file(self):
+        with open(TESTFN, 'wb') as testfile:
+            with wave.open(testfile) as f:
+                f.setnchannels(nchannels)
+                f.setsampwidth(sampwidth)
+                f.setframerate(framerate)
+            self.assertFalse(testfile.closed)
+        with open(TESTFN, 'rb') as testfile:
+            with wave.open(testfile) as f:
+                self.assertFalse(f.getfp().closed)
+                params = f.getparams()
+                self.assertEqual(params.nchannels, nchannels)
+                self.assertEqual(params.sampwidth, sampwidth)
+                self.assertEqual(params.framerate, framerate)
+            self.assertIsNone(f.getfp())
+            self.assertFalse(testfile.closed)
+
+    def test_context_manager_with_filename(self):
+        # If the file doesn't get closed, this test won't fail, but it will
+        # produce a resource leak warning.
+        with wave.open(TESTFN, 'wb') as f:
+            f.setnchannels(nchannels)
+            f.setsampwidth(sampwidth)
+            f.setframerate(framerate)
+        with wave.open(TESTFN) as f:
+            self.assertFalse(f.getfp().closed)
+            params = f.getparams()
+            self.assertEqual(params.nchannels, nchannels)
+            self.assertEqual(params.sampwidth, sampwidth)
+            self.assertEqual(params.framerate, framerate)
+        self.assertIsNone(f.getfp())
+
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
