@@ -6,6 +6,8 @@ import textwrap
 import warnings
 import operator
 import codecs
+import gc
+import sysconfig
 
 # count the number of test runs, used to create unique
 # strings to intern in test_intern()
@@ -480,7 +482,7 @@ class SysModuleTest(unittest.TestCase):
     def test_thread_info(self):
         info = sys.thread_info
         self.assertEqual(len(info), 3)
-        self.assertIn(info.name, ('nt', 'os2', 'pthread', 'solaris', None))
+        self.assertIn(info.name, ('nt', 'pthread', 'solaris', None))
         self.assertIn(info.lock, ('semaphore', 'mutex+cond', None))
 
     def test_43581(self):
@@ -608,6 +610,36 @@ class SysModuleTest(unittest.TestCase):
         args = ['-c', 'import sys; sys._debugmallocstats()']
         ret, out, err = assert_python_ok(*args)
         self.assertIn(b"free PyDictObjects", err)
+
+    @unittest.skipUnless(hasattr(sys, "getallocatedblocks"),
+                         "sys.getallocatedblocks unavailable on this build")
+    def test_getallocatedblocks(self):
+        # Some sanity checks
+        with_pymalloc = sysconfig.get_config_var('WITH_PYMALLOC')
+        a = sys.getallocatedblocks()
+        self.assertIs(type(a), int)
+        if with_pymalloc:
+            self.assertGreater(a, 0)
+        else:
+            # When WITH_PYMALLOC isn't available, we don't know anything
+            # about the underlying implementation: the function might
+            # return 0 or something greater.
+            self.assertGreaterEqual(a, 0)
+        try:
+            # While we could imagine a Python session where the number of
+            # multiple buffer objects would exceed the sharing of references,
+            # it is unlikely to happen in a normal test run.
+            self.assertLess(a, sys.gettotalrefcount())
+        except AttributeError:
+            # gettotalrefcount() not available
+            pass
+        gc.collect()
+        b = sys.getallocatedblocks()
+        self.assertLessEqual(b, a)
+        gc.collect()
+        c = sys.getallocatedblocks()
+        self.assertIn(c, range(b - 50, b + 50))
+
 
 class SizeofTest(unittest.TestCase):
 
@@ -778,7 +810,7 @@ class SizeofTest(unittest.TestCase):
         # memoryview
         check(memoryview(b''), size('Pnin 2P2n2i5P 3cPn'))
         # module
-        check(unittest, size('PnP'))
+        check(unittest, size('PnPPP'))
         # None
         check(None, size(''))
         # NotImplementedType
@@ -832,11 +864,11 @@ class SizeofTest(unittest.TestCase):
         check((1,2,3), vsize('') + 3*self.P)
         # type
         # static type: PyTypeObject
-        s = vsize('P2n15Pl4Pn9Pn11PI')
+        s = vsize('P2n15Pl4Pn9Pn11PIP')
         check(int, s)
         # (PyTypeObject + PyNumberMethods + PyMappingMethods +
         #  PySequenceMethods + PyBufferProcs + 4P)
-        s = vsize('P2n15Pl4Pn9Pn11PI') + struct.calcsize('34P 3P 10P 2P 4P')
+        s = vsize('P2n15Pl4Pn9Pn11PIP') + struct.calcsize('34P 3P 10P 2P 4P')
         # Separate block for PyDictKeysObject with 4 entries
         s += struct.calcsize("2nPn") + 4*struct.calcsize("n2P")
         # class

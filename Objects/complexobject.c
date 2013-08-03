@@ -271,6 +271,12 @@ try_complex_special_method(PyObject *op) {
     if (f) {
         PyObject *res = PyObject_CallFunctionObjArgs(f, NULL);
         Py_DECREF(f);
+        if (res != NULL && !PyComplex_Check(res)) {
+            PyErr_SetString(PyExc_TypeError,
+                "__complex__ should return a complex object");
+            Py_DECREF(res);
+            return NULL;
+        }
         return res;
     }
     return NULL;
@@ -296,12 +302,6 @@ PyComplex_AsCComplex(PyObject *op)
     newop = try_complex_special_method(op);
 
     if (newop) {
-        if (!PyComplex_Check(newop)) {
-            PyErr_SetString(PyExc_TypeError,
-                "__complex__ should return a complex object");
-            Py_DECREF(newop);
-            return cv;
-        }
         cv = ((PyComplexObject *)newop)->cval;
         Py_DECREF(newop);
         return cv;
@@ -705,7 +705,7 @@ complex__format__(PyObject* self, PyObject* args)
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
 
-    _PyUnicodeWriter_Init(&writer, 0);
+    _PyUnicodeWriter_Init(&writer);
     ret = _PyComplex_FormatAdvancedWriter(
         &writer,
         self,

@@ -1120,12 +1120,10 @@ Basic customization
       ``sys.last_traceback`` keeps the stack frame alive).  The first situation
       can only be remedied by explicitly breaking the cycles; the latter two
       situations can be resolved by storing ``None`` in ``sys.last_traceback``.
-      Circular references which are garbage are detected when the option cycle
-      detector is enabled (it's on by default), but can only be cleaned up if
-      there are no Python- level :meth:`__del__` methods involved. Refer to the
-      documentation for the :mod:`gc` module for more information about how
-      :meth:`__del__` methods are handled by the cycle detector, particularly
-      the description of the ``garbage`` value.
+      Circular references which are garbage are detected and cleaned up when
+      the cyclic garbage collector is enabled (it's on by default). Refer to the
+      documentation for the :mod:`gc` module for more information about this
+      topic.
 
    .. warning::
 
@@ -1827,6 +1825,15 @@ through the container; for mappings, :meth:`__iter__` should be the same as
    :meth:`__bool__` method and whose :meth:`__len__` method returns zero is
    considered to be false in a Boolean context.
 
+
+.. method:: object.__length_hint__(self)
+
+   Called to implement :func:`operator.length_hint`. Should return an estimated
+   length for the object (which may be greater or less than the actual length).
+   The length must be an integer ``>=`` 0. This method is purely an
+   optimization and is never required for correctness.
+
+   .. versionadded:: 3.4
 
 .. note::
 
