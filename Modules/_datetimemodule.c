@@ -4749,7 +4749,7 @@ local_timezone(PyDateTime_DateTime *utc_time)
             goto error;
     }
     result = new_timezone(delta, nameo);
-    Py_DECREF(nameo);
+    Py_XDECREF(nameo);
   error:
     Py_DECREF(delta);
     return result;
@@ -4873,9 +4873,16 @@ datetime_timestamp(PyDateTime_DateTime *self)
         time.tm_wday = -1;
         time.tm_isdst = -1;
         timestamp = mktime(&time);
-        /* Return value of -1 does not necessarily mean an error, but tm_wday
-         * cannot remain set to -1 if mktime succeeded. */
-        if (timestamp == (time_t)(-1) && time.tm_wday == -1) {
+        if (timestamp == (time_t)(-1)
+#ifndef _AIX
+            /* Return value of -1 does not necessarily mean an error,
+             * but tm_wday cannot remain set to -1 if mktime succeeded. */
+            && time.tm_wday == -1
+#else
+            /* on AIX, tm_wday is always sets, even on error */
+#endif
+          )
+        {
             PyErr_SetString(PyExc_OverflowError,
                             "timestamp out of range");
             return NULL;
@@ -5299,8 +5306,8 @@ PyInit__datetime(void)
       return NULL;
 
     /* module initialization */
-    PyModule_AddIntConstant(m, "MINYEAR", MINYEAR);
-    PyModule_AddIntConstant(m, "MAXYEAR", MAXYEAR);
+    PyModule_AddIntMacro(m, MINYEAR);
+    PyModule_AddIntMacro(m, MAXYEAR);
 
     Py_INCREF(&PyDateTime_DateType);
     PyModule_AddObject(m, "date", (PyObject *) &PyDateTime_DateType);
