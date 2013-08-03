@@ -22,7 +22,9 @@
 #  define FAULTHANDLER_USER
 #endif
 
-#define PUTS(fd, str) write(fd, str, strlen(str))
+/* cast size_t to int because write() takes an int on Windows
+   (anyway, the length is smaller than 30 characters) */
+#define PUTS(fd, str) write(fd, str, (int)strlen(str))
 
 #ifdef HAVE_SIGACTION
 typedef struct sigaction _Py_sighandler_t;
@@ -79,9 +81,6 @@ typedef struct {
 static user_signal_t *user_signals;
 
 /* the following macros come from Python: Modules/signalmodule.c */
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#define NSIG 12
-#endif
 #ifndef NSIG
 # if defined(_NSIG)
 #  define NSIG _NSIG            /* For BSD/SysV */
@@ -448,7 +447,7 @@ faulthandler_thread(void *unused)
         /* get the thread holding the GIL, NULL if no thread hold the GIL */
         current = _Py_atomic_load_relaxed(&_PyThreadState_Current);
 
-        write(thread.fd, thread.header, thread.header_len);
+        write(thread.fd, thread.header, (int)thread.header_len);
 
         errmsg = _Py_DumpTracebackThreads(thread.fd, thread.interp, current);
         ok = (errmsg == NULL);
@@ -476,7 +475,7 @@ cancel_dump_traceback_later(void)
 
     Py_CLEAR(thread.file);
     if (thread.header) {
-        free(thread.header);
+        PyMem_Free(thread.header);
         thread.header = NULL;
     }
 }
@@ -505,7 +504,7 @@ format_timeout(double timeout)
                       "Timeout (%lu:%02lu:%02lu)!\n",
                       hour, min, sec);
 
-    return strdup(buffer);
+    return _PyMem_Strdup(buffer);
 }
 
 static PyObject*
@@ -571,7 +570,7 @@ faulthandler_dump_traceback_later(PyObject *self,
     if (PyThread_start_new_thread(faulthandler_thread, NULL) == -1) {
         PyThread_release_lock(thread.running);
         Py_CLEAR(thread.file);
-        free(header);
+        PyMem_Free(header);
         thread.header = NULL;
         PyErr_SetString(PyExc_RuntimeError,
                         "unable to start watchdog thread");
@@ -730,9 +729,10 @@ faulthandler_register_py(PyObject *self,
         return NULL;
 
     if (user_signals == NULL) {
-        user_signals = calloc(NSIG, sizeof(user_signal_t));
+        user_signals = PyMem_Malloc(NSIG * sizeof(user_signal_t));
         if (user_signals == NULL)
             return PyErr_NoMemory();
+        memset(user_signals, 0, NSIG * sizeof(user_signal_t));
     }
     user = &user_signals[signum];
 
@@ -1137,7 +1137,7 @@ void _PyFaulthandler_Fini(void)
     if (user_signals != NULL) {
         for (signum=0; signum < NSIG; signum++)
             faulthandler_unregister(&user_signals[signum], signum);
-        free(user_signals);
+        PyMem_Free(user_signals);
         user_signals = NULL;
     }
 #endif
