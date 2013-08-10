@@ -380,6 +380,21 @@ always available.
    .. versionadded:: 3.1
 
 
+.. function:: getallocatedblocks()
+
+   Return the number of memory blocks currently allocated by the interpreter,
+   regardless of their size.  This function is mainly useful for tracking
+   and debugging memory leaks.  Because of the interpreter's internal
+   caches, the result can vary from call to call; you may have to call
+   :func:`_clear_type_cache()` and :func:`gc.collect()` to get more
+   predictable results.
+
+   If a Python build or implementation cannot reasonably compute this
+   information, :func:`getallocatedblocks()` is allowed to return 0 instead.
+
+   .. versionadded:: 3.4
+
+
 .. function:: getcheckinterval()
 
    Return the interpreter's "check interval"; see :func:`setcheckinterval`.
@@ -396,9 +411,10 @@ always available.
 
 .. function:: getdlopenflags()
 
-   Return the current value of the flags that are used for :c:func:`dlopen` calls.
-   The flag constants are defined in the :mod:`ctypes` and :mod:`DLFCN` modules.
-   Availability: Unix.
+   Return the current value of the flags that are used for
+   :c:func:`dlopen` calls.  Symbolic names for the flag values can be
+   found in the :mod:`os` module (``RTLD_xxx`` constants, e.g.
+   :data:`os.RTLD_LAZY`).  Availability: Unix.
 
 
 .. function:: getfilesystemencoding()
@@ -664,6 +680,16 @@ always available.
    .. versionadded:: 3.1
 
 
+.. data:: __interactivehook__
+
+   When present, this function is automatically called (with no arguments)
+   when the interpreter is launched in :ref:`interactive mode <tut-interactive>`.
+   This is done after the :envvar:`PYTHONSTARTUP` file is read, so that you
+   can set this hook there.
+
+   .. versionadded:: 3.4
+
+
 .. function:: intern(string)
 
    Enter *string* in the table of "interned" strings and return the interned string
@@ -811,8 +837,6 @@ always available.
    Windows          ``'win32'``
    Windows/Cygwin   ``'cygwin'``
    Mac OS X         ``'darwin'``
-   OS/2             ``'os2'``
-   OS/2 EMX         ``'os2emx'``
    ================ ===========================
 
    .. versionchanged:: 3.3
@@ -883,7 +907,7 @@ always available.
    the interpreter loads extension modules.  Among other things, this will enable a
    lazy resolving of symbols when importing a module, if called as
    ``sys.setdlopenflags(0)``.  To share symbols across extension modules, call as
-   ``sys.setdlopenflags(os.RTLD_GLOBAL)``.  Symbolic names for the flag modules
+   ``sys.setdlopenflags(os.RTLD_GLOBAL)``.  Symbolic names for the flag values
    can be found in the :mod:`os` module (``RTLD_xxx`` constants, e.g.
    :data:`os.RTLD_LAZY`).
 
@@ -1093,7 +1117,6 @@ always available.
    | :const:`name`    | Name of the thread implementation:                      |
    |                  |                                                         |
    |                  |  * ``'nt'``: Windows threads                            |
-   |                  |  * ``'os2'``: OS/2 threads                              |
    |                  |  * ``'pthread'``: POSIX threads                         |
    |                  |  * ``'solaris'``: Solaris threads                       |
    +------------------+---------------------------------------------------------+
