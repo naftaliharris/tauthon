@@ -264,9 +264,11 @@ faulthandler._sigsegv()
     def test_disabled_by_default(self):
         # By default, the module should be disabled
         code = "import faulthandler; print(faulthandler.is_enabled())"
-        rc, stdout, stderr = assert_python_ok("-c", code)
-        stdout = (stdout + stderr).strip()
-        self.assertEqual(stdout, b"False")
+        args = (sys.executable, '-E', '-c', code)
+        # use subprocess module directly because test.script_helper adds
+        # "-X faulthandler" to the command line
+        stdout = subprocess.check_output(args)
+        self.assertEqual(stdout.rstrip(), b"False")
 
     def test_sys_xoptions(self):
         # Test python -X faulthandler
@@ -590,8 +592,5 @@ sys.exit(exitcode)
         self.check_register(chain=True)
 
 
-def test_main():
-    support.run_unittest(FaultHandlerTests)
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
