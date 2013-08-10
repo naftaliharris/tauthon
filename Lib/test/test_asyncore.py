@@ -20,7 +20,7 @@ except ImportError:
     threading = None
 
 HOST = support.HOST
-
+TIMEOUT = 3
 HAS_UNIX_SOCKETS = hasattr(socket, 'AF_UNIX')
 
 class dummysocket:
@@ -397,7 +397,10 @@ class DispatcherWithSendTests(unittest.TestCase):
 
             self.assertEqual(cap.getvalue(), data*2)
         finally:
-            t.join()
+            t.join(timeout=TIMEOUT)
+            if t.is_alive():
+                self.fail("join() timed out")
+
 
 
 class DispatcherWithSendTests_UsePoll(DispatcherWithSendTests):
@@ -756,7 +759,7 @@ class BaseTestAPI:
         s2 = asyncore.dispatcher()
         s2.create_socket(self.family)
         # EADDRINUSE indicates the socket was correctly bound
-        self.assertRaises(socket.error, s2.bind, (self.addr[0], port))
+        self.assertRaises(OSError, s2.bind, (self.addr[0], port))
 
     def test_set_reuse_addr(self):
         if HAS_UNIX_SOCKETS and self.family == socket.AF_UNIX:
@@ -764,7 +767,7 @@ class BaseTestAPI:
         sock = socket.socket(self.family)
         try:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        except socket.error:
+        except OSError:
             unittest.skip("SO_REUSEADDR not supported on this platform")
         else:
             # if SO_REUSEADDR succeeded for sock we expect asyncore
@@ -789,7 +792,11 @@ class BaseTestAPI:
             t = threading.Thread(target=lambda: asyncore.loop(timeout=0.1,
                                                               count=500))
             t.start()
-            self.addCleanup(t.join)
+            def cleanup():
+                t.join(timeout=TIMEOUT)
+                if t.is_alive():
+                    self.fail("join() timed out")
+            self.addCleanup(cleanup)
 
             s = socket.socket(self.family, socket.SOCK_STREAM)
             s.settimeout(.2)
@@ -797,7 +804,7 @@ class BaseTestAPI:
                          struct.pack('ii', 1, 0))
             try:
                 s.connect(server.address)
-            except socket.error:
+            except OSError:
                 pass
             finally:
                 s.close()
