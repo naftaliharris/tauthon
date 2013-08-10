@@ -774,7 +774,7 @@ Set the flags used by the interpreter for dlopen calls, such as when the\n\
 interpreter loads extension modules.  Among other things, this will enable\n\
 a lazy resolving of symbols when importing a module, if called as\n\
 sys.setdlopenflags(0).  To share symbols across extension modules, call as\n\
-sys.setdlopenflags(ctypes.RTLD_GLOBAL).  Symbolic names for the flag modules\n\
+sys.setdlopenflags(os.RTLD_GLOBAL).  Symbolic names for the flag modules\n\
 can be found in the os module (RTLD_xxx constants, e.g. os.RTLD_LAZY).");
 
 static PyObject *
@@ -790,7 +790,7 @@ PyDoc_STRVAR(getdlopenflags_doc,
 "getdlopenflags() -> int\n\
 \n\
 Return the current value of the flags that are used for dlopen calls.\n\
-The flag constants are defined in the ctypes and DLFCN modules.");
+The flag constants are defined in the os module.");
 
 #endif  /* HAVE_DLOPEN */
 
@@ -892,6 +892,19 @@ PyDoc_STRVAR(getrefcount_doc,
 Return the reference count of object.  The count returned is generally\n\
 one higher than you might expect, because it includes the (temporary)\n\
 reference as an argument to getrefcount()."
+);
+
+static PyObject *
+sys_getallocatedblocks(PyObject *self)
+{
+    return PyLong_FromSsize_t(_Py_GetAllocatedBlocks());
+}
+
+PyDoc_STRVAR(getallocatedblocks_doc,
+"getallocatedblocks() -> integer\n\
+\n\
+Return the number of memory blocks currently allocated, regardless of their\n\
+size."
 );
 
 #ifdef COUNT_ALLOCS
@@ -1062,6 +1075,8 @@ static PyMethodDef sys_methods[] = {
     {"getdlopenflags", (PyCFunction)sys_getdlopenflags, METH_NOARGS,
      getdlopenflags_doc},
 #endif
+    {"getallocatedblocks", (PyCFunction)sys_getallocatedblocks, METH_NOARGS,
+      getallocatedblocks_doc},
 #ifdef COUNT_ALLOCS
     {"getcounts",       (PyCFunction)sys_getcounts, METH_NOARGS},
 #endif
@@ -1349,9 +1364,6 @@ static PyStructSequence_Field flags_fields[] = {
     {"no_site",                 "-S"},
     {"ignore_environment",      "-E"},
     {"verbose",                 "-v"},
-#ifdef RISCOS
-    {"riscos_wimp",             "???"},
-#endif
     /* {"unbuffered",                   "-u"}, */
     /* {"skip_first",                   "-x"}, */
     {"bytes_warning",           "-b"},
@@ -1364,11 +1376,7 @@ static PyStructSequence_Desc flags_desc = {
     "sys.flags",        /* name */
     flags__doc__,       /* doc */
     flags_fields,       /* fields */
-#ifdef RISCOS
-    13
-#else
     12
-#endif
 };
 
 static PyObject*
@@ -1393,9 +1401,6 @@ make_flags(void)
     SetFlag(Py_NoSiteFlag);
     SetFlag(Py_IgnoreEnvironmentFlag);
     SetFlag(Py_VerboseFlag);
-#ifdef RISCOS
-    SetFlag(Py_RISCOSWimpFlag);
-#endif
     /* SetFlag(saw_unbuffered_flag); */
     /* SetFlag(skipfirstline); */
     SetFlag(Py_BytesWarningFlag);
@@ -1560,18 +1565,24 @@ static struct PyModuleDef sysmodule = {
 PyObject *
 _PySys_Init(void)
 {
-    PyObject *m, *v, *sysdict, *version_info;
-    char *s;
+    PyObject *m, *sysdict, *version_info;
 
     m = PyModule_Create(&sysmodule);
     if (m == NULL)
         return NULL;
     sysdict = PyModule_GetDict(m);
-#define SET_SYS_FROM_STRING(key, value)                 \
-    v = value;                                          \
-    if (v != NULL)                                      \
-        PyDict_SetItemString(sysdict, key, v);          \
-    Py_XDECREF(v)
+#define SET_SYS_FROM_STRING(key, value)                    \
+    do {                                                   \
+        int res;                                           \
+        PyObject *v = (value);                             \
+        if (v == NULL)                                     \
+            return NULL;                                   \
+        res = PyDict_SetItemString(sysdict, key, v);       \
+        if (res < 0) {                                     \
+            Py_DECREF(v);                                  \
+            return NULL;                                   \
+        }                                                  \
+    } while (0)
 
     /* Check that stdin is not a directory
     Using shell redirection, you can redirect stdin to a directory,
@@ -1593,10 +1604,10 @@ _PySys_Init(void)
 
     /* stdin/stdout/stderr are now set by pythonrun.c */
 
-    PyDict_SetItemString(sysdict, "__displayhook__",
-                         PyDict_GetItemString(sysdict, "displayhook"));
-    PyDict_SetItemString(sysdict, "__excepthook__",
-                         PyDict_GetItemString(sysdict, "excepthook"));
+    SET_SYS_FROM_STRING("__displayhook__",
+                        PyDict_GetItemString(sysdict, "displayhook"));
+    SET_SYS_FROM_STRING("__excepthook__",
+                        PyDict_GetItemString(sysdict, "excepthook"));
     SET_SYS_FROM_STRING("version",
                          PyUnicode_FromString(Py_GetVersion()));
     SET_SYS_FROM_STRING("hexversion",
@@ -1630,28 +1641,24 @@ _PySys_Init(void)
     SET_SYS_FROM_STRING("int_info",
                         PyLong_GetInfo());
     /* initialize hash_info */
-    if (Hash_InfoType.tp_name == 0)
-        PyStructSequence_InitType(&Hash_InfoType, &hash_info_desc);
+    if (Hash_InfoType.tp_name == NULL) {
+        if (PyStructSequence_InitType2(&Hash_InfoType, &hash_info_desc) < 0)
+            return NULL;
+    }
     SET_SYS_FROM_STRING("hash_info",
                         get_hash_info());
     SET_SYS_FROM_STRING("maxunicode",
                         PyLong_FromLong(0x10FFFF));
     SET_SYS_FROM_STRING("builtin_module_names",
                         list_builtin_module_names());
-    {
-        /* Assumes that longs are at least 2 bytes long.
-           Should be safe! */
-        unsigned long number = 1;
-        char *value;
+#if PY_BIG_ENDIAN
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("big"));
+#else
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("little"));
+#endif
 
-        s = (char *) &number;
-        if (s[0] == 0)
-            value = "big";
-        else
-            value = "little";
-        SET_SYS_FROM_STRING("byteorder",
-                            PyUnicode_FromString(value));
-    }
 #ifdef MS_COREDLL
     SET_SYS_FROM_STRING("dllhandle",
                         PyLong_FromVoidPtr(PyWin_DLLhModule));
@@ -1664,22 +1671,22 @@ _PySys_Init(void)
 #endif
     if (warnoptions == NULL) {
         warnoptions = PyList_New(0);
+        if (warnoptions == NULL)
+            return NULL;
     }
     else {
         Py_INCREF(warnoptions);
     }
-    if (warnoptions != NULL) {
-        PyDict_SetItemString(sysdict, "warnoptions", warnoptions);
-    }
+    SET_SYS_FROM_STRING("warnoptions", warnoptions);
 
-    v = get_xoptions();
-    if (v != NULL) {
-        PyDict_SetItemString(sysdict, "_xoptions", v);
-    }
+    SET_SYS_FROM_STRING("_xoptions", get_xoptions());
 
     /* version_info */
-    if (VersionInfoType.tp_name == 0)
-        PyStructSequence_InitType(&VersionInfoType, &version_info_desc);
+    if (VersionInfoType.tp_name == NULL) {
+        if (PyStructSequence_InitType2(&VersionInfoType,
+                                       &version_info_desc) < 0)
+            return NULL;
+    }
     version_info = make_version_info();
     SET_SYS_FROM_STRING("version_info", version_info);
     /* prevent user from creating new instances */
@@ -1690,8 +1697,10 @@ _PySys_Init(void)
     SET_SYS_FROM_STRING("implementation", make_impl_info(version_info));
 
     /* flags */
-    if (FlagsType.tp_name == 0)
-        PyStructSequence_InitType(&FlagsType, &flags_desc);
+    if (FlagsType.tp_name == 0) {
+        if (PyStructSequence_InitType2(&FlagsType, &flags_desc) < 0)
+            return NULL;
+    }
     SET_SYS_FROM_STRING("flags", make_flags());
     /* prevent user from creating new instances */
     FlagsType.tp_init = NULL;
@@ -1701,7 +1710,9 @@ _PySys_Init(void)
 #if defined(MS_WINDOWS)
     /* getwindowsversion */
     if (WindowsVersionType.tp_name == 0)
-        PyStructSequence_InitType(&WindowsVersionType, &windows_version_desc);
+        if (PyStructSequence_InitType2(&WindowsVersionType,
+                                       &windows_version_desc) < 0)
+            return NULL;
     /* prevent user from creating new instances */
     WindowsVersionType.tp_init = NULL;
     WindowsVersionType.tp_new = NULL;
