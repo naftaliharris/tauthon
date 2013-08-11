@@ -9,7 +9,7 @@
 #endif
 
 #ifdef MS_WINDOWS
-#include <Windows.h>
+#include <windows.h>
 #ifdef HAVE_PROCESS_H
 #include <process.h>
 #endif
@@ -35,11 +35,6 @@
 
 #ifndef SIG_ERR
 #define SIG_ERR ((PyOS_sighandler_t)(-1))
-#endif
-
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-#define NSIG 12
-#include <process.h>
 #endif
 
 #ifndef NSIG
@@ -983,9 +978,10 @@ PyInit_signal(void)
         return NULL;
 
 #if defined(HAVE_SIGWAITINFO) || defined(HAVE_SIGTIMEDWAIT)
-    if (!initialized)
-        PyStructSequence_InitType(&SiginfoType, &struct_siginfo_desc);
-
+    if (!initialized) {
+        if (PyStructSequence_InitType2(&SiginfoType, &struct_siginfo_desc) < 0)
+            return NULL;
+    }
     Py_INCREF((PyObject*) &SiginfoType);
     PyModule_AddObject(m, "struct_siginfo", (PyObject*) &SiginfoType);
     initialized = 1;
