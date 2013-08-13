@@ -122,7 +122,7 @@ try:
 except AttributeError:
     # os.devnull was added in Python 2.4, so emulate it for earlier
     # Python versions
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # Use the old CP/M NUL as device name
         DEV_NULL = 'NUL'
     else:
@@ -316,7 +316,7 @@ def linux_distribution(distname='', version='', id='',
     """
     try:
         etc = os.listdir('/etc')
-    except os.error:
+    except OSError:
         # Probably not a Unix system
         return distname,version,id
     etc.sort()
@@ -403,13 +403,13 @@ _ver_output = re.compile(r'(?:([\w ]+) ([\w.]+) '
 
 def _syscmd_ver(system='', release='', version='',
 
-               supported_platforms=('win32','win16','dos','os2')):
+               supported_platforms=('win32','win16','dos')):
 
     """ Tries to figure out the OS version used and returns
         a tuple (system,release,version).
 
         It uses the "ver" shell command for this which is known
-        to exists on Windows, DOS and OS/2. XXX Others too ?
+        to exists on Windows, DOS. XXX Others too ?
 
         In case this fails, the given parameters are used as
         defaults.
@@ -424,13 +424,10 @@ def _syscmd_ver(system='', release='', version='',
             pipe = popen(cmd)
             info = pipe.read()
             if pipe.close():
-                raise os.error('command failed')
+                raise OSError('command failed')
             # XXX How can I suppress shell errors from being written
             #     to stderr ?
-        except os.error as why:
-            #print 'Command %s failed: %s' % (cmd,why)
-            continue
-        except IOError as why:
+        except OSError as why:
             #print 'Command %s failed: %s' % (cmd,why)
             continue
         else:
@@ -581,7 +578,7 @@ def win32_ver(release='',version='',csd='',ptype=''):
                     # Discard any type that isn't REG_SZ
                     if type == REG_SZ and name.find("Server") != -1:
                         product_type = VER_NT_SERVER
-                except WindowsError:
+                except OSError:
                     # Use default of VER_NT_WORKSTATION
                     pass
 
@@ -637,62 +634,6 @@ def win32_ver(release='',version='',csd='',ptype=''):
     RegCloseKey(keyCurVer)
     return release,version,csd,ptype
 
-def _mac_ver_lookup(selectors,default=None):
-
-    from _gestalt import gestalt
-    l = []
-    append = l.append
-    for selector in selectors:
-        try:
-            append(gestalt(selector))
-        except (RuntimeError, OSError):
-            append(default)
-    return l
-
-def _bcd2str(bcd):
-
-    return hex(bcd)[2:]
-
-def _mac_ver_gestalt():
-    """
-        Thanks to Mark R. Levinson for mailing documentation links and
-        code examples for this function. Documentation for the
-        gestalt() API is available online at:
-
-           http://www.rgaros.nl/gestalt/
-    """
-    # Check whether the version info module is available
-    try:
-        import _gestalt
-    except ImportError:
-        return None
-    # Get the infos
-    sysv, sysa = _mac_ver_lookup(('sysv','sysa'))
-    # Decode the infos
-    if sysv:
-        major = (sysv & 0xFF00) >> 8
-        minor = (sysv & 0x00F0) >> 4
-        patch = (sysv & 0x000F)
-
-        if (major, minor) >= (10, 4):
-            # the 'sysv' gestald cannot return patchlevels
-            # higher than 9. Apple introduced 3 new
-            # gestalt codes in 10.4 to deal with this
-            # issue (needed because patch levels can
-            # run higher than 9, such as 10.4.11)
-            major,minor,patch = _mac_ver_lookup(('sys1','sys2','sys3'))
-            release = '%i.%i.%i' %(major, minor, patch)
-        else:
-            release = '%s.%i.%i' % (_bcd2str(major),minor,patch)
-
-    if sysa:
-        machine = {0x1: '68k',
-                   0x2: 'PowerPC',
-                   0xa: 'i386'}.get(sysa,'')
-
-    versioninfo=('', '', '')
-    return release,versioninfo,machine
-
 def _mac_ver_xml():
     fn = '/System/Library/CoreServices/SystemVersion.plist'
     if not os.path.exists(fn):
@@ -708,7 +649,7 @@ def _mac_ver_xml():
     versioninfo=('', '', '')
     machine = os.uname().machine
     if machine in ('ppc', 'Power Macintosh'):
-        # for compatibility with the gestalt based code
+        # Cannonical name
         machine = 'PowerPC'
 
     return release,versioninfo,machine
@@ -727,12 +668,6 @@ def mac_ver(release='',versioninfo=('','',''),machine=''):
     # First try reading the information from an XML file which should
     # always be present
     info = _mac_ver_xml()
-    if info is not None:
-        return info
-
-    # If that doesn't work for some reason fall back to reading the
-    # information using gestalt calls.
-    info = _mac_ver_gestalt()
     if info is not None:
         return info
 
@@ -882,7 +817,7 @@ def _node(default=''):
         return default
     try:
         return socket.gethostname()
-    except socket.error:
+    except OSError:
         # Still not working...
         return default
 
@@ -901,12 +836,12 @@ def _syscmd_uname(option,default=''):
 
     """ Interface to the system's uname command.
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     try:
         f = os.popen('uname %s 2> %s' % (option, DEV_NULL))
-    except (AttributeError,os.error):
+    except (AttributeError, OSError):
         return default
     output = f.read().strip()
     rc = f.close()
@@ -924,7 +859,7 @@ def _syscmd_file(target,default=''):
         default in case the command should fail.
 
     """
-    if sys.platform in ('dos','win32','win16','os2'):
+    if sys.platform in ('dos','win32','win16'):
         # XXX Others too ?
         return default
     target = _follow_symlinks(target)
@@ -932,7 +867,7 @@ def _syscmd_file(target,default=''):
         proc = subprocess.Popen(['file', target],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
-    except (AttributeError,os.error):
+    except (AttributeError, OSError):
         return default
     output = proc.communicate()[0].decode('latin-1')
     rc = proc.wait()
