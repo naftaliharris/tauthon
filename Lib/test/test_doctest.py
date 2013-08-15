@@ -1409,8 +1409,40 @@ However, output from `report_start` is not suppressed:
         2
     TestResults(failed=3, attempted=5)
 
-For the purposes of REPORT_ONLY_FIRST_FAILURE, unexpected exceptions
-count as failures:
+The FAIL_FAST flag causes the runner to exit after the first failing example,
+so subsequent examples are not even attempted:
+
+    >>> flags = doctest.FAIL_FAST
+    >>> doctest.DocTestRunner(verbose=False, optionflags=flags).run(test)
+    ... # doctest: +ELLIPSIS
+    **********************************************************************
+    File ..., line 5, in f
+    Failed example:
+        print(2) # first failure
+    Expected:
+        200
+    Got:
+        2
+    TestResults(failed=1, attempted=2)
+
+Specifying both FAIL_FAST and REPORT_ONLY_FIRST_FAILURE is equivalent to
+FAIL_FAST only:
+
+    >>> flags = doctest.FAIL_FAST | doctest.REPORT_ONLY_FIRST_FAILURE
+    >>> doctest.DocTestRunner(verbose=False, optionflags=flags).run(test)
+    ... # doctest: +ELLIPSIS
+    **********************************************************************
+    File ..., line 5, in f
+    Failed example:
+        print(2) # first failure
+    Expected:
+        200
+    Got:
+        2
+    TestResults(failed=1, attempted=2)
+
+For the purposes of both REPORT_ONLY_FIRST_FAILURE and FAIL_FAST, unexpected
+exceptions count as failures:
 
     >>> def f(x):
     ...     r'''
@@ -1437,6 +1469,17 @@ count as failures:
         ...
         ValueError: 2
     TestResults(failed=3, attempted=5)
+    >>> flags = doctest.FAIL_FAST
+    >>> doctest.DocTestRunner(verbose=False, optionflags=flags).run(test)
+    ... # doctest: +ELLIPSIS
+    **********************************************************************
+    File ..., line 5, in f
+    Failed example:
+        raise ValueError(2) # first failure
+    Exception raised:
+        ...
+        ValueError: 2
+    TestResults(failed=1, attempted=2)
 
 New option flags can also be registered, via register_optionflag().  Here
 we reach into doctest's internals a bit.
@@ -2552,6 +2595,240 @@ Check doctest with a non-ascii filename:
         Exception: clé
     TestResults(failed=1, attempted=1)
     """
+
+def test_CLI(): r"""
+The doctest module can be used to run doctests against an arbitrary file.
+These tests test this CLI functionality.
+
+We'll use the support module's script_helpers for this, and write a test files
+to a temp dir to run the command against.  Due to a current limitation in
+script_helpers, though, we need a little utility function to turn the returned
+output into something we can doctest against:
+
+    >>> def normalize(s):
+    ...     return '\n'.join(s.decode().splitlines())
+
+Note: we also pass TERM='' to all the assert_python calls to avoid a bug
+in the readline library that is triggered in these tests because we are
+running them in a new python process.  See:
+
+  http://lists.gnu.org/archive/html/bug-readline/2013-06/msg00000.html
+
+With those preliminaries out of the way, we'll start with a file with two
+simple tests and no errors.  We'll run both the unadorned doctest command, and
+the verbose version, and then check the output:
+
+    >>> from test import script_helper
+    >>> with script_helper.temp_dir() as tmpdir:
+    ...     fn = os.path.join(tmpdir, 'myfile.doc')
+    ...     with open(fn, 'w') as f:
+    ...         _ = f.write('This is a very simple test file.\n')
+    ...         _ = f.write('   >>> 1 + 1\n')
+    ...         _ = f.write('   2\n')
+    ...         _ = f.write('   >>> "a"\n')
+    ...         _ = f.write("   'a'\n")
+    ...         _ = f.write('\n')
+    ...         _ = f.write('And that is it.\n')
+    ...     rc1, out1, err1 = script_helper.assert_python_ok(
+    ...             '-m', 'doctest', fn, TERM='')
+    ...     rc2, out2, err2 = script_helper.assert_python_ok(
+    ...             '-m', 'doctest', '-v', fn, TERM='')
+
+With no arguments and passing tests, we should get no output:
+
+    >>> rc1, out1, err1
+    (0, b'', b'')
+
+With the verbose flag, we should see the test output, but no error output:
+
+    >>> rc2, err2
+    (0, b'')
+    >>> print(normalize(out2))
+    Trying:
+        1 + 1
+    Expecting:
+        2
+    ok
+    Trying:
+        "a"
+    Expecting:
+        'a'
+    ok
+    1 items passed all tests:
+       2 tests in myfile.doc
+    2 tests in 1 items.
+    2 passed and 0 failed.
+    Test passed.
+
+Now we'll write a couple files, one with three tests, the other a python module
+with two tests, both of the files having "errors" in the tests that can be made
+non-errors by applying the appropriate doctest options to the run (ELLIPSIS in
+the first file, NORMALIZE_WHITESPACE in the second).  This combination will
+allow to thoroughly test the -f and -o flags, as well as the doctest command's
+ability to process more than one file on the command line and, since the second
+file ends in '.py', its handling of python module files (as opposed to straight
+text files).
+
+    >>> from test import script_helper
+    >>> with script_helper.temp_dir() as tmpdir:
+    ...     fn = os.path.join(tmpdir, 'myfile.doc')
+    ...     with open(fn, 'w') as f:
+    ...         _ = f.write('This is another simple test file.\n')
+    ...         _ = f.write('   >>> 1 + 1\n')
+    ...         _ = f.write('   2\n')
+    ...         _ = f.write('   >>> "abcdef"\n')
+    ...         _ = f.write("   'a...f'\n")
+    ...         _ = f.write('   >>> "ajkml"\n')
+    ...         _ = f.write("   'a...l'\n")
+    ...         _ = f.write('\n')
+    ...         _ = f.write('And that is it.\n')
+    ...     fn2 = os.path.join(tmpdir, 'myfile2.py')
+    ...     with open(fn2, 'w') as f:
+    ...         _ = f.write('def test_func():\n')
+    ...         _ = f.write('   \"\"\"\n')
+    ...         _ = f.write('   This is simple python test function.\n')
+    ...         _ = f.write('       >>> 1 + 1\n')
+    ...         _ = f.write('       2\n')
+    ...         _ = f.write('       >>> "abc   def"\n')
+    ...         _ = f.write("       'abc def'\n")
+    ...         _ = f.write("\n")
+    ...         _ = f.write('   \"\"\"\n')
+    ...     import shutil
+    ...     rc1, out1, err1 = script_helper.assert_python_failure(
+    ...             '-m', 'doctest', fn, fn2, TERM='')
+    ...     rc2, out2, err2 = script_helper.assert_python_ok(
+    ...             '-m', 'doctest', '-o', 'ELLIPSIS', fn, TERM='')
+    ...     rc3, out3, err3 = script_helper.assert_python_ok(
+    ...             '-m', 'doctest', '-o', 'ELLIPSIS',
+    ...             '-o', 'NORMALIZE_WHITESPACE', fn, fn2, TERM='')
+    ...     rc4, out4, err4 = script_helper.assert_python_failure(
+    ...             '-m', 'doctest', '-f', fn, fn2, TERM='')
+    ...     rc5, out5, err5 = script_helper.assert_python_ok(
+    ...             '-m', 'doctest', '-v', '-o', 'ELLIPSIS',
+    ...             '-o', 'NORMALIZE_WHITESPACE', fn, fn2, TERM='')
+
+Our first test run will show the errors from the first file (doctest stops if a
+file has errors).  Note that doctest test-run error output appears on stdout,
+not stderr:
+
+    >>> rc1, err1
+    (1, b'')
+    >>> print(normalize(out1))                # doctest: +ELLIPSIS
+    **********************************************************************
+    File "...myfile.doc", line 4, in myfile.doc
+    Failed example:
+        "abcdef"
+    Expected:
+        'a...f'
+    Got:
+        'abcdef'
+    **********************************************************************
+    File "...myfile.doc", line 6, in myfile.doc
+    Failed example:
+        "ajkml"
+    Expected:
+        'a...l'
+    Got:
+        'ajkml'
+    **********************************************************************
+    1 items had failures:
+       2 of   3 in myfile.doc
+    ***Test Failed*** 2 failures.
+
+With -o ELLIPSIS specified, the second run, against just the first file, should
+produce no errors, and with -o NORMALIZE_WHITESPACE also specified, neither
+should the third, which ran against both files:
+
+    >>> rc2, out2, err2
+    (0, b'', b'')
+    >>> rc3, out3, err3
+    (0, b'', b'')
+
+The fourth run uses FAIL_FAST, so we should see only one error:
+
+    >>> rc4, err4
+    (1, b'')
+    >>> print(normalize(out4))                # doctest: +ELLIPSIS
+    **********************************************************************
+    File "...myfile.doc", line 4, in myfile.doc
+    Failed example:
+        "abcdef"
+    Expected:
+        'a...f'
+    Got:
+        'abcdef'
+    **********************************************************************
+    1 items had failures:
+       1 of   2 in myfile.doc
+    ***Test Failed*** 1 failures.
+
+The fifth test uses verbose with the two options, so we should get verbose
+success output for the tests in both files:
+
+    >>> rc5, err5
+    (0, b'')
+    >>> print(normalize(out5))
+    Trying:
+        1 + 1
+    Expecting:
+        2
+    ok
+    Trying:
+        "abcdef"
+    Expecting:
+        'a...f'
+    ok
+    Trying:
+        "ajkml"
+    Expecting:
+        'a...l'
+    ok
+    1 items passed all tests:
+       3 tests in myfile.doc
+    3 tests in 1 items.
+    3 passed and 0 failed.
+    Test passed.
+    Trying:
+        1 + 1
+    Expecting:
+        2
+    ok
+    Trying:
+        "abc   def"
+    Expecting:
+        'abc def'
+    ok
+    1 items had no tests:
+        myfile2
+    1 items passed all tests:
+       2 tests in myfile2.test_func
+    2 tests in 2 items.
+    2 passed and 0 failed.
+    Test passed.
+
+We should also check some typical error cases.
+
+Invalid file name:
+
+    >>> rc, out, err = script_helper.assert_python_failure(
+    ...         '-m', 'doctest', 'nosuchfile', TERM='')
+    >>> rc, out
+    (1, b'')
+    >>> print(normalize(err))                    # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+      ...
+    FileNotFoundError: [Errno ...] No such file or directory: 'nosuchfile'
+
+Invalid doctest option:
+
+    >>> rc, out, err = script_helper.assert_python_failure(
+    ...         '-m', 'doctest', '-o', 'nosuchoption', TERM='')
+    >>> rc, out
+    (2, b'')
+    >>> print(normalize(err))                    # doctest: +ELLIPSIS
+    usage...invalid...nosuchoption...
+
+"""
 
 ######################################################################
 ## Main
