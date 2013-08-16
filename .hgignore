@@ -18,6 +18,8 @@ platform$
 pyconfig.h$
 python$
 python.exe$
+python-config$
+python-config.py$
 reflog.txt$
 tags$
 Lib/plat-mac/errors.rsrc.df.rsrc
@@ -27,12 +29,14 @@ Doc/tools/jinja/
 Doc/tools/jinja2/
 Doc/tools/pygments/
 Misc/python.pc
+Misc/python-config.sh$
 Modules/Setup$
 Modules/Setup.config
 Modules/Setup.local
 Modules/config.c
 Modules/ld_so_aix$
 Parser/pgen$
+^lcov-report/
 ^core
 ^python-gdb.py
 ^python.exe-gdb.py
@@ -88,3 +92,7 @@ Modules/_testembed
 .coverage
 coverage/
 htmlcov/
+*.gcda
+*.gcno
+*.gcov
+coverage.info
