@@ -69,6 +69,7 @@ typedef struct _ts PyThreadState;
 typedef struct _ts {
     /* See Python/ceval.c for comments explaining most fields */
 
+    struct _ts *prev;
     struct _ts *next;
     PyInterpreterState *interp;
 
@@ -133,12 +134,16 @@ PyAPI_FUNC(int) PyState_AddModule(PyObject*, struct PyModuleDef*);
 PyAPI_FUNC(int) PyState_RemoveModule(struct PyModuleDef*);
 #endif
 PyAPI_FUNC(PyObject*) PyState_FindModule(struct PyModuleDef*);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(void) _PyState_ClearModules(void);
+#endif
 
 PyAPI_FUNC(PyThreadState *) PyThreadState_New(PyInterpreterState *);
 PyAPI_FUNC(PyThreadState *) _PyThreadState_Prealloc(PyInterpreterState *);
 PyAPI_FUNC(void) _PyThreadState_Init(PyThreadState *);
 PyAPI_FUNC(void) PyThreadState_Clear(PyThreadState *);
 PyAPI_FUNC(void) PyThreadState_Delete(PyThreadState *);
+PyAPI_FUNC(void) _PyThreadState_DeleteExcept(PyThreadState *tstate);
 #ifdef WITH_THREAD
 PyAPI_FUNC(void) PyThreadState_DeleteCurrent(void);
 PyAPI_FUNC(void) _PyGILState_Reinit(void);
@@ -211,6 +216,11 @@ PyAPI_FUNC(void) PyGILState_Release(PyGILState_STATE);
    on the main thread.
 */
 PyAPI_FUNC(PyThreadState *) PyGILState_GetThisThreadState(void);
+
+/* Helper/diagnostic function - return 1 if the current thread
+ * currently holds the GIL, 0 otherwise
+ */
+PyAPI_FUNC(int) PyGILState_Check(void);
 
 #endif   /* #ifdef WITH_THREAD */
 
