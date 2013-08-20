@@ -37,7 +37,7 @@ fbound(double val, double minval, double maxval)
         val = maxval;
     else if (val < minval + 1)
         val = minval;
-    return val;
+    return (int)val;
 }
 
 
@@ -1137,8 +1137,8 @@ audioop_ratecv(PyObject *self, PyObject *args)
                         "not enough memory for output buffer");
         return 0;
     }
-    prev_i = (int *) malloc(nchannels * sizeof(int));
-    cur_i = (int *) malloc(nchannels * sizeof(int));
+    prev_i = (int *) PyMem_Malloc(nchannels * sizeof(int));
+    cur_i = (int *) PyMem_Malloc(nchannels * sizeof(int));
     if (prev_i == NULL || cur_i == NULL) {
         (void) PyErr_NoMemory();
         goto exit;
@@ -1257,10 +1257,8 @@ audioop_ratecv(PyObject *self, PyObject *args)
         }
     }
   exit:
-    if (prev_i != NULL)
-        free(prev_i);
-    if (cur_i != NULL)
-        free(cur_i);
+    PyMem_Free(prev_i);
+    PyMem_Free(cur_i);
     return rv;
 }
 

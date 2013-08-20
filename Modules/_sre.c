@@ -70,10 +70,6 @@ static char copyright[] =
 /* enables copy/deepcopy handling (work in progress) */
 #undef USE_BUILTIN_COPY
 
-#if PY_VERSION_HEX < 0x01060000
-#define PyObject_DEL(op) PyMem_DEL((op))
-#endif
-
 /* -------------------------------------------------------------------- */
 
 #if defined(_MSC_VER)
@@ -1871,7 +1867,7 @@ static PyObject*
 pattern_match(PatternObject* self, PyObject* args, PyObject* kw)
 {
     SRE_STATE state;
-    int status;
+    Py_ssize_t status;
 
     PyObject* string;
     Py_ssize_t start = 0;
@@ -1993,10 +1989,8 @@ join_list(PyObject* list, PyObject* string)
     /* join list elements */
 
     PyObject* joiner;
-#if PY_VERSION_HEX >= 0x01060000
     PyObject* function;
     PyObject* args;
-#endif
     PyObject* result;
 
     joiner = PySequence_GetSlice(string, 0, 0);
@@ -2008,7 +2002,6 @@ join_list(PyObject* list, PyObject* string)
         return joiner;
     }
 
-#if PY_VERSION_HEX >= 0x01060000
     function = PyObject_GetAttrString(joiner, "join");
     if (!function) {
         Py_DECREF(joiner);
@@ -2024,12 +2017,6 @@ join_list(PyObject* list, PyObject* string)
     result = PyObject_CallObject(function, args);
     Py_DECREF(args); /* also removes list */
     Py_DECREF(function);
-#else
-    result = call(
-        "string", "join",
-        PyTuple_Pack(2, list, joiner)
-        );
-#endif
     Py_DECREF(joiner);
 
     return result;
@@ -2040,7 +2027,7 @@ pattern_findall(PatternObject* self, PyObject* args, PyObject* kw)
 {
     SRE_STATE state;
     PyObject* list;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t i, b, e;
 
     PyObject* string;
@@ -2136,7 +2123,6 @@ error:
 
 }
 
-#if PY_VERSION_HEX >= 0x02020000
 static PyObject*
 pattern_finditer(PatternObject* pattern, PyObject* args, PyObject* kw)
 {
@@ -2158,7 +2144,6 @@ pattern_finditer(PatternObject* pattern, PyObject* args, PyObject* kw)
 
     return iterator;
 }
-#endif
 
 static PyObject*
 pattern_split(PatternObject* self, PyObject* args, PyObject* kw)
@@ -2166,7 +2151,7 @@ pattern_split(PatternObject* self, PyObject* args, PyObject* kw)
     SRE_STATE state;
     PyObject* list;
     PyObject* item;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t n;
     Py_ssize_t i;
     void* last;
@@ -2282,7 +2267,7 @@ pattern_subx(PatternObject* self, PyObject* ptemplate, PyObject* string,
     PyObject* args;
     PyObject* match;
     void* ptr;
-    int status;
+    Py_ssize_t status;
     Py_ssize_t n;
     Py_ssize_t i, b, e;
     int logical_charsize, charsize;
@@ -2301,7 +2286,7 @@ pattern_subx(PatternObject* self, PyObject* ptemplate, PyObject* string,
         ptr = getstring(ptemplate, &n, &logical_charsize, &charsize, &view);
         b = charsize;
         if (ptr) {
-            literal = sre_literal_template(b, ptr, n);
+            literal = sre_literal_template(charsize, ptr, n);
         } else {
             PyErr_Clear();
             literal = 0;
@@ -2581,10 +2566,8 @@ static PyMethodDef pattern_methods[] = {
         pattern_split_doc},
     {"findall", (PyCFunction) pattern_findall, METH_VARARGS|METH_KEYWORDS,
         pattern_findall_doc},
-#if PY_VERSION_HEX >= 0x02020000
     {"finditer", (PyCFunction) pattern_finditer, METH_VARARGS|METH_KEYWORDS,
         pattern_finditer_doc},
-#endif
     {"scanner", (PyCFunction) pattern_scanner, METH_VARARGS|METH_KEYWORDS},
     {"__copy__", (PyCFunction) pattern_copy, METH_NOARGS},
     {"__deepcopy__", (PyCFunction) pattern_deepcopy, METH_O},
@@ -3767,7 +3750,7 @@ scanner_match(ScannerObject* self, PyObject *unused)
 {
     SRE_STATE* state = &self->state;
     PyObject* match;
-    int status;
+    Py_ssize_t status;
 
     state_reset(state);
 
@@ -3798,7 +3781,7 @@ scanner_search(ScannerObject* self, PyObject *unused)
 {
     SRE_STATE* state = &self->state;
     PyObject* match;
-    int status;
+    Py_ssize_t status;
 
     state_reset(state);
 
