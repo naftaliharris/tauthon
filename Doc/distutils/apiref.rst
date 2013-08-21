@@ -26,6 +26,8 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
    The setup function takes a large number of arguments. These are laid out in the
    following table.
 
+   .. tabularcolumns:: |l|L|L|
+
    +--------------------+--------------------------------+-------------------------------------------------------------+
    | argument name      | value                          | type                                                        |
    +====================+================================+=============================================================+
@@ -125,6 +127,8 @@ setup script). Indirectly provides the  :class:`distutils.dist.Distribution` and
 
    *stop_after* tells :func:`setup` when to stop processing; possible  values:
 
+   .. tabularcolumns:: |l|L|
+
    +---------------+---------------------------------------------+
    | value         | description                                 |
    +===============+=============================================+
@@ -163,7 +167,9 @@ the full reference.
 .. class:: Extension
 
    The Extension class describes a single C or C++extension module in a setup
-   script. It accepts the following keyword arguments in its constructor
+   script. It accepts the following keyword arguments in its constructor:
+
+   .. tabularcolumns:: |l|L|l|
 
    +------------------------+--------------------------------+---------------------------+
    | argument name          | value                          | type                      |
@@ -999,7 +1005,7 @@ directories.
    these files is available in answer D2 of the `NFS FAQ page
    <http://nfs.sourceforge.net/#section_d>`_.
 
-   .. versionchanged:: 3.2.4
+   .. versionchanged:: 3.3.1
       NFS files are ignored.
 
 .. function:: remove_tree(directory[, verbose=0, dry_run=0])
@@ -1166,12 +1172,11 @@ other utility module.
 
 .. function:: grok_environment_error(exc[, prefix='error: '])
 
-   Generate a useful error message from an :exc:`EnvironmentError`  (:exc:`IOError`
-   or :exc:`OSError`) exception object.   Handles Python 1.5.1 and later styles,
-   and does what it can to deal with  exception objects that don't have a filename
-   (which happens when the error  is due to a two-file operation, such as
-   :func:`rename` or  :func:`link`).  Returns the error message as a string
-   prefixed  with *prefix*.
+   Generate a useful error message from an :exc:`OSError` exception object.
+   Handles Python 1.5.1 and later styles, and does what it can to deal with
+   exception objects that don't have a filename (which happens when the error
+   is due to a two-file operation, such as :func:`rename` or :func:`link`).
+   Returns the error message as a string prefixed with *prefix*.
 
 
 .. function:: split_quoted(s)
@@ -1562,6 +1567,8 @@ lines, and joining lines with backslashes.
    :func:`open` built-in function.
 
    The options are all boolean, and affect the values returned by :meth:`readline`
+
+   .. tabularcolumns:: |l|L|l|
 
    +------------------+--------------------------------+---------+
    | option name      | description                    | default |

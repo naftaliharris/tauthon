@@ -17,6 +17,7 @@ Python's interfaces for processing XML are grouped in the ``xml`` package.
    constructed data.  If you need to parse untrusted or unauthenticated data see
    :ref:`xml-vulnerabilities`.
 
+
 It is important to note that modules in the :mod:`xml` package require that
 there be at least one SAX-compliant XML parser available. The Expat parser is
 included with Python, so the :mod:`xml.parsers.expat` module will always be
@@ -129,3 +130,4 @@ well-definied XML features.
 .. _Billion Laughs: http://en.wikipedia.org/wiki/Billion_laughs
 .. _ZIP bomb: http://en.wikipedia.org/wiki/Zip_bomb
 .. _DTD: http://en.wikipedia.org/wiki/Document_Type_Definition
+

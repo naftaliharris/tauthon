@@ -54,6 +54,8 @@ There are a number of built-in exceptions that represent warning categories.
 This categorization is useful to be able to filter out groups of warnings.  The
 following warnings category classes are currently defined:
 
+.. tabularcolumns:: |l|p{0.6\linewidth}|
+
 +----------------------------------+-----------------------------------------------+
 | Class                            | Description                                   |
 +==================================+===============================================+
@@ -339,8 +341,7 @@ Available Functions
    Write a warning to a file.  The default implementation calls
    ``formatwarning(message, category, filename, lineno, line)`` and writes the
    resulting string to *file*, which defaults to ``sys.stderr``.  You may replace
-   this function with an alternative implementation by assigning to
-   ``warnings.showwarning``.
+   this function with any callable by assigning to ``warnings.showwarning``.
    *line* is a line of source code to be included in the warning
    message; if *line* is not supplied, :func:`showwarning` will
    try to read the line specified by *filename* and *lineno*.

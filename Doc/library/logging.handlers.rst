@@ -53,8 +53,8 @@ and :meth:`flush` methods).
    .. method:: flush()
 
       Flushes the stream by calling its :meth:`flush` method. Note that the
-      :meth:`close` method is inherited from :class:`Handler` and so does
-      no output, so an explicit :meth:`flush` call may be needed at times.
+      :meth:`close` method is inherited from :class:`~logging.Handler` and so
+      does no output, so an explicit :meth:`flush` call may be needed at times.
 
 .. versionchanged:: 3.2
    The ``StreamHandler`` class now has a ``terminator`` attribute, default
@@ -145,8 +145,8 @@ new stream.
 This handler is not appropriate for use under Windows, because under Windows
 open log files cannot be moved or renamed - logging opens the files with
 exclusive locks - and so there is no need for such a handler. Furthermore,
-*ST_INO* is not supported under Windows; :func:`stat` always returns zero for
-this value.
+*ST_INO* is not supported under Windows; :func:`~os.stat` always returns zero
+for this value.
 
 
 .. class:: WatchedFileHandler(filename[,mode[, encoding[, delay]]])
@@ -163,6 +163,87 @@ this value.
       Outputs the record to the file, but first checks to see if the file has
       changed.  If it has, the existing stream is flushed and closed and the
       file opened again, before outputting the record to the file.
+
+.. _base-rotating-handler:
+
+BaseRotatingHandler
+^^^^^^^^^^^^^^^^^^^
+
+The :class:`BaseRotatingHandler` class, located in the :mod:`logging.handlers`
+module, is the base class for the rotating file handlers,
+:class:`RotatingFileHandler` and :class:`TimedRotatingFileHandler`. You should
+not need to instantiate this class, but it has attributes and methods you may
+need to override.
+
+.. class:: BaseRotatingHandler(filename, mode, encoding=None, delay=False)
+
+   The parameters are as for :class:`FileHandler`. The attributes are:
+
+   .. attribute:: namer
+
+      If this attribute is set to a callable, the :meth:`rotation_filename`
+      method delegates to this callable. The parameters passed to the callable
+      are those passed to :meth:`rotation_filename`.
+
+      .. note:: The namer function is called quite a few times during rollover,
+         so it should be as simple and as fast as possible. It should also
+         return the same output every time for a given input, otherwise the
+         rollover behaviour may not work as expected.
+
+      .. versionadded:: 3.3
+
+
+   .. attribute:: BaseRotatingHandler.rotator
+
+      If this attribute is set to a callable, the :meth:`rotate` method
+      delegates to this callable.  The parameters passed to the callable are
+      those passed to :meth:`rotate`.
+
+      .. versionadded:: 3.3
+
+   .. method:: BaseRotatingHandler.rotation_filename(default_name)
+
+      Modify the filename of a log file when rotating.
+
+      This is provided so that a custom filename can be provided.
+
+      The default implementation calls the 'namer' attribute of the handler,
+      if it's callable, passing the default name to it. If the attribute isn't
+      callable (the default is ``None``), the name is returned unchanged.
+
+      :param default_name: The default name for the log file.
+
+      .. versionadded:: 3.3
+
+
+   .. method:: BaseRotatingHandler.rotate(source, dest)
+
+      When rotating, rotate the current log.
+
+      The default implementation calls the 'rotator' attribute of the handler,
+      if it's callable, passing the source and dest arguments to it. If the
+      attribute isn't callable (the default is ``None``), the source is simply
+      renamed to the destination.
+
+      :param source: The source filename. This is normally the base
+                     filename, e.g. 'test.log'
+      :param dest:   The destination filename. This is normally
+                     what the source is rotated to, e.g. 'test.log.1'.
+
+      .. versionadded:: 3.3
+
+The reason the attributes exist is to save you having to subclass - you can use
+the same callables for instances of :class:`RotatingFileHandler` and
+:class:`TimedRotatingFileHandler`. If either the namer or rotator callable
+raises an exception, this will be handled in the same way as any other
+exception during an :meth:`emit` call, i.e. via the :meth:`handleError` method
+of the handler.
+
+If you need to make more significant changes to rotation processing, you can
+override the methods.
+
+For an example, see :ref:`cookbook-rotator-namer`.
+
 
 .. _rotating-file-handler:
 
@@ -302,7 +383,8 @@ sends logging output to a network socket. The base class uses a TCP socket.
       binary format. If there is an error with the socket, silently drops the
       packet. If the connection was previously lost, re-establishes the
       connection. To unpickle the record at the receiving end into a
-      :class:`LogRecord`, use the :func:`makeLogRecord` function.
+      :class:`~logging.LogRecord`, use the :func:`~logging.makeLogRecord`
+      function.
 
 
    .. method:: handleError()
@@ -380,7 +462,8 @@ over UDP sockets.
       Pickles the record's attribute dictionary and writes it to the socket in
       binary format. If there is an error with the socket, silently drops the
       packet. To unpickle the record at the receiving end into a
-      :class:`LogRecord`, use the :func:`makeLogRecord` function.
+      :class:`~logging.LogRecord`, use the :func:`~logging.makeLogRecord`
+      function.
 
 
    .. method:: makeSocket()
@@ -455,6 +538,15 @@ supports sending logging messages to a remote or local Unix syslog.
          ``append_nul``. This defaults to ``True`` (preserving the existing
          behaviour) but can be set to ``False`` on a ``SysLogHandler`` instance
          in order for that instance to *not* append the NUL terminator.
+
+      .. versionchanged:: 3.3
+         (See: :issue:`12419`.) In earlier versions, there was no facility for
+         an "ident" or "tag" prefix to identify the source of the message. This
+         can now be specified using a class-level attribute, defaulting to
+         ``""`` to preserve existing behaviour, but which can be overridden on
+         a ``SysLogHandler`` instance in order for that instance to prepend
+         the ident to every message handled. Note that the provided ident must
+         be text, not bytes, and is prepended to the message exactly as is.
 
    .. method:: encodePriority(facility, priority)
 
@@ -618,7 +710,7 @@ The :class:`SMTPHandler` class, located in the :mod:`logging.handlers` module,
 supports sending logging messages to an email address via SMTP.
 
 
-.. class:: SMTPHandler(mailhost, fromaddr, toaddrs, subject, credentials=None, secure=None)
+.. class:: SMTPHandler(mailhost, fromaddr, toaddrs, subject, credentials=None, secure=None, timeout=1.0)
 
    Returns a new instance of the :class:`SMTPHandler` class. The instance is
    initialized with the from and to addresses and subject line of the email. The
@@ -633,6 +725,12 @@ supports sending logging messages to an email address via SMTP.
    with the name of a keyfile, or a 2-value tuple with the names of the keyfile
    and certificate file. (This tuple is passed to the
    :meth:`smtplib.SMTP.starttls` method.)
+
+   A timeout can be specified for communication with the SMTP server using the
+   *timeout* argument.
+
+   .. versionadded:: 3.3
+      The *timeout* argument was added.
 
    .. method:: emit(record)
 
@@ -694,7 +792,7 @@ should, then :meth:`flush` is expected to do the flushing.
 
    .. method:: close()
 
-      Calls :meth:`flush`, sets the target to :const:`None` and clears the
+      Calls :meth:`flush`, sets the target to ``None`` and clears the
       buffer.
 
 
@@ -862,6 +960,15 @@ possible, while any potentially slow operations (such as sending an email via
       This asks the thread to terminate, and then waits for it to do so.
       Note that if you don't call this before your application exits, there
       may be some records still left on the queue, which won't be processed.
+
+   .. method:: enqueue_sentinel()
+
+      Writes a sentinel to the queue to tell the listener to quit. This
+      implementation uses ``put_nowait()``.  You may want to override this
+      method if you want to use timeouts or work with custom queue
+      implementations.
+
+      .. versionadded:: 3.3
 
 
 .. seealso::

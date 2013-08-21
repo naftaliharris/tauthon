@@ -184,7 +184,6 @@ The output of the example code is:
 
 .. code-block:: none
 
-
    After local assignment: test spam
    After nonlocal assignment: nonlocal spam
    After global assignment: nonlocal spam
@@ -698,9 +697,9 @@ example, the following code will print B, C, D in that order::
    class D(C):
        pass
 
-   for c in [B, C, D]:
+   for cls in [B, C, D]:
        try:
-           raise c()
+           raise cls()
        except D:
            print("D")
        except C:

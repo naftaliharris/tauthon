@@ -40,7 +40,11 @@ The module defines the following exception:
 .. exception:: LoadError
 
    Instances of :class:`FileCookieJar` raise this exception on failure to load
-   cookies from a file.  :exc:`LoadError` is a subclass of :exc:`IOError`.
+   cookies from a file.  :exc:`LoadError` is a subclass of :exc:`OSError`.
+
+   .. versionchanged:: 3.3
+      LoadError was made a subclass of :exc:`OSError` instead of
+      :exc:`IOError`.
 
 
 The following classes are provided:
@@ -150,9 +154,15 @@ contained :class:`Cookie` objects.
 
    The *request* object (usually a :class:`urllib.request..Request` instance)
    must support the methods :meth:`get_full_url`, :meth:`get_host`,
-   :meth:`get_type`, :meth:`unverifiable`, :meth:`get_origin_req_host`,
-   :meth:`has_header`, :meth:`get_header`, :meth:`header_items`, and
-   :meth:`add_unredirected_header`, as documented by :mod:`urllib.request`.
+   :meth:`get_type`, :meth:`unverifiable`, :meth:`has_header`,
+   :meth:`get_header`, :meth:`header_items`, :meth:`add_unredirected_header`
+   and :attr:`origin_req_host` attribute as documented by
+   :mod:`urllib.request`.
+
+   .. versionchanged:: 3.3
+
+    *request* object needs :attr:`origin_req_host` attribute. Dependency on a
+    deprecated method :meth:`get_origin_req_host` has been removed.
 
 
 .. method:: CookieJar.extract_cookies(response, request)
@@ -170,11 +180,15 @@ contained :class:`Cookie` objects.
 
    The *request* object (usually a :class:`urllib.request.Request` instance)
    must support the methods :meth:`get_full_url`, :meth:`get_host`,
-   :meth:`unverifiable`, and :meth:`get_origin_req_host`, as documented by
-   :mod:`urllib.request`.  The request is used to set default values for
+   :meth:`unverifiable`, and :attr:`origin_req_host` attribute, as documented
+   by :mod:`urllib.request`.  The request is used to set default values for
    cookie-attributes as well as for checking that the cookie is allowed to be
    set.
 
+   .. versionchanged:: 3.3
+
+    *request* object needs :attr:`origin_req_host` attribute. Dependency on a
+    deprecated method :meth:`get_origin_req_host` has been removed.
 
 .. method:: CookieJar.set_policy(policy)
 
@@ -257,8 +271,11 @@ contained :class:`Cookie` objects.
    Arguments are as for :meth:`save`.
 
    The named file must be in the format understood by the class, or
-   :exc:`LoadError` will be raised.  Also, :exc:`IOError` may be raised, for
+   :exc:`LoadError` will be raised.  Also, :exc:`OSError` may be raised, for
    example if the file does not exist.
+
+   .. versionchanged:: 3.3
+      :exc:`IOError` used to be raised, it is now an alias of :exc:`OSError`.
 
 
 .. method:: FileCookieJar.revert(filename=None, ignore_discard=False, ignore_expires=False)

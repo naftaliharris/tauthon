@@ -70,7 +70,7 @@ syslog_get_argv(void)
 
     Py_ssize_t argv_len, scriptlen;
     PyObject *scriptobj;
-    Py_UNICODE *atslash, *atstart;
+    Py_ssize_t slash;
     PyObject *argv = PySys_GetObject("argv");
 
     if (argv == NULL) {
@@ -90,16 +90,16 @@ syslog_get_argv(void)
     if (!PyUnicode_Check(scriptobj)) {
         return(NULL);
     }
-    scriptlen = PyUnicode_GET_SIZE(scriptobj);
+    scriptlen = PyUnicode_GET_LENGTH(scriptobj);
     if (scriptlen == 0) {
         return(NULL);
     }
 
-    atstart = PyUnicode_AS_UNICODE(scriptobj);
-    atslash = Py_UNICODE_strrchr(atstart, SEP);
-    if (atslash) {
-        return(PyUnicode_FromUnicode(atslash + 1,
-                                     scriptlen - (atslash - atstart) - 1));
+    slash = PyUnicode_FindChar(scriptobj, SEP, 0, scriptlen, -1);
+    if (slash == -2)
+        return NULL;
+    if (slash != -1) {
+        return PyUnicode_Substring(scriptobj, slash, scriptlen);
     } else {
         Py_INCREF(scriptobj);
         return(scriptobj);
@@ -291,6 +291,9 @@ PyInit_syslog(void)
     PyModule_AddIntConstant(m, "LOG_PID",         LOG_PID);
     PyModule_AddIntConstant(m, "LOG_CONS",        LOG_CONS);
     PyModule_AddIntConstant(m, "LOG_NDELAY",  LOG_NDELAY);
+#ifdef LOG_ODELAY
+    PyModule_AddIntConstant(m, "LOG_ODELAY",  LOG_ODELAY);
+#endif
 #ifdef LOG_NOWAIT
     PyModule_AddIntConstant(m, "LOG_NOWAIT",  LOG_NOWAIT);
 #endif
@@ -331,5 +334,10 @@ PyInit_syslog(void)
     PyModule_AddIntConstant(m, "LOG_CRON",        LOG_CRON);
     PyModule_AddIntConstant(m, "LOG_UUCP",        LOG_UUCP);
     PyModule_AddIntConstant(m, "LOG_NEWS",        LOG_NEWS);
+
+#ifdef LOG_AUTHPRIV
+    PyModule_AddIntConstant(m, "LOG_AUTHPRIV",    LOG_AUTHPRIV);
+#endif
+
     return m;
 }

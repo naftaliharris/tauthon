@@ -165,8 +165,12 @@ dev_urandom_python(char *buffer, Py_ssize_t size)
     Py_END_ALLOW_THREADS
     if (fd < 0)
     {
-        PyErr_SetString(PyExc_NotImplementedError,
-                        "/dev/urandom (or equivalent) not found");
+        if (errno == ENOENT || errno == ENXIO ||
+            errno == ENODEV || errno == EACCES)
+            PyErr_SetString(PyExc_NotImplementedError,
+                            "/dev/urandom (or equivalent) not found");
+        else
+            PyErr_SetFromErrno(PyExc_OSError);
         return -1;
     }
 
@@ -256,17 +260,6 @@ _PyRandom_Init(void)
     if (_Py_HashSecret_Initialized)
         return;
     _Py_HashSecret_Initialized = 1;
-
-    /*
-      By default, hash randomization is disabled, and only
-      enabled if PYTHONHASHSEED is set to non-empty or if
-      "-R" is provided at the command line:
-    */
-    if (!Py_HashRandomizationFlag) {
-        /* Disable the randomized hash: */
-        memset(secret, 0, secret_size);
-        return;
-    }
 
     /*
       Hash randomization is enabled.  Generate a per-process secret,

@@ -3,6 +3,7 @@
 import unittest
 import sys
 import os
+import _testcapi
 from test import support
 
 # Skip this test if the _tkinter module wasn't built.
@@ -175,9 +176,82 @@ class TclTest(unittest.TestCase):
                 self.assertEqual(passValue(f), f)
         self.assertEqual(passValue((1, '2', (3.4,))), (1, '2', (3.4,)))
 
+    def test_splitlist(self):
+        splitlist = self.interp.tk.splitlist
+        call = self.interp.tk.call
+        self.assertRaises(TypeError, splitlist)
+        self.assertRaises(TypeError, splitlist, 'a', 'b')
+        self.assertRaises(TypeError, splitlist, 2)
+        testcases = [
+            ('2', ('2',)),
+            ('', ()),
+            ('{}', ('',)),
+            ('""', ('',)),
+            ('a\n b\t\r c\n ', ('a', 'b', 'c')),
+            (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
+            ('a \u20ac', ('a', '\u20ac')),
+            (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            ('a {b c}', ('a', 'b c')),
+            (r'a b\ c', ('a', 'b c')),
+            (('a', 'b c'), ('a', 'b c')),
+            ('a 2', ('a', '2')),
+            (('a', 2), ('a', 2)),
+            ('a 3.4', ('a', '3.4')),
+            (('a', 3.4), ('a', 3.4)),
+            ((), ()),
+            (call('list', 1, '2', (3.4,)), (1, '2', (3.4,))),
+        ]
+        for arg, res in testcases:
+            self.assertEqual(splitlist(arg), res, msg=arg)
+        self.assertRaises(TclError, splitlist, '{')
+
+    def test_split(self):
+        split = self.interp.tk.split
+        call = self.interp.tk.call
+        self.assertRaises(TypeError, split)
+        self.assertRaises(TypeError, split, 'a', 'b')
+        self.assertRaises(TypeError, split, 2)
+        testcases = [
+            ('2', '2'),
+            ('', ''),
+            ('{}', ''),
+            ('""', ''),
+            ('{', '{'),
+            ('a\n b\t\r c\n ', ('a', 'b', 'c')),
+            (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
+            ('a \u20ac', ('a', '\u20ac')),
+            (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            ('a {b c}', ('a', ('b', 'c'))),
+            (r'a b\ c', ('a', ('b', 'c'))),
+            (('a', b'b c'), ('a', ('b', 'c'))),
+            (('a', 'b c'), ('a', ('b', 'c'))),
+            ('a 2', ('a', '2')),
+            (('a', 2), ('a', 2)),
+            ('a 3.4', ('a', '3.4')),
+            (('a', 3.4), ('a', 3.4)),
+            (('a', (2, 3.4)), ('a', (2, 3.4))),
+            ((), ()),
+            (call('list', 1, '2', (3.4,)), (1, '2', (3.4,))),
+        ]
+        for arg, res in testcases:
+            self.assertEqual(split(arg), res, msg=arg)
+
+
+class BigmemTclTest(unittest.TestCase):
+
+    def setUp(self):
+        self.interp = Tcl()
+
+    @unittest.skipUnless(_testcapi.INT_MAX < _testcapi.PY_SSIZE_T_MAX,
+                         "needs UINT_MAX < SIZE_MAX")
+    @support.bigmemtest(size=_testcapi.INT_MAX + 1, memuse=5, dry_run=False)
+    def test_huge_string(self, size):
+        value = ' ' * size
+        self.assertRaises(OverflowError, self.interp.call, 'set', '_', value)
+
 
 def test_main():
-    support.run_unittest(TclTest, TkinterTest)
+    support.run_unittest(TclTest, TkinterTest, BigmemTclTest)
 
 if __name__ == "__main__":
     test_main()
