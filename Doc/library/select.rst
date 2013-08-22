@@ -47,10 +47,13 @@ The module defines the following:
    to :const:`EPOLL_CLOEXEC`, which causes the epoll descriptor to be closed
    automatically when :func:`os.execve` is called. See section
    :ref:`epoll-objects` below for the methods supported by epolling objects.
-
+   They also support the :keyword:`with` statement.
 
    .. versionchanged:: 3.3
       Added the *flags* parameter.
+
+   .. versionchanged:: 3.4
+      Support for the :keyword:`with` statement was added.
 
 
 .. function:: poll()
@@ -142,6 +145,27 @@ descriptors), ``/dev/poll`` is O(active file descriptors).
 
 ``/dev/poll`` behaviour is very close to the standard :c:func:`poll`
 object.
+
+
+.. method:: devpoll.close()
+
+   Close the file descriptor of the polling object.
+
+   .. versionadded:: 3.4
+
+
+.. attribute:: devpoll.closed
+
+   ``True`` if the polling object is closed.
+
+   .. versionadded:: 3.4
+
+
+.. method:: devpoll.fileno()
+
+   Return the file descriptor number of the polling object.
+
+   .. versionadded:: 3.4
 
 
 .. method:: devpoll.register(fd[, eventmask])
@@ -239,6 +263,11 @@ Edge and Level Trigger Polling (epoll) Objects
 .. method:: epoll.close()
 
    Close the control file descriptor of the epoll object.
+
+
+.. attribute:: epoll.closed
+
+   ``True`` if the epoll object is closed.
 
 
 .. method:: epoll.fileno()
@@ -358,6 +387,11 @@ Kqueue Objects
 .. method:: kqueue.close()
 
    Close the control file descriptor of the kqueue object.
+
+
+.. attribute:: kqueue.closed
+
+   ``True`` if the kqueue object is closed.
 
 
 .. method:: kqueue.fileno()
