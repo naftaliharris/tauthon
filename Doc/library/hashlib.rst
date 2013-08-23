@@ -1,4 +1,3 @@
-
 :mod:`hashlib` --- Secure hashes and message digests
 ====================================================
 
@@ -13,6 +12,10 @@
 .. index::
    single: message digest, MD5
    single: secure hash algorithm, SHA1, SHA224, SHA256, SHA384, SHA512
+
+**Source code:** :source:`Lib/hashlib.py`
+
+--------------
 
 This module implements a common interface to many different secure hash and
 message digest algorithms.  Included are the FIPS secure hash algorithms SHA1,
@@ -74,6 +77,15 @@ Using :func:`new` with an algorithm provided by OpenSSL:
    >>> h.hexdigest()
    'cc4a5ce1b3df48aec5d22d1f16b894a0b894eccc'
 
+This module provides the following constant attribute:
+
+.. data:: hashlib.algorithms
+
+   A tuple providing the names of the hash algorithms guaranteed to be
+   supported by this module.
+
+   .. versionadded:: 2.7
+
 The following values are provided as constant attributes of the hash objects
 returned by the constructors:
 
@@ -94,6 +106,12 @@ A hash object has the following methods:
    Update the hash object with the string *arg*.  Repeated calls are equivalent to
    a single call with the concatenation of all the arguments: ``m.update(a);
    m.update(b)`` is equivalent to ``m.update(a+b)``.
+
+   .. versionchanged:: 2.7
+
+      The Python GIL is released to allow other threads to run while
+      hash updates on data larger than 2048 bytes is taking place when
+      using hash algorithms supplied by OpenSSL.
 
 
 .. method:: hash.digest()

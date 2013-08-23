@@ -63,6 +63,95 @@ static PyObject *gc_str = NULL;
 /* Python string used to look for __del__ attribute. */
 static PyObject *delstr = NULL;
 
+/* This is the number of objects who survived the last full collection. It
+   approximates the number of long lived objects tracked by the GC.
+
+   (by "full collection", we mean a collection of the oldest generation).
+*/
+static Py_ssize_t long_lived_total = 0;
+
+/* This is the number of objects who survived all "non-full" collections,
+   and are awaiting to undergo a full collection for the first time.
+
+*/
+static Py_ssize_t long_lived_pending = 0;
+
+/*
+   NOTE: about the counting of long-lived objects.
+
+   To limit the cost of garbage collection, there are two strategies;
+     - make each collection faster, e.g. by scanning fewer objects
+     - do less collections
+   This heuristic is about the latter strategy.
+
+   In addition to the various configurable thresholds, we only trigger a
+   full collection if the ratio
+    long_lived_pending / long_lived_total
+   is above a given value (hardwired to 25%).
+
+   The reason is that, while "non-full" collections (i.e., collections of
+   the young and middle generations) will always examine roughly the same
+   number of objects -- determined by the aforementioned thresholds --,
+   the cost of a full collection is proportional to the total number of
+   long-lived objects, which is virtually unbounded.
+
+   Indeed, it has been remarked that doing a full collection every
+   <constant number> of object creations entails a dramatic performance
+   degradation in workloads which consist in creating and storing lots of
+   long-lived objects (e.g. building a large list of GC-tracked objects would
+   show quadratic performance, instead of linear as expected: see issue #4074).
+
+   Using the above ratio, instead, yields amortized linear performance in
+   the total number of objects (the effect of which can be summarized
+   thusly: "each full garbage collection is more and more costly as the
+   number of objects grows, but we do fewer and fewer of them").
+
+   This heuristic was suggested by Martin von Löwis on python-dev in
+   June 2008. His original analysis and proposal can be found at:
+    http://mail.python.org/pipermail/python-dev/2008-June/080579.html
+*/
+
+/*
+   NOTE: about untracking of mutable objects.
+   
+   Certain types of container cannot participate in a reference cycle, and
+   so do not need to be tracked by the garbage collector. Untracking these
+   objects reduces the cost of garbage collections. However, determining
+   which objects may be untracked is not free, and the costs must be
+   weighed against the benefits for garbage collection.
+
+   There are two possible strategies for when to untrack a container:
+
+   i) When the container is created.
+   ii) When the container is examined by the garbage collector.
+
+   Tuples containing only immutable objects (integers, strings etc, and
+   recursively, tuples of immutable objects) do not need to be tracked.
+   The interpreter creates a large number of tuples, many of which will
+   not survive until garbage collection. It is therefore not worthwhile
+   to untrack eligible tuples at creation time.
+
+   Instead, all tuples except the empty tuple are tracked when created. 
+   During garbage collection it is determined whether any surviving tuples 
+   can be untracked. A tuple can be untracked if all of its contents are 
+   already not tracked. Tuples are examined for untracking in all garbage 
+   collection cycles. It may take more than one cycle to untrack a tuple.
+
+   Dictionaries containing only immutable objects also do not need to be
+   tracked. Dictionaries are untracked when created. If a tracked item is
+   inserted into a dictionary (either as a key or value), the dictionary
+   becomes tracked. During a full garbage collection (all generations),
+   the collector will untrack any dictionaries whose contents are not
+   tracked.
+
+   The module provides the python function is_tracked(obj), which returns
+   the CURRENT tracking status of the object. Subsequent garbage
+   collections may change the tracking status of the object.
+   
+   Untracking of certain containers was introduced in issue #4688, and 
+   the algorithm was refined in response to issue #14775.
+*/
+
 /* set for debugging information */
 #define DEBUG_STATS             (1<<0) /* print collection statistics */
 #define DEBUG_COLLECTABLE       (1<<1) /* print collectable objects */
@@ -384,6 +473,9 @@ move_unreachable(PyGC_Head *young, PyGC_Head *unreachable)
                             (visitproc)visit_reachable,
                             (void *)young);
             next = gc->gc.gc_next;
+            if (PyTuple_CheckExact(op)) {
+                _PyTuple_MaybeUntrack(op);
+            }
         }
         else {
             /* This *may* be unreachable.  To make progress,
@@ -421,6 +513,20 @@ has_finalizer(PyObject *op)
         return PyGen_NeedsFinalizing((PyGenObject *)op);
     else
         return 0;
+}
+
+/* Try to untrack all currently tracked dictionaries */
+static void
+untrack_dicts(PyGC_Head *head)
+{
+    PyGC_Head *next, *gc = head->gc.gc_next;
+    while (gc != head) {
+        PyObject *op = FROM_GC(gc);
+        next = gc->gc.gc_next;
+        if (PyDict_CheckExact(op))
+            _PyDict_MaybeUntrack(op);
+        gc = next;
+    }
 }
 
 /* Move the objects in unreachable with __del__ methods into `finalizers`.
@@ -735,7 +841,9 @@ clear_freelists(void)
     (void)PyFrame_ClearFreeList();
     (void)PyCFunction_ClearFreeList();
     (void)PyTuple_ClearFreeList();
+#ifdef Py_USING_UNICODE
     (void)PyUnicode_ClearFreeList();
+#endif
     (void)PyInt_ClearFreeList();
     (void)PyFloat_ClearFreeList();
 }
@@ -826,8 +934,19 @@ collect(int generation)
     move_unreachable(young, &unreachable);
 
     /* Move reachable objects to next generation. */
-    if (young != old)
+    if (young != old) {
+        if (generation == NUM_GENERATIONS - 2) {
+            long_lived_pending += gc_list_size(young);
+        }
         gc_list_merge(young, old);
+    }
+    else {
+        /* We only untrack dicts in full collections, to avoid quadratic
+           dict build-up. See issue #14775. */
+        untrack_dicts(young);
+        long_lived_pending = 0;
+        long_lived_total = gc_list_size(young);
+    }
 
     /* All objects in unreachable are trash, but objects reachable from
      * finalizers can't safely be deleted.  Python programmers should take
@@ -895,7 +1014,7 @@ collect(int generation)
      */
     (void)handle_finalizers(&finalizers, old);
 
-    /* Clear free list only during the collection of the higest
+    /* Clear free list only during the collection of the highest
      * generation */
     if (generation == NUM_GENERATIONS-1) {
         clear_freelists();
@@ -916,11 +1035,18 @@ collect_generations(void)
     int i;
     Py_ssize_t n = 0;
 
-    /* Find the oldest generation (higest numbered) where the count
+    /* Find the oldest generation (highest numbered) where the count
      * exceeds the threshold.  Objects in the that generation and
      * generations younger than it will be collected. */
     for (i = NUM_GENERATIONS-1; i >= 0; i--) {
         if (generations[i].count > generations[i].threshold) {
+            /* Avoid quadratic performance degradation in number
+               of tracked objects. See comments at the beginning
+               of this file, and issue #4074.
+            */
+            if (i == NUM_GENERATIONS - 1
+                && long_lived_pending < long_lived_total / 4)
+                continue;
             n = collect(i);
             break;
         }
@@ -1198,6 +1324,26 @@ gc_get_objects(PyObject *self, PyObject *noargs)
     return result;
 }
 
+PyDoc_STRVAR(gc_is_tracked__doc__,
+"is_tracked(obj) -> bool\n"
+"\n"
+"Returns true if the object is tracked by the garbage collector.\n"
+"Simple atomic objects will return false.\n"
+);
+
+static PyObject *
+gc_is_tracked(PyObject *self, PyObject *obj)
+{
+    PyObject *result;
+
+    if (PyObject_IS_GC(obj) && IS_TRACKED(obj))
+        result = Py_True;
+    else
+        result = Py_False;
+    Py_INCREF(result);
+    return result;
+}
+
 
 PyDoc_STRVAR(gc__doc__,
 "This module provides access to the garbage collector for reference cycles.\n"
@@ -1212,6 +1358,7 @@ PyDoc_STRVAR(gc__doc__,
 "set_threshold() -- Set the collection thresholds.\n"
 "get_threshold() -- Return the current the collection thresholds.\n"
 "get_objects() -- Return a list of all objects tracked by the collector.\n"
+"is_tracked() -- Returns true if a given object is tracked.\n"
 "get_referrers() -- Return the list of objects that refer to an object.\n"
 "get_referents() -- Return the list of objects that an object refers to.\n");
 
@@ -1227,6 +1374,7 @@ static PyMethodDef GcMethods[] = {
     {"collect",            (PyCFunction)gc_collect,
         METH_VARARGS | METH_KEYWORDS,           gc_collect__doc__},
     {"get_objects",    gc_get_objects,METH_NOARGS,  gc_get_objects__doc__},
+    {"is_tracked",     gc_is_tracked, METH_O,       gc_is_tracked__doc__},
     {"get_referrers",  gc_get_referrers, METH_VARARGS,
         gc_get_referrers__doc__},
     {"get_referents",  gc_get_referents, METH_VARARGS,

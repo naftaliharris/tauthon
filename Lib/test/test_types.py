@@ -1,7 +1,7 @@
 # Python test set -- part 6, built-in types
 
 from test.test_support import run_unittest, have_unicode, run_with_locale, \
-                              _check_py3k_warnings
+                              check_py3k_warnings
 import unittest
 import sys
 import locale
@@ -21,7 +21,6 @@ class TypesTests(unittest.TestCase):
         if not {'x': 1}: self.fail('{\'x\': 1} is false instead of true')
         def f(): pass
         class C: pass
-        import sys
         x = C()
         if not f: self.fail('f is false instead of true')
         if not C: self.fail('C is false instead of true')
@@ -113,6 +112,9 @@ class TypesTests(unittest.TestCase):
 
         self.assertEqual(1.5e-101.__format__('e'), '1.500000e-101')
         self.assertEqual('%e' % 1.5e-101, '1.500000e-101')
+
+        self.assertEqual('%g' % 1.0, '1')
+        self.assertEqual('%#g' % 1.0, '1.00000')
 
     def test_normal_integers(self):
         # Ensure the first 256 integers are shared
@@ -403,6 +405,9 @@ class TypesTests(unittest.TestCase):
         test(123456, "#012X", '0X000001E240')
         test(-123456, "#012X", '-0X00001E240')
 
+        # issue 5782, commas with no specifier type
+        test(1234, '010,', '00,001,234')
+
         # make sure these are errors
 
         # precision disallowed
@@ -412,6 +417,9 @@ class TypesTests(unittest.TestCase):
         # format spec must be string
         self.assertRaises(TypeError, 3 .__format__, None)
         self.assertRaises(TypeError, 3 .__format__, 0)
+
+        # can't have ',' with 'c'
+        self.assertRaises(ValueError, 3 .__format__, ",c")
 
         # ensure that only int and float type specifiers work
         for format_spec in ([chr(x) for x in range(ord('a'), ord('z')+1)] +
@@ -427,6 +435,17 @@ class TypesTests(unittest.TestCase):
             for value in [0, 1, -1, 100, -100, 1234567890, -1234567890]:
                 self.assertEqual(value.__format__(format_spec),
                                  float(value).__format__(format_spec))
+
+        # Issue 6902
+        test(123456, "0<20", '12345600000000000000')
+        test(123456, "1<20", '12345611111111111111')
+        test(123456, "*<20", '123456**************')
+        test(123456, "0>20", '00000000000000123456')
+        test(123456, "1>20", '11111111111111123456')
+        test(123456, "*>20", '**************123456')
+        test(123456, "0=20", '00000000000000123456')
+        test(123456, "1=20", '11111111111111123456')
+        test(123456, "*=20", '**************123456')
 
     def test_long__format__(self):
         def test(i, format_spec, result):
@@ -525,6 +544,16 @@ class TypesTests(unittest.TestCase):
             for value in [0L, 1L, -1L, 100L, -100L, 1234567890L, -1234567890L]:
                 self.assertEqual(value.__format__(format_spec),
                                  float(value).__format__(format_spec))
+        # Issue 6902
+        test(123456L, "0<20", '12345600000000000000')
+        test(123456L, "1<20", '12345611111111111111')
+        test(123456L, "*<20", '123456**************')
+        test(123456L, "0>20", '00000000000000123456')
+        test(123456L, "1>20", '11111111111111123456')
+        test(123456L, "*>20", '**************123456')
+        test(123456L, "0=20", '00000000000000123456')
+        test(123456L, "1=20", '11111111111111123456')
+        test(123456L, "*=20", '**************123456')
 
     @run_with_locale('LC_NUMERIC', 'en_US.UTF8')
     def test_float__format__locale(self):
@@ -593,10 +622,25 @@ class TypesTests(unittest.TestCase):
         test(-1.0, ' f', '-1.000000')
         test( 1.0, '+f', '+1.000000')
         test(-1.0, '+f', '-1.000000')
-        test(1.1234e90, 'f', '1.1234e+90')
-        test(1.1234e90, 'F', '1.1234e+90')
-        test(1.1234e200, 'f', '1.1234e+200')
-        test(1.1234e200, 'F', '1.1234e+200')
+
+        # Python versions <= 2.6 switched from 'f' to 'g' formatting for
+        # values larger than 1e50.  No longer.
+        f = 1.1234e90
+        for fmt in 'f', 'F':
+            # don't do a direct equality check, since on some
+            # platforms only the first few digits of dtoa
+            # will be reliable
+            result = f.__format__(fmt)
+            self.assertEqual(len(result), 98)
+            self.assertEqual(result[-7], '.')
+            self.assertIn(result[:12], ('112340000000', '112339999999'))
+        f = 1.1234e200
+        for fmt in 'f', 'F':
+            result = f.__format__(fmt)
+            self.assertEqual(len(result), 208)
+            self.assertEqual(result[-7], '.')
+            self.assertIn(result[:12], ('112340000000', '112339999999'))
+
 
         test( 1.0, 'e', '1.000000e+00')
         test(-1.0, 'e', '-1.000000e+00')
@@ -610,11 +654,40 @@ class TypesTests(unittest.TestCase):
         # a totaly empty format specifier means something else.
         # So, just use a sign flag
         test(1e200, '+g', '+1e+200')
-        test(1e200, '+', '+1.0e+200')
+        test(1e200, '+', '+1e+200')
         test(1.1e200, '+g', '+1.1e+200')
         test(1.1e200, '+', '+1.1e+200')
 
-        # % formatting
+        test(1.1e200, '+g', '+1.1e+200')
+        test(1.1e200, '+', '+1.1e+200')
+
+        # 0 padding
+        test(1234., '010f', '1234.000000')
+        test(1234., '011f', '1234.000000')
+        test(1234., '012f', '01234.000000')
+        test(-1234., '011f', '-1234.000000')
+        test(-1234., '012f', '-1234.000000')
+        test(-1234., '013f', '-01234.000000')
+        test(-1234.12341234, '013f', '-01234.123412')
+        test(-123456.12341234, '011.2f', '-0123456.12')
+
+        # issue 5782, commas with no specifier type
+        test(1.2, '010,.2', '0,000,001.2')
+
+        # 0 padding with commas
+        test(1234., '011,f', '1,234.000000')
+        test(1234., '012,f', '1,234.000000')
+        test(1234., '013,f', '01,234.000000')
+        test(-1234., '012,f', '-1,234.000000')
+        test(-1234., '013,f', '-1,234.000000')
+        test(-1234., '014,f', '-01,234.000000')
+        test(-12345., '015,f', '-012,345.000000')
+        test(-123456., '016,f', '-0,123,456.000000')
+        test(-123456., '017,f', '-0,123,456.000000')
+        test(-123456.12341234, '017,f', '-0,123,456.123412')
+        test(-123456.12341234, '013,.2f', '-0,123,456.12')
+
+         # % formatting
         test(-1.0, '%', '-100.000000%')
 
         # format spec must be string
@@ -638,9 +711,43 @@ class TypesTests(unittest.TestCase):
         self.assertRaises(ValueError, format, 0.0, '#')
         self.assertRaises(ValueError, format, 0.0, '#20f')
 
+        # Issue 6902
+        test(12345.6, "0<20", '12345.60000000000000')
+        test(12345.6, "1<20", '12345.61111111111111')
+        test(12345.6, "*<20", '12345.6*************')
+        test(12345.6, "0>20", '000000000000012345.6')
+        test(12345.6, "1>20", '111111111111112345.6')
+        test(12345.6, "*>20", '*************12345.6')
+        test(12345.6, "0=20", '000000000000012345.6')
+        test(12345.6, "1=20", '111111111111112345.6')
+        test(12345.6, "*=20", '*************12345.6')
+
+    def test_format_spec_errors(self):
+        # int, float, and string all share the same format spec
+        # mini-language parser.
+
+        # Check that we can't ask for too many digits. This is
+        # probably a CPython specific test. It tries to put the width
+        # into a C long.
+        self.assertRaises(ValueError, format, 0, '1'*10000 + 'd')
+
+        # Similar with the precision.
+        self.assertRaises(ValueError, format, 0, '.' + '1'*10000 + 'd')
+
+        # And may as well test both.
+        self.assertRaises(ValueError, format, 0, '1'*1000 + '.' + '1'*10000 + 'd')
+
+        # Make sure commas aren't allowed with various type codes
+        for code in 'xXobns':
+            self.assertRaises(ValueError, format, 0, ',' + code)
+
+    def test_internal_sizes(self):
+        self.assertGreater(object.__basicsize__, 0)
+        self.assertGreater(tuple.__itemsize__, 0)
+
 
 def test_main():
-    with _check_py3k_warnings(
+    with check_py3k_warnings(
             ("buffer.. not supported", DeprecationWarning),
             ("classic long division", DeprecationWarning)):
         run_unittest(TypesTests)

@@ -29,7 +29,7 @@ class BaseTestCase(unittest.TestCase):
 
 
     def check(self, result, expect):
-        self.assertEquals(result, expect,
+        self.assertEqual(result, expect,
             'expected:\n%s\nbut got:\n%s' % (
                 self.show(expect), self.show(result)))
 
@@ -39,9 +39,9 @@ class BaseTestCase(unittest.TestCase):
 
     def check_split(self, text, expect):
         result = self.wrapper._split(text)
-        self.assertEquals(result, expect,
-                          "\nexpected %r\n"
-                          "but got  %r" % (expect, result))
+        self.assertEqual(result, expect,
+                         "\nexpected %r\n"
+                         "but got  %r" % (expect, result))
 
 
 class WrapTestCase(BaseTestCase):
@@ -66,6 +66,15 @@ class WrapTestCase(BaseTestCase):
                          "I'm glad to hear it!"])
         self.check_wrap(text, 80, [text])
 
+    def test_empty_string(self):
+        # Check that wrapping the empty string returns an empty list.
+        self.check_wrap("", 6, [])
+        self.check_wrap("", 6, [], drop_whitespace=False)
+
+    def test_empty_string_with_initial_indent(self):
+        # Check that the empty string is not indented.
+        self.check_wrap("", 6, [], initial_indent="++")
+        self.check_wrap("", 6, [], initial_indent="++", drop_whitespace=False)
 
     def test_whitespace(self):
         # Whitespace munging and end-of-sentence detection
@@ -323,7 +332,32 @@ What a mess!
                          ["blah", " ", "(ding", " ", "dong),",
                           " ", "wubba"])
 
-    def test_initial_whitespace(self):
+    def test_drop_whitespace_false(self):
+        # Check that drop_whitespace=False preserves whitespace.
+        # SF patch #1581073
+        text = " This is a    sentence with     much whitespace."
+        self.check_wrap(text, 10,
+                        [" This is a", "    ", "sentence ",
+                         "with     ", "much white", "space."],
+                        drop_whitespace=False)
+
+    def test_drop_whitespace_false_whitespace_only(self):
+        # Check that drop_whitespace=False preserves a whitespace-only string.
+        self.check_wrap("   ", 6, ["   "], drop_whitespace=False)
+
+    def test_drop_whitespace_false_whitespace_only_with_indent(self):
+        # Check that a whitespace-only string gets indented (when
+        # drop_whitespace is False).
+        self.check_wrap("   ", 6, ["     "], drop_whitespace=False,
+                        initial_indent="  ")
+
+    def test_drop_whitespace_whitespace_only(self):
+        # Check drop_whitespace on a whitespace-only string.
+        self.check_wrap("  ", 6, [])
+
+    def test_drop_whitespace_leading_whitespace(self):
+        # Check that drop_whitespace does not drop leading whitespace (if
+        # followed by non-whitespace).
         # SF bug #622849 reported inconsistent handling of leading
         # whitespace; let's test that a bit, shall we?
         text = " This is a sentence with leading whitespace."
@@ -332,13 +366,27 @@ What a mess!
         self.check_wrap(text, 30,
                         [" This is a sentence with", "leading whitespace."])
 
-    def test_no_drop_whitespace(self):
-        # SF patch #1581073
-        text = " This is a    sentence with     much whitespace."
-        self.check_wrap(text, 10,
-                        [" This is a", "    ", "sentence ",
-                         "with     ", "much white", "space."],
+    def test_drop_whitespace_whitespace_line(self):
+        # Check that drop_whitespace skips the whole line if a non-leading
+        # line consists only of whitespace.
+        text = "abcd    efgh"
+        # Include the result for drop_whitespace=False for comparison.
+        self.check_wrap(text, 6, ["abcd", "    ", "efgh"],
                         drop_whitespace=False)
+        self.check_wrap(text, 6, ["abcd", "efgh"])
+
+    def test_drop_whitespace_whitespace_only_with_indent(self):
+        # Check that initial_indent is not applied to a whitespace-only
+        # string.  This checks a special case of the fact that dropping
+        # whitespace occurs before indenting.
+        self.check_wrap("  ", 6, [], initial_indent="++")
+
+    def test_drop_whitespace_whitespace_indent(self):
+        # Check that drop_whitespace does not drop whitespace indents.
+        # This checks a special case of the fact that dropping whitespace
+        # occurs before indenting.
+        self.check_wrap("abcd efgh", 6, ["  abcd", "  efgh"],
+                        initial_indent="  ", subsequent_indent="  ")
 
     if test_support.have_unicode:
         def test_unicode(self):
@@ -349,9 +397,10 @@ What a mess!
             self.check_wrap(text, 50, [u"Hello there, how are you today?"])
             self.check_wrap(text, 20, [u"Hello there, how are", "you today?"])
             olines = self.wrapper.wrap(text)
-            assert isinstance(olines, list) and isinstance(olines[0], unicode)
+            self.assertIsInstance(olines, list)
+            self.assertIsInstance(olines[0], unicode)
             otext = self.wrapper.fill(text)
-            assert isinstance(otext, unicode)
+            self.assertIsInstance(otext, unicode)
 
         def test_no_split_at_umlaut(self):
             text = u"Die Empf\xe4nger-Auswahl"
@@ -503,7 +552,7 @@ class DedentTestCase(unittest.TestCase):
 
     def assertUnchanged(self, text):
         """assert that dedent() has no effect on 'text'"""
-        self.assertEquals(text, dedent(text))
+        self.assertEqual(text, dedent(text))
 
     def test_dedent_nomargin(self):
         # No lines indented.
@@ -526,17 +575,17 @@ class DedentTestCase(unittest.TestCase):
         # All lines indented by two spaces.
         text = "  Hello there.\n  How are ya?\n  Oh good."
         expect = "Hello there.\nHow are ya?\nOh good."
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         # Same, with blank lines.
         text = "  Hello there.\n\n  How are ya?\n  Oh good.\n"
         expect = "Hello there.\n\nHow are ya?\nOh good.\n"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         # Now indent one of the blank lines.
         text = "  Hello there.\n  \n  How are ya?\n  Oh good.\n"
         expect = "Hello there.\n\nHow are ya?\nOh good.\n"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
     def test_dedent_uneven(self):
         # Lines indented unevenly.
@@ -550,27 +599,27 @@ def foo():
     while 1:
         return foo
 '''
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         # Uneven indentation with a blank line.
         text = "  Foo\n    Bar\n\n   Baz\n"
         expect = "Foo\n  Bar\n\n Baz\n"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         # Uneven indentation with a whitespace-only line.
         text = "  Foo\n    Bar\n \n   Baz\n"
         expect = "Foo\n  Bar\n\n Baz\n"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
     # dedent() should not mangle internal tabs
     def test_dedent_preserve_internal_tabs(self):
         text = "  hello\tthere\n  how are\tyou?"
         expect = "hello\tthere\nhow are\tyou?"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         # make sure that it preserves tabs when it's not making any
         # changes at all
-        self.assertEquals(expect, dedent(expect))
+        self.assertEqual(expect, dedent(expect))
 
     # dedent() should not mangle tabs in the margin (i.e.
     # tabs and spaces both count as margin, but are *not*
@@ -586,17 +635,17 @@ def foo():
         # dedent() only removes whitespace that can be uniformly removed!
         text = "\thello there\n\thow are you?"
         expect = "hello there\nhow are you?"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         text = "  \thello there\n  \thow are you?"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         text = "  \t  hello there\n  \t  how are you?"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
         text = "  \thello there\n  \t  how are you?"
         expect = "hello there\n  how are you?"
-        self.assertEquals(expect, dedent(text))
+        self.assertEqual(expect, dedent(text))
 
 
 def test_main():

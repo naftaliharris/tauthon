@@ -65,7 +65,7 @@ This module provides an interface to the mechanisms used to implement the
    path and the last item in the *description* tuple is :const:`PKG_DIRECTORY`.
 
    This function does not handle hierarchical module names (names containing
-   dots).  In order to find *P*.*M*, that is, submodule *M* of package *P*, use
+   dots).  In order to find *P.M*, that is, submodule *M* of package *P*, use
    :func:`find_module` and :func:`load_module` to find and load package *P*, and
    then use :func:`find_module` with the *path* argument set to ``P.__path__``.
    When *P* itself has a dotted name, apply this recipe recursively.
@@ -116,8 +116,7 @@ This module provides an interface to the mechanisms used to implement the
 .. function:: acquire_lock()
 
    Acquire the interpreter's import lock for the current thread.  This lock should
-   be used by import hooks to ensure thread-safety when importing modules. On
-   platforms without threads, this function does nothing.
+   be used by import hooks to ensure thread-safety when importing modules.
 
    Once a thread has acquired the import lock, the same thread may acquire it
    again without blocking; the thread must release it once for each time it has
@@ -237,6 +236,17 @@ around for backward compatibility:
    shared library is called.  The optional *file* argument is ignored.  (Note:
    using shared libraries is highly system dependent, and not all systems support
    it.)
+
+   .. impl-detail::
+
+      The import internals identify extension modules by filename, so doing
+      ``foo = load_dynamic("foo", "mod.so")`` and
+      ``bar = load_dynamic("bar", "mod.so")`` will result in both foo and bar
+      referring to the same module, regardless of whether or not
+      ``mod.so`` exports an ``initbar`` function. On systems which
+      support them, symlinks can be used to import multiple modules from
+      the same shared library, as each reference to the module will use
+      a different file name.
 
 
 .. function:: load_source(name, pathname[, file])

@@ -24,9 +24,9 @@ special needs of your application and users.
 
 .. note::
 
-   :mod:`Tix` has been renamed to :mod:`tkinter.tix` in Python 3.0.  The
+   :mod:`Tix` has been renamed to :mod:`tkinter.tix` in Python 3.  The
    :term:`2to3` tool will automatically adapt imports when converting your
-   sources to 3.0.
+   sources to Python 3.
 
 .. seealso::
 
@@ -514,7 +514,7 @@ Tix Commands
       print root.tix_configure()
 
 
-.. method:: tixCommand.tix_configure([cnf,] **kw)
+.. method:: tixCommand.tix_configure(cnf=None **kw)
 
    Query or modify the configuration options of the Tix application context. If no
    option is specified, returns a dictionary all of the available options.  If

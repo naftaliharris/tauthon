@@ -18,6 +18,11 @@
 
 #ifdef WITH_THREAD
 #include "pythread.h"
+
+#ifdef HAVE_PTHREAD_ATFORK
+#  include <pthread.h>
+#endif
+
 #define PySSL_BEGIN_ALLOW_THREADS { \
             PyThreadState *_save = NULL;  \
             if (_ssl_locks_count>0) {_save = PyEval_SaveThread();}
@@ -62,8 +67,10 @@ enum py_ssl_cert_requirements {
 };
 
 enum py_ssl_version {
+#ifndef OPENSSL_NO_SSL2
     PY_SSL_VERSION_SSL2,
-    PY_SSL_VERSION_SSL3,
+#endif
+    PY_SSL_VERSION_SSL3=1,
     PY_SSL_VERSION_SSL23,
     PY_SSL_VERSION_TLS1
 };
@@ -263,7 +270,7 @@ newPySSLObject(PySocketSockObject *Sock, char *key_file, char *cert_file,
                enum py_ssl_server_or_client socket_type,
                enum py_ssl_cert_requirements certreq,
                enum py_ssl_version proto_version,
-               char *cacerts_file)
+               char *cacerts_file, char *ciphers)
 {
     PySSLObject *self;
     char *errstr = NULL;
@@ -313,6 +320,14 @@ newPySSLObject(PySocketSockObject *Sock, char *key_file, char *cert_file,
     if (self->ctx == NULL) {
         errstr = ERRSTR("Invalid SSL protocol variant specified.");
         goto fail;
+    }
+
+    if (ciphers != NULL) {
+        ret = SSL_CTX_set_cipher_list(self->ctx, ciphers);
+        if (ret == 0) {
+            errstr = ERRSTR("No cipher can be selected.");
+            goto fail;
+        }
     }
 
     if (certreq != PY_SSL_CERT_NONE) {
@@ -415,14 +430,15 @@ PySSL_sslwrap(PyObject *self, PyObject *args)
     char *key_file = NULL;
     char *cert_file = NULL;
     char *cacerts_file = NULL;
+    char *ciphers = NULL;
 
-    if (!PyArg_ParseTuple(args, "O!i|zziiz:sslwrap",
+    if (!PyArg_ParseTuple(args, "O!i|zziizz:sslwrap",
                           PySocketModule.Sock_Type,
                           &Sock,
                           &server_side,
                           &key_file, &cert_file,
                           &verification_mode, &protocol,
-                          &cacerts_file))
+                          &cacerts_file, &ciphers))
         return NULL;
 
     /*
@@ -435,12 +451,13 @@ PySSL_sslwrap(PyObject *self, PyObject *args)
 
     return (PyObject *) newPySSLObject(Sock, key_file, cert_file,
                                        server_side, verification_mode,
-                                       protocol, cacerts_file);
+                                       protocol, cacerts_file,
+                                       ciphers);
 }
 
 PyDoc_STRVAR(ssl_doc,
 "sslwrap(socket, server_side, [keyfile, certfile, certs_mode, protocol,\n"
-"                              cacertsfile]) -> sslobject");
+"                              cacertsfile, ciphers]) -> sslobject");
 
 /* SSL object methods */
 
@@ -457,7 +474,6 @@ static PyObject *PySSL_SSLdo_handshake(PySSLObject *self)
 
     /* Actually negotiate SSL connection */
     /* XXX If SSL_do_handshake() returns 0, it's also a failure. */
-    sockstate = 0;
     do {
         PySSL_BEGIN_ALLOW_THREADS
         ret = SSL_do_handshake(self->ssl);
@@ -633,15 +649,20 @@ _create_tuple_for_X509_NAME (X509_NAME *xname)
             goto fail1;
     }
     /* now, there's typically a dangling RDN */
-    if ((rdn != NULL) && (PyList_Size(rdn) > 0)) {
-        rdnt = PyList_AsTuple(rdn);
-        Py_DECREF(rdn);
-        if (rdnt == NULL)
-            goto fail0;
-        retcode = PyList_Append(dn, rdnt);
-        Py_DECREF(rdnt);
-        if (retcode < 0)
-            goto fail0;
+    if (rdn != NULL) {
+        if (PyList_GET_SIZE(rdn) > 0) {
+            rdnt = PyList_AsTuple(rdn);
+            Py_DECREF(rdn);
+            if (rdnt == NULL)
+                goto fail0;
+            retcode = PyList_Append(dn, rdnt);
+            Py_DECREF(rdnt);
+            if (retcode < 0)
+                goto fail0;
+        }
+        else {
+            Py_DECREF(rdn);
+        }
     }
 
     /* convert list to tuple */
@@ -674,12 +695,17 @@ _get_peer_alt_names (X509 *certificate) {
     X509_EXTENSION *ext = NULL;
     GENERAL_NAMES *names = NULL;
     GENERAL_NAME *name;
-    X509V3_EXT_METHOD *method;
+    const X509V3_EXT_METHOD *method;
     BIO *biobuf = NULL;
     char buf[2048];
     char *vptr;
     int len;
+    /* Issue #2973: ASN1_item_d2i() API changed in OpenSSL 0.9.6m */
+#if OPENSSL_VERSION_NUMBER >= 0x009060dfL
     const unsigned char *p;
+#else
+    unsigned char *p;
+#endif
 
     if (certificate == NULL)
         return peer_alt_names;
@@ -687,7 +713,7 @@ _get_peer_alt_names (X509 *certificate) {
     /* get a memory buffer */
     biobuf = BIO_new(BIO_s_mem());
 
-    i = 0;
+    i = -1;
     while ((i = X509_get_ext_by_NID(
                     certificate, NID_subject_alt_name, i)) >= 0) {
 
@@ -717,18 +743,16 @@ _get_peer_alt_names (X509 *certificate) {
                                                   ext->value->length));
 
         for(j = 0; j < sk_GENERAL_NAME_num(names); j++) {
-
             /* get a rendering of each name in the set of names */
-
             int gntype;
             ASN1_STRING *as = NULL;
 
             name = sk_GENERAL_NAME_value(names, j);
-            gntype = name-> type;
+            gntype = name->type;
             switch (gntype) {
             case GEN_DIRNAME:
-
-                /* we special-case DirName as a tuple of tuples of attributes */
+                /* we special-case DirName as a tuple of
+                   tuples of attributes */
 
                 t = PyTuple_New(2);
                 if (t == NULL) {
@@ -753,22 +777,22 @@ _get_peer_alt_names (X509 *certificate) {
             case GEN_EMAIL:
             case GEN_DNS:
             case GEN_URI:
-                /* GENERAL_NAME_print() doesn't handle NUL bytes in ASN1_string
-                   correctly. */
+                /* GENERAL_NAME_print() doesn't handle NULL bytes in ASN1_string
+                   correctly, CVE-2013-4238 */
                 t = PyTuple_New(2);
                 if (t == NULL)
                     goto fail;
                 switch (gntype) {
                 case GEN_EMAIL:
-                    v = PyUnicode_FromString("email");
+                    v = PyString_FromString("email");
                     as = name->d.rfc822Name;
                     break;
                 case GEN_DNS:
-                    v = PyUnicode_FromString("DNS");
+                    v = PyString_FromString("DNS");
                     as = name->d.dNSName;
                     break;
                 case GEN_URI:
-                    v = PyUnicode_FromString("URI");
+                    v = PyString_FromString("URI");
                     as = name->d.uniformResourceIdentifier;
                     break;
                 }
@@ -798,7 +822,7 @@ _get_peer_alt_names (X509 *certificate) {
                         break;
                     default:
                         if (PyErr_Warn(PyExc_RuntimeWarning,
-				       "Unknown general name type") == -1) {
+                                       "Unknown general name type") == -1) {
                             goto fail;
                         }
                         break;
@@ -828,7 +852,7 @@ _get_peer_alt_names (X509 *certificate) {
                     goto fail;
                 }
                 PyTuple_SET_ITEM(t, 1, v);
-		break;
+                break;
             }
 
             /* and add that rendering to the list */
@@ -839,6 +863,7 @@ _get_peer_alt_names (X509 *certificate) {
             }
             Py_DECREF(t);
         }
+        sk_GENERAL_NAME_pop_free(names, GENERAL_NAME_free);
     }
     BIO_free(biobuf);
     if (peer_alt_names != Py_None) {
@@ -1039,6 +1064,7 @@ PySSL_peercert(PySSLObject *self, PyObject *args)
     int len;
     int verification;
     PyObject *binary_mode = Py_None;
+    int b;
 
     if (!PyArg_ParseTuple(args, "|O:peer_certificate", &binary_mode))
         return NULL;
@@ -1046,7 +1072,10 @@ PySSL_peercert(PySSLObject *self, PyObject *args)
     if (!self->peer_cert)
         Py_RETURN_NONE;
 
-    if (PyObject_IsTrue(binary_mode)) {
+    b = PyObject_IsTrue(binary_mode);
+    if (b < 0)
+        return NULL;
+    if (b) {
         /* return cert in DER-encoded format */
 
         unsigned char *bytes_buf = NULL;
@@ -1086,15 +1115,15 @@ return the certificate even if it wasn't validated.");
 static PyObject *PySSL_cipher (PySSLObject *self) {
 
     PyObject *retval, *v;
-    SSL_CIPHER *current;
+    const SSL_CIPHER *current;
     char *cipher_name;
     char *cipher_protocol;
 
     if (self->ssl == NULL)
-        return Py_None;
+        Py_RETURN_NONE;
     current = SSL_get_current_cipher(self->ssl);
     if (current == NULL)
-        return Py_None;
+        Py_RETURN_NONE;
 
     retval = PyTuple_New(3);
     if (retval == NULL)
@@ -1102,6 +1131,7 @@ static PyObject *PySSL_cipher (PySSLObject *self) {
 
     cipher_name = (char *) SSL_CIPHER_get_name(current);
     if (cipher_name == NULL) {
+        Py_INCREF(Py_None);
         PyTuple_SET_ITEM(retval, 0, Py_None);
     } else {
         v = PyString_FromString(cipher_name);
@@ -1111,6 +1141,7 @@ static PyObject *PySSL_cipher (PySSLObject *self) {
     }
     cipher_protocol = SSL_CIPHER_get_version(current);
     if (cipher_protocol == NULL) {
+        Py_INCREF(Py_None);
         PyTuple_SET_ITEM(retval, 1, Py_None);
     } else {
         v = PyString_FromString(cipher_protocol);
@@ -1184,10 +1215,8 @@ check_socket_and_wait_for_timeout(PySocketSockObject *s, int writing)
 #endif
 
     /* Guard against socket too large for select*/
-#ifndef Py_SOCKET_FD_CAN_BE_GE_FD_SETSIZE
-    if (s->sock_fd >= FD_SETSIZE)
+    if (!_PyIsSelectable_fd(s->sock_fd))
         return SOCKET_TOO_LARGE_FOR_SELECT;
-#endif
 
     /* Construct the arguments to select */
     tv.tv_sec = (int)s->sock_timeout;
@@ -1213,15 +1242,20 @@ normal_return:
 
 static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
 {
-    char *data;
+    Py_buffer buf;
     int len;
-    int count;
     int sockstate;
     int err;
     int nonblocking;
 
-    if (!PyArg_ParseTuple(args, "s#:write", &data, &count))
+    if (!PyArg_ParseTuple(args, "s*:write", &buf))
         return NULL;
+
+    if (buf.len > INT_MAX) {
+        PyErr_Format(PyExc_OverflowError,
+                     "string longer than %d bytes", INT_MAX);
+        goto error;
+    }
 
     /* just in case the blocking state of the socket has been changed */
     nonblocking = (self->Socket->sock_timeout >= 0.0);
@@ -1232,24 +1266,23 @@ static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
     if (sockstate == SOCKET_HAS_TIMED_OUT) {
         PyErr_SetString(PySSLErrorObject,
                         "The write operation timed out");
-        return NULL;
+        goto error;
     } else if (sockstate == SOCKET_HAS_BEEN_CLOSED) {
         PyErr_SetString(PySSLErrorObject,
                         "Underlying socket has been closed.");
-        return NULL;
+        goto error;
     } else if (sockstate == SOCKET_TOO_LARGE_FOR_SELECT) {
         PyErr_SetString(PySSLErrorObject,
                         "Underlying socket too large for select().");
-        return NULL;
+        goto error;
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
-        len = SSL_write(self->ssl, data, count);
+        len = SSL_write(self->ssl, buf.buf, (int)buf.len);
         err = SSL_get_error(self->ssl, len);
         PySSL_END_ALLOW_THREADS
-        if(PyErr_CheckSignals()) {
-            return NULL;
+        if (PyErr_CheckSignals()) {
+            goto error;
         }
         if (err == SSL_ERROR_WANT_READ) {
             sockstate = check_socket_and_wait_for_timeout(self->Socket, 0);
@@ -1261,19 +1294,25 @@ static PyObject *PySSL_SSLwrite(PySSLObject *self, PyObject *args)
         if (sockstate == SOCKET_HAS_TIMED_OUT) {
             PyErr_SetString(PySSLErrorObject,
                             "The write operation timed out");
-            return NULL;
+            goto error;
         } else if (sockstate == SOCKET_HAS_BEEN_CLOSED) {
             PyErr_SetString(PySSLErrorObject,
                             "Underlying socket has been closed.");
-            return NULL;
+            goto error;
         } else if (sockstate == SOCKET_IS_NONBLOCKING) {
             break;
         }
     } while (err == SSL_ERROR_WANT_READ || err == SSL_ERROR_WANT_WRITE);
+
+    PyBuffer_Release(&buf);
     if (len > 0)
         return PyInt_FromLong(len);
     else
         return PySSL_SetError(self, len, __FILE__, __LINE__);
+
+error:
+    PyBuffer_Release(&buf);
+    return NULL;
 }
 
 PyDoc_STRVAR(PySSL_SSLwrite_doc,
@@ -1354,7 +1393,6 @@ static PyObject *PySSL_SSLread(PySSLObject *self, PyObject *args)
         }
     }
     do {
-        err = 0;
         PySSL_BEGIN_ALLOW_THREADS
         count = SSL_read(self->ssl, PyString_AsString(buf), len);
         err = SSL_get_error(self->ssl, count);
@@ -1422,7 +1460,7 @@ static PyObject *PySSL_SSLshutdown(PySSLObject *self)
          * Otherwise OpenSSL might read in too much data,
          * eating clear text data that happens to be
          * transmitted after the SSL shutdown.
-         * Should be safe to call repeatedly everytime this
+         * Should be safe to call repeatedly every time this
          * function is used and the shutdown_seen_zero != 0
          * condition is met.
          */
@@ -1586,9 +1624,68 @@ PyDoc_STRVAR(PySSL_RAND_egd_doc,
 \n\
 Queries the entropy gather daemon (EGD) on the socket named by 'path'.\n\
 Returns number of bytes read.  Raises SSLError if connection to EGD\n\
-fails or if it does provide enough data to seed PRNG.");
+fails or if it does not provide enough data to seed PRNG.");
 
+/* Seed OpenSSL's PRNG at fork(), http://bugs.python.org/issue18747
+ *
+ * The parent handler seeds the PRNG from pseudo-random data like pid, the
+ * current time (miliseconds or seconds) and an uninitialized arry.
+ * The array contains stack variables that are impossible to predict
+ * on most systems, e.g. function return address (subject to ASLR), the
+ * stack protection canary and automatic variables.
+ * The code is inspired by Apache's ssl_rand_seed() function.
+ *
+ * Note:
+ * The code uses pthread_atfork() until Python has a proper atfork API. The
+ * handlers are not removed from the child process. A parent handler is used
+ * instead of a child handler because fork() is suppose to be async-signal
+ * safe but the handler calls unsafe functions.
+ */
+
+#if defined(HAVE_PTHREAD_ATFORK) && defined(WITH_THREAD)
+#define PYSSL_RAND_ATFORK 1
+
+static void
+PySSL_RAND_atfork_parent(void)
+{
+    struct {
+        char stack[128];    /* uninitialized (!) stack data, 128 is an
+                               arbitrary number. */
+        pid_t pid;          /* current pid */
+        time_t time;        /* current time */
+    } seed;
+
+#ifdef WITH_VALGRIND
+    VALGRIND_MAKE_MEM_DEFINED(seed.stack, sizeof(seed.stack));
 #endif
+    seed.pid = getpid();
+    seed.time = time(NULL);
+    RAND_add((unsigned char *)&seed, sizeof(seed), 0.0);
+}
+
+static int
+PySSL_RAND_atfork(void)
+{
+    static int registered = 0;
+    int retval;
+
+    if (registered)
+        return 0;
+
+    retval = pthread_atfork(NULL,                     /* prepare */
+                            PySSL_RAND_atfork_parent, /* parent */
+                            NULL);                    /* child */
+    if (retval != 0) {
+        PyErr_SetFromErrno(PyExc_OSError);
+        return -1;
+    }
+    registered = 1;
+    return 0;
+}
+#endif /* HAVE_PTHREAD_ATFORK */
+
+#endif /* HAVE_OPENSSL_RAND */
+
 
 /* List of functions exported by this module. */
 
@@ -1616,9 +1713,21 @@ static PyMethodDef PySSL_methods[] = {
 
 static PyThread_type_lock *_ssl_locks = NULL;
 
-static unsigned long _ssl_thread_id_function (void) {
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+/* use new CRYPTO_THREADID API. */
+static void
+_ssl_threadid_callback(CRYPTO_THREADID *id)
+{
+    CRYPTO_THREADID_set_numeric(id,
+                                (unsigned long)PyThread_get_thread_ident());
+}
+#else
+/* deprecated CRYPTO_set_id_callback() API. */
+static unsigned long
+_ssl_thread_id_function (void) {
     return PyThread_get_thread_ident();
 }
+#endif
 
 static void _ssl_thread_locking_function (int mode, int n, const char *file, int line) {
     /* this function is needed to perform locking on shared data
@@ -1669,7 +1778,11 @@ static int _setup_ssl_threads(void) {
             }
         }
         CRYPTO_set_locking_callback(_ssl_thread_locking_function);
+#if OPENSSL_VERSION_NUMBER >= 0x10000000
+        CRYPTO_THREADID_set_callback(_ssl_threadid_callback);
+#else
         CRYPTO_set_id_callback(_ssl_thread_id_function);
+#endif
     }
     return 1;
 }
@@ -1683,7 +1796,9 @@ for documentation.");
 PyMODINIT_FUNC
 init_ssl(void)
 {
-    PyObject *m, *d;
+    PyObject *m, *d, *r;
+    unsigned long libver;
+    unsigned int major, minor, fix, patch, status;
 
     Py_TYPE(&PySSL_Type) = &PyType_Type;
 
@@ -1746,12 +1861,45 @@ init_ssl(void)
                             PY_SSL_CERT_REQUIRED);
 
     /* protocol versions */
+#ifndef OPENSSL_NO_SSL2
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv2",
                             PY_SSL_VERSION_SSL2);
+#endif
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv3",
                             PY_SSL_VERSION_SSL3);
     PyModule_AddIntConstant(m, "PROTOCOL_SSLv23",
                             PY_SSL_VERSION_SSL23);
     PyModule_AddIntConstant(m, "PROTOCOL_TLSv1",
                             PY_SSL_VERSION_TLS1);
+
+    /* OpenSSL version */
+    /* SSLeay() gives us the version of the library linked against,
+       which could be different from the headers version.
+    */
+    libver = SSLeay();
+    r = PyLong_FromUnsignedLong(libver);
+    if (r == NULL)
+        return;
+    if (PyModule_AddObject(m, "OPENSSL_VERSION_NUMBER", r))
+        return;
+    status = libver & 0xF;
+    libver >>= 4;
+    patch = libver & 0xFF;
+    libver >>= 8;
+    fix = libver & 0xFF;
+    libver >>= 8;
+    minor = libver & 0xFF;
+    libver >>= 8;
+    major = libver & 0xFF;
+    r = Py_BuildValue("IIIII", major, minor, fix, patch, status);
+    if (r == NULL || PyModule_AddObject(m, "OPENSSL_VERSION_INFO", r))
+        return;
+    r = PyString_FromString(SSLeay_version(SSLEAY_VERSION));
+    if (r == NULL || PyModule_AddObject(m, "OPENSSL_VERSION", r))
+        return;
+
+#ifdef PYSSL_RAND_ATFORK
+    if (PySSL_RAND_atfork() == -1)
+        return;
+#endif
 }

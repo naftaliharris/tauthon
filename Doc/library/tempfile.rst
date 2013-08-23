@@ -1,4 +1,3 @@
-
 :mod:`tempfile` --- Generate temporary files and directories
 ============================================================
 
@@ -12,6 +11,10 @@
 .. index::
    pair: temporary; file name
    pair: temporary; file
+
+**Source code:** :source:`Lib/tempfile.py`
+
+--------------
 
 This module generates temporary files and directories.  It works on all
 supported platforms.
@@ -61,7 +64,7 @@ The module defines the following user-callable functions:
    This function operates exactly as :func:`TemporaryFile` does, except that
    the file is guaranteed to have a visible name in the file system (on
    Unix, the directory entry is not unlinked).  That name can be retrieved
-   from the :attr:`name` member of the file object.  Whether the name can be
+   from the :attr:`name` attribute of the file object.  Whether the name can be
    used to open the file a second time, while the named temporary file is
    still open, varies across platforms (it can be so used on Unix; it cannot
    on Windows NT or later).  If *delete* is true (the default), the file is
@@ -83,7 +86,8 @@ The module defines the following user-callable functions:
    data is spooled in memory until the file size exceeds *max_size*, or
    until the file's :func:`fileno` method is called, at which point the
    contents are written to disk and operation proceeds as with
-   :func:`TemporaryFile`.
+   :func:`TemporaryFile`.  Also, it's ``truncate`` method does not
+   accept a ``size`` argument.
 
    The resulting file has one additional method, :func:`rollover`, which
    causes the file to roll over to an on-disk file regardless of its size.

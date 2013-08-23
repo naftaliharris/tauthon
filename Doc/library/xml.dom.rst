@@ -374,7 +374,7 @@ All of the components of an XML document are subclasses of :class:`Node`.
 
    Add a new child node to this node at the end of the list of
    children, returning *newChild*. If the node was already in
-   in the tree, it is removed first.
+   the tree, it is removed first.
 
 
 .. method:: Node.insertBefore(newChild, refChild)
@@ -705,18 +705,27 @@ Attr Objects
 
 .. attribute:: Attr.name
 
-   The attribute name.  In a namespace-using document it may have colons in it.
+   The attribute name.
+   In a namespace-using document it may include a colon.
 
 
 .. attribute:: Attr.localName
 
-   The part of the name following the colon if there is one, else the entire name.
+   The part of the name following the colon if there is one, else the
+   entire name.
    This is a read-only attribute.
 
 
 .. attribute:: Attr.prefix
 
-   The part of the name preceding the colon if there is one, else the empty string.
+   The part of the name preceding the colon if there is one, else the
+   empty string.
+
+
+.. attribute:: Attr.value
+
+   The text value of the attribute.  This is a synonym for the
+   :attr:`nodeValue` attribute.
 
 
 .. _dom-attributelist-objects:

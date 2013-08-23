@@ -813,7 +813,7 @@ class Option:
             parser.print_version()
             parser.exit()
         else:
-            raise RuntimeError, "unknown action %r" % self.action
+            raise ValueError("unknown action %r" % self.action)
 
         return 1
 
@@ -1131,6 +1131,11 @@ class OptionParser (OptionContainer):
       prog : string
         the name of the current program (to override
         os.path.basename(sys.argv[0])).
+      description : string
+        A paragraph of text giving a brief overview of your program.
+        optparse reformats this paragraph to fit the current terminal
+        width and prints it when the user requests help (after usage,
+        but before the list of options).
       epilog : string
         paragraph of help text to print after option help
 
@@ -1466,7 +1471,7 @@ class OptionParser (OptionContainer):
         """_match_long_opt(opt : string) -> string
 
         Determine which long option string 'opt' matches, ie. which one
-        it is an unambiguous abbrevation for.  Raises BadOptionError if
+        it is an unambiguous abbreviation for.  Raises BadOptionError if
         'opt' doesn't unambiguously match any long option string.
         """
         return _match_abbrev(opt, self._long_opt)

@@ -9,7 +9,7 @@
 # wrapper for 'threading'.
 #
 # Try calling `multiprocessing.doc.main()` to read the html
-# documentation in in a webbrowser.
+# documentation in a webbrowser.
 #
 #
 # Copyright (c) 2006-2008, R Oudkerk
@@ -38,6 +38,7 @@
 # HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
 # LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
 #
 
 __version__ = '0.70a1'
@@ -115,8 +116,12 @@ def cpu_count():
         except (ValueError, KeyError):
             num = 0
     elif 'bsd' in sys.platform or sys.platform == 'darwin':
+        comm = '/sbin/sysctl -n hw.ncpu'
+        if sys.platform == 'darwin':
+            comm = '/usr' + comm
         try:
-            num = int(os.popen('sysctl -n hw.ncpu').read())
+            with os.popen(comm) as p:
+                num = int(p.read())
         except ValueError:
             num = 0
     else:
@@ -219,12 +224,12 @@ def JoinableQueue(maxsize=0):
     from multiprocessing.queues import JoinableQueue
     return JoinableQueue(maxsize)
 
-def Pool(processes=None, initializer=None, initargs=()):
+def Pool(processes=None, initializer=None, initargs=(), maxtasksperchild=None):
     '''
     Returns a process pool object
     '''
     from multiprocessing.pool import Pool
-    return Pool(processes, initializer, initargs)
+    return Pool(processes, initializer, initargs, maxtasksperchild)
 
 def RawValue(typecode_or_type, *args):
     '''

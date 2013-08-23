@@ -8,16 +8,15 @@ for the Microsoft Visual Studio.
 # hacked by Robin Becker and Thomas Heller to do a better job of
 #   finding DevStudio (through the registry)
 
-# This module should be kept compatible with Python 2.1.
-
 __revision__ = "$Id$"
 
-import sys, os, string
-from distutils.errors import \
-     DistutilsExecError, DistutilsPlatformError, \
-     CompileError, LibError, LinkError
-from distutils.ccompiler import \
-     CCompiler, gen_preprocess_options, gen_lib_options
+import sys
+import os
+import string
+
+from distutils.errors import (DistutilsExecError, DistutilsPlatformError,
+                              CompileError, LibError, LinkError)
+from distutils.ccompiler import CCompiler, gen_lib_options
 from distutils import log
 
 _can_read_reg = 0
@@ -129,7 +128,7 @@ class MacroExpander:
                 self.set_macro("FrameworkSDKDir", net, "sdkinstallrootv1.1")
             else:
                 self.set_macro("FrameworkSDKDir", net, "sdkinstallroot")
-        except KeyError, exc: #
+        except KeyError:
             raise DistutilsPlatformError, \
                   ("""Python was built with Visual Studio 2003;
 extensions must be built with a compiler than can generate compatible binaries.

@@ -1,4 +1,3 @@
-
 :mod:`cmd` --- Support for line-oriented command interpreters
 =============================================================
 
@@ -6,12 +5,14 @@
    :synopsis: Build line-oriented command interpreters.
 .. sectionauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 
+**Source code:** :source:`Lib/cmd.py`
+
+--------------
 
 The :class:`Cmd` class provides a simple framework for writing line-oriented
 command interpreters.  These are often useful for test harnesses, administrative
 tools, and prototypes that will later be wrapped in a more sophisticated
 interface.
-
 
 .. class:: Cmd([completekey[, stdin[, stdout]]])
 
@@ -52,7 +53,7 @@ A :class:`Cmd` instance has the following methods:
    the line as argument.
 
    The optional argument is a banner or intro string to be issued before the first
-   prompt (this overrides the :attr:`intro` class member).
+   prompt (this overrides the :attr:`intro` class attribute).
 
    If the :mod:`readline` module is loaded, input will automatically inherit
    :program:`bash`\ -like history-list editing (e.g. :kbd:`Control-P` scrolls back

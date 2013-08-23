@@ -53,51 +53,472 @@ raised for division by zero and mod by zero.
  */
 
 #include "Python.h"
-#include "longintrepr.h" /* just for SHIFT */
+#include "_math.h"
 
 #ifdef _OSF_SOURCE
 /* OSF1 5.1 doesn't make this available with XOPEN_SOURCE_EXTENDED defined */
 extern double copysign(double, double);
 #endif
 
-/* Call is_error when errno != 0, and where x is the result libm
- * returned.  is_error will usually set up an exception and return
- * true (1), but may return false (0) without setting up an exception.
- */
-static int
-is_error(double x)
-{
-    int result = 1;     /* presumption of guilt */
-    assert(errno);      /* non-zero errno is a precondition for calling */
-    if (errno == EDOM)
-        PyErr_SetString(PyExc_ValueError, "math domain error");
+/*
+   sin(pi*x), giving accurate results for all finite x (especially x
+   integral or close to an integer).  This is here for use in the
+   reflection formula for the gamma function.  It conforms to IEEE
+   754-2008 for finite arguments, but not for infinities or nans.
+*/
 
-    else if (errno == ERANGE) {
-        /* ANSI C generally requires libm functions to set ERANGE
-         * on overflow, but also generally *allows* them to set
-         * ERANGE on underflow too.  There's no consistency about
-         * the latter across platforms.
-         * Alas, C99 never requires that errno be set.
-         * Here we suppress the underflow errors (libm functions
-         * should return a zero on underflow, and +- HUGE_VAL on
-         * overflow, so testing the result for zero suffices to
-         * distinguish the cases).
-         *
-         * On some platforms (Ubuntu/ia64) it seems that errno can be
-         * set to ERANGE for subnormal results that do *not* underflow
-         * to zero.  So to be safe, we'll ignore ERANGE whenever the
-         * function result is less than one in absolute value.
-         */
-        if (fabs(x) < 1.0)
-            result = 0;
-        else
-            PyErr_SetString(PyExc_OverflowError,
-                            "math range error");
+static const double pi = 3.141592653589793238462643383279502884197;
+static const double sqrtpi = 1.772453850905516027298167483341145182798;
+
+static double
+sinpi(double x)
+{
+    double y, r;
+    int n;
+    /* this function should only ever be called for finite arguments */
+    assert(Py_IS_FINITE(x));
+    y = fmod(fabs(x), 2.0);
+    n = (int)round(2.0*y);
+    assert(0 <= n && n <= 4);
+    switch (n) {
+    case 0:
+        r = sin(pi*y);
+        break;
+    case 1:
+        r = cos(pi*(y-0.5));
+        break;
+    case 2:
+        /* N.B. -sin(pi*(y-1.0)) is *not* equivalent: it would give
+           -0.0 instead of 0.0 when y == 1.0. */
+        r = sin(pi*(1.0-y));
+        break;
+    case 3:
+        r = -cos(pi*(y-1.5));
+        break;
+    case 4:
+        r = sin(pi*(y-2.0));
+        break;
+    default:
+        assert(0);  /* should never get here */
+        r = -1.23e200; /* silence gcc warning */
     }
-    else
-        /* Unexpected math error */
-        PyErr_SetFromErrno(PyExc_ValueError);
+    return copysign(1.0, x)*r;
+}
+
+/* Implementation of the real gamma function.  In extensive but non-exhaustive
+   random tests, this function proved accurate to within <= 10 ulps across the
+   entire float domain.  Note that accuracy may depend on the quality of the
+   system math functions, the pow function in particular.  Special cases
+   follow C99 annex F.  The parameters and method are tailored to platforms
+   whose double format is the IEEE 754 binary64 format.
+
+   Method: for x > 0.0 we use the Lanczos approximation with parameters N=13
+   and g=6.024680040776729583740234375; these parameters are amongst those
+   used by the Boost library.  Following Boost (again), we re-express the
+   Lanczos sum as a rational function, and compute it that way.  The
+   coefficients below were computed independently using MPFR, and have been
+   double-checked against the coefficients in the Boost source code.
+
+   For x < 0.0 we use the reflection formula.
+
+   There's one minor tweak that deserves explanation: Lanczos' formula for
+   Gamma(x) involves computing pow(x+g-0.5, x-0.5) / exp(x+g-0.5).  For many x
+   values, x+g-0.5 can be represented exactly.  However, in cases where it
+   can't be represented exactly the small error in x+g-0.5 can be magnified
+   significantly by the pow and exp calls, especially for large x.  A cheap
+   correction is to multiply by (1 + e*g/(x+g-0.5)), where e is the error
+   involved in the computation of x+g-0.5 (that is, e = computed value of
+   x+g-0.5 - exact value of x+g-0.5).  Here's the proof:
+
+   Correction factor
+   -----------------
+   Write x+g-0.5 = y-e, where y is exactly representable as an IEEE 754
+   double, and e is tiny.  Then:
+
+     pow(x+g-0.5,x-0.5)/exp(x+g-0.5) = pow(y-e, x-0.5)/exp(y-e)
+     = pow(y, x-0.5)/exp(y) * C,
+
+   where the correction_factor C is given by
+
+     C = pow(1-e/y, x-0.5) * exp(e)
+
+   Since e is tiny, pow(1-e/y, x-0.5) ~ 1-(x-0.5)*e/y, and exp(x) ~ 1+e, so:
+
+     C ~ (1-(x-0.5)*e/y) * (1+e) ~ 1 + e*(y-(x-0.5))/y
+
+   But y-(x-0.5) = g+e, and g+e ~ g.  So we get C ~ 1 + e*g/y, and
+
+     pow(x+g-0.5,x-0.5)/exp(x+g-0.5) ~ pow(y, x-0.5)/exp(y) * (1 + e*g/y),
+
+   Note that for accuracy, when computing r*C it's better to do
+
+     r + e*g/y*r;
+
+   than
+
+     r * (1 + e*g/y);
+
+   since the addition in the latter throws away most of the bits of
+   information in e*g/y.
+*/
+
+#define LANCZOS_N 13
+static const double lanczos_g = 6.024680040776729583740234375;
+static const double lanczos_g_minus_half = 5.524680040776729583740234375;
+static const double lanczos_num_coeffs[LANCZOS_N] = {
+    23531376880.410759688572007674451636754734846804940,
+    42919803642.649098768957899047001988850926355848959,
+    35711959237.355668049440185451547166705960488635843,
+    17921034426.037209699919755754458931112671403265390,
+    6039542586.3520280050642916443072979210699388420708,
+    1439720407.3117216736632230727949123939715485786772,
+    248874557.86205415651146038641322942321632125127801,
+    31426415.585400194380614231628318205362874684987640,
+    2876370.6289353724412254090516208496135991145378768,
+    186056.26539522349504029498971604569928220784236328,
+    8071.6720023658162106380029022722506138218516325024,
+    210.82427775157934587250973392071336271166969580291,
+    2.5066282746310002701649081771338373386264310793408
+};
+
+/* denominator is x*(x+1)*...*(x+LANCZOS_N-2) */
+static const double lanczos_den_coeffs[LANCZOS_N] = {
+    0.0, 39916800.0, 120543840.0, 150917976.0, 105258076.0, 45995730.0,
+    13339535.0, 2637558.0, 357423.0, 32670.0, 1925.0, 66.0, 1.0};
+
+/* gamma values for small positive integers, 1 though NGAMMA_INTEGRAL */
+#define NGAMMA_INTEGRAL 23
+static const double gamma_integral[NGAMMA_INTEGRAL] = {
+    1.0, 1.0, 2.0, 6.0, 24.0, 120.0, 720.0, 5040.0, 40320.0, 362880.0,
+    3628800.0, 39916800.0, 479001600.0, 6227020800.0, 87178291200.0,
+    1307674368000.0, 20922789888000.0, 355687428096000.0,
+    6402373705728000.0, 121645100408832000.0, 2432902008176640000.0,
+    51090942171709440000.0, 1124000727777607680000.0,
+};
+
+/* Lanczos' sum L_g(x), for positive x */
+
+static double
+lanczos_sum(double x)
+{
+    double num = 0.0, den = 0.0;
+    int i;
+    assert(x > 0.0);
+    /* evaluate the rational function lanczos_sum(x).  For large
+       x, the obvious algorithm risks overflow, so we instead
+       rescale the denominator and numerator of the rational
+       function by x**(1-LANCZOS_N) and treat this as a
+       rational function in 1/x.  This also reduces the error for
+       larger x values.  The choice of cutoff point (5.0 below) is
+       somewhat arbitrary; in tests, smaller cutoff values than
+       this resulted in lower accuracy. */
+    if (x < 5.0) {
+        for (i = LANCZOS_N; --i >= 0; ) {
+            num = num * x + lanczos_num_coeffs[i];
+            den = den * x + lanczos_den_coeffs[i];
+        }
+    }
+    else {
+        for (i = 0; i < LANCZOS_N; i++) {
+            num = num / x + lanczos_num_coeffs[i];
+            den = den / x + lanczos_den_coeffs[i];
+        }
+    }
+    return num/den;
+}
+
+static double
+m_tgamma(double x)
+{
+    double absx, r, y, z, sqrtpow;
+
+    /* special cases */
+    if (!Py_IS_FINITE(x)) {
+        if (Py_IS_NAN(x) || x > 0.0)
+            return x;  /* tgamma(nan) = nan, tgamma(inf) = inf */
+        else {
+            errno = EDOM;
+            return Py_NAN;  /* tgamma(-inf) = nan, invalid */
+        }
+    }
+    if (x == 0.0) {
+        errno = EDOM;
+        return 1.0/x; /* tgamma(+-0.0) = +-inf, divide-by-zero */
+    }
+
+    /* integer arguments */
+    if (x == floor(x)) {
+        if (x < 0.0) {
+            errno = EDOM;  /* tgamma(n) = nan, invalid for */
+            return Py_NAN; /* negative integers n */
+        }
+        if (x <= NGAMMA_INTEGRAL)
+            return gamma_integral[(int)x - 1];
+    }
+    absx = fabs(x);
+
+    /* tiny arguments:  tgamma(x) ~ 1/x for x near 0 */
+    if (absx < 1e-20) {
+        r = 1.0/x;
+        if (Py_IS_INFINITY(r))
+            errno = ERANGE;
+        return r;
+    }
+
+    /* large arguments: assuming IEEE 754 doubles, tgamma(x) overflows for
+       x > 200, and underflows to +-0.0 for x < -200, not a negative
+       integer. */
+    if (absx > 200.0) {
+        if (x < 0.0) {
+            return 0.0/sinpi(x);
+        }
+        else {
+            errno = ERANGE;
+            return Py_HUGE_VAL;
+        }
+    }
+
+    y = absx + lanczos_g_minus_half;
+    /* compute error in sum */
+    if (absx > lanczos_g_minus_half) {
+        /* note: the correction can be foiled by an optimizing
+           compiler that (incorrectly) thinks that an expression like
+           a + b - a - b can be optimized to 0.0.  This shouldn't
+           happen in a standards-conforming compiler. */
+        double q = y - absx;
+        z = q - lanczos_g_minus_half;
+    }
+    else {
+        double q = y - lanczos_g_minus_half;
+        z = q - absx;
+    }
+    z = z * lanczos_g / y;
+    if (x < 0.0) {
+        r = -pi / sinpi(absx) / absx * exp(y) / lanczos_sum(absx);
+        r -= z * r;
+        if (absx < 140.0) {
+            r /= pow(y, absx - 0.5);
+        }
+        else {
+            sqrtpow = pow(y, absx / 2.0 - 0.25);
+            r /= sqrtpow;
+            r /= sqrtpow;
+        }
+    }
+    else {
+        r = lanczos_sum(absx) / exp(y);
+        r += z * r;
+        if (absx < 140.0) {
+            r *= pow(y, absx - 0.5);
+        }
+        else {
+            sqrtpow = pow(y, absx / 2.0 - 0.25);
+            r *= sqrtpow;
+            r *= sqrtpow;
+        }
+    }
+    if (Py_IS_INFINITY(r))
+        errno = ERANGE;
+    return r;
+}
+
+/*
+   lgamma:  natural log of the absolute value of the Gamma function.
+   For large arguments, Lanczos' formula works extremely well here.
+*/
+
+static double
+m_lgamma(double x)
+{
+    double r, absx;
+
+    /* special cases */
+    if (!Py_IS_FINITE(x)) {
+        if (Py_IS_NAN(x))
+            return x;  /* lgamma(nan) = nan */
+        else
+            return Py_HUGE_VAL; /* lgamma(+-inf) = +inf */
+    }
+
+    /* integer arguments */
+    if (x == floor(x) && x <= 2.0) {
+        if (x <= 0.0) {
+            errno = EDOM;  /* lgamma(n) = inf, divide-by-zero for */
+            return Py_HUGE_VAL; /* integers n <= 0 */
+        }
+        else {
+            return 0.0; /* lgamma(1) = lgamma(2) = 0.0 */
+        }
+    }
+
+    absx = fabs(x);
+    /* tiny arguments: lgamma(x) ~ -log(fabs(x)) for small x */
+    if (absx < 1e-20)
+        return -log(absx);
+
+    /* Lanczos' formula */
+    if (x > 0.0) {
+        /* we could save a fraction of a ulp in accuracy by having a
+           second set of numerator coefficients for lanczos_sum that
+           absorbed the exp(-lanczos_g) term, and throwing out the
+           lanczos_g subtraction below; it's probably not worth it. */
+        r = log(lanczos_sum(x)) - lanczos_g +
+            (x-0.5)*(log(x+lanczos_g-0.5)-1);
+    }
+    else {
+        r = log(pi) - log(fabs(sinpi(absx))) - log(absx) -
+            (log(lanczos_sum(absx)) - lanczos_g +
+             (absx-0.5)*(log(absx+lanczos_g-0.5)-1));
+    }
+    if (Py_IS_INFINITY(r))
+        errno = ERANGE;
+    return r;
+}
+
+/*
+   Implementations of the error function erf(x) and the complementary error
+   function erfc(x).
+
+   Method: following 'Numerical Recipes' by Flannery, Press et. al. (2nd ed.,
+   Cambridge University Press), we use a series approximation for erf for
+   small x, and a continued fraction approximation for erfc(x) for larger x;
+   combined with the relations erf(-x) = -erf(x) and erfc(x) = 1.0 - erf(x),
+   this gives us erf(x) and erfc(x) for all x.
+
+   The series expansion used is:
+
+      erf(x) = x*exp(-x*x)/sqrt(pi) * [
+                     2/1 + 4/3 x**2 + 8/15 x**4 + 16/105 x**6 + ...]
+
+   The coefficient of x**(2k-2) here is 4**k*factorial(k)/factorial(2*k).
+   This series converges well for smallish x, but slowly for larger x.
+
+   The continued fraction expansion used is:
+
+      erfc(x) = x*exp(-x*x)/sqrt(pi) * [1/(0.5 + x**2 -) 0.5/(2.5 + x**2 - )
+                              3.0/(4.5 + x**2 - ) 7.5/(6.5 + x**2 - ) ...]
+
+   after the first term, the general term has the form:
+
+      k*(k-0.5)/(2*k+0.5 + x**2 - ...).
+
+   This expansion converges fast for larger x, but convergence becomes
+   infinitely slow as x approaches 0.0.  The (somewhat naive) continued
+   fraction evaluation algorithm used below also risks overflow for large x;
+   but for large x, erfc(x) == 0.0 to within machine precision.  (For
+   example, erfc(30.0) is approximately 2.56e-393).
+
+   Parameters: use series expansion for abs(x) < ERF_SERIES_CUTOFF and
+   continued fraction expansion for ERF_SERIES_CUTOFF <= abs(x) <
+   ERFC_CONTFRAC_CUTOFF.  ERFC_SERIES_TERMS and ERFC_CONTFRAC_TERMS are the
+   numbers of terms to use for the relevant expansions.  */
+
+#define ERF_SERIES_CUTOFF 1.5
+#define ERF_SERIES_TERMS 25
+#define ERFC_CONTFRAC_CUTOFF 30.0
+#define ERFC_CONTFRAC_TERMS 50
+
+/*
+   Error function, via power series.
+
+   Given a finite float x, return an approximation to erf(x).
+   Converges reasonably fast for small x.
+*/
+
+static double
+m_erf_series(double x)
+{
+    double x2, acc, fk, result;
+    int i, saved_errno;
+
+    x2 = x * x;
+    acc = 0.0;
+    fk = (double)ERF_SERIES_TERMS + 0.5;
+    for (i = 0; i < ERF_SERIES_TERMS; i++) {
+        acc = 2.0 + x2 * acc / fk;
+        fk -= 1.0;
+    }
+    /* Make sure the exp call doesn't affect errno;
+       see m_erfc_contfrac for more. */
+    saved_errno = errno;
+    result = acc * x * exp(-x2) / sqrtpi;
+    errno = saved_errno;
     return result;
+}
+
+/*
+   Complementary error function, via continued fraction expansion.
+
+   Given a positive float x, return an approximation to erfc(x).  Converges
+   reasonably fast for x large (say, x > 2.0), and should be safe from
+   overflow if x and nterms are not too large.  On an IEEE 754 machine, with x
+   <= 30.0, we're safe up to nterms = 100.  For x >= 30.0, erfc(x) is smaller
+   than the smallest representable nonzero float.  */
+
+static double
+m_erfc_contfrac(double x)
+{
+    double x2, a, da, p, p_last, q, q_last, b, result;
+    int i, saved_errno;
+
+    if (x >= ERFC_CONTFRAC_CUTOFF)
+        return 0.0;
+
+    x2 = x*x;
+    a = 0.0;
+    da = 0.5;
+    p = 1.0; p_last = 0.0;
+    q = da + x2; q_last = 1.0;
+    for (i = 0; i < ERFC_CONTFRAC_TERMS; i++) {
+        double temp;
+        a += da;
+        da += 2.0;
+        b = da + x2;
+        temp = p; p = b*p - a*p_last; p_last = temp;
+        temp = q; q = b*q - a*q_last; q_last = temp;
+    }
+    /* Issue #8986: On some platforms, exp sets errno on underflow to zero;
+       save the current errno value so that we can restore it later. */
+    saved_errno = errno;
+    result = p / q * x * exp(-x2) / sqrtpi;
+    errno = saved_errno;
+    return result;
+}
+
+/* Error function erf(x), for general x */
+
+static double
+m_erf(double x)
+{
+    double absx, cf;
+
+    if (Py_IS_NAN(x))
+        return x;
+    absx = fabs(x);
+    if (absx < ERF_SERIES_CUTOFF)
+        return m_erf_series(x);
+    else {
+        cf = m_erfc_contfrac(absx);
+        return x > 0.0 ? 1.0 - cf : cf - 1.0;
+    }
+}
+
+/* Complementary error function erfc(x), for general x. */
+
+static double
+m_erfc(double x)
+{
+    double absx, cf;
+
+    if (Py_IS_NAN(x))
+        return x;
+    absx = fabs(x);
+    if (absx < ERF_SERIES_CUTOFF)
+        return 1.0 - m_erf_series(x);
+    else {
+        cf = m_erfc_contfrac(absx);
+        return x > 0.0 ? cf : 2.0 - cf;
+    }
 }
 
 /*
@@ -188,6 +609,46 @@ m_log10(double x)
 }
 
 
+/* Call is_error when errno != 0, and where x is the result libm
+ * returned.  is_error will usually set up an exception and return
+ * true (1), but may return false (0) without setting up an exception.
+ */
+static int
+is_error(double x)
+{
+    int result = 1;     /* presumption of guilt */
+    assert(errno);      /* non-zero errno is a precondition for calling */
+    if (errno == EDOM)
+        PyErr_SetString(PyExc_ValueError, "math domain error");
+
+    else if (errno == ERANGE) {
+        /* ANSI C generally requires libm functions to set ERANGE
+         * on overflow, but also generally *allows* them to set
+         * ERANGE on underflow too.  There's no consistency about
+         * the latter across platforms.
+         * Alas, C99 never requires that errno be set.
+         * Here we suppress the underflow errors (libm functions
+         * should return a zero on underflow, and +- HUGE_VAL on
+         * overflow, so testing the result for zero suffices to
+         * distinguish the cases).
+         *
+         * On some platforms (Ubuntu/ia64) it seems that errno can be
+         * set to ERANGE for subnormal results that do *not* underflow
+         * to zero.  So to be safe, we'll ignore ERANGE whenever the
+         * function result is less than one in absolute value.
+         */
+        if (fabs(x) < 1.0)
+            result = 0;
+        else
+            PyErr_SetString(PyExc_OverflowError,
+                            "math range error");
+    }
+    else
+        /* Unexpected math error */
+        PyErr_SetFromErrno(PyExc_ValueError);
+    return result;
+}
+
 /*
    math_1 is used to wrap a libm function f that takes a double
    arguments and returns a double.
@@ -245,6 +706,26 @@ math_1(PyObject *arg, double (*func) (double), int can_overflow)
         return NULL;
     else
         return PyFloat_FromDouble(r);
+}
+
+/* variant of math_1, to be used when the function being wrapped is known to
+   set errno properly (that is, errno = EDOM for invalid or divide-by-zero,
+   errno = ERANGE for overflow). */
+
+static PyObject *
+math_1a(PyObject *arg, double (*func) (double))
+{
+    double x, r;
+    x = PyFloat_AsDouble(arg);
+    if (x == -1.0 && PyErr_Occurred())
+        return NULL;
+    errno = 0;
+    PyFPE_START_PROTECT("in math_1a", return 0);
+    r = (*func)(x);
+    PyFPE_END_PROTECT(r);
+    if (errno && is_error(r))
+        return NULL;
+    return PyFloat_FromDouble(r);
 }
 
 /*
@@ -313,6 +794,12 @@ math_2(PyObject *args, double (*func) (double, double), char *funcname)
     }\
     PyDoc_STRVAR(math_##funcname##_doc, docstring);
 
+#define FUNC1A(funcname, func, docstring)                               \
+    static PyObject * math_##funcname(PyObject *self, PyObject *args) { \
+        return math_1a(args, func);                                     \
+    }\
+    PyDoc_STRVAR(math_##funcname##_doc, docstring);
+
 #define FUNC2(funcname, func, docstring) \
     static PyObject * math_##funcname(PyObject *self, PyObject *args) { \
         return math_2(args, func, #funcname); \
@@ -321,18 +808,18 @@ math_2(PyObject *args, double (*func) (double, double), char *funcname)
 
 FUNC1(acos, acos, 0,
       "acos(x)\n\nReturn the arc cosine (measured in radians) of x.")
-FUNC1(acosh, acosh, 0,
+FUNC1(acosh, m_acosh, 0,
       "acosh(x)\n\nReturn the hyperbolic arc cosine (measured in radians) of x.")
 FUNC1(asin, asin, 0,
       "asin(x)\n\nReturn the arc sine (measured in radians) of x.")
-FUNC1(asinh, asinh, 0,
+FUNC1(asinh, m_asinh, 0,
       "asinh(x)\n\nReturn the hyperbolic arc sine (measured in radians) of x.")
 FUNC1(atan, atan, 0,
       "atan(x)\n\nReturn the arc tangent (measured in radians) of x.")
 FUNC2(atan2, m_atan2,
       "atan2(y, x)\n\nReturn the arc tangent (measured in radians) of y/x.\n"
       "Unlike atan(y/x), the signs of both x and y are considered.")
-FUNC1(atanh, atanh, 0,
+FUNC1(atanh, m_atanh, 0,
       "atanh(x)\n\nReturn the hyperbolic arc tangent (measured in radians) of x.")
 FUNC1(ceil, ceil, 0,
       "ceil(x)\n\nReturn the ceiling of x as a float.\n"
@@ -343,14 +830,26 @@ FUNC1(cos, cos, 0,
       "cos(x)\n\nReturn the cosine of x (measured in radians).")
 FUNC1(cosh, cosh, 1,
       "cosh(x)\n\nReturn the hyperbolic cosine of x.")
+FUNC1A(erf, m_erf,
+       "erf(x)\n\nError function at x.")
+FUNC1A(erfc, m_erfc,
+       "erfc(x)\n\nComplementary error function at x.")
 FUNC1(exp, exp, 1,
       "exp(x)\n\nReturn e raised to the power of x.")
+FUNC1(expm1, m_expm1, 1,
+      "expm1(x)\n\nReturn exp(x)-1.\n"
+      "This function avoids the loss of precision involved in the direct "
+      "evaluation of exp(x)-1 for small x.")
 FUNC1(fabs, fabs, 0,
       "fabs(x)\n\nReturn the absolute value of the float x.")
 FUNC1(floor, floor, 0,
       "floor(x)\n\nReturn the floor of x as a float.\n"
       "This is the largest integral value <= x.")
-FUNC1(log1p, log1p, 1,
+FUNC1A(gamma, m_tgamma,
+      "gamma(x)\n\nGamma function at x.")
+FUNC1A(lgamma, m_lgamma,
+      "lgamma(x)\n\nNatural logarithm of absolute value of Gamma function at x.")
+FUNC1(log1p, m_log1p, 1,
       "log1p(x)\n\nReturn the natural logarithm of 1+x (base e).\n"
       "The result is computed in a way which is accurate for x near zero.")
 FUNC1(sin, sin, 0,
@@ -592,15 +1091,22 @@ math_factorial(PyObject *self, PyObject *arg)
     PyObject *result, *iobj, *newresult;
 
     if (PyFloat_Check(arg)) {
+        PyObject *lx;
         double dx = PyFloat_AS_DOUBLE((PyFloatObject *)arg);
-        if (dx != floor(dx)) {
+        if (!(Py_IS_FINITE(dx) && dx == floor(dx))) {
             PyErr_SetString(PyExc_ValueError,
                 "factorial() only accepts integral values");
             return NULL;
         }
+        lx = PyLong_FromDouble(dx);
+        if (lx == NULL)
+            return NULL;
+        x = PyLong_AsLong(lx);
+        Py_DECREF(lx);
     }
+    else
+        x = PyInt_AsLong(arg);
 
-    x = PyInt_AsLong(arg);
     if (x == -1 && PyErr_Occurred())
         return NULL;
     if (x < 0) {
@@ -679,31 +1185,18 @@ math_ldexp(PyObject *self, PyObject *args)
     double x, r;
     PyObject *oexp;
     long exp;
+    int overflow;
     if (! PyArg_ParseTuple(args, "dO:ldexp", &x, &oexp))
         return NULL;
 
-    if (PyLong_Check(oexp)) {
+    if (PyLong_Check(oexp) || PyInt_Check(oexp)) {
         /* on overflow, replace exponent with either LONG_MAX
            or LONG_MIN, depending on the sign. */
-        exp = PyLong_AsLong(oexp);
-        if (exp == -1 && PyErr_Occurred()) {
-            if (PyErr_ExceptionMatches(PyExc_OverflowError)) {
-                if (Py_SIZE(oexp) < 0) {
-                    exp = LONG_MIN;
-                }
-                else {
-                    exp = LONG_MAX;
-                }
-                PyErr_Clear();
-            }
-            else {
-                /* propagate any unexpected exception */
-                return NULL;
-            }
-        }
-    }
-    else if (PyInt_Check(oexp)) {
-        exp = PyInt_AS_LONG(oexp);
+        exp = PyLong_AsLongAndOverflow(oexp, &overflow);
+        if (exp == -1 && PyErr_Occurred())
+            return NULL;
+        if (overflow)
+            exp = overflow < 0 ? LONG_MIN : LONG_MAX;
     }
     else {
         PyErr_SetString(PyExc_TypeError,
@@ -772,11 +1265,12 @@ PyDoc_STRVAR(math_modf_doc,
 
 /* A decent logarithm is easy to compute even for huge longs, but libm can't
    do that by itself -- loghelper can.  func is log or log10, and name is
-   "log" or "log10".  Note that overflow isn't possible:  a long can contain
-   no more than INT_MAX * SHIFT bits, so has value certainly less than
-   2**(2**64 * 2**16) == 2**2**80, and log2 of that is 2**80, which is
+   "log" or "log10".  Note that overflow of the result isn't possible: a long
+   can contain no more than INT_MAX * SHIFT bits, so has value certainly less
+   than 2**(2**64 * 2**16) == 2**2**80, and log2 of that is 2**80, which is
    small enough to fit in an IEEE single.  log and log10 are even smaller.
-*/
+   However, intermediate overflow is possible for a long if the number of bits
+   in that long is larger than PY_SSIZE_T_MAX. */
 
 static PyObject*
 loghelper(PyObject* arg, double (*func)(double), char *funcname)
@@ -784,18 +1278,21 @@ loghelper(PyObject* arg, double (*func)(double), char *funcname)
     /* If it is long, do it ourselves. */
     if (PyLong_Check(arg)) {
         double x;
-        int e;
-        x = _PyLong_AsScaledDouble(arg, &e);
+        Py_ssize_t e;
+        x = _PyLong_Frexp((PyLongObject *)arg, &e);
+        if (x == -1.0 && PyErr_Occurred())
+            return NULL;
         if (x <= 0.0) {
             PyErr_SetString(PyExc_ValueError,
                             "math domain error");
             return NULL;
         }
-        /* Value is ~= x * 2**(e*PyLong_SHIFT), so the log ~=
-           log(x) + log(2) * e * PyLong_SHIFT.
-           CAUTION:  e*PyLong_SHIFT may overflow using int arithmetic,
-           so force use of double. */
-        x = func(x) + (e * (double)PyLong_SHIFT) * func(2.0);
+        /* Special case for log(1), to make sure we get an
+           exact result there. */
+        if (e == 1 && x == 0.5)
+            return PyFloat_FromDouble(0.0);
+        /* Value is ~= x * 2**e, so the log ~= log(x) + log(2) * e. */
+        x = func(x) + func(2.0) * e;
         return PyFloat_FromDouble(x);
     }
 
@@ -1074,17 +1571,22 @@ static PyMethodDef math_methods[] = {
     {"cos",             math_cos,       METH_O,         math_cos_doc},
     {"cosh",            math_cosh,      METH_O,         math_cosh_doc},
     {"degrees",         math_degrees,   METH_O,         math_degrees_doc},
+    {"erf",             math_erf,       METH_O,         math_erf_doc},
+    {"erfc",            math_erfc,      METH_O,         math_erfc_doc},
     {"exp",             math_exp,       METH_O,         math_exp_doc},
+    {"expm1",           math_expm1,     METH_O,         math_expm1_doc},
     {"fabs",            math_fabs,      METH_O,         math_fabs_doc},
     {"factorial",       math_factorial, METH_O,         math_factorial_doc},
     {"floor",           math_floor,     METH_O,         math_floor_doc},
     {"fmod",            math_fmod,      METH_VARARGS,   math_fmod_doc},
     {"frexp",           math_frexp,     METH_O,         math_frexp_doc},
     {"fsum",            math_fsum,      METH_O,         math_fsum_doc},
+    {"gamma",           math_gamma,     METH_O,         math_gamma_doc},
     {"hypot",           math_hypot,     METH_VARARGS,   math_hypot_doc},
     {"isinf",           math_isinf,     METH_O,         math_isinf_doc},
     {"isnan",           math_isnan,     METH_O,         math_isnan_doc},
     {"ldexp",           math_ldexp,     METH_VARARGS,   math_ldexp_doc},
+    {"lgamma",          math_lgamma,    METH_O,         math_lgamma_doc},
     {"log",             math_log,       METH_VARARGS,   math_log_doc},
     {"log1p",           math_log1p,     METH_O,         math_log1p_doc},
     {"log10",           math_log10,     METH_O,         math_log10_doc},

@@ -26,6 +26,7 @@ import tkMessageBox
 from idlelib import PyShell
 
 from idlelib.configHandler import idleConf
+from idlelib import macosxSupport
 
 IDENTCHARS = string.ascii_letters + string.digits + "_"
 
@@ -53,6 +54,9 @@ class ScriptBinding:
         self.flist = self.editwin.flist
         self.root = self.editwin.root
 
+        if macosxSupport.runningAsOSXApp():
+            self.editwin.text_frame.bind('<<run-module-event-2>>', self._run_module_event)
+
     def check_module_event(self, event):
         filename = self.getfilename()
         if not filename:
@@ -66,13 +70,13 @@ class ScriptBinding:
         f = open(filename, 'r')
         try:
             tabnanny.process_tokens(tokenize.generate_tokens(f.readline))
-        except tokenize.TokenError, msg:
+        except tokenize.TokenError as msg:
             msgtxt, (lineno, start) = msg
             self.editwin.gotoline(lineno)
             self.errorbox("Tabnanny Tokenizing Error",
                           "Token Error: %s" % msgtxt)
             return False
-        except tabnanny.NannyNag, nag:
+        except tabnanny.NannyNag as nag:
             # The error messages from tabnanny are too confusing...
             self.editwin.gotoline(nag.get_lineno())
             self.errorbox("Tab/space error", indent_message)
@@ -83,9 +87,8 @@ class ScriptBinding:
         self.shell = shell = self.flist.open_shell()
         saved_stream = shell.get_warning_stream()
         shell.set_warning_stream(shell.stderr)
-        f = open(filename, 'r')
-        source = f.read()
-        f.close()
+        with open(filename, 'r') as f:
+            source = f.read()
         if '\r' in source:
             source = re.sub(r"\r\n", "\n", source)
             source = re.sub(r"\r", "\n", source)
@@ -97,7 +100,7 @@ class ScriptBinding:
             try:
                 # If successful, return the compiled code
                 return compile(source, filename, "exec")
-            except (SyntaxError, OverflowError), err:
+            except (SyntaxError, OverflowError, ValueError) as err:
                 try:
                     msg, (errorfilename, lineno, offset, line) = err
                     if not errorfilename:
@@ -142,29 +145,41 @@ class ScriptBinding:
             return 'break'
         if not self.tabnanny(filename):
             return 'break'
-        shell = self.shell
-        interp = shell.interp
+        interp = self.shell.interp
         if PyShell.use_subprocess:
-            shell.restart_shell()
+            interp.restart_subprocess(with_cwd=False)
         dirname = os.path.dirname(filename)
         # XXX Too often this discards arguments the user just set...
         interp.runcommand("""if 1:
-            _filename = %r
+            __file__ = {filename!r}
             import sys as _sys
             from os.path import basename as _basename
             if (not _sys.argv or
-                _basename(_sys.argv[0]) != _basename(_filename)):
-                _sys.argv = [_filename]
+                _basename(_sys.argv[0]) != _basename(__file__)):
+                _sys.argv = [__file__]
             import os as _os
-            _os.chdir(%r)
-            del _filename, _sys, _basename, _os
-            \n""" % (filename, dirname))
+            _os.chdir({dirname!r})
+            del _sys, _basename, _os
+            \n""".format(filename=filename, dirname=dirname))
         interp.prepend_syspath(filename)
         # XXX KBK 03Jul04 When run w/o subprocess, runtime warnings still
         #         go to __stderr__.  With subprocess, they go to the shell.
         #         Need to change streams in PyShell.ModifiedInterpreter.
         interp.runcode(code)
         return 'break'
+
+    if macosxSupport.runningAsOSXApp():
+        # Tk-Cocoa in MacOSX is broken until at least
+        # Tk 8.5.9, and without this rather
+        # crude workaround IDLE would hang when a user
+        # tries to run a module using the keyboard shortcut
+        # (the menu item works fine).
+        _run_module_event = run_module_event
+
+        def run_module_event(self, event):
+            self.editwin.text_frame.after(200,
+                lambda: self.editwin.text_frame.event_generate('<<run-module-event-2>>'))
+            return 'break'
 
     def getfilename(self):
         """Get source filename.  If not saved, offer to save (or create) file
@@ -184,9 +199,9 @@ class ScriptBinding:
             if autosave and filename:
                 self.editwin.io.save(None)
             else:
-                reply = self.ask_save_dialog()
+                confirm = self.ask_save_dialog()
                 self.editwin.text.focus_set()
-                if reply == "ok":
+                if confirm:
                     self.editwin.io.save(None)
                     filename = self.editwin.io.filename
                 else:
@@ -195,13 +210,11 @@ class ScriptBinding:
 
     def ask_save_dialog(self):
         msg = "Source Must Be Saved\n" + 5*' ' + "OK to Save?"
-        mb = tkMessageBox.Message(title="Save Before Run or Check",
-                                  message=msg,
-                                  icon=tkMessageBox.QUESTION,
-                                  type=tkMessageBox.OKCANCEL,
-                                  default=tkMessageBox.OK,
-                                  master=self.editwin.text)
-        return mb.show()
+        confirm = tkMessageBox.askokcancel(title="Save Before Run or Check",
+                                           message=msg,
+                                           default=tkMessageBox.OK,
+                                           master=self.editwin.text)
+        return confirm
 
     def errorbox(self, title, message):
         # XXX This should really be a function of EditorWindow...

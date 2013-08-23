@@ -23,6 +23,12 @@ file object, use its :meth:`fileno` method to obtain the correct value for the
 :func:`os.open` function, which returns a file descriptor directly (the file
 still needs to be closed when done).
 
+.. note::
+   If you want to create a memory-mapping for a writable, buffered file, you
+   should :func:`~io.IOBase.flush` the file first.  This is necessary to ensure
+   that local modifications to the buffers are actually available to the
+   mapping.
+
 For both the Unix and Windows versions of the constructor, *access* may be
 specified as an optional keyword parameter. *access* accepts one of three
 values: :const:`ACCESS_READ`, :const:`ACCESS_WRITE`, or :const:`ACCESS_COPY`
@@ -94,6 +100,10 @@ memory but does not update the underlying file.
    defaults to 0.  *offset* must be a multiple of the PAGESIZE or
    ALLOCATIONGRANULARITY.
 
+   To ensure validity of the created memory mapping the file specified
+   by the descriptor *fileno* is internally automatically synchronized
+   with physical backing store on Mac OS X and OpenVMS.
+
    This example shows a simple way of using :class:`mmap`::
 
       import mmap
@@ -104,19 +114,19 @@ memory but does not update the underlying file.
 
       with open("hello.txt", "r+b") as f:
           # memory-map the file, size 0 means whole file
-          map = mmap.mmap(f.fileno(), 0)
+          mm = mmap.mmap(f.fileno(), 0)
           # read content via standard file methods
-          print map.readline()  # prints "Hello Python!"
+          print mm.readline()  # prints "Hello Python!"
           # read content via slice notation
-          print map[:5]  # prints "Hello"
+          print mm[:5]  # prints "Hello"
           # update content using slice notation;
           # note that new content must have same size
-          map[6:] = " world!\n"
+          mm[6:] = " world!\n"
           # ... and read again using standard file methods
-          map.seek(0)
-          print map.readline()  # prints "Hello  world!"
+          mm.seek(0)
+          print mm.readline()  # prints "Hello  world!"
           # close the map
-          map.close()
+          mm.close()
 
 
    The next example demonstrates how to create an anonymous map and exchange
@@ -125,16 +135,16 @@ memory but does not update the underlying file.
       import mmap
       import os
 
-      map = mmap.mmap(-1, 13)
-      map.write("Hello world!")
+      mm = mmap.mmap(-1, 13)
+      mm.write("Hello world!")
 
       pid = os.fork()
 
       if pid == 0: # In a child process
-          map.seek(0)
-          print map.readline()
+          mm.seek(0)
+          print mm.readline()
 
-          map.close()
+          mm.close()
 
 
    Memory-mapped file objects support the following methods:
@@ -173,7 +183,7 @@ memory but does not update the underlying file.
 
       Copy the *count* bytes starting at offset *src* to the destination index
       *dest*.  If the mmap was created with :const:`ACCESS_READ`, then calls to
-      move will throw a :exc:`TypeError` exception.
+      move will raise a :exc:`TypeError` exception.
 
 
    .. method:: read(num)
@@ -199,7 +209,7 @@ memory but does not update the underlying file.
 
       Resizes the map and the underlying file, if any. If the mmap was created
       with :const:`ACCESS_READ` or :const:`ACCESS_COPY`, resizing the map will
-      throw a :exc:`TypeError` exception.
+      raise a :exc:`TypeError` exception.
 
 
    .. method:: rfind(string[, start[, end]])
@@ -234,7 +244,7 @@ memory but does not update the underlying file.
       Write the bytes in *string* into memory at the current position of the
       file pointer; the file position is updated to point after the bytes that
       were written. If the mmap was created with :const:`ACCESS_READ`, then
-      writing to it will throw a :exc:`TypeError` exception.
+      writing to it will raise a :exc:`TypeError` exception.
 
 
    .. method:: write_byte(byte)
@@ -242,6 +252,4 @@ memory but does not update the underlying file.
       Write the single-character string *byte* into memory at the current
       position of the file pointer; the file position is advanced by ``1``. If
       the mmap was created with :const:`ACCESS_READ`, then writing to it will
-      throw a :exc:`TypeError` exception.
-
-
+      raise a :exc:`TypeError` exception.

@@ -1,14 +1,17 @@
-:mod:`queue` --- A synchronized queue class
+:mod:`Queue` --- A synchronized queue class
 ===========================================
 
 .. module:: Queue
    :synopsis: A synchronized queue class.
 
 .. note::
-   The :mod:`Queue` module has been renamed to :mod:`queue` in Python 3.0.  The
+   The :mod:`Queue` module has been renamed to :mod:`queue` in Python 3.  The
    :term:`2to3` tool will automatically adapt imports when converting your
-   sources to 3.0.
+   sources to Python 3.
 
+**Source code:** :source:`Lib/Queue.py`
+
+--------------
 
 The :mod:`Queue` module implements multi-producer, multi-consumer queues.
 It is especially useful in threaded programming when information must be
@@ -17,8 +20,8 @@ module implements all the required locking semantics.  It depends on the
 availability of thread support in Python; see the :mod:`threading`
 module.
 
-Implements three types of queue whose only difference is the order that
-the entries are retrieved.  In a FIFO queue, the first tasks added are
+The module implements three types of queue, which differ only in the order in
+which the entries are retrieved.  In a FIFO queue, the first tasks added are
 the first retrieved. In a LIFO queue, the most recently added entry is
 the first retrieved (operating like a stack).  With a priority queue,
 the entries are kept sorted (using the :mod:`heapq` module) and the
@@ -183,7 +186,7 @@ Example of how to wait for enqueued tasks to be completed::
    q = Queue()
    for i in range(num_worker_threads):
         t = Thread(target=worker)
-        t.setDaemon(True)
+        t.daemon = True
         t.start()
 
    for item in source():

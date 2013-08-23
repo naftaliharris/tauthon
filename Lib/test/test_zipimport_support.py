@@ -2,7 +2,6 @@
 # for working with modules located inside zipfiles
 # The tests are centralised in this fashion to make it easy to drop them
 # if a platform doesn't support zipimport
-import unittest
 import test.test_support
 import os
 import os.path
@@ -15,6 +14,8 @@ import inspect
 import linecache
 import pdb
 import warnings
+from test.script_helper import (spawn_python, kill_python, run_python,
+                                temp_dir, make_script, make_zip_script)
 
 verbose = test.test_support.verbose
 
@@ -28,13 +29,9 @@ verbose = test.test_support.verbose
 #  test_cmd_line_script (covers the zipimport support in runpy)
 
 # Retrieve some helpers from other test cases
-from test import test_doctest, sample_doctest
+from test import (test_doctest, sample_doctest, sample_doctest_no_doctests,
+                  sample_doctest_no_docstrings)
 from test.test_importhooks import ImportHooksBaseTestCase
-from test.test_cmd_line_script import temp_dir, _run_python,        \
-                                      _spawn_python, _kill_python,  \
-                                      _make_test_script,            \
-                                      _compile_test_script,         \
-                                      _make_test_zip, _make_test_pkg
 
 
 def _run_object_doctest(obj, module):
@@ -79,10 +76,10 @@ class ZipSupportTests(ImportHooksBaseTestCase):
     def test_inspect_getsource_issue4223(self):
         test_src = "def foo(): pass\n"
         with temp_dir() as d:
-            init_name = _make_test_script(d, '__init__', test_src)
+            init_name = make_script(d, '__init__', test_src)
             name_in_zip = os.path.join('zip_pkg',
                                        os.path.basename(init_name))
-            zip_name, run_name = _make_test_zip(d, 'test_zip',
+            zip_name, run_name = make_zip_script(d, 'test_zip',
                                                 init_name, name_in_zip)
             os.remove(init_name)
             sys.path.insert(0, zip_name)
@@ -103,16 +100,26 @@ class ZipSupportTests(ImportHooksBaseTestCase):
                                     "test_zipped_doctest")
         test_src = test_src.replace("test.sample_doctest",
                                     "sample_zipped_doctest")
-        sample_src = inspect.getsource(sample_doctest)
-        sample_src = sample_src.replace("test.test_doctest",
-                                        "test_zipped_doctest")
+        # The sample doctest files rewritten to include in the zipped version.
+        sample_sources = {}
+        for mod in [sample_doctest, sample_doctest_no_doctests,
+                    sample_doctest_no_docstrings]:
+            src = inspect.getsource(mod)
+            src = src.replace("test.test_doctest", "test_zipped_doctest")
+            # Rewrite the module name so that, for example,
+            # "test.sample_doctest" becomes "sample_zipped_doctest".
+            mod_name = mod.__name__.split(".")[-1]
+            mod_name = mod_name.replace("sample_", "sample_zipped_")
+            sample_sources[mod_name] = src
+
         with temp_dir() as d:
-            script_name = _make_test_script(d, 'test_zipped_doctest',
+            script_name = make_script(d, 'test_zipped_doctest',
                                             test_src)
-            zip_name, run_name = _make_test_zip(d, 'test_zip',
+            zip_name, run_name = make_zip_script(d, 'test_zip',
                                                 script_name)
             z = zipfile.ZipFile(zip_name, 'a')
-            z.writestr("sample_zipped_doctest.py", sample_src)
+            for mod_name, src in sample_sources.items():
+                z.writestr(mod_name + ".py", src)
             z.close()
             if verbose:
                 zip_file = zipfile.ZipFile(zip_name, 'r')
@@ -172,9 +179,10 @@ class ZipSupportTests(ImportHooksBaseTestCase):
                 test_zipped_doctest.test_unittest_reportflags,
             ]
             # Needed for test_DocTestParser and test_debug
-            deprecations = [
+            deprecations = []
+            if __debug__:
                 # Ignore all warnings about the use of class Tester in this module.
-                ("class Tester is deprecated", DeprecationWarning)]
+                deprecations.append(("class Tester is deprecated", DeprecationWarning))
             if sys.py3kwarning:
                 deprecations += [
                     ("backquote not supported", SyntaxWarning),
@@ -194,23 +202,23 @@ class ZipSupportTests(ImportHooksBaseTestCase):
                     """)
         pattern = 'File "%s", line 2, in %s'
         with temp_dir() as d:
-            script_name = _make_test_script(d, 'script', test_src)
-            exit_code, data = _run_python(script_name)
+            script_name = make_script(d, 'script', test_src)
+            exit_code, data = run_python(script_name)
             expected = pattern % (script_name, "__main__.Test")
             if verbose:
                 print "Expected line", expected
                 print "Got stdout:"
                 print data
-            self.assert_(expected in data)
-            zip_name, run_name = _make_test_zip(d, "test_zip",
+            self.assertIn(expected, data)
+            zip_name, run_name = make_zip_script(d, "test_zip",
                                                 script_name, '__main__.py')
-            exit_code, data = _run_python(zip_name)
+            exit_code, data = run_python(zip_name)
             expected = pattern % (run_name, "__main__.Test")
             if verbose:
                 print "Expected line", expected
                 print "Got stdout:"
                 print data
-            self.assert_(expected in data)
+            self.assertIn(expected, data)
 
     def test_pdb_issue4201(self):
         test_src = textwrap.dedent("""\
@@ -221,17 +229,17 @@ class ZipSupportTests(ImportHooksBaseTestCase):
                     pdb.runcall(f)
                     """)
         with temp_dir() as d:
-            script_name = _make_test_script(d, 'script', test_src)
-            p = _spawn_python(script_name)
+            script_name = make_script(d, 'script', test_src)
+            p = spawn_python(script_name)
             p.stdin.write('l\n')
-            data = _kill_python(p)
-            self.assert_(script_name in data)
-            zip_name, run_name = _make_test_zip(d, "test_zip",
+            data = kill_python(p)
+            self.assertIn(script_name, data)
+            zip_name, run_name = make_zip_script(d, "test_zip",
                                                 script_name, '__main__.py')
-            p = _spawn_python(zip_name)
+            p = spawn_python(zip_name)
             p.stdin.write('l\n')
-            data = _kill_python(p)
-            self.assert_(run_name in data)
+            data = kill_python(p)
+            self.assertIn(run_name, data)
 
 
 def test_main():

@@ -4,7 +4,6 @@ Provides the PyPIRCCommand class, the base class for the command classes
 that uses .pypirc in the distutils.command package.
 """
 import os
-import sys
 from ConfigParser import ConfigParser
 
 from distutils.cmd import Command
@@ -43,16 +42,11 @@ class PyPIRCCommand(Command):
     def _store_pypirc(self, username, password):
         """Creates a default .pypirc file."""
         rc = self._get_rc_file()
-        f = open(rc, 'w')
+        f = os.fdopen(os.open(rc, os.O_CREAT | os.O_WRONLY, 0600), 'w')
         try:
             f.write(DEFAULT_PYPIRC % (username, password))
         finally:
             f.close()
-        try:
-            os.chmod(rc, 0600)
-        except OSError:
-            # should do something better here
-            pass
 
     def _read_pypirc(self):
         """Reads the .pypirc file."""
@@ -60,8 +54,6 @@ class PyPIRCCommand(Command):
         if os.path.exists(rc):
             self.announce('Using PyPI login from %s' % rc)
             repository = self.repository or self.DEFAULT_REPOSITORY
-            realm = self.realm or self.DEFAULT_REALM
-
             config = ConfigParser()
             config.read(rc)
             sections = config.sections()
@@ -82,12 +74,12 @@ class PyPIRCCommand(Command):
                 for server in _servers:
                     current = {'server': server}
                     current['username'] = config.get(server, 'username')
-                    current['password'] = config.get(server, 'password')
 
                     # optional params
                     for key, default in (('repository',
                                           self.DEFAULT_REPOSITORY),
-                                         ('realm', self.DEFAULT_REALM)):
+                                         ('realm', self.DEFAULT_REALM),
+                                         ('password', None)):
                         if config.has_option(server, key):
                             current[key] = config.get(server, key)
                         else:

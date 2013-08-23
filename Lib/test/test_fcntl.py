@@ -3,12 +3,17 @@
 OS/2+EMX doesn't support the file locking operations.
 
 """
-import fcntl
 import os
 import struct
 import sys
+import _testcapi
 import unittest
-from test.test_support import verbose, TESTFN, unlink, run_unittest
+from test.test_support import (verbose, TESTFN, unlink, run_unittest,
+    import_module)
+
+# Skip test if no fnctl module.
+fcntl = import_module('fcntl')
+
 
 # TODO - Write tests for flock() and lockf().
 
@@ -23,12 +28,8 @@ def get_lockdata():
         else:
             start_len = "qq"
 
-    if sys.platform in ('netbsd1', 'netbsd2', 'netbsd3',
-                        'Darwin1.2', 'darwin',
-                        'freebsd2', 'freebsd3', 'freebsd4', 'freebsd5',
-                        'freebsd6', 'freebsd7', 'freebsd8',
-                        'bsdos2', 'bsdos3', 'bsdos4',
-                        'openbsd', 'openbsd2', 'openbsd3', 'openbsd4'):
+    if (sys.platform.startswith(('netbsd', 'freebsd', 'openbsd', 'bsdos'))
+        or sys.platform == 'darwin'):
         if struct.calcsize('l') == 8:
             off_t = 'l'
             pid_t = 'i'
@@ -81,6 +82,26 @@ class TestFcntl(unittest.TestCase):
             rv = fcntl.fcntl(self.f, fcntl.F_SETLKW, lockdata)
         self.f.close()
 
+    def test_fcntl_bad_file(self):
+        class F:
+            def __init__(self, fn):
+                self.fn = fn
+            def fileno(self):
+                return self.fn
+        self.assertRaises(ValueError, fcntl.fcntl, -1, fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(ValueError, fcntl.fcntl, F(-1), fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(TypeError, fcntl.fcntl, 'spam', fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(TypeError, fcntl.fcntl, F('spam'), fcntl.F_SETFL, os.O_NONBLOCK)
+        # Issue 15989
+        self.assertRaises(ValueError, fcntl.fcntl, _testcapi.INT_MAX + 1,
+                                                   fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(ValueError, fcntl.fcntl, F(_testcapi.INT_MAX + 1),
+                                                   fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(ValueError, fcntl.fcntl, _testcapi.INT_MIN - 1,
+                                                   fcntl.F_SETFL, os.O_NONBLOCK)
+        self.assertRaises(ValueError, fcntl.fcntl, F(_testcapi.INT_MIN - 1),
+                                                   fcntl.F_SETFL, os.O_NONBLOCK)
+
     def test_fcntl_64_bit(self):
         # Issue #1309352: fcntl shouldn't fail when the third arg fits in a
         # C 'long' but not in a C 'int'.
@@ -89,8 +110,7 @@ class TestFcntl(unittest.TestCase):
             # This flag is larger than 2**31 in 64-bit builds
             flags = fcntl.DN_MULTISHOT
         except AttributeError:
-            # F_NOTIFY or DN_MULTISHOT unavailable, skipping
-            return
+            self.skipTest("F_NOTIFY or DN_MULTISHOT unavailable")
         fd = os.open(os.path.dirname(os.path.abspath(TESTFN)), os.O_RDONLY)
         try:
             fcntl.fcntl(fd, cmd, flags)

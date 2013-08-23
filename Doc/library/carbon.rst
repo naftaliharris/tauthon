@@ -5,7 +5,7 @@
 Mac OS Toolbox Modules
 **********************
 
-There are a set of modules that provide interfaces to various Mac OS toolboxes.
+These are a set of modules that provide interfaces to various legacy Mac OS toolboxes.
 If applicable the module will define a number of Python objects for the various
 structures declared by the toolbox, and operations will be implemented as
 methods of the object.  Other operations will be implemented as functions in the
@@ -14,7 +14,7 @@ module.  Not all operations possible in C will also be possible in Python
 in Python (input and output buffers, especially).  All methods and functions
 have a :attr:`__doc__` string describing their arguments and return values, and
 for additional description you are referred to `Inside Macintosh
-<http://developer.apple.com/documentation/macos8/mac8.html>`_ or similar works.
+<http://developer.apple.com/legacy/mac/library/#documentation/macos8/mac8.html>`_ or similar works.
 
 These modules all live in a package called :mod:`Carbon`. Despite that name they
 are not all part of the Carbon framework: CF is really in the CoreFoundation
@@ -24,7 +24,10 @@ framework and Qt is in the QuickTime framework. The normal use pattern is ::
 
 .. note::
 
-   The Carbon modules have been removed in Python 3.0.
+   Most of the OS X APIs that these modules use are deprecated or removed
+   in recent versions of OS X.  Many are not available when Python is
+   executing in 64-bit mode.  The Carbon modules have been removed in
+   Python 3.  You should avoid using them in Python 2.
 
 
 :mod:`Carbon.AE` --- Apple Events
@@ -515,7 +518,7 @@ Manager.  It contains the following functions:
 
 .. seealso::
 
-   `Scrap Manager <http://developer.apple.com/documentation/mac/MoreToolbox/MoreToolbox-109.html>`_
+   `Scrap Manager <http://developer.apple.com/legacy/mac/library/documentation/mac/MoreToolbox/MoreToolbox-109.html>`_
       Apple's documentation for the Scrap Manager gives a lot of useful information
       about using the Scrap Manager in applications.
 

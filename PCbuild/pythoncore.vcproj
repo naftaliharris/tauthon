@@ -715,6 +715,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Include\dtoa.h"
+				>
+			</File>
+			<File
 				RelativePath="..\Include\enumobject.h"
 				>
 			</File>
@@ -848,6 +852,14 @@
 			</File>
 			<File
 				RelativePath="..\Include\pyarena.h"
+				>
+			</File>
+			<File
+				RelativePath="..\Include\pycapsule.h"
+				>
+			</File>
+			<File
+				RelativePath="..\Include\pyctype.h"
 				>
 			</File>
 			<File
@@ -995,14 +1007,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\Modules\_fileio.c"
-				>
-			</File>
-			<File
-				RelativePath="..\Modules\_bytesio.c"
-				>
-			</File>
-			<File
 				RelativePath="..\Modules\_functoolsmodule.c"
 				>
 			</File>
@@ -1024,6 +1028,14 @@
 			</File>
 			<File
 				RelativePath="..\Modules\_lsprof.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Modules\_math.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Modules\_math.h"
 				>
 			</File>
 			<File
@@ -1168,14 +1180,6 @@
 			</File>
 			<File
 				RelativePath="..\Modules\xxsubtype.c"
-				>
-			</File>
-			<File
-				RelativePath="..\Modules\yuv.h"
-				>
-			</File>
-			<File
-				RelativePath="..\Modules\yuvconvert.c"
 				>
 			</File>
 			<File
@@ -1354,6 +1358,42 @@
 					>
 				</File>
 			</Filter>
+			<Filter
+				Name="_io"
+				>
+				<File
+					RelativePath="..\Modules\_io\_iomodule.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\_iomodule.h"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\bufferedio.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\bytesio.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\fileio.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\iobase.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\stringio.c"
+					>
+				</File>
+				<File
+					RelativePath="..\Modules\_io\textio.c"
+					>
+				</File>
+			</Filter>
 		</Filter>
 		<Filter
 			Name="Objects"
@@ -1379,7 +1419,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\Objects\stringobject.c"
+				RelativePath="..\Objects\capsule.c"
 				>
 			</File>
 			<File
@@ -1467,6 +1507,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Objects\memoryobject.c"
+				>
+			</File>
+			<File
 				RelativePath="..\Objects\methodobject.c"
 				>
 			</File>
@@ -1496,6 +1540,14 @@
 			</File>
 			<File
 				RelativePath="..\Objects\sliceobject.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Objects\stringlib\split.h"
+				>
+			</File>
+			<File
+				RelativePath="..\Objects\stringobject.c"
 				>
 			</File>
 			<File
@@ -1659,6 +1711,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\Python\dtoa.c"
+				>
+			</File>
+			<File
 				RelativePath="..\Python\dynload_win.c"
 				>
 			</File>
@@ -1692,10 +1748,6 @@
 			</File>
 			<File
 				RelativePath="..\Python\getcopyright.c"
-				>
-			</File>
-			<File
-				RelativePath="..\Python\getmtime.c"
 				>
 			</File>
 			<File
@@ -1748,6 +1800,10 @@
 			</File>
 			<File
 				RelativePath="..\Python\pyarena.c"
+				>
+			</File>
+			<File
+				RelativePath="..\Python\pyctype.c"
 				>
 			</File>
 			<File
@@ -1818,4 +1874,4 @@
 	</Files>
 	<Globals>
 	</Globals>
-</VisualStudioProject>
+</VisualStudioProject>
