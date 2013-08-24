@@ -132,8 +132,28 @@ newcompobject(PyTypeObject *type)
     }
 #ifdef WITH_THREAD
     self->lock = PyThread_allocate_lock();
+    if (self->lock == NULL) {
+        PyErr_SetString(PyExc_MemoryError, "Unable to allocate lock");
+        return NULL;
+    }
 #endif
     return self;
+}
+
+static void*
+PyZlib_Malloc(voidpf ctx, uInt items, uInt size)
+{
+    if (items > (size_t)PY_SSIZE_T_MAX / size)
+        return NULL;
+    /* PyMem_Malloc() cannot be used: the GIL is not held when
+       inflate() and deflate() are called */
+    return PyMem_RawMalloc(items * size);
+}
+
+static void
+PyZlib_Free(voidpf ctx, void *ptr)
+{
+    PyMem_RawFree(ptr);
 }
 
 PyDoc_STRVAR(compress__doc__,
@@ -161,11 +181,11 @@ PyZlib_compress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     zst.avail_out = length + length/1000 + 12 + 1;
 
-    output = (Byte*)malloc(zst.avail_out);
+    output = (Byte*)PyMem_Malloc(zst.avail_out);
     if (output == NULL) {
         PyErr_SetString(PyExc_MemoryError,
                         "Can't allocate memory to compress data");
@@ -175,8 +195,9 @@ PyZlib_compress(PyObject *self, PyObject *args)
     /* Past the point of no return.  From here on out, we need to make sure
        we clean up mallocs & INCREFs. */
 
-    zst.zalloc = (alloc_func)NULL;
-    zst.zfree = (free_func)Z_NULL;
+    zst.opaque = NULL;
+    zst.zalloc = PyZlib_Malloc;
+    zst.zfree = PyZlib_Free;
     zst.next_out = (Byte *)output;
     zst.next_in = (Byte *)input;
     zst.avail_in = length;
@@ -218,7 +239,7 @@ PyZlib_compress(PyObject *self, PyObject *args)
 
  error:
     PyBuffer_Release(&pinput);
-    free(output);
+    PyMem_Free(output);
 
     return ReturnVal;
 }
@@ -251,7 +272,7 @@ PyZlib_decompress(PyObject *self, PyObject *args)
         goto error;
     }
     input = pinput.buf;
-    length = pinput.len;
+    length = (unsigned int)pinput.len;
 
     if (r_strlen <= 0)
         r_strlen = 1;
@@ -262,8 +283,9 @@ PyZlib_decompress(PyObject *self, PyObject *args)
     if (!(result_str = PyBytes_FromStringAndSize(NULL, r_strlen)))
         goto error;
 
-    zst.zalloc = (alloc_func)NULL;
-    zst.zfree = (free_func)Z_NULL;
+    zst.opaque = NULL;
+    zst.zalloc = PyZlib_Malloc;
+    zst.zfree = PyZlib_Free;
     zst.next_out = (Byte *)PyBytes_AS_STRING(result_str);
     zst.next_in = (Byte *)input;
     err = inflateInit2(&zst, wsize);
@@ -356,8 +378,9 @@ PyZlib_compressobj(PyObject *selfptr, PyObject *args, PyObject *kwargs)
     self = newcompobject(&Comptype);
     if (self==NULL)
         goto error;
-    self->zst.zalloc = (alloc_func)NULL;
-    self->zst.zfree = (free_func)Z_NULL;
+    self->zst.opaque = NULL;
+    self->zst.zalloc = PyZlib_Malloc;
+    self->zst.zfree = PyZlib_Free;
     self->zst.next_in = NULL;
     self->zst.avail_in = 0;
     err = deflateInit2(&self->zst, level, method, wbits, memLevel, strategy);
@@ -420,8 +443,9 @@ PyZlib_decompressobj(PyObject *selfptr, PyObject *args, PyObject *kwargs)
     self = newcompobject(&Decomptype);
     if (self == NULL)
         return(NULL);
-    self->zst.zalloc = (alloc_func)NULL;
-    self->zst.zfree = (free_func)Z_NULL;
+    self->zst.opaque = NULL;
+    self->zst.zalloc = PyZlib_Malloc;
+    self->zst.zfree = PyZlib_Free;
     self->zst.next_in = NULL;
     self->zst.avail_in = 0;
     if (zdict != NULL) {
@@ -525,8 +549,7 @@ PyZlib_objcompress(compobject *self, PyObject *args)
        so extend the output buffer and try again */
     while (err == Z_OK && self->zst.avail_out == 0) {
         if (_PyBytes_Resize(&RetVal, length << 1) < 0) {
-            Py_DECREF(RetVal);
-            RetVal = NULL;
+            Py_CLEAR(RetVal);
             goto error;
         }
         self->zst.next_out =
@@ -550,8 +573,7 @@ PyZlib_objcompress(compobject *self, PyObject *args)
         goto error;
     }
     if (_PyBytes_Resize(&RetVal, self->zst.total_out - start_total_out) < 0) {
-        Py_DECREF(RetVal);
-        RetVal = NULL;
+        Py_CLEAR(RetVal);
     }
 
  error:
@@ -573,7 +595,7 @@ save_unconsumed_input(compobject *self, int err)
             Py_ssize_t old_size = PyBytes_GET_SIZE(self->unused_data);
             Py_ssize_t new_size;
             PyObject *new_data;
-            if (self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
+            if ((Py_ssize_t)self->zst.avail_in > PY_SSIZE_T_MAX - old_size) {
                 PyErr_NoMemory();
                 return -1;
             }
@@ -698,8 +720,7 @@ PyZlib_objdecompress(compobject *self, PyObject *args)
             length = max_length;
 
         if (_PyBytes_Resize(&RetVal, length) < 0) {
-            Py_DECREF(RetVal);
-            RetVal = NULL;
+            Py_CLEAR(RetVal);
             goto error;
         }
         self->zst.next_out =
@@ -733,8 +754,7 @@ PyZlib_objdecompress(compobject *self, PyObject *args)
     }
 
     if (_PyBytes_Resize(&RetVal, self->zst.total_out - start_total_out) < 0) {
-        Py_DECREF(RetVal);
-        RetVal = NULL;
+        Py_CLEAR(RetVal);
     }
 
  error:
@@ -787,8 +807,7 @@ PyZlib_flush(compobject *self, PyObject *args)
        so extend the output buffer and try again */
     while (err == Z_OK && self->zst.avail_out == 0) {
         if (_PyBytes_Resize(&RetVal, length << 1) < 0) {
-            Py_DECREF(RetVal);
-            RetVal = NULL;
+            Py_CLEAR(RetVal);
             goto error;
         }
         self->zst.next_out =
@@ -827,8 +846,7 @@ PyZlib_flush(compobject *self, PyObject *args)
     }
 
     if (_PyBytes_Resize(&RetVal, self->zst.total_out - start_total_out) < 0) {
-        Py_DECREF(RetVal);
-        RetVal = NULL;
+        Py_CLEAR(RetVal);
     }
 
  error:
@@ -988,8 +1006,7 @@ PyZlib_unflush(compobject *self, PyObject *args)
        so extend the output buffer and try again */
     while ((err == Z_OK || err == Z_BUF_ERROR) && self->zst.avail_out == 0) {
         if (_PyBytes_Resize(&retval, length << 1) < 0) {
-            Py_DECREF(retval);
-            retval = NULL;
+            Py_CLEAR(retval);
             goto error;
         }
         self->zst.next_out = (Byte *)PyBytes_AS_STRING(retval) + length;
@@ -1021,8 +1038,7 @@ PyZlib_unflush(compobject *self, PyObject *args)
     }
 
     if (_PyBytes_Resize(&retval, self->zst.total_out - start_total_out) < 0) {
-        Py_DECREF(retval);
-        retval = NULL;
+        Py_CLEAR(retval);
     }
 
 error:
@@ -1094,10 +1110,10 @@ PyZlib_adler32(PyObject *self, PyObject *args)
             buf += (size_t) UINT_MAX;
             len -= (size_t) UINT_MAX;
         }
-        adler32val = adler32(adler32val, buf, len);
+        adler32val = adler32(adler32val, buf, (unsigned int)len);
         Py_END_ALLOW_THREADS
     } else {
-        adler32val = adler32(adler32val, pbuf.buf, pbuf.len);
+        adler32val = adler32(adler32val, pbuf.buf, (unsigned int)pbuf.len);
     }
     PyBuffer_Release(&pbuf);
     return PyLong_FromUnsignedLong(adler32val & 0xffffffffU);
@@ -1132,10 +1148,10 @@ PyZlib_crc32(PyObject *self, PyObject *args)
             buf += (size_t) UINT_MAX;
             len -= (size_t) UINT_MAX;
         }
-        signed_val = crc32(crc32val, buf, len);
+        signed_val = crc32(crc32val, buf, (unsigned int)len);
         Py_END_ALLOW_THREADS
     } else {
-        signed_val = crc32(crc32val, pbuf.buf, pbuf.len);
+        signed_val = crc32(crc32val, pbuf.buf, (unsigned int)pbuf.len);
     }
     PyBuffer_Release(&pbuf);
     return PyLong_FromUnsignedLong(signed_val & 0xffffffffU);
@@ -1266,20 +1282,20 @@ PyInit_zlib(void)
         Py_INCREF(ZlibError);
         PyModule_AddObject(m, "error", ZlibError);
     }
-    PyModule_AddIntConstant(m, "MAX_WBITS", MAX_WBITS);
-    PyModule_AddIntConstant(m, "DEFLATED", DEFLATED);
-    PyModule_AddIntConstant(m, "DEF_MEM_LEVEL", DEF_MEM_LEVEL);
-    PyModule_AddIntConstant(m, "Z_BEST_SPEED", Z_BEST_SPEED);
-    PyModule_AddIntConstant(m, "Z_BEST_COMPRESSION", Z_BEST_COMPRESSION);
-    PyModule_AddIntConstant(m, "Z_DEFAULT_COMPRESSION", Z_DEFAULT_COMPRESSION);
-    PyModule_AddIntConstant(m, "Z_FILTERED", Z_FILTERED);
-    PyModule_AddIntConstant(m, "Z_HUFFMAN_ONLY", Z_HUFFMAN_ONLY);
-    PyModule_AddIntConstant(m, "Z_DEFAULT_STRATEGY", Z_DEFAULT_STRATEGY);
+    PyModule_AddIntMacro(m, MAX_WBITS);
+    PyModule_AddIntMacro(m, DEFLATED);
+    PyModule_AddIntMacro(m, DEF_MEM_LEVEL);
+    PyModule_AddIntMacro(m, Z_BEST_SPEED);
+    PyModule_AddIntMacro(m, Z_BEST_COMPRESSION);
+    PyModule_AddIntMacro(m, Z_DEFAULT_COMPRESSION);
+    PyModule_AddIntMacro(m, Z_FILTERED);
+    PyModule_AddIntMacro(m, Z_HUFFMAN_ONLY);
+    PyModule_AddIntMacro(m, Z_DEFAULT_STRATEGY);
 
-    PyModule_AddIntConstant(m, "Z_FINISH", Z_FINISH);
-    PyModule_AddIntConstant(m, "Z_NO_FLUSH", Z_NO_FLUSH);
-    PyModule_AddIntConstant(m, "Z_SYNC_FLUSH", Z_SYNC_FLUSH);
-    PyModule_AddIntConstant(m, "Z_FULL_FLUSH", Z_FULL_FLUSH);
+    PyModule_AddIntMacro(m, Z_FINISH);
+    PyModule_AddIntMacro(m, Z_NO_FLUSH);
+    PyModule_AddIntMacro(m, Z_SYNC_FLUSH);
+    PyModule_AddIntMacro(m, Z_FULL_FLUSH);
 
     ver = PyUnicode_FromString(ZLIB_VERSION);
     if (ver != NULL)
