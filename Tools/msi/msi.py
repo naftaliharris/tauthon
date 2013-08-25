@@ -99,7 +99,9 @@ extensions = [
     '_multiprocessing.pyd',
     '_lzma.pyd',
     '_decimal.pyd',
-    '_testbuffer.pyd'
+    '_testbuffer.pyd',
+    '_sha3.pyd',
+    '_testimportmultiple.pyd',
 ]
 
 # Well-known component UUIDs
@@ -119,6 +121,7 @@ pythondll_uuid = {
     "31":"{4afcba0b-13e4-47c3-bebe-477428b46913}",
     "32":"{3ff95315-1096-4d31-bd86-601d5438ad5e}",
     "33":"{f7581ca4-d368-4eea-8f82-d48c64c4f047}",
+    "34":"{7A0C5812-2583-40D9-BCBB-CD7485F11377}",
     } [major+minor]
 
 # Compute the name that Sphinx gives to the docfile
@@ -954,8 +957,6 @@ def add_files(db):
     # Add all executables, icons, text files into the TARGETDIR component
     root = PyDirectory(db, cab, None, srcdir, "TARGETDIR", "SourceDir")
     default_feature.set_current()
-    if not msilib.Win64:
-        root.add_file("%s/w9xpopen.exe" % PCBUILD)
     root.add_file("README.txt", src="README")
     root.add_file("NEWS.txt", src="Misc/NEWS")
     generate_license()
@@ -1268,6 +1269,10 @@ def add_registry(db):
              ("pyc.drop", -1, pat4 % (testprefix, "Compiled"), "",
               "{60254CA5-953B-11CF-8C96-00AA00B8708C}", "REGISTRY.def"),
             ])
+
+    # PATHEXT
+    add_data(db, "Environment",
+             [("PathExtAddition", "=-*PathExt", "[~];.PY", "REGISTRY.def")])
 
     # Registry keys
     prefix = r"Software\%sPython\PythonCore\%s" % (testprefix, short_version)
