@@ -32,6 +32,9 @@ Core and Builtins
 Library
 -------
 
+- Issue #11973: Fix a problem in kevent. The flags and fflags fields are now
+  properly handled as unsigned.
+
 - Issue #16809: Fixed some tkinter incompabilities with Tcl/Tk 8.6.
 
 - Issue #16809: Tkinter's splitlist() and split() methods now accept Tcl_Obj
@@ -44,7 +47,7 @@ Library
   module will be called in a deterministic order.
 
 - Issue #18747: Re-seed OpenSSL's pseudo-random number generator after fork.
-  A pthread_atfork() parent handler is used to seeded the PRNG with pid, time
+  A pthread_atfork() parent handler is used to seed the PRNG with pid, time
   and some stack data.
 
 - Issue #8865: Concurrent invocation of select.poll.poll() now raises a
@@ -137,6 +140,8 @@ Library
 
 Tools/Demos
 -----------
+
+- Issue #18817: Fix a resource warning in Lib/aifc.py demo.
 
 - Issue #18439: Make patchcheck work on Windows for ACKS, NEWS.
 
