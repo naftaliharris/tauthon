@@ -49,7 +49,6 @@ extern "C" {
 #define BINARY_OR       66
 #define INPLACE_POWER   67
 #define GET_ITER        68
-#define STORE_LOCALS    69
 #define PRINT_EXPR      70
 #define LOAD_BUILD_CLASS 71
 #define YIELD_FROM      72
@@ -140,6 +139,7 @@ extern "C" {
 #define SET_ADD         146
 #define MAP_ADD         147
 
+#define LOAD_CLASSDEREF   148
 
 /* EXCEPT_HANDLER is a special, implicit block type which is created when
    entering an except handler. It is not an opcode but we define it here
