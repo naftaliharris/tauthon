@@ -356,16 +356,9 @@ def close_all_fds_except(fds):
 #
 
 def spawnv_passfds(path, args, passfds):
-    import _posixsubprocess, fcntl
+    import _posixsubprocess
     passfds = sorted(passfds)
-    tmp = []
-    # temporarily unset CLOEXEC on passed fds
-    for fd in passfds:
-        flag = fcntl.fcntl(fd, fcntl.F_GETFD)
-        if flag & fcntl.FD_CLOEXEC:
-            fcntl.fcntl(fd, fcntl.F_SETFD, flag & ~fcntl.FD_CLOEXEC)
-            tmp.append((fd, flag))
-    errpipe_read, errpipe_write = _posixsubprocess.cloexec_pipe()
+    errpipe_read, errpipe_write = os.pipe()
     try:
         return _posixsubprocess.fork_exec(
             args, [os.fsencode(path)], True, passfds, None, None,
@@ -374,14 +367,3 @@ def spawnv_passfds(path, args, passfds):
     finally:
         os.close(errpipe_read)
         os.close(errpipe_write)
-        # reset CLOEXEC where necessary
-        for fd, flag in tmp:
-            fcntl.fcntl(fd, fcntl.F_SETFD, flag)
-
-#
-# Return pipe with CLOEXEC set on fds
-#
-
-def pipe():
-    import _posixsubprocess
-    return _posixsubprocess.cloexec_pipe()

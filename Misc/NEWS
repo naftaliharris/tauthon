@@ -10,6 +10,11 @@ Projected Release date: 2013-09-08
 Core and Builtins
 -----------------
 
+- Issue #18571: Implementation of the PEP 446: file descriptors and file
+  handles are now created non-inheritable; add functions
+  os.get/set_inheritable(), os.get/set_handle_inheritable() and
+  socket.socket.get/set_inheritable().
+
 - Issue #11619: The parser and the import machinery do not encode Unicode
   filenames anymore on Windows.
 
@@ -45,6 +50,10 @@ Core and Builtins
 
 Library
 -------
+
+- Issue #17974: Switch unittest from using getopt to using argparse.
+
+- Issue #11798: TestSuite now drops references to own tests after execution.
 
 - Issue #16611: http.cookie now correctly parses the 'secure' and 'httponly'
   cookie flags.
@@ -146,9 +155,20 @@ Library
 Tests
 -----
 
+- Issue #16799: Switched from getopt to argparse style in regrtest's argument
+  parsing.  Added more tests for regrtest's argument parsing.
+
 - Issue #18792: Use "127.0.0.1" or "::1" instead of "localhost" as much as
   possible, since "localhost" goes through a DNS lookup under recent Windows
   versions.
+
+Documentation
+-------------
+
+- Issue #18743: Fix references to non-existant "StringIO" module.
+
+- Issue #18783: Removed existing mentions of Python long type in docstrings,
+  error messages and comments.
 
 
 What's New in Python 3.4.0 Alpha 1?
