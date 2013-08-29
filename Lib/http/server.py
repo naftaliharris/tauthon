@@ -401,12 +401,17 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
         while not self.close_connection:
             self.handle_one_request()
 
-    def send_error(self, code, message=None):
+    def send_error(self, code, message=None, explain=None):
         """Send and log an error reply.
 
-        Arguments are the error code, and a detailed message.
-        The detailed message defaults to the short entry matching the
-        response code.
+        Arguments are
+        * code:    an HTTP error code
+                   3 digits
+        * message: a simple optional 1 line reason phrase.
+                   *( HTAB / SP / VCHAR / %x80-FF )
+                   defaults to short entry matching the response code
+        * explain: a detailed message defaults to the long entry
+                   matching the response code.
 
         This sends an error response (so it must be called before any
         output has been generated), logs the error, and finally sends
@@ -420,17 +425,20 @@ class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):
             shortmsg, longmsg = '???', '???'
         if message is None:
             message = shortmsg
-        explain = longmsg
+        if explain is None:
+            explain = longmsg
         self.log_error("code %d, message %s", code, message)
         # using _quote_html to prevent Cross Site Scripting attacks (see bug #1100201)
         content = (self.error_message_format %
-                   {'code': code, 'message': _quote_html(message), 'explain': explain})
+                   {'code': code, 'message': _quote_html(message), 'explain': _quote_html(explain)})
+        body = content.encode('UTF-8', 'replace')
         self.send_response(code, message)
         self.send_header("Content-Type", self.error_content_type)
         self.send_header('Connection', 'close')
+        self.send_header('Content-Length', int(len(body)))
         self.end_headers()
         if self.command != 'HEAD' and code >= 200 and code not in (204, 304):
-            self.wfile.write(content.encode('UTF-8', 'replace'))
+            self.wfile.write(body)
 
     def send_response(self, code, message=None):
         """Add the response header to the headers buffer and log the
@@ -709,7 +717,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         ctype = self.guess_type(path)
         try:
             f = open(path, 'rb')
-        except IOError:
+        except OSError:
             self.send_error(404, "File not found")
             return None
         self.send_response(200)
@@ -730,7 +738,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         """
         try:
             list = os.listdir(path)
-        except os.error:
+        except OSError:
             self.send_error(404, "No permission to list directory")
             return None
         list.sort(key=lambda a: a.lower())
@@ -1121,7 +1129,7 @@ class CGIHTTPRequestHandler(SimpleHTTPRequestHandler):
             try:
                 try:
                     os.setuid(nobody)
-                except os.error:
+                except OSError:
                     pass
                 os.dup2(self.rfile.fileno(), 0)
                 os.dup2(self.wfile.fileno(), 1)
