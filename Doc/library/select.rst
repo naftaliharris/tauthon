@@ -37,7 +37,12 @@ The module defines the following:
    increases this value, :c:func:`devpoll` may return an
    incomplete list of active file descriptors.
 
+   The new file descriptor is :ref:`non-inheritable <fd_inheritance>`.
+
    .. versionadded:: 3.3
+
+   .. versionchanged:: 3.4
+      The new file descriptor is now non-inheritable.
 
 .. function:: epoll(sizehint=-1, flags=0)
 
@@ -47,10 +52,16 @@ The module defines the following:
    to :const:`EPOLL_CLOEXEC`, which causes the epoll descriptor to be closed
    automatically when :func:`os.execve` is called. See section
    :ref:`epoll-objects` below for the methods supported by epolling objects.
+   They also support the :keyword:`with` statement.
 
+   The new file descriptor is :ref:`non-inheritable <fd_inheritance>`.
 
    .. versionchanged:: 3.3
       Added the *flags* parameter.
+
+   .. versionchanged:: 3.4
+      Support for the :keyword:`with` statement was added.
+      The new file descriptor is now non-inheritable.
 
 
 .. function:: poll()
@@ -65,6 +76,11 @@ The module defines the following:
 
    (Only supported on BSD.)  Returns a kernel queue object; see section
    :ref:`kqueue-objects` below for the methods supported by kqueue objects.
+
+   The new file descriptor is :ref:`non-inheritable <fd_inheritance>`.
+
+   .. versionchanged:: 3.4
+      The new file descriptor is now non-inheritable.
 
 
 .. function:: kevent(ident, filter=KQ_FILTER_READ, flags=KQ_EV_ADD, fflags=0, data=0, udata=0)
@@ -142,6 +158,27 @@ descriptors), ``/dev/poll`` is O(active file descriptors).
 
 ``/dev/poll`` behaviour is very close to the standard :c:func:`poll`
 object.
+
+
+.. method:: devpoll.close()
+
+   Close the file descriptor of the polling object.
+
+   .. versionadded:: 3.4
+
+
+.. attribute:: devpoll.closed
+
+   ``True`` if the polling object is closed.
+
+   .. versionadded:: 3.4
+
+
+.. method:: devpoll.fileno()
+
+   Return the file descriptor number of the polling object.
+
+   .. versionadded:: 3.4
 
 
 .. method:: devpoll.register(fd[, eventmask])
@@ -239,6 +276,11 @@ Edge and Level Trigger Polling (epoll) Objects
 .. method:: epoll.close()
 
    Close the control file descriptor of the epoll object.
+
+
+.. attribute:: epoll.closed
+
+   ``True`` if the epoll object is closed.
 
 
 .. method:: epoll.fileno()
@@ -358,6 +400,11 @@ Kqueue Objects
 .. method:: kqueue.close()
 
    Close the control file descriptor of the kqueue object.
+
+
+.. attribute:: kqueue.closed
+
+   ``True`` if the kqueue object is closed.
 
 
 .. method:: kqueue.fileno()
