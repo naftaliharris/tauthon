@@ -103,13 +103,32 @@ class socket(_socket.socket):
             self.close()
 
     def __repr__(self):
-        """Wrap __repr__() to reveal the real class name."""
-        s = _socket.socket.__repr__(self)
-        if s.startswith("<socket object"):
-            s = "<%s.%s%s%s" % (self.__class__.__module__,
-                                self.__class__.__name__,
-                                getattr(self, '_closed', False) and " [closed] " or "",
-                                s[7:])
+        """Wrap __repr__() to reveal the real class name and socket
+        address(es).
+        """
+        closed = getattr(self, '_closed', False)
+        s = "<%s.%s%s fd=%i, family=%i, type=%i, proto=%i" \
+            % (self.__class__.__module__,
+               self.__class__.__name__,
+               " [closed]" if closed else "",
+               self.fileno(),
+               self.family,
+               self.type,
+               self.proto)
+        if not closed:
+            try:
+                laddr = self.getsockname()
+                if laddr:
+                    s += ", laddr=%s" % str(laddr)
+            except error:
+                pass
+            try:
+                raddr = self.getpeername()
+                if raddr:
+                    s += ", raddr=%s" % str(raddr)
+            except error:
+                pass
+        s += '>'
         return s
 
     def __getstate__(self):
@@ -118,7 +137,8 @@ class socket(_socket.socket):
     def dup(self):
         """dup() -> socket object
 
-        Return a new socket object connected to the same system resource.
+        Duplicate the socket. Return a new socket object connected to the same
+        system resource. The new socket is non-inheritable.
         """
         fd = dup(self.fileno())
         sock = self.__class__(self.family, self.type, self.proto, fileno=fd)
@@ -210,6 +230,20 @@ class socket(_socket.socket):
         self._closed = True
         return super().detach()
 
+    if os.name == 'nt':
+        def get_inheritable(self):
+            return os.get_handle_inheritable(self.fileno())
+        def set_inheritable(self, inheritable):
+            os.set_handle_inheritable(self.fileno(), inheritable)
+    else:
+        def get_inheritable(self):
+            return os.get_inheritable(self.fileno())
+        def set_inheritable(self, inheritable):
+            os.set_inheritable(self.fileno(), inheritable)
+    get_inheritable.__doc__ = "Get the inheritable flag of the socket"
+    set_inheritable.__doc__ = "Set the inheritable flag of the socket"
+
+
 def fromfd(fd, family, type, proto=0):
     """ fromfd(fd, family, type[, proto]) -> socket object
 
@@ -291,7 +325,7 @@ class SocketIO(io.RawIOBase):
         self._checkClosed()
         self._checkReadable()
         if self._timeout_occurred:
-            raise IOError("cannot read from timed out object")
+            raise OSError("cannot read from timed out object")
         while True:
             try:
                 return self._sock.recv_into(b)

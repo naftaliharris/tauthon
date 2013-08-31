@@ -7,11 +7,6 @@
 #include "opcode.h"
 #include "structmember.h"
 
-#undef MIN
-#undef MAX
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-
 #define OFF(x) offsetof(PyFrameObject, x)
 
 static PyMemberDef frame_memberlist[] = {
@@ -160,8 +155,8 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
 
     /* We're now ready to look at the bytecode. */
     PyBytes_AsStringAndSize(f->f_code->co_code, (char **)&code, &code_len);
-    min_addr = MIN(new_lasti, f->f_lasti);
-    max_addr = MAX(new_lasti, f->f_lasti);
+    min_addr = Py_MIN(new_lasti, f->f_lasti);
+    max_addr = Py_MAX(new_lasti, f->f_lasti);
 
     /* You can't jump onto a line with an 'except' statement on it -
      * they expect to have an exception on the top of the stack, which
@@ -293,7 +288,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
             break;
         }
 
-        min_delta_iblock = MIN(min_delta_iblock, delta_iblock);
+        min_delta_iblock = Py_MIN(min_delta_iblock, delta_iblock);
 
         if (op >= HAVE_ARGUMENT) {
             addr += 2;
@@ -466,7 +461,7 @@ static int
 frame_traverse(PyFrameObject *f, visitproc visit, void *arg)
 {
     PyObject **fastlocals, **p;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     Py_VISIT(f->f_back);
     Py_VISIT(f->f_code);
@@ -493,10 +488,10 @@ frame_traverse(PyFrameObject *f, visitproc visit, void *arg)
 }
 
 static void
-frame_clear(PyFrameObject *f)
+frame_tp_clear(PyFrameObject *f)
 {
     PyObject **fastlocals, **p, **oldtop;
-    int i, slots;
+    Py_ssize_t i, slots;
 
     /* Before anything else, make sure that this frame is clearly marked
      * as being defunct!  Else, e.g., a generator reachable from this
@@ -505,6 +500,7 @@ frame_clear(PyFrameObject *f)
      */
     oldtop = f->f_stacktop;
     f->f_stacktop = NULL;
+    f->f_executing = 0;
 
     Py_CLEAR(f->f_exc_type);
     Py_CLEAR(f->f_exc_value);
@@ -525,6 +521,25 @@ frame_clear(PyFrameObject *f)
 }
 
 static PyObject *
+frame_clear(PyFrameObject *f)
+{
+    if (f->f_executing) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "cannot clear an executing frame");
+        return NULL;
+    }
+    if (f->f_gen) {
+        _PyGen_Finalize(f->f_gen);
+        assert(f->f_gen == NULL);
+    }
+    frame_tp_clear(f);
+    Py_RETURN_NONE;
+}
+
+PyDoc_STRVAR(clear__doc__,
+"F.clear(): clear most references held by the frame");
+
+static PyObject *
 frame_sizeof(PyFrameObject *f)
 {
     Py_ssize_t res, extras, ncells, nfrees;
@@ -543,6 +558,8 @@ PyDoc_STRVAR(sizeof__doc__,
 "F.__sizeof__() -> size of F in memory, in bytes");
 
 static PyMethodDef frame_methods[] = {
+    {"clear",           (PyCFunction)frame_clear,       METH_NOARGS,
+     clear__doc__},
     {"__sizeof__",      (PyCFunction)frame_sizeof,      METH_NOARGS,
      sizeof__doc__},
     {NULL,              NULL}   /* sentinel */
@@ -571,7 +588,7 @@ PyTypeObject PyFrame_Type = {
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC,/* tp_flags */
     0,                                          /* tp_doc */
     (traverseproc)frame_traverse,               /* tp_traverse */
-    (inquiry)frame_clear,                       /* tp_clear */
+    (inquiry)frame_tp_clear,                    /* tp_clear */
     0,                                          /* tp_richcompare */
     0,                                          /* tp_weaklistoffset */
     0,                                          /* tp_iter */
@@ -713,6 +730,8 @@ PyFrame_New(PyThreadState *tstate, PyCodeObject *code, PyObject *globals,
     f->f_lasti = -1;
     f->f_lineno = code->co_firstlineno;
     f->f_iblock = 0;
+    f->f_executing = 0;
+    f->f_gen = NULL;
 
     _PyObject_GC_TRACK(f);
     return f;
@@ -848,7 +867,7 @@ PyFrame_FastToLocals(PyFrameObject *f)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
@@ -900,7 +919,7 @@ PyFrame_LocalsToFast(PyFrameObject *f, int clear)
     PyObject *error_type, *error_value, *error_traceback;
     PyCodeObject *co;
     Py_ssize_t j;
-    int ncells, nfreevars;
+    Py_ssize_t ncells, nfreevars;
     if (f == NULL)
         return;
     locals = f->f_locals;
