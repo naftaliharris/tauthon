@@ -24,7 +24,7 @@ Command line
 
 When invoking Python, you may specify any of these options::
 
-    python [-bBdEhiOqsSuvVWx?] [-c command | -m module-name | script | - ] [args]
+    python [-bBdEhiIOqsSuvVWx?] [-c command | -m module-name | script | - ] [args]
 
 The most common use case is, of course, a simple invocation of a script::
 
@@ -147,7 +147,12 @@ source.
 
 If no interface option is given, :option:`-i` is implied, ``sys.argv[0]`` is
 an empty string (``""``) and the current directory will be added to the
-start of :data:`sys.path`.
+start of :data:`sys.path`.  Also, tab-completion and history editing is
+automatically enabled, if available on your platform (see
+:ref:`rlcompleter-config`).
+
+.. versionchanged:: 3.4
+   Automatic enabling of tab-completion and history editing.
 
 .. seealso::  :ref:`tut-invoking`
 
@@ -169,6 +174,8 @@ Generic options
 
        Python 3.0
 
+
+.. _using-on-misc-options:
 
 Miscellaneous options
 ~~~~~~~~~~~~~~~~~~~~~
@@ -206,6 +213,17 @@ Miscellaneous options
 
    This can be useful to inspect global variables or a stack trace when a script
    raises an exception.  See also :envvar:`PYTHONINSPECT`.
+
+
+.. cmdoption:: -I
+
+   Run Python in isolated mode. This also implies -E and -s.
+   In isolated mode :data:`sys.path` contains neither the script's directory nor
+   the user's site-packages directory. All :envvar:`PYTHON*` environment
+   variables are ignored, too. Further restrictions may be imposed to prevent
+   the user from injecting malicious code.
+
+   .. versionadded:: 3.4
 
 
 .. cmdoption:: -O
@@ -358,15 +376,23 @@ Miscellaneous options
 .. cmdoption:: -X
 
    Reserved for various implementation-specific options.  CPython currently
-   defines just one, you can use ``-X faulthandler`` to enable
-   :mod:`faulthandler`. It also allows to pass arbitrary values and retrieve
-   them through the :data:`sys._xoptions` dictionary.
+   defines two possible values:
+
+   * ``-X faulthandler`` to enable :mod:`faulthandler`;
+   * ``-X showrefcount`` to enable the output of the total reference count
+     and memory blocks (only works on debug builds);
+
+   It also allows to pass arbitrary values and retrieve them through the
+   :data:`sys._xoptions` dictionary.
 
    .. versionchanged:: 3.2
       It is now allowed to pass :option:`-X` with CPython.
 
    .. versionadded:: 3.3
       The ``-X faulthandler`` option.
+
+   .. versionadded:: 3.4
+      The ``-X showrefcount`` option.
 
 
 Options you shouldn't use
@@ -385,7 +411,7 @@ Environment variables
 ---------------------
 
 These environment variables influence Python's behavior, they are processed
-before the command-line switches other than -E.  It is customary that
+before the command-line switches other than -E or -I.  It is customary that
 command-line switches override environmental variables where there is a
 conflict.
 
@@ -430,7 +456,7 @@ conflict.
    is executed in the same namespace where interactive commands are executed so
    that objects defined or imported in it can be used without qualification in
    the interactive session.  You can also change the prompts :data:`sys.ps1` and
-   :data:`sys.ps2` in this file.
+   :data:`sys.ps2` and the hook :data:`sys.__interactivehook__` in this file.
 
 
 .. envvar:: PYTHONY2K
