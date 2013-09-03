@@ -56,6 +56,12 @@ Library
 
 - Issue #16826: Don't check for PYTHONCASEOK if interpreter started with -E.
 
+- Issue #18901: The sunau getparams method now returns a namedtuple rather than
+  a plain tuple.  Patch by Claudiu Popa.
+
+- Issue #17487: The result of the wave getparams method now is pickleable again.
+  Patch by Claudiu Popa.
+
 - Issue #18756: os.urandom() now uses a lazily-opened persistent file
   descriptor, so as to avoid using many file descriptors when run in
   parallel from multiple threads.
