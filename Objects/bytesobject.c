@@ -10,9 +10,18 @@
 static Py_ssize_t
 _getbuffer(PyObject *obj, Py_buffer *view)
 {
-    PyBufferProcs *buffer = Py_TYPE(obj)->tp_as_buffer;
+    PyBufferProcs *bufferprocs;
+    if (PyBytes_CheckExact(obj)) {
+        /* Fast path, e.g. for .join() of many bytes objects */
+        Py_INCREF(obj);
+        view->obj = obj;
+        view->buf = PyBytes_AS_STRING(obj);
+        view->len = PyBytes_GET_SIZE(obj);
+        return view->len;
+    }
 
-    if (buffer == NULL || buffer->bf_getbuffer == NULL)
+    bufferprocs = Py_TYPE(obj)->tp_as_buffer;
+    if (bufferprocs == NULL || bufferprocs->bf_getbuffer == NULL)
     {
         PyErr_Format(PyExc_TypeError,
                      "Type %.100s doesn't support the buffer API",
@@ -20,7 +29,7 @@ _getbuffer(PyObject *obj, Py_buffer *view)
         return -1;
     }
 
-    if (buffer->bf_getbuffer(obj, view, PyBUF_SIMPLE) < 0)
+    if (bufferprocs->bf_getbuffer(obj, view, PyBUF_SIMPLE) < 0)
         return -1;
     return view->len;
 }
@@ -65,7 +74,7 @@ static PyBytesObject *nullstring;
 PyObject *
 PyBytes_FromStringAndSize(const char *str, Py_ssize_t size)
 {
-    register PyBytesObject *op;
+    PyBytesObject *op;
     if (size < 0) {
         PyErr_SetString(PyExc_SystemError,
             "Negative size passed to PyBytes_FromStringAndSize");
@@ -117,8 +126,8 @@ PyBytes_FromStringAndSize(const char *str, Py_ssize_t size)
 PyObject *
 PyBytes_FromString(const char *str)
 {
-    register size_t size;
-    register PyBytesObject *op;
+    size_t size;
+    PyBytesObject *op;
 
     assert(str != NULL);
     size = strlen(str);
@@ -504,7 +513,7 @@ PyObject *PyBytes_DecodeEscape(const char *s,
 /* object api */
 
 Py_ssize_t
-PyBytes_Size(register PyObject *op)
+PyBytes_Size(PyObject *op)
 {
     if (!PyBytes_Check(op)) {
         PyErr_Format(PyExc_TypeError,
@@ -515,7 +524,7 @@ PyBytes_Size(register PyObject *op)
 }
 
 char *
-PyBytes_AsString(register PyObject *op)
+PyBytes_AsString(PyObject *op)
 {
     if (!PyBytes_Check(op)) {
         PyErr_Format(PyExc_TypeError,
@@ -526,9 +535,9 @@ PyBytes_AsString(register PyObject *op)
 }
 
 int
-PyBytes_AsStringAndSize(register PyObject *obj,
-                         register char **s,
-                         register Py_ssize_t *len)
+PyBytes_AsStringAndSize(PyObject *obj,
+                         char **s,
+                         Py_ssize_t *len)
 {
     if (s == NULL) {
         PyErr_BadInternalCall();
@@ -560,6 +569,7 @@ PyBytes_AsStringAndSize(register PyObject *obj,
 #include "stringlib/fastsearch.h"
 #include "stringlib/count.h"
 #include "stringlib/find.h"
+#include "stringlib/join.h"
 #include "stringlib/partition.h"
 #include "stringlib/split.h"
 #include "stringlib/ctype.h"
@@ -569,7 +579,7 @@ PyBytes_AsStringAndSize(register PyObject *obj,
 PyObject *
 PyBytes_Repr(PyObject *obj, int smartquotes)
 {
-    register PyBytesObject* op = (PyBytesObject*) obj;
+    PyBytesObject* op = (PyBytesObject*) obj;
     Py_ssize_t i, length = Py_SIZE(op);
     size_t newsize, squotes, dquotes;
     PyObject *v;
@@ -708,12 +718,12 @@ bytes_concat(PyObject *a, PyObject *b)
 }
 
 static PyObject *
-bytes_repeat(register PyBytesObject *a, register Py_ssize_t n)
+bytes_repeat(PyBytesObject *a, Py_ssize_t n)
 {
-    register Py_ssize_t i;
-    register Py_ssize_t j;
-    register Py_ssize_t size;
-    register PyBytesObject *op;
+    Py_ssize_t i;
+    Py_ssize_t j;
+    Py_ssize_t size;
+    PyBytesObject *op;
     size_t nbytes;
     if (n < 0)
         n = 0;
@@ -783,7 +793,7 @@ bytes_contains(PyObject *self, PyObject *arg)
 }
 
 static PyObject *
-bytes_item(PyBytesObject *a, register Py_ssize_t i)
+bytes_item(PyBytesObject *a, Py_ssize_t i)
 {
     if (i < 0 || i >= Py_SIZE(a)) {
         PyErr_SetString(PyExc_IndexError, "index out of range");
@@ -1112,94 +1122,9 @@ Concatenate any number of bytes objects, with B in between each pair.\n\
 Example: b'.'.join([b'ab', b'pq', b'rs']) -> b'ab.pq.rs'.");
 
 static PyObject *
-bytes_join(PyObject *self, PyObject *orig)
+bytes_join(PyObject *self, PyObject *iterable)
 {
-    char *sep = PyBytes_AS_STRING(self);
-    const Py_ssize_t seplen = PyBytes_GET_SIZE(self);
-    PyObject *res = NULL;
-    char *p;
-    Py_ssize_t seqlen = 0;
-    size_t sz = 0;
-    Py_ssize_t i;
-    PyObject *seq, *item;
-
-    seq = PySequence_Fast(orig, "");
-    if (seq == NULL) {
-        return NULL;
-    }
-
-    seqlen = PySequence_Size(seq);
-    if (seqlen == 0) {
-        Py_DECREF(seq);
-        return PyBytes_FromString("");
-    }
-    if (seqlen == 1) {
-        item = PySequence_Fast_GET_ITEM(seq, 0);
-        if (PyBytes_CheckExact(item)) {
-            Py_INCREF(item);
-            Py_DECREF(seq);
-            return item;
-        }
-    }
-
-    /* There are at least two things to join, or else we have a subclass
-     * of the builtin types in the sequence.
-     * Do a pre-pass to figure out the total amount of space we'll
-     * need (sz), and see whether all argument are bytes.
-     */
-    /* XXX Shouldn't we use _getbuffer() on these items instead? */
-    for (i = 0; i < seqlen; i++) {
-        const size_t old_sz = sz;
-        item = PySequence_Fast_GET_ITEM(seq, i);
-        if (!PyBytes_Check(item) && !PyByteArray_Check(item)) {
-            PyErr_Format(PyExc_TypeError,
-                         "sequence item %zd: expected bytes,"
-                         " %.80s found",
-                         i, Py_TYPE(item)->tp_name);
-            Py_DECREF(seq);
-            return NULL;
-        }
-        sz += Py_SIZE(item);
-        if (i != 0)
-            sz += seplen;
-        if (sz < old_sz || sz > PY_SSIZE_T_MAX) {
-            PyErr_SetString(PyExc_OverflowError,
-                "join() result is too long for bytes");
-            Py_DECREF(seq);
-            return NULL;
-        }
-    }
-
-    /* Allocate result space. */
-    res = PyBytes_FromStringAndSize((char*)NULL, sz);
-    if (res == NULL) {
-        Py_DECREF(seq);
-        return NULL;
-    }
-
-    /* Catenate everything. */
-    /* I'm not worried about a PyByteArray item growing because there's
-       nowhere in this function where we release the GIL. */
-    p = PyBytes_AS_STRING(res);
-    for (i = 0; i < seqlen; ++i) {
-        size_t n;
-        char *q;
-        if (i) {
-            Py_MEMCPY(p, sep, seplen);
-            p += seplen;
-        }
-        item = PySequence_Fast_GET_ITEM(seq, i);
-        n = Py_SIZE(item);
-        if (PyBytes_Check(item))
-            q = PyBytes_AS_STRING(item);
-        else
-            q = PyByteArray_AS_STRING(item);
-        Py_MEMCPY(p, q, n);
-        p += n;
-    }
-
-    Py_DECREF(seq);
-    return res;
+    return stringlib_bytes_join(self, iterable);
 }
 
 PyObject *
@@ -1536,9 +1461,9 @@ table, which must be a bytes object of length 256.");
 static PyObject *
 bytes_translate(PyBytesObject *self, PyObject *args)
 {
-    register char *input, *output;
+    char *input, *output;
     const char *table;
-    register Py_ssize_t i, c, changed = 0;
+    Py_ssize_t i, c, changed = 0;
     PyObject *input_obj = (PyObject*)self;
     const char *output_start, *del_table=NULL;
     Py_ssize_t inlen, tablen, dellen = 0;
@@ -2316,8 +2241,6 @@ bytes_decode(PyObject *self, PyObject *args, PyObject *kwargs)
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ss:decode", kwlist, &encoding, &errors))
         return NULL;
-    if (encoding == NULL)
-        encoding = PyUnicode_GetDefaultEncoding();
     return PyUnicode_FromEncodedObject(self, encoding, errors);
 }
 
@@ -2679,7 +2602,7 @@ PyBytes_FromObject(PyObject *x)
     }
 
     /* For iterator version, create a string object and resize as needed */
-    size = _PyObject_LengthHint(x, 64);
+    size = PyObject_LengthHint(x, 64);
     if (size == -1 && PyErr_Occurred())
         return NULL;
     /* Allocate an extra byte to prevent PyBytes_FromStringAndSize() from
@@ -2825,9 +2748,9 @@ PyTypeObject PyBytes_Type = {
 };
 
 void
-PyBytes_Concat(register PyObject **pv, register PyObject *w)
+PyBytes_Concat(PyObject **pv, PyObject *w)
 {
-    register PyObject *v;
+    PyObject *v;
     assert(pv != NULL);
     if (*pv == NULL)
         return;
@@ -2841,7 +2764,7 @@ PyBytes_Concat(register PyObject **pv, register PyObject *w)
 }
 
 void
-PyBytes_ConcatAndDel(register PyObject **pv, register PyObject *w)
+PyBytes_ConcatAndDel(PyObject **pv, PyObject *w)
 {
     PyBytes_Concat(pv, w);
     Py_XDECREF(w);
@@ -2865,8 +2788,8 @@ PyBytes_ConcatAndDel(register PyObject **pv, register PyObject *w)
 int
 _PyBytes_Resize(PyObject **pv, Py_ssize_t newsize)
 {
-    register PyObject *v;
-    register PyBytesObject *sv;
+    PyObject *v;
+    PyBytesObject *sv;
     v = *pv;
     if (!PyBytes_Check(v) || Py_REFCNT(v) != 1 || newsize < 0) {
         *pv = 0;
