@@ -10,6 +10,11 @@ except ImportError:
     from time import time as _time
 from traceback import format_exc as _format_exc
 from _weakrefset import WeakSet
+from itertools import islice as _islice
+try:
+    from _collections import deque as _deque
+except ImportError:
+    from collections import deque as _deque
 
 # Note regarding PEP 8 compliant names
 #  This threading model was originally inspired by Java, and inherited
@@ -79,7 +84,7 @@ class _RLock:
     def acquire(self, blocking=True, timeout=-1):
         me = get_ident()
         if self._owner == me:
-            self._count = self._count + 1
+            self._count += 1
             return 1
         rc = self._block.acquire(blocking, timeout)
         if rc:
@@ -146,7 +151,7 @@ class Condition:
             self._is_owned = lock._is_owned
         except AttributeError:
             pass
-        self._waiters = []
+        self._waiters = _deque()
 
     def __enter__(self):
         return self._lock.__enter__()
@@ -216,14 +221,14 @@ class Condition:
     def notify(self, n=1):
         if not self._is_owned():
             raise RuntimeError("cannot notify on un-acquired lock")
-        __waiters = self._waiters
-        waiters = __waiters[:n]
-        if not waiters:
+        all_waiters = self._waiters
+        waiters_to_notify = _deque(_islice(all_waiters, n))
+        if not waiters_to_notify:
             return
-        for waiter in waiters:
+        for waiter in waiters_to_notify:
             waiter.release()
             try:
-                __waiters.remove(waiter)
+                all_waiters.remove(waiter)
             except ValueError:
                 pass
 
@@ -261,7 +266,7 @@ class Semaphore:
                             break
                 self._cond.wait(timeout)
             else:
-                self._value = self._value - 1
+                self._value -= 1
                 rc = True
         return rc
 
@@ -269,7 +274,7 @@ class Semaphore:
 
     def release(self):
         with self._cond:
-            self._value = self._value + 1
+            self._value += 1
             self._cond.notify()
 
     def __exit__(self, t, v, tb):
@@ -504,7 +509,7 @@ class BrokenBarrierError(RuntimeError): pass
 _counter = 0
 def _newname(template="Thread-%d"):
     global _counter
-    _counter = _counter + 1
+    _counter += 1
     return template % _counter
 
 # Active thread administration
@@ -835,20 +840,6 @@ class _MainThread(Thread):
         with _active_limbo_lock:
             _active[self._ident] = self
 
-    def _exitfunc(self):
-        self._stop()
-        t = _pickSomeNonDaemonThread()
-        while t:
-            t.join()
-            t = _pickSomeNonDaemonThread()
-        self._delete()
-
-def _pickSomeNonDaemonThread():
-    for t in enumerate():
-        if not t.daemon and t.is_alive():
-            return t
-    return None
-
 
 # Dummy thread class to represent threads not started here.
 # These aren't garbage collected when they die, nor can they be waited for.
@@ -910,7 +901,29 @@ from _thread import stack_size
 # and make it available for the interpreter
 # (Py_Main) as threading._shutdown.
 
-_shutdown = _MainThread()._exitfunc
+_main_thread = _MainThread()
+
+def _shutdown():
+    _main_thread._stop()
+    t = _pickSomeNonDaemonThread()
+    while t:
+        t.join()
+        t = _pickSomeNonDaemonThread()
+    _main_thread._delete()
+
+def _pickSomeNonDaemonThread():
+    for t in enumerate():
+        if not t.daemon and t.is_alive():
+            return t
+    return None
+
+def main_thread():
+    """Return the main thread object.
+
+    In normal conditions, the main thread is the thread from which the
+    Python interpreter was started.
+    """
+    return _main_thread
 
 # get thread-local implementation, either from the thread
 # module, or from the python fallback
@@ -928,12 +941,13 @@ def _after_fork():
 
     # Reset _active_limbo_lock, in case we forked while the lock was held
     # by another (non-forked) thread.  http://bugs.python.org/issue874900
-    global _active_limbo_lock
+    global _active_limbo_lock, _main_thread
     _active_limbo_lock = _allocate_lock()
 
     # fork() only copied the current thread; clear references to others.
     new_active = {}
     current = current_thread()
+    _main_thread = current
     with _active_limbo_lock:
         for thread in _enumerate():
             # Any lock/condition variable may be currently locked or in an
