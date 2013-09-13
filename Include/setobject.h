@@ -23,8 +23,8 @@ no meaning otherwise.
 
 typedef struct {
     /* Cached hash code of the key. */
-    Py_hash_t hash;
     PyObject *key;
+    Py_hash_t hash;
 } setentry;
 
 
@@ -51,9 +51,9 @@ struct _setobject {
      */
     setentry *table;
     setentry *(*lookup)(PySetObject *so, PyObject *key, Py_hash_t hash);
+    Py_hash_t hash;             /* only used by frozenset objects */
     setentry smalltable[PySet_MINSIZE];
 
-    Py_hash_t hash;                  /* only used by frozenset objects */
     PyObject *weakreflist;      /* List of weak references */
 };
 #endif /* Py_LIMITED_API */
@@ -61,6 +61,10 @@ struct _setobject {
 PyAPI_DATA(PyTypeObject) PySet_Type;
 PyAPI_DATA(PyTypeObject) PyFrozenSet_Type;
 PyAPI_DATA(PyTypeObject) PySetIter_Type;
+#ifndef Py_LIMITED_API
+PyAPI_DATA(PyObject *) _PySet_Dummy;
+#endif
+
 
 /* Invariants for frozensets:
  *     data is immutable.
@@ -101,7 +105,6 @@ PyAPI_FUNC(PyObject *) PySet_Pop(PyObject *set);
 PyAPI_FUNC(int) _PySet_Update(PyObject *set, PyObject *iterable);
 
 PyAPI_FUNC(int) PySet_ClearFreeList(void);
-PyAPI_FUNC(void) _PySet_DebugMallocStats(FILE *out);
 #endif
 
 #ifdef __cplusplus
