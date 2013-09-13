@@ -223,11 +223,7 @@ class HelperFunctionsTests(unittest.TestCase):
         site.PREFIXES = ['xoxo']
         dirs = site.getsitepackages()
 
-        if sys.platform in ('os2emx', 'riscos'):
-            self.assertEqual(len(dirs), 1)
-            wanted = os.path.join('xoxo', 'Lib', 'site-packages')
-            self.assertEqual(dirs[0], wanted)
-        elif (sys.platform == "darwin" and
+        if (sys.platform == "darwin" and
             sysconfig.get_config_var("PYTHONFRAMEWORK")):
             # OS X framework builds
             site.PREFIXES = ['Python.framework']
@@ -429,8 +425,6 @@ class LicenseURL(unittest.TestCase):
                     code = e.code
                 self.assertEqual(code, 200, msg=url)
 
-def test_main():
-    run_unittest(HelperFunctionsTests, ImportSideEffectTests, LicenseURL)
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

@@ -54,7 +54,7 @@ Notes on the availability of these functions:
 
    The name of the operating system dependent module imported.  The following
    names have currently been registered: ``'posix'``, ``'nt'``, ``'mac'``,
-   ``'os2'``, ``'ce'``, ``'java'``.
+   ``'ce'``, ``'java'``.
 
    .. seealso::
       :attr:`sys.platform` has a finer granularity.  :func:`os.uname` gives
@@ -685,16 +685,29 @@ as internal buffering of data.
 
 .. function:: dup(fd)
 
-   Return a duplicate of file descriptor *fd*.
+   Return a duplicate of file descriptor *fd*. The new file descriptor is
+   :ref:`non-inheritable <fd_inheritance>`.
+
+   On Windows, when duplicating a standard stream (0: stdin, 1: stdout,
+   2: stderr), the new file descriptor is :ref:`inheritable
+   <fd_inheritance>`.
 
    Availability: Unix, Windows.
 
+   .. versionchanged:: 3.4
+      The new file descriptor is now non-inheritable.
 
-.. function:: dup2(fd, fd2)
+
+.. function:: dup2(fd, fd2, inheritable=True)
 
    Duplicate file descriptor *fd* to *fd2*, closing the latter first if necessary.
+   The file descriptor *fd2* is :ref:`inheritable <fd_inheritance>` by default,
+   or non-inheritable if *inheritable* is ``False``.
 
    Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      Add the optional *inheritable* parameter.
 
 
 .. function:: fchmod(fd, mode)
@@ -846,16 +859,20 @@ as internal buffering of data.
    Open the file *file* and set various flags according to *flags* and possibly
    its mode according to *mode*.  When computing *mode*, the current umask value
    is first masked out.  Return the file descriptor for the newly opened file.
+   The new file descriptor is :ref:`non-inheritable <fd_inheritance>`.
 
    For a description of the flag and mode values, see the C run-time documentation;
    flag constants (like :const:`O_RDONLY` and :const:`O_WRONLY`) are defined in
-   this module too (see :ref:`open-constants`).  In particular, on Windows adding
+   the :mod:`os` module.  In particular, on Windows adding
    :const:`O_BINARY` is needed to open files in binary mode.
 
    This function can support :ref:`paths relative to directory descriptors
-   <dir_fd>`.
+   <dir_fd>` with the *dir_fd* parameter.
 
    Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      The new file descriptor is now non-inheritable.
 
    .. note::
 
@@ -867,24 +884,91 @@ as internal buffering of data.
    .. versionadded:: 3.3
       The *dir_fd* argument.
 
+The following constants are options for the *flags* parameter to the
+:func:`~os.open` function.  They can be combined using the bitwise OR operator
+``|``.  Some of them are not available on all platforms.  For descriptions of
+their availability and use, consult the :manpage:`open(2)` manual page on Unix
+or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Windows.
+
+
+.. data:: O_RDONLY
+          O_WRONLY
+          O_RDWR
+          O_APPEND
+          O_CREAT
+          O_EXCL
+          O_TRUNC
+
+   These constants are available on Unix and Windows.
+
+
+.. data:: O_DSYNC
+          O_RSYNC
+          O_SYNC
+          O_NDELAY
+          O_NONBLOCK
+          O_NOCTTY
+          O_SHLOCK
+          O_EXLOCK
+          O_CLOEXEC
+
+   These constants are only available on Unix.
+
+   .. versionchanged:: 3.3
+      Add :data:`O_CLOEXEC` constant.
+
+.. data:: O_BINARY
+          O_NOINHERIT
+          O_SHORT_LIVED
+          O_TEMPORARY
+          O_RANDOM
+          O_SEQUENTIAL
+          O_TEXT
+
+   These constants are only available on Windows.
+
+
+.. data:: O_ASYNC
+          O_DIRECT
+          O_DIRECTORY
+          O_NOFOLLOW
+          O_NOATIME
+          O_PATH
+          O_TMPFILE
+
+   These constants are GNU extensions and not present if they are not defined by
+   the C library.
+
+   .. versionchanged:: 3.4
+      Add :data:`O_TMPFILE` constant. It's only available on Linux Kernel 3.11
+      or newer.
+
 
 .. function:: openpty()
 
    .. index:: module: pty
 
-   Open a new pseudo-terminal pair. Return a pair of file descriptors ``(master,
-   slave)`` for the pty and the tty, respectively. For a (slightly) more portable
-   approach, use the :mod:`pty` module.
+   Open a new pseudo-terminal pair. Return a pair of file descriptors
+   ``(master, slave)`` for the pty and the tty, respectively. The new file
+   descriptors are :ref:`non-inheritable <fd_inheritance>`. For a (slightly) more
+   portable approach, use the :mod:`pty` module.
 
    Availability: some flavors of Unix.
+
+   .. versionchanged:: 3.4
+      The new file descriptors are now non-inheritable.
 
 
 .. function:: pipe()
 
-   Create a pipe.  Return a pair of file descriptors ``(r, w)`` usable for reading
-   and writing, respectively.
+   Create a pipe.  Return a pair of file descriptors ``(r, w)`` usable for
+   reading and writing, respectively. The new file descriptor are
+   :ref:`non-inheritable <fd_inheritance>`.
 
    Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      The new file descriptors are now non-inheritable.
 
 
 .. function:: pipe2(flags)
@@ -1080,78 +1164,6 @@ as internal buffering of data.
    .. versionadded:: 3.3
 
 
-.. _open-constants:
-
-``open()`` flag constants
-~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The following constants are options for the *flags* parameter to the
-:func:`~os.open` function.  They can be combined using the bitwise OR operator
-``|``.  Some of them are not available on all platforms.  For descriptions of
-their availability and use, consult the :manpage:`open(2)` manual page on Unix
-or `the MSDN <http://msdn.microsoft.com/en-us/library/z0kc8e3z.aspx>`_ on Windows.
-
-
-.. data:: O_RDONLY
-          O_WRONLY
-          O_RDWR
-          O_APPEND
-          O_CREAT
-          O_EXCL
-          O_TRUNC
-
-   These constants are available on Unix and Windows.
-
-
-.. data:: O_DSYNC
-          O_RSYNC
-          O_SYNC
-          O_NDELAY
-          O_NONBLOCK
-          O_NOCTTY
-          O_SHLOCK
-          O_EXLOCK
-          O_CLOEXEC
-
-   These constants are only available on Unix.
-
-   .. versionchanged:: 3.3
-      Add :data:`O_CLOEXEC` constant.
-
-.. data:: O_BINARY
-          O_NOINHERIT
-          O_SHORT_LIVED
-          O_TEMPORARY
-          O_RANDOM
-          O_SEQUENTIAL
-          O_TEXT
-
-   These constants are only available on Windows.
-
-
-.. data:: O_ASYNC
-          O_DIRECT
-          O_DIRECTORY
-          O_NOFOLLOW
-          O_NOATIME
-
-   These constants are GNU extensions and not present if they are not defined by
-   the C library.
-
-
-.. data:: RTLD_LAZY
-          RTLD_NOW
-          RTLD_GLOBAL
-          RTLD_LOCAL
-          RTLD_NODELETE
-          RTLD_NOLOAD
-          RTLD_DEEPBIND
-
-   See the Unix manual page :manpage:`dlopen(3)`.
-
-   .. versionadded:: 3.3
-
-
 .. _terminal-size:
 
 Querying the size of a terminal
@@ -1187,6 +1199,50 @@ Querying the size of a terminal
    .. attribute:: lines
 
       Height of the terminal window in characters.
+
+
+.. _fd_inheritance:
+
+Inheritance of File Descriptors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A file descriptor has a inheritable flag which indicates if the file descriptor
+can be inherited or not in child processes. Since Python 3.4, file descriptors
+created by Python are non-inheritable by default.
+
+On UNIX, non-inheritable file descriptors are closed in child processes at the
+execution of a new program, other file descriptors are inherited.
+
+On Windows, non-inheritable handles and file descriptors are closed in child
+processes, except standard streams (file descriptors 0, 1 and 2: stdin, stdout
+and stderr) which are always inherited. Using :func:`os.spawn*` functions,
+all inheritable handles and all inheritable file descriptors are inherited.
+Using the :mod:`subprocess` module, all file descriptors except standard
+streams are closed, inheritable handles are only inherited if the *close_fds*
+parameter is ``False``.
+
+.. versionadded:: 3.4
+
+.. function:: get_inheritable(fd)
+
+   Get the `inheritable flag <fd_inheritance>`_ of the specified file
+   descriptor. Return a :class:`bool`.
+
+.. function:: set_inheritable(fd, inheritable)
+
+   Set the `inheritable flag <fd_inheritance>`_ of the specified file descriptor.
+
+.. function:: get_handle_inheritable(handle)
+
+   Get the `inheritable flag <fd_inheritance>`_ of the specified handle. Return a :class:`bool`.
+
+   Availability: Windows.
+
+.. function:: set_handle_inheritable(handle, inheritable)
+
+   Set the `inheritable flag <fd_inheritance>`_ of the specified handle.
+
+   Availability: Windows.
 
 
 .. _os-file-dir:
@@ -3045,7 +3101,7 @@ information, consult your Unix manpages.
 
 .. versionadded:: 3.3
 
-The following scheduling policies are exposed if they are a supported by the
+The following scheduling policies are exposed if they are supported by the
 operating system.
 
 .. data:: SCHED_OTHER
@@ -3154,10 +3210,6 @@ operating system.
    Return the set of CPUs the process with PID *pid* (or the current process
    if zero) is restricted to.
 
-   .. seealso::
-      :func:`multiprocessing.cpu_count` returns the number of CPUs in the
-      system.
-
 
 .. _os-path:
 
@@ -3193,6 +3245,13 @@ Miscellaneous System Information
    determine the set of names known to the system.
 
    Availability: Unix.
+
+
+.. function:: cpu_count()
+
+   Return the number of CPUs in the system. Returns None if undetermined.
+
+   .. versionadded:: 3.4
 
 
 .. function:: getloadavg()
@@ -3292,6 +3351,19 @@ Higher-level operations on pathnames are defined in the :mod:`os.path` module.
    The file path of the null device. For example: ``'/dev/null'`` for
    POSIX, ``'nul'`` for Windows.  Also available via :mod:`os.path`.
 
+.. data:: RTLD_LAZY
+          RTLD_NOW
+          RTLD_GLOBAL
+          RTLD_LOCAL
+          RTLD_NODELETE
+          RTLD_NOLOAD
+          RTLD_DEEPBIND
+
+   Flags for use with the :func:`~sys.setdlopenflags` and
+   :func:`~sys.getdlopenflags` functions.  See the Unix manual page
+   :manpage:`dlopen(3)` for what the different flags mean.
+
+   .. versionadded:: 3.3
 
 .. _os-miscfunc:
 

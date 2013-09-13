@@ -513,7 +513,7 @@ newarrayobject(PyTypeObject *type, Py_ssize_t size, struct arraydescr *descr)
 static PyObject *
 getarrayitem(PyObject *op, Py_ssize_t i)
 {
-    register arrayobject *ap;
+    arrayobject *ap;
     assert(array_Check(op));
     ap = (arrayobject *)op;
     assert(i>=0 && i<Py_SIZE(ap));
@@ -968,8 +968,13 @@ array_count(arrayobject *self, PyObject *v)
     Py_ssize_t i;
 
     for (i = 0; i < Py_SIZE(self); i++) {
-        PyObject *selfi = getarrayitem((PyObject *)self, i);
-        int cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
+        PyObject *selfi;
+        int cmp;
+
+        selfi = getarrayitem((PyObject *)self, i);
+        if (selfi == NULL)
+            return NULL;
+        cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
         Py_DECREF(selfi);
         if (cmp > 0)
             count++;
@@ -990,8 +995,13 @@ array_index(arrayobject *self, PyObject *v)
     Py_ssize_t i;
 
     for (i = 0; i < Py_SIZE(self); i++) {
-        PyObject *selfi = getarrayitem((PyObject *)self, i);
-        int cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
+        PyObject *selfi;
+        int cmp;
+
+        selfi = getarrayitem((PyObject *)self, i);
+        if (selfi == NULL)
+            return NULL;
+        cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
         Py_DECREF(selfi);
         if (cmp > 0) {
             return PyLong_FromLong((long)i);
@@ -1016,6 +1026,8 @@ array_contains(arrayobject *self, PyObject *v)
 
     for (i = 0, cmp = 0 ; cmp == 0 && i < Py_SIZE(self); i++) {
         PyObject *selfi = getarrayitem((PyObject *)self, i);
+        if (selfi == NULL)
+            return -1;
         cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
         Py_DECREF(selfi);
     }
@@ -1028,8 +1040,13 @@ array_remove(arrayobject *self, PyObject *v)
     int i;
 
     for (i = 0; i < Py_SIZE(self); i++) {
-        PyObject *selfi = getarrayitem((PyObject *)self,i);
-        int cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
+        PyObject *selfi;
+        int cmp;
+
+        selfi = getarrayitem((PyObject *)self,i);
+        if (selfi == NULL)
+            return NULL;
+        cmp = PyObject_RichCompareBool(selfi, v, Py_EQ);
         Py_DECREF(selfi);
         if (cmp > 0) {
             if (array_ass_slice(self, i, i+1,
@@ -1068,7 +1085,9 @@ array_pop(arrayobject *self, PyObject *args)
         PyErr_SetString(PyExc_IndexError, "pop index out of range");
         return NULL;
     }
-    v = getarrayitem((PyObject *)self,i);
+    v = getarrayitem((PyObject *)self, i);
+    if (v == NULL)
+        return NULL;
     if (array_ass_slice(self, i, i+1, (PyObject *)NULL) != 0) {
         Py_DECREF(v);
         return NULL;
@@ -1206,8 +1225,8 @@ Byteswap all items of the array.  If the items in the array are not 1, 2,\n\
 static PyObject *
 array_reverse(arrayobject *self, PyObject *unused)
 {
-    register Py_ssize_t itemsize = self->ob_descr->itemsize;
-    register char *p, *q;
+    Py_ssize_t itemsize = self->ob_descr->itemsize;
+    char *p, *q;
     /* little buffer to hold items while swapping */
     char tmp[256];      /* 8 is probably enough -- but why skimp */
     assert((size_t)itemsize <= sizeof(tmp));
@@ -1386,13 +1405,16 @@ array_tolist(arrayobject *self, PyObject *unused)
         return NULL;
     for (i = 0; i < Py_SIZE(self); i++) {
         PyObject *v = getarrayitem((PyObject *)self, i);
-        if (v == NULL) {
-            Py_DECREF(list);
-            return NULL;
-        }
-        PyList_SetItem(list, i, v);
+        if (v == NULL)
+            goto error;
+        if (PyList_SetItem(list, i, v) < 0)
+            goto error;
     }
     return list;
+
+error:
+    Py_DECREF(list);
+    return NULL;
 }
 
 PyDoc_STRVAR(tolist_doc,
@@ -1664,11 +1686,8 @@ static const struct mformatdescr {
 static enum machine_format_code
 typecode_to_mformat_code(char typecode)
 {
-#ifdef WORDS_BIGENDIAN
-    const int is_big_endian = 1;
-#else
-    const int is_big_endian = 0;
-#endif
+    const int is_big_endian = PY_BIG_ENDIAN;
+
     size_t intsize;
     int is_signed;
 
