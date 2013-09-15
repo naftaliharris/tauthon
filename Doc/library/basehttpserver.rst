@@ -6,8 +6,8 @@
 
 .. note::
    The :mod:`BaseHTTPServer` module has been merged into :mod:`http.server` in
-   Python 3.0.  The :term:`2to3` tool will automatically adapt imports when
-   converting your sources to 3.0.
+   Python 3.  The :term:`2to3` tool will automatically adapt imports when
+   converting your sources to Python 3.
 
 
 .. index::
@@ -17,6 +17,10 @@
    single: httpd
    module: SimpleHTTPServer
    module: CGIHTTPServer
+
+**Source code:** :source:`Lib/BaseHTTPServer.py`
+
+--------------
 
 This module defines two classes for implementing HTTP servers (Web servers).
 Usually, this module isn't used directly, but is used as a basis for building
@@ -236,7 +240,7 @@ to a handler.  Code to create and run the server looks like this::
       to create custom error logging mechanisms. The *format* argument is a
       standard printf-style format string, where the additional arguments to
       :meth:`log_message` are applied as inputs to the formatting. The client
-      address and current date and time are prefixed to every message logged.
+      ip address and current date and time are prefixed to every message logged.
 
 
    .. method:: version_string()

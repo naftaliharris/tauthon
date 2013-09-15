@@ -1,4 +1,3 @@
-
 :mod:`hmac` --- Keyed-Hashing for Message Authentication
 ========================================================
 
@@ -10,6 +9,10 @@
 
 .. versionadded:: 2.2
 
+**Source code:** :source:`Lib/hmac.py`
+
+--------------
+
 This module implements the HMAC algorithm as described by :rfc:`2104`.
 
 
@@ -19,36 +22,31 @@ This module implements the HMAC algorithm as described by :rfc:`2104`.
    is made. *digestmod* is the digest constructor or module for the HMAC object to
    use. It defaults to  the :func:`hashlib.md5` constructor.
 
-   .. note::
-
-      The md5 hash has known weaknesses but remains the default for backwards
-      compatibility. Choose a better one for your application.
 
 An HMAC object has the following methods:
 
-
-.. method:: hmac.update(msg)
+.. method:: HMAC.update(msg)
 
    Update the hmac object with the string *msg*.  Repeated calls are equivalent to
    a single call with the concatenation of all the arguments: ``m.update(a);
    m.update(b)`` is equivalent to ``m.update(a + b)``.
 
 
-.. method:: hmac.digest()
+.. method:: HMAC.digest()
 
    Return the digest of the strings passed to the :meth:`update` method so far.
    This string will be the same length as the *digest_size* of the digest given to
    the constructor.  It may contain non-ASCII characters, including NUL bytes.
 
 
-.. method:: hmac.hexdigest()
+.. method:: HMAC.hexdigest()
 
    Like :meth:`digest` except the digest is returned as a string twice the length
    containing only hexadecimal digits.  This may be used to exchange the value
    safely in email or other non-binary environments.
 
 
-.. method:: hmac.copy()
+.. method:: HMAC.copy()
 
    Return a copy ("clone") of the hmac object.  This can be used to efficiently
    compute the digests of strings that share a common initial substring.

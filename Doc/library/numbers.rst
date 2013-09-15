@@ -7,9 +7,9 @@
 .. versionadded:: 2.6
 
 
-The :mod:`numbers` module (:pep:`3141`) defines a hierarchy of numeric abstract
-base classes which progressively define more operations.  None of the types
-defined in this module can be instantiated.
+The :mod:`numbers` module (:pep:`3141`) defines a hierarchy of numeric
+:term:`abstract base classes <abstract base class>` which progressively define
+more operations.  None of the types defined in this module can be instantiated.
 
 
 .. class:: Number
@@ -47,7 +47,7 @@ The numeric tower
    To :class:`Complex`, :class:`Real` adds the operations that work on real
    numbers.
 
-   In short, those are: a conversion to :class:`float`, :func:`trunc`,
+   In short, those are: a conversion to :class:`float`, :func:`math.trunc`,
    :func:`round`, :func:`math.floor`, :func:`math.ceil`, :func:`divmod`, ``//``,
    ``%``, ``<``, ``<=``, ``>``, and ``>=``.
 
@@ -73,10 +73,10 @@ The numeric tower
 
 .. class:: Integral
 
-   Subtypes :class:`Rational` and adds a conversion to :class:`int`.
-   Provides defaults for :func:`float`, :attr:`~Rational.numerator`, and
-   :attr:`~Rational.denominator`, and bit-string operations: ``<<``,
-   ``>>``, ``&``, ``^``, ``|``, ``~``.
+   Subtypes :class:`Rational` and adds a conversion to :class:`int`.  Provides
+   defaults for :func:`float`, :attr:`~Rational.numerator`, and
+   :attr:`~Rational.denominator`.  Adds abstract methods for ``**`` and
+   bit-string operations: ``<<``, ``>>``, ``&``, ``^``, ``|``, ``~``.
 
 
 Notes for type implementors

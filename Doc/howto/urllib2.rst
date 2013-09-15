@@ -134,11 +134,11 @@ This is done as follows::
     >>> data['location'] = 'Northampton'
     >>> data['language'] = 'Python'
     >>> url_values = urllib.urlencode(data)
-    >>> print url_values
+    >>> print url_values  # The order may differ. #doctest: +SKIP
     name=Somebody+Here&language=Python&location=Northampton
     >>> url = 'http://www.example.com/example.cgi'
     >>> full_url = url + '?' + url_values
-    >>> data = urllib2.open(full_url)
+    >>> data = urllib2.urlopen(full_url)
 
 Notice that the full URL is created by adding a ``?`` to the URL, followed by
 the encoded values.
@@ -201,9 +201,9 @@ e.g. ::
 
     >>> req = urllib2.Request('http://www.pretend_server.org')
     >>> try: urllib2.urlopen(req)
-    >>> except URLError, e:
-    >>>    print e.reason
-    >>>
+    ... except URLError as e:
+    ...    print e.reason   #doctest: +SKIP
+    ...
     (4, 'getaddrinfo failed')
 
 
@@ -309,18 +309,18 @@ geturl, and info, methods. ::
 
     >>> req = urllib2.Request('http://www.python.org/fish.html')
     >>> try:
-    >>>     urllib2.urlopen(req)
-    >>> except HTTPError, e:
-    >>>     print e.code
-    >>>     print e.read()
-    >>>
+    ...     urllib2.urlopen(req)
+    ... except urllib2.HTTPError as e:
+    ...     print e.code
+    ...     print e.read() #doctest: +ELLIPSIS, +NORMALIZE_WHITESPACE
+    ...
     404
-    <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN"
-        "http://www.w3.org/TR/html4/loose.dtd">
-    <?xml-stylesheet href="./css/ht2html.css"
-        type="text/css"?>
-    <html><head><title>Error 404: File Not Found</title>
-    ...... etc...
+    <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+    ...
+    <title>Page Not Found</title>
+    ...
+
 
 Wrapping it Up
 --------------
@@ -338,10 +338,10 @@ Number 1
     req = Request(someurl)
     try:
         response = urlopen(req)
-    except HTTPError, e:
+    except HTTPError as e:
         print 'The server couldn\'t fulfill the request.'
         print 'Error code: ', e.code
-    except URLError, e:
+    except URLError as e:
         print 'We failed to reach a server.'
         print 'Reason: ', e.reason
     else:
@@ -362,7 +362,7 @@ Number 2
     req = Request(someurl)
     try:
         response = urlopen(req)
-    except URLError, e:
+    except URLError as e:
         if hasattr(e, 'reason'):
             print 'We failed to reach a server.'
             print 'Reason: ', e.reason
@@ -439,12 +439,12 @@ Authentication Tutorial
 
 When authentication is required, the server sends a header (as well as the 401
 error code) requesting authentication.  This specifies the authentication scheme
-and a 'realm'. The header looks like : ``Www-authenticate: SCHEME
+and a 'realm'. The header looks like : ``WWW-Authenticate: SCHEME
 realm="REALM"``.
 
 e.g. ::
 
-    Www-authenticate: Basic realm="cPanel Users"
+    WWW-Authenticate: Basic realm="cPanel Users"
 
 
 The client should then retry the request with the appropriate name and password
@@ -489,7 +489,8 @@ than the URL you pass to .add_password() will also match. ::
 
     In the above example we only supplied our ``HTTPBasicAuthHandler`` to
     ``build_opener``. By default openers have the handlers for normal situations
-    -- ``ProxyHandler``, ``UnknownHandler``, ``HTTPHandler``,
+    -- ``ProxyHandler`` (if a proxy setting such as an :envvar:`http_proxy`
+    environment variable is set), ``UnknownHandler``, ``HTTPHandler``,
     ``HTTPDefaultErrorHandler``, ``HTTPRedirectHandler``, ``FTPHandler``,
     ``FileHandler``, ``HTTPErrorProcessor``.
 
@@ -506,10 +507,11 @@ Proxies
 =======
 
 **urllib2** will auto-detect your proxy settings and use those. This is through
-the ``ProxyHandler`` which is part of the normal handler chain. Normally that's
-a good thing, but there are occasions when it may not be helpful [#]_. One way
-to do this is to setup our own ``ProxyHandler``, with no proxies defined. This
-is done using similar steps to setting up a `Basic Authentication`_ handler : ::
+the ``ProxyHandler``, which is part of the normal handler chain when a proxy
+setting is detected.  Normally that's a good thing, but there are occasions
+when it may not be helpful [#]_. One way to do this is to setup our own
+``ProxyHandler``, with no proxies defined. This is done using similar steps to
+setting up a `Basic Authentication`_ handler : ::
 
     >>> proxy_support = urllib2.ProxyHandler({})
     >>> opener = urllib2.build_opener(proxy_support)

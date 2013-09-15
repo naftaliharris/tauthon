@@ -14,12 +14,20 @@ but that conflict with builtins that already exist in Python 2.x.\n\
 \n\
 Functions:\n\
 \n\
-hex(arg) -- Returns the hexadecimal representation of an integer\n\
-oct(arg) -- Returns the octal representation of an integer\n\
+ascii(arg) -- Returns the canonical string representation of an object.\n\
+filter(pred, iterable) -- Returns an iterator yielding those items of \n\
+       iterable for which pred(item) is true.\n\
+hex(arg) -- Returns the hexadecimal representation of an integer.\n\
+map(func, *iterables) -- Returns an iterator that computes the function \n\
+    using arguments from each of the iterables.\n\
+oct(arg) -- Returns the octal representation of an integer.\n\
+zip(iter1 [,iter2 [...]]) -- Returns a zip object whose .next() method \n\
+    returns a tuple where the i-th element comes from the i-th iterable \n\
+    argument.\n\
 \n\
 The typical usage of this module is to replace existing builtins in a\n\
 module's namespace:\n \n\
-from future_builtins import hex, oct\n");
+from future_builtins import ascii, filter, map, hex, oct, zip\n");
 
 static PyObject *
 builtin_hex(PyObject *self, PyObject *v)
@@ -85,11 +93,12 @@ initfuture_builtins(void)
     if (itertools == NULL)
         return;
 
+    /* If anything in the following loop fails, we fall through. */
     for (cur_func = it_funcs; *cur_func; ++cur_func){
         iter_func = PyObject_GetAttrString(itertools, *cur_func);
-        if (iter_func == NULL)
-            return;
-        PyModule_AddObject(m, *cur_func+1, iter_func);
+        if (iter_func == NULL ||
+            PyModule_AddObject(m, *cur_func+1, iter_func) < 0)
+            break;
     }
     Py_DECREF(itertools);
     /* any other initialization needed */

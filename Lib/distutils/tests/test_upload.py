@@ -1,14 +1,13 @@
-"""Tests for distutils.command.upload."""
 # -*- encoding: utf8 -*-
-import sys
+"""Tests for distutils.command.upload."""
 import os
 import unittest
-import httplib
+from test.test_support import run_unittest
 
+from distutils.command import upload as upload_mod
 from distutils.command.upload import upload
 from distutils.core import Distribution
 
-from distutils.tests import support
 from distutils.tests.test_config import PYPIRC, PyPIRCCommandTestCase
 
 PYPIRC_LONG_PASSWORD = """\
@@ -29,63 +28,75 @@ realm:acme
 repository:http://another.pypi/
 """
 
-class _Resp(object):
-    def __init__(self, status):
-        self.status = status
-        self.reason = 'OK'
 
-_CONNECTIONS = []
+PYPIRC_NOPASSWORD = """\
+[distutils]
 
-class _FakeHTTPConnection(object):
-    def __init__(self, netloc):
-        self.requests = []
-        self.headers = {}
-        self.body = None
-        self.netloc = netloc
-        _CONNECTIONS.append(self)
+index-servers =
+    server1
 
-    def connect(self):
-        pass
-    endheaders = connect
+[server1]
+username:me
+"""
 
-    def send(self, body):
-        self.body = body
+class FakeOpen(object):
 
-    def putrequest(self, type_, data):
-        self.requests.append((type_, data))
+    def __init__(self, url):
+        self.url = url
+        if not isinstance(url, str):
+            self.req = url
+        else:
+            self.req = None
+        self.msg = 'OK'
 
-    def putheader(self, name, value):
-        self.headers[name] = value
+    def getcode(self):
+        return 200
 
-    def getresponse(self):
-        return _Resp(200)
 
 class uploadTestCase(PyPIRCCommandTestCase):
 
     def setUp(self):
         super(uploadTestCase, self).setUp()
-        self.old_klass = httplib.HTTPConnection
-        httplib.HTTPConnection = _FakeHTTPConnection
+        self.old_open = upload_mod.urlopen
+        upload_mod.urlopen = self._urlopen
+        self.last_open = None
 
     def tearDown(self):
-        httplib.HTTPConnection = self.old_klass
+        upload_mod.urlopen = self.old_open
         super(uploadTestCase, self).tearDown()
+
+    def _urlopen(self, url):
+        self.last_open = FakeOpen(url)
+        return self.last_open
 
     def test_finalize_options(self):
 
         # new format
-        f = open(self.rc, 'w')
-        f.write(PYPIRC)
-        f.close()
-
+        self.write_file(self.rc, PYPIRC)
         dist = Distribution()
         cmd = upload(dist)
         cmd.finalize_options()
         for attr, waited in (('username', 'me'), ('password', 'secret'),
                              ('realm', 'pypi'),
                              ('repository', 'http://pypi.python.org/pypi')):
-            self.assertEquals(getattr(cmd, attr), waited)
+            self.assertEqual(getattr(cmd, attr), waited)
 
+    def test_saved_password(self):
+        # file with no password
+        self.write_file(self.rc, PYPIRC_NOPASSWORD)
+
+        # make sure it passes
+        dist = Distribution()
+        cmd = upload(dist)
+        cmd.finalize_options()
+        self.assertEqual(cmd.password, None)
+
+        # make sure we get it as well, if another command
+        # initialized it at the dist level
+        dist.password = 'xxx'
+        cmd = upload(dist)
+        cmd.finalize_options()
+        self.assertEqual(cmd.password, 'xxx')
 
     def test_upload(self):
         tmp = self.mkdtemp()
@@ -102,21 +113,19 @@ class uploadTestCase(PyPIRCCommandTestCase):
         cmd.run()
 
         # what did we send ?
-        res = _CONNECTIONS[-1]
-
-        headers = res.headers
-        self.assert_('dédé' in res.body)
-        self.assertEquals(headers['Content-length'], '2085')
+        self.assertIn('dédé', self.last_open.req.data)
+        headers = dict(self.last_open.req.headers)
+        self.assertEqual(headers['Content-length'], '2085')
         self.assertTrue(headers['Content-type'].startswith('multipart/form-data'))
-
-        method, request = res.requests[-1]
-        self.assertEquals(method, 'POST')
-        self.assertEquals(res.netloc, 'pypi.python.org')
-        self.assertTrue('xxx' in res.body)
-        self.assertFalse('\n' in headers['Authorization'])
+        self.assertEqual(self.last_open.req.get_method(), 'POST')
+        self.assertEqual(self.last_open.req.get_full_url(),
+                         'http://pypi.python.org/pypi')
+        self.assertTrue('xxx' in self.last_open.req.data)
+        auth = self.last_open.req.headers['Authorization']
+        self.assertFalse('\n' in auth)
 
 def test_suite():
     return unittest.makeSuite(uploadTestCase)
 
 if __name__ == "__main__":
-    unittest.main(defaultTest="test_suite")
+    run_unittest(test_suite())

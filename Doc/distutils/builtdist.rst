@@ -80,7 +80,7 @@ The available formats for built distributions are:
 +-------------+------------------------------+---------+
 | ``tar``     | tar file (:file:`.tar`)      | \(3)    |
 +-------------+------------------------------+---------+
-| ``zip``     | zip file (:file:`.zip`)      | \(4)    |
+| ``zip``     | zip file (:file:`.zip`)      | (2),(4) |
 +-------------+------------------------------+---------+
 | ``rpm``     | RPM                          | \(5)    |
 +-------------+------------------------------+---------+
@@ -88,11 +88,12 @@ The available formats for built distributions are:
 +-------------+------------------------------+---------+
 | ``sdux``    | HP-UX :program:`swinstall`   |         |
 +-------------+------------------------------+---------+
-| ``rpm``     | RPM                          | \(5)    |
-+-------------+------------------------------+---------+
-| ``wininst`` | self-extracting ZIP file for | (2),(4) |
+| ``wininst`` | self-extracting ZIP file for | \(4)    |
 |             | Windows                      |         |
 +-------------+------------------------------+---------+
+| ``msi``     | Microsoft Installer.         |         |
++-------------+------------------------------+---------+
+
 
 Notes:
 
@@ -101,8 +102,6 @@ Notes:
 
 (2)
    default on Windows
-
-   **\*\*** to-do! **\*\***
 
 (3)
    requires external utilities: :program:`tar` and possibly one of :program:`gzip`,
@@ -132,6 +131,8 @@ generates all the "dumb" archive formats (``tar``, ``ztar``, ``gztar``, and
 | :command:`bdist_rpm`     | rpm, srpm             |
 +--------------------------+-----------------------+
 | :command:`bdist_wininst` | wininst               |
++--------------------------+-----------------------+
+| :command:`bdist_msi`     | msi                   |
 +--------------------------+-----------------------+
 
 The following sections give details on the individual :command:`bdist_\*`
@@ -238,7 +239,8 @@ tedious and error-prone, so it's usually best to put them in the setup
 configuration file, :file:`setup.cfg`\ ---see section :ref:`setup-config`.  If
 you distribute or package many Python module distributions, you might want to
 put options that apply to all of them in your personal Distutils configuration
-file (:file:`~/.pydistutils.cfg`).
+file (:file:`~/.pydistutils.cfg`).  If you want to temporarily disable
+this file, you can pass the --no-user-cfg option to setup.py.
 
 There are three steps to building a binary RPM package, all of which are
 handled automatically by the Distutils:
@@ -318,7 +320,7 @@ the :option:`--no-target-compile` and/or the :option:`--no-target-optimize`
 option.
 
 By default the installer will display the cool "Python Powered" logo when it is
-run, but you can also supply your own 152x161 bitmap which must be a Windows
+run, but you can also supply your own 152x261 bitmap which must be a Windows
 :file:`.bmp` file with the :option:`--bitmap` option.
 
 The installer will also display a large title on the desktop background window
@@ -354,7 +356,7 @@ would create a 64bit installation executable on your 32bit version of Windows.
 
 To cross-compile, you must download the Python source code and cross-compile
 Python itself for the platform you are targetting - it is not possible from a
-binary installtion of Python (as the .lib etc file for other platforms are
+binary installation of Python (as the .lib etc file for other platforms are
 not included.)  In practice, this means the user of a 32 bit operating
 system will need to use Visual Studio 2008 to open the
 :file:`PCBuild/PCbuild.sln` solution in the Python source tree and build the
@@ -371,7 +373,7 @@ check or modify your existing install.)
 The Postinstallation script
 ---------------------------
 
-Starting with Python 2.3, a postinstallation script can be specified which the
+Starting with Python 2.3, a postinstallation script can be specified with the
 :option:`--install-script` option.  The basename of the script must be
 specified, and the script filename must also be listed in the scripts argument
 to the setup function.
@@ -424,7 +426,7 @@ built-in functions in the installation script.
 
    Which folders are available depends on the exact Windows version, and probably
    also the configuration.  For details refer to Microsoft's documentation of the
-   :cfunc:`SHGetSpecialFolderPath` function.
+   :c:func:`SHGetSpecialFolderPath` function.
 
 
 .. function:: create_shortcut(target, description, filename[, arguments[, workdir[, iconpath[, iconindex]]]])

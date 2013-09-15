@@ -114,6 +114,8 @@ PyAPI_FUNC(const char *) Py_GetBuildInfo(void);
 PyAPI_FUNC(const char *) _Py_svnversion(void);
 PyAPI_FUNC(const char *) Py_SubversionRevision(void);
 PyAPI_FUNC(const char *) Py_SubversionShortBranch(void);
+PyAPI_FUNC(const char *) _Py_hgidentifier(void);
+PyAPI_FUNC(const char *) _Py_hgversion(void);
 
 /* Internal -- various one-time initializations */
 PyAPI_FUNC(PyObject *) _PyBuiltin_Init(void);
@@ -123,6 +125,7 @@ PyAPI_FUNC(void) _PyExc_Init(void);
 PyAPI_FUNC(void) _PyImportHooks_Init(void);
 PyAPI_FUNC(int) _PyFrame_Init(void);
 PyAPI_FUNC(int) _PyInt_Init(void);
+PyAPI_FUNC(int) _PyLong_Init(void);
 PyAPI_FUNC(void) _PyFloat_Init(void);
 PyAPI_FUNC(int) PyByteArray_Init(void);
 PyAPI_FUNC(void) _PyRandom_Init(void);

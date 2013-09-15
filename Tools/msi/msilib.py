@@ -305,7 +305,7 @@ def init_database(name, schema,
         t.create(db)
     # Fill the validation table
     add_data(db, "_Validation", schema._Validation_records)
-    # Initialize the summary information, allowing atmost 20 properties
+    # Initialize the summary information, allowing at most 20 properties
     si = db.GetSummaryInformation(20)
     si.SetProperty(PID_TITLE, "Installation Database")
     si.SetProperty(PID_SUBJECT, ProductName)
@@ -516,7 +516,7 @@ class Directory:
 
     def add_file(self, file, src=None, version=None, language=None):
         """Add a file to the current component of the directory, starting a new one
-        one if there is no current component. By default, the file name in the source
+        if there is no current component. By default, the file name in the source
         and the file table will be identical. If the src file is specified, it is
         interpreted relative to the current directory. Optionally, a version and a
         language can be specified for the entry in the File table."""

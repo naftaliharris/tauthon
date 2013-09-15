@@ -171,8 +171,9 @@ class _ComplexBinder:
                     break
             ishandlerrunning[:] = []
             # Call all functions in doafterhandler and remove them from list
-            while doafterhandler:
-                doafterhandler.pop()()
+            for f in doafterhandler:
+                f()
+            doafterhandler[:] = []
             if r:
                 return r
         return handler
@@ -201,7 +202,7 @@ class _ComplexBinder:
                                                           seq, handler)))
 
     def bind(self, triplet, func):
-        if not self.bindedfuncs.has_key(triplet[2]):
+        if triplet[2] not in self.bindedfuncs:
             self.bindedfuncs[triplet[2]] = [[] for s in _states]
             for s in _states:
                 lists = [ self.bindedfuncs[detail][i]

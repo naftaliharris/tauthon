@@ -7,6 +7,10 @@
 
 .. index:: module: pickle
 
+**Source code:** :source:`Lib/shelve.py`
+
+--------------
+
 A "shelf" is a persistent, dictionary-like object.  The difference with "dbm"
 databases is that the values (not the keys!) in a shelf can be essentially
 arbitrary Python objects --- anything that the :mod:`pickle` module can handle.
@@ -14,7 +18,7 @@ This includes most class instances, recursive data types, and objects containing
 lots of shared  sub-objects.  The keys are ordinary strings.
 
 
-.. function:: open(filename[, flag='c'[, protocol=None[, writeback=False]]])
+.. function:: open(filename, flag='c', protocol=None, writeback=False)
 
    Open a persistent dictionary.  The filename specified is the base filename for
    the underlying database.  As a side-effect, an extension may be added to the
@@ -40,12 +44,12 @@ lots of shared  sub-objects.  The keys are ordinary strings.
    determine which accessed entries are mutable, nor which ones were actually
    mutated).
 
-   .. note::
+   Like file objects, shelve objects should be closed explicitly to ensure
+   that the persistent data is flushed to disk.
 
-      Do not rely on the shelf being closed automatically; always call
-      :meth:`close` explicitly when you don't need it any more, or use a
-      :keyword:`with` statement with :func:`contextlib.closing`.
-
+   Since the :mod:`shelve` module stores objects using :mod:`pickle`, the same
+   security precautions apply.  Accordingly, you should avoid loading a shelf
+   from an untrusted source.
 
 Shelf objects support all methods supported by dictionaries.  This eases the
 transition from dictionary based scripts to those requiring persistent storage.
@@ -96,7 +100,7 @@ Restrictions
   implementation used.
 
 
-.. class:: Shelf(dict[, protocol=None[, writeback=False]])
+.. class:: Shelf(dict, protocol=None, writeback=False)
 
    A subclass of :class:`UserDict.DictMixin` which stores pickled values in the
    *dict* object.
@@ -114,7 +118,7 @@ Restrictions
    memory and make sync and close take a long time.
 
 
-.. class:: BsdDbShelf(dict[, protocol=None[, writeback=False]])
+.. class:: BsdDbShelf(dict, protocol=None, writeback=False)
 
    A subclass of :class:`Shelf` which exposes :meth:`first`, :meth:`!next`,
    :meth:`previous`, :meth:`last` and :meth:`set_location` which are available in
@@ -125,7 +129,7 @@ Restrictions
    the same interpretation as for the :class:`Shelf` class.
 
 
-.. class:: DbfilenameShelf(filename[, flag='c'[, protocol=None[, writeback=False]]])
+.. class:: DbfilenameShelf(filename, flag='c', protocol=None, writeback=False)
 
    A subclass of :class:`Shelf` which accepts a *filename* instead of a dict-like
    object.  The underlying file will be opened using :func:`anydbm.open`.  By

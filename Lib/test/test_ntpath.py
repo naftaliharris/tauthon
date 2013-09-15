@@ -1,7 +1,7 @@
 import ntpath
 import os
-from test.test_support import verbose, TestFailed
-import test.test_support as test_support
+from test.test_support import TestFailed
+from test import test_support, test_genericpath
 import unittest
 
 
@@ -123,21 +123,15 @@ class TestNtpath(unittest.TestCase):
         tester("ntpath.normpath('C:////a/b')", r'C:\a\b')
         tester("ntpath.normpath('//machine/share//a/b')", r'\\machine\share\a\b')
 
-        # Issue 5827: Make sure normpath preserves unicode
-        for path in (u'', u'.', u'/', u'\\', u'///foo/.//bar//'):
-            self.assertTrue(isinstance(ntpath.normpath(path), unicode),
-                            'normpath() returned str instead of unicode')
-
         tester("ntpath.normpath('\\\\.\\NUL')", r'\\.\NUL')
         tester("ntpath.normpath('\\\\?\\D:/XY\\Z')", r'\\?\D:/XY\Z')
 
     def test_expandvars(self):
-        oldenv = os.environ.copy()
-        try:
-            os.environ.clear()
-            os.environ["foo"] = "bar"
-            os.environ["{foo"] = "baz1"
-            os.environ["{foo}"] = "baz2"
+        with test_support.EnvironmentVarGuard() as env:
+            env.clear()
+            env["foo"] = "bar"
+            env["{foo"] = "baz1"
+            env["{foo}"] = "baz2"
             tester('ntpath.expandvars("foo")', "foo")
             tester('ntpath.expandvars("$foo bar")', "bar bar")
             tester('ntpath.expandvars("${foo}bar")', "barbar")
@@ -157,9 +151,6 @@ class TestNtpath(unittest.TestCase):
             tester('ntpath.expandvars("%?bar%")', "%?bar%")
             tester('ntpath.expandvars("%foo%%bar")', "bar%bar")
             tester('ntpath.expandvars("\'%foo%\'%bar")', "\'%foo%\'%bar")
-        finally:
-            os.environ.clear()
-            os.environ.update(oldenv)
 
     def test_abspath(self):
         # ntpath.abspath() can only be used on a system with the "nt" module
@@ -176,23 +167,6 @@ class TestNtpath(unittest.TestCase):
         else:
             tester('ntpath.abspath("C:\\")', "C:\\")
 
-            # Issue 3426: check that abspath retuns unicode when the arg is
-            # unicode and str when it's str, with both ASCII and non-ASCII cwds
-            saved_cwd = os.getcwd()
-            for cwd in (u'cwd', u'\xe7w\xf0'):
-                try:
-                    os.mkdir(cwd)
-                    os.chdir(cwd)
-                    for path in ('', 'foo', 'f\xf2\xf2', '/foo', 'C:\\'):
-                        self.assertTrue(isinstance(ntpath.abspath(path), str))
-                    for upath in (u'', u'fuu', u'f\xf9\xf9', u'/fuu', u'U:\\'):
-                        self.assertTrue(isinstance(ntpath.abspath(upath),
-                                                   unicode))
-                finally:
-                    os.chdir(saved_cwd)
-                    os.rmdir(cwd)
-
-
     def test_relpath(self):
         currentdir = os.path.split(os.getcwd())[-1]
         tester('ntpath.relpath("a")', 'a')
@@ -204,10 +178,25 @@ class TestNtpath(unittest.TestCase):
         tester('ntpath.relpath("a", "b/c")', '..\\..\\a')
         tester('ntpath.relpath("//conky/mountpoint/a", "//conky/mountpoint/b/c")', '..\\..\\a')
         tester('ntpath.relpath("a", "a")', '.')
+        tester('ntpath.relpath("/foo/bar/bat", "/x/y/z")', '..\\..\\..\\foo\\bar\\bat')
+        tester('ntpath.relpath("/foo/bar/bat", "/foo/bar")', 'bat')
+        tester('ntpath.relpath("/foo/bar/bat", "/")', 'foo\\bar\\bat')
+        tester('ntpath.relpath("/", "/foo/bar/bat")', '..\\..\\..')
+        tester('ntpath.relpath("/foo/bar/bat", "/x")', '..\\foo\\bar\\bat')
+        tester('ntpath.relpath("/x", "/foo/bar/bat")', '..\\..\\..\\x')
+        tester('ntpath.relpath("/", "/")', '.')
+        tester('ntpath.relpath("/a", "/a")', '.')
+        tester('ntpath.relpath("/a/b", "/a/b")', '.')
+        tester('ntpath.relpath("c:/foo", "C:/FOO")', '.')
+
+
+class NtCommonTest(test_genericpath.CommonTest):
+    pathmodule = ntpath
+    attributes = ['relpath', 'splitunc']
 
 
 def test_main():
-    test_support.run_unittest(TestNtpath)
+    test_support.run_unittest(TestNtpath, NtCommonTest)
 
 
 if __name__ == "__main__":

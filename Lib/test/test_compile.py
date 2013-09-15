@@ -6,6 +6,19 @@ import textwrap
 
 class TestSpecifics(unittest.TestCase):
 
+    def test_no_ending_newline(self):
+        compile("hi", "<test>", "exec")
+        compile("hi\r", "<test>", "exec")
+
+    def test_empty(self):
+        compile("", "<test>", "exec")
+
+    def test_other_newlines(self):
+        compile("\r\n", "<test>", "exec")
+        compile("\r", "<test>", "exec")
+        compile("hi\r\nstuff\r\ndef f():\n    pass\r", "<test>", "exec")
+        compile("this_is\rreally_old_mac\rdef f():\n    pass", "<test>", "exec")
+
     def test_debug_assignment(self):
         # catch assignments to __debug__
         self.assertRaises(SyntaxError, compile, '__debug__ = 1', '?', 'single')
@@ -47,6 +60,34 @@ class TestSpecifics(unittest.TestCase):
             self.fail("variable is global and local")
         except SyntaxError:
             pass
+
+    def test_exec_functional_style(self):
+        # Exec'ing a tuple of length 2 works.
+        g = {'b': 2}
+        exec("a = b + 1", g)
+        self.assertEqual(g['a'], 3)
+
+        # As does exec'ing a tuple of length 3.
+        l = {'b': 3}
+        g = {'b': 5, 'c': 7}
+        exec("a = b + c", g, l)
+        self.assertNotIn('a', g)
+        self.assertEqual(l['a'], 10)
+
+        # Tuples not of length 2 or 3 are invalid.
+        with self.assertRaises(TypeError):
+            exec("a = b + 1",)
+
+        with self.assertRaises(TypeError):
+            exec("a = b + 1", {}, {}, {})
+
+        # Can't mix and match the two calling forms.
+        g = {'a': 3, 'b': 4}
+        l = {}
+        with self.assertRaises(TypeError):
+            exec("a = b + 1", g) in g
+        with self.assertRaises(TypeError):
+            exec("a = b + 1", g, l) in g, l
 
     def test_exec_with_general_mapping_for_locals(self):
 
@@ -130,7 +171,7 @@ def f(x):
 
     def test_complex_args(self):
 
-        with test_support._check_py3k_warnings(
+        with test_support.check_py3k_warnings(
                 ("tuple parameter unpacking has been removed", SyntaxWarning)):
             exec textwrap.dedent('''
         def comp_args((a, b)):
@@ -239,10 +280,10 @@ if 1:
             self.assertEqual(eval("-" + all_one_bits), -18446744073709551615L)
         else:
             self.fail("How many bits *does* this machine have???")
-        # Verify treatment of contant folding on -(sys.maxint+1)
+        # Verify treatment of constant folding on -(sys.maxint+1)
         # i.e. -2147483648 on 32 bit platforms.  Should return int, not long.
-        self.assertTrue(isinstance(eval("%s" % (-sys.maxint - 1)), int))
-        self.assertTrue(isinstance(eval("%s" % (-sys.maxint - 2)), long))
+        self.assertIsInstance(eval("%s" % (-sys.maxint - 1)), int)
+        self.assertIsInstance(eval("%s" % (-sys.maxint - 2)), long)
 
     if sys.maxint == 9223372036854775807:
         def test_32_63_bit_values(self):
@@ -257,7 +298,7 @@ if 1:
 
             for variable in self.test_32_63_bit_values.func_code.co_consts:
                 if variable is not None:
-                    self.assertTrue(isinstance(variable, int))
+                    self.assertIsInstance(variable, int)
 
     def test_sequence_unpacking_error(self):
         # Verify sequence packing/unpacking with "or".  SF bug #757818
@@ -275,11 +316,19 @@ if 1:
             '(a, None) = 0, 0',
             'for None in range(10): pass',
             'def f(None): pass',
+            'import None',
+            'import x as None',
+            'from x import None',
+            'from x import y as None'
         ]
         for stmt in stmts:
             stmt += "\n"
             self.assertRaises(SyntaxError, compile, stmt, 'tmp', 'single')
             self.assertRaises(SyntaxError, compile, stmt, 'tmp', 'exec')
+        # This is ok.
+        compile("from None import x", "tmp", "exec")
+        compile("from x import None as y", "tmp", "exec")
+        compile("import None as x", "tmp", "exec")
 
     def test_import(self):
         succeed = [
@@ -337,6 +386,10 @@ if 1:
         f1, f2 = f()
         self.assertNotEqual(id(f1.func_code), id(f2.func_code))
 
+    def test_lambda_doc(self):
+        l = lambda: "foo"
+        self.assertIsNone(l.__doc__)
+
     def test_unicode_encoding(self):
         code = u"# -*- coding: utf-8 -*-\npass\n"
         self.assertRaises(SyntaxError, compile, code, "tmp", "exec")
@@ -362,56 +415,56 @@ if 1:
         d[1] += 1
         self.assertEqual(d[1], 2)
         del d[1]
-        self.assertEqual(1 in d, False)
+        self.assertNotIn(1, d)
         # Tuple of indices
         d[1, 1] = 1
         self.assertEqual(d[1, 1], 1)
         d[1, 1] += 1
         self.assertEqual(d[1, 1], 2)
         del d[1, 1]
-        self.assertEqual((1, 1) in d, False)
+        self.assertNotIn((1, 1), d)
         # Simple slice
         d[1:2] = 1
         self.assertEqual(d[1:2], 1)
         d[1:2] += 1
         self.assertEqual(d[1:2], 2)
         del d[1:2]
-        self.assertEqual(slice(1, 2) in d, False)
+        self.assertNotIn(slice(1, 2), d)
         # Tuple of simple slices
         d[1:2, 1:2] = 1
         self.assertEqual(d[1:2, 1:2], 1)
         d[1:2, 1:2] += 1
         self.assertEqual(d[1:2, 1:2], 2)
         del d[1:2, 1:2]
-        self.assertEqual((slice(1, 2), slice(1, 2)) in d, False)
+        self.assertNotIn((slice(1, 2), slice(1, 2)), d)
         # Extended slice
         d[1:2:3] = 1
         self.assertEqual(d[1:2:3], 1)
         d[1:2:3] += 1
         self.assertEqual(d[1:2:3], 2)
         del d[1:2:3]
-        self.assertEqual(slice(1, 2, 3) in d, False)
+        self.assertNotIn(slice(1, 2, 3), d)
         # Tuple of extended slices
         d[1:2:3, 1:2:3] = 1
         self.assertEqual(d[1:2:3, 1:2:3], 1)
         d[1:2:3, 1:2:3] += 1
         self.assertEqual(d[1:2:3, 1:2:3], 2)
         del d[1:2:3, 1:2:3]
-        self.assertEqual((slice(1, 2, 3), slice(1, 2, 3)) in d, False)
+        self.assertNotIn((slice(1, 2, 3), slice(1, 2, 3)), d)
         # Ellipsis
         d[...] = 1
         self.assertEqual(d[...], 1)
         d[...] += 1
         self.assertEqual(d[...], 2)
         del d[...]
-        self.assertEqual(Ellipsis in d, False)
+        self.assertNotIn(Ellipsis, d)
         # Tuple of Ellipses
         d[..., ...] = 1
         self.assertEqual(d[..., ...], 1)
         d[..., ...] += 1
         self.assertEqual(d[..., ...], 2)
         del d[..., ...]
-        self.assertEqual((Ellipsis, Ellipsis) in d, False)
+        self.assertNotIn((Ellipsis, Ellipsis), d)
 
     def test_mangling(self):
         class A:
@@ -421,10 +474,10 @@ if 1:
                 import __mangled_mod
                 import __package__.module
 
-        self.assert_("_A__mangled" in A.f.func_code.co_varnames)
-        self.assert_("__not_mangled__" in A.f.func_code.co_varnames)
-        self.assert_("_A__mangled_mod" in A.f.func_code.co_varnames)
-        self.assert_("__package__" in A.f.func_code.co_varnames)
+        self.assertIn("_A__mangled", A.f.func_code.co_varnames)
+        self.assertIn("__not_mangled__", A.f.func_code.co_varnames)
+        self.assertIn("_A__mangled_mod", A.f.func_code.co_varnames)
+        self.assertIn("__package__", A.f.func_code.co_varnames)
 
     def test_compile_ast(self):
         fname = __file__
@@ -447,7 +500,7 @@ if 1:
         for fname, code in sample_code:
             co1 = compile(code, '%s1' % fname, 'exec')
             ast = compile(code, '%s2' % fname, 'exec', _ast.PyCF_ONLY_AST)
-            self.assert_(type(ast) == _ast.Module)
+            self.assertTrue(type(ast) == _ast.Module)
             co2 = compile(ast, '%s3' % fname, 'exec')
             self.assertEqual(co1, co2)
             # the code object's filename comes from the second compilation step
