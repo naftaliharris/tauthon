@@ -184,11 +184,14 @@ any that have been added to the map during asynchronous service) is closed.
    Most of these are nearly identical to their socket partners.
 
 
-   .. method:: create_socket(family, type)
+   .. method:: create_socket(family=socket.AF_INET, type=socket.SOCK_STREAM)
 
       This is identical to the creation of a normal socket, and will use the
       same options for creation.  Refer to the :mod:`socket` documentation for
       information on creating sockets.
+
+      .. versionchanged:: 3.3
+         *family* and *type* arguments can be omitted.
 
 
    .. method:: connect(address)
@@ -274,13 +277,13 @@ asyncore Example basic HTTP client
 Here is a very basic HTTP client that uses the :class:`dispatcher` class to
 implement its socket handling::
 
-   import asyncore, socket
+   import asyncore
 
    class HTTPClient(asyncore.dispatcher):
 
        def __init__(self, host, path):
            asyncore.dispatcher.__init__(self)
-           self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+           self.create_socket()
            self.connect( (host, 80) )
            self.buffer = bytes('GET %s HTTP/1.0\r\nHost: %s\r\n\r\n' %
                                (path, host), 'ascii')
@@ -314,7 +317,6 @@ Here is a basic echo server that uses the :class:`dispatcher` class to accept
 connections and dispatches the incoming connections to a handler::
 
     import asyncore
-    import socket
 
     class EchoHandler(asyncore.dispatcher_with_send):
 
@@ -327,7 +329,7 @@ connections and dispatches the incoming connections to a handler::
 
         def __init__(self, host, port):
             asyncore.dispatcher.__init__(self)
-            self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.create_socket()
             self.set_reuse_addr()
             self.bind((host, port))
             self.listen(5)
@@ -338,4 +340,3 @@ connections and dispatches the incoming connections to a handler::
 
     server = EchoServer('localhost', 8080)
     asyncore.loop()
-

@@ -1,6 +1,6 @@
 import os
 import types
-import pipes
+import shlex
 import sys
 import codecs
 import tempfile
@@ -208,12 +208,11 @@ class IOBinding:
         try:
             # open the file in binary mode so that we can handle
             # end-of-line convention ourselves.
-            f = open(filename,'rb')
-            two_lines = f.readline() + f.readline()
-            f.seek(0)
-            bytes = f.read()
-            f.close()
-        except IOError as msg:
+            with open(filename, 'rb') as f:
+                two_lines = f.readline() + f.readline()
+                f.seek(0)
+                bytes = f.read()
+        except OSError as msg:
             tkMessageBox.showerror("I/O Error", str(msg), master=self.text)
             return False
         chars, converted = self._decode(two_lines, bytes)
@@ -373,12 +372,10 @@ class IOBinding:
             text = text.replace("\n", self.eol_convention)
         chars = self.encode(text)
         try:
-            f = open(filename, "wb")
-            f.write(chars)
-            f.flush()
-            f.close()
+            with open(filename, "wb") as f:
+                f.write(chars)
             return True
-        except IOError as msg:
+        except OSError as msg:
             tkMessageBox.showerror("I/O Error", str(msg),
                                    master=self.text)
             return False
@@ -459,7 +456,7 @@ class IOBinding:
         else: #no printing for this platform
             printPlatform = False
         if printPlatform:  #we can try to print for this platform
-            command = command % pipes.quote(filename)
+            command = command % shlex.quote(filename)
             pipe = os.popen(command, "r")
             # things can get ugly on NT if there is no printer available.
             output = pipe.read().strip()
@@ -486,6 +483,8 @@ class IOBinding:
         ("All files", "*"),
         ]
 
+    defaultextension = '.py' if sys.platform == 'darwin' else ''
+
     def askopenfile(self):
         dir, base = self.defaultfilename("open")
         if not self.opendialog:
@@ -509,8 +508,10 @@ class IOBinding:
     def asksavefile(self):
         dir, base = self.defaultfilename("save")
         if not self.savedialog:
-            self.savedialog = tkFileDialog.SaveAs(master=self.text,
-                                                  filetypes=self.filetypes)
+            self.savedialog = tkFileDialog.SaveAs(
+                    master=self.text,
+                    filetypes=self.filetypes,
+                    defaultextension=self.defaultextension)
         filename = self.savedialog.show(initialdir=dir, initialfile=base)
         return filename
 

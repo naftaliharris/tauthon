@@ -102,7 +102,8 @@ class TestCaseBase(unittest.TestCase):
 class HTMLParserStrictTestCase(TestCaseBase):
 
     def get_collector(self):
-        return EventCollector(strict=True)
+        with support.check_warnings(("", DeprecationWarning), quite=False):
+            return EventCollector(strict=True)
 
     def test_processing_instruction_only(self):
         self._run_check("<?processing instruction>", [
@@ -455,7 +456,7 @@ class HTMLParserTolerantTestCase(HTMLParserStrictTestCase):
         self._run_check('<form action="/xxx.php?a=1&amp;b=2&amp", '
                         'method="post">', [
                             ('starttag', 'form',
-                                [('action', '/xxx.php?a=1&b=2&amp'),
+                                [('action', '/xxx.php?a=1&b=2&'),
                                  (',', None), ('method', 'post')])])
 
     def test_weird_chars_in_unquoted_attribute_values(self):
@@ -534,12 +535,31 @@ class HTMLParserTolerantTestCase(HTMLParserStrictTestCase):
         ]
         self._run_check(html, expected)
 
+    def test_EOF_in_charref(self):
+        # see #17802
+        # This test checks that the UnboundLocalError reported in the issue
+        # is not raised, however I'm not sure the returned values are correct.
+        # Maybe HTMLParser should use self.unescape for these
+        data = [
+            ('a&', [('data', 'a&')]),
+            ('a&b', [('data', 'ab')]),
+            ('a&b ', [('data', 'a'), ('entityref', 'b'), ('data', ' ')]),
+            ('a&b;', [('data', 'a'), ('entityref', 'b')]),
+        ]
+        for html, expected in data:
+            self._run_check(html, expected)
+
     def test_unescape_function(self):
         p = self.get_collector()
         self.assertEqual(p.unescape('&#bad;'),'&#bad;')
         self.assertEqual(p.unescape('&#0038;'),'&')
         # see #12888
         self.assertEqual(p.unescape('&#123; ' * 1050), '{ ' * 1050)
+        # see #15156
+        self.assertEqual(p.unescape('&Eacuteric&Eacute;ric'
+                                    '&alphacentauri&alpha;centauri'),
+                                    'ÉricÉric&alphacentauriαcentauri')
+        self.assertEqual(p.unescape('&co;'), '&co;')
 
     def test_broken_comments(self):
         html = ('<! not really a comment >'
@@ -594,7 +614,8 @@ class HTMLParserTolerantTestCase(HTMLParserStrictTestCase):
 class AttributesStrictTestCase(TestCaseBase):
 
     def get_collector(self):
-        return EventCollector(strict=True)
+        with support.check_warnings(("", DeprecationWarning), quite=False):
+            return EventCollector(strict=True)
 
     def test_attr_syntax(self):
         output = [

@@ -171,11 +171,6 @@ The Python compiler currently generates the following bytecode instructions.
 
 **General instructions**
 
-.. opcode:: STOP_CODE
-
-   Indicates end-of-code to the compiler, not used by the interpreter.
-
-
 .. opcode:: NOP
 
    Do nothing code.  Used as a placeholder by the bytecode optimizer.
@@ -434,6 +429,13 @@ the stack so that it is available for further iterations of the loop.
 .. opcode:: YIELD_VALUE
 
    Pops ``TOS`` and yields it from a :term:`generator`.
+
+
+.. opcode:: YIELD_FROM
+
+   Pops ``TOS`` and delegates to it as a subiterator from a :term:`generator`.
+
+   .. versionadded:: 3.3
 
 
 .. opcode:: IMPORT_STAR
@@ -752,17 +754,19 @@ the more significant byte last.
 
 .. opcode:: MAKE_FUNCTION (argc)
 
-   Pushes a new function object on the stack.  TOS is the code associated with the
-   function.  The function object is defined to have *argc* default parameters,
-   which are found below TOS.
+   Pushes a new function object on the stack.  TOS is the
+   :term:`qualified name` of the function; TOS1 is the code associated with
+   the function.  The function object is defined to have *argc* default parameters,
+   which are found below TOS1.
 
 
 .. opcode:: MAKE_CLOSURE (argc)
 
    Creates a new function object, sets its *__closure__* slot, and pushes it on
-   the stack.  TOS is the code associated with the function, TOS1 the tuple
-   containing cells for the closure's free variables.  The function also has
-   *argc* default parameters, which are found below the cells.
+   the stack.  TOS is the :term:`qualified name` of the function, TOS1 is the
+   code associated with the function, and TOS2 is the tuple containing cells for
+   the closure's free variables.  The function also has *argc* default parameters,
+   which are found below the cells.
 
 
 .. opcode:: BUILD_SLICE (argc)

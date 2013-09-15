@@ -56,6 +56,13 @@ The simplest way to use urllib.request is as follows::
     response = urllib.request.urlopen('http://python.org/')
     html = response.read()
 
+If you wish to retrieve a resource via URL and store it in a temporary location,
+you can do so via the :func:`urlretrieve` function::
+
+    import urllib.request
+    local_filename, headers = urllib.request.urlretrieve('http://python.org/')
+    html = open(local_filename)
+
 Many uses of urllib will be that simple (note that instead of an 'http:' URL we
 could have used an URL starting with 'ftp:', 'file:', etc.).  However, it's the
 purpose of this tutorial to explain the more complicated cases, concentrating on
@@ -497,7 +504,8 @@ than the URL you pass to .add_password() will also match. ::
 
     In the above example we only supplied our ``HTTPBasicAuthHandler`` to
     ``build_opener``. By default openers have the handlers for normal situations
-    -- ``ProxyHandler``, ``UnknownHandler``, ``HTTPHandler``,
+    -- ``ProxyHandler`` (if a proxy setting such as an :envvar:`http_proxy`
+    environment variable is set), ``UnknownHandler``, ``HTTPHandler``,
     ``HTTPDefaultErrorHandler``, ``HTTPRedirectHandler``, ``FTPHandler``,
     ``FileHandler``, ``HTTPErrorProcessor``.
 
@@ -514,10 +522,11 @@ Proxies
 =======
 
 **urllib** will auto-detect your proxy settings and use those. This is through
-the ``ProxyHandler`` which is part of the normal handler chain. Normally that's
-a good thing, but there are occasions when it may not be helpful [#]_. One way
-to do this is to setup our own ``ProxyHandler``, with no proxies defined. This
-is done using similar steps to setting up a `Basic Authentication`_ handler : ::
+the ``ProxyHandler``, which is part of the normal handler chain when a proxy
+setting is detected.  Normally that's a good thing, but there are occasions
+when it may not be helpful [#]_. One way to do this is to setup our own
+``ProxyHandler``, with no proxies defined. This is done using similar steps to
+setting up a `Basic Authentication`_ handler : ::
 
     >>> proxy_support = urllib.request.ProxyHandler({})
     >>> opener = urllib.request.build_opener(proxy_support)

@@ -43,6 +43,53 @@ DBL_MIN_EXP = sys.float_info.min_exp
 DBL_MANT_DIG = sys.float_info.mant_dig
 DBL_MIN_OVERFLOW = 2**DBL_MAX_EXP - 2**(DBL_MAX_EXP - DBL_MANT_DIG - 1)
 
+
+# Pure Python version of correctly-rounded integer-to-float conversion.
+def int_to_float(n):
+    """
+    Correctly-rounded integer-to-float conversion.
+
+    """
+    # Constants, depending only on the floating-point format in use.
+    # We use an extra 2 bits of precision for rounding purposes.
+    PRECISION = sys.float_info.mant_dig + 2
+    SHIFT_MAX = sys.float_info.max_exp - PRECISION
+    Q_MAX = 1 << PRECISION
+    ROUND_HALF_TO_EVEN_CORRECTION = [0, -1, -2, 1, 0, -1, 2, 1]
+
+    # Reduce to the case where n is positive.
+    if n == 0:
+        return 0.0
+    elif n < 0:
+        return -int_to_float(-n)
+
+    # Convert n to a 'floating-point' number q * 2**shift, where q is an
+    # integer with 'PRECISION' significant bits.  When shifting n to create q,
+    # the least significant bit of q is treated as 'sticky'.  That is, the
+    # least significant bit of q is set if either the corresponding bit of n
+    # was already set, or any one of the bits of n lost in the shift was set.
+    shift = n.bit_length() - PRECISION
+    q = n << -shift if shift < 0 else (n >> shift) | bool(n & ~(-1 << shift))
+
+    # Round half to even (actually rounds to the nearest multiple of 4,
+    # rounding ties to a multiple of 8).
+    q += ROUND_HALF_TO_EVEN_CORRECTION[q & 7]
+
+    # Detect overflow.
+    if shift + (q == Q_MAX) > SHIFT_MAX:
+        raise OverflowError("integer too large to convert to float")
+
+    # Checks: q is exactly representable, and q**2**shift doesn't overflow.
+    assert q % 4 == 0 and q // 4 <= 2**(sys.float_info.mant_dig)
+    assert q * 2**shift <= sys.float_info.max
+
+    # Some circularity here, since float(q) is doing an int-to-float
+    # conversion.  But here q is of bounded size, and is exactly representable
+    # as a float.  In a low-level C-like language, this operation would be a
+    # simple cast (e.g., from unsigned long long to double).
+    return math.ldexp(float(q), shift)
+
+
 # pure Python version of correctly-rounded true division
 def truediv(a, b):
     """Correctly-rounded true division for integers."""
@@ -275,20 +322,13 @@ class LongTest(unittest.TestCase):
                "".join("0123456789abcdef"[i] for i in digits)
 
     def check_format_1(self, x):
-        for base, mapper in (8, oct), (10, repr), (16, hex):
+        for base, mapper in (2, bin), (8, oct), (10, str), (10, repr), (16, hex):
             got = mapper(x)
             expected = self.slow_format(x, base)
             msg = Frm("%s returned %r but expected %r for %r",
                 mapper.__name__, got, expected, x)
             self.assertEqual(got, expected, msg)
             self.assertEqual(int(got, 0), x, Frm('int("%s", 0) != %r', got, x))
-        # str() has to be checked a little differently since there's no
-        # trailing "L"
-        got = str(x)
-        expected = self.slow_format(x, 10)
-        msg = Frm("%s returned %r but expected %r for %r",
-            mapper.__name__, got, expected, x)
-        self.assertEqual(got, expected, msg)
 
     def test_format(self):
         for x in special:
@@ -367,6 +407,23 @@ class LongTest(unittest.TestCase):
                 return 1729
         self.assertEqual(int(LongTrunc()), 1729)
 
+    def check_float_conversion(self, n):
+        # Check that int -> float conversion behaviour matches
+        # that of the pure Python version above.
+        try:
+            actual = float(n)
+        except OverflowError:
+            actual = 'overflow'
+
+        try:
+            expected = int_to_float(n)
+        except OverflowError:
+            expected = 'overflow'
+
+        msg = ("Error in conversion of integer {} to float.  "
+               "Got {}, expected {}.".format(n, actual, expected))
+        self.assertEqual(actual, expected, msg)
+
     @support.requires_IEEE_754
     def test_float_conversion(self):
 
@@ -421,6 +478,22 @@ class LongTest(unittest.TestCase):
             y = 2**p * 2**53
             self.assertEqual(int(float(x)), y)
 
+        # Compare builtin float conversion with pure Python int_to_float
+        # function above.
+        test_values = [
+            int_dbl_max-1, int_dbl_max, int_dbl_max+1,
+            halfway-1, halfway, halfway + 1,
+            top_power-1, top_power, top_power+1,
+            2*top_power-1, 2*top_power, top_power*top_power,
+        ]
+        test_values.extend(exact_values)
+        for p in range(-4, 8):
+            for x in range(-128, 128):
+                test_values.append(2**(p+53) + x)
+        for value in test_values:
+            self.check_float_conversion(value)
+            self.check_float_conversion(-value)
+
     def test_float_overflow(self):
         for x in -2.0, -1.0, 0.0, 1.0, 2.0:
             self.assertEqual(float(int(x)), x)
@@ -473,11 +546,11 @@ class LongTest(unittest.TestCase):
     def test_mixed_compares(self):
         eq = self.assertEqual
 
-        # We're mostly concerned with that mixing floats and longs does the
-        # right stuff, even when longs are too large to fit in a float.
+        # We're mostly concerned with that mixing floats and ints does the
+        # right stuff, even when ints are too large to fit in a float.
         # The safest way to check the results is to use an entirely different
         # method, which we do here via a skeletal rational class (which
-        # represents all Python ints, longs and floats exactly).
+        # represents all Python ints and floats exactly).
         class Rat:
             def __init__(self, value):
                 if isinstance(value, int):

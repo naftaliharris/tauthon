@@ -68,16 +68,16 @@ maybe_small_long(PyLongObject *v)
 #define maybe_small_long(val) (val)
 #endif
 
-/* If a freshly-allocated long is already shared, it must
+/* If a freshly-allocated int is already shared, it must
    be a small integer, so negating it must go to PyLong_FromLong */
 #define NEGATE(x) \
     do if (Py_REFCNT(x) == 1) Py_SIZE(x) = -Py_SIZE(x);  \
        else { PyObject* tmp=PyLong_FromLong(-MEDIUM_VALUE(x));  \
            Py_DECREF(x); (x) = (PyLongObject*)tmp; }               \
     while(0)
-/* For long multiplication, use the O(N**2) school algorithm unless
+/* For int multiplication, use the O(N**2) school algorithm unless
  * both operands contain more than KARATSUBA_CUTOFF digits (this
- * being an internal Python long digit, in base BASE).
+ * being an internal Python int digit, in base BASE).
  */
 #define KARATSUBA_CUTOFF 70
 #define KARATSUBA_SQUARE_CUTOFF (2 * KARATSUBA_CUTOFF)
@@ -99,7 +99,7 @@ maybe_small_long(PyLongObject *v)
         if (PyErr_CheckSignals()) PyTryBlock    \
     } while(0)
 
-/* Normalize (remove leading zeros from) a long int object.
+/* Normalize (remove leading zeros from) an int object.
    Doesn't attempt to free the storage--in most cases, due to the nature
    of the algorithms used, this could save at most be one word anyway. */
 
@@ -116,7 +116,7 @@ long_normalize(register PyLongObject *v)
     return v;
 }
 
-/* Allocate a new long int object with size digits.
+/* Allocate a new int object with size digits.
    Return NULL and set exception if we run out of memory. */
 
 #define MAX_LONG_DIGITS \
@@ -168,7 +168,7 @@ _PyLong_Copy(PyLongObject *src)
     return (PyObject *)result;
 }
 
-/* Create a new long int object from a C long int */
+/* Create a new int object from a C long int */
 
 PyObject *
 PyLong_FromLong(long ival)
@@ -237,7 +237,7 @@ PyLong_FromLong(long ival)
     return (PyObject *)v;
 }
 
-/* Create a new long int object from a C unsigned long int */
+/* Create a new int object from a C unsigned long int */
 
 PyObject *
 PyLong_FromUnsignedLong(unsigned long ival)
@@ -266,7 +266,7 @@ PyLong_FromUnsignedLong(unsigned long ival)
     return (PyObject *)v;
 }
 
-/* Create a new long int object from a C double */
+/* Create a new int object from a C double */
 
 PyObject *
 PyLong_FromDouble(double dval)
@@ -320,8 +320,15 @@ PyLong_FromDouble(double dval)
 #define PY_ABS_LONG_MIN         (0-(unsigned long)LONG_MIN)
 #define PY_ABS_SSIZE_T_MIN      (0-(size_t)PY_SSIZE_T_MIN)
 
-/* Get a C long int from a long int object.
-   Returns -1 and sets an error condition if overflow occurs. */
+/* Get a C long int from an int object or any object that has an __int__
+   method.
+
+   On overflow, return -1 and set *overflow to 1 or -1 depending on the sign of
+   the result.  Otherwise *overflow is 0.
+
+   For other errors (e.g., TypeError), return -1 and set an error condition.
+   In this case *overflow will be 0.
+*/
 
 long
 PyLong_AsLongAndOverflow(PyObject *vv, int *overflow)
@@ -410,6 +417,9 @@ PyLong_AsLongAndOverflow(PyObject *vv, int *overflow)
     return res;
 }
 
+/* Get a C long int from an int object or any object that has an __int__
+   method.  Return -1 and set an error if overflow occurs. */
+
 long
 PyLong_AsLong(PyObject *obj)
 {
@@ -424,7 +434,7 @@ PyLong_AsLong(PyObject *obj)
     return result;
 }
 
-/* Get a C int from a long int object or any object that has an __int__
+/* Get a C int from an int object or any object that has an __int__
    method.  Return -1 and set an error if overflow occurs. */
 
 int
@@ -442,7 +452,7 @@ _PyLong_AsInt(PyObject *obj)
     return (int)result;
 }
 
-/* Get a Py_ssize_t from a long int object.
+/* Get a Py_ssize_t from an int object.
    Returns -1 and sets an error condition if overflow occurs. */
 
 Py_ssize_t
@@ -497,7 +507,7 @@ PyLong_AsSsize_t(PyObject *vv) {
     return -1;
 }
 
-/* Get a C unsigned long int from a long int object.
+/* Get a C unsigned long int from an int object.
    Returns -1 and sets an error condition if overflow occurs. */
 
 unsigned long
@@ -541,7 +551,7 @@ PyLong_AsUnsignedLong(PyObject *vv)
     return x;
 }
 
-/* Get a C size_t from a long int object. Returns (size_t)-1 and sets
+/* Get a C size_t from an int object. Returns (size_t)-1 and sets
    an error condition if overflow occurs. */
 
 size_t
@@ -584,7 +594,7 @@ PyLong_AsSize_t(PyObject *vv)
     return x;
 }
 
-/* Get a C unsigned long int from a long int object, ignoring the high bits.
+/* Get a C unsigned long int from an int object, ignoring the high bits.
    Returns -1 and sets an error condition if an error occurs. */
 
 static unsigned long
@@ -676,10 +686,9 @@ _PyLong_NumBits(PyObject *vv)
     assert(ndigits == 0 || v->ob_digit[ndigits - 1] != 0);
     if (ndigits > 0) {
         digit msd = v->ob_digit[ndigits - 1];
-
-        result = (ndigits - 1) * PyLong_SHIFT;
-        if (result / PyLong_SHIFT != (size_t)(ndigits - 1))
+        if ((size_t)(ndigits - 1) > PY_SIZE_MAX / (size_t)PyLong_SHIFT)
             goto Overflow;
+        result = (size_t)(ndigits - 1) * (size_t)PyLong_SHIFT;
         do {
             ++result;
             if (result == 0)
@@ -703,7 +712,7 @@ _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
     int incr;                           /* direction to move pstartbyte */
     const unsigned char* pendbyte;      /* MSB of bytes */
     size_t numsignificantbytes;         /* number of bytes that matter */
-    Py_ssize_t ndigits;                 /* number of Python long digits */
+    Py_ssize_t ndigits;                 /* number of Python int digits */
     PyLongObject* v;                    /* result */
     Py_ssize_t idigit = 0;              /* next free index in v->ob_digit */
 
@@ -747,8 +756,8 @@ _PyLong_FromByteArray(const unsigned char* bytes, size_t n,
             ++numsignificantbytes;
     }
 
-    /* How many Python long digits do we need?  We have
-       8*numsignificantbytes bits, and each Python long digit has
+    /* How many Python int digits do we need?  We have
+       8*numsignificantbytes bits, and each Python int digit has
        PyLong_SHIFT bits, so it's the ceiling of the quotient. */
     /* catch overflow before it happens */
     if (numsignificantbytes > (PY_SSIZE_T_MAX - PyLong_SHIFT) / 8) {
@@ -848,7 +857,7 @@ _PyLong_AsByteArray(PyLongObject* v,
 
     /* Copy over all the Python digits.
        It's crucial that every Python digit except for the MSD contribute
-       exactly PyLong_SHIFT bits to the total, so first assert that the long is
+       exactly PyLong_SHIFT bits to the total, so first assert that the int is
        normalized. */
     assert(ndigits == 0 || v->ob_digit[ndigits - 1] != 0);
     j = 0;
@@ -903,7 +912,7 @@ _PyLong_AsByteArray(PyLongObject* v,
         ++j;
         if (do_twos_comp) {
             /* Fill leading bits of the byte with sign bits
-               (appropriately pretending that the long had an
+               (appropriately pretending that the int had an
                infinite supply of sign bits). */
             accum |= (~(twodigits)0) << accumbits;
         }
@@ -939,7 +948,7 @@ _PyLong_AsByteArray(PyLongObject* v,
 
 }
 
-/* Create a new long (or int) object from a C pointer */
+/* Create a new int object from a C pointer */
 
 PyObject *
 PyLong_FromVoidPtr(void *p)
@@ -965,15 +974,11 @@ PyLong_FromVoidPtr(void *p)
 
 }
 
-/* Get a C pointer from a long object (or an int object in some cases) */
+/* Get a C pointer from an int object. */
 
 void *
 PyLong_AsVoidPtr(PyObject *vv)
 {
-    /* This function will allow int or long objects. If vv is neither,
-       then the PyLong_AsLong*() functions will raise the exception:
-       PyExc_SystemError, "bad argument to internal function"
-    */
 #if SIZEOF_VOID_P <= SIZEOF_LONG
     long x;
 
@@ -1012,7 +1017,7 @@ PyLong_AsVoidPtr(PyObject *vv)
 #define IS_LITTLE_ENDIAN (int)*(unsigned char*)&one
 #define PY_ABS_LLONG_MIN (0-(unsigned PY_LONG_LONG)PY_LLONG_MIN)
 
-/* Create a new long int object from a C PY_LONG_LONG int. */
+/* Create a new int object from a C PY_LONG_LONG int. */
 
 PyObject *
 PyLong_FromLongLong(PY_LONG_LONG ival)
@@ -1056,7 +1061,7 @@ PyLong_FromLongLong(PY_LONG_LONG ival)
     return (PyObject *)v;
 }
 
-/* Create a new long int object from a C unsigned PY_LONG_LONG int. */
+/* Create a new int object from a C unsigned PY_LONG_LONG int. */
 
 PyObject *
 PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG ival)
@@ -1085,7 +1090,7 @@ PyLong_FromUnsignedLongLong(unsigned PY_LONG_LONG ival)
     return (PyObject *)v;
 }
 
-/* Create a new long int object from a C Py_ssize_t. */
+/* Create a new int object from a C Py_ssize_t. */
 
 PyObject *
 PyLong_FromSsize_t(Py_ssize_t ival)
@@ -1125,7 +1130,7 @@ PyLong_FromSsize_t(Py_ssize_t ival)
     return (PyObject *)v;
 }
 
-/* Create a new long int object from a C size_t. */
+/* Create a new int object from a C size_t. */
 
 PyObject *
 PyLong_FromSize_t(size_t ival)
@@ -1154,8 +1159,8 @@ PyLong_FromSize_t(size_t ival)
     return (PyObject *)v;
 }
 
-/* Get a C PY_LONG_LONG int from a long int object.
-   Return -1 and set an error if overflow occurs. */
+/* Get a C long long int from an int object or any object that has an
+   __int__ method.  Return -1 and set an error if overflow occurs. */
 
 PY_LONG_LONG
 PyLong_AsLongLong(PyObject *vv)
@@ -1206,7 +1211,7 @@ PyLong_AsLongLong(PyObject *vv)
         return bytes;
 }
 
-/* Get a C unsigned PY_LONG_LONG int from a long int object.
+/* Get a C unsigned PY_LONG_LONG int from an int object.
    Return -1 and set an error if overflow occurs. */
 
 unsigned PY_LONG_LONG
@@ -1217,8 +1222,12 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
     int one = 1;
     int res;
 
-    if (vv == NULL || !PyLong_Check(vv)) {
+    if (vv == NULL) {
         PyErr_BadInternalCall();
+        return (unsigned PY_LONG_LONG)-1;
+    }
+    if (!PyLong_Check(vv)) {
+        PyErr_SetString(PyExc_TypeError, "an integer is required");
         return (unsigned PY_LONG_LONG)-1;
     }
 
@@ -1238,7 +1247,7 @@ PyLong_AsUnsignedLongLong(PyObject *vv)
         return bytes;
 }
 
-/* Get a C unsigned long int from a long int object, ignoring the high bits.
+/* Get a C unsigned long int from an int object, ignoring the high bits.
    Returns -1 and sets an error condition if an error occurs. */
 
 static unsigned PY_LONG_LONG
@@ -1307,12 +1316,14 @@ PyLong_AsUnsignedLongLongMask(register PyObject *op)
 }
 #undef IS_LITTLE_ENDIAN
 
-/* Get a C long long int from a Python long or Python int object.
-   On overflow, returns -1 and sets *overflow to 1 or -1 depending
-   on the sign of the result.  Otherwise *overflow is 0.
+/* Get a C long long int from an int object or any object that has an
+   __int__ method.
 
-   For other errors (e.g., type error), returns -1 and sets an error
-   condition.
+   On overflow, return -1 and set *overflow to 1 or -1 depending on the sign of
+   the result.  Otherwise *overflow is 0.
+
+   For other errors (e.g., TypeError), return -1 and set an error condition.
+   In this case *overflow will be 0.
 */
 
 PY_LONG_LONG
@@ -1406,10 +1417,8 @@ PyLong_AsLongLongAndOverflow(PyObject *vv, int *overflow)
 
 #define CHECK_BINOP(v,w)                                \
     do {                                                \
-        if (!PyLong_Check(v) || !PyLong_Check(w)) {     \
-            Py_INCREF(Py_NotImplemented);               \
-            return Py_NotImplemented;                   \
-        }                                               \
+        if (!PyLong_Check(v) || !PyLong_Check(w))       \
+            Py_RETURN_NOTIMPLEMENTED;                   \
     } while(0)
 
 /* bits_in_digit(d) returns the unique integer k such that 2**(k-1) <= d <
@@ -1524,7 +1533,7 @@ v_rshift(digit *z, digit *a, Py_ssize_t m, int d)
 /* Divide long pin, w/ size digits, by non-zero digit n, storing quotient
    in pout, and returning the remainder.  pin and pout point at the LSD.
    It's OK for pin == pout on entry, which saves oodles of mallocs/frees in
-   _PyLong_Format, but that should be done with great care since longs are
+   _PyLong_Format, but that should be done with great care since ints are
    immutable. */
 
 static digit
@@ -1544,7 +1553,7 @@ inplace_divrem1(digit *pout, digit *pin, Py_ssize_t size, digit n)
     return (digit)rem;
 }
 
-/* Divide a long integer by a digit, returning both the quotient
+/* Divide an integer by a digit, returning both the quotient
    (as function result) and the remainder (through *prem).
    The sign of a is ignored; n should not be zero. */
 
@@ -1562,24 +1571,26 @@ divrem1(PyLongObject *a, digit n, digit *prem)
     return long_normalize(z);
 }
 
-/* Convert a long integer to a base 10 string.  Returns a new non-shared
+/* Convert an integer to a base 10 string.  Returns a new non-shared
    string.  (Return value is non-shared so that callers can modify the
    returned value if necessary.) */
 
-static PyObject *
-long_to_decimal_string(PyObject *aa)
+static int
+long_to_decimal_string_internal(PyObject *aa,
+                                PyObject **p_output,
+                                _PyUnicodeWriter *writer)
 {
     PyLongObject *scratch, *a;
     PyObject *str;
     Py_ssize_t size, strlen, size_a, i, j;
     digit *pout, *pin, rem, tenpow;
-    Py_UNICODE *p;
     int negative;
+    enum PyUnicode_Kind kind;
 
     a = (PyLongObject *)aa;
     if (a == NULL || !PyLong_Check(a)) {
         PyErr_BadInternalCall();
-        return NULL;
+        return -1;
     }
     size_a = ABS(Py_SIZE(a));
     negative = Py_SIZE(a) < 0;
@@ -1596,13 +1607,13 @@ long_to_decimal_string(PyObject *aa)
     if (size_a > PY_SSIZE_T_MAX / PyLong_SHIFT) {
         PyErr_SetString(PyExc_OverflowError,
                         "long is too large to format");
-        return NULL;
+        return -1;
     }
     /* the expression size_a * PyLong_SHIFT is now safe from overflow */
     size = 1 + size_a * PyLong_SHIFT / (3 * _PyLong_DECIMAL_SHIFT);
     scratch = _PyLong_New(size);
     if (scratch == NULL)
-        return NULL;
+        return -1;
 
     /* convert array of base _PyLong_BASE digits in pin to an array of
        base _PyLong_DECIMAL_BASE digits in pout, following Knuth (TAOCP,
@@ -1625,7 +1636,7 @@ long_to_decimal_string(PyObject *aa)
         /* check for keyboard interrupt */
         SIGCHECK({
                 Py_DECREF(scratch);
-                return NULL;
+                return -1;
             });
     }
     /* pout should have at least one digit, so that the case when a = 0
@@ -1641,64 +1652,118 @@ long_to_decimal_string(PyObject *aa)
         tenpow *= 10;
         strlen++;
     }
-    str = PyUnicode_FromUnicode(NULL, strlen);
-    if (str == NULL) {
-        Py_DECREF(scratch);
-        return NULL;
+    if (writer) {
+        if (_PyUnicodeWriter_Prepare(writer, strlen, '9') == -1) {
+            Py_DECREF(scratch);
+            return -1;
+        }
+        kind = writer->kind;
+        str = NULL;
     }
+    else {
+        str = PyUnicode_New(strlen, '9');
+        if (str == NULL) {
+            Py_DECREF(scratch);
+            return -1;
+        }
+        kind = PyUnicode_KIND(str);
+    }
+
+#define WRITE_DIGITS(TYPE)                                            \
+    do {                                                              \
+        if (writer)                                                   \
+            p = (TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos + strlen; \
+        else                                                          \
+            p = (TYPE*)PyUnicode_DATA(str) + strlen;                  \
+                                                                      \
+        *p = '\0';                                                    \
+        /* pout[0] through pout[size-2] contribute exactly            \
+           _PyLong_DECIMAL_SHIFT digits each */                       \
+        for (i=0; i < size - 1; i++) {                                \
+            rem = pout[i];                                            \
+            for (j = 0; j < _PyLong_DECIMAL_SHIFT; j++) {             \
+                *--p = '0' + rem % 10;                                \
+                rem /= 10;                                            \
+            }                                                         \
+        }                                                             \
+        /* pout[size-1]: always produce at least one decimal digit */ \
+        rem = pout[i];                                                \
+        do {                                                          \
+            *--p = '0' + rem % 10;                                    \
+            rem /= 10;                                                \
+        } while (rem != 0);                                           \
+                                                                      \
+        /* and sign */                                                \
+        if (negative)                                                 \
+            *--p = '-';                                               \
+                                                                      \
+        /* check we've counted correctly */                           \
+        if (writer)                                                   \
+            assert(p == ((TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos)); \
+        else                                                          \
+            assert(p == (TYPE*)PyUnicode_DATA(str));                  \
+    } while (0)
 
     /* fill the string right-to-left */
-    p = PyUnicode_AS_UNICODE(str) + strlen;
-    *p = '\0';
-    /* pout[0] through pout[size-2] contribute exactly
-       _PyLong_DECIMAL_SHIFT digits each */
-    for (i=0; i < size - 1; i++) {
-        rem = pout[i];
-        for (j = 0; j < _PyLong_DECIMAL_SHIFT; j++) {
-            *--p = '0' + rem % 10;
-            rem /= 10;
-        }
+    if (kind == PyUnicode_1BYTE_KIND) {
+        Py_UCS1 *p;
+        WRITE_DIGITS(Py_UCS1);
     }
-    /* pout[size-1]: always produce at least one decimal digit */
-    rem = pout[i];
-    do {
-        *--p = '0' + rem % 10;
-        rem /= 10;
-    } while (rem != 0);
+    else if (kind == PyUnicode_2BYTE_KIND) {
+        Py_UCS2 *p;
+        WRITE_DIGITS(Py_UCS2);
+    }
+    else {
+        Py_UCS4 *p;
+        assert (kind == PyUnicode_4BYTE_KIND);
+        WRITE_DIGITS(Py_UCS4);
+    }
+#undef WRITE_DIGITS
 
-    /* and sign */
-    if (negative)
-        *--p = '-';
-
-    /* check we've counted correctly */
-    assert(p == PyUnicode_AS_UNICODE(str));
     Py_DECREF(scratch);
-    return (PyObject *)str;
+    if (writer) {
+        writer->pos += strlen;
+    }
+    else {
+        assert(_PyUnicode_CheckConsistency(str, 1));
+        *p_output = (PyObject *)str;
+    }
+    return 0;
 }
 
-/* Convert a long int object to a string, using a given conversion base,
-   which should be one of 2, 8, 10 or 16.  Return a string object.
-   If base is 2, 8 or 16, add the proper prefix '0b', '0o' or '0x'. */
+static PyObject *
+long_to_decimal_string(PyObject *aa)
+{
+    PyObject *v;
+    if (long_to_decimal_string_internal(aa, &v, NULL) == -1)
+        return NULL;
+    return v;
+}
 
-PyObject *
-_PyLong_Format(PyObject *aa, int base)
+/* Convert an int object to a string, using a given conversion base,
+   which should be one of 2, 8 or 16.  Return a string object.
+   If base is 2, 8 or 16, add the proper prefix '0b', '0o' or '0x'
+   if alternate is nonzero. */
+
+static int
+long_format_binary(PyObject *aa, int base, int alternate,
+                   PyObject **p_output, _PyUnicodeWriter *writer)
 {
     register PyLongObject *a = (PyLongObject *)aa;
-    PyObject *str;
-    Py_ssize_t i, sz;
+    PyObject *v;
+    Py_ssize_t sz;
     Py_ssize_t size_a;
-    Py_UNICODE *p, sign = '\0';
+    enum PyUnicode_Kind kind;
+    int negative;
     int bits;
 
-    assert(base == 2 || base == 8 || base == 10 || base == 16);
-    if (base == 10)
-        return long_to_decimal_string((PyObject *)a);
-
+    assert(base == 2 || base == 8 || base == 16);
     if (a == NULL || !PyLong_Check(a)) {
         PyErr_BadInternalCall();
-        return NULL;
+        return -1;
     }
     size_a = ABS(Py_SIZE(a));
+    negative = Py_SIZE(a) < 0;
 
     /* Compute a rough upper bound for the length of the string */
     switch (base) {
@@ -1715,70 +1780,137 @@ _PyLong_Format(PyObject *aa, int base)
         assert(0); /* shouldn't ever get here */
         bits = 0; /* to silence gcc warning */
     }
-    /* compute length of output string: allow 2 characters for prefix and
-       1 for possible '-' sign. */
-    if (size_a > (PY_SSIZE_T_MAX - 3) / PyLong_SHIFT) {
-        PyErr_SetString(PyExc_OverflowError,
-                        "int is too large to format");
-        return NULL;
-    }
-    /* now size_a * PyLong_SHIFT + 3 <= PY_SSIZE_T_MAX, so the RHS below
-       is safe from overflow */
-    sz = 3 + (size_a * PyLong_SHIFT + (bits - 1)) / bits;
-    assert(sz >= 0);
-    str = PyUnicode_FromUnicode(NULL, sz);
-    if (str == NULL)
-        return NULL;
-    p = PyUnicode_AS_UNICODE(str) + sz;
-    *p = '\0';
-    if (Py_SIZE(a) < 0)
-        sign = '-';
 
-    if (Py_SIZE(a) == 0) {
-        *--p = '0';
+    /* Compute exact length 'sz' of output string. */
+    if (size_a == 0) {
+        sz = 1;
     }
     else {
-        /* JRH: special case for power-of-2 bases */
-        twodigits accum = 0;
-        int accumbits = 0;              /* # of bits in accum */
-        for (i = 0; i < size_a; ++i) {
-            accum |= (twodigits)a->ob_digit[i] << accumbits;
-            accumbits += PyLong_SHIFT;
-            assert(accumbits >= bits);
-            do {
-                Py_UNICODE cdigit;
-                cdigit = (Py_UNICODE)(accum & (base - 1));
-                cdigit += (cdigit < 10) ? '0' : 'a'-10;
-                assert(p > PyUnicode_AS_UNICODE(str));
-                *--p = cdigit;
-                accumbits -= bits;
-                accum >>= bits;
-            } while (i < size_a-1 ? accumbits >= bits : accum > 0);
+        Py_ssize_t size_a_in_bits;
+        /* Ensure overflow doesn't occur during computation of sz. */
+        if (size_a > (PY_SSIZE_T_MAX - 3) / PyLong_SHIFT) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "int is too large to format");
+            return -1;
         }
+        size_a_in_bits = (size_a - 1) * PyLong_SHIFT +
+                         bits_in_digit(a->ob_digit[size_a - 1]);
+        /* Allow 1 character for a '-' sign. */
+        sz = negative + (size_a_in_bits + (bits - 1)) / bits;
+    }
+    if (alternate) {
+        /* 2 characters for prefix  */
+        sz += 2;
     }
 
-    if (base == 16)
-        *--p = 'x';
-    else if (base == 8)
-        *--p = 'o';
-    else /* (base == 2) */
-        *--p = 'b';
-    *--p = '0';
-    if (sign)
-        *--p = sign;
-    if (p != PyUnicode_AS_UNICODE(str)) {
-        Py_UNICODE *q = PyUnicode_AS_UNICODE(str);
-        assert(p > q);
-        do {
-        } while ((*q++ = *p++) != '\0');
-        q--;
-        if (PyUnicode_Resize(&str,(Py_ssize_t) (q -
-                                        PyUnicode_AS_UNICODE(str)))) {
-            Py_DECREF(str);
-            return NULL;
-        }
+    if (writer) {
+        if (_PyUnicodeWriter_Prepare(writer, sz, 'x') == -1)
+            return -1;
+        kind = writer->kind;
+        v = NULL;
     }
-    return (PyObject *)str;
+    else {
+        v = PyUnicode_New(sz, 'x');
+        if (v == NULL)
+            return -1;
+        kind = PyUnicode_KIND(v);
+    }
+
+#define WRITE_DIGITS(TYPE)                                              \
+    do {                                                                \
+        if (writer)                                                     \
+            p = (TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos + sz; \
+        else                                                            \
+            p = (TYPE*)PyUnicode_DATA(v) + sz;                          \
+                                                                        \
+        if (size_a == 0) {                                              \
+            *--p = '0';                                                 \
+        }                                                               \
+        else {                                                          \
+            /* JRH: special case for power-of-2 bases */                \
+            twodigits accum = 0;                                        \
+            int accumbits = 0;   /* # of bits in accum */               \
+            Py_ssize_t i;                                               \
+            for (i = 0; i < size_a; ++i) {                              \
+                accum |= (twodigits)a->ob_digit[i] << accumbits;        \
+                accumbits += PyLong_SHIFT;                              \
+                assert(accumbits >= bits);                              \
+                do {                                                    \
+                    char cdigit;                                        \
+                    cdigit = (char)(accum & (base - 1));                \
+                    cdigit += (cdigit < 10) ? '0' : 'a'-10;             \
+                    *--p = cdigit;                                      \
+                    accumbits -= bits;                                  \
+                    accum >>= bits;                                     \
+                } while (i < size_a-1 ? accumbits >= bits : accum > 0); \
+            }                                                           \
+        }                                                               \
+                                                                        \
+        if (alternate) {                                                \
+            if (base == 16)                                             \
+                *--p = 'x';                                             \
+            else if (base == 8)                                         \
+                *--p = 'o';                                             \
+            else /* (base == 2) */                                      \
+                *--p = 'b';                                             \
+            *--p = '0';                                                 \
+        }                                                               \
+        if (negative)                                                   \
+            *--p = '-';                                                 \
+        if (writer)                                                     \
+            assert(p == ((TYPE*)PyUnicode_DATA(writer->buffer) + writer->pos)); \
+        else                                                            \
+            assert(p == (TYPE*)PyUnicode_DATA(v));                      \
+    } while (0)
+
+    if (kind == PyUnicode_1BYTE_KIND) {
+        Py_UCS1 *p;
+        WRITE_DIGITS(Py_UCS1);
+    }
+    else if (kind == PyUnicode_2BYTE_KIND) {
+        Py_UCS2 *p;
+        WRITE_DIGITS(Py_UCS2);
+    }
+    else {
+        Py_UCS4 *p;
+        assert (kind == PyUnicode_4BYTE_KIND);
+        WRITE_DIGITS(Py_UCS4);
+    }
+#undef WRITE_DIGITS
+
+    if (writer) {
+        writer->pos += sz;
+    }
+    else {
+        assert(_PyUnicode_CheckConsistency(v, 1));
+        *p_output = v;
+    }
+    return 0;
+}
+
+PyObject *
+_PyLong_Format(PyObject *obj, int base)
+{
+    PyObject *str;
+    int err;
+    if (base == 10)
+        err = long_to_decimal_string_internal(obj, &str, NULL);
+    else
+        err = long_format_binary(obj, base, 1, &str, NULL);
+    if (err == -1)
+        return NULL;
+    return str;
+}
+
+int
+_PyLong_FormatWriter(_PyUnicodeWriter *writer,
+                     PyObject *obj,
+                     int base, int alternate)
+{
+    if (base == 10)
+        return long_to_decimal_string_internal(obj, NULL, writer);
+    else
+        return long_format_binary(obj, base, alternate, NULL, writer);
 }
 
 /* Table of digit values for 8-bit string -> integer conversion.
@@ -1809,7 +1941,7 @@ unsigned char _PyLong_DigitValue[256] = {
 
 /* *str points to the first digit in a string of base `base` digits.  base
  * is a power of 2 (2, 4, 8, 16, or 32).  *str is set to point to the first
- * non-digit (which may be *str!).  A normalized long is returned.
+ * non-digit (which may be *str!).  A normalized int is returned.
  * The point to this routine is that it takes time linear in the number of
  * string characters.
  */
@@ -1844,7 +1976,7 @@ long_from_binary_base(char **str, int base)
     z = _PyLong_New(n);
     if (z == NULL)
         return NULL;
-    /* Read string from right, and fill in long from left; i.e.,
+    /* Read string from right, and fill in int from left; i.e.,
      * from least to most significant in both.
      */
     accum = 0;
@@ -1873,6 +2005,14 @@ long_from_binary_base(char **str, int base)
     return long_normalize(z);
 }
 
+/* Parses an int from a bytestring. Leading and trailing whitespace will be
+ * ignored.
+ *
+ * If successful, a PyLong object will be returned and 'pend' will be pointing
+ * to the first unused byte unless it's NULL.
+ *
+ * If unsuccessful, NULL will be returned.
+ */
 PyObject *
 PyLong_FromString(char *str, char **pend, int base)
 {
@@ -1935,7 +2075,7 @@ case number of Python digits needed to hold it is the smallest integer n s.t.
     n >= log(B**N)/log(BASE) = N * log(B)/log(BASE)
 
 The static array log_base_BASE[base] == log(base)/log(BASE) so we can compute
-this quickly.  A Python long with that much space is reserved near the start,
+this quickly.  A Python int with that much space is reserved near the start,
 and the result is computed into it.
 
 The input string is actually treated as being in base base**i (i.e., i digits
@@ -2000,7 +2140,7 @@ is very close to an integer.  If we were working with IEEE single-precision,
 rounding errors could kill us.  Finding worst cases in IEEE double-precision
 requires better-than-double-precision log() functions, and Tim didn't bother.
 Instead the code checks to see whether the allocated space is enough as each
-new Python digit is added, and copies the whole thing to a larger long if not.
+new Python digit is added, and copies the whole thing to a larger int if not.
 This should happen extremely rarely, and in fact I don't have a test case
 that triggers it(!).  Instead the code was tested by artificially allocating
 just 1 digit at the start, so that the copying code was exercised for every
@@ -2041,7 +2181,7 @@ digit beyond the first.
         while (_PyLong_DigitValue[Py_CHARMASK(*scan)] < base)
             ++scan;
 
-        /* Create a long object that can contain the largest possible
+        /* Create an int object that can contain the largest possible
          * integer with this base and length.  Note that there's no
          * need to initialize z->ob_digit -- no slot is read up before
          * being stored into.
@@ -2135,12 +2275,17 @@ digit beyond the first.
         str++;
     if (*str != '\0')
         goto onError;
-    if (pend)
-        *pend = str;
     long_normalize(z);
-    return (PyObject *) maybe_small_long(z);
+    z = maybe_small_long(z);
+    if (z == NULL)
+        return NULL;
+    if (pend != NULL)
+        *pend = str;
+    return (PyObject *) z;
 
   onError:
+    if (pend != NULL)
+        *pend = str;
     Py_XDECREF(z);
     slen = strlen(orig_str) < 200 ? strlen(orig_str) : 200;
     strobj = PyUnicode_FromStringAndSize(orig_str, slen);
@@ -2153,39 +2298,75 @@ digit beyond the first.
     return NULL;
 }
 
+/* Since PyLong_FromString doesn't have a length parameter,
+ * check here for possible NULs in the string.
+ *
+ * Reports an invalid literal as a bytes object.
+ */
+PyObject *
+_PyLong_FromBytes(const char *s, Py_ssize_t len, int base)
+{
+    PyObject *result, *strobj;
+    char *end = NULL;
+
+    result = PyLong_FromString((char*)s, &end, base);
+    if (end == NULL || (result != NULL && end == s + len))
+        return result;
+    Py_XDECREF(result);
+    strobj = PyBytes_FromStringAndSize(s, Py_MIN(len, 200));
+    if (strobj != NULL) {
+        PyErr_Format(PyExc_ValueError,
+                     "invalid literal for int() with base %d: %R",
+                     base, strobj);
+        Py_DECREF(strobj);
+    }
+    return NULL;
+}
+
 PyObject *
 PyLong_FromUnicode(Py_UNICODE *u, Py_ssize_t length, int base)
 {
-    PyObject *result;
-    PyObject *asciidig;
-    char *buffer, *end;
-    Py_ssize_t i, buflen;
-    Py_UNICODE *ptr;
+    PyObject *v, *unicode = PyUnicode_FromUnicode(u, length);
+    if (unicode == NULL)
+        return NULL;
+    v = PyLong_FromUnicodeObject(unicode, base);
+    Py_DECREF(unicode);
+    return v;
+}
 
-    asciidig = PyUnicode_TransformDecimalToASCII(u, length);
+PyObject *
+PyLong_FromUnicodeObject(PyObject *u, int base)
+{
+    PyObject *result, *asciidig, *strobj;
+    char *buffer, *end = NULL;
+    Py_ssize_t buflen;
+
+    asciidig = _PyUnicode_TransformDecimalAndSpaceToASCII(u);
     if (asciidig == NULL)
         return NULL;
-    /* Replace non-ASCII whitespace with ' ' */
-    ptr = PyUnicode_AS_UNICODE(asciidig);
-    for (i = 0; i < length; i++) {
-        Py_UNICODE ch = ptr[i];
-        if (ch > 127 && Py_UNICODE_ISSPACE(ch))
-            ptr[i] = ' ';
-    }
-    buffer = _PyUnicode_AsStringAndSize(asciidig, &buflen);
+    buffer = PyUnicode_AsUTF8AndSize(asciidig, &buflen);
     if (buffer == NULL) {
         Py_DECREF(asciidig);
-        return NULL;
+        if (!PyErr_ExceptionMatches(PyExc_UnicodeEncodeError))
+            return NULL;
     }
-    result = PyLong_FromString(buffer, &end, base);
-    if (result != NULL && end != buffer + buflen) {
-        PyErr_SetString(PyExc_ValueError,
-                        "null byte in argument for int()");
-        Py_DECREF(result);
-        result = NULL;
+    else {
+        result = PyLong_FromString(buffer, &end, base);
+        if (end == NULL || (result != NULL && end == buffer + buflen)) {
+            Py_DECREF(asciidig);
+            return result;
+        }
+        Py_DECREF(asciidig);
+        Py_XDECREF(result);
     }
-    Py_DECREF(asciidig);
-    return result;
+    strobj = PySequence_GetSlice(u, 0, 200);
+    if (strobj != NULL) {
+        PyErr_Format(PyExc_ValueError,
+                     "invalid literal for int() with base %d: %R",
+                     base, strobj);
+        Py_DECREF(strobj);
+    }
+    return NULL;
 }
 
 /* forward */
@@ -2193,7 +2374,7 @@ static PyLongObject *x_divrem
     (PyLongObject *, PyLongObject *, PyLongObject **);
 static PyObject *long_long(PyObject *v);
 
-/* Long division with remainder, top-level routine */
+/* Int division with remainder, top-level routine */
 
 static int
 long_divrem(PyLongObject *a, PyLongObject *b,
@@ -2246,7 +2427,7 @@ long_divrem(PyLongObject *a, PyLongObject *b,
     return 0;
 }
 
-/* Unsigned long division with remainder -- the algorithm.  The arguments v1
+/* Unsigned int division with remainder -- the algorithm.  The arguments v1
    and w1 should satisfy 2 <= ABS(Py_SIZE(w1)) <= ABS(Py_SIZE(v1)). */
 
 static PyLongObject *
@@ -2469,8 +2650,7 @@ _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e)
                     break;
                 }
     }
-    assert(1 <= x_size &&
-           x_size <= (Py_ssize_t)(sizeof(x_digits)/sizeof(digit)));
+    assert(1 <= x_size && x_size <= (Py_ssize_t)Py_ARRAY_LENGTH(x_digits));
 
     /* Round, and convert to double. */
     x_digits[0] += half_even_correction[x_digits[0] & 7];
@@ -2498,7 +2678,7 @@ _PyLong_Frexp(PyLongObject *a, Py_ssize_t *e)
     return -1.0;
 }
 
-/* Get a C double from a long int object.  Rounds to the nearest double,
+/* Get a C double from an int object.  Rounds to the nearest double,
    using the round-half-to-even rule in the case of a tie. */
 
 double
@@ -2507,8 +2687,12 @@ PyLong_AsDouble(PyObject *v)
     Py_ssize_t exponent;
     double x;
 
-    if (v == NULL || !PyLong_Check(v)) {
+    if (v == NULL) {
         PyErr_BadInternalCall();
+        return -1.0;
+    }
+    if (!PyLong_Check(v)) {
+        PyErr_SetString(PyExc_TypeError, "an integer is required");
         return -1.0;
     }
     x = _PyLong_Frexp((PyLongObject *)v, &exponent);
@@ -2650,7 +2834,7 @@ long_hash(PyLongObject *v)
 }
 
 
-/* Add the absolute values of two long integers. */
+/* Add the absolute values of two integers. */
 
 static PyLongObject *
 x_add(PyLongObject *a, PyLongObject *b)
@@ -2858,7 +3042,7 @@ x_mul(PyLongObject *a, PyLongObject *b)
             assert((carry >> PyLong_SHIFT) == 0);
         }
     }
-    else {      /* a is not the same as b -- gradeschool long mult */
+    else {      /* a is not the same as b -- gradeschool int mult */
         for (i = 0; i < size_a; ++i) {
             twodigits carry = 0;
             twodigits f = a->ob_digit[i];
@@ -2886,7 +3070,7 @@ x_mul(PyLongObject *a, PyLongObject *b)
 }
 
 /* A helper for Karatsuba multiplication (k_mul).
-   Takes a long "n" and an integer "size" representing the place to
+   Takes an int "n" and an integer "size" representing the place to
    split, and sets low and high such that abs(n) == (high << size) + low,
    viewing the shift as being by digits.  The sign bit is ignored, and
    the return values are >= 0.
@@ -3635,8 +3819,7 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
     else {
         Py_DECREF(a);
         Py_DECREF(b);
-        Py_INCREF(Py_NotImplemented);
-        return Py_NotImplemented;
+        Py_RETURN_NOTIMPLEMENTED;
     }
 
     if (Py_SIZE(b) < 0) {  /* if exponent is negative */
@@ -4169,27 +4352,14 @@ long_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     }
 
     if (PyUnicode_Check(x))
-        return PyLong_FromUnicode(PyUnicode_AS_UNICODE(x),
-                                  PyUnicode_GET_SIZE(x),
-                                  (int)base);
+        return PyLong_FromUnicodeObject(x, (int)base);
     else if (PyByteArray_Check(x) || PyBytes_Check(x)) {
-        /* Since PyLong_FromString doesn't have a length parameter,
-         * check here for possible NULs in the string. */
         char *string;
-        Py_ssize_t size = Py_SIZE(x);
         if (PyByteArray_Check(x))
             string = PyByteArray_AS_STRING(x);
         else
             string = PyBytes_AS_STRING(x);
-        if (strlen(string) != (size_t)size || !size) {
-            /* We only see this if there's a null byte in x or x is empty,
-               x is a bytes or buffer, *and* a base is given. */
-            PyErr_Format(PyExc_ValueError,
-                         "invalid literal for int() with base %d: %R",
-                         (int)base, x);
-            return NULL;
-        }
-        return PyLong_FromString(string, NULL, (int)base);
+        return _PyLong_FromBytes(string, Py_SIZE(x), (int)base);
     }
     else {
         PyErr_SetString(PyExc_TypeError,
@@ -4198,10 +4368,10 @@ long_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     }
 }
 
-/* Wimpy, slow approach to tp_new calls for subtypes of long:
-   first create a regular long from whatever arguments we got,
+/* Wimpy, slow approach to tp_new calls for subtypes of int:
+   first create a regular int from whatever arguments we got,
    then allocate a subtype instance and initialize it from
-   the regular long.  The regular long is then thrown away.
+   the regular int.  The regular int is then thrown away.
 */
 static PyObject *
 long_subtype_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
@@ -4250,12 +4420,22 @@ static PyObject *
 long__format__(PyObject *self, PyObject *args)
 {
     PyObject *format_spec;
+    _PyUnicodeWriter writer;
+    int ret;
 
     if (!PyArg_ParseTuple(args, "U:__format__", &format_spec))
         return NULL;
-    return _PyLong_FormatAdvanced(self,
-                                  PyUnicode_AS_UNICODE(format_spec),
-                                  PyUnicode_GET_SIZE(format_spec));
+
+    _PyUnicodeWriter_Init(&writer, 0);
+    ret = _PyLong_FormatAdvancedWriter(
+        &writer,
+        self,
+        format_spec, 0, PyUnicode_GET_LENGTH(format_spec));
+    if (ret == -1) {
+        _PyUnicodeWriter_Dealloc(&writer);
+        return NULL;
+    }
+    return _PyUnicodeWriter_Finish(&writer);
 }
 
 /* Return a pair (q, r) such that a = b * q + r, and
@@ -4642,7 +4822,7 @@ long_from_bytes(PyTypeObject *type, PyObject *args, PyObject *kwds)
     Py_DECREF(bytes);
 
     /* If from_bytes() was used on subclass, allocate new subclass
-     * instance, initialize it with decoded long value and return it.
+     * instance, initialize it with decoded int value and return it.
      */
     if (type != &PyLong_Type && PyType_IsSubtype(type, &PyLong_Type)) {
         PyLongObject *newobj;

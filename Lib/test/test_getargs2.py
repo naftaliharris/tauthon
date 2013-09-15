@@ -1,6 +1,6 @@
 import unittest
 from test import support
-from _testcapi import getargs_keywords
+from _testcapi import getargs_keywords, getargs_keyword_only
 
 """
 > How about the following counterproposal. This also changes some of
@@ -214,6 +214,36 @@ class LongLong_TestCase(unittest.TestCase):
 
         self.assertEqual(VERY_LARGE & ULLONG_MAX, getargs_K(VERY_LARGE))
 
+class Paradox:
+    "This statement is false."
+    def __bool__(self):
+        raise NotImplementedError
+
+class Boolean_TestCase(unittest.TestCase):
+    def test_p(self):
+        from _testcapi import getargs_p
+        self.assertEqual(0, getargs_p(False))
+        self.assertEqual(0, getargs_p(None))
+        self.assertEqual(0, getargs_p(0))
+        self.assertEqual(0, getargs_p(0.0))
+        self.assertEqual(0, getargs_p(0j))
+        self.assertEqual(0, getargs_p(''))
+        self.assertEqual(0, getargs_p(()))
+        self.assertEqual(0, getargs_p([]))
+        self.assertEqual(0, getargs_p({}))
+
+        self.assertEqual(1, getargs_p(True))
+        self.assertEqual(1, getargs_p(1))
+        self.assertEqual(1, getargs_p(1.0))
+        self.assertEqual(1, getargs_p(1j))
+        self.assertEqual(1, getargs_p('x'))
+        self.assertEqual(1, getargs_p((1,)))
+        self.assertEqual(1, getargs_p([1]))
+        self.assertEqual(1, getargs_p({1:2}))
+        self.assertEqual(1, getargs_p(unittest.TestCase))
+
+        self.assertRaises(NotImplementedError, getargs_p, Paradox())
+
 
 class Tuple_TestCase(unittest.TestCase):
     def test_tuple(self):
@@ -293,7 +323,87 @@ class Keywords_TestCase(unittest.TestCase):
         else:
             self.fail('TypeError should have been raised')
 
+class KeywordOnly_TestCase(unittest.TestCase):
+    def test_positional_args(self):
+        # using all possible positional args
+        self.assertEqual(
+            getargs_keyword_only(1, 2),
+            (1, 2, -1)
+            )
+
+    def test_mixed_args(self):
+        # positional and keyword args
+        self.assertEqual(
+            getargs_keyword_only(1, 2, keyword_only=3),
+            (1, 2, 3)
+            )
+
+    def test_keyword_args(self):
+        # all keywords
+        self.assertEqual(
+            getargs_keyword_only(required=1, optional=2, keyword_only=3),
+            (1, 2, 3)
+            )
+
+    def test_optional_args(self):
+        # missing optional keyword args, skipping tuples
+        self.assertEqual(
+            getargs_keyword_only(required=1, optional=2),
+            (1, 2, -1)
+            )
+        self.assertEqual(
+            getargs_keyword_only(required=1, keyword_only=3),
+            (1, -1, 3)
+            )
+
+    def test_required_args(self):
+        self.assertEqual(
+            getargs_keyword_only(1),
+            (1, -1, -1)
+            )
+        self.assertEqual(
+            getargs_keyword_only(required=1),
+            (1, -1, -1)
+            )
+        # required arg missing
+        with self.assertRaisesRegex(TypeError,
+            "Required argument 'required' \(pos 1\) not found"):
+            getargs_keyword_only(optional=2)
+
+        with self.assertRaisesRegex(TypeError,
+            "Required argument 'required' \(pos 1\) not found"):
+            getargs_keyword_only(keyword_only=3)
+
+    def test_too_many_args(self):
+        with self.assertRaisesRegex(TypeError,
+            "Function takes at most 2 positional arguments \(3 given\)"):
+            getargs_keyword_only(1, 2, 3)
+
+        with self.assertRaisesRegex(TypeError,
+            "function takes at most 3 arguments \(4 given\)"):
+            getargs_keyword_only(1, 2, 3, keyword_only=5)
+
+    def test_invalid_keyword(self):
+        # extraneous keyword arg
+        with self.assertRaisesRegex(TypeError,
+            "'monster' is an invalid keyword argument for this function"):
+            getargs_keyword_only(1, 2, monster=666)
+
+    def test_surrogate_keyword(self):
+        with self.assertRaisesRegex(TypeError,
+            "'\udc80' is an invalid keyword argument for this function"):
+            getargs_keyword_only(1, 2, **{'\uDC80': 10})
+
 class Bytes_TestCase(unittest.TestCase):
+    def test_c(self):
+        from _testcapi import getargs_c
+        self.assertRaises(TypeError, getargs_c, b'abc')  # len > 1
+        self.assertEqual(getargs_c(b'a'), b'a')
+        self.assertEqual(getargs_c(bytearray(b'a')), b'a')
+        self.assertRaises(TypeError, getargs_c, memoryview(b'a'))
+        self.assertRaises(TypeError, getargs_c, 's')
+        self.assertRaises(TypeError, getargs_c, None)
+
     def test_s(self):
         from _testcapi import getargs_s
         self.assertEqual(getargs_s('abc\xe9'), b'abc\xc3\xa9')
@@ -430,8 +540,10 @@ def test_main():
     tests = [
         Signed_TestCase,
         Unsigned_TestCase,
+        Boolean_TestCase,
         Tuple_TestCase,
         Keywords_TestCase,
+        KeywordOnly_TestCase,
         Bytes_TestCase,
         Unicode_TestCase,
     ]
