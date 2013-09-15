@@ -31,17 +31,19 @@ frame_getlocals(PyFrameObject *f, void *closure)
     return f->f_locals;
 }
 
+int
+PyFrame_GetLineNumber(PyFrameObject *f)
+{
+    if (f->f_trace)
+        return f->f_lineno;
+    else
+        return PyCode_Addr2Line(f->f_code, f->f_lasti);
+}
+
 static PyObject *
 frame_getlineno(PyFrameObject *f, void *closure)
 {
-    int lineno;
-
-    if (f->f_trace)
-        lineno = f->f_lineno;
-    else
-        lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
-    return PyLong_FromLong(lineno);
+    return PyLong_FromLong(PyFrame_GetLineNumber(f));
 }
 
 /* Setter for f_lineno - you can set f_lineno from within a trace function in
@@ -197,6 +199,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
         case SETUP_LOOP:
         case SETUP_EXCEPT:
         case SETUP_FINALLY:
+        case SETUP_WITH:
             blockstack[blockstack_top++] = addr;
             in_finally[blockstack_top-1] = 0;
             break;
@@ -204,7 +207,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
         case POP_BLOCK:
             assert(blockstack_top > 0);
             setup_op = code[blockstack[blockstack_top-1]];
-            if (setup_op == SETUP_FINALLY) {
+            if (setup_op == SETUP_FINALLY || setup_op == SETUP_WITH) {
                 in_finally[blockstack_top-1] = 1;
             }
             else {
@@ -219,7 +222,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
              * be seeing such an END_FINALLY.) */
             if (blockstack_top > 0) {
                 setup_op = code[blockstack[blockstack_top-1]];
-                if (setup_op == SETUP_FINALLY) {
+                if (setup_op == SETUP_FINALLY || setup_op == SETUP_WITH) {
                     blockstack_top--;
                 }
             }
@@ -281,6 +284,7 @@ frame_setlineno(PyFrameObject *f, PyObject* p_new_lineno)
         case SETUP_LOOP:
         case SETUP_EXCEPT:
         case SETUP_FINALLY:
+        case SETUP_WITH:
             delta_iblock++;
             break;
 
@@ -345,16 +349,14 @@ frame_gettrace(PyFrameObject *f, void *closure)
 static int
 frame_settrace(PyFrameObject *f, PyObject* v, void *closure)
 {
+    PyObject* old_value;
+
     /* We rely on f_lineno being accurate when f_trace is set. */
+    f->f_lineno = PyFrame_GetLineNumber(f);
 
-    PyObject* old_value = f->f_trace;
-
+    old_value = f->f_trace;
     Py_XINCREF(v);
     f->f_trace = v;
-
-    if (v != NULL)
-        f->f_lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
-
     Py_XDECREF(old_value);
 
     return 0;
@@ -391,7 +393,7 @@ static PyGetSetDef frame_getsetlist[] = {
        the local variables in f_localsplus are NULL.
 
    2. We also maintain a separate free list of stack frames (just like
-   integers are allocated in a special way -- see intobject.c).  When
+   floats are allocated in a special way -- see floatobject.c).  When
    a stack frame is on the free list, only the following members have
    a meaning:
     ob_type             == &Frametype

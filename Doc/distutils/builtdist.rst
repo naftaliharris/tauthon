@@ -139,13 +139,13 @@ The following sections give details on the individual :command:`bdist_\*`
 commands.
 
 
-.. _creating-dumb:
+.. .. _creating-dumb:
 
-Creating dumb built distributions
-=================================
+.. Creating dumb built distributions
+.. =================================
 
 .. XXX Need to document absolute vs. prefix-relative packages here, but first
-       I have to implement it!
+   I have to implement it!
 
 
 .. _creating-rpms:
@@ -425,7 +425,7 @@ built-in functions in the installation script.
 
    Which folders are available depends on the exact Windows version, and probably
    also the configuration.  For details refer to Microsoft's documentation of the
-   :cfunc:`SHGetSpecialFolderPath` function.
+   :c:func:`SHGetSpecialFolderPath` function.
 
 
 .. function:: create_shortcut(target, description, filename[, arguments[, workdir[, iconpath[, iconindex]]]])

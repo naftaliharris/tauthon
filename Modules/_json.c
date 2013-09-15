@@ -36,6 +36,7 @@ typedef struct _PyScannerObject {
     PyObject *parse_float;
     PyObject *parse_int;
     PyObject *parse_constant;
+    PyObject *memo;
 } PyScannerObject;
 
 static PyMemberDef scanner_members[] = {
@@ -305,6 +306,21 @@ _build_rval_index_tuple(PyObject *rval, Py_ssize_t idx) {
     return tpl;
 }
 
+#define APPEND_OLD_CHUNK \
+    if (chunk != NULL) { \
+        if (chunks == NULL) { \
+            chunks = PyList_New(0); \
+            if (chunks == NULL) { \
+                goto bail; \
+            } \
+        } \
+        if (PyList_Append(chunks, chunk)) { \
+            Py_DECREF(chunk); \
+            goto bail; \
+        } \
+        Py_CLEAR(chunk); \
+    }
+
 static PyObject *
 scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next_end_ptr)
 {
@@ -316,15 +332,14 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
 
     Return value is a new PyUnicode
     */
-    PyObject *rval;
+    PyObject *rval = NULL;
     Py_ssize_t len = PyUnicode_GET_SIZE(pystr);
     Py_ssize_t begin = end - 1;
     Py_ssize_t next = begin;
     const Py_UNICODE *buf = PyUnicode_AS_UNICODE(pystr);
-    PyObject *chunks = PyList_New(0);
-    if (chunks == NULL) {
-        goto bail;
-    }
+    PyObject *chunks = NULL;
+    PyObject *chunk = NULL;
+
     if (end < 0 || len <= end) {
         PyErr_SetString(PyExc_ValueError, "end is out of bounds");
         goto bail;
@@ -332,7 +347,6 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
     while (1) {
         /* Find the end of the string or the next escape */
         Py_UNICODE c = 0;
-        PyObject *chunk = NULL;
         for (next = end; next < len; next++) {
             c = buf[next];
             if (c == '"' || c == '\\') {
@@ -349,15 +363,11 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
         }
         /* Pick up this chunk if it's not zero length */
         if (next != end) {
+            APPEND_OLD_CHUNK
             chunk = PyUnicode_FromUnicode(&buf[end], next - end);
             if (chunk == NULL) {
                 goto bail;
             }
-            if (PyList_Append(chunks, chunk)) {
-                Py_DECREF(chunk);
-                goto bail;
-            }
-            Py_DECREF(chunk);
         }
         next++;
         if (c == '"') {
@@ -459,27 +469,34 @@ scanstring_unicode(PyObject *pystr, Py_ssize_t end, int strict, Py_ssize_t *next
             }
 #endif
         }
+        APPEND_OLD_CHUNK
         chunk = PyUnicode_FromUnicode(&c, 1);
         if (chunk == NULL) {
             goto bail;
         }
-        if (PyList_Append(chunks, chunk)) {
-            Py_DECREF(chunk);
-            goto bail;
-        }
-        Py_DECREF(chunk);
     }
 
-    rval = join_list_unicode(chunks);
-    if (rval == NULL) {
-        goto bail;
+    if (chunks == NULL) {
+        if (chunk != NULL)
+            rval = chunk;
+        else
+            rval = PyUnicode_FromStringAndSize("", 0);
     }
-    Py_DECREF(chunks);
+    else {
+        APPEND_OLD_CHUNK
+        rval = join_list_unicode(chunks);
+        if (rval == NULL) {
+            goto bail;
+        }
+        Py_CLEAR(chunks);
+    }
+
     *next_end_ptr = end;
     return rval;
 bail:
     *next_end_ptr = -1;
     Py_XDECREF(chunks);
+    Py_XDECREF(chunk);
     return NULL;
 }
 
@@ -578,6 +595,7 @@ scanner_clear(PyObject *self)
     Py_CLEAR(s->parse_float);
     Py_CLEAR(s->parse_int);
     Py_CLEAR(s->parse_constant);
+    Py_CLEAR(s->memo);
     return 0;
 }
 
@@ -593,10 +611,16 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
     Py_UNICODE *str = PyUnicode_AS_UNICODE(pystr);
     Py_ssize_t end_idx = PyUnicode_GET_SIZE(pystr) - 1;
     PyObject *val = NULL;
-    PyObject *rval = PyList_New(0);
+    PyObject *rval = NULL;
     PyObject *key = NULL;
     int strict = PyObject_IsTrue(s->strict);
+    int has_pairs_hook = (s->object_pairs_hook != Py_None);
     Py_ssize_t next_idx;
+
+    if (has_pairs_hook)
+        rval = PyList_New(0);
+    else
+        rval = PyDict_New();
     if (rval == NULL)
         return NULL;
 
@@ -606,20 +630,32 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
     /* only loop if the object is non-empty */
     if (idx <= end_idx && str[idx] != '}') {
         while (idx <= end_idx) {
+            PyObject *memokey;
+
             /* read key */
             if (str[idx] != '"') {
-                raise_errmsg("Expecting property name", pystr, idx);
+                raise_errmsg("Expecting property name enclosed in double quotes", pystr, idx);
                 goto bail;
             }
             key = scanstring_unicode(pystr, idx + 1, strict, &next_idx);
             if (key == NULL)
                 goto bail;
+            memokey = PyDict_GetItem(s->memo, key);
+            if (memokey != NULL) {
+                Py_INCREF(memokey);
+                Py_DECREF(key);
+                key = memokey;
+            }
+            else {
+                if (PyDict_SetItem(s->memo, key, key) < 0)
+                    goto bail;
+            }
             idx = next_idx;
 
             /* skip whitespace between key and : delimiter, read :, skip whitespace */
             while (idx <= end_idx && IS_WHITESPACE(str[idx])) idx++;
             if (idx > end_idx || str[idx] != ':') {
-                raise_errmsg("Expecting : delimiter", pystr, idx);
+                raise_errmsg("Expecting ':' delimiter", pystr, idx);
                 goto bail;
             }
             idx++;
@@ -630,19 +666,24 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
             if (val == NULL)
                 goto bail;
 
-            {
-                PyObject *tuple = PyTuple_Pack(2, key, val);
-                if (tuple == NULL)
+            if (has_pairs_hook) {
+                PyObject *item = PyTuple_Pack(2, key, val);
+                if (item == NULL)
                     goto bail;
-                if (PyList_Append(rval, tuple) == -1) {
-                    Py_DECREF(tuple);
+                Py_CLEAR(key);
+                Py_CLEAR(val);
+                if (PyList_Append(rval, item) == -1) {
+                    Py_DECREF(item);
                     goto bail;
                 }
-                Py_DECREF(tuple);
+                Py_DECREF(item);
             }
-
-            Py_CLEAR(key);
-            Py_CLEAR(val);
+            else {
+                if (PyDict_SetItem(rval, key, val) < 0)
+                    goto bail;
+                Py_CLEAR(key);
+                Py_CLEAR(val);
+            }
             idx = next_idx;
 
             /* skip whitespace before } or , */
@@ -654,7 +695,7 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
                 break;
             }
             else if (str[idx] != ',') {
-                raise_errmsg("Expecting , delimiter", pystr, idx);
+                raise_errmsg("Expecting ',' delimiter", pystr, idx);
                 goto bail;
             }
             idx++;
@@ -672,36 +713,23 @@ _parse_object_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ss
 
     *next_idx_ptr = idx + 1;
 
-    if (s->object_pairs_hook != Py_None) {
+    if (has_pairs_hook) {
         val = PyObject_CallFunctionObjArgs(s->object_pairs_hook, rval, NULL);
-        if (val == NULL)
-            goto bail;
         Py_DECREF(rval);
         return val;
     }
 
-    val = PyDict_New();
-    if (val == NULL)
-        goto bail;
-    if (PyDict_MergeFromSeq2(val, rval, 1) == -1)
-        goto bail;
-    Py_DECREF(rval);
-    rval = val;
-
     /* if object_hook is not None: rval = object_hook(rval) */
     if (s->object_hook != Py_None) {
         val = PyObject_CallFunctionObjArgs(s->object_hook, rval, NULL);
-        if (val == NULL)
-            goto bail;
         Py_DECREF(rval);
-        rval = val;
-        val = NULL;
+        return val;
     }
     return rval;
 bail:
     Py_XDECREF(key);
     Py_XDECREF(val);
-    Py_DECREF(rval);
+    Py_XDECREF(rval);
     return NULL;
 }
 
@@ -749,7 +777,7 @@ _parse_array_unicode(PyScannerObject *s, PyObject *pystr, Py_ssize_t idx, Py_ssi
                 break;
             }
             else if (str[idx] != ',') {
-                raise_errmsg("Expecting , delimiter", pystr, idx);
+                raise_errmsg("Expecting ',' delimiter", pystr, idx);
                 goto bail;
             }
             idx++;
@@ -999,6 +1027,9 @@ scanner_call(PyObject *self, PyObject *args, PyObject *kwds)
                  Py_TYPE(pystr)->tp_name);
         return NULL;
     }
+    PyDict_Clear(s->memo);
+    if (rval == NULL)
+        return NULL;
     return _build_rval_index_tuple(rval, next_idx);
 }
 
@@ -1031,6 +1062,12 @@ scanner_init(PyObject *self, PyObject *args, PyObject *kwds)
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O:make_scanner", kwlist, &ctx))
         return -1;
+
+    if (s->memo == NULL) {
+        s->memo = PyDict_New();
+        if (s->memo == NULL)
+            goto bail;
+    }
 
     /* All of these will fail "gracefully" so we don't need to verify them */
     s->strict = PyObject_GetAttrString(ctx, "strict");
@@ -1374,8 +1411,6 @@ encoder_listencode_dict(PyEncoderObject *s, PyObject *rval, PyObject *dct, Py_ss
     PyObject *item = NULL;
     int skipkeys;
     Py_ssize_t idx;
-    PyObject *mapping;
-    static PyObject *code = NULL;
 
     if (open_dict == NULL || close_dict == NULL || empty_dict == NULL) {
         open_dict = PyUnicode_InternFromString("{");
@@ -1417,30 +1452,37 @@ encoder_listencode_dict(PyEncoderObject *s, PyObject *rval, PyObject *dct, Py_ss
     }
 
     if (PyObject_IsTrue(s->sort_keys)) {
-        if (code == NULL) {
-            code = Py_CompileString("sorted(d.items(), key=lambda kv: kv[0])",
-                                    "_json.c", Py_eval_input);
-            if (code == NULL)
-                goto bail;
-        }
-
-        mapping = PyDict_New();
-        if (mapping == NULL)
-            goto bail;
-        if (PyDict_SetItemString(mapping, "d", dct) == -1) {
-            Py_DECREF(mapping);
-            goto bail;
-        }
-        items = PyEval_EvalCode((PyCodeObject *)code, PyEval_GetGlobals(), mapping);
-        Py_DECREF(mapping);
-        } else {
-        items = PyMapping_Items(dct);
-        }
+        /* First sort the keys then replace them with (key, value) tuples. */
+        Py_ssize_t i, nitems;
+        items = PyMapping_Keys(dct);
         if (items == NULL)
+            goto bail;
+        if (!PyList_Check(items)) {
+            PyErr_SetString(PyExc_ValueError, "keys must return list");
+            goto bail;
+        }
+        if (PyList_Sort(items) < 0)
+            goto bail;
+        nitems = PyList_GET_SIZE(items);
+        for (i = 0; i < nitems; i++) {
+            PyObject *key, *value;
+            key = PyList_GET_ITEM(items, i);
+            value = PyDict_GetItem(dct, key);
+            item = PyTuple_Pack(2, key, value);
+            if (item == NULL)
+                goto bail;
+            PyList_SET_ITEM(items, i, item);
+            Py_DECREF(key);
+        }
+    }
+    else {
+        items = PyMapping_Items(dct);
+    }
+    if (items == NULL)
         goto bail;
     it = PyObject_GetIter(items);
-        Py_DECREF(items);
-        if (it == NULL)
+    Py_DECREF(items);
+    if (it == NULL)
         goto bail;
     skipkeys = PyObject_IsTrue(s->skipkeys);
     idx = 0;
@@ -1543,8 +1585,6 @@ encoder_listencode_list(PyEncoderObject *s, PyObject *rval, PyObject *seq, Py_ss
     static PyObject *empty_array = NULL;
     PyObject *ident = NULL;
     PyObject *s_fast = NULL;
-    Py_ssize_t num_items;
-    PyObject **seq_items;
     Py_ssize_t i;
 
     if (open_array == NULL || close_array == NULL || empty_array == NULL) {
@@ -1558,8 +1598,7 @@ encoder_listencode_list(PyEncoderObject *s, PyObject *rval, PyObject *seq, Py_ss
     s_fast = PySequence_Fast(seq, "_iterencode_list needs a sequence");
     if (s_fast == NULL)
         return -1;
-    num_items = PySequence_Fast_GET_SIZE(s_fast);
-    if (num_items == 0) {
+    if (PySequence_Fast_GET_SIZE(s_fast) == 0) {
         Py_DECREF(s_fast);
         return PyList_Append(rval, empty_array);
     }
@@ -1580,7 +1619,6 @@ encoder_listencode_list(PyEncoderObject *s, PyObject *rval, PyObject *seq, Py_ss
         }
     }
 
-    seq_items = PySequence_Fast_ITEMS(s_fast);
     if (PyList_Append(rval, open_array))
         goto bail;
     if (s->indent != Py_None) {
@@ -1592,8 +1630,8 @@ encoder_listencode_list(PyEncoderObject *s, PyObject *rval, PyObject *seq, Py_ss
             buf += newline_indent
         */
     }
-    for (i = 0; i < num_items; i++) {
-        PyObject *obj = seq_items[i];
+    for (i = 0; i < PySequence_Fast_GET_SIZE(s_fast); i++) {
+        PyObject *obj = PySequence_Fast_GET_ITEM(s_fast, i);
         if (i) {
             if (PyList_Append(rval, s->item_separator))
                 goto bail;

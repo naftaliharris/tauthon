@@ -50,7 +50,7 @@ class CodeopTests(unittest.TestCase):
         '''succeed iff str is the start of an invalid piece of code'''
         try:
             compile_command(str,symbol=symbol)
-            self.fail("No exception thrown for invalid code")
+            self.fail("No exception raised for invalid code")
         except SyntaxError:
             self.assertTrue(is_syntax)
         except OverflowError:
@@ -294,10 +294,6 @@ class CodeopTests(unittest.TestCase):
                          compile("a = 1\n", "abc", 'single').co_filename)
         self.assertNotEqual(compile_command("a = 1\n", "abc").co_filename,
                             compile("a = 1\n", "def", 'single').co_filename)
-
-    def test_no_universal_newlines(self):
-        code = compile_command("'\rfoo\r'", symbol='eval')
-        self.assertEqual(eval(code), '\rfoo\r')
 
 
 def test_main():

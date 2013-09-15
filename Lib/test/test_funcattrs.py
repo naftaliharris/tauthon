@@ -35,11 +35,11 @@ class FunctionPropertiesTest(FuncAttrsTest):
 
     def test_dir_includes_correct_attrs(self):
         self.b.known_attr = 7
-        self.assertTrue('known_attr' in dir(self.b),
+        self.assertIn('known_attr', dir(self.b),
             "set attributes not in dir listing of method")
         # Test on underlying function object of method
         self.F.a.known_attr = 7
-        self.assertTrue('known_attr' in dir(self.fi.a), "set attribute on function "
+        self.assertIn('known_attr', dir(self.fi.a), "set attribute on function "
                      "implementations, should show up in next dir")
 
     def test_duplicate_function_equality(self):
@@ -64,7 +64,7 @@ class FunctionPropertiesTest(FuncAttrsTest):
         a = 12
         def f(): print(a)
         c = f.__closure__
-        self.assertTrue(isinstance(c, tuple))
+        self.assertIsInstance(c, tuple)
         self.assertEqual(len(c), 1)
         # don't have a type object handy
         self.assertEqual(c[0].__class__.__name__, "cell")

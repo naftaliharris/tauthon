@@ -26,6 +26,9 @@ python \- an interpreted, interactive, object-oriented programming language
 .B \-m 
 .I module-name
 ]
+[
+.B \-q
+]
 .br
        [
 .B \-O
@@ -147,6 +150,10 @@ to \fI.pyo\fP.  Given twice, causes docstrings to be discarded.
 .TP
 .B \-OO
 Discard docstrings in addition to the \fB-O\fP optimizations.
+.TP
+.B \-q
+Do not print the version and copyright messages. These messages are 
+also suppressed in non-interactive mode.
 .TP
 .B \-R
 Turn on "hash randomization", so that the hash() values of str, bytes and
@@ -418,6 +425,9 @@ the \fB\-u\fP option.
 If this is set to a non-empty string it is equivalent to specifying
 the \fB\-v\fP option. If set to an integer, it is equivalent to
 specifying \fB\-v\fP multiple times. 
+.IP PYTHONWARNINGS
+If this is set to a comma-separated string it is equivalent to
+specifying the \fB\-W\fP option for each separate value.
 .IP PYTHONHASHSEED
 If this variable is set to "random", the effect is the same as specifying
 the \fB-R\fP option: a random value is used to seed the hashes of str,
@@ -439,7 +449,7 @@ Main website:  http://www.python.org/
 .br
 Documentation:  http://docs.python.org/py3k/
 .br
-Developer resources:  http://www.python.org/dev/
+Developer resources:  http://docs.python.org/devguide/
 .br
 Downloads:  http://python.org/download/
 .br

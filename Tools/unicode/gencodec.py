@@ -34,14 +34,16 @@ MAX_TABLE_SIZE = 8192
 # Standard undefined Unicode code point
 UNI_UNDEFINED = chr(0xFFFE)
 
+# Placeholder for a missing codepoint
+MISSING_CODE = -1
+
 mapRE = re.compile('((?:0x[0-9a-fA-F]+\+?)+)'
                    '\s+'
                    '((?:(?:0x[0-9a-fA-Z]+|<[A-Za-z]+>)\+?)*)'
                    '\s*'
                    '(#.+)?')
 
-def parsecodes(codes,
-               len=len, filter=filter,range=range):
+def parsecodes(codes, len=len, range=range):
 
     """ Converts code combinations to either a single code integer
         or a tuple of integers.
@@ -53,7 +55,7 @@ def parsecodes(codes,
 
     """
     if not codes:
-        return None
+        return MISSING_CODE
     l = codes.split('+')
     if len(l) == 1:
         return int(l[0],16)
@@ -61,8 +63,8 @@ def parsecodes(codes,
         try:
             l[i] = int(l[i],16)
         except ValueError:
-            l[i] = None
-    l = [x for x in l if x is not None]
+            l[i] = MISSING_CODE
+    l = [x for x in l if x != MISSING_CODE]
     if len(l) == 1:
         return l[0]
     else:
@@ -114,7 +116,7 @@ def readmap(filename):
     # mappings to None for the rest
     if len(identity) >= len(unmapped):
         for enc in unmapped:
-            enc2uni[enc] = (None, "")
+            enc2uni[enc] = (MISSING_CODE, "")
         enc2uni['IDENTITY'] = 256
 
     return enc2uni
@@ -212,7 +214,7 @@ def python_tabledef_code(varname, map, comments=1, key_precision=2):
             (mapkey, mapcomment) = mapkey
         if isinstance(mapvalue, tuple):
             (mapvalue, mapcomment) = mapvalue
-        if mapkey is None:
+        if mapkey == MISSING_CODE:
             continue
         table[mapkey] = (mapvalue, mapcomment)
         if mapkey > maxkey:
@@ -224,11 +226,11 @@ def python_tabledef_code(varname, map, comments=1, key_precision=2):
     # Create table code
     for key in range(maxkey + 1):
         if key not in table:
-            mapvalue = None
+            mapvalue = MISSING_CODE
             mapcomment = 'UNDEFINED'
         else:
             mapvalue, mapcomment = table[key]
-        if mapvalue is None:
+        if mapvalue == MISSING_CODE:
             mapchar = UNI_UNDEFINED
         else:
             if isinstance(mapvalue, tuple):
@@ -237,11 +239,11 @@ def python_tabledef_code(varname, map, comments=1, key_precision=2):
             else:
                 mapchar = chr(mapvalue)
         if mapcomment and comments:
-            append('    %r\t#  %s -> %s' % (mapchar,
+            append('    %a \t#  %s -> %s' % (mapchar,
                                             hexrepr(key, key_precision),
                                             mapcomment))
         else:
-            append('    %r' % mapchar)
+            append('    %a' % mapchar)
 
     append(')')
     return l

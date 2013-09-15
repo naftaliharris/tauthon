@@ -2,8 +2,10 @@ import calendar
 import unittest
 
 from test import support
+from test.script_helper import assert_python_ok
+import time
 import locale
-
+import datetime
 
 result_2004_text = """
                                   2004
@@ -256,13 +258,28 @@ class CalendarTestCase(unittest.TestCase):
         # (it is still not thread-safe though)
         old_october = calendar.TextCalendar().formatmonthname(2010, 10, 10)
         try:
-            calendar.LocaleTextCalendar(locale='').formatmonthname(2010, 10, 10)
+            cal = calendar.LocaleTextCalendar(locale='')
+            local_weekday = cal.formatweekday(1, 10)
+            local_month = cal.formatmonthname(2010, 10, 10)
         except locale.Error:
             # cannot set the system default locale -- skip rest of test
-            return
-        calendar.LocaleHTMLCalendar(locale='').formatmonthname(2010, 10)
+            raise unittest.SkipTest('cannot set the system default locale')
+        self.assertIsInstance(local_weekday, str)
+        self.assertIsInstance(local_month, str)
+        self.assertEqual(len(local_weekday), 10)
+        self.assertGreaterEqual(len(local_month), 10)
+        cal = calendar.LocaleHTMLCalendar(locale='')
+        local_weekday = cal.formatweekday(1)
+        local_month = cal.formatmonthname(2010, 10)
+        self.assertIsInstance(local_weekday, str)
+        self.assertIsInstance(local_month, str)
         new_october = calendar.TextCalendar().formatmonthname(2010, 10, 10)
-        self.assertEquals(old_october, new_october)
+        self.assertEqual(old_october, new_october)
+
+    def test_itermonthdates(self):
+        # ensure itermonthdates doesn't overflow after datetime.MAXYEAR
+        # see #15421
+        list(calendar.Calendar().itermonthdates(datetime.MAXYEAR, 12))
 
 
 class MonthCalendarTestCase(unittest.TestCase):
@@ -395,6 +412,13 @@ class SundayTestCase(MonthCalendarTestCase):
         # A 31-day december starting on friday (2+7+7+7+7+1 days)
         self.check_weeks(1995, 12, (2, 7, 7, 7, 7, 1))
 
+class TimegmTestCase(unittest.TestCase):
+    TIMESTAMPS = [0, 10, 100, 1000, 10000, 100000, 1000000,
+                  1234567890, 1262304000, 1275785153,]
+    def test_timegm(self):
+        for secs in self.TIMESTAMPS:
+            tuple = time.gmtime(secs)
+            self.assertEqual(secs, calendar.timegm(tuple))
 
 class MonthRangeTestCase(unittest.TestCase):
     def test_january(self):
@@ -444,14 +468,21 @@ class LeapdaysTestCase(unittest.TestCase):
         self.assertEqual(calendar.leapdays(1997,2020), 5)
 
 
+class ConsoleOutputTestCase(unittest.TestCase):
+    def test_outputs_bytes(self):
+        (return_code, stdout, stderr) = assert_python_ok('-m', 'calendar', '--type=html', '2010')
+        self.assertEqual(stdout[:6], b'<?xml ')
+
 def test_main():
     support.run_unittest(
         OutputTestCase,
         CalendarTestCase,
         MondayTestCase,
         SundayTestCase,
+        TimegmTestCase,
         MonthRangeTestCase,
         LeapdaysTestCase,
+        ConsoleOutputTestCase
     )
 
 

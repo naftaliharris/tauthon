@@ -13,13 +13,13 @@ parser.  It returns when there's nothing more it can do with the available
 data.  When you have no more data to push into the parser, call .close().
 This completes the parsing and returns the root message object.
 
-The other advantage of this parser is that it will never throw a parsing
+The other advantage of this parser is that it will never raise a parsing
 exception.  Instead, when it finds something unexpected, it adds a 'defect' to
 the current message.  Defects are just instances that live on the message
 object's .defects attribute.
 """
 
-__all__ = ['FeedParser']
+__all__ = ['FeedParser', 'BytesFeedParser']
 
 import re
 
@@ -214,7 +214,7 @@ class FeedParser:
         # supposed to see in the body of the message.
         self._parse_headers(headers)
         # Headers-only parsing is a backwards compatibility hack, which was
-        # necessary in the older parser, which could throw errors.  All
+        # necessary in the older parser, which could raise errors.  All
         # remaining lines in the input are thrown into the message body.
         if self._headersonly:
             lines = []
@@ -368,12 +368,12 @@ class FeedParser:
                                 end = len(mo.group(0))
                                 self._last.epilogue = epilogue[:-end]
                     else:
-                        payload = self._last.get_payload()
+                        payload = self._last._payload
                         if isinstance(payload, str):
                             mo = NLCRE_eol.search(payload)
                             if mo:
                                 payload = payload[:-len(mo.group(0))]
-                                self._last.set_payload(payload)
+                                self._last._payload = payload
                     self._input.pop_eof_matcher()
                     self._pop_message()
                     # Set the multipart up for newline cleansing, which will
@@ -482,3 +482,10 @@ class FeedParser:
         if lastheader:
             # XXX reconsider the joining of folded lines
             self._cur[lastheader] = EMPTYSTRING.join(lastvalue).rstrip('\r\n')
+
+
+class BytesFeedParser(FeedParser):
+    """Like FeedParser, but feed accepts bytes."""
+
+    def feed(self, data):
+        super().feed(data.decode('ascii', 'surrogateescape'))

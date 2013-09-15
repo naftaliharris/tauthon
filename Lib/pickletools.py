@@ -1907,7 +1907,7 @@ def optimize(p):
 ##############################################################################
 # A symbolic pickle disassembler.
 
-def dis(pickle, out=None, memo=None, indentlevel=4):
+def dis(pickle, out=None, memo=None, indentlevel=4, annotate=0):
     """Produce a symbolic disassembly of a pickle.
 
     'pickle' is a file-like object, or string, containing a (at least one)
@@ -1923,8 +1923,14 @@ def dis(pickle, out=None, memo=None, indentlevel=4):
     to proceed across multiple pickles that were all created by the same
     pickler with the same memo.  Ordinarily you don't need to worry about this.
 
-    Optional arg indentlevel is the number of blanks by which to indent
+    Optional arg 'indentlevel' is the number of blanks by which to indent
     a new MARK level.  It defaults to 4.
+
+    Optional arg 'annotate' if nonzero instructs dis() to add short
+    description of the opcode on each line of disassembled output.
+    The value given to 'annotate' must be an integer and is used as a
+    hint for the column where annotation should start.  The default
+    value is 0, meaning no annotations.
 
     In addition to printing the disassembly, some sanity checks are made:
 
@@ -1953,6 +1959,7 @@ def dis(pickle, out=None, memo=None, indentlevel=4):
     markstack = []      # bytecode positions of MARK opcodes
     indentchunk = ' ' * indentlevel
     errormsg = None
+    annocol = annotate  # columnt hint for annotations
     for opcode, arg, pos in genops(pickle):
         if pos is not None:
             print("%5d:" % pos, end=' ', file=out)
@@ -2020,6 +2027,13 @@ def dis(pickle, out=None, memo=None, indentlevel=4):
                 line += ' ' + repr(arg)
             if markmsg:
                 line += ' ' + markmsg
+        if annotate:
+            line += ' ' * (annocol - len(line))
+            # make a mild effort to align annotations
+            annocol = len(line)
+            if annocol > 50:
+                annocol = annotate
+            line += ' ' + opcode.doc.split('\n', 1)[0]
         print(line, file=out)
 
         if errormsg:
@@ -2069,27 +2083,22 @@ _dis_test = r"""
    29: (    MARK
    30: d        DICT       (MARK at 29)
    31: p    PUT        2
-   34: c    GLOBAL     '__builtin__ bytes'
-   53: p    PUT        3
-   56: (    MARK
-   57: (        MARK
-   58: l            LIST       (MARK at 57)
+   34: c    GLOBAL     '_codecs encode'
+   50: p    PUT        3
+   53: (    MARK
+   54: V        UNICODE    'abc'
    59: p        PUT        4
-   62: L        LONG       97
-   67: a        APPEND
-   68: L        LONG       98
-   73: a        APPEND
-   74: L        LONG       99
-   79: a        APPEND
-   80: t        TUPLE      (MARK at 56)
-   81: p    PUT        5
-   84: R    REDUCE
-   85: p    PUT        6
-   88: V    UNICODE    'def'
-   93: p    PUT        7
-   96: s    SETITEM
-   97: a    APPEND
-   98: .    STOP
+   62: V        UNICODE    'latin1'
+   70: p        PUT        5
+   73: t        TUPLE      (MARK at 53)
+   74: p    PUT        6
+   77: R    REDUCE
+   78: p    PUT        7
+   81: V    UNICODE    'def'
+   86: p    PUT        8
+   89: s    SETITEM
+   90: a    APPEND
+   91: .    STOP
 highest protocol among opcodes = 0
 
 Try again with a "binary" pickle.
@@ -2108,25 +2117,22 @@ Try again with a "binary" pickle.
    14: q        BINPUT     1
    16: }        EMPTY_DICT
    17: q        BINPUT     2
-   19: c        GLOBAL     '__builtin__ bytes'
-   38: q        BINPUT     3
-   40: (        MARK
-   41: ]            EMPTY_LIST
-   42: q            BINPUT     4
-   44: (            MARK
-   45: K                BININT1    97
-   47: K                BININT1    98
-   49: K                BININT1    99
-   51: e                APPENDS    (MARK at 44)
-   52: t            TUPLE      (MARK at 40)
-   53: q        BINPUT     5
-   55: R        REDUCE
-   56: q        BINPUT     6
-   58: X        BINUNICODE 'def'
-   66: q        BINPUT     7
-   68: s        SETITEM
-   69: e        APPENDS    (MARK at 3)
-   70: .    STOP
+   19: c        GLOBAL     '_codecs encode'
+   35: q        BINPUT     3
+   37: (        MARK
+   38: X            BINUNICODE 'abc'
+   46: q            BINPUT     4
+   48: X            BINUNICODE 'latin1'
+   59: q            BINPUT     5
+   61: t            TUPLE      (MARK at 37)
+   62: q        BINPUT     6
+   64: R        REDUCE
+   65: q        BINPUT     7
+   67: X        BINUNICODE 'def'
+   75: q        BINPUT     8
+   77: s        SETITEM
+   78: e        APPENDS    (MARK at 3)
+   79: .    STOP
 highest protocol among opcodes = 1
 
 Exercise the INST/OBJ/BUILD family.
@@ -2293,6 +2299,22 @@ highest protocol among opcodes = 2
    12: h    BINGET     1
    14: .    STOP
 highest protocol among opcodes = 2
+
+Try protocol 3 with annotations:
+
+>>> dis(pickle.dumps(T, 3), annotate=1)
+    0: \x80 PROTO      3 Protocol version indicator.
+    2: ]    EMPTY_LIST   Push an empty list.
+    3: q    BINPUT     0 Store the stack top into the memo.  The stack is not popped.
+    5: h    BINGET     0 Read an object from the memo and push it on the stack.
+    7: \x85 TUPLE1       Build a one-tuple out of the topmost item on the stack.
+    8: q    BINPUT     1 Store the stack top into the memo.  The stack is not popped.
+   10: a    APPEND       Append an object to a list.
+   11: 0    POP          Discard the top stack item, shrinking the stack by one item.
+   12: h    BINGET     1 Read an object from the memo and push it on the stack.
+   14: .    STOP         Stop the unpickling machine.
+highest protocol among opcodes = 2
+
 """
 
 _memo_test = r"""
@@ -2333,4 +2355,47 @@ def _test():
     return doctest.testmod()
 
 if __name__ == "__main__":
-    _test()
+    import sys, argparse
+    parser = argparse.ArgumentParser(
+        description='disassemble one or more pickle files')
+    parser.add_argument(
+        'pickle_file', type=argparse.FileType('br'),
+        nargs='*', help='the pickle file')
+    parser.add_argument(
+        '-o', '--output', default=sys.stdout, type=argparse.FileType('w'),
+        help='the file where the output should be written')
+    parser.add_argument(
+        '-m', '--memo', action='store_true',
+        help='preserve memo between disassemblies')
+    parser.add_argument(
+        '-l', '--indentlevel', default=4, type=int,
+        help='the number of blanks by which to indent a new MARK level')
+    parser.add_argument(
+        '-a', '--annotate',  action='store_true',
+        help='annotate each line with a short opcode description')
+    parser.add_argument(
+        '-p', '--preamble', default="==> {name} <==",
+        help='if more than one pickle file is specified, print this before'
+        ' each disassembly')
+    parser.add_argument(
+        '-t', '--test', action='store_true',
+        help='run self-test suite')
+    parser.add_argument(
+        '-v', action='store_true',
+        help='run verbosely; only affects self-test run')
+    args = parser.parse_args()
+    if args.test:
+        _test()
+    else:
+        annotate = 30 if args.annotate else 0
+        if not args.pickle_file:
+            parser.print_help()
+        elif len(args.pickle_file) == 1:
+            dis(args.pickle_file[0], args.output, None,
+                args.indentlevel, annotate)
+        else:
+            memo = {} if args.memo else None
+            for f in args.pickle_file:
+                preamble = args.preamble.format(name=f.name)
+                args.output.write(preamble + '\n')
+                dis(f, args.output, memo, args.indentlevel, annotate)

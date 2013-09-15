@@ -13,6 +13,10 @@
    single: URL
    single: Common Gateway Interface
 
+**Source code:** :source:`Lib/cgi.py`
+
+--------------
+
 Support module for Common Gateway Interface (CGI) scripts.
 
 This module defines a number of utilities for use by CGI scripts written in
@@ -75,18 +79,21 @@ program to users of your script, you can have the reports saved to files
 instead, with code like this::
 
    import cgitb
-   cgitb.enable(display=0, logdir="/tmp")
+   cgitb.enable(display=0, logdir="/path/to/logdir")
 
 It's very helpful to use this feature during script development. The reports
 produced by :mod:`cgitb` provide information that can save you a lot of time in
 tracking down bugs.  You can always remove the ``cgitb`` line later when you
 have tested your script and are confident that it works correctly.
 
-To get at submitted form data, use the :class:`FieldStorage` class.  Instantiate
-it exactly once, without arguments.  This reads the form contents from standard
-input or the environment (depending on the value of various environment
-variables set according to the CGI standard).  Since it may consume standard
-input, it should be instantiated only once.
+To get at submitted form data, use the :class:`FieldStorage` class. If the form
+contains non-ASCII characters, use the *encoding* keyword parameter set to the
+value of the encoding defined for the document. It is usually contained in the
+META tag in the HEAD section of the HTML document or by the
+:mailheader:`Content-Type` header).  This reads the form contents from the
+standard input or the environment (depending on the value of various
+environment variables set according to the CGI standard).  Since it may consume
+standard input, it should be instantiated only once.
 
 The :class:`FieldStorage` instance can be indexed like a Python dictionary.
 It allows membership testing with the :keyword:`in` operator, and also supports
@@ -132,10 +139,10 @@ commas::
 
 If a field represents an uploaded file, accessing the value via the
 :attr:`value` attribute or the :func:`getvalue` method reads the entire file in
-memory as a string.  This may not be what you want. You can test for an uploaded
+memory as bytes.  This may not be what you want. You can test for an uploaded
 file by testing either the :attr:`filename` attribute or the :attr:`!file`
 attribute.  You can then read the data at leisure from the :attr:`!file`
-attribute::
+attribute (the :func:`read` and :func:`readline` methods will return bytes)::
 
    fileitem = form["userfile"]
    if fileitem.file:
@@ -324,15 +331,13 @@ algorithms implemented in this module in other circumstances.
    Convert the characters ``'&'``, ``'<'`` and ``'>'`` in string *s* to HTML-safe
    sequences.  Use this if you need to display text that might contain such
    characters in HTML.  If the optional flag *quote* is true, the quotation mark
-   character (``'"'``) is also translated; this helps for inclusion in an HTML
-   attribute value, as in ``<A HREF="...">``.  If the value to be quoted might
-   include single- or double-quote characters, or both, consider using the
-   :func:`~xml.sax.saxutils.quoteattr` function in the :mod:`xml.sax.saxutils`
-   module instead.
+   character (``"``) is also translated; this helps for inclusion in an HTML
+   attribute value delimited by double quotes, as in ``<a href="...">``.  Note
+   that single quotes are never translated.
 
-   If the value to be quoted might include single- or double-quote characters,
-   or both, consider using the :func:`quoteattr` function in the
-   :mod:`xml.sax.saxutils` module instead.
+   .. deprecated:: 3.2
+      This function is unsafe because *quote* is false by default, and therefore
+      deprecated.  Use :func:`html.escape` instead.
 
 
 .. _cgi-security:
@@ -510,8 +515,8 @@ Common problems and solutions
 
 .. rubric:: Footnotes
 
-.. [#] Note that some recent versions of the HTML specification do state what order the
-   field values should be supplied in, but knowing whether a request was
-   received from a conforming browser, or even from a browser at all, is tedious
-   and error-prone.
+.. [#] Note that some recent versions of the HTML specification do state what
+   order the field values should be supplied in, but knowing whether a request
+   was received from a conforming browser, or even from a browser at all, is
+   tedious and error-prone.
 

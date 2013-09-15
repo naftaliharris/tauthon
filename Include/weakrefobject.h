@@ -12,6 +12,7 @@ typedef struct _PyWeakReference PyWeakReference;
 /* PyWeakReference is the base struct for the Python ReferenceType, ProxyType,
  * and CallableProxyType.
  */
+#ifndef Py_LIMITED_API
 struct _PyWeakReference {
     PyObject_HEAD
 
@@ -27,7 +28,7 @@ struct _PyWeakReference {
     /* A cache for wr_object's hash code.  As usual for hashes, this is -1
      * if the hash code isn't known yet.
      */
-    long hash;
+    Py_hash_t hash;
 
     /* If wr_object is weakly referenced, wr_object has a doubly-linked NULL-
      * terminated list of weak references to it.  These are the list pointers.
@@ -37,6 +38,7 @@ struct _PyWeakReference {
     PyWeakReference *wr_prev;
     PyWeakReference *wr_next;
 };
+#endif
 
 PyAPI_DATA(PyTypeObject) _PyWeakref_RefType;
 PyAPI_DATA(PyTypeObject) _PyWeakref_ProxyType;
@@ -62,11 +64,23 @@ PyAPI_FUNC(PyObject *) PyWeakref_NewProxy(PyObject *ob,
                                                 PyObject *callback);
 PyAPI_FUNC(PyObject *) PyWeakref_GetObject(PyObject *ref);
 
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(Py_ssize_t) _PyWeakref_GetWeakrefCount(PyWeakReference *head);
 
 PyAPI_FUNC(void) _PyWeakref_ClearRef(PyWeakReference *self);
+#endif
 
-#define PyWeakref_GET_OBJECT(ref) (((PyWeakReference *)(ref))->wr_object)
+/* Explanation for the Py_REFCNT() check: when a weakref's target is part
+   of a long chain of deallocations which triggers the trashcan mechanism,
+   clearing the weakrefs can be delayed long after the target's refcount
+   has dropped to zero.  In the meantime, code accessing the weakref will
+   be able to "see" the target object even though it is supposed to be
+   unreachable.  See issue #16602. */
+
+#define PyWeakref_GET_OBJECT(ref)                           \
+    (Py_REFCNT(((PyWeakReference *)(ref))->wr_object) > 0   \
+     ? ((PyWeakReference *)(ref))->wr_object                \
+     : Py_None)
 
 
 #ifdef __cplusplus

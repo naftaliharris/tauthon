@@ -81,7 +81,7 @@ class SymtableTest(unittest.TestCase):
     def test_function_info(self):
         func = self.spam
         self.assertEqual(sorted(func.get_parameters()), ["a", "b", "kw", "var"])
-        expected = ["a", "b", "bar", "glob", "internal", "kw", "var", "x"]
+        expected = ["a", "b", "internal", "kw", "var", "x"]
         self.assertEqual(sorted(func.get_locals()), expected)
         self.assertEqual(sorted(func.get_globals()), ["bar", "glob"])
         self.assertEqual(self.internal.get_frees(), ("x",))

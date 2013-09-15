@@ -1,11 +1,12 @@
 """
 Tests for kqueue wrapper.
 """
-import socket
 import errno
-import time
+import os
 import select
+import socket
 import sys
+import time
 import unittest
 
 from test import support
@@ -23,7 +24,10 @@ class TestKQueue(unittest.TestCase):
 
     def test_create_event(self):
         from operator import lt, le, gt, ge
-        fd = sys.stderr.fileno()
+
+        fd = os.open(os.devnull, os.O_WRONLY)
+        self.addCleanup(os.close, fd)
+
         ev = select.kevent(fd)
         other = select.kevent(1000)
         self.assertEqual(ev.ident, fd)
@@ -68,6 +72,17 @@ class TestKQueue(unittest.TestCase):
         self.assertEqual(ev.fflags, 4)
         self.assertEqual(ev.data, 5)
         self.assertEqual(ev.udata, 6)
+        self.assertEqual(ev, ev)
+        self.assertNotEqual(ev, other)
+
+        bignum = sys.maxsize * 2 + 1
+        ev = select.kevent(bignum, 1, 2, 3, sys.maxsize, bignum)
+        self.assertEqual(ev.ident, bignum)
+        self.assertEqual(ev.filter, 1)
+        self.assertEqual(ev.flags, 2)
+        self.assertEqual(ev.fflags, 3)
+        self.assertEqual(ev.data, sys.maxsize)
+        self.assertEqual(ev.udata, bignum)
         self.assertEqual(ev, ev)
         self.assertNotEqual(ev, other)
 

@@ -8,6 +8,9 @@
 .. moduleauthor:: Martin von Löwis <martin@loewis.home.cs.tu-berlin.de>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/weakref.py`
+
+--------------
 
 The :mod:`weakref` module allows the Python programmer to create :dfn:`weak
 references` to objects.
@@ -21,7 +24,10 @@ by a weak reference.
 A weak reference to an object is not enough to keep the object alive: when the
 only remaining references to a referent are weak references,
 :term:`garbage collection` is free to destroy the referent and reuse its memory
-for something else.  A primary use for weak references is to implement caches or
+for something else.  However, until the object is actually destroyed the weak
+reference may return the object even if there are no strong references to it.
+
+A primary use for weak references is to implement caches or
 mappings holding large objects, where it's desired that a large object not be
 kept alive solely because it appears in a cache or mapping.
 
@@ -50,17 +56,14 @@ they need -- it's not usually necessary to create your own weak references
 directly.  The low-level machinery used by the weak dictionary implementations
 is exposed by the :mod:`weakref` module for the benefit of advanced uses.
 
-.. note::
-
-   Weak references to an object are cleared before the object's :meth:`__del__`
-   is called, to ensure that the weak reference callback (if any) finds the
-   object still alive.
-
 Not all objects can be weakly referenced; those objects which can include class
 instances, functions written in Python (but not in C), instance methods, sets,
 frozensets, some :term:`file objects <file object>`, :term:`generator`\s, type
-objects, sockets, arrays, deques and regular expression pattern objects.
+objects, sockets, arrays, deques, regular expression pattern objects, and code
+objects.
 
+.. versionchanged:: 3.2
+   Added support for thread.lock, threading.Lock, and code objects.
 
 Several built-in types such as :class:`list` and :class:`dict` do not directly
 support weak references but can add support through subclassing::

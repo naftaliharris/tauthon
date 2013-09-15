@@ -27,7 +27,7 @@ class ImportModuleTests(unittest.TestCase):
                 self.assertEqual(module.__name__, name)
 
     def test_shallow_relative_package_import(self):
-        # Test importing a module from a package through a relatve import.
+        # Test importing a module from a package through a relative import.
         pkg_name = 'pkg'
         pkg_long_name = '{0}.__init__'.format(pkg_name)
         module_name = 'mod'
@@ -63,8 +63,26 @@ class ImportModuleTests(unittest.TestCase):
     def test_relative_import_wo_package(self):
         # Relative imports cannot happen without the 'package' argument being
         # set.
-        self.assertRaises(TypeError, importlib.import_module, '.support')
+        with self.assertRaises(TypeError):
+            importlib.import_module('.support')
 
+
+    def test_loaded_once(self):
+        # Issue #13591: Modules should only be loaded once when
+        # initializing the parent package attempts to import the
+        # module currently being imported.
+        b_load_count = 0
+        def load_a():
+            importlib.import_module('a.b')
+        def load_b():
+            nonlocal b_load_count
+            b_load_count += 1
+        code = {'a': load_a, 'a.b': load_b}
+        modules = ['a.__init__', 'a.b']
+        with util.mock_modules(*modules, module_code=code) as mock:
+            with util.import_state(meta_path=[mock]):
+                importlib.import_module('a.b')
+        self.assertEqual(b_load_count, 1)
 
 def test_main():
     from test.support import run_unittest

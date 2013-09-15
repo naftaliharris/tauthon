@@ -1,15 +1,18 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
+import getopt
 import os
 import os.path
-import sys
-import getopt
 import re
 import socket
-import time
+import subprocess
+import sys
 import threading
+import time
+import tokenize
 import traceback
 import types
+import io
 
 import linecache
 from code import InteractiveInterpreter
@@ -37,11 +40,6 @@ from idlelib import macosxSupport
 HOST = '127.0.0.1' # python execution server on localhost loopback
 PORT = 0  # someday pass in host, port for remote debug capability
 
-try:
-    from signal import SIGTERM
-except ImportError:
-    SIGTERM = 15
-
 # Override warnings module to write to warning_stream.  Initialize to send IDLE
 # internal warnings to the console.  ScriptBinding.check_syntax() will
 # temporarily redirect the stream to the shell window to display warnings when
@@ -55,20 +53,21 @@ except ImportError:
 else:
     def idle_showwarning(message, category, filename, lineno,
                          file=None, line=None):
-        file = warning_stream
+        if file is None:
+            file = warning_stream
         try:
-            file.write(warnings.formatwarning(message, category, filename,\
-                                              lineno, file=file, line=line))
+            file.write(warnings.formatwarning(message, category, filename,
+                                              lineno, line=line))
         except IOError:
             pass  ## file (probably __stderr__) is invalid, warning dropped.
     warnings.showwarning = idle_showwarning
-    def idle_formatwarning(message, category, filename, lineno,
-                           file=None, line=None):
+    def idle_formatwarning(message, category, filename, lineno, line=None):
         """Format warnings the IDLE way"""
         s = "\nWarning (from warnings module):\n"
         s += '  File \"%s\", line %s\n' % (filename, lineno)
-        line = linecache.getline(filename, lineno).strip() \
-            if line is None else line
+        if line is None:
+            line = linecache.getline(filename, lineno)
+        line = line.strip()
         if line:
             s += "    %s\n" % line
         s += "%s: %s\n>>> " % (category.__name__, message)
@@ -81,18 +80,17 @@ def extended_linecache_checkcache(filename=None,
 
     Rather than repeating the linecache code, patch it to save the
     <pyshell#...> entries, call the original linecache.checkcache()
-    (which destroys them), and then restore the saved entries.
+    (skipping them), and then restore the saved entries.
 
     orig_checkcache is bound at definition time to the original
     method, allowing it to be patched.
-
     """
     cache = linecache.cache
     save = {}
-    for filename in cache:
-        if filename[:1] + filename[-1:] == '<>':
-            save[filename] = cache[filename]
-    orig_checkcache()
+    for key in list(cache):
+        if key[:1] + key[-1:] == '<>':
+            save[key] = cache.pop(key)
+    orig_checkcache(filename)
     cache.update(save)
 
 # Patch linecache.checkcache():
@@ -119,8 +117,14 @@ class PyShellEditorWindow(EditorWindow):
             old_hook()
         self.io.set_filename_change_hook(filename_changed_hook)
 
-    rmenu_specs = [("Set Breakpoint", "<<set-breakpoint-here>>"),
-                   ("Clear Breakpoint", "<<clear-breakpoint-here>>")]
+    rmenu_specs = [
+        ("Cut", "<<cut>>", "rmenu_check_cut"),
+        ("Copy", "<<copy>>", "rmenu_check_copy"),
+        ("Paste", "<<paste>>", "rmenu_check_paste"),
+        (None, None, None),
+        ("Set Breakpoint", "<<set-breakpoint-here>>", None),
+        ("Clear Breakpoint", "<<clear-breakpoint-here>>", None)
+    ]
 
     def set_breakpoint(self, lineno):
         text = self.text
@@ -205,18 +209,26 @@ class PyShellEditorWindow(EditorWindow):
         breaks = self.breakpoints
         filename = self.io.filename
         try:
-            lines = open(self.breakpointPath,"r").readlines()
+            with open(self.breakpointPath, "r") as fp:
+                lines = fp.readlines()
         except IOError:
             lines = []
-        new_file = open(self.breakpointPath,"w")
-        for line in lines:
-            if not line.startswith(filename + '='):
-                new_file.write(line)
-        self.update_breakpoints()
-        breaks = self.breakpoints
-        if breaks:
-            new_file.write(filename + '=' + str(breaks) + '\n')
-        new_file.close()
+        try:
+            with open(self.breakpointPath, "w") as new_file:
+                for line in lines:
+                    if not line.startswith(filename + '='):
+                        new_file.write(line)
+                self.update_breakpoints()
+                breaks = self.breakpoints
+                if breaks:
+                    new_file.write(filename + '=' + str(breaks) + '\n')
+        except IOError as err:
+            if not getattr(self.root, "breakpoint_error_displayed", False):
+                self.root.breakpoint_error_displayed = True
+                tkMessageBox.showerror(title='IDLE Error',
+                    message='Unable to update breakpoint list:\n%s'
+                        % str(err),
+                    parent=self.text)
 
     def restore_file_breaks(self):
         self.text.update()   # this enables setting "BREAK" tags to be visible
@@ -224,7 +236,8 @@ class PyShellEditorWindow(EditorWindow):
         if filename is None:
             return
         if os.path.isfile(self.breakpointPath):
-            lines = open(self.breakpointPath,"r").readlines()
+            with open(self.breakpointPath, "r") as fp:
+                lines = fp.readlines()
             for line in lines:
                 if line.startswith(filename + '='):
                     breakpoint_linenumbers = eval(line[len(filename)+1:])
@@ -241,8 +254,8 @@ class PyShellEditorWindow(EditorWindow):
     def ranges_to_linenumbers(self, ranges):
         lines = []
         for index in range(0, len(ranges), 2):
-            lineno = int(float(ranges[index]))
-            end = int(float(ranges[index+1]))
+            lineno = int(float(ranges[index].string))
+            end = int(float(ranges[index+1].string))
             while lineno < end:
                 lines.append(lineno)
                 lineno += 1
@@ -303,6 +316,11 @@ class ModifiedColorDelegator(ColorDelegator):
             "console": idleConf.GetHighlight(theme, "console"),
         })
 
+    def removecolors(self):
+        # Don't remove shell color tags before "iomark"
+        for tag in self.tagdefs:
+            self.tag_remove(tag, "iomark", "end")
+
 class ModifiedUndoDelegator(UndoDelegator):
     "Extend base class: forbid insert/delete before the I/O mark"
 
@@ -342,15 +360,15 @@ class ModifiedInterpreter(InteractiveInterpreter):
         self.restarting = False
         self.subprocess_arglist = None
         self.port = PORT
+        self.original_compiler_flags = self.compile.compiler.flags
 
     rpcclt = None
-    rpcpid = None
+    rpcsubproc = None
 
     def spawn_subprocess(self):
         if self.subprocess_arglist is None:
             self.subprocess_arglist = self.build_subprocess_arglist()
-        args = self.subprocess_arglist
-        self.rpcpid = os.spawnv(os.P_NOWAIT, sys.executable, args)
+        self.rpcsubproc = subprocess.Popen(self.subprocess_arglist)
 
     def build_subprocess_arglist(self):
         assert (self.port!=0), (
@@ -365,12 +383,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
             command = "__import__('idlelib.run').run.main(%r)" % (del_exitf,)
         else:
             command = "__import__('run').main(%r)" % (del_exitf,)
-        if sys.platform[:3] == 'win' and ' ' in sys.executable:
-            # handle embedded space in path by quoting the argument
-            decorated_exec = '"%s"' % sys.executable
-        else:
-            decorated_exec = sys.executable
-        return [decorated_exec] + w + ["-c", command, str(self.port)]
+        return [sys.executable] + w + ["-c", command, str(self.port)]
 
     def start_subprocess(self):
         addr = (HOST, self.port)
@@ -404,17 +417,18 @@ class ModifiedInterpreter(InteractiveInterpreter):
         except socket.timeout as err:
             self.display_no_subprocess_error()
             return None
-        self.rpcclt.register("stdin", self.tkconsole)
+        self.rpcclt.register("console", self.tkconsole)
+        self.rpcclt.register("stdin", self.tkconsole.stdin)
         self.rpcclt.register("stdout", self.tkconsole.stdout)
         self.rpcclt.register("stderr", self.tkconsole.stderr)
         self.rpcclt.register("flist", self.tkconsole.flist)
         self.rpcclt.register("linecache", linecache)
         self.rpcclt.register("interp", self)
-        self.transfer_path()
+        self.transfer_path(with_cwd=True)
         self.poll_subprocess()
         return self.rpcclt
 
-    def restart_subprocess(self):
+    def restart_subprocess(self, with_cwd=False):
         if self.restarting:
             return self.rpcclt
         self.restarting = True
@@ -428,7 +442,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
                 pass
         # Kill subprocess, spawn a new one, accept connection.
         self.rpcclt.close()
-        self.unix_terminate()
+        self.terminate_subprocess()
         console = self.tkconsole
         was_executing = console.executing
         console.executing = False
@@ -438,7 +452,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
         except socket.timeout as err:
             self.display_no_subprocess_error()
             return None
-        self.transfer_path()
+        self.transfer_path(with_cwd=with_cwd)
         # annotate restart in shell window and mark it
         console.text.delete("iomark", "end-1c")
         if was_executing:
@@ -455,6 +469,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
             gui = RemoteDebugger.restart_subprocess_debugger(self.rpcclt)
             # reload remote debugger breakpoints for all PyShellEditWindows
             debug.load_breakpoints()
+        self.compile.compiler.flags = self.original_compiler_flags
         self.restarting = False
         return self.rpcclt
 
@@ -469,30 +484,35 @@ class ModifiedInterpreter(InteractiveInterpreter):
             self.rpcclt.close()
         except AttributeError:  # no socket
             pass
-        self.unix_terminate()
+        self.terminate_subprocess()
         self.tkconsole.executing = False
         self.rpcclt = None
 
-    def unix_terminate(self):
-        "UNIX: make sure subprocess is terminated and collect status"
-        if hasattr(os, 'kill'):
+    def terminate_subprocess(self):
+        "Make sure subprocess is terminated"
+        try:
+            self.rpcsubproc.kill()
+        except OSError:
+            # process already terminated
+            return
+        else:
             try:
-                os.kill(self.rpcpid, SIGTERM)
+                self.rpcsubproc.wait()
             except OSError:
-                # process already terminated:
                 return
-            else:
-                try:
-                    os.waitpid(self.rpcpid, 0)
-                except OSError:
-                    return
 
-    def transfer_path(self):
+    def transfer_path(self, with_cwd=False):
+        if with_cwd:        # Issue 13506
+            path = ['']     # include Current Working Directory
+            path.extend(sys.path)
+        else:
+            path = sys.path
+
         self.runcommand("""if 1:
         import sys as _sys
         _sys.path = %r
         del _sys
-        \n""" % (sys.path,))
+        \n""" % (path,))
 
     active_seq = None
 
@@ -582,7 +602,8 @@ class ModifiedInterpreter(InteractiveInterpreter):
     def execfile(self, filename, source=None):
         "Execute an existing file"
         if source is None:
-            source = open(filename, "r").read()
+            with tokenize.open(filename) as fp:
+                source = fp.read()
         try:
             code = compile(source, filename, "exec")
         except (OverflowError, SyntaxError):
@@ -651,9 +672,9 @@ class ModifiedInterpreter(InteractiveInterpreter):
         text = tkconsole.text
         text.tag_remove("ERROR", "1.0", "end")
         type, value, tb = sys.exc_info()
-        msg = value.msg or "<no detail available>"
-        lineno = value.lineno or 1
-        offset = value.offset or 0
+        msg = getattr(value, 'msg', '') or value or "<no detail available>"
+        lineno = getattr(value, 'lineno', '') or 1
+        offset = getattr(value, 'offset', '') or 0
         if offset == 0:
             lineno += 1 #mark end of offending line
         if lineno == 1:
@@ -743,7 +764,7 @@ class ModifiedInterpreter(InteractiveInterpreter):
 
     def write(self, s):
         "Override base class method"
-        self.tkconsole.stderr.write(s)
+        return self.tkconsole.stderr.write(s)
 
     def display_port_binding_error(self):
         tkMessageBox.showerror(
@@ -837,13 +858,14 @@ class PyShell(OutputWindow):
         self.save_stderr = sys.stderr
         self.save_stdin = sys.stdin
         from idlelib import IOBinding
-        self.stdout = PseudoFile(self, "stdout", IOBinding.encoding)
-        self.stderr = PseudoFile(self, "stderr", IOBinding.encoding)
-        self.console = PseudoFile(self, "console", IOBinding.encoding)
+        self.stdin = PseudoInputFile(self, "stdin", IOBinding.encoding)
+        self.stdout = PseudoOutputFile(self, "stdout", IOBinding.encoding)
+        self.stderr = PseudoOutputFile(self, "stderr", IOBinding.encoding)
+        self.console = PseudoOutputFile(self, "console", IOBinding.encoding)
         if not use_subprocess:
             sys.stdout = self.stdout
             sys.stderr = self.stderr
-            sys.stdin = self
+            sys.stdin = self.stdin
         try:
             # page help() text to shell.
             import pydoc # import must be done here to capture i/o rebinding.
@@ -1185,7 +1207,8 @@ class PyShell(OutputWindow):
         self.text.see("restart")
 
     def restart_shell(self, event=None):
-        self.interp.restart_subprocess()
+        "Callback for Run/Restart Shell Cntl-F6"
+        self.interp.restart_subprocess(with_cwd=True)
 
     def showprompt(self):
         self.resetoutput()
@@ -1210,7 +1233,7 @@ class PyShell(OutputWindow):
     def write(self, s, tags=()):
         try:
             self.text.mark_gravity("iomark", "right")
-            OutputWindow.write(self, s, tags, "iomark")
+            count = OutputWindow.write(self, s, tags, "iomark")
             self.text.mark_gravity("iomark", "left")
         except:
             raise ###pass  # ### 11Aug07 KBK if we are expecting exceptions
@@ -1219,26 +1242,97 @@ class PyShell(OutputWindow):
             self.canceled = 0
             if not use_subprocess:
                 raise KeyboardInterrupt
+        return count
 
-class PseudoFile(object):
+    def rmenu_check_cut(self):
+        try:
+            if self.text.compare('sel.first', '<', 'iomark'):
+                return 'disabled'
+        except TclError: # no selection, so the index 'sel.first' doesn't exist
+            return 'disabled'
+        return super().rmenu_check_cut()
+
+    def rmenu_check_paste(self):
+        if self.text.compare('insert','<','iomark'):
+            return 'disabled'
+        return super().rmenu_check_paste()
+
+class PseudoFile(io.TextIOBase):
 
     def __init__(self, shell, tags, encoding=None):
         self.shell = shell
         self.tags = tags
-        self.encoding = encoding
+        self._encoding = encoding
 
-    def write(self, s):
-        self.shell.write(s, self.tags)
+    @property
+    def encoding(self):
+        return self._encoding
 
-    def writelines(self, lines):
-        for line in lines:
-            self.write(line)
-
-    def flush(self):
-        pass
+    @property
+    def name(self):
+        return '<%s>' % self.tags
 
     def isatty(self):
         return True
+
+
+class PseudoOutputFile(PseudoFile):
+
+    def writable(self):
+        return True
+
+    def write(self, s):
+        if self.closed:
+            raise ValueError("write to closed file")
+        if not isinstance(s, str):
+            raise TypeError('must be str, not ' + type(s).__name__)
+        return self.shell.write(s, self.tags)
+
+
+class PseudoInputFile(PseudoFile):
+
+    def __init__(self, shell, tags, encoding=None):
+        PseudoFile.__init__(self, shell, tags, encoding)
+        self._line_buffer = ''
+
+    def readable(self):
+        return True
+
+    def read(self, size=-1):
+        if self.closed:
+            raise ValueError("read from closed file")
+        if size is None:
+            size = -1
+        elif not isinstance(size, int):
+            raise TypeError('must be int, not ' + type(size).__name__)
+        result = self._line_buffer
+        self._line_buffer = ''
+        if size < 0:
+            while True:
+                line = self.shell.readline()
+                if not line: break
+                result += line
+        else:
+            while len(result) < size:
+                line = self.shell.readline()
+                if not line: break
+                result += line
+            self._line_buffer = result[size:]
+            result = result[:size]
+        return result
+
+    def readline(self, size=-1):
+        if self.closed:
+            raise ValueError("read from closed file")
+        if size is None:
+            size = -1
+        elif not isinstance(size, int):
+            raise TypeError('must be int, not ' + type(size).__name__)
+        line = self._line_buffer or self.shell.readline()
+        if size < 0:
+            size = len(line)
+        self._line_buffer = line[size:]
+        return line[:size]
 
 
 usage_msg = """\
@@ -1380,8 +1474,10 @@ def main():
 
     if enable_edit:
         if not (cmd or script):
-            for filename in args:
-                flist.open(filename)
+            for filename in args[:]:
+                if flist.open(filename) is None:
+                    # filename is a directory actually, disconsider it
+                    args.remove(filename)
             if not args:
                 flist.new()
     if enable_shell:
@@ -1417,7 +1513,15 @@ def main():
             shell.interp.prepend_syspath(script)
             shell.interp.execfile(script)
 
-    root.mainloop()
+    # Check for problematic OS X Tk versions and print a warning message
+    # in the IDLE shell window; this is less intrusive than always opening
+    # a separate window.
+    tkversionwarning = macosxSupport.tkVersionWarning(root)
+    if tkversionwarning:
+        shell.interp.runcommand(''.join(("print('", tkversionwarning, "')")))
+
+    while flist.inversedict:  # keep IDLE running while files are open.
+        root.mainloop()
     root.destroy()
 
 if __name__ == "__main__":

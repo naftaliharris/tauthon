@@ -1,6 +1,6 @@
 /*  datetime.h
  */
-
+#ifndef Py_LIMITED_API
 #ifndef DATETIME_H
 #define DATETIME_H
 #ifdef __cplusplus
@@ -34,7 +34,7 @@ extern "C" {
 typedef struct
 {
     PyObject_HEAD
-    long hashcode;              /* -1 when unknown */
+    Py_hash_t hashcode;         /* -1 when unknown */
     int days;                   /* -MAX_DELTA_DAYS <= days <= MAX_DELTA_DAYS */
     int seconds;                /* 0 <= seconds < 24*3600 is invariant */
     int microseconds;           /* 0 <= microseconds < 1000000 is invariant */
@@ -51,7 +51,7 @@ typedef struct
  */
 #define _PyTZINFO_HEAD          \
     PyObject_HEAD               \
-    long hashcode;              \
+    Py_hash_t hashcode;         \
     char hastzinfo;             /* boolean flag */
 
 /* No _PyDateTime_BaseTZInfo is allocated; it's just to have something
@@ -182,7 +182,7 @@ typedef struct {
 #else
 
 /* Define global variable for the C API and a macro for setting it. */
-static PyDateTime_CAPI *PyDateTimeAPI;
+static PyDateTime_CAPI *PyDateTimeAPI = NULL;
 
 #define PyDateTime_IMPORT \
     PyDateTimeAPI = (PyDateTime_CAPI *)PyCapsule_Import(PyDateTime_CAPSULE_NAME, 0)
@@ -234,3 +234,4 @@ static PyDateTime_CAPI *PyDateTimeAPI;
 }
 #endif
 #endif
+#endif /* !Py_LIMITED_API */

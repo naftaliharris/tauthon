@@ -3,7 +3,6 @@ import os
 import re
 import string
 import imp
-from itertools import count
 from tkinter import *
 import tkinter.simpledialog as tkSimpleDialog
 import tkinter.messagebox as tkMessageBox
@@ -51,7 +50,62 @@ def _find_module(fullname, path=None):
             path = module.__path__
         except AttributeError:
             raise ImportError('No source for module ' + module.__name__)
+    if descr[2] != imp.PY_SOURCE:
+        # If all of the above fails and didn't raise an exception,fallback
+        # to a straight import which can find __init__.py in a package.
+        m = __import__(fullname)
+        try:
+            filename = m.__file__
+        except AttributeError:
+            pass
+        else:
+            file = None
+            descr = os.path.splitext(filename)[1], None, imp.PY_SOURCE
     return file, filename, descr
+
+
+class HelpDialog(object):
+
+    def __init__(self):
+        self.parent = None      # parent of help window
+        self.dlg = None         # the help window iteself
+
+    def display(self, parent, near=None):
+        """ Display the help dialog.
+
+            parent - parent widget for the help window
+
+            near - a Toplevel widget (e.g. EditorWindow or PyShell)
+                   to use as a reference for placing the help window
+        """
+        if self.dlg is None:
+            self.show_dialog(parent)
+        if near:
+            self.nearwindow(near)
+
+    def show_dialog(self, parent):
+        self.parent = parent
+        fn=os.path.join(os.path.abspath(os.path.dirname(__file__)),'help.txt')
+        self.dlg = dlg = textView.view_file(parent,'Help',fn, modal=False)
+        dlg.bind('<Destroy>', self.destroy, '+')
+
+    def nearwindow(self, near):
+        # Place the help dialog near the window specified by parent.
+        # Note - this may not reposition the window in Metacity
+        #  if "/apps/metacity/general/disable_workarounds" is enabled
+        dlg = self.dlg
+        geom = (near.winfo_rootx() + 10, near.winfo_rooty() + 10)
+        dlg.withdraw()
+        dlg.geometry("=+%d+%d" % geom)
+        dlg.deiconify()
+        dlg.lift()
+
+    def destroy(self, ev=None):
+        self.dlg = None
+        self.parent = None
+
+helpDialog = HelpDialog()  # singleton instance
+
 
 class EditorWindow(object):
     from idlelib.Percolator import Percolator
@@ -116,13 +170,15 @@ class EditorWindow(object):
                 'recent-files.lst')
         self.text_frame = text_frame = Frame(top)
         self.vbar = vbar = Scrollbar(text_frame, name='vbar')
-        self.width = idleConf.GetOption('main','EditorWindow','width')
+        self.width = idleConf.GetOption('main', 'EditorWindow',
+                                        'width', type='int')
         text_options = {
                 'name': 'text',
                 'padx': 5,
                 'wrap': 'none',
                 'width': self.width,
-                'height': idleConf.GetOption('main', 'EditorWindow', 'height')}
+                'height': idleConf.GetOption('main', 'EditorWindow',
+                                             'height', type='int')}
         if TkVersion >= 8.5:
             # Starting with tk 8.5 we have to set the new tabstyle option
             # to 'wordprocessor' to achieve the same display of tabs as in
@@ -199,7 +255,8 @@ class EditorWindow(object):
         if idleConf.GetOption('main', 'EditorWindow', 'font-bold', type='bool'):
             fontWeight='bold'
         text.config(font=(idleConf.GetOption('main', 'EditorWindow', 'font'),
-                          idleConf.GetOption('main', 'EditorWindow', 'font-size'),
+                          idleConf.GetOption('main', 'EditorWindow',
+                                             'font-size', type='int'),
                           fontWeight))
         text_frame.pack(side=LEFT, fill=BOTH, expand=1)
         text.pack(side=TOP, fill=BOTH, expand=1)
@@ -214,7 +271,8 @@ class EditorWindow(object):
         # Although use-spaces=0 can be configured manually in config-main.def,
         # configuration of tabs v. spaces is not supported in the configuration
         # dialog.  IDLE promotes the preferred Python indentation: use spaces!
-        usespaces = idleConf.GetOption('main', 'Indent', 'use-spaces', type='bool')
+        usespaces = idleConf.GetOption('main', 'Indent',
+                                       'use-spaces', type='bool')
         self.usetabs = not usespaces
 
         # tabwidth is the display width of a literal tab character.
@@ -328,9 +386,11 @@ class EditorWindow(object):
             self.text.tag_remove("sel", "1.0", "end")
         else:
             if not self.text.index("sel.first"):
-                self.text.mark_set("my_anchor", "insert")  # there was no previous selection
+                # there was no previous selection
+                self.text.mark_set("my_anchor", "insert")
             else:
-                if self.text.compare(self.text.index("sel.first"), "<", self.text.index("insert")):
+                if self.text.compare(self.text.index("sel.first"), "<",
+                                     self.text.index("insert")):
                     self.text.mark_set("my_anchor", "sel.first") # extend back
                 else:
                     self.text.mark_set("my_anchor", "sel.last") # extend forward
@@ -385,7 +445,7 @@ class EditorWindow(object):
             underline, label = prepstr(label)
             menudict[name] = menu = Menu(mbar, name=name)
             mbar.add_cascade(label=label, menu=menu, underline=underline)
-        if macosxSupport.runningAsOSXApp():
+        if macosxSupport.isCarbonAquaTk(self.root):
             # Insert the application menu
             menudict['application'] = menu = Menu(mbar, name='apple')
             mbar.add_cascade(label='IDLE', menu=menu)
@@ -410,7 +470,6 @@ class EditorWindow(object):
     rmenu = None
 
     def right_menu_event(self, event):
-        self.text.tag_remove("sel", "1.0", "end")
         self.text.mark_set("insert", "@%d,%d" % (event.x, event.y))
         if not self.rmenu:
             self.make_rmenu()
@@ -419,22 +478,52 @@ class EditorWindow(object):
         iswin = sys.platform[:3] == 'win'
         if iswin:
             self.text.config(cursor="arrow")
+
+        for label, eventname, verify_state in self.rmenu_specs:
+            if verify_state is None:
+                continue
+            state = getattr(self, verify_state)()
+            rmenu.entryconfigure(label, state=state)
+
+
         rmenu.tk_popup(event.x_root, event.y_root)
         if iswin:
             self.text.config(cursor="ibeam")
 
     rmenu_specs = [
-        # ("Label", "<<virtual-event>>"), ...
-        ("Close", "<<close-window>>"), # Example
+        # ("Label", "<<virtual-event>>", "statefuncname"), ...
+        ("Close", "<<close-window>>", None), # Example
     ]
 
     def make_rmenu(self):
         rmenu = Menu(self.text, tearoff=0)
-        for label, eventname in self.rmenu_specs:
-            def command(text=self.text, eventname=eventname):
-                text.event_generate(eventname)
-            rmenu.add_command(label=label, command=command)
+        for label, eventname, _ in self.rmenu_specs:
+            if label is not None:
+                def command(text=self.text, eventname=eventname):
+                    text.event_generate(eventname)
+                rmenu.add_command(label=label, command=command)
+            else:
+                rmenu.add_separator()
         self.rmenu = rmenu
+
+    def rmenu_check_cut(self):
+        return self.rmenu_check_copy()
+
+    def rmenu_check_copy(self):
+        try:
+            indx = self.text.index('sel.first')
+        except TclError:
+            return 'disabled'
+        else:
+            return 'normal' if indx else 'disabled'
+
+    def rmenu_check_paste(self):
+        try:
+            self.text.tk.call('tk::GetSelection', self.text, 'CLIPBOARD')
+        except TclError:
+            return 'disabled'
+        else:
+            return 'normal'
 
     def about_dialog(self, event=None):
         aboutDialog.AboutDialog(self.top,'About IDLE')
@@ -443,8 +532,11 @@ class EditorWindow(object):
         configDialog.ConfigDialog(self.top,'Settings')
 
     def help_dialog(self, event=None):
-        fn=os.path.join(os.path.abspath(os.path.dirname(__file__)),'help.txt')
-        textView.view_file(self.top,'Help',fn)
+        if self.root:
+            parent = self.root
+        else:
+            parent = self.top
+        helpDialog.display(parent, near=self.top)
 
     def python_docs(self, event=None):
         if sys.platform[:3] == 'win':
@@ -680,7 +772,8 @@ class EditorWindow(object):
         if idleConf.GetOption('main','EditorWindow','font-bold',type='bool'):
             fontWeight='bold'
         self.text.config(font=(idleConf.GetOption('main','EditorWindow','font'),
-                idleConf.GetOption('main','EditorWindow','font-size'),
+                idleConf.GetOption('main','EditorWindow','font-size',
+                                   type='int'),
                 fontWeight))
 
     def RemoveKeybindings(self):
@@ -789,18 +882,23 @@ class EditorWindow(object):
         rf_list = [path for path in rf_list if path not in bad_paths]
         ulchars = "1234567890ABCDEFGHIJK"
         rf_list = rf_list[0:len(ulchars)]
-        rf_file = open(self.recent_files_path, 'w',
-                        encoding='utf_8', errors='replace')
         try:
-            rf_file.writelines(rf_list)
-        finally:
-            rf_file.close()
+            with open(self.recent_files_path, 'w',
+                        encoding='utf_8', errors='replace') as rf_file:
+                rf_file.writelines(rf_list)
+        except IOError as err:
+            if not getattr(self.root, "recentfilelist_error_displayed", False):
+                self.root.recentfilelist_error_displayed = True
+                tkMessageBox.showerror(title='IDLE Error',
+                    message='Unable to update Recent Files list:\n%s'
+                        % str(err),
+                    parent=self.text)
         # for each edit window instance, construct the recent files menu
         for instance in self.top.instance_dict:
             menu = instance.recent_files_menu
-            menu.delete(1, END)  # clear, and rebuild:
-            for i, file in zip(count(), rf_list):
-                file_name = file[0:-1]  # zap \n
+            menu.delete(0, END)  # clear, and rebuild:
+            for i, file_name in enumerate(rf_list):
+                file_name = file_name.rstrip()  # zap \n
                 # make unicode string to display non-ASCII chars correctly
                 ufile_name = self._filename_to_unicode(file_name)
                 callback = instance.__recent_file_callback(file_name)
@@ -1119,7 +1217,10 @@ class EditorWindow(object):
         assert have > 0
         want = ((have - 1) // self.indentwidth) * self.indentwidth
         # Debug prompt is multilined....
-        last_line_of_prompt = sys.ps1.split('\n')[-1]
+        if self.context_use_ps1:
+            last_line_of_prompt = sys.ps1.split('\n')[-1]
+        else:
+            last_line_of_prompt = ''
         ncharsdeleted = 0
         while 1:
             if chars == last_line_of_prompt:
@@ -1517,7 +1618,7 @@ class IndentSearcher(object):
                 tokens = _tokenize.generate_tokens(self.readline)
                 for token in tokens:
                     self.tokeneater(*token)
-            except _tokenize.TokenError:
+            except (_tokenize.TokenError, SyntaxError):
                 # since we cut off the tokenizer early, we can trigger
                 # spurious errors
                 pass
@@ -1544,7 +1645,12 @@ keynames = {
 
 def get_accelerator(keydefs, eventname):
     keylist = keydefs.get(eventname)
-    if not keylist:
+    # issue10940: temporary workaround to prevent hang with OS X Cocoa Tk 8.5
+    # if not keylist:
+    if (not keylist) or (macosxSupport.runningAsOSXApp() and eventname in {
+                            "<<open-module>>",
+                            "<<goto-line>>",
+                            "<<change-indentwidth>>"}):
         return ""
     s = keylist[0]
     s = re.sub(r"-[a-z]\b", lambda m: m.group().upper(), s)

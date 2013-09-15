@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 """Test the errno module
    Roger E. Masse
 """
@@ -20,7 +20,8 @@ class ErrnoAttributeTests(unittest.TestCase):
     def test_using_errorcode(self):
         # Every key value in errno.errorcode should be on the module.
         for value in errno.errorcode.values():
-            self.assertTrue(hasattr(errno, value), 'no %s attr in errno' % value)
+            self.assertTrue(hasattr(errno, value),
+                            'no %s attr in errno' % value)
 
 
 class ErrorcodeTests(unittest.TestCase):
@@ -28,8 +29,8 @@ class ErrorcodeTests(unittest.TestCase):
     def test_attributes_in_errorcode(self):
         for attribute in errno.__dict__.keys():
             if attribute.isupper():
-                self.assertTrue(getattr(errno, attribute) in errno.errorcode,
-                             'no %s attr in errno.errorcode' % attribute)
+                self.assertIn(getattr(errno, attribute), errno.errorcode,
+                              'no %s attr in errno.errorcode' % attribute)
 
 
 def test_main():

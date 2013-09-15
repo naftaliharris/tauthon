@@ -23,7 +23,7 @@ returns a new sorted list::
     >>> sorted([5, 2, 3, 1, 4])
     [1, 2, 3, 4, 5]
 
-You can also use the :meth:`list.sort` method of a list. It modifies the list
+You can also use the :meth:`list.sort` method. It modifies the list
 in-place (and returns *None* to avoid confusion). Usually it's less convenient
 than :func:`sorted` - but if you don't need the original list, it's slightly
 more efficient.
@@ -42,7 +42,7 @@ lists. In contrast, the :func:`sorted` function accepts any iterable.
 Key Functions
 =============
 
-Both :meth:`list.sort` and :func:`sorted` have *key* parameter to specify a
+Both :meth:`list.sort` and :func:`sorted` have a *key* parameter to specify a
 function to be called on each list element prior to making comparisons.
 
 For example, here's a case-insensitive string comparison:
@@ -87,9 +87,9 @@ Operator Module Functions
 =========================
 
 The key-function patterns shown above are very common, so Python provides
-convenience functions to make accessor functions easier and faster. The operator
-module has :func:`operator.itemgetter`, :func:`operator.attrgetter`, and
-an :func:`operator.methodcaller` function.
+convenience functions to make accessor functions easier and faster. The
+:mod:`operator` module has :func:`~operator.itemgetter`,
+:func:`~operator.attrgetter`, and a :func:`~operator.methodcaller` function.
 
 Using those functions, the above examples become simpler and faster:
 
@@ -114,7 +114,7 @@ Ascending and Descending
 ========================
 
 Both :meth:`list.sort` and :func:`sorted` accept a *reverse* parameter with a
-boolean value. This is using to flag descending sorts. For example, to get the
+boolean value. This is used to flag descending sorts. For example, to get the
 student data in reverse *age* order:
 
     >>> sorted(student_tuples, key=itemgetter(2), reverse=True)
@@ -225,7 +225,7 @@ function. The following wrapper makes that easy to do::
 
     def cmp_to_key(mycmp):
         'Convert a cmp= function into a key= function'
-        class K(object):
+        class K:
             def __init__(self, obj, *args):
                 self.obj = obj
             def __lt__(self, other):
@@ -247,6 +247,8 @@ To convert to a key function, just wrap the old comparison function:
     >>> sorted([5, 2, 4, 1, 3], key=cmp_to_key(reverse_numeric))
     [5, 4, 3, 2, 1]
 
+In Python 3.2, the :func:`functools.cmp_to_key` function was added to the
+:mod:`functools` module in the standard library.
 
 Odd and Ends
 ============
@@ -254,7 +256,7 @@ Odd and Ends
 * For locale aware sorting, use :func:`locale.strxfrm` for a key function or
   :func:`locale.strcoll` for a comparison function.
 
-* The *reverse* parameter still maintains sort stability (i.e. records with
+* The *reverse* parameter still maintains sort stability (so that records with
   equal keys retain the original order). Interestingly, that effect can be
   simulated without the parameter by using the builtin :func:`reversed` function
   twice:

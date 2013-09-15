@@ -6,11 +6,21 @@
 .. moduleauthor:: Brian Quinlan <brianq@activestate.com>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/xmlrpc/server.py`
+
+--------------
 
 The :mod:`xmlrpc.server` module provides a basic server framework for XML-RPC
 servers written in Python.  Servers can either be free standing, using
 :class:`SimpleXMLRPCServer`, or embedded in a CGI environment, using
 :class:`CGIXMLRPCRequestHandler`.
+
+
+.. warning::
+
+   The :mod:`xmlrpc.client` module is not secure against maliciously
+   constructed data.  If you need to parse untrusted or unauthenticated data see
+   :ref:`xml-vulnerabilities`.
 
 
 .. class:: SimpleXMLRPCServer(addr, requestHandler=SimpleXMLRPCRequestHandler, logRequests=True, allow_none=False, encoding=None, bind_and_activate=True)

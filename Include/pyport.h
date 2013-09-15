@@ -62,15 +62,20 @@ Used in:  PY_LONG_LONG
 #define PY_LLONG_MAX LLONG_MAX
 #define PY_ULLONG_MAX ULLONG_MAX
 #elif defined(__LONG_LONG_MAX__)
-/* Otherwise, if GCC has a builtin define, use that. */
+/* Otherwise, if GCC has a builtin define, use that.  (Definition of
+ * PY_LLONG_MIN assumes two's complement with no trap representation.) */
 #define PY_LLONG_MAX __LONG_LONG_MAX__
-#define PY_LLONG_MIN (-PY_LLONG_MAX-1)
-#define PY_ULLONG_MAX (__LONG_LONG_MAX__*2ULL + 1ULL)
-#else
-/* Otherwise, rely on two's complement. */
-#define PY_ULLONG_MAX (~0ULL)
-#define PY_LLONG_MAX  ((long long)(PY_ULLONG_MAX>>1))
-#define PY_LLONG_MIN (-PY_LLONG_MAX-1)
+#define PY_LLONG_MIN (-PY_LLONG_MAX - 1)
+#define PY_ULLONG_MAX (PY_LLONG_MAX * Py_ULL(2) + 1)
+#elif defined(SIZEOF_LONG_LONG)
+/* Otherwise compute from SIZEOF_LONG_LONG, assuming two's complement, no
+   padding bits, and no trap representation.  Note: PY_ULLONG_MAX was
+   previously #defined as (~0ULL) here; but that'll give the wrong value in a
+   preprocessor expression on systems where long long != intmax_t. */
+#define PY_LLONG_MAX                                                    \
+    (1 + 2 * ((Py_LL(1) << (CHAR_BIT * SIZEOF_LONG_LONG - 2)) - 1))
+#define PY_LLONG_MIN (-PY_LLONG_MAX - 1)
+#define PY_ULLONG_MAX (PY_LLONG_MAX * Py_ULL(2) + 1)
 #endif /* LLONG_MAX */
 #endif
 #endif /* HAVE_LONG_LONG */
@@ -82,9 +87,12 @@ Used in:  PY_LONG_LONG
  * uint32_t to be such a type unless stdint.h or inttypes.h defines uint32_t.
  * However, it doesn't set HAVE_UINT32_T, so we do that here.
  */
-#if (defined UINT32_MAX || defined uint32_t)
-#ifndef PY_UINT32_T
+#ifdef uint32_t
 #define HAVE_UINT32_T 1
+#endif
+
+#ifdef HAVE_UINT32_T
+#ifndef PY_UINT32_T
 #define PY_UINT32_T uint32_t
 #endif
 #endif
@@ -92,23 +100,33 @@ Used in:  PY_LONG_LONG
 /* Macros for a 64-bit unsigned integer type; used for type 'twodigits' in the
  * long integer implementation, when 30-bit digits are enabled.
  */
-#if (defined UINT64_MAX || defined uint64_t)
-#ifndef PY_UINT64_T
+#ifdef uint64_t
 #define HAVE_UINT64_T 1
+#endif
+
+#ifdef HAVE_UINT64_T
+#ifndef PY_UINT64_T
 #define PY_UINT64_T uint64_t
 #endif
 #endif
 
 /* Signed variants of the above */
-#if (defined INT32_MAX || defined int32_t)
-#ifndef PY_INT32_T
+#ifdef int32_t
 #define HAVE_INT32_T 1
+#endif
+
+#ifdef HAVE_INT32_T
+#ifndef PY_INT32_T
 #define PY_INT32_T int32_t
 #endif
 #endif
-#if (defined INT64_MAX || defined int64_t)
-#ifndef PY_INT64_T
+
+#ifdef int64_t
 #define HAVE_INT64_T 1
+#endif
+
+#ifdef HAVE_INT64_T
+#ifndef PY_INT64_T
 #define PY_INT64_T int64_t
 #endif
 #endif
@@ -125,6 +143,23 @@ Used in:  PY_LONG_LONG
 #define PYLONG_BITS_IN_DIGIT 15
 #endif
 #endif
+
+/* Prime multiplier used in string and various other hashes. */
+#define _PyHASH_MULTIPLIER 1000003UL  /* 0xf4243 */
+
+/* Parameters used for the numeric hash implementation.  See notes for
+   _PyHash_Double in Objects/object.c.  Numeric hashes are based on
+   reduction modulo the prime 2**_PyHASH_BITS - 1. */
+
+#if SIZEOF_VOID_P >= 8
+#define _PyHASH_BITS 61
+#else
+#define _PyHASH_BITS 31
+#endif
+#define _PyHASH_MODULUS (((size_t)1 << _PyHASH_BITS) - 1)
+#define _PyHASH_INF 314159
+#define _PyHASH_NAN 0
+#define _PyHASH_IMAG _PyHASH_MULTIPLIER
 
 /* uintptr_t is the C9X name for an unsigned integral type such that a
  * legitimate void* can be cast to uintptr_t and then back to void* again
@@ -162,6 +197,11 @@ typedef Py_intptr_t     Py_ssize_t;
 #else
 #   error "Python needs a typedef for Py_ssize_t in pyport.h."
 #endif
+
+/* Py_hash_t is the same size as a pointer. */
+typedef Py_ssize_t Py_hash_t;
+/* Py_uhash_t is the unsigned equivalent needed to calculate numeric hash. */
+typedef size_t Py_uhash_t;
 
 /* Largest possible value of size_t.
    SIZE_MAX is part of C99, so it might be defined on some
@@ -219,6 +259,22 @@ typedef Py_intptr_t     Py_ssize_t;
 #   endif
 #endif
 
+/* PY_FORMAT_LONG_LONG is analogous to PY_FORMAT_SIZE_T above, but for
+ * the long long type instead of the size_t type.  It's only available
+ * when HAVE_LONG_LONG is defined. The "high level" Python format
+ * functions listed above will interpret "lld" or "llu" correctly on
+ * all platforms.
+ */
+#ifdef HAVE_LONG_LONG
+#   ifndef PY_FORMAT_LONG_LONG
+#       if defined(MS_WIN64) || defined(MS_WINDOWS)
+#           define PY_FORMAT_LONG_LONG "I64"
+#       else
+#           error "This platform's pyconfig.h needs to define PY_FORMAT_LONG_LONG"
+#       endif
+#   endif
+#endif
+
 /* Py_LOCAL can be used instead of static to get the fastest possible calling
  * convention for functions that are local to a given module.
  *
@@ -235,8 +291,6 @@ typedef Py_intptr_t     Py_ssize_t;
  * module; functions that are exported via method tables, callbacks, etc,
  * should keep using static.
  */
-
-#undef USE_INLINE /* XXX - set via configure? */
 
 #if defined(_MSC_VER)
 #if defined(PY_LOCAL_AGGRESSIVE)
@@ -516,6 +570,30 @@ extern "C" {
         _Py_set_387controlword(old_387controlword)
 #endif
 
+/* get and set x87 control word for VisualStudio/x86 */
+#if defined(_MSC_VER) && !defined(_WIN64) /* x87 not supported in 64-bit */
+#define HAVE_PY_SET_53BIT_PRECISION 1
+#define _Py_SET_53BIT_PRECISION_HEADER \
+    unsigned int old_387controlword, new_387controlword, out_387controlword
+/* We use the __control87_2 function to set only the x87 control word.
+   The SSE control word is unaffected. */
+#define _Py_SET_53BIT_PRECISION_START                                   \
+    do {                                                                \
+        __control87_2(0, 0, &old_387controlword, NULL);                 \
+        new_387controlword =                                            \
+          (old_387controlword & ~(_MCW_PC | _MCW_RC)) | (_PC_53 | _RC_NEAR); \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(new_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#define _Py_SET_53BIT_PRECISION_END                                     \
+    do {                                                                \
+        if (new_387controlword != old_387controlword)                   \
+            __control87_2(old_387controlword, _MCW_PC | _MCW_RC,        \
+                          &out_387controlword, NULL);                   \
+    } while (0)
+#endif
+
 /* default definitions are empty */
 #ifndef HAVE_PY_SET_53BIT_PRECISION
 #define _Py_SET_53BIT_PRECISION_HEADER
@@ -791,6 +869,16 @@ extern pid_t forkpty(int *, char *, struct termios *, struct winsize *);
 
 #ifndef Py_ULL
 #define Py_ULL(x) Py_LL(x##U)
+#endif
+
+#ifdef VA_LIST_IS_ARRAY
+#define Py_VA_COPY(x, y) Py_MEMCPY((x), (y), sizeof(va_list))
+#else
+#ifdef __va_copy
+#define Py_VA_COPY __va_copy
+#else
+#define Py_VA_COPY(x, y) (x) = (y)
+#endif
 #endif
 
 #endif /* Py_PYPORT_H */

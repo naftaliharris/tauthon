@@ -21,6 +21,12 @@ file object, use its :meth:`fileno` method to obtain the correct value for the
 :func:`os.open` function, which returns a file descriptor directly (the file
 still needs to be closed when done).
 
+.. note::
+   If you want to create a memory-mapping for a writable, buffered file, you
+   should :func:`~io.IOBase.flush` the file first.  This is necessary to ensure
+   that local modifications to the buffers are actually available to the
+   mapping.
+
 For both the Unix and Windows versions of the constructor, *access* may be
 specified as an optional keyword parameter. *access* accepts one of three
 values: :const:`ACCESS_READ`, :const:`ACCESS_WRITE`, or :const:`ACCESS_COPY`
@@ -100,19 +106,31 @@ To map anonymous memory, -1 should be passed as the fileno along with the length
 
       with open("hello.txt", "r+b") as f:
           # memory-map the file, size 0 means whole file
-          map = mmap.mmap(f.fileno(), 0)
+          mm = mmap.mmap(f.fileno(), 0)
           # read content via standard file methods
-          print(map.readline())  # prints b"Hello Python!\n"
+          print(mm.readline())  # prints b"Hello Python!\n"
           # read content via slice notation
-          print(map[:5])  # prints b"Hello"
+          print(mm[:5])  # prints b"Hello"
           # update content using slice notation;
           # note that new content must have same size
-          map[6:] = b" world!\n"
+          mm[6:] = b" world!\n"
           # ... and read again using standard file methods
-          map.seek(0)
-          print(map.readline())  # prints b"Hello  world!\n"
+          mm.seek(0)
+          print(mm.readline())  # prints b"Hello  world!\n"
           # close the map
-          map.close()
+          mm.close()
+
+
+   :class:`mmap` can also be used as a context manager in a :keyword:`with`
+   statement.::
+
+      import mmap
+
+      with mmap.mmap(-1, 13) as mm:
+          mm.write("Hello world!")
+
+   .. versionadded:: 3.2
+      Context manager support.
 
 
    The next example demonstrates how to create an anonymous map and exchange
@@ -121,25 +139,31 @@ To map anonymous memory, -1 should be passed as the fileno along with the length
       import mmap
       import os
 
-      map = mmap.mmap(-1, 13)
-      map.write(b"Hello world!")
+      mm = mmap.mmap(-1, 13)
+      mm.write(b"Hello world!")
 
       pid = os.fork()
 
       if pid == 0: # In a child process
-          map.seek(0)
-          print(map.readline())
+          mm.seek(0)
+          print(mm.readline())
 
-          map.close()
+          mm.close()
 
 
    Memory-mapped file objects support the following methods:
-
 
    .. method:: close()
 
       Close the file.  Subsequent calls to other methods of the object will
       result in an exception being raised.
+
+
+   .. attribute:: closed
+
+      True if the file is closed.
+
+      .. versionadded:: 3.2
 
 
    .. method:: find(sub[, start[, end]])
@@ -235,7 +259,7 @@ To map anonymous memory, -1 should be passed as the fileno along with the length
 
    .. method:: write_byte(byte)
 
-      Write the the integer *byte* into memory at the current
+      Write the integer *byte* into memory at the current
       position of the file pointer; the file position is advanced by ``1``. If
       the mmap was created with :const:`ACCESS_READ`, then writing to it will
       raise a :exc:`TypeError` exception.

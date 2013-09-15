@@ -27,6 +27,7 @@ from idlelib.EditorWindow import EditorWindow
 from idlelib import PyShell, IOBinding
 
 from idlelib.configHandler import idleConf
+from idlelib import macosxSupport
 
 indent_message = """Error: Inconsistent indentation detected!
 
@@ -52,6 +53,9 @@ class ScriptBinding:
         self.flist = self.editwin.flist
         self.root = self.editwin.root
 
+        if macosxSupport.runningAsOSXApp():
+            self.editwin.text_frame.bind('<<run-module-event-2>>', self._run_module_event)
+
     def check_module_event(self, event):
         filename = self.getfilename()
         if not filename:
@@ -63,25 +67,20 @@ class ScriptBinding:
 
     def tabnanny(self, filename):
         # XXX: tabnanny should work on binary files as well
-        with open(filename, 'r', encoding='iso-8859-1') as f:
-            two_lines = f.readline() + f.readline()
-        encoding = IOBinding.coding_spec(two_lines)
-        if not encoding:
-            encoding = 'utf-8'
-        f = open(filename, 'r', encoding=encoding)
-        try:
-            tabnanny.process_tokens(tokenize.generate_tokens(f.readline))
-        except tokenize.TokenError as msg:
-            msgtxt, (lineno, start) = msg
-            self.editwin.gotoline(lineno)
-            self.errorbox("Tabnanny Tokenizing Error",
-                          "Token Error: %s" % msgtxt)
-            return False
-        except tabnanny.NannyNag as nag:
-            # The error messages from tabnanny are too confusing...
-            self.editwin.gotoline(nag.get_lineno())
-            self.errorbox("Tab/space error", indent_message)
-            return False
+        with tokenize.open(filename) as f:
+            try:
+                tabnanny.process_tokens(tokenize.generate_tokens(f.readline))
+            except tokenize.TokenError as msg:
+                msgtxt, (lineno, start) = msg
+                self.editwin.gotoline(lineno)
+                self.errorbox("Tabnanny Tokenizing Error",
+                              "Token Error: %s" % msgtxt)
+                return False
+            except tabnanny.NannyNag as nag:
+                # The error messages from tabnanny are too confusing...
+                self.editwin.gotoline(nag.get_lineno())
+                self.errorbox("Tab/space error", indent_message)
+                return False
         return True
 
     def checksyntax(self, filename):
@@ -102,10 +101,10 @@ class ScriptBinding:
         try:
             # If successful, return the compiled code
             return compile(source, filename, "exec")
-        except (SyntaxError, OverflowError) as value:
-            msg = value.msg or "<no detail available>"
-            lineno = value.lineno or 1
-            offset = value.offset or 0
+        except (SyntaxError, OverflowError, ValueError) as value:
+            msg = getattr(value, 'msg', '') or value or "<no detail available>"
+            lineno = getattr(value, 'lineno', '') or 1
+            offset = getattr(value, 'offset', '') or 0
             if offset == 0:
                 lineno += 1  #mark end of offending line
             pos = "0.0 + %d lines + %d chars" % (lineno-1, offset-1)
@@ -116,14 +115,27 @@ class ScriptBinding:
             shell.set_warning_stream(saved_stream)
 
     def run_module_event(self, event):
+        if macosxSupport.runningAsOSXApp():
+            # Tk-Cocoa in MacOSX is broken until at least
+            # Tk 8.5.9, and without this rather
+            # crude workaround IDLE would hang when a user
+            # tries to run a module using the keyboard shortcut
+            # (the menu item works fine).
+            self.editwin.text_frame.after(200,
+                lambda: self.editwin.text_frame.event_generate('<<run-module-event-2>>'))
+            return 'break'
+        else:
+            return self._run_module_event(event)
+
+    def _run_module_event(self, event):
         """Run the module after setting up the environment.
 
         First check the syntax.  If OK, make sure the shell is active and
         then transfer the arguments, set the run environment's working
         directory to the directory of the module being executed and also
         add that directory to its sys.path if not already included.
-
         """
+
         filename = self.getfilename()
         if not filename:
             return 'break'
@@ -132,10 +144,9 @@ class ScriptBinding:
             return 'break'
         if not self.tabnanny(filename):
             return 'break'
-        shell = self.shell
-        interp = shell.interp
+        interp = self.shell.interp
         if PyShell.use_subprocess:
-            shell.restart_shell()
+            interp.restart_subprocess(with_cwd=False)
         dirname = os.path.dirname(filename)
         # XXX Too often this discards arguments the user just set...
         interp.runcommand("""if 1:

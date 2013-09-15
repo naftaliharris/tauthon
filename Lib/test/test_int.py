@@ -1,6 +1,7 @@
 import sys
 
 import unittest
+from test import support
 from test.support import run_unittest
 
 L = [
@@ -20,7 +21,8 @@ L = [
         ('  1\02  ', ValueError),
         ('', ValueError),
         (' ', ValueError),
-        ('  \t\t  ', ValueError)
+        ('  \t\t  ', ValueError),
+        ("\u0200", ValueError)
 ]
 
 class IntTestCases(unittest.TestCase):
@@ -34,6 +36,9 @@ class IntTestCases(unittest.TestCase):
         self.assertEqual(int(-3.9), -3)
         self.assertEqual(int(3.5), 3)
         self.assertEqual(int(-3.5), -3)
+        self.assertEqual(int("-3"), -3)
+        self.assertEqual(int(" -3 "), -3)
+        self.assertEqual(int("\N{EM SPACE}-3\N{EN SPACE}"), -3)
         # Different base:
         self.assertEqual(int("10",16), 16)
         # Test conversion from strings and various anomalies
@@ -52,15 +57,15 @@ class IntTestCases(unittest.TestCase):
         s = repr(-1-sys.maxsize)
         x = int(s)
         self.assertEqual(x+1, -sys.maxsize)
-        self.assertTrue(isinstance(x, int))
-        # should return long
+        self.assertIsInstance(x, int)
+        # should return int
         self.assertEqual(int(s[1:]), sys.maxsize+1)
 
-        # should return long
+        # should return int
         x = int(1e100)
-        self.assertTrue(isinstance(x, int))
+        self.assertIsInstance(x, int)
         x = int(-1e100)
-        self.assertTrue(isinstance(x, int))
+        self.assertIsInstance(x, int)
 
 
         # SF bug 434186:  0x80000000/2 != 0x80000000>>1.
@@ -78,7 +83,8 @@ class IntTestCases(unittest.TestCase):
         self.assertRaises(ValueError, int, '123\x00 245', 20)
 
         x = int('1' * 600)
-        self.assertTrue(isinstance(x, int))
+        self.assertIsInstance(x, int)
+
 
         self.assertRaises(TypeError, int, 1, 12)
 
@@ -94,10 +100,6 @@ class IntTestCases(unittest.TestCase):
 
         self.assertRaises(ValueError, int, "0b", 2)
         self.assertRaises(ValueError, int, "0b", 0)
-
-        # Bug #3236: Return small longs from PyLong_FromString
-        self.assertTrue(int("10") is 10)
-        self.assertTrue(int("-1") is -1)
 
         # SF bug 1334662: int(string, base) wrong answers
         # Various representations of 2**32 evaluated to 0
@@ -216,6 +218,22 @@ class IntTestCases(unittest.TestCase):
         self.assertEqual(int('2br45qc', 35), 4294967297)
         self.assertEqual(int('1z141z5', 36), 4294967297)
 
+    @support.cpython_only
+    def test_small_ints(self):
+        # Bug #3236: Return small longs from PyLong_FromString
+        self.assertIs(int('10'), 10)
+        self.assertIs(int('-1'), -1)
+        self.assertIs(int(b'10'), 10)
+        self.assertIs(int(b'-1'), -1)
+
+    def test_keyword_args(self):
+        # Test invoking int() using keyword arguments.
+        self.assertEqual(int(x=1.2), 1)
+        self.assertEqual(int('100', base=2), 4)
+        self.assertEqual(int(x='100', base=2), 4)
+        self.assertRaises(TypeError, int, base=10)
+        self.assertRaises(TypeError, int, base=0)
+
     def test_intconversion(self):
         # Test __int__()
         class ClassicMissingMethods:
@@ -299,6 +317,16 @@ class IntTestCases(unittest.TestCase):
                 else:
                     self.fail("Failed to raise TypeError with %s" %
                               ((base, trunc_result_base),))
+
+    def test_error_message(self):
+        testlist = ('\xbd', '123\xbd', '  123 456  ')
+        for s in testlist:
+            try:
+                int(s)
+            except ValueError as e:
+                self.assertIn(s.strip(), e.args[0])
+            else:
+                self.fail("Expected int(%r) to raise a ValueError", s)
 
 def test_main():
     run_unittest(IntTestCases)

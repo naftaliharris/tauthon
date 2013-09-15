@@ -64,7 +64,7 @@ This module provides an interface to the mechanisms used to implement the
    path and the last item in the *description* tuple is :const:`PKG_DIRECTORY`.
 
    This function does not handle hierarchical module names (names containing
-   dots).  In order to find *P*.*M*, that is, submodule *M* of package *P*, use
+   dots).  In order to find *P.M*, that is, submodule *M* of package *P*, use
    :func:`find_module` and :func:`load_module` to find and load package *P*, and
    then use :func:`find_module` with the *path* argument set to ``P.__path__``.
    When *P* itself has a dotted name, apply this recipe recursively.
@@ -190,8 +190,43 @@ This module provides an interface to the mechanisms used to implement the
    continue to use the old class definition.  The same is true for derived classes.
 
 
-The following constants with integer values, defined in this module, are used to
-indicate the search result of :func:`find_module`.
+The following functions are conveniences for handling :pep:`3147` byte-compiled
+file paths.
+
+.. versionadded:: 3.2
+
+.. function:: cache_from_source(path, debug_override=None)
+
+   Return the :pep:`3147` path to the byte-compiled file associated with the
+   source *path*.  For example, if *path* is ``/foo/bar/baz.py`` the return
+   value would be ``/foo/bar/__pycache__/baz.cpython-32.pyc`` for Python 3.2.
+   The ``cpython-32`` string comes from the current magic tag (see
+   :func:`get_tag`).  The returned path will end in ``.pyc`` when
+   ``__debug__`` is True or ``.pyo`` for an optimized Python
+   (i.e. ``__debug__`` is False).  By passing in True or False for
+   *debug_override* you can override the system's value for ``__debug__`` for
+   extension selection.
+
+   *path* need not exist.
+
+
+.. function:: source_from_cache(path)
+
+   Given the *path* to a :pep:`3147` file name, return the associated source code
+   file path.  For example, if *path* is
+   ``/foo/bar/__pycache__/baz.cpython-32.pyc`` the returned path would be
+   ``/foo/bar/baz.py``.  *path* need not exist, however if it does not conform
+   to :pep:`3147` format, a ``ValueError`` is raised.
+
+
+.. function:: get_tag()
+
+   Return the :pep:`3147` magic tag string matching this version of Python's
+   magic number, as returned by :func:`get_magic`.
+
+
+The following constants with integer values, defined in this module, are used
+to indicate the search result of :func:`find_module`.
 
 
 .. data:: PY_SOURCE
@@ -221,7 +256,7 @@ indicate the search result of :func:`find_module`.
 
 .. data:: PY_FROZEN
 
-   The module was found as a frozen module (see :func:`init_frozen`).
+   The module was found as a frozen module.
 
 
 .. class:: NullImporter(path_string)
@@ -273,10 +308,3 @@ in that version, since :func:`find_module` has been extended and
            # Since we may exit via an exception, close fp explicitly.
            if fp:
                fp.close()
-
-.. index:: module: knee
-
-A more complete example that implements hierarchical module names and includes a
-:func:`reload` function can be found in the module :mod:`knee`.  The :mod:`knee`
-module can be found in :file:`Demo/imputil/` in the Python source distribution.
-

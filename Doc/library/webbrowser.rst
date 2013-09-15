@@ -6,6 +6,9 @@
 .. moduleauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/webbrowser.py`
+
+--------------
 
 The :mod:`webbrowser` module provides a high-level interface to allow displaying
 Web-based documents to users. Under most circumstances, simply calling the
@@ -33,7 +36,9 @@ The script :program:`webbrowser` can be used as a command-line interface for the
 module. It accepts an URL as the argument. It accepts the following optional
 parameters: ``-n`` opens the URL in a new browser window, if possible;
 ``-t`` opens the URL in a new browser page ("tab"). The options are,
-naturally, mutually exclusive.
+naturally, mutually exclusive.  Usage example::
+
+   python -m webbrowser -t "http://www.python.org"
 
 The following exception is defined:
 
@@ -130,9 +135,9 @@ for the controller classes, all defined in this module.
 +-----------------------+-----------------------------------------+-------+
 | ``'windows-default'`` | :class:`WindowsDefault`                 | \(2)  |
 +-----------------------+-----------------------------------------+-------+
-| ``'internet-config'`` | :class:`InternetConfig`                 | \(3)  |
+| ``'macosx'``          | :class:`MacOSX('default')`              | \(3)  |
 +-----------------------+-----------------------------------------+-------+
-| ``'macosx'``          | :class:`MacOSX('default')`              | \(4)  |
+| ``'safari'``          | :class:`MacOSX('safari')`               | \(3)  |
 +-----------------------+-----------------------------------------+-------+
 
 Notes:
@@ -148,9 +153,6 @@ Notes:
    Only on Windows platforms.
 
 (3)
-   Only on Mac OS platforms; requires the standard MacPython :mod:`ic` module.
-
-(4)
    Only on Mac OS X platform.
 
 Here are some simple examples::

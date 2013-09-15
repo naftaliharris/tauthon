@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 #
 # Test suite for Optik.  Supplied by Johannes Gijsbers
 # (taradino@softhome.net) -- translated from the original Optik
@@ -18,9 +16,9 @@ from io import StringIO
 from test import support
 
 
-from optparse import make_option, Option, IndentedHelpFormatter, \
-     TitledHelpFormatter, OptionParser, OptionContainer, OptionGroup, \
-     SUPPRESS_HELP, SUPPRESS_USAGE, OptionError, OptionConflictError, \
+from optparse import make_option, Option, \
+     TitledHelpFormatter, OptionParser, OptionGroup, \
+     SUPPRESS_USAGE, OptionError, OptionConflictError, \
      BadOptionError, OptionValueError, Values
 from optparse import _match_abbrev
 from optparse import _parse_num
@@ -338,7 +336,7 @@ class TestOptionParser(BaseTest):
 
     def test_get_option(self):
         opt1 = self.parser.get_option("-v")
-        self.assertTrue(isinstance(opt1, Option))
+        self.assertIsInstance(opt1, Option)
         self.assertEqual(opt1._short_opts, ["-v", "-n"])
         self.assertEqual(opt1._long_opts, ["--verbose", "--noisy"])
         self.assertEqual(opt1.action, "store_true")
@@ -443,7 +441,7 @@ def _check_duration(option, opt, value):
             return int(value)
         else:
             return int(value[:-1]) * _time_units[value[-1]]
-    except ValueError as IndexError:
+    except (ValueError, IndexError):
         raise OptionValueError(
             'option %s: invalid duration: %r' % (opt, value))
 
@@ -1229,7 +1227,6 @@ class TestCallbackVarArgs(BaseTest):
 
     def variable_args(self, option, opt, value, parser):
         self.assertTrue(value is None)
-        done = 0
         value = []
         rargs = parser.rargs
         while rargs:

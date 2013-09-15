@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ Compare the output of two codecs.
 
@@ -30,7 +30,7 @@ def compare_codecs(encoding1, encoding2):
             mismatch += 1
     # Check decoding
     for i in range(256):
-        c = chr(i)
+        c = bytes([i])
         try:
             u1 = c.decode(encoding1)
         except UnicodeError:

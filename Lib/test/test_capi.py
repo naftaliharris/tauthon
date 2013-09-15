@@ -2,12 +2,24 @@
 # these are all functions _testcapi exports whose name begins with 'test_'.
 
 from __future__ import with_statement
+import os
+import pickle
+import random
+import subprocess
 import sys
 import time
-import random
 import unittest
-import threading
 from test import support
+try:
+    import _posixsubprocess
+except ImportError:
+    _posixsubprocess = None
+try:
+    import _thread
+    import threading
+except ImportError:
+    _thread = None
+    threading = None
 import _testcapi
 
 
@@ -32,7 +44,52 @@ class CAPITest(unittest.TestCase):
         self.assertEqual(testfunction.attribute, "test")
         self.assertRaises(AttributeError, setattr, inst.testfunction, "attribute", "test")
 
+    @unittest.skipUnless(threading, 'Threading required for this test.')
+    def test_no_FatalError_infinite_loop(self):
+        with support.suppress_crash_popup():
+            p = subprocess.Popen([sys.executable, "-c",
+                                  'import _testcapi;'
+                                  '_testcapi.crash_no_current_thread()'],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        (out, err) = p.communicate()
+        self.assertEqual(out, b'')
+        # This used to cause an infinite loop.
+        self.assertEqual(err.rstrip(),
+                         b'Fatal Python error:'
+                         b' PyThreadState_Get: no current thread')
 
+    def test_memoryview_from_NULL_pointer(self):
+        self.assertRaises(ValueError, _testcapi.make_memoryview_from_NULL_pointer)
+
+    @unittest.skipUnless(_posixsubprocess, '_posixsubprocess required for this test.')
+    def test_seq_bytes_to_charp_array(self):
+        # Issue #15732: crash in _PySequence_BytesToCharpArray()
+        class Z(object):
+            def __len__(self):
+                return 1
+        self.assertRaises(TypeError, _posixsubprocess.fork_exec,
+                          1,Z(),3,[1, 2],5,6,7,8,9,10,11,12,13,14,15,16,17)
+        # Issue #15736: overflow in _PySequence_BytesToCharpArray()
+        class Z(object):
+            def __len__(self):
+                return sys.maxsize
+            def __getitem__(self, i):
+                return b'x'
+        self.assertRaises(MemoryError, _posixsubprocess.fork_exec,
+                          1,Z(),3,[1, 2],5,6,7,8,9,10,11,12,13,14,15,16,17)
+
+    @unittest.skipUnless(_posixsubprocess, '_posixsubprocess required for this test.')
+    def test_subprocess_fork_exec(self):
+        class Z(object):
+            def __len__(self):
+                return 1
+
+        # Issue #15738: crash in subprocess_fork_exec()
+        self.assertRaises(TypeError, _posixsubprocess.fork_exec,
+                          Z(),[b'1'],3,[1, 2],5,6,7,8,9,10,11,12,13,14,15,16,17)
+
+@unittest.skipUnless(threading, 'Threading required for this test.')
 class TestPendingCalls(unittest.TestCase):
 
     def pendingcalls_submit(self, l, n):
@@ -115,13 +172,87 @@ class TestPendingCalls(unittest.TestCase):
         self.pendingcalls_submit(l, n)
         self.pendingcalls_wait(l, n)
 
+    def test_subinterps(self):
+        import builtins
+        r, w = os.pipe()
+        code = """if 1:
+            import sys, builtins, pickle
+            with open({:d}, "wb") as f:
+                pickle.dump(id(sys.modules), f)
+                pickle.dump(id(builtins), f)
+            """.format(w)
+        with open(r, "rb") as f:
+            ret = _testcapi.run_in_subinterp(code)
+            self.assertEqual(ret, 0)
+            self.assertNotEqual(pickle.load(f), id(sys.modules))
+            self.assertNotEqual(pickle.load(f), id(builtins))
+
 # Bug #6012
 class Test6012(unittest.TestCase):
     def test(self):
         self.assertEqual(_testcapi.argparsing("Hello", "World"), 1)
 
+
+class EmbeddingTest(unittest.TestCase):
+
+    @unittest.skipIf(
+        sys.platform.startswith('win'),
+        "test doesn't work under Windows")
+    def test_subinterps(self):
+        # XXX only tested under Unix checkouts
+        basepath = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        oldcwd = os.getcwd()
+        # This is needed otherwise we get a fatal error:
+        # "Py_Initialize: Unable to get the locale encoding
+        # LookupError: no codec search functions registered: can't find encoding"
+        os.chdir(basepath)
+        try:
+            exe = os.path.join(basepath, "Modules", "_testembed")
+            if not os.path.exists(exe):
+                self.skipTest("%r doesn't exist" % exe)
+            p = subprocess.Popen([exe],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+            (out, err) = p.communicate()
+            self.assertEqual(p.returncode, 0,
+                             "bad returncode %d, stderr is %r" %
+                             (p.returncode, err))
+            if support.verbose:
+                print()
+                print(out.decode('latin1'))
+                print(err.decode('latin1'))
+        finally:
+            os.chdir(oldcwd)
+
+
+@unittest.skipUnless(threading and _thread, 'Threading required for this test.')
+class TestThreadState(unittest.TestCase):
+
+    @support.reap_threads
+    def test_thread_state(self):
+        # some extra thread-state tests driven via _testcapi
+        def target():
+            idents = []
+
+            def callback():
+                idents.append(_thread.get_ident())
+
+            _testcapi._test_thread_state(callback)
+            a = b = callback
+            time.sleep(1)
+            # Check our main thread is in the list exactly 3 times.
+            self.assertEqual(idents.count(_thread.get_ident()), 3,
+                             "Couldn't find main thread correctly in the list")
+
+        target()
+        t = threading.Thread(target=target)
+        t.start()
+        t.join()
+
+
 def test_main():
-    support.run_unittest(CAPITest)
+    support.run_unittest(CAPITest, TestPendingCalls, Test6012,
+                         EmbeddingTest, TestThreadState)
 
     for name in dir(_testcapi):
         if name.startswith('test_'):
@@ -129,42 +260,6 @@ def test_main():
             if support.verbose:
                 print("internal", name)
             test()
-
-    # some extra thread-state tests driven via _testcapi
-    def TestThreadState():
-        if support.verbose:
-            print("auto-thread-state")
-
-        idents = []
-
-        def callback():
-            idents.append(_thread.get_ident())
-
-        _testcapi._test_thread_state(callback)
-        a = b = callback
-        time.sleep(1)
-        # Check our main thread is in the list exactly 3 times.
-        if idents.count(_thread.get_ident()) != 3:
-            raise support.TestFailed(
-                        "Couldn't find main thread correctly in the list")
-
-    try:
-        _testcapi._test_thread_state
-        have_thread_state = True
-    except AttributeError:
-        have_thread_state = False
-
-    if have_thread_state:
-        import _thread
-        import time
-        TestThreadState()
-        import threading
-        t = threading.Thread(target=TestThreadState)
-        t.start()
-        t.join()
-
-    support.run_unittest(TestPendingCalls, Test6012)
-
 
 if __name__ == "__main__":
     test_main()

@@ -28,7 +28,7 @@ class TestRaise(unittest.TestCase):
         try:
             raise
         except RuntimeError as e:
-            self.assertTrue("No active exception" in str(e))
+            self.assertIn("No active exception", str(e))
         else:
             self.fail("No exception raised")
 
@@ -121,13 +121,22 @@ class TestRaise(unittest.TestCase):
         else:
             self.fail("No exception raised")
 
+    def test_new_returns_invalid_instance(self):
+        # See issue #11627.
+        class MyException(Exception):
+            def __new__(cls, *args):
+                return object()
+
+        with self.assertRaises(TypeError):
+            raise MyException
+
 
 class TestCause(unittest.TestCase):
     def test_invalid_cause(self):
         try:
             raise IndexError from 5
         except TypeError as e:
-            self.assertTrue("exception cause" in str(e))
+            self.assertIn("exception cause", str(e))
         else:
             self.fail("No exception raised")
 
@@ -135,7 +144,7 @@ class TestCause(unittest.TestCase):
         try:
             raise IndexError from KeyError
         except IndexError as e:
-            self.assertTrue(isinstance(e.__cause__, KeyError))
+            self.assertIsInstance(e.__cause__, KeyError)
         else:
             self.fail("No exception raised")
 
@@ -166,7 +175,7 @@ class TestTraceback(unittest.TestCase):
         try:
             raise IndexError()
         except IndexError as e:
-            self.assertTrue(isinstance(e.__traceback__, types.TracebackType))
+            self.assertIsInstance(e.__traceback__, types.TracebackType)
         else:
             self.fail("No exception raised")
 
@@ -203,7 +212,7 @@ class TestContext(unittest.TestCase):
                 raise OSError()
         except OSError as e:
             self.assertNotEqual(e.__context__, context)
-            self.assertTrue(isinstance(e.__context__, context))
+            self.assertIsInstance(e.__context__, context)
         else:
             self.fail("No exception raised")
 
@@ -216,7 +225,7 @@ class TestContext(unittest.TestCase):
                 raise OSError
         except OSError as e:
             self.assertNotEqual(e.__context__, context)
-            self.assertTrue(isinstance(e.__context__, context))
+            self.assertIsInstance(e.__context__, context)
         else:
             self.fail("No exception raised")
 
@@ -227,7 +236,7 @@ class TestContext(unittest.TestCase):
             except:
                 raise OSError
         except OSError as e:
-            self.assertTrue(isinstance(e.__context__, ZeroDivisionError))
+            self.assertIsInstance(e.__context__, ZeroDivisionError)
         else:
             self.fail("No exception raised")
 
@@ -238,7 +247,7 @@ class TestContext(unittest.TestCase):
             except:
                 xyzzy
         except NameError as e:
-            self.assertTrue(isinstance(e.__context__, ZeroDivisionError))
+            self.assertIsInstance(e.__context__, ZeroDivisionError)
         else:
             self.fail("No exception raised")
 
@@ -260,7 +269,7 @@ class TestContext(unittest.TestCase):
             finally:
                 raise OSError
         except OSError as e:
-            self.assertTrue(isinstance(e.__context__, ZeroDivisionError))
+            self.assertIsInstance(e.__context__, ZeroDivisionError)
         else:
             self.fail("No exception raised")
 
@@ -274,7 +283,7 @@ class TestContext(unittest.TestCase):
             with ContextManager():
                 1/0
         except NameError as e:
-            self.assertTrue(isinstance(e.__context__, ZeroDivisionError))
+            self.assertIsInstance(e.__context__, ZeroDivisionError)
         else:
             self.fail("No exception raised")
 
@@ -320,7 +329,7 @@ class TestContext(unittest.TestCase):
                     del g
                     raise KeyError
             except Exception as e:
-                self.assertTrue(isinstance(e.__context__, ValueError))
+                self.assertIsInstance(e.__context__, ValueError)
 
         f()
 
@@ -344,7 +353,7 @@ class TestContext(unittest.TestCase):
                     raise TypeError
             except Exception as e:
                 self.assertNotEqual(e.__context__, None)
-                self.assertTrue(isinstance(e.__context__, AttributeError))
+                self.assertIsInstance(e.__context__, AttributeError)
 
         with support.captured_output("stderr"):
             f()

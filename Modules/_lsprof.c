@@ -1,7 +1,5 @@
 #include "Python.h"
-#include "compile.h"
 #include "frameobject.h"
-#include "structseq.h"
 #include "rotatingtree.h"
 
 #if !defined(HAVE_LONG_LONG)
@@ -180,7 +178,16 @@ normalizeUserObj(PyObject *obj)
         PyObject *mod = fn->m_module;
         const char *modname;
         if (mod && PyUnicode_Check(mod)) {
+            /* XXX: The following will truncate module names with embedded
+             * null-characters.  It is unlikely that this can happen in
+             * practice and the concequences are not serious enough to
+             * introduce extra checks here.
+             */
             modname = _PyUnicode_AsString(mod);
+            if (modname == NULL) {
+                modname = "<encoding error>";
+                PyErr_Clear();
+            }
         }
         else if (mod && PyModule_Check(mod)) {
             modname = PyModule_GetName(mod);

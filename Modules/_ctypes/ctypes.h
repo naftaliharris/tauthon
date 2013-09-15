@@ -58,7 +58,8 @@ struct tagCDataObject {
 
 typedef struct {
     PyObject_VAR_HEAD
-    ffi_closure *pcl; /* the C callable */
+    ffi_closure *pcl_write; /* the C callable, writeable */
+    void *pcl_exec;         /* the C callable, executable */
     ffi_cif cif;
     int flags;
     PyObject *converters;
@@ -115,6 +116,7 @@ extern int PyObject_stginfo(PyObject *self, Py_ssize_t *psize, Py_ssize_t *palig
 extern PyTypeObject PyCData_Type;
 #define CDataObject_CheckExact(v)       ((v)->ob_type == &PyCData_Type)
 #define CDataObject_Check(v)            PyObject_TypeCheck(v, &PyCData_Type)
+#define _CDataObject_HasExternalBuffer(v)  ((v)->b_ptr != (char *)&(v)->b_value)
 
 extern PyTypeObject PyCSimpleType_Type;
 #define PyCSimpleTypeObject_CheckExact(v)       ((v)->ob_type == &PyCSimpleType_Type)

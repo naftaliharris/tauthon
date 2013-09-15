@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 # Perform massive identifier substitution on C source files.
 # This actually tokenizes the files (to some extent) so it can
@@ -292,7 +292,7 @@ def addsubst(substfile):
         if not words: continue
         if len(words) == 3 and words[0] == 'struct':
             words[:2] = [words[0] + ' ' + words[1]]
-        elif len(words) <> 2:
+        elif len(words) != 2:
             err(substfile + '%s:%r: warning: bad line: %r' % (substfile, lineno, line))
             continue
         if Reverse:

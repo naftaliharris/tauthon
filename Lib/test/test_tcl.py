@@ -1,11 +1,15 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import unittest
+import sys
 import os
 from test import support
 
 # Skip this test if the _tkinter module wasn't built.
 _tkinter = support.import_module('_tkinter')
+
+# Make sure tkinter._fix runs to set up the environment
+support.import_fresh_module('tkinter')
 
 from tkinter import Tcl
 from _tkinter import TclError
@@ -127,21 +131,20 @@ class TclTest(unittest.TestCase):
         tcl = self.interp
         self.assertRaises(TclError,tcl.eval,'package require DNE')
 
+    @unittest.skipUnless(sys.platform == 'win32', 'Requires Windows')
     def testLoadWithUNC(self):
-        import sys
-        if sys.platform != 'win32':
-            return
-
         # Build a UNC path from the regular path.
         # Something like
         #   \\%COMPUTERNAME%\c$\python27\python.exe
 
         fullname = os.path.abspath(sys.executable)
         if fullname[1] != ':':
-            return
+            raise unittest.SkipTest('Absolute path should have drive part')
         unc_name = r'\\%s\%s$\%s' % (os.environ['COMPUTERNAME'],
                                     fullname[0],
                                     fullname[3:])
+        if not os.path.exists(unc_name):
+            raise unittest.SkipTest('Cannot connect to UNC Path')
 
         with support.EnvironmentVarGuard() as env:
             env.unset("TCL_LIBRARY")
@@ -151,6 +154,26 @@ class TclTest(unittest.TestCase):
         # exit code must be zero
         self.assertEqual(f.close(), None)
 
+    def test_passing_values(self):
+        def passValue(value):
+            return self.interp.call('set', '_', value)
+
+        self.assertEqual(passValue(True), True)
+        self.assertEqual(passValue(False), False)
+        self.assertEqual(passValue('string'), 'string')
+        self.assertEqual(passValue('string\u20ac'), 'string\u20ac')
+        for i in (0, 1, -1, 2**31-1, -2**31):
+            self.assertEqual(passValue(i), i)
+        for f in (0.0, 1.0, -1.0, 1/3,
+                  sys.float_info.min, sys.float_info.max,
+                  -sys.float_info.min, -sys.float_info.max):
+            self.assertEqual(passValue(f), f)
+        for f in float('nan'), float('inf'), -float('inf'):
+            if f != f: # NaN
+                self.assertNotEqual(passValue(f), f)
+            else:
+                self.assertEqual(passValue(f), f)
+        self.assertEqual(passValue((1, '2', (3.4,))), (1, '2', (3.4,)))
 
 
 def test_main():

@@ -180,7 +180,10 @@ binding::
    scope_test()
    print("In global scope:", spam)
 
-The output of the example code is::
+The output of the example code is:
+
+.. code-block:: none
+
 
    After local assignment: test spam
    After nonlocal assignment: nonlocal spam
@@ -458,8 +461,8 @@ argument::
            self.add(x)
 
 Methods may reference global names in the same way as ordinary functions.  The
-global scope associated with a method is the module containing the class
-definition.  (The class itself is never used as a global scope.)  While one
+global scope associated with a method is the module containing its
+definition.  (A class is never used as a global scope.)  While one
 rarely encounters a good reason for using global data in a method, there are
 many legitimate uses of the global scope: for one thing, functions and modules
 imported into the global scope can be used by methods, as well as functions and
@@ -595,6 +598,28 @@ current class name with leading underscore(s) stripped.  This mangling is done
 without regard to the syntactic position of the identifier, as long as it
 occurs within the definition of a class.
 
+Name mangling is helpful for letting subclasses override methods without
+breaking intraclass method calls.  For example::
+
+   class Mapping:
+       def __init__(self, iterable):
+           self.items_list = []
+           self.__update(iterable)
+
+       def update(self, iterable):
+           for item in iterable:
+               self.items_list.append(item)
+
+       __update = update   # private copy of original update() method
+
+   class MappingSubclass(Mapping):
+
+       def update(self, keys, values):
+           # provides new signature for update()
+           # but does not break __init__()
+           for item in zip(keys, values):
+               self.items_list.append(item)
+
 Note that the mangling rules are designed mostly to avoid accidents; it still is
 possible to access or modify a variable that is considered private.  This can
 even be useful in special circumstances, such as in the debugger.
@@ -713,11 +738,11 @@ using a :keyword:`for` statement::
 This style of access is clear, concise, and convenient.  The use of iterators
 pervades and unifies Python.  Behind the scenes, the :keyword:`for` statement
 calls :func:`iter` on the container object.  The function returns an iterator
-object that defines the method :meth:`__next__` which accesses elements in the
-container one at a time.  When there are no more elements, :meth:`__next__`
-raises a :exc:`StopIteration` exception which tells the :keyword:`for` loop to
-terminate.  You can call the :meth:`__next__` method using the :func:`next`
-builtin; this example shows how it all works::
+object that defines the method :meth:`~iterator.__next__` which accesses
+elements in the container one at a time.  When there are no more elements,
+:meth:`__next__` raises a :exc:`StopIteration` exception which tells the
+:keyword:`for` loop to terminate.  You can call the :meth:`__next__` method
+using the :func:`next` built-in function; this example shows how it all works::
 
    >>> s = 'abc'
    >>> it = iter(s)
@@ -730,7 +755,6 @@ builtin; this example shows how it all works::
    >>> next(it)
    'c'
    >>> next(it)
-
    Traceback (most recent call last):
      File "<stdin>", line 1, in ?
        next(it)
@@ -738,11 +762,11 @@ builtin; this example shows how it all works::
 
 Having seen the mechanics behind the iterator protocol, it is easy to add
 iterator behavior to your classes.  Define an :meth:`__iter__` method which
-returns an object with a :meth:`__next__` method.  If the class defines
-:meth:`__next__`, then :meth:`__iter__` can just return ``self``::
+returns an object with a :meth:`~iterator.__next__` method.  If the class
+defines :meth:`__next__`, then :meth:`__iter__` can just return ``self``::
 
    class Reverse:
-       "Iterator for looping over a sequence backwards"
+       """Iterator for looping over a sequence backwards."""
        def __init__(self, data):
            self.data = data
            self.index = len(data)
@@ -753,6 +777,8 @@ returns an object with a :meth:`__next__` method.  If the class defines
                raise StopIteration
            self.index = self.index - 1
            return self.data[self.index]
+
+::
 
    >>> rev = Reverse('spam')
    >>> iter(rev)
@@ -782,6 +808,8 @@ easy to create::
        for index in range(len(data)-1, -1, -1):
            yield data[index]
 
+::
+
    >>> for char in reverse('golf'):
    ...     print(char)
    ...
@@ -792,8 +820,8 @@ easy to create::
 
 Anything that can be done with generators can also be done with class based
 iterators as described in the previous section.  What makes generators so
-compact is that the :meth:`__iter__` and :meth:`__next__` methods are created
-automatically.
+compact is that the :meth:`__iter__` and :meth:`~generator.__next__` methods
+are created automatically.
 
 Another key feature is that the local variables and execution state are
 automatically saved between calls.  This made the function easier to write and

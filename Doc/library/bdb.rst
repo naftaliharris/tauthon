@@ -4,6 +4,10 @@
 .. module:: bdb
    :synopsis: Debugger framework.
 
+**Source code:** :source:`Lib/bdb.py`
+
+--------------
+
 The :mod:`bdb` module handles basic debugger functions, like setting breakpoints
 or managing execution via the debugger.
 
@@ -50,9 +54,10 @@ The :mod:`bdb` module also defines two classes:
       Mark the breakpoint as disabled.
 
 
-   .. method:: bpprint(out=None)
+   .. method:: bpformat()
 
-      Print all the information about the breakpoint:
+      Return a string with all the information about the breakpoint, nicely
+      formatted:
 
       * The breakpoint number.
       * If it is temporary or not.
@@ -60,6 +65,13 @@ The :mod:`bdb` module also defines two classes:
       * The condition that causes a break.
       * If it must be ignored the next N times.
       * The breakpoint hit count.
+
+      .. versionadded:: 3.2
+
+   .. method:: bpprint(out=None)
+
+      Print the output of :meth:`bpformat` to the file *out*, or if it is
+      ``None``, to standard output.
 
 
 .. class:: Bdb(skip=None)
@@ -266,6 +278,15 @@ The :mod:`bdb` module also defines two classes:
    .. method:: clear_all_breaks()
 
       Delete all existing breakpoints.
+
+   .. method:: get_bpbynumber(arg)
+
+      Return a breakpoint specified by the given number.  If *arg* is a string,
+      it will be converted to a number.  If *arg* is a non-numeric string, if
+      the given breakpoint never existed or has been deleted, a
+      :exc:`ValueError` is raised.
+
+      .. versionadded:: 3.2
 
    .. method:: get_break(filename, lineno)
 

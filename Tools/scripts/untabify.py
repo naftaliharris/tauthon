@@ -1,10 +1,11 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 "Replace tabs with spaces in argument files.  Print names of changed files."
 
 import os
 import sys
 import getopt
+import tokenize
 
 def main():
     tabsize = 8
@@ -23,11 +24,12 @@ def main():
     for filename in args:
         process(filename, tabsize)
 
+
 def process(filename, tabsize, verbose=True):
     try:
-        f = open(filename)
-        text = f.read()
-        f.close()
+        with tokenize.open(filename) as f:
+            text = f.read()
+            encoding = f.encoding
     except IOError as msg:
         print("%r: I/O error: %s" % (filename, msg))
         return
@@ -43,11 +45,11 @@ def process(filename, tabsize, verbose=True):
         os.rename(filename, backup)
     except os.error:
         pass
-    f = open(filename, "w")
-    f.write(newtext)
-    f.close()
+    with open(filename, "w", encoding=encoding) as f:
+        f.write(newtext)
     if verbose:
         print(filename)
+
 
 if __name__ == '__main__':
     main()

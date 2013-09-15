@@ -4,7 +4,6 @@
 /* For info also see http://www.unixpapa.com/incnote/passwd.html */
 
 #include "Python.h"
-#include "structseq.h"
 
 #include <sys/types.h>
 #ifdef HAVE_SHADOW_H
@@ -60,9 +59,7 @@ static void
 sets(PyObject *v, int i, const char* val)
 {
   if (val) {
-      PyObject *o = PyUnicode_Decode(val, strlen(val),
-                                     Py_FileSystemDefaultEncoding,
-                                     "surrogateescape");
+      PyObject *o = PyUnicode_DecodeFSDefault(val);
       PyStructSequence_SET_ITEM(v, i, o);
   } else {
       PyStructSequence_SET_ITEM(v, i, Py_None);
@@ -120,9 +117,7 @@ static PyObject* spwd_getspnam(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "U:getspnam", &arg))
         return NULL;
-    if ((bytes = PyUnicode_AsEncodedString(arg,
-                                           Py_FileSystemDefaultEncoding,
-                                           "surrogateescape")) == NULL)
+    if ((bytes = PyUnicode_EncodeFSDefault(arg)) == NULL)
         return NULL;
     if (PyBytes_AsStringAndSize(bytes, &name, NULL) == -1)
         goto out;
