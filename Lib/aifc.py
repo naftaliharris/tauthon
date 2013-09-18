@@ -123,7 +123,7 @@ It is best to first set all parameters, perhaps possibly the
 compression type, and then write audio frames using writeframesraw.
 When all frames have been written, either call writeframes('') or
 close() to patch up the sizes in the header.
-Marks can be added anytime.  If there are any marks, ypu must call
+Marks can be added anytime.  If there are any marks, you must call
 close() after all frames have been written.
 The close() method is called automatically when the class instance
 is destroyed.
@@ -136,6 +136,7 @@ writeframesraw.
 
 import struct
 import builtins
+import warnings
 
 __all__ = ["Error", "open", "openfp"]
 
@@ -440,7 +441,7 @@ class Aifc_read:
             kludge = 0
             if chunk.chunksize == 18:
                 kludge = 1
-                print('Warning: bad COMM chunk size')
+                warnings.warn('Warning: bad COMM chunk size')
                 chunk.chunksize = 23
             #DEBUG end
             self._comptype = chunk.read(4)
@@ -484,11 +485,10 @@ class Aifc_read:
                     # a position 0 and name ''
                     self._markers.append((id, pos, name))
         except EOFError:
-            print('Warning: MARK chunk contains only', end=' ')
-            print(len(self._markers), end=' ')
-            if len(self._markers) == 1: print('marker', end=' ')
-            else: print('markers', end=' ')
-            print('instead of', nmarkers)
+            w = ('Warning: MARK chunk contains only %s marker%s instead of %s' %
+                 (len(self._markers), '' if len(self._markers) == 1 else 's',
+                  nmarkers))
+            warnings.warn(w)
 
 class Aifc_write:
     # Variables used in this class:
@@ -873,23 +873,27 @@ if __name__ == '__main__':
         sys.argv.append('/usr/demos/data/audio/bach.aiff')
     fn = sys.argv[1]
     f = open(fn, 'r')
-    print("Reading", fn)
-    print("nchannels =", f.getnchannels())
-    print("nframes   =", f.getnframes())
-    print("sampwidth =", f.getsampwidth())
-    print("framerate =", f.getframerate())
-    print("comptype  =", f.getcomptype())
-    print("compname  =", f.getcompname())
-    if sys.argv[2:]:
-        gn = sys.argv[2]
-        print("Writing", gn)
-        g = open(gn, 'w')
-        g.setparams(f.getparams())
-        while 1:
-            data = f.readframes(1024)
-            if not data:
-                break
-            g.writeframes(data)
-        g.close()
+    try:
+        print("Reading", fn)
+        print("nchannels =", f.getnchannels())
+        print("nframes   =", f.getnframes())
+        print("sampwidth =", f.getsampwidth())
+        print("framerate =", f.getframerate())
+        print("comptype  =", f.getcomptype())
+        print("compname  =", f.getcompname())
+        if sys.argv[2:]:
+            gn = sys.argv[2]
+            print("Writing", gn)
+            g = open(gn, 'w')
+            try:
+                g.setparams(f.getparams())
+                while 1:
+                    data = f.readframes(1024)
+                    if not data:
+                        break
+                    g.writeframes(data)
+            finally:
+                g.close()
+            print("Done.")
+    finally:
         f.close()
-        print("Done.")

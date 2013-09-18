@@ -235,6 +235,8 @@ by how you built/installed Python itself.  On Unix (and Mac OS X, which is also
 Unix-based), it also depends on whether the module distribution being installed
 is pure Python or contains extensions ("non-pure"):
 
+.. tabularcolumns:: |l|l|l|l|
+
 +-----------------+-----------------------------------------------------+--------------------------------------------------+-------+
 | Platform        | Standard installation location                      | Default value                                    | Notes |
 +=================+=====================================================+==================================================+=======+
@@ -642,6 +644,11 @@ environment, such as ``$PLAT``.  (And of course, on systems that don't have
 environment variables, such as Mac OS 9, the configuration variables supplied by
 the Distutils are the only ones you can use.) See section :ref:`inst-config-files`
 for details.
+
+.. note:: When a :ref:`virtual environment <venv-def>` is activated, any options
+   that change the installation path will be ignored from all distutils configuration
+   files to prevent inadvertently installing projects outside of the virtual
+   environment.
 
 .. XXX need some Windows examples---when would custom installation schemes be
    needed on those platforms?

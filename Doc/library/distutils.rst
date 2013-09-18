@@ -12,18 +12,14 @@ additional modules into a Python installation.  The new modules may be either
 100%-pure Python, or may be extension modules written in C, or may be
 collections of Python packages which include modules coded in both Python and C.
 
-This package is discussed in two separate chapters:
 
+User documentation and API reference are provided in another document:
 
 .. seealso::
 
    :ref:`distutils-index`
       The manual for developers and packagers of Python modules.  This describes
       how to prepare :mod:`distutils`\ -based packages so that they may be
-      easily installed into an existing Python installation.
-
-   :ref:`install-index`
-      An "administrators" manual which includes information on installing
-      modules into an existing Python installation.  You do not need to be a
-      Python programmer to read this manual.
-
+      easily installed into an existing Python installation.  If also contains
+      instructions for end-users wanting to install a distutils-based package,
+      :ref:`install-index`.

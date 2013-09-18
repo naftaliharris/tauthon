@@ -105,6 +105,7 @@ class Codec:
                     Python will use the official U+FFFD REPLACEMENT
                     CHARACTER for the builtin Unicode codecs on
                     decoding and '?' on encoding.
+         'surrogateescape' - replace with private codepoints U+DCnn.
          'xmlcharrefreplace' - Replace with the appropriate XML
                                character reference (only for encoding).
          'backslashreplace'  - Replace with backslashed escape sequences
@@ -461,7 +462,7 @@ class StreamReader(Codec):
 
         # read until we get the required number of characters (if available)
         while True:
-            # can the request can be satisfied from the character buffer?
+            # can the request be satisfied from the character buffer?
             if chars < 0:
                 if size < 0:
                     if self.charbuffer:
@@ -484,7 +485,7 @@ class StreamReader(Codec):
                 if firstline:
                     newchars, decodedbytes = \
                         self.decode(data[:exc.start], self.errors)
-                    lines = newchars.splitlines(True)
+                    lines = newchars.splitlines(keepends=True)
                     if len(lines)<=1:
                         raise
                 else:
@@ -526,7 +527,7 @@ class StreamReader(Codec):
                 self.charbuffer = self.linebuffer[0]
                 self.linebuffer = None
             if not keepends:
-                line = line.splitlines(False)[0]
+                line = line.splitlines(keepends=False)[0]
             return line
 
         readsize = size or 72
@@ -543,7 +544,7 @@ class StreamReader(Codec):
                     data += self.read(size=1, chars=1)
 
             line += data
-            lines = line.splitlines(True)
+            lines = line.splitlines(keepends=True)
             if lines:
                 if len(lines) > 1:
                     # More than one line result; the first line is a full line
@@ -559,10 +560,10 @@ class StreamReader(Codec):
                         # only one remaining line, put it back into charbuffer
                         self.charbuffer = lines[0] + self.charbuffer
                     if not keepends:
-                        line = line.splitlines(False)[0]
+                        line = line.splitlines(keepends=False)[0]
                     break
                 line0withend = lines[0]
-                line0withoutend = lines[0].splitlines(False)[0]
+                line0withoutend = lines[0].splitlines(keepends=False)[0]
                 if line0withend != line0withoutend: # We really have a line end
                     # Put the rest back together and keep it until the next call
                     self.charbuffer = self._empty_charbuffer.join(lines[1:]) + \
@@ -575,7 +576,7 @@ class StreamReader(Codec):
             # we didn't get anything or this was our only try
             if not data or size is not None:
                 if line and not keepends:
-                    line = line.splitlines(False)[0]
+                    line = line.splitlines(keepends=False)[0]
                 break
             if readsize < 8000:
                 readsize *= 2
@@ -803,7 +804,7 @@ class StreamRecoder:
 
         data = self.reader.read()
         data, bytesencoded = self.encode(data, self.errors)
-        return data.splitlines(1)
+        return data.splitlines(keepends=True)
 
     def __next__(self):
 
@@ -1042,10 +1043,7 @@ def make_identity_dict(rng):
         mapped to themselves.
 
     """
-    res = {}
-    for i in rng:
-        res[i]=i
-    return res
+    return {i:i for i in rng}
 
 def make_encoding_map(decoding_map):
 

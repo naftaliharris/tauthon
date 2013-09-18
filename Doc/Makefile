@@ -53,7 +53,7 @@ checkout:
 	fi
 	@if [ ! -d tools/pygments ]; then \
 	  echo "Checking out Pygments..."; \
-	  svn checkout $(SVNROOT)/external/Pygments-1.3.1/pygments tools/pygments; \
+	  svn checkout $(SVNROOT)/external/Pygments-1.5dev-20120930/pygments tools/pygments; \
 	fi
 
 update: clean checkout
@@ -187,6 +187,10 @@ autobuild-dev:
 	make update
 	make dist SPHINXOPTS='-A daily=1 -A versionswitcher=1'
 
+# for quick rebuilds (HTML only)
+autobuild-html:
+	make html SPHINXOPTS='-A daily=1 -A versionswitcher=1'
+
 # for stable releases: only build if not in pre-release stage (alpha, beta, rc)
 autobuild-stable:
 	@case $(DISTVERSION) in *[abc]*) \
@@ -194,3 +198,4 @@ autobuild-stable:
 		exit 1;; \
 	esac
 	@make autobuild-dev
+

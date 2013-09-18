@@ -55,7 +55,7 @@ instead:
 .. function:: parseString(string, parser=None)
 
    Return a :class:`Document` that represents the *string*. This method creates a
-   :class:`StringIO` object for the string and passes that on to :func:`parse`.
+   :class:`io.StringIO` object for the string and passes that on to :func:`parse`.
 
 Both functions return a :class:`Document` object representing the content of the
 document.
@@ -149,12 +149,7 @@ module documentation.  This section lists the differences between the API and
    the DOM node.
 
    With an explicit *encoding* [1]_ argument, the result is a byte
-   string in the specified encoding.  It is recommended that you
-   always specify an encoding; you may use any encoding you like, but
-   an argument of "utf-8" is the most common choice, avoiding
-   :exc:`UnicodeError` exceptions in case of unrepresentable text
-   data.
-
+   string in the specified encoding.
    With no *encoding* argument, the result is a Unicode string, and the
    XML declaration in the resulting string does not specify an
    encoding. Encoding this string in an encoding other than UTF-8 is
