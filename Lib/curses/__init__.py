@@ -5,12 +5,10 @@ the package, and perhaps a particular module inside it.
 
    import curses
    from curses import textpad
-   curses.initwin()
+   curses.initscr()
    ...
 
 """
-
-__revision__ = "$Id$"
 
 from _curses import *
 from curses.wrapper import wrapper
@@ -56,4 +54,4 @@ def start_color():
 try:
     has_key
 except NameError:
-    from has_key import has_key
+    from .has_key import has_key

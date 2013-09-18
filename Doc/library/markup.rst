@@ -20,9 +20,11 @@ definition of the Python bindings for the DOM and SAX interfaces.
 
 .. toctree::
 
+   html.rst
    html.parser.rst
    html.entities.rst
-   pyexpat.rst
+   xml.rst
+   xml.etree.elementtree.rst
    xml.dom.rst
    xml.dom.minidom.rst
    xml.dom.pulldom.rst
@@ -30,4 +32,4 @@ definition of the Python bindings for the DOM and SAX interfaces.
    xml.sax.handler.rst
    xml.sax.utils.rst
    xml.sax.reader.rst
-   xml.etree.elementtree.rst
+   pyexpat.rst

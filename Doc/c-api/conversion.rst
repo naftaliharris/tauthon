@@ -8,20 +8,20 @@ String conversion and formatting
 Functions for number conversion and formatted string output.
 
 
-.. cfunction:: int PyOS_snprintf(char *str, size_t size,  const char *format, ...)
+.. c:function:: int PyOS_snprintf(char *str, size_t size,  const char *format, ...)
 
    Output not more than *size* bytes to *str* according to the format string
    *format* and the extra arguments. See the Unix man page :manpage:`snprintf(2)`.
 
 
-.. cfunction:: int PyOS_vsnprintf(char *str, size_t size, const char *format, va_list va)
+.. c:function:: int PyOS_vsnprintf(char *str, size_t size, const char *format, va_list va)
 
    Output not more than *size* bytes to *str* according to the format string
    *format* and the variable argument list *va*. Unix man page
    :manpage:`vsnprintf(2)`.
 
-:cfunc:`PyOS_snprintf` and :cfunc:`PyOS_vsnprintf` wrap the Standard C library
-functions :cfunc:`snprintf` and :cfunc:`vsnprintf`. Their purpose is to
+:c:func:`PyOS_snprintf` and :c:func:`PyOS_vsnprintf` wrap the Standard C library
+functions :c:func:`snprintf` and :c:func:`vsnprintf`. Their purpose is to
 guarantee consistent behavior in corner cases, which the Standard C functions do
 not.
 
@@ -30,7 +30,7 @@ never write more than *size* bytes (including the trailing ``'\0'``) into str.
 Both functions require that ``str != NULL``, ``size > 0`` and ``format !=
 NULL``.
 
-If the platform doesn't have :cfunc:`vsnprintf` and the buffer size needed to
+If the platform doesn't have :c:func:`vsnprintf` and the buffer size needed to
 avoid truncation exceeds *size* by more than 512 bytes, Python aborts with a
 *Py_FatalError*.
 
@@ -51,24 +51,9 @@ The return value (*rv*) for these functions should be interpreted as follows:
 The following functions provide locale-independent string to number conversions.
 
 
-.. cfunction:: double PyOS_ascii_strtod(const char *nptr, char **endptr)
+.. c:function:: double PyOS_string_to_double(const char *s, char **endptr, PyObject *overflow_exception)
 
-   Convert a string to a :ctype:`double`. This function behaves like the Standard C
-   function :cfunc:`strtod` does in the C locale. It does this without changing the
-   current locale, since that would not be thread-safe.
-
-   :cfunc:`PyOS_ascii_strtod` should typically be used for reading configuration
-   files or other non-user input that should be locale independent.
-
-   See the Unix man page :manpage:`strtod(2)` for details.
-
-   .. deprecated:: 3.1
-      Use :cfunc:`PyOS_string_to_double` instead.
-
-
-.. cfunction:: double PyOS_string_to_double(const char *s, char **endptr, PyObject *overflow_exception)
-
-   Convert a string ``s`` to a :ctype:`double`, raising a Python
+   Convert a string ``s`` to a :c:type:`double`, raising a Python
    exception on failure.  The set of accepted strings corresponds to
    the set of strings accepted by Python's :func:`float` constructor,
    except that ``s`` must not have leading or trailing whitespace.
@@ -100,23 +85,9 @@ The following functions provide locale-independent string to number conversions.
    .. versionadded:: 3.1
 
 
-.. cfunction:: char* PyOS_ascii_formatd(char *buffer, size_t buf_len, const char *format, double d)
+.. c:function:: char* PyOS_double_to_string(double val, char format_code, int precision, int flags, int *ptype)
 
-   Convert a :ctype:`double` to a string using the ``'.'`` as the decimal
-   separator. *format* is a :cfunc:`printf`\ -style format string specifying the
-   number format. Allowed conversion characters are ``'e'``, ``'E'``, ``'f'``,
-   ``'F'``, ``'g'`` and ``'G'``.
-
-   The return value is a pointer to *buffer* with the converted string or NULL if
-   the conversion failed.
-
-   .. deprecated:: 3.1
-     Use :cfunc:`PyOS_double_to_string` instead.
-
-
-.. cfunction:: char* PyOS_double_to_string(double val, char format_code, int precision, int flags, int *ptype)
-
-   Convert a :ctype:`double` *val* to a string using supplied
+   Convert a :c:type:`double` *val* to a string using supplied
    *format_code*, *precision*, and *flags*.
 
    *format_code* must be one of ``'e'``, ``'E'``, ``'f'``, ``'F'``,
@@ -134,7 +105,7 @@ The following functions provide locale-independent string to number conversions.
      like an integer.
 
    * *Py_DTSF_ALT* means to apply "alternate" formatting rules.  See the
-     documentation for the :cfunc:`PyOS_snprintf` ``'#'`` specifier for
+     documentation for the :c:func:`PyOS_snprintf` ``'#'`` specifier for
      details.
 
    If *ptype* is non-NULL, then the value it points to will be set to one of
@@ -143,28 +114,18 @@ The following functions provide locale-independent string to number conversions.
 
    The return value is a pointer to *buffer* with the converted string or
    *NULL* if the conversion failed. The caller is responsible for freeing the
-   returned string by calling :cfunc:`PyMem_Free`.
+   returned string by calling :c:func:`PyMem_Free`.
 
    .. versionadded:: 3.1
 
 
-.. cfunction:: double PyOS_ascii_atof(const char *nptr)
-
-   Convert a string to a :ctype:`double` in a locale-independent way.
-
-   See the Unix man page :manpage:`atof(2)` for details.
-
-   .. deprecated:: 3.1
-      Use :cfunc:`PyOS_string_to_double` instead.
-
-
-.. cfunction:: char* PyOS_stricmp(char *s1, char *s2)
+.. c:function:: char* PyOS_stricmp(char *s1, char *s2)
 
    Case insensitive comparison of strings. The function works almost
-   identically to :cfunc:`strcmp` except that it ignores the case.
+   identically to :c:func:`strcmp` except that it ignores the case.
 
 
-.. cfunction:: char* PyOS_strnicmp(char *s1, char *s2, Py_ssize_t  size)
+.. c:function:: char* PyOS_strnicmp(char *s1, char *s2, Py_ssize_t  size)
 
    Case insensitive comparison of strings. The function works almost
-   identically to :cfunc:`strncmp` except that it ignores the case.
+   identically to :c:func:`strncmp` except that it ignores the case.

@@ -78,7 +78,7 @@ class WeakValueDictionary(collections.MutableMapping):
         del self.data[key]
 
     def __len__(self):
-        return sum(wr() is not None for wr in self.data.values())
+        return len(self.data) - len(self._pending_removals)
 
     def __contains__(self, key):
         try:
@@ -166,7 +166,7 @@ class WeakValueDictionary(collections.MutableMapping):
     def popitem(self):
         if self._pending_removals:
             self._commit_removals()
-        while 1:
+        while True:
             key, wr = self.data.popitem()
             o = wr()
             if o is not None:
@@ -290,7 +290,7 @@ class WeakKeyDictionary(collections.MutableMapping):
         return self.data[ref(key)]
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data) - len(self._pending_removals)
 
     def __repr__(self):
         return "<WeakKeyDictionary at %s>" % id(self)
@@ -324,7 +324,7 @@ class WeakKeyDictionary(collections.MutableMapping):
         try:
             wr = ref(key)
         except TypeError:
-            return 0
+            return False
         return wr in self.data
 
     def items(self):
@@ -362,7 +362,7 @@ class WeakKeyDictionary(collections.MutableMapping):
         return list(self.data)
 
     def popitem(self):
-        while 1:
+        while True:
             key, value = self.data.popitem()
             o = key()
             if o is not None:

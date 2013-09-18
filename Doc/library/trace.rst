@@ -4,12 +4,14 @@
 .. module:: trace
    :synopsis: Trace or track Python statement execution.
 
+**Source code:** :source:`Lib/trace.py`
+
+--------------
 
 The :mod:`trace` module allows you to trace program execution, generate
 annotated statement coverage listings, print caller/callee relationships and
 list functions executed during a program run.  It can be used in another program
 or from the command line.
-
 
 .. _trace-cli:
 
@@ -199,7 +201,7 @@ A simple example demonstrating the use of the programmatic interface::
    # run the new command using the given tracer
    tracer.run('main()')
 
-   # make a report, placing output in /tmp
+   # make a report, placing output in the current directory
    r = tracer.results()
-   r.write_results(show_missing=True, coverdir="/tmp")
+   r.write_results(show_missing=True, coverdir=".")
 

@@ -4,13 +4,44 @@ import sys
 from functools import wraps
 from warnings import warn
 
-__all__ = ["contextmanager", "nested", "closing"]
+__all__ = ["contextmanager", "closing", "ContextDecorator"]
 
-class GeneratorContextManager(object):
+
+class ContextDecorator(object):
+    "A base class or mixin that enables context managers to work as decorators."
+
+    def _recreate_cm(self):
+        """Return a recreated instance of self.
+
+        Allows otherwise one-shot context managers like
+        _GeneratorContextManager to support use as
+        decorators via implicit recreation.
+
+        Note: this is a private interface just for _GCM in 3.2 but will be
+        renamed and documented for third party use in 3.3
+        """
+        return self
+
+    def __call__(self, func):
+        @wraps(func)
+        def inner(*args, **kwds):
+            with self._recreate_cm():
+                return func(*args, **kwds)
+        return inner
+
+
+class _GeneratorContextManager(ContextDecorator):
     """Helper for @contextmanager decorator."""
 
-    def __init__(self, gen):
-        self.gen = gen
+    def __init__(self, func, *args, **kwds):
+        self.gen = func(*args, **kwds)
+        self.func, self.args, self.kwds = func, args, kwds
+
+    def _recreate_cm(self):
+        # _GCM instances are one-shot context managers, so the
+        # CM must be recreated each time a decorated function is
+        # called
+        return self.__class__(self.func, *self.args, **self.kwds)
 
     def __enter__(self):
         try:
@@ -81,53 +112,8 @@ def contextmanager(func):
     """
     @wraps(func)
     def helper(*args, **kwds):
-        return GeneratorContextManager(func(*args, **kwds))
+        return _GeneratorContextManager(func, *args, **kwds)
     return helper
-
-
-@contextmanager
-def nested(*managers):
-    """Combine multiple context managers into a single nested context manager.
-
-   This function has been deprecated in favour of the multiple manager form
-   of the with statement.
-
-   The one advantage of this function over the multiple manager form of the
-   with statement is that argument unpacking allows it to be
-   used with a variable number of context managers as follows:
-
-      with nested(*managers):
-          do_something()
-
-    """
-    warn("With-statements now directly support multiple context managers",
-        DeprecationWarning, 3)
-    exits = []
-    vars = []
-    exc = (None, None, None)
-    try:
-        for mgr in managers:
-            exit = mgr.__exit__
-            enter = mgr.__enter__
-            vars.append(enter())
-            exits.append(exit)
-        yield vars
-    except:
-        exc = sys.exc_info()
-    finally:
-        while exits:
-            exit = exits.pop()
-            try:
-                if exit(*exc):
-                    exc = (None, None, None)
-            except:
-                exc = sys.exc_info()
-        if exc != (None, None, None):
-            # Don't rely on sys.exc_info() still containing
-            # the right information. Another exception may
-            # have been raised and caught by an exit method
-            # exc[1] already has the __traceback__ attribute populated
-            raise exc[1]
 
 
 class closing(object):

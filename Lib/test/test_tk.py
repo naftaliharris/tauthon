@@ -2,15 +2,14 @@ from test import support
 # Skip test if _tkinter wasn't built.
 support.import_module('_tkinter')
 
-import tkinter
-from tkinter.test import runtktests
-import unittest
+# Make sure tkinter._fix runs to set up the environment
+support.import_fresh_module('tkinter')
 
-try:
-    tkinter.Button()
-except tkinter.TclError as msg:
-    # assuming tk is not available
-    raise unittest.SkipTest("tk not available: %s" % msg)
+# Skip test if tk cannot be initialized.
+from tkinter.test.support import check_tk_availability
+check_tk_availability()
+
+from tkinter.test import runtktests
 
 def test_main(enable_gui=False):
     if enable_gui:

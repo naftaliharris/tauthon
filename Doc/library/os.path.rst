@@ -17,6 +17,11 @@ path names. Vice versa, using bytes objects cannot represent all file
 names on Windows (in the standard ``mbcs`` encoding), hence Windows
 applications should use string objects to access all files.
 
+Unlike a unix shell, Python does not do any *automatic* path expansions.
+Functions such as :func:`expanduser` and :func:`expandvars` can be invoked
+explicitly when an application desires shell-like path expansion.  (See also
+the :mod:`glob` module.)
+
 .. note::
 
    All of these functions accept either only bytes or only string objects as
@@ -43,13 +48,15 @@ applications should use string objects to access all files.
 .. function:: abspath(path)
 
    Return a normalized absolutized version of the pathname *path*. On most
-   platforms, this is equivalent to ``normpath(join(os.getcwd(), path))``.
+   platforms, this is equivalent to calling the function :func:`normpath` as
+   follows: ``normpath(join(os.getcwd(), path))``.
 
 
 .. function:: basename(path)
 
-   Return the base name of pathname *path*.  This is the second half of the pair
-   returned by ``split(path)``.  Note that the result of this function is different
+   Return the base name of pathname *path*.  This is the second element of the
+   pair returned by passing *path* to the function :func:`split`.  Note that
+   the result of this function is different
    from the Unix :program:`basename` program; where :program:`basename` for
    ``'/foo/bar/'`` returns ``'bar'``, the :func:`basename` function returns an
    empty string (``''``).
@@ -64,8 +71,8 @@ applications should use string objects to access all files.
 
 .. function:: dirname(path)
 
-   Return the directory name of pathname *path*.  This is the first half of the
-   pair returned by ``split(path)``.
+   Return the directory name of pathname *path*.  This is the first element of
+   the pair returned by passing *path* to the function :func:`split`.
 
 
 .. function:: exists(path)
@@ -190,10 +197,11 @@ applications should use string objects to access all files.
    path, all previous components (on Windows, including the previous drive letter,
    if there was one) are thrown away, and joining continues.  The return value is
    the concatenation of *path1*, and optionally *path2*, etc., with exactly one
-   directory separator (``os.sep``) inserted between components, unless *path2* is
-   empty.  Note that on Windows, since there is a current directory for each drive,
-   ``os.path.join("c:", "foo")`` represents a path relative to the current
-   directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
+   directory separator (``os.sep``) following each non-empty part except the last.
+   (This means that an empty last part will result in a path that ends with a
+   separator.)  Note that on Windows, since there is a current directory for
+   each drive, ``os.path.join("c:", "foo")`` represents a path relative to the
+   current directory on drive :file:`C:` (:file:`c:foo`), not :file:`c:\\foo`.
 
 
 .. function:: normcase(path)
@@ -201,17 +209,16 @@ applications should use string objects to access all files.
    Normalize the case of a pathname.  On Unix and Mac OS X, this returns the
    path unchanged; on case-insensitive filesystems, it converts the path to
    lowercase.  On Windows, it also converts forward slashes to backward slashes.
+   Raise a TypeError if the type of *path* is not ``str`` or ``bytes``.
 
 
 .. function:: normpath(path)
 
-   Normalize a pathname.  This collapses redundant separators and up-level
-   references so that ``A//B``, ``A/B/``, ``A/./B`` and ``A/foo/../B`` all become
-   ``A/B``.
-
-   It does not normalize the case (use :func:`normcase` for that).  On Windows, it
-   converts forward slashes to backward slashes. It should be understood that this
-   may change the meaning of the path if it contains symbolic links!
+   Normalize a pathname by collapsing redundant separators and up-level
+   references so that ``A//B``, ``A/B/``, ``A/./B`` and ``A/foo/../B`` all
+   become ``A/B``.  This string manipulation may change the meaning of a path
+   that contains symbolic links.  On Windows, it converts forward slashes to
+   backward slashes. To normalize case, use :func:`normcase`.
 
 
 .. function:: realpath(path)
@@ -220,7 +227,7 @@ applications should use string objects to access all files.
    links encountered in the path (if they are supported by the operating system).
 
 
-.. function:: relpath(path[, start])
+.. function:: relpath(path, start=None)
 
    Return a relative filepath to *path* either from the current directory or from
    an optional *start* point.
@@ -232,18 +239,27 @@ applications should use string objects to access all files.
 
 .. function:: samefile(path1, path2)
 
-   Return ``True`` if both pathname arguments refer to the same file or directory
-   (as indicated by device number and i-node number). Raise an exception if a
-   :func:`os.stat` call on either pathname fails.
+   Return ``True`` if both pathname arguments refer to the same file or directory.
+   On Unix, this is determined by the device number and i-node number and raises an
+   exception if a :func:`os.stat` call on either pathname fails.
 
-   Availability: Unix.
+   On Windows, two files are the same if they resolve to the same final path
+   name using the Windows API call GetFinalPathNameByHandle. This function
+   raises an exception if handles cannot be obtained to either file.
+
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.2
+      Added Windows support.
 
 
 .. function:: sameopenfile(fp1, fp2)
 
    Return ``True`` if the file descriptors *fp1* and *fp2* refer to the same file.
 
-   Availability: Unix.
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.2 Added Windows support.
 
 
 .. function:: samestat(stat1, stat2)
@@ -265,7 +281,8 @@ applications should use string objects to access all files.
    *path* is empty, both *head* and *tail* are empty.  Trailing slashes are
    stripped from *head* unless it is the root (one or more slashes only).  In
    all cases, ``join(head, tail)`` returns a path to the same location as *path*
-   (but the strings may differ).
+   (but the strings may differ).  Also see the functions :func:`dirname` and
+   :func:`basename`.
 
 
 .. function:: splitdrive(path)

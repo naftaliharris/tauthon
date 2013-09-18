@@ -287,7 +287,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="&quot;..\..\..\sqlite-3.5.9&quot;"
+				AdditionalIncludeDirectories="&quot;..\..\..\sqlite-3.6.21&quot;"
 			/>
 			<Tool
 				Name="VCManagedResourceCompilerTool"
@@ -515,11 +515,11 @@
 			Name="Header Files"
 			>
 			<File
-				RelativePath="..\..\..\sqlite-3.5.9\sqlite3.h"
+				RelativePath="..\..\..\sqlite-3.6.21\sqlite3.h"
 				>
 			</File>
 			<File
-				RelativePath="..\..\..\sqlite-3.5.9\sqlite3ext.h"
+				RelativePath="..\..\..\sqlite-3.6.21\sqlite3ext.h"
 				>
 			</File>
 		</Filter>
@@ -527,7 +527,7 @@
 			Name="Source Files"
 			>
 			<File
-				RelativePath="..\..\..\sqlite-3.5.9\sqlite3.c"
+				RelativePath="..\..\..\sqlite-3.6.21\sqlite3.c"
 				>
 			</File>
 		</Filter>

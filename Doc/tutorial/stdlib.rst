@@ -72,7 +72,7 @@ three`` at the command line::
 
 The :mod:`getopt` module processes *sys.argv* using the conventions of the Unix
 :func:`getopt` function.  More powerful and flexible command line processing is
-provided by the :mod:`optparse` module.
+provided by the :mod:`argparse` module.
 
 
 .. _tut-stderr:
@@ -148,7 +148,7 @@ Internet Access
 
 There are a number of modules for accessing the internet and processing internet
 protocols. Two of the simplest are :mod:`urllib.request` for retrieving data
-from urls and :mod:`smtplib` for sending mail::
+from URLs and :mod:`smtplib` for sending mail::
 
    >>> from urllib.request import urlopen
    >>> for line in urlopen('http://tycho.usno.navy.mil/cgi-bin/timer.pl'):

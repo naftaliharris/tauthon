@@ -7,7 +7,7 @@ import copy
 import pickle
 from io import StringIO
 import random
-import os
+import struct
 
 BIG = 100000
 
@@ -115,6 +115,39 @@ class TestBasic(unittest.TestCase):
             d = deque('abc')
             d.maxlen = 10
 
+    def test_count(self):
+        for s in ('', 'abracadabra', 'simsalabim'*500+'abc'):
+            s = list(s)
+            d = deque(s)
+            for letter in 'abcdefghijklmnopqrstuvwxyz':
+                self.assertEqual(s.count(letter), d.count(letter), (s, d, letter))
+        self.assertRaises(TypeError, d.count)       # too few args
+        self.assertRaises(TypeError, d.count, 1, 2) # too many args
+        class BadCompare:
+            def __eq__(self, other):
+                raise ArithmeticError
+        d = deque([1, 2, BadCompare(), 3])
+        self.assertRaises(ArithmeticError, d.count, 2)
+        d = deque([1, 2, 3])
+        self.assertRaises(ArithmeticError, d.count, BadCompare())
+        class MutatingCompare:
+            def __eq__(self, other):
+                self.d.pop()
+                return True
+        m = MutatingCompare()
+        d = deque([1, 2, 3, m, 4, 5])
+        m.d = d
+        self.assertRaises(RuntimeError, d.count, 3)
+
+        # test issue11004
+        # block advance failed after rotation aligned elements on right side of block
+        d = deque([None]*16)
+        for i in range(len(d)):
+            d.rotate(-1)
+        d.rotate(1)
+        self.assertEqual(d.count(1), 0)
+        self.assertEqual(d.count(None), 16)
+
     def test_comparisons(self):
         d = deque('xabc'); d.popleft()
         for e in [d, deque('abc'), deque('ab'), deque(), list(d)]:
@@ -199,10 +232,22 @@ class TestBasic(unittest.TestCase):
             self.assertEqual(len(d), n-i)
             j = random.randrange(-len(d), len(d))
             val = d[j]
-            self.assertTrue(val in d)
+            self.assertIn(val, d)
             del d[j]
-            self.assertTrue(val not in d)
+            self.assertNotIn(val, d)
         self.assertEqual(len(d), 0)
+
+    def test_reverse(self):
+        n = 500         # O(n**2) test, don't make this too big
+        data = [random.random() for i in range(n)]
+        for i in range(n):
+            d = deque(data[:i])
+            r = d.reverse()
+            self.assertEqual(list(d), list(reversed(data[:i])))
+            self.assertIs(r, None)
+            d.reverse()
+            self.assertEqual(list(d), data[:i])
+        self.assertRaises(TypeError, d.reverse, 1)          # Arity is zero
 
     def test_rotate(self):
         s = tuple('abcde')
@@ -316,7 +361,7 @@ class TestBasic(unittest.TestCase):
         e = eval(repr(d))
         self.assertEqual(list(d), list(e))
         d.append(d)
-        self.assertTrue('...' in repr(d))
+        self.assertIn('...', repr(d))
 
     def test_print(self):
         d = deque(range(200))
@@ -473,6 +518,21 @@ class TestBasic(unittest.TestCase):
             del obj, container
             gc.collect()
             self.assertTrue(ref() is None, "Cycle was not collected")
+
+    check_sizeof = support.check_sizeof
+
+    @support.cpython_only
+    def test_sizeof(self):
+        BLOCKLEN = 62
+        basesize = support.calcobjsize('2P4PlP')
+        blocksize = struct.calcsize('2P%dP' % BLOCKLEN)
+        self.assertEqual(object.__sizeof__(deque()), basesize)
+        check = self.check_sizeof
+        check(deque(), basesize + blocksize)
+        check(deque('a'), basesize + blocksize)
+        check(deque('a' * (BLOCKLEN // 2)), basesize + blocksize)
+        check(deque('a' * (BLOCKLEN // 2 + 1)), basesize + 2 * blocksize)
+        check(deque('a' * (42 * BLOCKLEN)), basesize + 43 * blocksize)
 
 class TestVariousIteratorArgs(unittest.TestCase):
 

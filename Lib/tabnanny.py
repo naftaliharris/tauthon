@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 
 """The Tab Nanny despises ambiguous indentation.  She knows no mercy.
 
@@ -93,11 +93,8 @@ def check(file):
                 check(fullname)
         return
 
-    with open(file, 'rb') as f:
-        encoding, lines = tokenize.detect_encoding(f.readline)
-
     try:
-        f = open(file, encoding=encoding)
+        f = tokenize.open(file)
     except IOError as msg:
         errprint("%r: I/O Error: %s" % (file, msg))
         return
@@ -128,6 +125,9 @@ def check(file):
             if filename_only: print(file)
             else: print(file, badline, repr(line))
         return
+
+    finally:
+        f.close()
 
     if verbose:
         print("%r: Clean bill of health." % (file,))
@@ -188,21 +188,21 @@ class Whitespace:
         # count, il = self.norm
         # for i in range(len(count)):
         #    if count[i]:
-        #        il = il + (i/tabsize + 1)*tabsize * count[i]
+        #        il = il + (i//tabsize + 1)*tabsize * count[i]
         # return il
 
         # quicker:
-        # il = trailing + sum (i/ts + 1)*ts*count[i] =
-        # trailing + ts * sum (i/ts + 1)*count[i] =
-        # trailing + ts * sum i/ts*count[i] + count[i] =
-        # trailing + ts * [(sum i/ts*count[i]) + (sum count[i])] =
-        # trailing + ts * [(sum i/ts*count[i]) + num_tabs]
-        # and note that i/ts*count[i] is 0 when i < ts
+        # il = trailing + sum (i//ts + 1)*ts*count[i] =
+        # trailing + ts * sum (i//ts + 1)*count[i] =
+        # trailing + ts * sum i//ts*count[i] + count[i] =
+        # trailing + ts * [(sum i//ts*count[i]) + (sum count[i])] =
+        # trailing + ts * [(sum i//ts*count[i]) + num_tabs]
+        # and note that i//ts*count[i] is 0 when i < ts
 
         count, trailing = self.norm
         il = 0
         for i in range(tabsize, len(count)):
-            il = il + i/tabsize * count[i]
+            il = il + i//tabsize * count[i]
         return trailing + tabsize * (il + self.nt)
 
     # return true iff self.indent_level(t) == other.indent_level(t)
@@ -267,7 +267,7 @@ class Whitespace:
         return a
 
 def format_witnesses(w):
-    firsts = map(lambda tup: str(tup[0]), w)
+    firsts = (str(tup[0]) for tup in w)
     prefix = "at tab size"
     if len(w) > 1:
         prefix = prefix + "s"

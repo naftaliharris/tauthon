@@ -1,6 +1,8 @@
 
 /* audioopmodule - Module to detect peak values in arrays */
 
+#define PY_SSIZE_T_CLEAN
+
 #include "Python.h"
 
 #if SIZEOF_INT == 4
@@ -23,6 +25,21 @@ typedef short PyInt16;
    characters are available.  Take it out of Setup.  Sorry. */
 #endif
 #endif
+
+static const int maxvals[] = {0, 0x7F, 0x7FFF, 0x7FFFFF, 0x7FFFFFFF};
+static const int minvals[] = {0, -0x80, -0x8000, -0x800000, -0x80000000};
+static const unsigned int masks[] = {0, 0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF};
+
+static int
+fbound(double val, double minval, double maxval)
+{
+    if (val > maxval)
+        val = maxval;
+    else if (val < minval + 1)
+        val = minval;
+    return val;
+}
+
 
 /* Code shamelessly stolen from sox, 12.17.7, g711.c
 ** (c) Craig Reese, Joe Campbell and Jeff Poskanzer 1989 */
@@ -307,7 +324,7 @@ audioop_check_size(int size)
 }
 
 static int
-audioop_check_parameters(int len, int size)
+audioop_check_parameters(Py_ssize_t len, int size)
 {
     if (!audioop_check_size(size))
         return 0;
@@ -322,10 +339,10 @@ static PyObject *
 audioop_getsample(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
+    Py_ssize_t len, i;
+    int size, val = 0;
 
-    if ( !PyArg_ParseTuple(args, "s#ii:getsample", &cp, &len, &size, &i) )
+    if ( !PyArg_ParseTuple(args, "s#in:getsample", &cp, &len, &size, &i) )
         return 0;
     if (!audioop_check_parameters(len, size))
         return NULL;
@@ -343,9 +360,9 @@ static PyObject *
 audioop_max(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
-    int max = 0;
+    Py_ssize_t len, i;
+    int size, val = 0;
+    unsigned int absval, max = 0;
 
     if ( !PyArg_ParseTuple(args, "s#i:max", &cp, &len, &size) )
         return 0;
@@ -355,19 +372,20 @@ audioop_max(PyObject *self, PyObject *args)
         if ( size == 1 )      val = (int)*CHARP(cp, i);
         else if ( size == 2 ) val = (int)*SHORTP(cp, i);
         else if ( size == 4 ) val = (int)*LONGP(cp, i);
-        if ( val < 0 ) val = (-val);
-        if ( val > max ) max = val;
+        if (val < 0) absval = (-val);
+        else absval = val;
+        if (absval > max) max = absval;
     }
-    return PyLong_FromLong(max);
+    return PyLong_FromUnsignedLong(max);
 }
 
 static PyObject *
 audioop_minmax(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
-    int min = 0x7fffffff, max = -0x7fffffff;
+    Py_ssize_t len, i;
+    int size, val = 0;
+    int min = 0x7fffffff, max = -0x80000000;
 
     if (!PyArg_ParseTuple(args, "s#i:minmax", &cp, &len, &size))
         return NULL;
@@ -387,8 +405,8 @@ static PyObject *
 audioop_avg(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
+    Py_ssize_t len, i;
+    int size, val = 0;
     double avg = 0.0;
 
     if ( !PyArg_ParseTuple(args, "s#i:avg", &cp, &len, &size) )
@@ -404,7 +422,7 @@ audioop_avg(PyObject *self, PyObject *args)
     if ( len == 0 )
         val = 0;
     else
-        val = (int)(avg / (double)(len/size));
+        val = (int)floor(avg / (double)(len/size));
     return PyLong_FromLong(val);
 }
 
@@ -412,8 +430,9 @@ static PyObject *
 audioop_rms(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
+    Py_ssize_t len, i;
+    int size, val = 0;
+    unsigned int res;
     double sum_squares = 0.0;
 
     if ( !PyArg_ParseTuple(args, "s#i:rms", &cp, &len, &size) )
@@ -427,15 +446,15 @@ audioop_rms(PyObject *self, PyObject *args)
         sum_squares += (double)val*(double)val;
     }
     if ( len == 0 )
-        val = 0;
+        res = 0;
     else
-        val = (int)sqrt(sum_squares / (double)(len/size));
-    return PyLong_FromLong(val);
+        res = (unsigned int)sqrt(sum_squares / (double)(len/size));
+    return PyLong_FromUnsignedLong(res);
 }
 
-static double _sum2(short *a, short *b, int len)
+static double _sum2(short *a, short *b, Py_ssize_t len)
 {
-    int i;
+    Py_ssize_t i;
     double sum = 0.0;
 
     for( i=0; i<len; i++) {
@@ -480,8 +499,8 @@ static PyObject *
 audioop_findfit(PyObject *self, PyObject *args)
 {
     short *cp1, *cp2;
-    int len1, len2;
-    int j, best_j;
+    Py_ssize_t len1, len2;
+    Py_ssize_t j, best_j;
     double aj_m1, aj_lm1;
     double sum_ri_2, sum_aij_2, sum_aij_ri, result, best_result, factor;
 
@@ -532,7 +551,7 @@ audioop_findfit(PyObject *self, PyObject *args)
 
     factor = _sum2(cp1+best_j, cp2, len2) / sum_ri_2;
 
-    return Py_BuildValue("(if)", best_j, factor);
+    return Py_BuildValue("(nf)", best_j, factor);
 }
 
 /*
@@ -543,7 +562,7 @@ static PyObject *
 audioop_findfactor(PyObject *self, PyObject *args)
 {
     short *cp1, *cp2;
-    int len1, len2;
+    Py_ssize_t len1, len2;
     double sum_ri_2, sum_aij_ri, result;
 
     if ( !PyArg_ParseTuple(args, "s#s#:findfactor",
@@ -574,12 +593,12 @@ static PyObject *
 audioop_findmax(PyObject *self, PyObject *args)
 {
     short *cp1;
-    int len1, len2;
-    int j, best_j;
+    Py_ssize_t len1, len2;
+    Py_ssize_t j, best_j;
     double aj_m1, aj_lm1;
     double result, best_result;
 
-    if ( !PyArg_ParseTuple(args, "s#i:findmax",
+    if ( !PyArg_ParseTuple(args, "s#n:findmax",
                            (char**)&cp1, &len1, &len2) )
         return 0;
     if ( len1 & 1 ) {
@@ -612,122 +631,116 @@ audioop_findmax(PyObject *self, PyObject *args)
 
     }
 
-    return PyLong_FromLong(best_j);
+    return PyLong_FromSsize_t(best_j);
 }
 
 static PyObject *
 audioop_avgpp(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0, prevval = 0, prevextremevalid = 0,
+    Py_ssize_t len, i;
+    int size, val = 0, prevval = 0, prevextremevalid = 0,
         prevextreme = 0;
-    int i;
-    double avg = 0.0;
-    int diff, prevdiff, extremediff, nextreme = 0;
+    double sum = 0.0;
+    unsigned int avg;
+    int diff, prevdiff, nextreme = 0;
 
     if ( !PyArg_ParseTuple(args, "s#i:avgpp", &cp, &len, &size) )
         return 0;
     if (!audioop_check_parameters(len, size))
         return NULL;
-    /* Compute first delta value ahead. Also automatically makes us
-    ** skip the first extreme value
-    */
+    if (len <= size)
+        return PyLong_FromLong(0);
     if ( size == 1 )      prevval = (int)*CHARP(cp, 0);
     else if ( size == 2 ) prevval = (int)*SHORTP(cp, 0);
     else if ( size == 4 ) prevval = (int)*LONGP(cp, 0);
-    if ( size == 1 )      val = (int)*CHARP(cp, size);
-    else if ( size == 2 ) val = (int)*SHORTP(cp, size);
-    else if ( size == 4 ) val = (int)*LONGP(cp, size);
-    prevdiff = val - prevval;
-
+    prevdiff = 17; /* Anything != 0, 1 */
     for ( i=size; i<len; i+= size) {
         if ( size == 1 )      val = (int)*CHARP(cp, i);
         else if ( size == 2 ) val = (int)*SHORTP(cp, i);
         else if ( size == 4 ) val = (int)*LONGP(cp, i);
-        diff = val - prevval;
-        if ( diff*prevdiff < 0 ) {
-            /* Derivative changed sign. Compute difference to last
-            ** extreme value and remember.
-            */
-            if ( prevextremevalid ) {
-                extremediff = prevval - prevextreme;
-                if ( extremediff < 0 )
-                    extremediff = -extremediff;
-                avg += extremediff;
-                nextreme++;
+        if (val != prevval) {
+            diff = val < prevval;
+            if (prevdiff == !diff) {
+                /* Derivative changed sign. Compute difference to last
+                ** extreme value and remember.
+                */
+                if (prevextremevalid) {
+                    sum += fabs((double)prevval - (double)prevextreme);
+                    nextreme++;
+                }
+                prevextremevalid = 1;
+                prevextreme = prevval;
             }
-            prevextremevalid = 1;
-            prevextreme = prevval;
-        }
-        prevval = val;
-        if ( diff != 0 )
+            prevval = val;
             prevdiff = diff;
+        }
     }
     if ( nextreme == 0 )
-        val = 0;
+        avg = 0;
     else
-        val = (int)(avg / (double)nextreme);
-    return PyLong_FromLong(val);
+        avg = (unsigned int)(sum / (double)nextreme);
+    return PyLong_FromUnsignedLong(avg);
 }
 
 static PyObject *
 audioop_maxpp(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0, prevval = 0, prevextremevalid = 0,
+    Py_ssize_t len, i;
+    int size, val = 0, prevval = 0, prevextremevalid = 0,
         prevextreme = 0;
-    int i;
-    int max = 0;
-    int diff, prevdiff, extremediff;
+    unsigned int max = 0, extremediff;
+    int diff, prevdiff;
 
     if ( !PyArg_ParseTuple(args, "s#i:maxpp", &cp, &len, &size) )
         return 0;
     if (!audioop_check_parameters(len, size))
         return NULL;
-    /* Compute first delta value ahead. Also automatically makes us
-    ** skip the first extreme value
-    */
+    if (len <= size)
+        return PyLong_FromLong(0);
     if ( size == 1 )      prevval = (int)*CHARP(cp, 0);
     else if ( size == 2 ) prevval = (int)*SHORTP(cp, 0);
     else if ( size == 4 ) prevval = (int)*LONGP(cp, 0);
-    if ( size == 1 )      val = (int)*CHARP(cp, size);
-    else if ( size == 2 ) val = (int)*SHORTP(cp, size);
-    else if ( size == 4 ) val = (int)*LONGP(cp, size);
-    prevdiff = val - prevval;
-
+    prevdiff = 17; /* Anything != 0, 1 */
     for ( i=size; i<len; i+= size) {
         if ( size == 1 )      val = (int)*CHARP(cp, i);
         else if ( size == 2 ) val = (int)*SHORTP(cp, i);
         else if ( size == 4 ) val = (int)*LONGP(cp, i);
-        diff = val - prevval;
-        if ( diff*prevdiff < 0 ) {
-            /* Derivative changed sign. Compute difference to
-            ** last extreme value and remember.
-            */
-            if ( prevextremevalid ) {
-                extremediff = prevval - prevextreme;
-                if ( extremediff < 0 )
-                    extremediff = -extremediff;
-                if ( extremediff > max )
-                    max = extremediff;
+        if (val != prevval) {
+            diff = val < prevval;
+            if (prevdiff == !diff) {
+                /* Derivative changed sign. Compute difference to
+                ** last extreme value and remember.
+                */
+                if (prevextremevalid) {
+                    if (prevval < prevextreme)
+                        extremediff = (unsigned int)prevextreme -
+                                      (unsigned int)prevval;
+                    else
+                        extremediff = (unsigned int)prevval -
+                                      (unsigned int)prevextreme;
+                    if ( extremediff > max )
+                        max = extremediff;
+                }
+                prevextremevalid = 1;
+                prevextreme = prevval;
             }
-            prevextremevalid = 1;
-            prevextreme = prevval;
-        }
-        prevval = val;
-        if ( diff != 0 )
+            prevval = val;
             prevdiff = diff;
+        }
     }
-    return PyLong_FromLong(max);
+    return PyLong_FromUnsignedLong(max);
 }
 
 static PyObject *
 audioop_cross(PyObject *self, PyObject *args)
 {
     signed char *cp;
-    int len, size, val = 0;
-    int i;
-    int prevval, ncross;
+    Py_ssize_t len, i;
+    int size, val = 0;
+    int prevval;
+    Py_ssize_t ncross;
 
     if ( !PyArg_ParseTuple(args, "s#i:cross", &cp, &len, &size) )
         return 0;
@@ -743,30 +756,25 @@ audioop_cross(PyObject *self, PyObject *args)
         if ( val != prevval ) ncross++;
         prevval = val;
     }
-    return PyLong_FromLong(ncross);
+    return PyLong_FromSsize_t(ncross);
 }
 
 static PyObject *
 audioop_mul(PyObject *self, PyObject *args)
 {
     signed char *cp, *ncp;
-    int len, size, val = 0;
-    double factor, fval, maxval;
+    Py_ssize_t len, i;
+    int size, val = 0;
+    double factor, fval, maxval, minval;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#id:mul", &cp, &len, &size, &factor ) )
         return 0;
     if (!audioop_check_parameters(len, size))
         return NULL;
 
-    if ( size == 1 ) maxval = (double) 0x7f;
-    else if ( size == 2 ) maxval = (double) 0x7fff;
-    else if ( size == 4 ) maxval = (double) 0x7fffffff;
-    else {
-        PyErr_SetString(AudioopError, "Size should be 1, 2 or 4");
-        return 0;
-    }
+    maxval = (double) maxvals[size];
+    minval = (double) minvals[size];
 
     rv = PyBytes_FromStringAndSize(NULL, len);
     if ( rv == 0 )
@@ -779,9 +787,7 @@ audioop_mul(PyObject *self, PyObject *args)
         else if ( size == 2 ) val = (int)*SHORTP(cp, i);
         else if ( size == 4 ) val = (int)*LONGP(cp, i);
         fval = (double)val*factor;
-        if ( fval > maxval ) fval = maxval;
-        else if ( fval < -maxval ) fval = -maxval;
-        val = (int)fval;
+        val = (int)floor(fbound(fval, minval, maxval));
         if ( size == 1 )      *CHARP(ncp, i) = (signed char)val;
         else if ( size == 2 ) *SHORTP(ncp, i) = (short)val;
         else if ( size == 4 ) *LONGP(ncp, i) = (Py_Int32)val;
@@ -794,10 +800,10 @@ audioop_tomono(PyObject *self, PyObject *args)
 {
     Py_buffer pcp;
     signed char *cp, *ncp;
-    int len, size, val1 = 0, val2 = 0;
-    double fac1, fac2, fval, maxval;
+    Py_ssize_t len, i;
+    int size, val1 = 0, val2 = 0;
+    double fac1, fac2, fval, maxval, minval;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s*idd:tomono",
                            &pcp, &size, &fac1, &fac2 ) )
@@ -814,14 +820,8 @@ audioop_tomono(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if ( size == 1 ) maxval = (double) 0x7f;
-    else if ( size == 2 ) maxval = (double) 0x7fff;
-    else if ( size == 4 ) maxval = (double) 0x7fffffff;
-    else {
-        PyBuffer_Release(&pcp);
-        PyErr_SetString(AudioopError, "Size should be 1, 2 or 4");
-        return 0;
-    }
+    maxval = (double) maxvals[size];
+    minval = (double) minvals[size];
 
     rv = PyBytes_FromStringAndSize(NULL, len/2);
     if ( rv == 0 ) {
@@ -839,9 +839,7 @@ audioop_tomono(PyObject *self, PyObject *args)
         else if ( size == 2 ) val2 = (int)*SHORTP(cp, i+2);
         else if ( size == 4 ) val2 = (int)*LONGP(cp, i+4);
         fval = (double)val1*fac1 + (double)val2*fac2;
-        if ( fval > maxval ) fval = maxval;
-        else if ( fval < -maxval ) fval = -maxval;
-        val1 = (int)fval;
+        val1 = (int)floor(fbound(fval, minval, maxval));
         if ( size == 1 )      *CHARP(ncp, i/2) = (signed char)val1;
         else if ( size == 2 ) *SHORTP(ncp, i/2) = (short)val1;
         else if ( size == 4 ) *LONGP(ncp, i/2)= (Py_Int32)val1;
@@ -854,10 +852,10 @@ static PyObject *
 audioop_tostereo(PyObject *self, PyObject *args)
 {
     signed char *cp, *ncp;
-    int len, size, val1, val2, val = 0;
-    double fac1, fac2, fval, maxval;
+    Py_ssize_t len, i;
+    int size, val1, val2, val = 0;
+    double fac1, fac2, fval, maxval, minval;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#idd:tostereo",
                            &cp, &len, &size, &fac1, &fac2 ) )
@@ -865,15 +863,10 @@ audioop_tostereo(PyObject *self, PyObject *args)
     if (!audioop_check_parameters(len, size))
         return NULL;
 
-    if ( size == 1 ) maxval = (double) 0x7f;
-    else if ( size == 2 ) maxval = (double) 0x7fff;
-    else if ( size == 4 ) maxval = (double) 0x7fffffff;
-    else {
-        PyErr_SetString(AudioopError, "Size should be 1, 2 or 4");
-        return 0;
-    }
+    maxval = (double) maxvals[size];
+    minval = (double) minvals[size];
 
-    if (len > INT_MAX/2) {
+    if (len > PY_SSIZE_T_MAX/2) {
         PyErr_SetString(PyExc_MemoryError,
                         "not enough memory for output buffer");
         return 0;
@@ -891,14 +884,10 @@ audioop_tostereo(PyObject *self, PyObject *args)
         else if ( size == 4 ) val = (int)*LONGP(cp, i);
 
         fval = (double)val*fac1;
-        if ( fval > maxval ) fval = maxval;
-        else if ( fval < -maxval ) fval = -maxval;
-        val1 = (int)fval;
+        val1 = (int)floor(fbound(fval, minval, maxval));
 
         fval = (double)val*fac2;
-        if ( fval > maxval ) fval = maxval;
-        else if ( fval < -maxval ) fval = -maxval;
-        val2 = (int)fval;
+        val2 = (int)floor(fbound(fval, minval, maxval));
 
         if ( size == 1 )      *CHARP(ncp, i*2) = (signed char)val1;
         else if ( size == 2 ) *SHORTP(ncp, i*2) = (short)val1;
@@ -915,9 +904,9 @@ static PyObject *
 audioop_add(PyObject *self, PyObject *args)
 {
     signed char *cp1, *cp2, *ncp;
-    int len1, len2, size, val1 = 0, val2 = 0, maxval, newval;
+    Py_ssize_t len1, len2, i;
+    int size, val1 = 0, val2 = 0, minval, maxval, newval;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#s#i:add",
                       &cp1, &len1, &cp2, &len2, &size ) )
@@ -929,13 +918,8 @@ audioop_add(PyObject *self, PyObject *args)
         return 0;
     }
 
-    if ( size == 1 ) maxval = 0x7f;
-    else if ( size == 2 ) maxval = 0x7fff;
-    else if ( size == 4 ) maxval = 0x7fffffff;
-    else {
-        PyErr_SetString(AudioopError, "Size should be 1, 2 or 4");
-        return 0;
-    }
+    maxval = maxvals[size];
+    minval = minvals[size];
 
     rv = PyBytes_FromStringAndSize(NULL, len1);
     if ( rv == 0 )
@@ -951,12 +935,19 @@ audioop_add(PyObject *self, PyObject *args)
         else if ( size == 2 ) val2 = (int)*SHORTP(cp2, i);
         else if ( size == 4 ) val2 = (int)*LONGP(cp2, i);
 
-        newval = val1 + val2;
-        /* truncate in case of overflow */
-        if (newval > maxval) newval = maxval;
-        else if (newval < -maxval) newval = -maxval;
-        else if (size == 4 && (newval^val1) < 0 && (newval^val2) < 0)
-            newval = val1 > 0 ? maxval : - maxval;
+        if (size < 4) {
+            newval = val1 + val2;
+            /* truncate in case of overflow */
+            if (newval > maxval)
+                newval = maxval;
+            else if (newval < minval)
+                newval = minval;
+        }
+        else {
+            double fval = (double)val1 + (double)val2;
+            /* truncate in case of overflow */
+            newval = (int)floor(fbound(fval, minval, maxval));
+        }
 
         if ( size == 1 )      *CHARP(ncp, i) = (signed char)newval;
         else if ( size == 2 ) *SHORTP(ncp, i) = (short)newval;
@@ -969,10 +960,10 @@ static PyObject *
 audioop_bias(PyObject *self, PyObject *args)
 {
     signed char *cp, *ncp;
-    int len, size, val = 0;
+    Py_ssize_t len, i;
+    int size, bias;
+    unsigned int val = 0, mask;
     PyObject *rv;
-    int i;
-    int bias;
 
     if ( !PyArg_ParseTuple(args, "s#ii:bias",
                       &cp, &len, &size , &bias) )
@@ -986,15 +977,20 @@ audioop_bias(PyObject *self, PyObject *args)
         return 0;
     ncp = (signed char *)PyBytes_AsString(rv);
 
+    mask = masks[size];
 
     for ( i=0; i < len; i += size ) {
-        if ( size == 1 )      val = (int)*CHARP(cp, i);
-        else if ( size == 2 ) val = (int)*SHORTP(cp, i);
-        else if ( size == 4 ) val = (int)*LONGP(cp, i);
+        if ( size == 1 )      val = (unsigned int)(unsigned char)*CHARP(cp, i);
+        else if ( size == 2 ) val = (unsigned int)(unsigned short)*SHORTP(cp, i);
+        else if ( size == 4 ) val = (unsigned int)(Py_UInt32)*LONGP(cp, i);
 
-        if ( size == 1 )      *CHARP(ncp, i) = (signed char)(val+bias);
-        else if ( size == 2 ) *SHORTP(ncp, i) = (short)(val+bias);
-        else if ( size == 4 ) *LONGP(ncp, i) = (Py_Int32)(val+bias);
+        val += (unsigned int)bias;
+        /* wrap around in case of overflow */
+        val &= mask;
+
+        if ( size == 1 )      *CHARP(ncp, i) = (signed char)(unsigned char)val;
+        else if ( size == 2 ) *SHORTP(ncp, i) = (short)(unsigned short)val;
+        else if ( size == 4 ) *LONGP(ncp, i) = (Py_Int32)(Py_UInt32)val;
     }
     return rv;
 }
@@ -1004,9 +1000,9 @@ audioop_reverse(PyObject *self, PyObject *args)
 {
     signed char *cp;
     unsigned char *ncp;
-    int len, size, val = 0;
+    Py_ssize_t len, i, j;
+    int size, val = 0;
     PyObject *rv;
-    int i, j;
 
     if ( !PyArg_ParseTuple(args, "s#i:reverse",
                       &cp, &len, &size) )
@@ -1021,15 +1017,15 @@ audioop_reverse(PyObject *self, PyObject *args)
     ncp = (unsigned char *)PyBytes_AsString(rv);
 
     for ( i=0; i < len; i += size ) {
-        if ( size == 1 )      val = ((int)*CHARP(cp, i)) << 8;
-        else if ( size == 2 ) val = (int)*SHORTP(cp, i);
-        else if ( size == 4 ) val = ((int)*LONGP(cp, i)) >> 16;
+        if ( size == 1 )      val = ((int)*CHARP(cp, i)) << 24;
+        else if ( size == 2 ) val = ((int)*SHORTP(cp, i)) << 16;
+        else if ( size == 4 ) val = (int)*LONGP(cp, i);
 
         j = len - i - size;
 
-        if ( size == 1 )      *CHARP(ncp, j) = (signed char)(val >> 8);
-        else if ( size == 2 ) *SHORTP(ncp, j) = (short)(val);
-        else if ( size == 4 ) *LONGP(ncp, j) = (Py_Int32)(val<<16);
+        if ( size == 1 )      *CHARP(ncp, j) = (signed char)(val >> 24);
+        else if ( size == 2 ) *SHORTP(ncp, j) = (short)(val >> 16);
+        else if ( size == 4 ) *LONGP(ncp, j) = (Py_Int32)val;
     }
     return rv;
 }
@@ -1039,9 +1035,9 @@ audioop_lin2lin(PyObject *self, PyObject *args)
 {
     signed char *cp;
     unsigned char *ncp;
-    int len, size, size2, val = 0;
+    Py_ssize_t len, i, j;
+    int size, size2, val = 0;
     PyObject *rv;
-    int i, j;
 
     if ( !PyArg_ParseTuple(args, "s#ii:lin2lin",
                       &cp, &len, &size, &size2) )
@@ -1052,7 +1048,7 @@ audioop_lin2lin(PyObject *self, PyObject *args)
     if (!audioop_check_size(size2))
         return NULL;
 
-    if (len/size > INT_MAX/size2) {
+    if (len/size > PY_SSIZE_T_MAX/size2) {
         PyErr_SetString(PyExc_MemoryError,
                         "not enough memory for output buffer");
         return 0;
@@ -1063,13 +1059,13 @@ audioop_lin2lin(PyObject *self, PyObject *args)
     ncp = (unsigned char *)PyBytes_AsString(rv);
 
     for ( i=0, j=0; i < len; i += size, j += size2 ) {
-        if ( size == 1 )      val = ((int)*CHARP(cp, i)) << 8;
-        else if ( size == 2 ) val = (int)*SHORTP(cp, i);
-        else if ( size == 4 ) val = ((int)*LONGP(cp, i)) >> 16;
+        if ( size == 1 )      val = ((int)*CHARP(cp, i)) << 24;
+        else if ( size == 2 ) val = ((int)*SHORTP(cp, i)) << 16;
+        else if ( size == 4 ) val = (int)*LONGP(cp, i);
 
-        if ( size2 == 1 )  *CHARP(ncp, j) = (signed char)(val >> 8);
-        else if ( size2 == 2 ) *SHORTP(ncp, j) = (short)(val);
-        else if ( size2 == 4 ) *LONGP(ncp, j) = (Py_Int32)(val<<16);
+        if ( size2 == 1 )  *CHARP(ncp, j) = (signed char)(val >> 24);
+        else if ( size2 == 2 ) *SHORTP(ncp, j) = (short)(val >> 16);
+        else if ( size2 == 4 ) *LONGP(ncp, j) = (Py_Int32)val;
     }
     return rv;
 }
@@ -1089,7 +1085,8 @@ static PyObject *
 audioop_ratecv(PyObject *self, PyObject *args)
 {
     char *cp, *ncp;
-    int len, size, nchannels, inrate, outrate, weightA, weightB;
+    Py_ssize_t len;
+    int size, nchannels, inrate, outrate, weightA, weightB;
     int chan, d, *prev_i, *cur_i, cur_o;
     PyObject *state, *samps, *str, *rv = NULL;
     int bytes_per_frame;
@@ -1132,6 +1129,10 @@ audioop_ratecv(PyObject *self, PyObject *args)
     d = gcd(inrate, outrate);
     inrate /= d;
     outrate /= d;
+    /* divide weightA and weightB by their greatest common divisor */
+    d = gcd(weightA, weightB);
+    weightA /= d;
+    weightA /= d;
 
     if ((size_t)nchannels > PY_SIZE_MAX/sizeof(int)) {
         PyErr_SetString(PyExc_MemoryError,
@@ -1171,7 +1172,9 @@ audioop_ratecv(PyObject *self, PyObject *args)
     }
 
     /* str <- Space for the output buffer. */
-    {
+    if (len == 0)
+        str = PyBytes_FromStringAndSize(NULL, 0);
+    else {
         /* There are len input frames, so we need (mathematically)
            ceiling(len*outrate/inrate) output frames, and each frame
            requires bytes_per_frame bytes.  Computing this
@@ -1180,18 +1183,17 @@ audioop_ratecv(PyObject *self, PyObject *args)
            case ceiling(len/inrate) * outrate. */
 
         /* compute ceiling(len/inrate) without overflow */
-        int q = len > 0 ? 1 + (len - 1) / inrate : 0;
-        if (outrate > INT_MAX / q / bytes_per_frame)
+        Py_ssize_t q = len > 0 ? 1 + (len - 1) / inrate : 0;
+        if (outrate > PY_SSIZE_T_MAX / q / bytes_per_frame)
             str = NULL;
         else
             str = PyBytes_FromStringAndSize(NULL,
                                             q * outrate * bytes_per_frame);
-
-        if (str == NULL) {
-            PyErr_SetString(PyExc_MemoryError,
-                "not enough memory for output buffer");
-            goto exit;
-        }
+    }
+    if (str == NULL) {
+        PyErr_SetString(PyExc_MemoryError,
+            "not enough memory for output buffer");
+        goto exit;
     }
     ncp = PyBytes_AsString(str);
 
@@ -1210,7 +1212,7 @@ audioop_ratecv(PyObject *self, PyObject *args)
                     goto exit;
                 /* We have checked before that the length
                  * of the string fits into int. */
-                len = (int)(ncp - PyBytes_AsString(str));
+                len = (Py_ssize_t)(ncp - PyBytes_AsString(str));
                 rv = PyBytes_FromStringAndSize
                     (PyBytes_AsString(str), len);
                 Py_DECREF(str);
@@ -1225,32 +1227,32 @@ audioop_ratecv(PyObject *self, PyObject *args)
             for (chan = 0; chan < nchannels; chan++) {
                 prev_i[chan] = cur_i[chan];
                 if (size == 1)
-                    cur_i[chan] = ((int)*CHARP(cp, 0)) << 8;
+                    cur_i[chan] = ((int)*CHARP(cp, 0)) << 24;
                 else if (size == 2)
-                    cur_i[chan] = (int)*SHORTP(cp, 0);
+                    cur_i[chan] = ((int)*SHORTP(cp, 0)) << 16;
                 else if (size == 4)
-                    cur_i[chan] = ((int)*LONGP(cp, 0)) >> 16;
+                    cur_i[chan] = (int)*LONGP(cp, 0);
                 cp += size;
                 /* implements a simple digital filter */
-                cur_i[chan] =
-                    (weightA * cur_i[chan] +
-                     weightB * prev_i[chan]) /
-                    (weightA + weightB);
+                cur_i[chan] = (int)(
+                    ((double)weightA * (double)cur_i[chan] +
+                     (double)weightB * (double)prev_i[chan]) /
+                    ((double)weightA + (double)weightB));
             }
             len--;
             d += outrate;
         }
         while (d >= 0) {
             for (chan = 0; chan < nchannels; chan++) {
-                cur_o = (prev_i[chan] * d +
-                         cur_i[chan] * (outrate - d)) /
-                    outrate;
+                cur_o = (int)(((double)prev_i[chan] * (double)d +
+                         (double)cur_i[chan] * (double)(outrate - d)) /
+                    (double)outrate);
                 if (size == 1)
-                    *CHARP(ncp, 0) = (signed char)(cur_o >> 8);
+                    *CHARP(ncp, 0) = (signed char)(cur_o >> 24);
                 else if (size == 2)
-                    *SHORTP(ncp, 0) = (short)(cur_o);
+                    *SHORTP(ncp, 0) = (short)(cur_o >> 16);
                 else if (size == 4)
-                    *LONGP(ncp, 0) = (Py_Int32)(cur_o<<16);
+                    *LONGP(ncp, 0) = (Py_Int32)(cur_o);
                 ncp += size;
             }
             d -= inrate;
@@ -1269,9 +1271,9 @@ audioop_lin2ulaw(PyObject *self, PyObject *args)
 {
     signed char *cp;
     unsigned char *ncp;
-    int len, size, val = 0;
+    Py_ssize_t len, i;
+    int size, val = 0;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#i:lin2ulaw",
                            &cp, &len, &size) )
@@ -1301,18 +1303,18 @@ audioop_ulaw2lin(PyObject *self, PyObject *args)
     unsigned char *cp;
     unsigned char cval;
     signed char *ncp;
-    int len, size, val;
+    Py_ssize_t len, i;
+    int size, val;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#i:ulaw2lin",
                            &cp, &len, &size) )
         return 0;
 
-    if (!audioop_check_parameters(len, size))
+    if (!audioop_check_size(size))
         return NULL;
 
-    if (len > INT_MAX/size) {
+    if (len > PY_SSIZE_T_MAX/size) {
         PyErr_SetString(PyExc_MemoryError,
                         "not enough memory for output buffer");
         return 0;
@@ -1338,9 +1340,9 @@ audioop_lin2alaw(PyObject *self, PyObject *args)
 {
     signed char *cp;
     unsigned char *ncp;
-    int len, size, val = 0;
+    Py_ssize_t len, i;
+    int size, val = 0;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#i:lin2alaw",
                            &cp, &len, &size) )
@@ -1370,18 +1372,18 @@ audioop_alaw2lin(PyObject *self, PyObject *args)
     unsigned char *cp;
     unsigned char cval;
     signed char *ncp;
-    int len, size, val;
+    Py_ssize_t len, i;
+    int size, val;
     PyObject *rv;
-    int i;
 
     if ( !PyArg_ParseTuple(args, "s#i:alaw2lin",
                            &cp, &len, &size) )
         return 0;
 
-    if (!audioop_check_parameters(len, size))
+    if (!audioop_check_size(size))
         return NULL;
 
-    if (len > INT_MAX/size) {
+    if (len > PY_SSIZE_T_MAX/size) {
         PyErr_SetString(PyExc_MemoryError,
                         "not enough memory for output buffer");
         return 0;
@@ -1407,10 +1409,11 @@ audioop_lin2adpcm(PyObject *self, PyObject *args)
 {
     signed char *cp;
     signed char *ncp;
-    int len, size, val = 0, step, valpred, delta,
+    Py_ssize_t len, i;
+    int size, val = 0, step, valpred, delta,
         index, sign, vpdiff, diff;
     PyObject *rv, *state, *str;
-    int i, outputbuffer = 0, bufferstep;
+    int outputbuffer = 0, bufferstep;
 
     if ( !PyArg_ParseTuple(args, "s#iO:lin2adpcm",
                            &cp, &len, &size, &state) )
@@ -1513,15 +1516,16 @@ audioop_adpcm2lin(PyObject *self, PyObject *args)
 {
     signed char *cp;
     signed char *ncp;
-    int len, size, valpred, step, delta, index, sign, vpdiff;
+    Py_ssize_t len, i;
+    int size, valpred, step, delta, index, sign, vpdiff;
     PyObject *rv, *str, *state;
-    int i, inputbuffer = 0, bufferstep;
+    int inputbuffer = 0, bufferstep;
 
     if ( !PyArg_ParseTuple(args, "s#iO:adpcm2lin",
                            &cp, &len, &size, &state) )
         return 0;
 
-    if (!audioop_check_parameters(len, size))
+    if (!audioop_check_size(size))
         return NULL;
 
     /* Decode state, should have (value, step) */
@@ -1533,7 +1537,7 @@ audioop_adpcm2lin(PyObject *self, PyObject *args)
     } else if ( !PyArg_ParseTuple(state, "ii", &valpred, &index) )
         return 0;
 
-    if (len > (INT_MAX/2)/size) {
+    if (len > (PY_SSIZE_T_MAX/2)/size) {
         PyErr_SetString(PyExc_MemoryError,
                         "not enough memory for output buffer");
         return 0;

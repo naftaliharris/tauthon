@@ -1,8 +1,14 @@
 import unittest
-from test.support import verbose, run_unittest
+from test.support import verbose, run_unittest, strip_python_stderr
 import sys
+import time
 import gc
 import weakref
+
+try:
+    import threading
+except ImportError:
+    threading = None
 
 ### Support code
 ###############################################################################
@@ -310,6 +316,69 @@ class GCTests(unittest.TestCase):
                 v = {1: v, 2: Ouch()}
         gc.disable()
 
+    @unittest.skipUnless(threading, "test meaningless on builds without threads")
+    def test_trashcan_threads(self):
+        # Issue #13992: trashcan mechanism should be thread-safe
+        NESTING = 60
+        N_THREADS = 2
+
+        def sleeper_gen():
+            """A generator that releases the GIL when closed or dealloc'ed."""
+            try:
+                yield
+            finally:
+                time.sleep(0.000001)
+
+        class C(list):
+            # Appending to a list is atomic, which avoids the use of a lock.
+            inits = []
+            dels = []
+            def __init__(self, alist):
+                self[:] = alist
+                C.inits.append(None)
+            def __del__(self):
+                # This __del__ is called by subtype_dealloc().
+                C.dels.append(None)
+                # `g` will release the GIL when garbage-collected.  This
+                # helps assert subtype_dealloc's behaviour when threads
+                # switch in the middle of it.
+                g = sleeper_gen()
+                next(g)
+                # Now that __del__ is finished, subtype_dealloc will proceed
+                # to call list_dealloc, which also uses the trashcan mechanism.
+
+        def make_nested():
+            """Create a sufficiently nested container object so that the
+            trashcan mechanism is invoked when deallocating it."""
+            x = C([])
+            for i in range(NESTING):
+                x = [C([x])]
+            del x
+
+        def run_thread():
+            """Exercise make_nested() in a loop."""
+            while not exit:
+                make_nested()
+
+        old_switchinterval = sys.getswitchinterval()
+        sys.setswitchinterval(1e-5)
+        try:
+            exit = False
+            threads = []
+            for i in range(N_THREADS):
+                t = threading.Thread(target=run_thread)
+                threads.append(t)
+            for t in threads:
+                t.start()
+            time.sleep(1.0)
+            exit = True
+            for t in threads:
+                t.join()
+        finally:
+            sys.setswitchinterval(old_switchinterval)
+        gc.collect()
+        self.assertEqual(len(C.inits), len(C.dels))
+
     def test_boom(self):
         class Boom:
             def __getattr__(self, someattribute):
@@ -476,6 +545,53 @@ class GCTests(unittest.TestCase):
             # If the callback resurrected one of these guys, the instance
             # would be damaged, with an empty __dict__.
             self.assertEqual(x, None)
+
+    def test_garbage_at_shutdown(self):
+        import subprocess
+        code = """if 1:
+            import gc
+            class X:
+                def __init__(self, name):
+                    self.name = name
+                def __repr__(self):
+                    return "<X %%r>" %% self.name
+                def __del__(self):
+                    pass
+
+            x = X('first')
+            x.x = x
+            x.y = X('second')
+            del x
+            gc.set_debug(%s)
+        """
+        def run_command(code):
+            p = subprocess.Popen([sys.executable, "-Wd", "-c", code],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE)
+            stdout, stderr = p.communicate()
+            p.stdout.close()
+            p.stderr.close()
+            self.assertEqual(p.returncode, 0)
+            self.assertEqual(stdout.strip(), b"")
+            return strip_python_stderr(stderr)
+
+        stderr = run_command(code % "0")
+        self.assertIn(b"ResourceWarning: gc: 2 uncollectable objects at "
+                      b"shutdown; use", stderr)
+        self.assertNotIn(b"<X 'first'>", stderr)
+        # With DEBUG_UNCOLLECTABLE, the garbage list gets printed
+        stderr = run_command(code % "gc.DEBUG_UNCOLLECTABLE")
+        self.assertIn(b"ResourceWarning: gc: 2 uncollectable objects at "
+                      b"shutdown", stderr)
+        self.assertTrue(
+            (b"[<X 'first'>, <X 'second'>]" in stderr) or
+            (b"[<X 'second'>, <X 'first'>]" in stderr), stderr)
+        # With DEBUG_SAVEALL, no additional message should get printed
+        # (because gc.garbage also contains normally reclaimable cyclic
+        # references, and its elements get printed at runtime anyway).
+        stderr = run_command(code % "gc.DEBUG_SAVEALL")
+        self.assertNotIn(b"uncollectable objects at shutdown", stderr)
+
 
 class GCTogglingTests(unittest.TestCase):
     def setUp(self):

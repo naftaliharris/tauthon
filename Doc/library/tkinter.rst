@@ -9,7 +9,9 @@
 The :mod:`tkinter` package ("Tk interface") is the standard Python interface to
 the Tk GUI toolkit.  Both Tk and :mod:`tkinter` are available on most Unix
 platforms, as well as on Windows systems.  (Tk itself is not part of Python; it
-is maintained at ActiveState.)
+is maintained at ActiveState.) You can check that :mod:`tkinter` is properly
+installed on your system by running ``python -m tkinter`` from the command line;
+this should open a window demonstrating a simple Tk interface.
 
 .. seealso::
 
@@ -17,11 +19,26 @@ is maintained at ActiveState.)
       The Python Tkinter Topic Guide provides a great deal of information on using Tk
       from Python and links to other sources of information on Tk.
 
+   `TKDocs <http://www.tkdocs.com/>`_
+      Extensive tutorial plus friendlier widget pages for some of the widgets.
+
+   `Tkinter reference: a GUI for Python <http://infohost.nmt.edu/tcc/help/pubs/tkinter/>`_
+      On-line reference material.
+
+   `Tkinter docs from effbot <http://effbot.org/tkinterbook/>`_
+      Online reference for tkinter supported by effbot.org.
+
+   `Tcl/Tk manual <http://www.tcl.tk/man/tcl8.5/>`_
+      Official manual for the latest tcl/tk version.
+
+   `Programming Python <http://www.amazon.com/Programming-Python-Mark-Lutz/dp/0596158106/>`_
+      Book by Mark Lutz, has excellent coverage of Tkinter.
+
+   `Modern Tkinter for Busy Python Developers <http://www.amazon.com/Modern-Tkinter-Python-Developers-ebook/dp/B0071QDNLO/>`_
+      Book by Mark Rozerman about building attractive and modern graphical user interfaces with Python and Tkinter.
+
    `An Introduction to Tkinter <http://www.pythonware.com/library/an-introduction-to-tkinter.htm>`_
       Fredrik Lundh's on-line reference material.
-
-   `Tkinter reference: a GUI for Python <http://infohost.nmt.edu/tcc/help/pubs/lang.html>`_
-      On-line reference material.
 
    `Python and Tkinter Programming <http://www.amazon.com/exec/obidos/ASIN/1884777813>`_
       The book by John Grayson (ISBN 1-884777-81-3).
@@ -657,9 +674,7 @@ relief
 
 scrollcommand
    This is almost always the :meth:`!set` method of some scrollbar widget, but can
-   be any widget method that takes a single argument.   Refer to the file
-   :file:`Demo/tkinter/matt/canvas-with-scrollbars.py` in the Python source
-   distribution for an example.
+   be any widget method that takes a single argument.
 
 wrap:
    Must be one of: ``"none"``, ``"char"``, or ``"word"``.

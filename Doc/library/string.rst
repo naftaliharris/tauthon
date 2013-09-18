@@ -4,6 +4,9 @@
 .. module:: string
    :synopsis: Common string operations.
 
+**Source code:** :source:`Lib/string.py`
+
+--------------
 
 .. seealso::
 
@@ -88,8 +91,8 @@ implementation as the built-in :meth:`format` method.
 
    .. method:: format(format_string, *args, **kwargs)
 
-      :meth:`format` is the primary API method.  It takes a format template
-      string, and an arbitrary set of positional and keyword argument.
+      :meth:`format` is the primary API method.  It takes a format string and
+      an arbitrary set of positional and keyword arguments.
       :meth:`format` is just a wrapper that calls :meth:`vformat`.
 
    .. method:: vformat(format_string, args, kwargs)
@@ -97,9 +100,9 @@ implementation as the built-in :meth:`format` method.
       This function does the actual work of formatting.  It is exposed as a
       separate function for cases where you want to pass in a predefined
       dictionary of arguments, rather than unpacking and repacking the
-      dictionary as individual arguments using the ``*args`` and ``**kwds``
-      syntax.  :meth:`vformat` does the work of breaking up the format template
-      string into character data and replacement fields.  It calls the various
+      dictionary as individual arguments using the ``*args`` and ``**kwargs``
+      syntax.  :meth:`vformat` does the work of breaking up the format string
+      into character data and replacement fields.  It calls the various
       methods described below.
 
    In addition, the :class:`Formatter` defines a number of methods that are
@@ -170,7 +173,8 @@ implementation as the built-in :meth:`format` method.
 
       Converts the value (returned by :meth:`get_field`) given a conversion type
       (as in the tuple returned by the :meth:`parse` method).  The default
-      version understands 'r' (repr) and 's' (str) conversion types.
+      version understands 's' (str), 'r' (repr) and 'a' (ascii) conversion
+      types.
 
 
 .. _formatstrings:
@@ -208,11 +212,13 @@ by a colon ``':'``.  These specify a non-default format for the replacement valu
 
 See also the :ref:`formatspec` section.
 
-The *field_name* itself begins with an *arg_name* that is either either a number or a
+The *field_name* itself begins with an *arg_name* that is either a number or a
 keyword.  If it's a number, it refers to a positional argument, and if it's a keyword,
 it refers to a named keyword argument.  If the numerical arg_names in a format string
 are 0, 1, 2, ... in sequence, they can all be omitted (not just some)
 and the numbers 0, 1, 2, ... will be automatically inserted in that order.
+Because *arg_name* is not quote-delimited, it is not possible to specify arbitrary
+dictionary keys (e.g., the strings ``'10'`` or ``':-]'``) within a format string.
 The *arg_name* can be followed by any number of index or
 attribute expressions. An expression of the form ``'.name'`` selects the named
 attribute using :func:`getattr`, while an expression of the form ``'[index]'``
@@ -287,7 +293,7 @@ The general form of a *standard format specifier* is:
 
 .. productionlist:: sf
    format_spec: [[`fill`]`align`][`sign`][#][0][`width`][,][.`precision`][`type`]
-   fill: <a character other than '}'>
+   fill: <a character other than '{' or '}'>
    align: "<" | ">" | "=" | "^"
    sign: "+" | "-" | " "
    width: `integer`
@@ -340,9 +346,18 @@ following:
    |         | positive numbers, and a minus sign on negative numbers.  |
    +---------+----------------------------------------------------------+
 
-The ``'#'`` option is only valid for integers, and only for binary, octal, or
-hexadecimal output.  If present, it specifies that the output will be prefixed
-by ``'0b'``, ``'0o'``, or ``'0x'``, respectively.
+
+The ``'#'`` option causes the "alternate form" to be used for the
+conversion.  The alternate form is defined differently for different
+types.  This option is only valid for integer, float, complex and
+Decimal types. For integers, when binary, octal, or hexadecimal output
+is used, this option adds the prefix respective ``'0b'``, ``'0o'``, or
+``'0x'`` to the output value. For floats, complex and Decimal the
+alternate form causes the result of the conversion to always contain a
+decimal-point character, even if no digits follow it. Normally, a
+decimal-point character appears in the result of these conversions
+only if a digit follows it. In addition, for ``'g'`` and ``'G'``
+conversions, trailing zeros are not removed from the result.
 
 The ``','`` option signals the use of a comma for a thousands separator.
 For a locale aware separator, use the ``'n'`` integer presentation type
@@ -354,9 +369,9 @@ instead.
 *width* is a decimal integer defining the minimum field width.  If not
 specified, then the field width will be determined by the content.
 
-If the *width* field is preceded by a zero (``'0'``) character, this enables
-zero-padding.  This is equivalent to an *alignment* type of ``'='`` and a *fill*
-character of ``'0'``.
+Preceding the *width* field by a zero (``'0'``) character enables
+sign-aware zero-padding for numeric types.  This is equivalent to a *fill*
+character of ``'0'`` with an *alignment* type of ``'='``.
 
 The *precision* is a decimal number indicating how many digits should be
 displayed after the decimal point for a floating point value formatted with
@@ -569,7 +584,7 @@ Expressing a percentage::
 
    >>> points = 19
    >>> total = 22
-   >>> 'Correct answers: {:.2%}.'.format(points/total)
+   >>> 'Correct answers: {:.2%}'.format(points/total)
    'Correct answers: 86.36%'
 
 Using type-specific formatting::
@@ -595,7 +610,7 @@ Nesting arguments and more complex examples::
    3232235521
    >>>
    >>> width = 5
-   >>> for num in range(5,12):
+   >>> for num in range(5,12): #doctest: +NORMALIZE_WHITESPACE
    ...     for base in 'dXob':
    ...         print('{0:{width}{base}}'.format(num, base=base, width=width), end=' ')
    ...     print()
@@ -673,7 +688,7 @@ these rules.  The methods of :class:`Template` are:
       This is the object passed to the constructor's *template* argument.  In
       general, you shouldn't change it, but read-only access is not enforced.
 
-Here is an example of how to use a Template:
+Here is an example of how to use a Template::
 
    >>> from string import Template
    >>> s = Template('$who likes $what')
@@ -682,11 +697,11 @@ Here is an example of how to use a Template:
    >>> d = dict(who='tim')
    >>> Template('Give $who $100').substitute(d)
    Traceback (most recent call last):
-   [...]
-   ValueError: Invalid placeholder in string: line 1, col 10
+   ...
+   ValueError: Invalid placeholder in string: line 1, col 11
    >>> Template('$who likes $what').substitute(d)
    Traceback (most recent call last):
-   [...]
+   ...
    KeyError: 'what'
    >>> Template('$who likes $what').safe_substitute(d)
    'tim likes $what'
@@ -696,14 +711,22 @@ placeholder syntax, delimiter character, or the entire regular expression used
 to parse template strings.  To do this, you can override these class attributes:
 
 * *delimiter* -- This is the literal string describing a placeholder introducing
-  delimiter.  The default value ``$``.  Note that this should *not* be a regular
-  expression, as the implementation will call :meth:`re.escape` on this string as
-  needed.
+  delimiter.  The default value is ``$``.  Note that this should *not* be a
+  regular expression, as the implementation will call :meth:`re.escape` on this
+  string as needed.
 
 * *idpattern* -- This is the regular expression describing the pattern for
   non-braced placeholders (the braces will be added automatically as
   appropriate).  The default value is the regular expression
   ``[_a-z][_a-z0-9]*``.
+
+* *flags* -- The regular expression flags that will be applied when compiling
+  the regular expression used for recognizing substitutions.  The default value
+  is ``re.IGNORECASE``.  Note that ``re.VERBOSE`` will always be added to the
+  flags, so custom *idpattern*\ s must follow conventions for verbose regular
+  expressions.
+
+  .. versionadded:: 3.2
 
 Alternatively, you can provide the entire regular expression pattern by
 overriding the class attribute *pattern*.  If you do this, the value must be a
@@ -727,7 +750,7 @@ rule:
 Helper functions
 ----------------
 
-.. function:: capwords(s[, sep])
+.. function:: capwords(s, sep=None)
 
    Split the argument into words using :meth:`str.split`, capitalize each word
    using :meth:`str.capitalize`, and join the capitalized words using
@@ -736,12 +759,3 @@ Helper functions
    and leading and trailing whitespace are removed, otherwise *sep* is used to
    split and join the words.
 
-
-.. function:: maketrans(frm, to)
-
-   Return a translation table suitable for passing to :meth:`bytes.translate`,
-   that will map each character in *from* into the character at the same
-   position in *to*; *from* and *to* must have the same length.
-
-   .. deprecated:: 3.1
-      Use the :meth:`bytes.maketrans` static method instead.

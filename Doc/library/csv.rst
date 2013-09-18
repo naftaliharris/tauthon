@@ -46,6 +46,9 @@ Module Contents
 The :mod:`csv` module defines the following functions:
 
 
+.. index::
+   single: universal newlines; csv.reader function
+
 .. function:: reader(csvfile, dialect='excel', **fmtparams)
 
    Return a reader object which will iterate over lines in the given *csvfile*.
@@ -68,9 +71,10 @@ The :mod:`csv` module defines the following functions:
    A short usage example::
 
       >>> import csv
-      >>> spamReader = csv.reader(open('eggs.csv', newline=''), delimiter=' ', quotechar='|')
-      >>> for row in spamReader:
-      ...     print(', '.join(row))
+      >>> with open('eggs.csv', newline='') as csvfile:
+      ...     spamreader = csv.reader(csvfile, delimiter=' ', quotechar='|')
+      ...     for row in spamreader:
+      ...         print(', '.join(row))
       Spam, Spam, Spam, Spam, Spam, Baked Beans
       Spam, Lovely Spam, Wonderful Spam
 
@@ -96,11 +100,12 @@ The :mod:`csv` module defines the following functions:
 
    A short usage example::
 
-      >>> import csv
-      >>> spamWriter = csv.writer(open('eggs.csv', 'w', newline=''), delimiter=' ',
-      ...                         quotechar='|', quoting=csv.QUOTE_MINIMAL)
-      >>> spamWriter.writerow(['Spam'] * 5 + ['Baked Beans'])
-      >>> spamWriter.writerow(['Spam', 'Lovely Spam', 'Wonderful Spam'])
+      import csv
+      with open('eggs.csv', 'w', newline='') as csvfile:
+          spamwriter = csv.writer(csvfile, delimiter=' ',
+                                  quotechar='|', quoting=csv.QUOTE_MINIMAL)
+          spamwriter.writerow(['Spam'] * 5 + ['Baked Beans'])
+          spamwriter.writerow(['Spam', 'Lovely Spam', 'Wonderful Spam'])
 
 
 .. function:: register_dialect(name[, dialect], **fmtparams)
@@ -188,6 +193,15 @@ The :mod:`csv` module defines the following classes:
    TAB-delimited file.  It is registered with the dialect name ``'excel-tab'``.
 
 
+.. class:: unix_dialect()
+
+   The :class:`unix_dialect` class defines the usual properties of a CSV file
+   generated on UNIX systems, i.e. using ``'\n'`` as line terminator and quoting
+   all fields.  It is registered with the dialect name ``'unix'``.
+
+   .. versionadded:: 3.2
+
+
 .. class:: Sniffer()
 
    The :class:`Sniffer` class is used to deduce the format of a CSV file.
@@ -209,11 +223,11 @@ The :mod:`csv` module defines the following classes:
 
 An example for :class:`Sniffer` use::
 
-   csvfile = open("example.csv")
-   dialect = csv.Sniffer().sniff(csvfile.read(1024))
-   csvfile.seek(0)
-   reader = csv.reader(csvfile, dialect)
-   # ... process CSV file contents here ...
+   with open('example.csv') as csvfile:
+       dialect = csv.Sniffer().sniff(csvfile.read(1024))
+       csvfile.seek(0)
+       reader = csv.reader(csvfile, dialect)
+       # ... process CSV file contents here ...
 
 
 The :mod:`csv` module defines the following constants:
@@ -327,6 +341,11 @@ Dialects support the following attributes:
    The default is :const:`False`.
 
 
+.. attribute:: Dialect.strict
+
+   When ``True``, raise exception :exc:`Error` on bad CSV input.
+   The default is ``False``.
+
 Reader Objects
 --------------
 
@@ -391,6 +410,16 @@ Writer objects have the following public attribute:
 .. attribute:: csvwriter.dialect
 
    A read-only description of the dialect in use by the writer.
+
+
+DictWriter objects have the following public method:
+
+
+.. method:: DictWriter.writeheader()
+
+   Write a row with the field names (as specified in the constructor).
+
+   .. versionadded:: 3.2
 
 
 .. _csv-examples:
@@ -467,4 +496,5 @@ done::
 .. [1] If ``newline=''`` is not specified, newlines embedded inside quoted fields
    will not be interpreted correctly, and on platforms that use ``\r\n`` linendings
    on write an extra ``\r`` will be added.  It should always be safe to specify
-   ``newline=''``, since the csv module does its own (universal) newline handling.
+   ``newline=''``, since the csv module does its own
+   (:term:`universal <universal newlines>`) newline handling.

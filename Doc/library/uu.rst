@@ -5,6 +5,9 @@
    :synopsis: Encode and decode files in uuencode format.
 .. moduleauthor:: Lance Ellinghouse
 
+**Source code:** :source:`Lib/uu.py`
+
+--------------
 
 This module encodes and decodes files in uuencode format, allowing arbitrary
 binary data to be transferred over ASCII-only connections. Wherever a file
@@ -56,4 +59,3 @@ The :mod:`uu` module defines the following functions:
 
    Module :mod:`binascii`
       Support module containing ASCII-to-binary and binary-to-ASCII conversions.
-

@@ -6,6 +6,9 @@
 .. moduleauthor:: Timothy O'Malley <timo@alum.mit.edu>
 .. sectionauthor:: Moshe Zadka <moshez@zadka.site.co.il>
 
+**Source code:** :source:`Lib/http/cookies.py`
+
+--------------
 
 The :mod:`http.cookies` module defines classes for abstracting the concept of
 cookies, an HTTP state management mechanism. It supports both simple string-only
@@ -14,8 +17,14 @@ cookie value.
 
 The module formerly strictly applied the parsing rules described in the
 :rfc:`2109` and :rfc:`2068` specifications.  It has since been discovered that
-MSIE 3.0x doesn't follow the character rules outlined in those specs.  As a
-result, the parsing rules used are a bit less strict.
+MSIE 3.0x doesn't follow the character rules outlined in those specs and also
+many current day browsers and servers have relaxed parsing rules when comes to
+Cookie handling.  As a result, the parsing rules used are a bit less strict.
+
+The character set, :data:`string.ascii_letters`, :data:`string.digits` and
+``!#$%&'*+-.^_`|~`` denote the set of valid characters allowed by this module
+in Cookie name (as :attr:`~Morsel.key`).
+
 
 .. note::
 
@@ -149,7 +158,7 @@ Morsel Objects
 
 .. method:: Morsel.set(key, value, coded_value)
 
-   Set the *key*, *value* and *coded_value* members.
+   Set the *key*, *value* and *coded_value* attributes.
 
 
 .. method:: Morsel.isReservedKey(K)

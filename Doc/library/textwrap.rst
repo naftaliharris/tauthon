@@ -6,13 +6,15 @@
 .. moduleauthor:: Greg Ward <gward@python.net>
 .. sectionauthor:: Greg Ward <gward@python.net>
 
+**Source code:** :source:`Lib/textwrap.py`
+
+--------------
 
 The :mod:`textwrap` module provides two convenience functions, :func:`wrap` and
 :func:`fill`, as well as :class:`TextWrapper`, the class that does all the work,
 and a utility function  :func:`dedent`.  If you're just wrapping or filling one
 or two  text strings, the convenience functions should be good enough;
 otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
-
 
 .. function:: wrap(text, width=70, **kwargs)
 
@@ -22,6 +24,9 @@ otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
 
    Optional keyword arguments correspond to the instance attributes of
    :class:`TextWrapper`, documented below.  *width* defaults to ``70``.
+
+   See the :meth:`TextWrapper.wrap` method for additional details on how
+   :func:`wrap` behaves.
 
 
 .. function:: fill(text, width=70, **kwargs)
@@ -107,9 +112,11 @@ indentation from strings that have unwanted whitespace to the left of the text.
 
    .. attribute:: replace_whitespace
 
-      (default: ``True``) If true, each whitespace character (as defined by
-      ``string.whitespace``) remaining after tab expansion will be replaced by a
-      single space.
+      (default: ``True``) If true, after tab expansion but before wrapping,
+      the :meth:`wrap` method will replace each whitespace character
+      with a single space.  The whitespace characters replaced are
+      as follows: tab, newline, vertical tab, formfeed, and carriage
+      return (``'\t\n\v\f\r'``).
 
       .. note::
 
@@ -127,15 +134,18 @@ indentation from strings that have unwanted whitespace to the left of the text.
 
    .. attribute:: drop_whitespace
 
-      (default: ``True``) If true, whitespace that, after wrapping, happens to
-      end up at the beginning or end of a line is dropped (leading whitespace in
-      the first line is always preserved, though).
+      (default: ``True``) If true, whitespace at the beginning and ending of
+      every line (after wrapping but before indenting) is dropped.
+      Whitespace at the beginning of the paragraph, however, is not dropped
+      if non-whitespace follows it.  If whitespace being dropped takes up an
+      entire line, the whole line is dropped.
 
 
    .. attribute:: initial_indent
 
       (default: ``''``) String that will be prepended to the first line of
-      wrapped output.  Counts towards the length of the first line.
+      wrapped output.  Counts towards the length of the first line.  The empty
+      string is not indented.
 
 
    .. attribute:: subsequent_indent
@@ -196,8 +206,9 @@ indentation from strings that have unwanted whitespace to the left of the text.
 
       Wraps the single paragraph in *text* (a string) so every line is at most
       :attr:`width` characters long.  All wrapping options are taken from
-      instance attributes of the :class:`TextWrapper` instance. Returns a list
-      of output lines, without final newlines.
+      instance attributes of the :class:`TextWrapper` instance.  Returns a list
+      of output lines, without final newlines.  If the wrapped output has no
+      content, the returned list is empty.
 
 
    .. method:: fill(text)

@@ -84,11 +84,7 @@ Tix Widgets
 -----------
 
 `Tix <http://tix.sourceforge.net/dist/current/man/html/TixCmd/TixIntro.htm>`_
-introduces over 40 widget classes to the :mod:`tkinter` repertoire.  There is a
-demo of all the :mod:`tkinter.tix` widgets in the :file:`Demo/tix` directory of
-the standard distribution.
-
-.. The Python sample code is still being added to Python, hence commented out
+introduces over 40 widget classes to the :mod:`tkinter` repertoire.
 
 
 Basic Widgets
@@ -508,7 +504,7 @@ Tix Commands
       print(root.tix_configure())
 
 
-.. method:: tixCommand.tix_configure([cnf,] **kw)
+.. method:: tixCommand.tix_configure(cnf=None, **kw)
 
    Query or modify the configuration options of the Tix application context. If no
    option is specified, returns a dictionary all of the available options.  If

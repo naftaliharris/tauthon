@@ -5,6 +5,7 @@ Common tests shared by test_str, test_unicode, test_userstring and test_string.
 import unittest, string, sys, struct
 from test import support
 from collections import UserList
+import _testcapi
 
 class Sequence:
     def __init__(self, seq='wxyz'): self.seq = seq
@@ -172,6 +173,9 @@ class BaseTest(unittest.TestCase):
         self.checkequal(-1, '', 'find', 'xx', 1, 1)
         self.checkequal(-1, '', 'find', 'xx', sys.maxsize, 0)
 
+        # issue 7458
+        self.checkequal(-1, 'ab', 'find', 'xxx', sys.maxsize + 1, 0)
+
         # For a variety of combinations,
         #    verify that str.find() matches __contains__
         #    and that the found substring is really at that location
@@ -191,8 +195,7 @@ class BaseTest(unittest.TestCase):
                 loc = i.find(j)
                 r1 = (loc != -1)
                 r2 = j in i
-                if r1 != r2:
-                    self.assertEqual(r1, r2)
+                self.assertEqual(r1, r2)
                 if loc != -1:
                     self.assertEqual(i[loc:loc+len(j)], j)
 
@@ -215,6 +218,32 @@ class BaseTest(unittest.TestCase):
 
         self.checkraises(TypeError, 'hello', 'rfind')
         self.checkraises(TypeError, 'hello', 'rfind', 42)
+
+        # For a variety of combinations,
+        #    verify that str.rfind() matches __contains__
+        #    and that the found substring is really at that location
+        charset = ['', 'a', 'b', 'c']
+        digits = 5
+        base = len(charset)
+        teststrings = set()
+        for i in range(base ** digits):
+            entry = []
+            for j in range(digits):
+                i, m = divmod(i, base)
+                entry.append(charset[m])
+            teststrings.add(''.join(entry))
+        teststrings = [self.fixtype(ts) for ts in teststrings]
+        for i in teststrings:
+            for j in teststrings:
+                loc = i.rfind(j)
+                r1 = (loc != -1)
+                r2 = j in i
+                self.assertEqual(r1, r2)
+                if loc != -1:
+                    self.assertEqual(i[loc:loc+len(j)], j)
+
+        # issue 7458
+        self.checkequal(-1, 'ab', 'rfind', 'xxx', sys.maxsize + 1, 0)
 
     def test_index(self):
         self.checkequal(0, 'abcdefghiabc', 'index', '')
@@ -612,6 +641,23 @@ class CommonTest(BaseTest):
         self.checkequal('Hello ', 'hello ','capitalize')
         self.checkequal('Aaaa', 'aaaa', 'capitalize')
         self.checkequal('Aaaa', 'AaAa', 'capitalize')
+
+        # check that titlecased chars are lowered correctly
+        # \u1ffc is the titlecased char
+        self.checkequal('\u1ffc\u1ff3\u1ff3\u1ff3',
+                        '\u1ff3\u1ff3\u1ffc\u1ffc', 'capitalize')
+        # check with cased non-letter chars
+        self.checkequal('\u24c5\u24e8\u24e3\u24d7\u24de\u24dd',
+                        '\u24c5\u24ce\u24c9\u24bd\u24c4\u24c3', 'capitalize')
+        self.checkequal('\u24c5\u24e8\u24e3\u24d7\u24de\u24dd',
+                        '\u24df\u24e8\u24e3\u24d7\u24de\u24dd', 'capitalize')
+        self.checkequal('\u2160\u2171\u2172',
+                        '\u2160\u2161\u2162', 'capitalize')
+        self.checkequal('\u2160\u2171\u2172',
+                        '\u2170\u2171\u2172', 'capitalize')
+        # check with Ll chars with no upper - nothing changes here
+        self.checkequal('\u019b\u1d00\u1d86\u0221\u1fb7',
+                        '\u019b\u1d00\u1d86\u0221\u1fb7', 'capitalize')
 
         self.checkraises(TypeError, 'hello', 'capitalize', 42)
 
@@ -1071,7 +1117,6 @@ class MixinStrUnicodeUserStringTest:
 
         longvalue = sys.maxsize + 10
         slongvalue = str(longvalue)
-        if slongvalue[-1] in ("L","l"): slongvalue = slongvalue[:-1]
         self.checkequal(' 42', '%3ld', '__mod__', 42)
         self.checkequal('42', '%d', '__mod__', 42.0)
         self.checkequal(slongvalue, '%d', '__mod__', longvalue)
@@ -1086,7 +1131,7 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(ValueError, '%(foo', '__mod__', {})
         self.checkraises(TypeError, '%(foo)s %(bar)s', '__mod__', ('foo', 42))
         self.checkraises(TypeError, '%d', '__mod__', "42") # not numeric
-        self.checkraises(TypeError, '%d', '__mod__', (42+0j)) # no int/long conversion provided
+        self.checkraises(TypeError, '%d', '__mod__', (42+0j)) # no int conversion provided
 
         # argument names with properly nested brackets are supported
         self.checkequal('bar', '%((foo))s', '__mod__', {'(foo)': 'bar'})
@@ -1098,13 +1143,26 @@ class MixinStrUnicodeUserStringTest:
         self.checkraises(TypeError, '%10.*f', '__mod__', ('foo', 42.))
         self.checkraises(ValueError, '%10', '__mod__', (42,))
 
+        self.checkraises(OverflowError, '%*s', '__mod__',
+                         (_testcapi.PY_SSIZE_T_MAX + 1, ''))
+        self.checkraises(OverflowError, '%.*f', '__mod__',
+                         (_testcapi.INT_MAX + 1, 1. / 7))
+        # Issue 15989
+        self.checkraises(OverflowError, '%*s', '__mod__',
+                         (1 << (_testcapi.PY_SSIZE_T_MAX.bit_length() + 1), ''))
+        self.checkraises(OverflowError, '%.*f', '__mod__',
+                         (_testcapi.UINT_MAX + 1, 1. / 7))
+
+        class X(object): pass
+        self.checkraises(TypeError, 'abc', '__mod__', X())
+
     def test_floatformatting(self):
         # float formatting
         for prec in range(100):
             format = '%%.%if' % prec
             value = 0.01
             for x in range(60):
-                value = value * 3.141592655 / 3.0 * 10.0
+                value = value * 3.14159265359 / 3.0 * 10.0
                 self.checkcall(format, "__mod__", value)
 
     def test_inplace_rewrites(self):
@@ -1198,19 +1256,19 @@ class MixinStrUnicodeUserStringTest:
         # issue 11828
         s = 'hello'
         x = 'x'
-        self.assertRaisesRegexp(TypeError, r'^find\(', s.find,
+        self.assertRaisesRegex(TypeError, r'^find\(', s.find,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^rfind\(', s.rfind,
+        self.assertRaisesRegex(TypeError, r'^rfind\(', s.rfind,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^index\(', s.index,
+        self.assertRaisesRegex(TypeError, r'^index\(', s.index,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^rindex\(', s.rindex,
+        self.assertRaisesRegex(TypeError, r'^rindex\(', s.rindex,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^count\(', s.count,
+        self.assertRaisesRegex(TypeError, r'^count\(', s.count,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^startswith\(', s.startswith,
+        self.assertRaisesRegex(TypeError, r'^startswith\(', s.startswith,
                                 x, None, None, None)
-        self.assertRaisesRegexp(TypeError, r'^endswith\(', s.endswith,
+        self.assertRaisesRegex(TypeError, r'^endswith\(', s.endswith,
                                 x, None, None, None)
 
 

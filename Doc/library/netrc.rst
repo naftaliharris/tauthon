@@ -7,6 +7,9 @@
 .. moduleauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 .. sectionauthor:: Eric S. Raymond <esr@snark.thyrsus.com>
 
+**Source code:** :source:`Lib/netrc.py`
+
+--------------
 
 The :class:`netrc` class parses and encapsulates the netrc file format used by
 the Unix :program:`ftp` program and other FTP clients.
@@ -26,7 +29,7 @@ the Unix :program:`ftp` program and other FTP clients.
    This implements security behavior equivalent to that of ftp and other
    programs that use :file:`.netrc`.
 
-   .. versionchanged:: 3.1.6 Added the POSIX permission check.
+   .. versionchanged:: 3.2.6 Added the POSIX permission check.
 
 
 .. exception:: NetrcParseError

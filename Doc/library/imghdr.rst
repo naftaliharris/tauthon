@@ -4,6 +4,9 @@
 .. module:: imghdr
    :synopsis: Determine the type of image contained in a file or byte stream.
 
+**Source code:** :source:`Lib/imghdr.py`
+
+--------------
 
 The :mod:`imghdr` module determines the type of image contained in a file or
 byte stream.
@@ -62,6 +65,6 @@ to this variable:
 Example::
 
    >>> import imghdr
-   >>> imghdr.what('/tmp/bass.gif')
+   >>> imghdr.what('bass.gif')
    'gif'
 

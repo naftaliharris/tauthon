@@ -2,9 +2,8 @@
 /* UNIX group file access module */
 
 #include "Python.h"
-#include "structseq.h"
+#include "posixmodule.h"
 
-#include <sys/types.h>
 #include <grp.h>
 
 static PyStructSequence_Field struct_group_type_fields[] = {
@@ -46,11 +45,8 @@ mkgrent(struct group *p)
         Py_DECREF(v);
         return NULL;
     }
-#define FSDECODE(val) PyUnicode_Decode(val, strlen(val),\
-                                       Py_FileSystemDefaultEncoding,\
-                                       "surrogateescape")
     for (member = p->gr_mem; *member != NULL; member++) {
-        PyObject *x = FSDECODE(*member);
+        PyObject *x = PyUnicode_DecodeFSDefault(*member);
         if (x == NULL || PyList_Append(w, x) != 0) {
             Py_XDECREF(x);
             Py_DECREF(w);
@@ -61,19 +57,19 @@ mkgrent(struct group *p)
     }
 
 #define SET(i,val) PyStructSequence_SET_ITEM(v, i, val)
-    SET(setIndex++, FSDECODE(p->gr_name));
+    SET(setIndex++, PyUnicode_DecodeFSDefault(p->gr_name));
 #ifdef __VMS
     SET(setIndex++, Py_None);
     Py_INCREF(Py_None);
 #else
     if (p->gr_passwd)
-            SET(setIndex++, FSDECODE(p->gr_passwd));
+            SET(setIndex++, PyUnicode_DecodeFSDefault(p->gr_passwd));
     else {
             SET(setIndex++, Py_None);
             Py_INCREF(Py_None);
     }
 #endif
-    SET(setIndex++, PyLong_FromLong((long) p->gr_gid));
+    SET(setIndex++, _PyLong_FromGid(p->gr_gid));
     SET(setIndex++, w);
 #undef SET
 
@@ -89,17 +85,24 @@ static PyObject *
 grp_getgrgid(PyObject *self, PyObject *pyo_id)
 {
     PyObject *py_int_id;
-    unsigned int gid;
+    gid_t gid;
     struct group *p;
 
     py_int_id = PyNumber_Long(pyo_id);
     if (!py_int_id)
             return NULL;
-    gid = PyLong_AS_LONG(py_int_id);
+    if (!_Py_Gid_Converter(py_int_id, &gid)) {
+        Py_DECREF(py_int_id);
+        return NULL;
+    }
     Py_DECREF(py_int_id);
 
     if ((p = getgrgid(gid)) == NULL) {
-        PyErr_Format(PyExc_KeyError, "getgrgid(): gid not found: %d", gid);
+        PyObject *gid_obj = _PyLong_FromGid(gid);
+        if (gid_obj == NULL)
+            return NULL;
+        PyErr_Format(PyExc_KeyError, "getgrgid(): gid not found: %S", gid_obj);
+        Py_DECREF(gid_obj);
         return NULL;
     }
     return mkgrent(p);
@@ -114,8 +117,7 @@ grp_getgrnam(PyObject *self, PyObject *args)
 
     if (!PyArg_ParseTuple(args, "U:getgrnam", &arg))
         return NULL;
-    if ((bytes = PyUnicode_AsEncodedString(arg, Py_FileSystemDefaultEncoding,
-                                           "surrogateescape")) == NULL)
+    if ((bytes = PyUnicode_EncodeFSDefault(arg)) == NULL)
         return NULL;
     if (PyBytes_AsStringAndSize(bytes, &name, NULL) == -1)
         goto out;

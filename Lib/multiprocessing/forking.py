@@ -35,6 +35,7 @@
 import os
 import sys
 import signal
+import errno
 
 from multiprocessing import util, process
 
@@ -124,18 +125,21 @@ if sys.platform != 'win32':
                     import random
                     random.seed()
                 code = process_obj._bootstrap()
-                sys.stdout.flush()
-                sys.stderr.flush()
                 os._exit(code)
 
         def poll(self, flag=os.WNOHANG):
             if self.returncode is None:
-                try:
-                    pid, sts = os.waitpid(self.pid, flag)
-                except os.error:
-                    # Child process not yet created. See #1731717
-                    # e.errno == errno.ECHILD == 10
-                    return None
+                while True:
+                    try:
+                        pid, sts = os.waitpid(self.pid, flag)
+                    except os.error as e:
+                        if e.errno == errno.EINTR:
+                            continue
+                        # Child process not yet created. See #1731717
+                        # e.errno == errno.ECHILD == 10
+                        return None
+                    else:
+                        break
                 if pid == self.pid:
                     if os.WIFSIGNALED(sts):
                         self.returncode = -os.WTERMSIG(sts)
@@ -333,7 +337,7 @@ else:
         '''
         Returns prefix of command line used for spawning a child process
         '''
-        if process.current_process()._identity==() and is_forking(sys.argv):
+        if getattr(process.current_process(), '_inheriting', False):
             raise RuntimeError('''
             Attempt to start a new process before the current process
             has finished its bootstrapping phase.
@@ -460,12 +464,20 @@ def prepare(data):
         process.ORIGINAL_DIR = data['orig_dir']
 
     if 'main_path' in data:
+        # XXX (ncoghlan): The following code makes several bogus
+        # assumptions regarding the relationship between __file__
+        # and a module's real name. See PEP 302 and issue #10845
         main_path = data['main_path']
         main_name = os.path.splitext(os.path.basename(main_path))[0]
         if main_name == '__init__':
             main_name = os.path.basename(os.path.dirname(main_path))
 
-        if main_name != 'ipython':
+        if main_name == '__main__':
+            main_module = sys.modules['__main__']
+            main_module.__file__ = main_path
+        elif main_name != 'ipython':
+            # Main modules not actually called __main__.py may
+            # contain additional code that should still be executed
             import imp
 
             if main_path is None:

@@ -3,7 +3,6 @@
 
 #include "Python.h"
 #include "code.h"
-#include "eval.h"
 #include "structmember.h"
 
 PyObject *
@@ -628,7 +627,7 @@ function_call(PyObject *func, PyObject *arg, PyObject *kw)
     }
 
     result = PyEval_EvalCodeEx(
-        (PyCodeObject *)PyFunction_GET_CODE(func),
+        PyFunction_GET_CODE(func),
         PyFunction_GET_GLOBALS(func), (PyObject *)NULL,
         &PyTuple_GET_ITEM(arg, 0), PyTuple_GET_SIZE(arg),
         k, nk, d, nd,
@@ -890,9 +889,7 @@ sm_traverse(staticmethod *sm, visitproc visit, void *arg)
 static int
 sm_clear(staticmethod *sm)
 {
-    Py_XDECREF(sm->sm_callable);
-    sm->sm_callable = NULL;
-
+    Py_CLEAR(sm->sm_callable);
     return 0;
 }
 

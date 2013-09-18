@@ -7,12 +7,6 @@ import os
 
 class BoolTest(unittest.TestCase):
 
-    def assertIs(self, a, b):
-        self.assertTrue(a is b)
-
-    def assertIsNot(self, a, b):
-        self.assertTrue(a is not b)
-
     def test_subclass(self):
         try:
             class C(bool):
@@ -50,6 +44,12 @@ class BoolTest(unittest.TestCase):
         self.assertIsNot(int(False), False)
         self.assertEqual(int(True), 1)
         self.assertIsNot(int(True), True)
+
+    def test_float(self):
+        self.assertEqual(float(False), 0.0)
+        self.assertIsNot(float(False), False)
+        self.assertEqual(float(True), 1.0)
+        self.assertIsNot(float(True), True)
 
     def test_math(self):
         self.assertEqual(+False, 0)
@@ -174,8 +174,8 @@ class BoolTest(unittest.TestCase):
         self.assertIs(hasattr([], "wobble"), False)
 
     def test_callable(self):
-        self.assertIs(hasattr(len, '__call__'), True)
-        self.assertIs(hasattr(1, '__call__'), False)
+        self.assertIs(callable(len), True)
+        self.assertIs(callable(1), False)
 
     def test_isinstance(self):
         self.assertIs(isinstance(True, bool), True)
@@ -221,15 +221,15 @@ class BoolTest(unittest.TestCase):
 
     def test_boolean(self):
         self.assertEqual(True & 1, 1)
-        self.assertTrue(not isinstance(True & 1, bool))
+        self.assertNotIsInstance(True & 1, bool)
         self.assertIs(True & True, True)
 
         self.assertEqual(True | 1, 1)
-        self.assertTrue(not isinstance(True | 1, bool))
+        self.assertNotIsInstance(True | 1, bool)
         self.assertIs(True | True, True)
 
         self.assertEqual(True ^ 1, 0)
-        self.assertTrue(not isinstance(True ^ 1, bool))
+        self.assertNotIsInstance(True ^ 1, bool)
         self.assertIs(True ^ True, False)
 
     def test_fileclosed(self):
@@ -240,6 +240,12 @@ class BoolTest(unittest.TestCase):
             self.assertIs(f.closed, True)
         finally:
             os.remove(support.TESTFN)
+
+    def test_types(self):
+        # types are always true.
+        for t in [bool, complex, dict, float, int, list, object,
+                  set, str, tuple, type]:
+            self.assertIs(bool(t), True)
 
     def test_operator(self):
         import operator

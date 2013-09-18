@@ -4,7 +4,7 @@ import select
 import os
 import sys
 
-@unittest.skipIf(sys.platform[:3] in ('win', 'mac', 'os2', 'riscos'),
+@unittest.skipIf(sys.platform[:3] in ('win', 'os2', 'riscos'),
                  "can't easily test on this system")
 class SelectTestCase(unittest.TestCase):
 
@@ -48,6 +48,16 @@ class SelectTestCase(unittest.TestCase):
                 continue
             self.fail('Unexpected return values from select():', rfd, wfd, xfd)
         p.close()
+
+    # Issue 16230: Crash on select resized list
+    def test_select_mutated(self):
+        a = []
+        class F:
+            def fileno(self):
+                del a[-1]
+                return sys.__stdout__.fileno()
+        a[:] = [F()] * 10
+        self.assertEqual(select.select([], a, []), ([], a[:5], []))
 
 def test_main():
     support.run_unittest(SelectTestCase)

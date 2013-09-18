@@ -18,15 +18,12 @@ Note: .pop() abuses the hash field of an Unused or Dummy slot to
 hold a search finger.  The hash field of Unused or Dummy slots has
 no meaning otherwise.
 */
-
+#ifndef Py_LIMITED_API
 #define PySet_MINSIZE 8
 
 typedef struct {
-    /* Cached hash code of the key.  Note that hash codes are C longs.
-     * We have to use Py_ssize_t instead because set_pop() abuses
-     * the hash field to hold a search finger.
-     */
-    Py_ssize_t hash;
+    /* Cached hash code of the key. */
+    Py_hash_t hash;
     PyObject *key;
 } setentry;
 
@@ -53,12 +50,13 @@ struct _setobject {
      * saves repeated runtime null-tests.
      */
     setentry *table;
-    setentry *(*lookup)(PySetObject *so, PyObject *key, long hash);
+    setentry *(*lookup)(PySetObject *so, PyObject *key, Py_hash_t hash);
     setentry smalltable[PySet_MINSIZE];
 
-    long hash;                  /* only used by frozenset objects */
+    Py_hash_t hash;                  /* only used by frozenset objects */
     PyObject *weakreflist;      /* List of weak references */
 };
+#endif /* Py_LIMITED_API */
 
 PyAPI_DATA(PyTypeObject) PySet_Type;
 PyAPI_DATA(PyTypeObject) PyFrozenSet_Type;
@@ -88,14 +86,20 @@ PyAPI_DATA(PyTypeObject) PySetIter_Type;
 PyAPI_FUNC(PyObject *) PySet_New(PyObject *);
 PyAPI_FUNC(PyObject *) PyFrozenSet_New(PyObject *);
 PyAPI_FUNC(Py_ssize_t) PySet_Size(PyObject *anyset);
+#ifndef Py_LIMITED_API
 #define PySet_GET_SIZE(so) (((PySetObject *)(so))->used)
+#endif
 PyAPI_FUNC(int) PySet_Clear(PyObject *set);
 PyAPI_FUNC(int) PySet_Contains(PyObject *anyset, PyObject *key);
 PyAPI_FUNC(int) PySet_Discard(PyObject *set, PyObject *key);
 PyAPI_FUNC(int) PySet_Add(PyObject *set, PyObject *key);
-PyAPI_FUNC(int) _PySet_NextEntry(PyObject *set, Py_ssize_t *pos, PyObject **key, long *hash);
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(int) _PySet_NextEntry(PyObject *set, Py_ssize_t *pos, PyObject **key, Py_hash_t *hash);
+#endif
 PyAPI_FUNC(PyObject *) PySet_Pop(PyObject *set);
+#ifndef Py_LIMITED_API
 PyAPI_FUNC(int) _PySet_Update(PyObject *set, PyObject *iterable);
+#endif
 
 #ifdef __cplusplus
 }

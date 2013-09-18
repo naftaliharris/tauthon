@@ -19,7 +19,7 @@ This module also provides some data items to the user:
 
 __all__ = [
     "NamedTemporaryFile", "TemporaryFile", # high level safe interfaces
-    "SpooledTemporaryFile",
+    "SpooledTemporaryFile", "TemporaryDirectory",
     "mkstemp", "mkdtemp",                  # low level safe interfaces
     "mktemp",                              # deprecated unsafe interface
     "TMP_MAX", "gettempprefix",            # constants
@@ -29,6 +29,8 @@ __all__ = [
 
 # Imports.
 
+import warnings as _warnings
+import sys as _sys
 import io as _io
 import os as _os
 import errno as _errno
@@ -108,30 +110,24 @@ class _RandomNameSequence:
 
     _RandomNameSequence is an iterator."""
 
-    characters = ("abcdefghijklmnopqrstuvwxyz" +
-                  "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-                  "0123456789_")
+    characters = "abcdefghijklmnopqrstuvwxyz0123456789_"
 
-    def __init__(self):
-        self.mutex = _allocate_lock()
-        self.rng = _Random()
-        self.normcase = _os.path.normcase
+    @property
+    def rng(self):
+        cur_pid = _os.getpid()
+        if cur_pid != getattr(self, '_rng_pid', None):
+            self._rng = _Random()
+            self._rng_pid = cur_pid
+        return self._rng
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        m = self.mutex
         c = self.characters
         choose = self.rng.choice
-
-        m.acquire()
-        try:
-            letters = [choose(c) for dummy in "123456"]
-        finally:
-            m.release()
-
-        return self.normcase(''.join(letters))
+        letters = [choose(c) for dummy in "123456"]
+        return ''.join(letters)
 
 def _candidate_tempdir_list():
     """Generate a list of candidate temporary directories which
@@ -179,11 +175,14 @@ def _get_default_tempdir():
             filename = _os.path.join(dir, name)
             try:
                 fd = _os.open(filename, _bin_openflags, 0o600)
-                fp = _io.open(fd, 'wb')
-                fp.write(b'blat')
-                fp.close()
-                _os.unlink(filename)
-                del fp, fd
+                try:
+                    try:
+                        with _io.open(fd, 'wb', closefd=False) as fp:
+                            fp.write(b'blat')
+                    finally:
+                        _os.close(fd)
+                finally:
+                    _os.unlink(filename)
                 return dir
             except (OSError, IOError) as e:
                 if e.args[0] != _errno.EEXIST:
@@ -483,8 +482,8 @@ else:
             raise
 
 class SpooledTemporaryFile:
-    """Temporary file wrapper, specialized to switch from
-    StringIO to a real file when it exceeds a certain size or
+    """Temporary file wrapper, specialized to switch from BytesIO
+    or StringIO to a real file when it exceeds a certain size or
     when a fileno is needed.
     """
     _rolled = False
@@ -550,7 +549,12 @@ class SpooledTemporaryFile:
 
     @property
     def encoding(self):
-        return self._file.encoding
+        try:
+            return self._file.encoding
+        except AttributeError:
+            if 'b' in self._TemporaryFileArgs['mode']:
+                raise
+            return self._TemporaryFileArgs['encoding']
 
     def fileno(self):
         self.rollover()
@@ -564,18 +568,26 @@ class SpooledTemporaryFile:
 
     @property
     def mode(self):
-        return self._file.mode
+        try:
+            return self._file.mode
+        except AttributeError:
+            return self._TemporaryFileArgs['mode']
 
     @property
     def name(self):
-        return self._file.name
+        try:
+            return self._file.name
+        except AttributeError:
+            return None
 
     @property
     def newlines(self):
-        return self._file.newlines
-
-    def next(self):
-        return self._file.next
+        try:
+            return self._file.newlines
+        except AttributeError:
+            if 'b' in self._TemporaryFileArgs['mode']:
+                raise
+            return self._TemporaryFileArgs['newline']
 
     def read(self, *args):
         return self._file.read(*args)
@@ -611,5 +623,85 @@ class SpooledTemporaryFile:
         self._check(file)
         return rv
 
-    def xreadlines(self, *args):
-        return self._file.xreadlines(*args)
+
+class TemporaryDirectory(object):
+    """Create and return a temporary directory.  This has the same
+    behavior as mkdtemp but can be used as a context manager.  For
+    example:
+
+        with TemporaryDirectory() as tmpdir:
+            ...
+
+    Upon exiting the context, the directory and everthing contained
+    in it are removed.
+    """
+
+    def __init__(self, suffix="", prefix=template, dir=None):
+        self._closed = False
+        self.name = None # Handle mkdtemp raising an exception
+        self.name = mkdtemp(suffix, prefix, dir)
+
+    def __repr__(self):
+        return "<{} {!r}>".format(self.__class__.__name__, self.name)
+
+    def __enter__(self):
+        return self.name
+
+    def cleanup(self, _warn=False):
+        if self.name and not self._closed:
+            try:
+                self._rmtree(self.name)
+            except (TypeError, AttributeError) as ex:
+                # Issue #10188: Emit a warning on stderr
+                # if the directory could not be cleaned
+                # up due to missing globals
+                if "None" not in str(ex):
+                    raise
+                print("ERROR: {!r} while cleaning up {!r}".format(ex, self,),
+                      file=_sys.stderr)
+                return
+            self._closed = True
+            if _warn:
+                self._warn("Implicitly cleaning up {!r}".format(self),
+                           ResourceWarning)
+
+    def __exit__(self, exc, value, tb):
+        self.cleanup()
+
+    def __del__(self):
+        # Issue a ResourceWarning if implicit cleanup needed
+        self.cleanup(_warn=True)
+
+    # XXX (ncoghlan): The following code attempts to make
+    # this class tolerant of the module nulling out process
+    # that happens during CPython interpreter shutdown
+    # Alas, it doesn't actually manage it. See issue #10188
+    _listdir = staticmethod(_os.listdir)
+    _path_join = staticmethod(_os.path.join)
+    _isdir = staticmethod(_os.path.isdir)
+    _islink = staticmethod(_os.path.islink)
+    _remove = staticmethod(_os.remove)
+    _rmdir = staticmethod(_os.rmdir)
+    _os_error = _os.error
+    _warn = _warnings.warn
+
+    def _rmtree(self, path):
+        # Essentially a stripped down version of shutil.rmtree.  We can't
+        # use globals because they may be None'ed out at shutdown.
+        for name in self._listdir(path):
+            fullname = self._path_join(path, name)
+            try:
+                isdir = self._isdir(fullname) and not self._islink(fullname)
+            except self._os_error:
+                isdir = False
+            if isdir:
+                self._rmtree(fullname)
+            else:
+                try:
+                    self._remove(fullname)
+                except self._os_error:
+                    pass
+        try:
+            self._rmdir(path)
+        except self._os_error:
+            pass

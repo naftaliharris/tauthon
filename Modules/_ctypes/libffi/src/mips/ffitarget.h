@@ -1,5 +1,6 @@
 /* -----------------------------------------------------------------*-C-*-
-   ffitarget.h - Copyright (c) 1996-2003  Red Hat, Inc.
+   ffitarget.h - Copyright (c) 2012  Anthony Green
+                 Copyright (c) 1996-2003  Red Hat, Inc.
    Target configuration macros for MIPS.
 
    Permission is hereby granted, free of charge, to any person obtaining
@@ -27,8 +28,23 @@
 #ifndef LIBFFI_TARGET_H
 #define LIBFFI_TARGET_H
 
+#ifndef LIBFFI_H
+#error "Please do not include ffitarget.h directly into your source.  Use ffi.h instead."
+#endif
+
 #ifdef linux
-#include <asm/sgidefs.h>
+# include <asm/sgidefs.h>
+#elif defined(__rtems__)
+/*
+ * Subprogram calling convention - copied from sgidefs.h
+ */
+#define _MIPS_SIM_ABI32		1
+#define _MIPS_SIM_NABI32	2
+#define _MIPS_SIM_ABI64		3
+#elif !defined(__OpenBSD__)
+# include <sgidefs.h>
+#endif
+
 #  ifndef _ABIN32
 #    define _ABIN32 _MIPS_SIM_NABI32
 #  endif
@@ -38,10 +54,9 @@
 #  ifndef _ABIO32
 #    define _ABIO32 _MIPS_SIM_ABI32
 #  endif
-#endif
 
 #if !defined(_MIPS_SIM)
--- something is very wrong --
+# error -- something is very wrong --
 #else
 #  if (_MIPS_SIM==_ABIN32 && defined(_ABIN32)) || (_MIPS_SIM==_ABI64 && defined(_ABI64))
 #    define FFI_MIPS_N32
@@ -49,7 +64,7 @@
 #    if (_MIPS_SIM==_ABIO32 && defined(_ABIO32))
 #      define FFI_MIPS_O32
 #    else
--- this is an unsupported platform --
+#     error -- this is an unsupported platform --
 #    endif
 #  endif
 #endif
@@ -95,6 +110,15 @@
 #define FFI_TYPE_STRUCT_DF     189
 #define FFI_TYPE_STRUCT_SMALL  93
 #define FFI_TYPE_STRUCT_SMALL2 109
+
+/* and for n32 soft float, add 16 * 2^4 */
+#define FFI_TYPE_STRUCT_D_SOFT      317
+#define FFI_TYPE_STRUCT_F_SOFT      301
+#define FFI_TYPE_STRUCT_DD_SOFT     509
+#define FFI_TYPE_STRUCT_FF_SOFT     429
+#define FFI_TYPE_STRUCT_FD_SOFT     493
+#define FFI_TYPE_STRUCT_DF_SOFT     445
+#define FFI_TYPE_STRUCT_SOFT        16
 #endif
 
 #ifdef LIBFFI_ASM
@@ -145,7 +169,8 @@
 # endif /* _MIPS_SIM==_ABI64 */
 #endif /* !FFI_MIPS_O32 */
 #else /* !LIBFFI_ASM */
-#ifdef FFI_MIPS_O32
+# ifdef __GNUC__
+#  ifdef FFI_MIPS_O32
 /* O32 stack frames have 32bit integer args */
 typedef unsigned int     ffi_arg __attribute__((__mode__(__SI__)));
 typedef signed   int     ffi_sarg __attribute__((__mode__(__SI__)));
@@ -153,7 +178,18 @@ typedef signed   int     ffi_sarg __attribute__((__mode__(__SI__)));
 /* N32 and N64 frames have 64bit integer args */
 typedef unsigned int     ffi_arg __attribute__((__mode__(__DI__)));
 typedef signed   int     ffi_sarg __attribute__((__mode__(__DI__)));
-#endif
+#  endif
+# else
+#  ifdef FFI_MIPS_O32
+/* O32 stack frames have 32bit integer args */
+typedef __uint32_t ffi_arg;
+typedef __int32_t ffi_sarg;
+#  else
+/* N32 and N64 frames have 64bit integer args */
+typedef __uint64_t ffi_arg;
+typedef __int64_t ffi_sarg;
+#  endif
+# endif /* __GNUC__ */
 
 typedef enum ffi_abi {
   FFI_FIRST_ABI = 0,
@@ -161,22 +197,31 @@ typedef enum ffi_abi {
   FFI_N32,
   FFI_N64,
   FFI_O32_SOFT_FLOAT,
+  FFI_N32_SOFT_FLOAT,
+  FFI_N64_SOFT_FLOAT,
+  FFI_LAST_ABI,
 
 #ifdef FFI_MIPS_O32
 #ifdef __mips_soft_float
-  FFI_DEFAULT_ABI = FFI_O32_SOFT_FLOAT,
+  FFI_DEFAULT_ABI = FFI_O32_SOFT_FLOAT
 #else
-  FFI_DEFAULT_ABI = FFI_O32,
+  FFI_DEFAULT_ABI = FFI_O32
 #endif
 #else
 # if _MIPS_SIM==_ABI64
-  FFI_DEFAULT_ABI = FFI_N64,
+#  ifdef __mips_soft_float
+  FFI_DEFAULT_ABI = FFI_N64_SOFT_FLOAT
+#  else
+  FFI_DEFAULT_ABI = FFI_N64
+#  endif
 # else
-  FFI_DEFAULT_ABI = FFI_N32,
+#  ifdef __mips_soft_float
+  FFI_DEFAULT_ABI = FFI_N32_SOFT_FLOAT
+#  else
+  FFI_DEFAULT_ABI = FFI_N32
+#  endif
 # endif
 #endif
-
-  FFI_LAST_ABI = FFI_DEFAULT_ABI + 1
 } ffi_abi;
 
 #define FFI_EXTRA_CIF_FIELDS unsigned rstruct_flag

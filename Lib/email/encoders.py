@@ -54,22 +54,33 @@ def encode_7or8bit(msg):
         # There's no payload.  For backwards compatibility we use 7bit
         msg['Content-Transfer-Encoding'] = '7bit'
         return
-    # We play a trick to make this go fast.  If encoding to ASCII succeeds, we
-    # know the data must be 7bit, otherwise treat it as 8bit.
+    # We play a trick to make this go fast.  If encoding/decode to ASCII
+    # succeeds, we know the data must be 7bit, otherwise treat it as 8bit.
     try:
-        orig.encode('ascii')
+        if isinstance(orig, str):
+            orig.encode('ascii')
+        else:
+            orig.decode('ascii')
     except UnicodeError:
-        # iso-2022-* is non-ASCII but still 7-bit
         charset = msg.get_charset()
         output_cset = charset and charset.output_charset
+        # iso-2022-* is non-ASCII but encodes to a 7-bit representation
         if output_cset and output_cset.lower().startswith('iso-2022-'):
             msg['Content-Transfer-Encoding'] = '7bit'
         else:
             msg['Content-Transfer-Encoding'] = '8bit'
     else:
         msg['Content-Transfer-Encoding'] = '7bit'
+    if not isinstance(orig, str):
+        msg.set_payload(orig.decode('ascii', 'surrogateescape'))
 
 
 
 def encode_noop(msg):
     """Do nothing."""
+    # Well, not quite *nothing*: in Python3 we have to turn bytes into a string
+    # in our internal surrogateescaped form in order to keep the model
+    # consistent.
+    orig = msg.get_payload()
+    if not isinstance(orig, str):
+        msg.set_payload(orig.decode('ascii', 'surrogateescape'))
