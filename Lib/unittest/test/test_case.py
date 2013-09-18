@@ -1,8 +1,10 @@
+import contextlib
 import difflib
 import pprint
 import pickle
 import re
 import sys
+import logging
 import warnings
 import weakref
 import inspect
@@ -13,9 +15,15 @@ from test import support
 import unittest
 
 from .support import (
-    TestEquality, TestHashing, LoggingResult,
+    TestEquality, TestHashing, LoggingResult, LegacyLoggingResult,
     ResultWithNoStartTestRunStopTestRun
 )
+from test.support import captured_stderr
+
+
+log_foo = logging.getLogger('foo')
+log_foobar = logging.getLogger('foo.bar')
+log_quux = logging.getLogger('quux')
 
 
 class Test(object):
@@ -296,6 +304,98 @@ class Test_TestCase(unittest.TestCase, TestEquality, TestHashing):
                 pass
 
         Foo('test').run()
+
+    def _check_call_order__subtests(self, result, events, expected_events):
+        class Foo(Test.LoggingTestCase):
+            def test(self):
+                super(Foo, self).test()
+                for i in [1, 2, 3]:
+                    with self.subTest(i=i):
+                        if i == 1:
+                            self.fail('failure')
+                        for j in [2, 3]:
+                            with self.subTest(j=j):
+                                if i * j == 6:
+                                    raise RuntimeError('raised by Foo.test')
+                1 / 0
+
+        # Order is the following:
+        # i=1 => subtest failure
+        # i=2, j=2 => subtest success
+        # i=2, j=3 => subtest error
+        # i=3, j=2 => subtest error
+        # i=3, j=3 => subtest success
+        # toplevel => error
+        Foo(events).run(result)
+        self.assertEqual(events, expected_events)
+
+    def test_run_call_order__subtests(self):
+        events = []
+        result = LoggingResult(events)
+        expected = ['startTest', 'setUp', 'test', 'tearDown',
+                    'addSubTestFailure', 'addSubTestSuccess',
+                    'addSubTestFailure', 'addSubTestFailure',
+                    'addSubTestSuccess', 'addError', 'stopTest']
+        self._check_call_order__subtests(result, events, expected)
+
+    def test_run_call_order__subtests_legacy(self):
+        # With a legacy result object (without a addSubTest method),
+        # text execution stops after the first subtest failure.
+        events = []
+        result = LegacyLoggingResult(events)
+        expected = ['startTest', 'setUp', 'test', 'tearDown',
+                    'addFailure', 'stopTest']
+        self._check_call_order__subtests(result, events, expected)
+
+    def _check_call_order__subtests_success(self, result, events, expected_events):
+        class Foo(Test.LoggingTestCase):
+            def test(self):
+                super(Foo, self).test()
+                for i in [1, 2]:
+                    with self.subTest(i=i):
+                        for j in [2, 3]:
+                            with self.subTest(j=j):
+                                pass
+
+        Foo(events).run(result)
+        self.assertEqual(events, expected_events)
+
+    def test_run_call_order__subtests_success(self):
+        events = []
+        result = LoggingResult(events)
+        # The 6 subtest successes are individually recorded, in addition
+        # to the whole test success.
+        expected = (['startTest', 'setUp', 'test', 'tearDown']
+                    + 6 * ['addSubTestSuccess']
+                    + ['addSuccess', 'stopTest'])
+        self._check_call_order__subtests_success(result, events, expected)
+
+    def test_run_call_order__subtests_success_legacy(self):
+        # With a legacy result, only the whole test success is recorded.
+        events = []
+        result = LegacyLoggingResult(events)
+        expected = ['startTest', 'setUp', 'test', 'tearDown',
+                    'addSuccess', 'stopTest']
+        self._check_call_order__subtests_success(result, events, expected)
+
+    def test_run_call_order__subtests_failfast(self):
+        events = []
+        result = LoggingResult(events)
+        result.failfast = True
+
+        class Foo(Test.LoggingTestCase):
+            def test(self):
+                super(Foo, self).test()
+                with self.subTest(i=1):
+                    self.fail('failure')
+                with self.subTest(i=2):
+                    self.fail('failure')
+                self.fail('failure')
+
+        expected = ['startTest', 'setUp', 'test', 'tearDown',
+                    'addSubTestFailure', 'stopTest']
+        Foo(events).run(result)
+        self.assertEqual(events, expected)
 
     # "This class attribute gives the exception raised by the test() method.
     # If a test framework needs to use a specialized exception, possibly to
@@ -1159,6 +1259,94 @@ test case
                 with self.assertWarnsRegex(RuntimeWarning, "o+"):
                     _runtime_warn("barz")
 
+    @contextlib.contextmanager
+    def assertNoStderr(self):
+        with captured_stderr() as buf:
+            yield
+        self.assertEqual(buf.getvalue(), "")
+
+    def assertLogRecords(self, records, matches):
+        self.assertEqual(len(records), len(matches))
+        for rec, match in zip(records, matches):
+            self.assertIsInstance(rec, logging.LogRecord)
+            for k, v in match.items():
+                self.assertEqual(getattr(rec, k), v)
+
+    def testAssertLogsDefaults(self):
+        # defaults: root logger, level INFO
+        with self.assertNoStderr():
+            with self.assertLogs() as cm:
+                log_foo.info("1")
+                log_foobar.debug("2")
+            self.assertEqual(cm.output, ["INFO:foo:1"])
+            self.assertLogRecords(cm.records, [{'name': 'foo'}])
+
+    def testAssertLogsTwoMatchingMessages(self):
+        # Same, but with two matching log messages
+        with self.assertNoStderr():
+            with self.assertLogs() as cm:
+                log_foo.info("1")
+                log_foobar.debug("2")
+                log_quux.warning("3")
+            self.assertEqual(cm.output, ["INFO:foo:1", "WARNING:quux:3"])
+            self.assertLogRecords(cm.records,
+                                   [{'name': 'foo'}, {'name': 'quux'}])
+
+    def checkAssertLogsPerLevel(self, level):
+        # Check level filtering
+        with self.assertNoStderr():
+            with self.assertLogs(level=level) as cm:
+                log_foo.warning("1")
+                log_foobar.error("2")
+                log_quux.critical("3")
+            self.assertEqual(cm.output, ["ERROR:foo.bar:2", "CRITICAL:quux:3"])
+            self.assertLogRecords(cm.records,
+                                   [{'name': 'foo.bar'}, {'name': 'quux'}])
+
+    def testAssertLogsPerLevel(self):
+        self.checkAssertLogsPerLevel(logging.ERROR)
+        self.checkAssertLogsPerLevel('ERROR')
+
+    def checkAssertLogsPerLogger(self, logger):
+        # Check per-logger fitering
+        with self.assertNoStderr():
+            with self.assertLogs(level='DEBUG') as outer_cm:
+                with self.assertLogs(logger, level='DEBUG') as cm:
+                    log_foo.info("1")
+                    log_foobar.debug("2")
+                    log_quux.warning("3")
+                self.assertEqual(cm.output, ["INFO:foo:1", "DEBUG:foo.bar:2"])
+                self.assertLogRecords(cm.records,
+                                       [{'name': 'foo'}, {'name': 'foo.bar'}])
+            # The outer catchall caught the quux log
+            self.assertEqual(outer_cm.output, ["WARNING:quux:3"])
+
+    def testAssertLogsPerLogger(self):
+        self.checkAssertLogsPerLogger(logging.getLogger('foo'))
+        self.checkAssertLogsPerLogger('foo')
+
+    def testAssertLogsFailureNoLogs(self):
+        # Failure due to no logs
+        with self.assertNoStderr():
+            with self.assertRaises(self.failureException):
+                with self.assertLogs():
+                    pass
+
+    def testAssertLogsFailureLevelTooHigh(self):
+        # Failure due to level too high
+        with self.assertNoStderr():
+            with self.assertRaises(self.failureException):
+                with self.assertLogs(level='WARNING'):
+                    log_foo.info("1")
+
+    def testAssertLogsFailureMismatchingLogger(self):
+        # Failure due to mismatching logger (and the logged message is
+        # passed through)
+        with self.assertLogs('quux', level='ERROR'):
+            with self.assertRaises(self.failureException):
+                with self.assertLogs('foo'):
+                    log_quux.error("1")
+
     def testDeprecatedMethodNames(self):
         """
         Test that the deprecated methods raise a DeprecationWarning. See #9424.
@@ -1313,3 +1501,7 @@ test case
         with support.disable_gc():
             del case
             self.assertFalse(wr())
+
+
+if __name__ == "__main__":
+    unittest.main()
