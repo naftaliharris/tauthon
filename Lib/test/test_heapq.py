@@ -1,31 +1,31 @@
 """Unittests for heapq."""
 
-import random
-import unittest
-from test import test_support
 import sys
+import random
 
-# We do a bit of trickery here to be able to test both the C implementation
-# and the Python implementation of the module.
+from test import test_support
+from unittest import TestCase, skipUnless
 
-# Make it impossible to import the C implementation anymore.
-sys.modules['_heapq'] = 0
-# We must also handle the case that heapq was imported before.
-if 'heapq' in sys.modules:
-    del sys.modules['heapq']
+py_heapq = test_support.import_fresh_module('heapq', blocked=['_heapq'])
+c_heapq = test_support.import_fresh_module('heapq', fresh=['_heapq'])
 
-# Now we can import the module and get the pure Python implementation.
-import heapq as py_heapq
+# _heapq.nlargest/nsmallest are saved in heapq._nlargest/_smallest when
+# _heapq is imported, so check them there
+func_names = ['heapify', 'heappop', 'heappush', 'heappushpop',
+              'heapreplace', '_nlargest', '_nsmallest']
 
-# Restore everything to normal.
-del sys.modules['_heapq']
-del sys.modules['heapq']
+class TestModules(TestCase):
+    def test_py_functions(self):
+        for fname in func_names:
+            self.assertEqual(getattr(py_heapq, fname).__module__, 'heapq')
 
-# This is now the module with the C implementation.
-import heapq as c_heapq
+    @skipUnless(c_heapq, 'requires _heapq')
+    def test_c_functions(self):
+        for fname in func_names:
+            self.assertEqual(getattr(c_heapq, fname).__module__, '_heapq')
 
 
-class TestHeap(unittest.TestCase):
+class TestHeap(TestCase):
     module = None
 
     def test_push_pop(self):
@@ -61,7 +61,7 @@ class TestHeap(unittest.TestCase):
         for pos, item in enumerate(heap):
             if pos: # pos 0 has no parent
                 parentpos = (pos-1) >> 1
-                self.assert_(heap[parentpos] <= item)
+                self.assertTrue(heap[parentpos] <= item)
 
     def test_heapify(self):
         for size in range(30):
@@ -158,6 +158,15 @@ class TestHeap(unittest.TestCase):
         self.assertEqual(sorted(chain(*inputs)), list(self.module.merge(*inputs)))
         self.assertEqual(list(self.module.merge()), [])
 
+    def test_merge_does_not_suppress_index_error(self):
+        # Issue 19018: Heapq.merge suppresses IndexError from user generator
+        def iterable():
+            s = list(range(10))
+            for i in range(20):
+                yield s[i]       # IndexError when i > 10
+        with self.assertRaises(IndexError):
+            list(self.module.merge(iterable(), iterable()))
+
     def test_merge_stability(self):
         class Int(int):
             pass
@@ -190,14 +199,8 @@ class TestHeap(unittest.TestCase):
                 self.assertEqual(self.module.nlargest(n, data, key=f),
                                  sorted(data, key=f, reverse=True)[:n])
 
-class TestHeapPython(TestHeap):
-    module = py_heapq
-
-class TestHeapC(TestHeap):
-    module = c_heapq
-
     def test_comparison_operator(self):
-        # Issue 3501: Make sure heapq works with both __lt__ and __le__
+        # Issue 3051: Make sure heapq works with both __lt__ and __le__
         def hsort(data, comp):
             data = map(comp, data)
             self.module.heapify(data)
@@ -216,6 +219,15 @@ class TestHeapC(TestHeap):
         target = sorted(data, reverse=True)
         self.assertEqual(hsort(data, LT), target)
         self.assertEqual(hsort(data, LE), target)
+
+
+class TestHeapPython(TestHeap):
+    module = py_heapq
+
+
+@skipUnless(c_heapq, 'requires _heapq')
+class TestHeapC(TestHeap):
+    module = c_heapq
 
 
 #==============================================================================
@@ -312,32 +324,33 @@ def L(seqn):
     'Test multiple tiers of iterators'
     return chain(imap(lambda x:x, R(Ig(G(seqn)))))
 
-class TestErrorHandling(unittest.TestCase):
-    # only for C implementation
-    module = c_heapq
+class SideEffectLT:
+    def __init__(self, value, heap):
+        self.value = value
+        self.heap = heap
+
+    def __lt__(self, other):
+        self.heap[:] = []
+        return self.value < other.value
+
+
+class TestErrorHandling(TestCase):
+    module = None
 
     def test_non_sequence(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
         for f in (self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10, 10)
 
     def test_len_only(self):
         for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, LenOnly())
+            self.assertRaises((TypeError, AttributeError), f, LenOnly())
         for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, LenOnly(), 10)
+            self.assertRaises((TypeError, AttributeError), f, LenOnly(), 10)
         for f in (self.module.nlargest, self.module.nsmallest):
             self.assertRaises(TypeError, f, 2, LenOnly())
-
-    def test_get_only(self):
-        for f in (self.module.heapify, self.module.heappop):
-            self.assertRaises(TypeError, f, GetOnly())
-        for f in (self.module.heappush, self.module.heapreplace):
-            self.assertRaises(TypeError, f, GetOnly(), 10)
-        for f in (self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 2, GetOnly())
 
     def test_get_only(self):
         seq = [CmpErr(), CmpErr(), CmpErr()]
@@ -352,13 +365,13 @@ class TestErrorHandling(unittest.TestCase):
         for f in (self.module.heapify, self.module.heappop,
                   self.module.heappush, self.module.heapreplace,
                   self.module.nlargest, self.module.nsmallest):
-            self.assertRaises(TypeError, f, 10)
+            self.assertRaises((TypeError, AttributeError), f, 10)
 
     def test_iterable_args(self):
         for f in (self.module.nlargest, self.module.nsmallest):
             for s in ("123", "", range(1000), ('do', 1.2), xrange(2000,2200,5)):
                 for g in (G, I, Ig, L, R):
-                    with test_support._check_py3k_warnings(
+                    with test_support.check_py3k_warnings(
                             ("comparing unequal types not supported",
                              DeprecationWarning), quiet=True):
                         self.assertEqual(f(2, g(s)), f(2,s))
@@ -367,14 +380,38 @@ class TestErrorHandling(unittest.TestCase):
                 self.assertRaises(TypeError, f, 2, N(s))
                 self.assertRaises(ZeroDivisionError, f, 2, E(s))
 
+    # Issue #17278: the heap may change size while it's being walked.
+
+    def test_heappush_mutating_heap(self):
+        heap = []
+        heap.extend(SideEffectLT(i, heap) for i in range(200))
+        # Python version raises IndexError, C version RuntimeError
+        with self.assertRaises((IndexError, RuntimeError)):
+            self.module.heappush(heap, SideEffectLT(5, heap))
+
+    def test_heappop_mutating_heap(self):
+        heap = []
+        heap.extend(SideEffectLT(i, heap) for i in range(200))
+        # Python version raises IndexError, C version RuntimeError
+        with self.assertRaises((IndexError, RuntimeError)):
+            self.module.heappop(heap)
+
+
+class TestErrorHandlingPython(TestErrorHandling):
+    module = py_heapq
+
+
+@skipUnless(c_heapq, 'requires _heapq')
+class TestErrorHandlingC(TestErrorHandling):
+    module = c_heapq
+
 
 #==============================================================================
 
 
 def test_main(verbose=None):
-    from types import BuiltinFunctionType
-
-    test_classes = [TestHeapPython, TestHeapC, TestErrorHandling]
+    test_classes = [TestModules, TestHeapPython, TestHeapC,
+                    TestErrorHandlingPython, TestErrorHandlingC]
     test_support.run_unittest(*test_classes)
 
     # verify reference counting

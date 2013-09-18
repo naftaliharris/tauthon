@@ -236,9 +236,9 @@ sha_init(SHAobject *sha_info)
 /* update the SHA digest */
 
 static void
-sha_update(SHAobject *sha_info, SHA_BYTE *buffer, int count)
+sha_update(SHAobject *sha_info, SHA_BYTE *buffer, unsigned int count)
 {
-    int i;
+    unsigned int i;
     SHA_INT32 clo;
 
     clo = sha_info->count_lo + ((SHA_INT32) count << 3);
@@ -428,16 +428,29 @@ PyDoc_STRVAR(SHA_update__doc__,
 static PyObject *
 SHA_update(SHAobject *self, PyObject *args)
 {
-    unsigned char *cp;
-    int len;
+    Py_buffer view;
+    Py_ssize_t n;
+    unsigned char *buf;
 
-    if (!PyArg_ParseTuple(args, "s#:update", &cp, &len))
+    if (!PyArg_ParseTuple(args, "s*:update", &view))
         return NULL;
 
-    sha_update(self, cp, len);
+    n = view.len;
+    buf = (unsigned char *) view.buf;
+    while (n > 0) {
+        Py_ssize_t nbytes;
+        if (n > INT_MAX)
+            nbytes = INT_MAX;
+        else
+            nbytes = n;
+        sha_update(self, buf,
+                   Py_SAFE_DOWNCAST(nbytes, Py_ssize_t, unsigned int));
+        buf += nbytes;
+        n -= nbytes;
+    }
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    PyBuffer_Release(&view);
+    Py_RETURN_NONE;
 }
 
 static PyMethodDef SHA_methods[] = {
@@ -535,25 +548,43 @@ SHA_new(PyObject *self, PyObject *args, PyObject *kwdict)
 {
     static char *kwlist[] = {"string", NULL};
     SHAobject *new;
-    unsigned char *cp = NULL;
-    int len;
+    Py_buffer view = { 0 };
+    Py_ssize_t n;
+    unsigned char *buf;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|s#:new", kwlist,
-                                     &cp, &len)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwdict, "|s*:new", kwlist,
+                                     &view)) {
         return NULL;
     }
 
-    if ((new = newSHAobject()) == NULL)
+    if ((new = newSHAobject()) == NULL) {
+        PyBuffer_Release(&view);
         return NULL;
+    }
 
     sha_init(new);
 
     if (PyErr_Occurred()) {
         Py_DECREF(new);
+        PyBuffer_Release(&view);
         return NULL;
     }
-    if (cp)
-        sha_update(new, cp, len);
+
+    n = view.len;
+    buf = (unsigned char *) view.buf;
+    while (n > 0) {
+        Py_ssize_t nbytes;
+        if (n > INT_MAX)
+            nbytes = INT_MAX;
+        else
+            nbytes = n;
+        sha_update(new, buf,
+                   Py_SAFE_DOWNCAST(nbytes, Py_ssize_t, unsigned int));
+        buf += nbytes;
+        n -= nbytes;
+    }
+
+    PyBuffer_Release(&view);
 
     return (PyObject *)new;
 }

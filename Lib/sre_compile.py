@@ -13,6 +13,7 @@
 import _sre, sys
 import sre_parse
 from sre_constants import *
+from _sre import MAXREPEAT
 
 assert _sre.MAGIC == MAGIC, "SRE module mismatch"
 
@@ -23,12 +24,6 @@ else:
 
 def _identityfunction(x):
     return x
-
-def set(seq):
-    s = {}
-    for elem in seq:
-        s[elem] = 1
-    return s
 
 _LITERAL_CODES = set([LITERAL, NOT_LITERAL])
 _REPEATING_CODES = set([REPEAT, MIN_REPEAT, MAX_REPEAT])
@@ -360,8 +355,6 @@ def _optimize_unicode(charset, fixup):
 def _simple(av):
     # check if av is a "simple" operator
     lo, hi = av[2].getwidth()
-    if lo == 0 and hi == MAXREPEAT:
-        raise error, "nothing to repeat"
     return lo == hi == 1 and av[2][0][0] != SUBPATTERN
 
 def _compile_info(code, pattern, flags):

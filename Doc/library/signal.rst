@@ -69,10 +69,30 @@ The variables defined in the :mod:`signal` module are:
    All the signal numbers are defined symbolically.  For example, the hangup signal
    is defined as :const:`signal.SIGHUP`; the variable names are identical to the
    names used in C programs, as found in ``<signal.h>``. The Unix man page for
-   ':cfunc:`signal`' lists the existing signals (on some systems this is
+   ':c:func:`signal`' lists the existing signals (on some systems this is
    :manpage:`signal(2)`, on others the list is in :manpage:`signal(7)`). Note that
    not all systems define the same set of signal names; only those names defined by
    the system are defined by this module.
+
+
+.. data:: CTRL_C_EVENT
+
+   The signal corresponding to the CTRL+C keystroke event. This signal can
+   only be used with :func:`os.kill`.
+
+   Availability: Windows.
+
+   .. versionadded:: 2.7
+
+
+.. data:: CTRL_BREAK_EVENT
+
+   The signal corresponding to the CTRL+BREAK keystroke event. This signal can
+   only be used with :func:`os.kill`.
+
+   Availability: Windows.
+
+   .. versionadded:: 2.7
 
 
 .. data:: NSIG
@@ -184,6 +204,8 @@ The :mod:`signal` module defines the following functions:
    attempting to call it from other threads will cause a :exc:`ValueError`
    exception to be raised.
 
+   .. versionadded:: 2.6
+
 
 .. function:: siginterrupt(signalnum, flag)
 
@@ -194,7 +216,7 @@ The :mod:`signal` module defines the following functions:
 
    Note that installing a signal handler with :func:`signal` will reset the
    restart behaviour to interruptible by implicitly calling
-   :cfunc:`siginterrupt` with a true *flag* value for the given signal.
+   :c:func:`siginterrupt` with a true *flag* value for the given signal.
 
    .. versionadded:: 2.6
 
@@ -215,6 +237,10 @@ The :mod:`signal` module defines the following functions:
    stack frame (``None`` or a frame object; for a description of frame objects,
    see the :ref:`description in the type hierarchy <frame-objects>` or see the
    attribute descriptions in the :mod:`inspect` module).
+
+   On Windows, :func:`signal` can only be called with :const:`SIGABRT`,
+   :const:`SIGFPE`, :const:`SIGILL`, :const:`SIGINT`, :const:`SIGSEGV`, or
+   :const:`SIGTERM`. A :exc:`ValueError` will be raised in any other case.
 
 
 .. _signal-example:

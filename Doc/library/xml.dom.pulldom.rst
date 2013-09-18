@@ -1,4 +1,3 @@
-
 :mod:`xml.dom.pulldom` --- Support for building partial DOM trees
 =================================================================
 
@@ -9,8 +8,19 @@
 
 .. versionadded:: 2.0
 
+**Source code:** :source:`Lib/xml/dom/pulldom.py`
+
+--------------
+
 :mod:`xml.dom.pulldom` allows building only selected portions of a Document
 Object Model representation of a document from SAX events.
+
+
+.. warning::
+
+   The :mod:`xml.dom.pulldom` module is not secure against
+   maliciously constructed data.  If you need to parse untrusted or
+   unauthenticated data see :ref:`xml-vulnerabilities`.
 
 
 .. class:: PullDOM([documentFactory])

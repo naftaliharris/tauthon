@@ -1,4 +1,3 @@
-
 :mod:`atexit` --- Exit handlers
 ===============================
 
@@ -10,18 +9,25 @@
 
 .. versionadded:: 2.0
 
+**Source code:** :source:`Lib/atexit.py`
+
+--------------
+
 The :mod:`atexit` module defines a single function to register cleanup
 functions.  Functions thus registered are automatically executed upon normal
-interpreter termination.
+interpreter termination.  :mod:`atexit` runs these functions in the *reverse*
+order in which they were registered; if you register ``A``, ``B``, and ``C``,
+at interpreter termination time they will be run in the order ``C``, ``B``,
+``A``.
 
-Note: the functions registered via this module are not called when the program
-is killed by a signal, when a Python fatal internal error is detected, or when
-:func:`os._exit` is called.
+**Note:** The functions registered via this module are not called when the
+program is killed by a signal not handled by Python, when a Python fatal
+internal error is detected, or when :func:`os._exit` is called.
 
 .. index:: single: exitfunc (in sys)
 
 This is an alternate interface to the functionality provided by the
-``sys.exitfunc`` variable.
+:func:`sys.exitfunc` variable.
 
 Note: This module is unlikely to work correctly when used with other code that
 sets ``sys.exitfunc``.  In particular, other core Python modules are free to use
@@ -35,7 +41,8 @@ simplest way to convert code that sets ``sys.exitfunc`` is to import
 
    Register *func* as a function to be executed at termination.  Any optional
    arguments that are to be passed to *func* must be passed as arguments to
-   :func:`register`.
+   :func:`register`.  It is possible to register the same function and arguments
+   more than once.
 
    At normal program termination (for instance, if :func:`sys.exit` is called or
    the main module's execution completes), all functions registered are called in
@@ -49,8 +56,8 @@ simplest way to convert code that sets ``sys.exitfunc`` is to import
    be raised is re-raised.
 
    .. versionchanged:: 2.6
-      This function now returns *func* which makes it possible to use it as a
-      decorator without binding the original name to ``None``.
+      This function now returns *func*, which makes it possible to use it as a
+      decorator.
 
 
 .. seealso::
@@ -70,7 +77,7 @@ automatically when the program terminates without relying on the application
 making an explicit call into this module at termination. ::
 
    try:
-       _count = int(open("/tmp/counter").read())
+       _count = int(open("counter").read())
    except IOError:
        _count = 0
 
@@ -79,7 +86,7 @@ making an explicit call into this module at termination. ::
        _count = _count + n
 
    def savecounter():
-       open("/tmp/counter", "w").write("%d" % _count)
+       open("counter", "w").write("%d" % _count)
 
    import atexit
    atexit.register(savecounter)
@@ -104,5 +111,4 @@ Usage as a :term:`decorator`::
    def goodbye():
        print "You are now leaving the Python sector."
 
-This obviously only works with functions that don't take arguments.
-
+This only works with functions that can be called without arguments.

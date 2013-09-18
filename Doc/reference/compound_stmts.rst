@@ -238,10 +238,7 @@ present, must be last; it matches any exception.  For an except clause with an
 expression, that expression is evaluated, and the clause matches the exception
 if the resulting object is "compatible" with the exception.  An object is
 compatible with an exception if it is the class or a base class of the exception
-object, a tuple containing an item compatible with the exception, or, in the
-(deprecated) case of string exceptions, is the raised string itself (note that
-the object identities must match, i.e. it must be the same string object, not
-just a string with the same value).
+object, or a tuple containing an item compatible with the exception.
 
 If no except clause matches the exception, the search for an exception handler
 continues in the surrounding code and on the invocation stack.  [#]_
@@ -297,8 +294,19 @@ not handled, the exception is temporarily saved. The :keyword:`finally` clause
 is executed.  If there is a saved exception, it is re-raised at the end of the
 :keyword:`finally` clause. If the :keyword:`finally` clause raises another
 exception or executes a :keyword:`return` or :keyword:`break` statement, the
-saved exception is lost.  The exception information is not available to the
-program during execution of the :keyword:`finally` clause.
+saved exception is discarded::
+
+    def f():
+        try:
+            1/0
+        finally:
+            return 42
+
+    >>> f()
+    42
+
+The exception information is not available to the program during execution of
+the :keyword:`finally` clause.
 
 .. index::
    statement: return
@@ -333,11 +341,15 @@ allows common :keyword:`try`...\ :keyword:`except`...\ :keyword:`finally` usage
 patterns to be encapsulated for convenient reuse.
 
 .. productionlist::
-   with_stmt: "with" `expression` ["as" `target`] ":" `suite`
+   with_stmt: "with" with_item ("," with_item)* ":" `suite`
+   with_item: `expression` ["as" `target`]
 
-The execution of the :keyword:`with` statement proceeds as follows:
+The execution of the :keyword:`with` statement with one "item" proceeds as follows:
 
-#. The context expression is evaluated to obtain a context manager.
+#. The context expression (the expression given in the :token:`with_item`) is
+   evaluated to obtain a context manager.
+
+#. The context manager's :meth:`__exit__` is loaded for later use.
 
 #. The context manager's :meth:`__enter__` method is invoked.
 
@@ -349,7 +361,7 @@ The execution of the :keyword:`with` statement proceeds as follows:
       The :keyword:`with` statement guarantees that if the :meth:`__enter__` method
       returns without an error, then :meth:`__exit__` will always be called. Thus, if
       an error occurs during the assignment to the target list, it will be treated the
-      same as an error occurring within the suite would be. See step 5 below.
+      same as an error occurring within the suite would be. See step 6 below.
 
 #. The suite is executed.
 
@@ -367,11 +379,26 @@ The execution of the :keyword:`with` statement proceeds as follows:
    from :meth:`__exit__` is ignored, and execution proceeds at the normal location
    for the kind of exit that was taken.
 
+With more than one item, the context managers are processed as if multiple
+:keyword:`with` statements were nested::
+
+   with A() as a, B() as b:
+       suite
+
+is equivalent to ::
+
+   with A() as a:
+       with B() as b:
+           suite
+
 .. note::
 
    In Python 2.5, the :keyword:`with` statement is only allowed when the
    ``with_statement`` feature has been enabled.  It is always enabled in
    Python 2.6.
+
+.. versionchanged:: 2.7
+   Support for multiple context expressions.
 
 .. seealso::
 
@@ -379,6 +406,9 @@ The execution of the :keyword:`with` statement proceeds as follows:
       The specification, background, and examples for the Python :keyword:`with`
       statement.
 
+
+.. index::
+   single: parameter; function definition
 
 .. _function:
 .. _def:
@@ -404,7 +434,7 @@ A function definition defines a user-defined function object (see section
    funcdef: "def" `funcname` "(" [`parameter_list`] ")" ":" `suite`
    dotted_name: `identifier` ("." `identifier`)*
    parameter_list: (`defparameter` ",")*
-                 : (  "*" `identifier` [, "**" `identifier`]
+                 : (  "*" `identifier` ["," "**" `identifier`]
                  : | "**" `identifier`
                  : | `defparameter` [","] )
    defparameter: `parameter` ["=" `expression`]
@@ -440,18 +470,21 @@ is equivalent to::
    def func(): pass
    func = f1(arg)(f2(func))
 
-.. index:: triple: default; parameter; value
+.. index::
+   triple: default; parameter; value
+   single: argument; function definition
 
-When one or more top-level parameters have the form *parameter* ``=``
-*expression*, the function is said to have "default parameter values."  For a
-parameter with a default value, the corresponding argument may be omitted from a
-call, in which case the parameter's default value is substituted.  If a
+When one or more top-level :term:`parameters <parameter>` have the form
+*parameter* ``=`` *expression*, the function is said to have "default parameter
+values."  For a parameter with a default value, the corresponding
+:term:`argument` may be omitted from a call, in which
+case the parameter's default value is substituted.  If a
 parameter has a default value, all following parameters must also have a default
 value --- this is a syntactic restriction that is not expressed by the grammar.
 
 **Default parameter values are evaluated when the function definition is
 executed.**  This means that the expression is evaluated once, when the function
-is defined, and that that same "pre-computed" value is used for each call.  This
+is defined, and that the same "pre-computed" value is used for each call.  This
 is especially important to understand when a default parameter is a mutable
 object, such as a list or a dictionary: if the function modifies the object
 (e.g. by appending an item to a list), the default value is in effect modified.
@@ -543,8 +576,9 @@ which is then bound to the class name.
 
 .. rubric:: Footnotes
 
-.. [#] The exception is propagated to the invocation stack only if there is no
-   :keyword:`finally` clause that negates the exception.
+.. [#] The exception is propagated to the invocation stack unless
+   there is a :keyword:`finally` clause which happens to raise another
+   exception. That new exception causes the old one to be lost.
 
 .. [#] Currently, control "flows off the end" except in the case of an exception or the
    execution of a :keyword:`return`, :keyword:`continue`, or :keyword:`break`

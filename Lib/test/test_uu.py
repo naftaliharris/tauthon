@@ -48,7 +48,7 @@ class UUTest(unittest.TestCase):
         out = cStringIO.StringIO()
         try:
             uu.decode(inp, out)
-            self.fail("No exception thrown")
+            self.fail("No exception raised")
         except uu.Error, e:
             self.assertEqual(str(e), "Truncated input file")
 
@@ -57,7 +57,7 @@ class UUTest(unittest.TestCase):
         out = cStringIO.StringIO()
         try:
             uu.decode(inp, out)
-            self.fail("No exception thrown")
+            self.fail("No exception raised")
         except uu.Error, e:
             self.assertEqual(str(e), "No valid begin line found in input file")
 
@@ -158,6 +158,23 @@ class UUFileTest(unittest.TestCase):
             f.close()
             self.assertEqual(s, plaintext)
             # XXX is there an xp way to verify the mode?
+        finally:
+            self._kill(f)
+
+    def test_decode_filename(self):
+        f = None
+        try:
+            test_support.unlink(self.tmpin)
+            f = open(self.tmpin, 'w')
+            f.write(encodedtextwrapped % (0644, self.tmpout))
+            f.close()
+
+            uu.decode(self.tmpin)
+
+            f = open(self.tmpout, 'r')
+            s = f.read()
+            f.close()
+            self.assertEqual(s, plaintext)
         finally:
             self._kill(f)
 

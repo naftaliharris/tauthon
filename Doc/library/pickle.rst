@@ -25,6 +25,12 @@ confusion, the terms used here are "pickling" and "unpickling".
 This documentation describes both the :mod:`pickle` module and the
 :mod:`cPickle` module.
 
+.. warning::
+
+   The :mod:`pickle` module is not intended to be secure against erroneous or
+   maliciously constructed data.  Never unpickle data received from an untrusted
+   or unauthenticated source.
+
 
 Relationship to other Python modules
 ------------------------------------
@@ -47,7 +53,7 @@ general :mod:`pickle` should always be the preferred way to serialize Python
 objects.  :mod:`marshal` exists primarily to support Python's :file:`.pyc`
 files.
 
-The :mod:`pickle` module differs from :mod:`marshal` several significant ways:
+The :mod:`pickle` module differs from :mod:`marshal` in several significant ways:
 
 * The :mod:`pickle` module keeps track of the objects it has already serialized,
   so that later references to the same object won't be serialized again.
@@ -73,12 +79,6 @@ The :mod:`pickle` module differs from :mod:`marshal` several significant ways:
   serialization format in non-backwards compatible ways should the need arise.
   The :mod:`pickle` serialization format is guaranteed to be backwards compatible
   across Python releases.
-
-.. warning::
-
-   The :mod:`pickle` module is not intended to be secure against erroneous or
-   maliciously constructed data.  Never unpickle data received from an untrusted
-   or unauthenticated source.
 
 Note that serialization is a more primitive notion than persistence; although
 :mod:`pickle` reads and writes file objects, it does not handle the issue of
@@ -352,8 +352,9 @@ The following types can be pickled:
 
 * classes that are defined at the top level of a module
 
-* instances of such classes whose :attr:`__dict__` or :meth:`__setstate__` is
-  picklable  (see section :ref:`pickle-protocol` for details)
+* instances of such classes whose :attr:`__dict__` or the result of calling
+  :meth:`__getstate__` is picklable  (see section :ref:`pickle-protocol` for
+  details).
 
 Attempts to pickle unpicklable objects will raise the :exc:`PicklingError`
 exception; when this happens, an unspecified number of bytes may have already
@@ -364,8 +365,8 @@ raised in this case. You can carefully raise this limit with
 
 Note that functions (built-in and user-defined) are pickled by "fully qualified"
 name reference, not by value.  This means that only the function name is
-pickled, along with the name of module the function is defined in.  Neither the
-function's code, nor any of its function attributes are pickled.  Thus the
+pickled, along with the name of the module the function is defined in.  Neither
+the function's code, nor any of its function attributes are pickled.  Thus the
 defining module must be importable in the unpickling environment, and the module
 must contain the named object, otherwise an exception will be raised. [#]_
 
@@ -444,7 +445,7 @@ Pickling and unpickling normal class instances
    instance's dictionary.  If there is no :meth:`__getstate__` method, the
    instance's :attr:`__dict__` is pickled.
 
-.. method:: object.__setstate__()
+.. method:: object.__setstate__(state)
 
    Upon unpickling, if the class also defines the method :meth:`__setstate__`,
    it is called with the unpickled state. [#]_ If there is no

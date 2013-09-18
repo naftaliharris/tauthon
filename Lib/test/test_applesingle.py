@@ -1,12 +1,12 @@
 # Copyright (C) 2003 Python Software Foundation
 
 import unittest
-import macostools
-import Carbon.File
-import MacOS
 import os
 from test import test_support
 import struct
+
+MacOS = test_support.import_module('MacOS')
+# The following should exist if MacOS does.
 import applesingle
 
 AS_MAGIC=0x00051600

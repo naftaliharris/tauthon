@@ -9,16 +9,6 @@ from test.test_support import run_unittest, is_jython, Error
 
 import traceback
 
-try:
-    raise KeyError
-except KeyError:
-    type_, value, tb = sys.exc_info()
-    file_ = StringIO()
-    traceback_print(tb, file_)
-    example_traceback = file_.getvalue()
-else:
-    raise Error("unable to create test traceback string")
-
 
 class TracebackCases(unittest.TestCase):
     # For now, a very minimal set of tests.  I want to be sure that
@@ -48,16 +38,16 @@ class TracebackCases(unittest.TestCase):
     def test_caret(self):
         err = self.get_exception_format(self.syntax_error_with_caret,
                                         SyntaxError)
-        self.assert_(len(err) == 4)
-        self.assert_(err[1].strip() == "return x!")
-        self.assert_("^" in err[2]) # third line has caret
-        self.assert_(err[1].find("!") == err[2].find("^")) # in the right place
+        self.assertTrue(len(err) == 4)
+        self.assertTrue(err[1].strip() == "return x!")
+        self.assertIn("^", err[2]) # third line has caret
+        self.assertTrue(err[1].find("!") == err[2].find("^")) # in the right place
 
         err = self.get_exception_format(self.syntax_error_with_caret_2,
                                         SyntaxError)
-        self.assert_("^" in err[2]) # third line has caret
-        self.assert_(err[2].count('\n') == 1) # and no additional newline
-        self.assert_(err[1].find("+") == err[2].find("^")) # in the right place
+        self.assertIn("^", err[2]) # third line has caret
+        self.assertTrue(err[2].count('\n') == 1) # and no additional newline
+        self.assertTrue(err[1].find("+") == err[2].find("^")) # in the right place
 
     def test_nocaret(self):
         if is_jython:
@@ -65,19 +55,19 @@ class TracebackCases(unittest.TestCase):
             return
         err = self.get_exception_format(self.syntax_error_without_caret,
                                         SyntaxError)
-        self.assert_(len(err) == 3)
-        self.assert_(err[1].strip() == "[x for x in x] = x")
+        self.assertTrue(len(err) == 3)
+        self.assertTrue(err[1].strip() == "[x for x in x] = x")
 
     def test_bad_indentation(self):
         err = self.get_exception_format(self.syntax_error_bad_indentation,
                                         IndentationError)
-        self.assert_(len(err) == 4)
-        self.assert_(err[1].strip() == "print 2")
-        self.assert_("^" in err[2])
-        self.assert_(err[1].find("2") == err[2].find("^"))
+        self.assertTrue(len(err) == 4)
+        self.assertTrue(err[1].strip() == "print 2")
+        self.assertIn("^", err[2])
+        self.assertTrue(err[1].find("2") == err[2].find("^"))
 
     def test_bug737473(self):
-        import sys, os, tempfile, time
+        import os, tempfile, time
 
         savedpath = sys.path[:]
         testdir = tempfile.mkdtemp()
@@ -114,7 +104,7 @@ def test():
                 test_bug737473.test()
             except NotImplementedError:
                 src = traceback.extract_tb(sys.exc_traceback)[-1][-1]
-                self.failUnlessEqual(src, 'raise NotImplementedError')
+                self.assertEqual(src, 'raise NotImplementedError')
         finally:
             sys.path[:] = savedpath
             for f in os.listdir(testdir):
@@ -181,14 +171,29 @@ def test():
 
 class TracebackFormatTests(unittest.TestCase):
 
-    def test_traceback_indentation(self):
+    def test_traceback_format(self):
+        try:
+            raise KeyError('blah')
+        except KeyError:
+            type_, value, tb = sys.exc_info()
+            traceback_fmt = 'Traceback (most recent call last):\n' + \
+                            ''.join(traceback.format_tb(tb))
+            file_ = StringIO()
+            traceback_print(tb, file_)
+            python_fmt  = file_.getvalue()
+        else:
+            raise Error("unable to create test traceback string")
+
+        # Make sure that Python and the traceback module format the same thing
+        self.assertEqual(traceback_fmt, python_fmt)
+
         # Make sure that the traceback is properly indented.
-        tb_lines = example_traceback.splitlines()
-        self.assertEquals(len(tb_lines), 3)
+        tb_lines = python_fmt.splitlines()
+        self.assertEqual(len(tb_lines), 3)
         banner, location, source_line = tb_lines
-        self.assert_(banner.startswith('Traceback'))
-        self.assert_(location.startswith('  File'))
-        self.assert_(source_line.startswith('    raise'))
+        self.assertTrue(banner.startswith('Traceback'))
+        self.assertTrue(location.startswith('  File'))
+        self.assertTrue(source_line.startswith('    raise'))
 
 
 def test_main():

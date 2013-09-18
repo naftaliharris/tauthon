@@ -1,3 +1,4 @@
+from __future__ import with_statement, print_function
 # Script for building the _ssl and _hashlib modules for Windows.
 # Uses Perl to setup the OpenSSL environment correctly
 # and build OpenSSL, then invokes a simple nmake session
@@ -46,7 +47,7 @@ def find_all_on_path(filename, extras = None):
 # is available.
 def find_working_perl(perls):
     for perl in perls:
-        fh = os.popen(perl + ' -e "use Win32;"')
+        fh = os.popen('"%s" -e "use Win32;"' % perl)
         fh.read()
         rc = fh.close()
         if rc:
@@ -63,37 +64,13 @@ def find_working_perl(perls):
     print(" Please install ActivePerl and ensure it appears on your path")
     return None
 
-# Locate the best SSL directory given a few roots to look into.
-def find_best_ssl_dir(sources):
-    candidates = []
-    for s in sources:
-        try:
-            # note: do not abspath s; the build will fail if any
-            # higher up directory name has spaces in it.
-            fnames = os.listdir(s)
-        except os.error:
-            fnames = []
-        for fname in fnames:
-            fqn = os.path.join(s, fname)
-            if os.path.isdir(fqn) and fname.startswith("openssl-"):
-                candidates.append(fqn)
-    # Now we have all the candidates, locate the best.
-    best_parts = []
-    best_name = None
-    for c in candidates:
-        parts = re.split("[.-]", os.path.basename(c))[1:]
-        # eg - openssl-0.9.7-beta1 - ignore all "beta" or any other qualifiers
-        if len(parts) >= 4:
-            continue
-        if parts > best_parts:
-            best_parts = parts
-            best_name = c
-    if best_name is not None:
-        print("Found an SSL directory at '%s'" % (best_name,))
-    else:
-        print("Could not find an SSL directory in '%s'" % (sources,))
-    sys.stdout.flush()
-    return best_name
+# Fetch SSL directory from VC properties
+def get_ssl_dir():
+    propfile = (os.path.join(os.path.dirname(__file__), 'pyproject.vsprops'))
+    with open(propfile) as f:
+        m = re.search('openssl-([^"]+)"', f.read())
+        return "..\..\openssl-"+m.group(1)
+
 
 def create_makefile64(makefile, m32):
     """Create and fix makefile for 64bit
@@ -102,11 +79,8 @@ def create_makefile64(makefile, m32):
     """
     if not os.path.isfile(m32):
         return
-    # 2.4 compatibility
-    fin = open(m32)
-    if 1: # with open(m32) as fin:
-        fout = open(makefile, 'w')
-        if 1: # with open(makefile, 'w') as fout:
+    with open(m32) as fin:
+        with open(makefile, 'w') as fout:
             for line in fin:
                 line = line.replace("=tmp32", "=tmp64")
                 line = line.replace("=out32", "=out64")
@@ -186,13 +160,13 @@ def main():
     # as "well known" locations
     perls = find_all_on_path("perl.exe", ["\\perl\\bin", "C:\\perl\\bin"])
     perl = find_working_perl(perls)
-    if perl is None:
+    if perl:
+        print("Found a working perl at '%s'" % (perl,))
+    else:
         print("No Perl installation was found. Existing Makefiles are used.")
-
-    print("Found a working perl at '%s'" % (perl,))
     sys.stdout.flush()
     # Look for SSL 2 levels up from pcbuild - ie, same place zlib etc all live.
-    ssl_dir = find_best_ssl_dir(("..\\..",))
+    ssl_dir = get_ssl_dir()
     if ssl_dir is None:
         sys.exit(1)
 

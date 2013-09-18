@@ -224,7 +224,7 @@ def _escapeAndEncode(text):
 
 PLISTHEADER = """\
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 """
 
 class PlistWriter(DumbXMLWriter):
@@ -262,8 +262,8 @@ class PlistWriter(DumbXMLWriter):
     def writeData(self, data):
         self.beginElement("data")
         self.indentLevel -= 1
-        maxlinelength = 76 - len(self.indent.replace("\t", " " * 8) *
-                                 self.indentLevel)
+        maxlinelength = max(16, 76 - len(self.indent.replace("\t", " " * 8) *
+                                 self.indentLevel))
         for line in data.asBase64(maxlinelength).split("\n"):
             if line:
                 self.writeln(line)
