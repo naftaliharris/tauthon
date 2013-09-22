@@ -126,8 +126,8 @@ Please read on for a comprehensive list of user-facing changes.
 PEP 446: Make newly created file descriptors non-inheritable
 ============================================================
 
-The :pep:`446` makes newly created file descriptors `non-inheritable
-<fd_inheritance>`_. New functions and methods:
+The :pep:`446` makes newly created file descriptors :ref:`non-inheritable
+<fd_inheritance>`.  New functions and methods:
 
 * :func:`os.get_inheritable`, :func:`os.set_inheritable`
 * :func:`os.get_handle_inheritable`, :func:`os.set_handle_inheritable`
@@ -152,6 +152,10 @@ This PEP removes the current limitations and quirks of object finalization.
 With it, objects with :meth:`__del__` methods, as well as generators
 with :keyword:`finally` clauses, can be finalized when they are part of a
 reference cycle.
+
+As part of this change, module globals are no longer forcibly set to
+:const:`None` during interpreter shutdown, instead relying on the normal
+operation of the cyclic garbage collector.
 
 .. seealso::
 
@@ -260,10 +264,14 @@ New :func:`functools.singledispatch` decorator: see the :pep:`443`.
 inspect
 -------
 
+
+The inspect module now offers a basic command line interface to quickly
+display source code and other information for modules, classes and
+functions.
+
 :func:`~inspect.unwrap` makes it easy to unravel wrapper function chains
 created by :func:`functools.wraps` (and any other API that sets the
 ``__wrapped__`` attribute on a wrapper function).
-
 
 mmap
 ----
@@ -287,7 +295,7 @@ will no longer inherit unneeded handles/file descriptors from their parents.
 os
 --
 
-New functions to get and set the `inheritable flag <fd_inheritance>`_ of a file
+New functions to get and set the :ref:`inheritable flag <fd_inheritance>` of a file
 descriptors or a Windows handle:
 
 * :func:`os.get_inheritable`, :func:`os.set_inheritable`
@@ -318,8 +326,8 @@ try/except statement by code that only cares whether or not an error occurred.
 socket
 ------
 
-Socket objects have new methods to get or set their `inheritable flag
-<fd_inheritance>`_:
+Socket objects have new methods to get or set their :ref:`inheritable flag
+<fd_inheritance>`:
 
 * :meth:`socket.socket.get_inheritable`, :meth:`socket.socket.set_inheritable`
 
@@ -377,6 +385,14 @@ plain tuple.  (Contributed by Claudiu Popa in :issue:`18901`.)
 :meth:`sunau.open` now supports the context manager protocol (:issue:`18878`).
 
 
+traceback
+---------
+
+A new :func:`traceback.clear_frames` function takes a traceback object
+and clears the local variables in all of the frames it references,
+reducing the amount of memory consumed (:issue:`1565525`).
+
+
 urllib
 ------
 
@@ -408,9 +424,12 @@ weakref
 -------
 
 New :class:`~weakref.WeakMethod` class simulates weak references to bound
-methods.
+methods. (Contributed by Antoine Pitrou in :issue:`14631`.)
 
-(Contributed by Antoine Pitrou in :issue:`14631`.)
+New :class:`~weakref.finalize` class makes it possible to register a callback
+to be invoked when an object is garbage collected, without needing to
+carefully manage the lifecycle of the weak reference itself. (Contributed by
+Richard Oudkerk in :issue:`15528`)
 
 
 xml.etree
@@ -444,8 +463,15 @@ Major performance enhancements have been added:
 * The UTF-32 decoder is now 3x to 4x faster.
 
 * The cost of hash collisions for sets is now reduced.  Each hash table
-  probe now checks a second key/hash pair for each cache line retrieved.
-  This exploits cache locality to make collision resolution less expensive.
+  probe now checks a series of consecutive, adjacent key/hash pairs before
+  continuing to make random probes through the hash table.  This exploits
+  cache locality to make collision resolution less expensive.
+
+  The collision resolution scheme can be described as a hybrid of linear
+  probing and open addressing.  The number of additional linear probes
+  defaults to nine.  This can be changed at compile-time by defining
+  LINEAR_PROBES to be any value.  Set LINEAR_PROBES=0 to turn-off
+  linear probing entirely.
 
   (Contributed by Raymond Hettinger in :issue"`18771`.)
 

@@ -98,7 +98,7 @@ class TestEnum(unittest.TestCase):
         Season = self.Season
         self.assertEqual(
             set(dir(Season)),
-            set(['__class__', '__doc__', '__members__',
+            set(['__class__', '__doc__', '__members__', '__module__',
                 'SPRING', 'SUMMER', 'AUTUMN', 'WINTER']),
             )
 
@@ -106,8 +106,23 @@ class TestEnum(unittest.TestCase):
         Season = self.Season
         self.assertEqual(
             set(dir(Season.WINTER)),
-            set(['__class__', '__doc__', 'name', 'value']),
+            set(['__class__', '__doc__', '__module__', 'name', 'value']),
             )
+
+    def test_dir_with_added_behavior(self):
+        class Test(Enum):
+            this = 'that'
+            these = 'those'
+            def wowser(self):
+                return ("Wowser! I'm %s!" % self.name)
+        self.assertEqual(
+                set(dir(Test)),
+                set(['__class__', '__doc__', '__members__', '__module__', 'this', 'these']),
+                )
+        self.assertEqual(
+                set(dir(Test.this)),
+                set(['__class__', '__doc__', '__module__', 'name', 'value', 'wowser']),
+                )
 
     def test_enum_in_enum_out(self):
         Season = self.Season
@@ -227,6 +242,32 @@ class TestEnum(unittest.TestCase):
                 [k for k,v in Season.__members__.items() if v.name != k],
                 ['FALL', 'ANOTHER_SPRING'],
                 )
+
+    def test_duplicate_name(self):
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                red = 1
+                green = 2
+                blue = 3
+                red = 4
+
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                red = 1
+                green = 2
+                blue = 3
+                def red(self):
+                    return 'red'
+
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                @property
+                def red(self):
+                    return 'redder'
+                red = 1
+                green = 2
+                blue = 3
+
 
     def test_enum_with_value_name(self):
         class Huh(Enum):
@@ -477,6 +518,13 @@ class TestEnum(unittest.TestCase):
                 [Season.SUMMER, Season.WINTER, Season.AUTUMN, Season.SPRING],
                 )
 
+    def test_reversed_iteration_order(self):
+        self.assertEqual(
+                list(reversed(self.Season)),
+                [self.Season.WINTER, self.Season.AUTUMN, self.Season.SUMMER,
+                 self.Season.SPRING]
+                )
+
     def test_programatic_function_string(self):
         SummerMonth = Enum('SummerMonth', 'june july august')
         lst = list(SummerMonth)
@@ -610,17 +658,6 @@ class TestEnum(unittest.TestCase):
                 return 'no, not %s' % self.value
         self.assertIsNot(type(whatever.really), whatever)
         self.assertEqual(whatever.this.really(), 'no, not that')
-
-    def test_overwrite_enums(self):
-        class Why(Enum):
-            question = 1
-            answer = 2
-            propisition = 3
-            def question(self):
-                print(42)
-        self.assertIsNot(type(Why.question), Why)
-        self.assertNotIn(Why.question, Why._member_names_)
-        self.assertNotIn(Why.question, Why)
 
     def test_wrong_inheritance_order(self):
         with self.assertRaises(TypeError):

@@ -308,9 +308,14 @@ def classify_class_attrs(cls):
            data attributes:  C.data is just a data object, but
            C.__dict__['data'] may be a data descriptor with additional
            info, like a __doc__ string.
+
+    If one of the items in dir(cls) is stored in the metaclass it will now
+    be discovered and not have None be listed as the class in which it was
+    defined.
     """
 
     mro = getmro(cls)
+    metamro = getmro(type(cls)) # for attributes stored in the metaclass
     names = dir(cls)
     result = []
     for name in names:
@@ -321,7 +326,7 @@ def classify_class_attrs(cls):
         # getattr(). This is the case with some descriptors (bug #1785).
         # Thus, we only use getattr() as a last resort.
         homecls = None
-        for base in (cls,) + mro:
+        for base in (cls,) + mro + metamro:
             if name in base.__dict__:
                 obj = base.__dict__[name]
                 homecls = base
@@ -2104,3 +2109,64 @@ class Signature:
             rendered += ' -> {}'.format(anno)
 
         return rendered
+
+def _main():
+    """ Logic for inspecting an object given at command line """
+    import argparse
+    import importlib
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'object',
+         help="The object to be analysed. "
+              "It supports the 'module:qualname' syntax")
+    parser.add_argument(
+        '-d', '--details', action='store_true',
+        help='Display info about the module rather than its source code')
+
+    args = parser.parse_args()
+
+    target = args.object
+    mod_name, has_attrs, attrs = target.partition(":")
+    try:
+        obj = module = importlib.import_module(mod_name)
+    except Exception as exc:
+        msg = "Failed to import {} ({}: {})".format(mod_name,
+                                                    type(exc).__name__,
+                                                    exc)
+        print(msg, file=sys.stderr)
+        exit(2)
+
+    if has_attrs:
+        parts = attrs.split(".")
+        obj = module
+        for part in parts:
+            obj = getattr(obj, part)
+
+    if module.__name__ in sys.builtin_module_names:
+        print("Can't get info for builtin modules.", file=sys.stderr)
+        exit(1)
+
+    if args.details:
+        print('Target: {}'.format(target))
+        print('Origin: {}'.format(getsourcefile(module)))
+        print('Cached: {}'.format(module.__cached__))
+        if obj is module:
+            print('Loader: {}'.format(repr(module.__loader__)))
+            if hasattr(module, '__path__'):
+                print('Submodule search path: {}'.format(module.__path__))
+        else:
+            try:
+                __, lineno = findsource(obj)
+            except Exception:
+                pass
+            else:
+                print('Line: {}'.format(lineno))
+
+        print('\n')
+    else:
+        print(getsource(obj))
+
+
+if __name__ == "__main__":
+    _main()

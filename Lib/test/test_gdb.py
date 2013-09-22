@@ -5,6 +5,7 @@
 
 import os
 import re
+import pprint
 import subprocess
 import sys
 import sysconfig
@@ -17,6 +18,7 @@ try:
 except ImportError:
     _thread = None
 
+from test import support
 from test.support import run_unittest, findfile, python_is_optimized
 
 try:
@@ -63,7 +65,8 @@ gdbpy_version, _ = run_gdb("--eval-command=python import sys; print sys.version_
 if not gdbpy_version:
     raise unittest.SkipTest("gdb not built with embedded python support")
 
-# Verify that "gdb" can load our custom hooks. In theory this should never fail.
+# Verify that "gdb" can load our custom hooks, as OS security settings may
+# disallow this without a customised .gdbinit.
 cmd = ['--args', sys.executable]
 _, gdbpy_errors = run_gdb('--args', sys.executable)
 if "auto-loading has been declined" in gdbpy_errors:
@@ -307,6 +310,8 @@ class PrettyPrintTests(DebuggerTests):
 
     def test_sets(self):
         'Verify the pretty-printing of sets'
+        if (gdb_major_version, gdb_minor_version) < (7, 3):
+            self.skipTest("pretty-printing of sets needs gdb 7.3 or later")
         self.assertGdbRepr(set())
         self.assertGdbRepr(set(['a', 'b']), "{'a', 'b'}")
         self.assertGdbRepr(set([4, 5, 6]), "{4, 5, 6}")
@@ -320,6 +325,8 @@ id(s)''')
 
     def test_frozensets(self):
         'Verify the pretty-printing of frozensets'
+        if (gdb_major_version, gdb_minor_version) < (7, 3):
+            self.skipTest("pretty-printing of frozensets needs gdb 7.3 or later")
         self.assertGdbRepr(frozenset())
         self.assertGdbRepr(frozenset(['a', 'b']), "frozenset({'a', 'b'})")
         self.assertGdbRepr(frozenset([4, 5, 6]), "frozenset({4, 5, 6})")
@@ -837,6 +844,10 @@ class PyLocalsTests(DebuggerTests):
                                     r".*\na = 1\nb = 2\nc = 3\n.*")
 
 def test_main():
+    if support.verbose:
+        print("GDB version:")
+        for line in os.fsdecode(gdb_version).splitlines():
+            print(" " * 4 + line)
     run_unittest(PrettyPrintTests,
                  PyListTests,
                  StackNavigationTests,

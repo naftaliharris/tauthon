@@ -2,10 +2,12 @@
 Python News
 +++++++++++
 
-What's New in Python 3.4.0 Alpha 3?
-===================================
+Projected Release date: 2013-09-29
 
-Projected Release date: 2013-10-XX
+Core and Builtins
+-----------------
+
+- Issue #18818: The "encodingname" part of PYTHONIOENCODING is now optional.
 
 Library
 -------
@@ -13,9 +15,49 @@ Library
 - Issue #18978: ``urllib.request.Request`` now allows the method to be
   indicated on the class and no longer sets it to None in ``__init__``.
 
+- Issue #18626: the inspect module now offers a basic command line
+  introspection interface (Initial patch by Claudiu Popa)
+
+- Issue #3015: Fixed tkinter with wantobject=False.  Any Tcl command call
+  returned empty string.
+
+- Issue #19037: The mailbox module now makes all changes to maildir files
+  before moving them into place, to avoid race conditions with other programs
+  that may be accessing the maildir directory.
+
+- Issue #14984: On POSIX systems, when netrc is called without a filename
+  argument (and therefore is reading the user's $HOME/.netrc file), it now
+  enforces the same security rules as typical ftp clients: the .netrc file must
+  be owned by the user that owns the process and must not be readable by any
+  other user.
+
+- Issue #18873: The tokenize module now detects Python source code encoding
+  only in comment lines.
+
+- Issue #17764: Enable http.server to bind to a user specified network
+  interface.  Patch contributed by Malte Swart.
+
+- Issue #18937: Add an assertLogs() context manager to unittest.TestCase
+  to ensure that a block of code emits a message using the logging module.
+
+- Issue #17324: Fix http.server's request handling case on trailing '/'. Patch
+  contributed by Vajrasky Kok.
+
+- Issue #19018: The heapq.merge() function no longer suppresses IndexError
+  in the underlying iterables.
+
+- Issue #18784: The uuid module no more attempts to load libc via ctypes.CDLL,
+  if all necessary functions are already found in libuuid.
+  Patch by Evgeny Sologubov.
+
 - The :envvar:`PYTHONFAULTHANDLER` environment variable now only enables the
   faulthandler module if the variable is non-empty. Same behaviour than other
   variables like :envvar:`PYTHONDONTWRITEBYTECODE`.
+
+- Issue #1565525: New function ``traceback.clear_frames`` will clear
+  the local variables of all the stack frames referenced by a traceback
+  object.
+
 
 Tests
 -----
@@ -24,11 +66,31 @@ Tests
   test.support was converted to a package. Regression noticed by Zachary
   Ware.
 
+IDLE
+----
+
+- Issue #18873: IDLE now detects Python source code encoding only in comment
+  lines.
+
+- Issue #18988: The "Tab" key now works when a word is already autocompleted.
+
+Documentation
+-------------
+
+- Issue #17003: Unified the size argument names in the io module with common
+  practice.
+
+Tools/Demos
+-----------
+
+- Issue #18873: 2to3 and the findnocoding.py script now detect Python source
+  code encoding only in comment lines.
+
 
 What's New in Python 3.4.0 Alpha 2?
 ===================================
 
-Projected Release date: 2013-09-08
+Release date: 2013-09-09
 
 Core and Builtins
 -----------------
@@ -90,7 +152,7 @@ Library
   readline activation code in ``site.py``.
 
 - Issue #18672: Fixed format specifiers for Py_ssize_t in debugging output in
-  the _sre moduel.
+  the _sre module.
 
 - Issue #18830: inspect.getclasstree() no more produces duplicated entries even
   when input list contains duplicates.

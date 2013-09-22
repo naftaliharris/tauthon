@@ -173,8 +173,9 @@ attributes:
 
    .. note::
 
-      :func:`getmembers` does not return metaclass attributes when the argument
-      is a class (this behavior is inherited from the :func:`dir` function).
+      :func:`getmembers` will only return metaclass attributes when the
+      argument is a class and those attributes have been listed in a custom
+      :meth:`__dir__`.
 
 
 .. function:: getmoduleinfo(path)
@@ -1005,3 +1006,20 @@ updated as expected:
       return an empty dictionary.
 
    .. versionadded:: 3.3
+
+
+Command Line Interface
+----------------------
+
+The :mod:`inspect` module also provides a basic introspection capability
+from the command line.
+
+.. program:: inspect
+
+By default, accepts the name of a module and prints the source of that
+module. A class or function within the module can be printed instead by
+appended a colon and the qualified name of the target object.
+
+.. cmdoption:: --details
+
+   Print information about the specified object rather than the source code

@@ -38,7 +38,8 @@ follows::
     ...     blue = 3
     ...
 
-..note: Nomenclature
+.. note:: Nomenclature
+
   - The class :class:`Color` is an *enumeration* (or *enum*)
   - The attributes :attr:`Color.red`, :attr:`Color.green`, etc., are
     *enumeration members* (or *enum members*).
@@ -152,6 +153,12 @@ return A::
     <Shape.square: 2>
     >>> Shape(2)
     <Shape.square: 2>
+
+.. note::
+
+    Attempting to create a member with the same name as an already
+    defined attribute (another member, a method, etc.) or attempting to create
+    an attribute with the same name as a member is not allowed.
 
 
 Ensuring unique enumeration values
@@ -474,7 +481,7 @@ Some rules:
 4. %-style formatting:  `%s` and `%r` call :class:`Enum`'s :meth:`__str__` and
    :meth:`__repr__` respectively; other codes (such as `%i` or `%h` for
    IntEnum) treat the enum member as its mixed-in type.
-5. :class:`str`.:meth:`__format__` (or :func:`format`) will use the mixed-in
+5. :meth:`str.__format__` (or :func:`format`) will use the mixed-in
    type's :meth:`__format__`.  If the :class:`Enum`'s :func:`str` or
    :func:`repr` is desired use the `!s` or `!r` :class:`str` format codes.
 
