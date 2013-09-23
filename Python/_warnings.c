@@ -283,9 +283,9 @@ show_warning(PyObject *filename, int lineno, PyObject *text, PyObject
         PyFile_WriteString(source_line_str, f_stderr);
         PyFile_WriteString("\n", f_stderr);
     }
-    else
-        if (_Py_DisplaySourceLine(f_stderr, filename, lineno, 2) < 0)
-                return;
+    else {
+        _Py_DisplaySourceLine(f_stderr, filename, lineno, 2);
+    }
     PyErr_Clear();
 }
 
@@ -707,14 +707,14 @@ warnings_warn_explicit(PyObject *self, PyObject *args, PyObject *kwds)
 
         /* Handle the warning. */
         returned = warn_explicit(category, message, filename, lineno, module,
-                            registry, source_line);
+                                 registry, source_line);
         Py_DECREF(source_list);
         return returned;
     }
 
  standard_call:
     return warn_explicit(category, message, filename, lineno, module,
-                                registry, NULL);
+                         registry, NULL);
 }
 
 
@@ -786,11 +786,26 @@ PyErr_Warn(PyObject *category, char *text)
 
 /* Warning with explicit origin */
 int
+PyErr_WarnExplicitObject(PyObject *category, PyObject *message,
+                         PyObject *filename, int lineno,
+                         PyObject *module, PyObject *registry)
+{
+    PyObject *res;
+    if (category == NULL)
+        category = PyExc_RuntimeWarning;
+    res = warn_explicit(category, message, filename, lineno,
+                        module, registry, NULL);
+    if (res == NULL)
+        return -1;
+    Py_DECREF(res);
+    return 0;
+}
+
+int
 PyErr_WarnExplicit(PyObject *category, const char *text,
                    const char *filename_str, int lineno,
                    const char *module_str, PyObject *registry)
 {
-    PyObject *res;
     PyObject *message = PyUnicode_FromString(text);
     PyObject *filename = PyUnicode_DecodeFSDefault(filename_str);
     PyObject *module = NULL;
@@ -800,21 +815,58 @@ PyErr_WarnExplicit(PyObject *category, const char *text,
         goto exit;
     if (module_str != NULL) {
         module = PyUnicode_FromString(module_str);
-            if (module == NULL)
-                goto exit;
+        if (module == NULL)
+            goto exit;
     }
 
-    if (category == NULL)
-        category = PyExc_RuntimeWarning;
-    res = warn_explicit(category, message, filename, lineno, module, registry,
-                        NULL);
-    if (res == NULL)
-        goto exit;
-    Py_DECREF(res);
-    ret = 0;
+    ret = PyErr_WarnExplicitObject(category, message, filename, lineno,
+                                   module, registry);
 
  exit:
     Py_XDECREF(message);
+    Py_XDECREF(module);
+    Py_XDECREF(filename);
+    return ret;
+}
+
+int
+PyErr_WarnExplicitFormat(PyObject *category,
+                         const char *filename_str, int lineno,
+                         const char *module_str, PyObject *registry,
+                         const char *format, ...)
+{
+    PyObject *message;
+    PyObject *module = NULL;
+    PyObject *filename = PyUnicode_DecodeFSDefault(filename_str);
+    int ret = -1;
+    va_list vargs;
+
+    if (filename == NULL)
+        goto exit;
+    if (module_str != NULL) {
+        module = PyUnicode_FromString(module_str);
+        if (module == NULL)
+            goto exit;
+    }
+
+#ifdef HAVE_STDARG_PROTOTYPES
+    va_start(vargs, format);
+#else
+    va_start(vargs);
+#endif
+    message = PyUnicode_FromFormatV(format, vargs);
+    if (message != NULL) {
+        PyObject *res;
+        res = warn_explicit(category, message, filename, lineno,
+                            module, registry, NULL);
+        Py_DECREF(message);
+        if (res != NULL) {
+            Py_DECREF(res);
+            ret = 0;
+        }
+    }
+    va_end(vargs);
+exit:
     Py_XDECREF(module);
     Py_XDECREF(filename);
     return ret;
