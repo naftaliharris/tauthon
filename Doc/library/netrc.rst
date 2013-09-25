@@ -10,6 +10,10 @@
 
 .. versionadded:: 1.5.2
 
+**Source code:** :source:`Lib/netrc.py`
+
+--------------
+
 The :class:`netrc` class parses and encapsulates the netrc file format used by
 the Unix :program:`ftp` program and other FTP clients.
 
@@ -28,7 +32,7 @@ the Unix :program:`ftp` program and other FTP clients.
    This implements security behavior equivalent to that of ftp and other
    programs that use :file:`.netrc`.
 
-   .. versionchanged:: 2.6.9 Added the POSIX permissions check.
+   .. versionchanged:: 2.7.6 Added the POSIX permissions check.
 
 
 .. exception:: NetrcParseError

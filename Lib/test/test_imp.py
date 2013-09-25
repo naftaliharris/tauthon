@@ -8,7 +8,7 @@ class LockTests(unittest.TestCase):
     """Very basic test of import lock functions."""
 
     def verify_lock_state(self, expected):
-        self.failUnlessEqual(imp.lock_held(), expected,
+        self.assertEqual(imp.lock_held(), expected,
                              "expected imp.lock_held() to be %r" % expected)
     def testLock(self):
         LOOPS = 50
@@ -43,16 +43,26 @@ class ReloadTests(unittest.TestCase):
     reload()."""
 
     def test_source(self):
-        import os
-        imp.reload(os)
+        # XXX (ncoghlan): It would be nice to use test_support.CleanImport
+        # here, but that breaks because the os module registers some
+        # handlers in copy_reg on import. Since CleanImport doesn't
+        # revert that registration, the module is left in a broken
+        # state after reversion. Reinitialising the module contents
+        # and just reverting os.environ to its previous state is an OK
+        # workaround
+        with test_support.EnvironmentVarGuard():
+            import os
+            imp.reload(os)
 
     def test_extension(self):
-        import time
-        imp.reload(time)
+        with test_support.CleanImport('time'):
+            import time
+            imp.reload(time)
 
     def test_builtin(self):
-        import marshal
-        imp.reload(marshal)
+        with test_support.CleanImport('marshal'):
+            import marshal
+            imp.reload(marshal)
 
 
 def test_main():

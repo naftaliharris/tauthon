@@ -107,7 +107,7 @@ The following data items and methods are also supported:
    memory buffer in bytes can be computed as ``array.buffer_info()[1] *
    array.itemsize``.  This is occasionally useful when working with low-level (and
    inherently unsafe) I/O interfaces that require memory addresses, such as certain
-   :cfunc:`ioctl` operations.  The returned numbers are valid as long as the array
+   :c:func:`ioctl` operations.  The returned numbers are valid as long as the array
    exists and no length-changing operations are applied to it.
 
    .. note::
@@ -268,9 +268,7 @@ Examples::
       Packing and unpacking of External Data Representation (XDR) data as used in some
       remote procedure call systems.
 
-   `The Numerical Python Manual <http://numpy.sourceforge.net/numdoc/HTML/numdoc.htm>`_
+   `The Numerical Python Documentation <http://docs.scipy.org/doc/>`_
       The Numeric Python extension (NumPy) defines another array type; see
-      http://numpy.sourceforge.net/ for further information about Numerical Python.
-      (A PDF version of the NumPy manual is available at
-      http://numpy.sourceforge.net/numdoc/numdoc.pdf).
+      http://www.numpy.org/ for further information about Numerical Python.
 

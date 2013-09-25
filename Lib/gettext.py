@@ -316,7 +316,7 @@ class GNUTranslations(NullTranslations):
             # Note: we unconditionally convert both msgids and msgstrs to
             # Unicode using the character encoding specified in the charset
             # parameter of the Content-Type header.  The gettext documentation
-            # strongly encourages msgids to be us-ascii, but some appliations
+            # strongly encourages msgids to be us-ascii, but some applications
             # require alternative encodings (e.g. Zope's ZCML and ZPT).  For
             # traditional gettext applications, the msgid conversion will
             # cause no problems since us-ascii should always be a subset of
@@ -467,15 +467,15 @@ def translation(domain, localedir=None, languages=None,
         if fallback:
             return NullTranslations()
         raise IOError(ENOENT, 'No translation file found for domain', domain)
-    # TBD: do we need to worry about the file pointer getting collected?
     # Avoid opening, reading, and parsing the .mo file after it's been done
     # once.
     result = None
     for mofile in mofiles:
-        key = os.path.abspath(mofile)
+        key = (class_, os.path.abspath(mofile))
         t = _translations.get(key)
         if t is None:
-            t = _translations.setdefault(key, class_(open(mofile, 'rb')))
+            with open(mofile, 'rb') as fp:
+                t = _translations.setdefault(key, class_(fp))
         # Copy the translation object to allow setting fallbacks and
         # output charset. All other instance data is shared with the
         # cached object.

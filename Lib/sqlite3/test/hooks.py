@@ -37,7 +37,7 @@ class CollationTests(unittest.TestCase):
             con.create_collation("X", 42)
             self.fail("should have raised a TypeError")
         except TypeError, e:
-            self.failUnlessEqual(e.args[0], "parameter must be callable")
+            self.assertEqual(e.args[0], "parameter must be callable")
 
     def CheckCreateCollationNotAscii(self):
         con = sqlite.connect(":memory:")
@@ -74,7 +74,26 @@ class CollationTests(unittest.TestCase):
             result = con.execute(sql).fetchall()
             self.fail("should have raised an OperationalError")
         except sqlite.OperationalError, e:
-            self.failUnlessEqual(e.args[0].lower(), "no such collation sequence: mycoll")
+            self.assertEqual(e.args[0].lower(), "no such collation sequence: mycoll")
+
+    def CheckCollationReturnsLargeInteger(self):
+        def mycoll(x, y):
+            # reverse order
+            return -((x > y) - (x < y)) * 2**32
+        con = sqlite.connect(":memory:")
+        con.create_collation("mycoll", mycoll)
+        sql = """
+            select x from (
+            select 'a' as x
+            union
+            select 'b' as x
+            union
+            select 'c' as x
+            ) order by x collate mycoll
+            """
+        result = con.execute(sql).fetchall()
+        self.assertEqual(result, [('c',), ('b',), ('a',)],
+                         msg="the expected order was not returned")
 
     def CheckCollationRegisterTwice(self):
         """
@@ -119,7 +138,7 @@ class ProgressTests(unittest.TestCase):
         con.execute("""
             create table foo(a, b)
             """)
-        self.failUnless(progress_calls)
+        self.assertTrue(progress_calls)
 
 
     def CheckOpcodeCount(self):
@@ -143,7 +162,7 @@ class ProgressTests(unittest.TestCase):
             create table bar (a, b)
             """)
         second_count = len(progress_calls)
-        self.failUnless(first_count > second_count)
+        self.assertTrue(first_count > second_count)
 
     def CheckCancelOperation(self):
         """
@@ -166,14 +185,14 @@ class ProgressTests(unittest.TestCase):
         Test that setting the progress handler to None clears the previously set handler.
         """
         con = sqlite.connect(":memory:")
-        action = 0
+        action = []
         def progress():
-            action = 1
+            action.append(1)
             return 0
         con.set_progress_handler(progress, 1)
         con.set_progress_handler(None, 1)
         con.execute("select 1 union select 2 union select 3").fetchall()
-        self.failUnlessEqual(action, 0, "progress handler was not cleared")
+        self.assertEqual(len(action), 0, "progress handler was not cleared")
 
 def suite():
     collation_suite = unittest.makeSuite(CollationTests, "Check")

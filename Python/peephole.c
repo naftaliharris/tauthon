@@ -13,7 +13,12 @@
 
 #define GETARG(arr, i) ((int)((arr[i+2]<<8) + arr[i+1]))
 #define UNCONDITIONAL_JUMP(op)  (op==JUMP_ABSOLUTE || op==JUMP_FORWARD)
-#define ABSOLUTE_JUMP(op) (op==JUMP_ABSOLUTE || op==CONTINUE_LOOP)
+#define CONDITIONAL_JUMP(op) (op==POP_JUMP_IF_FALSE || op==POP_JUMP_IF_TRUE \
+    || op==JUMP_IF_FALSE_OR_POP || op==JUMP_IF_TRUE_OR_POP)
+#define ABSOLUTE_JUMP(op) (op==JUMP_ABSOLUTE || op==CONTINUE_LOOP \
+    || op==POP_JUMP_IF_FALSE || op==POP_JUMP_IF_TRUE \
+    || op==JUMP_IF_FALSE_OR_POP || op==JUMP_IF_TRUE_OR_POP)
+#define JUMPS_ON_TRUE(op) (op==POP_JUMP_IF_TRUE || op==JUMP_IF_TRUE_OR_POP)
 #define GETJUMPTGT(arr, i) (GETARG(arr,i) + (ABSOLUTE_JUMP(arr[i]) ? 0 : i+3))
 #define SETARG(arr, i, val) arr[i+2] = val>>8; arr[i+1] = val & 255
 #define CODESIZE(op)  (HAS_ARG(op) ? 3 : 1)
@@ -123,6 +128,13 @@ fold_binops_on_constants(unsigned char *codestr, PyObject *consts)
             newconst = PyNumber_Subtract(v, w);
             break;
         case BINARY_SUBSCR:
+            /* #5057: if v is unicode, there might be differences between
+               wide and narrow builds in cases like '\U00012345'[0] or
+               '\U00012345abcdef'[3], so it's better to skip the optimization
+               in order to produce compatible pycs.
+            */
+            if (PyUnicode_Check(v))
+                return 0;
             newconst = PyObject_GetItem(v, w);
             break;
         case BINARY_LSHIFT:
@@ -245,13 +257,16 @@ markblocks(unsigned char *code, Py_ssize_t len)
         switch (opcode) {
             case FOR_ITER:
             case JUMP_FORWARD:
-            case JUMP_IF_FALSE:
-            case JUMP_IF_TRUE:
+            case JUMP_IF_FALSE_OR_POP:
+            case JUMP_IF_TRUE_OR_POP:
+            case POP_JUMP_IF_FALSE:
+            case POP_JUMP_IF_TRUE:
             case JUMP_ABSOLUTE:
             case CONTINUE_LOOP:
             case SETUP_LOOP:
             case SETUP_EXCEPT:
             case SETUP_FINALLY:
+            case SETUP_WITH:
                 j = GETJUMPTGT(code, i);
                 blocks[j] = 1;
                 break;
@@ -319,7 +334,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
     codestr = (unsigned char *)memcpy(codestr,
                                       PyString_AS_STRING(code), codelen);
 
-    /* Verify that RETURN_VALUE terminates the codestring.      This allows
+    /* Verify that RETURN_VALUE terminates the codestring. This allows
        the various transformation patterns to look ahead several
        instructions without additional checks to make sure they are not
        looking beyond the end of the code string.
@@ -338,29 +353,24 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
     assert(PyList_Check(consts));
 
     for (i=0 ; i<codelen ; i += CODESIZE(codestr[i])) {
+      reoptimize_current:
         opcode = codestr[i];
 
         lastlc = cumlc;
         cumlc = 0;
 
         switch (opcode) {
-
-            /* Replace UNARY_NOT JUMP_IF_FALSE POP_TOP with
-               with                JUMP_IF_TRUE POP_TOP */
+            /* Replace UNARY_NOT POP_JUMP_IF_FALSE
+               with    POP_JUMP_IF_TRUE */
             case UNARY_NOT:
-                if (codestr[i+1] != JUMP_IF_FALSE  ||
-                    codestr[i+4] != POP_TOP  ||
-                    !ISBASICBLOCK(blocks,i,5))
+                if (codestr[i+1] != POP_JUMP_IF_FALSE
+                    || !ISBASICBLOCK(blocks,i,4))
                     continue;
-                tgt = GETJUMPTGT(codestr, (i+1));
-                if (codestr[tgt] != POP_TOP)
-                    continue;
-                j = GETARG(codestr, i+1) + 1;
-                codestr[i] = JUMP_IF_TRUE;
+                j = GETARG(codestr, i+1);
+                codestr[i] = POP_JUMP_IF_TRUE;
                 SETARG(codestr, i, j);
-                codestr[i+3] = POP_TOP;
-                codestr[i+4] = NOP;
-                break;
+                codestr[i+3] = NOP;
+                goto reoptimize_current;
 
                 /* not a is b -->  a is not b
                    not a in b -->  a not in b
@@ -400,16 +410,16 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                 break;
 
                 /* Skip over LOAD_CONST trueconst
-                   JUMP_IF_FALSE xx  POP_TOP */
+                   POP_JUMP_IF_FALSE xx. This improves
+                   "while 1" performance. */
             case LOAD_CONST:
                 cumlc = lastlc + 1;
                 j = GETARG(codestr, i);
-                if (codestr[i+3] != JUMP_IF_FALSE  ||
-                    codestr[i+6] != POP_TOP  ||
-                    !ISBASICBLOCK(blocks,i,7)  ||
+                if (codestr[i+3] != POP_JUMP_IF_FALSE  ||
+                    !ISBASICBLOCK(blocks,i,6)  ||
                     !PyObject_IsTrue(PyList_GET_ITEM(consts, j)))
                     continue;
-                memset(codestr+i, NOP, 7);
+                memset(codestr+i, NOP, 6);
                 cumlc = 0;
                 break;
 
@@ -422,8 +432,8 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
             case BUILD_LIST:
                 j = GETARG(codestr, i);
                 h = i - 3 * j;
-                if (h >= 0  &&
-                    j <= lastlc                  &&
+                if (h >= 0 &&
+                    j <= lastlc &&
                     ((opcode == BUILD_TUPLE &&
                       ISBASICBLOCK(blocks, h, 3*(j+1))) ||
                      (opcode == BUILD_LIST &&
@@ -467,8 +477,8 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
             case BINARY_AND:
             case BINARY_XOR:
             case BINARY_OR:
-                if (lastlc >= 2                  &&
-                    ISBASICBLOCK(blocks, i-6, 7)  &&
+                if (lastlc >= 2 &&
+                    ISBASICBLOCK(blocks, i-6, 7) &&
                     fold_binops_on_constants(&codestr[i-6], consts)) {
                     i -= 2;
                     assert(codestr[i] == LOAD_CONST);
@@ -477,13 +487,13 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                 break;
 
                 /* Fold unary ops on constants.
-                   LOAD_CONST c1  UNARY_OP -->                  LOAD_CONST unary_op(c) */
+                   LOAD_CONST c1  UNARY_OP --> LOAD_CONST unary_op(c) */
             case UNARY_NEGATIVE:
             case UNARY_CONVERT:
             case UNARY_INVERT:
-                if (lastlc >= 1                  &&
-                    ISBASICBLOCK(blocks, i-3, 4)  &&
-                    fold_unaryops_on_constants(&codestr[i-3], consts))                  {
+                if (lastlc >= 1 &&
+                    ISBASICBLOCK(blocks, i-3, 4) &&
+                    fold_unaryops_on_constants(&codestr[i-3], consts)) {
                     i -= 2;
                     assert(codestr[i] == LOAD_CONST);
                     cumlc = 1;
@@ -498,27 +508,45 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                    "if a or b:"
                    "a and b or c"
                    "(a and b) and c"
-                   x:JUMP_IF_FALSE y   y:JUMP_IF_FALSE z  -->  x:JUMP_IF_FALSE z
-                   x:JUMP_IF_FALSE y   y:JUMP_IF_TRUE z                  -->  x:JUMP_IF_FALSE y+3
+                   x:JUMP_IF_FALSE_OR_POP y   y:JUMP_IF_FALSE_OR_POP z
+                      -->  x:JUMP_IF_FALSE_OR_POP z
+                   x:JUMP_IF_FALSE_OR_POP y   y:JUMP_IF_TRUE_OR_POP z
+                      -->  x:POP_JUMP_IF_FALSE y+3
                    where y+3 is the instruction following the second test.
                 */
-            case JUMP_IF_FALSE:
-            case JUMP_IF_TRUE:
+            case JUMP_IF_FALSE_OR_POP:
+            case JUMP_IF_TRUE_OR_POP:
                 tgt = GETJUMPTGT(codestr, i);
                 j = codestr[tgt];
-                if (j == JUMP_IF_FALSE                  ||  j == JUMP_IF_TRUE) {
-                    if (j == opcode) {
-                        tgttgt = GETJUMPTGT(codestr, tgt) - i - 3;
+                if (CONDITIONAL_JUMP(j)) {
+                    /* NOTE: all possible jumps here are absolute! */
+                    if (JUMPS_ON_TRUE(j) == JUMPS_ON_TRUE(opcode)) {
+                        /* The second jump will be
+                           taken iff the first is. */
+                        tgttgt = GETJUMPTGT(codestr, tgt);
+                        /* The current opcode inherits
+                           its target's stack behaviour */
+                        codestr[i] = j;
                         SETARG(codestr, i, tgttgt);
+                        goto reoptimize_current;
                     } else {
-                        tgt -= i;
-                        SETARG(codestr, i, tgt);
+                        /* The second jump is not taken if the first is (so
+                           jump past it), and all conditional jumps pop their
+                           argument when they're not taken (so change the
+                           first jump to pop its argument when it's taken). */
+                        if (JUMPS_ON_TRUE(opcode))
+                            codestr[i] = POP_JUMP_IF_TRUE;
+                        else
+                            codestr[i] = POP_JUMP_IF_FALSE;
+                        SETARG(codestr, i, (tgt + 3));
+                        goto reoptimize_current;
                     }
-                    break;
                 }
                 /* Intentional fallthrough */
 
                 /* Replace jumps to unconditional jumps */
+            case POP_JUMP_IF_FALSE:
+            case POP_JUMP_IF_TRUE:
             case FOR_ITER:
             case JUMP_FORWARD:
             case JUMP_ABSOLUTE:
@@ -526,6 +554,7 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
             case SETUP_LOOP:
             case SETUP_EXCEPT:
             case SETUP_FINALLY:
+            case SETUP_WITH:
                 tgt = GETJUMPTGT(codestr, i);
                 /* Replace JUMP_* to a RETURN into just a RETURN */
                 if (UNCONDITIONAL_JUMP(opcode) &&
@@ -540,8 +569,8 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                 if (opcode == JUMP_FORWARD) /* JMP_ABS can go backwards */
                     opcode = JUMP_ABSOLUTE;
                 if (!ABSOLUTE_JUMP(opcode))
-                    tgttgt -= i + 3;     /* Calc relative jump addr */
-                if (tgttgt < 0)                           /* No backward relative jumps */
+                    tgttgt -= i + 3;        /* Calc relative jump addr */
+                if (tgttgt < 0)             /* No backward relative jumps */
                     continue;
                 codestr[i] = opcode;
                 SETARG(codestr, i, tgttgt);
@@ -591,17 +620,20 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 
             case JUMP_ABSOLUTE:
             case CONTINUE_LOOP:
+            case POP_JUMP_IF_FALSE:
+            case POP_JUMP_IF_TRUE:
+            case JUMP_IF_FALSE_OR_POP:
+            case JUMP_IF_TRUE_OR_POP:
                 j = addrmap[GETARG(codestr, i)];
                 SETARG(codestr, i, j);
                 break;
 
             case FOR_ITER:
             case JUMP_FORWARD:
-            case JUMP_IF_FALSE:
-            case JUMP_IF_TRUE:
             case SETUP_LOOP:
             case SETUP_EXCEPT:
             case SETUP_FINALLY:
+            case SETUP_WITH:
                 j = addrmap[GETARG(codestr, i) + i + 3] - addrmap[i] - 3;
                 SETARG(codestr, i, j);
                 break;

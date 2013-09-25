@@ -1,4 +1,3 @@
-
 :mod:`smtplib` --- SMTP protocol client
 =======================================
 
@@ -11,6 +10,10 @@
    pair: SMTP; protocol
    single: Simple Mail Transfer Protocol
 
+**Source code:** :source:`Lib/smtplib.py`
+
+--------------
+
 The :mod:`smtplib` module defines an SMTP client session object that can be used
 to send mail to any Internet machine with an SMTP or ESMTP listener daemon.  For
 details of SMTP and ESMTP operation, consult :rfc:`821` (Simple Mail Transfer
@@ -21,15 +24,19 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
 
    A :class:`SMTP` instance encapsulates an SMTP connection.  It has methods
    that support a full repertoire of SMTP and ESMTP operations. If the optional
-   host and port parameters are given, the SMTP :meth:`connect` method is called
-   with those parameters during initialization.  An :exc:`SMTPConnectError` is
-   raised if the specified host doesn't respond correctly. The optional
+   host and port parameters are given, the SMTP :meth:`connect` method is
+   called with those parameters during initialization.  If specified,
+   *local_hostname* is used as the FQDN of the local host in the HELO/EHLO
+   command.  Otherwise, the local hostname is found using
+   :func:`socket.getfqdn`.  If the :meth:`connect` call returns anything other
+   than a success code, an :exc:`SMTPConnectError` is raised. The optional
    *timeout* parameter specifies a timeout in seconds for blocking operations
    like the connection attempt (if not specified, the global default timeout
    setting will be used).
 
    For normal use, you should only require the initialization/connect,
-   :meth:`sendmail`, and :meth:`quit` methods.  An example is included below.
+   :meth:`sendmail`, and :meth:`~smtplib.quit` methods.
+   An example is included below.
 
    .. versionchanged:: 2.6
       *timeout* was added.
@@ -41,27 +48,29 @@ Protocol) and :rfc:`1869` (SMTP Service Extensions).
    :class:`SMTP`. :class:`SMTP_SSL` should be used for situations where SSL is
    required from the beginning of the connection and using :meth:`starttls` is
    not appropriate. If *host* is not specified, the local host is used. If
-   *port* is omitted, the standard SMTP-over-SSL port (465) is used. *keyfile*
-   and *certfile* are also optional, and can contain a PEM formatted private key
-   and certificate chain file for the SSL connection. The optional *timeout*
-   parameter specifies a timeout in seconds for blocking operations like the
-   connection attempt (if not specified, the global default timeout setting
-   will be used).
+   *port* is omitted, the standard SMTP-over-SSL port (465) is used.
+   *local_hostname* has the same meaning as it does for the :class:`SMTP`
+   class.  *keyfile* and *certfile* are also optional, and can contain a PEM
+   formatted private key and certificate chain file for the SSL connection. The
+   optional *timeout* parameter specifies a timeout in seconds for blocking
+   operations like the connection attempt (if not specified, the global default
+   timeout setting will be used).
 
-   .. versionchanged:: 2.6
-      *timeout* was added.
+   .. versionadded:: 2.6
 
 
 .. class:: LMTP([host[, port[, local_hostname]]])
 
    The LMTP protocol, which is very similar to ESMTP, is heavily based on the
-   standard SMTP client. It's common to use Unix sockets for LMTP, so our :meth:`connect`
-   method must support that as well as a regular host:port server. To specify a
-   Unix socket, you must use an absolute path for *host*, starting with a '/'.
+   standard SMTP client. It's common to use Unix sockets for LMTP, so our
+   :meth:`connect` method must support that as well as a regular host:port
+   server.  *local_hostname* has the same meaning as it does for the
+   :class:`SMTP` class.  To specify a Unix socket, you must use an absolute
+   path for *host*, starting with a '/'.
 
-   Authentication is supported, using the regular SMTP mechanism. When using a Unix
-   socket, LMTP generally don't support or require any authentication, but your
-   mileage might vary.
+   Authentication is supported, using the regular SMTP mechanism. When using a
+   Unix socket, LMTP generally don't support or require any authentication, but
+   your mileage might vary.
 
    .. versionadded:: 2.6
 
@@ -70,7 +79,8 @@ A nice selection of exceptions is defined as well:
 
 .. exception:: SMTPException
 
-   Base exception class for all exceptions raised by this module.
+   The base exception class for all the other exceptions provided by this
+   module.
 
 
 .. exception:: SMTPServerDisconnected
@@ -149,15 +159,6 @@ An :class:`SMTP` instance has the following methods:
    for connection and for all messages sent to and received from the server.
 
 
-.. method:: SMTP.connect([host[, port]])
-
-   Connect to a host on a given port.  The defaults are to connect to the local
-   host at the standard SMTP port (25). If the hostname ends with a colon (``':'``)
-   followed by a number, that suffix will be stripped off and the number
-   interpreted as the port number to use. This method is automatically invoked by
-   the constructor if a host is specified during instantiation.
-
-
 .. method:: SMTP.docmd(cmd, [, argstring])
 
    Send a command *cmd* to the server.  The optional argument *argstring* is simply
@@ -172,6 +173,17 @@ An :class:`SMTP` instance has the following methods:
 
    If the connection to the server is lost while waiting for the reply,
    :exc:`SMTPServerDisconnected` will be raised.
+
+
+.. method:: SMTP.connect([host[, port]])
+
+   Connect to a host on a given port.  The defaults are to connect to the local
+   host at the standard SMTP port (25). If the hostname ends with a colon (``':'``)
+   followed by a number, that suffix will be stripped off and the number
+   interpreted as the port number to use. This method is automatically invoked by
+   the constructor if a host is specified during instantiation.  Returns a
+   2-tuple of the response code and message sent by the server in its
+   connection response.
 
 
 .. method:: SMTP.helo([hostname])
@@ -298,9 +310,9 @@ An :class:`SMTP` instance has the following methods:
    and ESMTP options suppressed.
 
    This method will return normally if the mail is accepted for at least one
-   recipient. Otherwise it will throw an exception.  That is, if this method does
-   not throw an exception, then someone should get your mail. If this method does
-   not throw an exception, it returns a dictionary, with one entry for each
+   recipient. Otherwise it will raise an exception.  That is, if this method does
+   not raise an exception, then someone should get your mail. If this method does
+   not raise an exception, it returns a dictionary, with one entry for each
    recipient that was refused.  Each entry contains a tuple of the SMTP error code
    and the accompanying error message sent by the server.
 

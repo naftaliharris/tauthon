@@ -1,5 +1,5 @@
-:mod:`email`: Creating email and MIME objects from scratch
-----------------------------------------------------------
+:mod:`email.mime`: Creating email and MIME objects from scratch
+---------------------------------------------------------------
 
 .. module:: email.mime
    :synopsis: Build MIME messages.
@@ -35,7 +35,8 @@ Here are the classes:
    *_maintype* is the :mailheader:`Content-Type` major type (e.g. :mimetype:`text`
    or :mimetype:`image`), and *_subtype* is the :mailheader:`Content-Type` minor
    type  (e.g. :mimetype:`plain` or :mimetype:`gif`).  *_params* is a parameter
-   key/value dictionary and is passed directly to :meth:`Message.add_header`.
+   key/value dictionary and is passed directly to :meth:`Message.add_header
+   <email.message.Message.add_header>`.
 
    The :class:`MIMEBase` class always adds a :mailheader:`Content-Type` header
    (based on *_maintype*, *_subtype*, and *_params*), and a
@@ -50,8 +51,9 @@ Here are the classes:
 
    A subclass of :class:`~email.mime.base.MIMEBase`, this is an intermediate base
    class for MIME messages that are not :mimetype:`multipart`.  The primary
-   purpose of this class is to prevent the use of the :meth:`attach` method,
-   which only makes sense for :mimetype:`multipart` messages.  If :meth:`attach`
+   purpose of this class is to prevent the use of the
+   :meth:`~email.message.Message.attach` method, which only makes sense for
+   :mimetype:`multipart` messages.  If :meth:`~email.message.Message.attach`
    is called, a :exc:`~email.errors.MultipartConversionError` exception is raised.
 
    .. versionadded:: 2.2.2
@@ -76,7 +78,8 @@ Here are the classes:
 
    *_subparts* is a sequence of initial subparts for the payload.  It must be
    possible to convert this sequence to a list.  You can always attach new subparts
-   to the message by using the :meth:`Message.attach` method.
+   to the message by using the :meth:`Message.attach
+   <email.message.Message.attach>` method.
 
    Additional parameters for the :mailheader:`Content-Type` header are taken from
    the keyword arguments, or passed into the *_params* argument, which is a keyword
@@ -99,8 +102,10 @@ Here are the classes:
 
    Optional *_encoder* is a callable (i.e. function) which will perform the actual
    encoding of the data for transport.  This callable takes one argument, which is
-   the :class:`MIMEApplication` instance. It should use :meth:`get_payload` and
-   :meth:`set_payload` to change the payload to encoded form.  It should also add
+   the :class:`MIMEApplication` instance. It should use
+   :meth:`~email.message.Message.get_payload` and
+   :meth:`~email.message.Message.set_payload` to change the payload to encoded
+   form.  It should also add
    any :mailheader:`Content-Transfer-Encoding` or other headers to the message
    object as necessary.  The default encoding is base64.  See the
    :mod:`email.encoders` module for a list of the built-in encoders.
@@ -127,8 +132,10 @@ Here are the classes:
 
    Optional *_encoder* is a callable (i.e. function) which will perform the actual
    encoding of the audio data for transport.  This callable takes one argument,
-   which is the :class:`MIMEAudio` instance. It should use :meth:`get_payload` and
-   :meth:`set_payload` to change the payload to encoded form.  It should also add
+   which is the :class:`MIMEAudio` instance. It should use
+   :meth:`~email.message.Message.get_payload` and
+   :meth:`~email.message.Message.set_payload` to change the payload to encoded
+   form.  It should also add
    any :mailheader:`Content-Transfer-Encoding` or other headers to the message
    object as necessary.  The default encoding is base64.  See the
    :mod:`email.encoders` module for a list of the built-in encoders.
@@ -153,8 +160,10 @@ Here are the classes:
 
    Optional *_encoder* is a callable (i.e. function) which will perform the actual
    encoding of the image data for transport.  This callable takes one argument,
-   which is the :class:`MIMEImage` instance. It should use :meth:`get_payload` and
-   :meth:`set_payload` to change the payload to encoded form.  It should also add
+   which is the :class:`MIMEImage` instance. It should use
+   :meth:`~email.message.Message.get_payload` and
+   :meth:`~email.message.Message.set_payload` to change the payload to encoded
+   form.  It should also add
    any :mailheader:`Content-Transfer-Encoding` or other headers to the message
    object as necessary.  The default encoding is base64.  See the
    :mod:`email.encoders` module for a list of the built-in encoders.
@@ -196,6 +205,15 @@ Here are the classes:
 
    .. versionchanged:: 2.4
       The previously deprecated *_encoding* argument has been removed.  Content
-      Transfer Encoding now happens happens implicitly based on the *_charset*
+      Transfer Encoding now happens implicitly based on the *_charset*
       argument.
 
+   Unless the ``_charset`` parameter is explicitly set to ``None``, the
+   MIMEText object created will have both a :mailheader:`Content-Type` header
+   with a ``charset`` parameter, and a :mailheader:`Content-Transfer-Endcoding`
+   header.  This means that a subsequent ``set_payload`` call will not result
+   in an encoded payload, even if a charset is passed in the ``set_payload``
+   command.  You can "reset" this behavior by deleting the
+   ``Content-Transfer-Encoding`` header, after which a ``set_payload`` call
+   will automatically encode the new payload (and add a new
+   :mailheader:`Content-Transfer-Encoding` header).

@@ -1,6 +1,7 @@
 /* -----------------------------------------------------------------------
-   unix64.S - Copyright (c) 2002  Bo Thorsen <bo@suse.de>
-	      Copyright (c) 2008  Red Hat, Inc
+   unix64.S - Copyright (c) 2013  The Written Word, Inc.
+	    - Copyright (c) 2008  Red Hat, Inc
+	    - Copyright (c) 2002  Bo Thorsen <bo@suse.de>
 
    x86-64 Foreign Function Interface 
 
@@ -89,7 +90,6 @@ ffi_call_unix64:
 	addq	%r11, %r10
 	jmp	*%r10
 
-	.section .rodata
 .Lstore_table:
 	.long	.Lst_void-.Lstore_table		/* FFI_TYPE_VOID */
 	.long	.Lst_sint32-.Lstore_table	/* FFI_TYPE_INT */
@@ -107,7 +107,6 @@ ffi_call_unix64:
 	.long	.Lst_struct-.Lstore_table	/* FFI_TYPE_STRUCT */
 	.long	.Lst_int64-.Lstore_table	/* FFI_TYPE_POINTER */
 
-	.text
 	.align 2
 .Lst_void:
 	ret
@@ -240,7 +239,6 @@ ffi_closure_unix64:
 	addq	%r11, %r10
 	jmp	*%r10
 
-	.section .rodata
 .Lload_table:
 	.long	.Lld_void-.Lload_table		/* FFI_TYPE_VOID */
 	.long	.Lld_int32-.Lload_table		/* FFI_TYPE_INT */
@@ -258,7 +256,6 @@ ffi_closure_unix64:
 	.long	.Lld_struct-.Lload_table	/* FFI_TYPE_STRUCT */
 	.long	.Lld_int64-.Lload_table		/* FFI_TYPE_POINTER */
 
-	.text
 	.align 2
 .Lld_void:
 	ret
@@ -328,7 +325,14 @@ ffi_closure_unix64:
 .LUW9:
 	.size	ffi_closure_unix64,.-ffi_closure_unix64
 
+#ifdef __GNUC__
+/* Only emit DWARF unwind info when building with the GNU toolchain.  */
+
+#ifdef HAVE_AS_X86_64_UNWIND_SECTION_TYPE
+	.section	.eh_frame,"a",@unwind
+#else
 	.section	.eh_frame,"a",@progbits
+#endif
 .Lframe1:
 	.long	.LECIE1-.LSCIE1		/* CIE Length */
 .LSCIE1:
@@ -351,7 +355,11 @@ ffi_closure_unix64:
 	.long	.LEFDE1-.LASFDE1	/* FDE Length */
 .LASFDE1:
 	.long	.LASFDE1-.Lframe1	/* FDE CIE offset */
+#if HAVE_AS_X86_PCREL
 	.long	.LUW0-.			/* FDE initial location */
+#else
+	.long	.LUW0@rel
+#endif
 	.long	.LUW4-.LUW0		/* FDE address range */
 	.uleb128 0x0			/* Augmentation size */
 
@@ -389,7 +397,11 @@ ffi_closure_unix64:
 	.long	.LEFDE3-.LASFDE3	/* FDE Length */
 .LASFDE3:
 	.long	.LASFDE3-.Lframe1	/* FDE CIE offset */
+#if HAVE_AS_X86_PCREL
 	.long	.LUW5-.			/* FDE initial location */
+#else
+	.long	.LUW5@rel
+#endif
 	.long	.LUW9-.LUW5		/* FDE address range */
 	.uleb128 0x0			/* Augmentation size */
 
@@ -411,6 +423,8 @@ ffi_closure_unix64:
 	.align 8
 .LEFDE3:
 
+#endif /* __GNUC__ */
+	
 #endif /* __x86_64__ */
 
 #if defined __ELF__ && defined __linux__

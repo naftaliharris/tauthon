@@ -9,24 +9,26 @@
 # Only called, not tested: getmouse(), ungetmouse()
 #
 
-import curses, sys, tempfile, os
-import curses.panel
+import sys, tempfile, os
 
 # Optionally test curses module.  This currently requires that the
 # 'curses' resource be given on the regrtest command line using the -u
 # option.  If not available, nothing after this line will be executed.
 
-from test.test_support import requires, TestSkipped
+import unittest
+from test.test_support import requires, import_module
 requires('curses')
+curses = import_module('curses')
+curses.panel = import_module('curses.panel')
 
 
 # XXX: if newterm was supported we could use it instead of initscr and not exit
 term = os.environ.get('TERM')
 if not term or term == 'unknown':
-    raise TestSkipped, "$TERM=%r, calling initscr() may cause exit" % term
+    raise unittest.SkipTest, "$TERM=%r, calling initscr() may cause exit" % term
 
 if sys.platform == "cygwin":
-    raise TestSkipped("cygwin's curses mostly just hangs")
+    raise unittest.SkipTest("cygwin's curses mostly just hangs")
 
 def window_funcs(stdscr):
     "Test the methods of windows"
@@ -248,6 +250,26 @@ def test_userptr_without_set(stdscr):
     except curses.panel.error:
         pass
 
+def test_userptr_memory_leak(stdscr):
+    w = curses.newwin(10, 10)
+    p = curses.panel.new_panel(w)
+    obj = object()
+    nrefs = sys.getrefcount(obj)
+    for i in range(100):
+        p.set_userptr(obj)
+
+    p.set_userptr(None)
+    if sys.getrefcount(obj) != nrefs:
+        raise RuntimeError, "set_userptr leaked references"
+
+def test_userptr_segfault(stdscr):
+    panel = curses.panel.new_panel(stdscr)
+    class A:
+        def __del__(self):
+            panel.set_userptr(None)
+    panel.set_userptr(A())
+    panel.set_userptr(None)
+
 def test_resize_term(stdscr):
     if hasattr(curses, 'resizeterm'):
         lines, cols = curses.LINES, curses.COLS
@@ -266,6 +288,8 @@ def main(stdscr):
         module_funcs(stdscr)
         window_funcs(stdscr)
         test_userptr_without_set(stdscr)
+        test_userptr_memory_leak(stdscr)
+        test_userptr_segfault(stdscr)
         test_resize_term(stdscr)
         test_issue6243(stdscr)
     finally:
@@ -276,7 +300,7 @@ if __name__ == '__main__':
     unit_tests()
 else:
     if not sys.__stdout__.isatty():
-        raise TestSkipped("sys.__stdout__ is not a tty")
+        raise unittest.SkipTest("sys.__stdout__ is not a tty")
     # testing setupterm() inside initscr/endwin
     # causes terminal breakage
     curses.setupterm(fd=sys.__stdout__.fileno())
