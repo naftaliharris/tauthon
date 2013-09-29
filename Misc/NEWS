@@ -15,6 +15,11 @@ Core and Builtins
 Library
 -------
 
+- Properly initialize all fields of a SSL object after allocation.
+
+- Issue #19095: SSLSocket.getpeercert() now raises ValueError when the
+  SSL handshake hasn't been done.
+
 - Issue #4366: Fix building extensions on all platforms when --enable-shared
   is used.
 
