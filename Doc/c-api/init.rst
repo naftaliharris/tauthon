@@ -329,7 +329,11 @@ Process-wide parameters
 
 .. c:function:: void PySys_SetArgv(int argc, wchar_t **argv)
 
-   This function works like :c:func:`PySys_SetArgvEx` with *updatepath* set to 1.
+   This function works like :c:func:`PySys_SetArgvEx` with *updatepath* set
+   to 1 unless the :program:`python` interpreter was started with the
+   :option:`-I`.
+
+   .. versionchanged:: 3.4 The *updatepath* value depends on :option:`-I`.
 
 
 .. c:function:: void Py_SetPythonHome(wchar_t *home)
@@ -652,6 +656,20 @@ with sub-interpreters:
    GILState API has been used on the current thread.  Note that the main thread
    always has such a thread-state, even if no auto-thread-state call has been
    made on the main thread.  This is mainly a helper/diagnostic function.
+
+
+.. c:function:: int PyGILState_Check()
+
+   Return 1 if the current thread is holding the GIL and 0 otherwise.
+   This function can be called from any thread at any time.
+   Only if it has had its Python thread state initialized and currently is
+   holding the GIL will it return 1.
+   This is mainly a helper/diagnostic function.  It can be useful
+   for example in callback contexts or memory allocation functions when
+   knowing that the GIL is locked can allow the caller to perform sensitive
+   actions or otherwise behave differently.
+
+   .. versionadded:: 3.4
 
 
 The following macros are normally used without a trailing semicolon; look for
