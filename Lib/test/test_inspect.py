@@ -8,10 +8,12 @@ import datetime
 import collections
 import os
 import shutil
+import functools
+import importlib
 from os.path import normcase
 
 from test.support import run_unittest, TESTFN, DirsOnSysPath
-
+from test.script_helper import assert_python_ok, assert_python_failure
 from test import inspect_fodder as mod
 from test import inspect_fodder2 as mod2
 
@@ -418,14 +420,14 @@ class TestBuggyCases(GetSourceBase):
             unicodedata.__file__[-4:] in (".pyc", ".pyo"),
         "unicodedata is not an external binary module")
     def test_findsource_binary(self):
-        self.assertRaises(IOError, inspect.getsource, unicodedata)
-        self.assertRaises(IOError, inspect.findsource, unicodedata)
+        self.assertRaises(OSError, inspect.getsource, unicodedata)
+        self.assertRaises(OSError, inspect.findsource, unicodedata)
 
     def test_findsource_code_in_linecache(self):
         lines = ["x=1"]
         co = compile(lines[0], "_dynamically_created_file", "exec")
-        self.assertRaises(IOError, inspect.findsource, co)
-        self.assertRaises(IOError, inspect.getsource, co)
+        self.assertRaises(OSError, inspect.findsource, co)
+        self.assertRaises(OSError, inspect.getsource, co)
         linecache.cache[co.co_filename] = (1, None, lines, co.co_filename)
         try:
             self.assertEqual(inspect.findsource(co), (lines,0))
@@ -650,6 +652,14 @@ class TestClassesAndFunctions(unittest.TestCase):
             if isinstance(builtin, type):
                 inspect.classify_class_attrs(builtin)
 
+    def test_classify_VirtualAttribute(self):
+        class VA:
+            @types.DynamicClassAttribute
+            def ham(self):
+                return 'eggs'
+        should_find = inspect.Attribute('ham', 'data', VA, VA.__dict__['ham'])
+        self.assertIn(should_find, inspect.classify_class_attrs(VA))
+
     def test_getmembers_descriptors(self):
         class A(object):
             dd = _BrokenDataDescriptor()
@@ -692,6 +702,13 @@ class TestClassesAndFunctions(unittest.TestCase):
         b = B()
         self.assertIn(('f', b.f), inspect.getmembers(b))
         self.assertIn(('f', b.f), inspect.getmembers(b, inspect.ismethod))
+
+    def test_getmembers_VirtualAttribute(self):
+        class A:
+            @types.DynamicClassAttribute
+            def eggs(self):
+                return 'spam'
+        self.assertIn(('eggs', A.__dict__['eggs']), inspect.getmembers(A))
 
 
 _global_ref = object()
@@ -1079,6 +1096,15 @@ class TestGetattrStatic(unittest.TestCase):
             x = object()
 
         self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.x)
+
+    def test_classVirtualAttribute(self):
+        class Thing(object):
+            @types.DynamicClassAttribute
+            def x(self):
+                return self._x
+            _x = object()
+
+        self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.__dict__['x'])
 
     def test_inherited_classattribute(self):
         class Thing(object):
@@ -1736,6 +1762,17 @@ class TestSignatureObject(unittest.TestCase):
                          ((('b', ..., ..., "positional_or_keyword"),),
                           ...))
 
+        # Test we handle __signature__ partway down the wrapper stack
+        def wrapped_foo_call():
+            pass
+        wrapped_foo_call.__wrapped__ = Foo.__call__
+
+        self.assertEqual(self.signature(wrapped_foo_call),
+                         ((('a', ..., ..., "positional_or_keyword"),
+                           ('b', ..., ..., "positional_or_keyword")),
+                          ...))
+
+
     def test_signature_on_class(self):
         class C:
             def __init__(self, a):
@@ -1850,6 +1887,10 @@ class TestSignatureObject(unittest.TestCase):
         self.assertEqual(self.signature(Wrapped),
                          ((('a', ..., ..., "positional_or_keyword"),),
                           ...))
+        # wrapper loop:
+        Wrapped.__wrapped__ = Wrapped
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            self.signature(Wrapped)
 
     def test_signature_on_lambdas(self):
         self.assertEqual(self.signature((lambda a=10: a)),
@@ -2301,6 +2342,103 @@ class TestBoundArguments(unittest.TestCase):
         self.assertNotEqual(ba, ba4)
 
 
+class TestUnwrap(unittest.TestCase):
+
+    def test_unwrap_one(self):
+        def func(a, b):
+            return a + b
+        wrapper = functools.lru_cache(maxsize=20)(func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_unwrap_several(self):
+        def func(a, b):
+            return a + b
+        wrapper = func
+        for __ in range(10):
+            @functools.wraps(wrapper)
+            def wrapper():
+                pass
+        self.assertIsNot(wrapper.__wrapped__, func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_stop(self):
+        def func1(a, b):
+            return a + b
+        @functools.wraps(func1)
+        def func2():
+            pass
+        @functools.wraps(func2)
+        def wrapper():
+            pass
+        func2.stop_here = 1
+        unwrapped = inspect.unwrap(wrapper,
+                                   stop=(lambda f: hasattr(f, "stop_here")))
+        self.assertIs(unwrapped, func2)
+
+    def test_cycle(self):
+        def func1(): pass
+        func1.__wrapped__ = func1
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+
+        def func2(): pass
+        func2.__wrapped__ = func1
+        func1.__wrapped__ = func2
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func2)
+
+    def test_unhashable(self):
+        def func(): pass
+        func.__wrapped__ = None
+        class C:
+            __hash__ = None
+            __wrapped__ = func
+        self.assertIsNone(inspect.unwrap(C()))
+
+class TestMain(unittest.TestCase):
+    def test_only_source(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1], inspect.getsource(module).splitlines())
+        self.assertEqual(err, b'')
+
+    def test_qualname_source(self):
+        module = importlib.import_module('concurrent.futures')
+        member = getattr(module, 'ThreadPoolExecutor')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                     'concurrent.futures:ThreadPoolExecutor')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1],
+                         inspect.getsource(member).splitlines())
+        self.assertEqual(err, b'')
+
+    def test_builtins(self):
+        module = importlib.import_module('unittest')
+        _, out, err = assert_python_failure('-m', 'inspect',
+                                            'sys')
+        lines = err.decode().splitlines()
+        self.assertEqual(lines, ["Can't get info for builtin modules."])
+
+    def test_details(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest', '--details')
+        output = out.decode()
+        # Just a quick sanity check on the output
+        self.assertIn(module.__name__, output)
+        self.assertIn(module.__file__, output)
+        self.assertIn(module.__cached__, output)
+        self.assertEqual(err, b'')
+
+
+
+
 def test_main():
     run_unittest(
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
@@ -2308,7 +2446,7 @@ def test_main():
         TestGetcallargsFunctions, TestGetcallargsMethods,
         TestGetcallargsUnboundMethods, TestGetattrStatic, TestGetGeneratorState,
         TestNoEOL, TestSignatureObject, TestSignatureBind, TestParameterObject,
-        TestBoundArguments, TestGetClosureVars
+        TestBoundArguments, TestGetClosureVars, TestUnwrap, TestMain
     )
 
 if __name__ == "__main__":
