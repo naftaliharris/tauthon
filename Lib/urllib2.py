@@ -102,6 +102,7 @@ import sys
 import time
 import urlparse
 import bisect
+import warnings
 
 try:
     from cStringIO import StringIO
@@ -109,7 +110,7 @@ except ImportError:
     from StringIO import StringIO
 
 from urllib import (unwrap, unquote, splittype, splithost, quote,
-     addinfourl, splitport,
+     addinfourl, splitport, splittag, toBytes,
      splitattr, ftpwrapper, splituser, splitpasswd, splitvalue)
 
 # support for FileHandler, proxies via environment variables
@@ -166,6 +167,15 @@ class HTTPError(URLError, addinfourl):
     def __str__(self):
         return 'HTTP Error %s: %s' % (self.code, self.msg)
 
+    # since URLError specifies a .reason attribute, HTTPError should also
+    #  provide this attribute. See issue13211 fo discussion.
+    @property
+    def reason(self):
+        return self.msg
+
+    def info(self):
+        return self.hdrs
+
 # copied from cookielib.py
 _cut_port_re = re.compile(r":\d+$")
 def request_host(request):
@@ -190,6 +200,7 @@ class Request:
                  origin_req_host=None, unverifiable=False):
         # unwrap('<URL:type://host/path>') --> 'type://host/path'
         self.__original = unwrap(url)
+        self.__original, self.__fragment = splittag(self.__original)
         self.type = None
         # self.__r_type is what's left after doing the splittype
         self.host = None
@@ -235,7 +246,10 @@ class Request:
         return self.data
 
     def get_full_url(self):
-        return self.__original
+        if self.__fragment:
+            return '%s#%s' % (self.__original, self.__fragment)
+        else:
+            return self.__original
 
     def get_type(self):
         if self.type is None:
@@ -298,8 +312,9 @@ class OpenerDirector:
     def __init__(self):
         client_version = "Python-urllib/%s" % __version__
         self.addheaders = [('User-agent', client_version)]
-        # manage the individual handlers
+        # self.handlers is retained only for backward compatibility
         self.handlers = []
+        # manage the individual handlers
         self.handle_open = {}
         self.handle_error = {}
         self.process_response = {}
@@ -349,8 +364,6 @@ class OpenerDirector:
             added = True
 
         if added:
-            # the handlers must work in an specific order, the order
-            # is specified in a Handler attribute
             bisect.insort(self.handlers, handler)
             handler.add_parent(self)
 
@@ -449,7 +462,7 @@ def build_opener(*handlers):
     """
     import types
     def isclass(obj):
-        return isinstance(obj, types.ClassType) or hasattr(obj, "__bases__")
+        return isinstance(obj, (types.ClassType, type))
 
     opener = OpenerDirector()
     default_classes = [ProxyHandler, UnknownHandler, HTTPHandler,
@@ -819,7 +832,7 @@ class AbstractBasicAuthHandler:
     # allow for double- and single-quoted realm values
     # (single quotes are a violation of the RFC, but appear in the wild)
     rx = re.compile('(?:.*,)*[ \t]*([^ \t]+)[ \t]+'
-                    'realm=(["\'])(.*?)\\2', re.I)
+                    'realm=(["\']?)([^"\']*)\\2', re.I)
 
     # XXX could pre-emptively send auth info already accepted (RFC 2617,
     # end of section 2, and section 1.2 immediately after "credentials"
@@ -830,6 +843,9 @@ class AbstractBasicAuthHandler:
             password_mgr = HTTPPasswordMgr()
         self.passwd = password_mgr
         self.add_password = self.passwd.add_password
+        self.retried = 0
+
+    def reset_retry_count(self):
         self.retried = 0
 
     def http_error_auth_reqed(self, authreq, host, req, headers):
@@ -849,8 +865,14 @@ class AbstractBasicAuthHandler:
             mo = AbstractBasicAuthHandler.rx.search(authreq)
             if mo:
                 scheme, quote, realm = mo.groups()
+                if quote not in ['"', "'"]:
+                    warnings.warn("Basic Auth Realm was unquoted",
+                                  UserWarning, 2)
                 if scheme.lower() == 'basic':
-                    return self.retry_http_basic_auth(host, req, realm)
+                    response = self.retry_http_basic_auth(host, req, realm)
+                    if response and response.code != 401:
+                        self.retried = 0
+                    return response
 
     def retry_http_basic_auth(self, host, req, realm):
         user, pw = self.passwd.find_user_password(realm, host)
@@ -871,8 +893,10 @@ class HTTPBasicAuthHandler(AbstractBasicAuthHandler, BaseHandler):
 
     def http_error_401(self, req, fp, code, msg, headers):
         url = req.get_full_url()
-        return self.http_error_auth_reqed('www-authenticate',
-                                          url, req, headers)
+        response = self.http_error_auth_reqed('www-authenticate',
+                                              url, req, headers)
+        self.reset_retry_count()
+        return response
 
 
 class ProxyBasicAuthHandler(AbstractBasicAuthHandler, BaseHandler):
@@ -885,8 +909,10 @@ class ProxyBasicAuthHandler(AbstractBasicAuthHandler, BaseHandler):
         # should not, RFC 3986 s. 3.2.1) support requests for URLs containing
         # userinfo.
         authority = req.get_host()
-        return self.http_error_auth_reqed('proxy-authenticate',
+        response = self.http_error_auth_reqed('proxy-authenticate',
                                           authority, req, headers)
+        self.reset_retry_count()
+        return response
 
 
 def randombytes(n):
@@ -1127,8 +1153,10 @@ class AbstractHTTPHandler(BaseHandler):
         h = http_class(host, timeout=req.timeout) # will parse host:port
         h.set_debuglevel(self._debuglevel)
 
-        headers = dict(req.headers)
-        headers.update(req.unredirected_hdrs)
+        headers = dict(req.unredirected_hdrs)
+        headers.update(dict((k, v) for k, v in req.headers.items()
+                            if k not in headers))
+
         # We want to make an HTTP/1.1 request, but the addinfourl
         # class isn't prepared to deal with a persistent connection.
         # It will try to read all remaining data from the socket,
@@ -1147,13 +1175,18 @@ class AbstractHTTPHandler(BaseHandler):
                 # Proxy-Authorization should not be sent to origin
                 # server.
                 del headers[proxy_auth_hdr]
-            h._set_tunnel(req._tunnel_host, headers=tunnel_headers)
+            h.set_tunnel(req._tunnel_host, headers=tunnel_headers)
 
         try:
             h.request(req.get_method(), req.get_selector(), req.data, headers)
-            r = h.getresponse()
         except socket.error, err: # XXX what error?
+            h.close()
             raise URLError(err)
+        else:
+            try:
+                r = h.getresponse(buffering=True)
+            except TypeError: # buffering kw not supported
+                r = h.getresponse()
 
         # Pick apart the HTTPResponse object to get the addinfourl
         # object initialized properly.
@@ -1266,6 +1299,12 @@ def parse_http_list(s):
 
     return [part.strip() for part in res]
 
+def _safe_gethostbyname(host):
+    try:
+        return socket.gethostbyname(host)
+    except socket.gaierror:
+        return None
+
 class FileHandler(BaseHandler):
     # Use local file or FTP depending on form of URL
     def file_open(self, req):
@@ -1307,7 +1346,7 @@ class FileHandler(BaseHandler):
             if host:
                 host, port = splitport(host)
             if not host or \
-                (not port and socket.gethostbyname(host) in self.get_names()):
+                (not port and _safe_gethostbyname(host) in self.get_names()):
                 if host:
                     origurl = 'file://' + host + filename
                 else:
@@ -1338,8 +1377,8 @@ class FTPHandler(BaseHandler):
         else:
             passwd = None
         host = unquote(host)
-        user = unquote(user or '')
-        passwd = unquote(passwd or '')
+        user = user or ''
+        passwd = passwd or ''
 
         try:
             host = socket.gethostbyname(host)
@@ -1373,7 +1412,8 @@ class FTPHandler(BaseHandler):
             raise URLError, ('ftp error: %s' % msg), sys.exc_info()[2]
 
     def connect_ftp(self, user, passwd, host, port, dirs, timeout):
-        fw = ftpwrapper(user, passwd, host, port, dirs, timeout)
+        fw = ftpwrapper(user, passwd, host, port, dirs, timeout,
+                        persistent=False)
 ##        fw.ftp.set_debuglevel(1)
         return fw
 
@@ -1422,3 +1462,9 @@ class CacheFTPHandler(FTPHandler):
                     del self.timeout[k]
                     break
             self.soonest = min(self.timeout.values())
+
+    def clear_cache(self):
+        for conn in self.cache.values():
+            conn.close()
+        self.cache.clear()
+        self.timeout.clear()

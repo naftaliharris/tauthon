@@ -22,7 +22,7 @@
 				Optimization="2"
 				InlineFunctionExpansion="1"
 				AdditionalIncludeDirectories="..\..\Include,..\..\PC"
-				PreprocessorDefinitions="NDEBUG;WIN32;_WINDOWS"
+				PreprocessorDefinitions="Py_BUILD_CORE_MODULE;NDEBUG;WIN32;_WINDOWS"
 				StringPooling="TRUE"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="TRUE"
@@ -35,7 +35,7 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="wsock32.lib"
+				AdditionalDependencies="ws2_32.lib"
 				OutputFile="./select.pyd"
 				LinkIncremental="1"
 				SuppressStartupBanner="TRUE"
@@ -78,7 +78,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="..\..\Include,..\..\PC"
-				PreprocessorDefinitions="_DEBUG;WIN32;_WINDOWS"
+				PreprocessorDefinitions="Py_BUILD_CORE_MODULE;_DEBUG;WIN32;_WINDOWS"
 				RuntimeLibrary="3"
 				UsePrecompiledHeader="2"
 				WarningLevel="3"
@@ -89,7 +89,7 @@
 				Name="VCCustomBuildTool"/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="wsock32.lib"
+				AdditionalDependencies="ws2_32.lib"
 				OutputFile="./select_d.pyd"
 				LinkIncremental="1"
 				SuppressStartupBanner="TRUE"
@@ -134,7 +134,7 @@
 				Optimization="2"
 				InlineFunctionExpansion="1"
 				AdditionalIncludeDirectories="..\..\Include,..\..\PC"
-				PreprocessorDefinitions="NDEBUG;WIN32;_WINDOWS"
+				PreprocessorDefinitions="Py_BUILD_CORE_MODULE;NDEBUG;WIN32;_WINDOWS"
 				StringPooling="TRUE"
 				BasicRuntimeChecks="0"
 				RuntimeLibrary="2"
@@ -151,7 +151,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions=" /MACHINE:IA64 /USELINK:MS_SDK"
-				AdditionalDependencies="wsock32.lib"
+				AdditionalDependencies="ws2_32.lib"
 				OutputFile="./select.pyd"
 				LinkIncremental="1"
 				SuppressStartupBanner="TRUE"
@@ -196,7 +196,7 @@
 				Optimization="2"
 				InlineFunctionExpansion="1"
 				AdditionalIncludeDirectories="..\..\Include,..\..\PC"
-				PreprocessorDefinitions="NDEBUG;WIN32;_WINDOWS"
+				PreprocessorDefinitions="Py_BUILD_CORE_MODULE;NDEBUG;WIN32;_WINDOWS"
 				StringPooling="TRUE"
 				BasicRuntimeChecks="0"
 				RuntimeLibrary="2"
@@ -213,7 +213,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				AdditionalOptions=" /MACHINE:AMD64 /USELINK:MS_SDK"
-				AdditionalDependencies="wsock32.lib"
+				AdditionalDependencies="ws2_32.lib"
 				OutputFile="./select.pyd"
 				LinkIncremental="1"
 				SuppressStartupBanner="TRUE"

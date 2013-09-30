@@ -6,7 +6,7 @@ Python compiler package
 ***********************
 
 .. deprecated:: 2.6
-   The :mod:`compiler` package has been removed in Python 3.0.
+   The :mod:`compiler` package has been removed in Python 3.
 
 .. sectionauthor:: Jeremy Hylton <jeremy@zope.com>
 
@@ -18,7 +18,7 @@ abstract syntax tree from Python source code and to generate Python
 
 The :mod:`compiler` package is a Python source to bytecode translator written in
 Python.  It uses the built-in parser and standard :mod:`parser` module to
-generated a concrete syntax tree.  This tree is used to generate an abstract
+generate a concrete syntax tree.  This tree is used to generate an abstract
 syntax tree (AST) and then Python bytecode.
 
 The full functionality of the package duplicates the built-in compiler provided
@@ -540,7 +540,7 @@ examples demonstrate how to use the :func:`parse` function, what the repr of an
 AST looks like, and how to access attributes of an AST node.
 
 The first module defines a single function.  Assume it is stored in
-:file:`/tmp/doublelib.py`.  ::
+:file:`doublelib.py`.  ::
 
    """This is an example module.
 
@@ -557,7 +557,7 @@ to create an instance from a repr, you must import the class names from the
 :mod:`compiler.ast` module. ::
 
    >>> import compiler
-   >>> mod = compiler.parseFile("/tmp/doublelib.py")
+   >>> mod = compiler.parseFile("doublelib.py")
    >>> mod
    Module('This is an example module.\n\nThis is the docstring.\n',
           Stmt([Function(None, 'double', ['x'], [], 0,

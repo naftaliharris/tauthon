@@ -3,18 +3,18 @@
 Under Windows it is unlikely the .obj files are of use, as special compiler options
 are needed (primarily to toggle the behavior of "public" symbols.
 
-I dont consider it worth parsing the MSVC makefiles for compiler options.  Even if
+I don't consider it worth parsing the MSVC makefiles for compiler options.  Even if
 we get it just right, a specific freeze application may have specific compiler
 options anyway (eg, to enable or disable specific functionality)
 
-So my basic stragtegy is:
+So my basic strategy is:
 
 * Have some Windows INI files which "describe" one or more extension modules.
   (Freeze comes with a default one for all known modules - but you can specify
   your own).
 * This description can include:
   - The MSVC .dsp file for the extension.  The .c source file names
-    are extraced from there.
+    are extracted from there.
   - Specific compiler/linker options
   - Flag to indicate if Unicode compilation is expected.
 

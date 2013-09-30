@@ -14,9 +14,6 @@ This module provides a comprehensive interface for the bz2 compression library.
 It implements a complete file interface, one-shot (de)compression functions, and
 types for sequential (de)compression.
 
-For other archive formats, see the :mod:`gzip`, :mod:`zipfile`, and
-:mod:`tarfile` modules.
-
 Here is a summary of the features offered by the bz2 module:
 
 * :class:`BZ2File` class implements a complete file interface, including
@@ -45,6 +42,9 @@ Here is a summary of the features offered by the bz2 module:
 Handling of compressed files is offered by the :class:`BZ2File` class.
 
 
+.. index::
+   single: universal newlines; bz2.BZ2File class
+
 .. class:: BZ2File(filename[, mode[, buffering[, compresslevel]]])
 
    Open a bz2 file. Mode can be either ``'r'`` or ``'w'``, for reading (default)
@@ -53,13 +53,30 @@ Handling of compressed files is offered by the :class:`BZ2File` class.
    unbuffered, and larger numbers specify the buffer size; the default is
    ``0``. If *compresslevel* is given, it must be a number between ``1`` and
    ``9``; the default is ``9``. Add a ``'U'`` to mode to open the file for input
-   with universal newline support. Any line ending in the input file will be
+   in :term:`universal newlines` mode. Any line ending in the input file will be
    seen as a ``'\n'`` in Python.  Also, a file so opened gains the attribute
    :attr:`newlines`; the value for this attribute is one of ``None`` (no newline
    read yet), ``'\r'``, ``'\n'``, ``'\r\n'`` or a tuple containing all the
    newline types seen. Universal newlines are available only when
    reading. Instances support iteration in the same way as normal :class:`file`
    instances.
+
+   :class:`BZ2File` supports the :keyword:`with` statement.
+
+   .. versionchanged:: 2.7
+      Support for the :keyword:`with` statement was added.
+
+
+   .. note::
+
+      This class does not support input files containing multiple streams (such
+      as those produced by the :program:`pbzip2` tool). When reading such an
+      input file, only the first stream will be accessible. If you require
+      support for multi-stream files, consider using the third-party
+      :mod:`bz2file` module (available from
+      `PyPI <http://pypi.python.org/pypi/bz2file>`_). This module provides a
+      backport of Python 3.3's :class:`BZ2File` class, which does support
+      multi-stream files.
 
 
    .. method:: close()

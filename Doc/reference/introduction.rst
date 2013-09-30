@@ -65,15 +65,15 @@ IronPython
    An alternate Python for .NET.  Unlike Python.NET, this is a complete Python
    implementation that generates IL, and compiles Python code directly to .NET
    assemblies.  It was created by Jim Hugunin, the original creator of Jython.  For
-   more information, see `the IronPython website <http://www.ironpython.com/>`_.
+   more information, see `the IronPython website <http://www.ironpython.net/>`_.
 
 PyPy
-   An implementation of Python written in Python; even the bytecode interpreter is
-   written in Python.  This is executed using CPython as the underlying
-   interpreter.  One of the goals of the project is to encourage experimentation
-   with the language itself by making it easier to modify the interpreter (since it
-   is written in Python).  Additional information is available on `the PyPy
-   project's home page <http://codespeak.net/pypy/>`_.
+   An implementation of Python written completely in Python. It supports several
+   advanced features not found in other implementations like stackless support
+   and a Just in Time compiler. One of the goals of the project is to encourage
+   experimentation with the language itself by making it easier to modify the
+   interpreter (since it is written in Python).  Additional information is
+   available on `the PyPy project's home page <http://pypy.org/>`_.
 
 Each of these implementations varies in some way from the language as documented
 in this manual, or introduces specific information beyond what's covered in the

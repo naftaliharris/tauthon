@@ -9,7 +9,7 @@ from test import test_support
 
 # This test data was generated through Cocoa's NSDictionary class
 TESTDATA = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" \
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" \
 "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -134,6 +134,18 @@ class TestPlistlib(unittest.TestCase):
         self.assertEqual(dict(pl), dict(pl2))
         data2 = plistlib.writePlistToString(pl2)
         self.assertEqual(data, data2)
+
+    def test_indentation_array(self):
+        data = [[[[[[[[{'test': plistlib.Data(b'aaaaaa')}]]]]]]]]
+        self.assertEqual(plistlib.readPlistFromString(plistlib.writePlistToString(data)), data)
+
+    def test_indentation_dict(self):
+        data = {'1': {'2': {'3': {'4': {'5': {'6': {'7': {'8': {'9': plistlib.Data(b'aaaaaa')}}}}}}}}}
+        self.assertEqual(plistlib.readPlistFromString(plistlib.writePlistToString(data)), data)
+
+    def test_indentation_dict_mix(self):
+        data = {'1': {'2': [{'3': [[[[[{'test': plistlib.Data(b'aaaaaa')}]]]]]}]}}
+        self.assertEqual(plistlib.readPlistFromString(plistlib.writePlistToString(data)), data)
 
     def test_appleformatting(self):
         pl = plistlib.readPlistFromString(TESTDATA)

@@ -1,7 +1,7 @@
 """TestCases for exercising a Recno DB.
 """
 
-import os
+import os, sys
 import errno
 from pprint import pprint
 import unittest
@@ -14,10 +14,13 @@ letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 #----------------------------------------------------------------------
 
 class SimpleRecnoTestCase(unittest.TestCase):
-    import sys
-    if sys.version_info[:3] < (2, 4, 0):
-        def assertFalse(self, expr, msg=None):
-            self.failIf(expr,msg=msg)
+    if (sys.version_info < (2, 7)) or ((sys.version_info >= (3, 0)) and
+            (sys.version_info < (3, 2))) :
+        def assertIsInstance(self, obj, datatype, msg=None) :
+            return self.assertEqual(type(obj), datatype, msg=msg)
+        def assertGreaterEqual(self, a, b, msg=None) :
+            return self.assertTrue(a>=b, msg=msg)
+
 
     def setUp(self):
         self.filename = get_new_database_path()
@@ -38,8 +41,8 @@ class SimpleRecnoTestCase(unittest.TestCase):
 
         for x in letters:
             recno = d.append(x * 60)
-            self.assertTrue(isinstance(recno, int))
-            self.assertTrue(recno >= 1)
+            self.assertIsInstance(recno, int)
+            self.assertGreaterEqual(recno, 1)
             if verbose:
                 print recno,
 
@@ -54,13 +57,16 @@ class SimpleRecnoTestCase(unittest.TestCase):
             if verbose:
                 print data
 
-            self.assertTrue(isinstance(data, str))
+            self.assertIsInstance(data, str)
             self.assertEqual(data, d.get(recno))
 
         try:
             data = d[0]  # This should raise a KeyError!?!?!
         except db.DBInvalidArgError, val:
-            self.assertEqual(val.args[0], db.EINVAL)
+            if sys.version_info < (2, 6) :
+                self.assertEqual(val[0], db.EINVAL)
+            else :
+                self.assertEqual(val.args[0], db.EINVAL)
             if verbose: print val
         else:
             self.fail("expected exception")
@@ -91,18 +97,18 @@ class SimpleRecnoTestCase(unittest.TestCase):
         keys = d.keys()
         if verbose:
             print keys
-        self.assertTrue(isinstance(keys, list))
-        self.assertTrue(isinstance(keys[0], int))
+        self.assertIsInstance(keys, list)
+        self.assertIsInstance(keys[0], int)
         self.assertEqual(len(keys), len(d))
 
         items = d.items()
         if verbose:
             pprint(items)
-        self.assertTrue(isinstance(items, list))
-        self.assertTrue(isinstance(items[0], tuple))
+        self.assertIsInstance(items, list)
+        self.assertIsInstance(items[0], tuple)
         self.assertEqual(len(items[0]), 2)
-        self.assertTrue(isinstance(items[0][0], int))
-        self.assertTrue(isinstance(items[0][1], str))
+        self.assertIsInstance(items[0][0], int)
+        self.assertIsInstance(items[0][1], str)
         self.assertEqual(len(items), len(d))
 
         self.assertTrue(d.has_key(25))
@@ -177,7 +183,10 @@ class SimpleRecnoTestCase(unittest.TestCase):
             if get_returns_none:
                 self.fail("unexpected DBKeyEmptyError exception")
             else:
-                self.assertEqual(val.args[0], db.DB_KEYEMPTY)
+                if sys.version_info < (2, 6) :
+                    self.assertEqual(val[0], db.DB_KEYEMPTY)
+                else :
+                    self.assertEqual(val.args[0], db.DB_KEYEMPTY)
                 if verbose: print val
         else:
             if not get_returns_none:
@@ -221,7 +230,9 @@ class SimpleRecnoTestCase(unittest.TestCase):
         d.close()
 
         # get the text from the backing source
-        text = open(source, 'r').read()
+        f = open(source, 'r')
+        text = f.read()
+        f.close()
         text = text.strip()
         if verbose:
             print text
@@ -241,7 +252,9 @@ class SimpleRecnoTestCase(unittest.TestCase):
         d.sync()
         d.close()
 
-        text = open(source, 'r').read()
+        f = open(source, 'r')
+        text = f.read()
+        f.close()
         text = text.strip()
         if verbose:
             print text
@@ -265,7 +278,10 @@ class SimpleRecnoTestCase(unittest.TestCase):
         try:                    # this one will fail
             d.append('bad' * 20)
         except db.DBInvalidArgError, val:
-            self.assertEqual(val.args[0], db.EINVAL)
+            if sys.version_info < (2, 6) :
+                self.assertEqual(val[0], db.EINVAL)
+            else :
+                self.assertEqual(val.args[0], db.EINVAL)
             if verbose: print val
         else:
             self.fail("expected exception")
@@ -279,6 +295,18 @@ class SimpleRecnoTestCase(unittest.TestCase):
 
         c.close()
         d.close()
+
+    def test04_get_size_empty(self) :
+        d = db.DB()
+        d.open(self.filename, dbtype=db.DB_RECNO, flags=db.DB_CREATE)
+
+        row_id = d.append(' ')
+        self.assertEqual(1, d.get_size(key=row_id))
+        row_id = d.append('')
+        self.assertEqual(0, d.get_size(key=row_id))
+
+
+
 
 
 #----------------------------------------------------------------------

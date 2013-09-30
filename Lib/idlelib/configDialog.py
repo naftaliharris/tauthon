@@ -28,6 +28,7 @@ class ConfigDialog(Toplevel):
         self.wm_withdraw()
 
         self.configure(borderwidth=5)
+        self.title('IDLE Preferences')
         self.geometry("+%d+%d" % (parent.winfo_rootx()+20,
                 parent.winfo_rooty()+30))
         #Theme Elements. Each theme element key is its display name.
@@ -182,7 +183,7 @@ class ConfigDialog(Toplevel):
                               text=' Highlighting Theme ')
         #frameCustom
         self.textHighlightSample=Text(frameCustom,relief=SOLID,borderwidth=1,
-            font=('courier',12,''),cursor='hand2',width=21,height=10,
+            font=('courier',12,''),cursor='hand2',width=21,height=11,
             takefocus=FALSE,highlightthickness=0,wrap=NONE)
         text=self.textHighlightSample
         text.bind('<Double-Button-1>',lambda e: 'break')
@@ -561,7 +562,7 @@ class ConfigDialog(Toplevel):
 
     def AddChangedItem(self,type,section,item,value):
         value=str(value) #make sure we use a string
-        if not self.changedItems[type].has_key(section):
+        if section not in self.changedItems[type]:
             self.changedItems[type][section]={}
         self.changedItems[type][section][item]=value
 
@@ -708,7 +709,7 @@ class ConfigDialog(Toplevel):
             return
         #remove key set from config
         idleConf.userCfg['keys'].remove_section(keySetName)
-        if self.changedItems['keys'].has_key(keySetName):
+        if keySetName in self.changedItems['keys']:
             del(self.changedItems['keys'][keySetName])
         #write changes
         idleConf.userCfg['keys'].Save()
@@ -735,7 +736,7 @@ class ConfigDialog(Toplevel):
             return
         #remove theme from config
         idleConf.userCfg['highlight'].remove_section(themeName)
-        if self.changedItems['highlight'].has_key(themeName):
+        if themeName in self.changedItems['highlight']:
             del(self.changedItems['highlight'][themeName])
         #write changes
         idleConf.userCfg['highlight'].Save()
@@ -831,8 +832,9 @@ class ConfigDialog(Toplevel):
             fontWeight=tkFont.BOLD
         else:
             fontWeight=tkFont.NORMAL
-        self.editFont.config(size=self.fontSize.get(),
-                weight=fontWeight,family=fontName)
+        newFont = (fontName, self.fontSize.get(), fontWeight)
+        self.labelFontSample.config(font=newFont)
+        self.textHighlightSample.configure(font=newFont)
 
     def SetHighlightTarget(self):
         if self.highlightTarget.get()=='Cursor': #bg not possible
@@ -870,9 +872,9 @@ class ConfigDialog(Toplevel):
             #handle any unsaved changes to this theme
             if theme in self.changedItems['highlight'].keys():
                 themeDict=self.changedItems['highlight'][theme]
-                if themeDict.has_key(element+'-foreground'):
+                if element+'-foreground' in themeDict:
                     colours['foreground']=themeDict[element+'-foreground']
-                if themeDict.has_key(element+'-background'):
+                if element+'-background' in themeDict:
                     colours['background']=themeDict[element+'-background']
             self.textHighlightSample.tag_config(element, **colours)
         self.SetColourSample()
@@ -945,7 +947,7 @@ class ConfigDialog(Toplevel):
             self.listFontName.select_anchor(currentFontIndex)
         ##font size dropdown
         fontSize=idleConf.GetOption('main','EditorWindow','font-size',
-                default='10')
+                type='int', default='10')
         self.optMenuFontSize.SetMenu(('7','8','9','10','11','12','13','14',
                 '16','18','20','22'),fontSize )
         ##fontWeight
@@ -1031,10 +1033,13 @@ class ConfigDialog(Toplevel):
         self.autoSave.set(idleConf.GetOption('main', 'General', 'autosave',
                                              default=0, type='bool'))
         #initial window size
-        self.winWidth.set(idleConf.GetOption('main','EditorWindow','width'))
-        self.winHeight.set(idleConf.GetOption('main','EditorWindow','height'))
+        self.winWidth.set(idleConf.GetOption('main','EditorWindow','width',
+                                             type='int'))
+        self.winHeight.set(idleConf.GetOption('main','EditorWindow','height',
+                                              type='int'))
         #initial paragraph reformat size
-        self.paraWidth.set(idleConf.GetOption('main','FormatParagraph','paragraph'))
+        self.paraWidth.set(idleConf.GetOption('main','FormatParagraph','paragraph',
+                                              type='int'))
         # default source encoding
         self.encoding.set(idleConf.GetOption('main', 'EditorWindow',
                                              'encoding', default='none'))

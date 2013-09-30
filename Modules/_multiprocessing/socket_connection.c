@@ -8,6 +8,10 @@
 
 #include "multiprocessing.h"
 
+#if defined(HAVE_POLL) && !defined(HAVE_BROKEN_POLL)
+#  include "poll.h"
+#endif
+
 #ifdef MS_WINDOWS
 #  define WRITE(h, buffer, length) send((SOCKET)h, buffer, length, 0)
 #  define READ(h, buffer, length) recv((SOCKET)h, buffer, length, 0)
@@ -17,6 +21,21 @@
 #  define READ(h, buffer, length) read(h, buffer, length)
 #  define CLOSE(h) close(h)
 #endif
+
+/*
+ * Wrapper for PyErr_CheckSignals() which can be called without the GIL
+ */
+
+static int
+check_signals(void)
+{
+    PyGILState_STATE state;
+    int res;
+    state = PyGILState_Ensure();
+    res = PyErr_CheckSignals();
+    PyGILState_Release(state);
+    return res;
+}
 
 /*
  * Send string to file descriptor
@@ -30,8 +49,14 @@ _conn_sendall(HANDLE h, char *string, size_t length)
 
     while (length > 0) {
         res = WRITE(h, p, length);
-        if (res < 0)
+        if (res < 0) {
+            if (errno == EINTR) {
+                if (check_signals() < 0)
+                    return MP_EXCEPTION_HAS_BEEN_SET;
+                continue;
+            }
             return MP_SOCKET_ERROR;
+        }
         length -= res;
         p += res;
     }
@@ -52,12 +77,16 @@ _conn_recvall(HANDLE h, char *buffer, size_t length)
 
     while (remaining > 0) {
         temp = READ(h, p, remaining);
-        if (temp <= 0) {
-            if (temp == 0)
-                return remaining == length ?
-                    MP_END_OF_FILE : MP_EARLY_END_OF_FILE;
-            else
-                return temp;
+        if (temp < 0) {
+            if (errno == EINTR) {
+                if (check_signals() < 0)
+                    return MP_EXCEPTION_HAS_BEEN_SET;
+                continue;
+            }
+            return temp;
+        }
+        else if (temp == 0) {
+            return remaining == length ? MP_END_OF_FILE : MP_EARLY_END_OF_FILE;
         }
         remaining -= temp;
         p += temp;
@@ -117,7 +146,7 @@ static Py_ssize_t
 conn_recv_string(ConnectionObject *conn, char *buffer,
                  size_t buflength, char **newbuffer, size_t maxlength)
 {
-    int res;
+    Py_ssize_t res;
     UINT32 ulength;
 
     *newbuffer = NULL;
@@ -132,20 +161,23 @@ conn_recv_string(ConnectionObject *conn, char *buffer,
     if (ulength > maxlength)
         return MP_BAD_MESSAGE_LENGTH;
 
-    if (ulength <= buflength) {
-        Py_BEGIN_ALLOW_THREADS
-        res = _conn_recvall(conn->handle, buffer, (size_t)ulength);
-        Py_END_ALLOW_THREADS
-        return res < 0 ? res : ulength;
-    } else {
-        *newbuffer = PyMem_Malloc((size_t)ulength);
-        if (*newbuffer == NULL)
+    if (ulength > buflength) {
+        *newbuffer = buffer = PyMem_Malloc((size_t)ulength);
+        if (buffer == NULL)
             return MP_MEMORY_ERROR;
-        Py_BEGIN_ALLOW_THREADS
-        res = _conn_recvall(conn->handle, *newbuffer, (size_t)ulength);
-        Py_END_ALLOW_THREADS
-        return res < 0 ? (Py_ssize_t)res : (Py_ssize_t)ulength;
     }
+
+    Py_BEGIN_ALLOW_THREADS
+    res = _conn_recvall(conn->handle, buffer, (size_t)ulength);
+    Py_END_ALLOW_THREADS
+
+    if (res >= 0) {
+        res = (Py_ssize_t)ulength;
+    } else if (*newbuffer != NULL) {
+        PyMem_Free(*newbuffer);
+        *newbuffer = NULL;
+    }
+    return res;
 }
 
 /*
@@ -155,6 +187,41 @@ conn_recv_string(ConnectionObject *conn, char *buffer,
 static int
 conn_poll(ConnectionObject *conn, double timeout, PyThreadState *_save)
 {
+#if defined(HAVE_POLL) && !defined(HAVE_BROKEN_POLL)
+    int res;
+    struct pollfd p;
+
+    p.fd = (int)conn->handle;
+    p.events = POLLIN | POLLPRI;
+    p.revents = 0;
+
+    if (timeout < 0) {
+        do {
+            res = poll(&p, 1, -1);
+        } while (res < 0 && errno == EINTR);
+    } else {
+        res = poll(&p, 1, (int)(timeout * 1000 + 0.5));
+        if (res < 0 && errno == EINTR) {
+            /* We were interrupted by a signal.  Just indicate a
+               timeout even though we are early. */
+            return FALSE;
+        }
+    }
+
+    if (res < 0) {
+        return MP_SOCKET_ERROR;
+    } else if (p.revents & (POLLNVAL|POLLERR)) {
+        Py_BLOCK_THREADS
+        PyErr_SetString(PyExc_IOError, "poll() gave POLLNVAL or POLLERR");
+        Py_UNBLOCK_THREADS
+        return MP_EXCEPTION_HAS_BEEN_SET;
+    } else if (p.revents != 0) {
+        return TRUE;
+    } else {
+        assert(res == 0);
+        return FALSE;
+    }
+#else
     int res;
     fd_set rfds;
 
@@ -174,12 +241,19 @@ conn_poll(ConnectionObject *conn, double timeout, PyThreadState *_save)
     FD_SET((SOCKET)conn->handle, &rfds);
 
     if (timeout < 0.0) {
-        res = select((int)conn->handle+1, &rfds, NULL, NULL, NULL);
+        do {
+            res = select((int)conn->handle+1, &rfds, NULL, NULL, NULL);
+        } while (res < 0 && errno == EINTR);
     } else {
         struct timeval tv;
         tv.tv_sec = (long)timeout;
         tv.tv_usec = (long)((timeout - tv.tv_sec) * 1e6 + 0.5);
         res = select((int)conn->handle+1, &rfds, NULL, NULL, &tv);
+        if (res < 0 && errno == EINTR) {
+            /* We were interrupted by a signal.  Just indicate a
+               timeout even though we are early. */
+            return FALSE;
+        }
     }
 
     if (res < 0) {
@@ -190,6 +264,7 @@ conn_poll(ConnectionObject *conn, double timeout, PyThreadState *_save)
         assert(res == 0);
         return FALSE;
     }
+#endif
 }
 
 /*

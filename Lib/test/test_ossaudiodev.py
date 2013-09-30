@@ -1,10 +1,11 @@
 from test import test_support
 test_support.requires('audio')
 
-from test.test_support import findfile, TestSkipped
+from test.test_support import findfile
+
+ossaudiodev = test_support.import_module('ossaudiodev')
 
 import errno
-import ossaudiodev
 import sys
 import sunau
 import time
@@ -46,7 +47,7 @@ class OSSAudioDevTests(unittest.TestCase):
         except IOError, msg:
             if msg.args[0] in (errno.EACCES, errno.ENOENT,
                                errno.ENODEV, errno.EBUSY):
-                raise TestSkipped(msg)
+                raise unittest.SkipTest(msg)
             raise
 
         # at least check that these methods can be invoked
@@ -57,7 +58,7 @@ class OSSAudioDevTests(unittest.TestCase):
         dsp.fileno()
 
         # Make sure the read-only attributes work.
-        self.failIf(dsp.closed)
+        self.assertFalse(dsp.closed)
         self.assertEqual(dsp.name, "/dev/dsp")
         self.assertEqual(dsp.mode, "w", "bad dsp.mode: %r" % dsp.mode)
 
@@ -83,7 +84,7 @@ class OSSAudioDevTests(unittest.TestCase):
         elapsed_time = t2 - t1
 
         percent_diff = (abs(elapsed_time - expected_time) / expected_time) * 100
-        self.failUnless(percent_diff <= 10.0,
+        self.assertTrue(percent_diff <= 10.0,
                         "elapsed time > 10% off of expected time")
 
     def set_parameters(self, dsp):
@@ -131,7 +132,7 @@ class OSSAudioDevTests(unittest.TestCase):
                       ]:
             (fmt, channels, rate) = config
             result = dsp.setparameters(fmt, channels, rate, False)
-            self.failIfEqual(result, config,
+            self.assertNotEqual(result, config,
                              "unexpectedly got requested configuration")
 
             try:
@@ -155,7 +156,7 @@ class OSSAudioDevTests(unittest.TestCase):
             #self.set_bad_parameters(dsp)
         finally:
             dsp.close()
-            self.failUnless(dsp.closed)
+            self.assertTrue(dsp.closed)
 
 
 def test_main():
@@ -164,7 +165,7 @@ def test_main():
     except (ossaudiodev.error, IOError), msg:
         if msg.args[0] in (errno.EACCES, errno.ENOENT,
                            errno.ENODEV, errno.EBUSY):
-            raise TestSkipped(msg)
+            raise unittest.SkipTest(msg)
         raise
     dsp.close()
     test_support.run_unittest(__name__)

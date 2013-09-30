@@ -51,7 +51,7 @@ def unix_getpass(prompt='Password: ', stream=None):
         # If that fails, see if stdin can be controlled.
         try:
             fd = sys.stdin.fileno()
-        except:
+        except (AttributeError, ValueError):
             passwd = fallback_getpass(prompt, stream)
         input = sys.stdin
         if not stream:
@@ -62,7 +62,7 @@ def unix_getpass(prompt='Password: ', stream=None):
         try:
             old = termios.tcgetattr(fd)     # a copy to save
             new = old[:]
-            new[3] &= ~(termios.ECHO|termios.ISIG)  # 3 == 'lflags'
+            new[3] &= ~termios.ECHO  # 3 == 'lflags'
             tcsetattr_flags = termios.TCSAFLUSH
             if hasattr(termios, 'TCSASOFT'):
                 tcsetattr_flags |= termios.TCSASOFT
