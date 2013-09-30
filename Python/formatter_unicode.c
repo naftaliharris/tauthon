@@ -315,7 +315,7 @@ calc_padding(Py_ssize_t nchars, Py_ssize_t width, Py_UCS4 align,
 
 /* Do the padding, and return a pointer to where the caller-supplied
    content goes. */
-static Py_ssize_t
+static int
 fill_padding(_PyUnicodeWriter *writer,
              Py_ssize_t nchars,
              Py_UCS4 fill_char, Py_ssize_t n_lpadding,
@@ -556,7 +556,7 @@ fill_number(_PyUnicodeWriter *writer, const NumberFieldWidths *spec,
 {
     /* Used to keep track of digits, decimal, and remainder. */
     Py_ssize_t d_pos = d_start;
-    const enum PyUnicode_Kind kind = writer->kind;
+    const unsigned int kind = writer->kind;
     const void *data = writer->data;
     Py_ssize_t r;
 
@@ -757,7 +757,8 @@ format_string_internal(PyObject *value, const InternalFormatSpec *format,
         goto done;
     }
 
-    if (format->width == -1 && format->precision == -1) {
+    if ((format->width == -1 || format->width <= len)
+        && (format->precision == -1 || format->precision >= len)) {
         /* Fast path */
         return _PyUnicodeWriter_WriteStr(writer, value);
     }
@@ -770,9 +771,13 @@ format_string_internal(PyObject *value, const InternalFormatSpec *format,
 
     calc_padding(len, format->width, format->align, &lpad, &rpad, &total);
 
-    maxchar = _PyUnicode_FindMaxChar(value, 0, len);
+    maxchar = writer->maxchar;
     if (lpad != 0 || rpad != 0)
         maxchar = Py_MAX(maxchar, format->fill_char);
+    if (PyUnicode_MAX_CHAR_VALUE(value) > maxchar) {
+        Py_UCS4 valmaxchar = _PyUnicode_FindMaxChar(value, 0, len);
+        maxchar = Py_MAX(maxchar, valmaxchar);
+    }
 
     /* allocate the resulting string */
     if (_PyUnicodeWriter_Prepare(writer, total, maxchar) == -1)
@@ -977,8 +982,7 @@ format_float_internal(PyObject *value,
     Py_ssize_t n_total;
     int has_decimal;
     double val;
-    Py_ssize_t precision;
-    Py_ssize_t default_precision = 6;
+    int precision, default_precision = 6;
     Py_UCS4 type = format->type;
     int add_pct = 0;
     Py_ssize_t index;
@@ -1133,8 +1137,7 @@ format_complex_internal(PyObject *value,
     Py_ssize_t n_im_total;
     int re_has_decimal;
     int im_has_decimal;
-    int precision;
-    Py_ssize_t default_precision = 6;
+    int precision, default_precision = 6;
     Py_UCS4 type = format->type;
     Py_ssize_t i_re;
     Py_ssize_t i_im;
