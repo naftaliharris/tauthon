@@ -8,8 +8,8 @@
 
 .. note::
    The :mod:`xmlrpclib` module has been renamed to :mod:`xmlrpc.client` in
-   Python 3.0.  The :term:`2to3` tool will automatically adapt imports when
-   converting your sources to 3.0.
+   Python 3.  The :term:`2to3` tool will automatically adapt imports when
+   converting your sources to Python 3.
 
 
 .. XXX Not everything is documented yet.  It might be good to describe
@@ -17,11 +17,22 @@
 
 .. versionadded:: 2.2
 
+**Source code:** :source:`Lib/xmlrpclib.py`
+
+--------------
+
 XML-RPC is a Remote Procedure Call method that uses XML passed via HTTP as a
 transport.  With it, a client can call methods with parameters on a remote
 server (the server is named by a URI) and get back structured data.  This module
 supports writing XML-RPC client code; it handles all the details of translating
 between conformable Python objects and XML on the wire.
+
+
+.. warning::
+
+   The :mod:`xmlrpclib` module is not secure against maliciously
+   constructed data.  If you need to parse untrusted or unauthenticated data see
+   :ref:`xml-vulnerabilities`.
 
 
 .. class:: ServerProxy(uri[, transport[, encoding[, verbose[,  allow_none[, use_datetime]]]]])
@@ -148,7 +159,7 @@ returning a value, which may be either returned data in a conformant type or a
 :class:`Fault` or :class:`ProtocolError` object indicating an error.
 
 Servers that support the XML introspection API support some common methods
-grouped under the reserved :attr:`system` member:
+grouped under the reserved :attr:`system` attribute:
 
 
 .. method:: ServerProxy.system.listMethods()
@@ -341,7 +352,7 @@ Fault Objects
 -------------
 
 A :class:`Fault` object encapsulates the content of an XML-RPC fault tag. Fault
-objects have the following members:
+objects have the following attributes:
 
 
 .. attribute:: Fault.faultCode
@@ -376,7 +387,7 @@ The client code for the preceding server::
    proxy = xmlrpclib.ServerProxy("http://localhost:8000/")
    try:
        proxy.add(2, 5)
-   except xmlrpclib.Fault, err:
+   except xmlrpclib.Fault as err:
        print "A fault occurred"
        print "Fault code: %d" % err.faultCode
        print "Fault string: %s" % err.faultString
@@ -390,7 +401,7 @@ ProtocolError Objects
 
 A :class:`ProtocolError` object describes a protocol error in the underlying
 transport layer (such as a 404 'not found' error if the server named by the URI
-does not exist).  It has the following members:
+does not exist).  It has the following attributes:
 
 
 .. attribute:: ProtocolError.url
@@ -423,7 +434,7 @@ by providing an URI that doesn't point to an XMLRPC server::
 
    try:
        proxy.some_method()
-   except xmlrpclib.ProtocolError, err:
+   except xmlrpclib.ProtocolError as err:
        print "A protocol error occurred"
        print "URL: %s" % err.url
        print "HTTP/HTTPS headers: %s" % err.headers
@@ -435,8 +446,8 @@ MultiCall Objects
 
 .. versionadded:: 2.4
 
-In http://www.xmlrpc.com/discuss/msgReader%241208, an approach is presented to
-encapsulate multiple calls to a remote server into a single request.
+The :class:`MultiCall` object provides a way to encapsulate multiple calls to a
+remote server into a single request [#]_.
 
 
 .. class:: MultiCall(server)
@@ -541,7 +552,7 @@ Example of Client Usage
 
    try:
        print server.examples.getStateName(41)
-   except Error, v:
+   except Error as v:
        print "ERROR", v
 
 To access an XML-RPC server through a proxy, you need to define  a custom
@@ -577,3 +588,10 @@ Example of Client and Server Usage
 See :ref:`simplexmlrpcserver-example`.
 
 
+.. rubric:: Footnotes
+
+.. [#] This approach has been first presented in `a discussion on xmlrpc.com
+   <http://web.archive.org/web/20060624230303/http://www.xmlrpc.com/discuss/msgReader$1208?mode=topic>`_.
+.. the link now points to webarchive since the one at
+.. http://www.xmlrpc.com/discuss/msgReader%241208 is broken (and webadmin
+.. doesn't reply)

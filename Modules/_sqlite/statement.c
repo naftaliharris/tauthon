@@ -1,6 +1,6 @@
 /* statement.c - the statement type
  *
- * Copyright (C) 2005-2007 Gerhard Häring <gh@ghaering.de>
+ * Copyright (C) 2005-2010 Gerhard Häring <gh@ghaering.de>
  *
  * This file is part of pysqlite.
  *
@@ -26,6 +26,7 @@
 #include "connection.h"
 #include "microprotocols.h"
 #include "prepare_protocol.h"
+#include "util.h"
 #include "sqlitecompat.h"
 
 /* prototypes */
@@ -101,8 +102,6 @@ int pysqlite_statement_create(pysqlite_Statement* self, pysqlite_Connection* con
 int pysqlite_statement_bind_parameter(pysqlite_Statement* self, int pos, PyObject* parameter, int allow_8bit_chars)
 {
     int rc = SQLITE_OK;
-    long longval;
-    PY_LONG_LONG longlongval;
     const char* buffer;
     char* string;
     Py_ssize_t buflen;
@@ -153,26 +152,30 @@ int pysqlite_statement_bind_parameter(pysqlite_Statement* self, int pos, PyObjec
     }
 
     switch (paramtype) {
-        case TYPE_INT:
-            longval = PyInt_AsLong(parameter);
-            rc = sqlite3_bind_int64(self->st, pos, (sqlite_int64)longval);
+        case TYPE_INT: {
+            long longval = PyInt_AsLong(parameter);
+            rc = sqlite3_bind_int64(self->st, pos, longval);
             break;
-        case TYPE_LONG:
-            longlongval = PyLong_AsLongLong(parameter);
-            /* in the overflow error case, longlongval is -1, and an exception is set */
-            rc = sqlite3_bind_int64(self->st, pos, (sqlite_int64)longlongval);
+        }
+        case TYPE_LONG: {
+            sqlite_int64 value = _pysqlite_long_as_int64(parameter);
+            if (value == -1 && PyErr_Occurred())
+                rc = -1;
+            else
+                rc = sqlite3_bind_int64(self->st, pos, (sqlite_int64)value);
             break;
+        }
         case TYPE_FLOAT:
             rc = sqlite3_bind_double(self->st, pos, PyFloat_AsDouble(parameter));
             break;
         case TYPE_STRING:
-            string = PyString_AS_STRING(parameter);
-            rc = sqlite3_bind_text(self->st, pos, string, -1, SQLITE_TRANSIENT);
+            PyString_AsStringAndSize(parameter, &string, &buflen);
+            rc = sqlite3_bind_text(self->st, pos, string, buflen, SQLITE_TRANSIENT);
             break;
         case TYPE_UNICODE:
             stringval = PyUnicode_AsUTF8String(parameter);
-            string = PyString_AsString(stringval);
-            rc = sqlite3_bind_text(self->st, pos, string, -1, SQLITE_TRANSIENT);
+            PyString_AsStringAndSize(stringval, &string, &buflen);
+            rc = sqlite3_bind_text(self->st, pos, string, buflen, SQLITE_TRANSIENT);
             Py_DECREF(stringval);
             break;
         case TYPE_BUFFER:
@@ -198,7 +201,7 @@ static int _need_adapt(PyObject* obj)
         return 1;
     }
 
-    if (PyInt_CheckExact(obj) || PyLong_CheckExact(obj) 
+    if (PyInt_CheckExact(obj) || PyLong_CheckExact(obj)
             || PyFloat_CheckExact(obj) || PyString_CheckExact(obj)
             || PyUnicode_CheckExact(obj) || PyBuffer_Check(obj)) {
         return 0;

@@ -22,6 +22,9 @@ the expense of doing their own locking).
 #endif
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifdef WITH_THREAD
 #include "pythread.h"
@@ -29,10 +32,6 @@ static PyThread_type_lock head_mutex = NULL; /* Protects interp->tstate_head */
 #define HEAD_INIT() (void)(head_mutex || (head_mutex = PyThread_allocate_lock()))
 #define HEAD_LOCK() PyThread_acquire_lock(head_mutex, WAIT_LOCK)
 #define HEAD_UNLOCK() PyThread_release_lock(head_mutex)
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* The single PyInterpreterState used by this process'
    GILState implementation
@@ -193,6 +192,9 @@ new_threadstate(PyInterpreterState *interp, int init)
         tstate->c_profileobj = NULL;
         tstate->c_traceobj = NULL;
 
+        tstate->trash_delete_nesting = 0;
+        tstate->trash_delete_later = NULL;
+
         if (init)
             _PyThreadState_Init(tstate);
 
@@ -298,7 +300,7 @@ PyThreadState_Delete(PyThreadState *tstate)
         Py_FatalError("PyThreadState_Delete: tstate is still current");
     tstate_delete_common(tstate);
 #ifdef WITH_THREAD
-    if (autoTLSkey && PyThread_get_key_value(autoTLSkey) == tstate)
+    if (autoInterpreterState && PyThread_get_key_value(autoTLSkey) == tstate)
         PyThread_delete_key_value(autoTLSkey);
 #endif /* WITH_THREAD */
 }
@@ -314,7 +316,7 @@ PyThreadState_DeleteCurrent()
             "PyThreadState_DeleteCurrent: no current tstate");
     _PyThreadState_Current = NULL;
     tstate_delete_common(tstate);
-    if (autoTLSkey && PyThread_get_key_value(autoTLSkey) == tstate)
+    if (autoInterpreterState && PyThread_get_key_value(autoTLSkey) == tstate)
         PyThread_delete_key_value(autoTLSkey);
     PyEval_ReleaseLock();
 }
@@ -463,7 +465,7 @@ _PyThread_CurrentFrames(void)
     /* for i in all interpreters:
      *     for t in all of i's thread states:
      *          if t's frame isn't NULL, map t's id to its frame
-     * Because these lists can mutute even when the GIL is held, we
+     * Because these lists can mutate even when the GIL is held, we
      * need to grab head_mutex for the duration.
      */
     HEAD_LOCK();
@@ -534,7 +536,6 @@ void
 _PyGILState_Fini(void)
 {
     PyThread_delete_key(autoTLSkey);
-    autoTLSkey = 0;
     autoInterpreterState = NULL;
 }
 
@@ -546,10 +547,10 @@ _PyGILState_Fini(void)
 static void
 _PyGILState_NoteThreadState(PyThreadState* tstate)
 {
-    /* If autoTLSkey is 0, this must be the very first threadstate created
-       in Py_Initialize().  Don't do anything for now (we'll be back here
-       when _PyGILState_Init is called). */
-    if (!autoTLSkey)
+    /* If autoTLSkey isn't initialized, this must be the very first
+       threadstate created in Py_Initialize().  Don't do anything for now
+       (we'll be back here when _PyGILState_Init is called). */
+    if (!autoInterpreterState)
         return;
 
     /* Stick the thread state for this thread in thread local storage.
@@ -577,7 +578,7 @@ _PyGILState_NoteThreadState(PyThreadState* tstate)
 PyThreadState *
 PyGILState_GetThisThreadState(void)
 {
-    if (autoInterpreterState == NULL || autoTLSkey == 0)
+    if (autoInterpreterState == NULL)
         return NULL;
     return (PyThreadState *)PyThread_get_key_value(autoTLSkey);
 }
@@ -655,10 +656,10 @@ PyGILState_Release(PyGILState_STATE oldstate)
         PyEval_SaveThread();
 }
 
+#endif /* WITH_THREAD */
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* WITH_THREAD */
 
 

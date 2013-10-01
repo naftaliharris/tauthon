@@ -156,12 +156,9 @@ class AutoComplete:
         if not comp_lists[0]:
             return
         self.autocompletewindow = self._make_autocomplete_window()
-        self.autocompletewindow.show_window(comp_lists,
-                                            "insert-%dc" % len(comp_start),
-                                            complete,
-                                            mode,
-                                            userWantsWin)
-        return True
+        return not self.autocompletewindow.show_window(
+                comp_lists, "insert-%dc" % len(comp_start),
+                complete, mode, userWantsWin)
 
     def fetch_completions(self, what, mode):
         """Return a pair of lists of completions for something. The first list
@@ -190,8 +187,7 @@ class AutoComplete:
                     bigl = eval("dir()", namespace)
                     bigl.sort()
                     if "__all__" in bigl:
-                        smalll = eval("__all__", namespace)
-                        smalll.sort()
+                        smalll = sorted(eval("__all__", namespace))
                     else:
                         smalll = [s for s in bigl if s[:1] != '_']
                 else:
@@ -200,8 +196,7 @@ class AutoComplete:
                         bigl = dir(entity)
                         bigl.sort()
                         if "__all__" in bigl:
-                            smalll = entity.__all__
-                            smalll.sort()
+                            smalll = sorted(entity.__all__)
                         else:
                             smalll = [s for s in bigl if s[:1] != '_']
                     except:

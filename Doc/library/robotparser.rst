@@ -16,9 +16,9 @@
 
 .. note::
    The :mod:`robotparser` module has been renamed :mod:`urllib.robotparser` in
-   Python 3.0.
+   Python 3.
    The :term:`2to3` tool will automatically adapt imports when converting
-   your sources to 3.0.
+   your sources to Python 3.
 
 This module provides a single class, :class:`RobotFileParser`, which answers
 questions about whether or not a particular user agent can fetch a URL on the
@@ -26,10 +26,10 @@ Web site that published the :file:`robots.txt` file.  For more details on the
 structure of :file:`robots.txt` files, see http://www.robotstxt.org/orig.html.
 
 
-.. class:: RobotFileParser()
+.. class:: RobotFileParser(url='')
 
-   This class provides a set of methods to read, parse and answer questions
-   about a single :file:`robots.txt` file.
+   This class provides methods to read, parse and answer questions about the
+   :file:`robots.txt` file at *url*.
 
 
    .. method:: set_url(url)

@@ -1,18 +1,24 @@
+import array
 import unittest
-from test.test_support import TestSkipped, run_unittest
+from test.test_support import run_unittest, import_module, get_attribute
 import os, struct
-try:
-    import fcntl, termios
-except ImportError:
-    raise TestSkipped("No fcntl or termios module")
-if not hasattr(termios,'TIOCGPGRP'):
-    raise TestSkipped("termios module doesn't have TIOCGPGRP")
+fcntl = import_module('fcntl')
+termios = import_module('termios')
+get_attribute(termios, 'TIOCGPGRP') #Can't run tests without this feature
 
 try:
     tty = open("/dev/tty", "r")
-    tty.close()
 except IOError:
-    raise TestSkipped("Unable to open /dev/tty")
+    raise unittest.SkipTest("Unable to open /dev/tty")
+else:
+    # Skip if another process is in foreground
+    r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
+    tty.close()
+    rpgrp = struct.unpack("i", r)[0]
+    if rpgrp not in (os.getpgrp(), os.getsid(0)):
+        raise unittest.SkipTest("Neither the process group nor the session "
+                                "are attached to /dev/tty")
+    del tty, r, rpgrp
 
 try:
     import pty
@@ -27,21 +33,41 @@ class IoctlTests(unittest.TestCase):
         tty = open("/dev/tty", "r")
         r = fcntl.ioctl(tty, termios.TIOCGPGRP, "    ")
         rpgrp = struct.unpack("i", r)[0]
-        self.assert_(rpgrp in ids, "%s not in %s" % (rpgrp, ids))
+        self.assertIn(rpgrp, ids)
+
+    def _check_ioctl_mutate_len(self, nbytes=None):
+        buf = array.array('i')
+        intsize = buf.itemsize
+        ids = (os.getpgrp(), os.getsid(0))
+        # A fill value unlikely to be in `ids`
+        fill = -12345
+        if nbytes is not None:
+            # Extend the buffer so that it is exactly `nbytes` bytes long
+            buf.extend([fill] * (nbytes // intsize))
+            self.assertEqual(len(buf) * intsize, nbytes)   # sanity check
+        else:
+            buf.append(fill)
+        with open("/dev/tty", "r") as tty:
+            r = fcntl.ioctl(tty, termios.TIOCGPGRP, buf, 1)
+        rpgrp = buf[0]
+        self.assertEqual(r, 0)
+        self.assertIn(rpgrp, ids)
 
     def test_ioctl_mutate(self):
-        import array
-        buf = array.array('i', [0])
-        ids = (os.getpgrp(), os.getsid(0))
-        tty = open("/dev/tty", "r")
-        r = fcntl.ioctl(tty, termios.TIOCGPGRP, buf, 1)
-        rpgrp = buf[0]
-        self.assertEquals(r, 0)
-        self.assert_(rpgrp in ids, "%s not in %s" % (rpgrp, ids))
+        self._check_ioctl_mutate_len()
+
+    def test_ioctl_mutate_1024(self):
+        # Issue #9758: a mutable buffer of exactly 1024 bytes wouldn't be
+        # copied back after the system call.
+        self._check_ioctl_mutate_len(1024)
+
+    def test_ioctl_mutate_2048(self):
+        # Test with a larger buffer, just for the record.
+        self._check_ioctl_mutate_len(2048)
 
     def test_ioctl_signed_unsigned_code_param(self):
         if not pty:
-            raise TestSkipped('pty module required')
+            raise unittest.SkipTest('pty module required')
         mfd, sfd = pty.openpty()
         try:
             if termios.TIOCSWINSZ < 0:

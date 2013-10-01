@@ -133,7 +133,12 @@ class RobotFileParser:
             return True
         # search for given user agent matches
         # the first match counts
-        url = urllib.quote(urlparse.urlparse(urllib.unquote(url))[2]) or "/"
+        parsed_url = urlparse.urlparse(urllib.unquote(url))
+        url = urlparse.urlunparse(('', '', parsed_url.path,
+            parsed_url.params, parsed_url.query, parsed_url.fragment))
+        url = urllib.quote(url)
+        if not url:
+            url = "/"
         for entry in self.entries:
             if entry.applies_to(useragent):
                 return entry.allowance(url)
@@ -155,6 +160,7 @@ class RuleLine:
         if path == '' and not allowance:
             # an empty value means allow all
             allowance = True
+        path = urlparse.urlunparse(urlparse.urlparse(path))
         self.path = urllib.quote(path)
         self.allowance = allowance
 

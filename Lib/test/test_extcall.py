@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 """Doctest for method/function calls.
 
 We're going the use these types for extra testing
@@ -235,7 +236,7 @@ first argument (got int instance instead)
     TypeError: unbound method method() must be called with Foo instance as \
 first argument (got int instance instead)
 
-A PyCFunction that takes only positional parameters shoud allow an
+A PyCFunction that takes only positional parameters should allow an
 empty keyword dictionary to pass without a complaint, but raise a
 TypeError if te dictionary is not empty
 
@@ -251,13 +252,50 @@ TypeError if te dictionary is not empty
       ...
     TypeError: id() takes no keyword arguments
 
+A corner case of keyword dictionary items being deleted during
+the function call setup. See <http://bugs.python.org/issue2016>.
+
+    >>> class Name(str):
+    ...     def __eq__(self, other):
+    ...         try:
+    ...              del x[self]
+    ...         except KeyError:
+    ...              pass
+    ...         return str.__eq__(self, other)
+    ...     def __hash__(self):
+    ...         return str.__hash__(self)
+
+    >>> x = {Name("a"):1, Name("b"):2}
+    >>> def f(a, b):
+    ...     print a,b
+    >>> f(**x)
+    1 2
+
+A obscure message:
+
+    >>> def f(a, b):
+    ...    pass
+    >>> f(b=1)
+    Traceback (most recent call last):
+      ...
+    TypeError: f() takes exactly 2 arguments (1 given)
+
+The number of arguments passed in includes keywords:
+
+    >>> def f(a):
+    ...    pass
+    >>> f(6, a=4, *(1, 2, 3))
+    Traceback (most recent call last):
+      ...
+    TypeError: f() takes exactly 1 argument (5 given)
 """
 
 import unittest
+import sys
 from test import test_support
 
 
-class UnicodeKeywordArgsTest(unittest.TestCase):
+class ExtCallTest(unittest.TestCase):
 
     def test_unicode_keywords(self):
         def f(a):
@@ -274,9 +312,8 @@ class UnicodeKeywordArgsTest(unittest.TestCase):
 
 
 def test_main():
-    from test import test_extcall # self import
-    test_support.run_doctest(test_extcall, True)
-    test_support.run_unittest(UnicodeKeywordArgsTest)
+    test_support.run_doctest(sys.modules[__name__], True)
+    test_support.run_unittest(ExtCallTest)
 
 if __name__ == '__main__':
     test_main()
