@@ -34,6 +34,7 @@ saferepr()
 
 """
 
+import re
 import sys as _sys
 from collections import OrderedDict as _OrderedDict
 from io import StringIO as _StringIO
@@ -48,15 +49,18 @@ _len = len
 _type = type
 
 
-def pprint(object, stream=None, indent=1, width=80, depth=None):
+def pprint(object, stream=None, indent=1, width=80, depth=None, *,
+           compact=False):
     """Pretty-print a Python object to a stream [default is sys.stdout]."""
     printer = PrettyPrinter(
-        stream=stream, indent=indent, width=width, depth=depth)
+        stream=stream, indent=indent, width=width, depth=depth,
+        compact=compact)
     printer.pprint(object)
 
-def pformat(object, indent=1, width=80, depth=None):
+def pformat(object, indent=1, width=80, depth=None, *, compact=False):
     """Format a Python object into a pretty-printed representation."""
-    return PrettyPrinter(indent=indent, width=width, depth=depth).pformat(object)
+    return PrettyPrinter(indent=indent, width=width, depth=depth,
+                         compact=compact).pformat(object)
 
 def saferepr(object):
     """Version of repr() which can handle recursive data structures."""
@@ -92,8 +96,8 @@ class _safe_key:
             rv = NotImplemented
 
         if rv is NotImplemented:
-            rv = (str(type(self.obj)), id(self.obj)) < \
-                 (str(type(other.obj)), id(other.obj))
+            rv = (str(_type(self.obj)), _id(self.obj)) < \
+                 (str(_type(other.obj)), _id(other.obj))
         return rv
 
 def _safe_tuple(t):
@@ -101,7 +105,8 @@ def _safe_tuple(t):
     return _safe_key(t[0]), _safe_key(t[1])
 
 class PrettyPrinter:
-    def __init__(self, indent=1, width=80, depth=None, stream=None):
+    def __init__(self, indent=1, width=80, depth=None, stream=None, *,
+                 compact=False):
         """Handle pretty printing operations onto a stream using a set of
         configured parameters.
 
@@ -118,6 +123,9 @@ class PrettyPrinter:
             The desired output stream.  If omitted (or false), the standard
             output stream available at construction will be used.
 
+        compact
+            If true, several items will be combined in one line.
+
         """
         indent = int(indent)
         width = int(width)
@@ -131,6 +139,7 @@ class PrettyPrinter:
             self._stream = stream
         else:
             self._stream = _sys.stdout
+        self._compact = bool(compact)
 
     def pprint(self, object):
         self._format(object, self._stream, 0, 0, {}, 0)
@@ -158,12 +167,9 @@ class PrettyPrinter:
             return
         rep = self._repr(object, context, level - 1)
         typ = _type(object)
-        sepLines = _len(rep) > (self._width - 1 - indent - allowance)
+        max_width = self._width - 1 - indent - allowance
+        sepLines = _len(rep) > max_width
         write = stream.write
-
-        if self._depth and level > self._depth:
-            write(rep)
-            return
 
         if sepLines:
             r = getattr(typ, "__repr__", None)
@@ -219,28 +225,76 @@ class PrettyPrinter:
                         write(typ.__name__)
                         write('({')
                         endchar = '})'
-                        indent += len(typ.__name__) + 1
+                        indent += _len(typ.__name__) + 1
                     object = sorted(object, key=_safe_key)
                 if self._indent_per_level > 1:
                     write((self._indent_per_level - 1) * ' ')
                 if length:
                     context[objid] = 1
-                    indent = indent + self._indent_per_level
-                    self._format(object[0], stream, indent, allowance + 1,
-                                 context, level)
-                    if length > 1:
-                        for ent in object[1:]:
-                            write(',\n' + ' '*indent)
-                            self._format(ent, stream, indent,
-                                          allowance + 1, context, level)
-                    indent = indent - self._indent_per_level
+                    self._format_items(object, stream,
+                                       indent + self._indent_per_level,
+                                       allowance + 1, context, level)
                     del context[objid]
                 if issubclass(typ, tuple) and length == 1:
                     write(',')
                 write(endchar)
                 return
 
+            if issubclass(typ, str) and _len(object) > 0 and r is str.__repr__:
+                def _str_parts(s):
+                    """
+                    Return a list of string literals comprising the repr()
+                    of the given string using literal concatenation.
+                    """
+                    lines = s.splitlines(True)
+                    for i, line in enumerate(lines):
+                        rep = repr(line)
+                        if _len(rep) <= max_width:
+                            yield rep
+                        else:
+                            # A list of alternating (non-space, space) strings
+                            parts = re.split(r'(\s+)', line) + ['']
+                            current = ''
+                            for i in range(0, _len(parts), 2):
+                                part = parts[i] + parts[i+1]
+                                candidate = current + part
+                                if _len(repr(candidate)) > max_width:
+                                    if current:
+                                        yield repr(current)
+                                    current = part
+                                else:
+                                    current = candidate
+                            if current:
+                                yield repr(current)
+                for i, rep in enumerate(_str_parts(object)):
+                    if i > 0:
+                        write('\n' + ' '*indent)
+                    write(rep)
+                return
         write(rep)
+
+    def _format_items(self, items, stream, indent, allowance, context, level):
+        write = stream.write
+        delimnl = ',\n' + ' ' * indent
+        delim = ''
+        width = max_width = self._width - indent - allowance + 2
+        for ent in items:
+            if self._compact:
+                rep = self._repr(ent, context, level)
+                w = _len(rep) + 2
+                if width < w:
+                    width = max_width
+                    if delim:
+                        delim = delimnl
+                if width >= w:
+                    width -= w
+                    write(delim)
+                    delim = ', '
+                    write(rep)
+                    continue
+            write(delim)
+            delim = delimnl
+            self._format(ent, stream, indent, allowance, context, level)
 
     def _repr(self, object, context, level):
         repr, readable, recursive = self.format(object, context.copy(),
