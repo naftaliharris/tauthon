@@ -51,6 +51,11 @@ Module :mod:`aifc` defines the following function:
    used for writing, the file object should be seekable, unless you know ahead of
    time how many samples you are going to write in total and use
    :meth:`writeframesraw` and :meth:`setnframes`.
+   The :func:`.open` function may be used in a :keyword:`with` statement.  When
+   the :keyword:`with` block completes, the :meth:`~aifc.close` method is called.
+
+.. versionchanged:: 3.4
+   Support for the :keyword:`with` statement was added.
 
 Objects returned by :func:`.open` when a file is opened for reading have the
 following methods:
@@ -92,7 +97,9 @@ following methods:
 
 .. method:: aifc.getparams()
 
-   Return a tuple consisting of all of the above values in the above order.
+   Returns a :func:`~collections.namedtuple` ``(nchannels, sampwidth,
+   framerate, nframes, comptype, compname)``, equivalent to output of the
+   :meth:`get\*` methods.
 
 
 .. method:: aifc.getmarkers()
