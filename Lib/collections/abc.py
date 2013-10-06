@@ -454,8 +454,7 @@ class KeysView(MappingView, Set):
         return key in self._mapping
 
     def __iter__(self):
-        for key in self._mapping:
-            yield key
+        yield from self._mapping
 
 KeysView.register(dict_keys)
 
@@ -644,6 +643,7 @@ class Sequence(Sized, Iterable, Container):
 Sequence.register(tuple)
 Sequence.register(str)
 Sequence.register(range)
+Sequence.register(memoryview)
 
 
 class ByteString(Sequence):
@@ -663,7 +663,7 @@ class MutableSequence(Sequence):
 
     __slots__ = ()
 
-    """All the operations on a read-only sequence.
+    """All the operations on a read-write sequence.
 
     Concrete subclasses must provide __new__ or __init__,
     __getitem__, __setitem__, __delitem__, __len__, and insert().
