@@ -140,19 +140,6 @@ divmod(int x, int y, int *r)
     return quo;
 }
 
-/* Round a double to the nearest long.  |x| must be small enough to fit
- * in a C long; this is not checked.
- */
-static long
-round_to_long(double x)
-{
-    if (x >= 0.0)
-        x = floor(x + 0.5);
-    else
-        x = ceil(x - 0.5);
-    return (long)x;
-}
-
 /* Nearest integer to m / n for integers m and n. Half-integer results
  * are rounded to even.
  */
@@ -1397,7 +1384,7 @@ cmperror(PyObject *a, PyObject *b)
  */
 
 /* Conversion factors. */
-static PyObject *us_per_us = NULL;      /* 1 */
+static PyObject *one = NULL;      /* 1 */
 static PyObject *us_per_ms = NULL;      /* 1000 */
 static PyObject *us_per_second = NULL;  /* 1000000 */
 static PyObject *us_per_minute = NULL;  /* 1e6 * 60 as Python int */
@@ -2119,7 +2106,7 @@ delta_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         goto Done
 
     if (us) {
-        y = accum("microseconds", x, us, us_per_us, &leftover_us);
+        y = accum("microseconds", x, us, one, &leftover_us);
         CLEANUP;
     }
     if (ms) {
@@ -2148,7 +2135,33 @@ delta_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     }
     if (leftover_us) {
         /* Round to nearest whole # of us, and add into x. */
-        PyObject *temp = PyLong_FromLong(round_to_long(leftover_us));
+        double whole_us = round(leftover_us);
+        int x_is_odd;
+        PyObject *temp;
+
+        whole_us = round(leftover_us);
+        if (fabs(whole_us - leftover_us) == 0.5) {
+            /* We're exactly halfway between two integers.  In order
+             * to do round-half-to-even, we must determine whether x
+             * is odd. Note that x is odd when it's last bit is 1. The
+             * code below uses bitwise and operation to check the last
+             * bit. */
+	    temp = PyNumber_And(x, one);  /* temp <- x & 1 */
+            if (temp == NULL) {
+                Py_DECREF(x);
+                goto Done;
+            }
+            x_is_odd = PyObject_IsTrue(temp);
+            Py_DECREF(temp);
+            if (x_is_odd == -1) {
+                Py_DECREF(x);
+                goto Done;
+            }
+            whole_us = 2.0 * round((leftover_us + x_is_odd) * 0.5) - x_is_odd;
+        }
+
+        temp = PyLong_FromLong((long)whole_us);
+
         if (temp == NULL) {
             Py_DECREF(x);
             goto Done;
@@ -2239,22 +2252,14 @@ delta_total_seconds(PyObject *self)
 {
     PyObject *total_seconds;
     PyObject *total_microseconds;
-    PyObject *one_million;
 
     total_microseconds = delta_to_microseconds((PyDateTime_Delta *)self);
     if (total_microseconds == NULL)
         return NULL;
 
-    one_million = PyLong_FromLong(1000000L);
-    if (one_million == NULL) {
-        Py_DECREF(total_microseconds);
-        return NULL;
-    }
-
-    total_seconds = PyNumber_TrueDivide(total_microseconds, one_million);
+    total_seconds = PyNumber_TrueDivide(total_microseconds, us_per_second);
 
     Py_DECREF(total_microseconds);
-    Py_DECREF(one_million);
     return total_seconds;
 }
 
@@ -4749,7 +4754,7 @@ local_timezone(PyDateTime_DateTime *utc_time)
             goto error;
     }
     result = new_timezone(delta, nameo);
-    Py_DECREF(nameo);
+    Py_XDECREF(nameo);
   error:
     Py_DECREF(delta);
     return result;
@@ -4873,9 +4878,16 @@ datetime_timestamp(PyDateTime_DateTime *self)
         time.tm_wday = -1;
         time.tm_isdst = -1;
         timestamp = mktime(&time);
-        /* Return value of -1 does not necessarily mean an error, but tm_wday
-         * cannot remain set to -1 if mktime succeeded. */
-        if (timestamp == (time_t)(-1) && time.tm_wday == -1) {
+        if (timestamp == (time_t)(-1)
+#ifndef _AIX
+            /* Return value of -1 does not necessarily mean an error,
+             * but tm_wday cannot remain set to -1 if mktime succeeded. */
+            && time.tm_wday == -1
+#else
+            /* on AIX, tm_wday is always sets, even on error */
+#endif
+          )
+        {
             PyErr_SetString(PyExc_OverflowError,
                             "timestamp out of range");
             return NULL;
@@ -5299,8 +5311,8 @@ PyInit__datetime(void)
       return NULL;
 
     /* module initialization */
-    PyModule_AddIntConstant(m, "MINYEAR", MINYEAR);
-    PyModule_AddIntConstant(m, "MAXYEAR", MAXYEAR);
+    PyModule_AddIntMacro(m, MINYEAR);
+    PyModule_AddIntMacro(m, MAXYEAR);
 
     Py_INCREF(&PyDateTime_DateType);
     PyModule_AddObject(m, "date", (PyObject *) &PyDateTime_DateType);
@@ -5344,12 +5356,12 @@ PyInit__datetime(void)
     assert(DI100Y == 25 * DI4Y - 1);
     assert(DI100Y == days_before_year(100+1));
 
-    us_per_us = PyLong_FromLong(1);
+    one = PyLong_FromLong(1);
     us_per_ms = PyLong_FromLong(1000);
     us_per_second = PyLong_FromLong(1000000);
     us_per_minute = PyLong_FromLong(60000000);
     seconds_per_day = PyLong_FromLong(24 * 3600);
-    if (us_per_us == NULL || us_per_ms == NULL || us_per_second == NULL ||
+    if (one == NULL || us_per_ms == NULL || us_per_second == NULL ||
         us_per_minute == NULL || seconds_per_day == NULL)
         return NULL;
 
