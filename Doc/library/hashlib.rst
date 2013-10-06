@@ -51,9 +51,13 @@ concatenation of the data fed to it so far using the :meth:`digest` or
 .. index:: single: OpenSSL; (use in module hashlib)
 
 Constructors for hash algorithms that are always present in this module are
-:func:`md5`, :func:`sha1`, :func:`sha224`, :func:`sha256`, :func:`sha384`, and
-:func:`sha512`.  Additional algorithms may also be available depending upon the
-OpenSSL library that Python uses on your platform.
+:func:`md5`, :func:`sha1`, :func:`sha224`, :func:`sha256`, :func:`sha384`,
+:func:`sha512`, :func:`sha3_224`, :func:`sha3_256`, :func:`sha3_384`, and
+:func:`sha3_512`. Additional algorithms may also be available depending upon
+the OpenSSL library that Python uses on your platform.
+
+   .. versionchanged:: 3.4
+      Add sha3 family of hash algorithms.
 
 For example, to obtain the digest of the byte string ``b'Nobody inspects the
 spammish repetition'``::
@@ -119,6 +123,18 @@ returned by the constructors:
 .. data:: hash.block_size
 
    The internal block size of the hash algorithm in bytes.
+
+A hash object has the following attributes:
+
+.. attribute:: hash.name
+
+   The canonical name of this hash, always lowercase and always suitable as a
+   parameter to :func:`new` to create another hash of this type.
+
+   .. versionchanged:: 3.4
+      The name attribute has been present in CPython since its inception, but
+      until Python 3.4 was not formally specified, so may not exist on some
+      platforms.
 
 A hash object has the following methods:
 
