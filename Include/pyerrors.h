@@ -75,6 +75,7 @@ typedef PyOSErrorObject PyWindowsErrorObject;
 
 PyAPI_FUNC(void) PyErr_SetNone(PyObject *);
 PyAPI_FUNC(void) PyErr_SetObject(PyObject *, PyObject *);
+PyAPI_FUNC(void) _PyErr_SetKeyError(PyObject *);
 PyAPI_FUNC(void) PyErr_SetString(
     PyObject *exception,
     const char *string   /* decoded from utf-8 */
@@ -301,8 +302,15 @@ PyAPI_FUNC(void) PyErr_SyntaxLocationEx(
     const char *filename,       /* decoded from the filesystem encoding */
     int lineno,
     int col_offset);
+PyAPI_FUNC(void) PyErr_SyntaxLocationObject(
+    PyObject *filename,
+    int lineno,
+    int col_offset);
 PyAPI_FUNC(PyObject *) PyErr_ProgramText(
     const char *filename,       /* decoded from the filesystem encoding */
+    int lineno);
+PyAPI_FUNC(PyObject *) PyErr_ProgramTextObject(
+    PyObject *filename,
     int lineno);
 
 /* The following functions are used to create and modify unicode
