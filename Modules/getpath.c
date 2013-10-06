@@ -346,7 +346,7 @@ search_for_prefix(wchar_t *argv0_path, wchar_t *home, wchar_t *_prefix)
             wcsncpy(prefix, argv0_path, MAXPATHLEN);
             prefix[MAXPATHLEN] = L'\0';
             joinpath(prefix, vpath);
-            PyMem_Free(vpath);
+            PyMem_RawFree(vpath);
             joinpath(prefix, L"Lib");
             joinpath(prefix, LANDMARK);
             if (ismodule(prefix))
@@ -562,8 +562,7 @@ calculate_path(void)
     }
     else
         progpath[0] = '\0';
-    if (path_buffer != NULL)
-        PyMem_Free(path_buffer);
+    PyMem_RawFree(path_buffer);
     if (progpath[0] != SEP && progpath[0] != '\0')
         absolutize(progpath);
     wcsncpy(argv0_path, progpath, MAXPATHLEN);
@@ -605,7 +604,7 @@ calculate_path(void)
             /* Use the location of the library as the progpath */
             wcsncpy(argv0_path, wbuf, MAXPATHLEN);
         }
-        PyMem_Free(wbuf);
+        PyMem_RawFree(wbuf);
     }
 #endif
 
@@ -707,13 +706,11 @@ calculate_path(void)
      */
     bufsz = 0;
 
-    if (_rtpypath) {
+    if (_rtpypath && _rtpypath[0] != '\0') {
         size_t rtpypath_len;
         rtpypath = _Py_char2wchar(_rtpypath, &rtpypath_len);
         if (rtpypath != NULL)
             bufsz += rtpypath_len + 1;
-        else
-            _rtpypath = NULL;
     }
 
     defpath = _pythonpath;
@@ -818,11 +815,10 @@ calculate_path(void)
     else
         wcsncpy(exec_prefix, _exec_prefix, MAXPATHLEN);
 
-    PyMem_Free(_pythonpath);
-    PyMem_Free(_prefix);
-    PyMem_Free(_exec_prefix);
-    if (rtpypath != NULL)
-        PyMem_Free(rtpypath);
+    PyMem_RawFree(_pythonpath);
+    PyMem_RawFree(_prefix);
+    PyMem_RawFree(_exec_prefix);
+    PyMem_RawFree(rtpypath);
 }
 
 
@@ -832,7 +828,7 @@ Py_SetPath(const wchar_t *path)
 {
     if (module_search_path != NULL) {
         if (module_search_path_malloced)
-            PyMem_Free(module_search_path);
+            PyMem_RawFree(module_search_path);
         module_search_path = NULL;
         module_search_path_malloced = 0;
     }
@@ -841,7 +837,7 @@ Py_SetPath(const wchar_t *path)
         wchar_t *prog = Py_GetProgramName();
         wcsncpy(progpath, prog, MAXPATHLEN);
         exec_prefix[0] = prefix[0] = L'\0';
-        module_search_path = PyMem_Malloc((wcslen(path) + 1) * sizeof(wchar_t));
+        module_search_path = PyMem_RawMalloc((wcslen(path) + 1) * sizeof(wchar_t));
         module_search_path_malloced = 1;
         if (module_search_path != NULL)
             wcscpy(module_search_path, path);
