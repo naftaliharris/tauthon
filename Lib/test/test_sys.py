@@ -6,6 +6,8 @@ import textwrap
 import warnings
 import operator
 import codecs
+import gc
+import sysconfig
 
 # count the number of test runs, used to create unique
 # strings to intern in test_intern()
@@ -480,7 +482,7 @@ class SysModuleTest(unittest.TestCase):
     def test_thread_info(self):
         info = sys.thread_info
         self.assertEqual(len(info), 3)
-        self.assertIn(info.name, ('nt', 'os2', 'pthread', 'solaris', None))
+        self.assertIn(info.name, ('nt', 'pthread', 'solaris', None))
         self.assertIn(info.lock, ('semaphore', 'mutex+cond', None))
 
     def test_43581(self):
@@ -513,7 +515,7 @@ class SysModuleTest(unittest.TestCase):
         attrs = ("debug",
                  "inspect", "interactive", "optimize", "dont_write_bytecode",
                  "no_user_site", "no_site", "ignore_environment", "verbose",
-                 "bytes_warning", "quiet", "hash_randomization")
+                 "bytes_warning", "quiet", "hash_randomization", "isolated")
         for attr in attrs:
             self.assertTrue(hasattr(sys.flags, attr), attr)
             self.assertEqual(type(getattr(sys.flags, attr)), int, attr)
@@ -541,6 +543,42 @@ class SysModuleTest(unittest.TestCase):
                              stdout = subprocess.PIPE, env=env)
         out = p.communicate()[0].strip()
         self.assertEqual(out, b'?')
+
+        env["PYTHONIOENCODING"] = "ascii"
+        p = subprocess.Popen([sys.executable, "-c", 'print(chr(0xa2))'],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             env=env)
+        out, err = p.communicate()
+        self.assertEqual(out, b'')
+        self.assertIn(b'UnicodeEncodeError:', err)
+        self.assertIn(rb"'\xa2'", err)
+
+        env["PYTHONIOENCODING"] = "ascii:"
+        p = subprocess.Popen([sys.executable, "-c", 'print(chr(0xa2))'],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             env=env)
+        out, err = p.communicate()
+        self.assertEqual(out, b'')
+        self.assertIn(b'UnicodeEncodeError:', err)
+        self.assertIn(rb"'\xa2'", err)
+
+        env["PYTHONIOENCODING"] = ":surrogateescape"
+        p = subprocess.Popen([sys.executable, "-c", 'print(chr(0xdcbd))'],
+                             stdout=subprocess.PIPE, env=env)
+        out = p.communicate()[0].strip()
+        self.assertEqual(out, b'\xbd')
+
+    @unittest.skipUnless(test.support.FS_NONASCII,
+                         'requires OS support of non-ASCII encodings')
+    def test_ioencoding_nonascii(self):
+        env = dict(os.environ)
+
+        env["PYTHONIOENCODING"] = ""
+        p = subprocess.Popen([sys.executable, "-c",
+                                'print(%a)' % test.support.FS_NONASCII],
+                                stdout=subprocess.PIPE, env=env)
+        out = p.communicate()[0].strip()
+        self.assertEqual(out, os.fsencode(test.support.FS_NONASCII))
 
     @unittest.skipIf(sys.base_prefix != sys.prefix,
                      'Test is not venv-compatible')
@@ -609,6 +647,36 @@ class SysModuleTest(unittest.TestCase):
         ret, out, err = assert_python_ok(*args)
         self.assertIn(b"free PyDictObjects", err)
 
+    @unittest.skipUnless(hasattr(sys, "getallocatedblocks"),
+                         "sys.getallocatedblocks unavailable on this build")
+    def test_getallocatedblocks(self):
+        # Some sanity checks
+        with_pymalloc = sysconfig.get_config_var('WITH_PYMALLOC')
+        a = sys.getallocatedblocks()
+        self.assertIs(type(a), int)
+        if with_pymalloc:
+            self.assertGreater(a, 0)
+        else:
+            # When WITH_PYMALLOC isn't available, we don't know anything
+            # about the underlying implementation: the function might
+            # return 0 or something greater.
+            self.assertGreaterEqual(a, 0)
+        try:
+            # While we could imagine a Python session where the number of
+            # multiple buffer objects would exceed the sharing of references,
+            # it is unlikely to happen in a normal test run.
+            self.assertLess(a, sys.gettotalrefcount())
+        except AttributeError:
+            # gettotalrefcount() not available
+            pass
+        gc.collect()
+        b = sys.getallocatedblocks()
+        self.assertLessEqual(b, a)
+        gc.collect()
+        c = sys.getallocatedblocks()
+        self.assertIn(c, range(b - 50, b + 50))
+
+
 class SizeofTest(unittest.TestCase):
 
     def setUp(self):
@@ -653,7 +721,7 @@ class SizeofTest(unittest.TestCase):
         samples = [b'', b'u'*100000]
         for sample in samples:
             x = bytearray(sample)
-            check(x, vsize('inP') + x.__alloc__())
+            check(x, vsize('n2Pi') + x.__alloc__())
         # bytearray_iterator
         check(iter(bytearray()), size('nP'))
         # cell
@@ -732,7 +800,7 @@ class SizeofTest(unittest.TestCase):
         nfrees = len(x.f_code.co_freevars)
         extras = x.f_code.co_stacksize + x.f_code.co_nlocals +\
                   ncells + nfrees - 1
-        check(x, vsize('12P3i' + CO_MAXBLOCKS*'3i' + 'P' + extras*'P'))
+        check(x, vsize('13P3ic' + CO_MAXBLOCKS*'3i' + 'P' + extras*'P'))
         # function
         def func(): pass
         check(func, size('12P'))
@@ -778,7 +846,7 @@ class SizeofTest(unittest.TestCase):
         # memoryview
         check(memoryview(b''), size('Pnin 2P2n2i5P 3cPn'))
         # module
-        check(unittest, size('PnP'))
+        check(unittest, size('PnPPP'))
         # None
         check(None, size(''))
         # NotImplementedType
@@ -832,11 +900,11 @@ class SizeofTest(unittest.TestCase):
         check((1,2,3), vsize('') + 3*self.P)
         # type
         # static type: PyTypeObject
-        s = vsize('P2n15Pl4Pn9Pn11PI')
+        s = vsize('P2n15Pl4Pn9Pn11PIP')
         check(int, s)
         # (PyTypeObject + PyNumberMethods + PyMappingMethods +
         #  PySequenceMethods + PyBufferProcs + 4P)
-        s = vsize('P2n15Pl4Pn9Pn11PI') + struct.calcsize('34P 3P 10P 2P 4P')
+        s = vsize('P2n15Pl4Pn9Pn11PIP') + struct.calcsize('34P 3P 10P 2P 4P')
         # Separate block for PyDictKeysObject with 4 entries
         s += struct.calcsize("2nPn") + 4*struct.calcsize("n2P")
         # class
