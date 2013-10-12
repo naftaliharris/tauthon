@@ -1327,7 +1327,6 @@ this database is based on the UnicodeData.txt file version\n\
 The module uses the same names and symbols as defined by the\n\
 UnicodeData File Format " UNIDATA_VERSION ".");
 
-
 static struct PyModuleDef unicodedatamodule = {
         PyModuleDef_HEAD_INIT,
         "unicodedata",
