@@ -94,6 +94,67 @@ Functions and classes provided:
    without needing to explicitly close ``page``.  Even if an error occurs,
    ``page.close()`` will be called when the :keyword:`with` block is exited.
 
+.. function:: ignore(*exceptions)
+
+   Return a context manager that ignores the specified exceptions if they
+   occur in the body of a with-statement.
+
+   As with any other mechanism that completely suppresses exceptions, it
+   should only be used to cover very specific errors where silently
+   ignoring the exception is known to be the right thing to do.
+
+   For example::
+
+       from contextlib import ignore
+
+       with ignore(FileNotFoundError):
+           os.remove('somefile.tmp')
+
+   This code is equivalent to::
+
+       try:
+           os.remove('somefile.tmp')
+       except FileNotFoundError:
+           pass
+
+   .. versionadded:: 3.4
+
+
+.. function:: redirect_stdout(new_target)
+
+   Context manager for temporarily redirecting :data:`sys.stdout` to
+   another file or file-like object.
+
+   This tool adds flexibility to existing functions or classes whose output
+   is hardwired to stdout.
+
+   For example, the output of :func:`help` normally is sent to *sys.stdout*.
+   You can capture that output in a string by redirecting the output to a
+   :class:`io.StringIO` object::
+
+        f = io.StringIO()
+        with redirect_stdout(f):
+            help(pow)
+        s = f.getvalue()
+
+   To send the output of :func:`help` to a file on disk, redirect the output
+   to a regular file::
+
+        with open('help.txt', 'w') as f:
+            with redirect_stdout(f):
+                help(pow)
+
+   To send the output of :func:`help` to *sys.stderr*::
+
+        with redirect_stdout(sys.stderr):
+            help(pow)
+
+   Note that the global side effect on :data:`sys.stdout` means that this
+   context manager is not suitable for use in library code and most threaded
+   applications. It also has no effect on the output of subprocesses.
+   However, it is still a useful approach for many utility scripts.
+
+   .. versionadded:: 3.4
 
 .. class:: ContextDecorator()
 
