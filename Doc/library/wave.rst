@@ -19,25 +19,29 @@ The :mod:`wave` module defines the following function and exception:
 .. function:: open(file, mode=None)
 
    If *file* is a string, open the file by that name, otherwise treat it as a
-   seekable file-like object.  *mode* can be any of
+   seekable file-like object.  *mode* can be:
 
-   ``'r'``, ``'rb'``
+   ``'rb'``
       Read only mode.
 
-   ``'w'``, ``'wb'``
+   ``'wb'``
       Write only mode.
 
    Note that it does not allow read/write WAV files.
 
-   A *mode* of ``'r'`` or ``'rb'`` returns a :class:`Wave_read` object, while a
-   *mode* of ``'w'`` or ``'wb'`` returns a :class:`Wave_write` object.  If
-   *mode* is omitted and a file-like object is passed as *file*, ``file.mode``
-   is used as the default value for *mode* (the ``'b'`` flag is still added if
-   necessary).
+   A *mode* of ``'rb'`` returns a :class:`Wave_read` object, while a *mode* of
+   ``'wb'`` returns a :class:`Wave_write` object.  If *mode* is omitted and a
+   file-like object is passed as *file*, ``file.mode`` is used as the default
+   value for *mode*.
 
    If you pass in a file-like object, the wave object will not close it when its
    :meth:`close` method is called; it is the caller's responsibility to close
    the file object.
+
+   The :func:`.open` function may be used in a :keyword:`with` statement.  When
+   the :keyword:`with` block completes, the :meth:`Wave_read.close()
+   <wave.Wave_read.close>` or :meth:`Wave_write.close()
+   <wave.Wave_write.close()>` method is called.
 
 
 .. function:: openfp(file, mode)
@@ -98,8 +102,9 @@ Wave_read objects, as returned by :func:`.open`, have the following methods:
 
 .. method:: Wave_read.getparams()
 
-   Returns a tuple ``(nchannels, sampwidth, framerate, nframes, comptype,
-   compname)``, equivalent to output of the :meth:`get\*` methods.
+   Returns a :func:`~collections.namedtuple` ``(nchannels, sampwidth,
+   framerate, nframes, comptype, compname)``, equivalent to output of the
+   :meth:`get\*` methods.
 
 
 .. method:: Wave_read.readframes(n)

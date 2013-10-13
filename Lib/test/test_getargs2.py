@@ -1,38 +1,40 @@
 import unittest
 from test import support
 from _testcapi import getargs_keywords, getargs_keyword_only
+try:
+    from _testcapi import getargs_L, getargs_K
+except ImportError:
+    getargs_L = None # PY_LONG_LONG not available
 
-"""
-> How about the following counterproposal. This also changes some of
-> the other format codes to be a little more regular.
->
-> Code C type Range check
->
-> b unsigned char 0..UCHAR_MAX
-> h signed short SHRT_MIN..SHRT_MAX
-> B unsigned char none **
-> H unsigned short none **
-> k * unsigned long none
-> I * unsigned int 0..UINT_MAX
-
-
-> i int INT_MIN..INT_MAX
-> l long LONG_MIN..LONG_MAX
-
-> K * unsigned long long none
-> L long long LLONG_MIN..LLONG_MAX
-
-> Notes:
->
-> * New format codes.
->
-> ** Changed from previous "range-and-a-half" to "none"; the
-> range-and-a-half checking wasn't particularly useful.
-
-Plus a C API or two, e.g. PyInt_AsLongMask() ->
-unsigned long and PyInt_AsLongLongMask() -> unsigned
-long long (if that exists).
-"""
+# > How about the following counterproposal. This also changes some of
+# > the other format codes to be a little more regular.
+# >
+# > Code C type Range check
+# >
+# > b unsigned char 0..UCHAR_MAX
+# > h signed short SHRT_MIN..SHRT_MAX
+# > B unsigned char none **
+# > H unsigned short none **
+# > k * unsigned long none
+# > I * unsigned int 0..UINT_MAX
+#
+#
+# > i int INT_MIN..INT_MAX
+# > l long LONG_MIN..LONG_MAX
+#
+# > K * unsigned long long none
+# > L long long LLONG_MIN..LLONG_MAX
+#
+# > Notes:
+# >
+# > * New format codes.
+# >
+# > ** Changed from previous "range-and-a-half" to "none"; the
+# > range-and-a-half checking wasn't particularly useful.
+#
+# Plus a C API or two, e.g. PyInt_AsLongMask() ->
+# unsigned long and PyInt_AsLongLongMask() -> unsigned
+# long long (if that exists).
 
 LARGE = 0x7FFFFFFF
 VERY_LARGE = 0xFF0000121212121212121242
@@ -184,6 +186,7 @@ class Signed_TestCase(unittest.TestCase):
         self.assertRaises(OverflowError, getargs_n, VERY_LARGE)
 
 
+@unittest.skipIf(getargs_L is None, 'PY_LONG_LONG is not available')
 class LongLong_TestCase(unittest.TestCase):
     def test_L(self):
         from _testcapi import getargs_L
@@ -536,24 +539,5 @@ class Unicode_TestCase(unittest.TestCase):
         self.assertIsNone(getargs_Z_hash(None))
 
 
-def test_main():
-    tests = [
-        Signed_TestCase,
-        Unsigned_TestCase,
-        Boolean_TestCase,
-        Tuple_TestCase,
-        Keywords_TestCase,
-        KeywordOnly_TestCase,
-        Bytes_TestCase,
-        Unicode_TestCase,
-    ]
-    try:
-        from _testcapi import getargs_L, getargs_K
-    except ImportError:
-        pass # PY_LONG_LONG not available
-    else:
-        tests.append(LongLong_TestCase)
-    support.run_unittest(*tests)
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
