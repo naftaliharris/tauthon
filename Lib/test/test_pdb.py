@@ -1,9 +1,9 @@
 # A test suite for pdb; not very comprehensive at the moment.
 
 import doctest
-import imp
 import pdb
 import sys
+import types
 import unittest
 import subprocess
 import textwrap
@@ -205,7 +205,8 @@ def test_pdb_breakpoint_commands():
     ...     'enable 1',
     ...     'clear 1',
     ...     'commands 2',
-    ...     'print 42',
+    ...     'p "42"',
+    ...     'print("42", 7*6)',     # Issue 18764 (not about breakpoints)
     ...     'end',
     ...     'continue',  # will stop at breakpoint 2 (line 4)
     ...     'clear',     # clear all!
@@ -252,11 +253,13 @@ def test_pdb_breakpoint_commands():
     (Pdb) clear 1
     Deleted breakpoint 1 at <doctest test.test_pdb.test_pdb_breakpoint_commands[0]>:3
     (Pdb) commands 2
-    (com) print 42
+    (com) p "42"
+    (com) print("42", 7*6)
     (com) end
     (Pdb) continue
     1
-    42
+    '42'
+    42 42
     > <doctest test.test_pdb.test_pdb_breakpoint_commands[0]>(4)test_function()
     -> print(2)
     (Pdb) clear
@@ -464,7 +467,7 @@ def test_pdb_skip_modules():
 
 
 # Module for testing skipping of module that makes a callback
-mod = imp.new_module('module_to_skip')
+mod = types.ModuleType('module_to_skip')
 exec('def foo_pony(callback): x = 1; callback(); return None', mod.__dict__)
 
 
@@ -616,6 +619,36 @@ class PdbTestCase(unittest.TestCase):
         stdout = stdout and bytes.decode(stdout)
         stderr = stderr and bytes.decode(stderr)
         return stdout, stderr
+
+    def _assert_find_function(self, file_content, func_name, expected):
+        file_content = textwrap.dedent(file_content)
+
+        with open(support.TESTFN, 'w') as f:
+            f.write(file_content)
+
+        expected = None if not expected else (
+            expected[0], support.TESTFN, expected[1])
+        self.assertEqual(
+            expected, pdb.find_function(func_name, support.TESTFN))
+
+    def test_find_function_empty_file(self):
+        self._assert_find_function('', 'foo', None)
+
+    def test_find_function_found(self):
+        self._assert_find_function(
+            """\
+            def foo():
+                pass
+
+            def bar():
+                pass
+
+            def quux():
+                pass
+            """,
+            'bar',
+            ('bar', 4),
+        )
 
     def test_issue7964(self):
         # open the file as binary so we can force \r\n newline
