@@ -47,6 +47,12 @@ class AudioTests:
         params = f.getparams()
         self.assertEqual(params,
                 (nchannels, sampwidth, framerate, nframes, comptype, compname))
+        self.assertEqual(params.nchannels, nchannels)
+        self.assertEqual(params.sampwidth, sampwidth)
+        self.assertEqual(params.framerate, framerate)
+        self.assertEqual(params.nframes, nframes)
+        self.assertEqual(params.comptype, comptype)
+        self.assertEqual(params.compname, compname)
 
         dump = pickle.dumps(params)
         self.assertEqual(pickle.loads(dump), params)
@@ -63,15 +69,12 @@ class AudioWriteTests(AudioTests):
         return f
 
     def check_file(self, testfile, nframes, frames):
-        f = self.module.open(testfile, 'rb')
-        try:
+        with self.module.open(testfile, 'rb') as f:
             self.assertEqual(f.getnchannels(), self.nchannels)
             self.assertEqual(f.getsampwidth(), self.sampwidth)
             self.assertEqual(f.getframerate(), self.framerate)
             self.assertEqual(f.getnframes(), nframes)
             self.assertEqual(f.readframes(nframes), frames)
-        finally:
-            f.close()
 
     def test_write_params(self):
         f = self.create_file(TESTFN)
@@ -80,6 +83,53 @@ class AudioWriteTests(AudioTests):
         self.check_params(f, self.nchannels, self.sampwidth, self.framerate,
                           self.nframes, self.comptype, self.compname)
         f.close()
+
+    def test_write_context_manager_calls_close(self):
+        # Close checks for a minimum header and will raise an error
+        # if it is not set, so this proves that close is called.
+        with self.assertRaises(self.module.Error):
+            with self.module.open(TESTFN, 'wb'):
+                pass
+        with self.assertRaises(self.module.Error):
+            with open(TESTFN, 'wb') as testfile:
+                with self.module.open(testfile):
+                    pass
+
+    def test_context_manager_with_open_file(self):
+        with open(TESTFN, 'wb') as testfile:
+            with self.module.open(testfile) as f:
+                f.setnchannels(self.nchannels)
+                f.setsampwidth(self.sampwidth)
+                f.setframerate(self.framerate)
+                f.setcomptype(self.comptype, self.compname)
+            self.assertEqual(testfile.closed, self.close_fd)
+        with open(TESTFN, 'rb') as testfile:
+            with self.module.open(testfile) as f:
+                self.assertFalse(f.getfp().closed)
+                params = f.getparams()
+                self.assertEqual(params.nchannels, self.nchannels)
+                self.assertEqual(params.sampwidth, self.sampwidth)
+                self.assertEqual(params.framerate, self.framerate)
+            if not self.close_fd:
+                self.assertIsNone(f.getfp())
+            self.assertEqual(testfile.closed, self.close_fd)
+
+    def test_context_manager_with_filename(self):
+        # If the file doesn't get closed, this test won't fail, but it will
+        # produce a resource leak warning.
+        with self.module.open(TESTFN, 'wb') as f:
+            f.setnchannels(self.nchannels)
+            f.setsampwidth(self.sampwidth)
+            f.setframerate(self.framerate)
+            f.setcomptype(self.comptype, self.compname)
+        with self.module.open(TESTFN) as f:
+            self.assertFalse(f.getfp().closed)
+            params = f.getparams()
+            self.assertEqual(params.nchannels, self.nchannels)
+            self.assertEqual(params.sampwidth, self.sampwidth)
+            self.assertEqual(params.framerate, self.framerate)
+        if not self.close_fd:
+            self.assertIsNone(f.getfp())
 
     def test_write(self):
         f = self.create_file(TESTFN)
@@ -203,12 +253,9 @@ class AudioTestsWithSourceFile(AudioTests):
 
         with open(TESTFN, 'rb') as testfile:
             self.assertEqual(testfile.read(13), b'ababagalamaga')
-            f = self.module.open(testfile, 'rb')
-            try:
+            with self.module.open(testfile, 'rb') as f:
                 self.assertEqual(f.getnchannels(), self.nchannels)
                 self.assertEqual(f.getsampwidth(), self.sampwidth)
                 self.assertEqual(f.getframerate(), self.framerate)
                 self.assertEqual(f.getnframes(), self.sndfilenframes)
                 self.assertEqual(f.readframes(self.nframes), self.frames)
-            finally:
-                f.close()

@@ -166,6 +166,21 @@ class AifcMiscTest(audiotests.AudioTests, unittest.TestCase):
         #This file contains chunk types aifc doesn't recognize.
         self.f = aifc.open(findfile('Sine-1000Hz-300ms.aif'))
 
+    def test_params_added(self):
+        f = self.f = aifc.open(TESTFN, 'wb')
+        f.aiff()
+        f.setparams((1, 1, 1, 1, b'NONE', b''))
+        f.close()
+
+        f = self.f = aifc.open(TESTFN, 'rb')
+        params = f.getparams()
+        self.assertEqual(params.nchannels, f.getnchannels())
+        self.assertEqual(params.sampwidth, f.getsampwidth())
+        self.assertEqual(params.framerate, f.getframerate())
+        self.assertEqual(params.nframes, f.getnframes())
+        self.assertEqual(params.comptype, f.getcomptype())
+        self.assertEqual(params.compname, f.getcompname())
+
     def test_write_header_comptype_sampwidth(self):
         for comptype in (b'ULAW', b'ulaw', b'ALAW', b'alaw', b'G722'):
             fout = aifc.open(io.BytesIO(), 'wb')
@@ -365,12 +380,14 @@ class AIFCLowLevelTest(unittest.TestCase):
 
     def test_write_aiff_by_extension(self):
         sampwidth = 2
-        fout = self.fout = aifc.open(TESTFN + '.aiff', 'wb')
+        filename = TESTFN + '.aiff'
+        fout = self.fout = aifc.open(filename, 'wb')
+        self.addCleanup(unlink, filename)
         fout.setparams((1, sampwidth, 1, 1, b'ULAW', b''))
         frames = b'\x00' * fout.getnchannels() * sampwidth
         fout.writeframes(frames)
         fout.close()
-        f = self.f = aifc.open(TESTFN + '.aiff', 'rb')
+        f = self.f = aifc.open(filename, 'rb')
         self.assertEqual(f.getcomptype(), b'NONE')
         f.close()
 
