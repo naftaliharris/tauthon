@@ -1,5 +1,6 @@
 """Unit tests for contextlib.py, and other context managers."""
 
+import io
 import sys
 import tempfile
 import unittest
@@ -631,10 +632,36 @@ class TestExitStack(unittest.TestCase):
         stack.push(cm)
         self.assertIs(stack._exit_callbacks[-1], cm)
 
+class TestRedirectStdout(unittest.TestCase):
 
-# This is needed to make the test actually run under regrtest.py!
-def test_main():
-    support.run_unittest(__name__)
+    def test_redirect_to_string_io(self):
+        f = io.StringIO()
+        with redirect_stdout(f):
+            help(pow)
+        s = f.getvalue()
+        self.assertIn('pow', s)
+
+class TestSuppress(unittest.TestCase):
+
+    def test_no_exception(self):
+
+        with suppress(ValueError):
+            self.assertEqual(pow(2, 5), 32)
+
+    def test_exact_exception(self):
+
+        with suppress(TypeError):
+            len(5)
+
+    def test_multiple_exception_args(self):
+
+        with suppress(ZeroDivisionError, TypeError):
+            len(5)
+
+    def test_exception_hierarchy(self):
+
+        with suppress(LookupError):
+            'Hello'[50]
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
