@@ -1,7 +1,7 @@
 # Autodetecting setup.py script for building the Python extensions
 #
 
-import sys, os, imp, re, optparse
+import sys, os, importlib.machinery, re, optparse
 from glob import glob
 import sysconfig
 
@@ -259,8 +259,9 @@ class PyBuildExt(build_ext):
 
         if missing:
             print()
-            print("Python build finished, but the necessary bits to build "
-                   "these modules were not found:")
+            print("Python build finished successfully!")
+            print("The necessary bits to build these optional modules were not "
+                  "found:")
             print_three_column(missing)
             print("To find the necessary bits, look in setup.py in"
                   " detect_modules() for the module's name.")
@@ -325,8 +326,9 @@ class PyBuildExt(build_ext):
         if cross_compiling:
             return
 
+        loader = importlib.machinery.ExtensionFileLoader(ext.name, ext_filename)
         try:
-            imp.load_dynamic(ext.name, ext_filename)
+            loader.load_module()
         except ImportError as why:
             self.failed.append(ext.name)
             self.announce('*** WARNING: renaming "%s" since importing it'
@@ -588,6 +590,8 @@ class PyBuildExt(build_ext):
                                depends=['testcapi_long.h']) )
         # Python PEP-3118 (buffer protocol) test module
         exts.append( Extension('_testbuffer', ['_testbuffer.c']) )
+        # Test loading multiple modules from one compiled file (http://bugs.python.org/issue16421)
+        exts.append( Extension('_testimportmultiple', ['_testimportmultiple.c']) )
         # profiler (_lsprof is for cProfile.py)
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database
@@ -784,10 +788,10 @@ class PyBuildExt(build_ext):
                     for line in incfile:
                         m = openssl_ver_re.match(line)
                         if m:
-                            openssl_ver = eval(m.group(1))
+                            openssl_ver = int(m.group(1), 16)
+                            break
             except IOError as msg:
                 print("IOError while reading opensshv.h:", msg)
-                pass
 
         #print('openssl_ver = 0x%08x' % openssl_ver)
         min_openssl_ver = 0x00907000
@@ -820,6 +824,15 @@ class PyBuildExt(build_ext):
                                depends=['hashlib.h']) )
         exts.append( Extension('_sha1', ['sha1module.c'],
                                depends=['hashlib.h']) )
+
+        # SHA-3 (Keccak) module
+        sha3_depends = ['hashlib.h']
+        keccak = os.path.join(os.getcwd(), srcdir, 'Modules', '_sha3',
+                              'keccak')
+        for pattern in ('*.c', '*.h', '*.macros'):
+            sha3_depends.extend(glob(os.path.join(keccak, pattern)))
+        exts.append(Extension("_sha3", ["_sha3/sha3module.c"],
+                              depends=sha3_depends))
 
         # Modules that provide persistent dictionary-like semantics.  You will
         # probably want to arrange for at least one of them to be available on
@@ -1509,10 +1522,6 @@ class PyBuildExt(build_ext):
 
         if host_platform == 'darwin':
             exts.append(
-                       Extension('_gestalt', ['_gestalt.c'],
-                       extra_link_args=['-framework', 'Carbon'])
-                       )
-            exts.append(
                        Extension('_scproxy', ['_scproxy.c'],
                        extra_link_args=[
                            '-framework', 'SystemConfiguration',
@@ -1537,6 +1546,41 @@ class PyBuildExt(build_ext):
             self.extensions.append(ext)
 
         return missing
+
+    def detect_tkinter_explicitly(self):
+        # Build _tkinter using explicit locations for Tcl/Tk.
+        #
+        # This is enabled when both arguments are given to ./configure:
+        #
+        #     --with-tcltk-includes="-I/path/to/tclincludes \
+        #                            -I/path/to/tkincludes"
+        #     --with-tcltk-libs="-L/path/to/tcllibs -ltclm.n \
+        #                        -L/path/to/tklibs -ltkm.n"
+        #
+        # These values can also be specified or overriden via make:
+        #    make TCLTK_INCLUDES="..." TCLTK_LIBS="..."
+        #
+        # This can be useful for building and testing tkinter with multiple
+        # versions of Tcl/Tk.  Note that a build of Tk depends on a particular
+        # build of Tcl so you need to specify both arguments and use care when
+        # overriding.
+
+        # The _TCLTK variables are created in the Makefile sharedmods target.
+        tcltk_includes = os.environ.get('_TCLTK_INCLUDES')
+        tcltk_libs = os.environ.get('_TCLTK_LIBS')
+        if not (tcltk_includes and tcltk_libs):
+            # Resume default configuration search.
+            return 0
+
+        extra_compile_args = tcltk_includes.split()
+        extra_link_args = tcltk_libs.split()
+        ext = Extension('_tkinter', ['_tkinter.c', 'tkappinit.c'],
+                        define_macros=[('WITH_APPINIT', 1)],
+                        extra_compile_args = extra_compile_args,
+                        extra_link_args = extra_link_args,
+                        )
+        self.extensions.append(ext)
+        return 1
 
     def detect_tkinter_darwin(self, inc_dirs, lib_dirs):
         # The _tkinter module, using frameworks. Since frameworks are quite
@@ -1627,9 +1671,15 @@ class PyBuildExt(build_ext):
         self.extensions.append(ext)
         return 1
 
-
     def detect_tkinter(self, inc_dirs, lib_dirs):
         # The _tkinter module.
+
+        # Check whether --with-tcltk-includes and --with-tcltk-libs were
+        # configured or passed into the make target.  If so, use these values
+        # to build tkinter and bypass the searches for Tcl and TK in standard
+        # locations.
+        if self.detect_tkinter_explicitly():
+            return
 
         # Rather than complicate the code below, detecting and building
         # AquaTk is a separate method. Only one Tkinter will be built on
@@ -2115,7 +2165,7 @@ is also usable as an extension language for applications that need a
 programmable interface.
 
 The Python implementation is portable: it runs on many brands of UNIX,
-on Windows, DOS, OS/2, Mac, Amiga... If your favorite system isn't
+on Windows, DOS, Mac, Amiga... If your favorite system isn't
 listed here, it may still be supported, if there's a C compiler for
 it. Ask around on comp.lang.python -- or just try compiling Python
 yourself.
