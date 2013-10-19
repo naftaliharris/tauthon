@@ -193,6 +193,44 @@ def library_recipes():
 
     LT_10_5 = bool(DEPTARGET < '10.5')
 
+    if DEPTARGET > '10.5':
+        result.extend([
+          dict(
+              name="Tcl 8.5.14",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.14-src.tar.gz",
+              checksum='44b50e58ab45dd272f6714dce2129123',
+              buildDir="unix",
+              configure_pre=[
+                    '--enable-shared',
+                    '--enable-threads',
+                    '--libdir=/Library/Frameworks/Python.framework/Versions/%s/lib'%(getVersion(),),
+              ],
+              useLDFlags=False,
+              install='make TCL_LIBRARY=%(TCL_LIBRARY)s && make install TCL_LIBRARY=%(TCL_LIBRARY)s DESTDIR=%(DESTDIR)s'%{
+                  "DESTDIR": shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  "TCL_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tcl8.5'%(getVersion())),
+                  },
+              ),
+          dict(
+              name="Tk 8.5.14",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.14-src.tar.gz",
+              checksum='a9c48921b3688020470cd3a6dd4e867d',
+              buildDir="unix",
+              configure_pre=[
+                    '--enable-aqua',
+                    '--enable-shared',
+                    '--enable-threads',
+                    '--libdir=/Library/Frameworks/Python.framework/Versions/%s/lib'%(getVersion(),),
+              ],
+              useLDFlags=False,
+              install='make TCL_LIBRARY=%(TCL_LIBRARY)s TK_LIBRARY=%(TK_LIBRARY)s && make install TCL_LIBRARY=%(TCL_LIBRARY)s TK_LIBRARY=%(TK_LIBRARY)s DESTDIR=%(DESTDIR)s'%{
+                  "DESTDIR": shellQuote(os.path.join(WORKDIR, 'libraries')),
+                  "TCL_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tcl8.5'%(getVersion())),
+                  "TK_LIBRARY": shellQuote('/Library/Frameworks/Python.framework/Versions/%s/lib/tk8.5'%(getVersion())),
+                  },
+                ),
+        ])
+
     if getVersionTuple() >= (3, 3):
         result.extend([
           dict(
@@ -526,6 +564,20 @@ def checkEnvironment():
                 % frameworks['Tk'],
             ]
 
+    # For 10.6+ builds, we build two versions of _tkinter:
+    #    - the traditional version (renamed to _tkinter.so.framework) linked
+    #       with /Library/Frameworks/{Tcl,Tk}.framework
+    #    - the default version linked with our private copies of Tcl and Tk
+    if DEPTARGET > '10.5':
+        EXPECTED_SHARED_LIBS['_tkinter.so.framework'] = \
+            EXPECTED_SHARED_LIBS['_tkinter.so']
+        EXPECTED_SHARED_LIBS['_tkinter.so'] = [
+                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtcl%s.dylib"
+                    % (getVersion(), frameworks['Tcl']),
+                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtk%s.dylib"
+                    % (getVersion(), frameworks['Tk']),
+                ]
+
     # Remove inherited environment variables which might influence build
     environ_var_prefixes = ['CPATH', 'C_INCLUDE_', 'DYLD_', 'LANG', 'LC_',
                             'LD_', 'LIBRARY_', 'PATH', 'PYTHON']
@@ -634,13 +686,19 @@ def extractArchive(builddir, archiveName):
 
     XXX: This function assumes that archives contain a toplevel directory
     that is has the same name as the basename of the archive. This is
-    save enough for anything we use.
+    safe enough for almost anything we use.  Unfortunately, it does not
+    work for current Tcl and Tk source releases where the basename of
+    the archive ends with "-src" but the uncompressed directory does not.
+    For now, just special case Tcl and Tk tar.gz downloads.
     """
     curdir = os.getcwd()
     try:
         os.chdir(builddir)
         if archiveName.endswith('.tar.gz'):
             retval = os.path.basename(archiveName[:-7])
+            if ((retval.startswith('tcl') or retval.startswith('tk'))
+                    and retval.endswith('-src')):
+                retval = retval[:-4]
             if os.path.exists(retval):
                 shutil.rmtree(retval)
             fp = os.popen("tar zxf %s 2>&1"%(shellQuote(archiveName),), 'r')
@@ -904,6 +962,23 @@ def buildPython():
     print("Running make")
     runCommand("make")
 
+    # For deployment targets of 10.6 and higher, we build our own version
+    # of Tcl and Cocoa Aqua Tk libs because the Apple-supplied Tk 8.5 is
+    # out-of-date and has critical bugs.  Save the _tkinter.so that was
+    # linked with /Library/Frameworks/{Tck,Tk}.framework and build
+    # another _tkinter.so linked with our private Tcl and Tk libs.
+    if DEPTARGET > '10.5':
+        runCommand("find build -name '_tkinter.so' "
+                        " -execdir mv '{}' '{}'.framework \;")
+        print("Running make to rebuild _tkinter")
+        runCommand("make TCLTK_INCLUDES='-I%s/libraries/usr/local/include' "
+                "TCLTK_LIBS='-L%s/libraries/usr/local/lib -ltcl8.5 -ltk8.5'"%(
+            shellQuote(WORKDIR)[1:-1],
+            shellQuote(WORKDIR)[1:-1]))
+        # make a backup copy, just in case
+        runCommand("find build -name '_tkinter.so' "
+                        " -execdir cp -p '{}' '{}'.private \;")
+
     print("Running make install")
     runCommand("make install DESTDIR=%s"%(
         shellQuote(rootDir)))
@@ -983,22 +1058,62 @@ def buildPython():
     # the end-users system. Also remove the directories from _sysconfigdata.py
     # (added in 3.3) if it exists.
 
+    include_path = '-I%s/libraries/usr/local/include' % (WORKDIR,)
+    lib_path = '-L%s/libraries/usr/local/lib' % (WORKDIR,)
+
     path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
                                 'Python.framework', 'Versions',
                                 version, 'lib', 'python%s'%(version,))
-    paths = [os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile'),
-             os.path.join(path_to_lib, '_sysconfigdata.py')]
-    for path in paths:
-        if not os.path.exists(path):
-            continue
+
+    # fix Makefile
+    path = os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile')
+    fp = open(path, 'r')
+    data = fp.read()
+    fp.close()
+
+    for p in (include_path, lib_path):
+        data = data.replace(" " + p, '')
+        data = data.replace(p + " ", '')
+
+    fp = open(path, 'w')
+    fp.write(data)
+    fp.close()
+
+    # fix _sysconfigdata if it exists
+    #
+    # TODO: make this more robust!  test_sysconfig_module of
+    # distutils.tests.test_sysconfig.SysconfigTestCase tests that
+    # the output from get_config_var in both sysconfig and
+    # distutils.sysconfig is exactly the same for both CFLAGS and
+    # LDFLAGS.  The fixing up is now complicated by the pretty
+    # printing in _sysconfigdata.py.  Also, we are using the
+    # pprint from the Python running the installer build which
+    # may not cosmetically format the same as the pprint in the Python
+    # being built (and which is used to originally generate
+    # _sysconfigdata.py).
+
+    import pprint
+    path = os.path.join(path_to_lib, '_sysconfigdata.py')
+    if os.path.exists(path):
         fp = open(path, 'r')
         data = fp.read()
         fp.close()
+        # create build_time_vars dict
+        exec(data)
+        vars = {}
+        for k, v in build_time_vars.items():
+            if type(v) == type(''):
+                for p in (include_path, lib_path):
+                    v = v.replace(' ' + p, '')
+                    v = v.replace(p + ' ', '')
+            vars[k] = v
 
-        data = data.replace(' -L%s/libraries/usr/local/lib'%(WORKDIR,), '')
-        data = data.replace(' -I%s/libraries/usr/local/include'%(WORKDIR,), '')
         fp = open(path, 'w')
-        fp.write(data)
+        # duplicated from sysconfig._generate_posix_vars()
+        fp.write('# system configuration generated and used by'
+                    ' the sysconfig module\n')
+        fp.write('build_time_vars = ')
+        pprint.pprint(vars, stream=fp)
         fp.close()
 
     # Add symlinks in /usr/local/bin, using relative links
