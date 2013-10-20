@@ -51,7 +51,7 @@ This returns an instance of a class with the following public methods:
         getcomptype()   -- returns compression type ('NONE' or 'ULAW')
         getcompname()   -- returns human-readable version of
                            compression type ('not compressed' matches 'NONE')
-        getparams()     -- returns a tuple consisting of all of the
+        getparams()     -- returns a namedtuple consisting of all of the
                            above in the above order
         getmarkers()    -- returns None (for compatibility with the
                            aifc module)
@@ -102,6 +102,11 @@ close() to patch up the sizes in the header.
 The close() method is called automatically when the class instance
 is destroyed.
 """
+
+from collections import namedtuple
+
+_sunau_params = namedtuple('_sunau_params',
+                           'nchannels sampwidth framerate nframes comptype compname')
 
 # from <multimedia/audio_filehdr.h>
 AUDIO_FILE_MAGIC = 0x2e736e64
@@ -162,6 +167,12 @@ class Au_read:
     def __del__(self):
         if self._file:
             self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def initfp(self, file):
         self._file = file
@@ -246,9 +257,9 @@ class Au_read:
             return 'not compressed'
 
     def getparams(self):
-        return self.getnchannels(), self.getsampwidth(), \
-                  self.getframerate(), self.getnframes(), \
-                  self.getcomptype(), self.getcompname()
+        return _sunau_params(self.getnchannels(), self.getsampwidth(),
+                  self.getframerate(), self.getnframes(),
+                  self.getcomptype(), self.getcompname())
 
     def getmarkers(self):
         return None
@@ -306,6 +317,12 @@ class Au_write:
         if self._file:
             self.close()
         self._file = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
     def initfp(self, file):
         self._file = file
@@ -390,9 +407,9 @@ class Au_write:
         self.setcomptype(comptype, compname)
 
     def getparams(self):
-        return self.getnchannels(), self.getsampwidth(), \
-                  self.getframerate(), self.getnframes(), \
-                  self.getcomptype(), self.getcompname()
+        return _sunau_params(self.getnchannels(), self.getsampwidth(),
+                  self.getframerate(), self.getnframes(),
+                  self.getcomptype(), self.getcompname())
 
     def tell(self):
         return self._nframeswritten
@@ -421,9 +438,9 @@ class Au_write:
                         self._datalength != self._datawritten:
                     self._patchheader()
                 self._file.flush()
+            finally:
                 if self._opened and self._file:
                     self._file.close()
-            finally:
                 self._file = None
 
     #
