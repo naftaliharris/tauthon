@@ -19,18 +19,6 @@ except ImportError:
 
 TIMEOUT = 0.5
 
-try:
-    from resource import setrlimit, RLIMIT_CORE, error as resource_error
-except ImportError:
-    prepare_subprocess = None
-else:
-    def prepare_subprocess():
-        # don't create core file
-        try:
-            setrlimit(RLIMIT_CORE, (0, 0))
-        except (ValueError, resource_error):
-            pass
-
 def expected_traceback(lineno1, lineno2, header, min_count=1):
     regex = header
     regex += '  File "<string>", line %s in func\n' % lineno1
@@ -59,10 +47,8 @@ class FaultHandlerTests(unittest.TestCase):
         build, and replace "Current thread 0x00007f8d8fbd9700" by "Current
         thread XXX".
         """
-        options = {}
-        if prepare_subprocess:
-            options['preexec_fn'] = prepare_subprocess
-        process = script_helper.spawn_python('-c', code, **options)
+        with support.SuppressCrashReport():
+            process = script_helper.spawn_python('-c', code)
         stdout, stderr = process.communicate()
         exitcode = process.wait()
         output = support.strip_python_stderr(stdout)
@@ -101,8 +87,7 @@ class FaultHandlerTests(unittest.TestCase):
             header=re.escape(header))
         if other_regex:
             regex += '|' + other_regex
-        with support.suppress_crash_popup():
-            output, exitcode = self.get_output(code, filename)
+        output, exitcode = self.get_output(code, filename)
         output = '\n'.join(output)
         self.assertRegex(output, regex)
         self.assertNotEqual(exitcode, 0)
@@ -232,8 +217,7 @@ faulthandler.disable()
 faulthandler._sigsegv()
 """.strip()
         not_expected = 'Fatal Python error'
-        with support.suppress_crash_popup():
-            stderr, exitcode = self.get_output(code)
+        stderr, exitcode = self.get_output(code)
         stder = '\n'.join(stderr)
         self.assertTrue(not_expected not in stderr,
                      "%r is present in %r" % (not_expected, stderr))
@@ -264,16 +248,34 @@ faulthandler._sigsegv()
     def test_disabled_by_default(self):
         # By default, the module should be disabled
         code = "import faulthandler; print(faulthandler.is_enabled())"
-        rc, stdout, stderr = assert_python_ok("-c", code)
-        stdout = (stdout + stderr).strip()
-        self.assertEqual(stdout, b"False")
+        args = (sys.executable, '-E', '-c', code)
+        # don't use assert_python_ok() because it always enable faulthandler
+        output = subprocess.check_output(args)
+        self.assertEqual(output.rstrip(), b"False")
 
     def test_sys_xoptions(self):
         # Test python -X faulthandler
         code = "import faulthandler; print(faulthandler.is_enabled())"
-        rc, stdout, stderr = assert_python_ok("-X", "faulthandler", "-c", code)
-        stdout = (stdout + stderr).strip()
-        self.assertEqual(stdout, b"True")
+        args = (sys.executable, "-E", "-X", "faulthandler", "-c", code)
+        # don't use assert_python_ok() because it always enable faulthandler
+        output = subprocess.check_output(args)
+        self.assertEqual(output.rstrip(), b"True")
+
+    def test_env_var(self):
+        # empty env var
+        code = "import faulthandler; print(faulthandler.is_enabled())"
+        args = (sys.executable, "-c", code)
+        env = os.environ.copy()
+        env['PYTHONFAULTHANDLER'] = ''
+        # don't use assert_python_ok() because it always enable faulthandler
+        output = subprocess.check_output(args, env=env)
+        self.assertEqual(output.rstrip(), b"False")
+
+        # non-empty env var
+        env = os.environ.copy()
+        env['PYTHONFAULTHANDLER'] = '1'
+        output = subprocess.check_output(args, env=env)
+        self.assertEqual(output.rstrip(), b"True")
 
     def check_dump_traceback(self, filename):
         """
@@ -590,8 +592,5 @@ sys.exit(exitcode)
         self.check_register(chain=True)
 
 
-def test_main():
-    support.run_unittest(FaultHandlerTests)
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
