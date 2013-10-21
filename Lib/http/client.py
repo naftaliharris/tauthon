@@ -267,8 +267,6 @@ def parse_headers(fp, _class=HTTPMessage):
     return email.parser.Parser(_class=_class).parsestr(hstring)
 
 
-_strict_sentinel = object()
-
 class HTTPResponse(io.RawIOBase):
 
     # See RFC 2616 sec 19.6 and RFC 1945 sec 6 for details.
@@ -278,7 +276,7 @@ class HTTPResponse(io.RawIOBase):
     # text following RFC 2047.  The basic status line parsing only
     # accepts iso-8859-1.
 
-    def __init__(self, sock, debuglevel=0, strict=_strict_sentinel, method=None, url=None):
+    def __init__(self, sock, debuglevel=0, method=None, url=None):
         # If the response includes a content-length header, we need to
         # make sure that the client doesn't read more than the
         # specified number of bytes.  If it does, it will block until
@@ -288,10 +286,6 @@ class HTTPResponse(io.RawIOBase):
         # clients unless they know what they are doing.
         self.fp = sock.makefile("rb")
         self.debuglevel = debuglevel
-        if strict is not _strict_sentinel:
-            warnings.warn("the 'strict' argument isn't supported anymore; "
-                "http.client now always assumes HTTP/1.x compliant servers.",
-                DeprecationWarning, 2)
         self._method = method
 
         # The HTTPResponse object is returned via urllib.  The clients
@@ -728,13 +722,17 @@ class HTTPConnection:
     default_port = HTTP_PORT
     auto_open = 1
     debuglevel = 0
+    # TCP Maximum Segment Size (MSS) is determined by the TCP stack on
+    # a per-connection basis.  There is no simple and efficient
+    # platform independent mechanism for determining the MSS, so
+    # instead a reasonable estimate is chosen.  The getsockopt()
+    # interface using the TCP_MAXSEG parameter may be a suitable
+    # approach on some operating systems. A value of 16KiB is chosen
+    # as a reasonable estimate of the maximum MSS.
+    mss = 16384
 
-    def __init__(self, host, port=None, strict=_strict_sentinel,
-                 timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None):
-        if strict is not _strict_sentinel:
-            warnings.warn("the 'strict' argument isn't supported anymore; "
-                "http.client now always assumes HTTP/1.x compliant servers.",
-                DeprecationWarning, 2)
+    def __init__(self, host, port=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                 source_address=None):
         self.timeout = timeout
         self.source_address = source_address
         self.sock = None
@@ -800,8 +798,8 @@ class HTTPConnection:
 
         if code != 200:
             self.close()
-            raise socket.error("Tunnel connection failed: %d %s" % (code,
-                                                                    message.strip()))
+            raise OSError("Tunnel connection failed: %d %s" % (code,
+                                                               message.strip()))
         while True:
             line = response.fp.readline(_MAXLINE + 1)
             if len(line) > _MAXLINE:
@@ -895,8 +893,11 @@ class HTTPConnection:
         del self._buffer[:]
         # If msg and message_body are sent in a single send() call,
         # it will avoid performance problems caused by the interaction
-        # between delayed ack and the Nagle algorithm.
-        if isinstance(message_body, bytes):
+        # between delayed ack and the Nagle algorithm. However,
+        # there is no performance gain if the message is larger
+        # than MSS (and there is a memory penalty for the message
+        # copy).
+        if isinstance(message_body, bytes) and len(message_body) < self.mss:
             msg += message_body
             message_body = None
         self.send(msg)
@@ -1166,9 +1167,10 @@ else:
         # XXX Should key_file and cert_file be deprecated in favour of context?
 
         def __init__(self, host, port=None, key_file=None, cert_file=None,
-                     strict=_strict_sentinel, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
-                     source_address=None, *, context=None, check_hostname=None):
-            super(HTTPSConnection, self).__init__(host, port, strict, timeout,
+                     timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
+                     source_address=None, *, context=None,
+                     check_hostname=None):
+            super(HTTPSConnection, self).__init__(host, port, timeout,
                                                   source_address)
             self.key_file = key_file
             self.cert_file = cert_file
