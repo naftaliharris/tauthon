@@ -17,7 +17,25 @@ from weakref import proxy
 
 import unittest
 
+class S(str):
+    def __getitem__(self, index):
+        return S(super().__getitem__(index))
+
+class B(bytes):
+    def __getitem__(self, index):
+        return B(super().__getitem__(index))
+
 class ReTests(unittest.TestCase):
+
+    def assertTypedEqual(self, actual, expect, msg=None):
+        self.assertEqual(actual, expect, msg)
+        def recurse(actual, expect):
+            if isinstance(expect, (tuple, list)):
+                for x, y in zip(actual, expect):
+                    recurse(x, y)
+            else:
+                self.assertIs(type(actual), type(expect), msg)
+        recurse(actual, expect)
 
     def test_keep_buffer(self):
         # See bug 14212
@@ -53,6 +71,13 @@ class ReTests(unittest.TestCase):
         return str(int_value + 1)
 
     def test_basic_re_sub(self):
+        self.assertTypedEqual(re.sub('y', 'a', 'xyz'), 'xaz')
+        self.assertTypedEqual(re.sub('y', S('a'), S('xyz')), 'xaz')
+        self.assertTypedEqual(re.sub(b'y', b'a', b'xyz'), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', B(b'a'), B(b'xyz')), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', bytearray(b'a'), bytearray(b'xyz')), b'xaz')
+        self.assertTypedEqual(re.sub(b'y', memoryview(b'a'), memoryview(b'xyz')), b'xaz')
+
         self.assertEqual(re.sub("(?i)b+", "x", "bbbb BBBB"), 'x x')
         self.assertEqual(re.sub(r'\d+', self.bump_num, '08.2 -2 23x99y'),
                          '9.3 -3 24x100y')
@@ -210,10 +235,22 @@ class ReTests(unittest.TestCase):
         self.assertEqual(re.subn("b*", "x", "xyz", 2), ('xxxyz', 2))
 
     def test_re_split(self):
-        self.assertEqual(re.split(":", ":a:b::c"), ['', 'a', 'b', '', 'c'])
-        self.assertEqual(re.split(":*", ":a:b::c"), ['', 'a', 'b', 'c'])
-        self.assertEqual(re.split("(:*)", ":a:b::c"),
-                         ['', ':', 'a', ':', 'b', '::', 'c'])
+        for string in ":a:b::c", S(":a:b::c"):
+            self.assertTypedEqual(re.split(":", string),
+                                  ['', 'a', 'b', '', 'c'])
+            self.assertTypedEqual(re.split(":*", string),
+                                  ['', 'a', 'b', 'c'])
+            self.assertTypedEqual(re.split("(:*)", string),
+                                  ['', ':', 'a', ':', 'b', '::', 'c'])
+        for string in (b":a:b::c", B(b":a:b::c"), bytearray(b":a:b::c"),
+                       memoryview(b":a:b::c")):
+            self.assertTypedEqual(re.split(b":", string),
+                                  [b'', b'a', b'b', b'', b'c'])
+            self.assertTypedEqual(re.split(b":*", string),
+                                  [b'', b'a', b'b', b'c'])
+            self.assertTypedEqual(re.split(b"(:*)", string),
+                                  [b'', b':', b'a', b':', b'b', b'::', b'c'])
+
         self.assertEqual(re.split("(?::*)", ":a:b::c"), ['', 'a', 'b', 'c'])
         self.assertEqual(re.split("(:)*", ":a:b::c"),
                          ['', ':', 'a', ':', 'b', ':', 'c'])
@@ -235,22 +272,39 @@ class ReTests(unittest.TestCase):
 
     def test_re_findall(self):
         self.assertEqual(re.findall(":+", "abc"), [])
-        self.assertEqual(re.findall(":+", "a:b::c:::d"), [":", "::", ":::"])
-        self.assertEqual(re.findall("(:+)", "a:b::c:::d"), [":", "::", ":::"])
-        self.assertEqual(re.findall("(:)(:*)", "a:b::c:::d"), [(":", ""),
-                                                               (":", ":"),
-                                                               (":", "::")])
+        for string in "a:b::c:::d", S("a:b::c:::d"):
+            self.assertTypedEqual(re.findall(":+", string),
+                                  [":", "::", ":::"])
+            self.assertTypedEqual(re.findall("(:+)", string),
+                                  [":", "::", ":::"])
+            self.assertTypedEqual(re.findall("(:)(:*)", string),
+                                  [(":", ""), (":", ":"), (":", "::")])
+        for string in (b"a:b::c:::d", B(b"a:b::c:::d"), bytearray(b"a:b::c:::d"),
+                       memoryview(b"a:b::c:::d")):
+            self.assertTypedEqual(re.findall(b":+", string),
+                                  [b":", b"::", b":::"])
+            self.assertTypedEqual(re.findall(b"(:+)", string),
+                                  [b":", b"::", b":::"])
+            self.assertTypedEqual(re.findall(b"(:)(:*)", string),
+                                  [(b":", b""), (b":", b":"), (b":", b"::")])
 
     def test_bug_117612(self):
         self.assertEqual(re.findall(r"(a|(b))", "aba"),
                          [("a", ""),("b", "b"),("a", "")])
 
     def test_re_match(self):
-        self.assertEqual(re.match('a', 'a').groups(), ())
-        self.assertEqual(re.match('(a)', 'a').groups(), ('a',))
-        self.assertEqual(re.match(r'(a)', 'a').group(0), 'a')
-        self.assertEqual(re.match(r'(a)', 'a').group(1), 'a')
-        self.assertEqual(re.match(r'(a)', 'a').group(1, 1), ('a', 'a'))
+        for string in 'a', S('a'):
+            self.assertEqual(re.match('a', string).groups(), ())
+            self.assertEqual(re.match('(a)', string).groups(), ('a',))
+            self.assertEqual(re.match('(a)', string).group(0), 'a')
+            self.assertEqual(re.match('(a)', string).group(1), 'a')
+            self.assertEqual(re.match('(a)', string).group(1, 1), ('a', 'a'))
+        for string in b'a', B(b'a'), bytearray(b'a'), memoryview(b'a'):
+            self.assertEqual(re.match(b'a', string).groups(), ())
+            self.assertEqual(re.match(b'(a)', string).groups(), (b'a',))
+            self.assertEqual(re.match(b'(a)', string).group(0), b'a')
+            self.assertEqual(re.match(b'(a)', string).group(1), b'a')
+            self.assertEqual(re.match(b'(a)', string).group(1, 1), (b'a', b'a'))
 
         pat = re.compile('((a)|(b))(c)?')
         self.assertEqual(pat.match('a').groups(), ('a', 'a', None, None))
@@ -1049,6 +1103,28 @@ class ReTests(unittest.TestCase):
                 pattern = pattern.encode()
                 self.assertEqual(re.compile(pattern, re.S).findall(b'xyz'),
                                  [b'xyz'], msg=pattern)
+
+    def test_match_repr(self):
+        for string in '[abracadabra]', S('[abracadabra]'):
+            m = re.search(r'(.+)(.*?)\1', string)
+            self.assertEqual(repr(m), "<%s.%s object; "
+                             "span=(1, 12), match='abracadabra'>" %
+                             (type(m).__module__, type(m).__qualname__))
+        for string in (b'[abracadabra]', B(b'[abracadabra]'),
+                       bytearray(b'[abracadabra]'),
+                       memoryview(b'[abracadabra]')):
+            m = re.search(rb'(.+)(.*?)\1', string)
+            self.assertEqual(repr(m), "<%s.%s object; "
+                             "span=(1, 12), match=b'abracadabra'>" %
+                             (type(m).__module__, type(m).__qualname__))
+
+        first, second = list(re.finditer("(aa)|(bb)", "aa bb"))
+        self.assertEqual(repr(first), "<%s.%s object; "
+                         "span=(0, 2), match='aa'>" %
+                         (type(second).__module__, type(first).__qualname__))
+        self.assertEqual(repr(second), "<%s.%s object; "
+                         "span=(3, 5), match='bb'>" %
+                         (type(second).__module__, type(second).__qualname__))
 
 
     def test_bug_2537(self):
