@@ -15,11 +15,13 @@ Doc/tools/jinja2/
 Doc/tools/pygments/
 Doc/tools/sphinx/
 Lib/lib2to3/*.pickle
+Lib/test/data/*
 Lib/_sysconfigdata.py
 Lib/plat-mac/errors.rsrc.df.rsrc
 Makefile
 Makefile.pre
 Misc/python.pc
+Misc/python-config.sh
 Modules/Setup
 Modules/Setup.config
 Modules/Setup.local
@@ -57,6 +59,8 @@ platform
 pybuilddir.txt
 pyconfig.h
 python
+python-config
+python-config.py
 python.exe
 python-gdb.py
 python.exe-gdb.py

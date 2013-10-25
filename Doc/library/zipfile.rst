@@ -144,7 +144,7 @@ ZipFile Objects
    and should be :const:`ZIP_STORED`, :const:`ZIP_DEFLATED`,
    :const:`ZIP_BZIP2` or :const:`ZIP_LZMA`; unrecognized
    values will cause :exc:`RuntimeError` to be raised.  If :const:`ZIP_DEFLATED`,
-   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponded module
+   :const:`ZIP_BZIP2` or :const:`ZIP_LZMA` is specified but the corresponding module
    (:mod:`zlib`, :mod:`bz2` or :mod:`lzma`) is not available, :exc:`RuntimeError`
    is also raised. The default is :const:`ZIP_STORED`.  If *allowZip64* is
    ``True`` zipfile will create ZIP files that use the ZIP64 extensions when
@@ -266,10 +266,8 @@ ZipFile Objects
       Never extract archives from untrusted sources without prior inspection.
       It is possible that files are created outside of *path*, e.g. members
       that have absolute filenames starting with ``"/"`` or filenames with two
-      dots ``".."``.
-
-   .. versionchanged:: 3.3.1
-      The zipfile module attempts to prevent that.  See :meth:`extract` note.
+      dots ``".."``.  This module attempts to prevent that.
+      See :meth:`extract` note.
 
 
 .. method:: ZipFile.printdir()
@@ -384,7 +382,7 @@ The :class:`PyZipFile` constructor takes the same parameters as the
 
    Instances have one method in addition to those of :class:`ZipFile` objects:
 
-   .. method:: PyZipFile.writepy(pathname, basename='')
+   .. method:: PyZipFile.writepy(pathname, basename='', filterfunc=None)
 
       Search for files :file:`\*.py` and add the corresponding file to the
       archive.
@@ -406,7 +404,10 @@ The :class:`PyZipFile` constructor takes the same parameters as the
       package directory, then all :file:`\*.py[co]` are added under the package
       name as a file path, and if any subdirectories are package directories,
       all of these are added recursively.  *basename* is intended for internal
-      use only.  The :meth:`writepy` method makes archives with file names like
+      use only.  When *filterfunc(pathname)* is given, it will be called for every
+      invocation. When it returns a False value, that path and its subpaths will
+      be ignored.
+      The :meth:`writepy` method makes archives with file names like
       this::
 
          string.pyc                   # Top level name
@@ -414,6 +415,9 @@ The :class:`PyZipFile` constructor takes the same parameters as the
          test/testall.pyc             # Module test.testall
          test/bogus/__init__.pyc      # Subpackage directory
          test/bogus/myfile.pyc        # Submodule test.bogus.myfile
+
+      .. versionadded:: 3.4
+         The *filterfunc* parameter.
 
 
 .. _zipinfo-objects:
