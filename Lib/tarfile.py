@@ -56,9 +56,9 @@ except ImportError:
 # os.symlink on Windows prior to 6.0 raises NotImplementedError
 symlink_exception = (AttributeError, NotImplementedError)
 try:
-    # WindowsError (1314) will be raised if the caller does not hold the
+    # OSError (winerror=1314) will be raised if the caller does not hold the
     # SeCreateSymbolicLinkPrivilege privilege
-    symlink_exception += (WindowsError,)
+    symlink_exception += (OSError,)
 except NameError:
     pass
 
@@ -138,30 +138,6 @@ PAX_NUMBER_FIELDS = {
     "gid": int,
     "size": int
 }
-
-#---------------------------------------------------------
-# Bits used in the mode field, values in octal.
-#---------------------------------------------------------
-S_IFLNK = 0o120000        # symbolic link
-S_IFREG = 0o100000        # regular file
-S_IFBLK = 0o060000        # block device
-S_IFDIR = 0o040000        # directory
-S_IFCHR = 0o020000        # character device
-S_IFIFO = 0o010000        # fifo
-
-TSUID   = 0o4000          # set UID on execution
-TSGID   = 0o2000          # set GID on execution
-TSVTX   = 0o1000          # reserved
-
-TUREAD  = 0o400           # read by owner
-TUWRITE = 0o200           # write by owner
-TUEXEC  = 0o100           # execute/search by owner
-TGREAD  = 0o040           # read by group
-TGWRITE = 0o020           # write by group
-TGEXEC  = 0o010           # execute/search by group
-TOREAD  = 0o004           # read by other
-TOWRITE = 0o002           # write by other
-TOEXEC  = 0o001           # execute/search by other
 
 #---------------------------------------------------------
 # initialization
@@ -264,13 +240,13 @@ def copyfileobj(src, dst, length=None):
     for b in range(blocks):
         buf = src.read(BUFSIZE)
         if len(buf) < BUFSIZE:
-            raise IOError("end of file reached")
+            raise OSError("end of file reached")
         dst.write(buf)
 
     if remainder != 0:
         buf = src.read(remainder)
         if len(buf) < remainder:
-            raise IOError("end of file reached")
+            raise OSError("end of file reached")
         dst.write(buf)
     return
 
@@ -399,7 +375,7 @@ class _Stream:
                 if mode == "r":
                     self.dbuf = b""
                     self.cmp = bz2.BZ2Decompressor()
-                    self.exception = IOError
+                    self.exception = OSError
                 else:
                     self.cmp = bz2.BZ2Compressor()
 
@@ -1631,7 +1607,7 @@ class TarFile(object):
         try:
             fileobj = gzip.GzipFile(name, mode + "b", compresslevel, fileobj)
             t = cls.taropen(name, mode, fileobj, **kwargs)
-        except IOError:
+        except OSError:
             if not extfileobj and fileobj is not None:
                 fileobj.close()
             if fileobj is None:
@@ -1662,7 +1638,7 @@ class TarFile(object):
 
         try:
             t = cls.taropen(name, mode, fileobj, **kwargs)
-        except (IOError, EOFError):
+        except (OSError, EOFError):
             fileobj.close()
             raise ReadError("not a bzip2 file")
         t._extfileobj = False
@@ -2022,7 +1998,7 @@ class TarFile(object):
         try:
             self._extract_member(tarinfo, os.path.join(path, tarinfo.name),
                                  set_attrs=set_attrs)
-        except EnvironmentError as e:
+        except OSError as e:
             if self.errorlevel > 0:
                 raise
             else:
@@ -2211,9 +2187,8 @@ class TarFile(object):
                 if tarinfo.issym() and hasattr(os, "lchown"):
                     os.lchown(targetpath, u, g)
                 else:
-                    if sys.platform != "os2emx":
-                        os.chown(targetpath, u, g)
-            except EnvironmentError as e:
+                    os.chown(targetpath, u, g)
+            except OSError as e:
                 raise ExtractError("could not change owner")
 
     def chmod(self, tarinfo, targetpath):
@@ -2222,7 +2197,7 @@ class TarFile(object):
         if hasattr(os, 'chmod'):
             try:
                 os.chmod(targetpath, tarinfo.mode)
-            except EnvironmentError as e:
+            except OSError as e:
                 raise ExtractError("could not change mode")
 
     def utime(self, tarinfo, targetpath):
@@ -2232,7 +2207,7 @@ class TarFile(object):
             return
         try:
             os.utime(targetpath, (tarinfo.mtime, tarinfo.mtime))
-        except EnvironmentError as e:
+        except OSError as e:
             raise ExtractError("could not change modification time")
 
     #--------------------------------------------------------------------------
@@ -2323,9 +2298,9 @@ class TarFile(object):
            corresponds to TarFile's mode.
         """
         if self.closed:
-            raise IOError("%s is closed" % self.__class__.__name__)
+            raise OSError("%s is closed" % self.__class__.__name__)
         if mode is not None and self.mode not in mode:
-            raise IOError("bad operation for mode %r" % self.mode)
+            raise OSError("bad operation for mode %r" % self.mode)
 
     def _find_link_target(self, tarinfo):
         """Find the target member of a symlink or hardlink member in the
