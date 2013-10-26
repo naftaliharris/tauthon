@@ -121,11 +121,11 @@ BaseException_str(PyBaseExceptionObject *self)
 static PyObject *
 BaseException_repr(PyBaseExceptionObject *self)
 {
-    char *name;
-    char *dot;
+    const char *name;
+    const char *dot;
 
-    name = (char *)Py_TYPE(self)->tp_name;
-    dot = strrchr(name, '.');
+    name = Py_TYPE(self)->tp_name;
+    dot = (const char *) strrchr(name, '.');
     if (dot != NULL) name = dot+1;
 
     return PyUnicode_FromFormat("%s%R", name, self->args);
@@ -2327,7 +2327,7 @@ PyObject *PyExc_RecursionErrorInst = NULL;
     }
 
 #ifdef MS_WINDOWS
-#include <Winsock2.h>
+#include <winsock2.h>
 /* The following constants were added to errno.h in VS2010 but have
    preferred WSA equivalents. */
 #undef EADDRINUSE
