@@ -4,7 +4,7 @@
 
 typedef struct {
     PyObject_HEAD
-    long      it_index;
+    Py_ssize_t it_index;
     PyObject *it_seq; /* Set to NULL when iterator is exhausted */
 } seqiterobject;
 
@@ -76,9 +76,14 @@ iter_len(seqiterobject *it)
     Py_ssize_t seqsize, len;
 
     if (it->it_seq) {
-        seqsize = PySequence_Size(it->it_seq);
-        if (seqsize == -1)
-            return NULL;
+        if (_PyObject_HasLen(it->it_seq)) {
+            seqsize = PySequence_Size(it->it_seq);
+            if (seqsize == -1)
+                return NULL;
+        }
+        else {
+            Py_RETURN_NOTIMPLEMENTED;
+        }
         len = seqsize - it->it_index;
         if (len >= 0)
             return PyLong_FromSsize_t(len);
