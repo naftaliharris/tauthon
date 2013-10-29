@@ -224,7 +224,8 @@ methoddescr_call(PyMethodDescrObject *descr, PyObject *args, PyObject *kwds)
         return NULL;
     }
     self = PyTuple_GET_ITEM(args, 0);
-    if (!PyObject_IsInstance(self, (PyObject *)(descr->d_type))) {
+    if (!_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
+                                  (PyObject *)(descr->d_type))) {
         PyErr_Format(PyExc_TypeError,
                      "descriptor '%.200s' "
                      "requires a '%.100s' object "
@@ -253,14 +254,51 @@ static PyObject *
 classmethoddescr_call(PyMethodDescrObject *descr, PyObject *args,
                       PyObject *kwds)
 {
-    PyObject *func, *result;
+    Py_ssize_t argc;
+    PyObject *self, *func, *result;
 
-    func = PyCFunction_New(descr->d_method, (PyObject *)descr->d_type);
+    /* Make sure that the first argument is acceptable as 'self' */
+    assert(PyTuple_Check(args));
+    argc = PyTuple_GET_SIZE(args);
+    if (argc < 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "descriptor '%s' of '%.100s' "
+                     "object needs an argument",
+                     descr_name((PyDescrObject *)descr),
+                     descr->d_type->tp_name);
+        return NULL;
+    }
+    self = PyTuple_GET_ITEM(args, 0);
+    if (!PyType_Check(self)) {
+        PyErr_Format(PyExc_TypeError,
+                     "descriptor '%s' requires a type "
+                     "but received a '%.100s'",
+                     descr_name((PyDescrObject *)descr),
+                     self->ob_type->tp_name);
+        return NULL;
+    }
+    if (!PyType_IsSubtype((PyTypeObject *)self, descr->d_type)) {
+        PyErr_Format(PyExc_TypeError,
+                     "descriptor '%s' "
+                     "requires a subtype of '%.100s' "
+                     "but received '%.100s",
+                     descr_name((PyDescrObject *)descr),
+                     descr->d_type->tp_name,
+                     self->ob_type->tp_name);
+        return NULL;
+    }
+
+    func = PyCFunction_New(descr->d_method, self);
     if (func == NULL)
         return NULL;
-
+    args = PyTuple_GetSlice(args, 1, argc);
+    if (args == NULL) {
+        Py_DECREF(func);
+        return NULL;
+    }
     result = PyEval_CallObjectWithKeywords(func, args, kwds);
     Py_DECREF(func);
+    Py_DECREF(args);
     return result;
 }
 
@@ -282,7 +320,8 @@ wrapperdescr_call(PyWrapperDescrObject *descr, PyObject *args, PyObject *kwds)
         return NULL;
     }
     self = PyTuple_GET_ITEM(args, 0);
-    if (!PyObject_IsInstance(self, (PyObject *)(descr->d_type))) {
+    if (!_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
+                                  (PyObject *)(descr->d_type))) {
         PyErr_Format(PyExc_TypeError,
                      "descriptor '%.200s' "
                      "requires a '%.100s' object "
@@ -799,6 +838,20 @@ proxy_str(proxyobject *pp)
     return PyObject_Str(pp->dict);
 }
 
+static PyObject *
+proxy_repr(proxyobject *pp)
+{
+    PyObject *dictrepr;
+    PyObject *result;
+
+    dictrepr = PyObject_Repr(pp->dict);
+    if (dictrepr == NULL)
+        return NULL;
+    result = PyString_FromFormat("dict_proxy(%s)", PyString_AS_STRING(dictrepr));
+    Py_DECREF(dictrepr);
+    return result;
+}
+
 static int
 proxy_traverse(PyObject *self, visitproc visit, void *arg)
 {
@@ -830,7 +883,7 @@ PyTypeObject PyDictProxy_Type = {
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
     (cmpfunc)proxy_compare,                     /* tp_compare */
-    0,                                          /* tp_repr */
+    (reprfunc)proxy_repr,                       /* tp_repr */
     0,                                          /* tp_as_number */
     &proxy_as_sequence,                         /* tp_as_sequence */
     &proxy_as_mapping,                          /* tp_as_mapping */
@@ -1046,7 +1099,8 @@ PyWrapper_New(PyObject *d, PyObject *self)
 
     assert(PyObject_TypeCheck(d, &PyWrapperDescr_Type));
     descr = (PyWrapperDescrObject *)d;
-    assert(PyObject_IsInstance(self, (PyObject *)(descr->d_type)));
+    assert(_PyObject_RealIsSubclass((PyObject *)Py_TYPE(self),
+                                    (PyObject *)(descr->d_type)));
 
     wp = PyObject_GC_New(wrapperobject, &wrappertype);
     if (wp != NULL) {
@@ -1102,7 +1156,7 @@ typedef struct {
 } propertyobject;
 
 static PyObject * property_copy(PyObject *, PyObject *, PyObject *,
-                                  PyObject *, PyObject *);
+                                  PyObject *);
 
 static PyMemberDef property_members[] = {
     {"fget", T_OBJECT, offsetof(propertyobject, prop_get), READONLY},
@@ -1119,7 +1173,7 @@ PyDoc_STRVAR(getter_doc,
 static PyObject *
 property_getter(PyObject *self, PyObject *getter)
 {
-    return property_copy(self, getter, NULL, NULL, NULL);
+    return property_copy(self, getter, NULL, NULL);
 }
 
 
@@ -1129,7 +1183,7 @@ PyDoc_STRVAR(setter_doc,
 static PyObject *
 property_setter(PyObject *self, PyObject *setter)
 {
-    return property_copy(self, NULL, setter, NULL, NULL);
+    return property_copy(self, NULL, setter, NULL);
 }
 
 
@@ -1139,7 +1193,7 @@ PyDoc_STRVAR(deleter_doc,
 static PyObject *
 property_deleter(PyObject *self, PyObject *deleter)
 {
-    return property_copy(self, NULL, NULL, deleter, NULL);
+    return property_copy(self, NULL, NULL, deleter);
 }
 
 
@@ -1208,11 +1262,10 @@ property_descr_set(PyObject *self, PyObject *obj, PyObject *value)
 }
 
 static PyObject *
-property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del,
-                PyObject *doc)
+property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del)
 {
     propertyobject *pold = (propertyobject *)old;
-    PyObject *new, *type;
+    PyObject *new, *type, *doc;
 
     type = PyObject_Type(old);
     if (type == NULL)
@@ -1230,15 +1283,12 @@ property_copy(PyObject *old, PyObject *get, PyObject *set, PyObject *del,
         Py_XDECREF(del);
         del = pold->prop_del ? pold->prop_del : Py_None;
     }
-    if (doc == NULL || doc == Py_None) {
-        Py_XDECREF(doc);
-        if (pold->getter_doc && get != Py_None) {
-            /* make _init use __doc__ from getter */
-            doc = Py_None;
-        }
-        else {
-            doc = pold->prop_doc ? pold->prop_doc : Py_None;
-        }
+    if (pold->getter_doc && get != Py_None) {
+        /* make _init use __doc__ from getter */
+        doc = Py_None;
+    }
+    else {
+        doc = pold->prop_doc ? pold->prop_doc : Py_None;
     }
 
     new =  PyObject_CallFunction(type, "OOOO", get, set, del, doc);
@@ -1280,25 +1330,28 @@ property_init(PyObject *self, PyObject *args, PyObject *kwds)
     /* if no docstring given and the getter has one, use that one */
     if ((doc == NULL || doc == Py_None) && get != NULL) {
         PyObject *get_doc = PyObject_GetAttrString(get, "__doc__");
-        if (get_doc != NULL) {
-            /* get_doc already INCREF'd by GetAttr */
-            if (Py_TYPE(self)==&PyProperty_Type) {
+        if (get_doc) {
+            if (Py_TYPE(self) == &PyProperty_Type) {
                 Py_XDECREF(prop->prop_doc);
                 prop->prop_doc = get_doc;
-            } else {
-                /* Put __doc__ in dict of the subclass instance instead,
-                otherwise it gets shadowed by class's __doc__. */
-                if (PyObject_SetAttrString(self, "__doc__", get_doc) != 0)
-                {
-                    /* DECREF for props handled by _dealloc */
-                    Py_DECREF(get_doc);
-                    return -1;
-                }
+            }
+            else {
+                /* If this is a property subclass, put __doc__
+                in dict of the subclass instance instead,
+                otherwise it gets shadowed by __doc__ in the
+                class's dict. */
+                int err = PyObject_SetAttrString(self, "__doc__", get_doc);
                 Py_DECREF(get_doc);
+                if (err < 0)
+                    return -1;
             }
             prop->getter_doc = 1;
-        } else {
+        }
+        else if (PyErr_ExceptionMatches(PyExc_Exception)) {
             PyErr_Clear();
+        }
+        else {
+            return -1;
         }
     }
 

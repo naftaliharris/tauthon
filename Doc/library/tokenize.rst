@@ -1,4 +1,3 @@
-
 :mod:`tokenize` --- Tokenizer for Python source
 ===============================================
 
@@ -7,11 +6,20 @@
 .. moduleauthor:: Ka Ping Yee
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/tokenize.py`
+
+--------------
 
 The :mod:`tokenize` module provides a lexical scanner for Python source code,
 implemented in Python.  The scanner in this module returns comments as tokens as
 well, making it useful for implementing "pretty-printers," including colorizers
 for on-screen displays.
+
+To simplify token stream handling, all :ref:`operators` and :ref:`delimiters`
+tokens are returned using the generic :data:`token.OP` token type.  The exact
+type can be determined by checking the token ``string`` field on the
+:term:`named tuple` returned from :func:`tokenize.tokenize` for the character
+sequence that identifies a specific operator token.
 
 The primary entry point is a :term:`generator`:
 
@@ -21,7 +29,8 @@ The primary entry point is a :term:`generator`:
    which must be a callable object which provides the same interface as the
    :meth:`readline` method of built-in file objects (see section
    :ref:`bltin-file-objects`).  Each call to the function should return one line
-   of input as a string.
+   of input as a string. Alternately, *readline* may be a callable object that
+   signals completion by raising :exc:`StopIteration`.
 
    The generator produces 5-tuples with these members: the token type; the token
    string; a 2-tuple ``(srow, scol)`` of ints specifying the row and column

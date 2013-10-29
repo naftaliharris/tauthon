@@ -1,6 +1,7 @@
 import mimetypes
 import StringIO
 import unittest
+import sys
 
 from test import test_support
 
@@ -20,6 +21,8 @@ class MimeTypesTestCase(unittest.TestCase):
         eq(self.db.guess_type("foo.tgz"), ("application/x-tar", "gzip"))
         eq(self.db.guess_type("foo.tar.gz"), ("application/x-tar", "gzip"))
         eq(self.db.guess_type("foo.tar.Z"), ("application/x-tar", "compress"))
+        eq(self.db.guess_type("foo.tar.bz2"), ("application/x-tar", "bzip2"))
+        eq(self.db.guess_type("foo.tar.xz"), ("application/x-tar", "xz"))
 
     def test_data_urls(self):
         eq = self.assertEqual
@@ -47,7 +50,7 @@ class MimeTypesTestCase(unittest.TestCase):
 
     def test_guess_all_types(self):
         eq = self.assertEqual
-        unless = self.failUnless
+        unless = self.assertTrue
         # First try strict.  Use a set here for testing the results because if
         # test_urllib2 is run before test_mimetypes, global state is modified
         # such that the 'all' set will have more items in it.
@@ -62,8 +65,33 @@ class MimeTypesTestCase(unittest.TestCase):
         eq(all, [])
 
 
+@unittest.skipUnless(sys.platform.startswith("win"), "Windows only")
+class Win32MimeTypesTestCase(unittest.TestCase):
+    def setUp(self):
+        # ensure all entries actually come from the Windows registry
+        self.original_types_map = mimetypes.types_map.copy()
+        mimetypes.types_map.clear()
+        mimetypes.init()
+        self.db = mimetypes.MimeTypes()
+
+    def tearDown(self):
+        # restore default settings
+        mimetypes.types_map.clear()
+        mimetypes.types_map.update(self.original_types_map)
+
+    def test_registry_parsing(self):
+        # the original, minimum contents of the MIME database in the
+        # Windows registry is undocumented AFAIK.
+        # Use file types that should *always* exist:
+        eq = self.assertEqual
+        eq(self.db.guess_type("foo.txt"), ("text/plain", None))
+        eq(self.db.guess_type("image.jpg"), ("image/jpeg", None))
+        eq(self.db.guess_type("image.png"), ("image/png", None))
+
 def test_main():
-    test_support.run_unittest(MimeTypesTestCase)
+    test_support.run_unittest(MimeTypesTestCase,
+        Win32MimeTypesTestCase
+        )
 
 
 if __name__ == "__main__":

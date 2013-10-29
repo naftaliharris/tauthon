@@ -38,7 +38,10 @@ div.related li.right {
 /* -- sidebar --------------------------------------------------------------- */
 
 div.sphinxsidebarwrapper {
+    position: relative;
+    top: 0;
     padding: 10px 5px 0 10px;
+    word-wrap: break-word;
 }
 
 div.sphinxsidebar {
@@ -253,8 +256,12 @@ table.docutils {
 
 table.docutils td, table.docutils th {
     padding: 2px 5px 2px 5px;
-    border-left: 0;    
-    background-color: #eef;    
+    border-left: 0;
+    background-color: #eef;
+}
+
+table.docutils td p.last, table.docutils th p.last {
+    margin-bottom: 0;
 }
 
 table.field-list td, table.field-list th {
@@ -266,7 +273,7 @@ table.footnote td, table.footnote th {
 }
 
 table.docutils th {
-    border-top: 1px solid #cac;    
+    border-top: 1px solid #cac;
     background-color: #ede;
 }
 
@@ -276,7 +283,7 @@ th {
 }
 
 th.head {
-    text-align: center;    
+    text-align: center;
 }
 
 /* -- other body styles ----------------------------------------------------- */
@@ -329,10 +336,14 @@ dl.glossary dt {
     font-style: italic;
 }
 
-p.deprecated {
+.deprecated {
     background-color: #ffe4e4;
     border: 1px solid #f66;
-    padding: 7px
+    padding: 7px;
+}
+
+div.deprecated p {
+    margin-bottom: 0;
 }
 
 .system-message {
@@ -342,7 +353,7 @@ p.deprecated {
 }
 
 .footnote:target  {
-    background-color: #ffa
+    background-color: #ffa;
 }
 
 .impl-detail {
@@ -364,6 +375,7 @@ p.deprecated {
 
 pre {
     overflow: auto;
+    overflow-y: hidden;
 }
 
 td.linenos pre {

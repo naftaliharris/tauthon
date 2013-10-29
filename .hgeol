@@ -10,6 +10,8 @@
 **.vsprops = BIN
 
 **.aif  = BIN
+**.aifc = BIN
+**.aiff = BIN
 **.au   = BIN
 **.bmp  = BIN
 **.db   = BIN
@@ -23,18 +25,14 @@
 **.png  = BIN
 **.psd  = BIN
 **.tar  = BIN
+**.wav  = BIN
 **.xar  = BIN
 **.zip  = BIN
 
 Lib/email/test/data/msg_26.txt = BIN
-Lib/test/sndhdrdata/sndhdr.* = BIN
+Lib/test/cjkencodings/* = BIN
 Lib/test/decimaltestdata/*.decTest = BIN
-
-Doc/make.bat = CRLF
-Tools/buildbot/*.bat = CRLF
-Tools/msi/merge.py = CRLF
-PC/VS7.1/*.bat = CRLF
-PC/VS8.0/*.bat = CRLF
+Lib/test/sndhdrdata/sndhdr.* = BIN
 
 # All other files (which presumably are human-editable) are "native".
 # This must be the last rule!

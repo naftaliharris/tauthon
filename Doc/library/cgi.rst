@@ -13,6 +13,10 @@
    single: URL
    single: Common Gateway Interface
 
+**Source code:** :source:`Lib/cgi.py`
+
+--------------
+
 Support module for Common Gateway Interface (CGI) scripts.
 
 This module defines a number of utilities for use by CGI scripts written in
@@ -77,7 +81,7 @@ program to users of your script, you can have the reports saved to files
 instead, with code like this::
 
    import cgitb
-   cgitb.enable(display=0, logdir="/tmp")
+   cgitb.enable(display=0, logdir="/path/to/logdir")
 
 It's very helpful to use this feature during script development. The reports
 produced by :mod:`cgitb` provide information that can save you a lot of time in
@@ -93,7 +97,7 @@ consume standard input, it should be instantiated only once.
 
 The :class:`FieldStorage` instance can be indexed like a Python dictionary.
 It allows membership testing with the :keyword:`in` operator, and also supports
-the standard dictionary method :meth:`keys` and the built-in function
+the standard dictionary method :meth:`~dict.keys` and the built-in function
 :func:`len`.  Form fields containing empty strings are ignored and do not appear
 in the dictionary; to keep such values, provide a true value for the optional
 *keep_blank_values* keyword parameter when creating the :class:`FieldStorage`
@@ -115,28 +119,29 @@ string::
 
 Here the fields, accessed through ``form[key]``, are themselves instances of
 :class:`FieldStorage` (or :class:`MiniFieldStorage`, depending on the form
-encoding). The :attr:`value` attribute of the instance yields the string value
-of the field.  The :meth:`getvalue` method returns this string value directly;
-it also accepts an optional second argument as a default to return if the
-requested key is not present.
+encoding). The :attr:`~FieldStorage.value` attribute of the instance yields
+the string value of the field.  The :meth:`~FieldStorage.getvalue` method
+returns this string value directly; it also accepts an optional second argument
+as a default to return if the requested key is not present.
 
 If the submitted form data contains more than one field with the same name, the
 object retrieved by ``form[key]`` is not a :class:`FieldStorage` or
 :class:`MiniFieldStorage` instance but a list of such instances.  Similarly, in
 this situation, ``form.getvalue(key)`` would return a list of strings. If you
 expect this possibility (when your HTML form contains multiple fields with the
-same name), use the :func:`getlist` function, which always returns a list of
-values (so that you do not need to special-case the single item case).  For
-example, this code concatenates any number of username fields, separated by
-commas::
+same name), use the :meth:`~FieldStorage.getlist` method, which always returns
+a list of values (so that you do not need to special-case the single item
+case).  For example, this code concatenates any number of username fields,
+separated by commas::
 
    value = form.getlist("username")
    usernames = ",".join(value)
 
 If a field represents an uploaded file, accessing the value via the
-:attr:`value` attribute or the :func:`getvalue` method reads the entire file in
-memory as a string.  This may not be what you want. You can test for an uploaded
-file by testing either the :attr:`filename` attribute or the :attr:`!file`
+:attr:`~FieldStorage.value` attribute or the :func:`~FieldStorage.getvalue`
+method reads the entire file in memory as a string.  This may not be what you
+want. You can test for an uploaded file by testing either the
+:attr:`~FieldStorage.filename` attribute or the :attr:`~FieldStorage.file`
 attribute.  You can then read the data at leisure from the :attr:`!file`
 attribute::
 
@@ -151,8 +156,8 @@ attribute::
 
 If an error is encountered when obtaining the contents of an uploaded file
 (for example, when the user interrupts the form submission by clicking on
-a Back or Cancel button) the :attr:`done` attribute of the object for the
-field will be set to the value -1.
+a Back or Cancel button) the :attr:`~FieldStorage.done` attribute of the
+object for the field will be set to the value -1.
 
 The file upload draft standard entertains the possibility of uploading multiple
 files from one field (using a recursive :mimetype:`multipart/\*` encoding).
@@ -221,8 +226,8 @@ Therefore, the appropriate way to read form data values was to always use the
 code which checks whether the obtained value is a single value or a list of
 values.  That's annoying and leads to less readable scripts.
 
-A more convenient approach is to use the methods :meth:`getfirst` and
-:meth:`getlist` provided by this higher level interface.
+A more convenient approach is to use the methods :meth:`~FieldStorage.getfirst`
+and :meth:`~FieldStorage.getlist` provided by this higher level interface.
 
 
 .. method:: FieldStorage.getfirst(name[, default])
@@ -280,10 +285,10 @@ These are useful if you want more control, or if you want to employ some of the
 algorithms implemented in this module in other circumstances.
 
 
-.. function:: parse(fp[, keep_blank_values[, strict_parsing]])
+.. function:: parse(fp[, environ[, keep_blank_values[, strict_parsing]]])
 
    Parse a query in the environment or from a file (the file defaults to
-   ``sys.stdin``).  The *keep_blank_values* and *strict_parsing* parameters are
+   ``sys.stdin`` and environment defaults to ``os.environ``).  The *keep_blank_values* and *strict_parsing* parameters are
    passed to :func:`urlparse.parse_qs` unchanged.
 
 
@@ -354,7 +359,7 @@ algorithms implemented in this module in other circumstances.
    that single quotes are never translated.
 
    If the value to be quoted might include single- or double-quote characters,
-   or both, consider using the :func:`quoteattr` function in the
+   or both, consider using the :func:`~xml.sax.saxutils.quoteattr` function in the
    :mod:`xml.sax.saxutils` module instead.
 
 

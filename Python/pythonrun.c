@@ -76,7 +76,7 @@ extern void _PyGILState_Fini(void);
 int Py_DebugFlag; /* Needed by parser.c */
 int Py_VerboseFlag; /* Needed by import.c */
 int Py_InteractiveFlag; /* Needed by Py_FdIsInteractive() below */
-int Py_InspectFlag; /* Needed to determine whether to exit at SystemError */
+int Py_InspectFlag; /* Needed to determine whether to exit at SystemExit */
 int Py_NoSiteFlag; /* Suppress 'import site' */
 int Py_BytesWarningFlag; /* Warn on str(bytes) and str(buffer) */
 int Py_DontWriteBytecodeFlag; /* Suppress writing bytecode files (*.py[co]) */
@@ -90,6 +90,11 @@ int Py_IgnoreEnvironmentFlag; /* e.g. PYTHONPATH, PYTHONHOME */
 int _Py_QnewFlag = 0;
 int Py_NoUserSiteDirectory = 0; /* for -s and site.py */
 int Py_HashRandomizationFlag = 0; /* for -R and PYTHONHASHSEED */
+
+
+/* Hack to force loading of object files */
+int (*_PyOS_mystrnicmp_hack)(const char *, const char *, Py_ssize_t) = \
+    PyOS_mystrnicmp; /* Python/pystrcmp.o */
 
 /* PyModule_GetWarningsModule is no longer necessary as of 2.6
 since _warnings is builtin.  This API should not be used. */
@@ -190,6 +195,9 @@ Py_InitializeEx(int install_sigs)
 
     if (!_PyInt_Init())
         Py_FatalError("Py_Initialize: can't init ints");
+
+    if (!_PyLong_Init())
+        Py_FatalError("Py_Initialize: can't init longs");
 
     if (!PyByteArray_Init())
         Py_FatalError("Py_Initialize: can't init bytearray");
@@ -705,7 +713,7 @@ initmain(void)
         if (bimod == NULL ||
             PyDict_SetItemString(d, "__builtins__", bimod) != 0)
             Py_FatalError("can't add __builtins__ to __main__");
-        Py_DECREF(bimod);
+        Py_XDECREF(bimod);
     }
 }
 
@@ -714,20 +722,12 @@ initmain(void)
 static void
 initsite(void)
 {
-    PyObject *m, *f;
+    PyObject *m;
     m = PyImport_ImportModule("site");
     if (m == NULL) {
-        f = PySys_GetObject("stderr");
-        if (Py_VerboseFlag) {
-            PyFile_WriteString(
-                "'import site' failed; traceback:\n", f);
-            PyErr_Print();
-        }
-        else {
-            PyFile_WriteString(
-              "'import site' failed; use -v for traceback\n", f);
-            PyErr_Clear();
-        }
+        PyErr_Print();
+        Py_Finalize();
+        exit(1);
     }
     else {
         Py_DECREF(m);
@@ -912,19 +912,20 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
 {
     PyObject *m, *d, *v;
     const char *ext;
-    int set_file_name = 0, ret, len;
+    int set_file_name = 0, len, ret = -1;
 
     m = PyImport_AddModule("__main__");
     if (m == NULL)
         return -1;
+    Py_INCREF(m);
     d = PyModule_GetDict(m);
     if (PyDict_GetItemString(d, "__file__") == NULL) {
         PyObject *f = PyString_FromString(filename);
         if (f == NULL)
-            return -1;
+            goto done;
         if (PyDict_SetItemString(d, "__file__", f) < 0) {
             Py_DECREF(f);
-            return -1;
+            goto done;
         }
         set_file_name = 1;
         Py_DECREF(f);
@@ -937,7 +938,6 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
             fclose(fp);
         if ((fp = fopen(filename, "rb")) == NULL) {
             fprintf(stderr, "python: Can't reopen .pyc file\n");
-            ret = -1;
             goto done;
         }
         /* Turn on optimization if a .pyo file is given */
@@ -950,7 +950,6 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
     }
     if (v == NULL) {
         PyErr_Print();
-        ret = -1;
         goto done;
     }
     Py_DECREF(v);
@@ -960,6 +959,7 @@ PyRun_SimpleFileExFlags(FILE *fp, const char *filename, int closeit,
   done:
     if (set_file_name && PyDict_DelItemString(d, "__file__"))
         PyErr_Clear();
+    Py_DECREF(m);
     return ret;
 }
 
@@ -994,55 +994,67 @@ parse_syntax_error(PyObject *err, PyObject **message, const char **filename,
         return PyArg_ParseTuple(err, "O(ziiz)", message, filename,
                                 lineno, offset, text);
 
+    *message = NULL;
+
     /* new style errors.  `err' is an instance */
-
-    if (! (v = PyObject_GetAttrString(err, "msg")))
+    *message = PyObject_GetAttrString(err, "msg");
+    if (!*message)
         goto finally;
-    *message = v;
 
-    if (!(v = PyObject_GetAttrString(err, "filename")))
+    v = PyObject_GetAttrString(err, "filename");
+    if (!v)
         goto finally;
-    if (v == Py_None)
+    if (v == Py_None) {
+        Py_DECREF(v);
         *filename = NULL;
-    else if (! (*filename = PyString_AsString(v)))
-        goto finally;
+    }
+    else {
+        *filename = PyString_AsString(v);
+        Py_DECREF(v);
+        if (!*filename)
+            goto finally;
+    }
 
-    Py_DECREF(v);
-    if (!(v = PyObject_GetAttrString(err, "lineno")))
+    v = PyObject_GetAttrString(err, "lineno");
+    if (!v)
         goto finally;
     hold = PyInt_AsLong(v);
     Py_DECREF(v);
-    v = NULL;
     if (hold < 0 && PyErr_Occurred())
         goto finally;
     *lineno = (int)hold;
 
-    if (!(v = PyObject_GetAttrString(err, "offset")))
+    v = PyObject_GetAttrString(err, "offset");
+    if (!v)
         goto finally;
     if (v == Py_None) {
         *offset = -1;
         Py_DECREF(v);
-        v = NULL;
     } else {
         hold = PyInt_AsLong(v);
         Py_DECREF(v);
-        v = NULL;
         if (hold < 0 && PyErr_Occurred())
             goto finally;
         *offset = (int)hold;
     }
 
-    if (!(v = PyObject_GetAttrString(err, "text")))
+    v = PyObject_GetAttrString(err, "text");
+    if (!v)
         goto finally;
-    if (v == Py_None)
+    if (v == Py_None) {
+        Py_DECREF(v);
         *text = NULL;
-    else if (! (*text = PyString_AsString(v)))
-        goto finally;
-    Py_DECREF(v);
+    }
+    else {
+        *text = PyString_AsString(v);
+        Py_DECREF(v);
+        if (!*text)
+            goto finally;
+    }
     return 1;
 
 finally:
-    Py_XDECREF(v);
+    Py_XDECREF(*message);
     return 0;
 }
 
@@ -1057,7 +1069,7 @@ print_error_text(PyObject *f, int offset, const char *text)
 {
     char *nl;
     if (offset >= 0) {
-        if (offset > 0 && offset == (int)strlen(text))
+        if (offset > 0 && offset == strlen(text) && text[offset - 1] == '\n')
             offset--;
         for (;;) {
             nl = strchr(text, '\n');
@@ -1161,7 +1173,7 @@ PyErr_PrintEx(int set_sys_last_vars)
         PySys_SetObject("last_traceback", tb);
     }
     hook = PySys_GetObject("excepthook");
-    if (hook) {
+    if (hook && hook != Py_None) {
         PyObject *args = PyTuple_Pack(3,
             exception, v, tb ? tb : Py_None);
         PyObject *result = PyEval_CallObject(hook, args);
@@ -1211,7 +1223,7 @@ PyErr_Display(PyObject *exception, PyObject *value, PyObject *tb)
     int err = 0;
     PyObject *f = PySys_GetObject("stderr");
     Py_INCREF(value);
-    if (f == NULL)
+    if (f == NULL || f == Py_None)
         fprintf(stderr, "lost sys.stderr\n");
     else {
         if (Py_FlushLine())

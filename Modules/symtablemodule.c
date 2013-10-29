@@ -33,7 +33,7 @@ symtable_symtable(PyObject *self, PyObject *args)
     st = Py_SymtableString(str, filename, start);
     if (st == NULL)
         return NULL;
-    t = st->st_symbols;
+    t = (PyObject *)st->st_top;
     Py_INCREF(t);
     PyMem_Free((void *)st->st_future);
     PySymtable_Free(st);
@@ -52,6 +52,9 @@ init_symtable(void)
 {
     PyObject *m;
 
+    if (PyType_Ready(&PySTEntry_Type) < 0)
+        return;
+
     m = Py_InitModule("_symtable", symtable_methods);
     if (m == NULL)
         return;
@@ -59,11 +62,7 @@ init_symtable(void)
     PyModule_AddIntConstant(m, "DEF_GLOBAL", DEF_GLOBAL);
     PyModule_AddIntConstant(m, "DEF_LOCAL", DEF_LOCAL);
     PyModule_AddIntConstant(m, "DEF_PARAM", DEF_PARAM);
-    PyModule_AddIntConstant(m, "DEF_STAR", DEF_STAR);
-    PyModule_AddIntConstant(m, "DEF_DOUBLESTAR", DEF_DOUBLESTAR);
-    PyModule_AddIntConstant(m, "DEF_INTUPLE", DEF_INTUPLE);
     PyModule_AddIntConstant(m, "DEF_FREE", DEF_FREE);
-    PyModule_AddIntConstant(m, "DEF_FREE_GLOBAL", DEF_FREE_GLOBAL);
     PyModule_AddIntConstant(m, "DEF_FREE_CLASS", DEF_FREE_CLASS);
     PyModule_AddIntConstant(m, "DEF_IMPORT", DEF_IMPORT);
     PyModule_AddIntConstant(m, "DEF_BOUND", DEF_BOUND);

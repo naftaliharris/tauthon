@@ -120,6 +120,14 @@ name multiple exceptions as a parenthesized tuple, for example::
    ... except (RuntimeError, TypeError, NameError):
    ...     pass
 
+Note that the parentheses around this tuple are required, because
+``except ValueError, e:`` was the syntax used for what is normally
+written as ``except ValueError as e:`` in modern Python (described
+below). The old syntax is still supported for backwards compatibility.
+This means ``except RuntimeError, TypeError`` is not equivalent to
+``except (RuntimeError, TypeError):`` but to ``except RuntimeError as
+TypeError:`` which is not what you want.
+
 The last except clause may omit the exception name(s), to serve as a wildcard.
 Use this with extreme caution, since it is easy to mask a real programming error
 in this way!  It can also be used to print an error message and then re-raise
@@ -131,8 +139,8 @@ the exception (allowing a caller to handle the exception as well)::
        f = open('myfile.txt')
        s = f.readline()
        i = int(s.strip())
-   except IOError as (errno, strerror):
-       print "I/O error({0}): {1}".format(errno, strerror)
+   except IOError as e:
+       print "I/O error({0}): {1}".format(e.errno, e.strerror)
    except ValueError:
        print "Could not convert data to an integer."
    except:
@@ -177,7 +185,7 @@ attributes to it as desired. ::
    ...    print type(inst)     # the exception instance
    ...    print inst.args      # arguments stored in .args
    ...    print inst           # __str__ allows args to printed directly
-   ...    x, y = inst          # __getitem__ allows args to be unpacked directly
+   ...    x, y = inst.args
    ...    print 'x =', x
    ...    print 'y =', y
    ...
@@ -218,11 +226,9 @@ exception to occur. For example::
      File "<stdin>", line 1, in ?
    NameError: HiThere
 
-The argument to :keyword:`raise` is an exception class or instance to be
-raised.  There is a deprecated alternate syntax that separates class and
-constructor arguments; the above could be written as ``raise NameError,
-'HiThere'``.  Since it once was the only one available, the latter form is
-prevalent in older code.
+The sole argument to :keyword:`raise` indicates the exception to be raised.
+This must be either an exception instance or an exception class (a class that
+derives from :class:`Exception`).
 
 If you need to determine whether an exception was raised but don't intend to
 handle it, a simpler form of the :keyword:`raise` statement allows you to
@@ -391,7 +397,7 @@ succeeded or failed. Look at the following example, which tries to open a file
 and print its contents to the screen. ::
 
    for line in open("myfile.txt"):
-       print line
+       print line,
 
 The problem with this code is that it leaves the file open for an indeterminate
 amount of time after the code has finished executing. This is not an issue in
@@ -401,7 +407,7 @@ ensures they are always cleaned up promptly and correctly. ::
 
    with open("myfile.txt") as f:
        for line in f:
-           print line
+           print line,
 
 After the statement is executed, the file *f* is always closed, even if a
 problem was encountered while processing the lines. Other objects which provide

@@ -1,6 +1,6 @@
 """This test case provides support for checking forking and wait behavior.
 
-To test different wait behavior, overrise the wait_impl method.
+To test different wait behavior, override the wait_impl method.
 
 We want fork1() semantics -- only the forking thread survives in the
 child after a fork().
@@ -12,7 +12,9 @@ While BeOS doesn't officially support fork and native threading in
 the same application, the present example should work just fine.  DC
 """
 
-import os, sys, time, thread, unittest
+import os, sys, time, unittest
+import test.test_support as test_support
+thread = test_support.import_module('thread')
 
 LONGSLEEP = 2
 SHORTSLEEP = 0.5
@@ -41,8 +43,8 @@ class ForkWait(unittest.TestCase):
                 break
             time.sleep(2 * SHORTSLEEP)
 
-        self.assertEquals(spid, cpid)
-        self.assertEquals(status, 0, "cause = %d, exit = %d" % (status&0xff, status>>8))
+        self.assertEqual(spid, cpid)
+        self.assertEqual(status, 0, "cause = %d, exit = %d" % (status&0xff, status>>8))
 
     def test_wait(self):
         for i in range(NUM_THREADS):
@@ -52,7 +54,7 @@ class ForkWait(unittest.TestCase):
 
         a = self.alive.keys()
         a.sort()
-        self.assertEquals(a, range(NUM_THREADS))
+        self.assertEqual(a, range(NUM_THREADS))
 
         prefork_lives = self.alive.copy()
 

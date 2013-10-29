@@ -1,7 +1,7 @@
-import gdbm
 import unittest
 import os
-from test.test_support import verbose, TESTFN, run_unittest, unlink
+from test.test_support import TESTFN, run_unittest, unlink, import_module
+gdbm = import_module('gdbm')
 
 
 filename = TESTFN
@@ -23,10 +23,10 @@ class TestGdbm(unittest.TestCase):
         self.g['12345678910'] = '019237410982340912840198242'
         key_set = set(self.g.keys())
         self.assertEqual(key_set, frozenset(['a', '12345678910']))
-        self.assert_(self.g.has_key('a'))
+        self.assertTrue(self.g.has_key('a'))
         key = self.g.firstkey()
         while key:
-            self.assert_(key in key_set)
+            self.assertIn(key, key_set)
             key_set.remove(key)
             key = self.g.nextkey(key)
         self.assertRaises(KeyError, lambda: self.g['xxx'])
@@ -47,7 +47,7 @@ class TestGdbm(unittest.TestCase):
         all = set(gdbm.open_flags)
         # Test standard flags (presumably "crwn").
         modes = all - set('fsu')
-        for mode in modes:
+        for mode in sorted(modes):
             self.g = gdbm.open(filename, mode)
             self.g.close()
 
@@ -64,7 +64,7 @@ class TestGdbm(unittest.TestCase):
 
         self.g['x'] = 'x' * 10000
         size1 = os.path.getsize(filename)
-        self.assert_(size0 < size1)
+        self.assertTrue(size0 < size1)
 
         del self.g['x']
         # 'size' is supposed to be the same even after deleting an entry.
@@ -72,7 +72,7 @@ class TestGdbm(unittest.TestCase):
 
         self.g.reorganize()
         size2 = os.path.getsize(filename)
-        self.assert_(size1 > size2 >= size0)
+        self.assertTrue(size1 > size2 >= size0)
 
 
 def test_main():

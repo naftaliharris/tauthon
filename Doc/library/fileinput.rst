@@ -6,6 +6,9 @@
 .. moduleauthor:: Guido van Rossum <guido@python.org>
 .. sectionauthor:: Fred L. Drake, Jr. <fdrake@acm.org>
 
+**Source code:** :source:`Lib/fileinput.py`
+
+--------------
 
 This module implements a helper class and functions to quickly write a
 loop over standard input or a list of files. If you just want to read or
@@ -47,7 +50,7 @@ provided by this module.
 The following function is the primary interface of this module:
 
 
-.. function:: input([files[, inplace[, backup[, mode[, openhook]]]]])
+.. function:: input([files[, inplace[, backup[, bufsize[, mode[, openhook]]]]]])
 
    Create an instance of the :class:`FileInput` class.  The instance will be used
    as global state for the functions of this module, and is also returned to use
@@ -119,15 +122,16 @@ The class which implements the sequence behavior provided by the module is
 available for subclassing as well:
 
 
-.. class:: FileInput([files[, inplace[, backup[, mode[, openhook]]]]])
+.. class:: FileInput([files[, inplace[, backup[,bufsize[, mode[, openhook]]]]]])
 
    Class :class:`FileInput` is the implementation; its methods :meth:`filename`,
    :meth:`fileno`, :meth:`lineno`, :meth:`filelineno`, :meth:`isfirstline`,
-   :meth:`isstdin`, :meth:`nextfile` and :meth:`close` correspond to the functions
-   of the same name in the module. In addition it has a :meth:`readline` method
-   which returns the next input line, and a :meth:`__getitem__` method which
-   implements the sequence behavior.  The sequence must be accessed in strictly
-   sequential order; random access and :meth:`readline` cannot be mixed.
+   :meth:`isstdin`, :meth:`nextfile` and :meth:`close` correspond to the
+   functions of the same name in the module. In addition it has a
+   :meth:`~file.readline` method which returns the next input line,
+   and a :meth:`__getitem__` method which implements the sequence behavior.
+   The sequence must be accessed in strictly sequential order; random access
+   and :meth:`~file.readline` cannot be mixed.
 
    With *mode* you can specify which file mode will be passed to :func:`open`. It
    must be one of ``'r'``, ``'rU'``, ``'U'`` and ``'rb'``.

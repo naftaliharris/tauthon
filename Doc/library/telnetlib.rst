@@ -1,4 +1,3 @@
-
 :mod:`telnetlib` --- Telnet client
 ==================================
 
@@ -8,6 +7,10 @@
 
 
 .. index:: single: protocol; Telnet
+
+**Source code:** :source:`Lib/telnetlib.py`
+
+--------------
 
 The :mod:`telnetlib` module provides a :class:`Telnet` class that implements the
 Telnet protocol.  See :rfc:`854` for details about the protocol. In addition, it
@@ -186,7 +189,7 @@ Telnet Objects
    Read until one from a list of a regular expressions matches.
 
    The first argument is a list of regular expressions, either compiled
-   (:class:`re.RegexObject` instances) or uncompiled (strings). The optional second
+   (:class:`regex objects <re-objects>`) or uncompiled (strings). The optional second
    argument is a timeout, in seconds; the default is to block indefinitely.
 
    Return a tuple of three items: the index in the list of the first regular
@@ -198,8 +201,8 @@ Telnet Objects
    received so far (may be the empty string if a timeout happened).
 
    If a regular expression ends with a greedy match (such as ``.*``) or if more
-   than one expression can match the same input, the results are indeterministic,
-   and may depend on the I/O timing.
+   than one expression can match the same input, the results are
+   non-deterministic, and may depend on the I/O timing.
 
 
 .. method:: Telnet.set_option_negotiation_callback(callback)

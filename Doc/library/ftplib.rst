@@ -9,6 +9,10 @@
    pair: FTP; protocol
    single: FTP; ftplib (standard module)
 
+**Source code:** :source:`Lib/ftplib.py`
+
+--------------
+
 This module defines the class :class:`FTP` and a few related items. The
 :class:`FTP` class implements the client side of the FTP protocol.  You can use
 this to write Python programs that perform a variety of automated FTP jobs, such
@@ -19,16 +23,17 @@ see Internet :rfc:`959`.
 Here's a sample session using the :mod:`ftplib` module::
 
    >>> from ftplib import FTP
-   >>> ftp = FTP('ftp.cwi.nl')   # connect to host, default port
-   >>> ftp.login()               # user anonymous, passwd anonymous@
-   >>> ftp.retrlines('LIST')     # list directory contents
-   total 24418
-   drwxrwsr-x   5 ftp-usr  pdmaint     1536 Mar 20 09:48 .
-   dr-xr-srwt 105 ftp-usr  pdmaint     1536 Mar 21 14:32 ..
-   -rw-r--r--   1 ftp-usr  pdmaint     5305 Mar 20 09:48 INDEX
-    .
-    .
-    .
+   >>> ftp = FTP('ftp.debian.org')     # connect to host, default port
+   >>> ftp.login()                     # user anonymous, passwd anonymous@
+   '230 Login successful.'
+   >>> ftp.cwd('debian')               # change into "debian" directory
+   >>> ftp.retrlines('LIST')           # list directory contents
+   -rw-rw-r--    1 1176     1176         1063 Jun 15 10:18 README
+   ...
+   drwxr-sr-x    5 1176     1176         4096 Dec 19  2000 pool
+   drwxr-sr-x    4 1176     1176         4096 Nov 17  2008 project
+   drwxr-xr-x    3 1176     1176         4096 Oct 10  2012 tools
+   '226 Directory send OK.'
    >>> ftp.retrbinary('RETR README', open('README', 'wb').write)
    '226 Transfer complete.'
    >>> ftp.quit()
@@ -50,6 +55,40 @@ The module defines the following items:
       *timeout* was added.
 
 
+.. class:: FTP_TLS([host[, user[, passwd[, acct[, keyfile[, certfile[, timeout]]]]]]])
+
+   A :class:`FTP` subclass which adds TLS support to FTP as described in
+   :rfc:`4217`.
+   Connect as usual to port 21 implicitly securing the FTP control connection
+   before authenticating. Securing the data connection requires the user to
+   explicitly ask for it by calling the :meth:`prot_p` method.
+   *keyfile* and *certfile* are optional -- they can contain a PEM formatted
+   private key and certificate chain file name for the SSL connection.
+
+   .. versionadded:: 2.7
+
+   Here's a sample session using the :class:`FTP_TLS` class:
+
+   >>> from ftplib import FTP_TLS
+   >>> ftps = FTP_TLS('ftp.python.org')
+   >>> ftps.login()           # login anonymously before securing control channel
+   >>> ftps.prot_p()          # switch to secure data connection
+   >>> ftps.retrlines('LIST') # list directory content securely
+   total 9
+   drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 .
+   drwxr-xr-x   8 root     wheel        1024 Jan  3  1994 ..
+   drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 bin
+   drwxr-xr-x   2 root     wheel        1024 Jan  3  1994 etc
+   d-wxrwxr-x   2 ftp      wheel        1024 Sep  5 13:43 incoming
+   drwxr-xr-x   2 root     wheel        1024 Nov 17  1993 lib
+   drwxr-xr-x   6 1094     wheel        1024 Sep 13 19:07 pub
+   drwxr-xr-x   3 root     wheel        1024 Jan  3  1994 usr
+   -rw-r--r--   1 root     root          312 Aug  1  1994 welcome.msg
+   '226 Transfer complete.'
+   >>> ftps.quit()
+   >>>
+
+
 .. exception:: error_reply
 
    Exception raised when an unexpected reply is received from the server.
@@ -57,18 +96,21 @@ The module defines the following items:
 
 .. exception:: error_temp
 
-   Exception raised when an error code in the range 400--499 is received.
+   Exception raised when an error code signifying a temporary error (response
+   codes in the range 400--499) is received.
 
 
 .. exception:: error_perm
 
-   Exception raised when an error code in the range 500--599 is received.
+   Exception raised when an error code signifying a permanent error (response
+   codes in the range 500--599) is received.
 
 
 .. exception:: error_proto
 
-   Exception raised when a reply is received from the server that does not
-   begin with a digit in the range 1--5.
+   Exception raised when a reply is received from the server that does not fit
+   the response specifications of the File Transfer Protocol, i.e. begin with a
+   digit in the range 1--5.
 
 
 .. data:: all_errors
@@ -76,7 +118,7 @@ The module defines the following items:
    The set of all exceptions (as a tuple) that methods of :class:`FTP`
    instances may raise as a result of problems with the FTP connection (as
    opposed to programming errors made by the caller).  This set includes the
-   four exceptions listed below as well as :exc:`socket.error` and
+   four exceptions listed above as well as :exc:`socket.error` and
    :exc:`IOError`.
 
 
@@ -164,9 +206,9 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
 
 .. method:: FTP.voidcmd(command)
 
-   Send a simple command string to the server and handle the response. Return
-   nothing if a response code in the range 200--299 is received. Raise an exception
-   otherwise.
+   Send a simple command string to the server and handle the response.  Return
+   nothing if a response code corresponding to success (codes in the range
+   200--299) is received.  Raise :exc:`error_reply` otherwise.
 
 
 .. method:: FTP.retrbinary(command, callback[, maxblocksize[, rest]])
@@ -186,9 +228,11 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    Retrieve a file or directory listing in ASCII transfer mode.  *command*
    should be an appropriate ``RETR`` command (see :meth:`retrbinary`) or a
    command such as ``LIST``, ``NLST`` or ``MLSD`` (usually just the string
-   ``'LIST'``).  The *callback* function is called for each line with a
-   string argument containing the line with the trailing CRLF stripped.
-   The default *callback* prints the line to ``sys.stdout``.
+   ``'LIST'``).  ``LIST`` retrieves a list of files and information about those files.
+   ``NLST`` retrieves a list of file names.  On some servers, ``MLSD`` retrieves
+   a machine readable list of files and information about those files.  The *callback*
+   function is called for each line with a string argument containing the line with
+   the trailing CRLF stripped.  The default *callback* prints the line to ``sys.stdout``.
 
 
 .. method:: FTP.set_pasv(boolean)
@@ -198,14 +242,15 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    it is on by default.)
 
 
-.. method:: FTP.storbinary(command, file[, blocksize, callback])
+.. method:: FTP.storbinary(command, file[, blocksize, callback, rest])
 
    Store a file in binary transfer mode.  *command* should be an appropriate
    ``STOR`` command: ``"STOR filename"``. *file* is an open file object which is
    read until EOF using its :meth:`read` method in blocks of size *blocksize* to
    provide the data to be stored.  The *blocksize* argument defaults to 8192.
    *callback* is an optional single parameter callable that is called
-   on each block of data after it is sent.
+   on each block of data after it is sent. *rest* means the same thing as in
+   the :meth:`transfercmd` method.
 
    .. versionchanged:: 2.1
       default for *blocksize* added.
@@ -213,13 +258,15 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
    .. versionchanged:: 2.6
       *callback* parameter added.
 
+   .. versionchanged:: 2.7
+      *rest* parameter added.
 
 .. method:: FTP.storlines(command, file[, callback])
 
    Store a file in ASCII transfer mode.  *command* should be an appropriate
    ``STOR`` command (see :meth:`storbinary`).  Lines are read until EOF from the
-   open file object *file* using its :meth:`readline` method to provide the data to
-   be stored.  *callback* is an optional single parameter callable
+   open file object *file* using its :meth:`~file.readline` method to provide
+   the data to be stored.  *callback* is an optional single parameter callable
    that is called on each line after it is sent.
 
    .. versionchanged:: 2.6
@@ -256,10 +303,10 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
 
 .. method:: FTP.nlst(argument[, ...])
 
-   Return a list of files as returned by the ``NLST`` command.  The optional
-   *argument* is a directory to list (default is the current server directory).
-   Multiple arguments can be used to pass non-standard options to the ``NLST``
-   command.
+   Return a list of file names as returned by the ``NLST`` command.  The
+   optional *argument* is a directory to list (default is the current server
+   directory).  Multiple arguments can be used to pass non-standard options to
+   the ``NLST`` command.
 
 
 .. method:: FTP.dir(argument[, ...])
@@ -324,8 +371,30 @@ followed by ``lines`` for the text version or ``binary`` for the binary version.
 .. method:: FTP.close()
 
    Close the connection unilaterally.  This should not be applied to an already
-   closed connection such as after a successful call to :meth:`quit`.  After this
-   call the :class:`FTP` instance should not be used any more (after a call to
-   :meth:`close` or :meth:`quit` you cannot reopen the connection by issuing
-   another :meth:`login` method).
+   closed connection such as after a successful call to :meth:`~FTP.quit`.
+   After this call the :class:`FTP` instance should not be used any more (after
+   a call to :meth:`close` or :meth:`~FTP.quit` you cannot reopen the
+   connection by issuing another :meth:`login` method).
 
+
+FTP_TLS Objects
+---------------
+
+:class:`FTP_TLS` class inherits from :class:`FTP`, defining these additional objects:
+
+.. attribute:: FTP_TLS.ssl_version
+
+   The SSL version to use (defaults to *TLSv1*).
+
+.. method:: FTP_TLS.auth()
+
+   Set up secure control connection by using TLS or SSL, depending on what
+   specified in :meth:`ssl_version` attribute.
+
+.. method:: FTP_TLS.prot_p()
+
+   Set up secure data connection.
+
+.. method:: FTP_TLS.prot_c()
+
+   Set up clear text data connection.

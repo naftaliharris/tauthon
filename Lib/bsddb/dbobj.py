@@ -29,13 +29,8 @@ if absolute_import :
 else :
     import db
 
-if sys.version_info[0:2] <= (2, 5) :
-    try:
-        from UserDict import DictMixin
-    except ImportError:
-        # DictMixin is new in Python 2.3
-        class DictMixin: pass
-    MutableMapping = DictMixin
+if sys.version_info < (2, 6) :
+    from UserDict import DictMixin as MutableMapping
 else :
     import collections
     MutableMapping = collections.MutableMapping
@@ -110,15 +105,17 @@ class DBEnv:
     def log_stat(self, *args, **kwargs):
         return self._cobj.log_stat(*args, **kwargs)
 
-    if db.version() >= (4,1):
-        def dbremove(self, *args, **kwargs):
-            return self._cobj.dbremove(*args, **kwargs)
-        def dbrename(self, *args, **kwargs):
-            return self._cobj.dbrename(*args, **kwargs)
-        def set_encrypt(self, *args, **kwargs):
-            return self._cobj.set_encrypt(*args, **kwargs)
+    def dbremove(self, *args, **kwargs):
+        return self._cobj.dbremove(*args, **kwargs)
+    def dbrename(self, *args, **kwargs):
+        return self._cobj.dbrename(*args, **kwargs)
+    def set_encrypt(self, *args, **kwargs):
+        return self._cobj.set_encrypt(*args, **kwargs)
 
     if db.version() >= (4,4):
+        def fileid_reset(self, *args, **kwargs):
+            return self._cobj.fileid_reset(*args, **kwargs)
+
         def lsn_reset(self, *args, **kwargs):
             return self._cobj.lsn_reset(*args, **kwargs)
 
@@ -138,7 +135,7 @@ class DB(MutableMapping):
     def __delitem__(self, arg):
         del self._cobj[arg]
 
-    if sys.version_info[0:2] >= (2, 6) :
+    if sys.version_info >= (2, 6) :
         def __iter__(self) :
             return self._cobj.__iter__()
 
@@ -194,6 +191,8 @@ class DB(MutableMapping):
         return self._cobj.set_bt_compare(*args, **kwargs)
     def set_cachesize(self, *args, **kwargs):
         return self._cobj.set_cachesize(*args, **kwargs)
+    def set_dup_compare(self, *args, **kwargs) :
+        return self._cobj.set_dup_compare(*args, **kwargs)
     def set_flags(self, *args, **kwargs):
         return self._cobj.set_flags(*args, **kwargs)
     def set_h_ffactor(self, *args, **kwargs):
@@ -229,9 +228,8 @@ class DB(MutableMapping):
     def set_get_returns_none(self, *args, **kwargs):
         return self._cobj.set_get_returns_none(*args, **kwargs)
 
-    if db.version() >= (4,1):
-        def set_encrypt(self, *args, **kwargs):
-            return self._cobj.set_encrypt(*args, **kwargs)
+    def set_encrypt(self, *args, **kwargs):
+        return self._cobj.set_encrypt(*args, **kwargs)
 
 
 class DBSequence:

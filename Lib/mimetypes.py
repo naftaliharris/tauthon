@@ -18,13 +18,19 @@ types_map -- dictionary mapping suffixes to types
 
 Functions:
 
-init([files]) -- parse a list of files, default knownfiles
+init([files]) -- parse a list of files, default knownfiles (on Windows, the
+  default values are taken from the registry)
 read_mime_types(file) -- parse one file, return a dictionary or None
 """
 
 import os
+import sys
 import posixpath
 import urllib
+try:
+    import _winreg
+except ImportError:
+    _winreg = None
 
 __all__ = [
     "guess_type","guess_extension","guess_all_extensions",
@@ -193,9 +199,8 @@ class MimeTypes:
         list of standard types, else to the list of non-standard
         types.
         """
-        fp = open(filename)
-        self.readfp(fp, strict)
-        fp.close()
+        with open(filename) as fp:
+            self.readfp(fp, strict)
 
     def readfp(self, fp, strict=True):
         """
@@ -219,6 +224,56 @@ class MimeTypes:
             type, suffixes = words[0], words[1:]
             for suff in suffixes:
                 self.add_type(type, '.' + suff, strict)
+
+    def read_windows_registry(self, strict=True):
+        """
+        Load the MIME types database from Windows registry.
+
+        If strict is true, information will be added to
+        list of standard types, else to the list of non-standard
+        types.
+        """
+
+        # Windows only
+        if not _winreg:
+            return
+
+        def enum_types(mimedb):
+            i = 0
+            while True:
+                try:
+                    ctype = _winreg.EnumKey(mimedb, i)
+                except EnvironmentError:
+                    break
+                try:
+                    ctype = ctype.encode(default_encoding) # omit in 3.x!
+                except UnicodeEncodeError:
+                    pass
+                else:
+                    yield ctype
+                i += 1
+
+        default_encoding = sys.getdefaultencoding()
+        with _winreg.OpenKey(_winreg.HKEY_CLASSES_ROOT, '') as hkcr:
+            for subkeyname in enum_types(hkcr):
+                try:
+                    with _winreg.OpenKey(hkcr, subkeyname) as subkey:
+                        # Only check file extensions
+                        if not subkeyname.startswith("."):
+                            continue
+                        # raises EnvironmentError if no 'Content Type' value
+                        mimetype, datatype = _winreg.QueryValueEx(
+                            subkey, 'Content Type')
+                        if datatype != _winreg.REG_SZ:
+                            continue
+                        try:
+                            mimetype = mimetype.encode(default_encoding)
+                            subkeyname = subkeyname.encode(default_encoding)
+                        except UnicodeEncodeError:
+                            continue
+                        self.add_type(mimetype, subkeyname, strict)
+                except EnvironmentError:
+                    continue
 
 def guess_type(url, strict=True):
     """Guess the type of a file based on its URL.
@@ -299,10 +354,12 @@ def init(files=None):
     inited = True    # so that MimeTypes.__init__() doesn't call us again
     db = MimeTypes()
     if files is None:
+        if _winreg:
+            db.read_windows_registry()
         files = knownfiles
     for file in files:
         if os.path.isfile(file):
-            db.readfp(open(file))
+            db.read(file)
     encodings_map = db.encodings_map
     suffix_map = db.suffix_map
     types_map = db.types_map[True]
@@ -332,12 +389,14 @@ def _default_mime_types():
         '.taz': '.tar.gz',
         '.tz': '.tar.gz',
         '.tbz2': '.tar.bz2',
+        '.txz': '.tar.xz',
         }
 
     encodings_map = {
         '.gz': 'gzip',
         '.Z': 'compress',
         '.bz2': 'bzip2',
+        '.xz': 'xz',
         }
 
     # Before adding new types, make sure they are either registered with IANA,
@@ -378,11 +437,12 @@ def _default_mime_types():
         '.hdf'    : 'application/x-hdf',
         '.htm'    : 'text/html',
         '.html'   : 'text/html',
+        '.ico'    : 'image/vnd.microsoft.icon',
         '.ief'    : 'image/ief',
         '.jpe'    : 'image/jpeg',
         '.jpeg'   : 'image/jpeg',
         '.jpg'    : 'image/jpeg',
-        '.js'     : 'application/x-javascript',
+        '.js'     : 'application/javascript',
         '.ksh'    : 'text/plain',
         '.latex'  : 'application/x-latex',
         '.m1v'    : 'video/mpeg',
@@ -492,7 +552,6 @@ _default_mime_types()
 
 
 if __name__ == '__main__':
-    import sys
     import getopt
 
     USAGE = """\

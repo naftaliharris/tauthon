@@ -22,7 +22,6 @@ class TestUntestedModules(unittest.TestCase):
             import distutils.filelist
             if sys.platform.startswith('win'):
                 import distutils.msvccompiler
-            import distutils.mwerkscompiler
             import distutils.text_file
             import distutils.unixccompiler
 
@@ -54,7 +53,6 @@ class TestUntestedModules(unittest.TestCase):
             import imputil
             import keyword
             import linecache
-            import macurl2path
             import mailcap
             import mimify
             import nntplib
@@ -66,7 +64,6 @@ class TestUntestedModules(unittest.TestCase):
             import pstats
             import py_compile
             import rexec
-            import rlcompleter
             import sched
             import sndhdr
             import statvfs

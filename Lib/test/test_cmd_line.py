@@ -2,35 +2,22 @@
 # All tests are executed with environment variables ignored
 # See test_cmd_line_script.py for testing of script execution
 
-import test.test_support, unittest
+import test.test_support
 import sys
-import subprocess
+import unittest
+from test.script_helper import (
+    assert_python_ok, assert_python_failure, spawn_python, kill_python,
+    python_exit_code
+)
 
-def _spawn_python(*args):
-    cmd_line = [sys.executable, '-E']
-    cmd_line.extend(args)
-    return subprocess.Popen(cmd_line, stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-
-def _kill_python(p):
-    p.stdin.close()
-    data = p.stdout.read()
-    p.stdout.close()
-    # try to cleanup the child so we don't appear to leak when running
-    # with regrtest -R.  This should be a no-op on Windows.
-    subprocess._cleanup()
-    return data
 
 class CmdLineTest(unittest.TestCase):
     def start_python(self, *args):
-        p = _spawn_python(*args)
-        return _kill_python(p)
+        p = spawn_python(*args)
+        return kill_python(p)
 
     def exit_code(self, *args):
-        cmd_line = [sys.executable, '-E']
-        cmd_line.extend(args)
-        return subprocess.call(cmd_line, stdout=subprocess.PIPE,
-                                         stderr=subprocess.PIPE)
+        return python_exit_code(*args)
 
     def test_directories(self):
         self.assertNotEqual(self.exit_code('.'), 0)
@@ -39,7 +26,7 @@ class CmdLineTest(unittest.TestCase):
     def verify_valid_flag(self, cmd_line):
         data = self.start_python(cmd_line)
         self.assertTrue(data == '' or data.endswith('\n'))
-        self.assertTrue('Traceback' not in data)
+        self.assertNotIn('Traceback', data)
 
     def test_optimize(self):
         self.verify_valid_flag('-O')
@@ -55,7 +42,7 @@ class CmdLineTest(unittest.TestCase):
         self.verify_valid_flag('-S')
 
     def test_usage(self):
-        self.assertTrue('usage' in self.start_python('-h'))
+        self.assertIn('usage', self.start_python('-h'))
 
     def test_version(self):
         version = 'Python %d.%d' % sys.version_info[:2]
@@ -83,12 +70,12 @@ class CmdLineTest(unittest.TestCase):
         # -m and -i need to play well together
         # Runs the timeit module and checks the __main__
         # namespace has been populated appropriately
-        p = _spawn_python('-i', '-m', 'timeit', '-n', '1')
+        p = spawn_python('-i', '-m', 'timeit', '-n', '1')
         p.stdin.write('Timer\n')
         p.stdin.write('exit()\n')
-        data = _kill_python(p)
+        data = kill_python(p)
         self.assertTrue(data.startswith('1 loop'))
-        self.assertTrue('__main__.Timer' in data)
+        self.assertIn('__main__.Timer', data)
 
     def test_run_code(self):
         # Test expected operation of the '-c' switch
@@ -117,6 +104,36 @@ class CmdLineTest(unittest.TestCase):
         code = 'import sys; print sys.flags'
         data = self.start_python('-R', '-c', code)
         self.assertTrue('hash_randomization=1' in data)
+
+    def test_del___main__(self):
+        # Issue #15001: PyRun_SimpleFileExFlags() did crash because it kept a
+        # borrowed reference to the dict of __main__ module and later modify
+        # the dict whereas the module was destroyed
+        filename = test.test_support.TESTFN
+        self.addCleanup(test.test_support.unlink, filename)
+        with open(filename, "w") as script:
+            print >>script, "import sys"
+            print >>script, "del sys.modules['__main__']"
+        assert_python_ok(filename)
+
+    def test_unknown_options(self):
+        rc, out, err = assert_python_failure('-E', '-z')
+        self.assertIn(b'Unknown option: -z', err)
+        self.assertEqual(err.splitlines().count(b'Unknown option: -z'), 1)
+        self.assertEqual(b'', out)
+        # Add "without='-E'" to prevent _assert_python to append -E
+        # to env_vars and change the output of stderr
+        rc, out, err = assert_python_failure('-z', without='-E')
+        self.assertIn(b'Unknown option: -z', err)
+        self.assertEqual(err.splitlines().count(b'Unknown option: -z'), 1)
+        self.assertEqual(b'', out)
+        rc, out, err = assert_python_failure('-a', '-z', without='-E')
+        self.assertIn(b'Unknown option: -a', err)
+        # only the first unknown option is reported
+        self.assertNotIn(b'Unknown option: -z', err)
+        self.assertEqual(err.splitlines().count(b'Unknown option: -a'), 1)
+        self.assertEqual(b'', out)
+
 
 def test_main():
     test.test_support.run_unittest(CmdLineTest)

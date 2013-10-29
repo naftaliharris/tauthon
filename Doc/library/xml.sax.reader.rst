@@ -109,47 +109,50 @@ The :class:`XMLReader` interface supports the following methods:
 
 .. method:: XMLReader.getContentHandler()
 
-   Return the current :class:`ContentHandler`.
+   Return the current :class:`~xml.sax.handler.ContentHandler`.
 
 
 .. method:: XMLReader.setContentHandler(handler)
 
-   Set the current :class:`ContentHandler`.  If no :class:`ContentHandler` is set,
-   content events will be discarded.
+   Set the current :class:`~xml.sax.handler.ContentHandler`.  If no
+   :class:`~xml.sax.handler.ContentHandler` is set, content events will be
+   discarded.
 
 
 .. method:: XMLReader.getDTDHandler()
 
-   Return the current :class:`DTDHandler`.
+   Return the current :class:`~xml.sax.handler.DTDHandler`.
 
 
 .. method:: XMLReader.setDTDHandler(handler)
 
-   Set the current :class:`DTDHandler`.  If no :class:`DTDHandler` is set, DTD
+   Set the current :class:`~xml.sax.handler.DTDHandler`.  If no
+   :class:`~xml.sax.handler.DTDHandler` is set, DTD
    events will be discarded.
 
 
 .. method:: XMLReader.getEntityResolver()
 
-   Return the current :class:`EntityResolver`.
+   Return the current :class:`~xml.sax.handler.EntityResolver`.
 
 
 .. method:: XMLReader.setEntityResolver(handler)
 
-   Set the current :class:`EntityResolver`.  If no :class:`EntityResolver` is set,
+   Set the current :class:`~xml.sax.handler.EntityResolver`.  If no
+   :class:`~xml.sax.handler.EntityResolver` is set,
    attempts to resolve an external entity will result in opening the system
    identifier for the entity, and fail if it is not available.
 
 
 .. method:: XMLReader.getErrorHandler()
 
-   Return the current :class:`ErrorHandler`.
+   Return the current :class:`~xml.sax.handler.ErrorHandler`.
 
 
 .. method:: XMLReader.setErrorHandler(handler)
 
-   Set the current error handler.  If no :class:`ErrorHandler` is set, errors will
-   be raised as exceptions, and warnings will be printed.
+   Set the current error handler.  If no :class:`~xml.sax.handler.ErrorHandler`
+   is set, errors will be raised as exceptions, and warnings will be printed.
 
 
 .. method:: XMLReader.setLocale(locale)
@@ -157,7 +160,7 @@ The :class:`XMLReader` interface supports the following methods:
    Allow an application to set the locale for errors and warnings.
 
    SAX parsers are not required to provide localization for errors and warnings; if
-   they cannot support the requested locale, however, they must throw a SAX
+   they cannot support the requested locale, however, they must raise a SAX
    exception.  Applications may request a locale change in the middle of a parse.
 
 
@@ -326,8 +329,13 @@ The :class:`Attributes` Interface
 ---------------------------------
 
 :class:`Attributes` objects implement a portion of the mapping protocol,
-including the methods :meth:`copy`, :meth:`get`, :meth:`has_key`, :meth:`items`,
-:meth:`keys`, and :meth:`values`.  The following methods are also provided:
+including the methods :meth:`~collections.Mapping.copy`,
+:meth:`~collections.Mapping.get`,
+:meth:`~collections.Mapping.has_key`,
+:meth:`~collections.Mapping.items`,
+:meth:`~collections.Mapping.keys`,
+and :meth:`~collections.Mapping.values`.  The following methods
+are also provided:
 
 
 .. method:: Attributes.getLength()

@@ -1,5 +1,8 @@
 /* fficonfig.h.in.  Generated from configure.ac by autoheader.  */
 
+/* Define if building universal (internal helper macro) */
+#undef AC_APPLE_UNIVERSAL_BUILD
+
 /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
    systems. This function is required for `alloca.c' support on those systems.
    */
@@ -14,6 +17,15 @@
 /* Define this if you want extra debugging. */
 #undef FFI_DEBUG
 
+/* Cannot use PROT_EXEC on this target, so, we revert to alternative means */
+#undef FFI_EXEC_TRAMPOLINE_TABLE
+
+/* Define this if you want to enable pax emulated trampolines */
+#undef FFI_MMAP_EXEC_EMUTRAMP_PAX
+
+/* Cannot use malloc on this target, so, we revert to alternative means */
+#undef FFI_MMAP_EXEC_WRIT
+
 /* Define this is you do not want support for the raw API. */
 #undef FFI_NO_RAW_API
 
@@ -27,6 +39,9 @@
    */
 #undef HAVE_ALLOCA_H
 
+/* Define if your assembler supports .ascii. */
+#undef HAVE_AS_ASCII_PSEUDO_OP
+
 /* Define if your assembler supports .cfi_* directives. */
 #undef HAVE_AS_CFI_PSEUDO_OP
 
@@ -36,6 +51,15 @@
 /* Define if your assembler and linker support unaligned PC relative relocs.
    */
 #undef HAVE_AS_SPARC_UA_PCREL
+
+/* Define if your assembler supports .string. */
+#undef HAVE_AS_STRING_PSEUDO_OP
+
+/* Define if your assembler supports unwind section type. */
+#undef HAVE_AS_X86_64_UNWIND_SECTION_TYPE
+
+/* Define if your assembler supports PC relative relocs. */
+#undef HAVE_AS_X86_PCREL
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
@@ -94,6 +118,10 @@
 /* Define to 1 if you have the <unistd.h> header file. */
 #undef HAVE_UNISTD_H
 
+/* Define to the sub-directory in which libtool stores uninstalled libraries.
+   */
+#undef LT_OBJDIR
+
 /* Define to 1 if your C compiler doesn't accept -c and -o together. */
 #undef NO_MINUS_C_MINUS_O
 
@@ -111,6 +139,9 @@
 
 /* Define to the one symbol short name of this package. */
 #undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
 
 /* Define to the version of this package. */
 #undef PACKAGE_VERSION
@@ -132,6 +163,9 @@
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
 
+/* Define if symbols are underscored. */
+#undef SYMBOL_UNDERSCORE
+
 /* Define this if you are using Purify and want to suppress spurious messages.
    */
 #undef USING_PURIFY
@@ -139,9 +173,20 @@
 /* Version number of package */
 #undef VERSION
 
-/* Define to 1 if your processor stores words with the most significant byte
-   first (like Motorola and SPARC, unlike Intel and VAX). */
-#undef WORDS_BIGENDIAN
+/* Define WORDS_BIGENDIAN to 1 if your processor stores words with the most
+   significant byte first (like Motorola and SPARC, unlike Intel). */
+#if defined AC_APPLE_UNIVERSAL_BUILD
+# if defined __BIG_ENDIAN__
+#  define WORDS_BIGENDIAN 1
+# endif
+#else
+# ifndef WORDS_BIGENDIAN
+#  undef WORDS_BIGENDIAN
+# endif
+#endif
+
+/* Define to `unsigned int' if <sys/types.h> does not define. */
+#undef size_t
 
 
 #ifdef HAVE_HIDDEN_VISIBILITY_ATTRIBUTE

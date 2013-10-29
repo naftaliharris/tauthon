@@ -19,7 +19,7 @@ systems the :mod:`posix` module is not available, but a subset is always
 available through the :mod:`os` interface.  Once :mod:`os` is imported, there is
 *no* performance penalty in using it instead of :mod:`posix`.  In addition,
 :mod:`os` provides some additional functionality, such as automatically calling
-:func:`putenv` when an entry in ``os.environ`` is changed.
+:func:`~os.putenv` when an entry in ``os.environ`` is changed.
 
 Errors are reported as exceptions; the usual exceptions are given for type
 errors, while errors reported by the system calls raise :exc:`OSError`.
@@ -38,13 +38,13 @@ Large File Support
 
 Several operating systems (including AIX, HP-UX, Irix and Solaris) provide
 support for files that are larger than 2 GB from a C programming model where
-:ctype:`int` and :ctype:`long` are 32-bit values. This is typically accomplished
+:c:type:`int` and :c:type:`long` are 32-bit values. This is typically accomplished
 by defining the relevant size and offset types as 64-bit values. Such files are
 sometimes referred to as :dfn:`large files`.
 
-Large file support is enabled in Python when the size of an :ctype:`off_t` is
-larger than a :ctype:`long` and the :ctype:`long long` type is available and is
-at least as large as an :ctype:`off_t`. Python longs are then used to represent
+Large file support is enabled in Python when the size of an :c:type:`off_t` is
+larger than a :c:type:`long` and the :c:type:`long long` type is available and is
+at least as large as an :c:type:`off_t`. Python longs are then used to represent
 file sizes, offsets and other values that can exceed the range of a Python int.
 It may be necessary to configure and compile Python with certain compiler flags
 to enable this mode. For example, it is enabled by default with recent versions
@@ -74,9 +74,10 @@ In addition to many functions described in the :mod:`os` module documentation,
    directory, equivalent to ``getenv("HOME")`` in C.
 
    Modifying this dictionary does not affect the string environment passed on by
-   :func:`execv`, :func:`popen` or :func:`system`; if you need to change the
-   environment, pass ``environ`` to :func:`execve` or add variable assignments and
-   export statements to the command string for :func:`system` or :func:`popen`.
+   :func:`~os.execv`, :func:`~os.popen` or :func:`~os.system`; if you need to
+   change the environment, pass ``environ`` to :func:`~os.execve` or add
+   variable assignments and export statements to the command string for
+   :func:`~os.system` or :func:`~os.popen`.
 
    .. note::
 

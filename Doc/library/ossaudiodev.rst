@@ -17,7 +17,7 @@ the standard audio interface for Linux and recent versions of FreeBSD.
    ALSA is in the standard kernel as of 2.5.x.  Presumably if you
    use ALSA, you'll have to make sure its OSS compatibility layer
    is active to use ossaudiodev, but you're gonna need it for the vast
-   majority of Linux audio apps anyways.
+   majority of Linux audio apps anyway.
 
    Sounds like things are also complicated for other BSDs.  In response
    to my python-dev query, Thomas Wouters said:
@@ -59,14 +59,15 @@ the standard audio interface for Linux and recent versions of FreeBSD.
    what went wrong.
 
    (If :mod:`ossaudiodev` receives an error from a system call such as
-   :cfunc:`open`, :cfunc:`write`, or :cfunc:`ioctl`, it raises :exc:`IOError`.
+   :c:func:`open`, :c:func:`write`, or :c:func:`ioctl`, it raises :exc:`IOError`.
    Errors detected directly by :mod:`ossaudiodev` result in :exc:`OSSAudioError`.)
 
    (For backwards compatibility, the exception class is also available as
    ``ossaudiodev.error``.)
 
 
-.. function:: open([device, ]mode)
+.. function:: open(mode)
+              open(device, mode)
 
    Open an audio device and return an OSS audio device object.  This object
    supports many file-like methods, such as :meth:`read`, :meth:`write`, and
@@ -162,11 +163,11 @@ and (read-only) attributes:
    is only useful in non-blocking mode.  Has no return value, since the amount of
    data written is always equal to the amount of data supplied.
 
-The following methods each map to exactly one :func:`ioctl` system call.  The
+The following methods each map to exactly one :c:func:`ioctl` system call.  The
 correspondence is obvious: for example, :meth:`setfmt` corresponds to the
 ``SNDCTL_DSP_SETFMT`` ioctl, and :meth:`sync` to ``SNDCTL_DSP_SYNC`` (this can
 be useful when consulting the OSS documentation).  If the underlying
-:func:`ioctl` fails, they all raise :exc:`IOError`.
+:c:func:`ioctl` fails, they all raise :exc:`IOError`.
 
 
 .. method:: oss_audio_device.nonblock()
@@ -275,7 +276,7 @@ The following convenience methods combine several ioctls, or one ioctl and some
 simple calculations.
 
 
-.. method:: oss_audio_device.setparameters(format, nchannels, samplerate [, strict=False])
+.. method:: oss_audio_device.setparameters(format, nchannels, samplerate[, strict=False])
 
    Set the key audio sampling parameters---sample format, number of channels, and
    sampling rate---in one method call.  *format*,  *nchannels*, and *samplerate*
@@ -295,7 +296,7 @@ simple calculations.
 
       fmt = dsp.setfmt(fmt)
       channels = dsp.channels(channels)
-      rate = dsp.rate(channels)
+      rate = dsp.rate(rate)
 
 
 .. method:: oss_audio_device.bufsize()

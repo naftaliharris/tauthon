@@ -10,6 +10,10 @@
    pair: NNTP; protocol
    single: Network News Transfer Protocol
 
+**Source code:** :source:`Lib/nntplib.py`
+
+--------------
+
 This module defines the class :class:`NNTP` which implements the client side of
 the NNTP protocol.  It can be used to implement a news reader or poster, or
 automated news processors.  For more information on NNTP (Network News Transfer
@@ -18,35 +22,35 @@ Protocol), see Internet :rfc:`977`.
 Here are two small examples of how it can be used.  To list some statistics
 about a newsgroup and print the subjects of the last 10 articles::
 
-   >>> s = NNTP('news.cwi.nl')
-   >>> resp, count, first, last, name = s.group('comp.lang.python')
+   >>> s = NNTP('news.gmane.org')
+   >>> resp, count, first, last, name = s.group('gmane.comp.python.committers')
    >>> print 'Group', name, 'has', count, 'articles, range', first, 'to', last
-   Group comp.lang.python has 59 articles, range 3742 to 3803
+   Group gmane.comp.python.committers has 1071 articles, range 1 to 1071
    >>> resp, subs = s.xhdr('subject', first + '-' + last)
    >>> for id, sub in subs[-10:]: print id, sub
    ...
-   3792 Re: Removing elements from a list while iterating...
-   3793 Re: Who likes Info files?
-   3794 Emacs and doc strings
-   3795 a few questions about the Mac implementation
-   3796 Re: executable python scripts
-   3797 Re: executable python scripts
-   3798 Re: a few questions about the Mac implementation
-   3799 Re: PROPOSAL: A Generic Python Object Interface for Python C Modules
-   3802 Re: executable python scripts
-   3803 Re: \POSIX{} wait and SIGCHLD
+   1062 Re: Mercurial Status?
+   1063 Re: [python-committers]  (Windows) buildbots on 3.x
+   1064 Re: Mercurial Status?
+   1065 Re: Mercurial Status?
+   1066 Python 2.6.6 status
+   1067 Commit Privileges for Ask Solem
+   1068 Re: Commit Privileges for Ask Solem
+   1069 Re: Commit Privileges for Ask Solem
+   1070 Re: Commit Privileges for Ask Solem
+   1071 2.6.6 rc 2
    >>> s.quit()
-   '205 news.cwi.nl closing connection.  Goodbye.'
+   '205 Bye!'
 
 To post an article from a file (this assumes that the article has valid
-headers)::
+headers, and that you have right to post on the particular newsgroup)::
 
-   >>> s = NNTP('news.cwi.nl')
-   >>> f = open('/tmp/article')
+   >>> s = NNTP('news.gmane.org')
+   >>> f = open('articlefile')
    >>> s.post(f)
    '240 Article posted successfully.'
    >>> s.quit()
-   '205 news.cwi.nl closing connection.  Goodbye.'
+   '205 Bye!'
 
 The module itself defines the following items:
 
@@ -230,25 +234,25 @@ indicates an error, the method raises one of the above exceptions.
 
 .. method:: NNTP.next()
 
-   Send a ``NEXT`` command.  Return as for :meth:`stat`.
+   Send a ``NEXT`` command.  Return as for :meth:`.stat`.
 
 
 .. method:: NNTP.last()
 
-   Send a ``LAST`` command.  Return as for :meth:`stat`.
+   Send a ``LAST`` command.  Return as for :meth:`.stat`.
 
 
 .. method:: NNTP.head(id)
 
-   Send a ``HEAD`` command, where *id* has the same meaning as for :meth:`stat`.
+   Send a ``HEAD`` command, where *id* has the same meaning as for :meth:`.stat`.
    Return a tuple ``(response, number, id, list)`` where the first three are the
-   same as for :meth:`stat`, and *list* is a list of the article's headers (an
+   same as for :meth:`.stat`, and *list* is a list of the article's headers (an
    uninterpreted list of lines, without trailing newlines).
 
 
 .. method:: NNTP.body(id,[file])
 
-   Send a ``BODY`` command, where *id* has the same meaning as for :meth:`stat`.
+   Send a ``BODY`` command, where *id* has the same meaning as for :meth:`.stat`.
    If the *file* parameter is supplied, then the body is stored in a file.  If
    *file* is a string, then the method will open a file object with that name,
    write to it then close it. If *file* is a file object, then it will start
@@ -259,7 +263,7 @@ indicates an error, the method raises one of the above exceptions.
 .. method:: NNTP.article(id)
 
    Send an ``ARTICLE`` command, where *id* has the same meaning as for
-   :meth:`stat`.  Return as for :meth:`head`.
+   :meth:`.stat`.  Return as for :meth:`head`.
 
 
 .. method:: NNTP.slave()
@@ -286,7 +290,7 @@ indicates an error, the method raises one of the above exceptions.
 .. method:: NNTP.post(file)
 
    Post an article using the ``POST`` command.  The *file* argument is an open file
-   object which is read until EOF using its :meth:`readline` method.  It should be
+   object which is read until EOF using its :meth:`~file.readline` method.  It should be
    a well-formed news article, including the required headers.  The :meth:`post`
    method automatically escapes lines beginning with ``.``.
 

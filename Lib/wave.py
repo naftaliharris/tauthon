@@ -80,7 +80,7 @@ class Error(Exception):
 
 WAVE_FORMAT_PCM = 0x0001
 
-_array_fmts = None, 'b', 'h', None, 'l'
+_array_fmts = None, 'b', 'h', None, 'i'
 
 # Determine endian-ness
 import struct
@@ -238,6 +238,7 @@ class Wave_read:
             import array
             chunk = self._data_chunk
             data = array.array(_array_fmts[self._sampwidth])
+            assert data.itemsize == self._sampwidth
             nitems = nframes * self._nchannels
             if nitems * self._sampwidth > chunk.chunksize - chunk.size_read:
                 nitems = (chunk.chunksize - chunk.size_read) / self._sampwidth
@@ -261,9 +262,9 @@ class Wave_read:
     #
 
     def _read_fmt_chunk(self, chunk):
-        wFormatTag, self._nchannels, self._framerate, dwAvgBytesPerSec, wBlockAlign = struct.unpack('<hhllh', chunk.read(14))
+        wFormatTag, self._nchannels, self._framerate, dwAvgBytesPerSec, wBlockAlign = struct.unpack('<HHLLH', chunk.read(14))
         if wFormatTag == WAVE_FORMAT_PCM:
-            sampwidth = struct.unpack('<h', chunk.read(2))[0]
+            sampwidth = struct.unpack('<H', chunk.read(2))[0]
             self._sampwidth = (sampwidth + 7) // 8
         else:
             raise Error, 'unknown format: %r' % (wFormatTag,)
@@ -319,6 +320,7 @@ class Wave_write:
         self._nframeswritten = 0
         self._datawritten = 0
         self._datalength = 0
+        self._headerwritten = False
 
     def __del__(self):
         self.close()
@@ -420,6 +422,7 @@ class Wave_write:
         if self._sampwidth > 1 and big_endian:
             import array
             data = array.array(_array_fmts[self._sampwidth], data)
+            assert data.itemsize == self._sampwidth
             data.byteswap()
             data.tofile(self._file)
             self._datawritten = self._datawritten + len(data) * self._sampwidth
@@ -435,11 +438,13 @@ class Wave_write:
 
     def close(self):
         if self._file:
-            self._ensure_header_written(0)
-            if self._datalength != self._datawritten:
-                self._patchheader()
-            self._file.flush()
-            self._file = None
+            try:
+                self._ensure_header_written(0)
+                if self._datalength != self._datawritten:
+                    self._patchheader()
+                self._file.flush()
+            finally:
+                self._file = None
         if self._i_opened_the_file:
             self._i_opened_the_file.close()
             self._i_opened_the_file = None
@@ -449,7 +454,7 @@ class Wave_write:
     #
 
     def _ensure_header_written(self, datasize):
-        if not self._datawritten:
+        if not self._headerwritten:
             if not self._nchannels:
                 raise Error, '# channels not specified'
             if not self._sampwidth:
@@ -459,28 +464,31 @@ class Wave_write:
             self._write_header(datasize)
 
     def _write_header(self, initlength):
+        assert not self._headerwritten
         self._file.write('RIFF')
         if not self._nframes:
             self._nframes = initlength / (self._nchannels * self._sampwidth)
         self._datalength = self._nframes * self._nchannels * self._sampwidth
         self._form_length_pos = self._file.tell()
-        self._file.write(struct.pack('<l4s4slhhllhh4s',
+        self._file.write(struct.pack('<L4s4sLHHLLHH4s',
             36 + self._datalength, 'WAVE', 'fmt ', 16,
             WAVE_FORMAT_PCM, self._nchannels, self._framerate,
             self._nchannels * self._framerate * self._sampwidth,
             self._nchannels * self._sampwidth,
             self._sampwidth * 8, 'data'))
         self._data_length_pos = self._file.tell()
-        self._file.write(struct.pack('<l', self._datalength))
+        self._file.write(struct.pack('<L', self._datalength))
+        self._headerwritten = True
 
     def _patchheader(self):
+        assert self._headerwritten
         if self._datawritten == self._datalength:
             return
         curpos = self._file.tell()
         self._file.seek(self._form_length_pos, 0)
-        self._file.write(struct.pack('<l', 36 + self._datawritten))
+        self._file.write(struct.pack('<L', 36 + self._datawritten))
         self._file.seek(self._data_length_pos, 0)
-        self._file.write(struct.pack('<l', self._datawritten))
+        self._file.write(struct.pack('<L', self._datawritten))
         self._file.seek(curpos, 0)
         self._datalength = self._datawritten
 
