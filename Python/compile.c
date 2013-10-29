@@ -94,6 +94,7 @@ enum {
     COMPILER_SCOPE_MODULE,
     COMPILER_SCOPE_CLASS,
     COMPILER_SCOPE_FUNCTION,
+    COMPILER_SCOPE_LAMBDA,
     COMPILER_SCOPE_COMPREHENSION,
 };
 
@@ -149,8 +150,7 @@ handled by the symbol analysis pass.
 */
 
 struct compiler {
-    const char *c_filename;
-    PyObject *c_filename_obj;
+    PyObject *c_filename;
     struct symtable *c_st;
     PyFutureFeatures *c_future; /* pointer to module's __future__ */
     PyCompilerFlags *c_flags;
@@ -201,6 +201,7 @@ static int compiler_call_helper(struct compiler *c, int n,
                                 expr_ty starargs,
                                 expr_ty kwargs);
 static int compiler_try_except(struct compiler *, stmt_ty);
+static int compiler_set_qualname(struct compiler *);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
 static PyObject *__doc__;
@@ -288,8 +289,8 @@ compiler_init(struct compiler *c)
 }
 
 PyCodeObject *
-PyAST_CompileEx(mod_ty mod, const char *filename, PyCompilerFlags *flags,
-                int optimize, PyArena *arena)
+PyAST_CompileObject(mod_ty mod, PyObject *filename, PyCompilerFlags *flags,
+                   int optimize, PyArena *arena)
 {
     struct compiler c;
     PyCodeObject *co = NULL;
@@ -304,12 +305,10 @@ PyAST_CompileEx(mod_ty mod, const char *filename, PyCompilerFlags *flags,
 
     if (!compiler_init(&c))
         return NULL;
+    Py_INCREF(filename);
     c.c_filename = filename;
-    c.c_filename_obj = PyUnicode_DecodeFSDefault(filename);
-    if (!c.c_filename_obj)
-        goto finally;
     c.c_arena = arena;
-    c.c_future = PyFuture_FromAST(mod, filename);
+    c.c_future = PyFuture_FromASTObject(mod, filename);
     if (c.c_future == NULL)
         goto finally;
     if (!flags) {
@@ -323,7 +322,7 @@ PyAST_CompileEx(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     c.c_optimize = (optimize == -1) ? Py_OptimizeFlag : optimize;
     c.c_nestlevel = 0;
 
-    c.c_st = PySymtable_Build(mod, filename, c.c_future);
+    c.c_st = PySymtable_BuildObject(mod, filename, c.c_future);
     if (c.c_st == NULL) {
         if (!PyErr_Occurred())
             PyErr_SetString(PyExc_SystemError, "no symtable");
@@ -336,6 +335,21 @@ PyAST_CompileEx(mod_ty mod, const char *filename, PyCompilerFlags *flags,
     compiler_free(&c);
     assert(co || PyErr_Occurred());
     return co;
+}
+
+PyCodeObject *
+PyAST_CompileEx(mod_ty mod, const char *filename_str, PyCompilerFlags *flags,
+                int optimize, PyArena *arena)
+{
+    PyObject *filename;
+    PyCodeObject *co;
+    filename = PyUnicode_DecodeFSDefault(filename_str);
+    if (filename == NULL)
+        return NULL;
+    co = PyAST_CompileObject(mod, filename, flags, optimize, arena);
+    Py_DECREF(filename);
+    return co;
+
 }
 
 PyCodeObject *
@@ -360,8 +374,7 @@ compiler_free(struct compiler *c)
         PySymtable_Free(c->c_st);
     if (c->c_future)
         PyObject_Free(c->c_future);
-    if (c->c_filename_obj)
-        Py_DECREF(c->c_filename_obj);
+    Py_XDECREF(c->c_filename);
     Py_DECREF(c->c_stack);
 }
 
@@ -535,6 +548,37 @@ compiler_enter_scope(struct compiler *c, identifier name,
         compiler_unit_free(u);
         return 0;
     }
+    if (u->u_ste->ste_needs_class_closure) {
+        /* Cook up a implicit __class__ cell. */
+        _Py_IDENTIFIER(__class__);
+        PyObject *tuple, *name, *zero;
+        int res;
+        assert(u->u_scope_type == COMPILER_SCOPE_CLASS);
+        assert(PyDict_Size(u->u_cellvars) == 0);
+        name = _PyUnicode_FromId(&PyId___class__);
+        if (!name) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        tuple = PyTuple_Pack(2, name, Py_TYPE(name));
+        if (!tuple) {
+            compiler_unit_free(u);
+            return 0;
+        }
+        zero = PyLong_FromLong(0);
+        if (!zero) {
+            Py_DECREF(tuple);
+            compiler_unit_free(u);
+            return 0;
+        }
+        res = PyDict_SetItem(u->u_cellvars, tuple, zero);
+        Py_DECREF(tuple);
+        Py_DECREF(zero);
+        if (res < 0) {
+            compiler_unit_free(u);
+            return 0;
+        }
+    }
 
     u->u_freevars = dictbytype(u->u_ste->ste_symbols, FREE, DEF_FREE_CLASS,
                                PyDict_Size(u->u_cellvars));
@@ -580,6 +624,11 @@ compiler_enter_scope(struct compiler *c, identifier name,
     if (compiler_use_new_block(c) == NULL)
         return 0;
 
+    if (u->u_scope_type != COMPILER_SCOPE_MODULE) {
+        if (!compiler_set_qualname(c))
+            return 0;
+    }
+
     return 1;
 }
 
@@ -607,57 +656,77 @@ compiler_exit_scope(struct compiler *c)
 
 }
 
-static PyObject *
-compiler_scope_qualname(struct compiler *c)
+static int
+compiler_set_qualname(struct compiler *c)
 {
-    Py_ssize_t stack_size, i;
     _Py_static_string(dot, ".");
-    _Py_static_string(locals, "<locals>");
-    struct compiler_unit *u;
-    PyObject *capsule, *name, *seq, *dot_str, *locals_str;
+    _Py_static_string(dot_locals, ".<locals>");
+    Py_ssize_t stack_size;
+    struct compiler_unit *u = c->u;
+    PyObject *name, *base, *dot_str, *dot_locals_str;
 
-    u = c->u;
-    if (u->u_qualname != NULL) {
-        Py_INCREF(u->u_qualname);
-        return u->u_qualname;
-    }
-
-    seq = PyList_New(0);
-    if (seq == NULL)
-        return NULL;
-
+    base = NULL;
     stack_size = PyList_GET_SIZE(c->c_stack);
-    for (i = 0; i < stack_size; i++) {
-        capsule = PyList_GET_ITEM(c->c_stack, i);
-        u = (struct compiler_unit *)PyCapsule_GetPointer(capsule, COMPILER_CAPSULE_NAME_COMPILER_UNIT);
-        assert(u);
-        if (u->u_scope_type == COMPILER_SCOPE_MODULE)
-            continue;
-        if (PyList_Append(seq, u->u_name))
-            goto _error;
-        if (u->u_scope_type == COMPILER_SCOPE_FUNCTION) {
-            locals_str = _PyUnicode_FromId(&locals);
-            if (locals_str == NULL)
-                goto _error;
-            if (PyList_Append(seq, locals_str))
-                goto _error;
+    assert(stack_size >= 1);
+    if (stack_size > 1) {
+        int scope, force_global = 0;
+        struct compiler_unit *parent;
+        PyObject *mangled, *capsule;
+
+        capsule = PyList_GET_ITEM(c->c_stack, stack_size - 1);
+        parent = (struct compiler_unit *)PyCapsule_GetPointer(capsule, COMPILER_CAPSULE_NAME_COMPILER_UNIT);
+        assert(parent);
+
+        if (u->u_scope_type == COMPILER_SCOPE_FUNCTION || u->u_scope_type == COMPILER_SCOPE_CLASS) {
+            assert(u->u_name);
+            mangled = _Py_Mangle(parent->u_private, u->u_name);
+            if (!mangled)
+                return 0;
+            scope = PyST_GetScope(parent->u_ste, mangled);
+            Py_DECREF(mangled);
+            assert(scope != GLOBAL_IMPLICIT);
+            if (scope == GLOBAL_EXPLICIT)
+                force_global = 1;
+        }
+
+        if (!force_global) {
+            if (parent->u_scope_type == COMPILER_SCOPE_FUNCTION
+                || parent->u_scope_type == COMPILER_SCOPE_LAMBDA) {
+                dot_locals_str = _PyUnicode_FromId(&dot_locals);
+                if (dot_locals_str == NULL)
+                    return 0;
+                base = PyUnicode_Concat(parent->u_qualname, dot_locals_str);
+                if (base == NULL)
+                    return 0;
+            }
+            else {
+                Py_INCREF(parent->u_qualname);
+                base = parent->u_qualname;
+            }
         }
     }
-    u = c->u;
-    if (PyList_Append(seq, u->u_name))
-        goto _error;
-    dot_str = _PyUnicode_FromId(&dot);
-    if (dot_str == NULL)
-        goto _error;
-    name = PyUnicode_Join(dot_str, seq);
-    Py_DECREF(seq);
-    u->u_qualname = name;
-    Py_XINCREF(name);
-    return name;
 
-_error:
-    Py_XDECREF(seq);
-    return NULL;
+    if (base != NULL) {
+        dot_str = _PyUnicode_FromId(&dot);
+        if (dot_str == NULL) {
+            Py_DECREF(base);
+            return 0;
+        }
+        name = PyUnicode_Concat(base, dot_str);
+        Py_DECREF(base);
+        if (name == NULL)
+            return 0;
+        PyUnicode_Append(&name, u->u_name);
+        if (name == NULL)
+            return 0;
+    }
+    else {
+        Py_INCREF(u->u_name);
+        name = u->u_name;
+    }
+    u->u_qualname = name;
+
+    return 1;
 }
 
 /* Allocate a new block and return a pointer to it.
@@ -862,8 +931,6 @@ opcode_stack_effect(int opcode, int oparg)
             return 7;
         case WITH_CLEANUP:
             return -1; /* XXX Sometimes more */
-        case STORE_LOCALS:
-            return -1;
         case RETURN_VALUE:
             return -1;
         case IMPORT_STAR:
@@ -970,6 +1037,7 @@ opcode_stack_effect(int opcode, int oparg)
         case LOAD_CLOSURE:
             return 1;
         case LOAD_DEREF:
+        case LOAD_CLASSDEREF:
             return 1;
         case STORE_DEREF:
             return -1;
@@ -1330,16 +1398,19 @@ compiler_mod(struct compiler *c, mod_ty mod)
 static int
 get_ref_type(struct compiler *c, PyObject *name)
 {
-    int scope = PyST_GetScope(c->u->u_ste, name);
+    int scope;
+    if (c->u->u_scope_type == COMPILER_SCOPE_CLASS &&
+        !PyUnicode_CompareWithASCIIString(name, "__class__"))
+        return CELL;
+    scope = PyST_GetScope(c->u->u_ste, name);
     if (scope == 0) {
         char buf[350];
         PyOS_snprintf(buf, sizeof(buf),
-                      "unknown scope for %.100s in %.100s(%s) in %s\n"
+                      "unknown scope for %.100s in %.100s(%s)\n"
                       "symbols: %s\nlocals: %s\nglobals: %s",
                       PyBytes_AS_STRING(name),
                       PyBytes_AS_STRING(c->u->u_name),
                       PyObject_REPR(c->u->u_ste->ste_id),
-                      c->c_filename,
                       PyObject_REPR(c->u->u_ste->ste_symbols),
                       PyObject_REPR(c->u->u_varnames),
                       PyObject_REPR(c->u->u_names)
@@ -1501,15 +1572,15 @@ compiler_visit_annotations(struct compiler *c, arguments_ty args,
 
     if (compiler_visit_argannotations(c, args->args, names))
         goto error;
-    if (args->varargannotation &&
-        compiler_visit_argannotation(c, args->vararg,
-                                     args->varargannotation, names))
+    if (args->vararg && args->vararg->annotation &&
+        compiler_visit_argannotation(c, args->vararg->arg,
+                                     args->vararg->annotation, names))
         goto error;
     if (compiler_visit_argannotations(c, args->kwonlyargs, names))
         goto error;
-    if (args->kwargannotation &&
-        compiler_visit_argannotation(c, args->kwarg,
-                                     args->kwargannotation, names))
+    if (args->kwarg && args->kwarg->annotation &&
+        compiler_visit_argannotation(c, args->kwarg->arg,
+                                     args->kwarg->annotation, names))
         goto error;
 
     if (!return_str) {
@@ -1568,6 +1639,8 @@ compiler_function(struct compiler *c, stmt_ty s)
 
     if (!compiler_decorators(c, decos))
         return 0;
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
@@ -1575,8 +1648,6 @@ compiler_function(struct compiler *c, stmt_ty s)
             return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
     num_annotations = compiler_visit_annotations(c, args, returns);
     if (num_annotations < 0)
         return 0;
@@ -1605,9 +1676,10 @@ compiler_function(struct compiler *c, stmt_ty s)
         VISIT_IN_SCOPE(c, stmt, st);
     }
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL) {
+    if (co == NULL) {
         Py_XDECREF(qualname);
         Py_XDECREF(co);
         return 0;
@@ -1661,12 +1733,6 @@ compiler_class(struct compiler *c, stmt_ty s)
         Py_INCREF(s->v.ClassDef.name);
         Py_XDECREF(c->u->u_private);
         c->u->u_private = s->v.ClassDef.name;
-        /* force it to have one mandatory argument */
-        c->u->u_argcount = 1;
-        /* load the first argument (__locals__) ... */
-        ADDOP_I(c, LOAD_FAST, 0);
-        /* ... and store it into f_locals */
-        ADDOP_IN_SCOPE(c, STORE_LOCALS);
         /* load (global) __name__ ... */
         str = PyUnicode_InternFromString("__name__");
         if (!str || !compiler_nameop(c, str, Load)) {
@@ -1683,14 +1749,8 @@ compiler_class(struct compiler *c, stmt_ty s)
             return 0;
         }
         Py_DECREF(str);
-        /* store the __qualname__ */
-        str = compiler_scope_qualname(c);
-        if (!str) {
-            compiler_exit_scope(c);
-            return 0;
-        }
-        ADDOP_O(c, LOAD_CONST, str, consts);
-        Py_DECREF(str);
+        assert(c->u->u_qualname);
+        ADDOP_O(c, LOAD_CONST, c->u->u_qualname, consts);
         str = PyUnicode_InternFromString("__qualname__");
         if (!str || !compiler_nameop(c, str, Store)) {
             Py_XDECREF(str);
@@ -1703,23 +1763,23 @@ compiler_class(struct compiler *c, stmt_ty s)
             compiler_exit_scope(c);
             return 0;
         }
-        /* return the (empty) __class__ cell */
-        str = PyUnicode_InternFromString("__class__");
-        if (str == NULL) {
-            compiler_exit_scope(c);
-            return 0;
-        }
-        i = compiler_lookup_arg(c->u->u_cellvars, str);
-        Py_DECREF(str);
-        if (i == -1) {
-            /* This happens when nobody references the cell */
-            PyErr_Clear();
-            /* Return None */
-            ADDOP_O(c, LOAD_CONST, Py_None, consts);
-        }
-        else {
+        if (c->u->u_ste->ste_needs_class_closure) {
+            /* return the (empty) __class__ cell */
+            str = PyUnicode_InternFromString("__class__");
+            if (str == NULL) {
+                compiler_exit_scope(c);
+                return 0;
+            }
+            i = compiler_lookup_arg(c->u->u_cellvars, str);
+            Py_DECREF(str);
+            assert(i == 0);
             /* Return the cell where to store __class__ */
             ADDOP_I(c, LOAD_CLOSURE, i);
+        }
+        else {
+            assert(PyDict_Size(c->u->u_cellvars) == 0);
+            /* This happens when nobody references the cell. Return None. */
+            ADDOP_O(c, LOAD_CONST, Py_None, consts);
         }
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
         /* create the code object */
@@ -1797,15 +1857,15 @@ compiler_lambda(struct compiler *c, expr_ty e)
             return 0;
     }
 
+    if (args->defaults)
+        VISIT_SEQ(c, expr, args->defaults);
     if (args->kwonlyargs) {
         int res = compiler_visit_kwonlydefaults(c, args->kwonlyargs,
                                                 args->kw_defaults);
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (args->defaults)
-        VISIT_SEQ(c, expr, args->defaults);
-    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_FUNCTION,
+    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_LAMBDA,
                               (void *)e, e->lineno))
         return 0;
 
@@ -1824,9 +1884,10 @@ compiler_lambda(struct compiler *c, expr_ty e)
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
     }
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL)
+    if (co == NULL)
         return 0;
 
     arglength = asdl_seq_LEN(args->defaults);
@@ -2288,8 +2349,11 @@ compiler_import(struct compiler *c, stmt_ty s)
             identifier tmp = alias->name;
             Py_ssize_t dot = PyUnicode_FindChar(
                 alias->name, '.', 0, PyUnicode_GET_LENGTH(alias->name), 1);
-            if (dot != -1)
+            if (dot != -1) {
                 tmp = PyUnicode_Substring(alias->name, 0, dot);
+                if (tmp == NULL)
+                    return 0;
+            }
             r = compiler_nameop(c, tmp, Store);
             if (dot != -1) {
                 Py_DECREF(tmp);
@@ -2380,6 +2444,7 @@ compiler_assert(struct compiler *c, stmt_ty s)
 {
     static PyObject *assertion_error = NULL;
     basicblock *end;
+    PyObject* msg;
 
     if (c->c_optimize)
         return 1;
@@ -2390,11 +2455,17 @@ compiler_assert(struct compiler *c, stmt_ty s)
     }
     if (s->v.Assert.test->kind == Tuple_kind &&
         asdl_seq_LEN(s->v.Assert.test->v.Tuple.elts) > 0) {
-        const char* msg =
-            "assertion is always true, perhaps remove parentheses?";
-        if (PyErr_WarnExplicit(PyExc_SyntaxWarning, msg, c->c_filename,
-                               c->u->u_lineno, NULL, NULL) == -1)
+        msg = PyUnicode_FromString("assertion is always true, "
+                                   "perhaps remove parentheses?");
+        if (msg == NULL)
             return 0;
+        if (PyErr_WarnExplicitObject(PyExc_SyntaxWarning, msg,
+                                     c->c_filename, c->u->u_lineno,
+                                     NULL, NULL) == -1) {
+            Py_DECREF(msg);
+            return 0;
+        }
+        Py_DECREF(msg);
     }
     VISIT(c, expr, s->v.Assert.test);
     end = compiler_new_block(c);
@@ -2638,6 +2709,10 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     if (!mangled)
         return 0;
 
+    assert(PyUnicode_CompareWithASCIIString(name, "None") &&
+           PyUnicode_CompareWithASCIIString(name, "True") &&
+           PyUnicode_CompareWithASCIIString(name, "False"));
+
     op = 0;
     optype = OP_NAME;
     scope = PyST_GetScope(c->u->u_ste, mangled);
@@ -2673,7 +2748,9 @@ compiler_nameop(struct compiler *c, identifier name, expr_context_ty ctx)
     switch (optype) {
     case OP_DEREF:
         switch (ctx) {
-        case Load: op = LOAD_DEREF; break;
+        case Load:
+            op = (c->u->u_ste->ste_type == ClassBlock) ? LOAD_CLASSDEREF : LOAD_DEREF;
+            break;
         case Store: op = STORE_DEREF; break;
         case AugLoad:
         case AugStore:
@@ -3085,9 +3162,10 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type, identifier name,
     }
 
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL)
+    if (co == NULL)
         goto error;
 
     if (!compiler_make_closure(c, co, 0, qualname))
@@ -3197,12 +3275,18 @@ expr_constant(struct compiler *c, expr_ty e)
     case Name_kind:
         /* optimize away names that can't be reassigned */
         id = PyUnicode_AsUTF8(e->v.Name.id);
-        if (strcmp(id, "True") == 0) return 1;
-        if (strcmp(id, "False") == 0) return 0;
-        if (strcmp(id, "None") == 0) return 0;
-        if (strcmp(id, "__debug__") == 0)
-            return ! c->c_optimize;
-        /* fall through */
+        if (id && strcmp(id, "__debug__") == 0)
+            return !c->c_optimize;
+        return -1;
+    case NameConstant_kind: {
+        PyObject *o = e->v.NameConstant.value;
+        if (o == Py_None)
+            return 0;
+        else if (o == Py_True)
+            return 1;
+        else if (o == Py_False)
+            return 0;
+    }
     default:
         return -1;
     }
@@ -3378,6 +3462,9 @@ compiler_visit_expr(struct compiler *c, expr_ty e)
     case Ellipsis_kind:
         ADDOP_O(c, LOAD_CONST, Py_Ellipsis, consts);
         break;
+    case NameConstant_kind:
+        ADDOP_O(c, LOAD_CONST, e->v.NameConstant.value, consts);
+        break;
     /* The following exprs can be assignment targets. */
     case Attribute_kind:
         if (e->v.Attribute.ctx != AugStore)
@@ -3547,12 +3634,12 @@ compiler_error(struct compiler *c, const char *errstr)
     PyObject *loc;
     PyObject *u = NULL, *v = NULL;
 
-    loc = PyErr_ProgramText(c->c_filename, c->u->u_lineno);
+    loc = PyErr_ProgramTextObject(c->c_filename, c->u->u_lineno);
     if (!loc) {
         Py_INCREF(Py_None);
         loc = Py_None;
     }
-    u = Py_BuildValue("(OiiO)", c->c_filename_obj, c->u->u_lineno,
+    u = Py_BuildValue("(OiiO)", c->c_filename, c->u->u_lineno,
                       c->u->u_col_offset, loc);
     if (!u)
         goto exit;
@@ -4060,9 +4147,8 @@ compute_code_flags(struct compiler *c)
 {
     PySTEntryObject *ste = c->u->u_ste;
     int flags = 0, n;
-    if (ste->ste_type != ModuleBlock)
-        flags |= CO_NEWLOCALS;
     if (ste->ste_type == FunctionBlock) {
+        flags |= CO_NEWLOCALS;
         if (!ste->ste_unoptimized)
             flags |= CO_OPTIMIZED;
         if (ste->ste_nested)
@@ -4143,7 +4229,7 @@ makecode(struct compiler *c, struct assembler *a)
                     nlocals, stackdepth(c), flags,
                     bytecode, consts, names, varnames,
                     freevars, cellvars,
-                    c->c_filename_obj, c->u->u_name,
+                    c->c_filename, c->u->u_name,
                     c->u->u_firstlineno,
                     a->a_lnotab);
  error:
