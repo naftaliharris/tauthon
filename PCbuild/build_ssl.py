@@ -65,9 +65,9 @@ def find_working_perl(perls):
 
 # Fetch SSL directory from VC properties
 def get_ssl_dir():
-    propfile = (os.path.join(os.path.dirname(__file__), 'pyproject.vsprops'))
+    propfile = (os.path.join(os.path.dirname(__file__), 'pyproject.props'))
     with open(propfile) as f:
-        m = re.search('openssl-([^"]+)"', f.read())
+        m = re.search('openssl-([^<]+)<', f.read())
         return "..\..\openssl-"+m.group(1)
 
 
@@ -228,9 +228,9 @@ def main():
 
         # Now run make.
         if arch == "amd64":
-            rc = os.system("ml64 -c -Foms\\uptable.obj ms\\uptable.asm")
+            rc = os.system("nasm -f win64 -DNEAR -Ox -g ms\\uptable.asm")
             if rc:
-                print("ml64 assembler has failed.")
+                print("nasm assembler has failed.")
                 sys.exit(rc)
 
         copy(r"crypto\buildinf_%s.h" % arch, r"crypto\buildinf.h")

@@ -101,13 +101,15 @@ PyAPI_FUNC(void) PyObject_Free(void *);
 
 /* Macros */
 #ifdef WITH_PYMALLOC
+#ifndef Py_LIMITED_API
+PyAPI_FUNC(void) _PyObject_DebugMallocStats(FILE *out);
+#endif /* #ifndef Py_LIMITED_API */
 #ifdef PYMALLOC_DEBUG   /* WITH_PYMALLOC && PYMALLOC_DEBUG */
 PyAPI_FUNC(void *) _PyObject_DebugMalloc(size_t nbytes);
 PyAPI_FUNC(void *) _PyObject_DebugRealloc(void *p, size_t nbytes);
 PyAPI_FUNC(void) _PyObject_DebugFree(void *p);
 PyAPI_FUNC(void) _PyObject_DebugDumpAddress(const void *p);
 PyAPI_FUNC(void) _PyObject_DebugCheckAddress(const void *p);
-PyAPI_FUNC(void) _PyObject_DebugMallocStats(void);
 PyAPI_FUNC(void *) _PyObject_DebugMallocApi(char api, size_t nbytes);
 PyAPI_FUNC(void *) _PyObject_DebugReallocApi(char api, void *p, size_t nbytes);
 PyAPI_FUNC(void) _PyObject_DebugFreeApi(char api, void *p);
@@ -169,7 +171,7 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
    value is rounded up to the closest multiple of sizeof(void *), in order to
    ensure that pointer fields at the end of the object are correctly aligned
    for the platform (this is of special importance for subclasses of, e.g.,
-   str or long, so that pointers can be stored after the embedded data).
+   str or int, so that pointers can be stored after the embedded data).
 
    Note that there's no memory wastage in doing this, as malloc has to
    return (at worst) pointer-aligned memory anyway.
@@ -179,12 +181,9 @@ PyAPI_FUNC(PyVarObject *) _PyObject_NewVar(PyTypeObject *, Py_ssize_t);
 #endif
 
 #define _PyObject_VAR_SIZE(typeobj, nitems)     \
-    (size_t)                                    \
-    ( ( (typeobj)->tp_basicsize +               \
-        (nitems)*(typeobj)->tp_itemsize +       \
-        (SIZEOF_VOID_P - 1)                     \
-      ) & ~(SIZEOF_VOID_P - 1)                  \
-    )
+    _Py_SIZE_ROUND_UP((typeobj)->tp_basicsize + \
+        (nitems)*(typeobj)->tp_itemsize,        \
+        SIZEOF_VOID_P)
 
 #define PyObject_NEW(type, typeobj) \
 ( (type *) PyObject_Init( \

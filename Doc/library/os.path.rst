@@ -77,10 +77,15 @@ the :mod:`glob` module.)
 
 .. function:: exists(path)
 
-   Return ``True`` if *path* refers to an existing path.  Returns ``False`` for
-   broken symbolic links. On some platforms, this function may return ``False`` if
-   permission is not granted to execute :func:`os.stat` on the requested file, even
+   Return ``True`` if *path* refers to an existing path or an open
+   file descriptor.  Returns ``False`` for broken symbolic links.  On
+   some platforms, this function may return ``False`` if permission is
+   not granted to execute :func:`os.stat` on the requested file, even
    if the *path* physically exists.
+
+   .. versionchanged:: 3.3
+      *path* can now be an integer: ``True`` is returned if it is an
+       open file descriptor, ``False`` otherwise.
 
 
 .. function:: lexists(path)
@@ -126,7 +131,7 @@ the :mod:`glob` module.)
 
    Return the time of last access of *path*.  The return value is a number giving
    the number of seconds since the epoch (see the  :mod:`time` module).  Raise
-   :exc:`os.error` if the file does not exist or is inaccessible.
+   :exc:`OSError` if the file does not exist or is inaccessible.
 
    If :func:`os.stat_float_times` returns True, the result is a floating point
    number.
@@ -136,7 +141,7 @@ the :mod:`glob` module.)
 
    Return the time of last modification of *path*.  The return value is a number
    giving the number of seconds since the epoch (see the  :mod:`time` module).
-   Raise :exc:`os.error` if the file does not exist or is inaccessible.
+   Raise :exc:`OSError` if the file does not exist or is inaccessible.
 
    If :func:`os.stat_float_times` returns True, the result is a floating point
    number.
@@ -145,15 +150,15 @@ the :mod:`glob` module.)
 .. function:: getctime(path)
 
    Return the system's ctime which, on some systems (like Unix) is the time of the
-   last change, and, on others (like Windows), is the creation time for *path*.
+   last metadata change, and, on others (like Windows), is the creation time for *path*.
    The return value is a number giving the number of seconds since the epoch (see
-   the  :mod:`time` module).  Raise :exc:`os.error` if the file does not exist or
+   the  :mod:`time` module).  Raise :exc:`OSError` if the file does not exist or
    is inaccessible.
 
 
 .. function:: getsize(path)
 
-   Return the size, in bytes, of *path*.  Raise :exc:`os.error` if the file does
+   Return the size, in bytes, of *path*.  Raise :exc:`OSError` if the file does
    not exist or is inaccessible.
 
 
@@ -229,8 +234,10 @@ the :mod:`glob` module.)
 
 .. function:: relpath(path, start=None)
 
-   Return a relative filepath to *path* either from the current directory or from
-   an optional *start* point.
+   Return a relative filepath to *path* either from the current directory or
+   from an optional *start* directory.  This is a path computation:  the
+   filesystem is not accessed to confirm the existence or nature of *path* or
+   *start*.
 
    *start* defaults to :attr:`os.curdir`.
 
@@ -259,15 +266,16 @@ the :mod:`glob` module.)
 
    Availability: Unix, Windows.
 
-   .. versionchanged:: 3.2 Added Windows support.
+   .. versionchanged:: 3.2
+      Added Windows support.
 
 
 .. function:: samestat(stat1, stat2)
 
    Return ``True`` if the stat tuples *stat1* and *stat2* refer to the same file.
-   These structures may have been returned by :func:`fstat`, :func:`lstat`, or
-   :func:`stat`.  This function implements the underlying comparison used by
-   :func:`samefile` and :func:`sameopenfile`.
+   These structures may have been returned by :func:`os.fstat`,
+   :func:`os.lstat`, or :func:`os.stat`.  This function implements the
+   underlying comparison used by :func:`samefile` and :func:`sameopenfile`.
 
    Availability: Unix.
 

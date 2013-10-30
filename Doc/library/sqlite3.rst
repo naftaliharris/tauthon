@@ -174,7 +174,7 @@ Module functions and constants
    For the *isolation_level* parameter, please see the
    :attr:`Connection.isolation_level` property of :class:`Connection` objects.
 
-   SQLite natively supports only the types TEXT, INTEGER, FLOAT, BLOB and NULL. If
+   SQLite natively supports only the types TEXT, INTEGER, REAL, BLOB and NULL. If
    you want to use other types you must add support for them yourself. The
    *detect_types* parameter and the using custom **converters** registered with the
    module-level :func:`register_converter` function allow you to easily do that.
@@ -389,6 +389,22 @@ Connection Objects
 
       If you want to clear any previously installed progress handler, call the
       method with :const:`None` for *handler*.
+
+
+   .. method:: set_trace_callback(trace_callback)
+
+      Registers *trace_callback* to be called for each SQL statement that is
+      actually executed by the SQLite backend.
+
+      The only argument passed to the callback is the statement (as string) that
+      is being executed. The return value of the callback is ignored. Note that
+      the backend does not only run statements passed to the :meth:`Cursor.execute`
+      methods.  Other sources include the transaction management of the Python
+      module and the execution of triggers defined in the current database.
+
+      Passing :const:`None` as *trace_callback* will disable the trace callback.
+
+      .. versionadded:: 3.3
 
 
    .. method:: enable_load_extension(enabled)

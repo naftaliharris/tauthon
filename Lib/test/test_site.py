@@ -5,6 +5,7 @@ executing have not been removed.
 
 """
 import unittest
+import test.support
 from test.support import run_unittest, TESTFN, EnvironmentVarGuard
 from test.support import captured_stderr
 import builtins
@@ -12,6 +13,8 @@ import os
 import sys
 import re
 import encodings
+import urllib.request
+import urllib.error
 import subprocess
 import sysconfig
 from copy import copy
@@ -39,6 +42,7 @@ class HelperFunctionsTests(unittest.TestCase):
         self.old_base = site.USER_BASE
         self.old_site = site.USER_SITE
         self.old_prefixes = site.PREFIXES
+        self.original_vars = sysconfig._CONFIG_VARS
         self.old_vars = copy(sysconfig._CONFIG_VARS)
 
     def tearDown(self):
@@ -47,7 +51,9 @@ class HelperFunctionsTests(unittest.TestCase):
         site.USER_BASE = self.old_base
         site.USER_SITE = self.old_site
         site.PREFIXES = self.old_prefixes
-        sysconfig._CONFIG_VARS = self.old_vars
+        sysconfig._CONFIG_VARS = self.original_vars
+        sysconfig._CONFIG_VARS.clear()
+        sysconfig._CONFIG_VARS.update(self.old_vars)
 
     def test_makepath(self):
         # Test makepath() have an absolute path for its first return value
@@ -173,14 +179,20 @@ class HelperFunctionsTests(unittest.TestCase):
         rc = subprocess.call([sys.executable, '-s', '-c',
             'import sys; sys.exit(%r in sys.path)' % usersite],
             env=env)
-        self.assertEqual(rc, 0)
+        if usersite == site.getsitepackages()[0]:
+            self.assertEqual(rc, 1)
+        else:
+            self.assertEqual(rc, 0)
 
         env = os.environ.copy()
         env["PYTHONNOUSERSITE"] = "1"
         rc = subprocess.call([sys.executable, '-c',
             'import sys; sys.exit(%r in sys.path)' % usersite],
             env=env)
-        self.assertEqual(rc, 0)
+        if usersite == site.getsitepackages()[0]:
+            self.assertEqual(rc, 1)
+        else:
+            self.assertEqual(rc, 0)
 
         env = os.environ.copy()
         env["PYTHONUSERBASE"] = "/tmp"
@@ -374,9 +386,10 @@ class ImportSideEffectTests(unittest.TestCase):
         self.assertTrue(hasattr(builtins, "exit"))
 
     def test_setting_copyright(self):
-        # 'copyright' and 'credits' should be in builtins
+        # 'copyright', 'credits', and 'license' should be in builtins
         self.assertTrue(hasattr(builtins, "copyright"))
         self.assertTrue(hasattr(builtins, "credits"))
+        self.assertTrue(hasattr(builtins, "license"))
 
     def test_setting_help(self):
         # 'help' should be set in builtins
@@ -402,8 +415,22 @@ class ImportSideEffectTests(unittest.TestCase):
             else:
                 self.fail("sitecustomize not imported automatically")
 
-def test_main():
-    run_unittest(HelperFunctionsTests, ImportSideEffectTests)
+    @test.support.requires_resource('network')
+    @unittest.skipUnless(sys.version_info[3] == 'final',
+                         'only for released versions')
+    def test_license_exists_at_url(self):
+        # This test is a bit fragile since it depends on the format of the
+        # string displayed by license in the absence of a LICENSE file.
+        url = license._Printer__data.split()[1]
+        req = urllib.request.Request(url, method='HEAD')
+        try:
+            with test.support.transient_internet(url):
+                with urllib.request.urlopen(req) as data:
+                    code = data.getcode()
+        except urllib.error.HTTPError as e:
+            code = e.code
+        self.assertEqual(code, 200, msg="Can't find " + url)
+
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()

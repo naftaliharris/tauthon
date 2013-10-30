@@ -339,8 +339,10 @@ otherwise stated.
 .. method:: xmlparser.StartElementHandler(name, attributes)
 
    Called for the start of every element.  *name* is a string containing the
-   element name, and *attributes* is a dictionary mapping attribute names to their
-   values.
+   element name, and *attributes* is the element attributes. If
+   :attr:`ordered_attributes` is true, this is a list (see
+   :attr:`ordered_attributes` for a full description). Otherwise it's a
+   dictionary mapping names to values.
 
 
 .. method:: xmlparser.EndElementHandler(name)
@@ -482,8 +484,8 @@ ExpatError Exceptions
 .. attribute:: ExpatError.code
 
    Expat's internal error number for the specific error.  The
-   :data:`errors.messages` dictionary maps these error numbers to Expat's error
-   messages.  For example::
+   :data:`errors.messages <xml.parsers.expat.errors.messages>` dictionary maps
+   these error numbers to Expat's error messages.  For example::
 
       from xml.parsers.expat import ParserCreate, ExpatError, errors
 
@@ -493,9 +495,9 @@ ExpatError Exceptions
       except ExpatError as err:
           print("Error:", errors.messages[err.code])
 
-   The :mod:`errors` module also provides error message constants and a
-   dictionary :data:`~errors.codes` mapping these messages back to the error
-   codes, see below.
+   The :mod:`~xml.parsers.expat.errors` module also provides error message
+   constants and a dictionary :data:`~xml.parsers.expat.errors.codes` mapping
+   these messages back to the error codes, see below.
 
 
 .. attribute:: ExpatError.lineno

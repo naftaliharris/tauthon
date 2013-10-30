@@ -1,4 +1,5 @@
 import unittest
+from test import support
 import ctypes
 import gc
 
@@ -10,6 +11,7 @@ dll = ctypes.CDLL(_ctypes_test.__file__)
 
 class RefcountTestCase(unittest.TestCase):
 
+    @support.refcount_test
     def test_1(self):
         from sys import getrefcount as grc
 
@@ -34,6 +36,7 @@ class RefcountTestCase(unittest.TestCase):
         self.assertEqual(grc(callback), 2)
 
 
+    @support.refcount_test
     def test_refcount(self):
         from sys import getrefcount as grc
         def func(*args):
@@ -41,7 +44,7 @@ class RefcountTestCase(unittest.TestCase):
         # this is the standard refcount for func
         self.assertEqual(grc(func), 2)
 
-        # the CFuncPtr instance holds atr least one refcount on func:
+        # the CFuncPtr instance holds at least one refcount on func:
         f = OtherCallback(func)
         self.assertTrue(grc(func) > 2)
 
@@ -58,7 +61,7 @@ class RefcountTestCase(unittest.TestCase):
         x = X()
         x.a = OtherCallback(func)
 
-        # the CFuncPtr instance holds atr least one refcount on func:
+        # the CFuncPtr instance holds at least one refcount on func:
         self.assertTrue(grc(func) > 2)
 
         # and may release it again
@@ -71,7 +74,7 @@ class RefcountTestCase(unittest.TestCase):
 
         f = OtherCallback(func)
 
-        # the CFuncPtr instance holds atr least one refcount on func:
+        # the CFuncPtr instance holds at least one refcount on func:
         self.assertTrue(grc(func) > 2)
 
         # create a cycle

@@ -70,10 +70,23 @@ The module itself defines the following classes:
    connecting to an NNTP server on the local machine and intend to call
    reader-specific commands, such as ``group``.  If you get unexpected
    :exc:`NNTPPermanentError`\ s, you might need to set *readermode*.
+   :class:`NNTP` class supports the :keyword:`with` statement to
+   unconditionally consume :exc:`socket.error` exceptions and to close the NNTP
+   connection when done. Here is a sample on how using it:
+
+    >>> from nntplib import NNTP
+    >>> with NNTP('news.gmane.org') as n:
+    ...     n.group('gmane.comp.python.committers')
+    ...
+    ('211 1755 1 1755 gmane.comp.python.committers', 1755, 1, 1755, 'gmane.comp.python.committers')
+    >>>
+
 
    .. versionchanged:: 3.2
       *usenetrc* is now False by default.
 
+   .. versionchanged:: 3.3
+      Support for the :keyword:`with` statement was added.
 
 .. class:: NNTP_SSL(host, port=563, user=None, password=None, ssl_context=None, readermode=None, usenetrc=False, [timeout])
 
@@ -382,18 +395,18 @@ tuples or objects that the method normally returns will be empty.
 
 .. method:: NNTP.next()
 
-   Send a ``NEXT`` command.  Return as for :meth:`stat`.
+   Send a ``NEXT`` command.  Return as for :meth:`.stat`.
 
 
 .. method:: NNTP.last()
 
-   Send a ``LAST`` command.  Return as for :meth:`stat`.
+   Send a ``LAST`` command.  Return as for :meth:`.stat`.
 
 
 .. method:: NNTP.article(message_spec=None, *, file=None)
 
    Send an ``ARTICLE`` command, where *message_spec* has the same meaning as
-   for :meth:`stat`.  Return a tuple ``(response, info)`` where *info*
+   for :meth:`.stat`.  Return a tuple ``(response, info)`` where *info*
    is a :class:`~collections.namedtuple` with three attributes *number*,
    *message_id* and *lines* (in that order).  *number* is the article number
    in the group (or 0 if the information is not available), *message_id* the
@@ -503,6 +516,9 @@ them have been superseded by newer commands in :rfc:`3977`.
    Return a pair ``(resp, path)``, where *path* is the directory path to the
    article with message ID *id*.  Most of the time, this extension is not
    enabled by NNTP server administrators.
+
+   .. deprecated:: 3.3
+      The XPATH extension is not actively used.
 
 
 .. XXX deprecated:

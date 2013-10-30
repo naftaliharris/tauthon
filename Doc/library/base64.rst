@@ -18,9 +18,14 @@ POST request.  The encoding algorithm is not the same as the
 
 There are two interfaces provided by this module.  The modern interface
 supports encoding and decoding ASCII byte string objects using all three
-alphabets.  The legacy interface provides for encoding and decoding to and from
-file-like objects as well as byte strings, but only using the Base64 standard
-alphabet.
+alphabets. Additionally, the decoding functions of the modern interface also
+accept Unicode strings containing only ASCII characters. The legacy interface
+provides for encoding and decoding to and from file-like objects as well as
+byte strings, but only using the Base64 standard alphabet.
+
+.. versionchanged:: 3.3
+   ASCII-only Unicode strings are now accepted by the decoding functions of
+   the modern interface.
 
 The modern interface provides:
 
@@ -98,7 +103,7 @@ The modern interface provides:
    digit 0 is always mapped to the letter O).  For security purposes the default is
    ``None``, so that 0 and 1 are not allowed in the input.
 
-   The decoded byte string is returned.  A :exc:`TypeError` is raised if *s* were
+   The decoded byte string is returned.  A :exc:`binascii.Error` is raised if *s* were
    incorrectly padded or if there are non-alphabet characters present in the
    string.
 

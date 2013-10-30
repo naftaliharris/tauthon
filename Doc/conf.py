@@ -12,8 +12,8 @@ sys.path.append(os.path.abspath('tools/sphinxext'))
 # General configuration
 # ---------------------
 
-extensions = ['sphinx.ext.refcounting', 'sphinx.ext.coverage',
-              'sphinx.ext.doctest', 'pyspecific']
+extensions = ['sphinx.ext.coverage', 'sphinx.ext.doctest',
+              'pyspecific', 'c_annotations']
 templates_path = ['tools/sphinxext']
 
 # General substitutions.
@@ -91,7 +91,7 @@ html_additional_pages = {
 }
 
 # Output an OpenSearch description file.
-html_use_opensearch = 'http://docs.python.org/3.2'
+html_use_opensearch = 'http://docs.python.org/' + version
 
 # Additional static files.
 html_static_path = ['tools/sphinxext/static']

@@ -17,6 +17,7 @@ Python's interfaces for processing XML are grouped in the ``xml`` package.
    constructed data.  If you need to parse untrusted or unauthenticated data see
    :ref:`xml-vulnerabilities`.
 
+
 It is important to note that modules in the :mod:`xml` package require that
 there be at least one SAX-compliant XML parser available. The Expat parser is
 included with Python, so the :mod:`xml.parsers.expat` module will always be
@@ -52,15 +53,17 @@ access local files, to generate network connections to other machines, or
 to or circumvent firewalls. The attacks on XML abuse unfamiliar features
 like inline `DTD`_ (document type definition) with entities.
 
+The following table gives an overview of the known attacks and if the various
+modules are vulnerable to them.
 
 =========================  ========  =========  =========  ========  =========
 kind                       sax       etree      minidom    pulldom   xmlrpc
 =========================  ========  =========  =========  ========  =========
-billion laughs             **True**  **True**   **True**   **True**  **True**
-quadratic blowup           **True**  **True**   **True**   **True**  **True**
-external entity expansion  **True**  False (1)  False (2)  **True**  False (3)
-DTD retrieval              **True**  False      False      **True**  False
-decompression bomb         False     False      False      False     **True**
+billion laughs             **Yes**   **Yes**    **Yes**    **Yes**   **Yes**
+quadratic blowup           **Yes**   **Yes**    **Yes**    **Yes**   **Yes**
+external entity expansion  **Yes**   No    (1)  No    (2)  **Yes**   No    (3)
+DTD retrieval              **Yes**   No         No         **Yes**   No
+decompression bomb         No        No         No         No        **Yes**
 =========================  ========  =========  =========  ========  =========
 
 1. :mod:`xml.etree.ElementTree` doesn't expand external entities and raises a
@@ -129,3 +132,4 @@ well-definied XML features.
 .. _Billion Laughs: http://en.wikipedia.org/wiki/Billion_laughs
 .. _ZIP bomb: http://en.wikipedia.org/wiki/Zip_bomb
 .. _DTD: http://en.wikipedia.org/wiki/Document_Type_Definition
+
