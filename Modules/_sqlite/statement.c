@@ -27,7 +27,6 @@
 #include "microprotocols.h"
 #include "prepare_protocol.h"
 #include "util.h"
-#include "sqlitecompat.h"
 
 /* prototypes */
 static int pysqlite_check_remaining_sql(const char* tail);
@@ -249,7 +248,7 @@ void pysqlite_statement_bind_parameters(pysqlite_Statement* self, PyObject* para
                 current_param = PyDict_GetItemString(parameters, binding_name);
                 Py_XINCREF(current_param);
             } else {
-                current_param = PyMapping_GetItemString(parameters, (char*)binding_name);
+                current_param = PyMapping_GetItemString(parameters, binding_name);
             }
             if (!current_param) {
                 PyErr_Format(pysqlite_ProgrammingError, "You did not supply a value for binding %d.", i);
