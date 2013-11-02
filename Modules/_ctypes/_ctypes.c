@@ -278,8 +278,10 @@ _ctypes_alloc_format_string(const char *prefix, const char *suffix)
     if (prefix)
         len += strlen(prefix);
     result = PyMem_Malloc(len + 1);
-    if (result == NULL)
+    if (result == NULL) {
+        PyErr_NoMemory();
         return NULL;
+    }
     if (prefix)
         strcpy(result, prefix);
     else
@@ -428,13 +430,7 @@ CDataType_from_buffer(PyObject *type, PyObject *args)
     StgDictObject *dict = PyType_stgdict(type);
     assert (dict);
 
-    if (!PyArg_ParseTuple(args,
-#if (PY_VERSION_HEX < 0x02050000)
-                          "O|i:from_buffer",
-#else
-                          "O|n:from_buffer",
-#endif
-                          &obj, &offset))
+    if (!PyArg_ParseTuple(args, "O|n:from_buffer", &obj, &offset))
         return NULL;
 
     if (-1 == PyObject_AsWriteBuffer(obj, &buffer, &buffer_len))
@@ -447,11 +443,7 @@ CDataType_from_buffer(PyObject *type, PyObject *args)
     }
     if (dict->size > buffer_len - offset) {
         PyErr_Format(PyExc_ValueError,
-#if (PY_VERSION_HEX < 0x02050000)
-                     "Buffer size too small (%d instead of at least %d bytes)",
-#else
                      "Buffer size too small (%zd instead of at least %zd bytes)",
-#endif
                      buffer_len, dict->size + offset);
         return NULL;
     }
@@ -484,13 +476,7 @@ CDataType_from_buffer_copy(PyObject *type, PyObject *args)
     StgDictObject *dict = PyType_stgdict(type);
     assert (dict);
 
-    if (!PyArg_ParseTuple(args,
-#if (PY_VERSION_HEX < 0x02050000)
-                          "O|i:from_buffer",
-#else
-                          "O|n:from_buffer",
-#endif
-                          &obj, &offset))
+    if (!PyArg_ParseTuple(args, "O|n:from_buffer", &obj, &offset))
         return NULL;
 
     if (-1 == PyObject_AsReadBuffer(obj, (const void**)&buffer, &buffer_len))
@@ -504,11 +490,7 @@ CDataType_from_buffer_copy(PyObject *type, PyObject *args)
 
     if (dict->size > buffer_len - offset) {
         PyErr_Format(PyExc_ValueError,
-#if (PY_VERSION_HEX < 0x02050000)
-                     "Buffer size too small (%d instead of at least %d bytes)",
-#else
                      "Buffer size too small (%zd instead of at least %zd bytes)",
-#endif
                      buffer_len, dict->size + offset);
         return NULL;
     }
@@ -1326,9 +1308,11 @@ PyCArrayType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     if (stgdict->format == NULL)
         goto error;
     stgdict->ndim = itemdict->ndim + 1;
-    stgdict->shape = PyMem_Malloc(sizeof(Py_ssize_t *) * stgdict->ndim);
-    if (stgdict->shape == NULL)
+    stgdict->shape = PyMem_Malloc(sizeof(Py_ssize_t) * stgdict->ndim);
+    if (stgdict->shape == NULL) {
+        PyErr_NoMemory();
         goto error;
+    }
     stgdict->shape[0] = length;
     memmove(&stgdict->shape[1], itemdict->shape,
         sizeof(Py_ssize_t) * (stgdict->ndim - 1));
@@ -2261,6 +2245,10 @@ PyCFuncPtrType_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
        argtypes would be a ctypes type).
     */
     stgdict->format = _ctypes_alloc_format_string(NULL, "X{}");
+    if (stgdict->format == NULL) {
+        Py_DECREF((PyObject *)stgdict);
+        return NULL;
+    }
     stgdict->flags |= TYPEFLAG_ISPOINTER;
 
     /* create the new instance (which is a class,
@@ -4222,7 +4210,7 @@ Array_subscript(PyObject *myself, PyObject *item)
             i += self->b_length;
         return Array_item(myself, i);
     }
-    else if PySlice_Check(item) {
+    else if (PySlice_Check(item)) {
         StgDictObject *stgdict, *itemdict;
         PyObject *proto;
         PyObject *np;
@@ -4298,6 +4286,10 @@ Array_subscript(PyObject *myself, PyObject *item)
         for (cur = start, i = 0; i < slicelen;
              cur += step, i++) {
             PyObject *v = Array_item(myself, cur);
+            if (v == NULL) {
+                Py_DECREF(np);
+                return NULL;
+            }
             PyList_SET_ITEM(np, i, v);
         }
         return np;
