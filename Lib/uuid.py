@@ -406,7 +406,7 @@ def _netbios_getnode():
         if win32wnet.Netbios(ncb) != 0:
             continue
         status._unpack()
-        bytes = map(ord, status.adapter_address)
+        bytes = status.adapter_address
         return ((bytes[0]<<40) + (bytes[1]<<32) + (bytes[2]<<24) +
                 (bytes[3]<<16) + (bytes[4]<<8) + bytes[5])
 
@@ -429,6 +429,8 @@ try:
             _uuid_generate_random = lib.uuid_generate_random
         if hasattr(lib, 'uuid_generate_time'):
             _uuid_generate_time = lib.uuid_generate_time
+            if _uuid_generate_random is not None:
+                break  # found everything we were looking for
 
     # The uuid_generate_* functions are broken on MacOS X 10.5, as noted
     # in issue #8621 the function generates the same sequence of values
@@ -440,7 +442,7 @@ try:
     import sys
     if sys.platform == 'darwin':
         import os
-        if int(os.uname()[2].split('.')[0]) >= 9:
+        if int(os.uname().release.split('.')[0]) >= 9:
             _uuid_generate_random = _uuid_generate_time = None
 
     # On Windows prior to 2000, UuidCreate gives a UUID containing the

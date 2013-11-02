@@ -309,7 +309,7 @@ PyDoc_STRVAR(flock_doc,
 "flock(fd, operation)\n\
 \n\
 Perform the lock operation op on file descriptor fd.  See the Unix \n\
-manual page for flock(3) for details.  (On some systems, this function is\n\
+manual page for flock(2) for details.  (On some systems, this function is\n\
 emulated using fcntl().)");
 
 
@@ -540,9 +540,12 @@ all_ins(PyObject* d)
     if (ins(d, "F_SHLCK", (long)F_SHLCK)) return -1;
 #endif
 
-/* OS X (and maybe others) let you tell the storage device to flush to physical media */
+/* OS X specifics */
 #ifdef F_FULLFSYNC
     if (ins(d, "F_FULLFSYNC", (long)F_FULLFSYNC)) return -1;
+#endif
+#ifdef F_NOCACHE
+    if (ins(d, "F_NOCACHE", (long)F_NOCACHE)) return -1;
 #endif
 
 /* For F_{GET|SET}FL */

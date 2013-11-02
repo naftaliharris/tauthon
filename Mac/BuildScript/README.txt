@@ -8,35 +8,36 @@ $DESTROOT, massages that installation to remove .pyc files and such, creates
 an Installer package from the installation plus other files in ``resources`` 
 and ``scripts`` and placed that on a ``.dmg`` disk image.
 
-For Python 2.7.x and 3.2.x, PSF practice is to build two installer variants
+As of Python 3.3.0, PSF practice is to build two installer variants
 for each release.
 
 1.  32-bit-only, i386 and PPC universal, capable on running on all machines
-    supported by Mac OS X 10.3.9 through (at least) 10.8::
+    supported by Mac OS X 10.5 through (at least) 10.8::
 
         /usr/bin/python build-installer.py \
-            --sdk-path=/Developer/SDKs/MacOSX10.4u.sdk \
+            --sdk-path=/Developer/SDKs/MacOSX10.5.sdk \
             --universal-archs=32-bit \
-            --dep-target=10.3 
+            --dep-target=10.5
 
     - builds the following third-party libraries
 
-        * Bzip2
-        * NCurses
-        * GNU Readline (GPL)
+        * NCurses 5.9 (http://bugs.python.org/issue15037)
         * SQLite 3.7.13
-        * Zlib 1.2.3
-        * Oracle Sleepycat DB 4.8 (Python 2.x only)
+        * XZ 5.0.3
+
+    - uses system-supplied versions of third-party libraries
+
+        * readline module links with Apple BSD editline (libedit)
 
     - requires ActiveState ``Tcl/Tk 8.4`` (currently 8.4.19) to be installed for building
 
     - recommended build environment:
-        
-        * Mac OS X 10.5.8 PPC or Intel
+
+        * Mac OS X 10.5.8 Intel or PPC
         * Xcode 3.1.4
-        * ``MacOSX10.4u`` SDK (later SDKs do not support PPC G3 processors)
-        * ``MACOSX_DEPLOYMENT_TARGET=10.3``
-        * Apple ``gcc-4.0``
+        * ``MacOSX10.5`` SDK
+        * ``MACOSX_DEPLOYMENT_TARGET=10.5``
+        * Apple ``gcc-4.2``
         * system Python 2.5 for documentation build with Sphinx
 
     - alternate build environments:
@@ -44,7 +45,6 @@ for each release.
         * Mac OS X 10.6.8 with Xcode 3.2.6
             - need to change ``/System/Library/Frameworks/{Tcl,Tk}.framework/Version/Current`` to ``8.4``
         * Note Xcode 4.* does not support building for PPC so cannot be used for this build
-
 
 2.  64-bit / 32-bit, x86_64 and i386 universal, for OS X 10.6 (and later)::
 
@@ -57,12 +57,40 @@ for each release.
 
         * NCurses 5.9 (http://bugs.python.org/issue15037)
         * SQLite 3.7.13
+        * Tcl 8.5.15
+        * Tk 8.5.15
+        * XZ 5.0.3
 
     - uses system-supplied versions of third-party libraries
 
         * readline module links with Apple BSD editline (libedit)
 
-    - requires ActiveState Tcl/Tk 8.5.9 (or later) to be installed for building
+    - requires ActiveState Tcl/Tk 8.5.14 (or later) to be installed for building
+
+        * Beginning with Python 3.3.3, this installer now includes its own
+          builtin copy of Tcl and Tk 8.5.15 libraries and thus is no longer
+          dependent on the buggy releases of Aqua Cocoa Tk 8.5 shipped with
+          OS X 10.6 or on installing a newer third-party version of Tcl/Tk
+          in /Library/Frameworks, such as from ActiveState.  If it is
+          necessary to fallback to using a third-party Tcl/Tk because of
+          a problem with the builtin Tcl/Tk, there is a backup version of
+          the _tkinter extension included which will dynamically link to
+          Tcl and Tk frameworks in /Library/Frameworks as in previous releases.
+          To enable (for all users of this Python 3.3)::
+
+              sudo bash
+              cd /Library/Frameworks/Python.framework/Versions/3.3
+              cd ./lib/python3.3
+              cp -p ./lib-tkinter/library/_tkinter.so ./lib-dynload
+              exit
+
+          To restore using Python's builtin versions of Tcl and Tk::
+
+              sudo bash
+              cd /Library/Frameworks/Python.framework/Versions/3.3
+              cd ./lib/python3.3
+              cp -p ./lib-tkinter/builtin/_tkinter.so ./lib-dynload
+              exit
 
     - recommended build environment:
 
@@ -81,10 +109,51 @@ for each release.
           considered a migration aid by Apple and is not likely to be fixed,
           its use should be avoided.  The other compiler, ``clang``, has been
           undergoing rapid development.  While it appears to have become
-          production-ready in the most recent Xcode 4 releases (Xcode 4.5.x
+          production-ready in the most recent Xcode 4 releases (Xcode 4.6.3
           as of this writing), there are still some open issues when
           building Python and there has not yet been the level of exposure in
           production environments that the Xcode 3 gcc-4.2 compiler has had.
+
+
+*   For Python 2.7.x and 3.2.x, the 32-bit-only installer was configured to
+    support Mac OS X 10.3.9 through (at least) 10.6.  Because it is
+    believed that there are few systems still running OS X 10.3 or 10.4
+    and because it has become increasingly difficult to test and
+    support the differences in these earlier systems, as of Python 3.3.0 the PSF
+    32-bit installer no longer supports them.  For reference in building such
+    an installer yourself, the details are::
+
+        /usr/bin/python build-installer.py \
+            --sdk-path=/Developer/SDKs/MacOSX10.4u.sdk \
+            --universal-archs=32-bit \
+            --dep-target=10.3 
+
+    - builds the following third-party libraries
+
+        * Bzip2
+        * NCurses
+        * GNU Readline (GPL)
+        * SQLite 3
+        * XZ
+        * Zlib 1.2.3
+        * Oracle Sleepycat DB 4.8 (Python 2.x only)
+
+    - requires ActiveState ``Tcl/Tk 8.4`` (currently 8.4.19) to be installed for building
+
+    - recommended build environment:
+        
+        * Mac OS X 10.5.8 PPC or Intel
+        * Xcode 3.1.4 (or later)
+        * ``MacOSX10.4u`` SDK (later SDKs do not support PPC G3 processors)
+        * ``MACOSX_DEPLOYMENT_TARGET=10.3``
+        * Apple ``gcc-4.0``
+        * system Python 2.5 for documentation build with Sphinx
+
+    - alternate build environments:
+
+        * Mac OS X 10.6.8 with Xcode 3.2.6
+            - need to change ``/System/Library/Frameworks/{Tcl,Tk}.framework/Version/Current`` to ``8.4``
+
 
 
 General Prerequisites

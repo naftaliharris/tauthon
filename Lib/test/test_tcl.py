@@ -3,6 +3,7 @@
 import unittest
 import sys
 import os
+import _testcapi
 from test import support
 
 # Skip this test if the _tkinter module wasn't built.
@@ -13,6 +14,14 @@ support.import_fresh_module('tkinter')
 
 from tkinter import Tcl
 from _tkinter import TclError
+
+tcl_version = _tkinter.TCL_VERSION.split('.')
+try:
+    for i in range(len(tcl_version)):
+        tcl_version[i] = int(tcl_version[i])
+except ValueError:
+    pass
+tcl_version = tuple(tcl_version)
 
 
 class TkinterTest(unittest.TestCase):
@@ -175,9 +184,126 @@ class TclTest(unittest.TestCase):
                 self.assertEqual(passValue(f), f)
         self.assertEqual(passValue((1, '2', (3.4,))), (1, '2', (3.4,)))
 
+    def test_splitlist(self):
+        splitlist = self.interp.tk.splitlist
+        call = self.interp.tk.call
+        self.assertRaises(TypeError, splitlist)
+        self.assertRaises(TypeError, splitlist, 'a', 'b')
+        self.assertRaises(TypeError, splitlist, 2)
+        testcases = [
+            ('2', ('2',)),
+            ('', ()),
+            ('{}', ('',)),
+            ('""', ('',)),
+            ('a\n b\t\r c\n ', ('a', 'b', 'c')),
+            (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
+            ('a \u20ac', ('a', '\u20ac')),
+            (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            ('a {b c}', ('a', 'b c')),
+            (r'a b\ c', ('a', 'b c')),
+            (('a', 'b c'), ('a', 'b c')),
+            ('a 2', ('a', '2')),
+            (('a', 2), ('a', 2)),
+            ('a 3.4', ('a', '3.4')),
+            (('a', 3.4), ('a', 3.4)),
+            ((), ()),
+            (call('list', 1, '2', (3.4,)), (1, '2', (3.4,))),
+        ]
+        if tcl_version >= (8, 5):
+            testcases += [
+                (call('dict', 'create', 1, '\u20ac', b'\xe2\x82\xac', (3.4,)),
+                        (1, '\u20ac', '\u20ac', (3.4,))),
+            ]
+        for arg, res in testcases:
+            self.assertEqual(splitlist(arg), res, msg=arg)
+        self.assertRaises(TclError, splitlist, '{')
+
+    def test_split(self):
+        split = self.interp.tk.split
+        call = self.interp.tk.call
+        self.assertRaises(TypeError, split)
+        self.assertRaises(TypeError, split, 'a', 'b')
+        self.assertRaises(TypeError, split, 2)
+        testcases = [
+            ('2', '2'),
+            ('', ''),
+            ('{}', ''),
+            ('""', ''),
+            ('{', '{'),
+            ('a\n b\t\r c\n ', ('a', 'b', 'c')),
+            (b'a\n b\t\r c\n ', ('a', 'b', 'c')),
+            ('a \u20ac', ('a', '\u20ac')),
+            (b'a \xe2\x82\xac', ('a', '\u20ac')),
+            ('a {b c}', ('a', ('b', 'c'))),
+            (r'a b\ c', ('a', ('b', 'c'))),
+            (('a', b'b c'), ('a', ('b', 'c'))),
+            (('a', 'b c'), ('a', ('b', 'c'))),
+            ('a 2', ('a', '2')),
+            (('a', 2), ('a', 2)),
+            ('a 3.4', ('a', '3.4')),
+            (('a', 3.4), ('a', 3.4)),
+            (('a', (2, 3.4)), ('a', (2, 3.4))),
+            ((), ()),
+            (call('list', 1, '2', (3.4,)), (1, '2', (3.4,))),
+        ]
+        if tcl_version >= (8, 5):
+            testcases += [
+                (call('dict', 'create', 12, '\u20ac', b'\xe2\x82\xac', (3.4,)),
+                        (12, '\u20ac', '\u20ac', (3.4,))),
+            ]
+        for arg, res in testcases:
+            self.assertEqual(split(arg), res, msg=arg)
+
+    def test_merge(self):
+        with support.check_warnings(('merge is deprecated',
+                                     DeprecationWarning)):
+            merge = self.interp.tk.merge
+            call = self.interp.tk.call
+            testcases = [
+                ((), ''),
+                (('a',), 'a'),
+                ((2,), '2'),
+                (('',), '{}'),
+                ('{', '\\{'),
+                (('a', 'b', 'c'), 'a b c'),
+                ((' ', '\t', '\r', '\n'), '{ } {\t} {\r} {\n}'),
+                (('a', ' ', 'c'), 'a { } c'),
+                (('a', '€'), 'a €'),
+                (('a', '\U000104a2'), 'a \U000104a2'),
+                (('a', b'\xe2\x82\xac'), 'a €'),
+                (('a', ('b', 'c')), 'a {b c}'),
+                (('a', 2), 'a 2'),
+                (('a', 3.4), 'a 3.4'),
+                (('a', (2, 3.4)), 'a {2 3.4}'),
+                ((), ''),
+                ((call('list', 1, '2', (3.4,)),), '{1 2 3.4}'),
+            ]
+            if tcl_version >= (8, 5):
+                testcases += [
+                    ((call('dict', 'create', 12, '\u20ac', b'\xe2\x82\xac', (3.4,)),),
+                     '{12 € € 3.4}'),
+                ]
+            for args, res in testcases:
+                self.assertEqual(merge(*args), res, msg=args)
+            self.assertRaises(UnicodeDecodeError, merge, b'\x80')
+            self.assertRaises(UnicodeEncodeError, merge, '\udc80')
+
+
+class BigmemTclTest(unittest.TestCase):
+
+    def setUp(self):
+        self.interp = Tcl()
+
+    @unittest.skipUnless(_testcapi.INT_MAX < _testcapi.PY_SSIZE_T_MAX,
+                         "needs UINT_MAX < SIZE_MAX")
+    @support.bigmemtest(size=_testcapi.INT_MAX + 1, memuse=5, dry_run=False)
+    def test_huge_string(self, size):
+        value = ' ' * size
+        self.assertRaises(OverflowError, self.interp.call, 'set', '_', value)
+
 
 def test_main():
-    support.run_unittest(TclTest, TkinterTest)
+    support.run_unittest(TclTest, TkinterTest, BigmemTclTest)
 
 if __name__ == "__main__":
     test_main()

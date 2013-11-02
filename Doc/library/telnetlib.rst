@@ -162,8 +162,12 @@ Telnet Objects
 .. method:: Telnet.write(buffer)
 
    Write a byte string to the socket, doubling any IAC characters. This can
-   block if the connection is blocked.  May raise :exc:`socket.error` if the
+   block if the connection is blocked.  May raise :exc:`OSError` if the
    connection is closed.
+
+   .. versionchanged:: 3.3
+      This method used to raise :exc:`socket.error`, which is now an alias
+      of :exc:`OSError`.
 
 
 .. method:: Telnet.interact()
@@ -181,7 +185,7 @@ Telnet Objects
    Read until one from a list of a regular expressions matches.
 
    The first argument is a list of regular expressions, either compiled
-   (:class:`re.RegexObject` instances) or uncompiled (byte strings). The
+   (:ref:`regex objects <re-objects>`) or uncompiled (byte strings). The
    optional second argument is a timeout, in seconds; the default is to block
    indefinitely.
 

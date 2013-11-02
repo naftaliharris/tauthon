@@ -413,7 +413,7 @@ class Example:
         zero-based, with respect to the beginning of the DocTest.
 
       - indent: The example's indentation in the DocTest string.
-        I.e., the number of space characters that preceed the
+        I.e., the number of space characters that precede the
         example's first prompt.
 
       - options: A dictionary mapping from option flags to True or
@@ -457,7 +457,6 @@ class Example:
     def __hash__(self):
         return hash((self.source, self.want, self.lineno, self.indent,
                      self.exc_msg))
-
 
 class DocTest:
     """
@@ -554,7 +553,7 @@ class DocTestParser:
         # Want consists of any non-blank lines that do not start with PS1.
         (?P<want> (?:(?![ ]*$)    # Not a blank line
                      (?![ ]*>>>)  # Not a line starting with PS1
-                     .*$\n?       # But any other line
+                     .+$\n?       # But any other line
                   )*)
         ''', re.MULTILINE | re.VERBOSE)
 
@@ -894,7 +893,7 @@ class DocTestFinder:
         if '__name__' not in globs:
             globs['__name__'] = '__main__'  # provide a default module name
 
-        # Recursively expore `obj`, extracting DocTests.
+        # Recursively explore `obj`, extracting DocTests.
         tests = []
         self._find(tests, obj, name, module, source_lines, globs, {})
         # Sort the tests by alpha order of names, for consistency in
@@ -1367,7 +1366,7 @@ class DocTestRunner:
         m = self.__LINECACHE_FILENAME_RE.match(filename)
         if m and m.group('name') == self.test.name:
             example = self.test.examples[int(m.group('examplenum'))]
-            return example.source.splitlines(True)
+            return example.source.splitlines(keepends=True)
         else:
             return self.save_linecache_getlines(filename, module_globals)
 
@@ -1413,6 +1412,7 @@ class DocTestRunner:
         # Note that the interactive output will go to *our*
         # save_stdout, even if that's not the real sys.stdout; this
         # allows us to write test cases for the set_trace behavior.
+        save_trace = sys.gettrace()
         save_set_trace = pdb.set_trace
         self.debugger = _OutputRedirectingPdb(save_stdout)
         self.debugger.reset()
@@ -1432,6 +1432,7 @@ class DocTestRunner:
         finally:
             sys.stdout = save_stdout
             pdb.set_trace = save_set_trace
+            sys.settrace(save_trace)
             linecache.getlines = self.save_linecache_getlines
             sys.displayhook = save_displayhook
             if clear_globs:
@@ -1628,8 +1629,8 @@ class OutputChecker:
         # Check if we should use diff.
         if self._do_a_fancy_diff(want, got, optionflags):
             # Split want & got into lines.
-            want_lines = want.splitlines(True)  # True == keep line ends
-            got_lines = got.splitlines(True)
+            want_lines = want.splitlines(keepends=True)
+            got_lines = got.splitlines(keepends=True)
             # Use difflib to find their differences.
             if optionflags & REPORT_UDIFF:
                 diff = difflib.unified_diff(want_lines, got_lines, n=2)
