@@ -840,9 +840,10 @@ class UTF7Test(ReadTest, unittest.TestCase):
             (b'a+////,+IKw-b', 'a\uffff\ufffd\u20acb'),
         ]
         for raw, expected in tests:
-            self.assertRaises(UnicodeDecodeError, codecs.utf_7_decode,
-                              raw, 'strict', True)
-            self.assertEqual(raw.decode('utf-7', 'replace'), expected)
+            with self.subTest(raw=raw):
+                self.assertRaises(UnicodeDecodeError, codecs.utf_7_decode,
+                                raw, 'strict', True)
+                self.assertEqual(raw.decode('utf-7', 'replace'), expected)
 
     def test_nonbmp(self):
         self.assertEqual('\U000104A0'.encode(self.encoding), b'+2AHcoA-')
@@ -2314,6 +2315,24 @@ class TransformCodecTest(unittest.TestCase):
             sout = reader.readline()
             self.assertEqual(sout, b"\x80")
 
+    def test_buffer_api_usage(self):
+        # We check all the transform codecs accept memoryview input
+        # for encoding and decoding
+        # and also that they roundtrip correctly
+        original = b"12345\x80"
+        for encoding in bytes_transform_encodings:
+            data = original
+            view = memoryview(data)
+            data = codecs.encode(data, encoding)
+            view_encoded = codecs.encode(view, encoding)
+            self.assertEqual(view_encoded, data)
+            view = memoryview(data)
+            data = codecs.decode(data, encoding)
+            self.assertEqual(data, original)
+            view_decoded = codecs.decode(view, encoding)
+            self.assertEqual(view_decoded, data)
+
+
 
 @unittest.skipUnless(sys.platform == 'win32',
                      'code pages are specific to Windows')
@@ -2324,8 +2343,8 @@ class CodePageTest(unittest.TestCase):
     def test_invalid_code_page(self):
         self.assertRaises(ValueError, codecs.code_page_encode, -1, 'a')
         self.assertRaises(ValueError, codecs.code_page_decode, -1, b'a')
-        self.assertRaises(WindowsError, codecs.code_page_encode, 123, 'a')
-        self.assertRaises(WindowsError, codecs.code_page_decode, 123, b'a')
+        self.assertRaises(OSError, codecs.code_page_encode, 123, 'a')
+        self.assertRaises(OSError, codecs.code_page_decode, 123, b'a')
 
     def test_code_page_name(self):
         self.assertRaisesRegex(UnicodeEncodeError, 'cp932',

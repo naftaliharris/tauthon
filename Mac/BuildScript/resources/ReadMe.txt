@@ -22,7 +22,7 @@ the contextual menu that appears.
 Installing a third-party version of Tcl/Tk is no longer required
 ================================================================
 
-As of Python 3.3.3, the 10.6+ 64-bit installer now
+Beginning with Python 3.4 alpha2, the 10.6+ 64-bit installer now
 comes with its own private copy of Tcl and Tk 8.5 libraries.  For
 this version of Python, it is no longer necessary to install
 a third-party version of Tcl/Tk 8.5, such as those from ActiveState,
@@ -33,6 +33,10 @@ this version of Python will always use its own private version,
 regardless of whether a third-party Tcl/Tk is installed.
 The 10.5+ 32-bit-only installer continues to use Tcl/Tk 8.4,
 either a third-party or system-supplied version.
+Since this is a new feature, it should be considered somewhat
+experimental and subject to change prior to the final release of
+Python 3.4.  Please report any problems found to the Python bug
+tracker at http://bugs.python.org.
 
 Visit http://www.python.org/download/mac/tcltk/
 for current information about supported and recommended versions of
