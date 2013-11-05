@@ -300,6 +300,15 @@
     <ClInclude Include="..\Modules\rotatingtree.h">
       <Filter>Modules</Filter>
     </ClInclude>
+    <ClInclude Include="..\Modules\sre.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Modules\sre_constants.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Modules\sre_lib.h">
+      <Filter>Modules</Filter>
+    </ClInclude>
     <ClInclude Include="..\Modules\_io\_iomodule.h">
       <Filter>Modules\_io</Filter>
     </ClInclude>
@@ -376,6 +385,9 @@
       <Filter>Objects</Filter>
     </ClInclude>
     <ClInclude Include="..\Objects\stringlib\partition.h">
+      <Filter>Objects</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Objects\stringlib\replace.h">
       <Filter>Objects</Filter>
     </ClInclude>
     <ClInclude Include="..\Objects\stringlib\split.h">
@@ -498,7 +510,7 @@
     <ClCompile Include="..\Modules\mmapmodule.c">
       <Filter>Modules</Filter>
     </ClCompile>
-    <ClCompile Include="..\Modules\operator.c">
+    <ClCompile Include="..\Modules\_operator.c">
       <Filter>Modules</Filter>
     </ClCompile>
     <ClCompile Include="..\Modules\parsermodule.c">
@@ -916,6 +928,9 @@
       <Filter>PC</Filter>
     </ClCompile>
     <ClCompile Include="..\Objects\namespaceobject.c" />
+    <ClCompile Include="..\Modules\_stat.c">
+      <Filter>Modules</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\PC\python_nt.rc">

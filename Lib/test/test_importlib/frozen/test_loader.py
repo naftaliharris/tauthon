@@ -1,11 +1,13 @@
-from importlib import machinery
-import imp
-import unittest
 from .. import abc
 from .. import util
-from test.support import captured_stdout
 
-class LoaderTests(abc.LoaderTests):
+from importlib import machinery
+import unittest
+from test.support import captured_stdout
+import types
+
+
+class LoaderTests(unittest.TestCase, abc.LoaderTests):
 
     def test_module(self):
         with util.uncache('__hello__'), captured_stdout() as stdout:
@@ -24,7 +26,7 @@ class LoaderTests(abc.LoaderTests):
             module = machinery.FrozenImporter.load_module('__phello__')
             check = {'__name__': '__phello__',
                      '__package__': '__phello__',
-                     '__path__': ['__phello__'],
+                     '__path__': [],
                      '__loader__': machinery.FrozenImporter,
                      }
             for attr, value in check.items():
@@ -85,7 +87,7 @@ class InspectLoaderTests(unittest.TestCase):
         name = '__hello__'
         with captured_stdout() as stdout:
             code = machinery.FrozenImporter.get_code(name)
-            mod = imp.new_module(name)
+            mod = types.ModuleType(name)
             exec(code, mod.__dict__)
             self.assertTrue(hasattr(mod, 'initialized'))
             self.assertEqual(stdout.getvalue(), 'Hello world!\n')
