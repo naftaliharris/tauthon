@@ -3010,12 +3010,11 @@ convert_op_cmp(PyObject **vcmp, PyObject **wcmp, PyObject *v, PyObject *w,
         }
     }
     else {
-        int is_instance = PyObject_IsInstance(w, Rational);
-        if (is_instance < 0) {
+        int is_rational = PyObject_IsInstance(w, Rational);
+        if (is_rational < 0) {
             *wcmp = NULL;
-            return 0;
         }
-        if (is_instance) {
+        else if (is_rational > 0) {
             *wcmp = numerator_as_decimal(w, context);
             if (*wcmp && !mpd_isspecial(MPD(v))) {
                 *vcmp = multiply_by_denominator(v, w, context);
@@ -3109,6 +3108,7 @@ dec_strdup(const char *src, Py_ssize_t size)
 {
     char *dest = PyMem_Malloc(size+1);
     if (dest == NULL) {
+        PyErr_NoMemory();
         return NULL;
     }
 
@@ -3187,7 +3187,6 @@ dec_format(PyObject *dec, PyObject *args)
             replace_fillchar = 1;
             fmt = dec_strdup(fmt, size);
             if (fmt == NULL) {
-                PyErr_NoMemory();
                 return NULL;
             }
             fmt[0] = '_';
