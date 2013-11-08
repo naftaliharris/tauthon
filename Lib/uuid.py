@@ -147,7 +147,7 @@ class UUID(object):
             if len(bytes) != 16:
                 raise ValueError('bytes is not a 16-char string')
             assert isinstance(bytes, bytes_), repr(bytes)
-            int = int_(('%02x'*16) % tuple(bytes), 16)
+            int = int_.from_bytes(bytes, byteorder='big')
         if fields is not None:
             if len(fields) != 6:
                 raise ValueError('fields is not a 6-tuple')
@@ -329,7 +329,7 @@ def _find_mac(command, args, hw_identifiers, get_index):
                         if words[i] in hw_identifiers:
                             return int(
                                 words[get_index(i)].replace(':', ''), 16)
-        except IOError:
+        except OSError:
             continue
     return None
 
@@ -371,7 +371,7 @@ def _ipconfig_getnode():
     for dir in dirs:
         try:
             pipe = os.popen(os.path.join(dir, 'ipconfig') + ' /all')
-        except IOError:
+        except OSError:
             continue
         else:
             for line in pipe:

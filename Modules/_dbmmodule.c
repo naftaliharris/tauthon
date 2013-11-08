@@ -14,11 +14,7 @@
  */
 #if defined(HAVE_NDBM_H)
 #include <ndbm.h>
-#if defined(PYOS_OS2) && !defined(PYCC_GCC)
-static char *which_dbm = "ndbm";
-#else
 static char *which_dbm = "GNU gdbm";  /* EMX port of GDBM */
-#endif
 #elif defined(HAVE_GDBM_NDBM_H)
 #include <gdbm/ndbm.h>
 static char *which_dbm = "GNU gdbm";
@@ -48,7 +44,7 @@ static PyTypeObject Dbmtype;
 static PyObject *DbmError;
 
 static PyObject *
-newdbmobject(char *file, int flags, int mode)
+newdbmobject(const char *file, int flags, int mode)
 {
     dbmobject *dp;
 
@@ -67,7 +63,7 @@ newdbmobject(char *file, int flags, int mode)
 /* Methods */
 
 static void
-dbm_dealloc(register dbmobject *dp)
+dbm_dealloc(dbmobject *dp)
 {
     if ( dp->di_dbm )
         dbm_close(dp->di_dbm);
@@ -95,7 +91,7 @@ dbm_length(dbmobject *dp)
 }
 
 static PyObject *
-dbm_subscript(dbmobject *dp, register PyObject *key)
+dbm_subscript(dbmobject *dp, PyObject *key)
 {
     datum drec, krec;
     Py_ssize_t tmp_size;
@@ -170,7 +166,7 @@ static PyMappingMethods dbm_as_mapping = {
 };
 
 static PyObject *
-dbm__close(register dbmobject *dp, PyObject *unused)
+dbm__close(dbmobject *dp, PyObject *unused)
 {
     if (dp->di_dbm)
         dbm_close(dp->di_dbm);
@@ -180,9 +176,9 @@ dbm__close(register dbmobject *dp, PyObject *unused)
 }
 
 static PyObject *
-dbm_keys(register dbmobject *dp, PyObject *unused)
+dbm_keys(dbmobject *dp, PyObject *unused)
 {
-    register PyObject *v, *item;
+    PyObject *v, *item;
     datum key;
     int err;
 
@@ -253,7 +249,7 @@ static PySequenceMethods dbm_as_sequence = {
 };
 
 static PyObject *
-dbm_get(register dbmobject *dp, PyObject *args)
+dbm_get(dbmobject *dp, PyObject *args)
 {
     datum key, val;
     PyObject *defvalue = Py_None;
@@ -276,7 +272,7 @@ dbm_get(register dbmobject *dp, PyObject *args)
 }
 
 static PyObject *
-dbm_setdefault(register dbmobject *dp, PyObject *args)
+dbm_setdefault(dbmobject *dp, PyObject *args)
 {
     datum key, val;
     PyObject *defvalue = NULL;
@@ -365,16 +361,69 @@ static PyTypeObject Dbmtype = {
 
 /* ----------------------------------------------------------------- */
 
+/*[clinic]
+module dbm
+
+dbm.open as dbmopen
+
+    filename: str
+        The filename to open.
+
+    flags: str="r"
+        How to open the file.  "r" for reading, "w" for writing, etc.
+
+    mode: int(doc_default="0o666") = 0o666
+        If creating a new file, the mode bits for the new file
+        (e.g. os.O_RDWR).
+
+    /
+
+Return a database object.
+
+[clinic]*/
+
+PyDoc_STRVAR(dbmopen__doc__,
+"Return a database object.\n"
+"\n"
+"dbm.open(filename, flags=\'r\', mode=0o666)\n"
+"  filename\n"
+"    The filename to open.\n"
+"  flags\n"
+"    How to open the file.  \"r\" for reading, \"w\" for writing, etc.\n"
+"  mode\n"
+"    If creating a new file, the mode bits for the new file\n"
+"    (e.g. os.O_RDWR).");
+
+#define DBMOPEN_METHODDEF    \
+    {"open", (PyCFunction)dbmopen, METH_VARARGS, dbmopen__doc__},
+
+static PyObject *
+dbmopen_impl(PyObject *self, const char *filename, const char *flags, int mode);
+
 static PyObject *
 dbmopen(PyObject *self, PyObject *args)
 {
-    char *name;
-    char *flags = "r";
-    int iflags;
-    int mode = 0666;
+    PyObject *return_value = NULL;
+    const char *filename;
+    const char *flags = "r";
+    int mode = 438;
 
-    if ( !PyArg_ParseTuple(args, "s|si:open", &name, &flags, &mode) )
-        return NULL;
+    if (!PyArg_ParseTuple(args,
+        "s|si:open",
+        &filename, &flags, &mode))
+        goto exit;
+    return_value = dbmopen_impl(self, filename, flags, mode);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+dbmopen_impl(PyObject *self, const char *filename, const char *flags, int mode)
+/*[clinic checksum: 61007c796d38af85c8035afa769fb4bb453429ee]*/
+{
+    int iflags;
+
     if ( strcmp(flags, "r") == 0 )
         iflags = O_RDONLY;
     else if ( strcmp(flags, "w") == 0 )
@@ -390,13 +439,11 @@ dbmopen(PyObject *self, PyObject *args)
                         "arg 2 to open should be 'r', 'w', 'c', or 'n'");
         return NULL;
     }
-    return newdbmobject(name, iflags, mode);
+    return newdbmobject(filename, iflags, mode);
 }
 
 static PyMethodDef dbmmodule_methods[] = {
-    { "open", (PyCFunction)dbmopen, METH_VARARGS,
-      "open(path[, flag[, mode]]) -> mapping\n"
-      "Return a database object."},
+    DBMOPEN_METHODDEF
     { 0, 0 },
 };
 
