@@ -104,6 +104,11 @@ static PyTypeObject PyDateTime_TimeType;
 static PyTypeObject PyDateTime_TZInfoType;
 static PyTypeObject PyDateTime_TimeZoneType;
 
+_Py_IDENTIFIER(as_integer_ratio);
+_Py_IDENTIFIER(fromutc);
+_Py_IDENTIFIER(isoformat);
+_Py_IDENTIFIER(strftime);
+
 /* ---------------------------------------------------------------------------
  * Math utilities.
  */
@@ -138,19 +143,6 @@ divmod(int x, int y, int *r)
     }
     assert(0 <= *r && *r < y);
     return quo;
-}
-
-/* Round a double to the nearest long.  |x| must be small enough to fit
- * in a C long; this is not checked.
- */
-static long
-round_to_long(double x)
-{
-    if (x >= 0.0)
-        x = floor(x + 0.5);
-    else
-        x = ceil(x - 0.5);
-    return (long)x;
 }
 
 /* Nearest integer to m / n for integers m and n. Half-integer results
@@ -1290,8 +1282,6 @@ wrap_strftime(PyObject *object, PyObject *format, PyObject *timetuple,
             goto Done;
         format = PyUnicode_FromString(PyBytes_AS_STRING(newfmt));
         if (format != NULL) {
-            _Py_IDENTIFIER(strftime);
-
             result = _PyObject_CallMethodId(time, &PyId_strftime, "OO",
                                             format, timetuple, NULL);
             Py_DECREF(format);
@@ -1397,7 +1387,7 @@ cmperror(PyObject *a, PyObject *b)
  */
 
 /* Conversion factors. */
-static PyObject *us_per_us = NULL;      /* 1 */
+static PyObject *one = NULL;      /* 1 */
 static PyObject *us_per_ms = NULL;      /* 1000 */
 static PyObject *us_per_second = NULL;  /* 1000000 */
 static PyObject *us_per_minute = NULL;  /* 1e6 * 60 as Python int */
@@ -1579,7 +1569,6 @@ multiply_float_timedelta(PyObject *floatobj, PyDateTime_Delta *delta)
     PyObject *result = NULL;
     PyObject *pyus_in = NULL, *temp, *pyus_out;
     PyObject *ratio = NULL;
-    _Py_IDENTIFIER(as_integer_ratio);
 
     pyus_in = delta_to_microseconds(delta);
     if (pyus_in == NULL)
@@ -1678,7 +1667,6 @@ truedivide_timedelta_float(PyDateTime_Delta *delta, PyObject *f)
     PyObject *result = NULL;
     PyObject *pyus_in = NULL, *temp, *pyus_out;
     PyObject *ratio = NULL;
-    _Py_IDENTIFIER(as_integer_ratio);
 
     pyus_in = delta_to_microseconds(delta);
     if (pyus_in == NULL)
@@ -2119,7 +2107,7 @@ delta_new(PyTypeObject *type, PyObject *args, PyObject *kw)
         goto Done
 
     if (us) {
-        y = accum("microseconds", x, us, us_per_us, &leftover_us);
+        y = accum("microseconds", x, us, one, &leftover_us);
         CLEANUP;
     }
     if (ms) {
@@ -2148,7 +2136,33 @@ delta_new(PyTypeObject *type, PyObject *args, PyObject *kw)
     }
     if (leftover_us) {
         /* Round to nearest whole # of us, and add into x. */
-        PyObject *temp = PyLong_FromLong(round_to_long(leftover_us));
+        double whole_us = round(leftover_us);
+        int x_is_odd;
+        PyObject *temp;
+
+        whole_us = round(leftover_us);
+        if (fabs(whole_us - leftover_us) == 0.5) {
+            /* We're exactly halfway between two integers.  In order
+             * to do round-half-to-even, we must determine whether x
+             * is odd. Note that x is odd when it's last bit is 1. The
+             * code below uses bitwise and operation to check the last
+             * bit. */
+	    temp = PyNumber_And(x, one);  /* temp <- x & 1 */
+            if (temp == NULL) {
+                Py_DECREF(x);
+                goto Done;
+            }
+            x_is_odd = PyObject_IsTrue(temp);
+            Py_DECREF(temp);
+            if (x_is_odd == -1) {
+                Py_DECREF(x);
+                goto Done;
+            }
+            whole_us = 2.0 * round((leftover_us + x_is_odd) * 0.5) - x_is_odd;
+        }
+
+        temp = PyLong_FromLong((long)whole_us);
+
         if (temp == NULL) {
             Py_DECREF(x);
             goto Done;
@@ -2239,22 +2253,14 @@ delta_total_seconds(PyObject *self)
 {
     PyObject *total_seconds;
     PyObject *total_microseconds;
-    PyObject *one_million;
 
     total_microseconds = delta_to_microseconds((PyDateTime_Delta *)self);
     if (total_microseconds == NULL)
         return NULL;
 
-    one_million = PyLong_FromLong(1000000L);
-    if (one_million == NULL) {
-        Py_DECREF(total_microseconds);
-        return NULL;
-    }
-
-    total_seconds = PyNumber_TrueDivide(total_microseconds, one_million);
+    total_seconds = PyNumber_TrueDivide(total_microseconds, us_per_second);
 
     Py_DECREF(total_microseconds);
-    Py_DECREF(one_million);
     return total_seconds;
 }
 
@@ -2630,8 +2636,6 @@ date_isoformat(PyDateTime_Date *self)
 static PyObject *
 date_str(PyDateTime_Date *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "()");
 }
 
@@ -2671,7 +2675,6 @@ static PyObject *
 date_format(PyDateTime_Date *self, PyObject *args)
 {
     PyObject *format;
-    _Py_IDENTIFIER(strftime);
 
     if (!PyArg_ParseTuple(args, "U:__format__", &format))
         return NULL;
@@ -3588,8 +3591,6 @@ time_repr(PyDateTime_Time *self)
 static PyObject *
 time_str(PyDateTime_Time *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "()");
 }
 
@@ -4138,31 +4139,72 @@ datetime_best_possible(PyObject *cls, TM_FUNC f, PyObject *tzinfo)
                                       tzinfo);
 }
 
-/* Return best possible local time -- this isn't constrained by the
- * precision of a timestamp.
- */
+/*[clinic]
+module datetime
+
+@classmethod
+datetime.now
+
+    tz: object = None
+        Timezone object.
+
+Returns new datetime object representing current time local to tz.
+
+If no tz is specified, uses local timezone.
+[clinic]*/
+
+PyDoc_STRVAR(datetime_now__doc__,
+"Returns new datetime object representing current time local to tz.\n"
+"\n"
+"datetime.now(tz=None)\n"
+"  tz\n"
+"    Timezone object.\n"
+"\n"
+"If no tz is specified, uses local timezone.");
+
+#define DATETIME_NOW_METHODDEF    \
+    {"now", (PyCFunction)datetime_now, METH_VARARGS|METH_KEYWORDS|METH_CLASS, datetime_now__doc__},
+
 static PyObject *
-datetime_now(PyObject *cls, PyObject *args, PyObject *kw)
+datetime_now_impl(PyObject *cls, PyObject *tz);
+
+static PyObject *
+datetime_now(PyObject *cls, PyObject *args, PyObject *kwargs)
+{
+    PyObject *return_value = NULL;
+    static char *_keywords[] = {"tz", NULL};
+    PyObject *tz = Py_None;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+        "|O:now", _keywords,
+        &tz))
+        goto exit;
+    return_value = datetime_now_impl(cls, tz);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+datetime_now_impl(PyObject *cls, PyObject *tz)
+/*[clinic checksum: 328b54387f4c2f8cb534997e1bd55f8cb38c4992]*/
 {
     PyObject *self;
-    PyObject *tzinfo = Py_None;
-    static char *keywords[] = {"tz", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kw, "|O:now", keywords,
-                                      &tzinfo))
-        return NULL;
-    if (check_tzinfo_subclass(tzinfo) < 0)
+    /* Return best possible local time -- this isn't constrained by the
+     * precision of a timestamp.
+     */
+    if (check_tzinfo_subclass(tz) < 0)
         return NULL;
 
     self = datetime_best_possible(cls,
-                                  tzinfo == Py_None ? localtime : gmtime,
-                                  tzinfo);
-    if (self != NULL && tzinfo != Py_None) {
+                                  tz == Py_None ? localtime : gmtime,
+                                  tz);
+    if (self != NULL && tz != Py_None) {
         /* Convert UTC to tzinfo's zone. */
         PyObject *temp = self;
-        _Py_IDENTIFIER(fromutc);
 
-        self = _PyObject_CallMethodId(tzinfo, &PyId_fromutc, "O", self);
+        self = _PyObject_CallMethodId(tz, &PyId_fromutc, "O", self);
         Py_DECREF(temp);
     }
     return self;
@@ -4199,7 +4241,6 @@ datetime_fromtimestamp(PyObject *cls, PyObject *args, PyObject *kw)
     if (self != NULL && tzinfo != Py_None) {
         /* Convert UTC to tzinfo's zone. */
         PyObject *temp = self;
-        _Py_IDENTIFIER(fromutc);
 
         self = _PyObject_CallMethodId(tzinfo, &PyId_fromutc, "O", self);
         Py_DECREF(temp);
@@ -4421,6 +4462,9 @@ datetime_subtract(PyObject *left, PyObject *right)
             delta_us = DATE_GET_MICROSECOND(left) -
                        DATE_GET_MICROSECOND(right);
             result = new_delta(delta_d, delta_s, delta_us, 1);
+            if (result == NULL)
+                return NULL;
+
             if (offdiff != NULL) {
                 PyObject *temp = result;
                 result = delta_subtract(result, offdiff);
@@ -4482,8 +4526,6 @@ datetime_repr(PyDateTime_DateTime *self)
 static PyObject *
 datetime_str(PyDateTime_DateTime *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "(s)", " ");
 }
 
@@ -4749,7 +4791,7 @@ local_timezone(PyDateTime_DateTime *utc_time)
             goto error;
     }
     result = new_timezone(delta, nameo);
-    Py_DECREF(nameo);
+    Py_XDECREF(nameo);
   error:
     Py_DECREF(delta);
     return result;
@@ -4762,7 +4804,6 @@ datetime_astimezone(PyDateTime_DateTime *self, PyObject *args, PyObject *kw)
     PyObject *offset;
     PyObject *temp;
     PyObject *tzinfo = Py_None;
-    _Py_IDENTIFIER(fromutc);
     static char *keywords[] = {"tz", NULL};
 
     if (! PyArg_ParseTupleAndKeywords(args, kw, "|O:astimezone", keywords,
@@ -4873,9 +4914,16 @@ datetime_timestamp(PyDateTime_DateTime *self)
         time.tm_wday = -1;
         time.tm_isdst = -1;
         timestamp = mktime(&time);
-        /* Return value of -1 does not necessarily mean an error, but tm_wday
-         * cannot remain set to -1 if mktime succeeded. */
-        if (timestamp == (time_t)(-1) && time.tm_wday == -1) {
+        if (timestamp == (time_t)(-1)
+#ifndef _AIX
+            /* Return value of -1 does not necessarily mean an error,
+             * but tm_wday cannot remain set to -1 if mktime succeeded. */
+            && time.tm_wday == -1
+#else
+            /* on AIX, tm_wday is always sets, even on error */
+#endif
+          )
+        {
             PyErr_SetString(PyExc_OverflowError,
                             "timestamp out of range");
             return NULL;
@@ -4989,9 +5037,7 @@ static PyMethodDef datetime_methods[] = {
 
     /* Class methods: */
 
-    {"now",         (PyCFunction)datetime_now,
-     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
-     PyDoc_STR("[tz] -> new datetime with tz's local day and time.")},
+    DATETIME_NOW_METHODDEF
 
     {"utcnow",         (PyCFunction)datetime_utcnow,
      METH_NOARGS | METH_CLASS,
@@ -5299,8 +5345,8 @@ PyInit__datetime(void)
       return NULL;
 
     /* module initialization */
-    PyModule_AddIntConstant(m, "MINYEAR", MINYEAR);
-    PyModule_AddIntConstant(m, "MAXYEAR", MAXYEAR);
+    PyModule_AddIntMacro(m, MINYEAR);
+    PyModule_AddIntMacro(m, MAXYEAR);
 
     Py_INCREF(&PyDateTime_DateType);
     PyModule_AddObject(m, "date", (PyObject *) &PyDateTime_DateType);
@@ -5344,12 +5390,12 @@ PyInit__datetime(void)
     assert(DI100Y == 25 * DI4Y - 1);
     assert(DI100Y == days_before_year(100+1));
 
-    us_per_us = PyLong_FromLong(1);
+    one = PyLong_FromLong(1);
     us_per_ms = PyLong_FromLong(1000);
     us_per_second = PyLong_FromLong(1000000);
     us_per_minute = PyLong_FromLong(60000000);
     seconds_per_day = PyLong_FromLong(24 * 3600);
-    if (us_per_us == NULL || us_per_ms == NULL || us_per_second == NULL ||
+    if (one == NULL || us_per_ms == NULL || us_per_second == NULL ||
         us_per_minute == NULL || seconds_per_day == NULL)
         return NULL;
 
