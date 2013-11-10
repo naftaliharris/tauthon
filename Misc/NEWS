@@ -1,6 +1,48 @@
 Python News
 +++++++++++
 
+What's New in Python 2.7.7?
+===========================
+
+*Release date: XXXX-XX-XX*
+
+Core and Builtins
+-----------------
+
+Library
+-------
+
+- Issue #1575020: Fixed support of 24-bit wave files on big-endian platforms.
+
+- Issue #19480: HTMLParser now accepts all valid start-tag names as defined
+  by the HTML5 standard.
+
+- Issue #17827: Add the missing documentation for ``codecs.encode`` and
+  ``codecs.decode``.
+
+- Issue #6157: Fixed Tkinter.Text.debug().  Original patch by Guilherme Polo.
+
+- Issue #6160: The bbox() method of tkinter.Spinbox now returns a tuple of
+  integers instead of a string.  Based on patch by Guilherme Polo.
+
+- Issue #19286: Directories in ``package_data`` are no longer added to
+  the filelist, preventing failure outlined in the ticket.
+
+Tests
+-----
+
+- Issue #17883: Tweak test_tcl testLoadWithUNC to skip the test in the
+  event of a permission error on Windows and to properly report other
+  skip conditions.
+
+- Issue #17883: Backported _is_gui_available() in test.test_support to
+  avoid hanging Windows buildbots on test_ttk_guionly.
+
+- Issue #18702: All skipped tests now reported as skipped.
+
+- Issue #19085: Added basic tests for all tkinter widget options.
+
+
 Whats' New in Python 2.7.6?
 ===========================
 

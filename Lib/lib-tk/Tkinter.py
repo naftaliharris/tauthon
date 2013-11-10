@@ -2908,8 +2908,9 @@ class Text(Widget, XView, YView):
     def debug(self, boolean=None):
         """Turn on the internal consistency checks of the B-Tree inside the text
         widget according to BOOLEAN."""
-        return self.tk.getboolean(self.tk.call(
-            self._w, 'debug', boolean))
+        if boolean is None:
+            return self.tk.call(self._w, 'debug')
+        self.tk.call(self._w, 'debug', boolean)
     def delete(self, index1, index2=None):
         """Delete the characters between INDEX1 and INDEX2 (not included)."""
         self.tk.call(self._w, 'delete', index1, index2)
@@ -3411,7 +3412,7 @@ class Spinbox(Widget, XView):
         bounding box may refer to a region outside the
         visible area of the window.
         """
-        return self.tk.call(self._w, 'bbox', index)
+        return self._getints(self.tk.call(self._w, 'bbox', index)) or None
 
     def delete(self, first, last=None):
         """Delete one or more elements of the spinbox.
