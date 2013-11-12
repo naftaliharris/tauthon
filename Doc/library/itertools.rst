@@ -88,9 +88,9 @@ loops that truncate the stream.
 .. function:: accumulate(iterable[, func])
 
     Make an iterator that returns accumulated sums. Elements may be any addable
-    type including :class:`Decimal` or :class:`Fraction`.  If the optional
-    *func* argument is supplied, it should be a function of two arguments
-    and it will be used instead of addition.
+    type including :class:`~decimal.Decimal` or :class:`~fractions.Fraction`.
+    If the optional *func* argument is supplied, it should be a function of two
+    arguments and it will be used instead of addition.
 
     Equivalent to::
 
@@ -134,6 +134,9 @@ loops that truncate the stream.
        '0.88' ,'0.39', '0.90', '0.33', '0.84', '0.52', '0.95', '0.18', '0.57',
        '0.93', '0.25', '0.71', '0.79', '0.63', '0.88', '0.39', '0.91', '0.32',
        '0.83', '0.54', '0.95', '0.20', '0.60', '0.91', '0.30', '0.80', '0.60']
+
+    See :func:`functools.reduce` for a similar function that returns only the
+    final accumulated value.
 
     .. versionadded:: 3.2
 

@@ -29,6 +29,14 @@ probably additional platforms, as long as OpenSSL is installed on that platform.
    cause variations in behavior. For example, TLSv1.1 and TLSv1.2 come with
    openssl version 1.0.1.
 
+.. warning::
+
+   OpenSSL's internal random number generator does not properly handle fork.
+   Applications must change the PRNG state of the parent process if they use
+   any SSL feature with :func:`os.fork`. Any successful call of
+   :func:`~ssl.RAND_add`, :func:`~ssl.RAND_bytes` or
+   :func:`~ssl.RAND_pseudo_bytes` is sufficient.
+
 This section documents the objects and functions in the ``ssl`` module; for more
 general information about TLS, SSL, and certificates, the reader is referred to
 the documents in the "See Also" section at the bottom.
@@ -286,10 +294,10 @@ Certificate handling
    Verify that *cert* (in decoded format as returned by
    :meth:`SSLSocket.getpeercert`) matches the given *hostname*.  The rules
    applied are those for checking the identity of HTTPS servers as outlined
-   in :rfc:`2818`, except that IP addresses are not currently supported.
-   In addition to HTTPS, this function should be suitable for checking the
-   identity of servers in various SSL-based protocols such as FTPS, IMAPS,
-   POPS and others.
+   in :rfc:`2818` and :rfc:`6125`, except that IP addresses are not currently
+   supported. In addition to HTTPS, this function should be suitable for
+   checking the identity of servers in various SSL-based protocols such as
+   FTPS, IMAPS, POPS and others.
 
    :exc:`CertificateError` is raised on failure. On success, the function
    returns nothing::
@@ -303,6 +311,13 @@ Certificate handling
       ssl.CertificateError: hostname 'example.org' doesn't match 'example.com'
 
    .. versionadded:: 3.2
+
+   .. versionchanged:: 3.3.3
+      The function now follows :rfc:`6125`, section 6.4.3 and does neither
+      match multiple wildcards (e.g. ``*.*.com`` or ``*a*.example.org``) nor
+      a wildcard inside an internationalized domain names (IDN) fragment.
+      IDN A-labels such as ``www*.xn--pthon-kva.org`` are still supported,
+      but ``x*.python.org`` no longer matches ``xn--tda.python.org``.
 
 .. function:: cert_time_to_seconds(timestring)
 
@@ -1469,10 +1484,10 @@ use the ``openssl ciphers`` command on your system.
 .. seealso::
 
    Class :class:`socket.socket`
-            Documentation of underlying :mod:`socket` class
+       Documentation of underlying :mod:`socket` class
 
-   `TLS (Transport Layer Security) and SSL (Secure Socket Layer) <http://www3.rad.com/networks/applications/secure/tls.htm>`_
-      Debby Koren
+   `SSL/TLS Strong Encryption: An Introduction <http://httpd.apache.org/docs/trunk/en/ssl/ssl_intro.html>`_
+       Intro from the Apache webserver documentation
 
    `RFC 1422: Privacy Enhancement for Internet Electronic Mail: Part II: Certificate-Based Key Management <http://www.ietf.org/rfc/rfc1422>`_
        Steve Kent

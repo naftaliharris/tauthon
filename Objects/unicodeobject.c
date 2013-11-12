@@ -896,6 +896,19 @@ _PyUnicode_New(Py_ssize_t length)
     if (unicode == NULL)
         return NULL;
     new_size = sizeof(Py_UNICODE) * ((size_t)length + 1);
+
+    _PyUnicode_WSTR_LENGTH(unicode) = length;
+    _PyUnicode_HASH(unicode) = -1;
+    _PyUnicode_STATE(unicode).interned = 0;
+    _PyUnicode_STATE(unicode).kind = 0;
+    _PyUnicode_STATE(unicode).compact = 0;
+    _PyUnicode_STATE(unicode).ready = 0;
+    _PyUnicode_STATE(unicode).ascii = 0;
+    _PyUnicode_DATA_ANY(unicode) = NULL;
+    _PyUnicode_LENGTH(unicode) = 0;
+    _PyUnicode_UTF8(unicode) = NULL;
+    _PyUnicode_UTF8_LENGTH(unicode) = 0;
+
     _PyUnicode_WSTR(unicode) = (Py_UNICODE*) PyObject_MALLOC(new_size);
     if (!_PyUnicode_WSTR(unicode)) {
         Py_DECREF(unicode);
@@ -912,17 +925,7 @@ _PyUnicode_New(Py_ssize_t length)
      */
     _PyUnicode_WSTR(unicode)[0] = 0;
     _PyUnicode_WSTR(unicode)[length] = 0;
-    _PyUnicode_WSTR_LENGTH(unicode) = length;
-    _PyUnicode_HASH(unicode) = -1;
-    _PyUnicode_STATE(unicode).interned = 0;
-    _PyUnicode_STATE(unicode).kind = 0;
-    _PyUnicode_STATE(unicode).compact = 0;
-    _PyUnicode_STATE(unicode).ready = 0;
-    _PyUnicode_STATE(unicode).ascii = 0;
-    _PyUnicode_DATA_ANY(unicode) = NULL;
-    _PyUnicode_LENGTH(unicode) = 0;
-    _PyUnicode_UTF8(unicode) = NULL;
-    _PyUnicode_UTF8_LENGTH(unicode) = 0;
+
     assert(_PyUnicode_CheckConsistency((PyObject *)unicode, 0));
     return unicode;
 }
@@ -2980,6 +2983,9 @@ _Py_normalize_encoding(const char *encoding,
     char *l_end;
 
     if (encoding == NULL) {
+        /* 6 == strlen("utf-8") + 1 */
+        if (lower_len < 6)
+            return 0;
         strcpy(lower, "utf-8");
         return 1;
     }
@@ -3021,7 +3027,8 @@ PyUnicode_Decode(const char *s,
             return PyUnicode_DecodeUTF8Stateful(s, size, errors, NULL);
         else if ((strcmp(lower, "latin-1") == 0) ||
                  (strcmp(lower, "latin1") == 0) ||
-                 (strcmp(lower, "iso-8859-1") == 0))
+                 (strcmp(lower, "iso-8859-1") == 0) ||
+                 (strcmp(lower, "iso8859-1") == 0))
             return PyUnicode_DecodeLatin1(s, size, errors);
 #ifdef HAVE_MBCS
         else if (strcmp(lower, "mbcs") == 0)
@@ -3392,7 +3399,8 @@ PyUnicode_AsEncodedString(PyObject *unicode,
         }
         else if ((strcmp(lower, "latin-1") == 0) ||
                  (strcmp(lower, "latin1") == 0) ||
-                 (strcmp(lower, "iso-8859-1") == 0))
+                 (strcmp(lower, "iso-8859-1") == 0) ||
+                 (strcmp(lower, "iso8859-1") == 0))
             return _PyUnicode_AsLatin1String(unicode, errors);
 #ifdef HAVE_MBCS
         else if (strcmp(lower, "mbcs") == 0)
@@ -3766,6 +3774,7 @@ PyUnicode_AsUTF8AndSize(PyObject *unicode, Py_ssize_t *psize)
             return NULL;
         _PyUnicode_UTF8(unicode) = PyObject_MALLOC(PyBytes_GET_SIZE(bytes) + 1);
         if (_PyUnicode_UTF8(unicode) == NULL) {
+            PyErr_NoMemory();
             Py_DECREF(bytes);
             return NULL;
         }
@@ -4341,6 +4350,7 @@ PyUnicode_DecodeUTF7Stateful(const char *s,
                     Py_UCS4 outCh = (Py_UCS4)(base64buffer >> (base64bits-16));
                     base64bits -= 16;
                     base64buffer &= (1 << base64bits) - 1; /* clear high bits */
+                    assert(outCh <= 0xffff);
                     if (surrogate) {
                         /* expecting a second surrogate */
                         if (Py_UNICODE_IS_LOW_SURROGATE(outCh)) {
@@ -4408,6 +4418,7 @@ PyUnicode_DecodeUTF7Stateful(const char *s,
                 inShift = 1;
                 shiftOutStart = writer.pos;
                 base64bits = 0;
+                base64buffer = 0;
             }
         }
         else if (DECODE_DIRECT(ch)) { /* character decodes as itself */
@@ -10420,10 +10431,6 @@ unicode_compare(PyObject *str1, PyObject *str2)
     void *data1, *data2;
     Py_ssize_t len1, len2, len;
 
-    /* a string is equal to itself */
-    if (str1 == str2)
-        return 0;
-
     kind1 = PyUnicode_KIND(str1);
     kind2 = PyUnicode_KIND(str2);
     data1 = PyUnicode_DATA(str1);
@@ -10518,17 +10525,13 @@ unicode_compare(PyObject *str1, PyObject *str2)
 #undef COMPARE
 }
 
-static int
+Py_LOCAL(int)
 unicode_compare_eq(PyObject *str1, PyObject *str2)
 {
     int kind;
     void *data1, *data2;
     Py_ssize_t len;
     int cmp;
-
-    /* a string is equal to itself */
-    if (str1 == str2)
-        return 1;
 
     len = PyUnicode_GET_LENGTH(str1);
     if (PyUnicode_GET_LENGTH(str2) != len)
@@ -10551,6 +10554,11 @@ PyUnicode_Compare(PyObject *left, PyObject *right)
         if (PyUnicode_READY(left) == -1 ||
             PyUnicode_READY(right) == -1)
             return -1;
+
+        /* a string is equal to itself */
+        if (left == right)
+            return 0;
+
         return unicode_compare(left, right);
     }
     PyErr_Format(PyExc_TypeError,
@@ -10561,29 +10569,59 @@ PyUnicode_Compare(PyObject *left, PyObject *right)
 }
 
 int
+_PyUnicode_CompareWithId(PyObject *left, _Py_Identifier *right)
+{
+    PyObject *right_str = _PyUnicode_FromId(right);   /* borrowed */
+    if (right_str == NULL)
+        return -1;
+    return PyUnicode_Compare(left, right_str);
+}
+
+int
 PyUnicode_CompareWithASCIIString(PyObject* uni, const char* str)
 {
     Py_ssize_t i;
     int kind;
-    void *data;
     Py_UCS4 chr;
 
     assert(_PyUnicode_CHECK(uni));
     if (PyUnicode_READY(uni) == -1)
         return -1;
     kind = PyUnicode_KIND(uni);
-    data = PyUnicode_DATA(uni);
-    /* Compare Unicode string and source character set string */
-    for (i = 0; (chr = PyUnicode_READ(kind, data, i)) && str[i]; i++)
-        if (chr != str[i])
-            return (chr < (unsigned char)(str[i])) ? -1 : 1;
-    /* This check keeps Python strings that end in '\0' from comparing equal
-     to C strings identical up to that point. */
-    if (PyUnicode_GET_LENGTH(uni) != i || chr)
-        return 1; /* uni is longer */
-    if (str[i])
-        return -1; /* str is longer */
-    return 0;
+    if (kind == PyUnicode_1BYTE_KIND) {
+        const void *data = PyUnicode_1BYTE_DATA(uni);
+        size_t len1 = (size_t)PyUnicode_GET_LENGTH(uni);
+        size_t len, len2 = strlen(str);
+        int cmp;
+
+        len = Py_MIN(len1, len2);
+        cmp = memcmp(data, str, len);
+        if (cmp != 0) {
+            if (cmp < 0)
+                return -1;
+            else
+                return 1;
+        }
+        if (len1 > len2)
+            return 1; /* uni is longer */
+        if (len2 > len1)
+            return -1; /* str is longer */
+        return 0;
+    }
+    else {
+        void *data = PyUnicode_DATA(uni);
+        /* Compare Unicode string and source character set string */
+        for (i = 0; (chr = PyUnicode_READ(kind, data, i)) && str[i]; i++)
+            if (chr != str[i])
+                return (chr < (unsigned char)(str[i])) ? -1 : 1;
+        /* This check keeps Python strings that end in '\0' from comparing equal
+         to C strings identical up to that point. */
+        if (PyUnicode_GET_LENGTH(uni) != i || chr)
+            return 1; /* uni is longer */
+        if (str[i])
+            return -1; /* str is longer */
+        return 0;
+    }
 }
 
 
@@ -10603,12 +10641,28 @@ PyUnicode_RichCompare(PyObject *left, PyObject *right, int op)
         PyUnicode_READY(right) == -1)
         return NULL;
 
-    if (op == Py_EQ || op == Py_NE) {
+    if (left == right) {
+        switch (op) {
+        case Py_EQ:
+        case Py_LE:
+        case Py_GE:
+            /* a string is equal to itself */
+            v = Py_True;
+            break;
+        case Py_NE:
+        case Py_LT:
+        case Py_GT:
+            v = Py_False;
+            break;
+        default:
+            PyErr_BadArgument();
+            return NULL;
+        }
+    }
+    else if (op == Py_EQ || op == Py_NE) {
         result = unicode_compare_eq(left, right);
-        if (op == Py_EQ)
-            v = TEST_COND(result);
-        else
-            v = TEST_COND(!result);
+        result ^= (op == Py_NE);
+        v = TEST_COND(result);
     }
     else {
         result = unicode_compare(left, right);
@@ -11872,7 +11926,7 @@ do_argstrip(PyObject *self, int striptype, PyObject *args)
 {
     PyObject *sep = NULL;
 
-    if (!PyArg_ParseTuple(args, (char *)stripformat[striptype], &sep))
+    if (!PyArg_ParseTuple(args, stripformat[striptype], &sep))
         return NULL;
 
     if (sep != NULL && sep != Py_None) {
@@ -12656,28 +12710,76 @@ unicode_swapcase(PyObject *self)
     return case_operation(self, do_swapcase);
 }
 
-PyDoc_STRVAR(maketrans__doc__,
-             "str.maketrans(x[, y[, z]]) -> dict (static method)\n\
-\n\
-Return a translation table usable for str.translate().\n\
-If there is only one argument, it must be a dictionary mapping Unicode\n\
-ordinals (integers) or characters to Unicode ordinals, strings or None.\n\
-Character keys will be then converted to ordinals.\n\
-If there are two arguments, they must be strings of equal length, and\n\
-in the resulting dictionary, each character in x will be mapped to the\n\
-character at the same position in y. If there is a third argument, it\n\
-must be a string, whose characters will be mapped to None in the result.");
+/*[clinic]
+module str
 
-static PyObject*
+@staticmethod
+str.maketrans as unicode_maketrans
+
+  x: object
+
+  y: unicode=NULL
+
+  z: unicode=NULL
+
+  /
+
+Return a translation table usable for str.translate().
+
+If there is only one argument, it must be a dictionary mapping Unicode
+ordinals (integers) or characters to Unicode ordinals, strings or None.
+Character keys will be then converted to ordinals.
+If there are two arguments, they must be strings of equal length, and
+in the resulting dictionary, each character in x will be mapped to the
+character at the same position in y. If there is a third argument, it
+must be a string, whose characters will be mapped to None in the result.
+[clinic]*/
+
+PyDoc_STRVAR(unicode_maketrans__doc__,
+"Return a translation table usable for str.translate().\n"
+"\n"
+"str.maketrans(x, y=None, z=None)\n"
+"\n"
+"If there is only one argument, it must be a dictionary mapping Unicode\n"
+"ordinals (integers) or characters to Unicode ordinals, strings or None.\n"
+"Character keys will be then converted to ordinals.\n"
+"If there are two arguments, they must be strings of equal length, and\n"
+"in the resulting dictionary, each character in x will be mapped to the\n"
+"character at the same position in y. If there is a third argument, it\n"
+"must be a string, whose characters will be mapped to None in the result.");
+
+#define UNICODE_MAKETRANS_METHODDEF    \
+    {"maketrans", (PyCFunction)unicode_maketrans, METH_VARARGS|METH_STATIC, unicode_maketrans__doc__},
+
+static PyObject *
+unicode_maketrans_impl(PyObject *x, PyObject *y, PyObject *z);
+
+static PyObject *
 unicode_maketrans(PyObject *null, PyObject *args)
 {
-    PyObject *x, *y = NULL, *z = NULL;
+    PyObject *return_value = NULL;
+    PyObject *x;
+    PyObject *y = NULL;
+    PyObject *z = NULL;
+
+    if (!PyArg_ParseTuple(args,
+        "O|UU:maketrans",
+        &x, &y, &z))
+        goto exit;
+    return_value = unicode_maketrans_impl(x, y, z);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+unicode_maketrans_impl(PyObject *x, PyObject *y, PyObject *z)
+/*[clinic checksum: 137db9c3199e7906b7967009f511c24fa3235b5f]*/
+{
     PyObject *new = NULL, *key, *value;
     Py_ssize_t i = 0;
     int res;
 
-    if (!PyArg_ParseTuple(args, "O|UU:maketrans", &x, &y, &z))
-        return NULL;
     new = PyDict_New();
     if (!new)
         return NULL;
@@ -13317,8 +13419,7 @@ static PyMethodDef unicode_methods[] = {
     {"format", (PyCFunction) do_string_format, METH_VARARGS | METH_KEYWORDS, format__doc__},
     {"format_map", (PyCFunction) do_string_format_map, METH_O, format_map__doc__},
     {"__format__", (PyCFunction) unicode__format__, METH_VARARGS, p_format__doc__},
-    {"maketrans", (PyCFunction) unicode_maketrans,
-     METH_VARARGS | METH_STATIC, maketrans__doc__},
+    UNICODE_MAKETRANS_METHODDEF
     {"__sizeof__", (PyCFunction) unicode__sizeof__, METH_NOARGS, sizeof__doc__},
 #if 0
     /* These methods are just used for debugging the implementation. */

@@ -8,6 +8,12 @@
 extern "C" {
 #endif
 
+_Py_IDENTIFIER(Py_Repr);
+_Py_IDENTIFIER(__bytes__);
+_Py_IDENTIFIER(__dir__);
+_Py_IDENTIFIER(__isabstractmethod__);
+_Py_IDENTIFIER(builtins);
+
 #ifdef Py_REF_DEBUG
 Py_ssize_t _Py_RefTotal;
 
@@ -560,7 +566,6 @@ PyObject *
 PyObject_Bytes(PyObject *v)
 {
     PyObject *result, *func;
-    _Py_IDENTIFIER(__bytes__);
 
     if (v == NULL)
         return PyBytes_FromString("<NULL>");
@@ -949,7 +954,6 @@ _PyObject_IsAbstract(PyObject *obj)
 {
     int res;
     PyObject* isabstract;
-    _Py_IDENTIFIER(__isabstractmethod__);
 
     if (obj == NULL)
         return 0;
@@ -1122,8 +1126,12 @@ PyObject_SelfIter(PyObject *obj)
 PyObject *
 _PyObject_GetBuiltin(const char *name)
 {
-    PyObject *mod, *attr;
-    mod = PyImport_ImportModule("builtins");
+    PyObject *mod_name, *mod, *attr;
+
+    mod_name = _PyUnicode_FromId(&PyId_builtins);   /* borrowed */
+    if (mod_name == NULL)
+        return NULL;
+    mod = PyImport_Import(mod_name);
     if (mod == NULL)
         return NULL;
     attr = PyObject_GetAttrString(mod, name);
@@ -1407,12 +1415,11 @@ static PyObject *
 _dir_locals(void)
 {
     PyObject *names;
-    PyObject *locals = PyEval_GetLocals();
+    PyObject *locals;
 
-    if (locals == NULL) {
-        PyErr_SetString(PyExc_SystemError, "frame does not exist");
+    locals = PyEval_GetLocals();
+    if (locals == NULL)
         return NULL;
-    }
 
     names = PyMapping_Keys(locals);
     if (!names)
@@ -1437,7 +1444,6 @@ static PyObject *
 _dir_object(PyObject *obj)
 {
     PyObject *result, *sorted;
-    _Py_IDENTIFIER(__dir__);
     PyObject *dirfunc = _PyObject_LookupSpecial(obj, &PyId___dir__);
 
     assert(obj);
@@ -1970,8 +1976,6 @@ _PyObject_DebugTypeStats(FILE *out)
    See dictobject.c and listobject.c for examples of use.
 */
 
-#define KEY "Py_Repr"
-
 int
 Py_ReprEnter(PyObject *obj)
 {
@@ -1982,12 +1986,12 @@ Py_ReprEnter(PyObject *obj)
     dict = PyThreadState_GetDict();
     if (dict == NULL)
         return 0;
-    list = PyDict_GetItemString(dict, KEY);
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL) {
         list = PyList_New(0);
         if (list == NULL)
             return -1;
-        if (PyDict_SetItemString(dict, KEY, list) < 0)
+        if (_PyDict_SetItemId(dict, &PyId_Py_Repr, list) < 0)
             return -1;
         Py_DECREF(list);
     }
@@ -2015,7 +2019,7 @@ Py_ReprLeave(PyObject *obj)
     if (dict == NULL)
         goto finally;
 
-    list = PyDict_GetItemString(dict, KEY);
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL || !PyList_Check(list))
         goto finally;
 

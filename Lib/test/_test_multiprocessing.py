@@ -273,7 +273,7 @@ class _TestProcess(BaseTestCase):
 
     @classmethod
     def _test_terminate(cls):
-        time.sleep(1000)
+        time.sleep(100)
 
     def test_terminate(self):
         if self.TYPE == 'threads':
@@ -297,9 +297,26 @@ class _TestProcess(BaseTestCase):
         self.assertTimingAlmostEqual(join.elapsed, 0.0)
         self.assertEqual(p.is_alive(), True)
 
+        # XXX maybe terminating too soon causes the problems on Gentoo...
+        time.sleep(1)
+
         p.terminate()
 
-        self.assertEqual(join(), None)
+        if hasattr(signal, 'alarm'):
+            # On the Gentoo buildbot waitpid() often seems to block forever.
+            # We use alarm() to interrupt it if it blocks for too long.
+            def handler(*args):
+                raise RuntimeError('join took too long: %s' % p)
+            old_handler = signal.signal(signal.SIGALRM, handler)
+            try:
+                signal.alarm(10)
+                self.assertEqual(join(), None)
+            finally:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+        else:
+            self.assertEqual(join(), None)
+
         self.assertTimingAlmostEqual(join.elapsed, 0.0)
 
         self.assertEqual(p.is_alive(), False)
@@ -706,7 +723,7 @@ class _TestQueue(BaseTestCase):
         start = time.time()
         self.assertRaises(pyqueue.Empty, q.get, True, 0.2)
         delta = time.time() - start
-        self.assertGreaterEqual(delta, 0.19)
+        self.assertGreaterEqual(delta, 0.18)
 
 #
 #
@@ -1680,6 +1697,16 @@ class _TestPool(BaseTestCase):
                             error_callback=call_args.append).wait()
         self.assertEqual(2, len(call_args))
         self.assertIsInstance(call_args[1], ValueError)
+
+    def test_map_unplicklable(self):
+        # Issue #19425 -- failure to pickle should not cause a hang
+        if self.TYPE == 'threads':
+            return
+        class A(object):
+            def __reduce__(self):
+                raise RuntimeError('cannot pickle')
+        with self.assertRaises(RuntimeError):
+            self.pool.map(sqr, [A()]*10)
 
     def test_map_chunksize(self):
         try:
@@ -3543,6 +3570,32 @@ class TestIgnoreEINTR(unittest.TestCase):
             conn.close()
 
 class TestStartMethod(unittest.TestCase):
+    @classmethod
+    def _check_context(cls, conn):
+        conn.send(multiprocessing.get_start_method())
+
+    def check_context(self, ctx):
+        r, w = ctx.Pipe(duplex=False)
+        p = ctx.Process(target=self._check_context, args=(w,))
+        p.start()
+        w.close()
+        child_method = r.recv()
+        r.close()
+        p.join()
+        self.assertEqual(child_method, ctx.get_start_method())
+
+    def test_context(self):
+        for method in ('fork', 'spawn', 'forkserver'):
+            try:
+                ctx = multiprocessing.get_context(method)
+            except ValueError:
+                continue
+            self.assertEqual(ctx.get_start_method(), method)
+            self.assertIs(ctx.get_context(), ctx)
+            self.assertRaises(ValueError, ctx.set_start_method, 'spawn')
+            self.assertRaises(ValueError, ctx.set_start_method, None)
+            self.check_context(ctx)
+
     def test_set_get(self):
         multiprocessing.set_forkserver_preload(PRELOAD)
         count = 0
@@ -3550,13 +3603,19 @@ class TestStartMethod(unittest.TestCase):
         try:
             for method in ('fork', 'spawn', 'forkserver'):
                 try:
-                    multiprocessing.set_start_method(method)
+                    multiprocessing.set_start_method(method, force=True)
                 except ValueError:
                     continue
                 self.assertEqual(multiprocessing.get_start_method(), method)
+                ctx = multiprocessing.get_context()
+                self.assertEqual(ctx.get_start_method(), method)
+                self.assertTrue(type(ctx).__name__.lower().startswith(method))
+                self.assertTrue(
+                    ctx.Process.__name__.lower().startswith(method))
+                self.check_context(multiprocessing)
                 count += 1
         finally:
-            multiprocessing.set_start_method(old_method)
+            multiprocessing.set_start_method(old_method, force=True)
         self.assertGreaterEqual(count, 1)
 
     def test_get_all(self):
@@ -3741,9 +3800,9 @@ def install_tests_in_module_dict(remote_globs, start_method):
         multiprocessing.process._cleanup()
         dangling[0] = multiprocessing.process._dangling.copy()
         dangling[1] = threading._dangling.copy()
-        old_start_method[0] = multiprocessing.get_start_method()
+        old_start_method[0] = multiprocessing.get_start_method(allow_none=True)
         try:
-            multiprocessing.set_start_method(start_method)
+            multiprocessing.set_start_method(start_method, force=True)
         except ValueError:
             raise unittest.SkipTest(start_method +
                                     ' start method not supported')
@@ -3759,7 +3818,7 @@ def install_tests_in_module_dict(remote_globs, start_method):
         multiprocessing.get_logger().setLevel(LOG_LEVEL)
 
     def tearDownModule():
-        multiprocessing.set_start_method(old_start_method[0])
+        multiprocessing.set_start_method(old_start_method[0], force=True)
         # pause a bit so we don't get warning about dangling threads/processes
         time.sleep(0.5)
         multiprocessing.process._cleanup()

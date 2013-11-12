@@ -681,7 +681,7 @@ complex_conjugate(PyObject *self)
 PyDoc_STRVAR(complex_conjugate_doc,
 "complex.conjugate() -> complex\n"
 "\n"
-"Returns the complex conjugate of its argument. (3-4j).conjugate() == 3+4j.");
+"Return the complex conjugate of its argument. (3-4j).conjugate() == 3+4j.");
 
 static PyObject *
 complex_getnewargs(PyComplexObject *v)
@@ -693,7 +693,7 @@ complex_getnewargs(PyComplexObject *v)
 PyDoc_STRVAR(complex__format__doc,
 "complex.__format__() -> str\n"
 "\n"
-"Converts to a string according to format_spec.");
+"Convert to a string according to format_spec.");
 
 static PyObject *
 complex__format__(PyObject* self, PyObject* args)
@@ -773,8 +773,9 @@ complex_subtype_from_string(PyTypeObject *type, PyObject *v)
             goto error;
     }
     else if (PyObject_AsCharBuffer(v, &s, &len)) {
-        PyErr_SetString(PyExc_TypeError,
-                        "complex() argument must be a string or a number");
+        PyErr_Format(PyExc_TypeError,
+            "complex() argument must be a string or a number, not '%.200s'",
+            Py_TYPE(v)->tp_name);
         return NULL;
     }
 
@@ -953,8 +954,9 @@ complex_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         nbi = i->ob_type->tp_as_number;
     if (nbr == NULL || nbr->nb_float == NULL ||
         ((i != NULL) && (nbi == NULL || nbi->nb_float == NULL))) {
-        PyErr_SetString(PyExc_TypeError,
-                   "complex() argument must be a string or a number");
+        PyErr_Format(PyExc_TypeError,
+            "complex() argument must be a string or a number, not '%.200s'",
+            Py_TYPE(r)->tp_name);
         if (own_r) {
             Py_DECREF(r);
         }

@@ -250,7 +250,7 @@ Equality comparisons are defined though::
     True
 
 Comparisons against non-enumeration values will always compare not equal
-(again, class:`IntEnum` was explicitly designed to behave differently, see
+(again, :class:`IntEnum` was explicitly designed to behave differently, see
 below)::
 
     >>> Color.blue == 2
@@ -371,8 +371,8 @@ The :class:`Enum` class is callable, providing the following functional API::
     >>> list(Animal)
     [<Animal.ant: 1>, <Animal.bee: 2>, <Animal.cat: 3>, <Animal.dog: 4>]
 
-The semantics of this API resemble :class:`namedtuple`. The first argument
-of the call to :class:`Enum` is the name of the enumeration.
+The semantics of this API resemble :class:`~collections.namedtuple`. The first
+argument of the call to :class:`Enum` is the name of the enumeration.
 
 The second argument is the *source* of enumeration member names.  It can be a
 whitespace-separated string of names, a sequence of names, a sequence of
@@ -594,8 +594,8 @@ alias::
 .. note::
 
     This is a useful example for subclassing Enum to add or change other
-    behaviors as well as disallowing aliases.  If the only change desired is
-    no aliases allowed the :func:`unique` decorator can be used instead.
+    behaviors as well as disallowing aliases.  If the only desired change is
+    disallowing aliases, the :func:`unique` decorator can be used instead.
 
 
 Planet
@@ -671,11 +671,11 @@ the member::
     ...
     AttributeError: 'Color' object has no attribute 'blue'
 
- Likewise, the :attr:`__members__` is only available on the class.
+Likewise, the :attr:`__members__` is only available on the class.
 
- If you give your :class:`Enum` subclass extra methods, like the `Planet`_
- class above, those methods will show up in a :func:`dir` of the member,
- but not of the class::
+If you give your :class:`Enum` subclass extra methods, like the `Planet`_
+class above, those methods will show up in a :func:`dir` of the member,
+but not of the class::
 
     >>> dir(Planet)
     ['EARTH', 'JUPITER', 'MARS', 'MERCURY', 'NEPTUNE', 'SATURN', 'URANUS', 'VENUS', '__class__', '__doc__', '__members__', '__module__']

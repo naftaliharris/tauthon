@@ -44,17 +44,17 @@ ENCODER(big5hkscs)
         Py_ssize_t insize;
 
         if (c < 0x80) {
-            REQUIRE_OUTBUF(1)
+            REQUIRE_OUTBUF(1);
             **outbuf = (unsigned char)c;
             NEXT(1, 1);
             continue;
         }
 
         insize = 1;
-        REQUIRE_OUTBUF(2)
+        REQUIRE_OUTBUF(2);
 
         if (c < 0x10000) {
-            TRYMAP_ENC(big5hkscs_bmp, code, c) {
+            if (TRYMAP_ENC(big5hkscs_bmp, code, c)) {
                 if (code == MULTIC) {
                     Py_UCS4 c2;
                     if (inlen - *inpos >= 2)
@@ -81,20 +81,24 @@ ENCODER(big5hkscs)
                     }
                 }
             }
-            else TRYMAP_ENC(big5, code, c);
-            else return 1;
+            else if (TRYMAP_ENC(big5, code, c))
+                ;
+            else
+                return 1;
         }
         else if (c < 0x20000)
             return insize;
         else if (c < 0x30000) {
-            TRYMAP_ENC(big5hkscs_nonbmp, code, c & 0xffff);
-            else return insize;
+            if (TRYMAP_ENC(big5hkscs_nonbmp, code, c & 0xffff))
+                ;
+            else
+                return insize;
         }
         else
             return insize;
 
-        OUTBYTE1(code >> 8)
-        OUTBYTE2(code & 0xFF)
+        OUTBYTE1(code >> 8);
+        OUTBYTE2(code & 0xFF);
         NEXT(insize, 2);
     }
 
@@ -115,16 +119,17 @@ DECODER(big5hkscs)
             continue;
         }
 
-        REQUIRE_INBUF(2)
+        REQUIRE_INBUF(2);
 
         if (0xc6 > c || c > 0xc8 || (c < 0xc7 && INBYTE2 < 0xa1)) {
-            TRYMAP_DEC(big5, writer, c, INBYTE2) {
+            if (TRYMAP_DEC(big5, decoded, c, INBYTE2)) {
+                OUTCHAR(decoded);
                 NEXT_IN(2);
                 continue;
             }
         }
 
-        TRYMAP_DEC_CHAR(big5hkscs, decoded, c, INBYTE2)
+        if (TRYMAP_DEC(big5hkscs, decoded, c, INBYTE2))
         {
             int s = BH2S(c, INBYTE2);
             const unsigned char *hintbase;

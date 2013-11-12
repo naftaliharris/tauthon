@@ -155,7 +155,7 @@ the same library that the Python runtime is using.
    Python source code.
 
 
-.. c:var:: char* (*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, char *)
+.. c:var:: char* (*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, const char *)
 
    Can be set to point to a function with the prototype
    ``char *func(FILE *stdin, FILE *stdout, char *prompt)``,
@@ -165,6 +165,14 @@ the same library that the Python runtime is using.
    input from the provided standard input file, returning the
    resulting string.  For example, The :mod:`readline` module sets
    this hook to provide line-editing and tab-completion features.
+
+   The result must be a string allocated by :c:func:`PyMem_RawMalloc` or
+   :c:func:`PyMem_RawRealloc`, or *NULL* if an error occurred.
+
+   .. versionchanged:: 3.4
+      The result must be allocated by :c:func:`PyMem_RawMalloc` or
+      :c:func:`PyMem_RawRealloc`, instead of being allocated by
+      :c:func:`PyMem_Malloc` or :c:func:`PyMem_Realloc`.
 
 
 .. c:function:: struct _node* PyParser_SimpleParseString(const char *str, int start)
@@ -312,7 +320,7 @@ the same library that the Python runtime is using.
    frame *f* is executed, interpreting bytecode and executing calls as needed.
    The additional *throwflag* parameter can mostly be ignored - if true, then
    it causes an exception to immediately be thrown; this is used for the
-   :meth:`throw` methods of generator objects.
+   :meth:`~generator.throw` methods of generator objects.
 
 
 .. c:function:: int PyEval_MergeCompilerFlags(PyCompilerFlags *cf)

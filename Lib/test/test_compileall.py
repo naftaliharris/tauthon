@@ -40,11 +40,10 @@ class CompileallTests(unittest.TestCase):
         compare = struct.pack('<4sl', importlib.util.MAGIC_NUMBER, mtime)
         return data, compare
 
+    @unittest.skipUnless(hasattr(os, 'stat'), 'test needs os.stat()')
     def recreation_check(self, metadata):
         """Check that compileall recreates bytecode when the new metadata is
         used."""
-        if not hasattr(os, 'stat'):
-            return
         py_compile.compile(self.source_path)
         self.assertEqual(*self.data())
         with open(self.bc_path, 'rb') as file:
@@ -295,7 +294,7 @@ class CommandLineTests(unittest.TestCase):
         pyc = importlib.util.cache_from_source(bazfn)
         os.rename(pyc, os.path.join(self.pkgdir, 'baz.pyc'))
         os.remove(bazfn)
-        rc, out, err = script_helper.assert_python_failure(fn)
+        rc, out, err = script_helper.assert_python_failure(fn, __isolated=False)
         self.assertRegex(err, b'File "dinsdale')
 
     def test_include_bad_file(self):

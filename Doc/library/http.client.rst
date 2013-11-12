@@ -169,8 +169,8 @@ The following exceptions are raised as appropriate:
    A subclass of :exc:`HTTPException`.  Raised if a server responds with a HTTP
    status code that we don't understand.
 
-The constants defined in this module are:
 
+The constants defined in this module are:
 
 .. data:: HTTP_PORT
 
@@ -649,7 +649,7 @@ request using http.client::
     >>> conn = http.client.HTTPConnection("localhost", 8080)
     >>> conn.request("PUT", "/file", BODY)
     >>> response = conn.getresponse()
-    >>> print(resp.status, response.reason)
+    >>> print(response.status, response.reason)
     200, OK
 
 .. _httpmessage-objects:

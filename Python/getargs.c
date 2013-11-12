@@ -376,7 +376,7 @@ seterror(Py_ssize_t iarg, const char *msg, int *levels, const char *fname,
                           "argument %" PY_FORMAT_SIZE_T "d", iarg);
             i = 0;
             p += strlen(p);
-            while (levels[i] > 0 && i < 32 && (int)(p-buf) < 220) {
+            while (i < 32 && levels[i] > 0 && (int)(p-buf) < 220) {
                 PyOS_snprintf(p, sizeof(buf) - (p - buf),
                               ", item %d", levels[i]-1);
                 p += strlen(p);
@@ -1590,7 +1590,6 @@ vgetargskeywords(PyObject *args, PyObject *keywords, const char *format,
                                 "keywords must be strings");
                 return cleanreturn(0, &freelist);
             }
-            /* check that _PyUnicode_AsString() result is not NULL */
             for (i = 0; i < len; i++) {
                 if (!PyUnicode_CompareWithASCIIString(key, kwlist[i])) {
                     match = 1;

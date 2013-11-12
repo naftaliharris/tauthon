@@ -631,7 +631,7 @@ def get_exec_path(env=None):
 
 
 # Change environ to automatically call putenv(), unsetenv if they exist.
-from collections.abc import MutableMapping
+from _collections_abc import MutableMapping
 
 class _Environ(MutableMapping):
     def __init__(self, data, encodekey, decodekey, encodevalue, decodevalue, putenv, unsetenv):
@@ -944,33 +944,6 @@ otherwise return -SIG, where SIG is the signal that killed it. """
 
     __all__.extend(["spawnlp", "spawnlpe"])
 
-
-import copyreg as _copyreg
-
-def _make_stat_result(tup, dict):
-    return stat_result(tup, dict)
-
-def _pickle_stat_result(sr):
-    (type, args) = sr.__reduce__()
-    return (_make_stat_result, args)
-
-try:
-    _copyreg.pickle(stat_result, _pickle_stat_result, _make_stat_result)
-except NameError: # stat_result may not exist
-    pass
-
-def _make_statvfs_result(tup, dict):
-    return statvfs_result(tup, dict)
-
-def _pickle_statvfs_result(sr):
-    (type, args) = sr.__reduce__()
-    return (_make_statvfs_result, args)
-
-try:
-    _copyreg.pickle(statvfs_result, _pickle_statvfs_result,
-                     _make_statvfs_result)
-except NameError: # statvfs_result may not exist
-    pass
 
 # Supply os.popen()
 def popen(cmd, mode="r", buffering=-1):

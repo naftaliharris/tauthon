@@ -16,7 +16,7 @@ try:
 except ImportError:
     ssl = None
 
-from unittest import TestCase
+from unittest import TestCase, skipUnless
 from test import support
 from test.support import HOST, HOSTv6
 threading = support.import_module('threading')
@@ -92,6 +92,7 @@ class DummyFTPHandler(asynchat.async_chat):
         self.next_response = ''
         self.next_data = None
         self.rest = None
+        self.next_retr_data = RETR_DATA
         self.push('220 welcome')
 
     def collect_incoming_data(self, data):
@@ -221,7 +222,7 @@ class DummyFTPHandler(asynchat.async_chat):
             offset = int(self.rest)
         else:
             offset = 0
-        self.dtp.push(RETR_DATA[offset:])
+        self.dtp.push(self.next_retr_data[offset:])
         self.dtp.close_when_done()
         self.rest = None
 
@@ -242,6 +243,11 @@ class DummyFTPHandler(asynchat.async_chat):
         self.push('125 mlsd ok')
         self.dtp.push(MLSD_DATA)
         self.dtp.close_when_done()
+
+    def cmd_setlongretr(self, arg):
+        # For testing. Next RETR will return long line.
+        self.next_retr_data = 'x' * int(arg)
+        self.push('125 setlongretr ok')
 
 
 class DummyFTPServer(asyncore.dispatcher, threading.Thread):
@@ -759,7 +765,22 @@ class TestFTPClass(TestCase):
         self.assertEqual(ftplib.parse257('257 "/foo/b""ar"'), '/foo/b"ar')
         self.assertEqual(ftplib.parse257('257 "/foo/b""ar" created'), '/foo/b"ar')
 
+    def test_line_too_long(self):
+        self.assertRaises(ftplib.Error, self.client.sendcmd,
+                          'x' * self.client.maxline * 2)
 
+    def test_retrlines_too_long(self):
+        self.client.sendcmd('SETLONGRETR %d' % (self.client.maxline * 2))
+        received = []
+        self.assertRaises(ftplib.Error,
+                          self.client.retrlines, 'retr', received.append)
+
+    def test_storlines_too_long(self):
+        f = io.BytesIO(b'x' * self.client.maxline * 2)
+        self.assertRaises(ftplib.Error, self.client.storlines, 'stor', f)
+
+
+@skipUnless(support.IPV6_ENABLED, "IPv6 not enabled")
 class TestIPv6Environment(TestCase):
 
     def setUp(self):
@@ -800,6 +821,7 @@ class TestIPv6Environment(TestCase):
         retr()
 
 
+@skipUnless(ssl, "SSL not available")
 class TestTLS_FTPClassMixin(TestFTPClass):
     """Repeat TestFTPClass tests starting the TLS layer for both control
     and data connections first.
@@ -815,6 +837,7 @@ class TestTLS_FTPClassMixin(TestFTPClass):
         self.client.prot_p()
 
 
+@skipUnless(ssl, "SSL not available")
 class TestTLS_FTPClass(TestCase):
     """Specific TLS_FTP class tests."""
 
@@ -1007,12 +1030,9 @@ class TestNetrcDeprecation(TestCase):
 
 
 def test_main():
-    tests = [TestFTPClass, TestTimeouts, TestNetrcDeprecation]
-    if support.IPV6_ENABLED:
-        tests.append(TestIPv6Environment)
-
-    if ssl is not None:
-        tests.extend([TestTLS_FTPClassMixin, TestTLS_FTPClass])
+    tests = [TestFTPClass, TestTimeouts, TestNetrcDeprecation,
+             TestIPv6Environment,
+             TestTLS_FTPClassMixin, TestTLS_FTPClass]
 
     thread_info = support.threading_setup()
     try:

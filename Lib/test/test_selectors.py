@@ -6,6 +6,7 @@ import socket
 from test import support
 from time import sleep
 import unittest
+import unittest.mock
 try:
     from time import monotonic as time
 except ImportError:
@@ -124,6 +125,15 @@ class BaseSelectorTestCase(unittest.TestCase):
         # modify unknown file obj
         self.assertRaises(KeyError, s.modify, 999999, selectors.EVENT_READ)
 
+        # modify use a shortcut
+        d3 = object()
+        s.register = unittest.mock.Mock()
+        s.unregister = unittest.mock.Mock()
+
+        s.modify(rd, selectors.EVENT_READ, d3)
+        self.assertFalse(s.register.called)
+        self.assertFalse(s.unregister.called)
+
     def test_close(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
@@ -152,6 +162,33 @@ class BaseSelectorTestCase(unittest.TestCase):
 
         # unknown file obj
         self.assertRaises(KeyError, s.get_key, 999999)
+
+    def test_get_map(self):
+        s = self.SELECTOR()
+        self.addCleanup(s.close)
+
+        rd, wr = socketpair()
+        self.addCleanup(rd.close)
+        self.addCleanup(wr.close)
+
+        keys = s.get_map()
+        self.assertFalse(keys)
+        self.assertEqual(len(keys), 0)
+        self.assertEqual(list(keys), [])
+        key = s.register(rd, selectors.EVENT_READ, "data")
+        self.assertIn(rd, keys)
+        self.assertEqual(key, keys[rd])
+        self.assertEqual(len(keys), 1)
+        self.assertEqual(list(keys), [rd.fileno()])
+        self.assertEqual(list(keys.values()), [key])
+
+        # unknown file obj
+        with self.assertRaises(KeyError):
+            keys[999999]
+
+        # Read-only mapping
+        with self.assertRaises(TypeError):
+            del keys[rd]
 
     def test_select(self):
         s = self.SELECTOR()
@@ -264,22 +301,23 @@ class BaseSelectorTestCase(unittest.TestCase):
         t = time()
         self.assertEqual(1, len(s.select(0)))
         self.assertEqual(1, len(s.select(-1)))
-        self.assertTrue(time() - t < 0.5)
+        self.assertLess(time() - t, 0.5)
 
         s.unregister(wr)
         s.register(rd, selectors.EVENT_READ)
         t = time()
         self.assertFalse(s.select(0))
         self.assertFalse(s.select(-1))
-        self.assertTrue(time() - t < 0.5)
+        self.assertLess(time() - t, 0.5)
 
-        t = time()
+        t0 = time()
         self.assertFalse(s.select(1))
-        self.assertTrue(0.5 < time() - t < 1.5)
+        t1 = time()
+        self.assertTrue(0.5 < t1 - t0 < 1.5, t1 - t0)
 
     @unittest.skipUnless(hasattr(signal, "alarm"),
                          "signal.alarm() required for this test")
-    def test_interrupted_retry(self):
+    def test_select_interrupt(self):
         s = self.SELECTOR()
         self.addCleanup(s.close)
 

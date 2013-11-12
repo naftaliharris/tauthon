@@ -82,15 +82,17 @@ PyObject_LengthHint(PyObject *o, Py_ssize_t defaultvalue)
     PyObject *hint, *result;
     Py_ssize_t res;
     _Py_IDENTIFIER(__length_hint__);
-    res = PyObject_Length(o);
-    if (res < 0 && PyErr_Occurred()) {
-        if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
-            return -1;
+    if (_PyObject_HasLen(o)) {
+        res = PyObject_Length(o);
+        if (res < 0 && PyErr_Occurred()) {
+            if (!PyErr_ExceptionMatches(PyExc_TypeError)) {
+                return -1;
+            }
+            PyErr_Clear();
         }
-        PyErr_Clear();
-    }
-    else {
-        return res;
+        else {
+            return res;
+        }
     }
     hint = _PyObject_LookupSpecial(o, &PyId___length_hint__);
     if (hint == NULL) {
@@ -223,7 +225,7 @@ PyObject_DelItem(PyObject *o, PyObject *key)
 }
 
 int
-PyObject_DelItemString(PyObject *o, char *key)
+PyObject_DelItemString(PyObject *o, const char *key)
 {
     PyObject *okey;
     int ret;
@@ -1950,7 +1952,7 @@ PyMapping_Length(PyObject *o)
 #define PyMapping_Length PyMapping_Size
 
 PyObject *
-PyMapping_GetItemString(PyObject *o, char *key)
+PyMapping_GetItemString(PyObject *o, const char *key)
 {
     PyObject *okey, *r;
 
@@ -1966,7 +1968,7 @@ PyMapping_GetItemString(PyObject *o, char *key)
 }
 
 int
-PyMapping_SetItemString(PyObject *o, char *key, PyObject *value)
+PyMapping_SetItemString(PyObject *o, const char *key, PyObject *value)
 {
     PyObject *okey;
     int r;
@@ -1985,7 +1987,7 @@ PyMapping_SetItemString(PyObject *o, char *key, PyObject *value)
 }
 
 int
-PyMapping_HasKeyString(PyObject *o, char *key)
+PyMapping_HasKeyString(PyObject *o, const char *key)
 {
     PyObject *v;
 
@@ -2142,6 +2144,8 @@ PyObject_CallFunction(PyObject *callable, const char *format, ...)
     }
     else
         args = PyTuple_New(0);
+    if (args == NULL)
+        return NULL;
 
     return call_function_tail(callable, args);
 }

@@ -1784,7 +1784,8 @@ values.  If they're used anyway, ``0`` is substituted for them.
 
 The full set of format codes supported varies across platforms, because Python
 calls the platform C library's :func:`strftime` function, and platform
-variations are common.
+variations are common.  To see the full set of format codes supported on your
+platform, consult the :manpage:`strftime(3)` documentation.
 
 The following is a list of all the format codes that the C standard (1989
 version) requires, and these work on all platforms with a standard C
@@ -1897,7 +1898,7 @@ Notes:
    making assumptions about the output value. Field orderings will vary (for
    example, "month/day/year" versus "day/month/year"), and the output may
    contain Unicode characters encoded using the locale's default encoding (for
-   example, if the current locale is ``js_JP``, the default encoding could be
+   example, if the current locale is ``ja_JP``, the default encoding could be
    any one of ``eucJP``, ``SJIS``, or ``utf-8``; use :meth:`locale.getlocale`
    to determine the current locale's encoding).
 

@@ -1,8 +1,11 @@
 import enum
+import inspect
+import pydoc
 import unittest
 from collections import OrderedDict
+from enum import Enum, IntEnum, EnumMeta, unique
+from io import StringIO
 from pickle import dumps, loads, PicklingError
-from enum import Enum, IntEnum, unique
 
 # for pickle tests
 try:
@@ -57,6 +60,35 @@ try:
         cherry = 3
 except Exception:
     pass
+
+
+class TestHelpers(unittest.TestCase):
+    # _is_descriptor, _is_sunder, _is_dunder
+
+    def test_is_descriptor(self):
+        class foo:
+            pass
+        for attr in ('__get__','__set__','__delete__'):
+            obj = foo()
+            self.assertFalse(enum._is_descriptor(obj))
+            setattr(obj, attr, 1)
+            self.assertTrue(enum._is_descriptor(obj))
+
+    def test_is_sunder(self):
+        for s in ('_a_', '_aa_'):
+            self.assertTrue(enum._is_sunder(s))
+
+        for s in ('a', 'a_', '_a', '__a', 'a__', '__a__', '_a__', '__a_', '_',
+                '__', '___', '____', '_____',):
+            self.assertFalse(enum._is_sunder(s))
+
+    def test_is_dunder(self):
+        for s in ('__a__', '__aa__'):
+            self.assertTrue(enum._is_dunder(s))
+        for s in ('a', 'a_', '_a', '__a', 'a__', '_a_', '_a__', '__a_', '_',
+                '__', '___', '____', '_____',):
+            self.assertFalse(enum._is_dunder(s))
+
 
 class TestEnum(unittest.TestCase):
     def setUp(self):
@@ -1110,8 +1142,10 @@ class TestEnum(unittest.TestCase):
             green = ()
             blue = ()
         self.assertEqual(list(ColorInAList), [ColorInAList.red, ColorInAList.green, ColorInAList.blue])
-        self.assertEqual(ColorInAList.red.value, [1])
-        self.assertEqual(ColorInAList([1]), ColorInAList.red)
+        for enum, value in zip(ColorInAList, range(3)):
+            value += 1
+            self.assertEqual(enum.value, [value])
+            self.assertIs(ColorInAList([value]), enum)
 
     def test_conflicting_types_resolved_in_new(self):
         class LabelledIntEnum(int, Enum):
@@ -1163,6 +1197,118 @@ class TestUnique(unittest.TestCase):
                 triple = 3
                 turkey = 3
 
+
+expected_help_output = """
+Help on class Color in module %s:
+
+class Color(enum.Enum)
+ |  Method resolution order:
+ |      Color
+ |      enum.Enum
+ |      builtins.object
+ |\x20\x20
+ |  Data and other attributes defined here:
+ |\x20\x20
+ |  blue = <Color.blue: 3>
+ |\x20\x20
+ |  green = <Color.green: 2>
+ |\x20\x20
+ |  red = <Color.red: 1>
+ |\x20\x20
+ |  ----------------------------------------------------------------------
+ |  Data descriptors inherited from enum.Enum:
+ |\x20\x20
+ |  name
+ |      The name of the Enum member.
+ |\x20\x20
+ |  value
+ |      The value of the Enum member.
+ |\x20\x20
+ |  ----------------------------------------------------------------------
+ |  Data descriptors inherited from enum.EnumMeta:
+ |\x20\x20
+ |  __members__
+ |      Returns a mapping of member name->value.
+ |\x20\x20\x20\x20\x20\x20
+ |      This mapping lists all enum members, including aliases. Note that this
+ |      is a read-only view of the internal mapping.
+""".strip()
+
+class TestStdLib(unittest.TestCase):
+
+    class Color(Enum):
+        red = 1
+        green = 2
+        blue = 3
+
+    def test_pydoc(self):
+        # indirectly test __objclass__
+        expected_text = expected_help_output % __name__
+        output = StringIO()
+        helper = pydoc.Helper(output=output)
+        helper(self.Color)
+        result = output.getvalue().strip()
+        if result != expected_text:
+            print_diffs(expected_text, result)
+            self.fail("outputs are not equal, see diff above")
+
+    def test_inspect_getmembers(self):
+        values = dict((
+                ('__class__', EnumMeta),
+                ('__doc__', None),
+                ('__members__', self.Color.__members__),
+                ('__module__', __name__),
+                ('blue', self.Color.blue),
+                ('green', self.Color.green),
+                ('name', Enum.__dict__['name']),
+                ('red', self.Color.red),
+                ('value', Enum.__dict__['value']),
+                ))
+        result = dict(inspect.getmembers(self.Color))
+        self.assertEqual(values.keys(), result.keys())
+        failed = False
+        for k in values.keys():
+            if result[k] != values[k]:
+                print()
+                print('\n%s\n     key: %s\n  result: %s\nexpected: %s\n%s\n' %
+                        ('=' * 75, k, result[k], values[k], '=' * 75), sep='')
+                failed = True
+        if failed:
+            self.fail("result does not equal expected, see print above")
+
+    def test_inspect_classify_class_attrs(self):
+        # indirectly test __objclass__
+        from inspect import Attribute
+        values = [
+                Attribute(name='__class__', kind='data',
+                    defining_class=object, object=EnumMeta),
+                Attribute(name='__doc__', kind='data',
+                    defining_class=self.Color, object=None),
+                Attribute(name='__members__', kind='property',
+                    defining_class=EnumMeta, object=EnumMeta.__members__),
+                Attribute(name='__module__', kind='data',
+                    defining_class=self.Color, object=__name__),
+                Attribute(name='blue', kind='data',
+                    defining_class=self.Color, object=self.Color.blue),
+                Attribute(name='green', kind='data',
+                    defining_class=self.Color, object=self.Color.green),
+                Attribute(name='red', kind='data',
+                    defining_class=self.Color, object=self.Color.red),
+                Attribute(name='name', kind='data',
+                    defining_class=Enum, object=Enum.__dict__['name']),
+                Attribute(name='value', kind='data',
+                    defining_class=Enum, object=Enum.__dict__['value']),
+                ]
+        values.sort(key=lambda item: item.name)
+        result = list(inspect.classify_class_attrs(self.Color))
+        result.sort(key=lambda item: item.name)
+        failed = False
+        for v, r in zip(values, result):
+            if r != v:
+                print('\n%s\n%s\n%s\n%s\n' % ('=' * 75, r, v, '=' * 75), sep='')
+                failed = True
+        if failed:
+            self.fail("result does not equal expected, see print above")
 
 if __name__ == '__main__':
     unittest.main()

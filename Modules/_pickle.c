@@ -136,6 +136,8 @@ static PyObject *empty_tuple = NULL;
 /* For looking up name pairs in copyreg._extension_registry. */
 static PyObject *two_tuple = NULL;
 
+_Py_IDENTIFIER(modules);
+
 static int
 stack_underflow(void)
 {
@@ -872,18 +874,21 @@ _Unpickler_SetStringInput(UnpicklerObject *self, PyObject *input)
 static int
 _Unpickler_SkipConsumed(UnpicklerObject *self)
 {
-    Py_ssize_t consumed = self->next_read_idx - self->prefetched_idx;
+    Py_ssize_t consumed;
+    PyObject *r;
 
-    if (consumed > 0) {
-        PyObject *r;
-        assert(self->peek);  /* otherwise we did something wrong */
-        /* This makes an useless copy... */
-        r = PyObject_CallFunction(self->read, "n", consumed);
-        if (r == NULL)
-            return -1;
-        Py_DECREF(r);
-        self->prefetched_idx = self->next_read_idx;
-    }
+    consumed = self->next_read_idx - self->prefetched_idx;
+    if (consumed <= 0)
+        return 0;
+
+    assert(self->peek);  /* otherwise we did something wrong */
+    /* This makes an useless copy... */
+    r = PyObject_CallFunction(self->read, "n", consumed);
+    if (r == NULL)
+        return -1;
+    Py_DECREF(r);
+
+    self->prefetched_idx = self->next_read_idx;
     return 0;
 }
 
@@ -1360,7 +1365,7 @@ whichmodule(PyObject *global, PyObject *global_name)
         return NULL;
 
   search:
-    modules_dict = PySys_GetObject("modules");
+    modules_dict = _PySys_GetObjectId(&PyId_modules);
     if (modules_dict == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "unable to get sys.modules");
         return NULL;
@@ -5427,9 +5432,6 @@ load(UnpicklerObject *self)
         break;                  /* and we are done! */
     }
 
-    if (_Unpickler_SkipConsumed(self) < 0)
-        return NULL;
-
     /* XXX: It is not clear what this is actually for. */
     if ((err = PyErr_Occurred())) {
         if (err == PyExc_EOFError) {
@@ -5437,6 +5439,9 @@ load(UnpicklerObject *self)
         }
         return NULL;
     }
+
+    if (_Unpickler_SkipConsumed(self) < 0)
+        return NULL;
 
     PDATA_POP(self->stack, value);
     return value;
@@ -5545,7 +5550,7 @@ Unpickler_find_class(UnpicklerObject *self, PyObject *args)
         }
     }
 
-    modules_dict = PySys_GetObject("modules");
+    modules_dict = _PySys_GetObjectId(&PyId_modules);
     if (modules_dict == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "unable to get sys.modules");
         return NULL;

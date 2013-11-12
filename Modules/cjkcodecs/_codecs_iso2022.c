@@ -73,7 +73,7 @@
 #define F_SHIFTED               0x01
 #define F_ESCTHROUGHOUT         0x02
 
-#define STATE_SETG(dn, v)       ((state)->c[dn]) = (v);
+#define STATE_SETG(dn, v)       do { ((state)->c[dn]) = (v); } while (0)
 #define STATE_GETG(dn)          ((state)->c[dn])
 
 #define STATE_G0                STATE_GETG(0)
@@ -85,10 +85,10 @@
 #define STATE_SETG2(v)          STATE_SETG(2, v)
 #define STATE_SETG3(v)          STATE_SETG(3, v)
 
-#define STATE_SETFLAG(f)        ((state)->c[4]) |= (f);
+#define STATE_SETFLAG(f)        do { ((state)->c[4]) |= (f); } while (0)
 #define STATE_GETFLAG(f)        ((state)->c[4] & (f))
-#define STATE_CLEARFLAG(f)      ((state)->c[4]) &= ~(f);
-#define STATE_CLEARFLAGS()      ((state)->c[4]) = 0;
+#define STATE_CLEARFLAG(f)      do { ((state)->c[4]) &= ~(f); } while (0)
+#define STATE_CLEARFLAGS()      do { ((state)->c[4]) = 0; } while (0)
 
 #define ISO2022_CONFIG          ((const struct iso2022_config *)config)
 #define CONFIG_ISSET(flag)      (ISO2022_CONFIG->flags & (flag))
@@ -132,23 +132,23 @@ CODEC_INIT(iso2022)
 
 ENCODER_INIT(iso2022)
 {
-    STATE_CLEARFLAGS()
-    STATE_SETG0(CHARSET_ASCII)
-    STATE_SETG1(CHARSET_ASCII)
+    STATE_CLEARFLAGS();
+    STATE_SETG0(CHARSET_ASCII);
+    STATE_SETG1(CHARSET_ASCII);
     return 0;
 }
 
 ENCODER_RESET(iso2022)
 {
     if (STATE_GETFLAG(F_SHIFTED)) {
-        WRITEBYTE1(SI)
+        WRITEBYTE1(SI);
         NEXT_OUT(1);
-        STATE_CLEARFLAG(F_SHIFTED)
+        STATE_CLEARFLAG(F_SHIFTED);
     }
     if (STATE_G0 != CHARSET_ASCII) {
-        WRITEBYTE3(ESC, '(', 'B')
+        WRITEBYTE3(ESC, '(', 'B');
         NEXT_OUT(3);
-        STATE_SETG0(CHARSET_ASCII)
+        STATE_SETG0(CHARSET_ASCII);
     }
     return 0;
 }
@@ -163,16 +163,16 @@ ENCODER(iso2022)
 
         if (c < 0x80) {
             if (STATE_G0 != CHARSET_ASCII) {
-                WRITEBYTE3(ESC, '(', 'B')
-                STATE_SETG0(CHARSET_ASCII)
+                WRITEBYTE3(ESC, '(', 'B');
+                STATE_SETG0(CHARSET_ASCII);
                 NEXT_OUT(3);
             }
             if (STATE_GETFLAG(F_SHIFTED)) {
-                WRITEBYTE1(SI)
-                STATE_CLEARFLAG(F_SHIFTED)
+                WRITEBYTE1(SI);
+                STATE_CLEARFLAG(F_SHIFTED);
                 NEXT_OUT(1);
             }
-            WRITEBYTE1((unsigned char)c)
+            WRITEBYTE1((unsigned char)c);
             NEXT(1, 1);
             continue;
         }
@@ -210,25 +210,25 @@ ENCODER(iso2022)
         switch (dsg->plane) {
         case 0: /* G0 */
             if (STATE_GETFLAG(F_SHIFTED)) {
-                WRITEBYTE1(SI)
-                STATE_CLEARFLAG(F_SHIFTED)
+                WRITEBYTE1(SI);
+                STATE_CLEARFLAG(F_SHIFTED);
                 NEXT_OUT(1);
             }
             if (STATE_G0 != dsg->mark) {
                 if (dsg->width == 1) {
-                    WRITEBYTE3(ESC, '(', ESCMARK(dsg->mark))
-                    STATE_SETG0(dsg->mark)
+                    WRITEBYTE3(ESC, '(', ESCMARK(dsg->mark));
+                    STATE_SETG0(dsg->mark);
                     NEXT_OUT(3);
                 }
                 else if (dsg->mark == CHARSET_JISX0208) {
-                    WRITEBYTE3(ESC, '$', ESCMARK(dsg->mark))
-                    STATE_SETG0(dsg->mark)
+                    WRITEBYTE3(ESC, '$', ESCMARK(dsg->mark));
+                    STATE_SETG0(dsg->mark);
                     NEXT_OUT(3);
                 }
                 else {
                     WRITEBYTE4(ESC, '$', '(',
-                        ESCMARK(dsg->mark))
-                    STATE_SETG0(dsg->mark)
+                        ESCMARK(dsg->mark));
+                    STATE_SETG0(dsg->mark);
                     NEXT_OUT(4);
                 }
             }
@@ -236,20 +236,19 @@ ENCODER(iso2022)
         case 1: /* G1 */
             if (STATE_G1 != dsg->mark) {
                 if (dsg->width == 1) {
-                    WRITEBYTE3(ESC, ')', ESCMARK(dsg->mark))
-                    STATE_SETG1(dsg->mark)
+                    WRITEBYTE3(ESC, ')', ESCMARK(dsg->mark));
+                    STATE_SETG1(dsg->mark);
                     NEXT_OUT(3);
                 }
                 else {
-                    WRITEBYTE4(ESC, '$', ')',
-                        ESCMARK(dsg->mark))
-                    STATE_SETG1(dsg->mark)
+                    WRITEBYTE4(ESC, '$', ')', ESCMARK(dsg->mark));
+                    STATE_SETG1(dsg->mark);
                     NEXT_OUT(4);
                 }
             }
             if (!STATE_GETFLAG(F_SHIFTED)) {
-                WRITEBYTE1(SO)
-                STATE_SETFLAG(F_SHIFTED)
+                WRITEBYTE1(SO);
+                STATE_SETFLAG(F_SHIFTED);
                 NEXT_OUT(1);
             }
             break;
@@ -259,11 +258,11 @@ ENCODER(iso2022)
         }
 
         if (dsg->width == 1) {
-            WRITEBYTE1((unsigned char)encoded)
+            WRITEBYTE1((unsigned char)encoded);
             NEXT_OUT(1);
         }
         else {
-            WRITEBYTE2(encoded >> 8, encoded & 0xff)
+            WRITEBYTE2(encoded >> 8, encoded & 0xff);
             NEXT_OUT(2);
         }
         NEXT_INCHAR(insize);
@@ -274,17 +273,17 @@ ENCODER(iso2022)
 
 DECODER_INIT(iso2022)
 {
-    STATE_CLEARFLAGS()
-    STATE_SETG0(CHARSET_ASCII)
-    STATE_SETG1(CHARSET_ASCII)
-    STATE_SETG2(CHARSET_ASCII)
+    STATE_CLEARFLAGS();
+    STATE_SETG0(CHARSET_ASCII);
+    STATE_SETG1(CHARSET_ASCII);
+    STATE_SETG2(CHARSET_ASCII);
     return 0;
 }
 
 DECODER_RESET(iso2022)
 {
-    STATE_SETG0(CHARSET_ASCII)
-    STATE_CLEARFLAG(F_SHIFTED)
+    STATE_SETG0(CHARSET_ASCII);
+    STATE_CLEARFLAG(F_SHIFTED);
     return 0;
 }
 
@@ -303,8 +302,9 @@ iso2022processesc(const void *config, MultibyteCodec_State *state,
             break;
         }
         else if (CONFIG_ISSET(USE_JISX0208_EXT) && i+1 < *inleft &&
-                 (*inbuf)[i] == '&' && (*inbuf)[i+1] == '@')
+                 (*inbuf)[i] == '&' && (*inbuf)[i+1] == '@') {
             i += 2;
+        }
     }
 
     if (i >= MAX_ESCSEQLEN)
@@ -318,11 +318,14 @@ iso2022processesc(const void *config, MultibyteCodec_State *state,
         }
         else {
             charset = INBYTE3;
-            if (INBYTE2 == '(') designation = 0;
-            else if (INBYTE2 == ')') designation = 1;
+            if (INBYTE2 == '(')
+                designation = 0;
+            else if (INBYTE2 == ')')
+                designation = 1;
             else if (CONFIG_ISSET(USE_G2) && INBYTE2 == '.')
                 designation = 2;
-            else return 3;
+            else
+                return 3;
         }
         break;
     case 4:
@@ -330,9 +333,12 @@ iso2022processesc(const void *config, MultibyteCodec_State *state,
             return 4;
 
         charset = INBYTE4 | CHARSET_DBCS;
-        if (INBYTE3 == '(') designation = 0;
-        else if (INBYTE3 == ')') designation = 1;
-        else return 4;
+        if (INBYTE3 == '(')
+            designation = 0;
+        else if (INBYTE3 == ')')
+            designation = 1;
+        else
+            return 4;
         break;
     case 6: /* designation with prefix */
         if (CONFIG_ISSET(USE_JISX0208_EXT) &&
@@ -352,29 +358,35 @@ iso2022processesc(const void *config, MultibyteCodec_State *state,
     if (charset != CHARSET_ASCII) {
         const struct iso2022_designation *dsg;
 
-        for (dsg = CONFIG_DESIGNATIONS; dsg->mark; dsg++)
+        for (dsg = CONFIG_DESIGNATIONS; dsg->mark; dsg++) {
             if (dsg->mark == charset)
                 break;
+        }
         if (!dsg->mark)
             return esclen;
     }
 
-    STATE_SETG(designation, charset)
+    STATE_SETG(designation, charset);
     *inleft -= esclen;
     (*inbuf) += esclen;
     return 0;
 }
 
-#define ISO8859_7_DECODE(c, writer)                               \
-    if ((c) < 0xa0) OUTCHAR(c);                                       \
-    else if ((c) < 0xc0 && (0x288f3bc9L & (1L << ((c)-0xa0))))    \
-        OUTCHAR(c);                                                   \
-    else if ((c) >= 0xb4 && (c) <= 0xfe && ((c) >= 0xd4 ||        \
-             (0xbffffd77L & (1L << ((c)-0xb4)))))                 \
-        OUTCHAR(0x02d0 + (c));                                        \
-    else if ((c) == 0xa1) OUTCHAR(0x2018);                            \
-    else if ((c) == 0xa2) OUTCHAR(0x2019);                            \
-    else if ((c) == 0xaf) OUTCHAR(0x2015);
+#define ISO8859_7_DECODE(c, writer)                                \
+    if ((c) < 0xa0) {                                              \
+        OUTCHAR(c);                                                \
+    } else if ((c) < 0xc0 && (0x288f3bc9L & (1L << ((c)-0xa0)))) { \
+        OUTCHAR(c);                                                \
+    } else if ((c) >= 0xb4 && (c) <= 0xfe && ((c) >= 0xd4 ||       \
+             (0xbffffd77L & (1L << ((c)-0xb4))))) {                \
+        OUTCHAR(0x02d0 + (c));                                     \
+    } else if ((c) == 0xa1) {                                      \
+        OUTCHAR(0x2018);                                           \
+    } else if ((c) == 0xa2) {                                      \
+        OUTCHAR(0x2019);                                           \
+    } else if ((c) == 0xaf) {                                      \
+        OUTCHAR(0x2015);                                           \
+    }
 
 static Py_ssize_t
 iso2022processg2(const void *config, MultibyteCodec_State *state,
@@ -391,11 +403,14 @@ iso2022processg2(const void *config, MultibyteCodec_State *state,
     }
     else if (STATE_G2 == CHARSET_ISO8859_7) {
         ISO8859_7_DECODE(INBYTE3 ^ 0x80, writer)
-        else return 3;
+        else
+            return 3;
     }
     else if (STATE_G2 == CHARSET_ASCII) {
-        if (INBYTE3 & 0x80) return 3;
-        else OUTCHAR(INBYTE3);
+        if (INBYTE3 & 0x80)
+            return 3;
+        else
+            OUTCHAR(INBYTE3);
     }
     else
         return MBERR_INTERNAL;
@@ -419,14 +434,14 @@ DECODER(iso2022)
             OUTCHAR(c); /* assume as ISO-8859-1 */
             NEXT_IN(1);
             if (IS_ESCEND(c)) {
-                STATE_CLEARFLAG(F_ESCTHROUGHOUT)
+                STATE_CLEARFLAG(F_ESCTHROUGHOUT);
             }
             continue;
         }
 
         switch (c) {
         case ESC:
-            REQUIRE_INBUF(2)
+            REQUIRE_INBUF(2);
             if (IS_ISO2022ESC(INBYTE2)) {
                 err = iso2022processesc(config, state,
                                         inbuf, &inleft);
@@ -434,7 +449,7 @@ DECODER(iso2022)
                     return err;
             }
             else if (CONFIG_ISSET(USE_G2) && INBYTE2 == 'N') {/* SS2 */
-                REQUIRE_INBUF(3)
+                REQUIRE_INBUF(3);
                 err = iso2022processg2(config, state,
                                        inbuf, &inleft, writer);
                 if (err != 0)
@@ -442,24 +457,24 @@ DECODER(iso2022)
             }
             else {
                 OUTCHAR(ESC);
-                STATE_SETFLAG(F_ESCTHROUGHOUT)
+                STATE_SETFLAG(F_ESCTHROUGHOUT);
                 NEXT_IN(1);
             }
             break;
         case SI:
             if (CONFIG_ISSET(NO_SHIFT))
                 goto bypass;
-            STATE_CLEARFLAG(F_SHIFTED)
+            STATE_CLEARFLAG(F_SHIFTED);
             NEXT_IN(1);
             break;
         case SO:
             if (CONFIG_ISSET(NO_SHIFT))
                 goto bypass;
-            STATE_SETFLAG(F_SHIFTED)
+            STATE_SETFLAG(F_SHIFTED);
             NEXT_IN(1);
             break;
         case LF:
-            STATE_CLEARFLAG(F_SHIFTED)
+            STATE_CLEARFLAG(F_SHIFTED);
             OUTCHAR(LF);
             NEXT_IN(1);
             break;
@@ -479,38 +494,41 @@ DECODER(iso2022)
                     charset = STATE_G0;
 
                 if (charset == CHARSET_ASCII) {
-bypass:                                 OUTCHAR(c);
-                                        NEXT_IN(1);
-                                        break;
-                                }
+bypass:
+                    OUTCHAR(c);
+                    NEXT_IN(1);
+                    break;
+                }
 
-                                if (dsgcache != NULL &&
-                                    dsgcache->mark == charset)
-                                        dsg = dsgcache;
-                                else {
-                                        for (dsg = CONFIG_DESIGNATIONS;
-                                             dsg->mark != charset
+                if (dsgcache != NULL &&
+                    dsgcache->mark == charset)
+                        dsg = dsgcache;
+                else {
+                    for (dsg = CONFIG_DESIGNATIONS;
+                         dsg->mark != charset
 #ifdef Py_DEBUG
-                                                && dsg->mark != '\0'
+                            && dsg->mark != '\0'
 #endif
-                                             ;dsg++)
-                                                /* noop */;
-                                        assert(dsg->mark != '\0');
-                                        dsgcache = dsg;
-                                }
+                         ; dsg++)
+                    {
+                        /* noop */
+                    }
+                    assert(dsg->mark != '\0');
+                    dsgcache = dsg;
+                }
 
-                                REQUIRE_INBUF(dsg->width)
-                                decoded = dsg->decoder(*inbuf);
-                                if (decoded == MAP_UNMAPPABLE)
-                                        return dsg->width;
+                REQUIRE_INBUF(dsg->width);
+                decoded = dsg->decoder(*inbuf);
+                if (decoded == MAP_UNMAPPABLE)
+                    return dsg->width;
 
-                                if (decoded < 0x10000) {
-                                        OUTCHAR(decoded);
-                                }
-                                else if (decoded < 0x30000) {
-                                        OUTCHAR(decoded);
-                                }
-                                else { /* JIS X 0213 pairs */
+                if (decoded < 0x10000) {
+                    OUTCHAR(decoded);
+                }
+                else if (decoded < 0x30000) {
+                    OUTCHAR(decoded);
+                }
+                else { /* JIS X 0213 pairs */
                     OUTCHAR2(decoded >> 16, decoded & 0xffff);
                 }
                 NEXT_IN(dsg->width);
@@ -566,7 +584,7 @@ static Py_UCS4
 ksx1001_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
-    TRYMAP_DEC_CHAR(ksx1001, u, data[0], data[1])
+    if (TRYMAP_DEC(ksx1001, u, data[0], data[1]))
         return u;
     else
         return MAP_UNMAPPABLE;
@@ -578,9 +596,10 @@ ksx1001_encoder(const Py_UCS4 *data, Py_ssize_t *length)
     DBCHAR coded;
     assert(*length == 1);
     if (*data < 0x10000) {
-        TRYMAP_ENC(cp949, coded, *data)
+        if (TRYMAP_ENC(cp949, coded, *data)) {
             if (!(coded & 0x8000))
                 return coded;
+        }
     }
     return MAP_UNMAPPABLE;
 }
@@ -604,7 +623,7 @@ jisx0208_decoder(const unsigned char *data)
     Py_UCS4 u;
     if (data[0] == 0x21 && data[1] == 0x40) /* F/W REVERSE SOLIDUS */
         return 0xff3c;
-    else TRYMAP_DEC_CHAR(jisx0208, u, data[0], data[1])
+    else if (TRYMAP_DEC(jisx0208, u, data[0], data[1]))
         return u;
     else
         return MAP_UNMAPPABLE;
@@ -618,7 +637,7 @@ jisx0208_encoder(const Py_UCS4 *data, Py_ssize_t *length)
     if (*data < 0x10000) {
         if (*data == 0xff3c) /* F/W REVERSE SOLIDUS */
             return 0x2140;
-        else TRYMAP_ENC(jisxcommon, coded, *data) {
+        else if (TRYMAP_ENC(jisxcommon, coded, *data)) {
             if (!(coded & 0x8000))
                 return coded;
         }
@@ -643,7 +662,7 @@ static Py_UCS4
 jisx0212_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
-    TRYMAP_DEC_CHAR(jisx0212, u, data[0], data[1])
+    if (TRYMAP_DEC(jisx0212, u, data[0], data[1]))
         return u;
     else
         return MAP_UNMAPPABLE;
@@ -655,7 +674,7 @@ jisx0212_encoder(const Py_UCS4 *data, Py_ssize_t *length)
     DBCHAR coded;
     assert(*length == 1);
     if (*data < 0x10000) {
-        TRYMAP_ENC(jisxcommon, coded, *data) {
+        if (TRYMAP_ENC(jisxcommon, coded, *data)) {
             if (coded & 0x8000)
                 return coded & 0x7fff;
         }
@@ -697,11 +716,14 @@ jisx0213_2000_1_decoder(const unsigned char *data)
     EMULATE_JISX0213_2000_DECODE_PLANE1(u, data[0], data[1])
     else if (data[0] == 0x21 && data[1] == 0x40) /* F/W REVERSE SOLIDUS */
         return 0xff3c;
-    else TRYMAP_DEC_CHAR(jisx0208, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_1_bmp, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_1_emp, u, data[0], data[1])
+    else if (TRYMAP_DEC(jisx0208, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_1_bmp, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_1_emp, u, data[0], data[1]))
         u |= 0x20000;
-    else TRYMAP_DEC_CHAR(jisx0213_pair, u, data[0], data[1]);
+    else if (TRYMAP_DEC(jisx0213_pair, u, data[0], data[1]))
+        ;
     else
         return MAP_UNMAPPABLE;
     return u;
@@ -712,8 +734,9 @@ jisx0213_2000_2_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
     EMULATE_JISX0213_2000_DECODE_PLANE2_CHAR(u, data[0], data[1])
-    TRYMAP_DEC_CHAR(jisx0213_2_bmp, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_2_emp, u, data[0], data[1])
+    if (TRYMAP_DEC(jisx0213_2_bmp, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_2_emp, u, data[0], data[1]))
         u |= 0x20000;
     else
         return MAP_UNMAPPABLE;
@@ -727,11 +750,14 @@ jisx0213_2004_1_decoder(const unsigned char *data)
     Py_UCS4 u;
     if (data[0] == 0x21 && data[1] == 0x40) /* F/W REVERSE SOLIDUS */
         return 0xff3c;
-    else TRYMAP_DEC_CHAR(jisx0208, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_1_bmp, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_1_emp, u, data[0], data[1])
+    else if (TRYMAP_DEC(jisx0208, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_1_bmp, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_1_emp, u, data[0], data[1]))
         u |= 0x20000;
-    else TRYMAP_DEC_CHAR(jisx0213_pair, u, data[0], data[1]);
+    else if (TRYMAP_DEC(jisx0213_pair, u, data[0], data[1]))
+        ;
     else
         return MAP_UNMAPPABLE;
     return u;
@@ -741,8 +767,9 @@ static Py_UCS4
 jisx0213_2004_2_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
-    TRYMAP_DEC_CHAR(jisx0213_2_bmp, u, data[0], data[1]);
-    else TRYMAP_DEC_CHAR(jisx0213_2_emp, u, data[0], data[1])
+    if (TRYMAP_DEC(jisx0213_2_bmp, u, data[0], data[1]))
+        ;
+    else if (TRYMAP_DEC(jisx0213_2_emp, u, data[0], data[1]))
         u |= 0x20000;
     else
         return MAP_UNMAPPABLE;
@@ -759,28 +786,28 @@ jisx0213_encoder(const Py_UCS4 *data, Py_ssize_t *length, void *config)
         if (*data >= 0x10000) {
             if ((*data) >> 16 == 0x20000 >> 16) {
                 EMULATE_JISX0213_2000_ENCODE_EMP(coded, *data)
-                else TRYMAP_ENC(jisx0213_emp, coded,
-                                (*data) & 0xffff)
+                else if (TRYMAP_ENC(jisx0213_emp, coded, (*data) & 0xffff))
                     return coded;
             }
             return MAP_UNMAPPABLE;
         }
 
         EMULATE_JISX0213_2000_ENCODE_BMP(coded, *data)
-        else TRYMAP_ENC(jisx0213_bmp, coded, *data) {
+        else if (TRYMAP_ENC(jisx0213_bmp, coded, *data)) {
             if (coded == MULTIC)
                 return MAP_MULTIPLE_AVAIL;
         }
-        else TRYMAP_ENC(jisxcommon, coded, *data) {
+        else if (TRYMAP_ENC(jisxcommon, coded, *data)) {
             if (coded & 0x8000)
                 return MAP_UNMAPPABLE;
         }
         else
             return MAP_UNMAPPABLE;
         return coded;
+
     case 2: /* second character of unicode pair */
         coded = find_pairencmap((ucs2_t)data[0], (ucs2_t)data[1],
-                        jisx0213_pair_encmap, JISX0213_ENCPAIRS);
+                                jisx0213_pair_encmap, JISX0213_ENCPAIRS);
         if (coded == DBCINV) {
             *length = 1;
             coded = find_pairencmap((ucs2_t)data[0], 0,
@@ -790,14 +817,17 @@ jisx0213_encoder(const Py_UCS4 *data, Py_ssize_t *length, void *config)
         }
         else
             return coded;
+
     case -1: /* flush unterminated */
         *length = 1;
         coded = find_pairencmap((ucs2_t)data[0], 0,
-                        jisx0213_pair_encmap, JISX0213_ENCPAIRS);
+                                jisx0213_pair_encmap, JISX0213_ENCPAIRS);
         if (coded == DBCINV)
             return MAP_UNMAPPABLE;
         else
             return coded;
+        break;
+
     default:
         return MAP_UNMAPPABLE;
     }
@@ -902,7 +932,8 @@ jisx0201_r_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
     JISX0201_R_DECODE_CHAR(*data, u)
-    else return MAP_UNMAPPABLE;
+    else
+        return MAP_UNMAPPABLE;
     return u;
 }
 
@@ -911,7 +942,8 @@ jisx0201_r_encoder(const Py_UCS4 *data, Py_ssize_t *length)
 {
     DBCHAR coded;
     JISX0201_R_ENCODE(*data, coded)
-    else return MAP_UNMAPPABLE;
+    else
+        return MAP_UNMAPPABLE;
     return coded;
 }
 
@@ -920,7 +952,8 @@ jisx0201_k_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
     JISX0201_K_DECODE_CHAR(*data ^ 0x80, u)
-    else return MAP_UNMAPPABLE;
+    else
+        return MAP_UNMAPPABLE;
     return u;
 }
 
@@ -929,7 +962,8 @@ jisx0201_k_encoder(const Py_UCS4 *data, Py_ssize_t *length)
 {
     DBCHAR coded;
     JISX0201_K_ENCODE(*data, coded)
-    else return MAP_UNMAPPABLE;
+    else
+        return MAP_UNMAPPABLE;
     return coded - 0x80;
 }
 
@@ -950,7 +984,7 @@ static Py_UCS4
 gb2312_decoder(const unsigned char *data)
 {
     Py_UCS4 u;
-    TRYMAP_DEC_CHAR(gb2312, u, data[0], data[1])
+    if (TRYMAP_DEC(gb2312, u, data[0], data[1]))
         return u;
     else
         return MAP_UNMAPPABLE;
@@ -962,7 +996,7 @@ gb2312_encoder(const Py_UCS4 *data, Py_ssize_t *length)
     DBCHAR coded;
     assert(*length == 1);
     if (*data < 0x10000) {
-        TRYMAP_ENC(gbcommon, coded, *data) {
+        if (TRYMAP_ENC(gbcommon, coded, *data)) {
             if (!(coded & 0x8000))
                 return coded;
         }

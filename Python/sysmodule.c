@@ -41,6 +41,26 @@ extern const char *PyWin_DLLVersionString;
 #include <langinfo.h>
 #endif
 
+_Py_IDENTIFIER(_);
+_Py_IDENTIFIER(__sizeof__);
+_Py_IDENTIFIER(buffer);
+_Py_IDENTIFIER(builtins);
+_Py_IDENTIFIER(encoding);
+_Py_IDENTIFIER(path);
+_Py_IDENTIFIER(stdout);
+_Py_IDENTIFIER(stderr);
+_Py_IDENTIFIER(write);
+
+PyObject *
+_PySys_GetObjectId(_Py_Identifier *key)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    PyObject *sd = tstate->interp->sysdict;
+    if (sd == NULL)
+        return NULL;
+    return _PyDict_GetItemId(sd, key);
+}
+
 PyObject *
 PySys_GetObject(const char *name)
 {
@@ -49,6 +69,21 @@ PySys_GetObject(const char *name)
     if (sd == NULL)
         return NULL;
     return PyDict_GetItemString(sd, name);
+}
+
+int
+_PySys_SetObjectId(_Py_Identifier *key, PyObject *v)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    PyObject *sd = tstate->interp->sysdict;
+    if (v == NULL) {
+        if (_PyDict_GetItemId(sd, key) == NULL)
+            return 0;
+        else
+            return _PyDict_DelItemId(sd, key);
+    }
+    else
+        return _PyDict_SetItemId(sd, key, v);
 }
 
 int
@@ -79,8 +114,6 @@ sys_displayhook_unencodable(PyObject *outf, PyObject *o)
     PyObject *encoded, *escaped_str, *repr_str, *buffer, *result;
     char *stdout_encoding_str;
     int ret;
-    _Py_IDENTIFIER(encoding);
-    _Py_IDENTIFIER(buffer);
 
     stdout_encoding = _PyObject_GetAttrId(outf, &PyId_encoding);
     if (stdout_encoding == NULL)
@@ -101,7 +134,6 @@ sys_displayhook_unencodable(PyObject *outf, PyObject *o)
 
     buffer = _PyObject_GetAttrId(outf, &PyId_buffer);
     if (buffer) {
-        _Py_IDENTIFIER(write);
         result = _PyObject_CallMethodId(buffer, &PyId_write, "(O)", encoded);
         Py_DECREF(buffer);
         Py_DECREF(encoded);
@@ -137,10 +169,11 @@ sys_displayhook(PyObject *self, PyObject *o)
     PyObject *outf;
     PyInterpreterState *interp = PyThreadState_GET()->interp;
     PyObject *modules = interp->modules;
-    PyObject *builtins = PyDict_GetItemString(modules, "builtins");
+    PyObject *builtins;
+    static PyObject *newline = NULL;
     int err;
-    _Py_IDENTIFIER(_);
 
+    builtins = _PyDict_GetItemId(modules, &PyId_builtins);
     if (builtins == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "lost builtins module");
         return NULL;
@@ -155,7 +188,7 @@ sys_displayhook(PyObject *self, PyObject *o)
     }
     if (_PyObject_SetAttrId(builtins, &PyId__, Py_None) != 0)
         return NULL;
-    outf = PySys_GetObject("stdout");
+    outf = _PySys_GetObjectId(&PyId_stdout);
     if (outf == NULL || outf == Py_None) {
         PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
         return NULL;
@@ -173,7 +206,12 @@ sys_displayhook(PyObject *self, PyObject *o)
             return NULL;
         }
     }
-    if (PyFile_WriteString("\n", outf) != 0)
+    if (newline == NULL) {
+        newline = PyUnicode_FromString("\n");
+        if (newline == NULL)
+            return NULL;
+    }
+    if (PyFile_WriteObject(newline, outf, Py_PRINT_RAW) != 0)
         return NULL;
     if (_PyObject_SetAttrId(builtins, &PyId__, o) != 0)
         return NULL;
@@ -332,12 +370,16 @@ static PyObject *
 call_trampoline(PyThreadState *tstate, PyObject* callback,
                 PyFrameObject *frame, int what, PyObject *arg)
 {
-    PyObject *args = PyTuple_New(3);
+    PyObject *args;
     PyObject *whatstr;
     PyObject *result;
 
+    args = PyTuple_New(3);
     if (args == NULL)
         return NULL;
+    if (PyFrame_FastToLocalsWithError(frame) < 0)
+        return NULL;
+
     Py_INCREF(frame);
     whatstr = whatstrings[what];
     Py_INCREF(whatstr);
@@ -349,7 +391,6 @@ call_trampoline(PyThreadState *tstate, PyObject* callback,
     PyTuple_SET_ITEM(args, 2, arg);
 
     /* call the Python-level function */
-    PyFrame_FastToLocals(frame);
     result = PyEval_CallObject(callback, args);
     PyFrame_LocalsToFast(frame, 1);
     if (result == NULL)
@@ -818,7 +859,6 @@ sys_getsizeof(PyObject *self, PyObject *args, PyObject *kwds)
     static char *kwlist[] = {"object", "default", 0};
     PyObject *o, *dflt = NULL;
     PyObject *method;
-    _Py_IDENTIFIER(__sizeof__);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:getsizeof",
                                      kwlist, &o, &dflt))
@@ -1573,7 +1613,7 @@ _PySys_Init(void)
     if (m == NULL)
         return NULL;
     sysdict = PyModule_GetDict(m);
-#define SET_SYS_FROM_STRING(key, value)                    \
+#define SET_SYS_FROM_STRING_BORROW(key, value)             \
     do {                                                   \
         int res;                                           \
         PyObject *v = (value);                             \
@@ -1581,7 +1621,18 @@ _PySys_Init(void)
             return NULL;                                   \
         res = PyDict_SetItemString(sysdict, key, v);       \
         if (res < 0) {                                     \
-            Py_DECREF(v);                                  \
+            return NULL;                                   \
+        }                                                  \
+    } while (0)
+#define SET_SYS_FROM_STRING(key, value)                    \
+    do {                                                   \
+        int res;                                           \
+        PyObject *v = (value);                             \
+        if (v == NULL)                                     \
+            return NULL;                                   \
+        res = PyDict_SetItemString(sysdict, key, v);       \
+        Py_DECREF(v);                                      \
+        if (res < 0) {                                     \
             return NULL;                                   \
         }                                                  \
     } while (0)
@@ -1606,10 +1657,10 @@ _PySys_Init(void)
 
     /* stdin/stdout/stderr are now set by pythonrun.c */
 
-    SET_SYS_FROM_STRING("__displayhook__",
-                        PyDict_GetItemString(sysdict, "displayhook"));
-    SET_SYS_FROM_STRING("__excepthook__",
-                        PyDict_GetItemString(sysdict, "excepthook"));
+    SET_SYS_FROM_STRING_BORROW("__displayhook__",
+                               PyDict_GetItemString(sysdict, "displayhook"));
+    SET_SYS_FROM_STRING_BORROW("__excepthook__",
+                               PyDict_GetItemString(sysdict, "excepthook"));
     SET_SYS_FROM_STRING("version",
                          PyUnicode_FromString(Py_GetVersion()));
     SET_SYS_FROM_STRING("hexversion",
@@ -1679,9 +1730,9 @@ _PySys_Init(void)
     else {
         Py_INCREF(warnoptions);
     }
-    SET_SYS_FROM_STRING("warnoptions", warnoptions);
+    SET_SYS_FROM_STRING_BORROW("warnoptions", warnoptions);
 
-    SET_SYS_FROM_STRING("_xoptions", get_xoptions());
+    SET_SYS_FROM_STRING_BORROW("_xoptions", get_xoptions());
 
     /* version_info */
     if (VersionInfoType.tp_name == NULL) {
@@ -1778,7 +1829,7 @@ PySys_SetPath(const wchar_t *path)
     PyObject *v;
     if ((v = makepathobject(path, DELIM)) == NULL)
         Py_FatalError("can't create sys.path");
-    if (PySys_SetObject("path", v) != 0)
+    if (_PySys_SetObjectId(&PyId_path, v) != 0)
         Py_FatalError("can't assign sys.path");
     Py_DECREF(v);
 }
@@ -1847,7 +1898,7 @@ sys_update_path(int argc, wchar_t **argv)
     wchar_t fullpath[MAX_PATH];
 #endif
 
-    path = PySys_GetObject("path");
+    path = _PySys_GetObjectId(&PyId_path);
     if (path == NULL)
         return;
 
@@ -1957,7 +2008,6 @@ sys_pyfile_write_unicode(PyObject *unicode, PyObject *file)
 {
     PyObject *writer = NULL, *args = NULL, *result = NULL;
     int err;
-    _Py_IDENTIFIER(write);
 
     if (file == NULL)
         return -1;
@@ -2034,7 +2084,7 @@ sys_pyfile_write(const char *text, PyObject *file)
  */
 
 static void
-sys_write(char *name, FILE *fp, const char *format, va_list va)
+sys_write(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
 {
     PyObject *file;
     PyObject *error_type, *error_value, *error_traceback;
@@ -2042,7 +2092,7 @@ sys_write(char *name, FILE *fp, const char *format, va_list va)
     int written;
 
     PyErr_Fetch(&error_type, &error_value, &error_traceback);
-    file = PySys_GetObject(name);
+    file = _PySys_GetObjectId(key);
     written = PyOS_vsnprintf(buffer, sizeof(buffer), format, va);
     if (sys_pyfile_write(buffer, file) != 0) {
         PyErr_Clear();
@@ -2062,7 +2112,7 @@ PySys_WriteStdout(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write("stdout", stdout, format, va);
+    sys_write(&PyId_stdout, stdout, format, va);
     va_end(va);
 }
 
@@ -2072,19 +2122,19 @@ PySys_WriteStderr(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write("stderr", stderr, format, va);
+    sys_write(&PyId_stderr, stderr, format, va);
     va_end(va);
 }
 
 static void
-sys_format(char *name, FILE *fp, const char *format, va_list va)
+sys_format(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
 {
     PyObject *file, *message;
     PyObject *error_type, *error_value, *error_traceback;
     char *utf8;
 
     PyErr_Fetch(&error_type, &error_value, &error_traceback);
-    file = PySys_GetObject(name);
+    file = _PySys_GetObjectId(key);
     message = PyUnicode_FromFormatV(format, va);
     if (message != NULL) {
         if (sys_pyfile_write_unicode(message, file) != 0) {
@@ -2104,7 +2154,7 @@ PySys_FormatStdout(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_format("stdout", stdout, format, va);
+    sys_format(&PyId_stdout, stdout, format, va);
     va_end(va);
 }
 
@@ -2114,6 +2164,6 @@ PySys_FormatStderr(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_format("stderr", stderr, format, va);
+    sys_format(&PyId_stderr, stderr, format, va);
     va_end(va);
 }

@@ -94,6 +94,7 @@ enum {
     COMPILER_SCOPE_MODULE,
     COMPILER_SCOPE_CLASS,
     COMPILER_SCOPE_FUNCTION,
+    COMPILER_SCOPE_LAMBDA,
     COMPILER_SCOPE_COMPREHENSION,
 };
 
@@ -200,6 +201,7 @@ static int compiler_call_helper(struct compiler *c, int n,
                                 expr_ty starargs,
                                 expr_ty kwargs);
 static int compiler_try_except(struct compiler *, stmt_ty);
+static int compiler_set_qualname(struct compiler *);
 
 static PyCodeObject *assemble(struct compiler *, int addNone);
 static PyObject *__doc__;
@@ -622,6 +624,11 @@ compiler_enter_scope(struct compiler *c, identifier name,
     if (compiler_use_new_block(c) == NULL)
         return 0;
 
+    if (u->u_scope_type != COMPILER_SCOPE_MODULE) {
+        if (!compiler_set_qualname(c))
+            return 0;
+    }
+
     return 1;
 }
 
@@ -649,57 +656,77 @@ compiler_exit_scope(struct compiler *c)
 
 }
 
-static PyObject *
-compiler_scope_qualname(struct compiler *c)
+static int
+compiler_set_qualname(struct compiler *c)
 {
-    Py_ssize_t stack_size, i;
     _Py_static_string(dot, ".");
-    _Py_static_string(locals, "<locals>");
-    struct compiler_unit *u;
-    PyObject *capsule, *name, *seq, *dot_str, *locals_str;
+    _Py_static_string(dot_locals, ".<locals>");
+    Py_ssize_t stack_size;
+    struct compiler_unit *u = c->u;
+    PyObject *name, *base, *dot_str, *dot_locals_str;
 
-    u = c->u;
-    if (u->u_qualname != NULL) {
-        Py_INCREF(u->u_qualname);
-        return u->u_qualname;
-    }
-
-    seq = PyList_New(0);
-    if (seq == NULL)
-        return NULL;
-
+    base = NULL;
     stack_size = PyList_GET_SIZE(c->c_stack);
-    for (i = 0; i < stack_size; i++) {
-        capsule = PyList_GET_ITEM(c->c_stack, i);
-        u = (struct compiler_unit *)PyCapsule_GetPointer(capsule, COMPILER_CAPSULE_NAME_COMPILER_UNIT);
-        assert(u);
-        if (u->u_scope_type == COMPILER_SCOPE_MODULE)
-            continue;
-        if (PyList_Append(seq, u->u_name))
-            goto _error;
-        if (u->u_scope_type == COMPILER_SCOPE_FUNCTION) {
-            locals_str = _PyUnicode_FromId(&locals);
-            if (locals_str == NULL)
-                goto _error;
-            if (PyList_Append(seq, locals_str))
-                goto _error;
+    assert(stack_size >= 1);
+    if (stack_size > 1) {
+        int scope, force_global = 0;
+        struct compiler_unit *parent;
+        PyObject *mangled, *capsule;
+
+        capsule = PyList_GET_ITEM(c->c_stack, stack_size - 1);
+        parent = (struct compiler_unit *)PyCapsule_GetPointer(capsule, COMPILER_CAPSULE_NAME_COMPILER_UNIT);
+        assert(parent);
+
+        if (u->u_scope_type == COMPILER_SCOPE_FUNCTION || u->u_scope_type == COMPILER_SCOPE_CLASS) {
+            assert(u->u_name);
+            mangled = _Py_Mangle(parent->u_private, u->u_name);
+            if (!mangled)
+                return 0;
+            scope = PyST_GetScope(parent->u_ste, mangled);
+            Py_DECREF(mangled);
+            assert(scope != GLOBAL_IMPLICIT);
+            if (scope == GLOBAL_EXPLICIT)
+                force_global = 1;
+        }
+
+        if (!force_global) {
+            if (parent->u_scope_type == COMPILER_SCOPE_FUNCTION
+                || parent->u_scope_type == COMPILER_SCOPE_LAMBDA) {
+                dot_locals_str = _PyUnicode_FromId(&dot_locals);
+                if (dot_locals_str == NULL)
+                    return 0;
+                base = PyUnicode_Concat(parent->u_qualname, dot_locals_str);
+                if (base == NULL)
+                    return 0;
+            }
+            else {
+                Py_INCREF(parent->u_qualname);
+                base = parent->u_qualname;
+            }
         }
     }
-    u = c->u;
-    if (PyList_Append(seq, u->u_name))
-        goto _error;
-    dot_str = _PyUnicode_FromId(&dot);
-    if (dot_str == NULL)
-        goto _error;
-    name = PyUnicode_Join(dot_str, seq);
-    Py_DECREF(seq);
-    u->u_qualname = name;
-    Py_XINCREF(name);
-    return name;
 
-_error:
-    Py_XDECREF(seq);
-    return NULL;
+    if (base != NULL) {
+        dot_str = _PyUnicode_FromId(&dot);
+        if (dot_str == NULL) {
+            Py_DECREF(base);
+            return 0;
+        }
+        name = PyUnicode_Concat(base, dot_str);
+        Py_DECREF(base);
+        if (name == NULL)
+            return 0;
+        PyUnicode_Append(&name, u->u_name);
+        if (name == NULL)
+            return 0;
+    }
+    else {
+        Py_INCREF(u->u_name);
+        name = u->u_name;
+    }
+    u->u_qualname = name;
+
+    return 1;
 }
 
 /* Allocate a new block and return a pointer to it.
@@ -1649,9 +1676,10 @@ compiler_function(struct compiler *c, stmt_ty s)
         VISIT_IN_SCOPE(c, stmt, st);
     }
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL) {
+    if (co == NULL) {
         Py_XDECREF(qualname);
         Py_XDECREF(co);
         return 0;
@@ -1721,14 +1749,8 @@ compiler_class(struct compiler *c, stmt_ty s)
             return 0;
         }
         Py_DECREF(str);
-        /* store the __qualname__ */
-        str = compiler_scope_qualname(c);
-        if (!str) {
-            compiler_exit_scope(c);
-            return 0;
-        }
-        ADDOP_O(c, LOAD_CONST, str, consts);
-        Py_DECREF(str);
+        assert(c->u->u_qualname);
+        ADDOP_O(c, LOAD_CONST, c->u->u_qualname, consts);
         str = PyUnicode_InternFromString("__qualname__");
         if (!str || !compiler_nameop(c, str, Store)) {
             Py_XDECREF(str);
@@ -1750,6 +1772,10 @@ compiler_class(struct compiler *c, stmt_ty s)
             }
             i = compiler_lookup_arg(c->u->u_cellvars, str);
             Py_DECREF(str);
+            if (i < 0) {
+                compiler_exit_scope(c);
+                return 0;
+            }
             assert(i == 0);
             /* Return the cell where to store __class__ */
             ADDOP_I(c, LOAD_CLOSURE, i);
@@ -1843,7 +1869,7 @@ compiler_lambda(struct compiler *c, expr_ty e)
         if (res < 0) return 0;
         kw_default_count = res;
     }
-    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_FUNCTION,
+    if (!compiler_enter_scope(c, name, COMPILER_SCOPE_LAMBDA,
                               (void *)e, e->lineno))
         return 0;
 
@@ -1862,9 +1888,10 @@ compiler_lambda(struct compiler *c, expr_ty e)
         ADDOP_IN_SCOPE(c, RETURN_VALUE);
     }
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL)
+    if (co == NULL)
         return 0;
 
     arglength = asdl_seq_LEN(args->defaults);
@@ -3139,9 +3166,10 @@ compiler_comprehension(struct compiler *c, expr_ty e, int type, identifier name,
     }
 
     co = assemble(c, 1);
-    qualname = compiler_scope_qualname(c);
+    qualname = c->u->u_qualname;
+    Py_INCREF(qualname);
     compiler_exit_scope(c);
-    if (qualname == NULL || co == NULL)
+    if (co == NULL)
         goto error;
 
     if (!compiler_make_closure(c, co, 0, qualname))

@@ -14,6 +14,10 @@ struct st_zip_searchorder {
     int type;
 };
 
+#ifdef ALTSEP
+_Py_IDENTIFIER(replace);
+#endif
+
 /* zip_searchorder defines how we search for a module in the Zip
    archive: we first search for a package __init__, then for
    non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
@@ -66,9 +70,6 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
     PyObject *path, *files, *tmp;
     PyObject *filename = NULL;
     Py_ssize_t len, flen;
-#ifdef ALTSEP
-    _Py_IDENTIFIER(replace);
-#endif
 
     if (!_PyArg_NoKeywords("zipimporter()", kwds))
         return -1;
@@ -117,6 +118,8 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
         if (flen == -1)
             break;
         filename = PyUnicode_Substring(path, 0, flen);
+        if (filename == NULL)
+            goto error;
     }
     if (filename == NULL) {
         PyErr_SetString(ZipImportError, "not a Zip file");
@@ -469,9 +472,12 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
     if (ispackage) {
         /* add __path__ to the module *before* the code gets
            executed */
-        PyObject *pkgpath, *fullpath;
-        PyObject *subname = get_subname(fullname);
+        PyObject *pkgpath, *fullpath, *subname;
         int err;
+
+        subname = get_subname(fullname);
+        if (subname == NULL)
+            goto error;
 
         fullpath = PyUnicode_FromFormat("%U%c%U%U",
                                 self->archive, SEP,
@@ -554,9 +560,6 @@ zipimporter_get_data(PyObject *obj, PyObject *args)
 {
     ZipImporter *self = (ZipImporter *)obj;
     PyObject *path, *key;
-#ifdef ALTSEP
-    _Py_IDENTIFIER(replace);
-#endif
     PyObject *toc_entry;
     Py_ssize_t path_start, path_len, len;
 
@@ -914,6 +917,8 @@ read_directory(PyObject *archive)
 
         /* Start of file header */
         l = PyMarshal_ReadLongFromFile(fp);
+        if (l == -1 && PyErr_Occurred())
+            goto error;
         if (l != 0x02014B50)
             break;              /* Bad: Central Dir File Header */
 
@@ -937,6 +942,9 @@ read_directory(PyObject *archive)
         if (fread(dummy, 1, 8, fp) != 8) /* Skip unused fields, avoid fseek */
             goto file_error;
         file_offset = PyMarshal_ReadLongFromFile(fp) + arc_offset;
+        if (PyErr_Occurred())
+            goto error;
+
         if (name_size > MAXPATHLEN)
             name_size = MAXPATHLEN;
 
@@ -1082,9 +1090,10 @@ get_data(PyObject *archive, PyObject *toc_entry)
     l = PyMarshal_ReadLongFromFile(fp);
     if (l != 0x04034B50) {
         /* Bad: Local File Header */
-        PyErr_Format(ZipImportError,
-                     "bad local file header in %U",
-                     archive);
+        if (!PyErr_Occurred())
+            PyErr_Format(ZipImportError,
+                         "bad local file header in %U",
+                         archive);
         fclose(fp);
         return NULL;
     }
@@ -1096,6 +1105,10 @@ get_data(PyObject *archive, PyObject *toc_entry)
 
     l = 30 + PyMarshal_ReadShortFromFile(fp) +
         PyMarshal_ReadShortFromFile(fp);        /* local header size */
+    if (PyErr_Occurred()) {
+        fclose(fp);
+        return NULL;
+    }
     file_offset += l;           /* Start of file data */
 
     bytes_size = compress == 0 ? data_size : data_size + 1;

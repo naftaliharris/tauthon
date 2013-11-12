@@ -6,7 +6,7 @@ This module allows high-level and efficient I/O multiplexing, built upon the
 
 
 from abc import ABCMeta, abstractmethod
-from collections import namedtuple
+from collections import namedtuple, Mapping
 import functools
 import select
 import sys
@@ -44,6 +44,25 @@ SelectorKey = namedtuple('SelectorKey', ['fileobj', 'fd', 'events', 'data'])
 selected event mask and attached data."""
 
 
+class _SelectorMapping(Mapping):
+    """Mapping of file objects to selector keys."""
+
+    def __init__(self, selector):
+        self._selector = selector
+
+    def __len__(self):
+        return len(self._selector._fd_to_key)
+
+    def __getitem__(self, fileobj):
+        try:
+            return self._selector._fd_to_key[_fileobj_to_fd(fileobj)]
+        except KeyError:
+            raise KeyError("{!r} is not registered".format(fileobj)) from None
+
+    def __iter__(self):
+        return iter(self._selector._fd_to_key)
+
+
 class BaseSelector(metaclass=ABCMeta):
     """Base selector class.
 
@@ -62,6 +81,8 @@ class BaseSelector(metaclass=ABCMeta):
     def __init__(self):
         # this maps file descriptors to keys
         self._fd_to_key = {}
+        # read-only mapping returned by get_map()
+        self._map = _SelectorMapping(self)
 
     def register(self, fileobj, events, data=None):
         """Register a file object.
@@ -117,11 +138,14 @@ class BaseSelector(metaclass=ABCMeta):
             key = self._fd_to_key[_fileobj_to_fd(fileobj)]
         except KeyError:
             raise KeyError("{!r} is not registered".format(fileobj)) from None
-        if events != key.events or data != key.data:
-            # TODO: If only the data changed, use a shortcut that only
-            # updates the data.
+        if events != key.events:
             self.unregister(fileobj)
             return self.register(fileobj, events, data)
+        elif data != key.data:
+            # Use a shortcut to update the data.
+            key = key._replace(data=data)
+            self._fd_to_key[key.fd] = key
+            return key
         else:
             return key
 
@@ -161,6 +185,10 @@ class BaseSelector(metaclass=ABCMeta):
             return self._fd_to_key[_fileobj_to_fd(fileobj)]
         except KeyError:
             raise KeyError("{!r} is not registered".format(fileobj)) from None
+
+    def get_map(self):
+        """Return a mapping of file objects to selector keys."""
+        return self._map
 
     def __enter__(self):
         return self
@@ -326,8 +354,8 @@ if hasattr(select, 'epoll'):
             return ready
 
         def close(self):
-            super().close()
             self._epoll.close()
+            super().close()
 
 
 if hasattr(select, 'kqueue'):
@@ -389,8 +417,8 @@ if hasattr(select, 'kqueue'):
             return ready
 
         def close(self):
-            super().close()
             self._kqueue.close()
+            super().close()
 
 
 # Choose the best implementation: roughly, epoll|kqueue > poll > select.

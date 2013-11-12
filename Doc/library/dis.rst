@@ -44,35 +44,38 @@ The bytecode analysis API allows pieces of Python code to be wrapped in a
 :class:`Bytecode` object that provides easy access to details of the
 compiled code.
 
-.. class:: Bytecode
+.. class:: Bytecode(x, *, first_line=None)
 
-   The bytecode operations of a piece of code
+   Analyse the bytecode corresponding to a function, method, string of
+   source code, or a code object (as returned by :func:`compile`).
 
-   This is a convenient wrapper around many of the functions listed below.
-   Instantiate it with a function, method, string of code, or a code object
-   (as returned by :func:`compile`).
+   This is a convenience wrapper around many of the functions listed below,
+   most notably :func:`get_instructions`, as iterating over a
+   :class:`Bytecode` instance yields the bytecode operations as
+   :class:`Instruction` instances.
 
-   Iterating over this yields the bytecode operations as :class:`Instruction`
-   instances.
+   If *first_line* is not None, it indicates the line number that should
+   be reported for the first source line in the disassembled code.
+   Otherwise, the source line information (if any) is taken directly from
+   the disassembled code object.
 
    .. data:: codeobj
 
       The compiled code object.
 
-   .. method:: display_code(*, file=None)
+   .. data:: first_line
 
-      Print a formatted view of the bytecode operations, like :func:`dis`.
+      The first source line of the code object (if available)
+
+   .. method:: dis()
+
+      Return a formatted view of the bytecode operations (the same as
+      printed by :func:`dis`, but returned as a multi-line string).
 
    .. method:: info()
 
       Return a formatted multi-line string with detailed information about the
       code object, like :func:`code_info`.
-
-   .. method:: show_info(*, file=None)
-
-      Print the information about the code object as returned by :meth:`info`.
-
-   .. versionadded:: 3.4
 
 Example::
 
@@ -176,7 +179,7 @@ object isn't useful:
       Added ``file`` parameter
 
 
-.. function:: get_instructions(x, *, line_offset=0)
+.. function:: get_instructions(x, *, first_line=None)
 
    Return an iterator over the instructions in the supplied function, method,
    source code string or code object.
@@ -184,8 +187,10 @@ object isn't useful:
    The iterator generates a series of :class:`Instruction` named tuples
    giving the details of each operation in the supplied code.
 
-   The given *line_offset* is added to the ``starts_line`` attribute of any
-   instructions that start a new line.
+   If *first_line* is not None, it indicates the line number that should
+   be reported for the first source line in the disassembled code.
+   Otherwise, the source line information (if any) is taken directly from
+   the disassembled code object.
 
    .. versionadded:: 3.4
 
@@ -846,10 +851,17 @@ the more significant byte last.
 
 .. opcode:: MAKE_FUNCTION (argc)
 
-   Pushes a new function object on the stack.  TOS is the
-   :term:`qualified name` of the function; TOS1 is the code associated with
-   the function.  The function object is defined to have *argc* default parameters,
-   which are found below TOS1.
+   Pushes a new function object on the stack.  From bottom to top, the consumed
+   stack must consist of
+
+   * ``argc & 0xFF`` default argument objects in positional order
+   * ``(argc >> 8) & 0xFF`` pairs of name and default argument, with the name
+     just below the object on the stack, for keyword-only parameters
+   * ``(argc >> 16) & 0x7FFF`` parameter annotation objects
+   * a tuple listing the parameter names for the annotations (only if there are
+     ony annotation objects)
+   * the code associated with the function (at TOS1)
+   * the :term:`qualified name` of the function (at TOS)
 
 
 .. opcode:: MAKE_CLOSURE (argc)

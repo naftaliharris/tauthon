@@ -1,5 +1,6 @@
 from io import BytesIO, UnsupportedOperation
 import os
+import pickle
 import random
 import unittest
 
@@ -216,6 +217,14 @@ class CompressorDecompressorTestCase(unittest.TestCase):
         finally:
             input = cdata = ddata = None
 
+    # Pickling raises an exception; there's no way to serialize an lzma_stream.
+
+    def test_pickle(self):
+        with self.assertRaises(TypeError):
+            pickle.dumps(LZMACompressor())
+        with self.assertRaises(TypeError):
+            pickle.dumps(LZMADecompressor())
+
 
 class CompressDecompressFunctionTestCase(unittest.TestCase):
 
@@ -362,6 +371,8 @@ class FileTestCase(unittest.TestCase):
             pass
         with LZMAFile(BytesIO(), "w") as f:
             pass
+        with LZMAFile(BytesIO(), "x") as f:
+            pass
         with LZMAFile(BytesIO(), "a") as f:
             pass
 
@@ -389,13 +400,29 @@ class FileTestCase(unittest.TestCase):
             with LZMAFile(TESTFN, "ab"):
                 pass
 
+    def test_init_with_x_mode(self):
+        self.addCleanup(unlink, TESTFN)
+        for mode in ("x", "xb"):
+            unlink(TESTFN)
+            with LZMAFile(TESTFN, mode):
+                pass
+            with self.assertRaises(FileExistsError):
+                with LZMAFile(TESTFN, mode):
+                    pass
+
     def test_init_bad_mode(self):
         with self.assertRaises(ValueError):
             LZMAFile(BytesIO(COMPRESSED_XZ), (3, "x"))
         with self.assertRaises(ValueError):
             LZMAFile(BytesIO(COMPRESSED_XZ), "")
         with self.assertRaises(ValueError):
-            LZMAFile(BytesIO(COMPRESSED_XZ), "x")
+            LZMAFile(BytesIO(COMPRESSED_XZ), "xt")
+        with self.assertRaises(ValueError):
+            LZMAFile(BytesIO(COMPRESSED_XZ), "x+")
+        with self.assertRaises(ValueError):
+            LZMAFile(BytesIO(COMPRESSED_XZ), "rx")
+        with self.assertRaises(ValueError):
+            LZMAFile(BytesIO(COMPRESSED_XZ), "wx")
         with self.assertRaises(ValueError):
             LZMAFile(BytesIO(COMPRESSED_XZ), "rt")
         with self.assertRaises(ValueError):
@@ -1022,8 +1049,6 @@ class OpenTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             lzma.open(TESTFN, "")
         with self.assertRaises(ValueError):
-            lzma.open(TESTFN, "x")
-        with self.assertRaises(ValueError):
             lzma.open(TESTFN, "rbt")
         with self.assertRaises(ValueError):
             lzma.open(TESTFN, "rb", encoding="utf-8")
@@ -1071,6 +1096,16 @@ class OpenTestCase(unittest.TestCase):
             bio.seek(0)
             with lzma.open(bio, "rt", newline="\r") as f:
                 self.assertEqual(f.readlines(), [text])
+
+    def test_x_mode(self):
+        self.addCleanup(unlink, TESTFN)
+        for mode in ("x", "xb", "xt"):
+            unlink(TESTFN)
+            with lzma.open(TESTFN, mode):
+                pass
+            with self.assertRaises(FileExistsError):
+                with lzma.open(TESTFN, mode):
+                    pass
 
 
 class MiscellaneousTestCase(unittest.TestCase):

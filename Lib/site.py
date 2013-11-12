@@ -70,7 +70,6 @@ ImportError exception, it is silently ignored.
 
 import sys
 import os
-import re
 import builtins
 import _sitebuiltins
 
@@ -327,6 +326,11 @@ def addsitepackages(known_paths, prefixes=None):
     """Add site-packages (and possibly site-python) to sys.path"""
     for sitedir in getsitepackages(prefixes):
         if os.path.isdir(sitedir):
+            if "site-python" in sitedir:
+                import warnings
+                warnings.warn('"site-python" directories will not be '
+                              'supported in 3.5 anymore',
+                              DeprecationWarning)
             addsitedir(sitedir, known_paths)
 
     return known_paths
@@ -426,8 +430,8 @@ def aliasmbcs():
     while they are always available as "mbcs" in each locale. Make
     them usable by aliasing to "mbcs" in such a case."""
     if sys.platform == 'win32':
-        import locale, codecs
-        enc = locale.getdefaultlocale()[1]
+        import _bootlocale, codecs
+        enc = _bootlocale.getpreferredencoding(False)
         if enc.startswith('cp'):            # "cp***" ?
             try:
                 codecs.lookup(enc)
@@ -436,8 +440,7 @@ def aliasmbcs():
                 encodings._cache[enc] = encodings._unknown
                 encodings.aliases.aliases[enc] = 'mbcs'
 
-
-CONFIG_LINE = re.compile(r'^(?P<key>(\w|[-_])+)\s*=\s*(?P<value>.*)\s*$')
+CONFIG_LINE = r'^(?P<key>(\w|[-_])+)\s*=\s*(?P<value>.*)\s*$'
 
 def venv(known_paths):
     global PREFIXES, ENABLE_USER_SITE
@@ -460,12 +463,14 @@ def venv(known_paths):
         ]
 
     if candidate_confs:
+        import re
+        config_line = re.compile(CONFIG_LINE)
         virtual_conf = candidate_confs[0]
         system_site = "true"
         with open(virtual_conf) as f:
             for line in f:
                 line = line.strip()
-                m = CONFIG_LINE.match(line)
+                m = config_line.match(line)
                 if m:
                     d = m.groupdict()
                     key, value = d['key'].lower(), d['value']

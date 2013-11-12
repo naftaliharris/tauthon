@@ -3,7 +3,6 @@ import importlib
 import importlib.util
 from importlib._bootstrap import _get_sourcefile
 import builtins
-from test.test_importlib.import_ import util as importlib_util
 import marshal
 import os
 import platform
@@ -149,15 +148,23 @@ class ImportTests(unittest.TestCase):
         sys.path.append('')
         importlib.invalidate_caches()
 
+        namespace = {}
         try:
             make_legacy_pyc(filename)
             # This used to crash.
-            exec('import ' + module)
+            exec('import ' + module, None, namespace)
         finally:
             # Cleanup.
             del sys.path[-1]
             unlink(filename + 'c')
             unlink(filename + 'o')
+
+            # Remove references to the module (unload the module)
+            namespace.clear()
+            try:
+                del sys.modules[module]
+            except KeyError:
+                pass
 
     def test_failing_import_sticks(self):
         source = TESTFN + ".py"
@@ -1050,7 +1057,8 @@ class ImportTracebackTests(unittest.TestCase):
         # encode filenames, especially on Windows
         pyname = script_helper.make_script('', TESTFN_UNENCODABLE, 'pass')
         name = pyname[:-3]
-        script_helper.assert_python_ok("-c", "mod = __import__(%a)" % name)
+        script_helper.assert_python_ok("-c", "mod = __import__(%a)" % name,
+                                       __isolated=False)
 
 
 if __name__ == '__main__':

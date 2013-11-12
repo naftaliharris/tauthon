@@ -1,6 +1,7 @@
 .gdb_history
 .purify
 .svn/
+^.idea/
 .DS_Store
 Makefile$
 Makefile.pre$
@@ -85,6 +86,9 @@ PCbuild/*.*sdf
 PCbuild/Win32-temp-*
 PCbuild/x64-temp-*
 PCbuild/amd64
+PCbuild/ipch
+Tools/unicode/build/
+Tools/unicode/MAPPINGS/
 BuildLog.htm
 __pycache__
 Modules/_freeze_importlib

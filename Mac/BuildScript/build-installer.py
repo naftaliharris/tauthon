@@ -155,6 +155,7 @@ target_cc_map = {
         '10.6': ('gcc-4.2', 'g++-4.2'),
         '10.7': ('clang', 'clang++'),
         '10.8': ('clang', 'clang++'),
+        '10.9': ('clang', 'clang++'),
 }
 
 CC, CXX = target_cc_map[DEPTARGET]
@@ -192,12 +193,12 @@ def library_recipes():
 
     LT_10_5 = bool(DEPTARGET < '10.5')
 
-    if DEPTARGET > '10.5':
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
         result.extend([
           dict(
-              name="Tcl 8.5.14",
-              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.14-src.tar.gz",
-              checksum='44b50e58ab45dd272f6714dce2129123',
+              name="Tcl 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.15-src.tar.gz",
+              checksum='f3df162f92c69b254079c4d0af7a690f',
               buildDir="unix",
               configure_pre=[
                     '--enable-shared',
@@ -211,9 +212,12 @@ def library_recipes():
                   },
               ),
           dict(
-              name="Tk 8.5.14",
-              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.14-src.tar.gz",
-              checksum='a9c48921b3688020470cd3a6dd4e867d',
+              name="Tk 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.15-src.tar.gz",
+              checksum='55b8e33f903210a4e1c8bce0f820657f',
+              patches=[
+                  "issue19373_tk_8_5_15_source.patch",
+                   ],
               buildDir="unix",
               configure_pre=[
                     '--enable-aqua',
@@ -564,11 +568,11 @@ def checkEnvironment():
             ]
 
     # For 10.6+ builds, we build two versions of _tkinter:
-    #    - the traditional version (renamed to _tkinter.so.framework) linked
+    #    - the traditional version (renamed to _tkinter_library.so) linked
     #       with /Library/Frameworks/{Tcl,Tk}.framework
-    #    - the default version linked with our private copies of Tcl and Tk
-    if DEPTARGET > '10.5':
-        EXPECTED_SHARED_LIBS['_tkinter.so.framework'] = \
+    #    - the default version linked with our builtin copies of Tcl and Tk
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        EXPECTED_SHARED_LIBS['_tkinter_library.so'] = \
             EXPECTED_SHARED_LIBS['_tkinter.so']
         EXPECTED_SHARED_LIBS['_tkinter.so'] = [
                 "/Library/Frameworks/Python.framework/Versions/%s/lib/libtcl%s.dylib"
@@ -796,8 +800,6 @@ def buildRecipe(recipe, basedir, archList):
 
     workDir = extractArchive(buildDir, sourceArchive)
     os.chdir(workDir)
-    if 'buildDir' in recipe:
-        os.chdir(recipe['buildDir'])
 
     for patch in recipe.get('patches', ()):
         if isinstance(patch, tuple):
@@ -823,6 +825,9 @@ def buildRecipe(recipe, basedir, archList):
             fn = fn[:-4]
         runCommand('sh %s' % shellQuote(fn))
         os.unlink(fn)
+
+    if 'buildDir' in recipe:
+        os.chdir(recipe['buildDir'])
 
     if configure is not None:
         configure_args = [
@@ -951,7 +956,7 @@ def buildPython():
                "--with-universal-archs=%s "
                "%s "
                "LDFLAGS='-g -L%s/libraries/usr/local/lib' "
-               "OPT='-g -O3 -I%s/libraries/usr/local/include' 2>&1"%(
+               "CFLAGS='-g -I%s/libraries/usr/local/include' 2>&1"%(
         shellQuote(os.path.join(SRCDIR, 'configure')), shellQuote(SDKPATH),
         UNIVERSALARCHS,
         (' ', '--with-computed-gotos ')[PYTHON_3],
@@ -965,18 +970,18 @@ def buildPython():
     # of Tcl and Cocoa Aqua Tk libs because the Apple-supplied Tk 8.5 is
     # out-of-date and has critical bugs.  Save the _tkinter.so that was
     # linked with /Library/Frameworks/{Tck,Tk}.framework and build
-    # another _tkinter.so linked with our private Tcl and Tk libs.
-    if DEPTARGET > '10.5':
+    # another _tkinter.so linked with our builtin Tcl and Tk libs.
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
         runCommand("find build -name '_tkinter.so' "
-                        " -execdir mv '{}' '{}'.framework \;")
-        print("Running make to rebuild _tkinter")
+                        " -execdir mv '{}' _tkinter_library.so \;")
+        print("Running make to build builtin _tkinter")
         runCommand("make TCLTK_INCLUDES='-I%s/libraries/usr/local/include' "
                 "TCLTK_LIBS='-L%s/libraries/usr/local/lib -ltcl8.5 -ltk8.5'"%(
             shellQuote(WORKDIR)[1:-1],
             shellQuote(WORKDIR)[1:-1]))
-        # make a backup copy, just in case
+        # make a copy which will be moved to lib-tkinter later
         runCommand("find build -name '_tkinter.so' "
-                        " -execdir cp -p '{}' '{}'.private \;")
+                        " -execdir cp -p '{}' _tkinter_builtin.so \;")
 
     print("Running make install")
     runCommand("make install DESTDIR=%s"%(
@@ -998,11 +1003,31 @@ def buildPython():
                 'Python.framework', 'Versions', getVersion(),
                 'lib'))))
 
+    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
+                                'Python.framework', 'Versions',
+                                version, 'lib', 'python%s'%(version,))
+
+    # If we made multiple versions of _tkinter, move them to
+    # their own directories under python lib.  This allows
+    # users to select which to import by manipulating sys.path
+    # directly or with PYTHONPATH.
+
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+        TKINTERS = ['builtin', 'library']
+        tkinter_moves = [('_tkinter_' + tkn + '.so',
+                             os.path.join(path_to_lib, 'lib-tkinter', tkn))
+                         for tkn in TKINTERS]
+        # Create the destination directories under lib-tkinter.
+        # The permissions and uid/gid will be fixed up next.
+        for tkm in tkinter_moves:
+            os.makedirs(tkm[1])
+
     print("Fix file modes")
     frmDir = os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework')
     gid = grp.getgrnam('admin').gr_gid
 
     shared_lib_error = False
+    moves_list = []
     for dirpath, dirnames, filenames in os.walk(frmDir):
         for dn in dirnames:
             os.chmod(os.path.join(dirpath, dn), STAT_0o775)
@@ -1028,8 +1053,24 @@ def buildPython():
                                 % (sl, p))
                         shared_lib_error = True
 
+            # If this is a _tkinter variant, move it to its own directory
+            # now that we have fixed its permissions and checked that it
+            # was linked properly.  The directory was created earlier.
+            # The files are moved after the entire tree has been walked
+            # since the shared library checking depends on the files
+            # having unique names.
+            if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 4)):
+                for tkm in tkinter_moves:
+                    if fn == tkm[0]:
+                        moves_list.append(
+                            (p, os.path.join(tkm[1], '_tkinter.so')))
+
     if shared_lib_error:
         fatal("Unexpected shared library errors.")
+
+    # Now do the moves.
+    for ml in moves_list:
+        shutil.move(ml[0], ml[1])
 
     if PYTHON_3:
         LDVERSION=None
@@ -1059,10 +1100,6 @@ def buildPython():
 
     include_path = '-I%s/libraries/usr/local/include' % (WORKDIR,)
     lib_path = '-L%s/libraries/usr/local/lib' % (WORKDIR,)
-
-    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
-                                'Python.framework', 'Versions',
-                                version, 'lib', 'python%s'%(version,))
 
     # fix Makefile
     path = os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile')

@@ -1,9 +1,9 @@
 /*
     An implementation of the I/O abstract base classes hierarchy
     as defined by PEP 3116 - "New I/O"
-    
+
     Classes defined here: IOBase, RawIOBase.
-    
+
     Written by Amaury Forgeot d'Arc and Antoine Pitrou
 */
 
@@ -19,7 +19,7 @@
 
 typedef struct {
     PyObject_HEAD
-    
+
     PyObject *dict;
     PyObject *weakreflist;
 } iobase;
@@ -62,6 +62,8 @@ PyDoc_STRVAR(iobase_doc,
 _Py_IDENTIFIER(__IOBase_closed);
 #define IS_CLOSED(self) \
     _PyObject_HasAttrId(self, &PyId___IOBase_closed)
+
+_Py_IDENTIFIER(read);
 
 /* Internal methods */
 static PyObject *
@@ -180,17 +182,21 @@ static PyObject *
 iobase_close(PyObject *self, PyObject *args)
 {
     PyObject *res;
-    _Py_IDENTIFIER(__IOBase_closed);
 
     if (IS_CLOSED(self))
         Py_RETURN_NONE;
 
     res = PyObject_CallMethodObjArgs(self, _PyIO_str_flush, NULL);
-    _PyObject_SetAttrId(self, &PyId___IOBase_closed, Py_True);
-    if (res == NULL) {
+
+    if (_PyObject_SetAttrId(self, &PyId___IOBase_closed, Py_True) < 0) {
+        Py_XDECREF(res);
         return NULL;
     }
-    Py_XDECREF(res);
+
+    if (res == NULL)
+        return NULL;
+
+    Py_DECREF(res);
     Py_RETURN_NONE;
 }
 
@@ -449,7 +455,6 @@ iobase_readline(PyObject *self, PyObject *args)
     int has_peek = 0;
     PyObject *buffer, *result;
     Py_ssize_t old_size = -1;
-    _Py_IDENTIFIER(read);
     _Py_IDENTIFIER(peek);
 
     if (!PyArg_ParseTuple(args, "|O&:readline", &_PyIO_ConvertSsize_t, &limit)) {
@@ -530,7 +535,10 @@ iobase_readline(PyObject *self, PyObject *args)
         }
 
         old_size = PyByteArray_GET_SIZE(buffer);
-        PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b));
+        if (PyByteArray_Resize(buffer, old_size + PyBytes_GET_SIZE(b)) < 0) {
+            Py_DECREF(b);
+            goto fail;
+        }
         memcpy(PyByteArray_AS_STRING(buffer) + old_size,
                PyBytes_AS_STRING(b), PyBytes_GET_SIZE(b));
 
@@ -835,12 +843,11 @@ rawiobase_readall(PyObject *self, PyObject *args)
     int r;
     PyObject *chunks = PyList_New(0);
     PyObject *result;
-    
+
     if (chunks == NULL)
         return NULL;
 
     while (1) {
-        _Py_IDENTIFIER(read);
         PyObject *data = _PyObject_CallMethodId(self, &PyId_read,
                                                 "i", DEFAULT_BUFFER_SIZE);
         if (!data) {

@@ -11,6 +11,7 @@ import errno
 import tempfile
 import time
 import re
+import selectors
 import sysconfig
 import warnings
 import select
@@ -883,8 +884,9 @@ class ProcessTestCase(BaseTestCase):
         #
         # UTF-16 and UTF-32-BE are sufficient to check both with BOM and
         # without, and UTF-16 and UTF-32.
+        import _bootlocale
         for encoding in ['utf-16', 'utf-32-be']:
-            old_getpreferredencoding = locale.getpreferredencoding
+            old_getpreferredencoding = _bootlocale.getpreferredencoding
             # Indirectly via io.TextIOWrapper, Popen() defaults to
             # locale.getpreferredencoding(False) and earlier in Python 3.2 to
             # locale.getpreferredencoding().
@@ -895,7 +897,7 @@ class ProcessTestCase(BaseTestCase):
                     encoding)
             args = [sys.executable, '-c', code]
             try:
-                locale.getpreferredencoding = getpreferredencoding
+                _bootlocale.getpreferredencoding = getpreferredencoding
                 # We set stdin to be non-None because, as of this writing,
                 # a different code path is used when the number of pipes is
                 # zero or one.
@@ -904,7 +906,7 @@ class ProcessTestCase(BaseTestCase):
                                          stdout=subprocess.PIPE)
                 stdout, stderr = popen.communicate(input='')
             finally:
-                locale.getpreferredencoding = old_getpreferredencoding
+                _bootlocale.getpreferredencoding = old_getpreferredencoding
             self.assertEqual(stdout, '1\n2\n3\n4')
 
     def test_no_leaking(self):
@@ -1231,7 +1233,7 @@ class POSIXProcessTestCase(BaseTestCase):
 
     def test_run_abort(self):
         # returncode handles signal termination
-        with support.SuppressCoreFiles():
+        with support.SuppressCrashReport():
             p = subprocess.Popen([sys.executable, "-c",
                                   'import os; os.abort()'])
             p.wait()
@@ -2157,13 +2159,6 @@ class Win32ProcessTestCase(BaseTestCase):
     def test_terminate_dead(self):
         self._kill_dead_process('terminate')
 
-
-# The module says:
-#   "NB This only works (and is only relevant) for UNIX."
-#
-# Actually, getoutput should work on any platform with an os.popen, but
-# I'll take the comment as given, and skip this suite.
-@unittest.skipUnless(os.name == 'posix', "only relevant for UNIX")
 class CommandTests(unittest.TestCase):
     def test_getoutput(self):
         self.assertEqual(subprocess.getoutput('echo xyzzy'), 'xyzzy')
@@ -2177,23 +2172,24 @@ class CommandTests(unittest.TestCase):
         try:
             dir = tempfile.mkdtemp()
             name = os.path.join(dir, "foo")
-
-            status, output = subprocess.getstatusoutput('cat ' + name)
+            status, output = subprocess.getstatusoutput(
+                ("type " if mswindows else "cat ") + name)
             self.assertNotEqual(status, 0)
         finally:
             if dir is not None:
                 os.rmdir(dir)
 
 
-@unittest.skipUnless(getattr(subprocess, '_has_poll', False),
-                     "poll system call not supported")
+@unittest.skipUnless(hasattr(selectors, 'PollSelector'),
+                     "Test needs selectors.PollSelector")
 class ProcessTestCaseNoPoll(ProcessTestCase):
     def setUp(self):
-        subprocess._has_poll = False
+        self.orig_selector = subprocess._PopenSelector
+        subprocess._PopenSelector = selectors.SelectSelector
         ProcessTestCase.setUp(self)
 
     def tearDown(self):
-        subprocess._has_poll = True
+        subprocess._PopenSelector = self.orig_selector
         ProcessTestCase.tearDown(self)
 
 

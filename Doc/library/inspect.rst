@@ -173,9 +173,9 @@ attributes:
 
    .. note::
 
-      :func:`getmembers` will only return metaclass attributes when the
-      argument is a class and those attributes have been listed in a custom
-      :meth:`__dir__`.
+      :func:`getmembers` will only return class attributes defined in the
+      metaclass when the argument is a class and those attributes have been
+      listed in the metaclass' custom :meth:`__dir__`.
 
 
 .. function:: getmoduleinfo(path)
@@ -928,8 +928,9 @@ but avoids executing code when it fetches attributes.
    that raise AttributeError). It can also return descriptors objects
    instead of instance members.
 
-   If the instance :attr:`__dict__` is shadowed by another member (for example a
-   property) then this function will be unable to find instance members.
+   If the instance :attr:`~object.__dict__` is shadowed by another member (for
+   example a property) then this function will be unable to find instance
+   members.
 
    .. versionadded:: 3.2
 
@@ -1007,6 +1008,8 @@ updated as expected:
 
    .. versionadded:: 3.3
 
+
+.. _inspect-module-cli:
 
 Command Line Interface
 ----------------------

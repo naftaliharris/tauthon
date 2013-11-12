@@ -161,7 +161,16 @@ write code that handles both IP versions correctly.
    .. attribute:: is_private
 
       ``True`` if the address is allocated for private networks.  See
-      :RFC:`1918` (for IPv4) or :RFC:`4193` (for IPv6).
+      iana-ipv4-special-registry (for IPv4) or iana-ipv6-special-registry
+      (for IPv6).
+
+   .. attribute:: is_global
+
+      ``True`` if the address is allocated for public networks.  See
+      iana-ipv4-special-registry (for IPv4) or iana-ipv6-special-registry
+      (for IPv6).
+
+   .. versionadded:: 3.4
 
    .. attribute:: is_unspecified
 
@@ -282,10 +291,10 @@ only be applied between compatible objects (i.e. IPv4 with IPv4, IPv6 with
 IPv6).
 
 
-Logical operators
-"""""""""""""""""
+Comparison operators
+""""""""""""""""""""
 
-Address objects can be compared with the usual set of logical operators.  Some
+Address objects can be compared with the usual set of comparison operators.  Some
 examples::
 
    >>> IPv4Address('127.0.0.2') > IPv4Address('127.0.0.1')

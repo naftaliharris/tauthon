@@ -65,10 +65,20 @@ def _path_split(path):
     return '', path
 
 
+def _path_stat(path):
+    """Stat the path.
+
+    Made a separate function to make it easier to override in experiments
+    (e.g. cache stat results).
+
+    """
+    return _os.stat(path)
+
+
 def _path_is_mode_type(path, mode):
     """Test whether the path is the specified mode type."""
     try:
-        stat_info = _os.stat(path)
+        stat_info = _path_stat(path)
     except OSError:
         return False
     return (stat_info.st_mode & 0o170000) == mode
@@ -369,12 +379,14 @@ def _call_with_frames_removed(f, *args, **kwds):
 #                        free vars)
 #     Python 3.4a1  3270 (various tweaks to the __class__ closure)
 #     Python 3.4a1  3280 (remove implicit class argument)
+#     Python 3.4a4  3290 (changes to __qualname__ computation)
+#     Python 3.4a4  3300 (more changes to __qualname__ computation)
 #
 # MAGIC must change whenever the bytecode emitted by the compiler may no
 # longer be understood by older implementations of the eval loop (usually
 # due to the addition of new opcodes).
 
-MAGIC_NUMBER = (3280).to_bytes(2, 'little') + b'\r\n'
+MAGIC_NUMBER = (3300).to_bytes(2, 'little') + b'\r\n'
 _RAW_MAGIC_NUMBER = int.from_bytes(MAGIC_NUMBER, 'little')  # For import.c
 
 _PYCACHE = '__pycache__'
@@ -456,7 +468,7 @@ def _get_sourcefile(bytecode_path):
 def _calc_mode(path):
     """Calculate the mode permissions for a bytecode file."""
     try:
-        mode = _os.stat(path).st_mode
+        mode = _path_stat(path).st_mode
     except OSError:
         mode = 0o666
     # We always ensure write access so we can update cached files
@@ -878,7 +890,7 @@ class WindowsRegistryFinder:
         if filepath is None:
             return None
         try:
-            _os.stat(filepath)
+            _path_stat(filepath)
         except OSError:
             return None
         for loader, suffixes in _get_supported_file_loaders():
@@ -1072,7 +1084,7 @@ class SourceFileLoader(FileLoader, SourceLoader):
 
     def path_stats(self, path):
         """Return the metadata for the path."""
-        st = _os.stat(path)
+        st = _path_stat(path)
         return {'mtime': st.st_mtime, 'size': st.st_size}
 
     def _cache_bytecode(self, source_path, bytecode_path, data):
@@ -1302,7 +1314,7 @@ class PathFinder:
 
         """
         if path == '':
-            path = '.'
+            path = _os.getcwd()
         try:
             finder = sys.path_importer_cache[path]
         except KeyError:
@@ -1390,7 +1402,7 @@ class FileFinder:
         is_namespace = False
         tail_module = fullname.rpartition('.')[2]
         try:
-            mtime = _os.stat(self.path).st_mtime
+            mtime = _path_stat(self.path or _os.getcwd()).st_mtime
         except OSError:
             mtime = -1
         if mtime != self._path_mtime:
@@ -1406,16 +1418,15 @@ class FileFinder:
         # Check if the module is the name of a directory (and thus a package).
         if cache_module in cache:
             base_path = _path_join(self.path, tail_module)
-            if _path_isdir(base_path):
-                for suffix, loader in self._loaders:
-                    init_filename = '__init__' + suffix
-                    full_path = _path_join(base_path, init_filename)
-                    if _path_isfile(full_path):
-                        return (loader(fullname, full_path), [base_path])
-                else:
-                    # A namespace package, return the path if we don't also
-                    #  find a module in the next section.
-                    is_namespace = True
+            for suffix, loader in self._loaders:
+                init_filename = '__init__' + suffix
+                full_path = _path_join(base_path, init_filename)
+                if _path_isfile(full_path):
+                    return (loader(fullname, full_path), [base_path])
+            else:
+                # If a namespace package, return the path if we don't
+                #  find a module in the next section.
+                is_namespace = _path_isdir(base_path)
         # Check for a file w/ a proper suffix exists.
         for suffix, loader in self._loaders:
             full_path = _path_join(self.path, tail_module + suffix)
@@ -1432,7 +1443,7 @@ class FileFinder:
         """Fill the cache of potential modules and packages for this directory."""
         path = self.path
         try:
-            contents = _os.listdir(path)
+            contents = _os.listdir(path or _os.getcwd())
         except (FileNotFoundError, PermissionError, NotADirectoryError):
             # Directory has either been removed, turned into a file, or made
             # unreadable.
@@ -1509,15 +1520,19 @@ def _find_module(name, path):
     """Find a module's loader."""
     if not sys.meta_path:
         _warnings.warn('sys.meta_path is empty', ImportWarning)
+    is_reload = name in sys.modules
     for finder in sys.meta_path:
         with _ImportLockContext():
             loader = finder.find_module(name, path)
         if loader is not None:
             # The parent import may have already imported this module.
-            if name not in sys.modules:
+            if is_reload or name not in sys.modules:
                 return loader
             else:
-                return sys.modules[name].__loader__
+                try:
+                    return sys.modules[name].__loader__
+                except AttributeError:
+                    return loader
     else:
         return None
 

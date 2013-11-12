@@ -121,9 +121,10 @@ Functions
    so it must have been successfully imported before.  This is useful if you
    have edited the module source file using an external editor and want to try
    out the new version without leaving the Python interpreter.  The return value
-   is the module object (the same as the *module* argument).
+   is the module object (which can be different if re-importing causes a
+   different object to be placed in :data:`sys.modules`).
 
-   When :func:`.reload` is executed:
+   When :func:`reload` is executed:
 
    * Python modules' code is recompiled and the module-level code re-executed,
      defining a new set of objects which are bound to names in the module's
@@ -165,7 +166,7 @@ Functions
 
    It is legal though generally not very useful to reload built-in or
    dynamically loaded modules (this is not true for e.g. :mod:`sys`,
-   :mod:`__main__`, :mod:`__builtin__` and other key modules where reloading is
+   :mod:`__main__`, :mod:`builtins` and other key modules where reloading is
    frowned upon). In many cases, however, extension modules are not designed to
    be initialized more than once, and may fail in arbitrary ways when reloaded.
 
@@ -722,6 +723,10 @@ find and load modules.
      Calls :meth:`importlib.abc.PathEntryFinder.invalidate_caches` on all
      finders stored in :attr:`sys.path_importer_cache`.
 
+  .. versionchanged:: 3.4
+     Calls objects in :data:`sys.path_hooks` with the current working directory
+     for ``''`` (i.e. the empty string).
+
 
 .. class:: FileFinder(path, \*loader_details)
 
@@ -873,6 +878,8 @@ find and load modules.
    .. method:: get_filename(fullname)
 
       Returns :attr:`path`.
+
+      .. versionadded:: 3.4
 
 
 :mod:`importlib.util` -- Utility code for importers

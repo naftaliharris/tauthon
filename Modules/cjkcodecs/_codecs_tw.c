@@ -18,7 +18,7 @@ ENCODER(big5)
         DBCHAR code;
 
         if (c < 0x80) {
-            REQUIRE_OUTBUF(1)
+            REQUIRE_OUTBUF(1);
             **outbuf = (unsigned char)c;
             NEXT(1, 1);
             continue;
@@ -27,13 +27,15 @@ ENCODER(big5)
         if (c > 0xFFFF)
             return 1;
 
-        REQUIRE_OUTBUF(2)
+        REQUIRE_OUTBUF(2);
 
-        TRYMAP_ENC(big5, code, c);
-        else return 1;
+        if (TRYMAP_ENC(big5, code, c))
+            ;
+        else
+            return 1;
 
-        OUTBYTE1(code >> 8)
-        OUTBYTE2(code & 0xFF)
+        OUTBYTE1(code >> 8);
+        OUTBYTE2(code & 0xFF);
         NEXT(1, 2);
     }
 
@@ -44,6 +46,7 @@ DECODER(big5)
 {
     while (inleft > 0) {
         unsigned char c = INBYTE1;
+        Py_UCS4 decoded;
 
         if (c < 0x80) {
             OUTCHAR(c);
@@ -51,8 +54,9 @@ DECODER(big5)
             continue;
         }
 
-        REQUIRE_INBUF(2)
-        TRYMAP_DEC(big5, writer, c, INBYTE2) {
+        REQUIRE_INBUF(2);
+        if (TRYMAP_DEC(big5, decoded, c, INBYTE2)) {
+            OUTCHAR(decoded);
             NEXT_IN(2);
         }
         else return 1;
@@ -73,7 +77,7 @@ ENCODER(cp950)
         DBCHAR code;
 
         if (c < 0x80) {
-            WRITEBYTE1((unsigned char)c)
+            WRITEBYTE1((unsigned char)c);
             NEXT(1, 1);
             continue;
         }
@@ -81,13 +85,16 @@ ENCODER(cp950)
         if (c > 0xFFFF)
             return 1;
 
-        REQUIRE_OUTBUF(2)
-        TRYMAP_ENC(cp950ext, code, c);
-        else TRYMAP_ENC(big5, code, c);
-        else return 1;
+        REQUIRE_OUTBUF(2);
+        if (TRYMAP_ENC(cp950ext, code, c))
+            ;
+        else if (TRYMAP_ENC(big5, code, c))
+            ;
+        else
+            return 1;
 
-        OUTBYTE1(code >> 8)
-        OUTBYTE2(code & 0xFF)
+        OUTBYTE1(code >> 8);
+        OUTBYTE2(code & 0xFF);
         NEXT(1, 2);
     }
 
@@ -98,6 +105,7 @@ DECODER(cp950)
 {
     while (inleft > 0) {
         unsigned char c = INBYTE1;
+        Py_UCS4 decoded;
 
         if (c < 0x80) {
             OUTCHAR(c);
@@ -105,11 +113,14 @@ DECODER(cp950)
             continue;
         }
 
-        REQUIRE_INBUF(2)
+        REQUIRE_INBUF(2);
 
-        TRYMAP_DEC(cp950ext, writer, c, INBYTE2);
-        else TRYMAP_DEC(big5, writer, c, INBYTE2);
-        else return 1;
+        if (TRYMAP_DEC(cp950ext, decoded, c, INBYTE2))
+            OUTCHAR(decoded);
+        else if (TRYMAP_DEC(big5, decoded, c, INBYTE2))
+            OUTCHAR(decoded);
+        else
+            return 1;
 
         NEXT_IN(2);
     }

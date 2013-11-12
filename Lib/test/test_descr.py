@@ -4517,6 +4517,13 @@ order (MRO) for bases """
         self.assertRaises(TypeError, type.__dict__['__qualname__'].__set__,
                           str, 'Oink')
 
+        global Y
+        class Y:
+            class Inside:
+                pass
+        self.assertEqual(Y.__qualname__, 'Y')
+        self.assertEqual(Y.Inside.__qualname__, 'Y.Inside')
+
     def test_qualname_dict(self):
         ns = {'__qualname__': 'some.name'}
         tp = type('Foo', (), ns)
