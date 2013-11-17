@@ -716,7 +716,7 @@ class _TestQueue(BaseTestCase):
         start = time.time()
         self.assertRaises(pyqueue.Empty, q.get, True, 0.2)
         delta = time.time() - start
-        self.assertGreaterEqual(delta, 0.19)
+        self.assertGreaterEqual(delta, 0.18)
 
 #
 #
@@ -1690,6 +1690,16 @@ class _TestPool(BaseTestCase):
                             error_callback=call_args.append).wait()
         self.assertEqual(2, len(call_args))
         self.assertIsInstance(call_args[1], ValueError)
+
+    def test_map_unplicklable(self):
+        # Issue #19425 -- failure to pickle should not cause a hang
+        if self.TYPE == 'threads':
+            return
+        class A(object):
+            def __reduce__(self):
+                raise RuntimeError('cannot pickle')
+        with self.assertRaises(RuntimeError):
+            self.pool.map(sqr, [A()]*10)
 
     def test_map_chunksize(self):
         try:

@@ -3009,18 +3009,24 @@ convert_op_cmp(PyObject **vcmp, PyObject **wcmp, PyObject *v, PyObject *w,
             *wcmp = Py_NotImplemented;
         }
     }
-    else if (PyObject_IsInstance(w, Rational)) {
-        *wcmp = numerator_as_decimal(w, context);
-        if (*wcmp && !mpd_isspecial(MPD(v))) {
-            *vcmp = multiply_by_denominator(v, w, context);
-            if (*vcmp == NULL) {
-                Py_CLEAR(*wcmp);
+    else {
+        int is_rational = PyObject_IsInstance(w, Rational);
+        if (is_rational < 0) {
+            *wcmp = NULL;
+        }
+        else if (is_rational > 0) {
+            *wcmp = numerator_as_decimal(w, context);
+            if (*wcmp && !mpd_isspecial(MPD(v))) {
+                *vcmp = multiply_by_denominator(v, w, context);
+                if (*vcmp == NULL) {
+                    Py_CLEAR(*wcmp);
+                }
             }
         }
-    }
-    else {
-        Py_INCREF(Py_NotImplemented);
-        *wcmp = Py_NotImplemented;
+        else {
+            Py_INCREF(Py_NotImplemented);
+            *wcmp = Py_NotImplemented;
+        }
     }
 
     if (*wcmp == NULL || *wcmp == Py_NotImplemented) {
@@ -3102,6 +3108,7 @@ dec_strdup(const char *src, Py_ssize_t size)
 {
     char *dest = PyMem_Malloc(size+1);
     if (dest == NULL) {
+        PyErr_NoMemory();
         return NULL;
     }
 
