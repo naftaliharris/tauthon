@@ -1,12 +1,13 @@
 import os
 import re
 import sys
+from test import support
 
 import unittest
 
 
 class TestableTestProgram(unittest.TestProgram):
-    module = '__main__'
+    module = None
     exit = True
     defaultTest = failfast = catchbreak = buffer = None
     verbosity = 1
@@ -46,9 +47,9 @@ class TestDiscovery(unittest.TestCase):
         def restore_isdir():
             os.path.isdir = original_isdir
 
-        path_lists = [['test1.py', 'test2.py', 'not_a_test.py', 'test_dir',
+        path_lists = [['test2.py', 'test1.py', 'not_a_test.py', 'test_dir',
                        'test.foo', 'test-not-a-module.py', 'another_dir'],
-                      ['test3.py', 'test4.py', ]]
+                      ['test4.py', 'test3.py', ]]
         os.listdir = lambda path: path_lists.pop(0)
         self.addCleanup(restore_listdir)
 
@@ -70,6 +71,8 @@ class TestDiscovery(unittest.TestCase):
         loader._top_level_dir = top_level
         suite = list(loader._find_tests(top_level, 'test*.py'))
 
+        # The test suites found should be sorted alphabetically for reliable
+        # execution order.
         expected = [name + ' module tests' for name in
                     ('test1', 'test2')]
         expected.extend([('test_dir.%s' % name) + ' module tests' for name in
@@ -132,6 +135,7 @@ class TestDiscovery(unittest.TestCase):
         # and directly from the test_directory2 package
         self.assertEqual(suite,
                          ['load_tests', 'test_directory2' + ' module tests'])
+        # The test module paths should be sorted for reliable execution order
         self.assertEqual(Module.paths, ['test_directory', 'test_directory2'])
 
         # load_tests should have been called once with loader, tests and pattern
@@ -184,11 +188,9 @@ class TestDiscovery(unittest.TestCase):
         self.assertEqual(_find_tests_args, [(start_dir, 'pattern')])
         self.assertIn(top_level_dir, sys.path)
 
-    def test_discover_with_modules_that_fail_to_import(self):
-        loader = unittest.TestLoader()
-
+    def setup_import_issue_tests(self, fakefile):
         listdir = os.listdir
-        os.listdir = lambda _: ['test_this_does_not_exist.py']
+        os.listdir = lambda _: [fakefile]
         isfile = os.path.isfile
         os.path.isfile = lambda _: True
         orig_sys_path = sys.path[:]
@@ -198,6 +200,11 @@ class TestDiscovery(unittest.TestCase):
             sys.path[:] = orig_sys_path
         self.addCleanup(restore)
 
+    def test_discover_with_modules_that_fail_to_import(self):
+        loader = unittest.TestLoader()
+
+        self.setup_import_issue_tests('test_this_does_not_exist.py')
+
         suite = loader.discover('.')
         self.assertIn(os.getcwd(), sys.path)
         self.assertEqual(suite.countTestCases(), 1)
@@ -206,62 +213,74 @@ class TestDiscovery(unittest.TestCase):
         with self.assertRaises(ImportError):
             test.test_this_does_not_exist()
 
+    def test_discover_with_module_that_raises_SkipTest_on_import(self):
+        loader = unittest.TestLoader()
+
+        def _get_module_from_name(name):
+            raise unittest.SkipTest('skipperoo')
+        loader._get_module_from_name = _get_module_from_name
+
+        self.setup_import_issue_tests('test_skip_dummy.py')
+
+        suite = loader.discover('.')
+        self.assertEqual(suite.countTestCases(), 1)
+
+        result = unittest.TestResult()
+        suite.run(result)
+        self.assertEqual(len(result.skipped), 1)
+
     def test_command_line_handling_parseArgs(self):
         program = TestableTestProgram()
 
         args = []
-        def do_discovery(argv):
-            args.extend(argv)
-        program._do_discovery = do_discovery
+        program._do_discovery = args.append
         program.parseArgs(['something', 'discover'])
-        self.assertEqual(args, [])
+        self.assertEqual(args, [[]])
 
+        args[:] = []
         program.parseArgs(['something', 'discover', 'foo', 'bar'])
-        self.assertEqual(args, ['foo', 'bar'])
+        self.assertEqual(args, [['foo', 'bar']])
 
     def test_command_line_handling_discover_by_default(self):
         program = TestableTestProgram()
-        program.module = None
 
-        self.called = False
-        def do_discovery(argv):
-            self.called = True
-            self.assertEqual(argv, [])
-        program._do_discovery = do_discovery
+        args = []
+        program._do_discovery = args.append
         program.parseArgs(['something'])
-        self.assertTrue(self.called)
+        self.assertEqual(args, [[]])
+        self.assertEqual(program.verbosity, 1)
+        self.assertIs(program.buffer, False)
+        self.assertIs(program.catchbreak, False)
+        self.assertIs(program.failfast, False)
 
     def test_command_line_handling_discover_by_default_with_options(self):
         program = TestableTestProgram()
-        program.module = None
 
-        args = ['something', '-v', '-b', '-v', '-c', '-f']
-        self.called = False
-        def do_discovery(argv):
-            self.called = True
-            self.assertEqual(argv, args[1:])
-        program._do_discovery = do_discovery
-        program.parseArgs(args)
-        self.assertTrue(self.called)
+        args = []
+        program._do_discovery = args.append
+        program.parseArgs(['something', '-v', '-b', '-v', '-c', '-f'])
+        self.assertEqual(args, [[]])
+        self.assertEqual(program.verbosity, 2)
+        self.assertIs(program.buffer, True)
+        self.assertIs(program.catchbreak, True)
+        self.assertIs(program.failfast, True)
 
 
     def test_command_line_handling_do_discovery_too_many_arguments(self):
-        class Stop(Exception):
-            pass
-        def usageExit():
-            raise Stop
-
         program = TestableTestProgram()
-        program.usageExit = usageExit
         program.testLoader = None
 
-        with self.assertRaises(Stop):
+        with support.captured_stderr() as stderr, \
+             self.assertRaises(SystemExit) as cm:
             # too many args
             program._do_discovery(['one', 'two', 'three', 'four'])
+        self.assertEqual(cm.exception.args, (2,))
+        self.assertIn('usage:', stderr.getvalue())
 
 
     def test_command_line_handling_do_discovery_uses_default_loader(self):
         program = object.__new__(unittest.TestProgram)
+        program._initArgParsers()
 
         class Loader(object):
             args = []
