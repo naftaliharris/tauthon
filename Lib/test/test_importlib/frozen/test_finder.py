@@ -1,5 +1,7 @@
-from importlib import machinery
 from .. import abc
+from .. import util
+
+machinery = util.import_importlib('importlib.machinery')
 
 import unittest
 
@@ -9,7 +11,7 @@ class FinderTests(abc.FinderTests):
     """Test finding frozen modules."""
 
     def find(self, name, path=None):
-        finder = machinery.FrozenImporter
+        finder = self.machinery.FrozenImporter
         return finder.find_module(name, path)
 
     def test_module(self):
@@ -37,11 +39,9 @@ class FinderTests(abc.FinderTests):
         loader = self.find('<not real>')
         self.assertIsNone(loader)
 
-
-def test_main():
-    from test.support import run_unittest
-    run_unittest(FinderTests)
+Frozen_FinderTests, Source_FinderTests = util.test_both(FinderTests,
+                                                        machinery=machinery)
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()

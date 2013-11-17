@@ -1,5 +1,6 @@
 import _testcapi
 import codecs
+import contextlib
 import io
 import locale
 import sys
@@ -840,9 +841,10 @@ class UTF7Test(ReadTest, unittest.TestCase):
             (b'a+////,+IKw-b', 'a\uffff\ufffd\u20acb'),
         ]
         for raw, expected in tests:
-            self.assertRaises(UnicodeDecodeError, codecs.utf_7_decode,
-                              raw, 'strict', True)
-            self.assertEqual(raw.decode('utf-7', 'replace'), expected)
+            with self.subTest(raw=raw):
+                self.assertRaises(UnicodeDecodeError, codecs.utf_7_decode,
+                                raw, 'strict', True)
+                self.assertEqual(raw.decode('utf-7', 'replace'), expected)
 
     def test_nonbmp(self):
         self.assertEqual('\U000104A0'.encode(self.encoding), b'+2AHcoA-')
@@ -2291,28 +2293,211 @@ class TransformCodecTest(unittest.TestCase):
     def test_basics(self):
         binput = bytes(range(256))
         for encoding in bytes_transform_encodings:
-            # generic codecs interface
-            (o, size) = codecs.getencoder(encoding)(binput)
-            self.assertEqual(size, len(binput))
-            (i, size) = codecs.getdecoder(encoding)(o)
-            self.assertEqual(size, len(o))
-            self.assertEqual(i, binput)
+            with self.subTest(encoding=encoding):
+                # generic codecs interface
+                (o, size) = codecs.getencoder(encoding)(binput)
+                self.assertEqual(size, len(binput))
+                (i, size) = codecs.getdecoder(encoding)(o)
+                self.assertEqual(size, len(o))
+                self.assertEqual(i, binput)
 
     def test_read(self):
         for encoding in bytes_transform_encodings:
-            sin = codecs.encode(b"\x80", encoding)
-            reader = codecs.getreader(encoding)(io.BytesIO(sin))
-            sout = reader.read()
-            self.assertEqual(sout, b"\x80")
+            with self.subTest(encoding=encoding):
+                sin = codecs.encode(b"\x80", encoding)
+                reader = codecs.getreader(encoding)(io.BytesIO(sin))
+                sout = reader.read()
+                self.assertEqual(sout, b"\x80")
 
     def test_readline(self):
         for encoding in bytes_transform_encodings:
             if encoding in ['uu_codec', 'zlib_codec']:
                 continue
-            sin = codecs.encode(b"\x80", encoding)
-            reader = codecs.getreader(encoding)(io.BytesIO(sin))
-            sout = reader.readline()
-            self.assertEqual(sout, b"\x80")
+            with self.subTest(encoding=encoding):
+                sin = codecs.encode(b"\x80", encoding)
+                reader = codecs.getreader(encoding)(io.BytesIO(sin))
+                sout = reader.readline()
+                self.assertEqual(sout, b"\x80")
+
+    def test_buffer_api_usage(self):
+        # We check all the transform codecs accept memoryview input
+        # for encoding and decoding
+        # and also that they roundtrip correctly
+        original = b"12345\x80"
+        for encoding in bytes_transform_encodings:
+            with self.subTest(encoding=encoding):
+                data = original
+                view = memoryview(data)
+                data = codecs.encode(data, encoding)
+                view_encoded = codecs.encode(view, encoding)
+                self.assertEqual(view_encoded, data)
+                view = memoryview(data)
+                data = codecs.decode(data, encoding)
+                self.assertEqual(data, original)
+                view_decoded = codecs.decode(view, encoding)
+                self.assertEqual(view_decoded, data)
+
+    def test_type_error_for_text_input(self):
+        # Check binary -> binary codecs give a good error for str input
+        bad_input = "bad input type"
+        for encoding in bytes_transform_encodings:
+            with self.subTest(encoding=encoding):
+                msg = "^encoding with '{}' codec failed".format(encoding)
+                with self.assertRaisesRegex(TypeError, msg) as failure:
+                    bad_input.encode(encoding)
+                self.assertTrue(isinstance(failure.exception.__cause__,
+                                           TypeError))
+
+    def test_type_error_for_binary_input(self):
+        # Check str -> str codec gives a good error for binary input
+        for bad_input in (b"immutable", bytearray(b"mutable")):
+            with self.subTest(bad_input=bad_input):
+                msg = "^decoding with 'rot_13' codec failed"
+                with self.assertRaisesRegex(AttributeError, msg) as failure:
+                    bad_input.decode("rot_13")
+                self.assertTrue(isinstance(failure.exception.__cause__,
+                                           AttributeError))
+
+    def test_bad_decoding_output_type(self):
+        # Check bytes.decode and bytearray.decode give a good error
+        # message for binary -> binary codecs
+        data = b"encode first to ensure we meet any format restrictions"
+        for encoding in bytes_transform_encodings:
+            with self.subTest(encoding=encoding):
+                encoded_data = codecs.encode(data, encoding)
+                fmt = ("'{}' decoder returned 'bytes' instead of 'str'; "
+                       "use codecs.decode\(\) to decode to arbitrary types")
+                msg = fmt.format(encoding)
+                with self.assertRaisesRegex(TypeError, msg):
+                    encoded_data.decode(encoding)
+                with self.assertRaisesRegex(TypeError, msg):
+                    bytearray(encoded_data).decode(encoding)
+
+    def test_bad_encoding_output_type(self):
+        # Check str.encode gives a good error message for str -> str codecs
+        msg = ("'rot_13' encoder returned 'str' instead of 'bytes'; "
+               "use codecs.encode\(\) to encode to arbitrary types")
+        with self.assertRaisesRegex(TypeError, msg):
+            "just an example message".encode("rot_13")
+
+
+# The codec system tries to wrap exceptions in order to ensure the error
+# mentions the operation being performed and the codec involved. We
+# currently *only* want this to happen for relatively stateless
+# exceptions, where the only significant information they contain is their
+# type and a single str argument.
+
+# Use a local codec registry to avoid appearing to leak objects when
+# registering multiple seach functions
+_TEST_CODECS = {}
+
+def _get_test_codec(codec_name):
+    return _TEST_CODECS.get(codec_name)
+codecs.register(_get_test_codec) # Returns None, not usable as a decorator
+
+class ExceptionChainingTest(unittest.TestCase):
+
+    def setUp(self):
+        # There's no way to unregister a codec search function, so we just
+        # ensure we render this one fairly harmless after the test
+        # case finishes by using the test case repr as the codec name
+        # The codecs module normalizes codec names, although this doesn't
+        # appear to be formally documented...
+        self.codec_name = repr(self).lower().replace(" ", "-")
+
+    def tearDown(self):
+        _TEST_CODECS.pop(self.codec_name, None)
+
+    def set_codec(self, obj_to_raise):
+        def raise_obj(*args, **kwds):
+            raise obj_to_raise
+        codec_info = codecs.CodecInfo(raise_obj, raise_obj,
+                                      name=self.codec_name)
+        _TEST_CODECS[self.codec_name] = codec_info
+
+    @contextlib.contextmanager
+    def assertWrapped(self, operation, exc_type, msg):
+        full_msg = "{} with '{}' codec failed \({}: {}\)".format(
+                  operation, self.codec_name, exc_type.__name__, msg)
+        with self.assertRaisesRegex(exc_type, full_msg) as caught:
+            yield caught
+
+    def check_wrapped(self, obj_to_raise, msg):
+        self.set_codec(obj_to_raise)
+        with self.assertWrapped("encoding", RuntimeError, msg):
+            "str_input".encode(self.codec_name)
+        with self.assertWrapped("encoding", RuntimeError, msg):
+            codecs.encode("str_input", self.codec_name)
+        with self.assertWrapped("decoding", RuntimeError, msg):
+            b"bytes input".decode(self.codec_name)
+        with self.assertWrapped("decoding", RuntimeError, msg):
+            codecs.decode(b"bytes input", self.codec_name)
+
+    def test_raise_by_type(self):
+        self.check_wrapped(RuntimeError, "")
+
+    def test_raise_by_value(self):
+        msg = "This should be wrapped"
+        self.check_wrapped(RuntimeError(msg), msg)
+
+    @contextlib.contextmanager
+    def assertNotWrapped(self, operation, exc_type, msg_re, msg=None):
+        if msg is None:
+            msg = msg_re
+        with self.assertRaisesRegex(exc_type, msg) as caught:
+            yield caught
+        self.assertEqual(str(caught.exception), msg)
+
+    def check_not_wrapped(self, obj_to_raise, msg_re, msg=None):
+        self.set_codec(obj_to_raise)
+        with self.assertNotWrapped("encoding", RuntimeError, msg_re, msg):
+            "str input".encode(self.codec_name)
+        with self.assertNotWrapped("encoding", RuntimeError, msg_re, msg):
+            codecs.encode("str input", self.codec_name)
+        with self.assertNotWrapped("decoding", RuntimeError, msg_re, msg):
+            b"bytes input".decode(self.codec_name)
+        with self.assertNotWrapped("decoding", RuntimeError, msg_re, msg):
+            codecs.decode(b"bytes input", self.codec_name)
+
+    def test_init_override_is_not_wrapped(self):
+        class CustomInit(RuntimeError):
+            def __init__(self):
+                pass
+        self.check_not_wrapped(CustomInit, "")
+
+    def test_new_override_is_not_wrapped(self):
+        class CustomNew(RuntimeError):
+            def __new__(cls):
+                return super().__new__(cls)
+        self.check_not_wrapped(CustomNew, "")
+
+    def test_instance_attribute_is_not_wrapped(self):
+        msg = "This should NOT be wrapped"
+        exc = RuntimeError(msg)
+        exc.attr = 1
+        self.check_not_wrapped(exc, msg)
+
+    def test_non_str_arg_is_not_wrapped(self):
+        self.check_not_wrapped(RuntimeError(1), "1")
+
+    def test_multiple_args_is_not_wrapped(self):
+        msg_re = "\('a', 'b', 'c'\)"
+        msg = "('a', 'b', 'c')"
+        self.check_not_wrapped(RuntimeError('a', 'b', 'c'), msg_re, msg)
+
+    # http://bugs.python.org/issue19609
+    def test_codec_lookup_failure_not_wrapped(self):
+        msg = "unknown encoding: %s" % self.codec_name
+        # The initial codec lookup should not be wrapped
+        with self.assertNotWrapped("encoding", LookupError, msg):
+            "str input".encode(self.codec_name)
+        with self.assertNotWrapped("encoding", LookupError, msg):
+            codecs.encode("str input", self.codec_name)
+        with self.assertNotWrapped("decoding", LookupError, msg):
+            b"bytes input".decode(self.codec_name)
+        with self.assertNotWrapped("decoding", LookupError, msg):
+            codecs.decode(b"bytes input", self.codec_name)
+
 
 
 @unittest.skipUnless(sys.platform == 'win32',
@@ -2324,8 +2509,8 @@ class CodePageTest(unittest.TestCase):
     def test_invalid_code_page(self):
         self.assertRaises(ValueError, codecs.code_page_encode, -1, 'a')
         self.assertRaises(ValueError, codecs.code_page_decode, -1, b'a')
-        self.assertRaises(WindowsError, codecs.code_page_encode, 123, 'a')
-        self.assertRaises(WindowsError, codecs.code_page_decode, 123, b'a')
+        self.assertRaises(OSError, codecs.code_page_encode, 123, 'a')
+        self.assertRaises(OSError, codecs.code_page_decode, 123, b'a')
 
     def test_code_page_name(self):
         self.assertRaisesRegex(UnicodeEncodeError, 'cp932',
