@@ -53,7 +53,7 @@ int PyCodec_Register(PyObject *search_function)
 static
 PyObject *normalizestring(const char *string)
 {
-    register size_t i;
+    size_t i;
     size_t len = strlen(string);
     char *p;
     PyObject *v;
@@ -65,9 +65,9 @@ PyObject *normalizestring(const char *string)
 
     p = PyMem_Malloc(len + 1);
     if (p == NULL)
-        return NULL;
+        return PyErr_NoMemory();
     for (i = 0; i < len; i++) {
-        register char ch = string[i];
+        char ch = string[i];
         if (ch == ' ')
             ch = '-';
         else
@@ -332,6 +332,22 @@ PyObject *PyCodec_StreamWriter(const char *encoding,
     return codec_getstreamcodec(encoding, stream, errors, 3);
 }
 
+/* Helper that tries to ensure the reported exception chain indicates the
+ * codec that was invoked to trigger the failure without changing the type
+ * of the exception raised.
+ */
+static void
+wrap_codec_error(const char *operation,
+                 const char *encoding)
+{
+    /* TrySetFromCause will replace the active exception with a suitably
+     * updated clone if it can, otherwise it will leave the original
+     * exception alone.
+     */
+    _PyErr_TrySetFromCause("%s with '%s' codec failed",
+                           operation, encoding);
+}
+
 /* Encode an object (e.g. an Unicode object) using the given encoding
    and return the resulting encoded object (usually a Python string).
 
@@ -354,8 +370,10 @@ PyObject *PyCodec_Encode(PyObject *object,
         goto onError;
 
     result = PyEval_CallObject(encoder, args);
-    if (result == NULL)
+    if (result == NULL) {
+        wrap_codec_error("encoding", encoding);
         goto onError;
+    }
 
     if (!PyTuple_Check(result) ||
         PyTuple_GET_SIZE(result) != 2) {
@@ -401,8 +419,10 @@ PyObject *PyCodec_Decode(PyObject *object,
         goto onError;
 
     result = PyEval_CallObject(decoder,args);
-    if (result == NULL)
+    if (result == NULL) {
+        wrap_codec_error("decoding", encoding);
         goto onError;
+    }
     if (!PyTuple_Check(result) ||
         PyTuple_GET_SIZE(result) != 2) {
         PyErr_SetString(PyExc_TypeError,
@@ -441,7 +461,7 @@ int PyCodec_RegisterError(const char *name, PyObject *error)
         return -1;
     }
     return PyDict_SetItemString(interp->codec_error_registry,
-                                (char *)name, error);
+                                name, error);
 }
 
 /* Lookup the error handling callback function registered under the
@@ -457,7 +477,7 @@ PyObject *PyCodec_LookupError(const char *name)
 
     if (name==NULL)
         name = "strict";
-    handler = PyDict_GetItemString(interp->codec_error_registry, (char *)name);
+    handler = PyDict_GetItemString(interp->codec_error_registry, name);
     if (!handler)
         PyErr_Format(PyExc_LookupError, "unknown error handler name '%.400s'", name);
     else
@@ -761,7 +781,7 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
         for (i = start; i < end; i++) {
             /* object is guaranteed to be "ready" */
             Py_UCS4 ch = PyUnicode_READ_CHAR(object, i);
-            if (ch < 0xd800 || ch > 0xdfff) {
+            if (!Py_UNICODE_IS_SURROGATE(ch)) {
                 /* Not a surrogate, fail with original exception */
                 PyErr_SetObject(PyExceptionInstance_Class(exc), exc);
                 Py_DECREF(res);
@@ -797,7 +817,7 @@ PyCodec_SurrogatePassErrors(PyObject *exc)
             (p[2] & 0xc0) == 0x80) {
             /* it's a three-byte code */
             ch = ((p[0] & 0x0f) << 12) + ((p[1] & 0x3f) << 6) + (p[2] & 0x3f);
-            if (ch < 0xd800 || ch > 0xdfff)
+            if (!Py_UNICODE_IS_SURROGATE(ch))
                 /* it's not a surrogate - fail */
                 ch = 0;
         }
@@ -1026,7 +1046,7 @@ static int _PyCodecRegistry_Init(void)
 
     if (interp->codec_error_registry) {
         for (i = 0; i < Py_ARRAY_LENGTH(methods); ++i) {
-            PyObject *func = PyCFunction_New(&methods[i].def, NULL);
+            PyObject *func = PyCFunction_NewEx(&methods[i].def, NULL, NULL);
             int res;
             if (!func)
                 Py_FatalError("can't initialize codec error registry");
