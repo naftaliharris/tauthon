@@ -92,10 +92,6 @@ typedef struct {
      (y)[4] = (unsigned char)(((x)>>24)&255); (y)[5] = (unsigned char)(((x)>>16)&255);     \
      (y)[6] = (unsigned char)(((x)>>8)&255); (y)[7] = (unsigned char)((x)&255); }
 
-#ifndef MIN
-   #define MIN(x, y) ( ((x)<(y))?(x):(y) )
-#endif
-
 
 /* SHA1 macros */
 
@@ -220,9 +216,9 @@ sha1_process(struct sha1_state *sha1,
            in             += SHA1_BLOCKSIZE;
            inlen          -= SHA1_BLOCKSIZE;
         } else {
-           n = MIN(inlen, (Py_ssize_t)(SHA1_BLOCKSIZE - sha1->curlen));
+           n = Py_MIN(inlen, (Py_ssize_t)(SHA1_BLOCKSIZE - sha1->curlen));
            memcpy(sha1->buf + sha1->curlen, in, (size_t)n);
-           sha1->curlen   += n;
+           sha1->curlen   += (SHA1_INT32)n;
            in             += n;
            inlen          -= n;
            if (sha1->curlen == SHA1_BLOCKSIZE) {
@@ -415,7 +411,7 @@ SHA1_get_block_size(PyObject *self, void *closure)
 static PyObject *
 SHA1_get_name(PyObject *self, void *closure)
 {
-    return PyUnicode_FromStringAndSize("SHA1", 4);
+    return PyUnicode_FromStringAndSize("sha1", 4);
 }
 
 static PyObject *
@@ -548,8 +544,17 @@ static struct PyModuleDef _sha1module = {
 PyMODINIT_FUNC
 PyInit__sha1(void)
 {
+    PyObject *m;
+
     Py_TYPE(&SHA1type) = &PyType_Type;
     if (PyType_Ready(&SHA1type) < 0)
         return NULL;
-    return PyModule_Create(&_sha1module);
+
+    m = PyModule_Create(&_sha1module);
+    if (m == NULL)
+        return NULL;
+
+    Py_INCREF((PyObject *)&SHA1type);
+    PyModule_AddObject(m, "SHA1Type", (PyObject *)&SHA1type);
+    return m;
 }

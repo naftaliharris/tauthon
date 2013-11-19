@@ -107,24 +107,63 @@ static Py_UCS4 getuchar(PyUnicodeObject *obj)
 
 /* --- Module API --------------------------------------------------------- */
 
-PyDoc_STRVAR(unicodedata_decimal__doc__,
-"decimal(unichr[, default])\n\
-\n\
-Returns the decimal value assigned to the Unicode character unichr\n\
-as integer. If no such value is defined, default is returned, or, if\n\
-not given, ValueError is raised.");
+/*[clinic]
+module unicodedata
+class unicodedata.UCD
+unicodedata.UCD.decimal
+
+    unichr: object(type='str')
+    default: object=NULL
+    /
+
+Converts a Unicode character into its equivalent decimal value.
+
+Returns the decimal value assigned to the Unicode character unichr
+as integer. If no such value is defined, default is returned, or, if
+not given, ValueError is raised.
+[clinic]*/
+
+PyDoc_STRVAR(unicodedata_UCD_decimal__doc__,
+"Converts a Unicode character into its equivalent decimal value.\n"
+"\n"
+"unicodedata.UCD.decimal(unichr, default=None)\n"
+"\n"
+"Returns the decimal value assigned to the Unicode character unichr\n"
+"as integer. If no such value is defined, default is returned, or, if\n"
+"not given, ValueError is raised.");
+
+#define UNICODEDATA_UCD_DECIMAL_METHODDEF    \
+    {"decimal", (PyCFunction)unicodedata_UCD_decimal, METH_VARARGS, unicodedata_UCD_decimal__doc__},
 
 static PyObject *
-unicodedata_decimal(PyObject *self, PyObject *args)
+unicodedata_UCD_decimal_impl(PyObject *self, PyObject *unichr, PyObject *default_value);
+
+static PyObject *
+unicodedata_UCD_decimal(PyObject *self, PyObject *args)
 {
-    PyUnicodeObject *v;
-    PyObject *defobj = NULL;
+    PyObject *return_value = NULL;
+    PyObject *unichr;
+    PyObject *default_value = NULL;
+
+    if (!PyArg_ParseTuple(args,
+        "O!|O:decimal",
+        &PyUnicode_Type, &unichr, &default_value))
+        goto exit;
+    return_value = unicodedata_UCD_decimal_impl(self, unichr, default_value);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+unicodedata_UCD_decimal_impl(PyObject *self, PyObject *unichr, PyObject *default_value)
+/*[clinic checksum: a0980c387387287e2ac230c37d95b26f6903e0d2]*/
+{
+    PyUnicodeObject *v = (PyUnicodeObject *)unichr;
     int have_old = 0;
     long rc;
     Py_UCS4 c;
 
-    if (!PyArg_ParseTuple(args, "O!|O:decimal", &PyUnicode_Type, &v, &defobj))
-        return NULL;
     c = getuchar(v);
     if (c == (Py_UCS4)-1)
         return NULL;
@@ -145,14 +184,14 @@ unicodedata_decimal(PyObject *self, PyObject *args)
     if (!have_old)
         rc = Py_UNICODE_TODECIMAL(c);
     if (rc < 0) {
-        if (defobj == NULL) {
+        if (default_value == NULL) {
             PyErr_SetString(PyExc_ValueError,
                             "not a decimal");
             return NULL;
         }
         else {
-            Py_INCREF(defobj);
-            return defobj;
+            Py_INCREF(default_value);
+            return default_value;
         }
     }
     return PyLong_FromLong(rc);
@@ -1250,7 +1289,7 @@ unicodedata_lookup(PyObject* self, PyObject* args)
 /* XXX Add doc strings. */
 
 static PyMethodDef unicodedata_functions[] = {
-    {"decimal", unicodedata_decimal, METH_VARARGS, unicodedata_decimal__doc__},
+    UNICODEDATA_UCD_DECIMAL_METHODDEF
     {"digit", unicodedata_digit, METH_VARARGS, unicodedata_digit__doc__},
     {"numeric", unicodedata_numeric, METH_VARARGS, unicodedata_numeric__doc__},
     {"category", unicodedata_category, METH_VARARGS,
@@ -1326,7 +1365,6 @@ this database is based on the UnicodeData.txt file version\n\
 \n\
 The module uses the same names and symbols as defined by the\n\
 UnicodeData File Format " UNIDATA_VERSION ".");
-
 
 static struct PyModuleDef unicodedatamodule = {
         PyModuleDef_HEAD_INIT,
