@@ -96,7 +96,9 @@ class TestCaseBase(unittest.TestCase):
             parser = self.get_collector()
             parser.feed(source)
             parser.close()
-        self.assertRaises(html.parser.HTMLParseError, parse)
+        with self.assertRaises(html.parser.HTMLParseError):
+            with self.assertWarns(DeprecationWarning):
+                parse()
 
 
 class HTMLParserStrictTestCase(TestCaseBase):
@@ -365,7 +367,16 @@ text
 class HTMLParserTolerantTestCase(HTMLParserStrictTestCase):
 
     def get_collector(self):
-        return EventCollector(strict=False)
+        return EventCollector()
+
+    def test_deprecation_warnings(self):
+        with self.assertWarns(DeprecationWarning):
+            EventCollector(strict=True)
+        with self.assertWarns(DeprecationWarning):
+            EventCollector(strict=False)
+        with self.assertRaises(html.parser.HTMLParseError):
+            with self.assertWarns(DeprecationWarning):
+                EventCollector().error('test')
 
     def test_tolerant_parsing(self):
         self._run_check('<html <html>te>>xt&a<<bc</a></html>\n'
@@ -558,18 +569,6 @@ class HTMLParserTolerantTestCase(HTMLParserStrictTestCase):
         for html, expected in data:
             self._run_check(html, expected)
 
-    def test_unescape_function(self):
-        p = self.get_collector()
-        self.assertEqual(p.unescape('&#bad;'),'&#bad;')
-        self.assertEqual(p.unescape('&#0038;'),'&')
-        # see #12888
-        self.assertEqual(p.unescape('&#123; ' * 1050), '{ ' * 1050)
-        # see #15156
-        self.assertEqual(p.unescape('&Eacuteric&Eacute;ric'
-                                    '&alphacentauri&alpha;centauri'),
-                                    'ÉricÉric&alphacentauriαcentauri')
-        self.assertEqual(p.unescape('&co;'), '&co;')
-
     def test_broken_comments(self):
         html = ('<! not really a comment >'
                 '<! not a comment either -->'
@@ -685,7 +684,7 @@ class AttributesStrictTestCase(TestCaseBase):
 class AttributesTolerantTestCase(AttributesStrictTestCase):
 
     def get_collector(self):
-        return EventCollector(strict=False)
+        return EventCollector()
 
     def test_attr_funky_names2(self):
         self._run_check(
