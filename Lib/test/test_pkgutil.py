@@ -1,12 +1,12 @@
 from test.support import run_unittest, unload, check_warnings
 import unittest
 import sys
-import imp
 import importlib
 import pkgutil
 import os
 import os.path
 import tempfile
+import types
 import shutil
 import zipfile
 
@@ -105,7 +105,7 @@ class PkgutilPEP302Tests(unittest.TestCase):
     class MyTestLoader(object):
         def load_module(self, fullname):
             # Create an empty module
-            mod = sys.modules.setdefault(fullname, imp.new_module(fullname))
+            mod = sys.modules.setdefault(fullname, types.ModuleType(fullname))
             mod.__file__ = "<%s>" % self.__class__.__name__
             mod.__loader__ = self
             # Make it a package
@@ -208,9 +208,16 @@ class ExtendPathTests(unittest.TestCase):
             importers = list(iter_importers(fullname))
             expected_importer = get_importer(pathitem)
             for finder in importers:
+                loader = finder.find_module(fullname)
+                try:
+                    loader = loader.loader
+                except AttributeError:
+                    # For now we still allow raw loaders from
+                    # find_module().
+                    pass
                 self.assertIsInstance(finder, importlib.machinery.FileFinder)
                 self.assertEqual(finder, expected_importer)
-                self.assertIsInstance(finder.find_module(fullname),
+                self.assertIsInstance(loader,
                                       importlib.machinery.SourceFileLoader)
                 self.assertIsNone(finder.find_module(pkgname))
 
@@ -222,8 +229,11 @@ class ExtendPathTests(unittest.TestCase):
         finally:
             shutil.rmtree(dirname)
             del sys.path[0]
-            del sys.modules['spam']
-            del sys.modules['spam.eggs']
+            try:
+                del sys.modules['spam']
+                del sys.modules['spam.eggs']
+            except KeyError:
+                pass
 
 
     def test_mixed_namespace(self):

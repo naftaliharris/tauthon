@@ -21,6 +21,8 @@ multitasking). Here's an overview:
    sched.rst
    queue.rst
    select.rst
+   selectors.rst
+   asyncio.rst
 
 
 The following are support modules for some of the above services:

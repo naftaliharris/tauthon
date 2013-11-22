@@ -18,7 +18,7 @@ This returns an instance of a class with the following public methods:
       getcomptype()   -- returns compression type ('NONE' for linear samples)
       getcompname()   -- returns human-readable version of
                          compression type ('not compressed' linear samples)
-      getparams()     -- returns a tuple consisting of all of the
+      getparams()     -- returns a namedtuple consisting of all of the
                          above in the above order
       getmarkers()    -- returns None (for compatibility with the
                          aifc module)
@@ -85,12 +85,16 @@ _array_fmts = None, 'b', 'h', None, 'i'
 import struct
 import sys
 from chunk import Chunk
+from collections import namedtuple
 
 def _byteswap3(data):
     ba = bytearray(data)
     ba[::3] = data[2::3]
     ba[2::3] = data[::3]
     return bytes(ba)
+
+_wave_params = namedtuple('_wave_params',
+                     'nchannels sampwidth framerate nframes comptype compname')
 
 class Wave_read:
     """Variables used in this class:
@@ -169,6 +173,13 @@ class Wave_read:
 
     def __del__(self):
         self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     #
     # User visible methods.
     #
@@ -207,9 +218,9 @@ class Wave_read:
         return self._compname
 
     def getparams(self):
-        return self.getnchannels(), self.getsampwidth(), \
-               self.getframerate(), self.getnframes(), \
-               self.getcomptype(), self.getcompname()
+        return _wave_params(self.getnchannels(), self.getsampwidth(),
+                       self.getframerate(), self.getnframes(),
+                       self.getcomptype(), self.getcompname())
 
     def getmarkers(self):
         return None
@@ -328,6 +339,12 @@ class Wave_write:
     def __del__(self):
         self.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     #
     # User visible methods.
     #
@@ -402,8 +419,8 @@ class Wave_write:
     def getparams(self):
         if not self._nchannels or not self._sampwidth or not self._framerate:
             raise Error('not all parameters set')
-        return self._nchannels, self._sampwidth, self._framerate, \
-              self._nframes, self._comptype, self._compname
+        return _wave_params(self._nchannels, self._sampwidth, self._framerate,
+              self._nframes, self._comptype, self._compname)
 
     def setmark(self, id, pos, name):
         raise Error('setmark() not supported')
@@ -418,6 +435,8 @@ class Wave_write:
         return self._nframeswritten
 
     def writeframesraw(self, data):
+        if not isinstance(data, (bytes, bytearray)):
+            data = memoryview(data).cast('B')
         self._ensure_header_written(len(data))
         nframes = len(data) // (self._sampwidth * self._nchannels)
         if self._convert:
@@ -476,14 +495,18 @@ class Wave_write:
         if not self._nframes:
             self._nframes = initlength // (self._nchannels * self._sampwidth)
         self._datalength = self._nframes * self._nchannels * self._sampwidth
-        self._form_length_pos = self._file.tell()
+        try:
+            self._form_length_pos = self._file.tell()
+        except (AttributeError, OSError):
+            self._form_length_pos = None
         self._file.write(struct.pack('<L4s4sLHHLLHH4s',
             36 + self._datalength, b'WAVE', b'fmt ', 16,
             WAVE_FORMAT_PCM, self._nchannels, self._framerate,
             self._nchannels * self._framerate * self._sampwidth,
             self._nchannels * self._sampwidth,
             self._sampwidth * 8, b'data'))
-        self._data_length_pos = self._file.tell()
+        if self._form_length_pos is not None:
+            self._data_length_pos = self._file.tell()
         self._file.write(struct.pack('<L', self._datalength))
         self._headerwritten = True
 
