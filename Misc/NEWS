@@ -68,6 +68,9 @@ Core and Builtins
 Library
 -------
 
+- Issue #19689: Add ssl.create_default_context() factory function. It creates
+  a new SSLContext object with secure default settings.
+
 - Issue #19727: os.utime(..., None) is now potentially more precise
   under Windows.
 
