@@ -8,9 +8,14 @@
 # and CDATA (character data -- only end tags are special).
 
 
-import _markupbase
 import re
 import warnings
+import _markupbase
+
+from html import unescape
+
+
+__all__ = ['HTMLParser']
 
 # Regular expressions used for parsing
 
@@ -92,6 +97,8 @@ class HTMLParseError(Exception):
         return result
 
 
+_strict_sentinel = object()
+
 class HTMLParser(_markupbase.ParserBase):
     """Find tags and other markup and call handler functions.
 
@@ -114,16 +121,18 @@ class HTMLParser(_markupbase.ParserBase):
 
     CDATA_CONTENT_ELEMENTS = ("script", "style")
 
-    def __init__(self, strict=False):
+    def __init__(self, strict=_strict_sentinel):
         """Initialize and reset this instance.
 
         If strict is set to False (the default) the parser will parse invalid
         markup, otherwise it will raise an error.  Note that the strict mode
-        is deprecated.
+        and argument are deprecated.
         """
-        if strict:
-            warnings.warn("The strict mode is deprecated.",
+        if strict is not _strict_sentinel:
+            warnings.warn("The strict argument and mode are deprecated.",
                           DeprecationWarning, stacklevel=2)
+        else:
+            strict = False  # default
         self.strict = strict
         self.reset()
 
@@ -149,6 +158,8 @@ class HTMLParser(_markupbase.ParserBase):
         self.goahead(1)
 
     def error(self, message):
+        warnings.warn("The 'error' method is deprecated.",
+                      DeprecationWarning, stacklevel=2)
         raise HTMLParseError(message, self.getpos())
 
     __starttag_text = None
@@ -349,7 +360,7 @@ class HTMLParser(_markupbase.ParserBase):
                  attrvalue[:1] == '"' == attrvalue[-1:]:
                 attrvalue = attrvalue[1:-1]
             if attrvalue:
-                attrvalue = self.unescape(attrvalue)
+                attrvalue = unescape(attrvalue)
             attrs.append((attrname.lower(), attrvalue))
             k = m.end()
 
@@ -505,31 +516,7 @@ class HTMLParser(_markupbase.ParserBase):
 
     # Internal -- helper to remove special character quoting
     def unescape(self, s):
-        if '&' not in s:
-            return s
-        def replaceEntities(s):
-            s = s.groups()[0]
-            try:
-                if s[0] == "#":
-                    s = s[1:]
-                    if s[0] in ['x','X']:
-                        c = int(s[1:].rstrip(';'), 16)
-                    else:
-                        c = int(s.rstrip(';'))
-                    return chr(c)
-            except ValueError:
-                return '&#' + s
-            else:
-                from html.entities import html5
-                if s in html5:
-                    return html5[s]
-                elif s.endswith(';'):
-                    return '&' + s
-                for x in range(2, len(s)):
-                    if s[:x] in html5:
-                        return html5[s[:x]] + s[x:]
-                else:
-                    return '&' + s
-
-        return re.sub(r"&(#?[xX]?(?:[0-9a-fA-F]+;|\w{1,32};?))",
-                      replaceEntities, s, flags=re.ASCII)
+        warnings.warn('The unescape method is deprecated and will be removed '
+                      'in 3.5, use html.unescape() instead.',
+                      DeprecationWarning, stacklevel=2)
+        return unescape(s)
