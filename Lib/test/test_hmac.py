@@ -10,8 +10,18 @@ class TestVectorsTestCase(unittest.TestCase):
         # Test the HMAC module against test vectors from the RFC.
 
         def md5test(key, data, digest):
-            h = hmac.HMAC(key, data)
+            h = hmac.HMAC(key, data, digestmod=hashlib.md5)
             self.assertEqual(h.hexdigest().upper(), digest.upper())
+            self.assertEqual(h.name, "hmac-md5")
+            self.assertEqual(h.digest_size, 16)
+            self.assertEqual(h.block_size, 64)
+
+            h = hmac.HMAC(key, data, digestmod='md5')
+            self.assertEqual(h.hexdigest().upper(), digest.upper())
+            self.assertEqual(h.name, "hmac-md5")
+            self.assertEqual(h.digest_size, 16)
+            self.assertEqual(h.block_size, 64)
+
 
         md5test(b"\x0b" * 16,
                 b"Hi There",
@@ -46,6 +56,16 @@ class TestVectorsTestCase(unittest.TestCase):
         def shatest(key, data, digest):
             h = hmac.HMAC(key, data, digestmod=hashlib.sha1)
             self.assertEqual(h.hexdigest().upper(), digest.upper())
+            self.assertEqual(h.name, "hmac-sha1")
+            self.assertEqual(h.digest_size, 20)
+            self.assertEqual(h.block_size, 64)
+
+            h = hmac.HMAC(key, data, digestmod='sha1')
+            self.assertEqual(h.hexdigest().upper(), digest.upper())
+            self.assertEqual(h.name, "hmac-sha1")
+            self.assertEqual(h.digest_size, 20)
+            self.assertEqual(h.block_size, 64)
+
 
         shatest(b"\x0b" * 20,
                 b"Hi There",
@@ -76,10 +96,21 @@ class TestVectorsTestCase(unittest.TestCase):
                  b"and Larger Than One Block-Size Data"),
                 "e8e99d0f45237d786d6bbaa7965c7808bbff1a91")
 
-    def _rfc4231_test_cases(self, hashfunc):
+    def _rfc4231_test_cases(self, hashfunc, hash_name, digest_size, block_size):
         def hmactest(key, data, hexdigests):
+            hmac_name = "hmac-" + hash_name
             h = hmac.HMAC(key, data, digestmod=hashfunc)
             self.assertEqual(h.hexdigest().lower(), hexdigests[hashfunc])
+            self.assertEqual(h.name, hmac_name)
+            self.assertEqual(h.digest_size, digest_size)
+            self.assertEqual(h.block_size, block_size)
+
+            h = hmac.HMAC(key, data, digestmod=hash_name)
+            self.assertEqual(h.hexdigest().lower(), hexdigests[hashfunc])
+            self.assertEqual(h.name, hmac_name)
+            self.assertEqual(h.digest_size, digest_size)
+            self.assertEqual(h.block_size, block_size)
+
 
         # 4.2.  Test Case 1
         hmactest(key = b'\x0b'*20,
@@ -189,16 +220,16 @@ class TestVectorsTestCase(unittest.TestCase):
                  })
 
     def test_sha224_rfc4231(self):
-        self._rfc4231_test_cases(hashlib.sha224)
+        self._rfc4231_test_cases(hashlib.sha224, 'sha224', 28, 64)
 
     def test_sha256_rfc4231(self):
-        self._rfc4231_test_cases(hashlib.sha256)
+        self._rfc4231_test_cases(hashlib.sha256, 'sha256', 32, 64)
 
     def test_sha384_rfc4231(self):
-        self._rfc4231_test_cases(hashlib.sha384)
+        self._rfc4231_test_cases(hashlib.sha384, 'sha384', 48, 128)
 
     def test_sha512_rfc4231(self):
-        self._rfc4231_test_cases(hashlib.sha512)
+        self._rfc4231_test_cases(hashlib.sha512, 'sha512', 64, 128)
 
     def test_legacy_block_size_warnings(self):
         class MockCrazyHash(object):
@@ -222,6 +253,13 @@ class TestVectorsTestCase(unittest.TestCase):
                 hmac.HMAC(b'a', b'b', digestmod=MockCrazyHash)
                 self.fail('Expected warning about small block_size')
 
+    def test_with_digestmod_warning(self):
+        with self.assertWarns(PendingDeprecationWarning):
+            key = b"\x0b" * 16
+            data = b"Hi There"
+            digest = "9294727A3638BB1C13F48EF8158BFC9D"
+            h = hmac.HMAC(key, data)
+            self.assertEqual(h.hexdigest().upper(), digest)
 
 
 class ConstructorTestCase(unittest.TestCase):
@@ -252,6 +290,20 @@ class ConstructorTestCase(unittest.TestCase):
             h = hmac.HMAC(b"key", b"hash this!")
         except:
             self.fail("Constructor call with text argument raised exception.")
+
+    def test_with_bytearray(self):
+        try:
+            h = hmac.HMAC(bytearray(b"key"), bytearray(b"hash this!"))
+            self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
+        except:
+            self.fail("Constructor call with bytearray arguments raised exception.")
+
+    def test_with_memoryview_msg(self):
+        try:
+            h = hmac.HMAC(b"key", memoryview(b"hash this!"))
+            self.assertEqual(h.hexdigest(), '34325b639da4cfd95735b381e28cb864')
+        except:
+            self.fail("Constructor call with memoryview msg raised exception.")
 
     def test_withmodule(self):
         # Constructor call with text and digest module.
