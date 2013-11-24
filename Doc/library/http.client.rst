@@ -27,7 +27,7 @@ HTTPS protocols.  It is normally not used directly --- the module
 The module provides the following classes:
 
 
-.. class:: HTTPConnection(host, port=None[, strict][, timeout], \
+.. class:: HTTPConnection(host, port=None[, timeout], \
                           source_address=None)
 
    An :class:`HTTPConnection` instance represents one transaction with an HTTP
@@ -51,13 +51,13 @@ The module provides the following classes:
    .. versionchanged:: 3.2
       *source_address* was added.
 
-   .. deprecated-removed:: 3.2 3.4
-      The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
-      are not supported anymore.
+   .. versionchanged:: 3.4
+      The  *strict* parameter is removed. HTTP 0.9-style "Simple Responses" are
+      not supported.
 
 
 .. class:: HTTPSConnection(host, port=None, key_file=None, \
-                           cert_file=None[, strict][, timeout], \
+                           cert_file=None[, timeout], \
                            source_address=None, *, context=None, \
                            check_hostname=None)
 
@@ -89,19 +89,19 @@ The module provides the following classes:
       This class now supports HTTPS virtual hosts if possible (that is,
       if :data:`ssl.HAS_SNI` is true).
 
-   .. deprecated-removed:: 3.2 3.4
-      The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
-      are not supported anymore.
+   .. versionchanged:: 3.4
+      The *strict* parameter is removed. HTTP 0.9-style "Simple Responses" are
+      not supported anymore.
 
 
-.. class:: HTTPResponse(sock, debuglevel=0[, strict], method=None, url=None)
+.. class:: HTTPResponse(sock, debuglevel=0, method=None, url=None)
 
    Class whose instances are returned upon successful connection.  Not
    instantiated directly by user.
 
-   .. deprecated-removed:: 3.2 3.4
-      The *strict* parameter is deprecated.  HTTP 0.9-style "Simple Responses"
-      are not supported anymore.
+   .. versionchanged:: 3.4
+      The *strict* parameter is removed. HTTP 0.9 style "Simple Responses" are
+      not supported anymore.
 
 
 The following exceptions are raised as appropriate:
