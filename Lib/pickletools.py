@@ -11,6 +11,7 @@ dis(pickle, out=None, memo=None, indentlevel=4)
 '''
 
 import codecs
+import io
 import pickle
 import re
 import sys
@@ -34,119 +35,118 @@ bytes_types = pickle.bytes_types
 #   by a later GET.
 
 
-"""
-"A pickle" is a program for a virtual pickle machine (PM, but more accurately
-called an unpickling machine).  It's a sequence of opcodes, interpreted by the
-PM, building an arbitrarily complex Python object.
+# "A pickle" is a program for a virtual pickle machine (PM, but more accurately
+# called an unpickling machine).  It's a sequence of opcodes, interpreted by the
+# PM, building an arbitrarily complex Python object.
+#
+# For the most part, the PM is very simple:  there are no looping, testing, or
+# conditional instructions, no arithmetic and no function calls.  Opcodes are
+# executed once each, from first to last, until a STOP opcode is reached.
+#
+# The PM has two data areas, "the stack" and "the memo".
+#
+# Many opcodes push Python objects onto the stack; e.g., INT pushes a Python
+# integer object on the stack, whose value is gotten from a decimal string
+# literal immediately following the INT opcode in the pickle bytestream.  Other
+# opcodes take Python objects off the stack.  The result of unpickling is
+# whatever object is left on the stack when the final STOP opcode is executed.
+#
+# The memo is simply an array of objects, or it can be implemented as a dict
+# mapping little integers to objects.  The memo serves as the PM's "long term
+# memory", and the little integers indexing the memo are akin to variable
+# names.  Some opcodes pop a stack object into the memo at a given index,
+# and others push a memo object at a given index onto the stack again.
+#
+# At heart, that's all the PM has.  Subtleties arise for these reasons:
+#
+# + Object identity.  Objects can be arbitrarily complex, and subobjects
+#   may be shared (for example, the list [a, a] refers to the same object a
+#   twice).  It can be vital that unpickling recreate an isomorphic object
+#   graph, faithfully reproducing sharing.
+#
+# + Recursive objects.  For example, after "L = []; L.append(L)", L is a
+#   list, and L[0] is the same list.  This is related to the object identity
+#   point, and some sequences of pickle opcodes are subtle in order to
+#   get the right result in all cases.
+#
+# + Things pickle doesn't know everything about.  Examples of things pickle
+#   does know everything about are Python's builtin scalar and container
+#   types, like ints and tuples.  They generally have opcodes dedicated to
+#   them.  For things like module references and instances of user-defined
+#   classes, pickle's knowledge is limited.  Historically, many enhancements
+#   have been made to the pickle protocol in order to do a better (faster,
+#   and/or more compact) job on those.
+#
+# + Backward compatibility and micro-optimization.  As explained below,
+#   pickle opcodes never go away, not even when better ways to do a thing
+#   get invented.  The repertoire of the PM just keeps growing over time.
+#   For example, protocol 0 had two opcodes for building Python integers (INT
+#   and LONG), protocol 1 added three more for more-efficient pickling of short
+#   integers, and protocol 2 added two more for more-efficient pickling of
+#   long integers (before protocol 2, the only ways to pickle a Python long
+#   took time quadratic in the number of digits, for both pickling and
+#   unpickling).  "Opcode bloat" isn't so much a subtlety as a source of
+#   wearying complication.
+#
+#
+# Pickle protocols:
+#
+# For compatibility, the meaning of a pickle opcode never changes.  Instead new
+# pickle opcodes get added, and each version's unpickler can handle all the
+# pickle opcodes in all protocol versions to date.  So old pickles continue to
+# be readable forever.  The pickler can generally be told to restrict itself to
+# the subset of opcodes available under previous protocol versions too, so that
+# users can create pickles under the current version readable by older
+# versions.  However, a pickle does not contain its version number embedded
+# within it.  If an older unpickler tries to read a pickle using a later
+# protocol, the result is most likely an exception due to seeing an unknown (in
+# the older unpickler) opcode.
+#
+# The original pickle used what's now called "protocol 0", and what was called
+# "text mode" before Python 2.3.  The entire pickle bytestream is made up of
+# printable 7-bit ASCII characters, plus the newline character, in protocol 0.
+# That's why it was called text mode.  Protocol 0 is small and elegant, but
+# sometimes painfully inefficient.
+#
+# The second major set of additions is now called "protocol 1", and was called
+# "binary mode" before Python 2.3.  This added many opcodes with arguments
+# consisting of arbitrary bytes, including NUL bytes and unprintable "high bit"
+# bytes.  Binary mode pickles can be substantially smaller than equivalent
+# text mode pickles, and sometimes faster too; e.g., BININT represents a 4-byte
+# int as 4 bytes following the opcode, which is cheaper to unpickle than the
+# (perhaps) 11-character decimal string attached to INT.  Protocol 1 also added
+# a number of opcodes that operate on many stack elements at once (like APPENDS
+# and SETITEMS), and "shortcut" opcodes (like EMPTY_DICT and EMPTY_TUPLE).
+#
+# The third major set of additions came in Python 2.3, and is called "protocol
+# 2".  This added:
+#
+# - A better way to pickle instances of new-style classes (NEWOBJ).
+#
+# - A way for a pickle to identify its protocol (PROTO).
+#
+# - Time- and space- efficient pickling of long ints (LONG{1,4}).
+#
+# - Shortcuts for small tuples (TUPLE{1,2,3}}.
+#
+# - Dedicated opcodes for bools (NEWTRUE, NEWFALSE).
+#
+# - The "extension registry", a vector of popular objects that can be pushed
+#   efficiently by index (EXT{1,2,4}).  This is akin to the memo and GET, but
+#   the registry contents are predefined (there's nothing akin to the memo's
+#   PUT).
+#
+# Another independent change with Python 2.3 is the abandonment of any
+# pretense that it might be safe to load pickles received from untrusted
+# parties -- no sufficient security analysis has been done to guarantee
+# this and there isn't a use case that warrants the expense of such an
+# analysis.
+#
+# To this end, all tests for __safe_for_unpickling__ or for
+# copyreg.safe_constructors are removed from the unpickling code.
+# References to these variables in the descriptions below are to be seen
+# as describing unpickling in Python 2.2 and before.
 
-For the most part, the PM is very simple:  there are no looping, testing, or
-conditional instructions, no arithmetic and no function calls.  Opcodes are
-executed once each, from first to last, until a STOP opcode is reached.
-
-The PM has two data areas, "the stack" and "the memo".
-
-Many opcodes push Python objects onto the stack; e.g., INT pushes a Python
-integer object on the stack, whose value is gotten from a decimal string
-literal immediately following the INT opcode in the pickle bytestream.  Other
-opcodes take Python objects off the stack.  The result of unpickling is
-whatever object is left on the stack when the final STOP opcode is executed.
-
-The memo is simply an array of objects, or it can be implemented as a dict
-mapping little integers to objects.  The memo serves as the PM's "long term
-memory", and the little integers indexing the memo are akin to variable
-names.  Some opcodes pop a stack object into the memo at a given index,
-and others push a memo object at a given index onto the stack again.
-
-At heart, that's all the PM has.  Subtleties arise for these reasons:
-
-+ Object identity.  Objects can be arbitrarily complex, and subobjects
-  may be shared (for example, the list [a, a] refers to the same object a
-  twice).  It can be vital that unpickling recreate an isomorphic object
-  graph, faithfully reproducing sharing.
-
-+ Recursive objects.  For example, after "L = []; L.append(L)", L is a
-  list, and L[0] is the same list.  This is related to the object identity
-  point, and some sequences of pickle opcodes are subtle in order to
-  get the right result in all cases.
-
-+ Things pickle doesn't know everything about.  Examples of things pickle
-  does know everything about are Python's builtin scalar and container
-  types, like ints and tuples.  They generally have opcodes dedicated to
-  them.  For things like module references and instances of user-defined
-  classes, pickle's knowledge is limited.  Historically, many enhancements
-  have been made to the pickle protocol in order to do a better (faster,
-  and/or more compact) job on those.
-
-+ Backward compatibility and micro-optimization.  As explained below,
-  pickle opcodes never go away, not even when better ways to do a thing
-  get invented.  The repertoire of the PM just keeps growing over time.
-  For example, protocol 0 had two opcodes for building Python integers (INT
-  and LONG), protocol 1 added three more for more-efficient pickling of short
-  integers, and protocol 2 added two more for more-efficient pickling of
-  long integers (before protocol 2, the only ways to pickle a Python long
-  took time quadratic in the number of digits, for both pickling and
-  unpickling).  "Opcode bloat" isn't so much a subtlety as a source of
-  wearying complication.
-
-
-Pickle protocols:
-
-For compatibility, the meaning of a pickle opcode never changes.  Instead new
-pickle opcodes get added, and each version's unpickler can handle all the
-pickle opcodes in all protocol versions to date.  So old pickles continue to
-be readable forever.  The pickler can generally be told to restrict itself to
-the subset of opcodes available under previous protocol versions too, so that
-users can create pickles under the current version readable by older
-versions.  However, a pickle does not contain its version number embedded
-within it.  If an older unpickler tries to read a pickle using a later
-protocol, the result is most likely an exception due to seeing an unknown (in
-the older unpickler) opcode.
-
-The original pickle used what's now called "protocol 0", and what was called
-"text mode" before Python 2.3.  The entire pickle bytestream is made up of
-printable 7-bit ASCII characters, plus the newline character, in protocol 0.
-That's why it was called text mode.  Protocol 0 is small and elegant, but
-sometimes painfully inefficient.
-
-The second major set of additions is now called "protocol 1", and was called
-"binary mode" before Python 2.3.  This added many opcodes with arguments
-consisting of arbitrary bytes, including NUL bytes and unprintable "high bit"
-bytes.  Binary mode pickles can be substantially smaller than equivalent
-text mode pickles, and sometimes faster too; e.g., BININT represents a 4-byte
-int as 4 bytes following the opcode, which is cheaper to unpickle than the
-(perhaps) 11-character decimal string attached to INT.  Protocol 1 also added
-a number of opcodes that operate on many stack elements at once (like APPENDS
-and SETITEMS), and "shortcut" opcodes (like EMPTY_DICT and EMPTY_TUPLE).
-
-The third major set of additions came in Python 2.3, and is called "protocol
-2".  This added:
-
-- A better way to pickle instances of new-style classes (NEWOBJ).
-
-- A way for a pickle to identify its protocol (PROTO).
-
-- Time- and space- efficient pickling of long ints (LONG{1,4}).
-
-- Shortcuts for small tuples (TUPLE{1,2,3}}.
-
-- Dedicated opcodes for bools (NEWTRUE, NEWFALSE).
-
-- The "extension registry", a vector of popular objects that can be pushed
-  efficiently by index (EXT{1,2,4}).  This is akin to the memo and GET, but
-  the registry contents are predefined (there's nothing akin to the memo's
-  PUT).
-
-Another independent change with Python 2.3 is the abandonment of any
-pretense that it might be safe to load pickles received from untrusted
-parties -- no sufficient security analysis has been done to guarantee
-this and there isn't a use case that warrants the expense of such an
-analysis.
-
-To this end, all tests for __safe_for_unpickling__ or for
-copyreg.safe_constructors are removed from the unpickling code.
-References to these variables in the descriptions below are to be seen
-as describing unpickling in Python 2.2 and before.
-"""
 
 # Meta-rule:  Descriptions are stored in instances of descriptor objects,
 # with plain constructors.  No meta-language is defined from which
@@ -169,6 +169,7 @@ UP_TO_NEWLINE = -1
 TAKEN_FROM_ARGUMENT1  = -2   # num bytes is 1-byte unsigned int
 TAKEN_FROM_ARGUMENT4  = -3   # num bytes is 4-byte signed little-endian int
 TAKEN_FROM_ARGUMENT4U = -4   # num bytes is 4-byte unsigned little-endian int
+TAKEN_FROM_ARGUMENT8U = -5   # num bytes is 8-byte unsigned little-endian int
 
 class ArgumentDescriptor(object):
     __slots__ = (
@@ -176,7 +177,7 @@ class ArgumentDescriptor(object):
         'name',
 
         # length of argument, in bytes; an int; UP_TO_NEWLINE and
-        # TAKEN_FROM_ARGUMENT{1,4} are negative values for variable-length
+        # TAKEN_FROM_ARGUMENT{1,4,8} are negative values for variable-length
         # cases
         'n',
 
@@ -197,7 +198,8 @@ class ArgumentDescriptor(object):
                                        n in (UP_TO_NEWLINE,
                                              TAKEN_FROM_ARGUMENT1,
                                              TAKEN_FROM_ARGUMENT4,
-                                             TAKEN_FROM_ARGUMENT4U))
+                                             TAKEN_FROM_ARGUMENT4U,
+                                             TAKEN_FROM_ARGUMENT8U))
         self.n = n
 
         self.reader = reader
@@ -287,6 +289,27 @@ uint4 = ArgumentDescriptor(
             n=4,
             reader=read_uint4,
             doc="Four-byte unsigned integer, little-endian.")
+
+
+def read_uint8(f):
+    r"""
+    >>> import io
+    >>> read_uint8(io.BytesIO(b'\xff\x00\x00\x00\x00\x00\x00\x00'))
+    255
+    >>> read_uint8(io.BytesIO(b'\xff' * 8)) == 2**64-1
+    True
+    """
+
+    data = f.read(8)
+    if len(data) == 8:
+        return _unpack("<Q", data)[0]
+    raise ValueError("not enough data in stream to read uint8")
+
+uint8 = ArgumentDescriptor(
+            name='uint8',
+            n=8,
+            reader=read_uint8,
+            doc="Eight-byte unsigned integer, little-endian.")
 
 
 def read_stringnl(f, decode=True, stripquotes=True):
@@ -382,6 +405,36 @@ stringnl_noescape_pair = ArgumentDescriptor(
                              a single blank separating the two strings.
                              """)
 
+
+def read_string1(f):
+    r"""
+    >>> import io
+    >>> read_string1(io.BytesIO(b"\x00"))
+    ''
+    >>> read_string1(io.BytesIO(b"\x03abcdef"))
+    'abc'
+    """
+
+    n = read_uint1(f)
+    assert n >= 0
+    data = f.read(n)
+    if len(data) == n:
+        return data.decode("latin-1")
+    raise ValueError("expected %d bytes in a string1, but only %d remain" %
+                     (n, len(data)))
+
+string1 = ArgumentDescriptor(
+              name="string1",
+              n=TAKEN_FROM_ARGUMENT1,
+              reader=read_string1,
+              doc="""A counted string.
+
+              The first argument is a 1-byte unsigned int giving the number
+              of bytes in the string, and the second argument is that many
+              bytes.
+              """)
+
+
 def read_string4(f):
     r"""
     >>> import io
@@ -416,28 +469,28 @@ string4 = ArgumentDescriptor(
               """)
 
 
-def read_string1(f):
+def read_bytes1(f):
     r"""
     >>> import io
-    >>> read_string1(io.BytesIO(b"\x00"))
-    ''
-    >>> read_string1(io.BytesIO(b"\x03abcdef"))
-    'abc'
+    >>> read_bytes1(io.BytesIO(b"\x00"))
+    b''
+    >>> read_bytes1(io.BytesIO(b"\x03abcdef"))
+    b'abc'
     """
 
     n = read_uint1(f)
     assert n >= 0
     data = f.read(n)
     if len(data) == n:
-        return data.decode("latin-1")
-    raise ValueError("expected %d bytes in a string1, but only %d remain" %
+        return data
+    raise ValueError("expected %d bytes in a bytes1, but only %d remain" %
                      (n, len(data)))
 
-string1 = ArgumentDescriptor(
-              name="string1",
+bytes1 = ArgumentDescriptor(
+              name="bytes1",
               n=TAKEN_FROM_ARGUMENT1,
-              reader=read_string1,
-              doc="""A counted string.
+              reader=read_bytes1,
+              doc="""A counted bytes string.
 
               The first argument is a 1-byte unsigned int giving the number
               of bytes in the string, and the second argument is that many
@@ -487,6 +540,7 @@ def read_bytes4(f):
     """
 
     n = read_uint4(f)
+    assert n >= 0
     if n > sys.maxsize:
         raise ValueError("bytes4 byte count > sys.maxsize: %d" % n)
     data = f.read(n)
@@ -505,6 +559,40 @@ bytes4 = ArgumentDescriptor(
               the number of bytes, and the second argument is that many bytes.
               """)
 
+
+def read_bytes8(f):
+    r"""
+    >>> import io, struct, sys
+    >>> read_bytes8(io.BytesIO(b"\x00\x00\x00\x00\x00\x00\x00\x00abc"))
+    b''
+    >>> read_bytes8(io.BytesIO(b"\x03\x00\x00\x00\x00\x00\x00\x00abcdef"))
+    b'abc'
+    >>> bigsize8 = struct.pack("<Q", sys.maxsize//3)
+    >>> read_bytes8(io.BytesIO(bigsize8 + b"abcdef"))  #doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    ...
+    ValueError: expected ... bytes in a bytes8, but only 6 remain
+    """
+
+    n = read_uint8(f)
+    assert n >= 0
+    if n > sys.maxsize:
+        raise ValueError("bytes8 byte count > sys.maxsize: %d" % n)
+    data = f.read(n)
+    if len(data) == n:
+        return data
+    raise ValueError("expected %d bytes in a bytes8, but only %d remain" %
+                     (n, len(data)))
+
+bytes8 = ArgumentDescriptor(
+              name="bytes8",
+              n=TAKEN_FROM_ARGUMENT8U,
+              reader=read_bytes8,
+              doc="""A counted bytes string.
+
+              The first argument is a 8-byte little-endian unsigned int giving
+              the number of bytes, and the second argument is that many bytes.
+              """)
 
 def read_unicodestringnl(f):
     r"""
@@ -531,6 +619,46 @@ unicodestringnl = ArgumentDescriptor(
                       escape sequences.
                       """)
 
+
+def read_unicodestring1(f):
+    r"""
+    >>> import io
+    >>> s = 'abcd\uabcd'
+    >>> enc = s.encode('utf-8')
+    >>> enc
+    b'abcd\xea\xaf\x8d'
+    >>> n = bytes([len(enc)])  # little-endian 1-byte length
+    >>> t = read_unicodestring1(io.BytesIO(n + enc + b'junk'))
+    >>> s == t
+    True
+
+    >>> read_unicodestring1(io.BytesIO(n + enc[:-1]))
+    Traceback (most recent call last):
+    ...
+    ValueError: expected 7 bytes in a unicodestring1, but only 6 remain
+    """
+
+    n = read_uint1(f)
+    assert n >= 0
+    data = f.read(n)
+    if len(data) == n:
+        return str(data, 'utf-8', 'surrogatepass')
+    raise ValueError("expected %d bytes in a unicodestring1, but only %d "
+                     "remain" % (n, len(data)))
+
+unicodestring1 = ArgumentDescriptor(
+                    name="unicodestring1",
+                    n=TAKEN_FROM_ARGUMENT1,
+                    reader=read_unicodestring1,
+                    doc="""A counted Unicode string.
+
+                    The first argument is a 1-byte little-endian signed int
+                    giving the number of bytes in the string, and the second
+                    argument-- the UTF-8 encoding of the Unicode string --
+                    contains that many bytes.
+                    """)
+
+
 def read_unicodestring4(f):
     r"""
     >>> import io
@@ -550,6 +678,7 @@ def read_unicodestring4(f):
     """
 
     n = read_uint4(f)
+    assert n >= 0
     if n > sys.maxsize:
         raise ValueError("unicodestring4 byte count > sys.maxsize: %d" % n)
     data = f.read(n)
@@ -565,6 +694,47 @@ unicodestring4 = ArgumentDescriptor(
                     doc="""A counted Unicode string.
 
                     The first argument is a 4-byte little-endian signed int
+                    giving the number of bytes in the string, and the second
+                    argument-- the UTF-8 encoding of the Unicode string --
+                    contains that many bytes.
+                    """)
+
+
+def read_unicodestring8(f):
+    r"""
+    >>> import io
+    >>> s = 'abcd\uabcd'
+    >>> enc = s.encode('utf-8')
+    >>> enc
+    b'abcd\xea\xaf\x8d'
+    >>> n = bytes([len(enc)]) + bytes(7)  # little-endian 8-byte length
+    >>> t = read_unicodestring8(io.BytesIO(n + enc + b'junk'))
+    >>> s == t
+    True
+
+    >>> read_unicodestring8(io.BytesIO(n + enc[:-1]))
+    Traceback (most recent call last):
+    ...
+    ValueError: expected 7 bytes in a unicodestring8, but only 6 remain
+    """
+
+    n = read_uint8(f)
+    assert n >= 0
+    if n > sys.maxsize:
+        raise ValueError("unicodestring8 byte count > sys.maxsize: %d" % n)
+    data = f.read(n)
+    if len(data) == n:
+        return str(data, 'utf-8', 'surrogatepass')
+    raise ValueError("expected %d bytes in a unicodestring8, but only %d "
+                     "remain" % (n, len(data)))
+
+unicodestring8 = ArgumentDescriptor(
+                    name="unicodestring8",
+                    n=TAKEN_FROM_ARGUMENT8U,
+                    reader=read_unicodestring8,
+                    doc="""A counted Unicode string.
+
+                    The first argument is a 8-byte little-endian signed int
                     giving the number of bytes in the string, and the second
                     argument-- the UTF-8 encoding of the Unicode string --
                     contains that many bytes.
@@ -860,6 +1030,16 @@ pydict = StackObject(
              obtype=dict,
              doc="A Python dict object.")
 
+pyset = StackObject(
+            name="set",
+            obtype=set,
+            doc="A Python set object.")
+
+pyfrozenset = StackObject(
+                  name="frozenset",
+                  obtype=set,
+                  doc="A Python frozenset object.")
+
 anyobject = StackObject(
                 name='any',
                 obtype=object,
@@ -1143,6 +1323,19 @@ opcodes = [
       literally as the string content.
       """),
 
+    I(name='BINBYTES8',
+      code='\x8e',
+      arg=bytes8,
+      stack_before=[],
+      stack_after=[pybytes],
+      proto=4,
+      doc="""Push a Python bytes object.
+
+      There are two arguments:  the first is a 8-byte unsigned int giving
+      the number of bytes in the string, and the second is that many bytes,
+      which are taken literally as the string content.
+      """),
+
     # Ways to spell None.
 
     I(name='NONE',
@@ -1191,6 +1384,19 @@ opcodes = [
       until the next newline character.
       """),
 
+    I(name='SHORT_BINUNICODE',
+      code='\x8c',
+      arg=unicodestring1,
+      stack_before=[],
+      stack_after=[pyunicode],
+      proto=4,
+      doc="""Push a Python Unicode string object.
+
+      There are two arguments:  the first is a 1-byte little-endian signed int
+      giving the number of bytes in the string.  The second is that many
+      bytes, and is the UTF-8 encoding of the Unicode string.
+      """),
+
     I(name='BINUNICODE',
       code='X',
       arg=unicodestring4,
@@ -1200,6 +1406,19 @@ opcodes = [
       doc="""Push a Python Unicode string object.
 
       There are two arguments:  the first is a 4-byte little-endian unsigned int
+      giving the number of bytes in the string.  The second is that many
+      bytes, and is the UTF-8 encoding of the Unicode string.
+      """),
+
+    I(name='BINUNICODE8',
+      code='\x8d',
+      arg=unicodestring8,
+      stack_before=[],
+      stack_after=[pyunicode],
+      proto=4,
+      doc="""Push a Python Unicode string object.
+
+      There are two arguments:  the first is a 8-byte little-endian signed int
       giving the number of bytes in the string.  The second is that many
       bytes, and is the UTF-8 encoding of the Unicode string.
       """),
@@ -1429,6 +1648,54 @@ opcodes = [
       1, 2, ..., n, and in that order.
       """),
 
+    # Ways to build sets
+
+    I(name='EMPTY_SET',
+      code='\x8f',
+      arg=None,
+      stack_before=[],
+      stack_after=[pyset],
+      proto=4,
+      doc="Push an empty set."),
+
+    I(name='ADDITEMS',
+      code='\x90',
+      arg=None,
+      stack_before=[pyset, markobject, stackslice],
+      stack_after=[pyset],
+      proto=4,
+      doc="""Add an arbitrary number of items to an existing set.
+
+      The slice of the stack following the topmost markobject is taken as
+      a sequence of items, added to the set immediately under the topmost
+      markobject.  Everything at and after the topmost markobject is popped,
+      leaving the mutated set at the top of the stack.
+
+      Stack before:  ... pyset markobject item_1 ... item_n
+      Stack after:   ... pyset
+
+      where pyset has been modified via pyset.add(item_i) = item_i for i in
+      1, 2, ..., n, and in that order.
+      """),
+
+    # Way to build frozensets
+
+    I(name='FROZENSET',
+      code='\x91',
+      arg=None,
+      stack_before=[markobject, stackslice],
+      stack_after=[pyfrozenset],
+      proto=4,
+      doc="""Build a frozenset out of the topmost slice, after markobject.
+
+      All the stack entries following the topmost markobject are placed into
+      a single Python frozenset, which single frozenset object replaces all
+      of the stack from the topmost markobject onward.  For example,
+
+      Stack before: ... markobject 1 2 3
+      Stack after:  ... frozenset({1, 2, 3})
+      """),
+
     # Stack manipulation.
 
     I(name='POP',
@@ -1550,6 +1817,18 @@ opcodes = [
       unsigned little-endian integer following.
       """),
 
+    I(name='MEMOIZE',
+      code='\x94',
+      arg=None,
+      stack_before=[anyobject],
+      stack_after=[anyobject],
+      proto=4,
+      doc="""Store the stack top into the memo.  The stack is not popped.
+
+      The index of the memo location to write is the number of
+      elements currently present in the memo.
+      """),
+
     # Access the extension registry (predefined objects).  Akin to the GET
     # family.
 
@@ -1613,6 +1892,15 @@ opcodes = [
       object module.class is pushed on the stack.  More accurately, the
       object returned by self.find_class(module, class) is pushed on the
       stack, so unpickling subclasses can override this form of lookup.
+      """),
+
+    I(name='STACK_GLOBAL',
+      code='\x93',
+      arg=None,
+      stack_before=[pyunicode, pyunicode],
+      stack_after=[anyobject],
+      proto=0,
+      doc="""Push a global object (module.attr) on the stack.
       """),
 
     # Ways to build objects of classes pickle doesn't know about directly
@@ -1771,6 +2059,21 @@ opcodes = [
       onto the stack.
       """),
 
+    I(name='NEWOBJ_EX',
+      code='\x92',
+      arg=None,
+      stack_before=[anyobject, anyobject, anyobject],
+      stack_after=[anyobject],
+      proto=4,
+      doc="""Build an object instance.
+
+      The stack before should be thought of as containing a class
+      object followed by an argument tuple and by a keyword argument dict
+      (the dict being the stack top).  Call these cls and args.  They are
+      popped off the stack, and the value returned by
+      cls.__new__(cls, *args, *kwargs) is  pushed back  onto the stack.
+      """),
+
     # Machine control.
 
     I(name='PROTO',
@@ -1796,6 +2099,20 @@ opcodes = [
       Every pickle ends with this opcode.  The object at the top of the stack
       is popped, and that's the result of unpickling.  The stack should be
       empty then.
+      """),
+
+    # Framing support.
+
+    I(name='FRAME',
+      code='\x95',
+      arg=uint8,
+      stack_before=[],
+      stack_after=[],
+      proto=4,
+      doc="""Indicate the beginning of a new frame.
+
+      The unpickler may use this opcode to safely prefetch data from its
+      underlying stream.
       """),
 
     # Ways to deal with persistent IDs.
@@ -1904,6 +2221,38 @@ del assure_pickle_consistency
 ##############################################################################
 # A pickle opcode generator.
 
+def _genops(data, yield_end_pos=False):
+    if isinstance(data, bytes_types):
+        data = io.BytesIO(data)
+
+    if hasattr(data, "tell"):
+        getpos = data.tell
+    else:
+        getpos = lambda: None
+
+    while True:
+        pos = getpos()
+        code = data.read(1)
+        opcode = code2op.get(code.decode("latin-1"))
+        if opcode is None:
+            if code == b"":
+                raise ValueError("pickle exhausted before seeing STOP")
+            else:
+                raise ValueError("at position %s, opcode %r unknown" % (
+                                 "<unknown>" if pos is None else pos,
+                                 code))
+        if opcode.arg is None:
+            arg = None
+        else:
+            arg = opcode.arg.reader(data)
+        if yield_end_pos:
+            yield opcode, arg, pos, getpos()
+        else:
+            yield opcode, arg, pos
+        if code == b'.':
+            assert opcode.name == 'STOP'
+            break
+
 def genops(pickle):
     """Generate all the opcodes in a pickle.
 
@@ -1927,62 +2276,47 @@ def genops(pickle):
     used.  Else (the pickle doesn't have a tell(), and it's not obvious how
     to query its current position) pos is None.
     """
-
-    if isinstance(pickle, bytes_types):
-        import io
-        pickle = io.BytesIO(pickle)
-
-    if hasattr(pickle, "tell"):
-        getpos = pickle.tell
-    else:
-        getpos = lambda: None
-
-    while True:
-        pos = getpos()
-        code = pickle.read(1)
-        opcode = code2op.get(code.decode("latin-1"))
-        if opcode is None:
-            if code == b"":
-                raise ValueError("pickle exhausted before seeing STOP")
-            else:
-                raise ValueError("at position %s, opcode %r unknown" % (
-                                 pos is None and "<unknown>" or pos,
-                                 code))
-        if opcode.arg is None:
-            arg = None
-        else:
-            arg = opcode.arg.reader(pickle)
-        yield opcode, arg, pos
-        if code == b'.':
-            assert opcode.name == 'STOP'
-            break
+    return _genops(pickle)
 
 ##############################################################################
 # A pickle optimizer.
 
 def optimize(p):
     'Optimize a pickle string by removing unused PUT opcodes'
-    gets = set()            # set of args used by a GET opcode
-    puts = []               # (arg, startpos, stoppos) for the PUT opcodes
-    prevpos = None          # set to pos if previous opcode was a PUT
-    for opcode, arg, pos in genops(p):
-        if prevpos is not None:
-            puts.append((prevarg, prevpos, pos))
-            prevpos = None
+    not_a_put = object()
+    gets = { not_a_put }    # set of args used by a GET opcode
+    opcodes = []            # (startpos, stoppos, putid)
+    proto = 0
+    for opcode, arg, pos, end_pos in _genops(p, yield_end_pos=True):
         if 'PUT' in opcode.name:
-            prevarg, prevpos = arg, pos
-        elif 'GET' in opcode.name:
-            gets.add(arg)
+            opcodes.append((pos, end_pos, arg))
+        elif 'FRAME' in opcode.name:
+            pass
+        else:
+            if 'GET' in opcode.name:
+                gets.add(arg)
+            elif opcode.name == 'PROTO':
+                assert pos == 0, pos
+                proto = arg
+            opcodes.append((pos, end_pos, not_a_put))
+            prevpos, prevarg = pos, None
 
-    # Copy the pickle string except for PUTS without a corresponding GET
-    s = []
-    i = 0
-    for arg, start, stop in puts:
-        j = stop if (arg in gets) else start
-        s.append(p[i:j])
-        i = stop
-    s.append(p[i:])
-    return b''.join(s)
+    # Copy the opcodes except for PUTS without a corresponding GET
+    out = io.BytesIO()
+    opcodes = iter(opcodes)
+    if proto >= 2:
+        # Write the PROTO header before any framing
+        start, stop, _ = next(opcodes)
+        out.write(p[start:stop])
+    buf = pickle._Framer(out.write)
+    if proto >= 4:
+        buf.start_framing()
+    for start, stop, putid in opcodes:
+        if putid in gets:
+            buf.write(p[start:stop])
+    if proto >= 4:
+        buf.end_framing()
+    return out.getvalue()
 
 ##############################################################################
 # A symbolic pickle disassembler.
@@ -2082,17 +2416,20 @@ def dis(pickle, out=None, memo=None, indentlevel=4, annotate=0):
                 errormsg = markmsg = "no MARK exists on stack"
 
         # Check for correct memo usage.
-        if opcode.name in ("PUT", "BINPUT", "LONG_BINPUT"):
-            assert arg is not None
-            if arg in memo:
+        if opcode.name in ("PUT", "BINPUT", "LONG_BINPUT", "MEMOIZE"):
+            if opcode.name == "MEMOIZE":
+                memo_idx = len(memo)
+            else:
+                assert arg is not None
+                memo_idx = arg
+            if memo_idx in memo:
                 errormsg = "memo key %r already defined" % arg
             elif not stack:
                 errormsg = "stack is empty -- can't store into memo"
             elif stack[-1] is markobject:
                 errormsg = "can't store markobject in the memo"
             else:
-                memo[arg] = stack[-1]
-
+                memo[memo_idx] = stack[-1]
         elif opcode.name in ("GET", "BINGET", "LONG_BINGET"):
             if arg in memo:
                 assert len(after) == 1
