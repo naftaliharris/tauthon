@@ -288,9 +288,7 @@ if _have_ssl:
         """
         # Generate a default SSL context if none was passed.
         if context is None:
-            context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            # SSLv2 considered harmful.
-            context.options |= ssl.OP_NO_SSLv2
+            context = ssl._create_stdlib_context()
         return context.wrap_socket(sock)
 
 
@@ -366,7 +364,7 @@ class _NNTPBase:
         if is_connected():
             try:
                 self.quit()
-            except (socket.error, EOFError):
+            except (OSError, EOFError):
                 pass
             finally:
                 if is_connected():
@@ -956,7 +954,7 @@ class _NNTPBase:
                 if auth:
                     user = auth[0]
                     password = auth[2]
-        except IOError:
+        except OSError:
             pass
         # Perform NNTP authentication if needed.
         if not user:
