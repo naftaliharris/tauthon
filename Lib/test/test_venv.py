@@ -12,9 +12,17 @@ import subprocess
 import sys
 import tempfile
 from test.support import (captured_stdout, captured_stderr, run_unittest,
-                          can_symlink)
+                          can_symlink, EnvironmentVarGuard)
 import unittest
 import venv
+try:
+    import ssl
+except ImportError:
+    ssl = None
+
+skipInVenv = unittest.skipIf(sys.prefix != sys.base_prefix,
+                             'Test not appropriate in a venv')
+
 
 class BaseTest(unittest.TestCase):
     """Base class for venv tests."""
@@ -83,8 +91,7 @@ class BasicTest(BaseTest):
             print('    %r' % os.listdir(bd))
         self.assertTrue(os.path.exists(fn), 'File %r should exist.' % fn)
 
-    @unittest.skipIf(sys.prefix != sys.base_prefix, 'Test not appropriate '
-                     'in a venv')
+    @skipInVenv
     def test_prefixes(self):
         """
         Test that the prefix values are as expected.
@@ -109,13 +116,68 @@ class BasicTest(BaseTest):
             out, err = p.communicate()
             self.assertEqual(out.strip(), expected.encode())
 
+    if sys.platform == 'win32':
+        ENV_SUBDIRS = (
+            ('Scripts',),
+            ('Include',),
+            ('Lib',),
+            ('Lib', 'site-packages'),
+        )
+    else:
+        ENV_SUBDIRS = (
+            ('bin',),
+            ('include',),
+            ('lib',),
+            ('lib', 'python%d.%d' % sys.version_info[:2]),
+            ('lib', 'python%d.%d' % sys.version_info[:2], 'site-packages'),
+        )
+
+    def create_contents(self, paths, filename):
+        """
+        Create some files in the environment which are unrelated
+        to the virtual environment.
+        """
+        for subdirs in paths:
+            d = os.path.join(self.env_dir, *subdirs)
+            os.mkdir(d)
+            fn = os.path.join(d, filename)
+            with open(fn, 'wb') as f:
+                f.write(b'Still here?')
+
     def test_overwrite_existing(self):
         """
-        Test control of overwriting an existing environment directory.
+        Test creating environment in an existing directory.
         """
-        self.assertRaises(ValueError, venv.create, self.env_dir)
+        self.create_contents(self.ENV_SUBDIRS, 'foo')
+        venv.create(self.env_dir)
+        for subdirs in self.ENV_SUBDIRS:
+            fn = os.path.join(self.env_dir, *(subdirs + ('foo',)))
+            self.assertTrue(os.path.exists(fn))
+            with open(fn, 'rb') as f:
+                self.assertEqual(f.read(), b'Still here?')
+
         builder = venv.EnvBuilder(clear=True)
         builder.create(self.env_dir)
+        for subdirs in self.ENV_SUBDIRS:
+            fn = os.path.join(self.env_dir, *(subdirs + ('foo',)))
+            self.assertFalse(os.path.exists(fn))
+
+    def clear_directory(self, path):
+        for fn in os.listdir(path):
+            fn = os.path.join(path, fn)
+            if os.path.islink(fn) or os.path.isfile(fn):
+                os.remove(fn)
+            elif os.path.isdir(fn):
+                shutil.rmtree(fn)
+
+    def test_unoverwritable_fails(self):
+        #create a file clashing with directories in the env dir
+        for paths in self.ENV_SUBDIRS[:3]:
+            fn = os.path.join(self.env_dir, *paths)
+            with open(fn, 'wb') as f:
+                f.write(b'')
+            self.assertRaises((ValueError, OSError), venv.create, self.env_dir)
+            self.clear_directory(self.env_dir)
 
     def test_upgrade(self):
         """
@@ -162,8 +224,7 @@ class BasicTest(BaseTest):
     # run the test, the pyvenv.cfg in the venv created in the test will
     # point to the venv being used to run the test, and we lose the link
     # to the source build - so Python can't initialise properly.
-    @unittest.skipIf(sys.prefix != sys.base_prefix, 'Test not appropriate '
-                     'in a venv')
+    @skipInVenv
     def test_executable(self):
         """
         Test that the sys.executable value is as expected.
@@ -192,8 +253,73 @@ class BasicTest(BaseTest):
         out, err = p.communicate()
         self.assertEqual(out.strip(), envpy.encode())
 
+
+@skipInVenv
+class EnsurePipTest(BaseTest):
+    """Test venv module installation of pip."""
+
+    def test_no_pip_by_default(self):
+        shutil.rmtree(self.env_dir)
+        self.run_with_capture(venv.create, self.env_dir)
+        envpy = os.path.join(os.path.realpath(self.env_dir), self.bindir, self.exe)
+        try_import = 'try:\n import pip\nexcept ImportError:\n print("OK")'
+        cmd = [envpy, '-c', try_import]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        self.assertEqual(err, b"")
+        self.assertEqual(out.strip(), b"OK")
+
+    def test_explicit_no_pip(self):
+        shutil.rmtree(self.env_dir)
+        self.run_with_capture(venv.create, self.env_dir, with_pip=False)
+        envpy = os.path.join(os.path.realpath(self.env_dir), self.bindir, self.exe)
+        try_import = 'try:\n import pip\nexcept ImportError:\n print("OK")'
+        cmd = [envpy, '-c', try_import]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        self.assertEqual(err, b"")
+        self.assertEqual(out.strip(), b"OK")
+
+    # Temporary skip for http://bugs.python.org/issue19744
+    @unittest.skipIf(ssl is None, 'pip needs SSL support')
+    def test_with_pip(self):
+        shutil.rmtree(self.env_dir)
+        with EnvironmentVarGuard() as envvars:
+            # pip's cross-version compatibility may trigger deprecation
+            # warnings in current versions of Python. Ensure related
+            # environment settings don't cause venv to fail.
+            envvars["PYTHONWARNINGS"] = "e"
+            # pip doesn't ignore environment variables when running in
+            # isolated mode, and we don't have an active virtualenv here
+            # See http://bugs.python.org/issue19734 for details
+            del envvars["PIP_REQUIRE_VIRTUALENV"]
+            try:
+                self.run_with_capture(venv.create, self.env_dir, with_pip=True)
+            except subprocess.CalledProcessError as exc:
+                # The output this produces can be a little hard to read, but
+                # least it has all the details
+                details = exc.output.decode(errors="replace")
+                msg = "{}\n\n**Subprocess Output**\n{}".format(exc, details)
+                self.fail(msg)
+        envpy = os.path.join(os.path.realpath(self.env_dir), self.bindir, self.exe)
+        cmd = [envpy, '-Im', 'pip', '--version']
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        out, err = p.communicate()
+        # We force everything to text, so unittest gives the detailed diff
+        # if we get unexpected results
+        err = err.decode("latin-1") # Force to text, prevent decoding errors
+        self.assertEqual(err, "")
+        out = out.decode("latin-1") # Force to text, prevent decoding errors
+        env_dir = os.fsencode(self.env_dir).decode("latin-1")
+        self.assertTrue(out.startswith("pip"))
+        self.assertIn(env_dir, out)
+
+
 def test_main():
-    run_unittest(BasicTest)
+    run_unittest(BasicTest, EnsurePipTest)
 
 if __name__ == "__main__":
     test_main()
