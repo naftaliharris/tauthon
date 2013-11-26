@@ -1526,7 +1526,7 @@ expression support in the :mod:`re` module).
    at that position.
 
 
-.. method:: str.expandtabs([tabsize])
+.. method:: str.expandtabs(tabsize=8)
 
    Return a copy of the string where all tab characters are replaced by one or
    more spaces, depending on the current column and the given tab size.  Tab
@@ -2461,6 +2461,10 @@ copying.
 
    .. versionchanged:: 3.3
       One-dimensional memoryviews with formats 'B', 'b' or 'c' are now hashable.
+
+   .. versionchanged:: 3.4
+      memoryview is now registered automatically with
+      :class:`collections.abc.Sequence`
 
    :class:`memoryview` has several methods:
 
