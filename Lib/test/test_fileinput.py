@@ -22,7 +22,7 @@ except ImportError:
 from io import StringIO
 from fileinput import FileInput, hook_encoded
 
-from test.support import verbose, TESTFN, run_unittest
+from test.support import verbose, TESTFN, run_unittest, check_warnings
 from test.support import unlink as safe_unlink
 
 
@@ -224,8 +224,10 @@ class FileInputTests(unittest.TestCase):
         try:
             # try opening in universal newline mode
             t1 = writeTmp(1, [b"A\nB\r\nC\rD"], mode="wb")
-            fi = FileInput(files=t1, mode="U")
-            lines = list(fi)
+            with check_warnings(('', DeprecationWarning)):
+                fi = FileInput(files=t1, mode="U")
+            with check_warnings(('', DeprecationWarning)):
+                lines = list(fi)
             self.assertEqual(lines, ["A\n", "B\n", "C\n", "D"])
         finally:
             remove_tempfiles(t1)
@@ -275,8 +277,8 @@ class FileInputTests(unittest.TestCase):
         try:
             t1 = writeTmp(1, [""])
             with FileInput(files=t1) as fi:
-                raise IOError
-        except IOError:
+                raise OSError
+        except OSError:
             self.assertEqual(fi._files, ())
         finally:
             remove_tempfiles(t1)
@@ -835,22 +837,6 @@ class Test_hook_encoded(unittest.TestCase):
         self.assertIs(kwargs.pop('encoding'), encoding)
         self.assertFalse(kwargs)
 
-def test_main():
-    run_unittest(
-        BufferSizesTests,
-        FileInputTests,
-        Test_fileinput_input,
-        Test_fileinput_close,
-        Test_fileinput_nextfile,
-        Test_fileinput_filename,
-        Test_fileinput_lineno,
-        Test_fileinput_filelineno,
-        Test_fileinput_fileno,
-        Test_fileinput_isfirstline,
-        Test_fileinput_isstdin,
-        Test_hook_compressed,
-        Test_hook_encoded,
-    )
 
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
