@@ -94,7 +94,7 @@ class TestKQueue(unittest.TestCase):
         client.setblocking(False)
         try:
             client.connect(('127.0.0.1', serverSocket.getsockname()[1]))
-        except socket.error as e:
+        except OSError as e:
             self.assertEqual(e.args[0], errno.EINPROGRESS)
         else:
             #raise AssertionError("Connect should have raised EINPROGRESS")
@@ -184,6 +184,33 @@ class TestKQueue(unittest.TestCase):
         a.close()
         b.close()
         kq.close()
+
+    def test_close(self):
+        open_file = open(__file__, "rb")
+        self.addCleanup(open_file.close)
+        fd = open_file.fileno()
+        kqueue = select.kqueue()
+
+        # test fileno() method and closed attribute
+        self.assertIsInstance(kqueue.fileno(), int)
+        self.assertFalse(kqueue.closed)
+
+        # test close()
+        kqueue.close()
+        self.assertTrue(kqueue.closed)
+        self.assertRaises(ValueError, kqueue.fileno)
+
+        # close() can be called more than once
+        kqueue.close()
+
+        # operations must fail with ValueError("I/O operation on closed ...")
+        self.assertRaises(ValueError, kqueue.control, None, 4)
+
+    def test_fd_non_inheritable(self):
+        kqueue = select.kqueue()
+        self.addCleanup(kqueue.close)
+        self.assertEqual(os.get_inheritable(kqueue.fileno()), False)
+
 
 def test_main():
     support.run_unittest(TestKQueue)
