@@ -1,7 +1,10 @@
-import sys
 import contextlib
-import unittest
+import importlib.abc
+import importlib.machinery
 import os
+import sys
+import types
+import unittest
 
 from test.test_importlib import util
 from test.support import run_unittest
@@ -286,9 +289,5 @@ class ModuleAndNamespacePackageInSameDir(NamespacePackageTest):
         self.assertEqual(a_test.attr, 'in module')
 
 
-def test_main():
-    run_unittest(*NamespacePackageTest.__subclasses__())
-
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
