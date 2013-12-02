@@ -306,6 +306,7 @@ class TestSupport(unittest.TestCase):
     # args_from_interpreter_flags
     # can_symlink
     # skip_unless_symlink
+    # SuppressCrashReport
 
 
 def test_main():
