@@ -14,6 +14,10 @@ struct st_zip_searchorder {
     int type;
 };
 
+#ifdef ALTSEP
+_Py_IDENTIFIER(replace);
+#endif
+
 /* zip_searchorder defines how we search for a module in the Zip
    archive: we first search for a package __init__, then for
    non-package .pyc, .pyo and .py entries. The .pyc and .pyo entries
@@ -66,9 +70,6 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
     PyObject *path, *files, *tmp;
     PyObject *filename = NULL;
     Py_ssize_t len, flen;
-#ifdef ALTSEP
-    _Py_IDENTIFIER(replace);
-#endif
 
     if (!_PyArg_NoKeywords("zipimporter()", kwds))
         return -1;
@@ -117,6 +118,8 @@ zipimporter_init(ZipImporter *self, PyObject *args, PyObject *kwds)
         if (flen == -1)
             break;
         filename = PyUnicode_Substring(path, 0, flen);
+        if (filename == NULL)
+            goto error;
     }
     if (filename == NULL) {
         PyErr_SetString(ZipImportError, "not a Zip file");
@@ -469,9 +472,12 @@ zipimporter_load_module(PyObject *obj, PyObject *args)
     if (ispackage) {
         /* add __path__ to the module *before* the code gets
            executed */
-        PyObject *pkgpath, *fullpath;
-        PyObject *subname = get_subname(fullname);
+        PyObject *pkgpath, *fullpath, *subname;
         int err;
+
+        subname = get_subname(fullname);
+        if (subname == NULL)
+            goto error;
 
         fullpath = PyUnicode_FromFormat("%U%c%U%U",
                                 self->archive, SEP,
@@ -554,9 +560,6 @@ zipimporter_get_data(PyObject *obj, PyObject *args)
 {
     ZipImporter *self = (ZipImporter *)obj;
     PyObject *path, *key;
-#ifdef ALTSEP
-    _Py_IDENTIFIER(replace);
-#endif
     PyObject *toc_entry;
     Py_ssize_t path_start, path_len, len;
 
@@ -862,6 +865,7 @@ read_directory(PyObject *archive)
     long l, count;
     Py_ssize_t i;
     char name[MAXPATHLEN + 5];
+    char dummy[8]; /* Buffer to read unused header values into */
     PyObject *nameobj = NULL;
     char *p, endof_central_dir[22];
     Py_ssize_t arc_offset;  /* Absolute offset to start of the zip-archive. */
@@ -869,7 +873,7 @@ read_directory(PyObject *archive)
     const char *charset;
     int bootstrap;
 
-    fp = _Py_fopen(archive, "rb");
+    fp = _Py_fopen_obj(archive, "rb");
     if (fp == NULL) {
         if (!PyErr_Occurred())
             PyErr_Format(ZipImportError, "can't open Zip file: %R", archive);
@@ -905,17 +909,25 @@ read_directory(PyObject *archive)
 
     /* Start of Central Directory */
     count = 0;
+    if (fseek(fp, header_offset, 0) == -1)
+        goto file_error;
     for (;;) {
         PyObject *t;
         int err;
 
-        if (fseek(fp, header_offset, 0) == -1)  /* Start of file header */
-            goto fseek_error;
+        /* Start of file header */
         l = PyMarshal_ReadLongFromFile(fp);
+        if (l == -1 && PyErr_Occurred())
+            goto error;
         if (l != 0x02014B50)
             break;              /* Bad: Central Dir File Header */
-        if (fseek(fp, header_offset + 8, 0) == -1)
-            goto fseek_error;
+
+        /* On Windows, calling fseek to skip over the fields we don't use is
+        slower than reading the data into a dummy buffer because fseek flushes
+        stdio's internal buffers. See issue #8745. */
+        if (fread(dummy, 1, 4, fp) != 4) /* Skip unused fields, avoid fseek */
+            goto file_error;
+
         flags = (unsigned short)PyMarshal_ReadShortFromFile(fp);
         compress = PyMarshal_ReadShortFromFile(fp);
         time = PyMarshal_ReadShortFromFile(fp);
@@ -924,12 +936,15 @@ read_directory(PyObject *archive)
         data_size = PyMarshal_ReadLongFromFile(fp);
         file_size = PyMarshal_ReadLongFromFile(fp);
         name_size = PyMarshal_ReadShortFromFile(fp);
-        header_size = 46 + name_size +
+        header_size = name_size +
            PyMarshal_ReadShortFromFile(fp) +
            PyMarshal_ReadShortFromFile(fp);
-        if (fseek(fp, header_offset + 42, 0) == -1)
-            goto fseek_error;
+        if (fread(dummy, 1, 8, fp) != 8) /* Skip unused fields, avoid fseek */
+            goto file_error;
         file_offset = PyMarshal_ReadLongFromFile(fp) + arc_offset;
+        if (PyErr_Occurred())
+            goto error;
+
         if (name_size > MAXPATHLEN)
             name_size = MAXPATHLEN;
 
@@ -941,7 +956,9 @@ read_directory(PyObject *archive)
             p++;
         }
         *p = 0;         /* Add terminating null byte */
-        header_offset += header_size;
+        for (; i < header_size; i++) /* Skip the rest of the header */
+            if(getc(fp) == EOF) /* Avoid fseek */
+                goto file_error;
 
         bootstrap = 0;
         if (flags & 0x0800)
@@ -988,7 +1005,7 @@ read_directory(PyObject *archive)
         PySys_FormatStderr("# zipimport: found %ld names in %R\n",
                            count, archive);
     return files;
-fseek_error:
+file_error:
     fclose(fp);
     Py_XDECREF(files);
     Py_XDECREF(nameobj);
@@ -1055,7 +1072,7 @@ get_data(PyObject *archive, PyObject *toc_entry)
         return NULL;
     }
 
-    fp = _Py_fopen(archive, "rb");
+    fp = _Py_fopen_obj(archive, "rb");
     if (!fp) {
         if (!PyErr_Occurred())
             PyErr_Format(PyExc_IOError,
@@ -1073,9 +1090,10 @@ get_data(PyObject *archive, PyObject *toc_entry)
     l = PyMarshal_ReadLongFromFile(fp);
     if (l != 0x04034B50) {
         /* Bad: Local File Header */
-        PyErr_Format(ZipImportError,
-                     "bad local file header in %U",
-                     archive);
+        if (!PyErr_Occurred())
+            PyErr_Format(ZipImportError,
+                         "bad local file header in %U",
+                         archive);
         fclose(fp);
         return NULL;
     }
@@ -1087,6 +1105,10 @@ get_data(PyObject *archive, PyObject *toc_entry)
 
     l = 30 + PyMarshal_ReadShortFromFile(fp) +
         PyMarshal_ReadShortFromFile(fp);        /* local header size */
+    if (PyErr_Occurred()) {
+        fclose(fp);
+        return NULL;
+    }
     file_offset += l;           /* Start of file data */
 
     bytes_size = compress == 0 ? data_size : data_size + 1;
@@ -1249,7 +1271,7 @@ normalize_line_endings(PyObject *source)
 }
 
 /* Given a string buffer containing Python source code, compile it
-   return and return a code object as a new reference. */
+   and return a code object as a new reference. */
 static PyObject *
 compile_source(PyObject *pathname, PyObject *source)
 {
