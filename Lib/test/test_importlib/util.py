@@ -1,9 +1,30 @@
 from contextlib import contextmanager
-import imp
 import os.path
 from test import support
 import unittest
 import sys
+import types
+
+
+def import_importlib(module_name):
+    """Import a module from importlib both w/ and w/o _frozen_importlib."""
+    fresh = ('importlib',) if '.' in module_name else ()
+    frozen = support.import_fresh_module(module_name)
+    source = support.import_fresh_module(module_name, fresh=fresh,
+                                         blocked=('_frozen_importlib',))
+    return frozen, source
+
+
+def test_both(test_class, **kwargs):
+    frozen_tests = types.new_class('Frozen_'+test_class.__name__,
+                                   (test_class, unittest.TestCase))
+    source_tests = types.new_class('Source_'+test_class.__name__,
+                                   (test_class, unittest.TestCase))
+    frozen_tests.__module__ = source_tests.__module__ = test_class.__module__
+    for attr, (frozen_value, source_value) in kwargs.items():
+        setattr(frozen_tests, attr, frozen_value)
+        setattr(source_tests, attr, source_value)
+    return frozen_tests, source_tests
 
 
 CASE_INSENSITIVE_FS = True
@@ -98,7 +119,7 @@ class mock_modules:
                 package = name.rsplit('.', 1)[0]
             else:
                 package = import_name
-            module = imp.new_module(import_name)
+            module = types.ModuleType(import_name)
             module.__loader__ = self
             module.__file__ = '<mock __file__>'
             module.__package__ = package
