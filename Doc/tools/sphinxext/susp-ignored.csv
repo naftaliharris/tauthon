@@ -18,14 +18,14 @@ faq/programming,,:reduce,"Sx=Sx,Sy=Sy:reduce(lambda x,y:x+y,map(lambda x,xc=Ru,y
 faq/windows,,:bd8afb90ebf2,"Python 3.3.0 (v3.3.0:bd8afb90ebf2, Sep 29 2012, 10:55:48) [MSC v.1600 32 bit (Intel)] on win32"
 howto/cporting,,:encode,"if (!PyArg_ParseTuple(args, ""O:encode_object"", &myobj))"
 howto/cporting,,:say,"if (!PyArg_ParseTuple(args, ""U:say_hello"", &name))"
-howto/curses,,:black,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:blue,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:cyan,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:green,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:magenta,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:red,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
-howto/curses,,:white,"7:white."
-howto/curses,,:yellow,"They are: 0:black, 1:red, 2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and"
+howto/curses,,:black,"colors when it activates color mode.  They are: 0:black, 1:red,"
+howto/curses,,:red,"colors when it activates color mode.  They are: 0:black, 1:red,"
+howto/curses,,:green,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
+howto/curses,,:yellow,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
+howto/curses,,:blue,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
+howto/curses,,:magenta,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
+howto/curses,,:cyan,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
+howto/curses,,:white,"2:green, 3:yellow, 4:blue, 5:magenta, 6:cyan, and 7:white.  The"
 howto/ipaddress,,:DB8,>>> ipaddress.ip_address('2001:DB8::1')
 howto/ipaddress,,::,>>> ipaddress.ip_address('2001:DB8::1')
 howto/ipaddress,,:db8,IPv6Address('2001:db8::1')
@@ -88,7 +88,6 @@ howto/urllib2,,:example,"for example ""joe@password:example.com"""
 library/audioop,,:ipos,"# factor = audioop.findfactor(in_test[ipos*2:ipos*2+len(out_test)],"
 library/bisect,32,:hi,all(val >= x for val in a[i:hi])
 library/bisect,42,:hi,all(val > x for val in a[i:hi])
-library/concurrent.futures,,:url,"future_to_url = {executor.submit(load_url, url, 60):url for url in URLS}"
 library/configparser,,:home,my_dir: ${Common:home_dir}/twosheds
 library/configparser,,:option,${section:option}
 library/configparser,,:path,python_dir: ${Frameworks:path}/Python/Versions/${Frameworks:Python}
@@ -142,15 +141,8 @@ library/linecache,,:sys,"sys:x:3:3:sys:/dev:/bin/sh"
 library/logging.handlers,,:port,host:port
 library/mmap,,:i2,obj[i1:i2]
 library/multiprocessing,,`,# Add more tasks using `put()`
-library/multiprocessing,,`,# A test file for the `multiprocessing` package
-library/multiprocessing,,`,# A test of `multiprocessing.Pool` class
-library/multiprocessing,,`,# `BaseManager`.
-library/multiprocessing,,`,# in the original order then consider using `Pool.map()` or
 library/multiprocessing,,`,">>> l._callmethod('__getitem__', (20,))     # equiv to `l[20]`"
 library/multiprocessing,,`,">>> l._callmethod('__getslice__', (2, 7))   # equiv to `l[2:7]`"
-library/multiprocessing,,`,# Not sure if we should synchronize access to `socket.accept()` method by
-library/multiprocessing,,`,# object.  (We import `multiprocessing.reduction` to enable this pickling.)
-library/multiprocessing,,`,# `Pool.imap()` (which will save on the amount of code needed anyway).
 library/multiprocessing,,:queue,">>> QueueManager.register('get_queue', callable=lambda:queue)"
 library/multiprocessing,,`,# register the Foo class; make `f()` and `g()` accessible via proxy
 library/multiprocessing,,`,# register the Foo class; make `g()` and `_h()` accessible via proxy
@@ -159,6 +151,10 @@ library/nntplib,,:bytes,:bytes
 library/nntplib,,:lines,:lines
 library/optparse,,:len,"del parser.rargs[:len(value)]"
 library/os.path,,:foo,c:foo
+library/pathlib,,:bar,">>> PureWindowsPath('c:/Windows', 'd:bar')"
+library/pathlib,,:bar,PureWindowsPath('d:bar')
+library/pathlib,,:Program,>>> PureWindowsPath('c:Program Files/').root
+library/pathlib,,:Program,>>> PureWindowsPath('c:Program Files/').anchor
 library/pdb,,:lineno,filename:lineno
 library/pickle,,:memory,"conn = sqlite3.connect("":memory:"")"
 library/posix,,`,"CFLAGS=""`getconf LFS_CFLAGS`"" OPT=""-g -O2 $CFLAGS"""
@@ -201,14 +197,19 @@ library/tarfile,,:xz,'r:xz'
 library/tarfile,,:xz,'w:xz'
 library/time,,:mm,
 library/time,,:ss,
+library/tracemalloc,,:limit,"for index, stat in enumerate(top_stats[:limit], 1):"
 library/turtle,,::,Example::
+library/unittest,1412,:foo,"self.assertEqual(cm.output, ['INFO:foo:first message',"
+library/unittest,1412,:first,"self.assertEqual(cm.output, ['INFO:foo:first message',"
+library/unittest,1412,:foo,'ERROR:foo.bar:second message'])
+library/unittest,1412,:second,'ERROR:foo.bar:second message'])
 library/urllib.request,,:close,Connection:close
 library/urllib.request,,:lang,"xmlns=""http://www.w3.org/1999/xhtml"" xml:lang=""en"" lang=""en"">\n\n<head>\n"
 library/urllib.request,,:password,"""joe:password@python.org"""
 library/uuid,,:uuid,urn:uuid:12345678-1234-5678-1234-567812345678
-library/venv,,:param,":param nodist: If True, Distribute is not installed into the created"
+library/venv,,:param,":param nodist: If True, setuptools and pip are not installed into the"
+library/venv,,:param,":param progress: If setuptools or pip are installed, the progress of the"
 library/venv,,:param,":param nopip: If True, pip is not installed into the created"
-library/venv,,:param,":param progress: If Distribute or pip are installed, the progress of the"
 library/venv,,:param,:param context: The information for the environment creation request
 library/xmlrpc.client,,:pass,http://user:pass@host:port/path
 library/xmlrpc.client,,:pass,user:pass
@@ -242,6 +243,7 @@ using/cmdline,,:line,action:message:category:module:line
 using/cmdline,,:line,file:line: category: message
 using/cmdline,,:message,action:message:category:module:line
 using/cmdline,,:module,action:message:category:module:line
+using/unix,,:Packaging,http://en.opensuse.org/Portal:Packaging
 whatsnew/2.0,418,:len,
 whatsnew/2.3,,::,
 whatsnew/2.3,,:config,
@@ -276,9 +278,7 @@ whatsnew/3.2,,:gz,">>> with tarfile.open(name='myarchive.tar.gz', mode='w:gz') a
 whatsnew/3.2,,:location,zope9-location = ${zope9:location}
 whatsnew/3.2,,:prefix,zope-conf = ${custom:prefix}/etc/zope.conf
 whatsnew/changelog,,:platform,:platform:
-whatsnew/changelog,,:password,: Unquote before b64encoding user:password during Basic
-whatsnew/changelog,,:close,Connection:close header.
 whatsnew/changelog,,:PythonCmd,"With Tk < 8.5 _tkinter.c:PythonCmd() raised UnicodeDecodeError, caused"
-whatsnew/changelog,,:close,: Connection:close header is sent by requests using URLOpener
 whatsnew/changelog,,::,": Fix FTP tests for IPv6, bind to ""::1"" instead of ""localhost""."
-whatsnew/changelog,,:test,: test_subprocess:test_leaking_fds_on_error no longer gives a
+whatsnew/changelog,,::,": Use ""127.0.0.1"" or ""::1"" instead of ""localhost"" as much as"
+whatsnew/changelog,,:password,user:password

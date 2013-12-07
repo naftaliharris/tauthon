@@ -49,12 +49,12 @@ class BZ2File(io.BufferedIOBase):
         which will be used to read or write the compressed data.
 
         mode can be 'r' for reading (default), 'w' for (over)writing,
-        or 'a' for appending. These can equivalently be given as 'rb',
-        'wb', and 'ab'.
+        'x' for creating exclusively, or 'a' for appending. These can
+        equivalently be given as 'rb', 'wb', 'xb', and 'ab'.
 
         buffering is ignored. Its use is deprecated.
 
-        If mode is 'w' or 'a', compresslevel can be a number between 1
+        If mode is 'w', 'x' or 'a', compresslevel can be a number between 1
         and 9 specifying the level of compression: 1 produces the least
         compression, and 9 (default) produces the most compression.
 
@@ -85,6 +85,10 @@ class BZ2File(io.BufferedIOBase):
             self._buffer_offset = 0
         elif mode in ("w", "wb"):
             mode = "wb"
+            mode_code = _MODE_WRITE
+            self._compressor = BZ2Compressor(compresslevel)
+        elif mode in ("x", "xb"):
+            mode = "xb"
             mode_code = _MODE_WRITE
             self._compressor = BZ2Compressor(compresslevel)
         elif mode in ("a", "ab"):
@@ -203,8 +207,15 @@ class BZ2File(io.BufferedIOBase):
             if self._decompressor.eof:
                 # Continue to next stream.
                 self._decompressor = BZ2Decompressor()
-
-            self._buffer = self._decompressor.decompress(rawblock)
+                try:
+                    self._buffer = self._decompressor.decompress(rawblock)
+                except OSError:
+                    # Trailing data isn't a valid bzip2 stream. We're done here.
+                    self._mode = _MODE_READ_EOF
+                    self._size = self._pos
+                    return False
+            else:
+                self._buffer = self._decompressor.decompress(rawblock)
             self._buffer_offset = 0
         return True
 
@@ -443,9 +454,9 @@ def open(filename, mode="rb", compresslevel=9,
     The filename argument can be an actual filename (a str or bytes
     object), or an existing file object to read from or write to.
 
-    The mode argument can be "r", "rb", "w", "wb", "a" or "ab" for
-    binary mode, or "rt", "wt" or "at" for text mode. The default mode
-    is "rb", and the default compresslevel is 9.
+    The mode argument can be "r", "rb", "w", "wb", "x", "xb", "a" or
+    "ab" for binary mode, or "rt", "wt", "xt" or "at" for text mode.
+    The default mode is "rb", and the default compresslevel is 9.
 
     For binary mode, this function is equivalent to the BZ2File
     constructor: BZ2File(filename, mode, compresslevel). In this case,
@@ -492,17 +503,19 @@ def decompress(data):
 
     For incremental decompression, use a BZ2Decompressor object instead.
     """
-    if len(data) == 0:
-        return b""
-
     results = []
-    while True:
+    while data:
         decomp = BZ2Decompressor()
-        results.append(decomp.decompress(data))
+        try:
+            res = decomp.decompress(data)
+        except OSError:
+            if results:
+                break  # Leftover data is not a valid bzip2 stream; ignore it.
+            else:
+                raise  # Error on the first iteration; bail out.
+        results.append(res)
         if not decomp.eof:
             raise ValueError("Compressed data ended before the "
                              "end-of-stream marker was reached")
-        if not decomp.unused_data:
-            return b"".join(results)
-        # There is unused data left over. Proceed to next stream.
         data = decomp.unused_data
+    return b"".join(results)

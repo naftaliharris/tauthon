@@ -8,6 +8,22 @@ import sys
 import dis
 import io
 import types
+import contextlib
+
+def get_tb():
+    def _error():
+        try:
+            1 / 0
+        except Exception as e:
+            tb = e.__traceback__
+        return tb
+
+    tb = _error()
+    while tb.tb_next:
+        tb = tb.tb_next
+    return tb
+
+TRACEBACK_CODE = get_tb().tb_frame.f_code
 
 class _C:
     def __init__(self, x):
@@ -173,33 +189,63 @@ dis_compound_stmt_str = """\
              25 RETURN_VALUE
 """
 
+dis_traceback = """\
+ %-4d         0 SETUP_EXCEPT            12 (to 15)
+
+ %-4d         3 LOAD_CONST               1 (1)
+              6 LOAD_CONST               2 (0)
+    -->       9 BINARY_TRUE_DIVIDE
+             10 POP_TOP
+             11 POP_BLOCK
+             12 JUMP_FORWARD            46 (to 61)
+
+ %-4d   >>   15 DUP_TOP
+             16 LOAD_GLOBAL              0 (Exception)
+             19 COMPARE_OP              10 (exception match)
+             22 POP_JUMP_IF_FALSE       60
+             25 POP_TOP
+             26 STORE_FAST               0 (e)
+             29 POP_TOP
+             30 SETUP_FINALLY           14 (to 47)
+
+ %-4d        33 LOAD_FAST                0 (e)
+             36 LOAD_ATTR                1 (__traceback__)
+             39 STORE_FAST               1 (tb)
+             42 POP_BLOCK
+             43 POP_EXCEPT
+             44 LOAD_CONST               0 (None)
+        >>   47 LOAD_CONST               0 (None)
+             50 STORE_FAST               0 (e)
+             53 DELETE_FAST              0 (e)
+             56 END_FINALLY
+             57 JUMP_FORWARD             1 (to 61)
+        >>   60 END_FINALLY
+
+ %-4d   >>   61 LOAD_FAST                1 (tb)
+             64 RETURN_VALUE
+""" % (TRACEBACK_CODE.co_firstlineno + 1,
+       TRACEBACK_CODE.co_firstlineno + 2,
+       TRACEBACK_CODE.co_firstlineno + 3,
+       TRACEBACK_CODE.co_firstlineno + 4,
+       TRACEBACK_CODE.co_firstlineno + 5)
+
 class DisTests(unittest.TestCase):
 
     def get_disassembly(self, func, lasti=-1, wrapper=True):
-        s = io.StringIO()
-        save_stdout = sys.stdout
-        sys.stdout = s
-        try:
+        # We want to test the default printing behaviour, not the file arg
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
             if wrapper:
                 dis.dis(func)
             else:
                 dis.disassemble(func, lasti)
-        finally:
-            sys.stdout = save_stdout
-        # Trim trailing blanks (if any).
-        return [line.rstrip() for line in s.getvalue().splitlines()]
+        return output.getvalue()
 
     def get_disassemble_as_string(self, func, lasti=-1):
-        return '\n'.join(self.get_disassembly(func, lasti, False))
+        return self.get_disassembly(func, lasti, False)
 
     def do_disassembly_test(self, func, expected):
-        lines = self.get_disassembly(func)
-        expected = expected.splitlines()
-        if expected != lines:
-            self.fail(
-                "events did not match expectation:\n" +
-                "\n".join(difflib.ndiff(expected,
-                                        lines)))
+        self.assertEqual(self.get_disassembly(func), expected)
 
     def test_opmap(self):
         self.assertEqual(dis.opmap["NOP"], 9)
@@ -247,7 +293,6 @@ class DisTests(unittest.TestCase):
             expected = _BIG_LINENO_FORMAT % (i + 2)
             self.do_disassembly_test(func(i), expected)
 
-    def test_big_linenos(self):
         from test import dis_module
         self.do_disassembly_test(dis_module, dis_module_expected_results)
 
@@ -273,9 +318,6 @@ class DisTests(unittest.TestCase):
             pass
         self.assertRaises(RuntimeError, dis.dis, None)
 
-    def test_dis_object(self):
-        self.assertRaises(TypeError, dis.dis, object())
-
     def test_dis_traceback(self):
         try:
             del sys.last_traceback
@@ -293,6 +335,19 @@ class DisTests(unittest.TestCase):
 
     def test_dis_object(self):
         self.assertRaises(TypeError, dis.dis, object())
+
+class DisWithFileTests(DisTests):
+
+    # Run the tests again, using the file arg instead of print
+    def get_disassembly(self, func, lasti=-1, wrapper=True):
+        output = io.StringIO()
+        if wrapper:
+            dis.dis(func, file=output)
+        else:
+            dis.disassemble(func, lasti, file=output)
+        return output.getvalue()
+
+
 
 code_info_code_info = """\
 Name:              code_info
@@ -486,26 +541,29 @@ def jumpy():
         print("OK, now we're done")
 
 # End fodder for opinfo generation tests
-expected_outer_offset = 1 - outer.__code__.co_firstlineno
-expected_jumpy_offset = 1 - jumpy.__code__.co_firstlineno
+expected_outer_line = 1
+_line_offset = outer.__code__.co_firstlineno - 1
 code_object_f = outer.__code__.co_consts[3]
+expected_f_line = code_object_f.co_firstlineno - _line_offset
 code_object_inner = code_object_f.co_consts[3]
+expected_inner_line = code_object_inner.co_firstlineno - _line_offset
+expected_jumpy_line = 1
 
 # The following lines are useful to regenerate the expected results after
 # either the fodder is modified or the bytecode generation changes
 # After regeneration, update the references to code_object_f and
 # code_object_inner before rerunning the tests
 
-#_instructions = dis.get_instructions(outer, line_offset=expected_outer_offset)
+#_instructions = dis.get_instructions(outer, first_line=expected_outer_line)
 #print('expected_opinfo_outer = [\n  ',
       #',\n  '.join(map(str, _instructions)), ',\n]', sep='')
-#_instructions = dis.get_instructions(outer(), line_offset=expected_outer_offset)
+#_instructions = dis.get_instructions(outer(), first_line=expected_outer_line)
 #print('expected_opinfo_f = [\n  ',
       #',\n  '.join(map(str, _instructions)), ',\n]', sep='')
-#_instructions = dis.get_instructions(outer()(), line_offset=expected_outer_offset)
+#_instructions = dis.get_instructions(outer()(), first_line=expected_outer_line)
 #print('expected_opinfo_inner = [\n  ',
       #',\n  '.join(map(str, _instructions)), ',\n]', sep='')
-#_instructions = dis.get_instructions(jumpy, line_offset=expected_jumpy_offset)
+#_instructions = dis.get_instructions(jumpy, first_line=expected_jumpy_line)
 #print('expected_opinfo_jumpy = [\n  ',
       #',\n  '.join(map(str, _instructions)), ',\n]', sep='')
 
@@ -675,42 +733,75 @@ expected_opinfo_jumpy = [
   Instruction(opname='RETURN_VALUE', opcode=83, arg=None, argval=None, argrepr='', offset=243, starts_line=None, is_jump_target=False),
 ]
 
+# One last piece of inspect fodder to check the default line number handling
+def simple(): pass
+expected_opinfo_simple = [
+  Instruction(opname='LOAD_CONST', opcode=100, arg=0, argval=None, argrepr='None', offset=0, starts_line=simple.__code__.co_firstlineno, is_jump_target=False),
+  Instruction(opname='RETURN_VALUE', opcode=83, arg=None, argval=None, argrepr='', offset=3, starts_line=None, is_jump_target=False)
+]
+
+
 class InstructionTests(BytecodeTestCase):
+
+    def test_default_first_line(self):
+        actual = dis.get_instructions(simple)
+        self.assertEqual(list(actual), expected_opinfo_simple)
+
+    def test_first_line_set_to_None(self):
+        actual = dis.get_instructions(simple, first_line=None)
+        self.assertEqual(list(actual), expected_opinfo_simple)
+
     def test_outer(self):
-        self.assertBytecodeExactlyMatches(outer, expected_opinfo_outer,
-                                          line_offset=expected_outer_offset)
+        actual = dis.get_instructions(outer, first_line=expected_outer_line)
+        self.assertEqual(list(actual), expected_opinfo_outer)
 
     def test_nested(self):
         with captured_stdout():
             f = outer()
-        self.assertBytecodeExactlyMatches(f, expected_opinfo_f,
-                                          line_offset=expected_outer_offset)
+        actual = dis.get_instructions(f, first_line=expected_f_line)
+        self.assertEqual(list(actual), expected_opinfo_f)
 
     def test_doubly_nested(self):
         with captured_stdout():
             inner = outer()()
-        self.assertBytecodeExactlyMatches(inner, expected_opinfo_inner,
-                                          line_offset=expected_outer_offset)
+        actual = dis.get_instructions(inner, first_line=expected_inner_line)
+        self.assertEqual(list(actual), expected_opinfo_inner)
 
     def test_jumpy(self):
-        self.assertBytecodeExactlyMatches(jumpy, expected_opinfo_jumpy,
-                                          line_offset=expected_jumpy_offset)
+        actual = dis.get_instructions(jumpy, first_line=expected_jumpy_line)
+        self.assertEqual(list(actual), expected_opinfo_jumpy)
 
+# get_instructions has its own tests above, so can rely on it to validate
+# the object oriented API
 class BytecodeTests(unittest.TestCase):
     def test_instantiation(self):
         # Test with function, method, code string and code object
         for obj in [_f, _C(1).__init__, "a=1", _f.__code__]:
-            b = dis.Bytecode(obj)
-            self.assertIsInstance(b.codeobj, types.CodeType)
+            with self.subTest(obj=obj):
+                b = dis.Bytecode(obj)
+                self.assertIsInstance(b.codeobj, types.CodeType)
 
         self.assertRaises(TypeError, dis.Bytecode, object())
 
     def test_iteration(self):
-        b = dis.Bytecode(_f)
-        for instr in b:
-            self.assertIsInstance(instr, dis.Instruction)
+        for obj in [_f, _C(1).__init__, "a=1", _f.__code__]:
+            with self.subTest(obj=obj):
+                via_object = list(dis.Bytecode(obj))
+                via_generator = list(dis.get_instructions(obj))
+                self.assertEqual(via_object, via_generator)
 
-        assert len(list(b)) > 0  # Iterating should yield at least 1 instruction
+    def test_explicit_first_line(self):
+        actual = dis.Bytecode(outer, first_line=expected_outer_line)
+        self.assertEqual(list(actual), expected_opinfo_outer)
+
+    def test_source_line_in_disassembly(self):
+        # Use the line in the source code
+        actual = dis.Bytecode(simple).dis()[:3]
+        expected = "{:>3}".format(simple.__code__.co_firstlineno)
+        self.assertEqual(actual, expected)
+        # Use an explicit first line number
+        actual = dis.Bytecode(simple, first_line=350).dis()[:3]
+        self.assertEqual(actual, "350")
 
     def test_info(self):
         self.maxDiff = 1000
@@ -718,16 +809,25 @@ class BytecodeTests(unittest.TestCase):
             b = dis.Bytecode(x)
             self.assertRegex(b.info(), expected)
 
-    def test_display_code(self):
-        b = dis.Bytecode(_f)
-        output = io.StringIO()
-        b.display_code(file=output)
-        result = [line.rstrip() for line in output.getvalue().splitlines()]
-        self.assertEqual(result, dis_f.splitlines())
+    def test_disassembled(self):
+        actual = dis.Bytecode(_f).dis()
+        self.assertEqual(actual, dis_f)
 
+    def test_from_traceback(self):
+        tb = get_tb()
+        b = dis.Bytecode.from_traceback(tb)
+        while tb.tb_next: tb = tb.tb_next
+
+        self.assertEqual(b.current_offset, tb.tb_lasti)
+
+    def test_from_traceback_dis(self):
+        tb = get_tb()
+        b = dis.Bytecode.from_traceback(tb)
+        self.assertEqual(b.dis(), dis_traceback)
 
 def test_main():
-    run_unittest(DisTests, CodeInfoTests, InstructionTests, BytecodeTests)
+    run_unittest(DisTests, DisWithFileTests, CodeInfoTests,
+                 InstructionTests, BytecodeTests)
 
 if __name__ == "__main__":
     test_main()

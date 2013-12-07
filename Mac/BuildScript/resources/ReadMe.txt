@@ -17,30 +17,47 @@ instead of double-clicking, control-click or right click the "Python"
 installer package icon.  Then select "Open using ... Installer" from
 the contextual menu that appears.
 
-       **** IMPORTANT changes if you use IDLE and Tkinter ****
+               **** IMPORTANT ****
 
-Installing a third-party version of Tcl/Tk is no longer required
-================================================================
+Update your version of Tcl/Tk to use IDLE or other Tk applications
+==================================================================
 
-Beginning with Python 3.4 alpha2, the 10.6+ 64-bit installer now
-comes with its own private copy of Tcl and Tk 8.5 libraries.  For
-this version of Python, it is no longer necessary to install
-a third-party version of Tcl/Tk 8.5, such as those from ActiveState,
-to work around the problematic versions of Tcl/Tk 8.5 shipped by
-Apple in OS X 10.6 and later.  (This does not change the requirements
-for older versions of Python installed from python.org.)  By default,
-this version of Python will always use its own private version,
-regardless of whether a third-party Tcl/Tk is installed.
-The 10.5+ 32-bit-only installer continues to use Tcl/Tk 8.4,
-either a third-party or system-supplied version.
-Since this is a new feature, it should be considered somewhat
-experimental and subject to change prior to the final release of
-Python 3.4.  Please report any problems found to the Python bug
-tracker at http://bugs.python.org.
-
-Visit http://www.python.org/download/mac/tcltk/
+To use IDLE or other programs that use the Tkinter graphical user
+interface toolkit, you may need to install a newer third-party version
+of the Tcl/Tk frameworks.  Visit http://www.python.org/download/mac/tcltk/
 for current information about supported and recommended versions of
 Tcl/Tk for this version of Python and of Mac OS X.
+
+              **NEW* As of Python 3.4.0b1:
+
+New Installation Options and Defaults
+=====================================
+
+The Python installer now includes an option to automatically install
+or upgrade pip, a tool for installing and managing Python packages.
+This option is enabled by default and no Internet access is required.
+If you do not want the installer to do this, select the "Customize"
+option at the "Installation Type" step and uncheck the "Install or
+ugprade pip" option.
+
+To make it easier to use scripts installed by third-party Python
+packages, with pip or by other means, the "Shell profile updater"
+option is now enabled by default, as has been the case with Python
+2.7.x installers. You can also turn this option off by selecting
+"Customize" and unchecking the "Shell profile updater" option. You
+can also update your shell profile later by launching the "Update
+Shell Profile" command found in the /Applications/Python $VERSION
+folder.  You may need to start a new terminal window for the
+changes to take effect.
+
+Python.org Python $VERSION and 2.7.x versions can both be installed and
+will not conflict. Command names for Python 3 contain a 3 in them,
+python3 (or python$VERSION), idle3 (or idle$VERSION), pip3 (or pip$VERSION), etc.
+Python 2.7 command names contain a 2 or no digit: python2 (or
+python2.7 or python), idle2 (or idle2.7 or idle), etc. If you want to
+use pip with Python 2.7.x, you will need to download and install a
+separate copy of it from the Python Package Index
+(https://pypi.python.org/pypi).
 
 Using this version of Python on OS X
 ====================================

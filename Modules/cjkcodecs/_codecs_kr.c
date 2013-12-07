@@ -38,7 +38,7 @@ ENCODER(euc_kr)
         DBCHAR code;
 
         if (c < 0x80) {
-            WRITEBYTE1((unsigned char)c)
+            WRITEBYTE1((unsigned char)c);
             NEXT(1, 1);
             continue;
         }
@@ -46,39 +46,42 @@ ENCODER(euc_kr)
         if (c > 0xFFFF)
             return 1;
 
-        REQUIRE_OUTBUF(2)
-        TRYMAP_ENC(cp949, code, c);
-        else return 1;
+        REQUIRE_OUTBUF(2);
+        if (TRYMAP_ENC(cp949, code, c))
+            ;
+        else
+            return 1;
 
         if ((code & 0x8000) == 0) {
             /* KS X 1001 coded character */
-            OUTBYTE1((code >> 8) | 0x80)
-            OUTBYTE2((code & 0xFF) | 0x80)
+            OUTBYTE1((code >> 8) | 0x80);
+            OUTBYTE2((code & 0xFF) | 0x80);
             NEXT(1, 2);
         }
-        else {          /* Mapping is found in CP949 extension,
-                 * but we encode it in KS X 1001:1998 Annex 3,
-                 * make-up sequence for EUC-KR. */
+        else {
+            /* Mapping is found in CP949 extension,
+               but we encode it in KS X 1001:1998 Annex 3,
+               make-up sequence for EUC-KR. */
 
-            REQUIRE_OUTBUF(8)
+            REQUIRE_OUTBUF(8);
 
             /* syllable composition precedence */
-            OUTBYTE1(EUCKR_JAMO_FIRSTBYTE)
-            OUTBYTE2(EUCKR_JAMO_FILLER)
+            OUTBYTE1(EUCKR_JAMO_FIRSTBYTE);
+            OUTBYTE2(EUCKR_JAMO_FILLER);
 
             /* All codepoints in CP949 extension are in unicode
              * Hangul Syllable area. */
             assert(0xac00 <= c && c <= 0xd7a3);
             c -= 0xac00;
 
-            OUTBYTE3(EUCKR_JAMO_FIRSTBYTE)
-            OUTBYTE4(u2cgk_choseong[c / 588])
+            OUTBYTE3(EUCKR_JAMO_FIRSTBYTE);
+            OUTBYTE4(u2cgk_choseong[c / 588]);
             NEXT_OUT(4);
 
-            OUTBYTE1(EUCKR_JAMO_FIRSTBYTE)
-            OUTBYTE2(u2cgk_jungseong[(c / 28) % 21])
-            OUTBYTE3(EUCKR_JAMO_FIRSTBYTE)
-            OUTBYTE4(u2cgk_jongseong[c % 28])
+            OUTBYTE1(EUCKR_JAMO_FIRSTBYTE);
+            OUTBYTE2(u2cgk_jungseong[(c / 28) % 21]);
+            OUTBYTE3(EUCKR_JAMO_FIRSTBYTE);
+            OUTBYTE4(u2cgk_jongseong[c % 28]);
             NEXT(1, 4);
         }
     }
@@ -105,6 +108,7 @@ DECODER(euc_kr)
 {
     while (inleft > 0) {
         unsigned char c = INBYTE1;
+        Py_UCS4 decoded;
 
         if (c < 0x80) {
             OUTCHAR(c);
@@ -112,14 +116,14 @@ DECODER(euc_kr)
             continue;
         }
 
-        REQUIRE_INBUF(2)
+        REQUIRE_INBUF(2);
 
         if (c == EUCKR_JAMO_FIRSTBYTE &&
             INBYTE2 == EUCKR_JAMO_FILLER) {
             /* KS X 1001:1998 Annex 3 make-up sequence */
             DBCHAR cho, jung, jong;
 
-            REQUIRE_INBUF(8)
+            REQUIRE_INBUF(8);
             if ((*inbuf)[2] != EUCKR_JAMO_FIRSTBYTE ||
                 (*inbuf)[4] != EUCKR_JAMO_FIRSTBYTE ||
                 (*inbuf)[6] != EUCKR_JAMO_FIRSTBYTE)
@@ -148,7 +152,8 @@ DECODER(euc_kr)
             OUTCHAR(0xac00 + cho*588 + jung*28 + jong);
             NEXT_IN(8);
         }
-        else TRYMAP_DEC(ksx1001, writer, c ^ 0x80, INBYTE2 ^ 0x80) {
+        else if (TRYMAP_DEC(ksx1001, decoded, c ^ 0x80, INBYTE2 ^ 0x80)) {
+            OUTCHAR(decoded);
             NEXT_IN(2);
         }
         else
@@ -171,7 +176,7 @@ ENCODER(cp949)
         DBCHAR code;
 
         if (c < 0x80) {
-            WRITEBYTE1((unsigned char)c)
+            WRITEBYTE1((unsigned char)c);
             NEXT(1, 1);
             continue;
         }
@@ -179,15 +184,17 @@ ENCODER(cp949)
         if (c > 0xFFFF)
             return 1;
 
-        REQUIRE_OUTBUF(2)
-        TRYMAP_ENC(cp949, code, c);
-        else return 1;
-
-        OUTBYTE1((code >> 8) | 0x80)
-        if (code & 0x8000)
-            OUTBYTE2(code & 0xFF) /* MSB set: CP949 */
+        REQUIRE_OUTBUF(2);
+        if (TRYMAP_ENC(cp949, code, c))
+            ;
         else
-            OUTBYTE2((code & 0xFF) | 0x80) /* MSB unset: ks x 1001 */
+            return 1;
+
+        OUTBYTE1((code >> 8) | 0x80);
+        if (code & 0x8000)
+            OUTBYTE2(code & 0xFF); /* MSB set: CP949 */
+        else
+            OUTBYTE2((code & 0xFF) | 0x80); /* MSB unset: ks x 1001 */
         NEXT(1, 2);
     }
 
@@ -198,6 +205,7 @@ DECODER(cp949)
 {
     while (inleft > 0) {
         unsigned char c = INBYTE1;
+        Py_UCS4 decoded;
 
         if (c < 0x80) {
             OUTCHAR(c);
@@ -205,10 +213,13 @@ DECODER(cp949)
             continue;
         }
 
-        REQUIRE_INBUF(2)
-        TRYMAP_DEC(ksx1001, writer, c ^ 0x80, INBYTE2 ^ 0x80);
-        else TRYMAP_DEC(cp949ext, writer, c, INBYTE2);
-        else return 1;
+        REQUIRE_INBUF(2);
+        if (TRYMAP_DEC(ksx1001, decoded, c ^ 0x80, INBYTE2 ^ 0x80))
+            OUTCHAR(decoded);
+        else if (TRYMAP_DEC(cp949ext, decoded, c, INBYTE2))
+            OUTCHAR(decoded);
+        else
+            return 1;
 
         NEXT_IN(2);
     }
@@ -255,7 +266,7 @@ ENCODER(johab)
         DBCHAR code;
 
         if (c < 0x80) {
-            WRITEBYTE1((unsigned char)c)
+            WRITEBYTE1((unsigned char)c);
             NEXT(1, 1);
             continue;
         }
@@ -263,7 +274,7 @@ ENCODER(johab)
         if (c > 0xFFFF)
             return 1;
 
-        REQUIRE_OUTBUF(2)
+        REQUIRE_OUTBUF(2);
 
         if (c >= 0xac00 && c <= 0xd7a3) {
             c -= 0xac00;
@@ -274,7 +285,7 @@ ENCODER(johab)
         }
         else if (c >= 0x3131 && c <= 0x3163)
             code = u2johabjamo[c - 0x3131];
-        else TRYMAP_ENC(cp949, code, c) {
+        else if (TRYMAP_ENC(cp949, code, c)) {
             unsigned char c1, c2, t2;
             unsigned short t1;
 
@@ -287,8 +298,8 @@ ENCODER(johab)
                 t1 = (c1 < 0x4a ? (c1 - 0x21 + 0x1b2) :
                           (c1 - 0x21 + 0x197));
                 t2 = ((t1 & 1) ? 0x5e : 0) + (c2 - 0x21);
-                OUTBYTE1(t1 >> 1)
-                OUTBYTE2(t2 < 0x4e ? t2 + 0x31 : t2 + 0x43)
+                OUTBYTE1(t1 >> 1);
+                OUTBYTE2(t2 < 0x4e ? t2 + 0x31 : t2 + 0x43);
                 NEXT(1, 2);
                 continue;
             }
@@ -298,8 +309,8 @@ ENCODER(johab)
         else
             return 1;
 
-        OUTBYTE1(code >> 8)
-        OUTBYTE2(code & 0xff)
+        OUTBYTE1(code >> 8);
+        OUTBYTE2(code & 0xff);
         NEXT(1, 2);
     }
 
@@ -350,7 +361,8 @@ static const unsigned char johabjamo_jongseong[32] = {
 DECODER(johab)
 {
     while (inleft > 0) {
-        unsigned char    c = INBYTE1, c2;
+        unsigned char c = INBYTE1, c2;
+        Py_UCS4 decoded;
 
         if (c < 0x80) {
             OUTCHAR(c);
@@ -358,7 +370,7 @@ DECODER(johab)
             continue;
         }
 
-        REQUIRE_INBUF(2)
+        REQUIRE_INBUF(2);
         c2 = INBYTE2;
 
         if (c < 0xd8) {
@@ -424,9 +436,13 @@ DECODER(johab)
                 t1 = t1 + (t2 < 0x5e ? 0 : 1) + 0x21;
                 t2 = (t2 < 0x5e ? t2 : t2 - 0x5e) + 0x21;
 
-                TRYMAP_DEC(ksx1001, writer, t1, t2);
-                else return 1;
-                NEXT_IN(2);
+                if (TRYMAP_DEC(ksx1001, decoded, t1, t2)) {
+                    OUTCHAR(decoded);
+                    NEXT_IN(2);
+                }
+                else {
+                    return 1;
+                }
             }
         }
     }

@@ -1,8 +1,11 @@
 import enum
+import inspect
+import pydoc
 import unittest
 from collections import OrderedDict
+from enum import Enum, IntEnum, EnumMeta, unique
+from io import StringIO
 from pickle import dumps, loads, PicklingError
-from enum import Enum, IntEnum, unique
 
 # for pickle tests
 try:
@@ -58,6 +61,35 @@ try:
 except Exception:
     pass
 
+
+class TestHelpers(unittest.TestCase):
+    # _is_descriptor, _is_sunder, _is_dunder
+
+    def test_is_descriptor(self):
+        class foo:
+            pass
+        for attr in ('__get__','__set__','__delete__'):
+            obj = foo()
+            self.assertFalse(enum._is_descriptor(obj))
+            setattr(obj, attr, 1)
+            self.assertTrue(enum._is_descriptor(obj))
+
+    def test_is_sunder(self):
+        for s in ('_a_', '_aa_'):
+            self.assertTrue(enum._is_sunder(s))
+
+        for s in ('a', 'a_', '_a', '__a', 'a__', '__a__', '_a__', '__a_', '_',
+                '__', '___', '____', '_____',):
+            self.assertFalse(enum._is_sunder(s))
+
+    def test_is_dunder(self):
+        for s in ('__a__', '__aa__'):
+            self.assertTrue(enum._is_dunder(s))
+        for s in ('a', 'a_', '_a', '__a', 'a__', '_a_', '_a__', '__a_', '_',
+                '__', '___', '____', '_____',):
+            self.assertFalse(enum._is_dunder(s))
+
+
 class TestEnum(unittest.TestCase):
     def setUp(self):
         class Season(Enum):
@@ -98,7 +130,7 @@ class TestEnum(unittest.TestCase):
         Season = self.Season
         self.assertEqual(
             set(dir(Season)),
-            set(['__class__', '__doc__', '__members__',
+            set(['__class__', '__doc__', '__members__', '__module__',
                 'SPRING', 'SUMMER', 'AUTUMN', 'WINTER']),
             )
 
@@ -106,8 +138,23 @@ class TestEnum(unittest.TestCase):
         Season = self.Season
         self.assertEqual(
             set(dir(Season.WINTER)),
-            set(['__class__', '__doc__', 'name', 'value']),
+            set(['__class__', '__doc__', '__module__', 'name', 'value']),
             )
+
+    def test_dir_with_added_behavior(self):
+        class Test(Enum):
+            this = 'that'
+            these = 'those'
+            def wowser(self):
+                return ("Wowser! I'm %s!" % self.name)
+        self.assertEqual(
+                set(dir(Test)),
+                set(['__class__', '__doc__', '__members__', '__module__', 'this', 'these']),
+                )
+        self.assertEqual(
+                set(dir(Test.this)),
+                set(['__class__', '__doc__', '__module__', 'name', 'value', 'wowser']),
+                )
 
     def test_enum_in_enum_out(self):
         Season = self.Season
@@ -156,6 +203,27 @@ class TestEnum(unittest.TestCase):
         Season = self.Season
         with self.assertRaises(AttributeError):
             Season.WINTER = 'really cold'
+
+    def test_attribute_deletion(self):
+        class Season(Enum):
+            SPRING = 1
+            SUMMER = 2
+            AUTUMN = 3
+            WINTER = 4
+
+            def spam(cls):
+                pass
+
+        self.assertTrue(hasattr(Season, 'spam'))
+        del Season.spam
+        self.assertFalse(hasattr(Season, 'spam'))
+
+        with self.assertRaises(AttributeError):
+            del Season.SPRING
+        with self.assertRaises(AttributeError):
+            del Season.DRY
+        with self.assertRaises(AttributeError):
+            del Season.SPRING.name
 
     def test_invalid_names(self):
         with self.assertRaises(ValueError):
@@ -227,6 +295,32 @@ class TestEnum(unittest.TestCase):
                 [k for k,v in Season.__members__.items() if v.name != k],
                 ['FALL', 'ANOTHER_SPRING'],
                 )
+
+    def test_duplicate_name(self):
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                red = 1
+                green = 2
+                blue = 3
+                red = 4
+
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                red = 1
+                green = 2
+                blue = 3
+                def red(self):
+                    return 'red'
+
+        with self.assertRaises(TypeError):
+            class Color(Enum):
+                @property
+                def red(self):
+                    return 'redder'
+                red = 1
+                green = 2
+                blue = 3
+
 
     def test_enum_with_value_name(self):
         class Huh(Enum):
@@ -477,6 +571,13 @@ class TestEnum(unittest.TestCase):
                 [Season.SUMMER, Season.WINTER, Season.AUTUMN, Season.SPRING],
                 )
 
+    def test_reversed_iteration_order(self):
+        self.assertEqual(
+                list(reversed(self.Season)),
+                [self.Season.WINTER, self.Season.AUTUMN, self.Season.SUMMER,
+                 self.Season.SPRING]
+                )
+
     def test_programatic_function_string(self):
         SummerMonth = Enum('SummerMonth', 'june july august')
         lst = list(SummerMonth)
@@ -610,17 +711,6 @@ class TestEnum(unittest.TestCase):
                 return 'no, not %s' % self.value
         self.assertIsNot(type(whatever.really), whatever)
         self.assertEqual(whatever.this.really(), 'no, not that')
-
-    def test_overwrite_enums(self):
-        class Why(Enum):
-            question = 1
-            answer = 2
-            propisition = 3
-            def question(self):
-                print(42)
-        self.assertIsNot(type(Why.question), Why)
-        self.assertNotIn(Why.question, Why._member_names_)
-        self.assertNotIn(Why.question, Why)
 
     def test_wrong_inheritance_order(self):
         with self.assertRaises(TypeError):
@@ -940,6 +1030,15 @@ class TestEnum(unittest.TestCase):
         self.assertEqual(list(Color), [Color.red, Color.green, Color.blue])
         self.assertEqual(list(map(int, Color)), [1, 2, 3])
 
+    def test_equality(self):
+        class AlwaysEqual:
+            def __eq__(self, other):
+                return True
+        class OrdinaryEnum(Enum):
+            a = 1
+        self.assertEqual(AlwaysEqual(), OrdinaryEnum.a)
+        self.assertEqual(OrdinaryEnum.a, AlwaysEqual())
+
     def test_ordered_mixin(self):
         class OrderedEnum(Enum):
             def __ge__(self, other):
@@ -968,6 +1067,8 @@ class TestEnum(unittest.TestCase):
         self.assertLessEqual(Grade.F, Grade.C)
         self.assertLess(Grade.D, Grade.A)
         self.assertGreaterEqual(Grade.B, Grade.B)
+        self.assertEqual(Grade.B, Grade.B)
+        self.assertNotEqual(Grade.C, Grade.D)
 
     def test_extending2(self):
         class Shade(Enum):
@@ -1052,8 +1153,10 @@ class TestEnum(unittest.TestCase):
             green = ()
             blue = ()
         self.assertEqual(list(ColorInAList), [ColorInAList.red, ColorInAList.green, ColorInAList.blue])
-        self.assertEqual(ColorInAList.red.value, [1])
-        self.assertEqual(ColorInAList([1]), ColorInAList.red)
+        for enum, value in zip(ColorInAList, range(3)):
+            value += 1
+            self.assertEqual(enum.value, [value])
+            self.assertIs(ColorInAList([value]), enum)
 
     def test_conflicting_types_resolved_in_new(self):
         class LabelledIntEnum(int, Enum):
@@ -1105,6 +1208,118 @@ class TestUnique(unittest.TestCase):
                 triple = 3
                 turkey = 3
 
+
+expected_help_output = """
+Help on class Color in module %s:
+
+class Color(enum.Enum)
+ |  Method resolution order:
+ |      Color
+ |      enum.Enum
+ |      builtins.object
+ |\x20\x20
+ |  Data and other attributes defined here:
+ |\x20\x20
+ |  blue = <Color.blue: 3>
+ |\x20\x20
+ |  green = <Color.green: 2>
+ |\x20\x20
+ |  red = <Color.red: 1>
+ |\x20\x20
+ |  ----------------------------------------------------------------------
+ |  Data descriptors inherited from enum.Enum:
+ |\x20\x20
+ |  name
+ |      The name of the Enum member.
+ |\x20\x20
+ |  value
+ |      The value of the Enum member.
+ |\x20\x20
+ |  ----------------------------------------------------------------------
+ |  Data descriptors inherited from enum.EnumMeta:
+ |\x20\x20
+ |  __members__
+ |      Returns a mapping of member name->value.
+ |\x20\x20\x20\x20\x20\x20
+ |      This mapping lists all enum members, including aliases. Note that this
+ |      is a read-only view of the internal mapping.
+""".strip()
+
+class TestStdLib(unittest.TestCase):
+
+    class Color(Enum):
+        red = 1
+        green = 2
+        blue = 3
+
+    def test_pydoc(self):
+        # indirectly test __objclass__
+        expected_text = expected_help_output % __name__
+        output = StringIO()
+        helper = pydoc.Helper(output=output)
+        helper(self.Color)
+        result = output.getvalue().strip()
+        if result != expected_text:
+            print_diffs(expected_text, result)
+            self.fail("outputs are not equal, see diff above")
+
+    def test_inspect_getmembers(self):
+        values = dict((
+                ('__class__', EnumMeta),
+                ('__doc__', None),
+                ('__members__', self.Color.__members__),
+                ('__module__', __name__),
+                ('blue', self.Color.blue),
+                ('green', self.Color.green),
+                ('name', Enum.__dict__['name']),
+                ('red', self.Color.red),
+                ('value', Enum.__dict__['value']),
+                ))
+        result = dict(inspect.getmembers(self.Color))
+        self.assertEqual(values.keys(), result.keys())
+        failed = False
+        for k in values.keys():
+            if result[k] != values[k]:
+                print()
+                print('\n%s\n     key: %s\n  result: %s\nexpected: %s\n%s\n' %
+                        ('=' * 75, k, result[k], values[k], '=' * 75), sep='')
+                failed = True
+        if failed:
+            self.fail("result does not equal expected, see print above")
+
+    def test_inspect_classify_class_attrs(self):
+        # indirectly test __objclass__
+        from inspect import Attribute
+        values = [
+                Attribute(name='__class__', kind='data',
+                    defining_class=object, object=EnumMeta),
+                Attribute(name='__doc__', kind='data',
+                    defining_class=self.Color, object=None),
+                Attribute(name='__members__', kind='property',
+                    defining_class=EnumMeta, object=EnumMeta.__members__),
+                Attribute(name='__module__', kind='data',
+                    defining_class=self.Color, object=__name__),
+                Attribute(name='blue', kind='data',
+                    defining_class=self.Color, object=self.Color.blue),
+                Attribute(name='green', kind='data',
+                    defining_class=self.Color, object=self.Color.green),
+                Attribute(name='red', kind='data',
+                    defining_class=self.Color, object=self.Color.red),
+                Attribute(name='name', kind='data',
+                    defining_class=Enum, object=Enum.__dict__['name']),
+                Attribute(name='value', kind='data',
+                    defining_class=Enum, object=Enum.__dict__['value']),
+                ]
+        values.sort(key=lambda item: item.name)
+        result = list(inspect.classify_class_attrs(self.Color))
+        result.sort(key=lambda item: item.name)
+        failed = False
+        for v, r in zip(values, result):
+            if r != v:
+                print('\n%s\n%s\n%s\n%s\n' % ('=' * 75, r, v, '=' * 75), sep='')
+                failed = True
+        if failed:
+            self.fail("result does not equal expected, see print above")
 
 if __name__ == '__main__':
     unittest.main()

@@ -13,6 +13,7 @@ extern PyObject* PyInit_binascii(void);
 extern PyObject* PyInit_cmath(void);
 extern PyObject* PyInit_errno(void);
 extern PyObject* PyInit_faulthandler(void);
+extern PyObject* PyInit__tracemalloc(void);
 extern PyObject* PyInit_gc(void);
 extern PyObject* PyInit_math(void);
 extern PyObject* PyInit__md5(void);
@@ -65,6 +66,7 @@ extern PyObject* PyInit_atexit(void);
 extern PyObject* _PyWarnings_Init(void);
 extern PyObject* PyInit__string(void);
 extern PyObject* PyInit__stat(void);
+extern PyObject* PyInit__opcode(void);
 
 /* tools/freeze/makeconfig.py marker for additional "extern" */
 /* -- ADDMODULE MARKER 1 -- */
@@ -102,6 +104,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"msvcrt", PyInit_msvcrt},
     {"_locale", PyInit__locale},
 #endif
+    {"_tracemalloc", PyInit__tracemalloc},
     /* XXX Should _winapi go in a WIN32 block?  not WIN64? */
     {"_winapi", PyInit__winapi},
 
@@ -156,6 +159,7 @@ struct _inittab _PyImport_Inittab[] = {
     {"_pickle", PyInit__pickle},
     {"atexit", PyInit_atexit},
     {"_stat", PyInit__stat},
+    {"_opcode", PyInit__opcode},
 
     /* Sentinel */
     {0, 0}

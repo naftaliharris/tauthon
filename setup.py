@@ -596,6 +596,8 @@ class PyBuildExt(build_ext):
         exts.append( Extension('_lsprof', ['_lsprof.c', 'rotatingtree.c']) )
         # static Unicode character database
         exts.append( Extension('unicodedata', ['unicodedata.c']) )
+        # _opcode module
+        exts.append( Extension('_opcode', ['_opcode.c']) )
 
         # Modules with some UNIX dependencies -- on by default:
         # (If you have a really backward UNIX, select and socket may not be
@@ -1326,6 +1328,8 @@ class PyBuildExt(build_ext):
             zlib_h = zlib_inc[0] + '/zlib.h'
             version = '"0.0.0"'
             version_req = '"1.1.3"'
+            if host_platform == 'darwin' and is_macosx_sdk_path(zlib_h):
+                zlib_h = os.path.join(macosx_sdk_root(), zlib_h[1:])
             with open(zlib_h) as fp:
                 while 1:
                     line = fp.readline()
@@ -1952,7 +1956,7 @@ class PyBuildExt(build_ext):
         undef_macros = []
         if '--with-system-libmpdec' in sysconfig.get_config_var("CONFIG_ARGS"):
             include_dirs = []
-            libraries = ['mpdec']
+            libraries = [':libmpdec.so.2']
             sources = ['_decimal/_decimal.c']
             depends = ['_decimal/docstrings.h']
         else:

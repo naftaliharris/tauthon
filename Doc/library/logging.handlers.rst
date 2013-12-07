@@ -381,6 +381,9 @@ sends logging output to a network socket. The base class uses a TCP socket.
    Returns a new instance of the :class:`SocketHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: close()
 
@@ -466,6 +469,9 @@ over UDP sockets.
    Returns a new instance of the :class:`DatagramHandler` class intended to
    communicate with a remote machine whose address is given by *host* and *port*.
 
+   .. versionchanged:: 3.4
+      If ``port`` is specified as ``None``, a Unix domain socket is created
+      using the value in ``host`` - otherwise, a TCP socket is created.
 
    .. method:: emit()
 
@@ -837,7 +843,7 @@ supports sending logging messages to a Web server, using either ``GET`` or
 
    Returns a new instance of the :class:`HTTPHandler` class. The *host* can be
    of the form ``host:port``, should you need to use a specific port number.
-   If no *method* is specified, ``GET`` is used. If *secure* is True, an HTTPS
+   If no *method* is specified, ``GET`` is used. If *secure* is true, an HTTPS
    connection will be used. If *credentials* is specified, it should be a
    2-tuple consisting of userid and password, which will be placed in an HTTP
    'Authorization' header using Basic authentication. If you specify
@@ -898,7 +904,7 @@ possible, while any potentially slow operations (such as sending an email via
 
       Enqueues the record on the queue using ``put_nowait()``; you may
       want to override this if you want to use blocking behaviour, or a
-      timeout, or a customised queue implementation.
+      timeout, or a customized queue implementation.
 
 
 

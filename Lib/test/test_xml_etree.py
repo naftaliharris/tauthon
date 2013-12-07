@@ -526,6 +526,11 @@ class ElementTreeTest(unittest.TestCase):
                 ('end-ns', None),
             ])
 
+        events = ('start-ns', 'end-ns')
+        context = iterparse(io.StringIO(r"<root xmlns=''/>"), events)
+        res = [action for action, elem in context]
+        self.assertEqual(res, ['start-ns', 'end-ns'])
+
         events = ("start", "end", "bogus")
         with self.assertRaises(ValueError) as cm:
             with open(SIMPLE_XMLFILE, "rb") as f:
@@ -692,9 +697,9 @@ class ElementTreeTest(unittest.TestCase):
             'iso8859-13', 'iso8859-14', 'iso8859-15', 'iso8859-16',
             'cp437', 'cp720', 'cp737', 'cp775', 'cp850', 'cp852',
             'cp855', 'cp856', 'cp857', 'cp858', 'cp860', 'cp861', 'cp862',
-            'cp863', 'cp865', 'cp866', 'cp869', 'cp874', 'cp1006', 'cp1250',
-            'cp1251', 'cp1252', 'cp1253', 'cp1254', 'cp1255', 'cp1256',
-            'cp1257', 'cp1258',
+            'cp863', 'cp865', 'cp866', 'cp869', 'cp874', 'cp1006', 'cp1125',
+            'cp1250', 'cp1251', 'cp1252', 'cp1253', 'cp1254', 'cp1255',
+            'cp1256', 'cp1257', 'cp1258',
             'mac-cyrillic', 'mac-greek', 'mac-iceland', 'mac-latin2',
             'mac-roman', 'mac-turkish',
             'iso2022-jp', 'iso2022-jp-1', 'iso2022-jp-2', 'iso2022-jp-2004',
@@ -985,10 +990,7 @@ class XMLPullParserTest(unittest.TestCase):
                     ])
                 self._feed(parser, "</root>\n", chunk_size)
                 self.assert_event_tags(parser, [('end', 'root')])
-                # Closing sets the `root` attribute
-                self.assertIs(parser.root, None)
-                parser.close()
-                self.assertEqual(parser.root.tag, 'root')
+                self.assertIsNone(parser.close())
 
     def test_feed_while_iterating(self):
         parser = ET.XMLPullParser()
@@ -1021,10 +1023,7 @@ class XMLPullParserTest(unittest.TestCase):
             ])
         self._feed(parser, "</root>\n")
         self.assert_event_tags(parser, [('end', '{namespace}root')])
-        # Closing sets the `root` attribute
-        self.assertIs(parser.root, None)
-        parser.close()
-        self.assertEqual(parser.root.tag, '{namespace}root')
+        self.assertIsNone(parser.close())
 
     def test_ns_events(self):
         parser = ET.XMLPullParser(events=('start-ns', 'end-ns'))
@@ -1039,7 +1038,7 @@ class XMLPullParserTest(unittest.TestCase):
         self._feed(parser, "<empty-element/>\n")
         self._feed(parser, "</root>\n")
         self.assertEqual(list(parser.read_events()), [('end-ns', None)])
-        parser.close()
+        self.assertIsNone(parser.close())
 
     def test_events(self):
         parser = ET.XMLPullParser(events=())
@@ -1064,10 +1063,8 @@ class XMLPullParserTest(unittest.TestCase):
             ('end', '{foo}element'),
             ])
         self._feed(parser, "</root>")
-        parser.close()
-        self.assertIs(parser.root, None)
+        self.assertIsNone(parser.close())
         self.assert_event_tags(parser, [('end', 'root')])
-        self.assertEqual(parser.root.tag, 'root')
 
         parser = ET.XMLPullParser(events=('start',))
         self._feed(parser, "<!-- comment -->\n")
@@ -1085,8 +1082,7 @@ class XMLPullParserTest(unittest.TestCase):
             ('start', '{foo}empty-element'),
             ])
         self._feed(parser, "</root>")
-        parser.close()
-        self.assertEqual(parser.root.tag, 'root')
+        self.assertIsNone(parser.close())
 
     def test_events_sequence(self):
         # Test that events can be some sequence that's not just a tuple or list

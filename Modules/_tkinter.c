@@ -737,8 +737,13 @@ PyTclObject_str(PyTclObject *self, void *ignored)
 static PyObject *
 PyTclObject_repr(PyTclObject *self)
 {
-    return PyUnicode_FromFormat("<%s object at %p>",
-                                self->value->typePtr->name, self->value);
+    PyObject *repr, *str = PyTclObject_str(self, NULL);
+    if (str == NULL)
+        return NULL;
+    repr = PyUnicode_FromFormat("<%s object: %R>",
+                                self->value->typePtr->name, str);
+    Py_DECREF(str);
+    return repr;
 }
 
 #define TEST_COND(cond) ((cond) ? Py_True : Py_False)
@@ -1107,10 +1112,7 @@ Tkapp_CallResult(TkappObject *self)
         res = FromObj((PyObject*)self, value);
         Tcl_DecrRefCount(value);
     } else {
-        const char *s = Tcl_GetStringResult(self->interp);
-        const char *p = s;
-
-        res = PyUnicode_FromStringAndSize(s, (int)(p-s));
+        res = PyUnicode_FromString(Tcl_GetStringResult(self->interp));
     }
     return res;
 }

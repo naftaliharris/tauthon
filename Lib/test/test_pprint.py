@@ -23,6 +23,20 @@ class tuple3(tuple):
     def __repr__(self):
         return tuple.__repr__(self)
 
+class set2(set):
+    pass
+
+class set3(set):
+    def __repr__(self):
+        return set.__repr__(self)
+
+class frozenset2(frozenset):
+    pass
+
+class frozenset3(frozenset):
+    def __repr__(self):
+        return frozenset.__repr__(self)
+
 class dict2(dict):
     pass
 
@@ -117,22 +131,24 @@ class QueryTestCase(unittest.TestCase):
         for simple in (0, 0, 0+0j, 0.0, "", b"",
                        (), tuple2(), tuple3(),
                        [], list2(), list3(),
+                       set(), set2(), set3(),
+                       frozenset(), frozenset2(), frozenset3(),
                        {}, dict2(), dict3(),
                        self.assertTrue, pprint,
                        -6, -6, -6-6j, -1.5, "x", b"x", (3,), [3], {3: 6},
                        (1,2), [3,4], {5: 6},
                        tuple2((1,2)), tuple3((1,2)), tuple3(range(100)),
                        [3,4], list2([3,4]), list3([3,4]), list3(range(100)),
+                       set({7}), set2({7}), set3({7}),
+                       frozenset({8}), frozenset2({8}), frozenset3({8}),
                        dict2({5: 6}), dict3({5: 6}),
                        range(10, -11, -1)
                       ):
             native = repr(simple)
-            for function in "pformat", "saferepr":
-                f = getattr(pprint, function)
-                got = f(simple)
-                self.assertEqual(native, got,
-                                 "expected %s got %s from pprint.%s" %
-                                 (native, got, function))
+            self.assertEqual(pprint.pformat(simple), native)
+            self.assertEqual(pprint.pformat(simple, width=1, indent=0)
+                             .replace('\n', ' '), native)
+            self.assertEqual(pprint.saferepr(simple), native)
 
     def test_basic_line_wrap(self):
         # verify basic line-wrapping operation
@@ -221,10 +237,54 @@ class QueryTestCase(unittest.TestCase):
  others.should.not.be: like.this}"""
         self.assertEqual(DottedPrettyPrinter().pformat(o), exp)
 
+    def test_set_reprs(self):
+        self.assertEqual(pprint.pformat(set()), 'set()')
+        self.assertEqual(pprint.pformat(set(range(3))), '{0, 1, 2}')
+        self.assertEqual(pprint.pformat(set(range(7)), width=20), '''\
+{0,
+ 1,
+ 2,
+ 3,
+ 4,
+ 5,
+ 6}''')
+        self.assertEqual(pprint.pformat(set2(range(7)), width=20), '''\
+set2({0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6})''')
+        self.assertEqual(pprint.pformat(set3(range(7)), width=20),
+                         'set3({0, 1, 2, 3, 4, 5, 6})')
+
+        self.assertEqual(pprint.pformat(frozenset()), 'frozenset()')
+        self.assertEqual(pprint.pformat(frozenset(range(3))),
+                         'frozenset({0, 1, 2})')
+        self.assertEqual(pprint.pformat(frozenset(range(7)), width=20), '''\
+frozenset({0,
+           1,
+           2,
+           3,
+           4,
+           5,
+           6})''')
+        self.assertEqual(pprint.pformat(frozenset2(range(7)), width=20), '''\
+frozenset2({0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6})''')
+        self.assertEqual(pprint.pformat(frozenset3(range(7)), width=20),
+                         'frozenset3({0, 1, 2, 3, 4, 5, 6})')
+
     @unittest.expectedFailure
     #See http://bugs.python.org/issue13907
     @test.support.cpython_only
-    def test_set_reprs(self):
+    def test_set_of_sets_reprs(self):
         # This test creates a complex arrangement of frozensets and
         # compares the pretty-printed repr against a string hard-coded in
         # the test.  The hard-coded repr depends on the sort order of
@@ -247,11 +307,6 @@ class QueryTestCase(unittest.TestCase):
         # algorithm cause the test to fail when it should pass.
         # XXX Or changes to the dictionary implmentation...
 
-        self.assertEqual(pprint.pformat(set()), 'set()')
-        self.assertEqual(pprint.pformat(set(range(3))), '{0, 1, 2}')
-        self.assertEqual(pprint.pformat(frozenset()), 'frozenset()')
-
-        self.assertEqual(pprint.pformat(frozenset(range(3))), 'frozenset({0, 1, 2})')
         cube_repr_tgt = """\
 {frozenset(): frozenset({frozenset({2}), frozenset({0}), frozenset({1})}),
  frozenset({0}): frozenset({frozenset(),
@@ -512,6 +567,18 @@ class QueryTestCase(unittest.TestCase):
         for width in range(3, 40):
             formatted = pprint.pformat(special, width=width)
             self.assertEqual(eval("(" + formatted + ")"), special)
+
+    def test_compact(self):
+        o = ([list(range(i * i)) for i in range(5)] +
+             [list(range(i)) for i in range(6)])
+        expected = """\
+[[], [0], [0, 1, 2, 3],
+ [0, 1, 2, 3, 4, 5, 6, 7, 8],
+ [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+  14, 15],
+ [], [0], [0, 1], [0, 1, 2], [0, 1, 2, 3],
+ [0, 1, 2, 3, 4]]"""
+        self.assertEqual(pprint.pformat(o, width=48, compact=True), expected)
 
 
 class DottedPrettyPrinter(pprint.PrettyPrinter):

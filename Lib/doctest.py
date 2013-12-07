@@ -318,6 +318,32 @@ def _comment_line(line):
     else:
         return '#'
 
+def _strip_exception_details(msg):
+    # Support for IGNORE_EXCEPTION_DETAIL.
+    # Get rid of everything except the exception name; in particular, drop
+    # the possibly dotted module path (if any) and the exception message (if
+    # any).  We assume that a colon is never part of a dotted name, or of an
+    # exception name.
+    # E.g., given
+    #    "foo.bar.MyError: la di da"
+    # return "MyError"
+    # Or for "abc.def" or "abc.def:\n" return "def".
+
+    start, end = 0, len(msg)
+    # The exception name must appear on the first line.
+    i = msg.find("\n")
+    if i >= 0:
+        end = i
+    # retain up to the first colon (if any)
+    i = msg.find(':', 0, end)
+    if i >= 0:
+        end = i
+    # retain just the exception name
+    i = msg.rfind('.', 0, end)
+    if i >= 0:
+        start = i+1
+    return msg[start: end]
+
 class _OutputRedirectingPdb(pdb.Pdb):
     """
     A specialized version of the python debugger that redirects stdout
@@ -918,6 +944,8 @@ class DocTestFinder:
             return module is inspect.getmodule(object)
         elif inspect.isfunction(object):
             return module.__dict__ is object.__globals__
+        elif inspect.ismethoddescriptor(object):
+            return module.__name__ == object.__objclass__.__module__
         elif inspect.isclass(object):
             return module.__name__ == object.__module__
         elif hasattr(object, '__module__'):
@@ -950,7 +978,7 @@ class DocTestFinder:
             for valname, val in obj.__dict__.items():
                 valname = '%s.%s' % (name, valname)
                 # Recurse to functions & classes.
-                if ((inspect.isfunction(val) or inspect.isclass(val)) and
+                if ((inspect.isroutine(val) or inspect.isclass(val)) and
                     self._from_module(module, val)):
                     self._find(tests, val, valname, module, source_lines,
                                globs, seen)
@@ -962,9 +990,8 @@ class DocTestFinder:
                     raise ValueError("DocTestFinder.find: __test__ keys "
                                      "must be strings: %r" %
                                      (type(valname),))
-                if not (inspect.isfunction(val) or inspect.isclass(val) or
-                        inspect.ismethod(val) or inspect.ismodule(val) or
-                        isinstance(val, str)):
+                if not (inspect.isroutine(val) or inspect.isclass(val) or
+                        inspect.ismodule(val) or isinstance(val, str)):
                     raise ValueError("DocTestFinder.find: __test__ values "
                                      "must be strings, functions, methods, "
                                      "classes, or modules: %r" %
@@ -983,7 +1010,7 @@ class DocTestFinder:
                     val = getattr(obj, valname).__func__
 
                 # Recurse to methods, properties, and nested classes.
-                if ((inspect.isfunction(val) or inspect.isclass(val) or
+                if ((inspect.isroutine(val) or inspect.isclass(val) or
                       isinstance(val, property)) and
                       self._from_module(module, val)):
                     valname = '%s.%s' % (name, valname)
@@ -1324,10 +1351,9 @@ class DocTestRunner:
 
                 # Another chance if they didn't care about the detail.
                 elif self.optionflags & IGNORE_EXCEPTION_DETAIL:
-                    m1 = re.match(r'(?:[^:]*\.)?([^:]*:)', example.exc_msg)
-                    m2 = re.match(r'(?:[^:]*\.)?([^:]*:)', exc_msg)
-                    if m1 and m2 and check(m1.group(1), m2.group(1),
-                                           self.optionflags):
+                    if check(_strip_exception_details(example.exc_msg),
+                             _strip_exception_details(exc_msg),
+                             self.optionflags):
                         outcome = SUCCESS
 
             # Report the outcome.

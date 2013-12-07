@@ -160,7 +160,7 @@ is the module's name in the Python package namespace.
    is called to get the exception information.
 
    The second optional keyword argument is *stack_info*, which defaults to
-   False. If specified as True, stack information is added to the logging
+   ``False``. If true, stack information is added to the logging
    message, including the actual logging call. Note that this is not the same
    stack information as that displayed through specifying *exc_info*: The
    former is stack frames from the bottom of the stack up to the logging call
@@ -308,7 +308,7 @@ is the module's name in the Python package namespace.
 
    Checks to see if this logger has any handlers configured. This is done by
    looking for handlers in this logger and its parents in the logger hierarchy.
-   Returns True if a handler was found, else False. The method stops searching
+   Returns ``True`` if a handler was found, else ``False``. The method stops searching
    up the hierarchy whenever a logger with the 'propagate' attribute set to
    False is found - that will be the last logger which is checked for the
    existence of handlers.
@@ -794,17 +794,18 @@ information into logging calls. For a usage example , see the section on
       (possibly modified) versions of the arguments passed in.
 
 In addition to the above, :class:`LoggerAdapter` supports the following
-methods of :class:`Logger`, i.e. :meth:`debug`, :meth:`info`, :meth:`warning`,
-:meth:`error`, :meth:`exception`, :meth:`critical`, :meth:`log`,
-:meth:`isEnabledFor`, :meth:`getEffectiveLevel`, :meth:`setLevel`,
-:meth:`hasHandlers`. These methods have the same signatures as their
+methods of :class:`Logger`: :meth:`~Logger.debug`, :meth:`~Logger.info`,
+:meth:`~Logger.warning`, :meth:`~Logger.error`, :meth:`~Logger.exception`,
+:meth:`~Logger.critical`, :meth:`~Logger.log`, :meth:`~Logger.isEnabledFor`,
+:meth:`~Logger.getEffectiveLevel`, :meth:`~Logger.setLevel` and
+:meth:`~Logger.hasHandlers`. These methods have the same signatures as their
 counterparts in :class:`Logger`, so you can use the two types of instances
 interchangeably.
 
 .. versionchanged:: 3.2
-   The :meth:`isEnabledFor`, :meth:`getEffectiveLevel`, :meth:`setLevel` and
-   :meth:`hasHandlers` methods were added to :class:`LoggerAdapter`.  These
-   methods delegate to the underlying logger.
+   The :meth:`~Logger.isEnabledFor`, :meth:`~Logger.getEffectiveLevel`,
+   :meth:`~Logger.setLevel` and :meth:`~Logger.hasHandlers` methods were added
+   to :class:`LoggerAdapter`.  These methods delegate to the underlying logger.
 
 
 Thread Safety
@@ -844,8 +845,8 @@ functions.
 
    Return either the standard :class:`Logger` class, or the last class passed to
    :func:`setLoggerClass`. This function may be called from within a new class
-   definition, to ensure that installing a customised :class:`Logger` class will
-   not undo customisations already applied by other code. For example::
+   definition, to ensure that installing a customized :class:`Logger` class will
+   not undo customizations already applied by other code. For example::
 
       class MyLogger(logging.getLoggerClass()):
           # ... override behaviour here
@@ -877,7 +878,7 @@ functions.
    is called to get the exception information.
 
    The second optional keyword argument is *stack_info*, which defaults to
-   False. If specified as True, stack information is added to the logging
+   ``False``. If true, stack information is added to the logging
    message, including the actual logging call. Note that this is not the same
    stack information as that displayed through specifying *exc_info*: The
    former is stack frames from the bottom of the stack up to the logging call
@@ -986,8 +987,10 @@ functions.
    effect is to disable all logging calls of severity *lvl* and below, so that
    if you call it with a value of INFO, then all INFO and DEBUG events would be
    discarded, whereas those of severity WARNING and above would be processed
-   according to the logger's effective level. To undo the effect of a call to
-   ``logging.disable(lvl)``, call ``logging.disable(logging.NOTSET)``.
+   according to the logger's effective level. If
+   ``logging.disable(logging.NOTSET)`` is called, it effectively removes this
+   overriding level, so that logging output again depends on the effective
+   levels of individual loggers.
 
 
 .. function:: addLevelName(lvl, levelName)

@@ -22,6 +22,11 @@ Functions such as :func:`expanduser` and :func:`expandvars` can be invoked
 explicitly when an application desires shell-like path expansion.  (See also
 the :mod:`glob` module.)
 
+
+.. seealso::
+   The :mod:`pathlib` module offers high-level path objects.
+
+
 .. note::
 
    All of these functions accept either only bytes or only string objects as
@@ -132,7 +137,7 @@ the :mod:`glob` module.)
    the number of seconds since the epoch (see the  :mod:`time` module).  Raise
    :exc:`OSError` if the file does not exist or is inaccessible.
 
-   If :func:`os.stat_float_times` returns True, the result is a floating point
+   If :func:`os.stat_float_times` returns ``True``, the result is a floating point
    number.
 
 
@@ -142,14 +147,14 @@ the :mod:`glob` module.)
    giving the number of seconds since the epoch (see the  :mod:`time` module).
    Raise :exc:`OSError` if the file does not exist or is inaccessible.
 
-   If :func:`os.stat_float_times` returns True, the result is a floating point
+   If :func:`os.stat_float_times` returns ``True``, the result is a floating point
    number.
 
 
 .. function:: getctime(path)
 
    Return the system's ctime which, on some systems (like Unix) is the time of the
-   last change, and, on others (like Windows), is the creation time for *path*.
+   last metadata change, and, on others (like Windows), is the creation time for *path*.
    The return value is a number giving the number of seconds since the epoch (see
    the  :mod:`time` module).  Raise :exc:`OSError` if the file does not exist or
    is inaccessible.
@@ -271,9 +276,9 @@ the :mod:`glob` module.)
 .. function:: samestat(stat1, stat2)
 
    Return ``True`` if the stat tuples *stat1* and *stat2* refer to the same file.
-   These structures may have been returned by :func:`fstat`, :func:`lstat`, or
-   :func:`stat`.  This function implements the underlying comparison used by
-   :func:`samefile` and :func:`sameopenfile`.
+   These structures may have been returned by :func:`os.fstat`,
+   :func:`os.lstat`, or :func:`os.stat`.  This function implements the
+   underlying comparison used by :func:`samefile` and :func:`sameopenfile`.
 
    Availability: Unix, Windows.
 
@@ -335,5 +340,5 @@ the :mod:`glob` module.)
 
 .. data:: supports_unicode_filenames
 
-   True if arbitrary Unicode strings can be used as file names (within limitations
+   ``True`` if arbitrary Unicode strings can be used as file names (within limitations
    imposed by the file system).

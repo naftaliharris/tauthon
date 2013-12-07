@@ -409,7 +409,8 @@ Compare `DocTestCase`:
 
 """
 
-def test_DocTestFinder(): r"""
+class test_DocTestFinder:
+    def basics(): r"""
 Unit tests for the `DocTestFinder` class.
 
 DocTestFinder is used to extract DocTests from an object's docstring
@@ -644,6 +645,39 @@ DocTestFinder finds the line number of each example:
     >>> test = doctest.DocTestFinder().find(f)[0]
     >>> [e.lineno for e in test.examples]
     [1, 9, 12]
+"""
+
+    if int.__doc__: # simple check for --without-doc-strings, skip if lacking
+        def non_Python_modules(): r"""
+
+Finding Doctests in Modules Not Written in Python
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DocTestFinder can also find doctests in most modules not written in Python.
+We'll use builtins as an example, since it almost certainly isn't written in
+plain ol' Python and is guaranteed to be available.
+
+    >>> import builtins
+    >>> tests = doctest.DocTestFinder().find(builtins)
+    >>> 790 < len(tests) < 800 # approximate number of objects with docstrings
+    True
+    >>> real_tests = [t for t in tests if len(t.examples) > 0]
+    >>> len(real_tests) # objects that actually have doctests
+    8
+    >>> for t in real_tests:
+    ...     print('{}  {}'.format(len(t.examples), t.name))
+    ...
+    1  builtins.bin
+    3  builtins.float.as_integer_ratio
+    2  builtins.float.fromhex
+    2  builtins.float.hex
+    1  builtins.hex
+    1  builtins.int
+    2  builtins.int.bit_length
+    1  builtins.oct
+
+Note here that 'bin', 'oct', and 'hex' are functions; 'float.as_integer_ratio',
+'float.hex', and 'int.bit_length' are methods; 'float.fromhex' is a classmethod,
+and 'int' is a type.
 """
 
 def test_DocTestParser(): r"""
@@ -1019,6 +1053,33 @@ But IGNORE_EXCEPTION_DETAIL does not allow a mismatch in the exception type:
         ...
         ValueError: message
     TestResults(failed=1, attempted=1)
+
+If the exception does not have a message, you can still use
+IGNORE_EXCEPTION_DETAIL to normalize the modules between Python 2 and 3:
+
+    >>> def f(x):
+    ...     r'''
+    ...     >>> from http.client import HTTPException
+    ...     >>> raise HTTPException() #doctest: +IGNORE_EXCEPTION_DETAIL
+    ...     Traceback (most recent call last):
+    ...     foo.bar.HTTPException
+    ...     '''
+    >>> test = doctest.DocTestFinder().find(f)[0]
+    >>> doctest.DocTestRunner(verbose=False).run(test)
+    TestResults(failed=0, attempted=2)
+
+Note that a trailing colon doesn't matter either:
+
+    >>> def f(x):
+    ...     r'''
+    ...     >>> from http.client import HTTPException
+    ...     >>> raise HTTPException() #doctest: +IGNORE_EXCEPTION_DETAIL
+    ...     Traceback (most recent call last):
+    ...     foo.bar.HTTPException:
+    ...     '''
+    >>> test = doctest.DocTestFinder().find(f)[0]
+    >>> doctest.DocTestRunner(verbose=False).run(test)
+    TestResults(failed=0, attempted=2)
 
 If an exception is raised but not expected, then it is reported as an
 unexpected exception:

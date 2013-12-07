@@ -109,22 +109,26 @@ my_fgets(char *buf, int len, FILE *fp)
 /* Readline implementation using fgets() */
 
 char *
-PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
+PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, const char *prompt)
 {
     size_t n;
     char *p, *pr;
+
     n = 100;
-    if ((p = (char *)PyMem_MALLOC(n)) == NULL)
+    p = (char *)PyMem_RawMalloc(n);
+    if (p == NULL)
         return NULL;
+
     fflush(sys_stdout);
     if (prompt)
         fprintf(stderr, "%s", prompt);
     fflush(stderr);
+
     switch (my_fgets(p, (int)n, sys_stdin)) {
     case 0: /* Normal case */
         break;
     case 1: /* Interrupt */
-        PyMem_FREE(p);
+        PyMem_RawFree(p);
         return NULL;
     case -1: /* EOF */
     case -2: /* Error */
@@ -136,13 +140,13 @@ PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
     while (n > 0 && p[n-1] != '\n') {
         size_t incr = n+2;
         if (incr > INT_MAX) {
-            PyMem_FREE(p);
+            PyMem_RawFree(p);
             PyErr_SetString(PyExc_OverflowError, "input line too long");
             return NULL;
         }
-        pr = (char *)PyMem_REALLOC(p, n + incr);
+        pr = (char *)PyMem_RawRealloc(p, n + incr);
         if (pr == NULL) {
-            PyMem_FREE(p);
+            PyMem_RawFree(p);
             PyErr_NoMemory();
             return NULL;
         }
@@ -151,9 +155,9 @@ PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
             break;
         n += strlen(p+n);
     }
-    pr = (char *)PyMem_REALLOC(p, n+1);
+    pr = (char *)PyMem_RawRealloc(p, n+1);
     if (pr == NULL) {
-        PyMem_FREE(p);
+        PyMem_RawFree(p);
         PyErr_NoMemory();
         return NULL;
     }
@@ -166,15 +170,16 @@ PyOS_StdioReadline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
 
    Note: Python expects in return a buffer allocated with PyMem_Malloc. */
 
-char *(*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, char *);
+char *(*PyOS_ReadlineFunctionPointer)(FILE *, FILE *, const char *);
 
 
 /* Interface used by tokenizer.c and bltinmodule.c */
 
 char *
-PyOS_Readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
+PyOS_Readline(FILE *sys_stdin, FILE *sys_stdout, const char *prompt)
 {
-    char *rv;
+    char *rv, *res;
+    size_t len;
 
     if (_PyOS_ReadlineTState == PyThreadState_GET()) {
         PyErr_SetString(PyExc_RuntimeError,
@@ -221,5 +226,14 @@ PyOS_Readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
 
     _PyOS_ReadlineTState = NULL;
 
-    return rv;
+    if (rv == NULL)
+        return NULL;
+
+    len = strlen(rv) + 1;
+    res = PyMem_Malloc(len);
+    if (res != NULL)
+        memcpy(res, rv, len);
+    PyMem_RawFree(rv);
+
+    return res;
 }

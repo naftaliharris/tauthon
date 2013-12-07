@@ -376,11 +376,16 @@ Miscellaneous options
 .. cmdoption:: -X
 
    Reserved for various implementation-specific options.  CPython currently
-   defines two possible values:
+   defines the following possible values:
 
    * ``-X faulthandler`` to enable :mod:`faulthandler`;
    * ``-X showrefcount`` to enable the output of the total reference count
      and memory blocks (only works on debug builds);
+   * ``-X tracemalloc`` to start tracing Python memory allocations using the
+     :mod:`tracemalloc` module. By default, only the most recent frame is
+     stored in a traceback of a trace. Use ``-X tracemalloc=NFRAME`` to start
+     tracing with a traceback limit of *NFRAME* frames. See the
+     :func:`tracemalloc.start` for more information.
 
    It also allows to pass arbitrary values and retrieve them through the
    :data:`sys._xoptions` dictionary.
@@ -392,7 +397,7 @@ Miscellaneous options
       The ``-X faulthandler`` option.
 
    .. versionadded:: 3.4
-      The ``-X showrefcount`` option.
+      The ``-X showrefcount`` and ``-X tracemalloc`` options.
 
 
 Options you shouldn't use
@@ -592,6 +597,17 @@ conflict.
    :option:`-X` ``faulthandler`` option.
 
    .. versionadded:: 3.3
+
+
+.. envvar:: PYTHONTRACEMALLOC
+
+   If this environment variable is set to a non-empty string, start tracing
+   Python memory allocations using the :mod:`tracemalloc` module. The value of
+   the variable is the maximum number of frames stored in a traceback of a
+   trace. For example, ``PYTHONTRACEMALLOC=1`` stores only the most recent
+   frame. See the :func:`tracemalloc.start` for more information.
+
+   .. versionadded:: 3.4
 
 
 Debug-mode variables

@@ -40,6 +40,12 @@ CR = b'\r'
 LF = b'\n'
 CRLF = CR+LF
 
+# maximal line length when calling readline(). This is to prevent
+# reading arbitrary lenght lines. RFC 1939 limits POP3 line length to
+# 512 characters, including CRLF. We have selected 2048 just to be on
+# the safe side.
+_MAXLINE = 2048
+
 
 class POP3:
 
@@ -118,7 +124,10 @@ class POP3:
     # Raise error_proto('-ERR EOF') if the connection is closed.
 
     def _getline(self):
-        line = self.file.readline()
+        line = self.file.readline(_MAXLINE + 1)
+        if len(line) > _MAXLINE:
+            raise error_proto('line too long')
+
         if self._debugging > 1: print('*get*', repr(line))
         if not line: raise error_proto('-ERR EOF')
         octets = len(line)
@@ -376,10 +385,11 @@ class POP3:
         if not 'STLS' in caps:
             raise error_proto('-ERR STLS not supported by server')
         if context is None:
-            context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            context.options |= ssl.OP_NO_SSLv2
+            context = ssl._create_stdlib_context()
         resp = self._shortcmd('STLS')
-        self.sock = context.wrap_socket(self.sock)
+        server_hostname = self.host if ssl.HAS_SNI else None
+        self.sock = context.wrap_socket(self.sock,
+                                        server_hostname=server_hostname)
         self.file = self.sock.makefile('rb')
         self._tls_established = True
         return resp
@@ -412,15 +422,17 @@ if HAVE_SSL:
                                  "exclusive")
             self.keyfile = keyfile
             self.certfile = certfile
+            if context is None:
+                context = ssl._create_stdlib_context(certfile=certfile,
+                                                     keyfile=keyfile)
             self.context = context
             POP3.__init__(self, host, port, timeout)
 
         def _create_socket(self, timeout):
             sock = POP3._create_socket(self, timeout)
-            if self.context is not None:
-                sock = self.context.wrap_socket(sock)
-            else:
-                sock = ssl.wrap_socket(sock, self.keyfile, self.certfile)
+            server_hostname = self.host if ssl.HAS_SNI else None
+            sock = self.context.wrap_socket(sock,
+                                            server_hostname=server_hostname)
             return sock
 
         def stls(self, keyfile=None, certfile=None, context=None):

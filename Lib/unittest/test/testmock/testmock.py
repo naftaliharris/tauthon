@@ -64,7 +64,7 @@ class MockTest(unittest.TestCase):
                           "method_calls not initialised correctly")
 
         # Can't use hasattr for this test as it always returns True on a mock
-        self.assertFalse('_items' in mock.__dict__,
+        self.assertNotIn('_items', mock.__dict__,
                          "default mock should not have '_items' attribute")
 
         self.assertIsNone(mock._mock_parent,
@@ -565,19 +565,19 @@ class MockTest(unittest.TestCase):
             pass
 
         mock = Mock(spec=X)
-        self.assertTrue(isinstance(mock, X))
+        self.assertIsInstance(mock, X)
 
         mock = Mock(spec=X())
-        self.assertTrue(isinstance(mock, X))
+        self.assertIsInstance(mock, X)
 
         self.assertIs(mock.__class__, X)
         self.assertEqual(Mock().__class__.__name__, 'Mock')
 
         mock = Mock(spec_set=X)
-        self.assertTrue(isinstance(mock, X))
+        self.assertIsInstance(mock, X)
 
         mock = Mock(spec_set=X())
-        self.assertTrue(isinstance(mock, X))
+        self.assertIsInstance(mock, X)
 
 
     def test_setting_attribute_with_spec_set(self):
@@ -1302,20 +1302,6 @@ class MockTest(unittest.TestCase):
             self.assertEqual(m.method_calls, [])
 
 
-    def test_attribute_deletion(self):
-        # this behaviour isn't *useful*, but at least it's now tested...
-        for Klass in Mock, MagicMock, NonCallableMagicMock, NonCallableMock:
-            m = Klass()
-            original = m.foo
-            m.foo = 3
-            del m.foo
-            self.assertEqual(m.foo, original)
-
-            new = m.foo = Mock()
-            del m.foo
-            self.assertEqual(m.foo, new)
-
-
     def test_mock_parents(self):
         for Klass in Mock, MagicMock:
             m = Klass()
@@ -1379,7 +1365,8 @@ class MockTest(unittest.TestCase):
 
 
     def test_attribute_deletion(self):
-        for mock in Mock(), MagicMock():
+        for mock in (Mock(), MagicMock(), NonCallableMagicMock(),
+                     NonCallableMock()):
             self.assertTrue(hasattr(mock, 'm'))
 
             del mock.m
@@ -1397,7 +1384,6 @@ class MockTest(unittest.TestCase):
             mock.__class__ = int
             self.assertIsInstance(mock, int)
             mock.foo
-
 
 
 if __name__ == '__main__':

@@ -43,6 +43,15 @@ IMAP4_PORT = 143
 IMAP4_SSL_PORT = 993
 AllowedVersions = ('IMAP4REV1', 'IMAP4')        # Most recent first
 
+# Maximal line length when calling readline(). This is to prevent
+# reading arbitrary length lines. RFC 3501 and 2060 (IMAP 4rev1)
+# don't specify a line length. RFC 2683 however suggests limiting client
+# command lines to 1000 octets and server command lines to 8000 octets.
+# We have selected 10000 for some extra margin and since that is supposedly
+# also what UW and Panda IMAP does.
+_MAXLINE = 10000
+
+
 #       Commands
 
 Commands = {
@@ -256,7 +265,10 @@ class IMAP4:
 
     def readline(self):
         """Read line from remote."""
-        return self.file.readline()
+        line = self.file.readline(_MAXLINE + 1)
+        if len(line) > _MAXLINE:
+            raise self.error("got more than %d bytes" % _MAXLINE)
+        return line
 
 
     def send(self, data):
@@ -542,7 +554,7 @@ class IMAP4:
         import hmac
         pwd = (self.password.encode('ASCII') if isinstance(self.password, str)
                                              else self.password)
-        return self.user + " " + hmac.HMAC(pwd, challenge).hexdigest()
+        return self.user + " " + hmac.HMAC(pwd, challenge, 'md5').hexdigest()
 
 
     def logout(self):
@@ -730,12 +742,12 @@ class IMAP4:
             raise self.abort('TLS not supported by server')
         # Generate a default SSL context if none was passed.
         if ssl_context is None:
-            ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            # SSLv2 considered harmful.
-            ssl_context.options |= ssl.OP_NO_SSLv2
+            ssl_context = ssl._create_stdlib_context()
         typ, dat = self._simple_command(name)
         if typ == 'OK':
-            self.sock = ssl_context.wrap_socket(self.sock)
+            server_hostname = self.host if ssl.HAS_SNI else None
+            self.sock = ssl_context.wrap_socket(self.sock,
+                                                server_hostname=server_hostname)
             self.file = self.sock.makefile('rb')
             self._tls_established = True
             self._get_capabilities()
@@ -1198,15 +1210,17 @@ if HAVE_SSL:
 
             self.keyfile = keyfile
             self.certfile = certfile
+            if ssl_context is None:
+                ssl_context = ssl._create_stdlib_context(certfile=certfile,
+                                                         keyfile=keyfile)
             self.ssl_context = ssl_context
             IMAP4.__init__(self, host, port)
 
         def _create_socket(self):
             sock = IMAP4._create_socket(self)
-            if self.ssl_context:
-                return self.ssl_context.wrap_socket(sock)
-            else:
-                return ssl.wrap_socket(sock, self.keyfile, self.certfile)
+            server_hostname = self.host if ssl.HAS_SNI else None
+            return self.ssl_context.wrap_socket(sock,
+                                                server_hostname=server_hostname)
 
         def open(self, host='', port=IMAP4_SSL_PORT):
             """Setup connection to remote server on "host:port".

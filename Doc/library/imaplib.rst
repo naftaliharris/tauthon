@@ -80,6 +80,10 @@ There's also a subclass for secure connections:
    .. versionchanged:: 3.3
       *ssl_context* parameter added.
 
+   .. versionchanged:: 3.4
+      The class now supports hostname check with
+      :attr:`SSLContext.check_hostname` and *Server Name Indicator* (see
+      :data:`~ssl.HAS_SNI`).
 
 The second subclass allows for connections created by a child process:
 
@@ -310,8 +314,9 @@ An :class:`IMAP4` instance has the following methods:
 
    Opens socket to *port* at *host*.  This method is implicitly called by
    the :class:`IMAP4` constructor.  The connection objects established by this
-   method will be used in the ``read``, ``readline``, ``send``, and ``shutdown``
-   methods.  You may override this method.
+   method will be used in the :meth:`IMAP4.read`, :meth:`IMAP4.readline`,
+   :meth:`IMAP4.send`, and :meth:`IMAP4.shutdown` methods.  You may override
+   this method.
 
 
 .. method:: IMAP4.partial(message_num, message_part, start, length)
@@ -436,6 +441,10 @@ An :class:`IMAP4` instance has the following methods:
 
    .. versionadded:: 3.2
 
+   .. versionchanged:: 3.4
+      The method now supports hostname check with
+      :attr:`SSLContext.check_hostname` and *Server Name Indicator* (see
+      :data:`~ssl.HAS_SNI`).
 
 .. method:: IMAP4.status(mailbox, names)
 

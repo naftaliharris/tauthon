@@ -290,20 +290,29 @@ dbm_contains(PyObject *self, PyObject *arg)
 {
     dbmobject *dp = (dbmobject *)self;
     datum key;
+    Py_ssize_t size;
 
     if ((dp)->di_dbm == NULL) {
         PyErr_SetString(DbmError,
                         "GDBM object has already been closed");
         return -1;
     }
-    if (!PyBytes_Check(arg)) {
+    if (PyUnicode_Check(arg)) {
+        key.dptr = PyUnicode_AsUTF8AndSize(arg, &size);
+        key.dsize = size;
+        if (key.dptr == NULL)
+            return -1;
+    }
+    else if (!PyBytes_Check(arg)) {
         PyErr_Format(PyExc_TypeError,
-                     "gdbm key must be bytes, not %.100s",
+                     "gdbm key must be bytes or string, not %.100s",
                      arg->ob_type->tp_name);
         return -1;
     }
-    key.dptr = PyBytes_AS_STRING(arg);
-    key.dsize = PyBytes_GET_SIZE(arg);
+    else {
+        key.dptr = PyBytes_AS_STRING(arg);
+        key.dsize = PyBytes_GET_SIZE(arg);
+    }
     return gdbm_exists(dp->di_dbm, key);
 }
 
@@ -416,6 +425,20 @@ dbm_sync(dbmobject *dp, PyObject *unused)
     return Py_None;
 }
 
+static PyObject *
+dbm__enter__(PyObject *self, PyObject *args)
+{
+    Py_INCREF(self);
+    return self;
+}
+
+static PyObject *
+dbm__exit__(PyObject *self, PyObject *args)
+{
+    _Py_IDENTIFIER(close);
+    return _PyObject_CallMethodId(self, &PyId_close, NULL);
+}
+
 static PyMethodDef dbm_methods[] = {
     {"close",     (PyCFunction)dbm_close,   METH_NOARGS, dbm_close__doc__},
     {"keys",      (PyCFunction)dbm_keys,    METH_NOARGS, dbm_keys__doc__},
@@ -425,6 +448,8 @@ static PyMethodDef dbm_methods[] = {
     {"sync",      (PyCFunction)dbm_sync,    METH_NOARGS, dbm_sync__doc__},
     {"get",       (PyCFunction)dbm_get,     METH_VARARGS, dbm_get__doc__},
     {"setdefault",(PyCFunction)dbm_setdefault,METH_VARARGS, dbm_setdefault__doc__},
+    {"__enter__", dbm__enter__, METH_NOARGS, NULL},
+    {"__exit__",  dbm__exit__, METH_VARARGS, NULL},
     {NULL,              NULL}           /* sentinel */
 };
 

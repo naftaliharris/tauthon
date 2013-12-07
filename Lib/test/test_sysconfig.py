@@ -5,7 +5,7 @@ import subprocess
 import shutil
 from copy import copy
 
-from test.support import (run_unittest, TESTFN, unlink,
+from test.support import (run_unittest, TESTFN, unlink, check_warnings,
                           captured_stdout, skip_unless_symlink)
 
 import sysconfig
@@ -352,8 +352,10 @@ class TestSysConfig(unittest.TestCase):
             self.assertTrue(os.path.exists(Python_h), Python_h)
             self.assertTrue(sysconfig._is_python_source_dir(srcdir))
         elif os.name == 'posix':
-            self.assertEqual(os.path.dirname(sysconfig.get_makefile_filename()),
-                                srcdir)
+            makefile_dir = os.path.dirname(sysconfig.get_makefile_filename())
+            # Issue #19340: srcdir has been realpath'ed already
+            makefile_dir = os.path.realpath(makefile_dir)
+            self.assertEqual(makefile_dir, srcdir)
 
     def test_srcdir_independent_of_cwd(self):
         # srcdir should be independent of the current working directory
@@ -366,6 +368,26 @@ class TestSysConfig(unittest.TestCase):
         finally:
             os.chdir(cwd)
         self.assertEqual(srcdir, srcdir2)
+
+    @unittest.skipIf(sysconfig.get_config_var('EXT_SUFFIX') is None,
+                     'EXT_SUFFIX required for this test')
+    def test_SO_deprecation(self):
+        self.assertWarns(DeprecationWarning,
+                         sysconfig.get_config_var, 'SO')
+
+    @unittest.skipIf(sysconfig.get_config_var('EXT_SUFFIX') is None,
+                     'EXT_SUFFIX required for this test')
+    def test_SO_value(self):
+        with check_warnings(('', DeprecationWarning)):
+            self.assertEqual(sysconfig.get_config_var('SO'),
+                             sysconfig.get_config_var('EXT_SUFFIX'))
+
+    @unittest.skipIf(sysconfig.get_config_var('EXT_SUFFIX') is None,
+                     'EXT_SUFFIX required for this test')
+    def test_SO_in_vars(self):
+        vars = sysconfig.get_config_vars()
+        self.assertIsNotNone(vars['SO'])
+        self.assertEqual(vars['SO'], vars['EXT_SUFFIX'])
 
 
 class MakefileTests(unittest.TestCase):

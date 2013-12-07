@@ -4,7 +4,7 @@
 .. module:: smtpd
    :synopsis: A SMTP server implementation in Python.
 
-.. moduleauthor:: Barry Warsaw <barry@zope.com>
+.. moduleauthor:: Barry Warsaw <barry@python.org>
 .. sectionauthor:: Moshe Zadka <moshez@moshez.org>
 
 **Source code:** :source:`Lib/smtpd.py`
@@ -27,7 +27,7 @@ SMTPServer Objects
 ------------------
 
 
-.. class:: SMTPServer(localaddr, remoteaddr, data_size_limit=33554432,
+.. class:: SMTPServer(localaddr, remoteaddr, data_size_limit=33554432,\
                       map=None)
 
    Create a new :class:`SMTPServer` object, which binds to local address
@@ -96,7 +96,7 @@ MailmanProxy Objects
 SMTPChannel Objects
 -------------------
 
-.. class:: SMTPChannel(server, conn, addr, data_size_limit=33554432,
+.. class:: SMTPChannel(server, conn, addr, data_size_limit=33554432,\
                        map=None))
 
    Create a new :class:`SMTPChannel` object which manages the communication

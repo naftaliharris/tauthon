@@ -20,6 +20,7 @@ except ImportError:
     ssl = None
 
 CERTFILE = None
+CAFILE = None
 
 
 class TestImaplib(unittest.TestCase):
@@ -324,6 +325,17 @@ class BaseThreadedNetworkedTests(unittest.TestCase):
             self.assertEqual(ret, "OK")
 
 
+    def test_linetoolong(self):
+        class TooLongHandler(SimpleIMAPHandler):
+            def handle(self):
+                # Send a very long response line
+                self.wfile.write(b'* OK ' + imaplib._MAXLINE*b'x' + b'\r\n')
+
+        with self.reaped_server(TooLongHandler) as server:
+            self.assertRaises(imaplib.IMAP4.error,
+                              self.imap_class, *server.server_address)
+
+
 class ThreadedNetworkedTests(BaseThreadedNetworkedTests):
 
     server_class = socketserver.TCPServer
@@ -335,6 +347,25 @@ class ThreadedNetworkedTestsSSL(BaseThreadedNetworkedTests):
 
     server_class = SecureTCPServer
     imap_class = IMAP4_SSL
+
+    @reap_threads
+    def test_ssl_verified(self):
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+        ssl_context.check_hostname = True
+        ssl_context.load_verify_locations(CAFILE)
+
+        with self.assertRaisesRegex(ssl.CertificateError,
+                                    "hostname '127.0.0.1' doesn't match 'localhost'"):
+            with self.reaped_server(SimpleIMAPHandler) as server:
+                client = self.imap_class(*server.server_address,
+                                         ssl_context=ssl_context)
+                client.shutdown()
+
+        with self.reaped_server(SimpleIMAPHandler) as server:
+            client = self.imap_class("localhost", server.server_address[1],
+                                     ssl_context=ssl_context)
+            client.shutdown()
 
 
 class RemoteIMAPTest(unittest.TestCase):
@@ -448,11 +479,15 @@ def load_tests(*args):
 
     if support.is_resource_enabled('network'):
         if ssl:
-            global CERTFILE
+            global CERTFILE, CAFILE
             CERTFILE = os.path.join(os.path.dirname(__file__) or os.curdir,
-                                    "keycert.pem")
+                                    "keycert3.pem")
             if not os.path.exists(CERTFILE):
                 raise support.TestFailed("Can't read certificate files!")
+            CAFILE = os.path.join(os.path.dirname(__file__) or os.curdir,
+                                 "pycacert.pem")
+            if not os.path.exists(CAFILE):
+                raise support.TestFailed("Can't read CA file!")
         tests.extend([
             ThreadedNetworkedTests, ThreadedNetworkedTestsSSL,
             RemoteIMAPTest, RemoteIMAP_SSLTest, RemoteIMAP_STARTTLSTest,

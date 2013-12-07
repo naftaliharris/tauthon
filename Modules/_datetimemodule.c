@@ -16,6 +16,12 @@
 #include "datetime.h"
 #undef Py_BUILD_CORE
 
+/*[clinic]
+module datetime
+class datetime.datetime
+[clinic]*/
+/*[clinic checksum: da39a3ee5e6b4b0d3255bfef95601890afd80709]*/
+
 /* We require that C int be at least 32 bits, and use int virtually
  * everywhere.  In just a few cases we use a temp long, where a Python
  * API returns a C long.  In such cases, we have to ensure that the
@@ -103,6 +109,11 @@ static PyTypeObject PyDateTime_DeltaType;
 static PyTypeObject PyDateTime_TimeType;
 static PyTypeObject PyDateTime_TZInfoType;
 static PyTypeObject PyDateTime_TimeZoneType;
+
+_Py_IDENTIFIER(as_integer_ratio);
+_Py_IDENTIFIER(fromutc);
+_Py_IDENTIFIER(isoformat);
+_Py_IDENTIFIER(strftime);
 
 /* ---------------------------------------------------------------------------
  * Math utilities.
@@ -602,7 +613,7 @@ time_alloc(PyTypeObject *type, Py_ssize_t aware)
                 sizeof(_PyDateTime_BaseTime));
     if (self == NULL)
         return (PyObject *)PyErr_NoMemory();
-    PyObject_INIT(self, type);
+    (void)PyObject_INIT(self, type);
     return self;
 }
 
@@ -617,7 +628,7 @@ datetime_alloc(PyTypeObject *type, Py_ssize_t aware)
                 sizeof(_PyDateTime_BaseDateTime));
     if (self == NULL)
         return (PyObject *)PyErr_NoMemory();
-    PyObject_INIT(self, type);
+    (void)PyObject_INIT(self, type);
     return self;
 }
 
@@ -1277,8 +1288,6 @@ wrap_strftime(PyObject *object, PyObject *format, PyObject *timetuple,
             goto Done;
         format = PyUnicode_FromString(PyBytes_AS_STRING(newfmt));
         if (format != NULL) {
-            _Py_IDENTIFIER(strftime);
-
             result = _PyObject_CallMethodId(time, &PyId_strftime, "OO",
                                             format, timetuple, NULL);
             Py_DECREF(format);
@@ -1566,7 +1575,6 @@ multiply_float_timedelta(PyObject *floatobj, PyDateTime_Delta *delta)
     PyObject *result = NULL;
     PyObject *pyus_in = NULL, *temp, *pyus_out;
     PyObject *ratio = NULL;
-    _Py_IDENTIFIER(as_integer_ratio);
 
     pyus_in = delta_to_microseconds(delta);
     if (pyus_in == NULL)
@@ -1665,7 +1673,6 @@ truedivide_timedelta_float(PyDateTime_Delta *delta, PyObject *f)
     PyObject *result = NULL;
     PyObject *pyus_in = NULL, *temp, *pyus_out;
     PyObject *ratio = NULL;
-    _Py_IDENTIFIER(as_integer_ratio);
 
     pyus_in = delta_to_microseconds(delta);
     if (pyus_in == NULL)
@@ -2635,8 +2642,6 @@ date_isoformat(PyDateTime_Date *self)
 static PyObject *
 date_str(PyDateTime_Date *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "()");
 }
 
@@ -2676,7 +2681,6 @@ static PyObject *
 date_format(PyDateTime_Date *self, PyObject *args)
 {
     PyObject *format;
-    _Py_IDENTIFIER(strftime);
 
     if (!PyArg_ParseTuple(args, "U:__format__", &format))
         return NULL;
@@ -3593,8 +3597,6 @@ time_repr(PyDateTime_Time *self)
 static PyObject *
 time_str(PyDateTime_Time *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "()");
 }
 
@@ -4143,31 +4145,71 @@ datetime_best_possible(PyObject *cls, TM_FUNC f, PyObject *tzinfo)
                                       tzinfo);
 }
 
-/* Return best possible local time -- this isn't constrained by the
- * precision of a timestamp.
- */
+/*[clinic]
+
+@classmethod
+datetime.datetime.now
+
+    tz: object = None
+        Timezone object.
+
+Returns new datetime object representing current time local to tz.
+
+If no tz is specified, uses local timezone.
+[clinic]*/
+
+PyDoc_STRVAR(datetime_datetime_now__doc__,
+"now(tz=None)\n"
+"Returns new datetime object representing current time local to tz.\n"
+"\n"
+"  tz\n"
+"    Timezone object.\n"
+"\n"
+"If no tz is specified, uses local timezone.");
+
+#define DATETIME_DATETIME_NOW_METHODDEF    \
+    {"now", (PyCFunction)datetime_datetime_now, METH_VARARGS|METH_KEYWORDS|METH_CLASS, datetime_datetime_now__doc__},
+
 static PyObject *
-datetime_now(PyObject *cls, PyObject *args, PyObject *kw)
+datetime_datetime_now_impl(PyTypeObject *cls, PyObject *tz);
+
+static PyObject *
+datetime_datetime_now(PyTypeObject *cls, PyObject *args, PyObject *kwargs)
+{
+    PyObject *return_value = NULL;
+    static char *_keywords[] = {"tz", NULL};
+    PyObject *tz = Py_None;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs,
+        "|O:now", _keywords,
+        &tz))
+        goto exit;
+    return_value = datetime_datetime_now_impl(cls, tz);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+datetime_datetime_now_impl(PyTypeObject *cls, PyObject *tz)
+/*[clinic checksum: ca3d26a423b3f633b260c7622e303f0915a96f7c]*/
 {
     PyObject *self;
-    PyObject *tzinfo = Py_None;
-    static char *keywords[] = {"tz", NULL};
 
-    if (! PyArg_ParseTupleAndKeywords(args, kw, "|O:now", keywords,
-                                      &tzinfo))
-        return NULL;
-    if (check_tzinfo_subclass(tzinfo) < 0)
+    /* Return best possible local time -- this isn't constrained by the
+     * precision of a timestamp.
+     */
+    if (check_tzinfo_subclass(tz) < 0)
         return NULL;
 
-    self = datetime_best_possible(cls,
-                                  tzinfo == Py_None ? localtime : gmtime,
-                                  tzinfo);
-    if (self != NULL && tzinfo != Py_None) {
+    self = datetime_best_possible((PyObject *)cls,
+                                  tz == Py_None ? localtime : gmtime,
+                                  tz);
+    if (self != NULL && tz != Py_None) {
         /* Convert UTC to tzinfo's zone. */
         PyObject *temp = self;
-        _Py_IDENTIFIER(fromutc);
 
-        self = _PyObject_CallMethodId(tzinfo, &PyId_fromutc, "O", self);
+        self = _PyObject_CallMethodId(tz, &PyId_fromutc, "O", self);
         Py_DECREF(temp);
     }
     return self;
@@ -4204,7 +4246,6 @@ datetime_fromtimestamp(PyObject *cls, PyObject *args, PyObject *kw)
     if (self != NULL && tzinfo != Py_None) {
         /* Convert UTC to tzinfo's zone. */
         PyObject *temp = self;
-        _Py_IDENTIFIER(fromutc);
 
         self = _PyObject_CallMethodId(tzinfo, &PyId_fromutc, "O", self);
         Py_DECREF(temp);
@@ -4426,6 +4467,9 @@ datetime_subtract(PyObject *left, PyObject *right)
             delta_us = DATE_GET_MICROSECOND(left) -
                        DATE_GET_MICROSECOND(right);
             result = new_delta(delta_d, delta_s, delta_us, 1);
+            if (result == NULL)
+                return NULL;
+
             if (offdiff != NULL) {
                 PyObject *temp = result;
                 result = delta_subtract(result, offdiff);
@@ -4487,8 +4531,6 @@ datetime_repr(PyDateTime_DateTime *self)
 static PyObject *
 datetime_str(PyDateTime_DateTime *self)
 {
-    _Py_IDENTIFIER(isoformat);
-
     return _PyObject_CallMethodId((PyObject *)self, &PyId_isoformat, "(s)", " ");
 }
 
@@ -4767,7 +4809,6 @@ datetime_astimezone(PyDateTime_DateTime *self, PyObject *args, PyObject *kw)
     PyObject *offset;
     PyObject *temp;
     PyObject *tzinfo = Py_None;
-    _Py_IDENTIFIER(fromutc);
     static char *keywords[] = {"tz", NULL};
 
     if (! PyArg_ParseTupleAndKeywords(args, kw, "|O:astimezone", keywords,
@@ -5001,9 +5042,7 @@ static PyMethodDef datetime_methods[] = {
 
     /* Class methods: */
 
-    {"now",         (PyCFunction)datetime_now,
-     METH_VARARGS | METH_KEYWORDS | METH_CLASS,
-     PyDoc_STR("[tz] -> new datetime with tz's local day and time.")},
+    DATETIME_DATETIME_NOW_METHODDEF
 
     {"utcnow",         (PyCFunction)datetime_utcnow,
      METH_NOARGS | METH_CLASS,

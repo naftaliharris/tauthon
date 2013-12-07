@@ -1941,10 +1941,10 @@ unsigned char _PyLong_DigitValue[256] = {
  * string characters.
  */
 static PyLongObject *
-long_from_binary_base(char **str, int base)
+long_from_binary_base(const char **str, int base)
 {
-    char *p = *str;
-    char *start = p;
+    const char *p = *str;
+    const char *start = p;
     int bits_per_char;
     Py_ssize_t n;
     PyLongObject *z;
@@ -2009,10 +2009,10 @@ long_from_binary_base(char **str, int base)
  * If unsuccessful, NULL will be returned.
  */
 PyObject *
-PyLong_FromString(char *str, char **pend, int base)
+PyLong_FromString(const char *str, char **pend, int base)
 {
     int sign = 1, error_if_nonzero = 0;
-    char *start, *orig_str = str;
+    const char *start, *orig_str = str;
     PyLongObject *z = NULL;
     PyObject *strobj;
     Py_ssize_t slen;
@@ -2147,7 +2147,7 @@ digit beyond the first.
         int convwidth;
         twodigits convmultmax, convmult;
         digit *pz, *pzstop;
-        char* scan;
+        const char* scan;
 
         static double log_base_BASE[37] = {0.0e0,};
         static int convwidth_base[37] = {0,};
@@ -2275,12 +2275,12 @@ digit beyond the first.
     if (z == NULL)
         return NULL;
     if (pend != NULL)
-        *pend = str;
+        *pend = (char *)str;
     return (PyObject *) z;
 
   onError:
     if (pend != NULL)
-        *pend = str;
+        *pend = (char *)str;
     Py_XDECREF(z);
     slen = strlen(orig_str) < 200 ? strlen(orig_str) : 200;
     strobj = PyUnicode_FromStringAndSize(orig_str, slen);
@@ -3878,10 +3878,16 @@ long_pow(PyObject *v, PyObject *w, PyObject *x)
             goto Done;
         }
 
-        /* if base < 0:
-               base = base % modulus
-           Having the base positive just makes things easier. */
-        if (Py_SIZE(a) < 0) {
+        /* Reduce base by modulus in some cases:
+           1. If base < 0.  Forcing the base non-negative makes things easier.
+           2. If base is obviously larger than the modulus.  The "small
+              exponent" case later can multiply directly by base repeatedly,
+              while the "large exponent" case multiplies directly by base 31
+              times.  It can be unboundedly faster to multiply by
+              base % modulus instead.
+           We could _always_ do this reduction, but l_divmod() isn't cheap,
+           so we only do it when it buys something. */
+        if (Py_SIZE(a) < 0 || Py_SIZE(a) > Py_SIZE(c)) {
             if (l_divmod(a, c, NULL, &temp) < 0)
                 goto Error;
             Py_DECREF(a);
@@ -5083,7 +5089,7 @@ _PyLong_Init(void)
             assert(v->ob_digit[0] == abs(ival));
         }
         else {
-            PyObject_INIT(v, &PyLong_Type);
+            (void)PyObject_INIT(v, &PyLong_Type);
         }
         Py_SIZE(v) = size;
         v->ob_digit[0] = abs(ival);

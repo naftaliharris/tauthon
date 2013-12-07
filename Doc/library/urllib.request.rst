@@ -59,7 +59,7 @@ The :mod:`urllib.request` module defines the following functions:
    some non-Windows platforms.
 
    .. warning::
-      If neither *cafile* nor *capath* is specified, and *cadefault* is False,
+      If neither *cafile* nor *capath* is specified, and *cadefault* is ``False``,
       an HTTPS request will not do any verification of the server's
       certificate.
 
@@ -81,7 +81,7 @@ The :mod:`urllib.request` module defines the following functions:
 
    * :meth:`~urllib.response.addinfourl.getcode` -- return the HTTP status code of the response.
 
-   Raises :exc:`URLError` on errors.
+   Raises :exc:`~urllib.error.URLError` on errors.
 
    Note that ``None`` may be returned if no handler handles the request (though
    the default installed global :class:`OpenerDirector` uses
@@ -144,14 +144,14 @@ The :mod:`urllib.request` module defines the following functions:
 
    Convert the pathname *path* from the local syntax for a path to the form used in
    the path component of a URL.  This does not produce a complete URL.  The return
-   value will already be quoted using the :func:`quote` function.
+   value will already be quoted using the :func:`~urllib.parse.quote` function.
 
 
 .. function:: url2pathname(path)
 
    Convert the path component *path* from a percent-encoded URL to the local syntax for a
-   path.  This does not accept a complete URL.  This function uses :func:`unquote`
-   to decode *path*.
+   path.  This does not accept a complete URL.  This function uses
+   :func:`~urllib.parse.unquote` to decode *path*.
 
 .. function:: getproxies()
 
@@ -211,7 +211,7 @@ The following classes are provided:
    containing the image.
 
    *unverifiable* should indicate whether the request is unverifiable,
-   as defined by RFC 2965.  It defaults to False.  An unverifiable
+   as defined by RFC 2965.  It defaults to ``False``.  An unverifiable
    request is one whose URL the user did not have the option to
    approve.  For example, if the request is for an image in an HTML
    document, and the user had no option to approve the automatic
@@ -220,9 +220,14 @@ The following classes are provided:
    *method* should be a string that indicates the HTTP request method that
    will be used (e.g. ``'HEAD'``).  Its value is stored in the
    :attr:`~Request.method` attribute and is used by :meth:`get_method()`.
+   Subclasses may indicate a default method by setting the
+   :attr:`~Request.method` attribute in the class itself.
 
    .. versionchanged:: 3.3
       :attr:`Request.method` argument is added to the Request class.
+
+   .. versionchanged:: 3.4
+      Default :attr:`Request.method` may be indicated at the class level.
 
 
 .. class:: OpenerDirector()
@@ -240,7 +245,7 @@ The following classes are provided:
 .. class:: HTTPDefaultErrorHandler()
 
    A class which defines a default handler for HTTP error responses; all responses
-   are turned into :exc:`HTTPError` exceptions.
+   are turned into :exc:`~urllib.error.HTTPError` exceptions.
 
 
 .. class:: HTTPRedirectHandler()
@@ -577,8 +582,8 @@ sorting the handler instances.
 
 #. Handlers with a method named like :meth:`protocol_open` are called to handle
    the request. This stage ends when a handler either returns a non-\ :const:`None`
-   value (ie. a response), or raises an exception (usually :exc:`URLError`).
-   Exceptions are allowed to propagate.
+   value (ie. a response), or raises an exception (usually
+   :exc:`~urllib.error.URLError`).  Exceptions are allowed to propagate.
 
    In fact, the above algorithm is first tried for methods named
    :meth:`default_open`.  If all such methods return :const:`None`, the algorithm
@@ -637,8 +642,9 @@ The following attribute and methods should only be used by classes derived from
    This method, if implemented, will be called by the parent
    :class:`OpenerDirector`.  It should return a file-like object as described in
    the return value of the :meth:`open` of :class:`OpenerDirector`, or ``None``.
-   It should raise :exc:`URLError`, unless a truly exceptional thing happens (for
-   example, :exc:`MemoryError` should not be mapped to :exc:`URLError`).
+   It should raise :exc:`~urllib.error.URLError`, unless a truly exceptional
+   thing happens (for example, :exc:`MemoryError` should not be mapped to
+   :exc:`URLError`).
 
    This method will be called before any protocol-specific open method.
 
@@ -724,8 +730,8 @@ HTTPRedirectHandler Objects
 .. note::
 
    Some HTTP redirections require action from this module's client code.  If this
-   is the case, :exc:`HTTPError` is raised.  See :rfc:`2616` for details of the
-   precise meanings of the various redirection codes.
+   is the case, :exc:`~urllib.error.HTTPError` is raised.  See :rfc:`2616` for
+   details of the precise meanings of the various redirection codes.
 
    An :class:`HTTPError` exception raised as a security consideration if the
    HTTPRedirectHandler is presented with a redirected url which is not an HTTP,
@@ -738,9 +744,9 @@ HTTPRedirectHandler Objects
    by the default implementations of the :meth:`http_error_30\*` methods when a
    redirection is received from the server.  If a redirection should take place,
    return a new :class:`Request` to allow :meth:`http_error_30\*` to perform the
-   redirect to *newurl*.  Otherwise, raise :exc:`HTTPError` if no other handler
-   should try to handle this URL, or return ``None`` if you can't but another
-   handler might.
+   redirect to *newurl*.  Otherwise, raise :exc:`~urllib.error.HTTPError` if
+   no other handler should try to handle this URL, or return ``None`` if you
+   can't but another handler might.
 
    .. note::
 
@@ -942,7 +948,7 @@ FileHandler Objects
 
    .. versionchanged:: 3.2
       This method is applicable only for local hostnames.  When a remote
-      hostname is given, an :exc:`URLError` is raised.
+      hostname is given, an :exc:`~urllib.error.URLError` is raised.
 
 
 .. _data-handler-objects:
@@ -999,7 +1005,7 @@ UnknownHandler Objects
 
 .. method:: UnknownHandler.unknown_open()
 
-   Raise a :exc:`URLError` exception.
+   Raise a :exc:`~urllib.error.URLError` exception.
 
 
 .. _http-error-processor-objects:
@@ -1016,7 +1022,7 @@ HTTPErrorProcessor Objects
    For non-200 error codes, this simply passes the job on to the
    :meth:`protocol_error_code` handler methods, via :meth:`OpenerDirector.error`.
    Eventually, :class:`HTTPDefaultErrorHandler` will raise an
-   :exc:`HTTPError` if no other handler handles the error.
+   :exc:`~urllib.error.HTTPError` if no other handler handles the error.
 
 
 .. method:: HTTPErrorProcessor.https_response()
@@ -1229,7 +1235,7 @@ some point in the future.
    argument may be given to specify a ``POST`` request (normally the request
    type is ``GET``).  The *data* argument must be a bytes object in standard
    :mimetype:`application/x-www-form-urlencoded` format; see the
-   :func:`urlencode` function below.
+   :func:`urllib.parse.urlencode` function.
 
    :func:`urlretrieve` will raise :exc:`ContentTooShortError` when it detects that
    the amount of data available  was less than the expected amount (which is the
@@ -1311,8 +1317,8 @@ some point in the future.
        If the *url* uses the :file:`http:` scheme identifier, the optional *data*
        argument may be given to specify a ``POST`` request (normally the request type
        is ``GET``).  The *data* argument must in standard
-       :mimetype:`application/x-www-form-urlencoded` format; see the :func:`urlencode`
-       function below.
+       :mimetype:`application/x-www-form-urlencoded` format; see the
+       :func:`urllib.parse.urlencode` function.
 
 
     .. attribute:: version

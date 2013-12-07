@@ -425,6 +425,10 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 #define INVALID_SOCKET (-1)
 #endif
 
+#ifndef INADDR_NONE
+#define INADDR_NONE (-1)
+#endif
+
 /* XXX There's a problem here: *static* functions are not supposed to have
    a Py prefix (or use CapitalizedWords).  Later... */
 
@@ -581,8 +585,9 @@ sendsegmented(int sock_fd, char *buf, int len, int flags)
 static int
 internal_setblocking(PySocketSockObject *s, int block)
 {
-#ifndef MS_WINDOWS
-    int delay_flag;
+#if !defined(MS_WINDOWS) \
+    && !((defined(HAVE_SYS_IOCTL_H) && defined(FIONBIO)) || defined(__VMS))
+    int delay_flag, new_delay_flag;
 #endif
 #ifdef SOCK_NONBLOCK
     if (block)
@@ -593,17 +598,18 @@ internal_setblocking(PySocketSockObject *s, int block)
 
     Py_BEGIN_ALLOW_THREADS
 #ifndef MS_WINDOWS
-#if defined(__VMS)
+#if (defined(HAVE_SYS_IOCTL_H) && defined(FIONBIO)) || defined(__VMS)
     block = !block;
     ioctl(s->sock_fd, FIONBIO, (unsigned int *)&block);
-#else  /* !__VMS */
+#else
     delay_flag = fcntl(s->sock_fd, F_GETFL, 0);
     if (block)
-        delay_flag &= (~O_NONBLOCK);
+        new_delay_flag = delay_flag & (~O_NONBLOCK);
     else
-        delay_flag |= O_NONBLOCK;
-    fcntl(s->sock_fd, F_SETFL, delay_flag);
-#endif /* !__VMS */
+        new_delay_flag = delay_flag | O_NONBLOCK;
+    if (new_delay_flag != delay_flag)
+        fcntl(s->sock_fd, F_SETFL, new_delay_flag);
+#endif
 #else /* MS_WINDOWS */
     block = !block;
     ioctlsocket(s->sock_fd, FIONBIO, (u_long*)&block);
@@ -787,8 +793,6 @@ setipaddr(char *name, struct sockaddr *addr_ret, size_t addr_ret_size, int af)
 {
     struct addrinfo hints, *res;
     int error;
-    int d1, d2, d3, d4;
-    char ch;
 
     memset((void *) addr_ret, '\0', sizeof(*addr_ret));
     if (name[0] == '\0') {
@@ -837,7 +841,10 @@ setipaddr(char *name, struct sockaddr *addr_ret, size_t addr_ret_size, int af)
         freeaddrinfo(res);
         return siz;
     }
-    if (name[0] == '<' && strcmp(name, "<broadcast>") == 0) {
+    /* special-case broadcast - inet_addr() below can return INADDR_NONE for
+     * this */
+    if (strcmp(name, "255.255.255.255") == 0 ||
+        strcmp(name, "<broadcast>") == 0) {
         struct sockaddr_in *sin;
         if (af != AF_INET && af != AF_UNSPEC) {
             PyErr_SetString(PyExc_OSError,
@@ -853,20 +860,53 @@ setipaddr(char *name, struct sockaddr *addr_ret, size_t addr_ret_size, int af)
         sin->sin_addr.s_addr = INADDR_BROADCAST;
         return sizeof(sin->sin_addr);
     }
-    if (sscanf(name, "%d.%d.%d.%d%c", &d1, &d2, &d3, &d4, &ch) == 4 &&
-        0 <= d1 && d1 <= 255 && 0 <= d2 && d2 <= 255 &&
-        0 <= d3 && d3 <= 255 && 0 <= d4 && d4 <= 255) {
-        struct sockaddr_in *sin;
-        sin = (struct sockaddr_in *)addr_ret;
-        sin->sin_addr.s_addr = htonl(
-            ((long) d1 << 24) | ((long) d2 << 16) |
-            ((long) d3 << 8) | ((long) d4 << 0));
-        sin->sin_family = AF_INET;
+
+    /* avoid a name resolution in case of numeric address */
+#ifdef HAVE_INET_PTON
+    /* check for an IPv4 address */
+    if (af == AF_UNSPEC || af == AF_INET) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)addr_ret;
+        memset(sin, 0, sizeof(*sin));
+        if (inet_pton(AF_INET, name, &sin->sin_addr) > 0) {
+            sin->sin_family = AF_INET;
 #ifdef HAVE_SOCKADDR_SA_LEN
-        sin->sin_len = sizeof(*sin);
+            sin->sin_len = sizeof(*sin);
 #endif
-        return 4;
+            return 4;
+        }
     }
+#ifdef ENABLE_IPV6
+    /* check for an IPv6 address - if the address contains a scope ID, we
+     * fallback to getaddrinfo(), which can handle translation from interface
+     * name to interface index */
+    if ((af == AF_UNSPEC || af == AF_INET6) && !strchr(name, '%')) {
+        struct sockaddr_in6 *sin = (struct sockaddr_in6 *)addr_ret;
+        memset(sin, 0, sizeof(*sin));
+        if (inet_pton(AF_INET6, name, &sin->sin6_addr) > 0) {
+            sin->sin6_family = AF_INET6;
+#ifdef HAVE_SOCKADDR_SA_LEN
+            sin->sin6_len = sizeof(*sin);
+#endif
+            return 16;
+        }
+    }
+#endif /* ENABLE_IPV6 */
+#else /* HAVE_INET_PTON */
+    /* check for an IPv4 address */
+    if (af == AF_INET || af == AF_UNSPEC) {
+        struct sockaddr_in *sin = (struct sockaddr_in *)addr_ret;
+        memset(sin, 0, sizeof(*sin));
+        if ((sin->sin_addr.s_addr = inet_addr(name)) != INADDR_NONE) {
+            sin->sin_family = AF_INET;
+#ifdef HAVE_SOCKADDR_SA_LEN
+            sin->sin_len = sizeof(*sin);
+#endif
+            return 4;
+        }
+    }
+#endif /* HAVE_INET_PTON */
+
+    /* perform a name resolution */
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = af;
     Py_BEGIN_ALLOW_THREADS
@@ -2282,8 +2322,8 @@ sock_detach(PySocketSockObject *s)
 PyDoc_STRVAR(detach_doc,
 "detach()\n\
 \n\
-Close the socket object without closing the underlying file descriptor.\
-The object cannot be used after this call, but the file descriptor\
+Close the socket object without closing the underlying file descriptor.\n\
+The object cannot be used after this call, but the file descriptor\n\
 can be reused for other purposes.  The file descriptor is returned.");
 
 static int
@@ -2795,7 +2835,7 @@ sock_recvfrom_guts(PySocketSockObject *s, char* cbuf, Py_ssize_t len, int flags,
     memset(&addrbuf, 0, addrlen);
     timeout = internal_select_ex(s, 0, interval);
     if (!timeout) {
-#ifndef MS_WINDOWS
+#ifdef MS_WINDOWS
         if (len > INT_MAX)
             len = INT_MAX;
         n = recvfrom(s->sock_fd, cbuf, (int)len, flags,
@@ -4664,7 +4704,7 @@ socket_dup(PyObject *self, PyObject *fdobj)
     /* On UNIX, dup can be used to duplicate the file descriptor of a socket */
     newfd = _Py_dup(fd);
     if (newfd == INVALID_SOCKET)
-        return NULL; 
+        return NULL;
 #endif
 
     newfdobj = PyLong_FromSocket_t(newfd);
@@ -4896,9 +4936,6 @@ binary format used in low-level network functions.");
 static PyObject*
 socket_inet_aton(PyObject *self, PyObject *args)
 {
-#ifndef INADDR_NONE
-#define INADDR_NONE (-1)
-#endif
 #ifdef HAVE_INET_ATON
     struct in_addr buf;
 #endif
@@ -4988,13 +5025,17 @@ socket_inet_ntoa(PyObject *self, PyObject *args)
     return PyUnicode_FromString(inet_ntoa(packed_addr));
 }
 
-#ifdef HAVE_INET_PTON
+#if defined(HAVE_INET_PTON) || defined(MS_WINDOWS)
 
 PyDoc_STRVAR(inet_pton_doc,
 "inet_pton(af, ip) -> packed IP address string\n\
 \n\
 Convert an IP address from string format to a packed string suitable\n\
 for use with low-level network functions.");
+
+#endif
+
+#ifdef HAVE_INET_PTON
 
 static PyObject *
 socket_inet_pton(PyObject *self, PyObject *args)
@@ -5040,12 +5081,52 @@ socket_inet_pton(PyObject *self, PyObject *args)
         return NULL;
     }
 }
+#elif defined(MS_WINDOWS)
+
+static PyObject *
+socket_inet_pton(PyObject *self, PyObject *args)
+{
+    int af;
+    char* ip;
+    struct sockaddr_in6 addr;
+    INT ret, size;
+
+    if (!PyArg_ParseTuple(args, "is:inet_pton", &af, &ip)) {
+        return NULL;
+    }
+
+    size = sizeof(addr);
+    ret = WSAStringToAddressA(ip, af, NULL, (LPSOCKADDR)&addr, &size);
+
+    if (ret) {
+        PyErr_SetExcFromWindowsErr(PyExc_OSError, WSAGetLastError());
+        return NULL;
+    } else if(af == AF_INET) {
+        struct sockaddr_in *addr4 = (struct sockaddr_in*)&addr;
+        return PyBytes_FromStringAndSize((const char *)&(addr4->sin_addr),
+                                         sizeof(addr4->sin_addr));
+    } else if (af == AF_INET6) {
+        return PyBytes_FromStringAndSize((const char *)&(addr.sin6_addr),
+                                          sizeof(addr.sin6_addr));
+    } else {
+        PyErr_SetString(PyExc_OSError, "unknown address family");
+        return NULL;
+    }
+}
+
+#endif
+
+#if defined(HAVE_INET_PTON) || defined(MS_WINDOWS)
 
 PyDoc_STRVAR(inet_ntop_doc,
 "inet_ntop(af, packed_ip) -> string formatted IP address\n\
 \n\
 Convert a packed IP address of the given family to string format.");
 
+#endif
+
+
+#ifdef HAVE_INET_PTON
 static PyObject *
 socket_inet_ntop(PyObject *self, PyObject *args)
 {
@@ -5099,6 +5180,70 @@ socket_inet_ntop(PyObject *self, PyObject *args)
     return NULL;
 }
 
+#elif defined(MS_WINDOWS)
+
+static PyObject *
+socket_inet_ntop(PyObject *self, PyObject *args)
+{
+    int af;
+    char* packed;
+    int len;
+    struct sockaddr_in6 addr;
+    DWORD addrlen, ret, retlen;
+#ifdef ENABLE_IPV6
+    char ip[Py_MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN) + 1];
+#else
+    char ip[INET_ADDRSTRLEN + 1];
+#endif
+
+    /* Guarantee NUL-termination for PyUnicode_FromString() below */
+    memset((void *) &ip[0], '\0', sizeof(ip));
+
+    if (!PyArg_ParseTuple(args, "iy#:inet_ntop", &af, &packed, &len)) {
+        return NULL;
+    }
+
+    if (af == AF_INET) {
+        struct sockaddr_in * addr4 = (struct sockaddr_in *)&addr;
+
+        if (len != sizeof(struct in_addr)) {
+            PyErr_SetString(PyExc_ValueError,
+                "invalid length of packed IP address string");
+            return NULL;
+        }
+        memset(addr4, 0, sizeof(struct sockaddr_in));
+        addr4->sin_family = AF_INET;
+        memcpy(&(addr4->sin_addr), packed, sizeof(addr4->sin_addr));
+        addrlen = sizeof(struct sockaddr_in);
+    } else if (af == AF_INET6) {
+        if (len != sizeof(struct in6_addr)) {
+            PyErr_SetString(PyExc_ValueError,
+                "invalid length of packed IP address string");
+            return NULL;
+        }
+
+        memset(&addr, 0, sizeof(addr));
+        addr.sin6_family = AF_INET6;
+        memcpy(&(addr.sin6_addr), packed, sizeof(addr.sin6_addr));
+        addrlen = sizeof(addr);
+    } else {
+        PyErr_Format(PyExc_ValueError,
+            "unknown address family %d", af);
+        return NULL;
+    }
+
+    retlen = sizeof(ip);
+    ret = WSAAddressToStringA((struct sockaddr*)&addr, addrlen, NULL,
+                              ip, &retlen);
+
+    if (ret) {
+        PyErr_SetExcFromWindowsErr(PyExc_OSError, WSAGetLastError());
+        return NULL;
+    } else {
+        return PyUnicode_FromString(ip);
+    }
+}
+
 #endif /* HAVE_INET_PTON */
 
 /* Python interface to getaddrinfo(host, port). */
@@ -5120,7 +5265,7 @@ socket_getaddrinfo(PyObject *self, PyObject *args, PyObject* kwargs)
     PyObject *all = (PyObject *)NULL;
     PyObject *idna = NULL;
 
-    family = socktype = protocol = flags = 0;
+    socktype = protocol = flags = 0;
     family = AF_UNSPEC;
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "OO|iiii:getaddrinfo",
                           kwnames, &hobj, &pobj, &family, &socktype,
@@ -5565,7 +5710,7 @@ static PyMethodDef socket_methods[] = {
      METH_VARARGS, inet_aton_doc},
     {"inet_ntoa",               socket_inet_ntoa,
      METH_VARARGS, inet_ntoa_doc},
-#ifdef HAVE_INET_PTON
+#if defined(HAVE_INET_PTON) || defined(MS_WINDOWS)
     {"inet_pton",               socket_inet_pton,
      METH_VARARGS, inet_pton_doc},
     {"inet_ntop",               socket_inet_ntop,
@@ -6097,6 +6242,9 @@ PyInit__socket(void)
 #endif
 #ifdef  SO_BINDTODEVICE
     PyModule_AddIntMacro(m, SO_BINDTODEVICE);
+#endif
+#ifdef  SO_PRIORITY
+    PyModule_AddIntMacro(m, SO_PRIORITY);
 #endif
 
     /* Maximum number of connections for "listen" */

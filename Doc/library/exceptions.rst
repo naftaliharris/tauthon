@@ -146,10 +146,9 @@ The following exceptions are the exceptions that are usually raised.
 
 .. exception:: EOFError
 
-   Raised when one of the built-in functions (:func:`input` or :func:`raw_input`)
-   hits an end-of-file condition (EOF) without reading any data. (N.B.: the
-   :meth:`file.read` and :meth:`file.readline` methods return an empty string
-   when they hit EOF.)
+   Raised when the :func:`input` function hits an end-of-file condition (EOF)
+   without reading any data. (N.B.: the :meth:`io.IOBase.read` and
+   :meth:`io.IOBase.readline` methods return an empty string when they hit EOF.)
 
 
 .. exception:: FloatingPointError
@@ -288,8 +287,7 @@ The following exceptions are the exceptions that are usually raised.
 
    Raised when an error is detected that doesn't fall in any of the other
    categories.  The associated value is a string indicating what precisely went
-   wrong.  (This exception is mostly a relic from a previous version of the
-   interpreter; it is not used very much any more.)
+   wrong.
 
 
 .. exception:: StopIteration
@@ -356,7 +354,7 @@ The following exceptions are the exceptions that are usually raised.
    if it has another type (such as a string), the object's value is printed and
    the exit status is one.
 
-   Instances have an attribute :attr:`code` which is set to the proposed exit
+   Instances have an attribute :attr:`!code` which is set to the proposed exit
    status or error message (defaulting to ``None``). Also, this exception derives
    directly from :exc:`BaseException` and not :exc:`Exception`, since it is not
    technically an error.
@@ -366,7 +364,7 @@ The following exceptions are the exceptions that are usually raised.
    executed, and so that a debugger can execute a script without running the risk
    of losing control.  The :func:`os._exit` function can be used if it is
    absolutely positively necessary to exit immediately (for example, in the child
-   process after a call to :func:`fork`).
+   process after a call to :func:`os.fork`).
 
    The exception inherits from :exc:`BaseException` instead of :exc:`Exception` so
    that it is not accidentally caught by code that catches :exc:`Exception`.  This
@@ -629,7 +627,7 @@ module for more information.
 
 .. exception:: BytesWarning
 
-   Base class for warnings related to :class:`bytes` and :class:`buffer`.
+   Base class for warnings related to :class:`bytes` and :class:`bytearray`.
 
 
 .. exception:: ResourceWarning

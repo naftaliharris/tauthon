@@ -8,6 +8,12 @@
 extern "C" {
 #endif
 
+_Py_IDENTIFIER(Py_Repr);
+_Py_IDENTIFIER(__bytes__);
+_Py_IDENTIFIER(__dir__);
+_Py_IDENTIFIER(__isabstractmethod__);
+_Py_IDENTIFIER(builtins);
+
 #ifdef Py_REF_DEBUG
 Py_ssize_t _Py_RefTotal;
 
@@ -560,7 +566,6 @@ PyObject *
 PyObject_Bytes(PyObject *v)
 {
     PyObject *result, *func;
-    _Py_IDENTIFIER(__bytes__);
 
     if (v == NULL)
         return PyBytes_FromString("<NULL>");
@@ -726,150 +731,6 @@ PyObject_RichCompareBool(PyObject *v, PyObject *w, int op)
     return ok;
 }
 
-/* Set of hash utility functions to help maintaining the invariant that
-    if a==b then hash(a)==hash(b)
-
-   All the utility functions (_Py_Hash*()) return "-1" to signify an error.
-*/
-
-/* For numeric types, the hash of a number x is based on the reduction
-   of x modulo the prime P = 2**_PyHASH_BITS - 1.  It's designed so that
-   hash(x) == hash(y) whenever x and y are numerically equal, even if
-   x and y have different types.
-
-   A quick summary of the hashing strategy:
-
-   (1) First define the 'reduction of x modulo P' for any rational
-   number x; this is a standard extension of the usual notion of
-   reduction modulo P for integers.  If x == p/q (written in lowest
-   terms), the reduction is interpreted as the reduction of p times
-   the inverse of the reduction of q, all modulo P; if q is exactly
-   divisible by P then define the reduction to be infinity.  So we've
-   got a well-defined map
-
-      reduce : { rational numbers } -> { 0, 1, 2, ..., P-1, infinity }.
-
-   (2) Now for a rational number x, define hash(x) by:
-
-      reduce(x)   if x >= 0
-      -reduce(-x) if x < 0
-
-   If the result of the reduction is infinity (this is impossible for
-   integers, floats and Decimals) then use the predefined hash value
-   _PyHASH_INF for x >= 0, or -_PyHASH_INF for x < 0, instead.
-   _PyHASH_INF, -_PyHASH_INF and _PyHASH_NAN are also used for the
-   hashes of float and Decimal infinities and nans.
-
-   A selling point for the above strategy is that it makes it possible
-   to compute hashes of decimal and binary floating-point numbers
-   efficiently, even if the exponent of the binary or decimal number
-   is large.  The key point is that
-
-      reduce(x * y) == reduce(x) * reduce(y) (modulo _PyHASH_MODULUS)
-
-   provided that {reduce(x), reduce(y)} != {0, infinity}.  The reduction of a
-   binary or decimal float is never infinity, since the denominator is a power
-   of 2 (for binary) or a divisor of a power of 10 (for decimal).  So we have,
-   for nonnegative x,
-
-      reduce(x * 2**e) == reduce(x) * reduce(2**e) % _PyHASH_MODULUS
-
-      reduce(x * 10**e) == reduce(x) * reduce(10**e) % _PyHASH_MODULUS
-
-   and reduce(10**e) can be computed efficiently by the usual modular
-   exponentiation algorithm.  For reduce(2**e) it's even better: since
-   P is of the form 2**n-1, reduce(2**e) is 2**(e mod n), and multiplication
-   by 2**(e mod n) modulo 2**n-1 just amounts to a rotation of bits.
-
-   */
-
-Py_hash_t
-_Py_HashDouble(double v)
-{
-    int e, sign;
-    double m;
-    Py_uhash_t x, y;
-
-    if (!Py_IS_FINITE(v)) {
-        if (Py_IS_INFINITY(v))
-            return v > 0 ? _PyHASH_INF : -_PyHASH_INF;
-        else
-            return _PyHASH_NAN;
-    }
-
-    m = frexp(v, &e);
-
-    sign = 1;
-    if (m < 0) {
-        sign = -1;
-        m = -m;
-    }
-
-    /* process 28 bits at a time;  this should work well both for binary
-       and hexadecimal floating point. */
-    x = 0;
-    while (m) {
-        x = ((x << 28) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - 28);
-        m *= 268435456.0;  /* 2**28 */
-        e -= 28;
-        y = (Py_uhash_t)m;  /* pull out integer part */
-        m -= y;
-        x += y;
-        if (x >= _PyHASH_MODULUS)
-            x -= _PyHASH_MODULUS;
-    }
-
-    /* adjust for the exponent;  first reduce it modulo _PyHASH_BITS */
-    e = e >= 0 ? e % _PyHASH_BITS : _PyHASH_BITS-1-((-1-e) % _PyHASH_BITS);
-    x = ((x << e) & _PyHASH_MODULUS) | x >> (_PyHASH_BITS - e);
-
-    x = x * sign;
-    if (x == (Py_uhash_t)-1)
-        x = (Py_uhash_t)-2;
-    return (Py_hash_t)x;
-}
-
-Py_hash_t
-_Py_HashPointer(void *p)
-{
-    Py_hash_t x;
-    size_t y = (size_t)p;
-    /* bottom 3 or 4 bits are likely to be 0; rotate y by 4 to avoid
-       excessive hash collisions for dicts and sets */
-    y = (y >> 4) | (y << (8 * SIZEOF_VOID_P - 4));
-    x = (Py_hash_t)y;
-    if (x == -1)
-        x = -2;
-    return x;
-}
-
-Py_hash_t
-_Py_HashBytes(unsigned char *p, Py_ssize_t len)
-{
-    Py_uhash_t x;
-    Py_ssize_t i;
-
-    /*
-      We make the hash of the empty string be 0, rather than using
-      (prefix ^ suffix), since this slightly obfuscates the hash secret
-    */
-#ifdef Py_DEBUG
-    assert(_Py_HashSecret_Initialized);
-#endif
-    if (len == 0) {
-        return 0;
-    }
-    x = (Py_uhash_t) _Py_HashSecret.prefix;
-    x ^= (Py_uhash_t) *p << 7;
-    for (i = 0; i < len; i++)
-        x = (_PyHASH_MULTIPLIER * x) ^ (Py_uhash_t) *p++;
-    x ^= (Py_uhash_t) len;
-    x ^= (Py_uhash_t) _Py_HashSecret.suffix;
-    if (x == -1)
-        x = -2;
-    return x;
-}
-
 Py_hash_t
 PyObject_HashNotImplemented(PyObject *v)
 {
@@ -877,8 +738,6 @@ PyObject_HashNotImplemented(PyObject *v)
                  Py_TYPE(v)->tp_name);
     return -1;
 }
-
-_Py_HashSecret_t _Py_HashSecret;
 
 Py_hash_t
 PyObject_Hash(PyObject *v)
@@ -949,7 +808,6 @@ _PyObject_IsAbstract(PyObject *obj)
 {
     int res;
     PyObject* isabstract;
-    _Py_IDENTIFIER(__isabstractmethod__);
 
     if (obj == NULL)
         return 0;
@@ -1122,8 +980,12 @@ PyObject_SelfIter(PyObject *obj)
 PyObject *
 _PyObject_GetBuiltin(const char *name)
 {
-    PyObject *mod, *attr;
-    mod = PyImport_ImportModule("builtins");
+    PyObject *mod_name, *mod, *attr;
+
+    mod_name = _PyUnicode_FromId(&PyId_builtins);   /* borrowed */
+    if (mod_name == NULL)
+        return NULL;
+    mod = PyImport_Import(mod_name);
     if (mod == NULL)
         return NULL;
     attr = PyObject_GetAttrString(mod, name);
@@ -1407,12 +1269,11 @@ static PyObject *
 _dir_locals(void)
 {
     PyObject *names;
-    PyObject *locals = PyEval_GetLocals();
+    PyObject *locals;
 
-    if (locals == NULL) {
-        PyErr_SetString(PyExc_SystemError, "frame does not exist");
+    locals = PyEval_GetLocals();
+    if (locals == NULL)
         return NULL;
-    }
 
     names = PyMapping_Keys(locals);
     if (!names)
@@ -1437,7 +1298,6 @@ static PyObject *
 _dir_object(PyObject *obj)
 {
     PyObject *result, *sorted;
-    _Py_IDENTIFIER(__dir__);
     PyObject *dirfunc = _PyObject_LookupSpecial(obj, &PyId___dir__);
 
     assert(obj);
@@ -1549,7 +1409,7 @@ static PyNumberMethods none_as_number = {
     0,                          /* nb_index */
 };
 
-static PyTypeObject PyNone_Type = {
+PyTypeObject _PyNone_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "NoneType",
     0,
@@ -1592,7 +1452,7 @@ static PyTypeObject PyNone_Type = {
 
 PyObject _Py_NoneStruct = {
   _PyObject_EXTRA_INIT
-  1, &PyNone_Type
+  1, &_PyNone_Type
 };
 
 /* NotImplemented is an object that can be used to signal that an
@@ -1603,6 +1463,17 @@ NotImplemented_repr(PyObject *op)
 {
     return PyUnicode_FromString("NotImplemented");
 }
+
+static PyObject *
+NotImplemented_reduce(PyObject *op)
+{
+    return PyUnicode_FromString("NotImplemented");
+}
+
+static PyMethodDef notimplemented_methods[] = {
+    {"__reduce__", (PyCFunction)NotImplemented_reduce, METH_NOARGS, NULL},
+    {NULL, NULL}
+};
 
 static PyObject *
 notimplemented_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
@@ -1623,7 +1494,7 @@ notimplemented_dealloc(PyObject* ignore)
     Py_FatalError("deallocating NotImplemented");
 }
 
-static PyTypeObject PyNotImplemented_Type = {
+PyTypeObject _PyNotImplemented_Type = {
     PyVarObject_HEAD_INIT(&PyType_Type, 0)
     "NotImplementedType",
     0,
@@ -1651,7 +1522,7 @@ static PyTypeObject PyNotImplemented_Type = {
     0,                  /*tp_weaklistoffset */
     0,                  /*tp_iter */
     0,                  /*tp_iternext */
-    0,                  /*tp_methods */
+    notimplemented_methods, /*tp_methods */
     0,                  /*tp_members */
     0,                  /*tp_getset */
     0,                  /*tp_base */
@@ -1666,7 +1537,7 @@ static PyTypeObject PyNotImplemented_Type = {
 
 PyObject _Py_NotImplementedStruct = {
     _PyObject_EXTRA_INIT
-    1, &PyNotImplemented_Type
+    1, &_PyNotImplemented_Type
 };
 
 void
@@ -1696,10 +1567,10 @@ _Py_ReadyTypes(void)
     if (PyType_Ready(&PyList_Type) < 0)
         Py_FatalError("Can't initialize list type");
 
-    if (PyType_Ready(&PyNone_Type) < 0)
+    if (PyType_Ready(&_PyNone_Type) < 0)
         Py_FatalError("Can't initialize None type");
 
-    if (PyType_Ready(&PyNotImplemented_Type) < 0)
+    if (PyType_Ready(&_PyNotImplemented_Type) < 0)
         Py_FatalError("Can't initialize NotImplemented type");
 
     if (PyType_Ready(&PyTraceBack_Type) < 0)
@@ -1970,8 +1841,6 @@ _PyObject_DebugTypeStats(FILE *out)
    See dictobject.c and listobject.c for examples of use.
 */
 
-#define KEY "Py_Repr"
-
 int
 Py_ReprEnter(PyObject *obj)
 {
@@ -1982,12 +1851,12 @@ Py_ReprEnter(PyObject *obj)
     dict = PyThreadState_GetDict();
     if (dict == NULL)
         return 0;
-    list = PyDict_GetItemString(dict, KEY);
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL) {
         list = PyList_New(0);
         if (list == NULL)
             return -1;
-        if (PyDict_SetItemString(dict, KEY, list) < 0)
+        if (_PyDict_SetItemId(dict, &PyId_Py_Repr, list) < 0)
             return -1;
         Py_DECREF(list);
     }
@@ -2015,7 +1884,7 @@ Py_ReprLeave(PyObject *obj)
     if (dict == NULL)
         goto finally;
 
-    list = PyDict_GetItemString(dict, KEY);
+    list = _PyDict_GetItemId(dict, &PyId_Py_Repr);
     if (list == NULL || !PyList_Check(list))
         goto finally;
 

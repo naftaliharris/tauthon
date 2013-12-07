@@ -1330,7 +1330,7 @@ memory_cast(PyMemoryViewObject *self, PyObject *args, PyObject *kwds)
             "memoryview: casts are restricted to C-contiguous views");
         return NULL;
     }
-    if (zero_in_shape(self)) {
+    if ((shape || self->view.ndim != 1) && zero_in_shape(self)) {
         PyErr_SetString(PyExc_TypeError,
             "memoryview: cannot cast view with zeros in shape or strides");
         return NULL;
@@ -2402,7 +2402,7 @@ static PyMappingMethods memory_as_mapping = {
 
 /* As sequence */
 static PySequenceMethods memory_as_sequence = {
-        0,                                /* sq_length */
+        (lenfunc)memory_length,           /* sq_length */
         0,                                /* sq_concat */
         0,                                /* sq_repeat */
         (ssizeargfunc)memory_item,        /* sq_item */
@@ -2742,7 +2742,7 @@ memory_hash(PyMemoryViewObject *self)
         }
 
         /* Can't fail */
-        self->hash = _Py_HashBytes((unsigned char *)mem, view->len);
+        self->hash = _Py_HashBytes(mem, view->len);
 
         if (mem != view->buf)
             PyMem_Free(mem);

@@ -14,7 +14,7 @@ from random import randint, random, getrandbits
 
 from test.support import (TESTFN, findfile, unlink,
                           requires_zlib, requires_bz2, requires_lzma,
-                          captured_stdout)
+                          captured_stdout, check_warnings)
 
 TESTFN2 = TESTFN + "2"
 TESTFNDIR = TESTFN + "d"
@@ -34,6 +34,10 @@ def get_files(test):
     with io.BytesIO() as f:
         yield f
         test.assertFalse(f.closed)
+
+def openU(zipfp, fn):
+    with check_warnings(('', DeprecationWarning)):
+        return zipfp.open(fn, 'rU')
 
 class AbstractTestsWithSourceFile:
     @classmethod
@@ -157,6 +161,45 @@ class AbstractTestsWithSourceFile:
     def test_random_open(self):
         for f in get_files(self):
             self.zip_random_open_test(f, self.compression)
+
+    def zip_read1_test(self, f, compression):
+        self.make_test_archive(f, compression)
+
+        # Read the ZIP archive
+        with zipfile.ZipFile(f, "r") as zipfp, \
+             zipfp.open(TESTFN) as zipopen:
+            zipdata = []
+            while True:
+                read_data = zipopen.read1(-1)
+                if not read_data:
+                    break
+                zipdata.append(read_data)
+
+        self.assertEqual(b''.join(zipdata), self.data)
+
+    def test_read1(self):
+        for f in get_files(self):
+            self.zip_read1_test(f, self.compression)
+
+    def zip_read1_10_test(self, f, compression):
+        self.make_test_archive(f, compression)
+
+        # Read the ZIP archive
+        with zipfile.ZipFile(f, "r") as zipfp, \
+             zipfp.open(TESTFN) as zipopen:
+            zipdata = []
+            while True:
+                read_data = zipopen.read1(10)
+                self.assertLessEqual(len(read_data), 10)
+                if not read_data:
+                    break
+                zipdata.append(read_data)
+
+        self.assertEqual(b''.join(zipdata), self.data)
+
+    def test_read1_10(self):
+        for f in get_files(self):
+            self.zip_read1_10_test(f, self.compression)
 
     def zip_readline_read_test(self, f, compression):
         self.make_test_archive(f, compression)
@@ -467,12 +510,12 @@ class StoredTestZip64InSmallFiles(AbstractTestZip64InSmallFiles,
     compression = zipfile.ZIP_STORED
 
     def large_file_exception_test(self, f, compression):
-        with zipfile.ZipFile(f, "w", compression) as zipfp:
+        with zipfile.ZipFile(f, "w", compression, allowZip64=False) as zipfp:
             self.assertRaises(zipfile.LargeZipFile,
                               zipfp.write, TESTFN, "another.name")
 
     def large_file_exception_test2(self, f, compression):
-        with zipfile.ZipFile(f, "w", compression) as zipfp:
+        with zipfile.ZipFile(f, "w", compression, allowZip64=False) as zipfp:
             self.assertRaises(zipfile.LargeZipFile,
                               zipfp.writestr, "another.name", self.data)
 
@@ -552,6 +595,34 @@ class PyZipFileTests(unittest.TestCase):
             self.assertCompiledIn('email/__init__.py', names)
             self.assertCompiledIn('email/mime/text.py', names)
 
+    def test_write_filtered_python_package(self):
+        import test
+        packagedir = os.path.dirname(test.__file__)
+
+        with TemporaryFile() as t, zipfile.PyZipFile(t, "w") as zipfp:
+
+            # first make sure that the test folder gives error messages
+            # (on the badsyntax_... files)
+            with captured_stdout() as reportSIO:
+                zipfp.writepy(packagedir)
+            reportStr = reportSIO.getvalue()
+            self.assertTrue('SyntaxError' in reportStr)
+
+            # then check that the filter works on the whole package
+            with captured_stdout() as reportSIO:
+                zipfp.writepy(packagedir, filterfunc=lambda whatever: False)
+            reportStr = reportSIO.getvalue()
+            self.assertTrue('SyntaxError' not in reportStr)
+
+            # then check that the filter works on individual files
+            with captured_stdout() as reportSIO:
+                zipfp.writepy(packagedir, filterfunc=lambda fn:
+                                                     'bad' not in fn)
+            reportStr = reportSIO.getvalue()
+            if reportStr:
+                print(reportStr)
+            self.assertTrue('SyntaxError' not in reportStr)
+
     def test_write_with_optimization(self):
         import email
         packagedir = os.path.dirname(email.__file__)
@@ -561,7 +632,7 @@ class PyZipFileTests(unittest.TestCase):
         ext = '.pyo' if optlevel == 1 else '.pyc'
 
         with TemporaryFile() as t, \
-                 zipfile.PyZipFile(t, "w", optimize=optlevel) as zipfp:
+             zipfile.PyZipFile(t, "w", optimize=optlevel) as zipfp:
             zipfp.writepy(packagedir)
 
             names = zipfp.namelist()
@@ -587,6 +658,26 @@ class PyZipFileTests(unittest.TestCase):
                 self.assertCompiledIn('mod1.py', names)
                 self.assertCompiledIn('mod2.py', names)
                 self.assertNotIn('mod2.txt', names)
+
+        finally:
+            shutil.rmtree(TESTFN2)
+
+    def test_write_python_directory_filtered(self):
+        os.mkdir(TESTFN2)
+        try:
+            with open(os.path.join(TESTFN2, "mod1.py"), "w") as fp:
+                fp.write("print(42)\n")
+
+            with open(os.path.join(TESTFN2, "mod2.py"), "w") as fp:
+                fp.write("print(42 * 42)\n")
+
+            with TemporaryFile() as t, zipfile.PyZipFile(t, "w") as zipfp:
+                zipfp.writepy(TESTFN2, filterfunc=lambda fn:
+                                                  not fn.endswith('mod2.py'))
+
+                names = zipfp.namelist()
+                self.assertCompiledIn('mod1.py', names)
+                self.assertNotIn('mod2.py', names)
 
         finally:
             shutil.rmtree(TESTFN2)
@@ -694,25 +785,25 @@ class ExtractTests(unittest.TestCase):
     def test_extract_hackers_arcnames_windows_only(self):
         """Test combination of path fixing and windows name sanitization."""
         windows_hacknames = [
-                (r'..\foo\bar', 'foo/bar'),
-                (r'..\/foo\/bar', 'foo/bar'),
-                (r'foo/\..\/bar', 'foo/bar'),
-                (r'foo\/../\bar', 'foo/bar'),
-                (r'C:foo/bar', 'foo/bar'),
-                (r'C:/foo/bar', 'foo/bar'),
-                (r'C://foo/bar', 'foo/bar'),
-                (r'C:\foo\bar', 'foo/bar'),
-                (r'//conky/mountpoint/foo/bar', 'foo/bar'),
-                (r'\\conky\mountpoint\foo\bar', 'foo/bar'),
-                (r'///conky/mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
-                (r'\\\conky\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
-                (r'//conky//mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
-                (r'\\conky\\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
-                (r'//?/C:/foo/bar', 'foo/bar'),
-                (r'\\?\C:\foo\bar', 'foo/bar'),
-                (r'C:/../C:/foo/bar', 'C_/foo/bar'),
-                (r'a:b\c<d>e|f"g?h*i', 'b/c_d_e_f_g_h_i'),
-                ('../../foo../../ba..r', 'foo/ba..r'),
+            (r'..\foo\bar', 'foo/bar'),
+            (r'..\/foo\/bar', 'foo/bar'),
+            (r'foo/\..\/bar', 'foo/bar'),
+            (r'foo\/../\bar', 'foo/bar'),
+            (r'C:foo/bar', 'foo/bar'),
+            (r'C:/foo/bar', 'foo/bar'),
+            (r'C://foo/bar', 'foo/bar'),
+            (r'C:\foo\bar', 'foo/bar'),
+            (r'//conky/mountpoint/foo/bar', 'foo/bar'),
+            (r'\\conky\mountpoint\foo\bar', 'foo/bar'),
+            (r'///conky/mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
+            (r'\\\conky\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
+            (r'//conky//mountpoint/foo/bar', 'conky/mountpoint/foo/bar'),
+            (r'\\conky\\mountpoint\foo\bar', 'conky/mountpoint/foo/bar'),
+            (r'//?/C:/foo/bar', 'foo/bar'),
+            (r'\\?\C:\foo\bar', 'foo/bar'),
+            (r'C:/../C:/foo/bar', 'C_/foo/bar'),
+            (r'a:b\c<d>e|f"g?h*i', 'b/c_d_e_f_g_h_i'),
+            ('../../foo../../ba..r', 'foo/ba..r'),
         ]
         self._test_extract_hackers_arcnames(windows_hacknames)
 
@@ -788,6 +879,17 @@ class OtherTests(unittest.TestCase):
                 data += zipfp.read(info)
             self.assertIn(data, {b"foobar", b"barfoo"})
 
+    def test_universal_deprecation(self):
+        f = io.BytesIO()
+        with zipfile.ZipFile(f, "w") as zipfp:
+            zipfp.writestr('spam.txt', b'ababagalamaga')
+
+        with zipfile.ZipFile(f, "r") as zipfp:
+            for mode in 'U', 'rU':
+                with self.assertWarns(DeprecationWarning):
+                    zipopen = zipfp.open('spam.txt', mode)
+                zipopen.close()
+
     def test_universal_readaheads(self):
         f = io.BytesIO()
 
@@ -797,7 +899,7 @@ class OtherTests(unittest.TestCase):
 
         data2 = b''
         with zipfile.ZipFile(f, 'r') as zipfp, \
-             zipfp.open(TESTFN, 'rU') as zipopen:
+             openU(zipfp, TESTFN) as zipopen:
             for line in zipopen:
                 data2 += line
 
@@ -838,10 +940,10 @@ class OtherTests(unittest.TestCase):
     def test_unsupported_version(self):
         # File has an extract_version of 120
         data = (b'PK\x03\x04x\x00\x00\x00\x00\x00!p\xa1@\x00\x00\x00\x00\x00\x00'
-        b'\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00xPK\x01\x02x\x03x\x00\x00\x00\x00'
-        b'\x00!p\xa1@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00'
-        b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x00\x00\x00\x00xPK\x05\x06'
-        b'\x00\x00\x00\x00\x01\x00\x01\x00/\x00\x00\x00\x1f\x00\x00\x00\x00\x00')
+                b'\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00xPK\x01\x02x\x03x\x00\x00\x00\x00'
+                b'\x00!p\xa1@\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00'
+                b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x00\x00\x00\x00xPK\x05\x06'
+                b'\x00\x00\x00\x00\x01\x00\x01\x00/\x00\x00\x00\x1f\x00\x00\x00\x00\x00')
 
         self.assertRaises(NotImplementedError, zipfile.ZipFile,
                           io.BytesIO(data), 'r')
@@ -1027,11 +1129,11 @@ class OtherTests(unittest.TestCase):
     def test_unsupported_compression(self):
         # data is declared as shrunk, but actually deflated
         data = (b'PK\x03\x04.\x00\x00\x00\x01\x00\xe4C\xa1@\x00\x00\x00'
-        b'\x00\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00x\x03\x00PK\x01'
-        b'\x02.\x03.\x00\x00\x00\x01\x00\xe4C\xa1@\x00\x00\x00\x00\x02\x00\x00'
-        b'\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
-        b'\x80\x01\x00\x00\x00\x00xPK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x00'
-        b'/\x00\x00\x00!\x00\x00\x00\x00\x00')
+                b'\x00\x02\x00\x00\x00\x00\x00\x00\x00\x01\x00\x00\x00x\x03\x00PK\x01'
+                b'\x02.\x03.\x00\x00\x00\x01\x00\xe4C\xa1@\x00\x00\x00\x00\x02\x00\x00'
+                b'\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+                b'\x80\x01\x00\x00\x00\x00xPK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x00'
+                b'/\x00\x00\x00!\x00\x00\x00\x00\x00')
         with zipfile.ZipFile(io.BytesIO(data), 'r') as zipf:
             self.assertRaises(NotImplementedError, zipf.open, 'x')
 
@@ -1193,57 +1295,57 @@ class AbstractBadCrcTests:
 class StoredBadCrcTests(AbstractBadCrcTests, unittest.TestCase):
     compression = zipfile.ZIP_STORED
     zip_with_bad_crc = (
-            b'PK\003\004\024\0\0\0\0\0 \213\212;:r'
-            b'\253\377\f\0\0\0\f\0\0\0\005\0\0\000af'
-            b'ilehello,AworldP'
-            b'K\001\002\024\003\024\0\0\0\0\0 \213\212;:'
-            b'r\253\377\f\0\0\0\f\0\0\0\005\0\0\0\0'
-            b'\0\0\0\0\0\0\0\200\001\0\0\0\000afi'
-            b'lePK\005\006\0\0\0\0\001\0\001\0003\000'
-            b'\0\0/\0\0\0\0\0')
+        b'PK\003\004\024\0\0\0\0\0 \213\212;:r'
+        b'\253\377\f\0\0\0\f\0\0\0\005\0\0\000af'
+        b'ilehello,AworldP'
+        b'K\001\002\024\003\024\0\0\0\0\0 \213\212;:'
+        b'r\253\377\f\0\0\0\f\0\0\0\005\0\0\0\0'
+        b'\0\0\0\0\0\0\0\200\001\0\0\0\000afi'
+        b'lePK\005\006\0\0\0\0\001\0\001\0003\000'
+        b'\0\0/\0\0\0\0\0')
 
 @requires_zlib
 class DeflateBadCrcTests(AbstractBadCrcTests, unittest.TestCase):
     compression = zipfile.ZIP_DEFLATED
     zip_with_bad_crc = (
-            b'PK\x03\x04\x14\x00\x00\x00\x08\x00n}\x0c=FA'
-            b'KE\x10\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
-            b'ile\xcbH\xcd\xc9\xc9W(\xcf/\xcaI\xc9\xa0'
-            b'=\x13\x00PK\x01\x02\x14\x03\x14\x00\x00\x00\x08\x00n'
-            b'}\x0c=FAKE\x10\x00\x00\x00n\x00\x00\x00\x05'
-            b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x00\x00\x00'
-            b'\x00afilePK\x05\x06\x00\x00\x00\x00\x01\x00'
-            b'\x01\x003\x00\x00\x003\x00\x00\x00\x00\x00')
+        b'PK\x03\x04\x14\x00\x00\x00\x08\x00n}\x0c=FA'
+        b'KE\x10\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
+        b'ile\xcbH\xcd\xc9\xc9W(\xcf/\xcaI\xc9\xa0'
+        b'=\x13\x00PK\x01\x02\x14\x03\x14\x00\x00\x00\x08\x00n'
+        b'}\x0c=FAKE\x10\x00\x00\x00n\x00\x00\x00\x05'
+        b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x01\x00\x00\x00'
+        b'\x00afilePK\x05\x06\x00\x00\x00\x00\x01\x00'
+        b'\x01\x003\x00\x00\x003\x00\x00\x00\x00\x00')
 
 @requires_bz2
 class Bzip2BadCrcTests(AbstractBadCrcTests, unittest.TestCase):
     compression = zipfile.ZIP_BZIP2
     zip_with_bad_crc = (
-            b'PK\x03\x04\x14\x03\x00\x00\x0c\x00nu\x0c=FA'
-            b'KE8\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
-            b'ileBZh91AY&SY\xd4\xa8\xca'
-            b'\x7f\x00\x00\x0f\x11\x80@\x00\x06D\x90\x80 \x00 \xa5'
-            b'P\xd9!\x03\x03\x13\x13\x13\x89\xa9\xa9\xc2u5:\x9f'
-            b'\x8b\xb9"\x9c(HjTe?\x80PK\x01\x02\x14'
-            b'\x03\x14\x03\x00\x00\x0c\x00nu\x0c=FAKE8'
-            b'\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00'
-            b'\x00 \x80\x80\x81\x00\x00\x00\x00afilePK'
-            b'\x05\x06\x00\x00\x00\x00\x01\x00\x01\x003\x00\x00\x00[\x00'
-            b'\x00\x00\x00\x00')
+        b'PK\x03\x04\x14\x03\x00\x00\x0c\x00nu\x0c=FA'
+        b'KE8\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
+        b'ileBZh91AY&SY\xd4\xa8\xca'
+        b'\x7f\x00\x00\x0f\x11\x80@\x00\x06D\x90\x80 \x00 \xa5'
+        b'P\xd9!\x03\x03\x13\x13\x13\x89\xa9\xa9\xc2u5:\x9f'
+        b'\x8b\xb9"\x9c(HjTe?\x80PK\x01\x02\x14'
+        b'\x03\x14\x03\x00\x00\x0c\x00nu\x0c=FAKE8'
+        b'\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00\x00\x00\x00\x00\x00'
+        b'\x00 \x80\x80\x81\x00\x00\x00\x00afilePK'
+        b'\x05\x06\x00\x00\x00\x00\x01\x00\x01\x003\x00\x00\x00[\x00'
+        b'\x00\x00\x00\x00')
 
 @requires_lzma
 class LzmaBadCrcTests(AbstractBadCrcTests, unittest.TestCase):
     compression = zipfile.ZIP_LZMA
     zip_with_bad_crc = (
-            b'PK\x03\x04\x14\x03\x00\x00\x0e\x00nu\x0c=FA'
-            b'KE\x1b\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
-            b'ile\t\x04\x05\x00]\x00\x00\x00\x04\x004\x19I'
-            b'\xee\x8d\xe9\x17\x89:3`\tq!.8\x00PK'
-            b'\x01\x02\x14\x03\x14\x03\x00\x00\x0e\x00nu\x0c=FA'
-            b'KE\x1b\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00\x00\x00'
-            b'\x00\x00\x00\x00 \x80\x80\x81\x00\x00\x00\x00afil'
-            b'ePK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x003\x00\x00'
-            b'\x00>\x00\x00\x00\x00\x00')
+        b'PK\x03\x04\x14\x03\x00\x00\x0e\x00nu\x0c=FA'
+        b'KE\x1b\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00af'
+        b'ile\t\x04\x05\x00]\x00\x00\x00\x04\x004\x19I'
+        b'\xee\x8d\xe9\x17\x89:3`\tq!.8\x00PK'
+        b'\x01\x02\x14\x03\x14\x03\x00\x00\x0e\x00nu\x0c=FA'
+        b'KE\x1b\x00\x00\x00n\x00\x00\x00\x05\x00\x00\x00\x00\x00'
+        b'\x00\x00\x00\x00 \x80\x80\x81\x00\x00\x00\x00afil'
+        b'ePK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x003\x00\x00'
+        b'\x00>\x00\x00\x00\x00\x00')
 
 
 class DecryptionTests(unittest.TestCase):
@@ -1252,22 +1354,22 @@ class DecryptionTests(unittest.TestCase):
     ZIP file."""
 
     data = (
-    b'PK\x03\x04\x14\x00\x01\x00\x00\x00n\x92i.#y\xef?&\x00\x00\x00\x1a\x00'
-    b'\x00\x00\x08\x00\x00\x00test.txt\xfa\x10\xa0gly|\xfa-\xc5\xc0=\xf9y'
-    b'\x18\xe0\xa8r\xb3Z}Lg\xbc\xae\xf9|\x9b\x19\xe4\x8b\xba\xbb)\x8c\xb0\xdbl'
-    b'PK\x01\x02\x14\x00\x14\x00\x01\x00\x00\x00n\x92i.#y\xef?&\x00\x00\x00'
-    b'\x1a\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x01\x00 \x00\xb6\x81'
-    b'\x00\x00\x00\x00test.txtPK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x006\x00'
-    b'\x00\x00L\x00\x00\x00\x00\x00' )
+        b'PK\x03\x04\x14\x00\x01\x00\x00\x00n\x92i.#y\xef?&\x00\x00\x00\x1a\x00'
+        b'\x00\x00\x08\x00\x00\x00test.txt\xfa\x10\xa0gly|\xfa-\xc5\xc0=\xf9y'
+        b'\x18\xe0\xa8r\xb3Z}Lg\xbc\xae\xf9|\x9b\x19\xe4\x8b\xba\xbb)\x8c\xb0\xdbl'
+        b'PK\x01\x02\x14\x00\x14\x00\x01\x00\x00\x00n\x92i.#y\xef?&\x00\x00\x00'
+        b'\x1a\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x01\x00 \x00\xb6\x81'
+        b'\x00\x00\x00\x00test.txtPK\x05\x06\x00\x00\x00\x00\x01\x00\x01\x006\x00'
+        b'\x00\x00L\x00\x00\x00\x00\x00' )
     data2 = (
-    b'PK\x03\x04\x14\x00\t\x00\x08\x00\xcf}38xu\xaa\xb2\x14\x00\x00\x00\x00\x02'
-    b'\x00\x00\x04\x00\x15\x00zeroUT\t\x00\x03\xd6\x8b\x92G\xda\x8b\x92GUx\x04'
-    b'\x00\xe8\x03\xe8\x03\xc7<M\xb5a\xceX\xa3Y&\x8b{oE\xd7\x9d\x8c\x98\x02\xc0'
-    b'PK\x07\x08xu\xaa\xb2\x14\x00\x00\x00\x00\x02\x00\x00PK\x01\x02\x17\x03'
-    b'\x14\x00\t\x00\x08\x00\xcf}38xu\xaa\xb2\x14\x00\x00\x00\x00\x02\x00\x00'
-    b'\x04\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x81\x00\x00\x00\x00ze'
-    b'roUT\x05\x00\x03\xd6\x8b\x92GUx\x00\x00PK\x05\x06\x00\x00\x00\x00\x01'
-    b'\x00\x01\x00?\x00\x00\x00[\x00\x00\x00\x00\x00' )
+        b'PK\x03\x04\x14\x00\t\x00\x08\x00\xcf}38xu\xaa\xb2\x14\x00\x00\x00\x00\x02'
+        b'\x00\x00\x04\x00\x15\x00zeroUT\t\x00\x03\xd6\x8b\x92G\xda\x8b\x92GUx\x04'
+        b'\x00\xe8\x03\xe8\x03\xc7<M\xb5a\xceX\xa3Y&\x8b{oE\xd7\x9d\x8c\x98\x02\xc0'
+        b'PK\x07\x08xu\xaa\xb2\x14\x00\x00\x00\x00\x02\x00\x00PK\x01\x02\x17\x03'
+        b'\x14\x00\t\x00\x08\x00\xcf}38xu\xaa\xb2\x14\x00\x00\x00\x00\x02\x00\x00'
+        b'\x04\x00\r\x00\x00\x00\x00\x00\x00\x00\x00\x00\xa4\x81\x00\x00\x00\x00ze'
+        b'roUT\x05\x00\x03\xd6\x8b\x92GUx\x00\x00PK\x05\x06\x00\x00\x00\x00\x01'
+        b'\x00\x01\x00?\x00\x00\x00[\x00\x00\x00\x00\x00' )
 
     plain = b'zipfile.py encryption test'
     plain2 = b'\x00'*512
@@ -1526,7 +1628,7 @@ class AbstractUniversalNewlineTests:
         # Read the ZIP archive
         with zipfile.ZipFile(f, "r") as zipfp:
             for sep, fn in self.arcfiles.items():
-                with zipfp.open(fn, "rU") as fp:
+                with openU(zipfp, fn) as fp:
                     zipdata = fp.read()
                 self.assertEqual(self.arcdata[sep], zipdata)
 
@@ -1540,7 +1642,7 @@ class AbstractUniversalNewlineTests:
         # Read the ZIP archive
         with zipfile.ZipFile(f, "r") as zipfp:
             for sep, fn in self.arcfiles.items():
-                with zipfp.open(fn, "rU") as zipopen:
+                with openU(zipfp, fn) as zipopen:
                     data = b''
                     while True:
                         read = zipopen.readline()
@@ -1565,7 +1667,7 @@ class AbstractUniversalNewlineTests:
         # Read the ZIP archive
         with zipfile.ZipFile(f, "r") as zipfp:
             for sep, fn in self.arcfiles.items():
-                with zipfp.open(fn, "rU") as zipopen:
+                with openU(zipfp, fn) as zipopen:
                     for line in self.line_gen:
                         linedata = zipopen.readline()
                         self.assertEqual(linedata, line + b'\n')
@@ -1580,7 +1682,7 @@ class AbstractUniversalNewlineTests:
         # Read the ZIP archive
         with zipfile.ZipFile(f, "r") as zipfp:
             for sep, fn in self.arcfiles.items():
-                with zipfp.open(fn, "rU") as fp:
+                with openU(zipfp, fn) as fp:
                     ziplines = fp.readlines()
                 for line, zipline in zip(self.line_gen, ziplines):
                     self.assertEqual(zipline, line + b'\n')
@@ -1595,7 +1697,7 @@ class AbstractUniversalNewlineTests:
         # Read the ZIP archive
         with zipfile.ZipFile(f, "r") as zipfp:
             for sep, fn in self.arcfiles.items():
-                with zipfp.open(fn, "rU") as fp:
+                with openU(zipfp, fn) as fp:
                     for line, zipline in zip(self.line_gen, fp):
                         self.assertEqual(zipline, line + b'\n')
 

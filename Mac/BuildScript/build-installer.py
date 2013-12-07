@@ -155,6 +155,7 @@ target_cc_map = {
         '10.6': ('gcc-4.2', 'g++-4.2'),
         '10.7': ('clang', 'clang++'),
         '10.8': ('clang', 'clang++'),
+        '10.9': ('clang', 'clang++'),
 }
 
 CC, CXX = target_cc_map[DEPTARGET]
@@ -192,12 +193,13 @@ def library_recipes():
 
     LT_10_5 = bool(DEPTARGET < '10.5')
 
-    if DEPTARGET > '10.5':
+#   Disable for now
+    if (DEPTARGET > '10.5') and (getVersionTuple() >= (3, 5)):
         result.extend([
           dict(
-              name="Tcl 8.5.14",
-              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.14-src.tar.gz",
-              checksum='44b50e58ab45dd272f6714dce2129123',
+              name="Tcl 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tcl8.5.15-src.tar.gz",
+              checksum='f3df162f92c69b254079c4d0af7a690f',
               buildDir="unix",
               configure_pre=[
                     '--enable-shared',
@@ -211,9 +213,12 @@ def library_recipes():
                   },
               ),
           dict(
-              name="Tk 8.5.14",
-              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.14-src.tar.gz",
-              checksum='a9c48921b3688020470cd3a6dd4e867d',
+              name="Tk 8.5.15",
+              url="ftp://ftp.tcl.tk/pub/tcl//tcl8_5/tk8.5.15-src.tar.gz",
+              checksum='55b8e33f903210a4e1c8bce0f820657f',
+              patches=[
+                  "issue19373_tk_8_5_15_source.patch",
+                   ],
               buildDir="unix",
               configure_pre=[
                     '--enable-aqua',
@@ -233,9 +238,9 @@ def library_recipes():
     if getVersionTuple() >= (3, 3):
         result.extend([
           dict(
-              name="XZ 5.0.3",
-              url="http://tukaani.org/xz/xz-5.0.3.tar.gz",
-              checksum='fefe52f9ecd521de2a8ce38c21a27574',
+              name="XZ 5.0.5",
+              url="http://tukaani.org/xz/xz-5.0.5.tar.gz",
+              checksum='19d924e066b6fff0bc9d1981b4e53196',
               configure_pre=[
                     '--disable-dependency-tracking',
               ]
@@ -278,9 +283,9 @@ def library_recipes():
                   ),
           ),
           dict(
-              name="SQLite 3.7.13",
-              url="http://www.sqlite.org/sqlite-autoconf-3071300.tar.gz",
-              checksum='c97df403e8a3d5b67bb408fcd6aabd8e',
+              name="SQLite 3.8.1",
+              url="http://www.sqlite.org/2013/sqlite-autoconf-3080100.tar.gz",
+              checksum='8b5a0a02dfcb0c7daf90856a5cfd485a',
               extra_cflags=('-Os '
                             '-DSQLITE_ENABLE_FTS4 '
                             '-DSQLITE_ENABLE_FTS3_PARENTHESIS '
@@ -360,6 +365,7 @@ def library_recipes():
 # Instructions for building packages inside the .mpkg.
 def pkg_recipes():
     unselected_for_python3 = ('selected', 'unselected')[PYTHON_3]
+    unselected_for_lt_python34 = ('selected', 'unselected')[getVersionTuple() < (3, 4)]
     result = [
         dict(
             name="PythonFramework",
@@ -428,9 +434,26 @@ def pkg_recipes():
             topdir="/Library/Frameworks/Python.framework",
             source="/empty-dir",
             required=False,
-            selected=unselected_for_python3,
+            selected=unselected_for_lt_python34,
         ),
     ]
+
+    if getVersionTuple() >= (3, 4):
+        result.append(
+            dict(
+                name="PythonInstallPip",
+                long_name="Install or upgrade pip",
+                readme="""\
+                    This package installs (or upgrades from an earlier version)
+                    pip, a tool for installing and managing Python packages.
+                    """,
+                postflight="scripts/postflight.ensurepip",
+                topdir="/Library/Frameworks/Python.framework",
+                source="/empty-dir",
+                required=False,
+                selected='selected',
+            )
+        )
 
     if DEPTARGET < '10.4' and not PYTHON_3:
         result.append(
@@ -449,6 +472,7 @@ def pkg_recipes():
                 selected=unselected_for_python3,
             )
         )
+
     return result
 
 def fatal(msg):
@@ -562,20 +586,6 @@ def checkEnvironment():
             "/Library/Frameworks/Tk.framework/Versions/%s/Tk"
                 % frameworks['Tk'],
             ]
-
-    # For 10.6+ builds, we build two versions of _tkinter:
-    #    - the traditional version (renamed to _tkinter.so.framework) linked
-    #       with /Library/Frameworks/{Tcl,Tk}.framework
-    #    - the default version linked with our private copies of Tcl and Tk
-    if DEPTARGET > '10.5':
-        EXPECTED_SHARED_LIBS['_tkinter.so.framework'] = \
-            EXPECTED_SHARED_LIBS['_tkinter.so']
-        EXPECTED_SHARED_LIBS['_tkinter.so'] = [
-                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtcl%s.dylib"
-                    % (getVersion(), frameworks['Tcl']),
-                "/Library/Frameworks/Python.framework/Versions/%s/lib/libtk%s.dylib"
-                    % (getVersion(), frameworks['Tk']),
-                ]
 
     # Remove inherited environment variables which might influence build
     environ_var_prefixes = ['CPATH', 'C_INCLUDE_', 'DYLD_', 'LANG', 'LC_',
@@ -796,8 +806,6 @@ def buildRecipe(recipe, basedir, archList):
 
     workDir = extractArchive(buildDir, sourceArchive)
     os.chdir(workDir)
-    if 'buildDir' in recipe:
-        os.chdir(recipe['buildDir'])
 
     for patch in recipe.get('patches', ()):
         if isinstance(patch, tuple):
@@ -823,6 +831,9 @@ def buildRecipe(recipe, basedir, archList):
             fn = fn[:-4]
         runCommand('sh %s' % shellQuote(fn))
         os.unlink(fn)
+
+    if 'buildDir' in recipe:
+        os.chdir(recipe['buildDir'])
 
     if configure is not None:
         configure_args = [
@@ -950,33 +961,18 @@ def buildPython():
     runCommand("%s -C --enable-framework --enable-universalsdk=%s "
                "--with-universal-archs=%s "
                "%s "
+               "%s "
                "LDFLAGS='-g -L%s/libraries/usr/local/lib' "
-               "OPT='-g -O3 -I%s/libraries/usr/local/include' 2>&1"%(
+               "CFLAGS='-g -I%s/libraries/usr/local/include' 2>&1"%(
         shellQuote(os.path.join(SRCDIR, 'configure')), shellQuote(SDKPATH),
         UNIVERSALARCHS,
         (' ', '--with-computed-gotos ')[PYTHON_3],
+        (' ', '--without-ensurepip ')[getVersionTuple() >= (3, 4)],
         shellQuote(WORKDIR)[1:-1],
         shellQuote(WORKDIR)[1:-1]))
 
     print("Running make")
     runCommand("make")
-
-    # For deployment targets of 10.6 and higher, we build our own version
-    # of Tcl and Cocoa Aqua Tk libs because the Apple-supplied Tk 8.5 is
-    # out-of-date and has critical bugs.  Save the _tkinter.so that was
-    # linked with /Library/Frameworks/{Tck,Tk}.framework and build
-    # another _tkinter.so linked with our private Tcl and Tk libs.
-    if DEPTARGET > '10.5':
-        runCommand("find build -name '_tkinter.so' "
-                        " -execdir mv '{}' '{}'.framework \;")
-        print("Running make to rebuild _tkinter")
-        runCommand("make TCLTK_INCLUDES='-I%s/libraries/usr/local/include' "
-                "TCLTK_LIBS='-L%s/libraries/usr/local/lib -ltcl8.5 -ltk8.5'"%(
-            shellQuote(WORKDIR)[1:-1],
-            shellQuote(WORKDIR)[1:-1]))
-        # make a backup copy, just in case
-        runCommand("find build -name '_tkinter.so' "
-                        " -execdir cp -p '{}' '{}'.private \;")
 
     print("Running make install")
     runCommand("make install DESTDIR=%s"%(
@@ -997,6 +993,10 @@ def buildPython():
             shellQuote(os.path.join(WORKDIR, '_root', 'Library', 'Frameworks',
                 'Python.framework', 'Versions', getVersion(),
                 'lib'))))
+
+    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
+                                'Python.framework', 'Versions',
+                                version, 'lib', 'python%s'%(version,))
 
     print("Fix file modes")
     frmDir = os.path.join(rootDir, 'Library', 'Frameworks', 'Python.framework')
@@ -1059,10 +1059,6 @@ def buildPython():
 
     include_path = '-I%s/libraries/usr/local/include' % (WORKDIR,)
     lib_path = '-L%s/libraries/usr/local/lib' % (WORKDIR,)
-
-    path_to_lib = os.path.join(rootDir, 'Library', 'Frameworks',
-                                'Python.framework', 'Versions',
-                                version, 'lib', 'python%s'%(version,))
 
     # fix Makefile
     path = os.path.join(path_to_lib, 'config' + config_suffix, 'Makefile')

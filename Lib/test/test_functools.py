@@ -1,3 +1,4 @@
+import abc
 import collections
 from itertools import permutations
 import pickle
@@ -153,7 +154,8 @@ class TestPartialC(TestPartial, unittest.TestCase):
     def test_repr(self):
         args = (object(), object())
         args_repr = ', '.join(repr(a) for a in args)
-        kwargs = {'a': object(), 'b': object()}
+        #kwargs = {'a': object(), 'b': object()}
+        kwargs = {'a': object()}
         kwargs_repr = ', '.join("%s=%r" % (k, v) for k, v in kwargs.items())
         if self.partial is c_functools.partial:
             name = 'functools.partial'
@@ -215,6 +217,120 @@ if c_functools:
 class TestPartialCSubclass(TestPartialC):
     if c_functools:
         partial = PartialSubclass
+
+
+class TestPartialMethod(unittest.TestCase):
+
+    class A(object):
+        nothing = functools.partialmethod(capture)
+        positional = functools.partialmethod(capture, 1)
+        keywords = functools.partialmethod(capture, a=2)
+        both = functools.partialmethod(capture, 3, b=4)
+
+        nested = functools.partialmethod(positional, 5)
+
+        over_partial = functools.partialmethod(functools.partial(capture, c=6), 7)
+
+        static = functools.partialmethod(staticmethod(capture), 8)
+        cls = functools.partialmethod(classmethod(capture), d=9)
+
+    a = A()
+
+    def test_arg_combinations(self):
+        self.assertEqual(self.a.nothing(), ((self.a,), {}))
+        self.assertEqual(self.a.nothing(5), ((self.a, 5), {}))
+        self.assertEqual(self.a.nothing(c=6), ((self.a,), {'c': 6}))
+        self.assertEqual(self.a.nothing(5, c=6), ((self.a, 5), {'c': 6}))
+
+        self.assertEqual(self.a.positional(), ((self.a, 1), {}))
+        self.assertEqual(self.a.positional(5), ((self.a, 1, 5), {}))
+        self.assertEqual(self.a.positional(c=6), ((self.a, 1), {'c': 6}))
+        self.assertEqual(self.a.positional(5, c=6), ((self.a, 1, 5), {'c': 6}))
+
+        self.assertEqual(self.a.keywords(), ((self.a,), {'a': 2}))
+        self.assertEqual(self.a.keywords(5), ((self.a, 5), {'a': 2}))
+        self.assertEqual(self.a.keywords(c=6), ((self.a,), {'a': 2, 'c': 6}))
+        self.assertEqual(self.a.keywords(5, c=6), ((self.a, 5), {'a': 2, 'c': 6}))
+
+        self.assertEqual(self.a.both(), ((self.a, 3), {'b': 4}))
+        self.assertEqual(self.a.both(5), ((self.a, 3, 5), {'b': 4}))
+        self.assertEqual(self.a.both(c=6), ((self.a, 3), {'b': 4, 'c': 6}))
+        self.assertEqual(self.a.both(5, c=6), ((self.a, 3, 5), {'b': 4, 'c': 6}))
+
+        self.assertEqual(self.A.both(self.a, 5, c=6), ((self.a, 3, 5), {'b': 4, 'c': 6}))
+
+    def test_nested(self):
+        self.assertEqual(self.a.nested(), ((self.a, 1, 5), {}))
+        self.assertEqual(self.a.nested(6), ((self.a, 1, 5, 6), {}))
+        self.assertEqual(self.a.nested(d=7), ((self.a, 1, 5), {'d': 7}))
+        self.assertEqual(self.a.nested(6, d=7), ((self.a, 1, 5, 6), {'d': 7}))
+
+        self.assertEqual(self.A.nested(self.a, 6, d=7), ((self.a, 1, 5, 6), {'d': 7}))
+
+    def test_over_partial(self):
+        self.assertEqual(self.a.over_partial(), ((self.a, 7), {'c': 6}))
+        self.assertEqual(self.a.over_partial(5), ((self.a, 7, 5), {'c': 6}))
+        self.assertEqual(self.a.over_partial(d=8), ((self.a, 7), {'c': 6, 'd': 8}))
+        self.assertEqual(self.a.over_partial(5, d=8), ((self.a, 7, 5), {'c': 6, 'd': 8}))
+
+        self.assertEqual(self.A.over_partial(self.a, 5, d=8), ((self.a, 7, 5), {'c': 6, 'd': 8}))
+
+    def test_bound_method_introspection(self):
+        obj = self.a
+        self.assertIs(obj.both.__self__, obj)
+        self.assertIs(obj.nested.__self__, obj)
+        self.assertIs(obj.over_partial.__self__, obj)
+        self.assertIs(obj.cls.__self__, self.A)
+        self.assertIs(self.A.cls.__self__, self.A)
+
+    def test_unbound_method_retrieval(self):
+        obj = self.A
+        self.assertFalse(hasattr(obj.both, "__self__"))
+        self.assertFalse(hasattr(obj.nested, "__self__"))
+        self.assertFalse(hasattr(obj.over_partial, "__self__"))
+        self.assertFalse(hasattr(obj.static, "__self__"))
+        self.assertFalse(hasattr(self.a.static, "__self__"))
+
+    def test_descriptors(self):
+        for obj in [self.A, self.a]:
+            with self.subTest(obj=obj):
+                self.assertEqual(obj.static(), ((8,), {}))
+                self.assertEqual(obj.static(5), ((8, 5), {}))
+                self.assertEqual(obj.static(d=8), ((8,), {'d': 8}))
+                self.assertEqual(obj.static(5, d=8), ((8, 5), {'d': 8}))
+
+                self.assertEqual(obj.cls(), ((self.A,), {'d': 9}))
+                self.assertEqual(obj.cls(5), ((self.A, 5), {'d': 9}))
+                self.assertEqual(obj.cls(c=8), ((self.A,), {'c': 8, 'd': 9}))
+                self.assertEqual(obj.cls(5, c=8), ((self.A, 5), {'c': 8, 'd': 9}))
+
+    def test_overriding_keywords(self):
+        self.assertEqual(self.a.keywords(a=3), ((self.a,), {'a': 3}))
+        self.assertEqual(self.A.keywords(self.a, a=3), ((self.a,), {'a': 3}))
+
+    def test_invalid_args(self):
+        with self.assertRaises(TypeError):
+            class B(object):
+                method = functools.partialmethod(None, 1)
+
+    def test_repr(self):
+        self.assertEqual(repr(vars(self.A)['both']),
+                         'functools.partialmethod({}, 3, b=4)'.format(capture))
+
+    def test_abstract(self):
+        class Abstract(abc.ABCMeta):
+
+            @abc.abstractmethod
+            def add(self, x, y):
+                pass
+
+            add5 = functools.partialmethod(add, 5)
+
+        self.assertTrue(Abstract.add.__isabstractmethod__)
+        self.assertTrue(Abstract.add5.__isabstractmethod__)
+
+        for func in [self.A.static, self.A.cls, self.A.over_partial, self.A.nested, self.A.both]:
+            self.assertFalse(getattr(func, '__isabstractmethod__', False))
 
 
 class TestUpdateWrapper(unittest.TestCase):
@@ -584,6 +700,7 @@ class TestTotalOrdering(unittest.TestCase):
         self.assertTrue(A(2) >= A(1))
         self.assertTrue(A(2) <= A(2))
         self.assertTrue(A(2) >= A(2))
+        self.assertFalse(A(1) > A(2))
 
     def test_total_ordering_le(self):
         @functools.total_ordering
@@ -600,6 +717,7 @@ class TestTotalOrdering(unittest.TestCase):
         self.assertTrue(A(2) >= A(1))
         self.assertTrue(A(2) <= A(2))
         self.assertTrue(A(2) >= A(2))
+        self.assertFalse(A(1) >= A(2))
 
     def test_total_ordering_gt(self):
         @functools.total_ordering
@@ -616,6 +734,7 @@ class TestTotalOrdering(unittest.TestCase):
         self.assertTrue(A(2) >= A(1))
         self.assertTrue(A(2) <= A(2))
         self.assertTrue(A(2) >= A(2))
+        self.assertFalse(A(2) < A(1))
 
     def test_total_ordering_ge(self):
         @functools.total_ordering
@@ -632,6 +751,7 @@ class TestTotalOrdering(unittest.TestCase):
         self.assertTrue(A(2) >= A(1))
         self.assertTrue(A(2) <= A(2))
         self.assertTrue(A(2) >= A(2))
+        self.assertFalse(A(2) <= A(1))
 
     def test_total_ordering_no_overwrite(self):
         # new methods should not overwrite existing
@@ -651,22 +771,112 @@ class TestTotalOrdering(unittest.TestCase):
             class A:
                 pass
 
-    def test_bug_10042(self):
+    def test_type_error_when_not_implemented(self):
+        # bug 10042; ensure stack overflow does not occur
+        # when decorated types return NotImplemented
         @functools.total_ordering
-        class TestTO:
+        class ImplementsLessThan:
             def __init__(self, value):
                 self.value = value
             def __eq__(self, other):
-                if isinstance(other, TestTO):
+                if isinstance(other, ImplementsLessThan):
                     return self.value == other.value
                 return False
             def __lt__(self, other):
-                if isinstance(other, TestTO):
+                if isinstance(other, ImplementsLessThan):
                     return self.value < other.value
-                raise TypeError
-        with self.assertRaises(TypeError):
-            TestTO(8) <= ()
+                return NotImplemented
 
+        @functools.total_ordering
+        class ImplementsGreaterThan:
+            def __init__(self, value):
+                self.value = value
+            def __eq__(self, other):
+                if isinstance(other, ImplementsGreaterThan):
+                    return self.value == other.value
+                return False
+            def __gt__(self, other):
+                if isinstance(other, ImplementsGreaterThan):
+                    return self.value > other.value
+                return NotImplemented
+
+        @functools.total_ordering
+        class ImplementsLessThanEqualTo:
+            def __init__(self, value):
+                self.value = value
+            def __eq__(self, other):
+                if isinstance(other, ImplementsLessThanEqualTo):
+                    return self.value == other.value
+                return False
+            def __le__(self, other):
+                if isinstance(other, ImplementsLessThanEqualTo):
+                    return self.value <= other.value
+                return NotImplemented
+
+        @functools.total_ordering
+        class ImplementsGreaterThanEqualTo:
+            def __init__(self, value):
+                self.value = value
+            def __eq__(self, other):
+                if isinstance(other, ImplementsGreaterThanEqualTo):
+                    return self.value == other.value
+                return False
+            def __ge__(self, other):
+                if isinstance(other, ImplementsGreaterThanEqualTo):
+                    return self.value >= other.value
+                return NotImplemented
+
+        @functools.total_ordering
+        class ComparatorNotImplemented:
+            def __init__(self, value):
+                self.value = value
+            def __eq__(self, other):
+                if isinstance(other, ComparatorNotImplemented):
+                    return self.value == other.value
+                return False
+            def __lt__(self, other):
+                return NotImplemented
+
+        with self.subTest("LT < 1"), self.assertRaises(TypeError):
+            ImplementsLessThan(-1) < 1
+
+        with self.subTest("LT < LE"), self.assertRaises(TypeError):
+            ImplementsLessThan(0) < ImplementsLessThanEqualTo(0)
+
+        with self.subTest("LT < GT"), self.assertRaises(TypeError):
+            ImplementsLessThan(1) < ImplementsGreaterThan(1)
+
+        with self.subTest("LE <= LT"), self.assertRaises(TypeError):
+            ImplementsLessThanEqualTo(2) <= ImplementsLessThan(2)
+
+        with self.subTest("LE <= GE"), self.assertRaises(TypeError):
+            ImplementsLessThanEqualTo(3) <= ImplementsGreaterThanEqualTo(3)
+
+        with self.subTest("GT > GE"), self.assertRaises(TypeError):
+            ImplementsGreaterThan(4) > ImplementsGreaterThanEqualTo(4)
+
+        with self.subTest("GT > LT"), self.assertRaises(TypeError):
+            ImplementsGreaterThan(5) > ImplementsLessThan(5)
+
+        with self.subTest("GE >= GT"), self.assertRaises(TypeError):
+            ImplementsGreaterThanEqualTo(6) >= ImplementsGreaterThan(6)
+
+        with self.subTest("GE >= LE"), self.assertRaises(TypeError):
+            ImplementsGreaterThanEqualTo(7) >= ImplementsLessThanEqualTo(7)
+
+        with self.subTest("GE when equal"):
+            a = ComparatorNotImplemented(8)
+            b = ComparatorNotImplemented(8)
+            self.assertEqual(a, b)
+            with self.assertRaises(TypeError):
+                a >= b
+
+        with self.subTest("LE when equal"):
+            a = ComparatorNotImplemented(9)
+            b = ComparatorNotImplemented(9)
+            self.assertEqual(a, b)
+            with self.assertRaises(TypeError):
+                a <= b
 
 class TestLRU(unittest.TestCase):
 
@@ -1339,6 +1549,7 @@ def test_main(verbose=None):
         TestPartialC,
         TestPartialPy,
         TestPartialCSubclass,
+        TestPartialMethod,
         TestUpdateWrapper,
         TestTotalOrdering,
         TestCmpToKeyC,

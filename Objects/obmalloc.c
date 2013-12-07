@@ -12,6 +12,24 @@ static void _PyObject_DebugDumpAddress(const void *p);
 static void _PyMem_DebugCheckAddress(char api_id, const void *p);
 #endif
 
+#if defined(__has_feature)  /* Clang */
+ #if __has_feature(address_sanitizer)  /* is ASAN enabled? */
+  #define ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS \
+        __attribute__((no_address_safety_analysis)) \
+        __attribute__ ((noinline))
+ #else
+  #define ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS
+ #endif
+#else
+ #if defined(__SANITIZE_ADDRESS__)  /* GCC 4.8.x, is ASAN enabled? */
+  #define ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS \
+        __attribute__((no_address_safety_analysis)) \
+        __attribute__ ((noinline))
+ #else
+  #define ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS
+ #endif
+#endif
+
 #ifdef WITH_PYMALLOC
 
 #ifdef MS_WINDOWS
@@ -107,10 +125,11 @@ _PyObject_ArenaFree(void *ctx, void *ptr, size_t size)
 
 #define PYRAW_FUNCS _PyMem_RawMalloc, _PyMem_RawRealloc, _PyMem_RawFree
 #ifdef WITH_PYMALLOC
-#define PYOBJECT_FUNCS _PyObject_Malloc, _PyObject_Realloc, _PyObject_Free
+#  define PYOBJ_FUNCS _PyObject_Malloc, _PyObject_Realloc, _PyObject_Free
 #else
-#define PYOBJECT_FUNCS PYRAW_FUNCS
+#  define PYOBJ_FUNCS PYRAW_FUNCS
 #endif
+#define PYMEM_FUNCS PYRAW_FUNCS
 
 #ifdef PYMALLOC_DEBUG
 typedef struct {
@@ -124,16 +143,16 @@ static struct {
     debug_alloc_api_t obj;
 } _PyMem_Debug = {
     {'r', {NULL, PYRAW_FUNCS}},
-    {'m', {NULL, PYRAW_FUNCS}},
-    {'o', {NULL, PYOBJECT_FUNCS}}
+    {'m', {NULL, PYMEM_FUNCS}},
+    {'o', {NULL, PYOBJ_FUNCS}}
     };
 
-#define PYDEBUG_FUNCS _PyMem_DebugMalloc, _PyMem_DebugRealloc, _PyMem_DebugFree
+#define PYDBG_FUNCS _PyMem_DebugMalloc, _PyMem_DebugRealloc, _PyMem_DebugFree
 #endif
 
 static PyMemAllocator _PyMem_Raw = {
 #ifdef PYMALLOC_DEBUG
-    &_PyMem_Debug.raw, PYDEBUG_FUNCS
+    &_PyMem_Debug.raw, PYDBG_FUNCS
 #else
     NULL, PYRAW_FUNCS
 #endif
@@ -141,23 +160,24 @@ static PyMemAllocator _PyMem_Raw = {
 
 static PyMemAllocator _PyMem = {
 #ifdef PYMALLOC_DEBUG
-    &_PyMem_Debug.mem, PYDEBUG_FUNCS
+    &_PyMem_Debug.mem, PYDBG_FUNCS
 #else
-    NULL, PYRAW_FUNCS
+    NULL, PYMEM_FUNCS
 #endif
     };
 
 static PyMemAllocator _PyObject = {
 #ifdef PYMALLOC_DEBUG
-    &_PyMem_Debug.obj, PYDEBUG_FUNCS
+    &_PyMem_Debug.obj, PYDBG_FUNCS
 #else
-    NULL, PYOBJECT_FUNCS
+    NULL, PYOBJ_FUNCS
 #endif
     };
 
 #undef PYRAW_FUNCS
-#undef PYOBJECT_FUNCS
-#undef PYDEBUG_FUNCS
+#undef PYMEM_FUNCS
+#undef PYOBJ_FUNCS
+#undef PYDBG_FUNCS
 
 static PyObjectArenaAllocator _PyObject_Arena = {NULL,
 #ifdef MS_WINDOWS
@@ -906,7 +926,7 @@ new_arena(void)
             return NULL;                /* overflow */
 #endif
         nbytes = numarenas * sizeof(*arenas);
-        arenaobj = (struct arena_object *)PyMem_Realloc(arenas, nbytes);
+        arenaobj = (struct arena_object *)PyMem_RawRealloc(arenas, nbytes);
         if (arenaobj == NULL)
             return NULL;
         arenas = arenaobj;
@@ -1291,7 +1311,7 @@ redirect:
      * has been reached.
      */
     {
-        void *result = PyMem_Malloc(nbytes);
+        void *result = PyMem_RawMalloc(nbytes);
         if (!result)
             _Py_AllocatedBlocks--;
         return result;
@@ -1300,6 +1320,7 @@ redirect:
 
 /* free */
 
+ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS
 static void
 _PyObject_Free(void *ctx, void *p)
 {
@@ -1520,7 +1541,7 @@ _PyObject_Free(void *ctx, void *p)
 redirect:
 #endif
     /* We didn't allocate this address. */
-    PyMem_Free(p);
+    PyMem_RawFree(p);
 }
 
 /* realloc.  If p is NULL, this acts like malloc(nbytes).  Else if nbytes==0,
@@ -1528,6 +1549,7 @@ redirect:
  * return a non-NULL result.
  */
 
+ATTRIBUTE_NO_ADDRESS_SAFETY_ANALYSIS
 static void *
 _PyObject_Realloc(void *ctx, void *p, size_t nbytes)
 {
@@ -1588,14 +1610,14 @@ _PyObject_Realloc(void *ctx, void *p, size_t nbytes)
      * at p.  Instead we punt:  let C continue to manage this block.
      */
     if (nbytes)
-        return PyMem_Realloc(p, nbytes);
+        return PyMem_RawRealloc(p, nbytes);
     /* C doesn't define the result of realloc(p, 0) (it may or may not
      * return NULL then), but Python's docs promise that nbytes==0 never
      * returns NULL.  We don't pass 0 to realloc(), to avoid that endcase
      * to begin with.  Even then, we can't be sure that realloc() won't
      * return NULL.
      */
-    bp = PyMem_Realloc(p, 1);
+    bp = PyMem_RawRealloc(p, 1);
     return bp ? bp : p;
 }
 
@@ -1702,7 +1724,9 @@ pool_is_in_list(const poolp target, poolp list)
 p[0: S]
     Number of bytes originally asked for.  This is a size_t, big-endian (easier
     to read in a memory dump).
-p[S: 2*S]
+p[S]
+    API ID.  See PEP 445.  This is a character, but seems undocumented.
+p[S+1: 2*S]
     Copies of FORBIDDENBYTE.  Used to catch under- writes and reads.
 p[2*S: 2*S+n]
     The requested memory, filled with copies of CLEANBYTE.

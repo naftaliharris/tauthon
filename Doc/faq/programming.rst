@@ -1193,34 +1193,10 @@ that final assignment still results in an error, because tuples are immutable.
 Dictionaries
 ============
 
-How can I get a dictionary to display its keys in a consistent order?
----------------------------------------------------------------------
+How can I get a dictionary to store and display its keys in a consistent order?
+-------------------------------------------------------------------------------
 
-You can't.  Dictionaries store their keys in an unpredictable order, so the
-display order of a dictionary's elements will be similarly unpredictable.
-
-This can be frustrating if you want to save a printable version to a file, make
-some changes and then compare it with some other printed dictionary.  In this
-case, use the ``pprint`` module to pretty-print the dictionary; the items will
-be presented in order sorted by the key.
-
-A more complicated solution is to subclass ``dict`` to create a
-``SortedDict`` class that prints itself in a predictable order.  Here's one
-simpleminded implementation of such a class::
-
-   class SortedDict(dict):
-       def __repr__(self):
-           keys = sorted(self.keys())
-           result = ("{!r}: {!r}".format(k, self[k]) for k in keys)
-           return "{{{}}}".format(", ".join(result))
-
-       __str__ = __repr__
-
-This will work for many common situations you might encounter, though it's far
-from a perfect solution. The largest flaw is that if some values in the
-dictionary are also dictionaries, their values won't be presented in any
-particular order.
-
+Use :class:`collections.OrderedDict`.
 
 I want to do a complicated sort: can you do a Schwartzian Transform in Python?
 ------------------------------------------------------------------------------
@@ -1597,6 +1573,32 @@ How do I get a list of all instances of a given class?
 Python does not keep track of all instances of a class (or of a built-in type).
 You can program the class's constructor to keep track of all instances by
 keeping a list of weak references to each instance.
+
+
+Why does the result of ``id()`` appear to be not unique?
+--------------------------------------------------------
+
+The :func:`id` builtin returns an integer that is guaranteed to be unique during
+the lifetime of the object.  Since in CPython, this is the object's memory
+address, it happens frequently that after an object is deleted from memory, the
+next freshly created object is allocated at the same position in memory.  This
+is illustrated by this example:
+
+>>> id(1000)
+13901272
+>>> id(2000)
+13901272
+
+The two ids belong to different integer objects that are created before, and
+deleted immediately after execution of the ``id()`` call.  To be sure that
+objects whose id you want to examine are still alive, create another reference
+to the object:
+
+>>> a = 1000; b = 2000
+>>> id(a)
+13901272
+>>> id(b)
+13891296
 
 
 Modules

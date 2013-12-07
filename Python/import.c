@@ -517,7 +517,7 @@ _PyImport_FixupExtensionObject(PyObject *mod, PyObject *name,
 }
 
 int
-_PyImport_FixupBuiltin(PyObject *mod, char *name)
+_PyImport_FixupBuiltin(PyObject *mod, const char *name)
 {
     int res;
     PyObject *nameobj;
@@ -656,22 +656,23 @@ remove_module(PyObject *name)
  * interface.  The other two exist primarily for backward compatibility.
  */
 PyObject *
-PyImport_ExecCodeModule(char *name, PyObject *co)
+PyImport_ExecCodeModule(const char *name, PyObject *co)
 {
     return PyImport_ExecCodeModuleWithPathnames(
         name, co, (char *)NULL, (char *)NULL);
 }
 
 PyObject *
-PyImport_ExecCodeModuleEx(char *name, PyObject *co, char *pathname)
+PyImport_ExecCodeModuleEx(const char *name, PyObject *co, const char *pathname)
 {
     return PyImport_ExecCodeModuleWithPathnames(
         name, co, pathname, (char *)NULL);
 }
 
 PyObject *
-PyImport_ExecCodeModuleWithPathnames(char *name, PyObject *co, char *pathname,
-                                     char *cpathname)
+PyImport_ExecCodeModuleWithPathnames(const char *name, PyObject *co,
+                                     const char *pathname,
+                                     const char *cpathname)
 {
     PyObject *m = NULL;
     PyObject *nameobj, *pathobj = NULL, *cpathobj = NULL;
@@ -947,8 +948,12 @@ static int
 init_builtin(PyObject *name)
 {
     struct _inittab *p;
+    PyObject *mod;
 
-    if (_PyImport_FindExtensionObject(name, name) != NULL)
+    mod = _PyImport_FindExtensionObject(name, name);
+    if (PyErr_Occurred())
+        return -1;
+    if (mod != NULL)
         return 1;
 
     for (p = PyImport_Inittab; p->name != NULL; p++) {
@@ -1019,7 +1024,7 @@ get_frozen_object(PyObject *name)
     size = p->size;
     if (size < 0)
         size = -size;
-    return PyMarshal_ReadObjectFromString((char *)p->code, size);
+    return PyMarshal_ReadObjectFromString((const char *)p->code, size);
 }
 
 static PyObject *
@@ -1071,7 +1076,7 @@ PyImport_ImportFrozenModuleObject(PyObject *name)
     ispackage = (size < 0);
     if (ispackage)
         size = -size;
-    co = PyMarshal_ReadObjectFromString((char *)p->code, size);
+    co = PyMarshal_ReadObjectFromString((const char *)p->code, size);
     if (co == NULL)
         return -1;
     if (!PyCode_Check(co)) {
@@ -1113,7 +1118,7 @@ err_return:
 }
 
 int
-PyImport_ImportFrozenModule(char *name)
+PyImport_ImportFrozenModule(const char *name)
 {
     PyObject *nameobj;
     int ret;
@@ -1227,7 +1232,8 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
                                  int level)
 {
     _Py_IDENTIFIER(__import__);
-    _Py_IDENTIFIER(__initializing__);
+    _Py_IDENTIFIER(__spec__);
+    _Py_IDENTIFIER(_initializing);
     _Py_IDENTIFIER(__package__);
     _Py_IDENTIFIER(__path__);
     _Py_IDENTIFIER(__name__);
@@ -1363,7 +1369,11 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
                 goto error;
             }
         }
+
         base = PyUnicode_Substring(package, 0, last_dot);
+        if (base == NULL)
+            goto error;
+
         if (PyUnicode_GET_LENGTH(name) > 0) {
             PyObject *borrowed_dot, *seq = NULL;
 
@@ -1417,16 +1427,21 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *given_globals,
         goto error_with_unlock;
     }
     else if (mod != NULL) {
-        PyObject *value;
+        PyObject *value = NULL;
+        PyObject *spec;
         int initializing = 0;
 
         Py_INCREF(mod);
         /* Optimization: only call _bootstrap._lock_unlock_module() if
-           __initializing__ is true.
-           NOTE: because of this, __initializing__ must be set *before*
+           __spec__._initializing is true.
+           NOTE: because of this, initializing must be set *before*
            stuffing the new module in sys.modules.
          */
-        value = _PyObject_GetAttrId(mod, &PyId___initializing__);
+        spec = _PyObject_GetAttrId(mod, &PyId___spec__);
+        if (spec != NULL) {
+            value = _PyObject_GetAttrId(spec, &PyId__initializing);
+            Py_DECREF(spec);
+        }
         if (value == NULL)
             PyErr_Clear();
         else {

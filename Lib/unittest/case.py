@@ -3,6 +3,7 @@
 import sys
 import functools
 import difflib
+import logging
 import pprint
 import re
 import warnings
@@ -11,7 +12,7 @@ import contextlib
 
 from . import result
 from .util import (strclass, safe_repr, _count_diff_all_purpose,
-                   _count_diff_hashable)
+                   _count_diff_hashable, _common_shorten_repr)
 
 __unittest = True
 
@@ -115,10 +116,21 @@ def expectedFailure(test_item):
     return test_item
 
 
-class _AssertRaisesBaseContext(object):
+class _BaseTestCaseContext:
+
+    def __init__(self, test_case):
+        self.test_case = test_case
+
+    def _raiseFailure(self, standardMsg):
+        msg = self.test_case._formatMessage(self.msg, standardMsg)
+        raise self.test_case.failureException(msg)
+
+
+class _AssertRaisesBaseContext(_BaseTestCaseContext):
 
     def __init__(self, expected, test_case, callable_obj=None,
                  expected_regex=None):
+        _BaseTestCaseContext.__init__(self, test_case)
         self.expected = expected
         self.test_case = test_case
         if callable_obj is not None:
@@ -133,10 +145,6 @@ class _AssertRaisesBaseContext(object):
         self.expected_regex = expected_regex
         self.msg = None
 
-    def _raiseFailure(self, standardMsg):
-        msg = self.test_case._formatMessage(self.msg, standardMsg)
-        raise self.test_case.failureException(msg)
-
     def handle(self, name, callable_obj, args, kwargs):
         """
         If callable_obj is None, assertRaises/Warns is being used as a
@@ -148,7 +156,6 @@ class _AssertRaisesBaseContext(object):
             return self
         with self:
             callable_obj(*args, **kwargs)
-
 
 
 class _AssertRaisesContext(_AssertRaisesBaseContext):
@@ -230,6 +237,74 @@ class _AssertWarnsContext(_AssertRaisesBaseContext):
                                                                self.obj_name))
         else:
             self._raiseFailure("{} not triggered".format(exc_name))
+
+
+
+_LoggingWatcher = collections.namedtuple("_LoggingWatcher",
+                                         ["records", "output"])
+
+
+class _CapturingHandler(logging.Handler):
+    """
+    A logging handler capturing all (raw and formatted) logging output.
+    """
+
+    def __init__(self):
+        logging.Handler.__init__(self)
+        self.watcher = _LoggingWatcher([], [])
+
+    def flush(self):
+        pass
+
+    def emit(self, record):
+        self.watcher.records.append(record)
+        msg = self.format(record)
+        self.watcher.output.append(msg)
+
+
+
+class _AssertLogsContext(_BaseTestCaseContext):
+    """A context manager used to implement TestCase.assertLogs()."""
+
+    LOGGING_FORMAT = "%(levelname)s:%(name)s:%(message)s"
+
+    def __init__(self, test_case, logger_name, level):
+        _BaseTestCaseContext.__init__(self, test_case)
+        self.logger_name = logger_name
+        if level:
+            self.level = logging._nameToLevel.get(level, level)
+        else:
+            self.level = logging.INFO
+        self.msg = None
+
+    def __enter__(self):
+        if isinstance(self.logger_name, logging.Logger):
+            logger = self.logger = self.logger_name
+        else:
+            logger = self.logger = logging.getLogger(self.logger_name)
+        formatter = logging.Formatter(self.LOGGING_FORMAT)
+        handler = _CapturingHandler()
+        handler.setFormatter(formatter)
+        self.watcher = handler.watcher
+        self.old_handlers = logger.handlers[:]
+        self.old_level = logger.level
+        self.old_propagate = logger.propagate
+        logger.handlers = [handler]
+        logger.setLevel(self.level)
+        logger.propagate = False
+        return handler.watcher
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.logger.handlers = self.old_handlers
+        self.logger.propagate = self.old_propagate
+        self.logger.setLevel(self.old_level)
+        if exc_type is not None:
+            # let unexpected exceptions pass through
+            return False
+        if len(self.watcher.records) == 0:
+            self._raiseFailure(
+                "no logs of level {} or higher triggered on {}"
+                .format(logging.getLevelName(self.level), self.logger.name))
 
 
 class TestCase(object):
@@ -644,6 +719,28 @@ class TestCase(object):
         context = _AssertWarnsContext(expected_warning, self, callable_obj)
         return context.handle('assertWarns', callable_obj, args, kwargs)
 
+    def assertLogs(self, logger=None, level=None):
+        """Fail unless a log message of level *level* or higher is emitted
+        on *logger_name* or its children.  If omitted, *level* defaults to
+        INFO and *logger* defaults to the root logger.
+
+        This method must be used as a context manager, and will yield
+        a recording object with two attributes: `output` and `records`.
+        At the end of the context manager, the `output` attribute will
+        be a list of the matching formatted log messages and the
+        `records` attribute will be a list of the corresponding LogRecord
+        objects.
+
+        Example::
+
+            with self.assertLogs('foo', level='INFO') as cm:
+                logging.getLogger('foo').info('first message')
+                logging.getLogger('foo.bar').error('second message')
+            self.assertEqual(cm.output, ['INFO:foo:first message',
+                                         'ERROR:foo.bar:second message'])
+        """
+        return _AssertLogsContext(self, logger, level)
+
     def _getAssertEqualityFunc(self, first, second):
         """Get a detailed comparison function for the types of the two args.
 
@@ -673,7 +770,7 @@ class TestCase(object):
     def _baseAssertEqual(self, first, second, msg=None):
         """The default assertEqual implementation, not type specific."""
         if not first == second:
-            standardMsg = '%s != %s' % (safe_repr(first), safe_repr(second))
+            standardMsg = '%s != %s' % _common_shorten_repr(first, second)
             msg = self._formatMessage(msg, standardMsg)
             raise self.failureException(msg)
 
@@ -808,14 +905,9 @@ class TestCase(object):
             if seq1 == seq2:
                 return
 
-            seq1_repr = safe_repr(seq1)
-            seq2_repr = safe_repr(seq2)
-            if len(seq1_repr) > 30:
-                seq1_repr = seq1_repr[:30] + '...'
-            if len(seq2_repr) > 30:
-                seq2_repr = seq2_repr[:30] + '...'
-            elements = (seq_type_name.capitalize(), seq1_repr, seq2_repr)
-            differing = '%ss differ: %s != %s\n' % elements
+            differing = '%ss differ: %s != %s\n' % (
+                    (seq_type_name.capitalize(),) +
+                    _common_shorten_repr(seq1, seq2))
 
             for i in range(min(len1, len2)):
                 try:
@@ -973,7 +1065,7 @@ class TestCase(object):
         self.assertIsInstance(d2, dict, 'Second argument is not a dictionary')
 
         if d1 != d2:
-            standardMsg = '%s != %s' % (safe_repr(d1, True), safe_repr(d2, True))
+            standardMsg = '%s != %s' % _common_shorten_repr(d1, d2)
             diff = ('\n' + '\n'.join(difflib.ndiff(
                            pprint.pformat(d1).splitlines(),
                            pprint.pformat(d2).splitlines())))
@@ -1057,8 +1149,7 @@ class TestCase(object):
             if len(firstlines) == 1 and first.strip('\r\n') == first:
                 firstlines = [first + '\n']
                 secondlines = [second + '\n']
-            standardMsg = '%s != %s' % (safe_repr(first, True),
-                                        safe_repr(second, True))
+            standardMsg = '%s != %s' % _common_shorten_repr(first, second)
             diff = '\n' + ''.join(difflib.ndiff(firstlines, secondlines))
             standardMsg = self._truncateMessage(standardMsg, diff)
             self.fail(self._formatMessage(msg, standardMsg))

@@ -50,6 +50,8 @@ MSG_OOB = 0x1                           # Process data out of band
 
 # The standard FTP server control port
 FTP_PORT = 21
+# The sizehint parameter passed to readline() calls
+MAXLINE = 8192
 
 
 # Exception raised when an error or invalid response is received
@@ -97,6 +99,7 @@ class FTP:
     debugging = 0
     host = ''
     port = FTP_PORT
+    maxline = MAXLINE
     sock = None
     file = None
     welcome = None
@@ -197,7 +200,9 @@ class FTP:
     # Internal: return one line from the server, stripping CRLF.
     # Raise EOFError if the connection is closed
     def getline(self):
-        line = self.file.readline()
+        line = self.file.readline(self.maxline + 1)
+        if len(line) > self.maxline:
+            raise Error("got more than %d bytes" % self.maxline)
         if self.debugging > 1:
             print('*get*', self.sanitize(line))
         if not line:
@@ -463,7 +468,9 @@ class FTP:
         with self.transfercmd(cmd) as conn, \
                  conn.makefile('r', encoding=self.encoding) as fp:
             while 1:
-                line = fp.readline()
+                line = fp.readline(self.maxline + 1)
+                if len(line) > self.maxline:
+                    raise Error("got more than %d bytes" % self.maxline)
                 if self.debugging > 2:
                     print('*retr*', repr(line))
                 if not line:
@@ -522,7 +529,9 @@ class FTP:
         self.voidcmd('TYPE A')
         with self.transfercmd(cmd) as conn:
             while 1:
-                buf = fp.readline()
+                buf = fp.readline(self.maxline + 1)
+                if len(buf) > self.maxline:
+                    raise Error("got more than %d bytes" % self.maxline)
                 if not buf:
                     break
                 if buf[-2:] != B_CRLF:
@@ -718,6 +727,10 @@ else:
                                  "exclusive")
             self.keyfile = keyfile
             self.certfile = certfile
+            if context is None:
+                context = ssl._create_stdlib_context(self.ssl_version,
+                                                     certfile=certfile,
+                                                     keyfile=keyfile)
             self.context = context
             self._prot_p = False
             FTP.__init__(self, host, user, passwd, acct, timeout, source_address)
@@ -735,12 +748,9 @@ else:
                 resp = self.voidcmd('AUTH TLS')
             else:
                 resp = self.voidcmd('AUTH SSL')
-            if self.context is not None:
-                self.sock = self.context.wrap_socket(self.sock)
-            else:
-                self.sock = ssl.wrap_socket(self.sock, self.keyfile,
-                                            self.certfile,
-                                            ssl_version=self.ssl_version)
+            server_hostname = self.host if ssl.HAS_SNI else None
+            self.sock = self.context.wrap_socket(self.sock,
+                                                 server_hostname=server_hostname)
             self.file = self.sock.makefile(mode='r', encoding=self.encoding)
             return resp
 
@@ -779,11 +789,9 @@ else:
         def ntransfercmd(self, cmd, rest=None):
             conn, size = FTP.ntransfercmd(self, cmd, rest)
             if self._prot_p:
-                if self.context is not None:
-                    conn = self.context.wrap_socket(conn)
-                else:
-                    conn = ssl.wrap_socket(conn, self.keyfile, self.certfile,
-                                           ssl_version=self.ssl_version)
+                server_hostname = self.host if ssl.HAS_SNI else None
+                conn = self.context.wrap_socket(conn,
+                                                server_hostname=server_hostname)
             return conn, size
 
         def abort(self):

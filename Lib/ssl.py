@@ -91,7 +91,8 @@ import textwrap
 import re
 import sys
 import os
-import collections
+from collections import namedtuple
+from enum import Enum as _Enum
 
 import _ssl             # if we can't import it, let the error propagate
 
@@ -102,6 +103,9 @@ from _ssl import (
     SSLSyscallError, SSLEOFError,
     )
 from _ssl import CERT_NONE, CERT_OPTIONAL, CERT_REQUIRED
+from _ssl import (VERIFY_DEFAULT, VERIFY_CRL_CHECK_LEAF, VERIFY_CRL_CHECK_CHAIN,
+    VERIFY_X509_STRICT)
+from _ssl import txt2obj as _txt2obj, nid2obj as _nid2obj
 from _ssl import RAND_status, RAND_egd, RAND_add, RAND_bytes, RAND_pseudo_bytes
 
 def _import_symbols(prefix):
@@ -141,9 +145,10 @@ else:
     _PROTOCOL_NAMES[PROTOCOL_TLSv1_2] = "TLSv1.2"
 
 if sys.platform == "win32":
-    from _ssl import enum_cert_store, X509_ASN_ENCODING, PKCS_7_ASN_ENCODING
+    from _ssl import enum_certificates, enum_crls
 
 from socket import getnameinfo as _getnameinfo
+from socket import SHUT_RDWR as _SHUT_RDWR
 from socket import socket, AF_INET, SOCK_STREAM, create_connection
 import base64        # for DER-to-PEM translation
 import traceback
@@ -161,47 +166,84 @@ else:
 # (OpenSSL's default setting is 'DEFAULT:!aNULL:!eNULL')
 _DEFAULT_CIPHERS = 'DEFAULT:!aNULL:!eNULL:!LOW:!EXPORT:!SSLv2'
 
+# restricted and more secure ciphers
+# HIGH: high encryption cipher suites with key length >= 128 bits (no MD5)
+# !aNULL: only authenticated cipher suites (no anonymous DH)
+# !RC4: no RC4 streaming cipher, RC4 is broken
+# !DSS: RSA is preferred over DSA
+_RESTRICTED_CIPHERS = 'HIGH:!aNULL:!RC4:!DSS'
+
 
 class CertificateError(ValueError):
     pass
 
 
-def _dnsname_to_pat(dn, max_wildcards=1):
+def _dnsname_match(dn, hostname, max_wildcards=1):
+    """Matching according to RFC 6125, section 6.4.3
+
+    http://tools.ietf.org/html/rfc6125#section-6.4.3
+    """
     pats = []
-    for frag in dn.split(r'.'):
-        if frag.count('*') > max_wildcards:
-            # Issue #17980: avoid denials of service by refusing more
-            # than one wildcard per fragment.  A survey of established
-            # policy among SSL implementations showed it to be a
-            # reasonable choice.
-            raise CertificateError(
-                "too many wildcards in certificate DNS name: " + repr(dn))
-        if frag == '*':
-            # When '*' is a fragment by itself, it matches a non-empty dotless
-            # fragment.
-            pats.append('[^.]+')
-        else:
-            # Otherwise, '*' matches any dotless fragment.
-            frag = re.escape(frag)
-            pats.append(frag.replace(r'\*', '[^.]*'))
-    return re.compile(r'\A' + r'\.'.join(pats) + r'\Z', re.IGNORECASE)
+    if not dn:
+        return False
+
+    leftmost, *remainder = dn.split(r'.')
+
+    wildcards = leftmost.count('*')
+    if wildcards > max_wildcards:
+        # Issue #17980: avoid denials of service by refusing more
+        # than one wildcard per fragment.  A survery of established
+        # policy among SSL implementations showed it to be a
+        # reasonable choice.
+        raise CertificateError(
+            "too many wildcards in certificate DNS name: " + repr(dn))
+
+    # speed up common case w/o wildcards
+    if not wildcards:
+        return dn.lower() == hostname.lower()
+
+    # RFC 6125, section 6.4.3, subitem 1.
+    # The client SHOULD NOT attempt to match a presented identifier in which
+    # the wildcard character comprises a label other than the left-most label.
+    if leftmost == '*':
+        # When '*' is a fragment by itself, it matches a non-empty dotless
+        # fragment.
+        pats.append('[^.]+')
+    elif leftmost.startswith('xn--') or hostname.startswith('xn--'):
+        # RFC 6125, section 6.4.3, subitem 3.
+        # The client SHOULD NOT attempt to match a presented identifier
+        # where the wildcard character is embedded within an A-label or
+        # U-label of an internationalized domain name.
+        pats.append(re.escape(leftmost))
+    else:
+        # Otherwise, '*' matches any dotless string, e.g. www*
+        pats.append(re.escape(leftmost).replace(r'\*', '[^.]*'))
+
+    # add the remaining fragments, ignore any wildcards
+    for frag in remainder:
+        pats.append(re.escape(frag))
+
+    pat = re.compile(r'\A' + r'\.'.join(pats) + r'\Z', re.IGNORECASE)
+    return pat.match(hostname)
 
 
 def match_hostname(cert, hostname):
     """Verify that *cert* (in decoded format as returned by
-    SSLSocket.getpeercert()) matches the *hostname*.  RFC 2818 rules
-    are mostly followed, but IP addresses are not accepted for *hostname*.
+    SSLSocket.getpeercert()) matches the *hostname*.  RFC 2818 and RFC 6125
+    rules are followed, but IP addresses are not accepted for *hostname*.
 
     CertificateError is raised on failure. On success, the function
     returns nothing.
     """
     if not cert:
-        raise ValueError("empty or no certificate")
+        raise ValueError("empty or no certificate, match_hostname needs a "
+                         "SSL socket or SSL context with either "
+                         "CERT_OPTIONAL or CERT_REQUIRED")
     dnsnames = []
     san = cert.get('subjectAltName', ())
     for key, value in san:
         if key == 'DNS':
-            if _dnsname_to_pat(value).match(hostname):
+            if _dnsname_match(value, hostname):
                 return
             dnsnames.append(value)
     if not dnsnames:
@@ -212,7 +254,7 @@ def match_hostname(cert, hostname):
                 # XXX according to RFC 2818, the most specific Common Name
                 # must be used.
                 if key == 'commonName':
-                    if _dnsname_to_pat(value).match(hostname):
+                    if _dnsname_match(value, hostname):
                         return
                     dnsnames.append(value)
     if len(dnsnames) > 1:
@@ -228,7 +270,7 @@ def match_hostname(cert, hostname):
             "subjectAltName fields were found")
 
 
-DefaultVerifyPaths = collections.namedtuple("DefaultVerifyPaths",
+DefaultVerifyPaths = namedtuple("DefaultVerifyPaths",
     "cafile capath openssl_cafile_env openssl_cafile openssl_capath_env "
     "openssl_capath")
 
@@ -246,11 +288,40 @@ def get_default_verify_paths():
                               *parts)
 
 
+class _ASN1Object(namedtuple("_ASN1Object", "nid shortname longname oid")):
+    """ASN.1 object identifier lookup
+    """
+    __slots__ = ()
+
+    def __new__(cls, oid):
+        return super().__new__(cls, *_txt2obj(oid, name=False))
+
+    @classmethod
+    def fromnid(cls, nid):
+        """Create _ASN1Object from OpenSSL numeric ID
+        """
+        return super().__new__(cls, *_nid2obj(nid))
+
+    @classmethod
+    def fromname(cls, name):
+        """Create _ASN1Object from short name, long name or OID
+        """
+        return super().__new__(cls, *_txt2obj(name, name=True))
+
+
+class Purpose(_ASN1Object, _Enum):
+    """SSLContext purpose flags with X509v3 Extended Key Usage objects
+    """
+    SERVER_AUTH = '1.3.6.1.5.5.7.3.1'
+    CLIENT_AUTH = '1.3.6.1.5.5.7.3.2'
+
+
 class SSLContext(_SSLContext):
     """An SSLContext holds various SSL-related configuration options and
     data, such as certificates and possibly a private key."""
 
     __slots__ = ('protocol', '__weakref__')
+    _windows_cert_stores = ("CA", "ROOT")
 
     def __new__(cls, protocol, *args, **kwargs):
         self = _SSLContext.__new__(cls, protocol)
@@ -282,6 +353,94 @@ class SSLContext(_SSLContext):
 
         self._set_npn_protocols(protos)
 
+    def _load_windows_store_certs(self, storename, purpose):
+        certs = bytearray()
+        for cert, encoding, trust in enum_certificates(storename):
+            # CA certs are never PKCS#7 encoded
+            if encoding == "x509_asn":
+                if trust is True or purpose.oid in trust:
+                    certs.extend(cert)
+        self.load_verify_locations(cadata=certs)
+        return certs
+
+    def load_default_certs(self, purpose=Purpose.SERVER_AUTH):
+        if not isinstance(purpose, _ASN1Object):
+            raise TypeError(purpose)
+        if sys.platform == "win32":
+            for storename in self._windows_cert_stores:
+                self._load_windows_store_certs(storename, purpose)
+        else:
+            self.set_default_verify_paths()
+
+
+def create_default_context(purpose=Purpose.SERVER_AUTH, *, cafile=None,
+                           capath=None, cadata=None):
+    """Create a SSLContext object with default settings.
+
+    NOTE: The protocol and settings may change anytime without prior
+          deprecation. The values represent a fair balance between maximum
+          compatibility and security.
+    """
+    if not isinstance(purpose, _ASN1Object):
+        raise TypeError(purpose)
+    context = SSLContext(PROTOCOL_TLSv1)
+    # SSLv2 considered harmful.
+    context.options |= OP_NO_SSLv2
+    # disable compression to prevent CRIME attacks (OpenSSL 1.0+)
+    context.options |= getattr(_ssl, "OP_NO_COMPRESSION", 0)
+    # disallow ciphers with known vulnerabilities
+    context.set_ciphers(_RESTRICTED_CIPHERS)
+    # verify certs and host name in client mode
+    if purpose == Purpose.SERVER_AUTH:
+        context.verify_mode = CERT_REQUIRED
+        context.check_hostname = True
+    if cafile or capath or cadata:
+        context.load_verify_locations(cafile, capath, cadata)
+    elif context.verify_mode != CERT_NONE:
+        # no explicit cafile, capath or cadata but the verify mode is
+        # CERT_OPTIONAL or CERT_REQUIRED. Let's try to load default system
+        # root CA certificates for the given purpose. This may fail silently.
+        context.load_default_certs(purpose)
+    return context
+
+
+def _create_stdlib_context(protocol=PROTOCOL_SSLv23, *, cert_reqs=None,
+                           check_hostname=False, purpose=Purpose.SERVER_AUTH,
+                           certfile=None, keyfile=None,
+                           cafile=None, capath=None, cadata=None):
+    """Create a SSLContext object for Python stdlib modules
+
+    All Python stdlib modules shall use this function to create SSLContext
+    objects in order to keep common settings in one place. The configuration
+    is less restrict than create_default_context()'s to increase backward
+    compatibility.
+    """
+    if not isinstance(purpose, _ASN1Object):
+        raise TypeError(purpose)
+
+    context = SSLContext(protocol)
+    # SSLv2 considered harmful.
+    context.options |= OP_NO_SSLv2
+
+    if cert_reqs is not None:
+        context.verify_mode = cert_reqs
+    context.check_hostname = check_hostname
+
+    if keyfile and not certfile:
+        raise ValueError("certfile must be specified")
+    if certfile or keyfile:
+        context.load_cert_chain(certfile, keyfile)
+
+    # load CA root certs
+    if cafile or capath or cadata:
+        context.load_verify_locations(cafile, capath, cadata)
+    elif context.verify_mode != CERT_NONE:
+        # no explicit cafile, capath or cadata but the verify mode is
+        # CERT_OPTIONAL or CERT_REQUIRED. Let's try to load default system
+        # root CA certificates for the given purpose. This may fail silently.
+        context.load_default_certs(purpose)
+
+    return context
 
 class SSLSocket(socket):
     """This class implements a subtype of socket.socket that wraps
@@ -326,6 +485,13 @@ class SSLSocket(socket):
         if server_side and server_hostname:
             raise ValueError("server_hostname can only be specified "
                              "in client mode")
+        if self._context.check_hostname and not server_hostname:
+            if HAS_SNI:
+                raise ValueError("check_hostname requires server_hostname")
+            else:
+                raise ValueError("check_hostname requires server_hostname, "
+                                 "but it's not supported by your OpenSSL "
+                                 "library")
         self.server_side = server_side
         self.server_hostname = server_hostname
         self.do_handshake_on_connect = do_handshake_on_connect
@@ -368,9 +534,9 @@ class SSLSocket(socket):
                         raise ValueError("do_handshake_on_connect should not be specified for non-blocking sockets")
                     self.do_handshake()
 
-            except OSError as x:
+            except (OSError, ValueError):
                 self.close()
-                raise x
+                raise
 
     @property
     def context(self):
@@ -597,6 +763,12 @@ class SSLSocket(socket):
         finally:
             self.settimeout(timeout)
 
+        if self.context.check_hostname:
+            if not self.server_hostname:
+                raise ValueError("check_hostname needs server_hostname "
+                                 "argument")
+            match_hostname(self.getpeercert(), self.server_hostname)
+
     def _real_connect(self, addr, connect_ex):
         if self.server_side:
             raise ValueError("can't connect in server-side mode")
@@ -616,7 +788,7 @@ class SSLSocket(socket):
                 if self.do_handshake_on_connect:
                     self.do_handshake()
             return rc
-        except OSError:
+        except (OSError, ValueError):
             self._sslobj = None
             raise
 
@@ -714,15 +886,16 @@ def get_server_certificate(addr, ssl_version=PROTOCOL_SSLv3, ca_certs=None):
     If 'ssl_version' is specified, use it in the connection attempt."""
 
     host, port = addr
-    if (ca_certs is not None):
+    if ca_certs is not None:
         cert_reqs = CERT_REQUIRED
     else:
         cert_reqs = CERT_NONE
-    s = create_connection(addr)
-    s = wrap_socket(s, ssl_version=ssl_version,
-                    cert_reqs=cert_reqs, ca_certs=ca_certs)
-    dercert = s.getpeercert(True)
-    s.close()
+    context = _create_stdlib_context(ssl_version,
+                                     cert_reqs=cert_reqs,
+                                     cafile=ca_certs)
+    with  create_connection(addr) as sock:
+        with context.wrap_socket(sock) as sslsock:
+            dercert = sslsock.getpeercert(True)
     return DER_cert_to_PEM_cert(dercert)
 
 def get_protocol_name(protocol_code):

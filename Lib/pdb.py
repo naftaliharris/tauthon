@@ -95,18 +95,11 @@ def find_function(funcname, filename):
     except OSError:
         return None
     # consumer of this info expects the first line to be 1
-    lineno = 1
-    answer = None
-    while True:
-        line = fp.readline()
-        if line == '':
-            break
-        if cre.match(line):
-            answer = funcname, filename, lineno
-            break
-        lineno += 1
-    fp.close()
-    return answer
+    with fp:
+        for lineno, line in enumerate(fp, start=1):
+            if cre.match(line):
+                return funcname, filename, lineno
+    return None
 
 def getsourcelines(obj):
     lines, lineno = inspect.findsource(obj)
@@ -304,8 +297,16 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             return
         exc_type, exc_value, exc_traceback = exc_info
         frame.f_locals['__exception__'] = exc_type, exc_value
-        self.message(traceback.format_exception_only(exc_type,
-                                                     exc_value)[-1].strip())
+
+        # An 'Internal StopIteration' exception is an exception debug event
+        # issued by the interpreter when handling a subgenerator run with
+        # 'yield from' or a generator controled by a for loop. No exception has
+        # actually occured in this case. The debugger uses this debug event to
+        # stop when the debuggee is returning from such generators.
+        prefix = 'Internal ' if (not exc_traceback
+                                    and exc_type is StopIteration) else ''
+        self.message('%s%s' % (prefix,
+            traceback.format_exception_only(exc_type, exc_value)[-1].strip()))
         self.interaction(frame, exc_traceback)
 
     # General interaction function
@@ -805,6 +806,8 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             cond = None
         try:
             bp = self.get_bpbynumber(args[0].strip())
+        except IndexError:
+            self.error('Breakpoint number expected')
         except ValueError as err:
             self.error(err)
         else:
@@ -832,6 +835,8 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             count = 0
         try:
             bp = self.get_bpbynumber(args[0].strip())
+        except IndexError:
+            self.error('Breakpoint number expected')
         except ValueError as err:
             self.error(err)
         else:
@@ -1159,15 +1164,13 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             return _rstr('** raised %s **' % err)
 
     def do_p(self, arg):
-        """p(rint) expression
+        """p expression
         Print the value of the expression.
         """
         try:
             self.message(repr(self._getval(arg)))
         except:
             pass
-    # make "print" an alias of "p" since print isn't a Python statement anymore
-    do_print = do_p
 
     def do_pp(self, arg):
         """pp expression
@@ -1388,7 +1391,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         placed in the .pdbrc file):
 
         # Print instance variables (usage "pi classInst")
-        alias pi for k in %1.__dict__.keys(): print "%1.",k,"=",%1.__dict__[k]
+        alias pi for k in %1.__dict__.keys(): print("%1.",k,"=",%1.__dict__[k])
         # Print instance variables in self
         alias ps pi self
         """
@@ -1546,7 +1549,7 @@ if __doc__ is not None:
         'help', 'where', 'down', 'up', 'break', 'tbreak', 'clear', 'disable',
         'enable', 'ignore', 'condition', 'commands', 'step', 'next', 'until',
         'jump', 'return', 'retval', 'run', 'continue', 'list', 'longlist',
-        'args', 'print', 'pp', 'whatis', 'source', 'display', 'undisplay',
+        'args', 'p', 'pp', 'whatis', 'source', 'display', 'undisplay',
         'interact', 'alias', 'unalias', 'debug', 'quit',
     ]
 

@@ -98,8 +98,8 @@ necessary, see :ref:`multiprocessing-programming`.
 
 
 
-Start methods
-~~~~~~~~~~~~~
+Contexts and start methods
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Depending on the platform, :mod:`multiprocessing` supports three ways
 to start a process.  These *start methods* are
@@ -126,13 +126,13 @@ to start a process.  These *start methods* are
   *forkserver*
     When the program starts and selects the *forkserver* start method,
     a server process is started.  From then on, whenever a new process
-    is need the parent process connects to the server and requests
+    is needed, the parent process connects to the server and requests
     that it fork a new process.  The fork server process is single
     threaded so it is safe for it to use :func:`os.fork`.  No
     unnecessary resources are inherited.
 
     Available on Unix platforms which support passing file descriptors
-    over unix pipes.
+    over Unix pipes.
 
 Before Python 3.4 *fork* was the only option available on Unix.  Also,
 prior to Python 3.4, child processes would inherit all the parents
@@ -153,18 +153,46 @@ example::
 
        import multiprocessing as mp
 
-       def foo():
-           print('hello')
+       def foo(q):
+           q.put('hello')
 
        if __name__ == '__main__':
            mp.set_start_method('spawn')
-           p = mp.Process(target=foo)
+           q = mp.Queue()
+           p = mp.Process(target=foo, args=(q,))
            p.start()
+           print(q.get())
            p.join()
 
 :func:`set_start_method` should not be used more than once in the
 program.
 
+Alternatively, you can use :func:`get_context` to obtain a context
+object.  Context objects have the same API as the multiprocessing
+module, and allow one to use multiple start methods in the same
+program. ::
+
+       import multiprocessing as mp
+
+       def foo(q):
+           q.put('hello')
+
+       if __name__ == '__main__':
+           ctx = mp.get_context('spawn')
+           q = ctx.Queue()
+           p = ctx.Process(target=foo, args=(q,))
+           p.start()
+           print(q.get())
+           p.join()
+
+Note that objects related to one context may not be compatible with
+processes for a different context.  In particular, locks created using
+the *fork* context cannot be passed to a processes started using the
+*spawn* or *forkserver* start methods.
+
+A library which wants to use a particular start method should probably
+use :func:`get_context` to avoid interfering with the choice of the
+library user.
 
 
 Exchanging objects between processes
@@ -859,11 +887,30 @@ Miscellaneous
 
    .. versionadded:: 3.4
 
-.. function:: get_start_method()
+.. function:: get_context(method=None)
 
-   Return the current start method.  This can be ``'fork'``,
-   ``'spawn'`` or ``'forkserver'``.  ``'fork'`` is the default on
-   Unix, while ``'spawn'`` is the default on Windows.
+   Return a context object which has the same attributes as the
+   :mod:`multiprocessing` module.
+
+   If *method* is *None* then the default context is returned.
+   Otherwise *method* should be ``'fork'``, ``'spawn'``,
+   ``'forkserver'``.  :exc:`ValueError` is raised if the specified
+   start method is not available.
+
+   .. versionadded:: 3.4
+
+.. function:: get_start_method(allow_none=False)
+
+   Return the name of start method used for starting processes.
+
+   If the start method has not been fixed and *allow_none* is false,
+   then the start method is fixed to the default and the name is
+   returned.  If the start method has not been fixed and *allow_none*
+   is true then *None* is returned.
+
+   The return value can be ``'fork'``, ``'spawn'``, ``'forkserver'``
+   or *None*.  ``'fork'`` is the default on Unix, while ``'spawn'`` is
+   the default on Windows.
 
    .. versionadded:: 3.4
 
@@ -1125,12 +1172,24 @@ inherited by child processes.
    ctypes type or a one character typecode of the kind used by the :mod:`array`
    module.  *\*args* is passed on to the constructor for the type.
 
-   If *lock* is ``True`` (the default) then a new lock object is created to
-   synchronize access to the value.  If *lock* is a :class:`Lock` or
-   :class:`RLock` object then that will be used to synchronize access to the
-   value.  If *lock* is ``False`` then access to the returned object will not be
-   automatically protected by a lock, so it will not necessarily be
-   "process-safe".
+   If *lock* is ``True`` (the default) then a new recursive lock
+   object is created to synchronize access to the value.  If *lock* is
+   a :class:`Lock` or :class:`RLock` object then that will be used to
+   synchronize access to the value.  If *lock* is ``False`` then
+   access to the returned object will not be automatically protected
+   by a lock, so it will not necessarily be "process-safe".
+
+   Operations like ``+=`` which involve a read and write are not
+   atomic.  So if, for instance, you want to atomically increment a
+   shared value it is insufficient to just do ::
+
+       counter.value += 1
+
+   Assuming the associated lock is recursive (which it is by default)
+   you can instead do ::
+
+       with counter.get_lock():
+           counter.value += 1
 
    Note that *lock* is a keyword-only argument.
 
@@ -1785,7 +1844,7 @@ Process Pools
 One can create a pool of processes which will carry out tasks submitted to it
 with the :class:`Pool` class.
 
-.. class:: Pool([processes[, initializer[, initargs[, maxtasksperchild]]]])
+.. class:: Pool([processes[, initializer[, initargs[, maxtasksperchild [, context]]]]])
 
    A process pool object which controls a pool of worker processes to which jobs
    can be submitted.  It supports asynchronous results with timeouts and
@@ -1804,6 +1863,13 @@ with the :class:`Pool` class.
       before it will exit and be replaced with a fresh worker process, to enable
       unused resources to be freed. The default *maxtasksperchild* is None, which
       means worker processes will live as long as the pool.
+
+   .. versionadded:: 3.4
+      *context* can be used to specify the context used for starting
+      the worker processes.  Usually a pool is created using the
+      function :func:`multiprocessing.Pool` or the :meth:`Pool` method
+      of a context object.  In both cases *context* is set
+      appropriately.
 
    .. note::
 
@@ -1920,7 +1986,7 @@ with the :class:`Pool` class.
    .. versionadded:: 3.3
       Pool objects now support the context manager protocol -- see
       :ref:`typecontextmanager`.  :meth:`~contextmanager.__enter__` returns the
-      pool object, and :meth:~contextmanager.`__exit__` calls :meth:`terminate`.
+      pool object, and :meth:`~contextmanager.__exit__` calls :meth:`terminate`.
 
 
 .. class:: AsyncResult
@@ -2093,7 +2159,7 @@ multiple connections at the same time.
    .. versionadded:: 3.3
       Listener objects now support the context manager protocol -- see
       :ref:`typecontextmanager`.  :meth:`~contextmanager.__enter__` returns the
-      listener object, and :meth:~contextmanager.`__exit__` calls :meth:`close`.
+      listener object, and :meth:`~contextmanager.__exit__` calls :meth:`close`.
 
 .. function:: wait(object_list, timeout=None)
 

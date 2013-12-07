@@ -1,9 +1,31 @@
 from contextlib import contextmanager
+from importlib import util
 import os.path
 from test import support
 import unittest
 import sys
 import types
+
+
+def import_importlib(module_name):
+    """Import a module from importlib both w/ and w/o _frozen_importlib."""
+    fresh = ('importlib',) if '.' in module_name else ()
+    frozen = support.import_fresh_module(module_name)
+    source = support.import_fresh_module(module_name, fresh=fresh,
+                                         blocked=('_frozen_importlib',))
+    return frozen, source
+
+
+def test_both(test_class, **kwargs):
+    frozen_tests = types.new_class('Frozen_'+test_class.__name__,
+                                   (test_class, unittest.TestCase))
+    source_tests = types.new_class('Source_'+test_class.__name__,
+                                   (test_class, unittest.TestCase))
+    frozen_tests.__module__ = source_tests.__module__ = test_class.__module__
+    for attr, (frozen_value, source_value) in kwargs.items():
+        setattr(frozen_tests, attr, frozen_value)
+        setattr(source_tests, attr, source_value)
+    return frozen_tests, source_tests
 
 
 CASE_INSENSITIVE_FS = True
@@ -80,9 +102,9 @@ def import_state(**kwargs):
             setattr(sys, attr, value)
 
 
-class mock_modules:
+class _ImporterMock:
 
-    """A mock importer/loader."""
+    """Base class to help with creating importer mocks."""
 
     def __init__(self, *names, module_code={}):
         self.modules = {}
@@ -112,6 +134,19 @@ class mock_modules:
     def __getitem__(self, name):
         return self.modules[name]
 
+    def __enter__(self):
+        self._uncache = uncache(*self.modules.keys())
+        self._uncache.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        self._uncache.__exit__(None, None, None)
+
+
+class mock_modules(_ImporterMock):
+
+    """Importer mock using PEP 302 APIs."""
+
     def find_module(self, fullname, path=None):
         if fullname not in self.modules:
             return None
@@ -131,10 +166,28 @@ class mock_modules:
                     raise
             return self.modules[fullname]
 
-    def __enter__(self):
-        self._uncache = uncache(*self.modules.keys())
-        self._uncache.__enter__()
-        return self
+class mock_spec(_ImporterMock):
 
-    def __exit__(self, *exc_info):
-        self._uncache.__exit__(None, None, None)
+    """Importer mock using PEP 451 APIs."""
+
+    def find_spec(self, fullname, path=None, parent=None):
+        try:
+            module = self.modules[fullname]
+        except KeyError:
+            return None
+        is_package = hasattr(module, '__path__')
+        spec = util.spec_from_file_location(
+                fullname, module.__file__, loader=self,
+                submodule_search_locations=getattr(module, '__path__', None))
+        return spec
+
+    def create_module(self, spec):
+        if spec.name not in self.modules:
+            raise ImportError
+        return self.modules[spec.name]
+
+    def exec_module(self, module):
+        try:
+            self.module_code[module.__spec__.name]()
+        except KeyError:
+            pass

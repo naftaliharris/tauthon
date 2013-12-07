@@ -80,8 +80,9 @@ class Error(Exception):
 
 WAVE_FORMAT_PCM = 0x0001
 
-_array_fmts = None, 'b', 'h', None, 'l'
+_array_fmts = None, 'b', 'h', None, 'i'
 
+import audioop
 import struct
 import sys
 from chunk import Chunk
@@ -237,26 +238,9 @@ class Wave_read:
             self._data_seek_needed = 0
         if nframes == 0:
             return b''
-        if self._sampwidth > 1 and sys.byteorder == 'big':
-            # unfortunately the fromfile() method does not take
-            # something that only looks like a file object, so
-            # we have to reach into the innards of the chunk object
-            import array
-            chunk = self._data_chunk
-            data = array.array(_array_fmts[self._sampwidth])
-            nitems = nframes * self._nchannels
-            if nitems * self._sampwidth > chunk.chunksize - chunk.size_read:
-                nitems = (chunk.chunksize - chunk.size_read) // self._sampwidth
-            data.fromfile(chunk.file.file, nitems)
-            # "tell" data chunk how much was read
-            chunk.size_read = chunk.size_read + nitems * self._sampwidth
-            # do the same for the outermost chunk
-            chunk = chunk.file
-            chunk.size_read = chunk.size_read + nitems * self._sampwidth
-            data.byteswap()
-            data = data.tobytes()
-        else:
-            data = self._data_chunk.read(nframes * self._framesize)
+        data = self._data_chunk.read(nframes * self._framesize)
+        if self._sampwidth != 1 and sys.byteorder == 'big':
+            data = audioop.byteswap(data, self._sampwidth)
         if self._convert and data:
             data = self._convert(data)
         self._soundpos = self._soundpos + len(data) // (self._nchannels * self._sampwidth)
@@ -426,19 +410,16 @@ class Wave_write:
         return self._nframeswritten
 
     def writeframesraw(self, data):
+        if not isinstance(data, (bytes, bytearray)):
+            data = memoryview(data).cast('B')
         self._ensure_header_written(len(data))
         nframes = len(data) // (self._sampwidth * self._nchannels)
         if self._convert:
             data = self._convert(data)
-        if self._sampwidth > 1 and sys.byteorder == 'big':
-            import array
-            data = array.array(_array_fmts[self._sampwidth], data)
-            data.byteswap()
-            data.tofile(self._file)
-            self._datawritten = self._datawritten + len(data) * self._sampwidth
-        else:
-            self._file.write(data)
-            self._datawritten = self._datawritten + len(data)
+        if self._sampwidth != 1 and sys.byteorder == 'big':
+            data = audioop.byteswap(data, self._sampwidth)
+        self._file.write(data)
+        self._datawritten += len(data)
         self._nframeswritten = self._nframeswritten + nframes
 
     def writeframes(self, data):
@@ -479,14 +460,18 @@ class Wave_write:
         if not self._nframes:
             self._nframes = initlength // (self._nchannels * self._sampwidth)
         self._datalength = self._nframes * self._nchannels * self._sampwidth
-        self._form_length_pos = self._file.tell()
+        try:
+            self._form_length_pos = self._file.tell()
+        except (AttributeError, OSError):
+            self._form_length_pos = None
         self._file.write(struct.pack('<L4s4sLHHLLHH4s',
             36 + self._datalength, b'WAVE', b'fmt ', 16,
             WAVE_FORMAT_PCM, self._nchannels, self._framerate,
             self._nchannels * self._framerate * self._sampwidth,
             self._nchannels * self._sampwidth,
             self._sampwidth * 8, b'data'))
-        self._data_length_pos = self._file.tell()
+        if self._form_length_pos is not None:
+            self._data_length_pos = self._file.tell()
         self._file.write(struct.pack('<L', self._datalength))
         self._headerwritten = True
 

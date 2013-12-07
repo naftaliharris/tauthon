@@ -78,12 +78,12 @@ below:
 
    .. attribute:: events
 
-      Events that must be waited for this file object.
+      Events that must be waited for on this file object.
 
    .. attribute:: data
 
       Optional opaque data associated to this file object: for example, this
-      could be used to store per-client session.
+      could be used to store a per-client session ID.
 
 
 .. class:: BaseSelector
@@ -122,7 +122,7 @@ below:
 
    .. method:: modify(fileobj, events, data=None)
 
-      Change a registered file object monitored events or attached data.
+      Change a registered file object's monitored events or attached data.
 
       This is equivalent to :meth:`BaseSelector.unregister(fileobj)` followed
       by :meth:`BaseSelector.register(fileobj, events, data)`, except that it
@@ -143,12 +143,17 @@ below:
       If *timeout* is ``None``, the call will block until a monitored file object
       becomes ready.
 
-      This returns a list of ``(key, events)`` tuple, one for each ready file
+      This returns a list of ``(key, events)`` tuples, one for each ready file
       object.
 
       *key* is the :class:`SelectorKey` instance corresponding to a ready file
       object.
       *events* is a bitmask of events ready on this file object.
+
+      .. note::
+          This method can return before any file object becomes ready or the
+          timeout has elapsed if the current process receives a signal: in this
+          case, an empty list will be returned.
 
    .. method:: close()
 
@@ -159,10 +164,18 @@ below:
 
    .. method:: get_key(fileobj)
 
-      Return the key associated to a registered file object.
+      Return the key associated with a registered file object.
 
       This returns the :class:`SelectorKey` instance associated to this file
       object, or raises :exc:`KeyError` if the file object is not registered.
+
+   .. method:: get_map()
+
+      Return a mapping of file objects to selector keys.
+
+      This returns a :class:`~collections.abc.Mapping` instance mapping
+      registered file objects to their associated :class:`SelectorKey`
+      instance.
 
 
 .. class:: DefaultSelector()
@@ -202,30 +215,40 @@ below:
       :func:`select.kqueue` object.
 
 
-Examples of selector usage::
+Examples
+--------
 
-   >>> import selectors
-   >>> import socket
-   >>>
-   >>> s = selectors.DefaultSelector()
-   >>> r, w = socket.socketpair()
-   >>>
-   >>> s.register(r, selectors.EVENT_READ)
-   SelectorKey(fileobj=<socket.socket fd=4, family=1, type=1, proto=0>, fd=4, events=1, data=None)
-   >>> s.register(w, selectors.EVENT_WRITE)
-   SelectorKey(fileobj=<socket.socket fd=5, family=1, type=1, proto=0>, fd=5, events=2, data=None)
-   >>>
-   >>> print(s.select())
-   [(SelectorKey(fileobj=<socket.socket fd=5, family=1, type=1, proto=0>, fd=5, events=2, data=None), 2)]
-   >>>
-   >>> for key, events in s.select():
-   ...     if events & selectors.EVENT_WRITE:
-   ...         key.fileobj.send(b'spam')
-   ...
-   4
-   >>> for key, events in s.select():
-   ...     if events & selectors.EVENT_READ:
-   ...         print(key.fileobj.recv(1024))
-   ...
-   b'spam'
-   >>> s.close()
+Here is a simple echo server implementation::
+
+   import selectors
+   import socket
+
+   sel = selectors.DefaultSelector()
+
+   def accept(sock, mask):
+       conn, addr = sock.accept()  # Should be ready
+       print('accepted', conn, 'from', addr)
+       conn.setblocking(False)
+       sel.register(conn, selectors.EVENT_READ, read)
+
+   def read(conn, mask):
+       data = conn.recv(1000)  # Should be ready
+       if data:
+           print('echoing', repr(data), 'to', conn)
+           conn.send(data)  # Hope it won't block
+       else:
+           print('closing', conn)
+           sel.unregister(conn)
+           conn.close()
+
+   sock = socket.socket()
+   sock.bind(('localhost', 1234))
+   sock.listen(100)
+   sock.setblocking(False)
+   sel.register(sock, selectors.EVENT_READ, accept)
+
+   while True:
+       events = sel.select()
+       for key, mask in events:
+           callback = key.data
+           callback(key.fileobj, mask)

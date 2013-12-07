@@ -425,7 +425,7 @@ always available.
    * On Mac OS X, the encoding is ``'utf-8'``.
 
    * On Unix, the encoding is the user's preference according to the result of
-     nl_langinfo(CODESET), or ``'utf-8'`` if ``nl_langinfo(CODESET)`` failed.
+     nl_langinfo(CODESET).
 
    * On Windows NT+, file names are Unicode natively, so no conversion is
      performed. :func:`getfilesystemencoding` still returns ``'mbcs'``, as
@@ -436,8 +436,7 @@ always available.
    * On Windows 9x, the encoding is ``'mbcs'``.
 
    .. versionchanged:: 3.2
-      On Unix, use ``'utf-8'`` instead of ``None`` if ``nl_langinfo(CODESET)``
-      failed. :func:`getfilesystemencoding` result cannot be ``None``.
+      :func:`getfilesystemencoding` result cannot be ``None`` anymore.
 
 
 .. function:: getrefcount(object)
@@ -594,8 +593,19 @@ always available.
    | :const:`imag`       | multiplier used for the imaginary part of a      |
    |                     | complex number                                   |
    +---------------------+--------------------------------------------------+
+   | :const:`algorithm`  | name of the algorithm for hashing of str, bytes, |
+   |                     | and memoryview                                   |
+   +---------------------+--------------------------------------------------+
+   | :const:`hash_bits`  | internal output size of the hash algorithm       |
+   +---------------------+--------------------------------------------------+
+   | :const:`seed_bits`  | size of the seed key of the hash algorithm       |
+   +---------------------+--------------------------------------------------+
+
 
    .. versionadded:: 3.2
+
+   .. versionchanged: 3.4
+      Added *algorithm*, *hash_bits* and *seed_bits*
 
 
 .. data:: hexversion
@@ -1056,7 +1066,7 @@ always available.
    :func:`open` function.  Their parameters are chosen as follows:
 
    * The character encoding is platform-dependent.  Under Windows, if the stream
-     is interactive (that is, if its :meth:`isatty` method returns True), the
+     is interactive (that is, if its :meth:`isatty` method returns ``True``), the
      console codepage is used, otherwise the ANSI code page.  Under other
      platforms, the locale encoding is used (see :meth:`locale.getpreferredencoding`).
 

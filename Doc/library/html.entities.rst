@@ -20,6 +20,7 @@ This module defines four dictionaries, :data:`html5`,
    Note that the trailing semicolon is included in the name (e.g. ``'gt;'``),
    however some of the names are accepted by the standard even without the
    semicolon: in this case the name is present with and without the ``';'``.
+   See also :func:`html.unescape`.
 
    .. versionadded:: 3.3
 
@@ -42,4 +43,4 @@ This module defines four dictionaries, :data:`html5`,
 
 .. rubric:: Footnotes
 
-.. [#] See http://www.w3.org/TR/html5/named-character-references.html
+.. [#] See http://www.w3.org/TR/html5/syntax.html#named-character-references

@@ -883,8 +883,8 @@ Test cases
 
 
 
-   It is also possible to check that exceptions and warnings are raised using
-   the following methods:
+   It is also possible to check the production of exceptions, warnings and
+   log messages using the following methods:
 
    +---------------------------------------------------------+--------------------------------------+------------+
    | Method                                                  | Checks that                          | New in     |
@@ -892,14 +892,17 @@ Test cases
    | :meth:`assertRaises(exc, fun, *args, **kwds)            | ``fun(*args, **kwds)`` raises *exc*  |            |
    | <TestCase.assertRaises>`                                |                                      |            |
    +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertRaisesRegex(exc, re, fun, *args, **kwds)   | ``fun(*args, **kwds)`` raises *exc*  | 3.1        |
-   | <TestCase.assertRaisesRegex>`                           | and the message matches *re*         |            |
+   | :meth:`assertRaisesRegex(exc, r, fun, *args, **kwds)    | ``fun(*args, **kwds)`` raises *exc*  | 3.1        |
+   | <TestCase.assertRaisesRegex>`                           | and the message matches regex *r*    |            |
    +---------------------------------------------------------+--------------------------------------+------------+
    | :meth:`assertWarns(warn, fun, *args, **kwds)            | ``fun(*args, **kwds)`` raises *warn* | 3.2        |
    | <TestCase.assertWarns>`                                 |                                      |            |
    +---------------------------------------------------------+--------------------------------------+------------+
-   | :meth:`assertWarnsRegex(warn, re, fun, *args, **kwds)   | ``fun(*args, **kwds)`` raises *warn* | 3.2        |
-   | <TestCase.assertWarnsRegex>`                            | and the message matches *re*         |            |
+   | :meth:`assertWarnsRegex(warn, r, fun, *args, **kwds)    | ``fun(*args, **kwds)`` raises *warn* | 3.2        |
+   | <TestCase.assertWarnsRegex>`                            | and the message matches regex *r*    |            |
+   +---------------------------------------------------------+--------------------------------------+------------+
+   | :meth:`assertLogs(logger, level)                        | The ``with`` block logs on *logger*  | 3.4        |
+   | <TestCase.assertLogs>`                                  | with minimum *level*                 |            |
    +---------------------------------------------------------+--------------------------------------+------------+
 
    .. method:: assertRaises(exception, callable, *args, **kwds)
@@ -1031,6 +1034,47 @@ Test cases
       .. versionchanged:: 3.3
          Added the *msg* keyword argument when used as a context manager.
 
+   .. method:: assertLogs(logger=None, level=None)
+
+      A context manager to test that at least one message is logged on
+      the *logger* or one of its children, with at least the given
+      *level*.
+
+      If given, *logger* should be a :class:`logging.Logger` object or a
+      :class:`str` giving the name of a logger.  The default is the root
+      logger, which will catch all messages.
+
+      If given, *level* should be either a numeric logging level or
+      its string equivalent (for example either ``"ERROR"`` or
+      :attr:`logging.ERROR`).  The default is :attr:`logging.INFO`.
+
+      The test passes if at least one message emitted inside the ``with``
+      block matches the *logger* and *level* conditions, otherwise it fails.
+
+      The object returned by the context manager is a recording helper
+      which keeps tracks of the matching log messages.  It has two
+      attributes:
+
+      .. attribute:: records
+
+         A list of :class:`logging.LogRecord` objects of the matching
+         log messages.
+
+      .. attribute:: output
+
+         A list of :class:`str` objects with the formatted output of
+         matching messages.
+
+      Example::
+
+         with self.assertLogs('foo', level='INFO') as cm:
+            logging.getLogger('foo').info('first message')
+            logging.getLogger('foo.bar').error('second message')
+         self.assertEqual(cm.output, ['INFO:foo:first message',
+                                      'ERROR:foo.bar:second message'])
+
+      .. versionadded:: 3.4
+
 
    There are also other methods used to perform more specific checks, such as:
 
@@ -1055,10 +1099,10 @@ Test cases
    | :meth:`assertLessEqual(a, b)          | ``a <= b``                     | 3.1          |
    | <TestCase.assertLessEqual>`           |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertRegex(s, re)             | ``regex.search(s)``            | 3.1          |
+   | :meth:`assertRegex(s, r)              | ``r.search(s)``                | 3.1          |
    | <TestCase.assertRegex>`               |                                |              |
    +---------------------------------------+--------------------------------+--------------+
-   | :meth:`assertNotRegex(s, re)          | ``not regex.search(s)``        | 3.2          |
+   | :meth:`assertNotRegex(s, r)           | ``not r.search(s)``            | 3.2          |
    | <TestCase.assertNotRegex>`            |                                |              |
    +---------------------------------------+--------------------------------+--------------+
    | :meth:`assertCountEqual(a, b)         | *a* and *b* have the same      | 3.2          |

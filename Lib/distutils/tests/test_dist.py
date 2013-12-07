@@ -8,7 +8,7 @@ import textwrap
 
 from unittest import mock
 
-from distutils.dist import Distribution, fix_help_options
+from distutils.dist import Distribution, fix_help_options, DistributionMetadata
 from distutils.cmd import Command
 
 from test.support import TESTFN, captured_stdout, run_unittest
@@ -39,6 +39,7 @@ class TestDistribution(Distribution):
 
 
 class DistributionTestCase(support.LoggingSilencer,
+                           support.TempdirManager,
                            support.EnvironGuard,
                            unittest.TestCase):
 
@@ -212,6 +213,34 @@ class DistributionTestCase(support.LoggingSilencer,
         kwargs = {'level': 'ok2'}
         self.assertRaises(ValueError, dist.announce, args, kwargs)
 
+
+    def test_find_config_files_disable(self):
+        # Ticket #1180: Allow user to disable their home config file.
+        temp_home = self.mkdtemp()
+        if os.name == 'posix':
+            user_filename = os.path.join(temp_home, ".pydistutils.cfg")
+        else:
+            user_filename = os.path.join(temp_home, "pydistutils.cfg")
+
+        with open(user_filename, 'w') as f:
+            f.write('[distutils]\n')
+
+        def _expander(path):
+            return temp_home
+
+        old_expander = os.path.expanduser
+        os.path.expanduser = _expander
+        try:
+            d = Distribution()
+            all_files = d.find_config_files()
+
+            d = Distribution(attrs={'script_args': ['--no-user-cfg']})
+            files = d.find_config_files()
+        finally:
+            os.path.expanduser = old_expander
+
+        # make sure --no-user-cfg disables the user cfg file
+        self.assertEqual(len(all_files)-1, len(files))
 
 class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
                        unittest.TestCase):
@@ -387,6 +416,33 @@ class MetadataTestCase(support.TempdirManager, support.EnvironGuard,
                   if line.strip() != '']
         self.assertTrue(output)
 
+
+    def test_read_metadata(self):
+        attrs = {"name": "package",
+                 "version": "1.0",
+                 "long_description": "desc",
+                 "description": "xxx",
+                 "download_url": "http://example.com",
+                 "keywords": ['one', 'two'],
+                 "requires": ['foo']}
+
+        dist = Distribution(attrs)
+        metadata = dist.metadata
+
+        # write it then reloads it
+        PKG_INFO = io.StringIO()
+        metadata.write_pkg_file(PKG_INFO)
+        PKG_INFO.seek(0)
+        metadata.read_pkg_file(PKG_INFO)
+
+        self.assertEqual(metadata.name, "package")
+        self.assertEqual(metadata.version, "1.0")
+        self.assertEqual(metadata.description, "xxx")
+        self.assertEqual(metadata.download_url, 'http://example.com')
+        self.assertEqual(metadata.keywords, ['one', 'two'])
+        self.assertEqual(metadata.platforms, ['UNKNOWN'])
+        self.assertEqual(metadata.obsoletes, None)
+        self.assertEqual(metadata.requires, ['foo'])
 
 def test_suite():
     suite = unittest.TestSuite()

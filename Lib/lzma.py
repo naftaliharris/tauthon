@@ -54,9 +54,9 @@ class LZMAFile(io.BufferedIOBase):
         bytes object), in which case the named file is opened, or it can
         be an existing file object to read from or write to.
 
-        mode can be "r" for reading (default), "w" for (over)writing, or
-        "a" for appending. These can equivalently be given as "rb", "wb"
-        and "ab" respectively.
+        mode can be "r" for reading (default), "w" for (over)writing,
+        "x" for creating exclusively, or "a" for appending. These can
+        equivalently be given as "rb", "wb", "xb" and "ab" respectively.
 
         format specifies the container format to use for the file.
         If mode is "r", this defaults to FORMAT_AUTO. Otherwise, the
@@ -112,7 +112,7 @@ class LZMAFile(io.BufferedIOBase):
             self._decompressor = LZMADecompressor(**self._init_args)
             self._buffer = b""
             self._buffer_offset = 0
-        elif mode in ("w", "wb", "a", "ab"):
+        elif mode in ("w", "wb", "a", "ab", "x", "xb"):
             if format is None:
                 format = FORMAT_XZ
             mode_code = _MODE_WRITE
@@ -225,11 +225,18 @@ class LZMAFile(io.BufferedIOBase):
                     raise EOFError("Compressed file ended before the "
                                    "end-of-stream marker was reached")
 
-            # Continue to next stream.
             if self._decompressor.eof:
+                # Continue to next stream.
                 self._decompressor = LZMADecompressor(**self._init_args)
-
-            self._buffer = self._decompressor.decompress(rawblock)
+                try:
+                    self._buffer = self._decompressor.decompress(rawblock)
+                except LZMAError:
+                    # Trailing data isn't a valid compressed stream; ignore it.
+                    self._mode = _MODE_READ_EOF
+                    self._size = self._pos
+                    return False
+            else:
+                self._buffer = self._decompressor.decompress(rawblock)
             self._buffer_offset = 0
         return True
 
@@ -426,8 +433,9 @@ def open(filename, mode="rb", *,
     object), in which case the named file is opened, or it can be an
     existing file object to read from or write to.
 
-    The mode argument can be "r", "rb" (default), "w", "wb", "a" or "ab"
-    for binary mode, or "rt", "wt" or "at" for text mode.
+    The mode argument can be "r", "rb" (default), "w", "wb", "x", "xb",
+    "a", or "ab" for binary mode, or "rt", "wt", "xt", or "at" for text
+    mode.
 
     The format, check, preset and filters arguments specify the
     compression settings, as for LZMACompressor, LZMADecompressor and
@@ -486,11 +494,18 @@ def decompress(data, format=FORMAT_AUTO, memlimit=None, filters=None):
     results = []
     while True:
         decomp = LZMADecompressor(format, memlimit, filters)
-        results.append(decomp.decompress(data))
+        try:
+            res = decomp.decompress(data)
+        except LZMAError:
+            if results:
+                break  # Leftover data is not a valid LZMA/XZ stream; ignore it.
+            else:
+                raise  # Error on the first iteration; bail out.
+        results.append(res)
         if not decomp.eof:
             raise LZMAError("Compressed data ended before the "
                             "end-of-stream marker was reached")
-        if not decomp.unused_data:
-            return b"".join(results)
-        # There is unused data left over. Proceed to next stream.
         data = decomp.unused_data
+        if not data:
+            break
+    return b"".join(results)

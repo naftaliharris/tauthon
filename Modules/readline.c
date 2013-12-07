@@ -55,11 +55,11 @@ extern char **completion_matches(char *, CPFunction *);
  * with the "real" readline and cannot be detected at compile-time,
  * hence we use a runtime check to detect if we're using libedit
  *
- * Currently there is one know API incompatibility:
+ * Currently there is one known API incompatibility:
  * - 'get_history' has a 1-based index with GNU readline, and a 0-based
- *   index with libedit's emulation.
+ *   index with older versions of libedit's emulation.
  * - Note that replace_history and remove_history use a 0-based index
- *   with both implementation.
+ *   with both implementations.
  */
 static int using_libedit_emulation = 0;
 static const char libedit_version_tag[] = "EditLine wrapper";
@@ -1043,7 +1043,7 @@ rlhandler(char *text)
 extern PyThreadState* _PyOS_ReadlineTState;
 
 static char *
-readline_until_enter_or_signal(char *prompt, int *signal)
+readline_until_enter_or_signal(const char *prompt, int *signal)
 {
     char * not_done_reading = "";
     fd_set selectset;
@@ -1118,7 +1118,7 @@ onintr(int sig)
 
 
 static char *
-readline_until_enter_or_signal(char *prompt, int *signal)
+readline_until_enter_or_signal(const char *prompt, int *signal)
 {
     PyOS_sighandler_t old_inthandler;
     char *p;
@@ -1145,7 +1145,7 @@ readline_until_enter_or_signal(char *prompt, int *signal)
 
 
 static char *
-call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
+call_readline(FILE *sys_stdin, FILE *sys_stdout, const char *prompt)
 {
     size_t n;
     char *p, *q;
@@ -1176,7 +1176,7 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
 
     /* We got an EOF, return a empty string. */
     if (p == NULL) {
-        p = PyMem_Malloc(1);
+        p = PyMem_RawMalloc(1);
         if (p != NULL)
             *p = '\0';
         RESTORE_LOCALE(saved_locale)
@@ -1204,7 +1204,7 @@ call_readline(FILE *sys_stdin, FILE *sys_stdout, char *prompt)
     /* Copy the malloc'ed buffer into a PyMem_Malloc'ed one and
        release the original. */
     q = p;
-    p = PyMem_Malloc(n+2);
+    p = PyMem_RawMalloc(n+2);
     if (p != NULL) {
         strncpy(p, q, n);
         p[n] = '\n';

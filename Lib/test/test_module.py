@@ -37,8 +37,10 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(foo.__doc__, None)
         self.assertIs(foo.__loader__, None)
         self.assertIs(foo.__package__, None)
+        self.assertIs(foo.__spec__, None)
         self.assertEqual(foo.__dict__, {"__name__": "foo", "__doc__": None,
-                                        "__loader__": None, "__package__": None})
+                                        "__loader__": None, "__package__": None,
+                                        "__spec__": None})
 
     def test_ascii_docstring(self):
         # ASCII docstring
@@ -47,7 +49,8 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(foo.__doc__, "foodoc")
         self.assertEqual(foo.__dict__,
                          {"__name__": "foo", "__doc__": "foodoc",
-                          "__loader__": None, "__package__": None})
+                          "__loader__": None, "__package__": None,
+                          "__spec__": None})
 
     def test_unicode_docstring(self):
         # Unicode docstring
@@ -56,7 +59,8 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(foo.__doc__, "foodoc\u1234")
         self.assertEqual(foo.__dict__,
                          {"__name__": "foo", "__doc__": "foodoc\u1234",
-                          "__loader__": None, "__package__": None})
+                          "__loader__": None, "__package__": None,
+                          "__spec__": None})
 
     def test_reinit(self):
         # Reinitialization should not replace the __dict__
@@ -69,7 +73,7 @@ class ModuleTests(unittest.TestCase):
         self.assertEqual(foo.bar, 42)
         self.assertEqual(foo.__dict__,
               {"__name__": "foo", "__doc__": "foodoc", "bar": 42,
-               "__loader__": None, "__package__": None})
+               "__loader__": None, "__package__": None, "__spec__": None})
         self.assertTrue(foo.__dict__ is d)
 
     def test_dont_clear_dict(self):
@@ -187,8 +191,12 @@ a = A(destroyed)"""
 
     def test_module_repr_source(self):
         r = repr(unittest)
-        self.assertEqual(r[:25], "<module 'unittest' from '")
-        self.assertEqual(r[-13:], "__init__.py'>")
+        starts_with = "<module 'unittest' from '"
+        ends_with = "__init__.py'>"
+        self.assertEqual(r[:len(starts_with)], starts_with,
+                         '{!r} does not start with {!r}'.format(r, starts_with))
+        self.assertEqual(r[-len(ends_with):], ends_with,
+                         '{!r} does not end with {!r}'.format(r, ends_with))
 
     def test_module_finalization_at_shutdown(self):
         # Module globals and builtins should still be available during shutdown

@@ -59,7 +59,9 @@ try:
     import smtpd
     from urllib.parse import urlparse, parse_qs
     from socketserver import (ThreadingUDPServer, DatagramRequestHandler,
-                              ThreadingTCPServer, StreamRequestHandler)
+                              ThreadingTCPServer, StreamRequestHandler,
+                              ThreadingUnixStreamServer,
+                              ThreadingUnixDatagramServer)
 except ImportError:
     threading = None
 try:
@@ -75,7 +77,6 @@ try:
     import zlib
 except ImportError:
     pass
-
 
 class BaseTest(unittest.TestCase):
 
@@ -589,12 +590,16 @@ class HandlerTest(BaseTest):
             for _ in range(tries):
                 try:
                     os.unlink(fname)
+                    self.deletion_time = time.time()
                 except OSError:
                     pass
                 time.sleep(0.004 * random.randint(0, 4))
 
         del_count = 500
         log_count = 500
+
+        self.handle_time = None
+        self.deletion_time = None
 
         for delay in (False, True):
             fd, fn = tempfile.mkstemp('.log', 'test_logging-3-')
@@ -609,7 +614,14 @@ class HandlerTest(BaseTest):
                 for _ in range(log_count):
                     time.sleep(0.005)
                     r = logging.makeLogRecord({'msg': 'testing' })
-                    h.handle(r)
+                    try:
+                        self.handle_time = time.time()
+                        h.handle(r)
+                    except Exception:
+                        print('Deleted at %s, '
+                              'opened at %s' % (self.deletion_time,
+                                                self.handle_time))
+                        raise
             finally:
                 remover.join()
                 h.close()
@@ -854,6 +866,9 @@ if threading:
             super(TestTCPServer, self).server_bind()
             self.port = self.socket.getsockname()[1]
 
+    class TestUnixStreamServer(TestTCPServer):
+        address_family = socket.AF_UNIX
+
     class TestUDPServer(ControlMixin, ThreadingUDPServer):
         """
         A UDP server which is controllable using :class:`ControlMixin`.
@@ -901,23 +916,28 @@ if threading:
             super(TestUDPServer, self).server_close()
             self._closed = True
 
+    class TestUnixDatagramServer(TestUDPServer):
+        address_family = socket.AF_UNIX
+
 # - end of server_helper section
 
 @unittest.skipUnless(threading, 'Threading required for this test.')
 class SMTPHandlerTest(BaseTest):
+    TIMEOUT = 8.0
     def test_basic(self):
         sockmap = {}
         server = TestSMTPServer(('localhost', 0), self.process_message, 0.001,
                                 sockmap)
         server.start()
         addr = ('localhost', server.port)
-        h = logging.handlers.SMTPHandler(addr, 'me', 'you', 'Log', timeout=5.0)
+        h = logging.handlers.SMTPHandler(addr, 'me', 'you', 'Log',
+                                         timeout=self.TIMEOUT)
         self.assertEqual(h.toaddrs, ['you'])
         self.messages = []
         r = logging.makeLogRecord({'msg': 'Hello'})
         self.handled = threading.Event()
         h.handle(r)
-        self.handled.wait(5.0)  # 14314: don't wait forever
+        self.handled.wait(self.TIMEOUT)  # 14314: don't wait forever
         server.stop()
         self.assertTrue(self.handled.is_set())
         self.assertEqual(len(self.messages), 1)
@@ -1345,7 +1365,7 @@ class ConfigFileTest(BaseTest):
 
     def test_logger_disabling(self):
         self.apply_config(self.disable_test)
-        logger = logging.getLogger('foo')
+        logger = logging.getLogger('some_pristine_logger')
         self.assertFalse(logger.disabled)
         self.apply_config(self.disable_test)
         self.assertTrue(logger.disabled)
@@ -1358,17 +1378,23 @@ class SocketHandlerTest(BaseTest):
 
     """Test for SocketHandler objects."""
 
+    if threading:
+        server_class = TestTCPServer
+        address = ('localhost', 0)
+
     def setUp(self):
         """Set up a TCP server to receive log messages, and a SocketHandler
         pointing to that server's address and port."""
         BaseTest.setUp(self)
-        addr = ('localhost', 0)
-        self.server = server = TestTCPServer(addr, self.handle_socket,
-                                                0.01)
+        self.server = server = self.server_class(self.address,
+                                                 self.handle_socket, 0.01)
         server.start()
         server.ready.wait()
-        self.sock_hdlr = logging.handlers.SocketHandler('localhost',
-                                                        server.port)
+        hcls = logging.handlers.SocketHandler
+        if isinstance(server.server_address, tuple):
+            self.sock_hdlr = hcls('localhost', server.port)
+        else:
+            self.sock_hdlr = hcls(server.server_address, None)
         self.log_output = ''
         self.root_logger.removeHandler(self.root_logger.handlers[0])
         self.root_logger.addHandler(self.sock_hdlr)
@@ -1424,22 +1450,53 @@ class SocketHandlerTest(BaseTest):
         time.sleep(self.sock_hdlr.retryTime - now + 0.001)
         self.root_logger.error('Nor this')
 
+def _get_temp_domain_socket():
+    fd, fn = tempfile.mkstemp(prefix='test_logging_', suffix='.sock')
+    os.close(fd)
+    # just need a name - file can't be present, or we'll get an
+    # 'address already in use' error.
+    os.remove(fn)
+    return fn
+
+@unittest.skipUnless(threading, 'Threading required for this test.')
+class UnixSocketHandlerTest(SocketHandlerTest):
+
+    """Test for SocketHandler with unix sockets."""
+
+    if threading:
+        server_class = TestUnixStreamServer
+
+    def setUp(self):
+        # override the definition in the base class
+        self.address = _get_temp_domain_socket()
+        SocketHandlerTest.setUp(self)
+
+    def tearDown(self):
+        SocketHandlerTest.tearDown(self)
+        os.remove(self.address)
 
 @unittest.skipUnless(threading, 'Threading required for this test.')
 class DatagramHandlerTest(BaseTest):
 
     """Test for DatagramHandler."""
 
+    if threading:
+        server_class = TestUDPServer
+        address = ('localhost', 0)
+
     def setUp(self):
         """Set up a UDP server to receive log messages, and a DatagramHandler
         pointing to that server's address and port."""
         BaseTest.setUp(self)
-        addr = ('localhost', 0)
-        self.server = server = TestUDPServer(addr, self.handle_datagram, 0.01)
+        self.server = server = self.server_class(self.address,
+                                                 self.handle_datagram, 0.01)
         server.start()
         server.ready.wait()
-        self.sock_hdlr = logging.handlers.DatagramHandler('localhost',
-                                                          server.port)
+        hcls = logging.handlers.DatagramHandler
+        if isinstance(server.server_address, tuple):
+            self.sock_hdlr = hcls('localhost', server.port)
+        else:
+            self.sock_hdlr = hcls(server.server_address, None)
         self.log_output = ''
         self.root_logger.removeHandler(self.root_logger.handlers[0])
         self.root_logger.addHandler(self.sock_hdlr)
@@ -1474,21 +1531,44 @@ class DatagramHandlerTest(BaseTest):
 
 
 @unittest.skipUnless(threading, 'Threading required for this test.')
+class UnixDatagramHandlerTest(DatagramHandlerTest):
+
+    """Test for DatagramHandler using Unix sockets."""
+
+    if threading:
+        server_class = TestUnixDatagramServer
+
+    def setUp(self):
+        # override the definition in the base class
+        self.address = _get_temp_domain_socket()
+        DatagramHandlerTest.setUp(self)
+
+    def tearDown(self):
+        DatagramHandlerTest.tearDown(self)
+        os.remove(self.address)
+
+@unittest.skipUnless(threading, 'Threading required for this test.')
 class SysLogHandlerTest(BaseTest):
 
     """Test for SysLogHandler using UDP."""
+
+    if threading:
+        server_class = TestUDPServer
+        address = ('localhost', 0)
 
     def setUp(self):
         """Set up a UDP server to receive log messages, and a SysLogHandler
         pointing to that server's address and port."""
         BaseTest.setUp(self)
-        addr = ('localhost', 0)
-        self.server = server = TestUDPServer(addr, self.handle_datagram,
-                                                0.01)
+        self.server = server = self.server_class(self.address,
+                                                 self.handle_datagram, 0.01)
         server.start()
         server.ready.wait()
-        self.sl_hdlr = logging.handlers.SysLogHandler(('localhost',
-                                                       server.port))
+        hcls = logging.handlers.SysLogHandler
+        if isinstance(server.server_address, tuple):
+            self.sl_hdlr = hcls(('localhost', server.port))
+        else:
+            self.sl_hdlr = hcls(server.server_address)
         self.log_output = ''
         self.root_logger.removeHandler(self.root_logger.handlers[0])
         self.root_logger.addHandler(self.sl_hdlr)
@@ -1524,6 +1604,23 @@ class SysLogHandlerTest(BaseTest):
         self.handled.wait()
         self.assertEqual(self.log_output, b'<11>h\xc3\xa4m-sp\xc3\xa4m')
 
+
+@unittest.skipUnless(threading, 'Threading required for this test.')
+class UnixSysLogHandlerTest(SysLogHandlerTest):
+
+    """Test for SysLogHandler with Unix sockets."""
+
+    if threading:
+        server_class = TestUnixDatagramServer
+
+    def setUp(self):
+        # override the definition in the base class
+        self.address = _get_temp_domain_socket()
+        SysLogHandlerTest.setUp(self)
+
+    def tearDown(self):
+        SysLogHandlerTest.tearDown(self)
+        os.remove(self.address)
 
 @unittest.skipUnless(threading, 'Threading required for this test.')
 class HTTPHandlerTest(BaseTest):
@@ -4034,7 +4131,8 @@ def test_main():
                  SMTPHandlerTest, FileHandlerTest, RotatingFileHandlerTest,
                  LastResortTest, LogRecordTest, ExceptionTest,
                  SysLogHandlerTest, HTTPHandlerTest, NTEventLogHandlerTest,
-                 TimedRotatingFileHandlerTest
+                 TimedRotatingFileHandlerTest, UnixSocketHandlerTest,
+                 UnixDatagramHandlerTest, UnixSysLogHandlerTest
                 )
 
 if __name__ == "__main__":

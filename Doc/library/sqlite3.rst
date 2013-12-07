@@ -174,7 +174,7 @@ Module functions and constants
    For the *isolation_level* parameter, please see the
    :attr:`Connection.isolation_level` property of :class:`Connection` objects.
 
-   SQLite natively supports only the types TEXT, INTEGER, FLOAT, BLOB and NULL. If
+   SQLite natively supports only the types TEXT, INTEGER, REAL, BLOB and NULL. If
    you want to use other types you must add support for them yourself. The
    *detect_types* parameter and the using custom **converters** registered with the
    module-level :func:`register_converter` function allow you to easily do that.
@@ -241,10 +241,10 @@ Module functions and constants
 .. function:: enable_callback_tracebacks(flag)
 
    By default you will not get any tracebacks in user-defined functions,
-   aggregates, converters, authorizer callbacks etc. If you want to debug them, you
-   can call this function with *flag* as True. Afterwards, you will get tracebacks
-   from callbacks on ``sys.stderr``. Use :const:`False` to disable the feature
-   again.
+   aggregates, converters, authorizer callbacks etc. If you want to debug them,
+   you can call this function with *flag* set to ``True``. Afterwards, you will
+   get tracebacks from callbacks on ``sys.stderr``. Use :const:`False` to
+   disable the feature again.
 
 
 .. _sqlite3-connection-objects:

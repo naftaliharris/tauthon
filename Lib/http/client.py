@@ -214,6 +214,8 @@ MAXAMOUNT = 1048576
 
 # maximal line length when calling readline().
 _MAXLINE = 65536
+_MAXHEADERS = 100
+
 
 class HTTPMessage(email.message.Message):
     # XXX The only usage of this method is in
@@ -261,6 +263,8 @@ def parse_headers(fp, _class=HTTPMessage):
         if len(line) > _MAXLINE:
             raise LineTooLong("header line")
         headers.append(line)
+        if len(headers) > _MAXHEADERS:
+            raise HTTPException("got more than %d headers" % _MAXHEADERS)
         if line in (b'\r\n', b'\n', b''):
             break
     hstring = b''.join(headers).decode('iso-8859-1')
@@ -1175,9 +1179,7 @@ else:
             self.key_file = key_file
             self.cert_file = cert_file
             if context is None:
-                # Some reasonable defaults
-                context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-                context.options |= ssl.OP_NO_SSLv2
+                context = ssl._create_stdlib_context()
             will_verify = context.verify_mode != ssl.CERT_NONE
             if check_hostname is None:
                 check_hostname = will_verify
@@ -1202,13 +1204,13 @@ else:
             server_hostname = self.host if ssl.HAS_SNI else None
             self.sock = self._context.wrap_socket(sock,
                                                   server_hostname=server_hostname)
-            try:
-                if self._check_hostname:
+            if not self._context.check_hostname and self._check_hostname:
+                try:
                     ssl.match_hostname(self.sock.getpeercert(), self.host)
-            except Exception:
-                self.sock.shutdown(socket.SHUT_RDWR)
-                self.sock.close()
-                raise
+                except Exception:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                    self.sock.close()
+                    raise
 
     __all__.append("HTTPSConnection")
 

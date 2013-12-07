@@ -32,8 +32,19 @@ const char *Py_FileSystemDefaultEncoding = NULL; /* set by initfsencoding() */
 int Py_HasFileSystemDefaultEncoding = 0;
 #endif
 
+_Py_IDENTIFIER(__builtins__);
+_Py_IDENTIFIER(__dict__);
+_Py_IDENTIFIER(__prepare__);
+_Py_IDENTIFIER(__round__);
+_Py_IDENTIFIER(encoding);
+_Py_IDENTIFIER(errors);
 _Py_IDENTIFIER(fileno);
 _Py_IDENTIFIER(flush);
+_Py_IDENTIFIER(metaclass);
+_Py_IDENTIFIER(sort);
+_Py_IDENTIFIER(stdin);
+_Py_IDENTIFIER(stdout);
+_Py_IDENTIFIER(stderr);
 
 static PyObject *
 builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
@@ -42,7 +53,6 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *cls = NULL;
     Py_ssize_t nargs;
     int isclass;
-    _Py_IDENTIFIER(__prepare__);
 
     assert(args != NULL);
     if (!PyTuple_Check(args)) {
@@ -82,10 +92,10 @@ builtin___build_class__(PyObject *self, PyObject *args, PyObject *kwds)
             Py_DECREF(bases);
             return NULL;
         }
-        meta = PyDict_GetItemString(mkw, "metaclass");
+        meta = _PyDict_GetItemId(mkw, &PyId_metaclass);
         if (meta != NULL) {
             Py_INCREF(meta);
-            if (PyDict_DelItemString(mkw, "metaclass") < 0) {
+            if (_PyDict_DelItemId(mkw, &PyId_metaclass) < 0) {
                 Py_DECREF(meta);
                 Py_DECREF(mkw);
                 Py_DECREF(bases);
@@ -340,7 +350,11 @@ builtin_bin(PyObject *self, PyObject *v)
 PyDoc_STRVAR(bin_doc,
 "bin(number) -> string\n\
 \n\
-Return the binary representation of an integer.");
+Return the binary representation of an integer.\n\
+\n\
+   >>> bin(2796202)\n\
+   '0b1010101010101010101010'\n\
+");
 
 
 static PyObject *
@@ -681,7 +695,7 @@ finally:
 PyDoc_STRVAR(compile_doc,
 "compile(source, filename, mode[, flags[, dont_inherit]]) -> code object\n\
 \n\
-Compile the source string (a Python module, statement or expression)\n\
+Compile the source (a Python module, statement or expression)\n\
 into a code object that can be executed by exec() or eval().\n\
 The filename will be used for run-time error messages.\n\
 The mode must be 'exec' to compile a module, 'single' to compile a\n\
@@ -755,8 +769,11 @@ builtin_eval(PyObject *self, PyObject *args)
     }
     if (globals == Py_None) {
         globals = PyEval_GetGlobals();
-        if (locals == Py_None)
+        if (locals == Py_None) {
             locals = PyEval_GetLocals();
+            if (locals == NULL)
+                return NULL;
+        }
     }
     else if (locals == Py_None)
         locals = globals;
@@ -768,9 +785,9 @@ builtin_eval(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    if (PyDict_GetItemString(globals, "__builtins__") == NULL) {
-        if (PyDict_SetItemString(globals, "__builtins__",
-                                 PyEval_GetBuiltins()) != 0)
+    if (_PyDict_GetItemId(globals, &PyId___builtins__) == NULL) {
+        if (_PyDict_SetItemId(globals, &PyId___builtins__,
+                              PyEval_GetBuiltins()) != 0)
             return NULL;
     }
 
@@ -820,6 +837,8 @@ builtin_exec(PyObject *self, PyObject *args)
         globals = PyEval_GetGlobals();
         if (locals == Py_None) {
             locals = PyEval_GetLocals();
+            if (locals == NULL)
+                return NULL;
         }
         if (!globals || !locals) {
             PyErr_SetString(PyExc_SystemError,
@@ -841,9 +860,9 @@ builtin_exec(PyObject *self, PyObject *args)
             locals->ob_type->tp_name);
         return NULL;
     }
-    if (PyDict_GetItemString(globals, "__builtins__") == NULL) {
-        if (PyDict_SetItemString(globals, "__builtins__",
-                                 PyEval_GetBuiltins()) != 0)
+    if (_PyDict_GetItemId(globals, &PyId___builtins__) == NULL) {
+        if (_PyDict_SetItemId(globals, &PyId___builtins__,
+                              PyEval_GetBuiltins()) != 0)
             return NULL;
     }
 
@@ -1261,7 +1280,11 @@ builtin_hex(PyObject *self, PyObject *v)
 PyDoc_STRVAR(hex_doc,
 "hex(number) -> string\n\
 \n\
-Return the hexadecimal representation of an integer.");
+Return the hexadecimal representation of an integer.\n\
+\n\
+   >>> hex(3735928559)\n\
+   '0xdeadbeef'\n\
+");
 
 
 static PyObject *
@@ -1335,7 +1358,7 @@ min_max(PyObject *args, PyObject *kwds, int op)
 
     if (positional)
         v = args;
-    else if (!PyArg_UnpackTuple(args, (char *)name, 1, 1, &v))
+    else if (!PyArg_UnpackTuple(args, name, 1, 1, &v))
         return NULL;
 
     emptytuple = PyTuple_New(0);
@@ -1461,7 +1484,11 @@ builtin_oct(PyObject *self, PyObject *v)
 PyDoc_STRVAR(oct_doc,
 "oct(number) -> string\n\
 \n\
-Return the octal representation of an integer.");
+Return the octal representation of an integer.\n\
+\n\
+   >>> oct(342391)\n\
+   '0o1234567'\n\
+");
 
 
 static PyObject *
@@ -1547,7 +1574,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
                                      kwlist, &sep, &end, &file, &flush))
         return NULL;
     if (file == NULL || file == Py_None) {
-        file = PySys_GetObject("stdout");
+        file = _PySys_GetObjectId(&PyId_stdout);
         if (file == NULL) {
             PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
             return NULL;
@@ -1606,7 +1633,7 @@ builtin_print(PyObject *self, PyObject *args, PyObject *kwds)
         if (do_flush == -1)
             return NULL;
         else if (do_flush) {
-            tmp = PyObject_CallMethod(file, "flush", "");
+            tmp = _PyObject_CallMethodId(file, &PyId_flush, "");
             if (tmp == NULL)
                 return NULL;
             else
@@ -1632,9 +1659,9 @@ static PyObject *
 builtin_input(PyObject *self, PyObject *args)
 {
     PyObject *promptarg = NULL;
-    PyObject *fin = PySys_GetObject("stdin");
-    PyObject *fout = PySys_GetObject("stdout");
-    PyObject *ferr = PySys_GetObject("stderr");
+    PyObject *fin = _PySys_GetObjectId(&PyId_stdin);
+    PyObject *fout = _PySys_GetObjectId(&PyId_stdout);
+    PyObject *ferr = _PySys_GetObjectId(&PyId_stderr);
     PyObject *tmp;
     long fd;
     int tty;
@@ -1705,8 +1732,6 @@ builtin_input(PyObject *self, PyObject *args)
         char *stdin_encoding_str, *stdin_errors_str;
         PyObject *result;
         size_t len;
-        _Py_IDENTIFIER(encoding);
-        _Py_IDENTIFIER(errors);
 
         stdin_encoding = _PyObject_GetAttrId(fin, &PyId_encoding);
         stdin_errors = _PyObject_GetAttrId(fin, &PyId_errors);
@@ -1835,7 +1860,6 @@ builtin_round(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *ndigits = NULL;
     static char *kwlist[] = {"number", "ndigits", 0};
     PyObject *number, *round, *result;
-    _Py_IDENTIFIER(__round__);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:round",
                                      kwlist, &number, &ndigits))
@@ -1878,7 +1902,6 @@ builtin_sorted(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject *callable;
     static char *kwlist[] = {"iterable", "key", "reverse", 0};
     int reverse;
-    _Py_IDENTIFIER(sort);
 
     /* args 1-3 should match listsort in Objects/listobject.c */
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|Oi:sorted",
@@ -1926,16 +1949,11 @@ builtin_vars(PyObject *self, PyObject *args)
         return NULL;
     if (v == NULL) {
         d = PyEval_GetLocals();
-        if (d == NULL) {
-            if (!PyErr_Occurred())
-                PyErr_SetString(PyExc_SystemError,
-                                "vars(): no locals!?");
-        }
-        else
-            Py_INCREF(d);
+        if (d == NULL)
+            return NULL;
+        Py_INCREF(d);
     }
     else {
-        _Py_IDENTIFIER(__dict__);
         d = _PyObject_GetAttrId(v, &PyId___dict__);
         if (d == NULL) {
             PyErr_SetString(PyExc_TypeError,

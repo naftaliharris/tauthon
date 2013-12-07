@@ -384,6 +384,8 @@ optionally followed by an import of the module::
           imports it. */
        PyImport_ImportModule("spam");
 
+       ...
+
 .. note::
 
    Removing entries from ``sys.modules`` or importing compiled modules into
@@ -515,7 +517,7 @@ or more format codes between parentheses.  For example::
 value of the Python function.  :c:func:`PyObject_CallObject` is
 "reference-count-neutral" with respect to its arguments.  In the example a new
 tuple was created to serve as the argument list, which is :c:func:`Py_DECREF`\
--ed immediately after the call.
+-ed immediately after the :c:func:`PyObject_CallObject` call.
 
 The return value of :c:func:`PyObject_CallObject` is "new": either it is a brand
 new object, or it is an existing object whose reference count has been
@@ -717,9 +719,7 @@ Philbrick (philbrick@hks.com)::
               action, voltage);
        printf("-- Lovely plumage, the %s -- It's %s!\n", type, state);
 
-       Py_INCREF(Py_None);
-
-       return Py_None;
+       Py_RETURN_NONE;
    }
 
    static PyMethodDef keywdarg_methods[] = {
@@ -860,9 +860,9 @@ the cycle itself.
 The cycle detector is able to detect garbage cycles and can reclaim them so long
 as there are no finalizers implemented in Python (:meth:`__del__` methods).
 When there are such finalizers, the detector exposes the cycles through the
-:mod:`gc` module (specifically, the
-``garbage`` variable in that module).  The :mod:`gc` module also exposes a way
-to run the detector (the :func:`collect` function), as well as configuration
+:mod:`gc` module (specifically, the :attr:`~gc.garbage` variable in that module).
+The :mod:`gc` module also exposes a way to run the detector (the
+:func:`~gc.collect` function), as well as configuration
 interfaces and the ability to disable the detector at runtime.  The cycle
 detector is considered an optional component; though it is included by default,
 it can be disabled at build time using the :option:`--without-cycle-gc` option

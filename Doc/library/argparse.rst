@@ -46,7 +46,7 @@ produces either the sum or the max::
 Assuming the Python code above is saved into a file called ``prog.py``, it can
 be run at the command line and provides useful help messages::
 
-   $ prog.py -h
+   $ python prog.py -h
    usage: prog.py [-h] [--sum] N [N ...]
 
    Process some integers.
@@ -61,15 +61,15 @@ be run at the command line and provides useful help messages::
 When run with the appropriate arguments, it prints either the sum or the max of
 the command-line integers::
 
-   $ prog.py 1 2 3 4
+   $ python prog.py 1 2 3 4
    4
 
-   $ prog.py 1 2 3 4 --sum
+   $ python prog.py 1 2 3 4 --sum
    10
 
 If invalid arguments are passed in, it will issue an error::
 
-   $ prog.py a b c
+   $ python prog.py a b c
    usage: prog.py [-h] [--sum] N [N ...]
    prog.py: error: argument N: invalid int value: 'a'
 
@@ -598,10 +598,10 @@ the help options::
 
    >>> parser = argparse.ArgumentParser(prog='PROG', prefix_chars='+/')
    >>> parser.print_help()
-   usage: PROG [-h]
+   usage: PROG [+h]
 
    optional arguments:
-     -h, --help  show this help message and exit
+     +h, ++help  show this help message and exit
 
 
 The add_argument() method
@@ -1371,12 +1371,14 @@ argument::
    >>> parser.parse_args(['--', '-f'])
    Namespace(foo='-f', one=None)
 
+.. _prefix-matching:
 
-Argument abbreviations
-^^^^^^^^^^^^^^^^^^^^^^
+Argument abbreviations (prefix matching)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :meth:`~ArgumentParser.parse_args` method allows long options to be
-abbreviated if the abbreviation is unambiguous::
+abbreviated to a prefix, if the abbreviation is unambiguous (the prefix matches
+a unique option)::
 
    >>> parser = argparse.ArgumentParser(prog='PROG')
    >>> parser.add_argument('-bacon')
@@ -1452,7 +1454,10 @@ Other utilities
 Sub-commands
 ^^^^^^^^^^^^
 
-.. method:: ArgumentParser.add_subparsers()
+.. method:: ArgumentParser.add_subparsers([title], [description], [prog], \
+                                          [parser_class], [action], \
+                                          [option_string], [dest], [help], \
+                                          [metavar])
 
    Many programs split up their functionality into a number of sub-commands,
    for example, the ``svn`` program can invoke sub-commands like ``svn
@@ -1465,6 +1470,30 @@ Sub-commands
    has a single method, :meth:`~ArgumentParser.add_parser`, which takes a
    command name and any :class:`ArgumentParser` constructor arguments, and
    returns an :class:`ArgumentParser` object that can be modified as usual.
+
+   Description of parameters:
+
+   * title - title for the sub-parser group in help output; by default
+     "subcommands" if description is provided, otherwise uses title for
+     positional arguments
+
+   * description - description for the sub-parser group in help output, by
+     default None
+
+   * prog - usage information that will be displayed with sub-command help,
+     by default the name of the program and any positional arguments before the
+     subparser argument
+
+   * parser_class - class which will be used to create sub-parser instances, by
+     default the class of the current parser (e.g. ArgumentParser)
+
+   * dest - name of the attribute under which sub-command name will be
+     stored; by default None and no value is stored
+
+   * help - help for sub-parser group in help output, by default None
+
+   * metavar - string presenting available sub-commands in help; by default it
+     is None and presents sub-commands in form {cmd1, cmd2, ..}
 
    Some example usage::
 
@@ -1698,7 +1727,7 @@ Argument groups
 Mutual exclusion
 ^^^^^^^^^^^^^^^^
 
-.. method:: add_mutually_exclusive_group(required=False)
+.. method:: ArgumentParser.add_mutually_exclusive_group(required=False)
 
    Create a mutually exclusive group. :mod:`argparse` will make sure that only
    one of the arguments in the mutually exclusive group was present on the
@@ -1826,6 +1855,12 @@ the populated namespace and the list of remaining argument strings.
    >>> parser.add_argument('bar')
    >>> parser.parse_known_args(['--foo', '--badger', 'BAR', 'spam'])
    (Namespace(bar='BAR', foo=True), ['--badger', 'spam'])
+
+.. warning::
+   :ref:`Prefix matching <prefix-matching>` rules apply to
+   :meth:`parse_known_args`. The parser may consume an option even if it's just
+   a prefix of one of its known options, instead of leaving it in the remaining
+   arguments list.
 
 
 Customizing file parsing

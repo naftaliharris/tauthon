@@ -1,46 +1,32 @@
 import sys
 from collections import OrderedDict
-from types import MappingProxyType
+from types import MappingProxyType, DynamicClassAttribute
 
 __all__ = ['Enum', 'IntEnum', 'unique']
 
 
-class _RouteClassAttributeToGetattr:
-    """Route attribute access on a class to __getattr__.
-
-    This is a descriptor, used to define attributes that act differently when
-    accessed through an instance and through a class.  Instance access remains
-    normal, but access to an attribute through a class will be routed to the
-    class's __getattr__ method; this is done by raising AttributeError.
-
-    """
-    def __init__(self, fget=None):
-        self.fget = fget
-
-    def __get__(self, instance, ownerclass=None):
-        if instance is None:
-            raise AttributeError()
-        return self.fget(instance)
-
-    def __set__(self, instance, value):
-        raise AttributeError("can't set attribute")
-
-    def __delete__(self, instance):
-        raise AttributeError("can't delete attribute")
+def _is_descriptor(obj):
+    """Returns True if obj is a descriptor, False otherwise."""
+    return (
+            hasattr(obj, '__get__') or
+            hasattr(obj, '__set__') or
+            hasattr(obj, '__delete__'))
 
 
 def _is_dunder(name):
     """Returns True if a __dunder__ name, False otherwise."""
     return (name[:2] == name[-2:] == '__' and
             name[2:3] != '_' and
-            name[-3:-2] != '_')
+            name[-3:-2] != '_' and
+            len(name) > 4)
 
 
 def _is_sunder(name):
     """Returns True if a _sunder_ name, False otherwise."""
     return (name[0] == name[-1] == '_' and
             name[1:2] != '_' and
-            name[-2:-1] != '_')
+            name[-2:-1] != '_' and
+            len(name) > 2)
 
 
 def _make_class_unpicklable(cls):
@@ -50,8 +36,9 @@ def _make_class_unpicklable(cls):
     cls.__reduce__ = _break_on_call_reduce
     cls.__module__ = '<unknown>'
 
+
 class _EnumDict(dict):
-    """Keeps track of definition order of the enum items.
+    """Track enum member order and ensure member names are not reused.
 
     EnumMeta will use the names found in self._member_names as the
     enumeration member names.
@@ -62,11 +49,7 @@ class _EnumDict(dict):
         self._member_names = []
 
     def __setitem__(self, key, value):
-        """Changes anything not dundered or that doesn't have __get__.
-
-        If a descriptor is added with the same name as an enum member, the name
-        is removed from _member_names (this may leave a hole in the numerical
-        sequence of values).
+        """Changes anything not dundered or not a descriptor.
 
         If an enum member name is used twice, an error is raised; duplicate
         values are not checked for.
@@ -76,17 +59,18 @@ class _EnumDict(dict):
         """
         if _is_sunder(key):
             raise ValueError('_names_ are reserved for future Enum use')
-        elif _is_dunder(key) or hasattr(value, '__get__'):
-            if key in self._member_names:
-                # overwriting an enum with a method?  then remove the name from
-                # _member_names or it will become an enum anyway when the class
-                # is created
-                self._member_names.remove(key)
-        else:
-            if key in self._member_names:
-                raise TypeError('Attempted to reuse key: %r' % key)
+        elif _is_dunder(key):
+            pass
+        elif key in self._member_names:
+            # descriptor overwriting an enum?
+            raise TypeError('Attempted to reuse key: %r' % key)
+        elif not _is_descriptor(value):
+            if key in self:
+                # enum overwriting a descriptor?
+                raise TypeError('Key already defined as: %r' % self[key])
             self._member_names.append(key)
         super().__setitem__(key, value)
+
 
 
 # Dummy value for Enum as EnumMeta explicitly checks for it, but of course
@@ -160,6 +144,7 @@ class EnumMeta(type):
                     enum_member._value_ = member_type(*args)
             value = enum_member._value_
             enum_member._name_ = member_name
+            enum_member.__objclass__ = enum_class
             enum_member.__init__(*args)
             # If another member with the same value was already defined, the
             # new member becomes an alias to the existing one.
@@ -222,18 +207,17 @@ class EnumMeta(type):
     def __contains__(cls, member):
         return isinstance(member, cls) and member.name in cls._member_map_
 
+    def __delattr__(cls, attr):
+        # nicer error message when someone tries to delete an attribute
+        # (see issue19025).
+        if attr in cls._member_map_:
+            raise AttributeError(
+                    "%s: cannot delete Enum member." % cls.__name__)
+        super().__delattr__(attr)
+
     def __dir__(self):
-        return ['__class__', '__doc__', '__members__'] + self._member_names_
-
-    @property
-    def __members__(cls):
-        """Returns a mapping of member name->value.
-
-        This mapping lists all enum members, including aliases. Note that this
-        is a read-only view of the internal mapping.
-
-        """
-        return MappingProxyType(cls._member_map_)
+        return (['__class__', '__doc__', '__members__', '__module__'] +
+                self._member_names_)
 
     def __getattr__(cls, name):
         """Return the enum member matching `name`
@@ -260,8 +244,21 @@ class EnumMeta(type):
     def __len__(cls):
         return len(cls._member_names_)
 
+    @property
+    def __members__(cls):
+        """Returns a mapping of member name->value.
+
+        This mapping lists all enum members, including aliases. Note that this
+        is a read-only view of the internal mapping.
+
+        """
+        return MappingProxyType(cls._member_map_)
+
     def __repr__(cls):
         return "<enum %r>" % cls.__name__
+
+    def __reversed__(cls):
+        return (cls._member_map_[name] for name in reversed(cls._member_names_))
 
     def __setattr__(cls, name, value):
         """Block attempts to reassign Enum members.
@@ -446,12 +443,9 @@ class Enum(metaclass=EnumMeta):
         return "%s.%s" % (self.__class__.__name__, self._name_)
 
     def __dir__(self):
-        return (['__class__', '__doc__', 'name', 'value'])
-
-    def __eq__(self, other):
-        if type(other) is self.__class__:
-            return self is other
-        return NotImplemented
+        added_behavior = [m for m in self.__class__.__dict__ if m[0] != '_']
+        return (['__class__', '__doc__', '__module__', 'name', 'value'] +
+                added_behavior)
 
     def __format__(self, format_spec):
         # mixed-in Enums should use the mixed-in type's __format__, otherwise
@@ -474,19 +468,21 @@ class Enum(metaclass=EnumMeta):
     def __hash__(self):
         return hash(self._name_)
 
-    # _RouteClassAttributeToGetattr is used to provide access to the `name`
-    # and `value` properties of enum members while keeping some measure of
+    # DynamicClassAttribute is used to provide access to the `name` and
+    # `value` properties of enum members while keeping some measure of
     # protection from modification, while still allowing for an enumeration
     # to have members named `name` and `value`.  This works because enumeration
     # members are not set directly on the enum class -- __getattr__ is
     # used to look them up.
 
-    @_RouteClassAttributeToGetattr
+    @DynamicClassAttribute
     def name(self):
+        """The name of the Enum member."""
         return self._name_
 
-    @_RouteClassAttributeToGetattr
+    @DynamicClassAttribute
     def value(self):
+        """The value of the Enum member."""
         return self._value_
 
 

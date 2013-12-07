@@ -9,10 +9,16 @@ import collections
 import os
 import shutil
 import functools
+import importlib
 from os.path import normcase
+try:
+    from concurrent.futures import ThreadPoolExecutor
+except ImportError:
+    ThreadPoolExecutor = None
 
 from test.support import run_unittest, TESTFN, DirsOnSysPath
-
+from test.support import MISSING_C_DOCSTRINGS
+from test.script_helper import assert_python_ok, assert_python_failure
 from test import inspect_fodder as mod
 from test import inspect_fodder2 as mod2
 
@@ -121,7 +127,6 @@ class TestPredicates(IsTestBase):
     def test_get_slot_members(self):
         class C(object):
             __slots__ = ("a", "b")
-
         x = C()
         x.a = 42
         members = dict(inspect.getmembers(x))
@@ -464,13 +469,13 @@ class _BrokenDataDescriptor(object):
     A broken data descriptor. See bug #1785.
     """
     def __get__(*args):
-        raise AssertionError("should not __get__ data descriptors")
+        raise AttributeError("broken data descriptor")
 
     def __set__(*args):
         raise RuntimeError
 
     def __getattr__(*args):
-        raise AssertionError("should not __getattr__ data descriptors")
+        raise AttributeError("broken data descriptor")
 
 
 class _BrokenMethodDescriptor(object):
@@ -478,10 +483,10 @@ class _BrokenMethodDescriptor(object):
     A broken method descriptor. See bug #1785.
     """
     def __get__(*args):
-        raise AssertionError("should not __get__ method descriptors")
+        raise AttributeError("broken method descriptor")
 
     def __getattr__(*args):
-        raise AssertionError("should not __getattr__ method descriptors")
+        raise AttributeError("broken method descriptor")
 
 
 # Helper for testing classify_class_attrs.
@@ -651,6 +656,88 @@ class TestClassesAndFunctions(unittest.TestCase):
             if isinstance(builtin, type):
                 inspect.classify_class_attrs(builtin)
 
+    def test_classify_DynamicClassAttribute(self):
+        class Meta(type):
+            def __getattr__(self, name):
+                if name == 'ham':
+                    return 'spam'
+                return super().__getattr__(name)
+        class VA(metaclass=Meta):
+            @types.DynamicClassAttribute
+            def ham(self):
+                return 'eggs'
+        should_find_dca = inspect.Attribute('ham', 'data', VA, VA.__dict__['ham'])
+        self.assertIn(should_find_dca, inspect.classify_class_attrs(VA))
+        should_find_ga = inspect.Attribute('ham', 'data', Meta, 'spam')
+        self.assertIn(should_find_ga, inspect.classify_class_attrs(VA))
+
+    def test_classify_metaclass_class_attribute(self):
+        class Meta(type):
+            fish = 'slap'
+            def __dir__(self):
+                return ['__class__', '__modules__', '__name__', 'fish']
+        class Class(metaclass=Meta):
+            pass
+        should_find = inspect.Attribute('fish', 'data', Meta, 'slap')
+        self.assertIn(should_find, inspect.classify_class_attrs(Class))
+
+    def test_classify_VirtualAttribute(self):
+        class Meta(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'BOOM']
+            def __getattr__(self, name):
+                if name =='BOOM':
+                    return 42
+                return super().__getattr(name)
+        class Class(metaclass=Meta):
+            pass
+        should_find = inspect.Attribute('BOOM', 'data', Meta, 42)
+        self.assertIn(should_find, inspect.classify_class_attrs(Class))
+
+    def test_classify_VirtualAttribute_multi_classes(self):
+        class Meta1(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'one']
+            def __getattr__(self, name):
+                if name =='one':
+                    return 1
+                return super().__getattr__(name)
+        class Meta2(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'two']
+            def __getattr__(self, name):
+                if name =='two':
+                    return 2
+                return super().__getattr__(name)
+        class Meta3(Meta1, Meta2):
+            def __dir__(cls):
+                return list(sorted(set(['__class__', '__module__', '__name__', 'three'] +
+                    Meta1.__dir__(cls) + Meta2.__dir__(cls))))
+            def __getattr__(self, name):
+                if name =='three':
+                    return 3
+                return super().__getattr__(name)
+        class Class1(metaclass=Meta1):
+            pass
+        class Class2(Class1, metaclass=Meta3):
+            pass
+
+        should_find1 = inspect.Attribute('one', 'data', Meta1, 1)
+        should_find2 = inspect.Attribute('two', 'data', Meta2, 2)
+        should_find3 = inspect.Attribute('three', 'data', Meta3, 3)
+        cca = inspect.classify_class_attrs(Class2)
+        for sf in (should_find1, should_find2, should_find3):
+            self.assertIn(sf, cca)
+
+    def test_classify_class_attrs_with_buggy_dir(self):
+        class M(type):
+            def __dir__(cls):
+                return ['__class__', '__name__', 'missing']
+        class C(metaclass=M):
+            pass
+        attrs = [a[0] for a in inspect.classify_class_attrs(C)]
+        self.assertNotIn('missing', attrs)
+
     def test_getmembers_descriptors(self):
         class A(object):
             dd = _BrokenDataDescriptor()
@@ -693,6 +780,28 @@ class TestClassesAndFunctions(unittest.TestCase):
         b = B()
         self.assertIn(('f', b.f), inspect.getmembers(b))
         self.assertIn(('f', b.f), inspect.getmembers(b, inspect.ismethod))
+
+    def test_getmembers_VirtualAttribute(self):
+        class M(type):
+            def __getattr__(cls, name):
+                if name == 'eggs':
+                    return 'scrambled'
+                return super().__getattr__(name)
+        class A(metaclass=M):
+            @types.DynamicClassAttribute
+            def eggs(self):
+                return 'spam'
+        self.assertIn(('eggs', 'scrambled'), inspect.getmembers(A))
+        self.assertIn(('eggs', 'spam'), inspect.getmembers(A()))
+
+    def test_getmembers_with_buggy_dir(self):
+        class M(type):
+            def __dir__(cls):
+                return ['__class__', '__name__', 'missing']
+        class C(metaclass=M):
+            pass
+        attrs = [a[0] for a in inspect.getmembers(C)]
+        self.assertNotIn('missing', attrs)
 
 
 _global_ref = object()
@@ -1081,6 +1190,15 @@ class TestGetattrStatic(unittest.TestCase):
 
         self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.x)
 
+    def test_classVirtualAttribute(self):
+        class Thing(object):
+            @types.DynamicClassAttribute
+            def x(self):
+                return self._x
+            _x = object()
+
+        self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.__dict__['x'])
+
     def test_inherited_classattribute(self):
         class Thing(object):
             x = object()
@@ -1462,7 +1580,7 @@ class TestSignatureObject(unittest.TestCase):
                            ('kwargs', ..., int, "var_keyword")),
                           ...))
 
-    def test_signature_on_builtin_function(self):
+    def test_signature_on_unsupported_builtins(self):
         with self.assertRaisesRegex(ValueError, 'not supported by signature'):
             inspect.signature(type)
         with self.assertRaisesRegex(ValueError, 'not supported by signature'):
@@ -1471,10 +1589,13 @@ class TestSignatureObject(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'not supported by signature'):
             # support for 'method-wrapper'
             inspect.signature(min.__call__)
-        with self.assertRaisesRegex(ValueError,
-                                     'no signature found for builtin function'):
-            # support for 'method-wrapper'
-            inspect.signature(min)
+
+    @unittest.skipIf(MISSING_C_DOCSTRINGS,
+                     "Signature information for builtins requires docstrings")
+    def test_signature_on_builtins(self):
+        self.assertEqual(inspect.signature(min), None)
+        signature = inspect.signature(os.stat)
+        self.assertTrue(isinstance(signature, inspect.Signature))
 
     def test_signature_on_non_function(self):
         with self.assertRaisesRegex(TypeError, 'is not a callable object'):
@@ -2372,6 +2493,47 @@ class TestUnwrap(unittest.TestCase):
             __wrapped__ = func
         self.assertIsNone(inspect.unwrap(C()))
 
+class TestMain(unittest.TestCase):
+    def test_only_source(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1], inspect.getsource(module).splitlines())
+        self.assertEqual(err, b'')
+
+    @unittest.skipIf(ThreadPoolExecutor is None,
+            'threads required to test __qualname__ for source files')
+    def test_qualname_source(self):
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                     'concurrent.futures:ThreadPoolExecutor')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1],
+                         inspect.getsource(ThreadPoolExecutor).splitlines())
+        self.assertEqual(err, b'')
+
+    def test_builtins(self):
+        module = importlib.import_module('unittest')
+        _, out, err = assert_python_failure('-m', 'inspect',
+                                            'sys')
+        lines = err.decode().splitlines()
+        self.assertEqual(lines, ["Can't get info for builtin modules."])
+
+    def test_details(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest', '--details')
+        output = out.decode()
+        # Just a quick sanity check on the output
+        self.assertIn(module.__name__, output)
+        self.assertIn(module.__file__, output)
+        self.assertIn(module.__cached__, output)
+        self.assertEqual(err, b'')
+
+
+
 
 def test_main():
     run_unittest(
@@ -2380,7 +2542,7 @@ def test_main():
         TestGetcallargsFunctions, TestGetcallargsMethods,
         TestGetcallargsUnboundMethods, TestGetattrStatic, TestGetGeneratorState,
         TestNoEOL, TestSignatureObject, TestSignatureBind, TestParameterObject,
-        TestBoundArguments, TestGetClosureVars, TestUnwrap
+        TestBoundArguments, TestGetClosureVars, TestUnwrap, TestMain
     )
 
 if __name__ == "__main__":

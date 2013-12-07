@@ -62,7 +62,7 @@ do { memory -= size; printf("%8d - %s\n", memory, comment); } while (0)
 /* Py_CLEAR for a PyObject* that uses a join flag. Pass the pointer by
  * reference since this function sets it to NULL.
 */
-void _clear_joined_ptr(PyObject **p)
+static void _clear_joined_ptr(PyObject **p)
 {
     if (*p) {
         PyObject *tmp = JOIN_OBJ(*p);
@@ -567,8 +567,9 @@ subelement(PyObject *self, PyObject *args, PyObject *kwds)
     PyObject* attrib = NULL;
     if (!PyArg_ParseTuple(args, "O!O|O!:SubElement",
                           &Element_Type, &parent, &tag,
-                          &PyDict_Type, &attrib))
+                          &PyDict_Type, &attrib)) {
         return NULL;
+    }
 
     if (attrib) {
         /* attrib passed as positional arg */
@@ -652,7 +653,6 @@ element_dealloc(ElementObject* self)
 }
 
 /* -------------------------------------------------------------------- */
-/* methods (in alphabetical order) */
 
 static PyObject*
 element_append(ElementObject* self, PyObject* args)
@@ -696,8 +696,7 @@ element_copy(ElementObject* self, PyObject* args)
         return NULL;
 
     element = (ElementObject*) create_new_element(
-        self->tag, (self->extra) ? self->extra->attrib : Py_None
-        );
+        self->tag, (self->extra) ? self->extra->attrib : Py_None);
     if (!element)
         return NULL;
 
@@ -710,7 +709,6 @@ element_copy(ElementObject* self, PyObject* args)
     Py_INCREF(JOIN_OBJ(element->tail));
 
     if (self->extra) {
-
         if (element_resize(element, self->extra->length) < 0) {
             Py_DECREF(element);
             return NULL;
@@ -722,7 +720,6 @@ element_copy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-
     }
 
     return (PyObject*) element;
@@ -779,7 +776,6 @@ element_deepcopy(ElementObject* self, PyObject* args)
     element->tail = JOIN_SET(tail, JOIN_GET(self->tail));
 
     if (self->extra) {
-
         if (element_resize(element, self->extra->length) < 0)
             goto error;
 
@@ -793,7 +789,6 @@ element_deepcopy(ElementObject* self, PyObject* args)
         }
 
         element->extra->length = self->extra->length;
-
     }
 
     /* add object to memo dictionary (so deepcopy won't visit it again) */
@@ -816,9 +811,9 @@ element_deepcopy(ElementObject* self, PyObject* args)
 }
 
 static PyObject*
-element_sizeof(PyObject* _self, PyObject* args)
+element_sizeof(PyObject* myself, PyObject* args)
 {
-    ElementObject *self = (ElementObject*)_self;
+    ElementObject *self = (ElementObject*)myself;
     Py_ssize_t result = sizeof(ElementObject);
     if (self->extra) {
         result += sizeof(ElementObjectExtra);
@@ -1141,8 +1136,8 @@ element_findtext(ElementObject *self, PyObject *args, PyObject *kwds)
 
     for (i = 0; i < self->extra->length; i++) {
         ElementObject* item = (ElementObject*) self->extra->children[i];
-        if (Element_CheckExact(item) && (PyObject_RichCompareBool(item->tag, tag, Py_EQ) == 1)) {
-
+        if (Element_CheckExact(item) &&
+            (PyObject_RichCompareBool(item->tag, tag, Py_EQ) == 1)) {
             PyObject* text = element_get_text(item);
             if (text == Py_None)
                 return PyUnicode_New(0, 0);
@@ -1207,12 +1202,12 @@ element_iterfind(ElementObject *self, PyObject *args, PyObject *kwds)
     elementtreestate *st = ET_STATE_GLOBAL;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:iterfind", kwlist,
-                                     &tag, &namespaces))
+                                     &tag, &namespaces)) {
         return NULL;
+    }
 
     return _PyObject_CallMethodId(
-        st->elementpath_obj, &PyId_iterfind, "OOO", self, tag, namespaces
-        );
+        st->elementpath_obj, &PyId_iterfind, "OOO", self, tag, namespaces);
 }
 
 static PyObject*
@@ -3043,7 +3038,10 @@ expat_start_ns_handler(XMLParserObject* self, const XML_Char* prefix,
     if (PyErr_Occurred())
         return;
 
-    suri = PyUnicode_DecodeUTF8(uri, strlen(uri), "strict");
+    if (uri)
+        suri = PyUnicode_DecodeUTF8(uri, strlen(uri), "strict");
+    else
+        suri = PyUnicode_FromString("");
     if (!suri)
         return;
 
@@ -3461,7 +3459,7 @@ xmlparser_parse_whole(XMLParserObject* self, PyObject* args)
 
         if (PyUnicode_CheckExact(buffer)) {
             /* A unicode object is encoded into bytes using UTF-8 */
-            if (PyUnicode_GET_SIZE(buffer) == 0) {
+            if (PyUnicode_GET_LENGTH(buffer) == 0) {
                 Py_DECREF(buffer);
                 break;
             }

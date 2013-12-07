@@ -232,6 +232,7 @@ class SMTP:
         will be used.
 
         """
+        self._host = host
         self.timeout = timeout
         self.esmtp_features = {}
         self.source_address = source_address
@@ -579,7 +580,7 @@ class SMTP:
         def encode_cram_md5(challenge, user, password):
             challenge = base64.decodebytes(challenge)
             response = user + " " + hmac.HMAC(password.encode('ascii'),
-                                              challenge).hexdigest()
+                                              challenge, 'md5').hexdigest()
             return encode_base64(response.encode('ascii'), eol='')
 
         def encode_plain(user, password):
@@ -664,10 +665,12 @@ class SMTP:
             if context is not None and certfile is not None:
                 raise ValueError("context and certfile arguments are mutually "
                                  "exclusive")
-            if context is not None:
-                self.sock = context.wrap_socket(self.sock)
-            else:
-                self.sock = ssl.wrap_socket(self.sock, keyfile, certfile)
+            if context is None:
+                context = ssl._create_stdlib_context(certfile=certfile,
+                                                     keyfile=keyfile)
+            server_hostname = self._host if ssl.HAS_SNI else None
+            self.sock = context.wrap_socket(self.sock,
+                                            server_hostname=server_hostname)
             self.file = None
             # RFC 3207:
             # The client MUST discard any knowledge obtained from
@@ -880,6 +883,9 @@ if _have_ssl:
                                  "exclusive")
             self.keyfile = keyfile
             self.certfile = certfile
+            if context is None:
+                context = ssl._create_stdlib_context(certfile=certfile,
+                                                     keyfile=keyfile)
             self.context = context
             SMTP.__init__(self, host, port, local_hostname, timeout,
                     source_address)
@@ -889,10 +895,9 @@ if _have_ssl:
                 print('connect:', (host, port), file=stderr)
             new_socket = socket.create_connection((host, port), timeout,
                     self.source_address)
-            if self.context is not None:
-                new_socket = self.context.wrap_socket(new_socket)
-            else:
-                new_socket = ssl.wrap_socket(new_socket, self.keyfile, self.certfile)
+            server_hostname = self._host if ssl.HAS_SNI else None
+            new_socket = self.context.wrap_socket(new_socket,
+                                                  server_hostname=server_hostname)
             return new_socket
 
     __all__.append("SMTP_SSL")

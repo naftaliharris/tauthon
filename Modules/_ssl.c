@@ -19,9 +19,6 @@
 #ifdef WITH_THREAD
 #include "pythread.h"
 
-#ifdef HAVE_PTHREAD_ATFORK
-#  include <pthread.h>
-#endif
 
 #define PySSL_BEGIN_ALLOW_THREADS_S(save) \
     do { if (_ssl_locks_count>0) { (save) = PyEval_SaveThread(); } } while (0)
@@ -100,7 +97,7 @@ struct py_ssl_library_code {
 # define HAVE_TLSv1_2 0
 #endif
 
-/* SNI support (client- and server-side) appeared in OpenSSL 1.0.0.
+/* SNI support (client- and server-side) appeared in OpenSSL 1.0.0 and 0.9.8f
  * This includes the SSL_set_SSL_CTX() function.
  */
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
@@ -201,6 +198,11 @@ static unsigned int _ssl_locks_count = 0;
 # define OPENSSL_NO_COMP
 #endif
 
+/* X509_VERIFY_PARAM got added to OpenSSL in 0.9.8 */
+#if OPENSSL_VERSION_NUMBER >= 0x0090800fL
+# define HAVE_OPENSSL_VERIFY_PARAM
+#endif
+
 
 typedef struct {
     PyObject_HEAD
@@ -212,6 +214,7 @@ typedef struct {
 #ifndef OPENSSL_NO_TLSEXT
     PyObject *set_hostname;
 #endif
+    int check_hostname;
 } PySSLContext;
 
 typedef struct {
@@ -220,7 +223,8 @@ typedef struct {
     SSL *ssl;
     PySSLContext *ctx; /* weakref to SSL context */
     X509 *peer_cert;
-    int shutdown_seen_zero;
+    char shutdown_seen_zero;
+    char handshake_done;
     enum py_ssl_server_or_client socket_type;
 } PySSLSocket;
 
@@ -348,14 +352,18 @@ fill_and_set_sslerror(PyObject *type, int ssl_errno, const char *errstr,
                                    lib_obj, errstr, lineno);
     else
         msg = PyUnicode_FromFormat("%s (_ssl.c:%d)", errstr, lineno);
-
     if (msg == NULL)
         goto fail;
+
     init_value = Py_BuildValue("iN", ssl_errno, msg);
+    if (init_value == NULL)
+        goto fail;
+
     err_value = PyObject_CallObject(type, init_value);
     Py_DECREF(init_value);
     if (err_value == NULL)
         goto fail;
+
     if (reason_obj == NULL)
         reason_obj = Py_None;
     if (_PyObject_SetAttrId(err_value, &PyId_reason, reason_obj))
@@ -485,6 +493,8 @@ newPySSLSocket(PySSLContext *sslctx, PySocketSockObject *sock,
     self->ssl = NULL;
     self->Socket = NULL;
     self->ctx = sslctx;
+    self->shutdown_seen_zero = 0;
+    self->handshake_done = 0;
     Py_INCREF(sslctx);
 
     /* Make sure the SSL error state is initialized */
@@ -495,7 +505,7 @@ newPySSLSocket(PySSLContext *sslctx, PySocketSockObject *sock,
     self->ssl = SSL_new(ctx);
     PySSL_END_ALLOW_THREADS
     SSL_set_app_data(self->ssl,self);
-    SSL_set_fd(self->ssl, sock->sock_fd);
+    SSL_set_fd(self->ssl, Py_SAFE_DOWNCAST(sock->sock_fd, SOCKET_T, int));
     mode = SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER;
 #ifdef SSL_MODE_AUTO_RETRY
     mode |= SSL_MODE_AUTO_RETRY;
@@ -524,6 +534,10 @@ newPySSLSocket(PySSLContext *sslctx, PySocketSockObject *sock,
 
     self->socket_type = socket_type;
     self->Socket = PyWeakref_NewRef((PyObject *) sock, NULL);
+    if (self->Socket == NULL) {
+        Py_DECREF(self);
+        return NULL;
+    }
     return self;
 }
 
@@ -590,6 +604,7 @@ static PyObject *PySSL_SSLdo_handshake(PySSLSocket *self)
     PySSL_BEGIN_ALLOW_THREADS
     self->peer_cert = SSL_get_peer_certificate(self->ssl);
     PySSL_END_ALLOW_THREADS
+    self->handshake_done = 1;
 
     Py_INCREF(Py_None);
     return Py_None;
@@ -956,6 +971,126 @@ _get_peer_alt_names (X509 *certificate) {
 }
 
 static PyObject *
+_get_aia_uri(X509 *certificate, int nid) {
+    PyObject *lst = NULL, *ostr = NULL;
+    int i, result;
+    AUTHORITY_INFO_ACCESS *info;
+
+    info = X509_get_ext_d2i(certificate, NID_info_access, NULL, NULL);
+    if ((info == NULL) || (sk_ACCESS_DESCRIPTION_num(info) == 0)) {
+        return Py_None;
+    }
+
+    if ((lst = PyList_New(0)) == NULL) {
+        goto fail;
+    }
+
+    for (i = 0; i < sk_ACCESS_DESCRIPTION_num(info); i++) {
+        ACCESS_DESCRIPTION *ad = sk_ACCESS_DESCRIPTION_value(info, i);
+        ASN1_IA5STRING *uri;
+
+        if ((OBJ_obj2nid(ad->method) != nid) ||
+                (ad->location->type != GEN_URI)) {
+            continue;
+        }
+        uri = ad->location->d.uniformResourceIdentifier;
+        ostr = PyUnicode_FromStringAndSize((char *)uri->data,
+                                           uri->length);
+        if (ostr == NULL) {
+            goto fail;
+        }
+        result = PyList_Append(lst, ostr);
+        Py_DECREF(ostr);
+        if (result < 0) {
+            goto fail;
+        }
+    }
+    AUTHORITY_INFO_ACCESS_free(info);
+
+    /* convert to tuple or None */
+    if (PyList_Size(lst) == 0) {
+        Py_DECREF(lst);
+        return Py_None;
+    } else {
+        PyObject *tup;
+        tup = PyList_AsTuple(lst);
+        Py_DECREF(lst);
+        return tup;
+    }
+
+  fail:
+    AUTHORITY_INFO_ACCESS_free(info);
+    Py_XDECREF(lst);
+    return NULL;
+}
+
+static PyObject *
+_get_crl_dp(X509 *certificate) {
+    STACK_OF(DIST_POINT) *dps;
+    int i, j, result;
+    PyObject *lst;
+
+#if OPENSSL_VERSION_NUMBER < 0x10001000L
+    dps = X509_get_ext_d2i(certificate, NID_crl_distribution_points,
+                           NULL, NULL);
+#else
+    /* Calls x509v3_cache_extensions and sets up crldp */
+    X509_check_ca(certificate);
+    dps = certificate->crldp;
+#endif
+
+    if (dps == NULL) {
+        return Py_None;
+    }
+
+    if ((lst = PyList_New(0)) == NULL) {
+        return NULL;
+    }
+
+    for (i=0; i < sk_DIST_POINT_num(dps); i++) {
+        DIST_POINT *dp;
+        STACK_OF(GENERAL_NAME) *gns;
+
+        dp = sk_DIST_POINT_value(dps, i);
+        gns = dp->distpoint->name.fullname;
+
+        for (j=0; j < sk_GENERAL_NAME_num(gns); j++) {
+            GENERAL_NAME *gn;
+            ASN1_IA5STRING *uri;
+            PyObject *ouri;
+
+            gn = sk_GENERAL_NAME_value(gns, j);
+            if (gn->type != GEN_URI) {
+                continue;
+            }
+            uri = gn->d.uniformResourceIdentifier;
+            ouri = PyUnicode_FromStringAndSize((char *)uri->data,
+                                               uri->length);
+            if (ouri == NULL) {
+                Py_DECREF(lst);
+                return NULL;
+            }
+            result = PyList_Append(lst, ouri);
+            Py_DECREF(ouri);
+            if (result < 0) {
+                Py_DECREF(lst);
+                return NULL;
+            }
+        }
+    }
+    /* convert to tuple or None */
+    if (PyList_Size(lst) == 0) {
+        Py_DECREF(lst);
+        return Py_None;
+    } else {
+        PyObject *tup;
+        tup = PyList_AsTuple(lst);
+        Py_DECREF(lst);
+        return tup;
+    }
+}
+
+static PyObject *
 _decode_certificate(X509 *certificate) {
 
     PyObject *retval = NULL;
@@ -965,9 +1100,10 @@ _decode_certificate(X509 *certificate) {
     PyObject *issuer;
     PyObject *version;
     PyObject *sn_obj;
+    PyObject *obj;
     ASN1_INTEGER *serialNumber;
     char buf[2048];
-    int len;
+    int len, result;
     ASN1_TIME *notBefore, *notAfter;
     PyObject *pnotBefore, *pnotAfter;
 
@@ -1073,6 +1209,41 @@ _decode_certificate(X509 *certificate) {
         Py_DECREF(peer_alt_names);
     }
 
+    /* Authority Information Access: OCSP URIs */
+    obj = _get_aia_uri(certificate, NID_ad_OCSP);
+    if (obj == NULL) {
+        goto fail1;
+    } else if (obj != Py_None) {
+        result = PyDict_SetItemString(retval, "OCSP", obj);
+        Py_DECREF(obj);
+        if (result < 0) {
+            goto fail1;
+        }
+    }
+
+    obj = _get_aia_uri(certificate, NID_ad_ca_issuers);
+    if (obj == NULL) {
+        goto fail1;
+    } else if (obj != Py_None) {
+        result = PyDict_SetItemString(retval, "caIssuers", obj);
+        Py_DECREF(obj);
+        if (result < 0) {
+            goto fail1;
+        }
+    }
+
+    /* CDP (CRL distribution points) */
+    obj = _get_crl_dp(certificate);
+    if (obj == NULL) {
+        goto fail1;
+    } else if (obj != Py_None) {
+        result = PyDict_SetItemString(retval, "crlDistributionPoints", obj);
+        Py_DECREF(obj);
+        if (result < 0) {
+            goto fail1;
+        }
+    }
+
     BIO_free(biobuf);
     return retval;
 
@@ -1153,6 +1324,11 @@ PySSL_peercert(PySSLSocket *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "|p:peer_certificate", &binary_mode))
         return NULL;
 
+    if (!self->handshake_done) {
+        PyErr_SetString(PyExc_ValueError,
+                        "handshake not done yet");
+        return NULL;
+    }
     if (!self->peer_cert)
         Py_RETURN_NONE;
 
@@ -1364,9 +1540,11 @@ check_socket_and_wait_for_timeout(PySocketSockObject *s, int writing)
     /* See if the socket is ready */
     PySSL_BEGIN_ALLOW_THREADS
     if (writing)
-        rc = select(s->sock_fd+1, NULL, &fds, NULL, &tv);
+        rc = select(Py_SAFE_DOWNCAST(s->sock_fd+1, SOCKET_T, int),
+                    NULL, &fds, NULL, &tv);
     else
-        rc = select(s->sock_fd+1, &fds, NULL, NULL, &tv);
+        rc = select(Py_SAFE_DOWNCAST(s->sock_fd+1, SOCKET_T, int),
+                    &fds, NULL, NULL, &tv);
     PySSL_END_ALLOW_THREADS
 
 #ifdef HAVE_POLL
@@ -1873,6 +2051,8 @@ context_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 #ifndef OPENSSL_NO_TLSEXT
     self->set_hostname = NULL;
 #endif
+    /* Don't check host name by default */
+    self->check_hostname = 0;
     /* Defaults */
     SSL_CTX_set_verify(self->ctx, SSL_VERIFY_NONE, NULL);
     SSL_CTX_set_options(self->ctx,
@@ -2054,9 +2234,55 @@ set_verify_mode(PySSLContext *self, PyObject *arg, void *c)
                         "invalid value for verify_mode");
         return -1;
     }
+    if (mode == SSL_VERIFY_NONE && self->check_hostname) {
+        PyErr_SetString(PyExc_ValueError,
+                        "Cannot set verify_mode to CERT_NONE when "
+                        "check_hostname is enabled.");
+        return -1;
+    }
     SSL_CTX_set_verify(self->ctx, mode, NULL);
     return 0;
 }
+
+#ifdef HAVE_OPENSSL_VERIFY_PARAM
+static PyObject *
+get_verify_flags(PySSLContext *self, void *c)
+{
+    X509_STORE *store;
+    unsigned long flags;
+
+    store = SSL_CTX_get_cert_store(self->ctx);
+    flags = X509_VERIFY_PARAM_get_flags(store->param);
+    return PyLong_FromUnsignedLong(flags);
+}
+
+static int
+set_verify_flags(PySSLContext *self, PyObject *arg, void *c)
+{
+    X509_STORE *store;
+    unsigned long new_flags, flags, set, clear;
+
+    if (!PyArg_Parse(arg, "k", &new_flags))
+        return -1;
+    store = SSL_CTX_get_cert_store(self->ctx);
+    flags = X509_VERIFY_PARAM_get_flags(store->param);
+    clear = flags & ~new_flags;
+    set = ~flags & new_flags;
+    if (clear) {
+        if (!X509_VERIFY_PARAM_clear_flags(store->param, clear)) {
+            _setSSLError(NULL, 0, __FILE__, __LINE__);
+            return -1;
+        }
+    }
+    if (set) {
+        if (!X509_VERIFY_PARAM_set_flags(store->param, set)) {
+            _setSSLError(NULL, 0, __FILE__, __LINE__);
+            return -1;
+        }
+    }
+    return 0;
+}
+#endif
 
 static PyObject *
 get_options(PySSLContext *self, void *c)
@@ -2086,6 +2312,30 @@ set_options(PySSLContext *self, PyObject *arg, void *c)
         SSL_CTX_set_options(self->ctx, set);
     return 0;
 }
+
+static PyObject *
+get_check_hostname(PySSLContext *self, void *c)
+{
+    return PyBool_FromLong(self->check_hostname);
+}
+
+static int
+set_check_hostname(PySSLContext *self, PyObject *arg, void *c)
+{
+    int check_hostname;
+    if (!PyArg_Parse(arg, "p", &check_hostname))
+        return -1;
+    if (check_hostname &&
+            SSL_CTX_get_verify_mode(self->ctx) == SSL_VERIFY_NONE) {
+        PyErr_SetString(PyExc_ValueError,
+                        "check_hostname needs a SSL context with either "
+                        "CERT_OPTIONAL or CERT_REQUIRED");
+        return -1;
+    }
+    self->check_hostname = check_hostname;
+    return 0;
+}
+
 
 typedef struct {
     PyThreadState *thread_state;
@@ -2288,60 +2538,200 @@ error:
     return NULL;
 }
 
+/* internal helper function, returns -1 on error
+ */
+static int
+_add_ca_certs(PySSLContext *self, void *data, Py_ssize_t len,
+              int filetype)
+{
+    BIO *biobuf = NULL;
+    X509_STORE *store;
+    int retval = 0, err, loaded = 0;
+
+    assert(filetype == SSL_FILETYPE_ASN1 || filetype == SSL_FILETYPE_PEM);
+
+    if (len <= 0) {
+        PyErr_SetString(PyExc_ValueError,
+                        "Empty certificate data");
+        return -1;
+    } else if (len > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "Certificate data is too long.");
+        return -1;
+    }
+
+    biobuf = BIO_new_mem_buf(data, (int)len);
+    if (biobuf == NULL) {
+        _setSSLError("Can't allocate buffer", 0, __FILE__, __LINE__);
+        return -1;
+    }
+
+    store = SSL_CTX_get_cert_store(self->ctx);
+    assert(store != NULL);
+
+    while (1) {
+        X509 *cert = NULL;
+        int r;
+
+        if (filetype == SSL_FILETYPE_ASN1) {
+            cert = d2i_X509_bio(biobuf, NULL);
+        } else {
+            cert = PEM_read_bio_X509(biobuf, NULL,
+                                     self->ctx->default_passwd_callback,
+                                     self->ctx->default_passwd_callback_userdata);
+        }
+        if (cert == NULL) {
+            break;
+        }
+        r = X509_STORE_add_cert(store, cert);
+        X509_free(cert);
+        if (!r) {
+            err = ERR_peek_last_error();
+            if ((ERR_GET_LIB(err) == ERR_LIB_X509) &&
+                (ERR_GET_REASON(err) == X509_R_CERT_ALREADY_IN_HASH_TABLE)) {
+                /* cert already in hash table, not an error */
+                ERR_clear_error();
+            } else {
+                break;
+            }
+        }
+        loaded++;
+    }
+
+    err = ERR_peek_last_error();
+    if ((filetype == SSL_FILETYPE_ASN1) &&
+            (loaded > 0) &&
+            (ERR_GET_LIB(err) == ERR_LIB_ASN1) &&
+            (ERR_GET_REASON(err) == ASN1_R_HEADER_TOO_LONG)) {
+        /* EOF ASN1 file, not an error */
+        ERR_clear_error();
+        retval = 0;
+    } else if ((filetype == SSL_FILETYPE_PEM) &&
+                   (loaded > 0) &&
+                   (ERR_GET_LIB(err) == ERR_LIB_PEM) &&
+                   (ERR_GET_REASON(err) == PEM_R_NO_START_LINE)) {
+        /* EOF PEM file, not an error */
+        ERR_clear_error();
+        retval = 0;
+    } else {
+        _setSSLError(NULL, 0, __FILE__, __LINE__);
+        retval = -1;
+    }
+
+    BIO_free(biobuf);
+    return retval;
+}
+
+
 static PyObject *
 load_verify_locations(PySSLContext *self, PyObject *args, PyObject *kwds)
 {
-    char *kwlist[] = {"cafile", "capath", NULL};
-    PyObject *cafile = NULL, *capath = NULL;
+    char *kwlist[] = {"cafile", "capath", "cadata", NULL};
+    PyObject *cafile = NULL, *capath = NULL, *cadata = NULL;
     PyObject *cafile_bytes = NULL, *capath_bytes = NULL;
     const char *cafile_buf = NULL, *capath_buf = NULL;
-    int r;
+    int r = 0, ok = 1;
 
     errno = 0;
     if (!PyArg_ParseTupleAndKeywords(args, kwds,
-        "|OO:load_verify_locations", kwlist,
-        &cafile, &capath))
+        "|OOO:load_verify_locations", kwlist,
+        &cafile, &capath, &cadata))
         return NULL;
+
     if (cafile == Py_None)
         cafile = NULL;
     if (capath == Py_None)
         capath = NULL;
-    if (cafile == NULL && capath == NULL) {
+    if (cadata == Py_None)
+        cadata = NULL;
+
+    if (cafile == NULL && capath == NULL && cadata == NULL) {
         PyErr_SetString(PyExc_TypeError,
-                        "cafile and capath cannot be both omitted");
-        return NULL;
+                        "cafile, capath and cadata cannot be all omitted");
+        goto error;
     }
     if (cafile && !PyUnicode_FSConverter(cafile, &cafile_bytes)) {
         PyErr_SetString(PyExc_TypeError,
                         "cafile should be a valid filesystem path");
-        return NULL;
+        goto error;
     }
     if (capath && !PyUnicode_FSConverter(capath, &capath_bytes)) {
-        Py_XDECREF(cafile_bytes);
         PyErr_SetString(PyExc_TypeError,
                         "capath should be a valid filesystem path");
-        return NULL;
+        goto error;
     }
-    if (cafile)
-        cafile_buf = PyBytes_AS_STRING(cafile_bytes);
-    if (capath)
-        capath_buf = PyBytes_AS_STRING(capath_bytes);
-    PySSL_BEGIN_ALLOW_THREADS
-    r = SSL_CTX_load_verify_locations(self->ctx, cafile_buf, capath_buf);
-    PySSL_END_ALLOW_THREADS
+
+    /* validata cadata type and load cadata */
+    if (cadata) {
+        Py_buffer buf;
+        PyObject *cadata_ascii = NULL;
+
+        if (PyObject_GetBuffer(cadata, &buf, PyBUF_SIMPLE) == 0) {
+            if (!PyBuffer_IsContiguous(&buf, 'C') || buf.ndim > 1) {
+                PyBuffer_Release(&buf);
+                PyErr_SetString(PyExc_TypeError,
+                                "cadata should be a contiguous buffer with "
+                                "a single dimension");
+                goto error;
+            }
+            r = _add_ca_certs(self, buf.buf, buf.len, SSL_FILETYPE_ASN1);
+            PyBuffer_Release(&buf);
+            if (r == -1) {
+                goto error;
+            }
+        } else {
+            PyErr_Clear();
+            cadata_ascii = PyUnicode_AsASCIIString(cadata);
+            if (cadata_ascii == NULL) {
+                PyErr_SetString(PyExc_TypeError,
+                                "cadata should be a ASCII string or a "
+                                "bytes-like object");
+                goto error;
+            }
+            r = _add_ca_certs(self,
+                              PyBytes_AS_STRING(cadata_ascii),
+                              PyBytes_GET_SIZE(cadata_ascii),
+                              SSL_FILETYPE_PEM);
+            Py_DECREF(cadata_ascii);
+            if (r == -1) {
+                goto error;
+            }
+        }
+    }
+
+    /* load cafile or capath */
+    if (cafile || capath) {
+        if (cafile)
+            cafile_buf = PyBytes_AS_STRING(cafile_bytes);
+        if (capath)
+            capath_buf = PyBytes_AS_STRING(capath_bytes);
+        PySSL_BEGIN_ALLOW_THREADS
+        r = SSL_CTX_load_verify_locations(self->ctx, cafile_buf, capath_buf);
+        PySSL_END_ALLOW_THREADS
+        if (r != 1) {
+            ok = 0;
+            if (errno != 0) {
+                ERR_clear_error();
+                PyErr_SetFromErrno(PyExc_IOError);
+            }
+            else {
+                _setSSLError(NULL, 0, __FILE__, __LINE__);
+            }
+            goto error;
+        }
+    }
+    goto end;
+
+  error:
+    ok = 0;
+  end:
     Py_XDECREF(cafile_bytes);
     Py_XDECREF(capath_bytes);
-    if (r != 1) {
-        if (errno != 0) {
-            ERR_clear_error();
-            PyErr_SetFromErrno(PyExc_IOError);
-        }
-        else {
-            _setSSLError(NULL, 0, __FILE__, __LINE__);
-        }
+    if (ok) {
+        Py_RETURN_NONE;
+    } else {
         return NULL;
     }
-    Py_RETURN_NONE;
 }
 
 static PyObject *
@@ -2673,7 +3063,7 @@ cert_store_stats(PySSLContext *self)
 }
 
 PyDoc_STRVAR(PySSL_get_ca_certs_doc,
-"get_ca_certs([der=False]) -> list of loaded certificate\n\
+"get_ca_certs(binary_form=False) -> list of loaded certificate\n\
 \n\
 Returns a list of dicts with information of loaded CA certs. If the\n\
 optional argument is True, returns a DER-encoded copy of the CA certificate.\n\
@@ -2681,14 +3071,16 @@ NOTE: Certificates in a capath directory aren't loaded unless they have\n\
 been used at least once.");
 
 static PyObject *
-get_ca_certs(PySSLContext *self, PyObject *args)
+get_ca_certs(PySSLContext *self, PyObject *args, PyObject *kwds)
 {
+    char *kwlist[] = {"binary_form", NULL};
     X509_STORE *store;
     PyObject *ci = NULL, *rlist = NULL;
     int i;
     int binary_mode = 0;
 
-    if (!PyArg_ParseTuple(args, "|p:get_ca_certs", &binary_mode)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|p:get_ca_certs",
+                                     kwlist, &binary_mode)) {
         return NULL;
     }
 
@@ -2734,8 +3126,14 @@ get_ca_certs(PySSLContext *self, PyObject *args)
 
 
 static PyGetSetDef context_getsetlist[] = {
+    {"check_hostname", (getter) get_check_hostname,
+                       (setter) set_check_hostname, NULL},
     {"options", (getter) get_options,
                 (setter) set_options, NULL},
+#ifdef HAVE_OPENSSL_VERIFY_PARAM
+    {"verify_flags", (getter) get_verify_flags,
+                     (setter) set_verify_flags, NULL},
+#endif
     {"verify_mode", (getter) get_verify_mode,
                     (setter) set_verify_mode, NULL},
     {NULL},            /* sentinel */
@@ -2767,7 +3165,7 @@ static struct PyMethodDef context_methods[] = {
     {"cert_store_stats", (PyCFunction) cert_store_stats,
                     METH_NOARGS, PySSL_get_stats_doc},
     {"get_ca_certs", (PyCFunction) get_ca_certs,
-                    METH_VARARGS, PySSL_get_ca_certs_doc},
+                    METH_VARARGS | METH_KEYWORDS, PySSL_get_ca_certs_doc},
     {NULL, NULL}        /* sentinel */
 };
 
@@ -2941,64 +3339,6 @@ Queries the entropy gather daemon (EGD) on the socket named by 'path'.\n\
 Returns number of bytes read.  Raises SSLError if connection to EGD\n\
 fails or if it does not provide enough data to seed PRNG.");
 
-/* Seed OpenSSL's PRNG at fork(), http://bugs.python.org/issue18747
- *
- * The parent handler seeds the PRNG from pseudo-random data like pid, the
- * current time (miliseconds or seconds) and an uninitialized array.
- * The array contains stack variables that are impossible to predict
- * on most systems, e.g. function return address (subject to ASLR), the
- * stack protection canary and automatic variables.
- * The code is inspired by Apache's ssl_rand_seed() function.
- *
- * Note:
- * The code uses pthread_atfork() until Python has a proper atfork API. The
- * handlers are not removed from the child process. A parent handler is used
- * instead of a child handler because fork() is supposed to be async-signal
- * safe but the handler calls unsafe functions.
- */
-
-#if defined(HAVE_PTHREAD_ATFORK) && defined(WITH_THREAD)
-#define PYSSL_RAND_ATFORK 1
-
-static void
-PySSL_RAND_atfork_parent(void)
-{
-    struct {
-        char stack[128];    /* uninitialized (!) stack data, 128 is an
-                               arbitrary number. */
-        pid_t pid;          /* current pid */
-        _PyTime_timeval tp; /* current time */
-    } seed;
-
-#ifdef WITH_VALGRIND
-    VALGRIND_MAKE_MEM_DEFINED(seed.stack, sizeof(seed.stack));
-#endif
-    seed.pid = getpid();
-    _PyTime_gettimeofday(&(seed.tp));
-    RAND_add((unsigned char *)&seed, sizeof(seed), 0.0);
-}
-
-static int
-PySSL_RAND_atfork(void)
-{
-    static int registered = 0;
-    int retval;
-
-    if (registered)
-        return 0;
-
-    retval = pthread_atfork(NULL,                     /* prepare */
-                            PySSL_RAND_atfork_parent, /* parent */
-                            NULL);                    /* child */
-    if (retval != 0) {
-        PyErr_SetFromErrno(PyExc_OSError);
-        return -1;
-    }
-    registered = 1;
-    return 0;
-}
-#endif /* HAVE_PTHREAD_ATFORK */
-
 #endif /* HAVE_OPENSSL_RAND */
 
 
@@ -3042,129 +3382,344 @@ PySSL_get_default_verify_paths(PyObject *self)
     return NULL;
 }
 
+static PyObject*
+asn1obj2py(ASN1_OBJECT *obj)
+{
+    int nid;
+    const char *ln, *sn;
+    char buf[100];
+    int buflen;
+
+    nid = OBJ_obj2nid(obj);
+    if (nid == NID_undef) {
+        PyErr_Format(PyExc_ValueError, "Unknown object");
+        return NULL;
+    }
+    sn = OBJ_nid2sn(nid);
+    ln = OBJ_nid2ln(nid);
+    buflen = OBJ_obj2txt(buf, sizeof(buf), obj, 1);
+    if (buflen < 0) {
+        _setSSLError(NULL, 0, __FILE__, __LINE__);
+        return NULL;
+    }
+    if (buflen) {
+        return Py_BuildValue("isss#", nid, sn, ln, buf, buflen);
+    } else {
+        return Py_BuildValue("issO", nid, sn, ln, Py_None);
+    }
+}
+
+PyDoc_STRVAR(PySSL_txt2obj_doc,
+"txt2obj(txt, name=False) -> (nid, shortname, longname, oid)\n\
+\n\
+Lookup NID, short name, long name and OID of an ASN1_OBJECT. By default\n\
+objects are looked up by OID. With name=True short and long name are also\n\
+matched.");
+
+static PyObject*
+PySSL_txt2obj(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    char *kwlist[] = {"txt", "name", NULL};
+    PyObject *result = NULL;
+    char *txt;
+    int name = 0;
+    ASN1_OBJECT *obj;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|p:txt2obj",
+                                     kwlist, &txt, &name)) {
+        return NULL;
+    }
+    obj = OBJ_txt2obj(txt, name ? 0 : 1);
+    if (obj == NULL) {
+        PyErr_Format(PyExc_ValueError, "unknown object '%.100s'", txt);
+        return NULL;
+    }
+    result = asn1obj2py(obj);
+    ASN1_OBJECT_free(obj);
+    return result;
+}
+
+PyDoc_STRVAR(PySSL_nid2obj_doc,
+"nid2obj(nid) -> (nid, shortname, longname, oid)\n\
+\n\
+Lookup NID, short name, long name and OID of an ASN1_OBJECT by NID.");
+
+static PyObject*
+PySSL_nid2obj(PyObject *self, PyObject *args)
+{
+    PyObject *result = NULL;
+    int nid;
+    ASN1_OBJECT *obj;
+
+    if (!PyArg_ParseTuple(args, "i:nid2obj", &nid)) {
+        return NULL;
+    }
+    if (nid < NID_undef) {
+        PyErr_SetString(PyExc_ValueError, "NID must be positive.");
+        return NULL;
+    }
+    obj = OBJ_nid2obj(nid);
+    if (obj == NULL) {
+        PyErr_Format(PyExc_ValueError, "unknown NID %i", nid);
+        return NULL;
+    }
+    result = asn1obj2py(obj);
+    ASN1_OBJECT_free(obj);
+    return result;
+}
+
 #ifdef _MSC_VER
-PyDoc_STRVAR(PySSL_enum_cert_store_doc,
-"enum_cert_store(store_name, cert_type='certificate') -> []\n\
+
+static PyObject*
+certEncodingType(DWORD encodingType)
+{
+    static PyObject *x509_asn = NULL;
+    static PyObject *pkcs_7_asn = NULL;
+
+    if (x509_asn == NULL) {
+        x509_asn = PyUnicode_InternFromString("x509_asn");
+        if (x509_asn == NULL)
+            return NULL;
+    }
+    if (pkcs_7_asn == NULL) {
+        pkcs_7_asn = PyUnicode_InternFromString("pkcs_7_asn");
+        if (pkcs_7_asn == NULL)
+            return NULL;
+    }
+    switch(encodingType) {
+    case X509_ASN_ENCODING:
+        Py_INCREF(x509_asn);
+        return x509_asn;
+    case PKCS_7_ASN_ENCODING:
+        Py_INCREF(pkcs_7_asn);
+        return pkcs_7_asn;
+    default:
+        return PyLong_FromLong(encodingType);
+    }
+}
+
+static PyObject*
+parseKeyUsage(PCCERT_CONTEXT pCertCtx, DWORD flags)
+{
+    CERT_ENHKEY_USAGE *usage;
+    DWORD size, error, i;
+    PyObject *retval;
+
+    if (!CertGetEnhancedKeyUsage(pCertCtx, flags, NULL, &size)) {
+        error = GetLastError();
+        if (error == CRYPT_E_NOT_FOUND) {
+            Py_RETURN_TRUE;
+        }
+        return PyErr_SetFromWindowsErr(error);
+    }
+
+    usage = (CERT_ENHKEY_USAGE*)PyMem_Malloc(size);
+    if (usage == NULL) {
+        return PyErr_NoMemory();
+    }
+
+    /* Now get the actual enhanced usage property */
+    if (!CertGetEnhancedKeyUsage(pCertCtx, flags, usage, &size)) {
+        PyMem_Free(usage);
+        error = GetLastError();
+        if (error == CRYPT_E_NOT_FOUND) {
+            Py_RETURN_TRUE;
+        }
+        return PyErr_SetFromWindowsErr(error);
+    }
+    retval = PySet_New(NULL);
+    if (retval == NULL) {
+        goto error;
+    }
+    for (i = 0; i < usage->cUsageIdentifier; ++i) {
+        if (usage->rgpszUsageIdentifier[i]) {
+            PyObject *oid;
+            int err;
+            oid = PyUnicode_FromString(usage->rgpszUsageIdentifier[i]);
+            if (oid == NULL) {
+                Py_CLEAR(retval);
+                goto error;
+            }
+            err = PySet_Add(retval, oid);
+            Py_DECREF(oid);
+            if (err == -1) {
+                Py_CLEAR(retval);
+                goto error;
+            }
+        }
+    }
+  error:
+    PyMem_Free(usage);
+    return retval;
+}
+
+PyDoc_STRVAR(PySSL_enum_certificates_doc,
+"enum_certificates(store_name) -> []\n\
 \n\
 Retrieve certificates from Windows' cert store. store_name may be one of\n\
 'CA', 'ROOT' or 'MY'. The system may provide more cert storages, too.\n\
-cert_type must be either 'certificate' or 'crl'.\n\
-The function returns a list of (bytes, encoding_type) tuples. The\n\
+The function returns a list of (bytes, encoding_type, trust) tuples. The\n\
 encoding_type flag can be interpreted with X509_ASN_ENCODING or\n\
-PKCS_7_ASN_ENCODING.");
+PKCS_7_ASN_ENCODING. The trust setting is either a set of OIDs or the\n\
+boolean True.");
 
 static PyObject *
-PySSL_enum_cert_store(PyObject *self, PyObject *args, PyObject *kwds)
+PySSL_enum_certificates(PyObject *self, PyObject *args, PyObject *kwds)
 {
-    char *kwlist[] = {"store_name", "cert_type", NULL};
+    char *kwlist[] = {"store_name", NULL};
     char *store_name;
-    char *cert_type = "certificate";
     HCERTSTORE hStore = NULL;
+    PCCERT_CONTEXT pCertCtx = NULL;
+    PyObject *keyusage = NULL, *cert = NULL, *enc = NULL, *tup = NULL;
     PyObject *result = NULL;
-    PyObject *tup = NULL, *cert = NULL, *enc = NULL;
-    int ok = 1;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|s:enum_cert_store",
-                                     kwlist, &store_name, &cert_type)) {
-            return NULL;
-    }
-
-    if ((strcmp(cert_type, "certificate") != 0) &&
-        (strcmp(cert_type, "crl") != 0)) {
-        return PyErr_Format(PyExc_ValueError,
-                            "cert_type must be 'certificate' or 'crl', "
-                            "not %.100s", cert_type);
-    }
-
-    if ((result = PyList_New(0)) == NULL) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|s:enum_certificates",
+                                     kwlist, &store_name)) {
         return NULL;
     }
-
-    if ((hStore = CertOpenSystemStore((HCRYPTPROV)NULL, store_name)) == NULL) {
+    result = PyList_New(0);
+    if (result == NULL) {
+        return NULL;
+    }
+    hStore = CertOpenSystemStore((HCRYPTPROV)NULL, store_name);
+    if (hStore == NULL) {
         Py_DECREF(result);
         return PyErr_SetFromWindowsErr(GetLastError());
     }
 
-    if (strcmp(cert_type, "certificate") == 0) {
-        PCCERT_CONTEXT pCertCtx = NULL;
-        while (pCertCtx = CertEnumCertificatesInStore(hStore, pCertCtx)) {
-            cert = PyBytes_FromStringAndSize((const char*)pCertCtx->pbCertEncoded,
-                                             pCertCtx->cbCertEncoded);
-            if (!cert) {
-                ok = 0;
-                break;
-            }
-            if ((enc = PyLong_FromLong(pCertCtx->dwCertEncodingType)) == NULL) {
-                ok = 0;
-                break;
-            }
-            if ((tup = PyTuple_New(2)) == NULL) {
-                ok = 0;
-                break;
-            }
-            PyTuple_SET_ITEM(tup, 0, cert); cert = NULL;
-            PyTuple_SET_ITEM(tup, 1, enc); enc = NULL;
-
-            if (PyList_Append(result, tup) < 0) {
-                ok = 0;
-                break;
-            }
-            Py_CLEAR(tup);
+    while (pCertCtx = CertEnumCertificatesInStore(hStore, pCertCtx)) {
+        cert = PyBytes_FromStringAndSize((const char*)pCertCtx->pbCertEncoded,
+                                            pCertCtx->cbCertEncoded);
+        if (!cert) {
+            Py_CLEAR(result);
+            break;
         }
-        if (pCertCtx) {
-            /* loop ended with an error, need to clean up context manually */
-            CertFreeCertificateContext(pCertCtx);
+        if ((enc = certEncodingType(pCertCtx->dwCertEncodingType)) == NULL) {
+            Py_CLEAR(result);
+            break;
         }
-    } else {
-        PCCRL_CONTEXT pCrlCtx = NULL;
-        while (pCrlCtx = CertEnumCRLsInStore(hStore, pCrlCtx)) {
-            cert = PyBytes_FromStringAndSize((const char*)pCrlCtx->pbCrlEncoded,
-                                             pCrlCtx->cbCrlEncoded);
-            if (!cert) {
-                ok = 0;
-                break;
-            }
-            if ((enc = PyLong_FromLong(pCrlCtx->dwCertEncodingType)) == NULL) {
-                ok = 0;
-                break;
-            }
-            if ((tup = PyTuple_New(2)) == NULL) {
-                ok = 0;
-                break;
-            }
-            PyTuple_SET_ITEM(tup, 0, cert); cert = NULL;
-            PyTuple_SET_ITEM(tup, 1, enc); enc = NULL;
-
-            if (PyList_Append(result, tup) < 0) {
-                ok = 0;
-                break;
-            }
-            Py_CLEAR(tup);
+        keyusage = parseKeyUsage(pCertCtx, CERT_FIND_PROP_ONLY_ENHKEY_USAGE_FLAG);
+        if (keyusage == Py_True) {
+            Py_DECREF(keyusage);
+            keyusage = parseKeyUsage(pCertCtx, CERT_FIND_EXT_ONLY_ENHKEY_USAGE_FLAG);
         }
-        if (pCrlCtx) {
-            /* loop ended with an error, need to clean up context manually */
-            CertFreeCRLContext(pCrlCtx);
+        if (keyusage == NULL) {
+            Py_CLEAR(result);
+            break;
         }
+        if ((tup = PyTuple_New(3)) == NULL) {
+            Py_CLEAR(result);
+            break;
+        }
+        PyTuple_SET_ITEM(tup, 0, cert);
+        cert = NULL;
+        PyTuple_SET_ITEM(tup, 1, enc);
+        enc = NULL;
+        PyTuple_SET_ITEM(tup, 2, keyusage);
+        keyusage = NULL;
+        if (PyList_Append(result, tup) < 0) {
+            Py_CLEAR(result);
+            break;
+        }
+        Py_CLEAR(tup);
+    }
+    if (pCertCtx) {
+        /* loop ended with an error, need to clean up context manually */
+        CertFreeCertificateContext(pCertCtx);
     }
 
     /* In error cases cert, enc and tup may not be NULL */
     Py_XDECREF(cert);
     Py_XDECREF(enc);
+    Py_XDECREF(keyusage);
     Py_XDECREF(tup);
 
     if (!CertCloseStore(hStore, 0)) {
         /* This error case might shadow another exception.*/
+        Py_XDECREF(result);
+        return PyErr_SetFromWindowsErr(GetLastError());
+    }
+    return result;
+}
+
+PyDoc_STRVAR(PySSL_enum_crls_doc,
+"enum_crls(store_name) -> []\n\
+\n\
+Retrieve CRLs from Windows' cert store. store_name may be one of\n\
+'CA', 'ROOT' or 'MY'. The system may provide more cert storages, too.\n\
+The function returns a list of (bytes, encoding_type) tuples. The\n\
+encoding_type flag can be interpreted with X509_ASN_ENCODING or\n\
+PKCS_7_ASN_ENCODING.");
+
+static PyObject *
+PySSL_enum_crls(PyObject *self, PyObject *args, PyObject *kwds)
+{
+    char *kwlist[] = {"store_name", NULL};
+    char *store_name;
+    HCERTSTORE hStore = NULL;
+    PCCRL_CONTEXT pCrlCtx = NULL;
+    PyObject *crl = NULL, *enc = NULL, *tup = NULL;
+    PyObject *result = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "s|s:enum_crls",
+                                     kwlist, &store_name)) {
+        return NULL;
+    }
+    result = PyList_New(0);
+    if (result == NULL) {
+        return NULL;
+    }
+    hStore = CertOpenSystemStore((HCRYPTPROV)NULL, store_name);
+    if (hStore == NULL) {
         Py_DECREF(result);
         return PyErr_SetFromWindowsErr(GetLastError());
     }
-    if (ok) {
-        return result;
-    } else {
-        Py_DECREF(result);
-        return NULL;
+
+    while (pCrlCtx = CertEnumCRLsInStore(hStore, pCrlCtx)) {
+        crl = PyBytes_FromStringAndSize((const char*)pCrlCtx->pbCrlEncoded,
+                                            pCrlCtx->cbCrlEncoded);
+        if (!crl) {
+            Py_CLEAR(result);
+            break;
+        }
+        if ((enc = certEncodingType(pCrlCtx->dwCertEncodingType)) == NULL) {
+            Py_CLEAR(result);
+            break;
+        }
+        if ((tup = PyTuple_New(2)) == NULL) {
+            Py_CLEAR(result);
+            break;
+        }
+        PyTuple_SET_ITEM(tup, 0, crl);
+        crl = NULL;
+        PyTuple_SET_ITEM(tup, 1, enc);
+        enc = NULL;
+
+        if (PyList_Append(result, tup) < 0) {
+            Py_CLEAR(result);
+            break;
+        }
+        Py_CLEAR(tup);
     }
+    if (pCrlCtx) {
+        /* loop ended with an error, need to clean up context manually */
+        CertFreeCRLContext(pCrlCtx);
+    }
+
+    /* In error cases cert, enc and tup may not be NULL */
+    Py_XDECREF(crl);
+    Py_XDECREF(enc);
+    Py_XDECREF(tup);
+
+    if (!CertCloseStore(hStore, 0)) {
+        /* This error case might shadow another exception.*/
+        Py_XDECREF(result);
+        return PyErr_SetFromWindowsErr(GetLastError());
+    }
+    return result;
 }
-#endif
+
+#endif /* _MSC_VER */
 
 /* List of functions exported by this module. */
 
@@ -3186,9 +3741,15 @@ static PyMethodDef PySSL_methods[] = {
     {"get_default_verify_paths", (PyCFunction)PySSL_get_default_verify_paths,
      METH_NOARGS, PySSL_get_default_verify_paths_doc},
 #ifdef _MSC_VER
-    {"enum_cert_store", (PyCFunction)PySSL_enum_cert_store,
-     METH_VARARGS | METH_KEYWORDS, PySSL_enum_cert_store_doc},
+    {"enum_certificates", (PyCFunction)PySSL_enum_certificates,
+     METH_VARARGS | METH_KEYWORDS, PySSL_enum_certificates_doc},
+    {"enum_crls", (PyCFunction)PySSL_enum_crls,
+     METH_VARARGS | METH_KEYWORDS, PySSL_enum_crls_doc},
 #endif
+    {"txt2obj", (PyCFunction)PySSL_txt2obj,
+     METH_VARARGS | METH_KEYWORDS, PySSL_txt2obj_doc},
+    {"nid2obj", (PyCFunction)PySSL_nid2obj,
+     METH_VARARGS, PySSL_nid2obj_doc},
     {NULL,                  NULL}            /* Sentinel */
 };
 
@@ -3416,12 +3977,15 @@ PyInit__ssl(void)
                             PY_SSL_CERT_OPTIONAL);
     PyModule_AddIntConstant(m, "CERT_REQUIRED",
                             PY_SSL_CERT_REQUIRED);
-
-#ifdef _MSC_VER
-    /* Windows dwCertEncodingType */
-    PyModule_AddIntMacro(m, X509_ASN_ENCODING);
-    PyModule_AddIntMacro(m, PKCS_7_ASN_ENCODING);
-#endif
+    /* CRL verification for verification_flags */
+    PyModule_AddIntConstant(m, "VERIFY_DEFAULT",
+                            0);
+    PyModule_AddIntConstant(m, "VERIFY_CRL_CHECK_LEAF",
+                            X509_V_FLAG_CRL_CHECK);
+    PyModule_AddIntConstant(m, "VERIFY_CRL_CHECK_CHAIN",
+                            X509_V_FLAG_CRL_CHECK|X509_V_FLAG_CRL_CHECK_ALL);
+    PyModule_AddIntConstant(m, "VERIFY_X509_STRICT",
+                            X509_V_FLAG_X509_STRICT);
 
     /* Alert Descriptions from ssl.h */
     /* note RESERVED constants no longer intended for use have been removed */
@@ -3612,11 +4176,6 @@ PyInit__ssl(void)
     r = Py_BuildValue("IIIII", major, minor, fix, patch, status);
     if (r == NULL || PyModule_AddObject(m, "_OPENSSL_API_VERSION", r))
         return NULL;
-
-#ifdef PYSSL_RAND_ATFORK
-    if (PySSL_RAND_atfork() == -1)
-        return NULL;
-#endif
 
     return m;
 }

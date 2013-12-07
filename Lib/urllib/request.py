@@ -141,13 +141,9 @@ def urlopen(url, data=None, timeout=socket._GLOBAL_DEFAULT_TIMEOUT,
     if cafile or capath or cadefault:
         if not _have_ssl:
             raise ValueError('SSL support not available')
-        context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-        context.options |= ssl.OP_NO_SSLv2
-        context.verify_mode = ssl.CERT_REQUIRED
-        if cafile or capath:
-            context.load_verify_locations(cafile, capath)
-        else:
-            context.set_default_verify_paths()
+        context = ssl._create_stdlib_context(cert_reqs=ssl.CERT_REQUIRED,
+                                             cafile=cafile,
+                                             capath=capath)
         https_handler = HTTPSHandler(context=context, check_hostname=True)
         opener = build_opener(https_handler)
     elif _opener is None:
@@ -271,7 +267,8 @@ class Request:
             origin_req_host = request_host(self)
         self.origin_req_host = origin_req_host
         self.unverifiable = unverifiable
-        self.method = method
+        if method:
+            self.method = method
 
     @property
     def full_url(self):
@@ -320,12 +317,8 @@ class Request:
 
     def get_method(self):
         """Return a string indicating the HTTP request method."""
-        if self.method is not None:
-            return self.method
-        elif self.data is not None:
-            return "POST"
-        else:
-            return "GET"
+        default_method = "POST" if self.data is not None else "GET"
+        return getattr(self, 'method', default_method)
 
     def get_full_url(self):
         return self.full_url

@@ -1,7 +1,6 @@
 """Access to Python's configuration information."""
 
 import os
-import re
 import sys
 from os.path import pardir, realpath
 
@@ -222,6 +221,7 @@ def _parse_makefile(filename, vars=None):
     """
     # Regexes needed for parsing Makefile (and similar syntaxes,
     # like old-style Setup files).
+    import re
     _variable_rx = re.compile("([a-zA-Z][a-zA-Z0-9_]+)\s*=\s*(.*)")
     _findvar1_rx = re.compile(r"\$\(([A-Za-z][A-Za-z0-9_]*)\)")
     _findvar2_rx = re.compile(r"\${([A-Za-z][A-Za-z0-9_]*)}")
@@ -368,7 +368,7 @@ def _generate_posix_vars():
     # -- these paths are relative to the Python source, but when installed
     # the scripts are in another directory.
     if _PYTHON_BUILD:
-        vars['LDSHARED'] = vars['BLDSHARED']
+        vars['BLDSHARED'] = vars['LDSHARED']
 
     # There's a chicken-and-egg situation on OS X with regards to the
     # _sysconfigdata module after the changes introduced by #15298:
@@ -435,6 +435,7 @@ def parse_config_h(fp, vars=None):
     """
     if vars is None:
         vars = {}
+    import re
     define_rx = re.compile("#define ([A-Z][A-Za-z0-9_]+) (.*)\n")
     undef_rx = re.compile("/[*] #undef ([A-Z][A-Za-z0-9_]+) [*]/\n")
 
@@ -535,6 +536,10 @@ def get_config_vars(*args):
             _init_non_posix(_CONFIG_VARS)
         if os.name == 'posix':
             _init_posix(_CONFIG_VARS)
+        # For backward compatibility, see issue19555
+        SO = _CONFIG_VARS.get('EXT_SUFFIX')
+        if SO is not None:
+            _CONFIG_VARS['SO'] = SO
         # Setting 'userbase' is done below the call to the
         # init function to enable using 'get_config_var' in
         # the init-function.
@@ -578,6 +583,9 @@ def get_config_var(name):
 
     Equivalent to get_config_vars().get(name)
     """
+    if name == 'SO':
+        import warnings
+        warnings.warn('SO is deprecated, use EXT_SUFFIX', DeprecationWarning, 2)
     return get_config_vars().get(name)
 
 
@@ -658,6 +666,7 @@ def get_platform():
         return "%s-%s.%s" % (osname, version, release)
     elif osname[:6] == "cygwin":
         osname = "cygwin"
+        import re
         rel_re = re.compile(r'[\d.]+')
         m = rel_re.match(release)
         if m:

@@ -8,7 +8,7 @@ $DESTROOT, massages that installation to remove .pyc files and such, creates
 an Installer package from the installation plus other files in ``resources`` 
 and ``scripts`` and placed that on a ``.dmg`` disk image.
 
-As of Python 3.3.0, PSF practice is to build two installer variants
+For Python 3.4.0, PSF practice is to build two installer variants
 for each release.
 
 1.  32-bit-only, i386 and PPC universal, capable on running on all machines
@@ -22,8 +22,8 @@ for each release.
     - builds the following third-party libraries
 
         * NCurses 5.9 (http://bugs.python.org/issue15037)
-        * SQLite 3.7.13
-        * XZ 5.0.3
+        * SQLite 3.8.1
+        * XZ 5.0.5
 
     - uses system-supplied versions of third-party libraries
 
@@ -56,43 +56,14 @@ for each release.
     - builds the following third-party libraries
 
         * NCurses 5.9 (http://bugs.python.org/issue15037)
-        * SQLite 3.7.13
-        * Tcl 8.5.14
-        * Tk 8.5.14
-        * XZ 5.0.3
+        * SQLite 3.8.1
+        * XZ 5.0.5
 
     - uses system-supplied versions of third-party libraries
 
         * readline module links with Apple BSD editline (libedit)
 
-    - requires ActiveState Tcl/Tk 8.5.14 (or later) to be installed for building
-
-        * Beginning with Python 3.4 alpha2, this installer now includes its own
-          private copy of Tcl and Tk 8.5.14 libraries and thus is no longer
-          dependent on the buggy releases of Aqua Cocoa Tk 8.5 shipped with
-          OS X 10.6 or on installing a newer third-party version of Tcl/Tk
-          in /Library/Frameworks, such as from ActiveState.  Because this
-          is a new feature, it should be considered somewhat experimental and
-          subject to change prior to the final release of Python 3.4.  If it
-          is necessary to fallback to using a third-party Tcl/Tk because of
-          a problem with the private Tcl/Tk, there is a backup version of
-          the _tkinter extension included which will dynamically link to
-          Tcl and Tk frameworks in /Library/Frameworks as in previous releases.
-          To enable (for all users of this Python 3.4)::
-
-              sudo bash
-              cd /Library/Frameworks/Python.framework/Versions/3.4
-              cd ./lib/python3.4/lib-dynload
-              cp -p _tkinter.so.framework _tkinter.so
-              exit
-
-          To restore using Python's private versions of Tcl and Tk::
-
-              sudo bash
-              cd /Library/Frameworks/Python.framework/Versions/3.4
-              cd ./lib/python3.4/lib-dynload
-              cp -p _tkinter.so.private _tkinter.so
-              exit
+    - requires ActiveState Tcl/Tk 8.5.15 (or later) to be installed for building
 
     - recommended build environment:
 

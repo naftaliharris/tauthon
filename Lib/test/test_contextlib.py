@@ -1,5 +1,6 @@
 """Unit tests for contextlib.py, and other context managers."""
 
+import io
 import sys
 import tempfile
 import unittest
@@ -100,15 +101,25 @@ class ContextManagerTestCase(unittest.TestCase):
         self.assertEqual(baz.__name__,'baz')
         self.assertEqual(baz.foo, 'bar')
 
-    @unittest.skipIf(sys.flags.optimize >= 2,
-                     "Docstrings are omitted with -O2 and above")
+    @support.requires_docstrings
     def test_contextmanager_doc_attrib(self):
         baz = self._create_contextmanager_attribs()
         self.assertEqual(baz.__doc__, "Whee!")
 
+    @support.requires_docstrings
+    def test_instance_docstring_given_cm_docstring(self):
+        baz = self._create_contextmanager_attribs()(None)
+        self.assertEqual(baz.__doc__, "Whee!")
+
+
 class ClosingTestCase(unittest.TestCase):
 
-    # XXX This needs more work
+    @support.requires_docstrings
+    def test_instance_docs(self):
+        # Issue 19330: ensure context manager instances have good docstrings
+        cm_docstring = closing.__doc__
+        obj = closing(None)
+        self.assertEqual(obj.__doc__, cm_docstring)
 
     def test_closing(self):
         state = []
@@ -204,6 +215,7 @@ class LockContextTestCase(unittest.TestCase):
 
 
 class mycontext(ContextDecorator):
+    """Example decoration-compatible context manager for testing"""
     started = False
     exc = None
     catch = False
@@ -218,6 +230,13 @@ class mycontext(ContextDecorator):
 
 
 class TestContextDecorator(unittest.TestCase):
+
+    @support.requires_docstrings
+    def test_instance_docs(self):
+        # Issue 19330: ensure context manager instances have good docstrings
+        cm_docstring = mycontext.__doc__
+        obj = mycontext()
+        self.assertEqual(obj.__doc__, cm_docstring)
 
     def test_contextdecorator(self):
         context = mycontext()
@@ -371,6 +390,13 @@ class TestContextDecorator(unittest.TestCase):
 
 
 class TestExitStack(unittest.TestCase):
+
+    @support.requires_docstrings
+    def test_instance_docs(self):
+        # Issue 19330: ensure context manager instances have good docstrings
+        cm_docstring = ExitStack.__doc__
+        obj = ExitStack()
+        self.assertEqual(obj.__doc__, cm_docstring)
 
     def test_no_resources(self):
         with ExitStack():
@@ -573,6 +599,43 @@ class TestExitStack(unittest.TestCase):
         self.assertIsInstance(inner_exc, ValueError)
         self.assertIsInstance(inner_exc.__context__, ZeroDivisionError)
 
+    def test_exit_exception_non_suppressing(self):
+        # http://bugs.python.org/issue19092
+        def raise_exc(exc):
+            raise exc
+
+        def suppress_exc(*exc_details):
+            return True
+
+        try:
+            with ExitStack() as stack:
+                stack.callback(lambda: None)
+                stack.callback(raise_exc, IndexError)
+        except Exception as exc:
+            self.assertIsInstance(exc, IndexError)
+        else:
+            self.fail("Expected IndexError, but no exception was raised")
+
+        try:
+            with ExitStack() as stack:
+                stack.callback(raise_exc, KeyError)
+                stack.push(suppress_exc)
+                stack.callback(raise_exc, IndexError)
+        except Exception as exc:
+            self.assertIsInstance(exc, KeyError)
+        else:
+            self.fail("Expected KeyError, but no exception was raised")
+
+    def test_body_exception_suppress(self):
+        def suppress_exc(*exc_details):
+            return True
+        try:
+            with ExitStack() as stack:
+                stack.push(suppress_exc)
+                1/0
+        except IndexError as exc:
+            self.fail("Expected no exception, got IndexError")
+
     def test_exit_exception_chaining_suppress(self):
         with ExitStack() as stack:
             stack.push(lambda *exc: True)
@@ -594,28 +657,111 @@ class TestExitStack(unittest.TestCase):
         stack.push(cm)
         self.assertIs(stack._exit_callbacks[-1], cm)
 
-class TestIgnored(unittest.TestCase):
+class TestRedirectStdout(unittest.TestCase):
+
+    @support.requires_docstrings
+    def test_instance_docs(self):
+        # Issue 19330: ensure context manager instances have good docstrings
+        cm_docstring = redirect_stdout.__doc__
+        obj = redirect_stdout(None)
+        self.assertEqual(obj.__doc__, cm_docstring)
+
+    def test_no_redirect_in_init(self):
+        orig_stdout = sys.stdout
+        redirect_stdout(None)
+        self.assertIs(sys.stdout, orig_stdout)
+
+    def test_redirect_to_string_io(self):
+        f = io.StringIO()
+        msg = "Consider an API like help(), which prints directly to stdout"
+        orig_stdout = sys.stdout
+        with redirect_stdout(f):
+            print(msg)
+        self.assertIs(sys.stdout, orig_stdout)
+        s = f.getvalue().strip()
+        self.assertEqual(s, msg)
+
+    def test_enter_result_is_target(self):
+        f = io.StringIO()
+        with redirect_stdout(f) as enter_result:
+            self.assertIs(enter_result, f)
+
+    def test_cm_is_reusable(self):
+        f = io.StringIO()
+        write_to_f = redirect_stdout(f)
+        orig_stdout = sys.stdout
+        with write_to_f:
+            print("Hello", end=" ")
+        with write_to_f:
+            print("World!")
+        self.assertIs(sys.stdout, orig_stdout)
+        s = f.getvalue()
+        self.assertEqual(s, "Hello World!\n")
+
+    def test_cm_is_reentrant(self):
+        f = io.StringIO()
+        write_to_f = redirect_stdout(f)
+        orig_stdout = sys.stdout
+        with write_to_f:
+            print("Hello", end=" ")
+            with write_to_f:
+                print("World!")
+        self.assertIs(sys.stdout, orig_stdout)
+        s = f.getvalue()
+        self.assertEqual(s, "Hello World!\n")
+
+
+class TestSuppress(unittest.TestCase):
+
+    @support.requires_docstrings
+    def test_instance_docs(self):
+        # Issue 19330: ensure context manager instances have good docstrings
+        cm_docstring = suppress.__doc__
+        obj = suppress()
+        self.assertEqual(obj.__doc__, cm_docstring)
+
+    def test_no_result_from_enter(self):
+        with suppress(ValueError) as enter_result:
+            self.assertIsNone(enter_result)
 
     def test_no_exception(self):
-
-        with ignored(ValueError):
+        with suppress(ValueError):
             self.assertEqual(pow(2, 5), 32)
 
     def test_exact_exception(self):
-
-        with ignored(TypeError):
-            len(5)
-
-    def test_multiple_exception_args(self):
-
-        with ignored(ZeroDivisionError, TypeError):
+        with suppress(TypeError):
             len(5)
 
     def test_exception_hierarchy(self):
-
-        with ignored(LookupError):
+        with suppress(LookupError):
             'Hello'[50]
 
+    def test_other_exception(self):
+        with self.assertRaises(ZeroDivisionError):
+            with suppress(TypeError):
+                1/0
+
+    def test_no_args(self):
+        with self.assertRaises(ZeroDivisionError):
+            with suppress():
+                1/0
+
+    def test_multiple_exception_args(self):
+        with suppress(ZeroDivisionError, TypeError):
+            1/0
+        with suppress(ZeroDivisionError, TypeError):
+            len(5)
+
+    def test_cm_is_reentrant(self):
+        ignore_exceptions = suppress(Exception)
+        with ignore_exceptions:
+            pass
+        with ignore_exceptions:
+            len(5)
+        with ignore_exceptions:
+            1/0
+            with ignore_exceptions: # Check nested usage
+                len(5)
 
 if __name__ == "__main__":
     unittest.main()

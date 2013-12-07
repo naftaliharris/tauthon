@@ -144,23 +144,6 @@ Used in:  PY_LONG_LONG
 #endif
 #endif
 
-/* Prime multiplier used in string and various other hashes. */
-#define _PyHASH_MULTIPLIER 1000003UL  /* 0xf4243 */
-
-/* Parameters used for the numeric hash implementation.  See notes for
-   _Py_HashDouble in Objects/object.c.  Numeric hashes are based on
-   reduction modulo the prime 2**_PyHASH_BITS - 1. */
-
-#if SIZEOF_VOID_P >= 8
-#define _PyHASH_BITS 61
-#else
-#define _PyHASH_BITS 31
-#endif
-#define _PyHASH_MODULUS (((size_t)1 << _PyHASH_BITS) - 1)
-#define _PyHASH_INF 314159
-#define _PyHASH_NAN 0
-#define _PyHASH_IMAG _PyHASH_MULTIPLIER
-
 /* uintptr_t is the C9X name for an unsigned integral type such that a
  * legitimate void* can be cast to uintptr_t and then back to void* again
  * without loss of information.  Similarly for intptr_t, wrt a signed
@@ -199,9 +182,18 @@ typedef Py_intptr_t     Py_ssize_t;
 #endif
 
 /* Py_hash_t is the same size as a pointer. */
+#define SIZEOF_PY_HASH_T SIZEOF_SIZE_T
 typedef Py_ssize_t Py_hash_t;
 /* Py_uhash_t is the unsigned equivalent needed to calculate numeric hash. */
+#define SIZEOF_PY_UHASH_T SIZEOF_SIZE_T
 typedef size_t Py_uhash_t;
+
+/* Only used for compatibility with code that may not be PY_SSIZE_T_CLEAN. */
+#ifdef PY_SSIZE_T_CLEAN
+typedef Py_ssize_t Py_ssize_clean_t;
+#else
+typedef int Py_ssize_clean_t;
+#endif
 
 /* Largest possible value of size_t.
    SIZE_MAX is part of C99, so it might be defined on some

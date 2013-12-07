@@ -24,19 +24,15 @@ optional arguments:
                         raised.
   --upgrade             Upgrade the environment directory to use this version
                         of Python, assuming Python has been upgraded in-place.
+  --without-pip         Skips installing or upgrading pip in the virtual
+                        environment (pip is bootstrapped by default)
 """
-import base64
-import io
 import logging
 import os
-import os.path
 import shutil
+import subprocess
 import sys
 import sysconfig
-try:
-    import threading
-except ImportError:
-    threading = None
 import types
 
 logger = logging.getLogger(__name__)
@@ -45,7 +41,7 @@ logger = logging.getLogger(__name__)
 class EnvBuilder:
     """
     This class exists to allow virtual environment creation to be
-    customised. The constructor parameters determine the builder's
+    customized. The constructor parameters determine the builder's
     behaviour when called upon to create a virtual environment.
 
     By default, the builder makes the system (global) site-packages dir
@@ -63,14 +59,17 @@ class EnvBuilder:
     :param symlinks: If True, attempt to symlink rather than copy files into
                      virtual environment.
     :param upgrade: If True, upgrade an existing virtual environment.
+    :param with_pip: If True, ensure pip is installed in the virtual
+                     environment
     """
 
     def __init__(self, system_site_packages=False, clear=False,
-                 symlinks=False, upgrade=False):
+                 symlinks=False, upgrade=False, with_pip=False):
         self.system_site_packages = system_site_packages
         self.clear = clear
         self.symlinks = symlinks
         self.upgrade = upgrade
+        self.with_pip = with_pip
 
     def create(self, env_dir):
         """
@@ -83,6 +82,8 @@ class EnvBuilder:
         context = self.ensure_directories(env_dir)
         self.create_configuration(context)
         self.setup_python(context)
+        if self.with_pip:
+            self._setup_pip(context)
         if not self.upgrade:
             self.setup_scripts(context)
             self.post_setup(context)
@@ -231,6 +232,15 @@ class EnvBuilder:
                     shutil.copyfile(src, dst)
                     break
 
+    def _setup_pip(self, context):
+        """Installs or upgrades pip in a virtual environment"""
+        # We run ensurepip in isolated mode to avoid side effects from
+        # environment vars, the current directory and anything else
+        # intended for the global Python environment
+        cmd = [context.env_exe, '-Im', 'ensurepip', '--upgrade',
+                                                    '--default-pip']
+        subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+
     def setup_scripts(self, context):
         """
         Set up scripts into the created environment from a directory.
@@ -268,7 +278,8 @@ class EnvBuilder:
                         being processed.
         """
         text = text.replace('__VENV_DIR__', context.env_dir)
-        text = text.replace('__VENV_NAME__', context.prompt)
+        text = text.replace('__VENV_NAME__', context.env_name)
+        text = text.replace('__VENV_PROMPT__', context.prompt)
         text = text.replace('__VENV_BIN_NAME__', context.bin_name)
         text = text.replace('__VENV_PYTHON__', context.env_exe)
         return text
@@ -323,7 +334,8 @@ class EnvBuilder:
                     shutil.copymode(srcfile, dstfile)
 
 
-def create(env_dir, system_site_packages=False, clear=False, symlinks=False):
+def create(env_dir, system_site_packages=False, clear=False,
+                    symlinks=False, with_pip=False):
     """
     Create a virtual environment in a directory.
 
@@ -339,9 +351,11 @@ def create(env_dir, system_site_packages=False, clear=False, symlinks=False):
                   raised.
     :param symlinks: If True, attempt to symlink rather than copy files into
                      virtual environment.
+    :param with_pip: If True, ensure pip is installed in the virtual
+                     environment
     """
     builder = EnvBuilder(system_site_packages=system_site_packages,
-                                   clear=clear, symlinks=symlinks)
+                         clear=clear, symlinks=symlinks, with_pip=with_pip)
     builder.create(env_dir)
 
 def main(args=None):
@@ -351,7 +365,7 @@ def main(args=None):
     elif not hasattr(sys, 'base_prefix'):
         compatible = False
     if not compatible:
-        raise ValueError('This script is only for use with Python 3.3')
+        raise ValueError('This script is only for use with Python >= 3.3')
     else:
         import argparse
 
@@ -396,12 +410,19 @@ def main(args=None):
                                                'directory to use this version '
                                                'of Python, assuming Python '
                                                'has been upgraded in-place.')
+        parser.add_argument('--without-pip', dest='with_pip',
+                            default=True, action='store_false',
+                            help='Skips installing or upgrading pip in the '
+                                 'virtual environment (pip is bootstrapped '
+                                 'by default)')
         options = parser.parse_args(args)
         if options.upgrade and options.clear:
             raise ValueError('you cannot supply --upgrade and --clear together.')
         builder = EnvBuilder(system_site_packages=options.system_site,
-                             clear=options.clear, symlinks=options.symlinks,
-                             upgrade=options.upgrade)
+                             clear=options.clear,
+                             symlinks=options.symlinks,
+                             upgrade=options.upgrade,
+                             with_pip=options.with_pip)
         for d in options.dirs:
             builder.create(d)
 

@@ -1247,7 +1247,6 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                    a try: finally: block uninterruptible. */
                 goto fast_next_opcode;
             }
-            tstate->tick_counter++;
 #ifdef WITH_TSC
             ticked = 1;
 #endif
@@ -1841,8 +1840,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
 
         TARGET(PRINT_EXPR) {
+            _Py_IDENTIFIER(displayhook);
             PyObject *value = POP();
-            PyObject *hook = PySys_GetObject("displayhook");
+            PyObject *hook = _PySys_GetObjectId(&PyId_displayhook);
             PyObject *res;
             if (hook == NULL) {
                 PyErr_SetString(PyExc_RuntimeError,
@@ -1904,6 +1904,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             Py_DECREF(v);
             if (retval == NULL) {
                 PyObject *val;
+                if (tstate->c_tracefunc != NULL
+                        && PyErr_ExceptionMatches(PyExc_StopIteration))
+                    call_exc_trace(tstate->c_tracefunc, tstate->c_traceobj, f);
                 err = _PyGen_FetchStopIterationValue(&val);
                 if (err < 0)
                     goto error;
@@ -2162,7 +2165,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             }
             else {
                 v = PyObject_GetItem(locals, name);
-                if (v == NULL && PyErr_Occurred()) {
+                if (v == NULL && _PyErr_OCCURRED()) {
                     if (!PyErr_ExceptionMatches(PyExc_KeyError))
                         goto error;
                     PyErr_Clear();
@@ -2207,7 +2210,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                                        (PyDictObject *)f->f_builtins,
                                        name);
                 if (v == NULL) {
-                    if (!PyErr_Occurred())
+                    if (!_PyErr_OCCURRED())
                         format_exc_check_arg(PyExc_NameError,
                                              NAME_ERROR_MSG, name);
                     goto error;
@@ -2473,7 +2476,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         TARGET(IMPORT_STAR) {
             PyObject *from = POP(), *locals;
             int err;
-            PyFrame_FastToLocals(f);
+            if (PyFrame_FastToLocalsWithError(f) < 0)
+                goto error;
+
             locals = f->f_locals;
             if (locals == NULL) {
                 PyErr_SetString(PyExc_SystemError,
@@ -2652,6 +2657,8 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
             if (PyErr_Occurred()) {
                 if (!PyErr_ExceptionMatches(PyExc_StopIteration))
                     goto error;
+                else if (tstate->c_tracefunc != NULL)
+                    call_exc_trace(tstate->c_tracefunc, tstate->c_traceobj, f);
                 PyErr_Clear();
             }
             /* iterator ended normally */
@@ -2715,7 +2722,7 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
         }
 
         TARGET(WITH_CLEANUP) {
-            /* At the top of the stack are 1-3 values indicating
+            /* At the top of the stack are 1-6 values indicating
                how/why we entered the finally clause:
                - TOP = None
                - (TOP, SECOND) = (WHY_{RETURN,CONTINUE}), retval
@@ -2728,9 +2735,9 @@ PyEval_EvalFrameEx(PyFrameObject *f, int throwflag)
                otherwise we must call
                  EXIT(None, None, None)
 
-               In the first two cases, we remove EXIT from the
+               In the first three cases, we remove EXIT from the
                stack, leaving the rest in the same order.  In the
-               third case, we shift the bottom 3 values of the
+               fourth case, we shift the bottom 3 values of the
                stack down, and replace the empty spot with NULL.
 
                In addition, if the stack represents an exception,
@@ -3843,20 +3850,16 @@ call_exc_trace(Py_tracefunc func, PyObject *self, PyFrameObject *f)
 {
     PyObject *type, *value, *traceback, *orig_traceback, *arg;
     int err;
-    PyErr_Fetch(&type, &value, &traceback);
+    PyErr_Fetch(&type, &value, &orig_traceback);
     if (value == NULL) {
         value = Py_None;
         Py_INCREF(value);
     }
-    PyErr_NormalizeException(&type, &value, &traceback);
-    orig_traceback = traceback;
-    if (traceback == NULL) {
-        Py_INCREF(Py_None);
-        traceback = Py_None;
-    }
+    PyErr_NormalizeException(&type, &value, &orig_traceback);
+    traceback = (orig_traceback != NULL) ? orig_traceback : Py_None;
     arg = PyTuple_Pack(3, type, value, traceback);
     if (arg == NULL) {
-        PyErr_Restore(type, value, traceback);
+        PyErr_Restore(type, value, orig_traceback);
         return;
     }
     err = call_trace(func, self, f, PyTrace_EXCEPTION, arg);
@@ -4006,9 +4009,15 @@ PyObject *
 PyEval_GetLocals(void)
 {
     PyFrameObject *current_frame = PyEval_GetFrame();
-    if (current_frame == NULL)
+    if (current_frame == NULL) {
+        PyErr_SetString(PyExc_SystemError, "frame does not exist");
         return NULL;
-    PyFrame_FastToLocals(current_frame);
+    }
+
+    if (PyFrame_FastToLocalsWithError(current_frame) < 0)
+        return NULL;
+
+    assert(current_frame->f_locals != NULL);
     return current_frame->f_locals;
 }
 
@@ -4018,8 +4027,9 @@ PyEval_GetGlobals(void)
     PyFrameObject *current_frame = PyEval_GetFrame();
     if (current_frame == NULL)
         return NULL;
-    else
-        return current_frame->f_globals;
+
+    assert(current_frame->f_globals != NULL);
+    return current_frame->f_globals;
 }
 
 PyFrameObject *

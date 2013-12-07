@@ -179,6 +179,10 @@ This module provides an interface to the mechanisms used to implement the
    the class does not affect the method definitions of the instances --- they
    continue to use the old class definition.  The same is true for derived classes.
 
+   .. versionchanged:: 3.3
+      Relies on both ``__name__`` and ``__loader__`` being defined on the module
+      being reloaded instead of just ``__name__``.
+
    .. deprecated:: 3.4
       Use :func:`importlib.reload` instead.
 
@@ -196,8 +200,8 @@ file paths.
    The ``cpython-32`` string comes from the current magic tag (see
    :func:`get_tag`; if :attr:`sys.implementation.cache_tag` is not defined then
    :exc:`NotImplementedError` will be raised).  The returned path will end in
-   ``.pyc`` when ``__debug__`` is True or ``.pyo`` for an optimized Python
-   (i.e. ``__debug__`` is False).  By passing in True or False for
+   ``.pyc`` when ``__debug__`` is ``True`` or ``.pyo`` for an optimized Python
+   (i.e. ``__debug__`` is ``False``).  By passing in ``True`` or ``False`` for
    *debug_override* you can override the system's value for ``__debug__`` for
    extension selection.
 

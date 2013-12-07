@@ -69,6 +69,11 @@ to the combined-table form.
 #include "Python.h"
 #include "stringlib/eq.h"
 
+/*[clinic]
+class dict
+[clinic]*/
+/*[clinic checksum: da39a3ee5e6b4b0d3255bfef95601890afd80709]*/
+
 typedef struct {
     /* Cached hash code of me_key. */
     Py_hash_t me_hash;
@@ -1397,9 +1402,9 @@ static PyObject *
 dict_repr(PyDictObject *mp)
 {
     Py_ssize_t i;
-    PyObject *s, *temp, *colon = NULL;
-    PyObject *pieces = NULL, *result = NULL;
-    PyObject *key, *value;
+    PyObject *key = NULL, *value = NULL;
+    _PyUnicodeWriter writer;
+    int first;
 
     i = Py_ReprEnter((PyObject *)mp);
     if (i != 0) {
@@ -1407,74 +1412,73 @@ dict_repr(PyDictObject *mp)
     }
 
     if (mp->ma_used == 0) {
-        result = PyUnicode_FromString("{}");
-        goto Done;
+        Py_ReprLeave((PyObject *)mp);
+        return PyUnicode_FromString("{}");
     }
 
-    pieces = PyList_New(0);
-    if (pieces == NULL)
-        goto Done;
+    _PyUnicodeWriter_Init(&writer);
+    writer.overallocate = 1;
+    /* "{" + "1: 2" + ", 3: 4" * (len - 1) + "}" */
+    writer.min_length = 1 + 4 + (2 + 4) * (mp->ma_used - 1) + 1;
 
-    colon = PyUnicode_FromString(": ");
-    if (colon == NULL)
-        goto Done;
+    if (_PyUnicodeWriter_WriteChar(&writer, '{') < 0)
+        goto error;
 
     /* Do repr() on each key+value pair, and insert ": " between them.
        Note that repr may mutate the dict. */
     i = 0;
+    first = 1;
     while (PyDict_Next((PyObject *)mp, &i, &key, &value)) {
-        int status;
+        PyObject *s;
+        int res;
+
         /* Prevent repr from deleting key or value during key format. */
         Py_INCREF(key);
         Py_INCREF(value);
-        s = PyObject_Repr(key);
-        PyUnicode_Append(&s, colon);
-        if (s == NULL)
-            goto Done;
 
-        PyUnicode_AppendAndDel(&s, PyObject_Repr(value));
-        Py_DECREF(key);
-        Py_DECREF(value);
+        if (!first) {
+            if (_PyUnicodeWriter_WriteASCIIString(&writer, ", ", 2) < 0)
+                goto error;
+        }
+        first = 0;
+
+        s = PyObject_Repr(key);
         if (s == NULL)
-            goto Done;
-        status = PyList_Append(pieces, s);
-        Py_DECREF(s);  /* append created a new ref */
-        if (status < 0)
-            goto Done;
+            goto error;
+        res = _PyUnicodeWriter_WriteStr(&writer, s);
+        Py_DECREF(s);
+        if (res < 0)
+            goto error;
+
+        if (_PyUnicodeWriter_WriteASCIIString(&writer, ": ", 2) < 0)
+            goto error;
+
+        s = PyObject_Repr(value);
+        if (s == NULL)
+            goto error;
+        res = _PyUnicodeWriter_WriteStr(&writer, s);
+        Py_DECREF(s);
+        if (res < 0)
+            goto error;
+
+        Py_CLEAR(key);
+        Py_CLEAR(value);
     }
 
-    /* Add "{}" decorations to the first and last items. */
-    assert(PyList_GET_SIZE(pieces) > 0);
-    s = PyUnicode_FromString("{");
-    if (s == NULL)
-        goto Done;
-    temp = PyList_GET_ITEM(pieces, 0);
-    PyUnicode_AppendAndDel(&s, temp);
-    PyList_SET_ITEM(pieces, 0, s);
-    if (s == NULL)
-        goto Done;
+    writer.overallocate = 0;
+    if (_PyUnicodeWriter_WriteChar(&writer, '}') < 0)
+        goto error;
 
-    s = PyUnicode_FromString("}");
-    if (s == NULL)
-        goto Done;
-    temp = PyList_GET_ITEM(pieces, PyList_GET_SIZE(pieces) - 1);
-    PyUnicode_AppendAndDel(&temp, s);
-    PyList_SET_ITEM(pieces, PyList_GET_SIZE(pieces) - 1, temp);
-    if (temp == NULL)
-        goto Done;
-
-    /* Paste them all together with ", " between. */
-    s = PyUnicode_FromString(", ");
-    if (s == NULL)
-        goto Done;
-    result = PyUnicode_Join(s, pieces);
-    Py_DECREF(s);
-
-Done:
-    Py_XDECREF(pieces);
-    Py_XDECREF(colon);
     Py_ReprLeave((PyObject *)mp);
-    return result;
+
+    return _PyUnicodeWriter_Finish(&writer);
+
+error:
+    Py_ReprLeave((PyObject *)mp);
+    _PyUnicodeWriter_Dealloc(&writer);
+    Py_XDECREF(key);
+    Py_XDECREF(value);
+    return NULL;
 }
 
 static Py_ssize_t
@@ -2160,9 +2164,29 @@ dict_richcompare(PyObject *v, PyObject *w, int op)
     return res;
 }
 
+/*[clinic]
+
+@coexist
+dict.__contains__
+
+  key: object
+  /
+
+True if D has a key k, else False"
+[clinic]*/
+
+PyDoc_STRVAR(dict___contains____doc__,
+"__contains__(key)\n"
+"True if D has a key k, else False\"");
+
+#define DICT___CONTAINS___METHODDEF    \
+    {"__contains__", (PyCFunction)dict___contains__, METH_O|METH_COEXIST, dict___contains____doc__},
+
 static PyObject *
-dict_contains(PyDictObject *mp, PyObject *key)
+dict___contains__(PyObject *self, PyObject *key)
+/*[clinic checksum: 3bbac5ce898ae630d9668fa1c8b3afb645ff22e8]*/
 {
+    register PyDictObject *mp = (PyDictObject *)self;
     Py_hash_t hash;
     PyDictKeyEntry *ep;
     PyObject **value_addr;
@@ -2447,9 +2471,6 @@ _PyDict_KeysSize(PyDictKeysObject *keys)
     return sizeof(PyDictKeysObject) + (DK_SIZE(keys)-1) * sizeof(PyDictKeyEntry);
 }
 
-PyDoc_STRVAR(contains__doc__,
-"D.__contains__(k) -> True if D has a key k, else False");
-
 PyDoc_STRVAR(getitem__doc__, "x.__getitem__(y) <==> x[y]");
 
 PyDoc_STRVAR(sizeof__doc__,
@@ -2498,8 +2519,7 @@ PyDoc_STRVAR(values__doc__,
              "D.values() -> an object providing a view on D's values");
 
 static PyMethodDef mapp_methods[] = {
-    {"__contains__",(PyCFunction)dict_contains,     METH_O | METH_COEXIST,
-     contains__doc__},
+    DICT___CONTAINS___METHODDEF
     {"__getitem__", (PyCFunction)dict_subscript,        METH_O | METH_COEXIST,
      getitem__doc__},
     {"__sizeof__",      (PyCFunction)dict_sizeof,       METH_NOARGS,
@@ -2715,6 +2735,15 @@ PyDict_SetItemString(PyObject *v, const char *key, PyObject *item)
     err = PyDict_SetItem(v, kv, item);
     Py_DECREF(kv);
     return err;
+}
+
+int
+_PyDict_DelItemId(PyObject *v, _Py_Identifier *key)
+{
+    PyObject *kv = _PyUnicode_FromId(key); /* borrowed */
+    if (kv == NULL)
+        return -1;
+    return PyDict_DelItem(v, kv);
 }
 
 int

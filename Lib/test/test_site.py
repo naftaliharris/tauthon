@@ -13,6 +13,8 @@ import os
 import sys
 import re
 import encodings
+import urllib.request
+import urllib.error
 import subprocess
 import sysconfig
 from copy import copy
@@ -177,14 +179,20 @@ class HelperFunctionsTests(unittest.TestCase):
         rc = subprocess.call([sys.executable, '-s', '-c',
             'import sys; sys.exit(%r in sys.path)' % usersite],
             env=env)
-        self.assertEqual(rc, 0)
+        if usersite == site.getsitepackages()[0]:
+            self.assertEqual(rc, 1)
+        else:
+            self.assertEqual(rc, 0)
 
         env = os.environ.copy()
         env["PYTHONNOUSERSITE"] = "1"
         rc = subprocess.call([sys.executable, '-c',
             'import sys; sys.exit(%r in sys.path)' % usersite],
             env=env)
-        self.assertEqual(rc, 0)
+        if usersite == site.getsitepackages()[0]:
+            self.assertEqual(rc, 1)
+        else:
+            self.assertEqual(rc, 0)
 
         env = os.environ.copy()
         env["PYTHONUSERBASE"] = "/tmp"
@@ -403,27 +411,54 @@ class ImportSideEffectTests(unittest.TestCase):
             else:
                 self.fail("sitecustomize not imported automatically")
 
-
-class LicenseURL(unittest.TestCase):
-    """Test accessibility of the license."""
-
-    @unittest.skipUnless(str(license).startswith('See http://'),
-                         'license is available as a file')
-    def test_license_page(self):
-        """urlopen should return the license page"""
-        pat = r'^See (http://www\.python\.org/download/releases/[^/]+/license/)$'
-        mo = re.search(pat, str(license))
-        self.assertIsNotNone(mo, msg='can\'t find appropriate url in license')
-        if mo is not None:
-            url = mo.group(1)
+    @test.support.requires_resource('network')
+    @unittest.skipUnless(sys.version_info[3] == 'final',
+                         'only for released versions')
+    def test_license_exists_at_url(self):
+        # This test is a bit fragile since it depends on the format of the
+        # string displayed by license in the absence of a LICENSE file.
+        url = license._Printer__data.split()[1]
+        req = urllib.request.Request(url, method='HEAD')
+        try:
             with test.support.transient_internet(url):
-                import urllib.request, urllib.error
-                try:
-                    with urllib.request.urlopen(url) as data:
-                        code = data.getcode()
-                except urllib.error.HTTPError as e:
-                    code = e.code
-                self.assertEqual(code, 200, msg=url)
+                with urllib.request.urlopen(req) as data:
+                    code = data.getcode()
+        except urllib.error.HTTPError as e:
+            code = e.code
+        self.assertEqual(code, 200, msg="Can't find " + url)
+
+
+class StartupImportTests(unittest.TestCase):
+
+    def test_startup_imports(self):
+        # This tests checks which modules are loaded by Python when it
+        # initially starts upon startup.
+        popen = subprocess.Popen([sys.executable, '-I', '-v', '-c',
+                                  'import sys; print(set(sys.modules))'],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        stdout, stderr = popen.communicate()
+        stdout = stdout.decode('utf-8')
+        stderr = stderr.decode('utf-8')
+        modules = eval(stdout)
+
+        self.assertIn('site', modules)
+
+        # http://bugs.python.org/issue19205
+        re_mods = {'re', '_sre', 'sre_compile', 'sre_constants', 'sre_parse'}
+        # _osx_support uses the re module in many placs
+        if sys.platform != 'darwin':
+            self.assertFalse(modules.intersection(re_mods), stderr)
+        # http://bugs.python.org/issue9548
+        self.assertNotIn('locale', modules, stderr)
+        if sys.platform != 'darwin':
+            # http://bugs.python.org/issue19209
+            self.assertNotIn('copyreg', modules, stderr)
+        # http://bugs.python.org/issue19218>
+        collection_mods = {'_collections', 'collections', 'functools',
+                           'heapq', 'itertools', 'keyword', 'operator',
+                           'reprlib', 'types', 'weakref'}
+        self.assertFalse(modules.intersection(collection_mods), stderr)
 
 
 if __name__ == "__main__":
