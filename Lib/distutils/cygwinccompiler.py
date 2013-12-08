@@ -54,7 +54,8 @@ import re
 from distutils.ccompiler import gen_preprocess_options, gen_lib_options
 from distutils.unixccompiler import UnixCCompiler
 from distutils.file_util import write_file
-from distutils.errors import DistutilsExecError, CompileError, UnknownFileError
+from distutils.errors import (DistutilsExecError, CCompilerError,
+        CompileError, UnknownFileError)
 from distutils import log
 from distutils.version import LooseVersion
 from distutils.spawn import find_executable
@@ -294,18 +295,17 @@ class Mingw32CCompiler(CygwinCCompiler):
         else:
             entry_point = ''
 
-        if self.gcc_version < '4' or is_cygwingcc():
-            no_cygwin = ' -mno-cygwin'
-        else:
-            no_cygwin = ''
+        if is_cygwingcc():
+            raise CCompilerError(
+                'Cygwin gcc cannot be used with --compiler=mingw32')
 
-        self.set_executables(compiler='gcc%s -O -Wall' % no_cygwin,
-                             compiler_so='gcc%s -mdll -O -Wall' % no_cygwin,
-                             compiler_cxx='g++%s -O -Wall' % no_cygwin,
-                             linker_exe='gcc%s' % no_cygwin,
-                             linker_so='%s%s %s %s'
-                                    % (self.linker_dll, no_cygwin,
-                                       shared_option, entry_point))
+        self.set_executables(compiler='gcc -O -Wall',
+                             compiler_so='gcc -mdll -O -Wall',
+                             compiler_cxx='g++ -O -Wall',
+                             linker_exe='gcc',
+                             linker_so='%s %s %s'
+                                        % (self.linker_dll, shared_option,
+                                           entry_point))
         # Maybe we should also append -mthreads, but then the finished
         # dlls need another dll (mingwm10.dll see Mingw32 docs)
         # (-mthreads: Support thread-safe exception handling on `Mingw32')
@@ -364,7 +364,7 @@ def check_config_h():
                 return CONFIG_H_NOTOK, "'%s' does not mention '__GNUC__'" % fn
         finally:
             config_h.close()
-    except IOError as exc:
+    except OSError as exc:
         return (CONFIG_H_UNCERTAIN,
                 "couldn't read '%s': %s" % (fn, exc.strerror))
 
