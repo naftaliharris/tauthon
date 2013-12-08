@@ -22,6 +22,11 @@ Functions such as :func:`expanduser` and :func:`expandvars` can be invoked
 explicitly when an application desires shell-like path expansion.  (See also
 the :mod:`glob` module.)
 
+
+.. seealso::
+   The :mod:`pathlib` module offers high-level path objects.
+
+
 .. note::
 
    All of these functions accept either only bytes or only string objects as
@@ -42,7 +47,6 @@ the :mod:`glob` module.)
    * :mod:`posixpath` for UNIX-style paths
    * :mod:`ntpath` for Windows paths
    * :mod:`macpath` for old-style MacOS paths
-   * :mod:`os2emxpath` for OS/2 EMX paths
 
 
 .. function:: abspath(path)
@@ -250,14 +254,13 @@ the :mod:`glob` module.)
    On Unix, this is determined by the device number and i-node number and raises an
    exception if a :func:`os.stat` call on either pathname fails.
 
-   On Windows, two files are the same if they resolve to the same final path
-   name using the Windows API call GetFinalPathNameByHandle. This function
-   raises an exception if handles cannot be obtained to either file.
-
    Availability: Unix, Windows.
 
    .. versionchanged:: 3.2
       Added Windows support.
+
+   .. versionchanged:: 3.4
+      Windows now uses the same implementation as all other platforms.
 
 
 .. function:: sameopenfile(fp1, fp2)
@@ -277,7 +280,10 @@ the :mod:`glob` module.)
    :func:`os.lstat`, or :func:`os.stat`.  This function implements the
    underlying comparison used by :func:`samefile` and :func:`sameopenfile`.
 
-   Availability: Unix.
+   Availability: Unix, Windows.
+
+   .. versionchanged:: 3.4
+      Added Windows support.
 
 
 .. function:: split(path)
