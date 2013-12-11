@@ -92,38 +92,6 @@ class TestMessageAPI(TestEmailBase):
         msg.set_payload('This is a string payload', charset)
         self.assertEqual(msg.get_charset().input_charset, 'iso-8859-1')
 
-    def test_set_payload_with_8bit_data_and_charset(self):
-        data = b'\xd0\x90\xd0\x91\xd0\x92'
-        charset = Charset('utf-8')
-        msg = Message()
-        msg.set_payload(data, charset)
-        self.assertEqual(msg['content-transfer-encoding'], 'base64')
-        self.assertEqual(msg.get_payload(decode=True), data)
-        self.assertEqual(msg.get_payload(), '0JDQkdCS\n')
-
-    def test_set_payload_with_non_ascii_and_charset_body_encoding_none(self):
-        data = b'\xd0\x90\xd0\x91\xd0\x92'
-        charset = Charset('utf-8')
-        charset.body_encoding = None # Disable base64 encoding
-        msg = Message()
-        msg.set_payload(data.decode('utf-8'), charset)
-        self.assertEqual(msg['content-transfer-encoding'], '8bit')
-        self.assertEqual(msg.get_payload(decode=True), data)
-
-    def test_set_payload_with_8bit_data_and_charset_body_encoding_none(self):
-        data = b'\xd0\x90\xd0\x91\xd0\x92'
-        charset = Charset('utf-8')
-        charset.body_encoding = None # Disable base64 encoding
-        msg = Message()
-        msg.set_payload(data, charset)
-        self.assertEqual(msg['content-transfer-encoding'], '8bit')
-        self.assertEqual(msg.get_payload(decode=True), data)
-
-    def test_set_payload_to_list(self):
-        msg = Message()
-        msg.set_payload([])
-        self.assertEqual(msg.get_payload(), [])
-
     def test_get_charsets(self):
         eq = self.assertEqual
 
@@ -281,15 +249,42 @@ class TestMessageAPI(TestEmailBase):
         self.assertIn('TO', msg)
 
     def test_as_string(self):
-        eq = self.ndiffAssertEqual
         msg = self._msgobj('msg_01.txt')
         with openfile('msg_01.txt') as fp:
             text = fp.read()
-        eq(text, str(msg))
+        self.assertEqual(text, str(msg))
         fullrepr = msg.as_string(unixfrom=True)
         lines = fullrepr.split('\n')
         self.assertTrue(lines[0].startswith('From '))
-        eq(text, NL.join(lines[1:]))
+        self.assertEqual(text, NL.join(lines[1:]))
+
+    def test_as_string_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_string(policy=newpolicy)
+        s = StringIO()
+        g = Generator(s, policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
+
+    def test_as_bytes(self):
+        msg = self._msgobj('msg_01.txt')
+        with openfile('msg_01.txt') as fp:
+            data = fp.read().encode('ascii')
+        self.assertEqual(data, bytes(msg))
+        fullrepr = msg.as_bytes(unixfrom=True)
+        lines = fullrepr.split(b'\n')
+        self.assertTrue(lines[0].startswith(b'From '))
+        self.assertEqual(data, b'\n'.join(lines[1:]))
+
+    def test_as_bytes_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_bytes(policy=newpolicy)
+        s = BytesIO()
+        g = BytesGenerator(s,policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
 
     # test_headerregistry.TestContentTypeHeader.bad_params
     def test_bad_param(self):
