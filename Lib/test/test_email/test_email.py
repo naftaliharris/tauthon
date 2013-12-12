@@ -124,6 +124,12 @@ class TestMessageAPI(TestEmailBase):
         msg.set_payload([])
         self.assertEqual(msg.get_payload(), [])
 
+    def test_set_payload_with_non_ascii_and_no_charset_raises(self):
+        data = b'\xd0\x90\xd0\x91\xd0\x92'.decode('utf-8')
+        msg = Message()
+        with self.assertRaises(TypeError):
+            msg.set_payload(data)
+
     def test_get_charsets(self):
         eq = self.assertEqual
 
@@ -281,15 +287,42 @@ class TestMessageAPI(TestEmailBase):
         self.assertIn('TO', msg)
 
     def test_as_string(self):
-        eq = self.ndiffAssertEqual
         msg = self._msgobj('msg_01.txt')
         with openfile('msg_01.txt') as fp:
             text = fp.read()
-        eq(text, str(msg))
+        self.assertEqual(text, str(msg))
         fullrepr = msg.as_string(unixfrom=True)
         lines = fullrepr.split('\n')
         self.assertTrue(lines[0].startswith('From '))
-        eq(text, NL.join(lines[1:]))
+        self.assertEqual(text, NL.join(lines[1:]))
+
+    def test_as_string_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_string(policy=newpolicy)
+        s = StringIO()
+        g = Generator(s, policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
+
+    def test_as_bytes(self):
+        msg = self._msgobj('msg_01.txt')
+        with openfile('msg_01.txt') as fp:
+            data = fp.read().encode('ascii')
+        self.assertEqual(data, bytes(msg))
+        fullrepr = msg.as_bytes(unixfrom=True)
+        lines = fullrepr.split(b'\n')
+        self.assertTrue(lines[0].startswith(b'From '))
+        self.assertEqual(data, b'\n'.join(lines[1:]))
+
+    def test_as_bytes_policy(self):
+        msg = self._msgobj('msg_01.txt')
+        newpolicy = msg.policy.clone(linesep='\r\n')
+        fullrepr = msg.as_bytes(policy=newpolicy)
+        s = BytesIO()
+        g = BytesGenerator(s,policy=newpolicy)
+        g.flatten(msg)
+        self.assertEqual(fullrepr, s.getvalue())
 
     # test_headerregistry.TestContentTypeHeader.bad_params
     def test_bad_param(self):
@@ -563,20 +596,10 @@ class TestMessageAPI(TestEmailBase):
         self.assertIsInstance(msg.defects[0],
                               errors.InvalidBase64CharactersDefect)
 
-    def test_broken_unicode_payload(self):
-        # This test improves coverage but is not a compliance test.
-        # The behavior in this situation is currently undefined by the API.
-        x = 'this is a br\xf6ken thing to do'
-        msg = Message()
-        msg['content-type'] = 'text/plain'
-        msg['content-transfer-encoding'] = '8bit'
-        msg.set_payload(x)
-        self.assertEqual(msg.get_payload(decode=True),
-                         bytes(x, 'raw-unicode-escape'))
-
     def test_questionable_bytes_payload(self):
         # This test improves coverage but is not a compliance test,
-        # since it involves poking inside the black box.
+        # since it involves poking inside the black box in a way
+        # that actually breaks the model invariants.
         x = 'this is a quéstionable thing to do'.encode('utf-8')
         msg = Message()
         msg['content-type'] = 'text/plain; charset="utf-8"'
