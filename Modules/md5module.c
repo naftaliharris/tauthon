@@ -91,10 +91,6 @@ typedef struct {
        (y)[3] = (unsigned char)(((x)>>24)&255); (y)[2] = (unsigned char)(((x)>>16)&255);   \
        (y)[1] = (unsigned char)(((x)>>8)&255); (y)[0] = (unsigned char)((x)&255); }
 
-#ifndef MIN
-   #define MIN(x, y) ( ((x)<(y))?(x):(y) )
-#endif
-
 
 /* MD5 macros */
 
@@ -244,9 +240,9 @@ md5_process(struct md5_state *md5, const unsigned char *in, Py_ssize_t inlen)
            in             += MD5_BLOCKSIZE;
            inlen          -= MD5_BLOCKSIZE;
         } else {
-           n = MIN(inlen, (Py_ssize_t)(MD5_BLOCKSIZE - md5->curlen));
+           n = Py_MIN(inlen, (Py_ssize_t)(MD5_BLOCKSIZE - md5->curlen));
            memcpy(md5->buf + md5->curlen, in, (size_t)n);
-           md5->curlen    += n;
+           md5->curlen    += (MD5_INT32)n;
            in             += n;
            inlen          -= n;
            if (md5->curlen == MD5_BLOCKSIZE) {
@@ -443,7 +439,7 @@ MD5_get_block_size(PyObject *self, void *closure)
 static PyObject *
 MD5_get_name(PyObject *self, void *closure)
 {
-    return PyUnicode_FromStringAndSize("MD5", 3);
+    return PyUnicode_FromStringAndSize("md5", 3);
 }
 
 static PyObject *
@@ -576,8 +572,17 @@ static struct PyModuleDef _md5module = {
 PyMODINIT_FUNC
 PyInit__md5(void)
 {
+    PyObject *m;
+
     Py_TYPE(&MD5type) = &PyType_Type;
     if (PyType_Ready(&MD5type) < 0)
         return NULL;
-    return PyModule_Create(&_md5module);
+
+    m = PyModule_Create(&_md5module);
+    if (m == NULL)
+        return NULL;
+
+    Py_INCREF((PyObject *)&MD5type);
+    PyModule_AddObject(m, "MD5Type", (PyObject *)&MD5type);
+    return m;
 }
