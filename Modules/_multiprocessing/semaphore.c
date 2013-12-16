@@ -18,6 +18,7 @@ typedef struct {
     int count;
     int maxvalue;
     int kind;
+    char *name;
 } SemLockObject;
 
 #define ISMINE(o) (o->count > 0 && PyThread_get_thread_ident() == o->last_tid)
@@ -43,7 +44,7 @@ _GetSemaphoreValue(HANDLE handle, long *value)
 {
     long previous;
 
-    switch (WaitForSingleObject(handle, 0)) {
+    switch (WaitForSingleObjectEx(handle, 0, FALSE)) {
     case WAIT_OBJECT_0:
         if (!ReleaseSemaphore(handle, 1, &previous))
             return MP_STANDARD_ERROR;
@@ -99,7 +100,7 @@ semlock_acquire(SemLockObject *self, PyObject *args, PyObject *kwds)
     }
 
     /* check whether we can acquire without releasing the GIL and blocking */
-    if (WaitForSingleObject(self->handle, 0) == WAIT_OBJECT_0) {
+    if (WaitForSingleObjectEx(self->handle, 0, FALSE) == WAIT_OBJECT_0) {
         self->last_tid = GetCurrentThreadId();
         ++self->count;
         Py_RETURN_TRUE;
@@ -118,7 +119,7 @@ semlock_acquire(SemLockObject *self, PyObject *args, PyObject *kwds)
     Py_BEGIN_ALLOW_THREADS
     if (sigint_event != NULL)
         ResetEvent(sigint_event);
-    res = WaitForMultipleObjects(nhandles, handles, FALSE, full_msecs);
+    res = WaitForMultipleObjectsEx(nhandles, handles, FALSE, full_msecs, FALSE);
     Py_END_ALLOW_THREADS
 
     /* handle result */
@@ -200,7 +201,7 @@ semlock_release(SemLockObject *self, PyObject *args)
 #ifndef HAVE_SEM_TIMEDWAIT
 #  define sem_timedwait(sem,deadline) sem_timedwait_save(sem,deadline,_save)
 
-int
+static int
 sem_timedwait_save(sem_t *sem, struct timespec *deadline, PyThreadState *_save)
 {
     int res;
@@ -397,7 +398,8 @@ semlock_release(SemLockObject *self, PyObject *args)
  */
 
 static PyObject *
-newsemlockobject(PyTypeObject *type, SEM_HANDLE handle, int kind, int maxvalue)
+newsemlockobject(PyTypeObject *type, SEM_HANDLE handle, int kind, int maxvalue,
+                 char *name)
 {
     SemLockObject *self;
 
@@ -409,21 +411,22 @@ newsemlockobject(PyTypeObject *type, SEM_HANDLE handle, int kind, int maxvalue)
     self->count = 0;
     self->last_tid = 0;
     self->maxvalue = maxvalue;
+    self->name = name;
     return (PyObject*)self;
 }
 
 static PyObject *
 semlock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
-    char buffer[256];
     SEM_HANDLE handle = SEM_FAILED;
-    int kind, maxvalue, value;
+    int kind, maxvalue, value, unlink;
     PyObject *result;
-    static char *kwlist[] = {"kind", "value", "maxvalue", NULL};
-    static int counter = 0;
+    char *name, *name_copy = NULL;
+    static char *kwlist[] = {"kind", "value", "maxvalue", "name", "unlink",
+                             NULL};
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "iii", kwlist,
-                                     &kind, &value, &maxvalue))
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "iiisi", kwlist,
+                                     &kind, &value, &maxvalue, &name, &unlink))
         return NULL;
 
     if (kind != RECURSIVE_MUTEX && kind != SEMAPHORE) {
@@ -431,18 +434,23 @@ semlock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
         return NULL;
     }
 
-    PyOS_snprintf(buffer, sizeof(buffer), "/mp%ld-%d", (long)getpid(), counter++);
+    if (!unlink) {
+        name_copy = PyMem_Malloc(strlen(name) + 1);
+        if (name_copy == NULL)
+            goto failure;
+        strcpy(name_copy, name);
+    }
 
     SEM_CLEAR_ERROR();
-    handle = SEM_CREATE(buffer, value, maxvalue);
+    handle = SEM_CREATE(name, value, maxvalue);
     /* On Windows we should fail if GetLastError()==ERROR_ALREADY_EXISTS */
     if (handle == SEM_FAILED || SEM_GET_LAST_ERROR() != 0)
         goto failure;
 
-    if (SEM_UNLINK(buffer) < 0)
+    if (unlink && SEM_UNLINK(name) < 0)
         goto failure;
 
-    result = newsemlockobject(type, handle, kind, maxvalue);
+    result = newsemlockobject(type, handle, kind, maxvalue, name_copy);
     if (!result)
         goto failure;
 
@@ -451,7 +459,8 @@ semlock_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
   failure:
     if (handle != SEM_FAILED)
         SEM_CLOSE(handle);
-    mp_SetError(NULL, MP_STANDARD_ERROR);
+    PyMem_Free(name_copy);
+    _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     return NULL;
 }
 
@@ -460,12 +469,30 @@ semlock_rebuild(PyTypeObject *type, PyObject *args)
 {
     SEM_HANDLE handle;
     int kind, maxvalue;
+    char *name, *name_copy = NULL;
 
-    if (!PyArg_ParseTuple(args, F_SEM_HANDLE "ii",
-                          &handle, &kind, &maxvalue))
+    if (!PyArg_ParseTuple(args, F_SEM_HANDLE "iiz",
+                          &handle, &kind, &maxvalue, &name))
         return NULL;
 
-    return newsemlockobject(type, handle, kind, maxvalue);
+    if (name != NULL) {
+        name_copy = PyMem_Malloc(strlen(name) + 1);
+        if (name_copy == NULL)
+            return PyErr_NoMemory();
+        strcpy(name_copy, name);
+    }
+
+#ifndef MS_WINDOWS
+    if (name != NULL) {
+        handle = sem_open(name, 0);
+        if (handle == SEM_FAILED) {
+            PyMem_Free(name_copy);
+            return PyErr_SetFromErrno(PyExc_OSError);
+        }
+    }
+#endif
+
+    return newsemlockobject(type, handle, kind, maxvalue, name_copy);
 }
 
 static void
@@ -473,6 +500,7 @@ semlock_dealloc(SemLockObject* self)
 {
     if (self->handle != SEM_FAILED)
         SEM_CLOSE(self->handle);
+    PyMem_Free(self->name);
     PyObject_Del(self);
 }
 
@@ -498,7 +526,7 @@ semlock_getvalue(SemLockObject *self)
 #else
     int sval;
     if (SEM_GETVALUE(self->handle, &sval) < 0)
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     /* some posix implementations use negative numbers to indicate
        the number of waiting threads */
     if (sval < 0)
@@ -514,16 +542,16 @@ semlock_iszero(SemLockObject *self)
     if (sem_trywait(self->handle) < 0) {
         if (errno == EAGAIN)
             Py_RETURN_TRUE;
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     } else {
         if (sem_post(self->handle) < 0)
-            return mp_SetError(NULL, MP_STANDARD_ERROR);
+            return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
         Py_RETURN_FALSE;
     }
 #else
     int sval;
     if (SEM_GETVALUE(self->handle, &sval) < 0)
-        return mp_SetError(NULL, MP_STANDARD_ERROR);
+        return _PyMp_SetError(NULL, MP_STANDARD_ERROR);
     return PyBool_FromLong((long)sval == 0);
 #endif
 }
@@ -574,6 +602,8 @@ static PyMemberDef semlock_members[] = {
      ""},
     {"maxvalue", T_INT, offsetof(SemLockObject, maxvalue), READONLY,
      ""},
+    {"name", T_STRING, offsetof(SemLockObject, name), READONLY,
+     ""},
     {NULL}
 };
 
@@ -581,7 +611,7 @@ static PyMemberDef semlock_members[] = {
  * Semaphore type
  */
 
-PyTypeObject SemLockType = {
+PyTypeObject _PyMp_SemLockType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     /* tp_name           */ "_multiprocessing.SemLock",
     /* tp_basicsize      */ sizeof(SemLockObject),
@@ -621,3 +651,23 @@ PyTypeObject SemLockType = {
     /* tp_alloc          */ 0,
     /* tp_new            */ semlock_new,
 };
+
+/*
+ * Function to unlink semaphore names
+ */
+
+PyObject *
+_PyMp_sem_unlink(PyObject *ignore, PyObject *args)
+{
+    char *name;
+
+    if (!PyArg_ParseTuple(args, "s", &name))
+        return NULL;
+
+    if (SEM_UNLINK(name) < 0) {
+        _PyMp_SetError(NULL, MP_STANDARD_ERROR);
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}

@@ -182,8 +182,9 @@ enum _expr_kind {BoolOp_kind=1, BinOp_kind=2, UnaryOp_kind=3, Lambda_kind=4,
                   SetComp_kind=9, DictComp_kind=10, GeneratorExp_kind=11,
                   Yield_kind=12, YieldFrom_kind=13, Compare_kind=14,
                   Call_kind=15, Num_kind=16, Str_kind=17, Bytes_kind=18,
-                  Ellipsis_kind=19, Attribute_kind=20, Subscript_kind=21,
-                  Starred_kind=22, Name_kind=23, List_kind=24, Tuple_kind=25};
+                  NameConstant_kind=19, Ellipsis_kind=20, Attribute_kind=21,
+                  Subscript_kind=22, Starred_kind=23, Name_kind=24,
+                  List_kind=25, Tuple_kind=26};
 struct _expr {
     enum _expr_kind kind;
     union {
@@ -279,6 +280,10 @@ struct _expr {
         } Bytes;
         
         struct {
+            singleton value;
+        } NameConstant;
+        
+        struct {
             expr_ty value;
             identifier attr;
             expr_context_ty ctx;
@@ -359,18 +364,18 @@ struct _excepthandler {
 
 struct _arguments {
     asdl_seq *args;
-    identifier vararg;
-    expr_ty varargannotation;
+    arg_ty vararg;
     asdl_seq *kwonlyargs;
-    identifier kwarg;
-    expr_ty kwargannotation;
-    asdl_seq *defaults;
     asdl_seq *kw_defaults;
+    arg_ty kwarg;
+    asdl_seq *defaults;
 };
 
 struct _arg {
     identifier arg;
     expr_ty annotation;
+    int lineno;
+    int col_offset;
 };
 
 struct _keyword {
@@ -509,6 +514,9 @@ expr_ty _Py_Num(object n, int lineno, int col_offset, PyArena *arena);
 expr_ty _Py_Str(string s, int lineno, int col_offset, PyArena *arena);
 #define Bytes(a0, a1, a2, a3) _Py_Bytes(a0, a1, a2, a3)
 expr_ty _Py_Bytes(bytes s, int lineno, int col_offset, PyArena *arena);
+#define NameConstant(a0, a1, a2, a3) _Py_NameConstant(a0, a1, a2, a3)
+expr_ty _Py_NameConstant(singleton value, int lineno, int col_offset, PyArena
+                         *arena);
 #define Ellipsis(a0, a1, a2) _Py_Ellipsis(a0, a1, a2)
 expr_ty _Py_Ellipsis(int lineno, int col_offset, PyArena *arena);
 #define Attribute(a0, a1, a2, a3, a4, a5) _Py_Attribute(a0, a1, a2, a3, a4, a5)
@@ -542,11 +550,10 @@ comprehension_ty _Py_comprehension(expr_ty target, expr_ty iter, asdl_seq *
 excepthandler_ty _Py_ExceptHandler(expr_ty type, identifier name, asdl_seq *
                                    body, int lineno, int col_offset, PyArena
                                    *arena);
-#define arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8) _Py_arguments(a0, a1, a2, a3, a4, a5, a6, a7, a8)
-arguments_ty _Py_arguments(asdl_seq * args, identifier vararg, expr_ty
-                           varargannotation, asdl_seq * kwonlyargs, identifier
-                           kwarg, expr_ty kwargannotation, asdl_seq * defaults,
-                           asdl_seq * kw_defaults, PyArena *arena);
+#define arguments(a0, a1, a2, a3, a4, a5, a6) _Py_arguments(a0, a1, a2, a3, a4, a5, a6)
+arguments_ty _Py_arguments(asdl_seq * args, arg_ty vararg, asdl_seq *
+                           kwonlyargs, asdl_seq * kw_defaults, arg_ty kwarg,
+                           asdl_seq * defaults, PyArena *arena);
 #define arg(a0, a1, a2) _Py_arg(a0, a1, a2)
 arg_ty _Py_arg(identifier arg, expr_ty annotation, PyArena *arena);
 #define keyword(a0, a1, a2) _Py_keyword(a0, a1, a2)
