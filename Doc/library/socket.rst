@@ -107,8 +107,8 @@ created.  Socket addresses are represented as follows:
 
   .. versionadded:: 3.3
 
-- Certain other address families (:const:`AF_BLUETOOTH`, :const:`AF_PACKET`)
-  support specific representations.
+- Certain other address families (:const:`AF_BLUETOOTH`, :const:`AF_PACKET`,
+  :const:`AF_CAN`) support specific representations.
 
   .. XXX document them!
 
@@ -264,6 +264,16 @@ Constants
 
    .. versionadded:: 3.3
 
+.. data:: CAN_BCM
+          CAN_BCM_*
+
+   CAN_BCM, in the CAN protocol family, is the broadcast manager (BCM) protocol.
+   Broadcast manager constants, documented in the Linux documentation, are also
+   defined in the socket module.
+
+   Availability: Linux >= 2.6.25.
+
+   .. versionadded:: 3.4
 
 .. data:: AF_RDS
           PF_RDS
@@ -290,6 +300,11 @@ Constants
    TIPC related constants, matching the ones exported by the C socket API. See
    the TIPC documentation for more information.
 
+.. data:: AF_LINK
+
+  Availability: BSD, OSX.
+
+  .. versionadded:: 3.4
 
 .. data:: has_ipv6
 
@@ -306,19 +321,28 @@ Creating sockets
 The following functions all create :ref:`socket objects <socket-objects>`.
 
 
-.. function:: socket([family[, type[, proto]]])
+.. function:: socket(family=AF_INET, type=SOCK_STREAM, proto=0, fileno=None)
 
    Create a new socket using the given address family, socket type and protocol
    number.  The address family should be :const:`AF_INET` (the default),
    :const:`AF_INET6`, :const:`AF_UNIX`, :const:`AF_CAN` or :const:`AF_RDS`. The
    socket type should be :const:`SOCK_STREAM` (the default),
    :const:`SOCK_DGRAM`, :const:`SOCK_RAW` or perhaps one of the other ``SOCK_``
-   constants. The protocol number is usually zero and may be omitted in that
-   case or :const:`CAN_RAW` in case the address family is :const:`AF_CAN`.
+   constants. The protocol number is usually zero and may be omitted or in the
+   case where the address family is :const:`AF_CAN` the protocol should be one
+   of :const:`CAN_RAW` or :const:`CAN_BCM`.
+
+   The newly created socket is :ref:`non-inheritable <fd_inheritance>`.
 
    .. versionchanged:: 3.3
       The AF_CAN family was added.
       The AF_RDS family was added.
+
+   .. versionchanged:: 3.4
+       The CAN_BCM protocol was added.
+
+   .. versionchanged:: 3.4
+      The returned socket is now non-inheritable.
 
 
 .. function:: socketpair([family[, type[, proto]]])
@@ -329,9 +353,14 @@ The following functions all create :ref:`socket objects <socket-objects>`.
    if defined on the platform; otherwise, the default is :const:`AF_INET`.
    Availability: Unix.
 
+   The newly created sockets are :ref:`non-inheritable <fd_inheritance>`.
+
    .. versionchanged:: 3.2
       The returned socket objects now support the whole socket API, rather
       than a subset.
+
+   .. versionchanged:: 3.4
+      The returned sockets are now non-inheritable.
 
 
 .. function:: create_connection(address[, timeout[, source_address]])
@@ -360,7 +389,7 @@ The following functions all create :ref:`socket objects <socket-objects>`.
       support for the :keyword:`with` statement was added.
 
 
-.. function:: fromfd(fd, family, type[, proto])
+.. function:: fromfd(fd, family, type, proto=0)
 
    Duplicate the file descriptor *fd* (an integer as returned by a file object's
    :meth:`fileno` method) and build a socket object from the result.  Address
@@ -370,6 +399,11 @@ The following functions all create :ref:`socket objects <socket-objects>`.
    This function is rarely needed, but can be used to get or set socket options on
    a socket passed to a program as standard input or output (such as a server
    started by the Unix inet daemon).  The socket is assumed to be in blocking mode.
+
+   The newly created socket is :ref:`non-inheritable <fd_inheritance>`.
+
+   .. versionchanged:: 3.4
+      The returned socket is now non-inheritable.
 
 
 .. function:: fromshare(data)
@@ -598,7 +632,7 @@ The :mod:`socket` module also offers various network-related services:
    both the value of *address_family* and the underlying implementation of
    :c:func:`inet_pton`.
 
-   Availability: Unix (maybe not all platforms).
+   Availability: Unix (maybe not all platforms), Windows.
 
 
 .. function:: inet_ntop(address_family, packed_ip)
@@ -614,7 +648,7 @@ The :mod:`socket` module also offers various network-related services:
    specified address family, :exc:`ValueError` will be raised.  A
    :exc:`OSError` is raised for errors from the call to :func:`inet_ntop`.
 
-   Availability: Unix (maybe not all platforms).
+   Availability: Unix (maybe not all platforms), Windows.
 
 
 ..
@@ -735,6 +769,11 @@ to sockets.
    *new* socket object usable to send and receive data on the connection, and
    *address* is the address bound to the socket on the other end of the connection.
 
+   The newly created socket is :ref:`non-inheritable <fd_inheritance>`.
+
+   .. versionchanged:: 3.4
+      The socket is now non-inheritable.
+
 
 .. method:: socket.bind(address)
 
@@ -786,6 +825,16 @@ to sockets.
    .. versionadded:: 3.2
 
 
+.. method:: socket.dup()
+
+   Duplicate the socket.
+
+   The newly created socket is :ref:`non-inheritable <fd_inheritance>`.
+
+   .. versionchanged:: 3.4
+      The socket is now non-inheritable.
+
+
 .. method:: socket.fileno()
 
    Return the socket's file descriptor (a small integer).  This is useful with
@@ -794,6 +843,15 @@ to sockets.
    Under Windows the small integer returned by this method cannot be used where a
    file descriptor can be used (such as :func:`os.fdopen`).  Unix does not have
    this limitation.
+
+
+.. method:: socket.get_inheritable()
+
+   Get the :ref:`inheritable flag <fd_inheritance>` of the socket's file
+   descriptor or socket's handle: ``True`` if the socket can be inherited in
+   child processes, ``False`` if it cannot.
+
+   .. versionadded:: 3.4
 
 
 .. method:: socket.getpeername()
@@ -1082,6 +1140,14 @@ to sockets.
    .. versionadded:: 3.3
 
 
+.. method:: socket.set_inheritable(inheritable)
+
+   Set the :ref:`inheritable flag <fd_inheritance>` of the socket's file
+   descriptor or socket's handle.
+
+   .. versionadded:: 3.4
+
+
 .. method:: socket.setblocking(flag)
 
    Set blocking or non-blocking mode of the socket: if *flag* is false, the
@@ -1363,7 +1429,16 @@ the interface::
    s.ioctl(socket.SIO_RCVALL, socket.RCVALL_OFF)
 
 The last example shows how to use the socket interface to communicate to a CAN
-network. This example might require special priviledge::
+network using the raw socket protocol. To use CAN with the broadcast
+manager protocol instead, open a socket with::
+
+    socket.socket(socket.AF_CAN, socket.SOCK_DGRAM, socket.CAN_BCM)
+
+After binding (:const:`CAN_RAW`) or connecting (:const:`CAN_BCM`) the socket, you
+can use the :meth:`socket.send`, and the :meth:`socket.recv` operations (and
+their counterparts) on the socket object as usual.
+
+This example might require special priviledge::
 
    import socket
    import struct
