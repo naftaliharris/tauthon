@@ -41,6 +41,26 @@ extern const char *PyWin_DLLVersionString;
 #include <langinfo.h>
 #endif
 
+_Py_IDENTIFIER(_);
+_Py_IDENTIFIER(__sizeof__);
+_Py_IDENTIFIER(buffer);
+_Py_IDENTIFIER(builtins);
+_Py_IDENTIFIER(encoding);
+_Py_IDENTIFIER(path);
+_Py_IDENTIFIER(stdout);
+_Py_IDENTIFIER(stderr);
+_Py_IDENTIFIER(write);
+
+PyObject *
+_PySys_GetObjectId(_Py_Identifier *key)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    PyObject *sd = tstate->interp->sysdict;
+    if (sd == NULL)
+        return NULL;
+    return _PyDict_GetItemId(sd, key);
+}
+
 PyObject *
 PySys_GetObject(const char *name)
 {
@@ -49,6 +69,21 @@ PySys_GetObject(const char *name)
     if (sd == NULL)
         return NULL;
     return PyDict_GetItemString(sd, name);
+}
+
+int
+_PySys_SetObjectId(_Py_Identifier *key, PyObject *v)
+{
+    PyThreadState *tstate = PyThreadState_GET();
+    PyObject *sd = tstate->interp->sysdict;
+    if (v == NULL) {
+        if (_PyDict_GetItemId(sd, key) == NULL)
+            return 0;
+        else
+            return _PyDict_DelItemId(sd, key);
+    }
+    else
+        return _PyDict_SetItemId(sd, key, v);
 }
 
 int
@@ -79,8 +114,6 @@ sys_displayhook_unencodable(PyObject *outf, PyObject *o)
     PyObject *encoded, *escaped_str, *repr_str, *buffer, *result;
     char *stdout_encoding_str;
     int ret;
-    _Py_IDENTIFIER(encoding);
-    _Py_IDENTIFIER(buffer);
 
     stdout_encoding = _PyObject_GetAttrId(outf, &PyId_encoding);
     if (stdout_encoding == NULL)
@@ -101,7 +134,6 @@ sys_displayhook_unencodable(PyObject *outf, PyObject *o)
 
     buffer = _PyObject_GetAttrId(outf, &PyId_buffer);
     if (buffer) {
-        _Py_IDENTIFIER(write);
         result = _PyObject_CallMethodId(buffer, &PyId_write, "(O)", encoded);
         Py_DECREF(buffer);
         Py_DECREF(encoded);
@@ -137,10 +169,11 @@ sys_displayhook(PyObject *self, PyObject *o)
     PyObject *outf;
     PyInterpreterState *interp = PyThreadState_GET()->interp;
     PyObject *modules = interp->modules;
-    PyObject *builtins = PyDict_GetItemString(modules, "builtins");
+    PyObject *builtins;
+    static PyObject *newline = NULL;
     int err;
-    _Py_IDENTIFIER(_);
 
+    builtins = _PyDict_GetItemId(modules, &PyId_builtins);
     if (builtins == NULL) {
         PyErr_SetString(PyExc_RuntimeError, "lost builtins module");
         return NULL;
@@ -155,7 +188,7 @@ sys_displayhook(PyObject *self, PyObject *o)
     }
     if (_PyObject_SetAttrId(builtins, &PyId__, Py_None) != 0)
         return NULL;
-    outf = PySys_GetObject("stdout");
+    outf = _PySys_GetObjectId(&PyId_stdout);
     if (outf == NULL || outf == Py_None) {
         PyErr_SetString(PyExc_RuntimeError, "lost sys.stdout");
         return NULL;
@@ -173,7 +206,12 @@ sys_displayhook(PyObject *self, PyObject *o)
             return NULL;
         }
     }
-    if (PyFile_WriteString("\n", outf) != 0)
+    if (newline == NULL) {
+        newline = PyUnicode_FromString("\n");
+        if (newline == NULL)
+            return NULL;
+    }
+    if (PyFile_WriteObject(newline, outf, Py_PRINT_RAW) != 0)
         return NULL;
     if (_PyObject_SetAttrId(builtins, &PyId__, o) != 0)
         return NULL;
@@ -329,15 +367,19 @@ trace_init(void)
 
 
 static PyObject *
-call_trampoline(PyThreadState *tstate, PyObject* callback,
+call_trampoline(PyObject* callback,
                 PyFrameObject *frame, int what, PyObject *arg)
 {
-    PyObject *args = PyTuple_New(3);
+    PyObject *args;
     PyObject *whatstr;
     PyObject *result;
 
+    args = PyTuple_New(3);
     if (args == NULL)
         return NULL;
+    if (PyFrame_FastToLocalsWithError(frame) < 0)
+        return NULL;
+
     Py_INCREF(frame);
     whatstr = whatstrings[what];
     Py_INCREF(whatstr);
@@ -349,7 +391,6 @@ call_trampoline(PyThreadState *tstate, PyObject* callback,
     PyTuple_SET_ITEM(args, 2, arg);
 
     /* call the Python-level function */
-    PyFrame_FastToLocals(frame);
     result = PyEval_CallObject(callback, args);
     PyFrame_LocalsToFast(frame, 1);
     if (result == NULL)
@@ -364,12 +405,11 @@ static int
 profile_trampoline(PyObject *self, PyFrameObject *frame,
                    int what, PyObject *arg)
 {
-    PyThreadState *tstate = frame->f_tstate;
     PyObject *result;
 
     if (arg == NULL)
         arg = Py_None;
-    result = call_trampoline(tstate, self, frame, what, arg);
+    result = call_trampoline(self, frame, what, arg);
     if (result == NULL) {
         PyEval_SetProfile(NULL, NULL);
         return -1;
@@ -382,7 +422,6 @@ static int
 trace_trampoline(PyObject *self, PyFrameObject *frame,
                  int what, PyObject *arg)
 {
-    PyThreadState *tstate = frame->f_tstate;
     PyObject *callback;
     PyObject *result;
 
@@ -392,7 +431,7 @@ trace_trampoline(PyObject *self, PyFrameObject *frame,
         callback = frame->f_trace;
     if (callback == NULL)
         return 0;
-    result = call_trampoline(tstate, callback, frame, what, arg);
+    result = call_trampoline(callback, frame, what, arg);
     if (result == NULL) {
         PyEval_SetTrace(NULL, NULL);
         Py_XDECREF(frame->f_trace);
@@ -617,7 +656,7 @@ PyDoc_STRVAR(hash_info_doc,
 "hash_info\n\
 \n\
 A struct sequence providing parameters used for computing\n\
-numeric hashes.  The attributes are read only.");
+hashes. The attributes are read only.");
 
 static PyStructSequence_Field hash_info_fields[] = {
     {"width", "width of the type used for hashing, in bits"},
@@ -626,6 +665,11 @@ static PyStructSequence_Field hash_info_fields[] = {
     {"inf", "value to be used for hash of a positive infinity"},
     {"nan", "value to be used for hash of a nan"},
     {"imag", "multiplier used for the imaginary part of a complex number"},
+    {"algorithm", "name of the algorithm for hashing of str, bytes and "
+                  "memoryviews"},
+    {"hash_bits", "internal output size of hash algorithm"},
+    {"seed_bits", "seed size of hash algorithm"},
+    {"cutoff", "small string optimization cutoff"},
     {NULL, NULL}
 };
 
@@ -633,7 +677,7 @@ static PyStructSequence_Desc hash_info_desc = {
     "sys.hash_info",
     hash_info_doc,
     hash_info_fields,
-    5,
+    9,
 };
 
 static PyObject *
@@ -641,9 +685,11 @@ get_hash_info(void)
 {
     PyObject *hash_info;
     int field = 0;
+    PyHash_FuncDef *hashfunc;
     hash_info = PyStructSequence_New(&Hash_InfoType);
     if (hash_info == NULL)
         return NULL;
+    hashfunc = PyHash_GetFuncDef();
     PyStructSequence_SET_ITEM(hash_info, field++,
                               PyLong_FromLong(8*sizeof(Py_hash_t)));
     PyStructSequence_SET_ITEM(hash_info, field++,
@@ -654,6 +700,14 @@ get_hash_info(void)
                               PyLong_FromLong(_PyHASH_NAN));
     PyStructSequence_SET_ITEM(hash_info, field++,
                               PyLong_FromLong(_PyHASH_IMAG));
+    PyStructSequence_SET_ITEM(hash_info, field++,
+                              PyUnicode_FromString(hashfunc->name));
+    PyStructSequence_SET_ITEM(hash_info, field++,
+                              PyLong_FromLong(hashfunc->hash_bits));
+    PyStructSequence_SET_ITEM(hash_info, field++,
+                              PyLong_FromLong(hashfunc->seed_bits));
+    PyStructSequence_SET_ITEM(hash_info, field++,
+                              PyLong_FromLong(Py_HASH_CUTOFF));
     if (PyErr_Occurred()) {
         Py_CLEAR(hash_info);
         return NULL;
@@ -778,7 +832,7 @@ Set the flags used by the interpreter for dlopen calls, such as when the\n\
 interpreter loads extension modules.  Among other things, this will enable\n\
 a lazy resolving of symbols when importing a module, if called as\n\
 sys.setdlopenflags(0).  To share symbols across extension modules, call as\n\
-sys.setdlopenflags(ctypes.RTLD_GLOBAL).  Symbolic names for the flag modules\n\
+sys.setdlopenflags(os.RTLD_GLOBAL).  Symbolic names for the flag modules\n\
 can be found in the os module (RTLD_xxx constants, e.g. os.RTLD_LAZY).");
 
 static PyObject *
@@ -794,7 +848,7 @@ PyDoc_STRVAR(getdlopenflags_doc,
 "getdlopenflags() -> int\n\
 \n\
 Return the current value of the flags that are used for dlopen calls.\n\
-The flag constants are defined in the ctypes and DLFCN modules.");
+The flag constants are defined in the os module.");
 
 #endif  /* HAVE_DLOPEN */
 
@@ -822,7 +876,6 @@ sys_getsizeof(PyObject *self, PyObject *args, PyObject *kwds)
     static char *kwlist[] = {"object", "default", 0};
     PyObject *o, *dflt = NULL;
     PyObject *method;
-    _Py_IDENTIFIER(__sizeof__);
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O|O:getsizeof",
                                      kwlist, &o, &dflt))
@@ -896,6 +949,19 @@ PyDoc_STRVAR(getrefcount_doc,
 Return the reference count of object.  The count returned is generally\n\
 one higher than you might expect, because it includes the (temporary)\n\
 reference as an argument to getrefcount()."
+);
+
+static PyObject *
+sys_getallocatedblocks(PyObject *self)
+{
+    return PyLong_FromSsize_t(_Py_GetAllocatedBlocks());
+}
+
+PyDoc_STRVAR(getallocatedblocks_doc,
+"getallocatedblocks() -> integer\n\
+\n\
+Return the number of memory blocks currently allocated, regardless of their\n\
+size."
 );
 
 #ifdef COUNT_ALLOCS
@@ -1066,6 +1132,8 @@ static PyMethodDef sys_methods[] = {
     {"getdlopenflags", (PyCFunction)sys_getdlopenflags, METH_NOARGS,
      getdlopenflags_doc},
 #endif
+    {"getallocatedblocks", (PyCFunction)sys_getallocatedblocks, METH_NOARGS,
+      getallocatedblocks_doc},
 #ifdef COUNT_ALLOCS
     {"getcounts",       (PyCFunction)sys_getcounts, METH_NOARGS},
 #endif
@@ -1287,6 +1355,7 @@ exec_prefix -- prefix used to find the machine-specific Python library\n\
 executable -- absolute path of the executable binary of the Python interpreter\n\
 float_info -- a struct sequence with information about the float implementation.\n\
 float_repr_style -- string indicating the style of repr() output for floats\n\
+hash_info -- a struct sequence with information about the hash algorithm.\n\
 hexversion -- version information encoded as a single integer\n\
 implementation -- Python implementation information.\n\
 int_info -- a struct sequence with information about the int implementation.\n\
@@ -1353,14 +1422,12 @@ static PyStructSequence_Field flags_fields[] = {
     {"no_site",                 "-S"},
     {"ignore_environment",      "-E"},
     {"verbose",                 "-v"},
-#ifdef RISCOS
-    {"riscos_wimp",             "???"},
-#endif
     /* {"unbuffered",                   "-u"}, */
     /* {"skip_first",                   "-x"}, */
     {"bytes_warning",           "-b"},
     {"quiet",                   "-q"},
     {"hash_randomization",      "-R"},
+    {"isolated",                "-I"},
     {0}
 };
 
@@ -1368,11 +1435,7 @@ static PyStructSequence_Desc flags_desc = {
     "sys.flags",        /* name */
     flags__doc__,       /* doc */
     flags_fields,       /* fields */
-#ifdef RISCOS
     13
-#else
-    12
-#endif
 };
 
 static PyObject*
@@ -1397,14 +1460,12 @@ make_flags(void)
     SetFlag(Py_NoSiteFlag);
     SetFlag(Py_IgnoreEnvironmentFlag);
     SetFlag(Py_VerboseFlag);
-#ifdef RISCOS
-    SetFlag(Py_RISCOSWimpFlag);
-#endif
     /* SetFlag(saw_unbuffered_flag); */
     /* SetFlag(skipfirstline); */
     SetFlag(Py_BytesWarningFlag);
     SetFlag(Py_QuietFlag);
     SetFlag(Py_HashRandomizationFlag);
+    SetFlag(Py_IsolatedFlag);
 #undef SetFlag
 
     if (PyErr_Occurred()) {
@@ -1565,18 +1626,35 @@ static struct PyModuleDef sysmodule = {
 PyObject *
 _PySys_Init(void)
 {
-    PyObject *m, *v, *sysdict, *version_info;
-    char *s;
+    PyObject *m, *sysdict, *version_info;
 
     m = PyModule_Create(&sysmodule);
     if (m == NULL)
         return NULL;
     sysdict = PyModule_GetDict(m);
-#define SET_SYS_FROM_STRING(key, value)                 \
-    v = value;                                          \
-    if (v != NULL)                                      \
-        PyDict_SetItemString(sysdict, key, v);          \
-    Py_XDECREF(v)
+#define SET_SYS_FROM_STRING_BORROW(key, value)             \
+    do {                                                   \
+        int res;                                           \
+        PyObject *v = (value);                             \
+        if (v == NULL)                                     \
+            return NULL;                                   \
+        res = PyDict_SetItemString(sysdict, key, v);       \
+        if (res < 0) {                                     \
+            return NULL;                                   \
+        }                                                  \
+    } while (0)
+#define SET_SYS_FROM_STRING(key, value)                    \
+    do {                                                   \
+        int res;                                           \
+        PyObject *v = (value);                             \
+        if (v == NULL)                                     \
+            return NULL;                                   \
+        res = PyDict_SetItemString(sysdict, key, v);       \
+        Py_DECREF(v);                                      \
+        if (res < 0) {                                     \
+            return NULL;                                   \
+        }                                                  \
+    } while (0)
 
     /* Check that stdin is not a directory
     Using shell redirection, you can redirect stdin to a directory,
@@ -1598,10 +1676,10 @@ _PySys_Init(void)
 
     /* stdin/stdout/stderr are now set by pythonrun.c */
 
-    PyDict_SetItemString(sysdict, "__displayhook__",
-                         PyDict_GetItemString(sysdict, "displayhook"));
-    PyDict_SetItemString(sysdict, "__excepthook__",
-                         PyDict_GetItemString(sysdict, "excepthook"));
+    SET_SYS_FROM_STRING_BORROW("__displayhook__",
+                               PyDict_GetItemString(sysdict, "displayhook"));
+    SET_SYS_FROM_STRING_BORROW("__excepthook__",
+                               PyDict_GetItemString(sysdict, "excepthook"));
     SET_SYS_FROM_STRING("version",
                          PyUnicode_FromString(Py_GetVersion()));
     SET_SYS_FROM_STRING("hexversion",
@@ -1635,28 +1713,24 @@ _PySys_Init(void)
     SET_SYS_FROM_STRING("int_info",
                         PyLong_GetInfo());
     /* initialize hash_info */
-    if (Hash_InfoType.tp_name == 0)
-        PyStructSequence_InitType(&Hash_InfoType, &hash_info_desc);
+    if (Hash_InfoType.tp_name == NULL) {
+        if (PyStructSequence_InitType2(&Hash_InfoType, &hash_info_desc) < 0)
+            return NULL;
+    }
     SET_SYS_FROM_STRING("hash_info",
                         get_hash_info());
     SET_SYS_FROM_STRING("maxunicode",
                         PyLong_FromLong(0x10FFFF));
     SET_SYS_FROM_STRING("builtin_module_names",
                         list_builtin_module_names());
-    {
-        /* Assumes that longs are at least 2 bytes long.
-           Should be safe! */
-        unsigned long number = 1;
-        char *value;
+#if PY_BIG_ENDIAN
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("big"));
+#else
+    SET_SYS_FROM_STRING("byteorder",
+                        PyUnicode_FromString("little"));
+#endif
 
-        s = (char *) &number;
-        if (s[0] == 0)
-            value = "big";
-        else
-            value = "little";
-        SET_SYS_FROM_STRING("byteorder",
-                            PyUnicode_FromString(value));
-    }
 #ifdef MS_COREDLL
     SET_SYS_FROM_STRING("dllhandle",
                         PyLong_FromVoidPtr(PyWin_DLLhModule));
@@ -1669,22 +1743,22 @@ _PySys_Init(void)
 #endif
     if (warnoptions == NULL) {
         warnoptions = PyList_New(0);
+        if (warnoptions == NULL)
+            return NULL;
     }
     else {
         Py_INCREF(warnoptions);
     }
-    if (warnoptions != NULL) {
-        PyDict_SetItemString(sysdict, "warnoptions", warnoptions);
-    }
+    SET_SYS_FROM_STRING_BORROW("warnoptions", warnoptions);
 
-    v = get_xoptions();
-    if (v != NULL) {
-        PyDict_SetItemString(sysdict, "_xoptions", v);
-    }
+    SET_SYS_FROM_STRING_BORROW("_xoptions", get_xoptions());
 
     /* version_info */
-    if (VersionInfoType.tp_name == 0)
-        PyStructSequence_InitType(&VersionInfoType, &version_info_desc);
+    if (VersionInfoType.tp_name == NULL) {
+        if (PyStructSequence_InitType2(&VersionInfoType,
+                                       &version_info_desc) < 0)
+            return NULL;
+    }
     version_info = make_version_info();
     SET_SYS_FROM_STRING("version_info", version_info);
     /* prevent user from creating new instances */
@@ -1695,8 +1769,10 @@ _PySys_Init(void)
     SET_SYS_FROM_STRING("implementation", make_impl_info(version_info));
 
     /* flags */
-    if (FlagsType.tp_name == 0)
-        PyStructSequence_InitType(&FlagsType, &flags_desc);
+    if (FlagsType.tp_name == 0) {
+        if (PyStructSequence_InitType2(&FlagsType, &flags_desc) < 0)
+            return NULL;
+    }
     SET_SYS_FROM_STRING("flags", make_flags());
     /* prevent user from creating new instances */
     FlagsType.tp_init = NULL;
@@ -1706,7 +1782,9 @@ _PySys_Init(void)
 #if defined(MS_WINDOWS)
     /* getwindowsversion */
     if (WindowsVersionType.tp_name == 0)
-        PyStructSequence_InitType(&WindowsVersionType, &windows_version_desc);
+        if (PyStructSequence_InitType2(&WindowsVersionType,
+                                       &windows_version_desc) < 0)
+            return NULL;
     /* prevent user from creating new instances */
     WindowsVersionType.tp_init = NULL;
     WindowsVersionType.tp_new = NULL;
@@ -1770,7 +1848,7 @@ PySys_SetPath(const wchar_t *path)
     PyObject *v;
     if ((v = makepathobject(path, DELIM)) == NULL)
         Py_FatalError("can't create sys.path");
-    if (PySys_SetObject("path", v) != 0)
+    if (_PySys_SetObjectId(&PyId_path, v) != 0)
         Py_FatalError("can't assign sys.path");
     Py_DECREF(v);
 }
@@ -1839,7 +1917,7 @@ sys_update_path(int argc, wchar_t **argv)
     wchar_t fullpath[MAX_PATH];
 #endif
 
-    path = PySys_GetObject("path");
+    path = _PySys_GetObjectId(&PyId_path);
     if (path == NULL)
         return;
 
@@ -1938,7 +2016,7 @@ PySys_SetArgvEx(int argc, wchar_t **argv, int updatepath)
 void
 PySys_SetArgv(int argc, wchar_t **argv)
 {
-    PySys_SetArgvEx(argc, argv, 1);
+    PySys_SetArgvEx(argc, argv, Py_IsolatedFlag == 0);
 }
 
 /* Reimplementation of PyFile_WriteString() no calling indirectly
@@ -1949,7 +2027,6 @@ sys_pyfile_write_unicode(PyObject *unicode, PyObject *file)
 {
     PyObject *writer = NULL, *args = NULL, *result = NULL;
     int err;
-    _Py_IDENTIFIER(write);
 
     if (file == NULL)
         return -1;
@@ -2026,7 +2103,7 @@ sys_pyfile_write(const char *text, PyObject *file)
  */
 
 static void
-sys_write(char *name, FILE *fp, const char *format, va_list va)
+sys_write(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
 {
     PyObject *file;
     PyObject *error_type, *error_value, *error_traceback;
@@ -2034,7 +2111,7 @@ sys_write(char *name, FILE *fp, const char *format, va_list va)
     int written;
 
     PyErr_Fetch(&error_type, &error_value, &error_traceback);
-    file = PySys_GetObject(name);
+    file = _PySys_GetObjectId(key);
     written = PyOS_vsnprintf(buffer, sizeof(buffer), format, va);
     if (sys_pyfile_write(buffer, file) != 0) {
         PyErr_Clear();
@@ -2054,7 +2131,7 @@ PySys_WriteStdout(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write("stdout", stdout, format, va);
+    sys_write(&PyId_stdout, stdout, format, va);
     va_end(va);
 }
 
@@ -2064,19 +2141,19 @@ PySys_WriteStderr(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write("stderr", stderr, format, va);
+    sys_write(&PyId_stderr, stderr, format, va);
     va_end(va);
 }
 
 static void
-sys_format(char *name, FILE *fp, const char *format, va_list va)
+sys_format(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
 {
     PyObject *file, *message;
     PyObject *error_type, *error_value, *error_traceback;
     char *utf8;
 
     PyErr_Fetch(&error_type, &error_value, &error_traceback);
-    file = PySys_GetObject(name);
+    file = _PySys_GetObjectId(key);
     message = PyUnicode_FromFormatV(format, va);
     if (message != NULL) {
         if (sys_pyfile_write_unicode(message, file) != 0) {
@@ -2096,7 +2173,7 @@ PySys_FormatStdout(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_format("stdout", stdout, format, va);
+    sys_format(&PyId_stdout, stdout, format, va);
     va_end(va);
 }
 
@@ -2106,6 +2183,6 @@ PySys_FormatStderr(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_format("stderr", stderr, format, va);
+    sys_format(&PyId_stderr, stderr, format, va);
     va_end(va);
 }
