@@ -12,13 +12,22 @@ import contextlib
 import shutil
 import zipfile
 
-from imp import source_from_cache
+from importlib.util import source_from_cache
 from test.support import make_legacy_pyc, strip_python_stderr, temp_dir
 
 # Executing the interpreter in a subprocess
 def _assert_python(expected_success, *args, **env_vars):
-    cmd_line = [sys.executable]
-    if not env_vars:
+    if '__isolated' in env_vars:
+        isolated = env_vars.pop('__isolated')
+    else:
+        isolated = not env_vars
+    cmd_line = [sys.executable, '-X', 'faulthandler']
+    if isolated:
+        # isolated mode: ignore Python environment variables, ignore user
+        # site-packages, and don't add the current directory to sys.path
+        cmd_line.append('-I')
+    elif not env_vars:
+        # ignore Python environment variables
         cmd_line.append('-E')
     # Need to preserve the original environment, for in-place testing of
     # shared library builds.
@@ -39,7 +48,7 @@ def _assert_python(expected_success, *args, **env_vars):
         p.stdout.close()
         p.stderr.close()
     rc = p.returncode
-    err =  strip_python_stderr(err)
+    err = strip_python_stderr(err)
     if (rc and expected_success) or (not rc and not expected_success):
         raise AssertionError(
             "Process return code is %d, "
@@ -49,18 +58,32 @@ def _assert_python(expected_success, *args, **env_vars):
 def assert_python_ok(*args, **env_vars):
     """
     Assert that running the interpreter with `args` and optional environment
-    variables `env_vars` is ok and return a (return code, stdout, stderr) tuple.
+    variables `env_vars` succeeds (rc == 0) and return a (return code, stdout,
+    stderr) tuple.
+
+    If the __cleanenv keyword is set, env_vars is used a fresh environment.
+
+    Python is started in isolated mode (command line option -I),
+    except if the __isolated keyword is set to False.
     """
     return _assert_python(True, *args, **env_vars)
 
 def assert_python_failure(*args, **env_vars):
     """
     Assert that running the interpreter with `args` and optional environment
-    variables `env_vars` fails and return a (return code, stdout, stderr) tuple.
+    variables `env_vars` fails (rc != 0) and return a (return code, stdout,
+    stderr) tuple.
+
+    See assert_python_ok() for more options.
     """
     return _assert_python(False, *args, **env_vars)
 
 def spawn_python(*args, **kw):
+    """Run a Python subprocess with the given arguments.
+
+    kw is extra keyword args to pass to subprocess.Popen. Returns a Popen
+    object.
+    """
     cmd_line = [sys.executable, '-E']
     cmd_line.extend(args)
     return subprocess.Popen(cmd_line, stdin=subprocess.PIPE,
@@ -68,6 +91,7 @@ def spawn_python(*args, **kw):
                             **kw)
 
 def kill_python(p):
+    """Run the given Popen process until completion and return stdout."""
     p.stdin.close()
     data = p.stdout.read()
     p.stdout.close()
@@ -77,8 +101,10 @@ def kill_python(p):
     subprocess._cleanup()
     return data
 
-def make_script(script_dir, script_basename, source):
-    script_filename = script_basename+os.extsep+'py'
+def make_script(script_dir, script_basename, source, omit_suffix=False):
+    script_filename = script_basename
+    if not omit_suffix:
+        script_filename += os.extsep + 'py'
     script_name = os.path.join(script_dir, script_filename)
     # The script should be encoded to UTF-8, the default string encoding
     script_file = open(script_name, 'w', encoding='utf-8')
