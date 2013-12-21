@@ -77,7 +77,7 @@ class uploadTestCase(PyPIRCCommandTestCase):
         cmd.finalize_options()
         for attr, waited in (('username', 'me'), ('password', 'secret'),
                              ('realm', 'pypi'),
-                             ('repository', 'http://pypi.python.org/pypi')):
+                             ('repository', 'https://pypi.python.org/pypi')):
             self.assertEqual(getattr(cmd, attr), waited)
 
     def test_saved_password(self):
@@ -114,11 +114,12 @@ class uploadTestCase(PyPIRCCommandTestCase):
          # what did we send ?
         headers = dict(self.last_open.req.headers)
         self.assertEqual(headers['Content-length'], '2087')
-        self.assertTrue(headers['Content-type'].startswith('multipart/form-data'))
+        content_type = headers['Content-type']
+        self.assertTrue(content_type.startswith('multipart/form-data'))
         self.assertEqual(self.last_open.req.get_method(), 'POST')
-        self.assertEqual(self.last_open.req.get_full_url(),
-                         'http://pypi.python.org/pypi')
-        self.assertIn(b'xxx', self.last_open.req.data)
+        expected_url = 'https://pypi.python.org/pypi'
+        self.assertEqual(self.last_open.req.get_full_url(), expected_url)
+        self.assertTrue(b'xxx' in self.last_open.req.data)
 
 def test_suite():
     return unittest.makeSuite(uploadTestCase)
