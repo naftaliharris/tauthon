@@ -371,7 +371,8 @@ class NormalizeTest(unittest.TestCase):
 
     def test_locale_alias(self):
         for localename, alias in locale.locale_alias.items():
-            self.check(localename, alias)
+            with self.subTest(locale=(localename, alias)):
+                self.check(localename, alias)
 
     def test_empty(self):
         self.check('', '')
