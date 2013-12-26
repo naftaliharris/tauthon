@@ -1,9 +1,10 @@
 from .. import abc
+from .. import util
 from . import util as source_util
 
-from importlib import machinery
+machinery = util.import_importlib('importlib.machinery')
+
 import errno
-import imp
 import os
 import py_compile
 import stat
@@ -39,14 +40,11 @@ class FinderTests(abc.FinderTests):
     """
 
     def get_finder(self, root):
-        loader_details = [(machinery.SourceFileLoader,
-                            machinery.SOURCE_SUFFIXES),
-                          (machinery.SourcelessFileLoader,
-                            machinery.BYTECODE_SUFFIXES)]
-        return machinery.FileFinder(root, *loader_details)
-
-    def import_(self, root, module):
-        return self.get_finder(root).find_module(module)
+        loader_details = [(self.machinery.SourceFileLoader,
+                            self.machinery.SOURCE_SUFFIXES),
+                          (self.machinery.SourcelessFileLoader,
+                            self.machinery.BYTECODE_SUFFIXES)]
+        return self.machinery.FileFinder(root, *loader_details)
 
     def run_test(self, test, create=None, *, compile_=None, unlink=None):
         """Test the finding of 'test' with the creation of modules listed in
@@ -124,8 +122,8 @@ class FinderTests(abc.FinderTests):
 
     def test_empty_string_for_dir(self):
         # The empty string from sys.path means to search in the cwd.
-        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
-            machinery.SOURCE_SUFFIXES))
+        finder = self.machinery.FileFinder('', (self.machinery.SourceFileLoader,
+            self.machinery.SOURCE_SUFFIXES))
         with open('mod.py', 'w') as file:
             file.write("# test file for importlib")
         try:
@@ -136,8 +134,8 @@ class FinderTests(abc.FinderTests):
 
     def test_invalidate_caches(self):
         # invalidate_caches() should reset the mtime.
-        finder = machinery.FileFinder('', (machinery.SourceFileLoader,
-            machinery.SOURCE_SUFFIXES))
+        finder = self.machinery.FileFinder('', (self.machinery.SourceFileLoader,
+            self.machinery.SOURCE_SUFFIXES))
         finder._path_mtime = 42
         finder.invalidate_caches()
         self.assertEqual(finder._path_mtime, -1)
@@ -181,11 +179,25 @@ class FinderTests(abc.FinderTests):
             finder = self.get_finder(file_obj.name)
             self.assertEqual((None, []), finder.find_loader('doesnotexist'))
 
+class FinderTestsPEP451(FinderTests):
 
-def test_main():
-    from test.support import run_unittest
-    run_unittest(FinderTests)
+    def import_(self, root, module):
+        found = self.get_finder(root).find_spec(module)
+        return found.loader if found is not None else found
+
+Frozen_FinderTestsPEP451, Source_FinderTestsPEP451 = util.test_both(
+        FinderTestsPEP451, machinery=machinery)
+
+
+class FinderTestsPEP302(FinderTests):
+
+    def import_(self, root, module):
+        return self.get_finder(root).find_module(module)
+
+Frozen_FinderTestsPEP302, Source_FinderTestsPEP302 = util.test_both(
+        FinderTestsPEP302, machinery=machinery)
+
 
 
 if __name__ == '__main__':
-    test_main()
+    unittest.main()
