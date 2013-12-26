@@ -271,8 +271,8 @@ performing string substitutions. ::
 
    >>> import re
    >>> p = re.compile('ab*')
-   >>> p  #doctest: +ELLIPSIS
-   <_sre.SRE_Pattern object at 0x...>
+   >>> p
+   re.compile('ab*')
 
 :func:`re.compile` also accepts an optional *flags* argument, used to enable
 various special features and syntax variations.  We'll go over the available
@@ -383,8 +383,8 @@ Python interpreter, import the :mod:`re` module, and compile a RE::
 
    >>> import re
    >>> p = re.compile('[a-z]+')
-   >>> p  #doctest: +ELLIPSIS
-   <_sre.SRE_Pattern object at 0x...>
+   >>> p
+   re.compile('[a-z]+')
 
 Now, you can try matching various strings against the RE ``[a-z]+``.  An empty
 string shouldn't match at all, since ``+`` means 'one or more repetitions'.
@@ -402,7 +402,7 @@ should store the result in a variable for later use. ::
 
    >>> m = p.match('tempo')
    >>> m  #doctest: +ELLIPSIS
-   <_sre.SRE_Match object at 0x...>
+   <_sre.SRE_Match object; span=(0, 5), match='tempo'>
 
 Now you can query the :ref:`match object <match-objects>` for information
 about the matching string.  :ref:`match object <match-objects>` instances
@@ -441,7 +441,7 @@ case. ::
    >>> print(p.match('::: message'))
    None
    >>> m = p.search('::: message'); print(m)  #doctest: +ELLIPSIS
-   <_sre.SRE_Match object at 0x...>
+   <_sre.SRE_Match object; span=(4, 11), match='message'>
    >>> m.group()
    'message'
    >>> m.span()
@@ -493,7 +493,7 @@ the RE string added as the first argument, and still return either ``None`` or a
    >>> print(re.match(r'From\s+', 'Fromage amk'))
    None
    >>> re.match(r'From\s+', 'From amk Thu May 14 19:12:10 1998')  #doctest: +ELLIPSIS
-   <_sre.SRE_Match object at 0x...>
+   <_sre.SRE_Match object; span=(0, 5), match='From '>
 
 Under the hood, these functions simply create a pattern object for you
 and call the appropriate method on it.  They also store the compiled
@@ -685,7 +685,7 @@ given location, they can obviously be matched an infinite number of times.
    line, the RE to use is ``^From``. ::
 
       >>> print(re.search('^From', 'From Here to Eternity'))  #doctest: +ELLIPSIS
-      <_sre.SRE_Match object at 0x...>
+      <_sre.SRE_Match object; span=(0, 4), match='From'>
       >>> print(re.search('^From', 'Reciting From Memory'))
       None
 
@@ -697,11 +697,11 @@ given location, they can obviously be matched an infinite number of times.
    or any location followed by a newline character.     ::
 
       >>> print(re.search('}$', '{block}'))  #doctest: +ELLIPSIS
-      <_sre.SRE_Match object at 0x...>
+      <_sre.SRE_Match object; span=(6, 7), match='}'>
       >>> print(re.search('}$', '{block} '))
       None
       >>> print(re.search('}$', '{block}\n'))  #doctest: +ELLIPSIS
-      <_sre.SRE_Match object at 0x...>
+      <_sre.SRE_Match object; span=(6, 7), match='}'>
 
    To match a literal ``'$'``, use ``\$`` or enclose it inside a character class,
    as in  ``[$]``.
@@ -726,7 +726,7 @@ given location, they can obviously be matched an infinite number of times.
 
       >>> p = re.compile(r'\bclass\b')
       >>> print(p.search('no class at all'))  #doctest: +ELLIPSIS
-      <_sre.SRE_Match object at 0x...>
+      <_sre.SRE_Match object; span=(3, 8), match='class'>
       >>> print(p.search('the declassified algorithm'))
       None
       >>> print(p.search('one subclass is'))
@@ -744,7 +744,7 @@ given location, they can obviously be matched an infinite number of times.
       >>> print(p.search('no class at all'))
       None
       >>> print(p.search('\b' + 'class' + '\b'))  #doctest: +ELLIPSIS
-      <_sre.SRE_Match object at 0x...>
+      <_sre.SRE_Match object; span=(0, 7), match='\x08class\x08'>
 
    Second, inside a character class, where there's no use for this assertion,
    ``\b`` represents the backspace character, for compatibility with Python's
