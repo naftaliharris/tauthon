@@ -1,0 +1,1395 @@
+****************************
+  What's New In Python 3.4
+****************************
+
+.. :Author: Someone <email>
+   (uncomment if there is a principal author)
+
+.. Rules for maintenance:
+
+   * Anyone can add text to this document, but the maintainer reserves the
+   right to rewrite any additions. In particular, for obscure or esoteric
+   features, the maintainer may reduce any addition to a simple reference to
+   the new documentation rather than explaining the feature inline.
+
+   * While the maintainer will periodically go through Misc/NEWS
+   and add changes, it's best not to rely on this. We know from experience
+   that any changes that aren't in the What's New documentation around the
+   time of the original release will remain largely unknown to the community
+   for years, even if they're added later. We also know from experience that
+   other priorities can arise, and the maintainer will run out of time to do
+   updates -- in such cases, end users will be much better served by partial
+   notifications that at least give a hint about new features to
+   investigate.
+
+   * This is not a complete list of every single change; completeness
+   is the purpose of Misc/NEWS. The What's New should focus on changes that
+   are visible to Python *users* and that *require* a feature release (i.e.
+   most bug fixes should only be recorded in Misc/NEWS)
+
+   * PEPs should not be marked Final until they have an entry in What's New.
+   A placeholder entry that is just a section header and a link to the PEP
+   (e.g ":pep:`397` has been implemented") is acceptable. If a PEP has been
+   implemented and noted in What's New, don't forget to mark it as Final!
+
+   * If you want to draw your new text to the attention of the
+   maintainer, add 'XXX' to the beginning of the paragraph or
+   section.
+
+   * It's OK to add just a very brief note about a change.  For
+   example: "The :ref:`~socket.transmogrify()` function was added to the
+   :mod:`socket` module."  The maintainer will research the change and
+   write the necessary text (if appropriate). The advantage of doing this
+   is that even if no more descriptive text is ever added, readers will at
+   least have a notification that the new feature exists and a link to the
+   relevant documentation.
+
+   * You can comment out your additions if you like, but it's not
+   necessary (especially when a final release is some months away).
+
+   * Credit the author of a patch or bugfix.   Just the name is
+   sufficient; the e-mail address isn't necessary.
+
+   * It's helpful to add the bug/patch number as a comment:
+
+   The :ref:`~socket.transmogrify()` function was added to the
+   :mod:`socket` module. (Contributed by P.Y. Developer in :issue:`12345`.)
+
+   This saves the maintainer the effort of going through the Mercurial log
+   when researching a change.
+
+   * Cross referencing tip: :ref:`mod.attr` will display as ``mod.attr``,
+   while :ref:`~mod.attr` will display as ``attr``.
+
+This article explains the new features in Python 3.4, compared to 3.3.
+
+.. Python 3.4 was released on TBD.
+
+For full details, see the
+`changelog <http://docs.python.org/3.4/whatsnew/changelog.html>`_.
+
+.. note:: Prerelease users should be aware that this document is currently in
+   draft form. It will be updated substantially as Python 3.4 moves towards
+   release, so it's worth checking back even after reading earlier versions.
+
+
+.. seealso::
+
+   :pep:`429` -- Python 3.4 Release Schedule
+
+
+Summary -- Release Highlights
+=============================
+
+.. This section singles out the most important changes in Python 3.4.
+   Brevity is key.
+
+New syntax features:
+
+* No new syntax features were added in Python 3.4.
+
+New expected features for Python implementations:
+
+* :ref:`pip should always be "available" <whatsnew-pep-453>` (:pep:`453`).
+* :ref:`Make newly created file descriptors non-inheritable <whatsnew-pep-446>`
+  (:pep:`446`).
+* command line option for :ref:`isolated mode <using-on-misc-options>`,
+  (:issue:`16499`).
+* :ref:`improvements in the handling of codecs <codec-handling-improvements>`
+  that are not text encodings (multiple issues).
+* :ref:`A ModuleSpec Type <whatsnew-pep-451>` for the Import System
+  (:pep:`451`).  (Affects importer authors.)
+
+New library modules:
+
+* :mod:`asyncio`: :ref:`New provisional API for asynchronous IO
+  <whatsnew-asyncio>` (:pep:`3156`).
+* :mod:`ensurepip`: :ref:`Bootstrapping the pip installer <whatsnew-ensurepip>`
+  (:pep:`453`).
+* :mod:`enum`: :ref:`Support for enumeration types <whatsnew-enum>`
+  (:pep:`435`).
+* :mod:`pathlib`: :ref:`Object-oriented filesystem paths <whatsnew-pathlib>`
+  (:pep:`428`).
+* :mod:`selectors`: :ref:`High-level and efficient I/O multiplexing
+  <whatsnew-selectors>`, built upon the :mod:`select` module primitives (part
+  of :pep:`3156`).
+* :mod:`statistics`: A basic :ref:`numerically stable statistics library
+  <whatsnew-statistics>` (:pep:`450`).
+* :mod:`tracemalloc`: :ref:`Trace Python memory allocations
+  <whatsnew-tracemalloc>` (:pep:`454`).
+
+Significantly Improved Library Modules:
+
+* :ref:`Single-dispatch generic functions <whatsnew-singledispatch>` in
+  :mod:`functools` (:pep:`443`).
+* New :mod:`pickle` :ref:`protocol 4 <whatsnew-protocol-4>` (:pep:`3154`).
+* :ref:`SHA-3 (Keccak) support <whatsnew-sha3>` for :mod:`hashlib`
+  (:issue:`16113`).
+* :ref:`TLSv1.1 and TLSv1.2 support <whatsnew-tls-11-12>` for :mod:`ssl`
+  (:issue:`16692`).
+* :mod:`multiprocessing` now has :ref:`an option to avoid using os.fork
+  on Unix <whatsnew-multiprocessing-no-fork>` (:issue:`8713`).
+* :mod:`email` has a new submodule, :mod:`~email.contentmanager`, and
+  a new :mod:`~email.message.Message` subclass
+  (:class:`~email.contentmanager.EmailMessage`) that :ref:`simplify MIME
+  handling <whatsnew_email_contentmanager>` (:issue:`18891`).
+
+CPython implementation improvements:
+
+* :ref:`Safe object finalization <whatsnew-pep-442>` (:pep:`442`).
+* Leveraging :pep:`442`, :ref:`module globals are no longer set to None
+  during finalization <whatsnew-pep-442>`, in most cases (:issue:`18214`).
+* :ref:`Configurable memory allocators <whatsnew-pep-445>` (:pep:`445`).
+* :ref:`Secure and interchangeable hash algorithm <whatsnew-pep-456>`
+  (:pep:`456`).
+* :ref:`Argument Clinic <whatsnew-pep-436>` (:pep:`436`).
+* The :mod:`marshal` format has been made :ref:`more compact and efficient
+  <whatsnew-marshal-3>` (:issue:`16475`).
+
+Please read on for a comprehensive list of user-facing changes, including many
+other smaller improvements, CPython optimizations, deprecations, and potential
+porting issues.
+
+
+New Expected Features for Python Implementations
+================================================
+
+.. _whatsnew-pep-453:
+
+PEP 453: Explicit Bootstrapping of PIP in Python Installations
+--------------------------------------------------------------
+
+The new :mod:`ensurepip` module (defined in :pep:`453`) provides a standard
+cross-platform mechanism to boostrap the pip installer into Python
+installations and virtual environments.
+
+The :mod:`venv` module and the :command:`pyvenv` utility make use of this
+module to make ``pip`` readily available in virtual environments. When
+using the command line interface, ``pip`` is installed by default, while
+for the module API installation of ``pip`` must be requested explicitly.
+
+For CPython source builds on POSIX systems, the ``make install`` and
+``make altinstall`` commands bootstrap ``pip`` by default. This behaviour
+can be controlled through configure options, and overridden through
+Makefile options.
+
+On Windows and Mac OS X, the CPython installers now offer the option to
+install ``pip`` along with CPython itself.
+
+As `discussed in the PEP`__, platform packagers may choose not to install
+``pip`` by default, as long as the command ``pip``, when invoked, provides
+clear and simple directions on how to install ``pip`` on the platform.
+
+__ http://www.python.org/dev/peps/pep-0453/#recommendations-for-downstream-distributors
+
+.. note::
+
+   The implementation of PEP 453 is still a work in progress. Refer to
+   :issue:`19347` for the progress on additional steps:
+
+   * Having the binary installers install ``pip`` by default
+   * Recommending the use of ``pip`` in the "Installing Python Module"
+     documentation.
+
+.. seealso::
+
+   :pep:`453` -- Explicit bootstrapping of pip in Python installations
+      PEP written by Donald Stufft and Nick Coghlan, implemented by
+      Donald Stufft, Nick Coghlan, Martin von Löwis and Ned Deily.
+
+
+.. _whatsnew-pep-446:
+
+PEP 446: Make Newly Created File Descriptors Non-Inheritable
+------------------------------------------------------------
+
+:pep:`446` makes newly created file descriptors :ref:`non-inheritable
+<fd_inheritance>`.  New functions and methods:
+
+* :func:`os.get_inheritable`, :func:`os.set_inheritable`
+* :func:`os.get_handle_inheritable`, :func:`os.set_handle_inheritable`
+* :meth:`socket.socket.get_inheritable`, :meth:`socket.socket.set_inheritable`
+
+.. seealso::
+
+   :pep:`446` -- Make newly created file descriptors non-inheritable
+      PEP written and implemented by Victor Stinner.
+
+
+.. _codec-handling-improvements:
+
+Improvements to Codec Handling
+------------------------------
+
+Since it was first introduced, the :mod:`codecs` module has always been
+intended to operate as a type-neutral dynamic encoding and decoding
+system. However, its close coupling with the Python text model, especially
+the type restricted convenience methods on the builtin :class:`str`,
+:class:`bytes` and :class:`bytearray` types, has historically obscured that
+fact.
+
+As a key step in clarifying the situation, the :meth:`codecs.encode` and
+:meth:`codecs.decode` convenience functions are now properly documented in
+Python 2.7, 3.3 and 3.4. These functions have existed in the :mod:`codecs`
+module (and have been covered by the regression test suite) since Python 2.4,
+but were previously only discoverable through runtime introspection.
+
+Unlike the convenience methods on :class:`str`, :class:`bytes` and
+:class:`bytearray`, these convenience functions support arbitrary codecs
+in both Python 2 and Python 3, rather than being limited to Unicode text
+encodings (in Python 3) or ``basestring`` <-> ``basestring`` conversions
+(in Python 2).
+
+In Python 3.4, the interpreter is able to identify the known non-text
+encodings provided in the standard library and direct users towards these
+general purpose convenience functions when appropriate::
+
+    >>> b"abcdef".decode("hex")
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    LookupError: 'hex' is not a text encoding; use codecs.decode() to handle arbitrary codecs
+
+    >>> "hello".encode("rot13")
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    LookupError: 'rot13' is not a text encoding; use codecs.encode() to handle arbitrary codecs
+
+In a related change, whenever it is feasible without breaking backwards
+compatibility, exceptions raised during encoding and decoding operations
+will be wrapped in a chained exception of the same type that mentions the
+name of the codec responsible for producing the error::
+
+    >>> import codecs
+
+    >>> codecs.decode(b"abcdefgh", "hex")
+    binascii.Error: Non-hexadecimal digit found
+
+    The above exception was the direct cause of the following exception:
+
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    binascii.Error: decoding with 'hex' codec failed (Error: Non-hexadecimal digit found)
+
+    >>> codecs.encode("hello", "bz2")
+    TypeError: 'str' does not support the buffer interface
+
+    The above exception was the direct cause of the following exception:
+
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    TypeError: encoding with 'bz2' codec failed (TypeError: 'str' does not support the buffer interface)
+
+Finally, as the examples above show, these improvements have permitted
+the restoration of the convenience aliases for the non-Unicode codecs that
+were themselves restored in Python 3.2. This means that encoding binary data
+to and from its hexadecimal representation (for example) can now be written
+as::
+
+    >>> from codecs import encode, decode
+    >>> encode(b"hello", "hex")
+    b'68656c6c6f'
+    >>> decode(b"68656c6c6f", "hex")
+    b'hello'
+
+The binary and text transforms provided in the standard library are detailed
+in :ref:`binary-transforms` and :ref:`text-transforms`.
+
+(Contributed by Nick Coghlan in :issue:`7475`, , :issue:`17827`,
+:issue:`17828` and :issue:`19619`)
+
+.. _whatsnew-pep-451:
+
+PEP 451: A ModuleSpec Type for the Import System
+------------------------------------------------
+
+:pep:`451` provides an encapsulation of the information about a module that the
+import machinery will use to load it (that is, a module specification).  This
+helps simplify both the import implementation and several import-related APIs.
+The change is also a stepping stone for `several future import-related
+improvements`__.
+
+__ https://mail.python.org/pipermail/python-dev/2013-November/130111.html
+
+The public-facing changes from the PEP are entirely backward-compatible.
+Furthermore, they should be transparent to everyone but importer authors.  Key
+finder and loader methods have been deprecated, but they will continue working.
+New importers should use the new methods described in the PEP.  Existing
+importers should be updated to implement the new methods.
+
+
+Other Language Changes
+----------------------
+
+Some smaller changes made to the core Python language are:
+
+* Unicode database updated to UCD version 6.3.
+
+* :func:`min` and :func:`max` now accept a *default* argument that can be used
+  to specify the value they return if the iterable they are evaluating has no
+  elements.  Contributed by Julian Berman in :issue:`18111`.
+
+* Module objects are now :mod:`weakref`'able.
+
+* Module ``__file__`` attributes (and related values) should now always
+  contain absolute paths by default, with the sole exception of
+  ``__main__.__file__`` when a script has been executed directly using
+  a relative path (Contributed by Brett Cannon in :issue:`18416`).
+
+* Now all the UTF-\* codecs (except UTF-7) reject surrogates during both
+  encoding and decoding unless the ``surrogatepass`` error handler is used,
+  with the exception of the UTF-16 decoder that accepts valid surrogate pairs,
+  and the UTF-16 encoder that produces them while encoding non-BMP characters.
+  Contributed by Victor Stinner, Kang-Hao (Kenny) Lu and Serhiy Storchaka in
+  :issue:`12892`.
+
+
+New Modules
+===========
+
+
+.. _whatsnew-asyncio:
+
+asyncio
+-------
+
+The new :mod:`asyncio` module (defined in :pep:`3156`) provides a standard
+pluggable event loop model for Python, providing solid asynchronous IO
+support in the standard library, and making it easier for other event loop
+implementations to interoperate with the standard library and each other.
+
+For Python 3.4, this module is considered a :term:`provisional API`.
+
+.. seealso::
+
+   :pep:`3156` -- Asynchronous IO Support Rebooted: the "asyncio" Module
+      PEP written and implementation led by Guido van Rossum.
+
+
+.. _whatsnew-ensurepip:
+
+ensurepip
+---------
+
+The new :mod:`ensurepip` module is the primary infrastructure for the
+:pep:`453` implementation.  In the normal course of events end users will not
+need to interact with this module, but it can be used to manually bootstrap
+``pip`` if the automated bootstrapping into an installation or virtual
+environment was declined.
+
+:mod:`ensurepip` includes a bundled copy of ``pip``, up-to-date as of the first
+release candidate of the release of CPython with which it ships (this applies
+to both maintenance releases and feature releases).  ``ensurepip`` does not
+access the internet.  (If the installation has Internet access, it is of course
+possible to upgrade ``pip`` to a release more recent than the bundled ``pip``
+by using the bundled ``pip`` command itself once it is installed.)
+
+The module is named *ensure*\ pip because if called when ``pip`` is already
+installed, it does nothing.  It also has an ``--upgrade`` option that will
+cause it to install the bundled copy of ``pip`` if the existing installed
+version of ``pip`` is older than the bundled copy.
+
+
+.. _whatsnew-enum:
+
+enum
+----
+
+The new :mod:`enum` module (defined in :pep:`435`) provides a standard
+implementation of enumeration types, allowing other modules (such as
+:mod:`socket`) to provide more informative error messages and better
+debugging support by replacing opaque integer constants with backwards
+compatible enumeration values.
+
+.. seealso::
+
+   :pep:`435` -- Adding an Enum type to the Python standard library
+      PEP written by Barry Warsaw, Eli Bendersky and Ethan Furman,
+      implemented by Ethan Furman.
+
+
+.. _whatsnew-pathlib:
+
+pathlib
+-------
+
+The new :mod:`pathlib` module offers classes representing filesystem paths
+with semantics appropriate for different operating systems.  Path classes are
+divided between *pure paths*, which provide purely computational operations
+without I/O, and *concrete paths*, which inherit from pure paths but also
+provide I/O operations.
+
+For Python 3.4, this module is considered a :term:`provisional API`.
+
+.. seealso::
+
+   :pep:`428` -- The pathlib module -- object-oriented filesystem paths
+      PEP written and implemented by Antoine Pitrou.
+
+
+.. _whatsnew-selectors:
+
+selectors
+---------
+
+The new :mod:`selectors` module (created as part of implementing :pep:`3156`)
+allows high-level and efficient I/O multiplexing, built upon the
+:mod:`select` module primitives.
+
+
+.. _whatsnew-statistics:
+
+statistics
+----------
+
+The new :mod:`statistics` module (defined in :pep:`450`) offers some core
+statistics functionality directly in the standard library. This module
+supports calculation of the mean, median, mode, variance and standard
+deviation of a data series.
+
+.. seealso::
+
+   :pep:`450` -- Adding A Statistics Module To The Standard Library
+      PEP written and implemented by Steven D'Aprano
+
+.. _whatsnew-tracemalloc:
+
+
+tracemalloc
+-----------
+
+The new :mod:`tracemalloc` module (defined in :pep:`454`) is a debug tool to
+trace memory blocks allocated by Python. It provides the following information:
+
+* Traceback where an object was allocated
+* Statistics on allocated memory blocks per filename and per line number:
+  total size, number and average size of allocated memory blocks
+* Compute the differences between two snapshots to detect memory leaks
+
+.. seealso::
+
+   :pep:`454` -- Add a new tracemalloc module to trace Python memory allocations
+      PEP written and implemented by Victor Stinner
+
+
+Improved Modules
+================
+
+
+abc
+---
+
+New function :func:`abc.get_cache_token` can be used to know when to invalidate
+caches that are affected by changes in the object graph.  (Contributed
+by Łukasz Langa in :issue:`16832`.)
+
+New class :class:`~abc.ABC` has :class:`~abc.ABCMeta` as its meta class.
+Using ``ABC`` as a base class has essentially the same effect as specifying
+``metaclass=abc.ABCMeta``, but is simpler to type and easier to read.
+(Contributed by Bruno Dupuis in :issue:`16049`.)
+
+
+
+aifc
+----
+
+The :meth:`~aifc.getparams` method now returns a namedtuple rather than a
+plain tuple.  (Contributed by Claudiu Popa in :issue:`17818`.)
+
+:func:`aifc.open` now supports the context manager protocol: when used in a
+:keyword:`with` block, the :meth:`~aifc.aifc.close` method of the returned
+object will be called automatically at the end of the block.  (Contributed by
+Serhiy Storchacha in :issue:`16486`.)
+
+
+argparse
+--------
+
+The :class:`~argparse.FileType` class now accepts *encoding* and
+*errors* arguments, which are passed through to :func:`open`.  (Contributed
+by Lucas Maystre in :issue:`11175`.)
+
+
+audioop
+-------
+
+Added support for 24-bit samples (:issue:`12866`).
+
+Added the :func:`~audioop.byteswap` function to convert big-endian samples
+to little-endian and vice versa (:issue:`19641`).
+
+
+base64
+------
+
+The encoding and decoding functions in :mod:`base64` now accept any
+:term:`bytes-like object` in cases where it previously required a
+:class:`bytes` or :class:`bytearray` instance (:issue:`17839`).
+
+
+colorsys
+--------
+
+The number of digits in the coefficients for the RGB --- YIQ conversions have
+been expanded so that they match the FCC NTSC versions.  The change in
+results should be less than 1% and may better match results found elsewhere.
+
+
+contextlib
+----------
+
+The new :class:`contextlib.suppress` context manager helps to clarify the
+intent of code that deliberately suppresses exceptions from a single
+statement. (Contributed by Raymond Hettinger in :issue:`15806` and
+Zero Piraeus in :issue:`19266`)
+
+The new :func:`contextlib.redirect_stdout` context manager makes it easier
+for utility scripts to handle inflexible APIs that don't provide any
+options to retrieve their output as a string or direct it to somewhere
+other than :data:`sys.stdout`. In conjunction with :class:`io.StringIO`,
+this context manager is also useful for checking expected output from
+command line utilities. (Contribute by Raymond Hettinger in :issue:`15805`)
+
+The :mod:`contextlib` documentation has also been updated to include a
+:ref:`discussion <single-use-reusable-and-reentrant-cms>` of the
+differences between single use, reusable and reentrant context managers.
+
+
+dis
+---
+
+The :mod:`dis` module is now built around an :class:`~dis.Instruction` class
+that provides details of individual bytecode operations and a
+:func:`~dis.get_instructions` iterator that emits the Instruction stream for a
+given piece of Python code. The various display tools in the :mod:`dis`
+module have been updated to be based on these new components.
+
+The new :class:`dis.Bytecode` class provides an object-oriented API for
+inspecting bytecode, both in human-readable form and for iterating over
+instructions.
+
+(Contributed by Nick Coghlan, Ryan Kelly and Thomas Kluyver in :issue:`11816`
+and Claudiu Popa in :issue:`17916`)
+
+
+doctest
+-------
+
+A new :ref:`option flag <doctest-options>`, :data:`~doctest.FAIL_FAST`, halts
+test running as soon as the first failure is detected.  (Contributed by R.
+David Murray and Daniel Urban in :issue:`16522`.)
+
+The :mod:`doctest` command line interface now uses :mod:`argparse`, and has two
+new options, ``-o`` and ``-f``.  ``-o`` allows :ref:`doctest options
+<doctest-options>` to be specified on the command line, and ``-f`` is a
+shorthand for ``-o FAIL_FAST`` (to parallel the similar option supported by the
+:mod:`unittest` CLI).  (Contributed by R. David Murray in :issue:`11390`.)
+
+
+email
+-----
+
+:meth:`~email.message.Message.as_string` now accepts a *policy* argument to
+override the default policy of the message when generating a string
+representation of it.  This means that ``as_string`` can now be used in more
+circumstances, instead of having to create and use a :mod:`~email.generator` in
+order to pass formatting parameters to its ``flatten`` method.
+
+New method :meth:`~email.message.Message.as_bytes` added to produce a bytes
+representation of the message in a fashion similar to how ``as_string``
+produces a string representation.  It does not accept the *maxheaderlen*
+argument, but does accept the *unixfrom* and *policy* arguments. The
+:class:`~email.message.Message` :meth:`~email.message.Message.__bytes__` method
+calls it, meaning that ``bytes(mymsg)`` will now produce the intuitive
+result:  a bytes object containing the fully formatted message.
+
+(Contributed by R. David Murray in :issue:`18600`.)
+
+.. _whatsnew_email_contentmanager:
+
+A pair of new subclasses of :class:`~email.message.Message` have been added,
+along with a new sub-module, :mod:`~email.contentmanager`.  All documentation
+is currently in the new module, which is being added as part of the new
+:term:`provisional <provisional package>` email API.  These classes provide a
+number of new methods that make extracting content from and inserting content
+into email messages much easier.  See the :mod:`~email.contentmanager`
+documentation for details.
+
+These API additions complete the bulk of the work that was planned as part of
+the email6 project.  The currently provisional API is scheduled to become final
+in Python 3.5 (possibly with a few minor additions in the area of error
+handling).
+
+(Contributed by R. David Murray in :issue:`18891`.)
+
+
+functools
+---------
+
+The new :func:`~functools.partialmethod` descriptor bring partial argument
+application to descriptors, just as :func:`~functools.partial` provides
+for normal callables. The new descriptor also makes it easier to get
+arbitrary callables (including :func:`~functools.partial` instances)
+to behave like normal instance methods when included in a class definition.
+
+(Contributed by Alon Horev and Nick Coghlan in :issue:`4331`)
+
+.. _whatsnew-singledispatch:
+
+The new :func:`~functools.singledispatch` decorator brings support for
+single-dispatch generic functions to the Python standard library. Where
+object oriented programming focuses on grouping multiple operations on a
+common set of data into a class, a generic function focuses on grouping
+multiple implementations of an operation that allows it to work with
+*different* kinds of data.
+
+.. seealso::
+
+   :pep:`443` -- Single-dispatch generic functions
+      PEP written and implemented by Łukasz Langa.
+
+A pure-python version of the :func:`~functools.partial` function is now in the
+stdlib; in CPython it is overridden by the C accelerated version, but it is
+available for other implementations to use.  (Contributed by Brian Thorne in
+:issue:`12428`.)
+
+
+gc
+--
+
+New :func:`~gc.get_stats` returns a list of three per-generation dictionaries
+containing the collections statistics since interpreter startup.  (Contributed
+by Antoine Pitrou in :issue:`16351`.)
+
+
+hashlib
+-------
+
+New :func:`hashlib.pbkdf2_hmac` function.
+(Contributed by Christian Heimes in :issue:`18582`)
+
+.. _whatsnew-sha3:
+
+New :ref:`hash algorithms <hash-algorithms>` ``sha3_224()``, ``sha3_256()``,
+``sha3_384()``, and ``sha3_512()``.  (Contributed by Christian Heimes in
+:issue:`16113`.)
+
+
+html
+----
+
+Added a new :func:`html.unescape` function that converts HTML5 character
+references to the corresponding Unicode characters.
+(Contributed by Ezio Melotti in :issue:`2927`)
+
+Added a new *convert_charrefs* keyword argument to
+:class:`~html.parser.HTMLParser` that, when ``True``, automatically converts
+all character references.  For backward-compatibility, its value defaults
+to ``False``, but it will change to ``True`` in future versions, so you
+are invited to set it explicitly and update your code to use this new feature.
+(Contributed by Ezio Melotti in :issue:`13633`)
+
+The *strict* argument of :class:`~html.parser.HTMLParser` is now deprecated.
+(Contributed by Ezio Melotti in :issue:`15114`)
+
+
+importlib
+---------
+
+The :class:`~importlib.abc.InspectLoader` ABC defines a new method,
+:meth:`~importlib.abc.InspectLoader.source_to_code` that accepts source
+data and a path and returns a code object.  The default implementation
+is equivalent to ``compile(data, path, 'exec', dont_inherit=True)``.
+(Contributed by Eric Snow and Brett Cannon in :issue:`15627`.)
+
+
+inspect
+-------
+
+
+The inspect module now offers a basic :ref:`command line interface
+<inspect-module-cli>` to quickly display source code and other
+information for modules, classes and functions. (Contributed by Claudiu Popa
+and Nick Coghlan in :issue:`18626`)
+
+:func:`~inspect.unwrap` makes it easy to unravel wrapper function chains
+created by :func:`functools.wraps` (and any other API that sets the
+``__wrapped__`` attribute on a wrapper function). (Contributed by
+Daniel Urban, Aaron Iles and Nick Coghlan in :issue:`13266`)
+
+As part of the implementation of the new :mod:`enum` module, the
+:mod:`inspect` module now has substantially better support for custom
+``__dir__`` methods and dynamic class attributes provided through
+metaclasses (Contributed by Ethan Furman in :issue:`18929` and
+:issue:`19030`)
+
+
+.. _whatsnew-marshal-3:
+
+marshal
+-------
+
+The default :mod:`marshal` version has been bumped to 3.  The code implementing
+the new version restores the Python2 behavior of recording only one copy of
+interned strings and preserving the interning on deserialization, and extends
+this "one copy" ability to any object type (including handling recursive
+references).  This reduces both the size of ``.pyc`` files and the amount of
+memory a module occupies in memory when it is loaded from a ``.pyc`` (or
+``.pyo``) file.  (Contributed by Kristján Valur Jónsson in :issue:`16475`.)
+
+
+mmap
+----
+
+mmap objects can now be weakref'ed.
+(Contributed by Valerie Lambert in :issue:`4885`.)
+
+
+mock
+----
+
+:mod:`~unittest.mock` objects now inspect their specification signatures when
+matching calls, which means an argument can now be matched by either position
+or name, instead of only by position.  (Contributed by Antoine Pitrou in
+:issue:`17015`.)
+
+
+multiprocessing
+---------------
+
+.. _whatsnew-multiprocessing-no-fork:
+
+On Unix, two new :ref:`start methods <multiprocessing-start-methods>`
+(``spawn`` and ``forkserver``) have been added for starting processes using
+:mod:`multiprocessing`.  These make the mixing of processes with threads more
+robust, and the ``spawn`` method matches the semantics that multiprocessing has
+always used on Windows. (Contributed by Richard Oudkerk in :issue:`8713`).
+
+Also, except when using the old *fork* start method, child processes
+will no longer inherit unneeded handles/file descriptors from their parents
+(part of :issue:`8713`).
+
+:mod:`multiprocessing` now relies on :mod:`runpy` (which implements the
+``-m`` switch) to initialise ``__main__`` appropriately in child processes
+when using the ``spawn`` or ``forkserver`` start methods. This resolves some
+edge cases where combining multiprocessing, the ``-m`` command line switch
+and explicit relative imports could cause obscure failures in child
+processes. (Contributed by Nick Coghlan in :issue:`19946`)
+
+
+os
+--
+
+New functions to get and set the :ref:`inheritable flag <fd_inheritance>` of a file
+descriptors or a Windows handle:
+
+* :func:`os.get_inheritable`, :func:`os.set_inheritable`
+* :func:`os.get_handle_inheritable`, :func:`os.set_handle_inheritable`
+
+
+pdb
+---
+
+The ``print`` command has been removed from :mod:`pdb`, restoring access to the
+``print`` function.
+
+Rationale: Python2's ``pdb`` did not have a ``print`` command; instead,
+entering ``print`` executed the ``print`` statement.  In Python3 ``print`` was
+mistakenly made an alias for the pdb :pdbcmd:`p` command.  ``p``, however,
+prints the ``repr`` of its argument, not the ``str`` like the Python2 ``print``
+command did.  Worse, the Python3 ``pdb print`` command shadowed the Python3
+``print`` function, making it inaccessible at the ``pdb`` prompt.
+
+(Contributed by Connor Osborn in :issue:`18764`.)
+
+
+.. _whatsnew-protocol-4:
+
+pickle
+------
+
+protocol 4
+
+:mod:`pickle` now supports (but does not use by default) a new pickle protocol,
+protocol 4.  This new protocol addresses a number of issues that were present
+in previous protocols, such as the serialization of nested classes, very large
+strings and containers, or classes whose :meth:`__new__` method takes
+keyword-only arguments.  It also provides some efficiency improvements.
+
+.. seealso::
+
+   :pep:`3154` -- Pickle protocol 4
+      PEP written by Antoine Pitrou and implemented by Alexandre Vassalotti.
+
+
+poplib
+------
+
+Two new methods have been added to :mod:`poplib`: :meth:`~poplib.POP3.capa`,
+which returns the list of capabilities advertised by the POP server, and
+:meth:`~poplib.POP3.stls`, which switches a clear-text POP3 session into an
+encrypted POP3 session if the POP server supports it.  (Contributed by Lorenzo
+Catucci in :issue:`4473`.)
+
+
+pprint
+------
+
+The :mod:`pprint` module now supports *compact* mode for formatting long
+sequences (:issue:`19132`).
+
+
+pty
+---
+
+:func:`pty.spawn` now returns the status value from :func:`os.waitpid` on
+the child process, instead of ``None``.  (Contributed by Gregory P. Smith.)
+
+
+pydoc
+-----
+
+While significant changes have not been made to :mod:`pydoc` directly,
+its handling of custom ``__dir__`` methods and various descriptor
+behaviours has been improved substantially by the underlying changes in
+the :mod:`inspect` module.
+
+
+re
+--
+
+Added :func:`re.fullmatch` function and :meth:`regex.fullmatch` method,
+which anchor the pattern at both ends of the string to match.
+(Contributed by Matthew Barnett in :issue:`16203`.)
+
+The repr of :ref:`regex objects <re-objects>` now includes the pattern
+and the flags; the repr of :ref:`match objects <match-objects>` now
+includes the start, end, and the part of the string that matched.
+(Contributed by Serhiy Storchaka in :issue:`13592` and :issue:`17087`.)
+
+
+resource
+--------
+
+New :func:`resource.prlimit` function and Linux specific constants.
+(Contributed by Christian Heimes in :issue:`16595` and :issue:`19324`.)
+
+
+select
+------
+
+:class:`~select.epoll` objects now support the context management protocol.
+When used in a :keyword:`with` statement, the :meth:`~select.epoll.close`
+method will be called automatically at the end of the block.  (Contributed
+by Serhiy Storchaka in :issue:`16488`.)
+
+
+shelve
+------
+
+:class:`~shelve.Shelf` instances may now be used in :keyword:`with` statements,
+and will be automatically closed at the end of the :keyword:`with` block.
+(Contributed by Filip Gruszczyński in :issue:`13896`.)
+
+
+smtplib
+-------
+
+:exc:`~smtplib.SMTPException` is now a subclass of :exc:`OSError`, which allows
+both socket level errors and SMTP protocol level errors to be caught in one
+try/except statement by code that only cares whether or not an error occurred.
+(:issue:`2118`).
+
+
+socket
+------
+
+The socket module now supports the :data:`~socket.CAN_BCM` protocol on
+platforms that support it.  (Contributed by Brian Thorne in :issue:`15359`.)
+
+Socket objects have new methods to get or set their :ref:`inheritable flag
+<fd_inheritance>`, :meth:`~socket.socket.get_inheritable` and
+:meth:`~socket.socket.set_inheritable`.
+
+The ``socket.AF_*`` and ``socket.SOCK_*`` constants are now enumeration values
+using the new :mod:`enum` module.  This allows meaningful names to be printed
+during debugging, instead of integer "magic numbers".
+
+
+sqlite3
+-------
+
+A new boolean parameter, *uri*, to the :func:`~sqlite3.connect` function can
+be used to indicate that the *database* parameter is a ``uri`` (see
+the `SQLite URI documentation <http://www.sqlite.org/uri.html>`_).
+(Contributed by poq in :issue:`13773`.)
+
+
+ssl
+---
+
+.. _whatsnew-tls-11-12:
+
+:data:`~ssl.PROTOCOL_TLSv1_1` and :data:`~ssl.PROTOCOL_TLSv1_2` (TLSv1.1 and
+TLSv1.2 support) have been added; support for these protocols is only available if
+Python is linked with OpenSSL 1.0.1 or later.  (Contributed by Michele Orrù and
+Antoine Pitrou in :issue:`16692`)
+
+New diagnostic functions :func:`~ssl.get_default_verify_paths`,
+:meth:`~ssl.SSLContext.cert_store_stats` and
+:meth:`~ssl.SSLContext.get_ca_certs` (Contributed by Christian Heimes
+in :issue:`18143` and :issue:`18147`)
+
+Add :func:`ssl.enum_cert_store` to retrieve certificates and CRL from Windows'
+cert store.  (Contributed by Christian Heimes in :issue:`17134`.)
+
+Support for server-side SNI using the new
+:meth:`ssl.SSLContext.set_servername_callback` method.
+(Contributed by Daniel Black in :issue:`8109`.)
+
+
+stat
+----
+
+The :mod:`stat` module is now backed by a C implementation in :mod:`_stat`. A C
+implementation is required as most of the values aren't standardized and
+platform-dependent.  (Contributed by Christian Heimes in :issue:`11016`.)
+
+The module supports new file types: door, event port and whiteout.
+
+
+struct
+------
+
+Streaming struct unpacking using :func:`struct.iter_unpack`.
+(Contributed by Antoine Pitrou in :issue:`17804`.)
+
+
+sunau
+-----
+
+The :meth:`~sunau.getparams` method now returns a namedtuple rather than a
+plain tuple.  (Contributed by Claudiu Popa in :issue:`18901`.)
+
+:meth:`sunau.open` now supports the context manager protocol (:issue:`18878`).
+
+
+sys
+---
+
+New function :func:`sys.getallocatedblocks` returns the current number of
+blocks allocated by the interpreter (in CPython with the default
+``--with-pymalloc`` setting, this is allocations made through the
+:c:func:`PyObject_Malloc` API).  This can be useful for tracking memory leaks,
+especially if automated via a test suite.  (Contributed by Antoine Pitrou
+in :issue:`13390`.)
+
+
+traceback
+---------
+
+A new :func:`traceback.clear_frames` function takes a traceback object
+and clears the local variables in all of the frames it references,
+reducing the amount of memory consumed (:issue:`1565525`).
+
+
+urllib
+------
+
+:mod:`urllib.request` now supports ``data:`` URLs via the
+:class:`~urllib.request.DataHandler` class.  (Contributed by Mathias Panzenböck
+in :issue:`16423`.)
+
+
+unittest
+--------
+
+Support for easy dynamically-generated subtests using the
+:meth:`~unittest.TestCase.subTest` context manager.
+(Contributed by Antoine Pitrou in :issue:`16997`.)
+
+:func:`unittest.main` now also accepts an iterable of test names for
+*defaultTest*, where previously it only accepted a single test name as a
+string.  (Contributed by Jyrki Pulliainen in :issue:`15132`.)
+
+
+venv
+----
+
+:mod:`venv` now includes activation scripts for the ``csh`` and ``fish``
+shells (Contributed by Andrew Svetlov in :issue:`15417`.)
+
+
+wave
+----
+
+The :meth:`~wave.getparams` method now returns a namedtuple rather than a
+plain tuple.  (Contributed by Claudiu Popa in :issue:`17487`.)
+
+:meth:`wave.open` now supports the context manager protocol.  (Contributed
+by Claudiu Popa in :issue:`17616`.)
+
+
+weakref
+-------
+
+New :class:`~weakref.WeakMethod` class simulates weak references to bound
+methods. (Contributed by Antoine Pitrou in :issue:`14631`.)
+
+New :class:`~weakref.finalize` class makes it possible to register a callback
+to be invoked when an object is garbage collected, without needing to
+carefully manage the lifecycle of the weak reference itself. (Contributed by
+Richard Oudkerk in :issue:`15528`)
+
+
+xml.etree
+---------
+
+Add an event-driven parser for non-blocking applications,
+:class:`~xml.etree.ElementTree.XMLPullParser`.
+(Contributed by Antoine Pitrou in :issue:`17741`.)
+
+The :mod:`xml.etree.ElementTree` :func:`~xml.etree.ElementTree.tostring` and
+:func:`~xml.etree.ElementTree.tostringlist` functions, and the
+:class:`~xml.etree.ElementTree.ElementTree`
+:meth:`~xml.etree.ElementTree.ElementTree.write` method, now have a
+*short_empty_elements* :ref:`keyword-only parameter <keyword-only_parameter>`
+providing control over whether elements with no content are written in
+abbreviated (``<tag />``) or expanded (``<tag></tag>``) form.  (Contributed by
+Ariel Poliak and Serhiy Storchaka in :issue:`14377`.)
+
+
+zipfile.PyZipfile
+-----------------
+
+Add a filter function to ignore some packages (tests for instance),
+:meth:`~zipfile.PyZipFile.writepy`.
+(Contributed by Christian Tismer in :issue:`19274`.)
+
+
+CPython Implementation Changes
+==============================
+
+
+.. _whatsnew-pep-445:
+
+PEP 445: Customization of CPython Memory Allocators
+---------------------------------------------------
+
+:pep:`445` adds new C level interfaces to customize memory allocation in
+the CPython interpreter.
+
+.. seealso::
+
+   :pep:`445` -- Add new APIs to customize Python memory allocators
+      PEP written and implemented by Victor Stinner.
+
+
+.. _whatsnew-pep-442:
+
+PEP 442: Safe Object Finalization
+---------------------------------
+
+:pep:`442` removes the current limitations and quirks of object finalization
+in CPython. With it, objects with :meth:`__del__` methods, as well as
+generators with :keyword:`finally` clauses, can be finalized when they are
+part of a reference cycle.
+
+As part of this change, module globals are no longer forcibly set to
+:const:`None` during interpreter shutdown in most cases, instead relying
+on the normal operation of the cyclic garbage collector.  This avoids a
+whole class of interpreter-shutdown-time errors, usually involving
+``__del__`` methods, that have plagued Python since the cyclic GC
+was first introduced.
+
+.. seealso::
+
+   :pep:`442` -- Safe object finalization
+      PEP written and implemented by Antoine Pitrou.
+
+
+.. _whatsnew-pep-456:
+
+PEP 456: Secure and Interchangeable Hash Algorithm
+--------------------------------------------------
+
+:pep:`456` follows up on earlier security fix work done on Python's hash
+algorithm to address certain DOS attacks to which public facing APIs backed by
+dictionary lookups may be subject.  (See :issue:`14621` for the start of the
+current round of improvements.)  The PEP unifies CPython's hash code to make it
+easier for a packager to substitute a different hash algorithm, and switches
+Python's default implementation to a SipHash implementation on platforms that
+have a 64 bit data type.  Any performance differences in comparison with the
+older FNV algorithm are trivial.
+
+The PEP adds additional fields to the :func:`sys.hash_info` struct sequence to
+describe the hash algorithm in use by the currently executing binary.  Otherwise,
+the PEP does not alter any existing CPython APIs.
+
+
+.. _whatsnew-pep-436:
+
+PEP 436: Argument Clinic
+------------------------
+
+"Argument Clinic" (:pep:`436`) is now part of the CPython build process
+and can be used to simplify the process of defining and maintaining
+accurate signatures for builtins and standard library extension modules
+implemented in C.
+
+.. note::
+   The Argument Clinic PEP is not fully up to date with the state of the
+   implementation. This has been deemed acceptable by the release manager
+   and core development team in this case, as Argument Clinic will not
+   be made available as a public API for third party use in Python 3.4.
+
+.. seealso::
+
+   :pep:`436` -- The Argument Clinic DSL
+       PEP written and implemented by Larry Hastings.
+
+
+Other Build and C API Changes
+-----------------------------
+
+* The new :c:func:`Py_SetStandardStreamEncoding` pre-initialization API
+  allows applications embedding the CPython interpreter to reliably force
+  a particular encoding and error handler for the standard streams
+  (Contributed by Bastien Montagne and Nick Coghlan in :issue:`16129`)
+
+* Most Python C APIs that don't mutate string arguments are now correctly
+  marked as accepting ``const char *`` rather than ``char *`` (Contributed
+  by Serhiy Storchaka in :issue:`1772673`).
+
+* New shell version of ``python-config``; can be used even when a python
+  interpreter is not available (for example, in cross compilation scenarios).
+
+
+Other Improvements
+==================
+
+* Tab-completion is now enabled by default in the interactive interpreter.
+  (Contributed by Antoine Pitrou and Éric Araujo in :issue:`5845`.)
+
+* Invoking the Python interpreter with ``--version`` now outputs the version to
+  standard output instead of standard error (:issue:`18338`). Similar changes
+  were made to :mod:`argparse` (:issue:`18920`) and other modules that have
+  script-like invocation capabilities (:issue:`18922`).
+
+* The CPython Windows installer now adds ``.py`` to the :envvar:`PATHEXT`
+  variable when extensions are registered, allowing users to run a python
+  script at the windows command prompt by just typing its name without the
+  ``.py`` extension.  (Contributed by Paul Moore in :issue:`18569`.)
+
+* A new ``make`` target `coverage-report
+  <http://docs.python.org/devguide/coverage.html#measuring-coverage-of-c-code-with-gcov-and-lcov>`_
+  will build python, run the test suite, and generate an HTML coverage report
+  for the C codebase using ``gcov`` and `lcov
+  <http://ltp.sourceforge.net/coverage/lcov.php>`_.
+
+* The ``-R`` option to the :ref:`python regression test suite <regrtest>` now
+  also checks for memory allocation leaks, using
+  :func:`sys.getallocatedblocks()`.  (Contributed by Antoine Pitrou in
+  :issue:`13390`).
+
+
+Significant Optimizations
+=========================
+
+* The UTF-32 decoder is now 3x to 4x faster.
+
+* The cost of hash collisions for sets is now reduced.  Each hash table
+  probe now checks a series of consecutive, adjacent key/hash pairs before
+  continuing to make random probes through the hash table.  This exploits
+  cache locality to make collision resolution less expensive.
+
+  The collision resolution scheme can be described as a hybrid of linear
+  probing and open addressing.  The number of additional linear probes
+  defaults to nine.  This can be changed at compile-time by defining
+  LINEAR_PROBES to be any value.  Set LINEAR_PROBES=0 to turn-off
+  linear probing entirely.
+
+  (Contributed by Raymond Hettinger in :issue:`18771`.)
+
+* The interpreter starts about 30% faster. A couple of measures lead to the
+  speedup. The interpreter loads fewer modules on startup, e.g. the :mod:`re`,
+  :mod:`collections` and :mod:`locale` modules and their dependencies are no
+  longer imported by default. The marshal module has been improved to load
+  compiled Python code faster.
+
+  (Contributed by Antoine Pitrou, Christian Heimes and Victor Stinner in
+  :issue:`19219`, :issue:`19218`, :issue:`19209`, :issue:`19205` and
+  :issue:`9548`)
+
+* :class:`bz2.BZ2File` is now as fast or faster than the Python2 version for
+  most cases.  :class:`lzma.LZMAFile` has also been optimized.  (Contributed by
+  Serhiy Storchaka and Nadeem Vawda in :issue:`16034`.)
+
+* :func:`random.getrandbits` is 20%-40% faster for small integers (the most
+  common use case).  (Contributed by Serhiy Storchaka in :issue:`16674`).
+
+
+Deprecated
+==========
+
+This section covers various APIs and other features that have been deprecated
+in Python 3.4, and will be removed in Python 3.5 or later.  In most (but not
+all) cases, using the deprecated APIs will produce a :exc:`DeprecationWarning`
+when the interpreter is run with deprecation warnings enabled (for example, by
+using ``-Wd``).
+
+
+Deprecated Python Modules, Functions and Methods
+------------------------------------------------
+
+* :meth:`difflib.SequenceMatcher.isbjunk` and
+  :meth:`difflib.SequenceMatcher.isbpopular` were removed: use ``x in sm.bjunk`` and
+  ``x in sm.bpopular``, where *sm* is a :class:`~difflib.SequenceMatcher` object.
+
+* :func:`importlib.util.module_for_loader` is pending deprecation. Using
+  :func:`importlib.util.module_to_load` and
+  :meth:`importlib.abc.Loader.init_module_attrs` allows subclasses of a loader
+  to more easily customize module loading.
+
+* The :mod:`imp` module is pending deprecation. To keep compatibility with
+  Python 2/3 code bases, the module's removal is currently not scheduled.
+
+* The :mod:`formatter` module is pending deprecation and is slated for removal
+  in Python 3.6.
+
+* MD5 as default digestmod for :mod:`hmac` is deprecated. Python 3.6 will
+  require an explicit digest name or constructor as *digestmod* argument.
+
+* The internal ``Netrc`` class in the :mod:`ftplib` module has been documented
+  as deprecated in its docstring for quite some time.  It now emits a
+  :exc:`DeprecationWarning` and will be removed completely in Python 3.5.
+
+
+Deprecated Functions and Types in the C API
+-------------------------------------------
+
+XXX: None so far
+
+
+Deprecated Features
+-------------------
+
+* Running :ref:`idle` with the ``-n`` flag (no subprocess) is deprecated.
+  However, the feature will not be removed until :issue:`18823` is resolved.
+
+* The site module adding a "site-python" directory to sys.path, if it
+  exists, is deprecated (:issue:`19375`).
+
+
+Removed
+=======
+
+The following obsolete and previously deprecated APIs and features have been
+removed in Python 3.4:
+
+* Support for the following operating systems has been removed from the source
+  and build tools:
+
+    * OS/2 (:issue:`16135`).
+    * Windows 2000 (changeset e52df05b496a).
+    * VMS (:issue:`16136`).
+
+* The unmaintained ``Misc/TextMate`` and ``Misc/vim`` directories have been
+  removed (see the `devguide <http://docs.python.org/devguide>`_
+  for what to use instead).
+
+* The ``SO`` makefile macro is removed (it was replaced by the
+  ``SHLIB_SUFFIX`` and ``EXT_SUFFIX`` macros) (:issue:`16754`).
+
+* The ``PyThreadState.tick_counter`` field has been removed; its value has
+  been meaningless since Python 3.2, when the "new GIL" was introduced.
+
+* ``PyLoader`` and ``PyPycLoader`` have been removed from :mod:`importlib`.
+  (Contributed by Taras Lyapun in :issue:`15641`.)
+
+
+Porting to Python 3.4
+=====================
+
+This section lists previously described changes and other bugfixes
+that may require changes to your code.
+
+Changes in the Python API
+-------------------------
+
+* The ABCs defined in :mod:`importlib.abc` now either raise the appropriate
+  exception or return a default value instead of raising
+  :exc:`NotImplementedError` blindly. This will only affect code calling
+  :func:`super` and falling through all the way to the ABCs. For compatibility,
+  catch both :exc:`NotImplementedError` or the appropriate exception as needed.
+
+* The module type now initializes the :attr:`__package__` and :attr:`__loader__`
+  attributes to ``None`` by default. To determine if these attributes were set
+  in a backwards-compatible fashion, use e.g.
+  ``getattr(module, '__loader__', None) is not None``.
+
+* :meth:`importlib.util.module_for_loader` now sets ``__loader__`` and
+  ``__package__`` unconditionally to properly support reloading. If this is not
+  desired then you will need to set these attributes manually. You can use
+  :func:`importlib.util.module_to_load` for module management.
+
+* Import now resets relevant attributes (e.g. ``__name__``, ``__loader__``,
+  ``__package__``, ``__file__``, ``__cached__``) unconditionally when reloading.
+
+* Frozen packages no longer set ``__path__`` to a list containing the package
+  name but an empty list instead. Determing if a module is a package should be
+  done using ``hasattr(module, '__path__')``.
+
+* :func:`py_compile.compile` now raises :exc:`FileExistsError` if the file path
+  it would write to is a symlink or a non-regular file. This is to act as a
+  warning that import will overwrite those files with a regular file regardless
+  of what type of file path they were originally.
+
+* :meth:`importlib.abc.SourceLoader.get_source` no longer raises
+  :exc:`ImportError` when the source code being loaded triggers a
+  :exc:`SyntaxError` or :exc:`UnicodeDecodeError`. As :exc:`ImportError` is
+  meant to be raised only when source code cannot be found but it should, it was
+  felt to be over-reaching/overloading of that meaning when the source code is
+  found but improperly structured. If you were catching ImportError before and
+  wish to continue to ignore syntax or decoding issues, catch all three
+  exceptions now.
+
+* :func:`functools.update_wrapper` and :func:`functools.wraps` now correctly
+  set the ``__wrapped__`` attribute to the function being wrapper, even if
+  that function also had its ``__wrapped__`` attribute set. This means
+  ``__wrapped__`` attributes now correctly link a stack of decorated
+  functions rather than every ``__wrapped__`` attribute in the chain
+  referring to the innermost function. Introspection libraries that
+  assumed the previous behaviour was intentional can use
+  :func:`inspect.unwrap` to access the first function in the chain that has
+  no ``__wrapped__`` attribute.
+
+* :class:`importlib.machinery.PathFinder` now passes on the current working
+  directory to objects in :data:`sys.path_hooks` for the empty string. This
+  results in :data:`sys.path_importer_cache` never containing ``''``, thus
+  iterating through :data:`sys.path_importer_cache` based on :data:`sys.path`
+  will not find all keys. A module's ``__file__`` when imported in the current
+  working directory will also now have an absolute path, including when using
+  ``-m`` with the interpreter (this does not influence when the path to a file
+  is specified on the command-line).
+
+
+Changes in the C API
+--------------------
+
+* :c:func:`PyErr_SetImportError` now sets :exc:`TypeError` when its **msg**
+  argument is not set. Previously only ``NULL`` was returned with no exception
+  set.
+
+* The result of the :c:data:`PyOS_ReadlineFunctionPointer` callback must
+  now be a string allocated by :c:func:`PyMem_RawMalloc` or
+  :c:func:`PyMem_RawRealloc`, or *NULL* if an error occurred, instead of a
+  string allocated by :c:func:`PyMem_Malloc` or :c:func:`PyMem_Realloc`.
+
+* :c:func:`PyThread_set_key_value` now always set the value. In Python
+  3.3, the function did nothing if the key already exists (if the current
+  value is a non-NULL pointer).
+
+* The ``f_tstate`` (thread state) field of the :c:type:`PyFrameObject`
+  structure has been removed to fix a bug: see :issue:`14432` for the
+  rationale.
+
