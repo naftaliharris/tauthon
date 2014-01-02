@@ -182,7 +182,7 @@ class upload(PyPIRCCommand):
             result = urlopen(request)
             status = result.getcode()
             reason = result.msg
-        except socket.error as e:
+        except OSError as e:
             self.announce(str(e), log.ERROR)
             return
         except HTTPError as e:

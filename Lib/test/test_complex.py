@@ -220,6 +220,8 @@ class ComplexTest(unittest.TestCase):
         self.assertRaises(TypeError, complex, OS(None))
         self.assertRaises(TypeError, complex, NS(None))
         self.assertRaises(TypeError, complex, {})
+        self.assertRaises(TypeError, complex, NS(1.5))
+        self.assertRaises(TypeError, complex, NS(1))
 
         self.assertAlmostEqual(complex("1+10j"), 1+10j)
         self.assertAlmostEqual(complex(10), 10+0j)
@@ -301,6 +303,7 @@ class ComplexTest(unittest.TestCase):
         self.assertRaises(TypeError, float, 5+3j)
         self.assertRaises(ValueError, complex, "")
         self.assertRaises(TypeError, complex, None)
+        self.assertRaisesRegex(TypeError, "not 'NoneType'", complex, None)
         self.assertRaises(ValueError, complex, "\0")
         self.assertRaises(ValueError, complex, "3\09")
         self.assertRaises(TypeError, complex, "1", "2")

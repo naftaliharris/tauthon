@@ -72,9 +72,7 @@ class BaseRotatingHandler(logging.FileHandler):
             if self.shouldRollover(record):
                 self.doRollover()
             logging.FileHandler.emit(self, record)
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
     def rotation_filename(self, default_name):
@@ -201,11 +199,12 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
     If backupCount is > 0, when rollover is done, no more than backupCount
     files are kept - the oldest ones are deleted.
     """
-    def __init__(self, filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False):
+    def __init__(self, filename, when='h', interval=1, backupCount=0, encoding=None, delay=False, utc=False, atTime=None):
         BaseRotatingHandler.__init__(self, filename, 'a', encoding, delay)
         self.when = when.upper()
         self.backupCount = backupCount
         self.utc = utc
+        self.atTime = atTime
         # Calculate the real rollover interval, which is just the number of
         # seconds between rollovers.  Also set the filename suffix used when
         # a rollover occurs.  Current 'when' events supported:
@@ -275,9 +274,22 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
             currentHour = t[3]
             currentMinute = t[4]
             currentSecond = t[5]
-            # r is the number of seconds left between now and midnight
-            r = _MIDNIGHT - ((currentHour * 60 + currentMinute) * 60 +
-                    currentSecond)
+            currentDay = t[6]
+            # r is the number of seconds left between now and the next rotation
+            if self.atTime is None:
+                rotate_ts = _MIDNIGHT
+            else:
+                rotate_ts = ((self.atTime.hour * 60 + self.atTime.minute)*60 +
+                    self.atTime.second)
+
+            r = rotate_ts - ((currentHour * 60 + currentMinute) * 60 +
+                currentSecond)
+            if r < 0:
+                # Rotate time is before the current time (for example when
+                # self.rotateAt is 13:45 and it now 14:15), rotation is
+                # tomorrow.
+                r += _MIDNIGHT
+                currentDay = (currentDay + 1) % 7
             result = currentTime + r
             # If we are rolling over on a certain day, add in the number of days until
             # the next rollover, but offset by 1 since we just calculated the time
@@ -295,7 +307,7 @@ class TimedRotatingFileHandler(BaseRotatingHandler):
             # This is because the above time calculation takes us to midnight on this
             # day, i.e. the start of the next day.
             if self.when.startswith('W'):
-                day = t[6] # 0 is Monday
+                day = currentDay # 0 is Monday
                 if day != self.dayOfWeek:
                     if day < self.dayOfWeek:
                         daysToWait = self.dayOfWeek - day
@@ -444,11 +456,8 @@ class WatchedFileHandler(logging.FileHandler):
         try:
             # stat the file by path, checking for existence
             sres = os.stat(self.baseFilename)
-        except OSError as err:
-            if err.errno == errno.ENOENT:
-                sres = None
-            else:
-                raise
+        except FileNotFoundError:
+            sres = None
         # compare file system stat with that of our stream file handle
         if not sres or sres[ST_DEV] != self.dev or sres[ST_INO] != self.ino:
             if self.stream is not None:
@@ -485,6 +494,10 @@ class SocketHandler(logging.Handler):
         logging.Handler.__init__(self)
         self.host = host
         self.port = port
+        if port is None:
+            self.address = host
+        else:
+            self.address = (host, port)
         self.sock = None
         self.closeOnError = False
         self.retryTime = None
@@ -500,15 +513,17 @@ class SocketHandler(logging.Handler):
         A factory method which allows subclasses to define the precise
         type of socket they want.
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if hasattr(s, 'settimeout'):
-            s.settimeout(timeout)
-        try:
-            s.connect((self.host, self.port))
-            return s
-        except socket.error:
-            s.close()
-            raise
+        if self.port is not None:
+            result = socket.create_connection(self.address, timeout=timeout)
+        else:
+            result = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            result.settimeout(timeout)
+            try:
+                result.connect(self.address)
+            except OSError:
+                result.close()  # Issue 19182
+                raise
+        return result
 
     def createSocket(self):
         """
@@ -528,7 +543,7 @@ class SocketHandler(logging.Handler):
             try:
                 self.sock = self.makeSocket()
                 self.retryTime = None # next time, no delay before trying
-            except socket.error:
+            except OSError:
                 #Creation failed, so set the retry time and return.
                 if self.retryTime is None:
                     self.retryPeriod = self.retryStart
@@ -552,16 +567,8 @@ class SocketHandler(logging.Handler):
         #but are still unable to connect.
         if self.sock:
             try:
-                if hasattr(self.sock, "sendall"):
-                    self.sock.sendall(s)
-                else: #pragma: no cover
-                    sentsofar = 0
-                    left = len(s)
-                    while left > 0:
-                        sent = self.sock.send(s[sentsofar:])
-                        sentsofar = sentsofar + sent
-                        left = left - sent
-            except socket.error: #pragma: no cover
+                self.sock.sendall(s)
+            except OSError: #pragma: no cover
                 self.sock.close()
                 self.sock = None  # so we can call createSocket next time
 
@@ -611,9 +618,7 @@ class SocketHandler(logging.Handler):
         try:
             s = self.makePickle(record)
             self.send(s)
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
     def close(self):
@@ -652,7 +657,11 @@ class DatagramHandler(SocketHandler):
         The factory method of SocketHandler is here overridden to create
         a UDP socket (SOCK_DGRAM).
         """
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if self.port is None:
+            family = socket.AF_UNIX
+        else:
+            family = socket.AF_INET
+        s = socket.socket(family, socket.SOCK_DGRAM)
         return s
 
     def send(self, s):
@@ -665,7 +674,7 @@ class DatagramHandler(SocketHandler):
         """
         if self.sock is None:
             self.createSocket()
-        self.sock.sendto(s, (self.host, self.port))
+        self.sock.sendto(s, self.address)
 
 class SysLogHandler(logging.Handler):
     """
@@ -777,7 +786,11 @@ class SysLogHandler(logging.Handler):
 
         If address is specified as a string, a UNIX socket is used. To log to a
         local syslogd, "SysLogHandler(address="/dev/log")" can be used.
-        If facility is not specified, LOG_USER is used.
+        If facility is not specified, LOG_USER is used. If socktype is
+        specified as socket.SOCK_DGRAM or socket.SOCK_STREAM, that specific
+        socket type will be used. For Unix sockets, you can also specify a
+        socktype of None, in which case socket.SOCK_DGRAM will be used, falling
+        back to socket.SOCK_STREAM.
         """
         logging.Handler.__init__(self)
 
@@ -807,7 +820,7 @@ class SysLogHandler(logging.Handler):
             self.socket.connect(address)
             # it worked, so set self.socktype to the used type
             self.socktype = use_socktype
-        except socket.error:
+        except OSError:
             self.socket.close()
             if self.socktype is not None:
                 # user didn't specify falling back, so fail
@@ -818,7 +831,7 @@ class SysLogHandler(logging.Handler):
                 self.socket.connect(address)
                 # it worked, so set self.socktype to the used type
                 self.socktype = use_socktype
-            except socket.error:
+            except OSError:
                 self.socket.close()
                 raise
 
@@ -871,10 +884,9 @@ class SysLogHandler(logging.Handler):
             msg = self.ident + msg
         if self.append_nul:
             msg += '\000'
-        """
-        We need to convert record level to lowercase, maybe this will
-        change in the future.
-        """
+
+        # We need to convert record level to lowercase, maybe this will
+        # change in the future.
         prio = '<%d>' % self.encodePriority(self.facility,
                                             self.mapPriority(record.levelname))
         prio = prio.encode('utf-8')
@@ -885,7 +897,7 @@ class SysLogHandler(logging.Handler):
             if self.unixsocket:
                 try:
                     self.socket.send(msg)
-                except socket.error:
+                except OSError:
                     self.socket.close()
                     self._connect_unixsocket(self.address)
                     self.socket.send(msg)
@@ -893,9 +905,7 @@ class SysLogHandler(logging.Handler):
                 self.socket.sendto(msg, self.address)
             else:
                 self.socket.sendall(msg)
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 class SMTPHandler(logging.Handler):
@@ -973,9 +983,7 @@ class SMTPHandler(logging.Handler):
                 smtp.login(self.username, self.password)
             smtp.sendmail(self.fromaddr, self.toaddrs, msg)
             smtp.quit()
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 class NTEventLogHandler(logging.Handler):
@@ -1060,9 +1068,7 @@ class NTEventLogHandler(logging.Handler):
                 type = self.getEventType(record)
                 msg = self.format(record)
                 self._welu.ReportEvent(self.appname, id, cat, type, [msg])
-            except (KeyboardInterrupt, SystemExit): #pragma: no cover
-                raise
-            except:
+            except Exception:
                 self.handleError(record)
 
     def close(self):
@@ -1147,9 +1153,7 @@ class HTTPHandler(logging.Handler):
             if self.method == "POST":
                 h.send(data.encode('utf-8'))
             h.getresponse()    #can't do anything with the result
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 class BufferingHandler(logging.Handler):
@@ -1329,9 +1333,7 @@ class QueueHandler(logging.Handler):
         """
         try:
             self.enqueue(self.prepare(record))
-        except (KeyboardInterrupt, SystemExit): #pragma: no cover
-            raise
-        except:
+        except Exception:
             self.handleError(record)
 
 if threading:
