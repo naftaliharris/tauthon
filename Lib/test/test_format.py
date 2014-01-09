@@ -142,7 +142,6 @@ class FormatTest(unittest.TestCase):
         testformat("%#+027.23X", big, "+0X0001234567890ABCDEF12345")
         # same, except no 0 flag
         testformat("%#+27.23X", big, " +0X001234567890ABCDEF12345")
-        testformat("%x", float(big), "123456_______________", 6)
         big = 0o12345670123456701234567012345670  # 32 octal digits
         testformat("%o", big, "12345670123456701234567012345670")
         testformat("%o", -big, "-12345670123456701234567012345670")
@@ -182,7 +181,6 @@ class FormatTest(unittest.TestCase):
         testformat("%034.33o", big, "0012345670123456701234567012345670")
         # base marker shouldn't change that
         testformat("%0#34.33o", big, "0o012345670123456701234567012345670")
-        testformat("%o", float(big), "123456__________________________", 6)
         # Some small ints, in both Python int and flavors).
         testformat("%d", 42, "42")
         testformat("%d", -42, "-42")
@@ -193,7 +191,6 @@ class FormatTest(unittest.TestCase):
         testformat("%#x", 1, "0x1")
         testformat("%#X", 1, "0X1")
         testformat("%#X", 1, "0X1")
-        testformat("%#x", 1.0, "0x1")
         testformat("%#o", 1, "0o1")
         testformat("%#o", 1, "0o1")
         testformat("%#o", 0, "0o0")
@@ -210,12 +207,10 @@ class FormatTest(unittest.TestCase):
         testformat("%x", -0x42, "-42")
         testformat("%x", 0x42, "42")
         testformat("%x", -0x42, "-42")
-        testformat("%x", float(0x42), "42")
         testformat("%o", 0o42, "42")
         testformat("%o", -0o42, "-42")
         testformat("%o", 0o42, "42")
         testformat("%o", -0o42, "-42")
-        testformat("%o", float(0o42), "42")
         testformat("%r", "\u0378", "'\\u0378'")  # non printable
         testformat("%a", "\u0378", "'\\u0378'")  # non printable
         testformat("%r", "\u0374", "'\u0374'")   # printable
@@ -307,27 +302,41 @@ class FormatTest(unittest.TestCase):
         finally:
             locale.setlocale(locale.LC_ALL, oldloc)
 
+    @support.cpython_only
+    def test_optimisations(self):
+        text = "abcde" # 5 characters
 
+        self.assertIs("%s" % text, text)
+        self.assertIs("%.5s" % text, text)
+        self.assertIs("%.10s" % text, text)
+        self.assertIs("%1s" % text, text)
+        self.assertIs("%5s" % text, text)
 
-def test_main():
-    support.run_unittest(FormatTest)
+        self.assertIs("{0}".format(text), text)
+        self.assertIs("{0:s}".format(text), text)
+        self.assertIs("{0:.5s}".format(text), text)
+        self.assertIs("{0:.10s}".format(text), text)
+        self.assertIs("{0:1s}".format(text), text)
+        self.assertIs("{0:5s}".format(text), text)
 
+        self.assertIs(text % (), text)
+        self.assertIs(text.format(), text)
+
+    @support.cpython_only
     def test_precision(self):
-        INT_MAX = 2147483647
+        from _testcapi import INT_MAX
 
         f = 1.2
         self.assertEqual(format(f, ".0f"), "1")
         self.assertEqual(format(f, ".3f"), "1.200")
         with self.assertRaises(ValueError) as cm:
             format(f, ".%sf" % (INT_MAX + 1))
-        self.assertEqual(str(cm.exception), "precision too big")
 
         c = complex(f)
-        self.assertEqual(format(f, ".0f"), "1")
-        self.assertEqual(format(f, ".3f"), "1.200")
+        self.assertEqual(format(c, ".0f"), "1+0j")
+        self.assertEqual(format(c, ".3f"), "1.200+0.000j")
         with self.assertRaises(ValueError) as cm:
-            format(f, ".%sf" % (INT_MAX + 1))
-        self.assertEqual(str(cm.exception), "precision too big")
+            format(c, ".%sf" % (INT_MAX + 1))
 
 
 if __name__ == "__main__":
