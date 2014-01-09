@@ -31,7 +31,7 @@ Here are some of the useful functions provided by this module:
 __author__ = ('Ka-Ping Yee <ping@lfw.org>',
               'Yury Selivanov <yselivanov@sprymix.com>')
 
-import imp
+import ast
 import importlib.machinery
 import itertools
 import linecache
@@ -268,21 +268,40 @@ def getmembers(object, predicate=None):
     else:
         mro = ()
     results = []
-    for key in dir(object):
-        # First try to get the value via __dict__. Some descriptors don't
-        # like calling their __get__ (see bug #1785).
-        for base in mro:
-            if key in base.__dict__:
-                value = base.__dict__[key]
-                break
-        else:
-            try:
-                value = getattr(object, key)
-            except AttributeError:
+    processed = set()
+    names = dir(object)
+    # :dd any DynamicClassAttributes to the list of names if object is a class;
+    # this may result in duplicate entries if, for example, a virtual
+    # attribute with the same name as a DynamicClassAttribute exists
+    try:
+        for base in object.__bases__:
+            for k, v in base.__dict__.items():
+                if isinstance(v, types.DynamicClassAttribute):
+                    names.append(k)
+    except AttributeError:
+        pass
+    for key in names:
+        # First try to get the value via getattr.  Some descriptors don't
+        # like calling their __get__ (see bug #1785), so fall back to
+        # looking in the __dict__.
+        try:
+            value = getattr(object, key)
+            # handle the duplicate key
+            if key in processed:
+                raise AttributeError
+        except AttributeError:
+            for base in mro:
+                if key in base.__dict__:
+                    value = base.__dict__[key]
+                    break
+            else:
+                # could be a (currently) missing slot member, or a buggy
+                # __dir__; discard and move on
                 continue
         if not predicate or predicate(value):
             results.append((key, value))
-    results.sort()
+        processed.add(key)
+    results.sort(key=lambda pair: pair[0])
     return results
 
 Attribute = namedtuple('Attribute', 'name kind defining_class object')
@@ -299,60 +318,106 @@ def classify_class_attrs(cls):
                'class method'    created via classmethod()
                'static method'   created via staticmethod()
                'property'        created via property()
-               'method'          any other flavor of method
+               'method'          any other flavor of method or descriptor
                'data'            not a method
 
         2. The class which defined this attribute (a class).
 
-        3. The object as obtained directly from the defining class's
-           __dict__, not via getattr.  This is especially important for
-           data attributes:  C.data is just a data object, but
-           C.__dict__['data'] may be a data descriptor with additional
-           info, like a __doc__ string.
+        3. The object as obtained by calling getattr; if this fails, or if the
+           resulting object does not live anywhere in the class' mro (including
+           metaclasses) then the object is looked up in the defining class's
+           dict (found by walking the mro).
+
+    If one of the items in dir(cls) is stored in the metaclass it will now
+    be discovered and not have None be listed as the class in which it was
+    defined.  Any items whose home class cannot be discovered are skipped.
     """
 
     mro = getmro(cls)
+    metamro = getmro(type(cls)) # for attributes stored in the metaclass
+    metamro = tuple([cls for cls in metamro if cls not in (type, object)])
+    class_bases = (cls,) + mro
+    all_bases = class_bases + metamro
     names = dir(cls)
+    # :dd any DynamicClassAttributes to the list of names;
+    # this may result in duplicate entries if, for example, a virtual
+    # attribute with the same name as a DynamicClassAttribute exists.
+    for base in mro:
+        for k, v in base.__dict__.items():
+            if isinstance(v, types.DynamicClassAttribute):
+                names.append(k)
     result = []
+    processed = set()
+
     for name in names:
         # Get the object associated with the name, and where it was defined.
+        # Normal objects will be looked up with both getattr and directly in
+        # its class' dict (in case getattr fails [bug #1785], and also to look
+        # for a docstring).
+        # For DynamicClassAttributes on the second pass we only look in the
+        # class's dict.
+        #
         # Getting an obj from the __dict__ sometimes reveals more than
         # using getattr.  Static and class methods are dramatic examples.
-        # Furthermore, some objects may raise an Exception when fetched with
-        # getattr(). This is the case with some descriptors (bug #1785).
-        # Thus, we only use getattr() as a last resort.
         homecls = None
-        for base in (cls,) + mro:
-            if name in base.__dict__:
-                obj = base.__dict__[name]
-                homecls = base
-                break
-        else:
-            obj = getattr(cls, name)
-            homecls = getattr(obj, "__objclass__", homecls)
-
-        # Classify the object.
-        if isinstance(obj, staticmethod):
-            kind = "static method"
-        elif isinstance(obj, classmethod):
-            kind = "class method"
-        elif isinstance(obj, property):
-            kind = "property"
-        elif ismethoddescriptor(obj):
-            kind = "method"
-        elif isdatadescriptor(obj):
-            kind = "data"
-        else:
-            obj_via_getattr = getattr(cls, name)
-            if (isfunction(obj_via_getattr) or
-                ismethoddescriptor(obj_via_getattr)):
-                kind = "method"
+        get_obj = None
+        dict_obj = None
+        if name not in processed:
+            try:
+                if name == '__dict__':
+                    raise Exception("__dict__ is special, don't want the proxy")
+                get_obj = getattr(cls, name)
+            except Exception as exc:
+                pass
             else:
-                kind = "data"
-            obj = obj_via_getattr
-
+                homecls = getattr(get_obj, "__objclass__", homecls)
+                if homecls not in class_bases:
+                    # if the resulting object does not live somewhere in the
+                    # mro, drop it and search the mro manually
+                    homecls = None
+                    last_cls = None
+                    # first look in the classes
+                    for srch_cls in class_bases:
+                        srch_obj = getattr(srch_cls, name, None)
+                        if srch_obj == get_obj:
+                            last_cls = srch_cls
+                    # then check the metaclasses
+                    for srch_cls in metamro:
+                        try:
+                            srch_obj = srch_cls.__getattr__(cls, name)
+                        except AttributeError:
+                            continue
+                        if srch_obj == get_obj:
+                            last_cls = srch_cls
+                    if last_cls is not None:
+                        homecls = last_cls
+        for base in all_bases:
+            if name in base.__dict__:
+                dict_obj = base.__dict__[name]
+                if homecls not in metamro:
+                    homecls = base
+                break
+        if homecls is None:
+            # unable to locate the attribute anywhere, most likely due to
+            # buggy custom __dir__; discard and move on
+            continue
+        obj = get_obj or dict_obj
+        # Classify the object or its descriptor.
+        if isinstance(dict_obj, staticmethod):
+            kind = "static method"
+            obj = dict_obj
+        elif isinstance(dict_obj, classmethod):
+            kind = "class method"
+            obj = dict_obj
+        elif isinstance(dict_obj, property):
+            kind = "property"
+            obj = dict_obj
+        elif isfunction(obj) or ismethoddescriptor(obj):
+            kind = "method"
+        else:
+            kind = "data"
         result.append(Attribute(name, kind, homecls, obj))
-
+        processed.add(name)
     return result
 
 # ----------------------------------------------------------- class helpers
@@ -360,6 +425,40 @@ def classify_class_attrs(cls):
 def getmro(cls):
     "Return tuple of base classes (including cls) in method resolution order."
     return cls.__mro__
+
+# -------------------------------------------------------- function helpers
+
+def unwrap(func, *, stop=None):
+    """Get the object wrapped by *func*.
+
+   Follows the chain of :attr:`__wrapped__` attributes returning the last
+   object in the chain.
+
+   *stop* is an optional callback accepting an object in the wrapper chain
+   as its sole argument that allows the unwrapping to be terminated early if
+   the callback returns a true value. If the callback never returns a true
+   value, the last object in the chain is returned as usual. For example,
+   :func:`signature` uses this to stop unwrapping if any object in the
+   chain has a ``__signature__`` attribute defined.
+
+   :exc:`ValueError` is raised if a cycle is encountered.
+
+    """
+    if stop is None:
+        def _is_wrapper(f):
+            return hasattr(f, '__wrapped__')
+    else:
+        def _is_wrapper(f):
+            return hasattr(f, '__wrapped__') and not stop(f)
+    f = func  # remember the original func for error reporting
+    memo = {id(f)} # Memoise by id to tolerate non-hashable objects
+    while _is_wrapper(func):
+        func = func.__wrapped__
+        id_func = id(func)
+        if id_func in memo:
+            raise ValueError('wrapper loop when unwrapping {!r}'.format(f))
+        memo.add(id_func)
+    return func
 
 # -------------------------------------------------- source code extraction
 def indentsize(line):
@@ -440,6 +539,9 @@ def getmoduleinfo(path):
     """Get the module name, suffix, mode, and module type for a given file."""
     warnings.warn('inspect.getmoduleinfo() is deprecated', DeprecationWarning,
                   2)
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', PendingDeprecationWarning)
+        import imp
     filename = os.path.basename(path)
     suffixes = [(-len(suffix), suffix, mode, mtype)
                     for suffix, mode, mtype in imp.get_suffixes()]
@@ -476,7 +578,7 @@ def getsourcefile(object):
     if os.path.exists(filename):
         return filename
     # only return a non-existent filename if the module has a PEP 302 loader
-    if hasattr(getmodule(object, filename), '__loader__'):
+    if getattr(getmodule(object, filename), '__loader__', None) is not None:
         return filename
     # or it is in the linecache
     if filename in linecache.cache:
@@ -545,13 +647,13 @@ def findsource(object):
 
     The argument may be a module, class, method, function, traceback, frame,
     or code object.  The source code is returned as a list of all the lines
-    in the file and the line number indexes a line in that list.  An IOError
+    in the file and the line number indexes a line in that list.  An OSError
     is raised if the source code cannot be retrieved."""
 
     file = getfile(object)
     sourcefile = getsourcefile(object)
     if not sourcefile and file[:1] + file[-1:] != '<>':
-        raise IOError('source code not available')
+        raise OSError('source code not available')
     file = sourcefile if sourcefile else file
 
     module = getmodule(object, file)
@@ -560,7 +662,7 @@ def findsource(object):
     else:
         lines = linecache.getlines(file)
     if not lines:
-        raise IOError('could not get source code')
+        raise OSError('could not get source code')
 
     if ismodule(object):
         return lines, 0
@@ -586,7 +688,7 @@ def findsource(object):
             candidates.sort()
             return lines, candidates[0][1]
         else:
-            raise IOError('could not find class definition')
+            raise OSError('could not find class definition')
 
     if ismethod(object):
         object = object.__func__
@@ -598,14 +700,14 @@ def findsource(object):
         object = object.f_code
     if iscode(object):
         if not hasattr(object, 'co_firstlineno'):
-            raise IOError('could not find function definition')
+            raise OSError('could not find function definition')
         lnum = object.co_firstlineno - 1
         pat = re.compile(r'^(\s*def\s)|(.*(?<!\w)lambda(:|\s))|^(\s*@)')
         while lnum > 0:
             if pat.match(lines[lnum]): break
             lnum = lnum - 1
         return lines, lnum
-    raise IOError('could not find code object')
+    raise OSError('could not find code object')
 
 def getcomments(object):
     """Get lines of comments immediately preceding an object's source code.
@@ -614,7 +716,7 @@ def getcomments(object):
     """
     try:
         lines, lnum = findsource(object)
-    except (IOError, TypeError):
+    except (OSError, TypeError):
         return None
 
     if ismodule(object):
@@ -710,7 +812,7 @@ def getsourcelines(object):
     The argument may be a module, class, method, function, traceback, frame,
     or code object.  The source code is returned as a list of the lines
     corresponding to the object and the line number indicates where in the
-    original source file the first line of code was found.  An IOError is
+    original source file the first line of code was found.  An OSError is
     raised if the source code cannot be retrieved."""
     lines, lnum = findsource(object)
 
@@ -722,7 +824,7 @@ def getsource(object):
 
     The argument may be a module, class, method, function, traceback, frame,
     or code object.  The source code is returned as a single string.  An
-    IOError is raised if the source code cannot be retrieved."""
+    OSError is raised if the source code cannot be retrieved."""
     lines, lnum = getsourcelines(object)
     return ''.join(lines)
 
@@ -1125,7 +1227,7 @@ def getframeinfo(frame, context=1):
         start = lineno - 1 - context//2
         try:
             lines, lnum = findsource(frame)
-        except IOError:
+        except OSError:
             lines = index = None
         else:
             start = max(start, 1)
@@ -1347,6 +1449,9 @@ def signature(obj):
         sig = signature(obj.__func__)
         return sig.replace(parameters=tuple(sig.parameters.values())[1:])
 
+    # Was this function wrapped by a decorator?
+    obj = unwrap(obj, stop=(lambda f: hasattr(f, "__signature__")))
+
     try:
         sig = obj.__signature__
     except AttributeError:
@@ -1355,16 +1460,12 @@ def signature(obj):
         if sig is not None:
             return sig
 
-    try:
-        # Was this function wrapped by a decorator?
-        wrapped = obj.__wrapped__
-    except AttributeError:
-        pass
-    else:
-        return signature(wrapped)
 
     if isinstance(obj, types.FunctionType):
         return Signature.from_function(obj)
+
+    if isinstance(obj, types.BuiltinFunctionType):
+        return Signature.from_builtin(obj)
 
     if isinstance(obj, functools.partial):
         sig = signature(obj.func)
@@ -1847,6 +1948,106 @@ class Signature:
                    return_annotation=annotations.get('return', _empty),
                    __validate_parameters__=False)
 
+    @classmethod
+    def from_builtin(cls, func):
+        s = getattr(func, "__text_signature__", None)
+        if not s:
+            return None
+
+        if s.endswith("/)"):
+            kind = Parameter.POSITIONAL_ONLY
+            s = s[:-2] + ')'
+        else:
+            kind = Parameter.POSITIONAL_OR_KEYWORD
+
+        s = "def foo" + s + ": pass"
+
+        try:
+            module = ast.parse(s)
+        except SyntaxError:
+            return None
+        if not isinstance(module, ast.Module):
+            return None
+
+        # ast.FunctionDef
+        f = module.body[0]
+
+        parameters = []
+        empty = Parameter.empty
+        invalid = object()
+
+        def parse_attribute(node):
+            if not isinstance(node.ctx, ast.Load):
+                return None
+
+            value = node.value
+            o = parse_node(value)
+            if o is invalid:
+                return invalid
+
+            if isinstance(value, ast.Name):
+                name = o
+                if name not in sys.modules:
+                    return invalid
+                o = sys.modules[name]
+
+            return getattr(o, node.attr, invalid)
+
+        def parse_node(node):
+            if isinstance(node, ast.arg):
+                if node.annotation != None:
+                    raise ValueError("Annotations are not currently supported")
+                return node.arg
+            if isinstance(node, ast.Num):
+                return node.n
+            if isinstance(node, ast.Str):
+                return node.s
+            if isinstance(node, ast.NameConstant):
+                return node.value
+            if isinstance(node, ast.Attribute):
+                return parse_attribute(node)
+            if isinstance(node, ast.Name):
+                if not isinstance(node.ctx, ast.Load):
+                    return invalid
+                return node.id
+            return invalid
+
+        def p(name_node, default_node, default=empty):
+            name = parse_node(name_node)
+            if name is invalid:
+                return None
+            if default_node:
+                o = parse_node(default_node)
+                if o is invalid:
+                    return None
+                default = o if o is not invalid else default
+            parameters.append(Parameter(name, kind, default=default, annotation=empty))
+
+        # non-keyword-only parameters
+        args = reversed(f.args.args)
+        defaults = reversed(f.args.defaults)
+        iter = itertools.zip_longest(args, defaults, fillvalue=None)
+        for name, default in reversed(list(iter)):
+            p(name, default)
+
+        # *args
+        if f.args.vararg:
+            kind = Parameter.VAR_POSITIONAL
+            p(f.args.vararg, empty)
+
+        # keyword-only arguments
+        kind = Parameter.KEYWORD_ONLY
+        for name, default in zip(f.args.kwonlyargs, f.args.kw_defaults):
+            p(name, default)
+
+        # **kwargs
+        if f.args.kwarg:
+            kind = Parameter.VAR_KEYWORD
+            p(f.args.kwarg, empty)
+
+        return cls(parameters, return_annotation=cls.empty)
+
+
     @property
     def parameters(self):
         return self._parameters
@@ -2074,3 +2275,64 @@ class Signature:
             rendered += ' -> {}'.format(anno)
 
         return rendered
+
+def _main():
+    """ Logic for inspecting an object given at command line """
+    import argparse
+    import importlib
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'object',
+         help="The object to be analysed. "
+              "It supports the 'module:qualname' syntax")
+    parser.add_argument(
+        '-d', '--details', action='store_true',
+        help='Display info about the module rather than its source code')
+
+    args = parser.parse_args()
+
+    target = args.object
+    mod_name, has_attrs, attrs = target.partition(":")
+    try:
+        obj = module = importlib.import_module(mod_name)
+    except Exception as exc:
+        msg = "Failed to import {} ({}: {})".format(mod_name,
+                                                    type(exc).__name__,
+                                                    exc)
+        print(msg, file=sys.stderr)
+        exit(2)
+
+    if has_attrs:
+        parts = attrs.split(".")
+        obj = module
+        for part in parts:
+            obj = getattr(obj, part)
+
+    if module.__name__ in sys.builtin_module_names:
+        print("Can't get info for builtin modules.", file=sys.stderr)
+        exit(1)
+
+    if args.details:
+        print('Target: {}'.format(target))
+        print('Origin: {}'.format(getsourcefile(module)))
+        print('Cached: {}'.format(module.__cached__))
+        if obj is module:
+            print('Loader: {}'.format(repr(module.__loader__)))
+            if hasattr(module, '__path__'):
+                print('Submodule search path: {}'.format(module.__path__))
+        else:
+            try:
+                __, lineno = findsource(obj)
+            except Exception:
+                pass
+            else:
+                print('Line: {}'.format(lineno))
+
+        print('\n')
+    else:
+        print(getsource(obj))
+
+
+if __name__ == "__main__":
+    _main()
