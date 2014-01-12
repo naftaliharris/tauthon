@@ -6,9 +6,11 @@ from test.support import run_unittest, TESTFN, unlink
 # rip off all interesting stuff from test_profile
 import cProfile
 from test.test_profile import ProfileTest, regenerate_expected_output
+from test.profilee import testfunc
 
 class CProfileTest(ProfileTest):
     profilerclass = cProfile.Profile
+    profilermodule = cProfile
     expected_max_output = "{built-in method max}"
 
     def get_expected_output(self):
@@ -27,6 +29,7 @@ class CProfileTest(ProfileTest):
                     obj.enable()
                     obj = _lsprof.Profiler(1)
                     obj.disable()
+                    obj.clear()
                 finally:
                     sys.stderr = orig_stderr
         finally:
