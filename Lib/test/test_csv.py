@@ -136,12 +136,12 @@ class Test_Csv(unittest.TestCase):
                 return 10;
             def __getitem__(self, i):
                 if i > 2:
-                    raise IOError
-        self.assertRaises(IOError, self._write_test, BadList(), '')
+                    raise OSError
+        self.assertRaises(OSError, self._write_test, BadList(), '')
         class BadItem:
             def __str__(self):
-                raise IOError
-        self.assertRaises(IOError, self._write_test, [BadItem()], '')
+                raise OSError
+        self.assertRaises(OSError, self._write_test, [BadItem()], '')
 
     def test_write_bigfield(self):
         # This exercises the buffer realloc functionality
@@ -186,9 +186,9 @@ class Test_Csv(unittest.TestCase):
     def test_writerows(self):
         class BrokenFile:
             def write(self, buf):
-                raise IOError
+                raise OSError
         writer = csv.writer(BrokenFile())
-        self.assertRaises(IOError, writer.writerows, [['a']])
+        self.assertRaises(OSError, writer.writerows, [['a']])
 
         with TemporaryFile("w+", newline='') as fileobj:
             writer = csv.writer(fileobj)
@@ -307,6 +307,15 @@ class Test_Csv(unittest.TestCase):
             fileobj.seek(0)
             for i, row in enumerate(csv.reader(fileobj)):
                 self.assertEqual(row, rows[i])
+
+    def test_roundtrip_escaped_unquoted_newlines(self):
+        with TemporaryFile("w+", newline='') as fileobj:
+            writer = csv.writer(fileobj,quoting=csv.QUOTE_NONE,escapechar="\\")
+            rows = [['a\nb','b'],['c','x\r\nd']]
+            writer.writerows(rows)
+            fileobj.seek(0)
+            for i, row in enumerate(csv.reader(fileobj,quoting=csv.QUOTE_NONE,escapechar="\\")):
+                self.assertEqual(row,rows[i])
 
 class TestDialectRegistry(unittest.TestCase):
     def test_registry_badargs(self):
@@ -836,10 +845,11 @@ class TestDialectValidity(unittest.TestCase):
             d = mydialect()
 
         for field_name in ("delimiter", "escapechar", "quotechar"):
-            self.assertRaises(csv.Error, create_invalid, field_name, "")
-            self.assertRaises(csv.Error, create_invalid, field_name, "abc")
-            self.assertRaises(csv.Error, create_invalid, field_name, b'x')
-            self.assertRaises(csv.Error, create_invalid, field_name, 5)
+            with self.subTest(field_name=field_name):
+                self.assertRaises(csv.Error, create_invalid, field_name, "")
+                self.assertRaises(csv.Error, create_invalid, field_name, "abc")
+                self.assertRaises(csv.Error, create_invalid, field_name, b'x')
+                self.assertRaises(csv.Error, create_invalid, field_name, 5)
 
 
 class TestSniffer(unittest.TestCase):
