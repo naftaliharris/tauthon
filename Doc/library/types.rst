@@ -107,9 +107,35 @@ Standard names are defined for the following types:
    C".)
 
 
-.. data:: ModuleType
+.. class:: ModuleType(name, doc=None)
 
-   The type of modules.
+   The type of :term:`modules <module>`. Constructor takes the name of the
+   module to be created and optionally its :term:`docstring`.
+
+   .. attribute:: __doc__
+
+      The :term:`docstring` of the module. Defaults to ``None``.
+
+   .. attribute:: __loader__
+
+      The :term:`loader` which loaded the module. Defaults to ``None``.
+
+      .. versionchanged:: 3.4
+         Defaults to ``None``. Previously the attribute was optional.
+
+   .. attribute:: __name__
+
+      The name of the module.
+
+   .. attribute:: __package__
+
+      Which :term:`package` a module belongs to. If the module is top-level
+      (i.e. not a part of any specific package) then the attribute should be set
+      to ``''``, else it should be set to the name of the package (which can be
+      :attr:`__name__` if the module is a package itself). Defaults to ``None``.
+
+      .. versionchanged:: 3.4
+         Defaults to ``None``. Previously the attribute was optional.
 
 
 .. data:: TracebackType
@@ -212,6 +238,8 @@ Standard names are defined for the following types:
                keys = sorted(self.__dict__)
                items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
                return "{}({})".format(type(self).__name__, ", ".join(items))
+           def __eq__(self, other):
+               return self.__dict__ == other.__dict__
 
    ``SimpleNamespace`` may be useful as a replacement for ``class NS: pass``.
    However, for a structured record type use :func:`~collections.namedtuple`
