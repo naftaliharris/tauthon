@@ -9,7 +9,6 @@ __all__ = ["BZ2File", "BZ2Compressor", "BZ2Decompressor",
 
 __author__ = "Nadeem Vawda <nadeem.vawda@gmail.com>"
 
-import builtins
 import io
 import warnings
 
@@ -28,6 +27,8 @@ _MODE_WRITE    = 3
 
 _BUFFER_SIZE = 8192
 
+_builtin_open = open
+
 
 class BZ2File(io.BufferedIOBase):
 
@@ -43,16 +44,17 @@ class BZ2File(io.BufferedIOBase):
     def __init__(self, filename, mode="r", buffering=None, compresslevel=9):
         """Open a bzip2-compressed file.
 
-        If filename is a str or bytes object, is gives the name of the file to
-        be opened. Otherwise, it should be a file object, which will be used to
-        read or write the compressed data.
+        If filename is a str or bytes object, it gives the name
+        of the file to be opened. Otherwise, it should be a file object,
+        which will be used to read or write the compressed data.
 
-        mode can be 'r' for reading (default), 'w' for (over)writing, or 'a' for
-        appending. These can equivalently be given as 'rb', 'wb', and 'ab'.
+        mode can be 'r' for reading (default), 'w' for (over)writing,
+        'x' for creating exclusively, or 'a' for appending. These can
+        equivalently be given as 'rb', 'wb', 'xb', and 'ab'.
 
         buffering is ignored. Its use is deprecated.
 
-        If mode is 'w' or 'a', compresslevel can be a number between 1
+        If mode is 'w', 'x' or 'a', compresslevel can be a number between 1
         and 9 specifying the level of compression: 1 produces the least
         compression, and 9 (default) produces the most compression.
 
@@ -85,15 +87,19 @@ class BZ2File(io.BufferedIOBase):
             mode = "wb"
             mode_code = _MODE_WRITE
             self._compressor = BZ2Compressor(compresslevel)
+        elif mode in ("x", "xb"):
+            mode = "xb"
+            mode_code = _MODE_WRITE
+            self._compressor = BZ2Compressor(compresslevel)
         elif mode in ("a", "ab"):
             mode = "ab"
             mode_code = _MODE_WRITE
             self._compressor = BZ2Compressor(compresslevel)
         else:
-            raise ValueError("Invalid mode: {!r}".format(mode))
+            raise ValueError("Invalid mode: %r" % (mode,))
 
         if isinstance(filename, (str, bytes)):
-            self._fp = builtins.open(filename, mode)
+            self._fp = _builtin_open(filename, mode)
             self._closefp = True
             self._mode = mode_code
         elif hasattr(filename, "read") or hasattr(filename, "write"):
@@ -189,15 +195,17 @@ class BZ2File(io.BufferedIOBase):
 
             if not rawblock:
                 if self._decompressor.eof:
+                    # End-of-stream marker and end of file. We're good.
                     self._mode = _MODE_READ_EOF
                     self._size = self._pos
                     return False
                 else:
+                    # Problem - we were expecting more compressed data.
                     raise EOFError("Compressed file ended before the "
                                    "end-of-stream marker was reached")
 
-            # Continue to next stream.
             if self._decompressor.eof:
+                # Continue to next stream.
                 self._decompressor = BZ2Decompressor()
                 try:
                     self._buffer = self._decompressor.decompress(rawblock)
@@ -419,7 +427,7 @@ class BZ2File(io.BufferedIOBase):
                     self._read_all(return_data=False)
                 offset = self._size + offset
             else:
-                raise ValueError("Invalid value for whence: {}".format(whence))
+                raise ValueError("Invalid value for whence: %s" % (whence,))
 
             # Make it so that offset is the number of bytes to skip forward.
             if offset < self._pos:
@@ -443,20 +451,20 @@ def open(filename, mode="rb", compresslevel=9,
          encoding=None, errors=None, newline=None):
     """Open a bzip2-compressed file in binary or text mode.
 
-    The filename argument can be an actual filename (a str or bytes object), or
-    an existing file object to read from or write to.
+    The filename argument can be an actual filename (a str or bytes
+    object), or an existing file object to read from or write to.
 
-    The mode argument can be "r", "rb", "w", "wb", "a" or "ab" for binary mode,
-    or "rt", "wt" or "at" for text mode. The default mode is "rb", and the
-    default compresslevel is 9.
+    The mode argument can be "r", "rb", "w", "wb", "x", "xb", "a" or
+    "ab" for binary mode, or "rt", "wt", "xt" or "at" for text mode.
+    The default mode is "rb", and the default compresslevel is 9.
 
-    For binary mode, this function is equivalent to the BZ2File constructor:
-    BZ2File(filename, mode, compresslevel). In this case, the encoding, errors
-    and newline arguments must not be provided.
+    For binary mode, this function is equivalent to the BZ2File
+    constructor: BZ2File(filename, mode, compresslevel). In this case,
+    the encoding, errors and newline arguments must not be provided.
 
     For text mode, a BZ2File object is created, and wrapped in an
-    io.TextIOWrapper instance with the specified encoding, error handling
-    behavior, and line ending(s).
+    io.TextIOWrapper instance with the specified encoding, error
+    handling behavior, and line ending(s).
 
     """
     if "t" in mode:

@@ -36,8 +36,9 @@ typedef struct _frame {
            non-generator frames. See the save_exc_state and swap_exc_state
            functions in ceval.c for details of their use. */
     PyObject *f_exc_type, *f_exc_value, *f_exc_traceback;
+    /* Borrowed reference to a generator, or NULL */
+    PyObject *f_gen;
 
-    PyThreadState *f_tstate;
     int f_lasti;                /* Last instruction if called */
     /* Call PyFrame_GetLineNumber() instead of reading this field
        directly.  As of 2.3 f_lineno is only valid when tracing is
@@ -46,6 +47,7 @@ typedef struct _frame {
        bytecode index. */
     int f_lineno;               /* Current line number */
     int f_iblock;               /* index in f_blockstack */
+    char f_executing;           /* whether the frame is still executing */
     PyTryBlock f_blockstack[CO_MAXBLOCKS]; /* for try and loop blocks */
     PyObject *f_localsplus[1];  /* locals+stack, dynamically sized */
 } PyFrameObject;
@@ -75,6 +77,8 @@ PyAPI_FUNC(PyObject **) PyFrame_ExtendStack(PyFrameObject *, int, int);
 /* Conversions between "fast locals" and locals in dictionary */
 
 PyAPI_FUNC(void) PyFrame_LocalsToFast(PyFrameObject *, int);
+
+PyAPI_FUNC(int) PyFrame_FastToLocalsWithError(PyFrameObject *f);
 PyAPI_FUNC(void) PyFrame_FastToLocals(PyFrameObject *);
 
 PyAPI_FUNC(int) PyFrame_ClearFreeList(void);
