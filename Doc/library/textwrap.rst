@@ -10,11 +10,11 @@
 
 --------------
 
-The :mod:`textwrap` module provides two convenience functions, :func:`wrap` and
-:func:`fill`, as well as :class:`TextWrapper`, the class that does all the work,
-and two utility functions, :func:`dedent` and :func:`indent`.  If you're just wrapping or filling one
-or two  text strings, the convenience functions should be good enough;
-otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
+The :mod:`textwrap` module provides some convenience functions,
+as well as :class:`TextWrapper`, the class that does all the work.
+If you're just wrapping or filling one or two text strings, the convenience
+functions should be good enough; otherwise, you should use an instance of
+:class:`TextWrapper` for efficiency.
 
 .. function:: wrap(text, width=70, **kwargs)
 
@@ -39,19 +39,24 @@ otherwise,  you should use an instance of :class:`TextWrapper` for efficiency.
    In particular, :func:`fill` accepts exactly the same keyword arguments as
    :func:`wrap`.
 
-Both :func:`wrap` and :func:`fill` work by creating a :class:`TextWrapper`
-instance and calling a single method on it.  That instance is not reused, so for
-applications that wrap/fill many text strings, it will be more efficient for you
-to create your own :class:`TextWrapper` object.
 
-Text is preferably wrapped on whitespaces and right after the hyphens in
-hyphenated words; only then will long words be broken if necessary, unless
-:attr:`TextWrapper.break_long_words` is set to false.
+.. function:: shorten(text, width=70, *, placeholder=" [...]")
 
-Two additional utility function, :func:`dedent` and :func:`indent`, are
-provided to remove indentation from strings that have unwanted whitespace
-to the left of the text and to add an arbitrary prefix to selected lines
-in a block of text.
+   Collapse and truncate the given text to fit in the given width.
+
+   The text first has its whitespace collapsed.  If it then fits in
+   the *width*, it is returned unchanged.  Otherwise, as many words
+   as possible are joined and then the *placeholder* is appended::
+
+      >>> textwrap.shorten("Hello  world!", width=12)
+      'Hello world!'
+      >>> textwrap.shorten("Hello  world!", width=11)
+      'Hello [...]'
+      >>> textwrap.shorten("Hello world", width=10, placeholder="...")
+      'Hello...'
+
+   .. versionadded:: 3.4
+
 
 .. function:: dedent(text)
 
@@ -101,6 +106,16 @@ in a block of text.
       +
       + world
 
+
+:func:`wrap`, :func:`fill` and :func:`shorten` work by creating a
+:class:`TextWrapper` instance and calling a single method on it.  That
+instance is not reused, so for applications that process many text
+strings, it may be more efficient to create your own
+:class:`TextWrapper` object.
+
+Text is preferably wrapped on whitespaces and right after the hyphens in
+hyphenated words; only then will long words be broken if necessary, unless
+:attr:`TextWrapper.break_long_words` is set to false.
 
 .. class:: TextWrapper(**kwargs)
 
@@ -235,7 +250,23 @@ in a block of text.
       was to always allow breaking hyphenated words.
 
 
-   :class:`TextWrapper` also provides two public methods, analogous to the
+   .. attribute:: max_lines
+
+      (default: ``None``) If not ``None``, then the text be will truncated to
+      *max_lines* lines.
+
+      .. versionadded:: 3.4
+
+
+   .. attribute:: placeholder
+
+      (default: ``' [...]'``) String that will be appended to the last line of
+      text if it will be truncated.
+
+      .. versionadded:: 3.4
+
+
+   :class:`TextWrapper` also provides some public methods, analogous to the
    module-level convenience functions:
 
    .. method:: wrap(text)
@@ -251,4 +282,3 @@ in a block of text.
 
       Wraps the single paragraph in *text*, and returns a single string
       containing the wrapped paragraph.
-
