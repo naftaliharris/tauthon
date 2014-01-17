@@ -228,6 +228,47 @@ class IntTestCases(unittest.TestCase):
         self.assertRaises(TypeError, int, base=10)
         self.assertRaises(TypeError, int, base=0)
 
+    def test_int_base_limits(self):
+        """Testing the supported limits of the int() base parameter."""
+        self.assertEqual(int('0', 5), 0)
+        with self.assertRaises(ValueError):
+            int('0', 1)
+        with self.assertRaises(ValueError):
+            int('0', 37)
+        with self.assertRaises(ValueError):
+            int('0', -909)  # An old magic value base from Python 2.
+        with self.assertRaises(ValueError):
+            int('0', base=0-(2**234))
+        with self.assertRaises(ValueError):
+            int('0', base=2**234)
+        # Bases 2 through 36 are supported.
+        for base in range(2,37):
+            self.assertEqual(int('0', base=base), 0)
+
+    def test_int_base_bad_types(self):
+        """Not integer types are not valid bases; issue16772."""
+        with self.assertRaises(TypeError):
+            int('0', 5.5)
+        with self.assertRaises(TypeError):
+            int('0', 5.0)
+
+    def test_int_base_indexable(self):
+        class MyIndexable(object):
+            def __init__(self, value):
+                self.value = value
+            def __index__(self):
+                return self.value
+
+        # Check out of range bases.
+        for base in 2**100, -2**100, 1, 37:
+            with self.assertRaises(ValueError):
+                int('43', base)
+
+        # Check in-range bases.
+        self.assertEqual(int('101', base=MyIndexable(2)), 5)
+        self.assertEqual(int('101', base=MyIndexable(10)), 101)
+        self.assertEqual(int('101', base=MyIndexable(36)), 1 + 36**2)
+
     def test_non_numeric_input_types(self):
         # Test possible non-numeric types for the argument x, including
         # subclasses of the explicitly documented accepted types.
@@ -359,15 +400,18 @@ class IntTestCases(unittest.TestCase):
                 return True
 
         bad_int = BadInt()
-        n = int(bad_int)
+        with self.assertWarns(DeprecationWarning):
+            n = int(bad_int)
         self.assertEqual(n, 1)
 
         bad_int = BadInt2()
-        n = int(bad_int)
+        with self.assertWarns(DeprecationWarning):
+            n = int(bad_int)
         self.assertEqual(n, 1)
 
         bad_int = TruncReturnsBadInt()
-        n = int(bad_int)
+        with self.assertWarns(DeprecationWarning):
+            n = int(bad_int)
         self.assertEqual(n, 1)
 
         good_int = TruncReturnsIntSubclass()
