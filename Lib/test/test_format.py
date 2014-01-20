@@ -307,27 +307,41 @@ class FormatTest(unittest.TestCase):
         finally:
             locale.setlocale(locale.LC_ALL, oldloc)
 
+    @support.cpython_only
+    def test_optimisations(self):
+        text = "abcde" # 5 characters
 
+        self.assertIs("%s" % text, text)
+        self.assertIs("%.5s" % text, text)
+        self.assertIs("%.10s" % text, text)
+        self.assertIs("%1s" % text, text)
+        self.assertIs("%5s" % text, text)
 
-def test_main():
-    support.run_unittest(FormatTest)
+        self.assertIs("{0}".format(text), text)
+        self.assertIs("{0:s}".format(text), text)
+        self.assertIs("{0:.5s}".format(text), text)
+        self.assertIs("{0:.10s}".format(text), text)
+        self.assertIs("{0:1s}".format(text), text)
+        self.assertIs("{0:5s}".format(text), text)
 
+        self.assertIs(text % (), text)
+        self.assertIs(text.format(), text)
+
+    @support.cpython_only
     def test_precision(self):
-        INT_MAX = 2147483647
+        from _testcapi import INT_MAX
 
         f = 1.2
         self.assertEqual(format(f, ".0f"), "1")
         self.assertEqual(format(f, ".3f"), "1.200")
         with self.assertRaises(ValueError) as cm:
             format(f, ".%sf" % (INT_MAX + 1))
-        self.assertEqual(str(cm.exception), "precision too big")
 
         c = complex(f)
-        self.assertEqual(format(f, ".0f"), "1")
-        self.assertEqual(format(f, ".3f"), "1.200")
+        self.assertEqual(format(c, ".0f"), "1+0j")
+        self.assertEqual(format(c, ".3f"), "1.200+0.000j")
         with self.assertRaises(ValueError) as cm:
-            format(f, ".%sf" % (INT_MAX + 1))
-        self.assertEqual(str(cm.exception), "precision too big")
+            format(c, ".%sf" % (INT_MAX + 1))
 
 
 if __name__ == "__main__":
