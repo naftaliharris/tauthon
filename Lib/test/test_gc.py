@@ -1,6 +1,9 @@
+import _testcapi
 import unittest
 from test.support import (verbose, refcount_test, run_unittest,
                             strip_python_stderr)
+from test.script_helper import assert_python_ok, make_script, temp_dir
+
 import sys
 import time
 import gc
@@ -38,6 +41,7 @@ class GC_Detector(object):
         # gc collects it.
         self.wr = weakref.ref(C1055820(666), it_happened)
 
+@_testcapi.with_tp_del
 class Uncollectable(object):
     """Create a reference cycle with multiple __del__ methods.
 
@@ -50,7 +54,7 @@ class Uncollectable(object):
             self.partner = Uncollectable(partner=self)
         else:
             self.partner = partner
-    def __del__(self):
+    def __tp_del__(self):
         pass
 
 ### Tests
@@ -139,11 +143,12 @@ class GCTests(unittest.TestCase):
         del a
         self.assertNotEqual(gc.collect(), 0)
 
-    def test_finalizer(self):
+    def test_legacy_finalizer(self):
         # A() is uncollectable if it is part of a cycle, make sure it shows up
         # in gc.garbage.
+        @_testcapi.with_tp_del
         class A:
-            def __del__(self): pass
+            def __tp_del__(self): pass
         class B:
             pass
         a = A()
@@ -163,11 +168,12 @@ class GCTests(unittest.TestCase):
             self.fail("didn't find obj in garbage (finalizer)")
         gc.garbage.remove(obj)
 
-    def test_finalizer_newclass(self):
+    def test_legacy_finalizer_newclass(self):
         # A() is uncollectable if it is part of a cycle, make sure it shows up
         # in gc.garbage.
+        @_testcapi.with_tp_del
         class A(object):
-            def __del__(self): pass
+            def __tp_del__(self): pass
         class B(object):
             pass
         a = A()
@@ -568,12 +574,14 @@ class GCTests(unittest.TestCase):
         import subprocess
         code = """if 1:
             import gc
+            import _testcapi
+            @_testcapi.with_tp_del
             class X:
                 def __init__(self, name):
                     self.name = name
                 def __repr__(self):
                     return "<X %%r>" %% self.name
-                def __del__(self):
+                def __tp_del__(self):
                     pass
 
             x = X('first')
@@ -609,6 +617,66 @@ class GCTests(unittest.TestCase):
         # references, and its elements get printed at runtime anyway).
         stderr = run_command(code % "gc.DEBUG_SAVEALL")
         self.assertNotIn(b"uncollectable objects at shutdown", stderr)
+
+    def test_gc_main_module_at_shutdown(self):
+        # Create a reference cycle through the __main__ module and check
+        # it gets collected at interpreter shutdown.
+        code = """if 1:
+            import weakref
+            class C:
+                def __del__(self):
+                    print('__del__ called')
+            l = [C()]
+            l.append(l)
+            """
+        rc, out, err = assert_python_ok('-c', code)
+        self.assertEqual(out.strip(), b'__del__ called')
+
+    def test_gc_ordinary_module_at_shutdown(self):
+        # Same as above, but with a non-__main__ module.
+        with temp_dir() as script_dir:
+            module = """if 1:
+                import weakref
+                class C:
+                    def __del__(self):
+                        print('__del__ called')
+                l = [C()]
+                l.append(l)
+                """
+            code = """if 1:
+                import sys
+                sys.path.insert(0, %r)
+                import gctest
+                """ % (script_dir,)
+            make_script(script_dir, 'gctest', module)
+            rc, out, err = assert_python_ok('-c', code)
+            self.assertEqual(out.strip(), b'__del__ called')
+
+    def test_get_stats(self):
+        stats = gc.get_stats()
+        self.assertEqual(len(stats), 3)
+        for st in stats:
+            self.assertIsInstance(st, dict)
+            self.assertEqual(set(st),
+                             {"collected", "collections", "uncollectable"})
+            self.assertGreaterEqual(st["collected"], 0)
+            self.assertGreaterEqual(st["collections"], 0)
+            self.assertGreaterEqual(st["uncollectable"], 0)
+        # Check that collection counts are incremented correctly
+        if gc.isenabled():
+            self.addCleanup(gc.enable)
+            gc.disable()
+        old = gc.get_stats()
+        gc.collect(0)
+        new = gc.get_stats()
+        self.assertEqual(new[0]["collections"], old[0]["collections"] + 1)
+        self.assertEqual(new[1]["collections"], old[1]["collections"])
+        self.assertEqual(new[2]["collections"], old[2]["collections"])
+        gc.collect(2)
+        new = gc.get_stats()
+        self.assertEqual(new[0]["collections"], old[0]["collections"] + 1)
+        self.assertEqual(new[1]["collections"], old[1]["collections"])
+        self.assertEqual(new[2]["collections"], old[2]["collections"] + 1)
 
 
 class GCCallbackTests(unittest.TestCase):
