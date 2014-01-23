@@ -69,7 +69,7 @@ This returns an instance of a class with the following public methods:
   getcomptype()   -- returns compression type ('NONE' for AIFF files)
   getcompname()   -- returns human-readable version of
              compression type ('not compressed' for AIFF files)
-  getparams() -- returns a tuple consisting of all of the
+  getparams() -- returns a namedtuple consisting of all of the
              above in the above order
   getmarkers()    -- get the list of marks in the audio file or None
              if there are no marks
@@ -252,6 +252,11 @@ def _write_float(f, x):
     _write_ulong(f, lomant)
 
 from chunk import Chunk
+from collections import namedtuple
+
+_aifc_params = namedtuple('_aifc_params',
+                          'nchannels sampwidth framerate nframes comptype compname')
+
 
 class Aifc_read:
     # Variables used in this class:
@@ -334,6 +339,12 @@ class Aifc_read:
         # else, assume it is an open file object already
         self.initfp(f)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     #
     # User visible methods.
     #
@@ -372,9 +383,9 @@ class Aifc_read:
 ##      return self._version
 
     def getparams(self):
-        return self.getnchannels(), self.getsampwidth(), \
-              self.getframerate(), self.getnframes(), \
-              self.getcomptype(), self.getcompname()
+        return _aifc_params(self.getnchannels(), self.getsampwidth(),
+                            self.getframerate(), self.getnframes(),
+                            self.getcomptype(), self.getcompname())
 
     def getmarkers(self):
         if len(self._markers) == 0:
@@ -551,6 +562,12 @@ class Aifc_write:
     def __del__(self):
         self.close()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
     #
     # User visible methods.
     #
@@ -644,8 +661,8 @@ class Aifc_write:
     def getparams(self):
         if not self._nchannels or not self._sampwidth or not self._framerate:
             raise Error('not all parameters set')
-        return self._nchannels, self._sampwidth, self._framerate, \
-              self._nframes, self._comptype, self._compname
+        return _aifc_params(self._nchannels, self._sampwidth, self._framerate,
+                            self._nframes, self._comptype, self._compname)
 
     def setmark(self, id, pos, name):
         if id <= 0:
@@ -675,6 +692,8 @@ class Aifc_write:
         return self._nframeswritten
 
     def writeframesraw(self, data):
+        if not isinstance(data, (bytes, bytearray)):
+            data = memoryview(data).cast('B')
         self._ensure_header_written(len(data))
         nframes = len(data) // (self._sampwidth * self._nchannels)
         if self._convert:
@@ -878,8 +897,7 @@ if __name__ == '__main__':
     if not sys.argv[1:]:
         sys.argv.append('/usr/demos/data/audio/bach.aiff')
     fn = sys.argv[1]
-    f = open(fn, 'r')
-    try:
+    with open(fn, 'r') as f:
         print("Reading", fn)
         print("nchannels =", f.getnchannels())
         print("nframes   =", f.getnframes())
@@ -890,16 +908,11 @@ if __name__ == '__main__':
         if sys.argv[2:]:
             gn = sys.argv[2]
             print("Writing", gn)
-            g = open(gn, 'w')
-            try:
+            with open(gn, 'w') as g:
                 g.setparams(f.getparams())
                 while 1:
                     data = f.readframes(1024)
                     if not data:
                         break
                     g.writeframes(data)
-            finally:
-                g.close()
             print("Done.")
-    finally:
-        f.close()

@@ -934,6 +934,20 @@ Internal types
       frame).  A debugger can implement a Jump command (aka Set Next Statement)
       by writing to f_lineno.
 
+      Frame objects support one method:
+
+      .. method:: frame.clear()
+
+         This method clears all references to local variables held by the
+         frame.  Also, if the frame belonged to a generator, the generator
+         is finalized.  This helps break reference cycles involving frame
+         objects (for example when catching an exception and storing its
+         traceback for later use).
+
+         :exc:`RuntimeError` is raised if the frame is currently executing.
+
+         .. versionadded:: 3.4
+
    Traceback objects
       .. index::
          object: traceback
@@ -1121,12 +1135,10 @@ Basic customization
       ``sys.last_traceback`` keeps the stack frame alive).  The first situation
       can only be remedied by explicitly breaking the cycles; the latter two
       situations can be resolved by storing ``None`` in ``sys.last_traceback``.
-      Circular references which are garbage are detected when the option cycle
-      detector is enabled (it's on by default), but can only be cleaned up if
-      there are no Python- level :meth:`__del__` methods involved. Refer to the
-      documentation for the :mod:`gc` module for more information about how
-      :meth:`__del__` methods are handled by the cycle detector, particularly
-      the description of the ``garbage`` value.
+      Circular references which are garbage are detected and cleaned up when
+      the cyclic garbage collector is enabled (it's on by default). Refer to the
+      documentation for the :mod:`gc` module for more information about this
+      topic.
 
    .. warning::
 
@@ -1830,6 +1842,15 @@ through the container; for mappings, :meth:`__iter__` should be the same as
    considered to be false in a Boolean context.
 
 
+.. method:: object.__length_hint__(self)
+
+   Called to implement :func:`operator.length_hint`. Should return an estimated
+   length for the object (which may be greater or less than the actual length).
+   The length must be an integer ``>=`` 0. This method is purely an
+   optimization and is never required for correctness.
+
+   .. versionadded:: 3.4
+
 .. note::
 
    Slicing is done exclusively with the following three methods.  A call like ::
@@ -2059,9 +2080,17 @@ left undefined.
 
 .. method:: object.__index__(self)
 
-   Called to implement :func:`operator.index`.  Also called whenever Python needs
-   an integer object (such as in slicing, or in the built-in :func:`bin`,
-   :func:`hex` and :func:`oct` functions). Must return an integer.
+   Called to implement :func:`operator.index`, and whenever Python needs to
+   losslessly convert the numeric object to an integer object (such as in
+   slicing, or in the built-in :func:`bin`, :func:`hex` and :func:`oct`
+   functions). Presence of this method indicates that the numeric object is
+   an integer type.  Must return an integer.
+
+   .. note::
+
+      When :meth:`__index__` is defined, :meth:`__int__` should also be defined,
+      and both shuld return the same value, in order to have a coherent integer
+      type class.
 
 
 .. _context-managers:
