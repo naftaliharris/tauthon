@@ -18,10 +18,6 @@
 
 #ifdef HAVE_DLFCN_H
 #include <dlfcn.h>
-#else
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-#include "dlfcn.h"
-#endif
 #endif
 
 #if (defined(__OpenBSD__) || defined(__NetBSD__)) && !defined(__ELF__)
@@ -40,30 +36,16 @@ const char *_PyImport_DynLoadFiletab[] = {
 #ifdef __CYGWIN__
     ".dll",
 #else  /* !__CYGWIN__ */
-#if defined(PYOS_OS2) && defined(PYCC_GCC)
-    ".pyd",
-    ".dll",
-#else  /* !(defined(PYOS_OS2) && defined(PYCC_GCC)) */
-#ifdef __VMS
-    ".exe",
-    ".EXE",
-#else  /* !__VMS */
     "." SOABI ".so",
     ".abi" PYTHON_ABI_STRING ".so",
     ".so",
-#endif  /* __VMS */
-#endif  /* defined(PYOS_OS2) && defined(PYCC_GCC) */
 #endif  /* __CYGWIN__ */
     NULL,
 };
 
 static struct {
     dev_t dev;
-#ifdef __VMS
-    ino_t ino[3];
-#else
     ino_t ino;
-#endif
     void *handle;
 } handles[128];
 static int nhandles = 0;
@@ -104,47 +86,39 @@ dl_funcptr _PyImport_GetDynLoadFunc(const char *shortname,
         }
         if (nhandles < 128) {
             handles[nhandles].dev = statb.st_dev;
-#ifdef __VMS
-            handles[nhandles].ino[0] = statb.st_ino[0];
-            handles[nhandles].ino[1] = statb.st_ino[1];
-            handles[nhandles].ino[2] = statb.st_ino[2];
-#else
             handles[nhandles].ino = statb.st_ino;
-#endif
         }
     }
 
-#if !(defined(PYOS_OS2) && defined(PYCC_GCC))
     dlopenflags = PyThreadState_GET()->interp->dlopenflags;
-#endif
-
-#ifdef __VMS
-    /* VMS currently don't allow a pathname, use a logical name instead */
-    /* Concatenate 'python_module_' and shortname */
-    /* so "import vms.bar" will use the logical python_module_bar */
-    /* As C module use only one name space this is probably not a */
-    /* important limitation */
-    PyOS_snprintf(pathbuf, sizeof(pathbuf), "python_module_%-.200s",
-                  shortname);
-    pathname = pathbuf;
-#endif
 
     handle = dlopen(pathname, dlopenflags);
 
     if (handle == NULL) {
-        PyObject *mod_name = NULL;
-        PyObject *path = NULL;
-        PyObject *error_ob = NULL;
+        PyObject *mod_name;
+        PyObject *path;
+        PyObject *error_ob;
         const char *error = dlerror();
         if (error == NULL)
             error = "unknown dlopen() error";
         error_ob = PyUnicode_FromString(error);
-        path = PyUnicode_FromString(pathname);
+        if (error_ob == NULL)
+            return NULL;
         mod_name = PyUnicode_FromString(shortname);
+        if (mod_name == NULL) {
+            Py_DECREF(error_ob);
+            return NULL;
+        }
+        path = PyUnicode_FromString(pathname);
+        if (path == NULL) {
+            Py_DECREF(error_ob);
+            Py_DECREF(mod_name);
+            return NULL;
+        }
         PyErr_SetImportError(error_ob, mod_name, path);
-        Py_XDECREF(error_ob);
-        Py_XDECREF(path);
-        Py_XDECREF(mod_name);
+        Py_DECREF(error_ob);
+        Py_DECREF(mod_name);
+        Py_DECREF(path);
         return NULL;
     }
     if (fp != NULL && nhandles < 128)

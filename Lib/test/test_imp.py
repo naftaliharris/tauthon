@@ -1,14 +1,29 @@
-import imp
+try:
+    import _thread
+except ImportError:
+    _thread = None
 import importlib
 import os
 import os.path
 import shutil
 import sys
 from test import support
-from test.test_importlib import util
 import unittest
 import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter('ignore', PendingDeprecationWarning)
+    import imp
 
+
+def requires_load_dynamic(meth):
+    """Decorator to skip a test if not running under CPython or lacking
+    imp.load_dynamic()."""
+    meth = support.cpython_only(meth)
+    return unittest.skipIf(not hasattr(imp, 'load_dynamic'),
+                           'imp.load_dynamic() required')(meth)
+
+
+@unittest.skipIf(_thread is None, '_thread module is required')
 class LockTests(unittest.TestCase):
 
     """Very basic test of import lock functions."""
@@ -150,7 +165,7 @@ class ImportTests(unittest.TestCase):
                 self.assertIsNotNone(file)
                 self.assertTrue(filename[:-3].endswith(temp_mod_name))
                 self.assertEqual(info[0], '.py')
-                self.assertEqual(info[1], 'U')
+                self.assertEqual(info[1], 'r')
                 self.assertEqual(info[2], imp.PY_SOURCE)
 
                 mod = imp.load_module(temp_mod_name, file, filename, info)
@@ -208,9 +223,7 @@ class ImportTests(unittest.TestCase):
             self.assertIs(orig_path, new_os.path)
             self.assertIsNot(orig_getenv, new_os.getenv)
 
-    @support.cpython_only
-    @unittest.skipIf(not hasattr(imp, 'load_dynamic'),
-                     'imp.load_dynamic() required')
+    @requires_load_dynamic
     def test_issue15828_load_extensions(self):
         # Issue 15828 picked up that the adapter between the old imp API
         # and importlib couldn't handle C extensions
@@ -222,6 +235,22 @@ class ImportTests(unittest.TestCase):
         mod = imp.load_module(example, *x)
         self.assertEqual(mod.__name__, example)
 
+    @requires_load_dynamic
+    def test_issue16421_multiple_modules_in_one_dll(self):
+        # Issue 16421: loading several modules from the same compiled file fails
+        m = '_testimportmultiple'
+        fileobj, pathname, description = imp.find_module(m)
+        fileobj.close()
+        mod0 = imp.load_dynamic(m, pathname)
+        mod1 = imp.load_dynamic('_testimportmultiple_foo', pathname)
+        mod2 = imp.load_dynamic('_testimportmultiple_bar', pathname)
+        self.assertEqual(mod0.__name__, m)
+        self.assertEqual(mod1.__name__, '_testimportmultiple_foo')
+        self.assertEqual(mod2.__name__, '_testimportmultiple_bar')
+        with self.assertRaises(ImportError):
+            imp.load_dynamic('nonexistent', pathname)
+
+    @requires_load_dynamic
     def test_load_dynamic_ImportError_path(self):
         # Issue #1559549 added `name` and `path` attributes to ImportError
         # in order to provide better detail. Issue #10854 implemented those
@@ -233,20 +262,27 @@ class ImportTests(unittest.TestCase):
         self.assertIn(path, err.exception.path)
         self.assertEqual(name, err.exception.name)
 
-    @support.cpython_only
-    @unittest.skipIf(not hasattr(imp, 'load_dynamic'),
-                     'imp.load_dynamic() required')
+    @requires_load_dynamic
     def test_load_module_extension_file_is_None(self):
         # When loading an extension module and the file is None, open one
         # on the behalf of imp.load_dynamic().
         # Issue #15902
-        name = '_heapq'
+        name = '_testimportmultiple'
         found = imp.find_module(name)
         if found[0] is not None:
             found[0].close()
         if found[2][2] != imp.C_EXTENSION:
             self.skipTest("found module doesn't appear to be a C extension")
         imp.load_module(name, None, *found[1:])
+
+    @unittest.skipIf(sys.dont_write_bytecode,
+        "test meaningful only when writing bytecode")
+    def test_bug7732(self):
+        with support.temp_cwd():
+            source = support.TESTFN + '.py'
+            os.mkdir(source)
+            self.assertRaisesRegex(ImportError, '^No module',
+                imp.find_module, support.TESTFN, ["."])
 
     def test_multiple_calls_to_get_data(self):
         # Issue #18755: make sure multiple calls to get_data() can succeed.
@@ -292,22 +328,6 @@ class ReloadTests(unittest.TestCase):
         self.addCleanup(cleanup)
         with self.assertRaisesRegex(ImportError, 'html'):
             imp.reload(parser)
-
-    def test_module_replaced(self):
-        # see #18698
-        def code():
-            module = type(sys)('top_level')
-            module.spam = 3
-            sys.modules['top_level'] = module
-        mock = util.mock_modules('top_level',
-                                 module_code={'top_level': code})
-        with mock:
-            with util.import_state(meta_path=[mock]):
-                module = importlib.import_module('top_level')
-                reloaded = imp.reload(module)
-                actual = sys.modules['top_level']
-                self.assertEqual(actual.spam, 3)
-                self.assertEqual(reloaded.spam, 3)
 
 
 class PEP3147Tests(unittest.TestCase):
@@ -461,20 +481,5 @@ class NullImporterTests(unittest.TestCase):
             os.rmdir(name)
 
 
-def test_main():
-    tests = [
-        ImportTests,
-        PEP3147Tests,
-        ReloadTests,
-        NullImporterTests,
-        ]
-    try:
-        import _thread
-    except ImportError:
-        pass
-    else:
-        tests.append(LockTests)
-    support.run_unittest(*tests)
-
 if __name__ == "__main__":
-    test_main()
+    unittest.main()
