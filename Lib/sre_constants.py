@@ -15,11 +15,7 @@
 
 MAGIC = 20031017
 
-try:
-    from _sre import MAXREPEAT
-except ImportError:
-    import _sre
-    MAXREPEAT = _sre.MAXREPEAT = 65535
+from _sre import MAXREPEAT
 
 # SRE standard exception (access as sre.error)
 # should this really be here?
@@ -254,6 +250,8 @@ if __name__ == "__main__":
     f.write("#define SRE_FLAG_DOTALL %d\n" % SRE_FLAG_DOTALL)
     f.write("#define SRE_FLAG_UNICODE %d\n" % SRE_FLAG_UNICODE)
     f.write("#define SRE_FLAG_VERBOSE %d\n" % SRE_FLAG_VERBOSE)
+    f.write("#define SRE_FLAG_DEBUG %d\n" % SRE_FLAG_DEBUG)
+    f.write("#define SRE_FLAG_ASCII %d\n" % SRE_FLAG_ASCII)
 
     f.write("#define SRE_INFO_PREFIX %d\n" % SRE_INFO_PREFIX)
     f.write("#define SRE_INFO_LITERAL %d\n" % SRE_INFO_LITERAL)
