@@ -164,6 +164,9 @@ uses a pool of processes to execute calls asynchronously.
 allows it to side-step the :term:`Global Interpreter Lock` but also means that
 only picklable objects can be executed and returned.
 
+The ``__main__`` module must be importable by worker subprocesses. This means
+that :class:`ProcessPoolExecutor` will not work in the interactive interpreter.
+
 Calling :class:`Executor` or :class:`Future` methods from a callable submitted
 to a :class:`ProcessPoolExecutor` will result in deadlock.
 
@@ -368,7 +371,8 @@ Module Functions
 
    Returns an iterator over the :class:`Future` instances (possibly created by
    different :class:`Executor` instances) given by *fs* that yields futures as
-   they complete (finished or were cancelled).  Any futures that completed
+   they complete (finished or were cancelled). Any futures given by *fs* that
+   are duplicated will be returned once. Any futures that completed
    before :func:`as_completed` is called will be yielded first.  The returned
    iterator raises a :exc:`TimeoutError` if :meth:`~iterator.__next__` is
    called and the result isn't available after *timeout* seconds from the

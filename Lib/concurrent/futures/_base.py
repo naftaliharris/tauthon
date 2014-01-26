@@ -181,7 +181,8 @@ def as_completed(fs, timeout=None):
 
     Returns:
         An iterator that yields the given Futures as they complete (finished or
-        cancelled).
+        cancelled). If any given Futures are duplicated, they will be returned
+        once.
 
     Raises:
         TimeoutError: If the entire result iterator could not be generated
@@ -190,16 +191,16 @@ def as_completed(fs, timeout=None):
     if timeout is not None:
         end_time = timeout + time.time()
 
+    fs = set(fs)
     with _AcquireFutures(fs):
         finished = set(
                 f for f in fs
                 if f._state in [CANCELLED_AND_NOTIFIED, FINISHED])
-        pending = set(fs) - finished
+        pending = fs - finished
         waiter = _create_and_install_waiters(fs, _AS_COMPLETED)
 
     try:
-        for future in finished:
-            yield future
+        yield from finished
 
         while pending:
             if timeout is None:
