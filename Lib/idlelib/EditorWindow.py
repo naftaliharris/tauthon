@@ -1,5 +1,6 @@
 import importlib
 import importlib.abc
+import importlib.util
 import os
 from platform import python_version
 import re
@@ -549,7 +550,7 @@ class EditorWindow(object):
         if sys.platform[:3] == 'win':
             try:
                 os.startfile(self.help_url)
-            except WindowsError as why:
+            except OSError as why:
                 tkMessageBox.showerror(title='Document Start Failure',
                     message=str(why), parent=self.text)
         else:
@@ -660,20 +661,20 @@ class EditorWindow(object):
             return
         # XXX Ought to insert current file's directory in front of path
         try:
-            loader = importlib.find_loader(name)
+            spec = importlib.util.find_spec(name)
         except (ValueError, ImportError) as msg:
             tkMessageBox.showerror("Import error", str(msg), parent=self.text)
             return
-        if loader is None:
+        if spec is None:
             tkMessageBox.showerror("Import error", "module not found",
                                    parent=self.text)
             return
-        if not isinstance(loader, importlib.abc.SourceLoader):
+        if not isinstance(spec.loader, importlib.abc.SourceLoader):
             tkMessageBox.showerror("Import error", "not a source-based module",
                                    parent=self.text)
             return
         try:
-            file_path = loader.get_filename(name)
+            file_path = spec.loader.get_filename(name)
         except AttributeError:
             tkMessageBox.showerror("Import error",
                                    "loader does not support get_filename",
@@ -872,7 +873,7 @@ class EditorWindow(object):
             if sys.platform[:3] == 'win':
                 try:
                     os.startfile(helpfile)
-                except WindowsError as why:
+                except OSError as why:
                     tkMessageBox.showerror(title='Document Start Failure',
                         message=str(why), parent=self.text)
             else:

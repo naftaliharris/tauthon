@@ -7,13 +7,17 @@ import unittest
 import hashlib
 from test import support
 threading = support.import_module('threading')
-
+try:
+    import ssl
+except ImportError:
+    ssl = None
 
 here = os.path.dirname(__file__)
 # Self-signed cert file for 'localhost'
 CERT_localhost = os.path.join(here, 'keycert.pem')
 # Self-signed cert file for 'fakehostname'
 CERT_fakehostname = os.path.join(here, 'keycert2.pem')
+
 
 # Loopback http server infrastructure
 
@@ -387,14 +391,14 @@ class TestUrlopen(unittest.TestCase):
         handler.port = port
         return handler
 
-    def start_https_server(self, responses=None, certfile=CERT_localhost):
+    def start_https_server(self, responses=None, **kwargs):
         if not hasattr(urllib.request, 'HTTPSHandler'):
             self.skipTest('ssl support required')
         from test.ssl_servers import make_https_server
         if responses is None:
             responses = [(200, [], b"we care a bit")]
         handler = GetRequestHandler(responses)
-        server = make_https_server(self, certfile=certfile, handler_class=handler)
+        server = make_https_server(self, handler_class=handler, **kwargs)
         handler.port = server.port
         return handler
 
@@ -484,6 +488,21 @@ class TestUrlopen(unittest.TestCase):
             self.urlopen("https://localhost:%s/bizarre" % handler.port,
                          cadefault=True)
 
+    def test_https_sni(self):
+        if ssl is None:
+            self.skipTest("ssl module required")
+        if not ssl.HAS_SNI:
+            self.skipTest("SNI support required in OpenSSL")
+        sni_name = None
+        def cb_sni(ssl_sock, server_name, initial_context):
+            nonlocal sni_name
+            sni_name = server_name
+        context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)
+        context.set_servername_callback(cb_sni)
+        handler = self.start_https_server(context=context, certfile=CERT_localhost)
+        self.urlopen("https://localhost:%s" % handler.port)
+        self.assertEqual(sni_name, "localhost")
+
     def test_sending_headers(self):
         handler = self.start_server()
         req = urllib.request.Request("http://localhost:%s/" % handler.port,
@@ -530,7 +549,7 @@ class TestUrlopen(unittest.TestCase):
         # so we run the test only when -unetwork/-uall is specified to
         # mitigate the problem a bit (see #17564)
         support.requires('network')
-        self.assertRaises(IOError,
+        self.assertRaises(OSError,
                           # Given that both VeriSign and various ISPs have in
                           # the past or are presently hijacking various invalid
                           # domain name requests in an attempt to boost traffic
