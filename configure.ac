@@ -3,7 +3,7 @@ dnl * Please run autoreconf to test your changes! *
 dnl ***********************************************
 
 # Set VERSION so we only need to edit in one place (i.e., here)
-m4_define(PYTHON_VERSION, 3.3)
+m4_define(PYTHON_VERSION, 3.4)
 
 AC_PREREQ(2.65)
 
@@ -152,7 +152,7 @@ AC_ARG_ENABLE(universalsdk,
 		# Locate the best usable SDK, see Mac/README.txt for more
 		# information
 		enableval="`/usr/bin/xcodebuild -version -sdk macosx Path 2>/dev/null`"
-		if test -z "${enableval}"
+		if ! ( echo $enableval | grep -E '\.sdk' 1>/dev/null )
 		then
 			enableval=/Developer/SDKs/MacOSX10.4u.sdk
 			if test ! -d "${enableval}"
@@ -189,6 +189,7 @@ fi
 AC_SUBST(UNIVERSALSDK)
 
 AC_SUBST(ARCH_RUN_32BIT)
+ARCH_RUN_32BIT=""
 
 # For backward compatibility reasons we prefer to select '32-bit' if available,
 # otherwise use 'intel'
@@ -197,7 +198,7 @@ if test "`uname -s`" = "Darwin"
 then
 	if test -n "${UNIVERSALSDK}"
 	then
-		if test -z "`/usr/bin/file "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | grep ppc`"
+		if test -z "`/usr/bin/file -L "${UNIVERSALSDK}/usr/lib/libSystem.dylib" | grep ppc`"
 		then
 			UNIVERSAL_ARCHS="intel"
 		fi
@@ -207,16 +208,17 @@ fi
 AC_SUBST(LIPO_32BIT_FLAGS)
 AC_MSG_CHECKING(for --with-universal-archs)
 AC_ARG_WITH(universal-archs,
-    AS_HELP_STRING([--with-universal-archs=ARCH], [select architectures for universal build ("32-bit", "64-bit", "3-way", "intel" or "all")]),
+    AS_HELP_STRING([--with-universal-archs=ARCH], [select architectures for universal build ("32-bit", "64-bit", "3-way", "intel", "intel-32", or "all")]),
 [
-	AC_MSG_RESULT($withval)
 	UNIVERSAL_ARCHS="$withval"
 ],
-[
- 	AC_MSG_RESULT(${UNIVERSAL_ARCHS})
-])
-
-
+[])
+if test -n "${UNIVERSALSDK}"
+then
+	AC_MSG_RESULT(${UNIVERSAL_ARCHS})
+else
+	AC_MSG_RESULT(no)
+fi
 
 AC_ARG_WITH(framework-name,
               AS_HELP_STRING([--with-framework-name=FRAMEWORK],
@@ -248,6 +250,7 @@ AC_ARG_ENABLE(framework,
 		FRAMEWORKINSTALLLAST=
 		FRAMEWORKALTINSTALLFIRST=
 		FRAMEWORKALTINSTALLLAST=
+		FRAMEWORKPYTHONW=
 		if test "x${prefix}" = "xNONE"; then
 			FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
 		else
@@ -262,6 +265,7 @@ AC_ARG_ENABLE(framework,
 		FRAMEWORKALTINSTALLFIRST="frameworkinstallstructure "
 		FRAMEWORKINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkinstallunixtools"
 		FRAMEWORKALTINSTALLLAST="frameworkinstallmaclib frameworkinstallapps frameworkaltinstallunixtools"
+		FRAMEWORKPYTHONW="frameworkpythonw"
 		FRAMEWORKINSTALLAPPSPREFIX="/Applications"
 
 		if test "x${prefix}" = "xNONE" ; then
@@ -323,6 +327,7 @@ AC_ARG_ENABLE(framework,
 	FRAMEWORKINSTALLLAST=
 	FRAMEWORKALTINSTALLFIRST=
 	FRAMEWORKALTINSTALLLAST=
+	FRAMEWORKPYTHONW=
 	if test "x${prefix}" = "xNONE" ; then
 		FRAMEWORKUNIXTOOLSPREFIX="${ac_default_prefix}"
 	else
@@ -340,6 +345,7 @@ AC_SUBST(FRAMEWORKINSTALLFIRST)
 AC_SUBST(FRAMEWORKINSTALLLAST)
 AC_SUBST(FRAMEWORKALTINSTALLFIRST)
 AC_SUBST(FRAMEWORKALTINSTALLLAST)
+AC_SUBST(FRAMEWORKPYTHONW)
 AC_SUBST(FRAMEWORKUNIXTOOLSPREFIX)
 AC_SUBST(FRAMEWORKINSTALLAPPSPREFIX)
 
@@ -514,6 +520,19 @@ then
    	    Define to activate Unix95-and-earlier features)
 
   AC_DEFINE(_POSIX_C_SOURCE, 200809L, Define to activate features from IEEE Stds 1003.1-2008)
+fi
+
+# On HP-UX mbstate_t requires _INCLUDE__STDC_A1_SOURCE
+case $ac_sys_system in
+  hp*|HP*)
+    define_stdc_a1=yes;;
+  *)
+    define_stdc_a1=no;;
+esac
+
+if test $define_stdc_a1 = yes
+then
+  AC_DEFINE(_INCLUDE__STDC_A1_SOURCE, 1, Define to include mbstate_t for mbrtowc)
 fi
 
 #
@@ -691,7 +710,7 @@ then
 fi
 if test "$preset_cxx" != "$CXX"
 then
-        AC_MSG_WARN([
+        AC_MSG_NOTICE([
 
   By default, distutils will build C++ extension modules with "$CXX".
   If this is not intended, then set CXX on the configure command line.
@@ -917,6 +936,7 @@ fi
 
 # Other platforms follow
 if test $enable_shared = "yes"; then
+  PY_ENABLE_SHARED=1
   AC_DEFINE(Py_ENABLE_SHARED, 1, [Defined if Python is built as a shared library.])
   case $ac_sys_system in
     CYGWIN*)
@@ -972,6 +992,7 @@ if test $enable_shared = "yes"; then
 
   esac
 else # shared is disabled
+  PY_ENABLE_SHARED=0
   case $ac_sys_system in
     CYGWIN*)
           BLDLIBRARY='$(LIBRARY)'
@@ -1182,6 +1203,28 @@ yes)
       BASECFLAGS="$BASECFLAGS -Wno-unused-result"
     fi
 
+    AC_MSG_CHECKING(for -Werror=declaration-after-statement)
+     ac_save_cc="$CC"
+     CC="$CC -Werror=declaration-after-statement"
+     save_CFLAGS="$CFLAGS"
+     AC_CACHE_VAL(ac_cv_declaration_after_statement_warning,
+       AC_COMPILE_IFELSE(
+         [
+	   AC_LANG_PROGRAM([[]], [[]])
+	 ],[
+           ac_cv_declaration_after_statement_warning=yes
+	 ],[
+           ac_cv_declaration_after_statement_warning=no
+	 ]))
+     CFLAGS="$save_CFLAGS"
+     CC="$ac_save_cc"
+    AC_MSG_RESULT($ac_cv_declaration_after_statement_warning)
+
+    if test $ac_cv_declaration_after_statement_warning = yes
+    then
+      BASECFLAGS="$BASECFLAGS -Werror=declaration-after-statement"
+    fi
+
     # if using gcc on alpha, use -mieee to get (near) full IEEE 754
     # support.  Without this, treatment of subnormals doesn't follow
     # the standard.
@@ -1195,111 +1238,120 @@ yes)
 	SCO_SV*)
 	    BASECFLAGS="$BASECFLAGS -m486 -DSCO5"
 	    ;;
-	# is there any other compiler on Darwin besides gcc?
-	Darwin*)
-	    # -Wno-long-double, -no-cpp-precomp, and -mno-fused-madd
-	    # used to be here, but non-Apple gcc doesn't accept them.
-            if test "${CC}" = gcc
-	    then
-		AC_MSG_CHECKING(which compiler should be used)
-		case "${UNIVERSALSDK}" in
-		*/MacOSX10.4u.sdk)
-			# Build using 10.4 SDK, force usage of gcc when the 
-			# compiler is gcc, otherwise the user will get very
-			# confusing error messages when building on OSX 10.6
-			CC=gcc-4.0
-			CPP=cpp-4.0
-			;;
-		esac
-		AC_MSG_RESULT($CC)
-	    fi
 
+    # is there any other compiler on Darwin besides gcc?
+    Darwin*)
+        # -Wno-long-double, -no-cpp-precomp, and -mno-fused-madd
+        # used to be here, but non-Apple gcc doesn't accept them.
+        if test "${CC}" = gcc
+        then
+            AC_MSG_CHECKING(which compiler should be used)
+            case "${UNIVERSALSDK}" in
+            */MacOSX10.4u.sdk)
+                # Build using 10.4 SDK, force usage of gcc when the
+                # compiler is gcc, otherwise the user will get very
+                # confusing error messages when building on OSX 10.6
+                CC=gcc-4.0
+                CPP=cpp-4.0
+                ;;
+            esac
+            AC_MSG_RESULT($CC)
+        fi
 
-	    if test "${enable_universalsdk}"; then
-		UNIVERSAL_ARCH_FLAGS=""
-	        if test "$UNIVERSAL_ARCHS" = "32-bit" ; then
-		   UNIVERSAL_ARCH_FLAGS="-arch ppc -arch i386"
-		   ARCH_RUN_32BIT=""
-		   LIPO_32BIT_FLAGS=""
-	         elif test "$UNIVERSAL_ARCHS" = "64-bit" ; then
-		   UNIVERSAL_ARCH_FLAGS="-arch ppc64 -arch x86_64"
-		   LIPO_32BIT_FLAGS=""
-		   ARCH_RUN_32BIT="true"
+        if test "${enable_universalsdk}"
+        then
+            case "$UNIVERSAL_ARCHS" in
+            32-bit)
+               UNIVERSAL_ARCH_FLAGS="-arch ppc -arch i386"
+               LIPO_32BIT_FLAGS=""
+               ARCH_RUN_32BIT=""
+               ;;
+            64-bit)
+               UNIVERSAL_ARCH_FLAGS="-arch ppc64 -arch x86_64"
+               LIPO_32BIT_FLAGS=""
+               ARCH_RUN_32BIT="true"
+               ;;
+            all)
+               UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch ppc64 -arch x86_64"
+               LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
+               ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
+               ;;
+            intel)
+               UNIVERSAL_ARCH_FLAGS="-arch i386 -arch x86_64"
+               LIPO_32BIT_FLAGS="-extract i386"
+               ARCH_RUN_32BIT="/usr/bin/arch -i386"
+               ;;
+            intel-32)
+               UNIVERSAL_ARCH_FLAGS="-arch i386"
+               LIPO_32BIT_FLAGS=""
+               ARCH_RUN_32BIT=""
+               ;;
+            3-way)
+               UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch x86_64"
+               LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
+               ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
+               ;;
+            *)
+               AC_MSG_ERROR([proper usage is --with-universal-arch=32-bit|64-bit|all|intel|3-way])
+               ;;
+            esac
 
-	         elif test "$UNIVERSAL_ARCHS" = "all" ; then
-		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch ppc64 -arch x86_64"
-		   LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
+            CFLAGS="${UNIVERSAL_ARCH_FLAGS} -isysroot ${UNIVERSALSDK} ${CFLAGS}"
+            LDFLAGS="${UNIVERSAL_ARCH_FLAGS} -isysroot ${UNIVERSALSDK} ${LDFLAGS}"
+            if test "${UNIVERSALSDK}" != "/"
+            then
+                CPPFLAGS="-isysroot ${UNIVERSALSDK} ${CPPFLAGS}"
+            fi
+        fi
 
-	         elif test "$UNIVERSAL_ARCHS" = "intel" ; then
-		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch x86_64"
-		   LIPO_32BIT_FLAGS="-extract i386"
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386"
+        # Calculate an appropriate deployment target for this build:
+        # The deployment target value is used explicitly to enable certain
+        # features are enabled (such as builtin libedit support for readline)
+        # through the use of Apple's Availabiliy Macros and is used as a
+        # component of the string returned by distutils.get_platform().
+        #
+        # Use the value from:
+        # 1. the MACOSX_DEPLOYMENT_TARGET environment variable if specified
+        # 2. the operating system version of the build machine if >= 10.6
+        # 3. If running on OS X 10.3 through 10.5, use the legacy tests
+        #       below to pick either 10.3, 10.4, or 10.5 as the target.
+        # 4. If we are running on OS X 10.2 or earlier, good luck!
 
-	         elif test "$UNIVERSAL_ARCHS" = "3-way" ; then
-		   UNIVERSAL_ARCH_FLAGS="-arch i386 -arch ppc -arch x86_64"
-		   LIPO_32BIT_FLAGS="-extract ppc7400 -extract i386"
-		   ARCH_RUN_32BIT="/usr/bin/arch -i386 -ppc"
+        AC_MSG_CHECKING(which MACOSX_DEPLOYMENT_TARGET to use)
+        cur_target=`sw_vers -productVersion | sed 's/\(10\.[[0-9]]*\).*/\1/'`
+        if test ${cur_target} '>' 10.2 && \
+           test ${cur_target} '<' 10.6
+        then
+            cur_target=10.3
+            if test ${enable_universalsdk}
+            then
+                case "$UNIVERSAL_ARCHS" in
+                all|3-way|intel|64-bit)
+                    # These configurations were first supported in 10.5
+                    cur_target='10.5'
+                    ;;
+                esac
+            else
+                if test `/usr/bin/arch` = "i386"
+                then
+                    # 10.4 was the first release to support Intel archs
+                    cur_target="10.4"
+                fi
+            fi
+        fi
+        CONFIGURE_MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET-${cur_target}}
 
-		 else
-	           AC_MSG_ERROR([proper usage is --with-universal-arch=32-bit|64-bit|all|intel|3-way])
+        # Make sure that MACOSX_DEPLOYMENT_TARGET is set in the
+        # environment with a value that is the same as what we'll use
+        # in the Makefile to ensure that we'll get the same compiler
+        # environment during configure and build time.
+        MACOSX_DEPLOYMENT_TARGET="$CONFIGURE_MACOSX_DEPLOYMENT_TARGET"
+        export MACOSX_DEPLOYMENT_TARGET
+        EXPORT_MACOSX_DEPLOYMENT_TARGET=''
+        AC_MSG_RESULT($MACOSX_DEPLOYMENT_TARGET)
 
-		 fi
-
-
-		CFLAGS="${UNIVERSAL_ARCH_FLAGS} -isysroot ${UNIVERSALSDK} ${CFLAGS}"
-		if test "${UNIVERSALSDK}" != "/"
-		then
-			CFLAGS="-isysroot ${UNIVERSALSDK} ${CFLAGS}"
-			LDFLAGS="-isysroot ${UNIVERSALSDK} ${LDFLAGS}"
-			CPPFLAGS="-isysroot ${UNIVERSALSDK} ${CPPFLAGS}"
-		fi
-	    fi
-
-	    # Calculate the right deployment target for this build.
-	    #
-	    cur_target=`sw_vers -productVersion | sed 's/\(10\.[[0-9]]*\).*/\1/'`
-	    if test ${cur_target} '>' 10.2 && \
-	       test ${cur_target} '<' 10.6
-	    then
-		    cur_target=10.3
-		    if test ${enable_universalsdk}; then
-			    if test "${UNIVERSAL_ARCHS}" = "all"; then
-				    # Ensure that the default platform for a 
-				    # 4-way universal build is OSX 10.5, 
-				    # that's the first OS release where 
-				    # 4-way builds make sense.
-				    cur_target='10.5'
-
-			    elif test "${UNIVERSAL_ARCHS}" = "3-way"; then
-				    cur_target='10.5'
-
-			    elif test "${UNIVERSAL_ARCHS}" = "intel"; then
-				    cur_target='10.5'
-
-			    elif test "${UNIVERSAL_ARCHS}" = "64-bit"; then
-				    cur_target='10.5'
-			    fi
-		    else
-			    if test `/usr/bin/arch` = "i386"; then
-				    # On Intel macs default to a deployment
-				    # target of 10.4, that's the first OSX
-				    # release with Intel support.
-				    cur_target="10.4"
-			    fi
-		    fi
-	    fi
-	    CONFIGURE_MACOSX_DEPLOYMENT_TARGET=${MACOSX_DEPLOYMENT_TARGET-${cur_target}}
-	    
-	    # Make sure that MACOSX_DEPLOYMENT_TARGET is set in the 
-	    # environment with a value that is the same as what we'll use
-	    # in the Makefile to ensure that we'll get the same compiler
-	    # environment during configure and build time.
-	    MACOSX_DEPLOYMENT_TARGET="$CONFIGURE_MACOSX_DEPLOYMENT_TARGET"
-	    export MACOSX_DEPLOYMENT_TARGET
-	    EXPORT_MACOSX_DEPLOYMENT_TARGET=''
-
-	    ;;
+        # end of Darwin* tests
+        ;;
     esac
     ;;
 
@@ -1324,24 +1376,6 @@ fi
 if test "$ac_arch_flags"
 then
 	BASECFLAGS="$BASECFLAGS $ac_arch_flags"
-fi
-
-# Check whether GCC supports PyArg_ParseTuple format
-if test "$GCC" = "yes"
-then
-  AC_MSG_CHECKING(whether gcc supports ParseTuple __format__)
-  save_CFLAGS=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wformat"
-  AC_COMPILE_IFELSE([
-    AC_LANG_PROGRAM([[void f(char*,...)__attribute((format(PyArg_ParseTuple, 1, 2)));]], [[]])
-  ],[
-    AC_DEFINE(HAVE_ATTRIBUTE_FORMAT_PARSETUPLE, 1,
-      [Define if GCC supports __attribute__((format(PyArg_ParseTuple, 2, 3)))])
-    AC_MSG_RESULT(yes)
-  ],[
-    AC_MSG_RESULT(no)
-  ])
-  CFLAGS=$save_CFLAGS
 fi
 
 # On some compilers, pthreads are available without further options
@@ -1526,7 +1560,8 @@ sys/param.h sys/select.h sys/sendfile.h sys/socket.h sys/statvfs.h \
 sys/stat.h sys/syscall.h sys/sys_domain.h sys/termio.h sys/time.h \
 sys/times.h sys/types.h sys/uio.h sys/un.h sys/utsname.h sys/wait.h pty.h \
 libutil.h sys/resource.h netpacket/packet.h sysexits.h bluetooth.h \
-bluetooth/bluetooth.h linux/tipc.h spawn.h util.h alloca.h)
+bluetooth/bluetooth.h linux/tipc.h spawn.h util.h alloca.h endian.h \
+sys/endian.h)
 CPPFLAGS=$ac_save_cppflags
 AC_HEADER_DIRENT
 AC_HEADER_MAJOR
@@ -1566,7 +1601,7 @@ AC_CHECK_HEADERS(linux/netlink.h,,,[
 ])
 
 # On Linux, can.h and can/raw.h require sys/socket.h
-AC_CHECK_HEADERS(linux/can.h linux/can/raw.h,,,[
+AC_CHECK_HEADERS(linux/can.h linux/can/raw.h linux/can/bcm.h,,,[
 #ifdef HAVE_SYS_SOCKET_H
 #include <sys/socket.h>
 #endif
@@ -1595,6 +1630,22 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
 AC_MSG_RESULT($ac_cv_has_makedev)
 if test "$ac_cv_has_makedev" = "yes"; then
     AC_DEFINE(HAVE_MAKEDEV, 1, [Define this if you have the makedev macro.])
+fi
+
+# byte swapping
+AC_MSG_CHECKING(for le64toh)
+AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#ifdef HAVE_ENDIAN_H
+#include <endian.h>
+#elif defined(HAVE_SYS_ENDIAN_H)
+#include <sys/endian.h>
+#endif
+]], [[
+   le64toh(1) ]])
+],[ac_cv_has_le64toh=yes],[ac_cv_has_le64toh=no])
+AC_MSG_RESULT($ac_cv_has_le64toh)
+if test "$ac_cv_has_le64toh" = "yes"; then
+    AC_DEFINE(HAVE_HTOLE64, 1, [Define this if you have le64toh()])
 fi
 
 # Enabling LFS on Solaris (2.6 to 9) with gcc 2.95 triggers a bug in
@@ -1798,7 +1849,6 @@ case $ac_sys_system/$ac_sys_release in
 esac
 
 
-ARCH_RUN_32BIT=""
 AC_SUBST(LIBTOOL_CRUFT)
 case $ac_sys_system/$ac_sys_release in
   Darwin/@<:@01567@:>@\..*) 
@@ -1855,14 +1905,12 @@ case $ac_sys_system/$ac_sys_release in
     		;;
     	esac
 
-	#ARCH_RUN_32BIT="true"
     fi
 
     LIBTOOL_CRUFT=$LIBTOOL_CRUFT" -lSystem -lSystemStubs -arch_only ${MACOSX_DEFAULT_ARCH}"
     LIBTOOL_CRUFT=$LIBTOOL_CRUFT' -install_name $(PYTHONFRAMEWORKINSTALLDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
     LIBTOOL_CRUFT=$LIBTOOL_CRUFT' -compatibility_version $(VERSION) -current_version $(VERSION)';;
 esac
-
 AC_MSG_CHECKING(for --enable-framework)
 if test "$enable_framework"
 then
@@ -1982,9 +2030,6 @@ then
 
 		if test ${MACOSX_DEPLOYMENT_TARGET} '>' 10.2
 		then
-			if test "${enable_universalsdk}"; then
-				LDFLAGS="${UNIVERSAL_ARCH_FLAGS} -isysroot ${UNIVERSALSDK} ${LDFLAGS}"
-			fi
 			LDSHARED='$(CC) -bundle -undefined dynamic_lookup'
 			LDCXXSHARED='$(CXX) -bundle -undefined dynamic_lookup'
 			BLDSHARED="$LDSHARED"
@@ -2108,6 +2153,12 @@ then
 	# -u libsys_s pulls in all symbols in libsys
 	Darwin/*) 
 		LINKFORSHARED="$extra_undefs -framework CoreFoundation"
+
+		# Issue #18075: the default maximum stack size (8MBytes) is too
+		# small for the default recursion limit. Increase the stack size
+		# to ensure that tests don't crash
+		LINKFORSHARED="-Wl,-stack_size,1000000 $LINKFORSHARED"
+
 		if test "$enable_framework"
 		then
 			LINKFORSHARED="$LINKFORSHARED "'$(PYTHONFRAMEWORKDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)'
@@ -2211,6 +2262,59 @@ case "$ac_sys_system" in
 		]);;
 	*) ;;
 esac
+
+# check for systems that require aligned memory access
+AC_MSG_CHECKING(aligned memory access is required)
+AC_TRY_RUN([
+int main()
+{
+    char s[16];
+    int i, *p1, *p2;
+    for (i=0; i < 16; i++)
+        s[i] = i;
+    p1 = (int*)(s+1);
+    p2 = (int*)(s+2);
+    if (*p1 == *p2)
+        return 1;
+    return 0;
+}
+              ],
+     [aligned_required=no],
+     [aligned_required=yes],
+     [aligned_required=yes])
+
+if test "$aligned_required" = yes ; then
+  AC_DEFINE([HAVE_ALIGNED_REQUIRED], [1],
+    [Define if aligned memory access is required])
+fi
+AC_MSG_RESULT($aligned_required)
+
+
+# str, bytes and memoryview hash algorithm
+AH_TEMPLATE(Py_HASH_ALGORITHM,
+  [Define hash algorithm for str, bytes and memoryview.
+   SipHash24: 1, FNV: 2, externally defined: 0])
+
+AC_MSG_CHECKING(for --with-hash-algorithm)
+dnl quadrigraphs "@<:@" and "@:>@" produce "[" and "]" in the output
+AC_ARG_WITH(hash_algorithm,
+            AS_HELP_STRING([--with-hash-algorithm=@<:@fnv|siphash24@:>@],
+                           [select hash algorithm]),
+[
+AC_MSG_RESULT($withval)
+case "$withval" in
+    siphash24)
+        AC_DEFINE(Py_HASH_ALGORITHM, 1)
+        ;;
+    fnv)
+        AC_DEFINE(Py_HASH_ALGORITHM, 2)
+        ;;
+    *)
+        AC_MSG_ERROR([unknown hash algorithm '$withval'])
+        ;;
+esac
+],
+[AC_MSG_RESULT(default)])
 
 # Most SVR4 platforms (e.g. Solaris) need -lsocket and -lnsl.
 AC_CHECK_LIB(nsl, t_open, [LIBS="-lnsl $LIBS"]) # SVR4
@@ -2823,7 +2927,7 @@ fi
 
 # checks for library functions
 AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
- clock confstr ctermid execv faccessat fchmod fchmodat fchown fchownat \
+ clock confstr ctermid dup3 execv faccessat fchmod fchmodat fchown fchownat \
  fexecve fdopendir fork fpathconf fstatat ftime ftruncate futimesat \
  futimens futimes gai_strerror \
  getgrouplist getgroups getlogin getloadavg getpeername getpgid getpid \
@@ -2843,7 +2947,7 @@ AC_CHECK_FUNCS(alarm accept4 setitimer getitimer bind_textdomain_codeset chown \
  sigtimedwait sigwait sigwaitinfo snprintf strftime strlcpy symlinkat sync \
  sysconf tcgetpgrp tcsetpgrp tempnam timegm times tmpfile tmpnam tmpnam_r \
  truncate uname unlinkat unsetenv utimensat utimes waitid waitpid wait3 wait4 \
- wcscoll wcsftime wcsxfrm writev _getpty)
+ wcscoll wcsftime wcsxfrm wmemcmp writev _getpty)
 
 AC_CHECK_DECL(dirfd,
     AC_DEFINE(HAVE_DIRFD, 1,
@@ -2910,6 +3014,16 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
    AC_MSG_RESULT(yes)],
   [AC_MSG_RESULT(no)
 ])
+AC_MSG_CHECKING(for prlimit)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <sys/time.h>
+#include <sys/resource.h>
+    ]], [[void *x=prlimit]])],
+  [AC_DEFINE(HAVE_PRLIMIT, 1, Define if you have the 'prlimit' functions.)
+   AC_MSG_RESULT(yes)],
+  [AC_MSG_RESULT(no)
+])
+
 # On some systems (eg. FreeBSD 5), we would find a definition of the
 # functions ctermid_r, setgroups in the library, but no prototype
 # (e.g. because we use _XOPEN_SOURCE). See whether we can take their
@@ -3110,7 +3224,7 @@ AC_CHECK_FUNCS(memmove)
 # check for long file support functions
 AC_CHECK_FUNCS(fseek64 fseeko fstatvfs ftell64 ftello statvfs)
 
-AC_REPLACE_FUNCS(dup2 getcwd strdup)
+AC_REPLACE_FUNCS(dup2 strdup)
 AC_CHECK_FUNCS(getpgrp, 
   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>]], [[getpgrp(0);]])],
     [AC_DEFINE(GETPGRP_HAVE_ARG, 1, [Define if getpgrp() must be called as getpgrp(0).])],
@@ -3983,6 +4097,11 @@ AC_MSG_CHECKING(LDVERSION)
 LDVERSION='$(VERSION)$(ABIFLAGS)'
 AC_MSG_RESULT($LDVERSION)
 
+dnl define LIBPL after ABIFLAGS and LDVERSION is defined.
+AC_SUBST(PY_ENABLE_SHARED)
+LIBPL="${prefix}/lib/python${VERSION}/config-${LDVERSION}"
+AC_SUBST(LIBPL)
+
 # Check whether right shifting a negative integer extends the sign bit
 # or fills with zeros (like the Cray J90, according to Tim Peters).
 AC_MSG_CHECKING(whether right shift extends the sign bit)
@@ -4661,8 +4780,23 @@ if test "$have_gcc_asm_for_x87" = yes; then
     esac
 fi
 
+# ensurepip option
+AC_MSG_CHECKING(for ensurepip)
+AC_ARG_WITH(ensurepip,
+    [AS_HELP_STRING([--with(out)-ensurepip=@<:@=upgrade@:>@],
+        ["install" or "upgrade" using bundled pip])],
+    [],
+    [with_ensurepip=upgrade])
+AS_CASE($with_ensurepip,
+    [yes|upgrade],[ENSUREPIP=upgrade],
+    [install],[ENSUREPIP=install],
+    [no],[ENSUREPIP=no],
+    [AC_MSG_ERROR([--with-ensurepip=upgrade|install|no])])
+AC_MSG_RESULT($ENSUREPIP)
+AC_SUBST(ENSUREPIP)
+
 # generate output files
-AC_CONFIG_FILES(Makefile.pre Modules/Setup.config Misc/python.pc)
+AC_CONFIG_FILES(Makefile.pre Modules/Setup.config Misc/python.pc Misc/python-config.sh)
 AC_CONFIG_FILES([Modules/ld_so_aix], [chmod +x Modules/ld_so_aix])
 AC_OUTPUT
 

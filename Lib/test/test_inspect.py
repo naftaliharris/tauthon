@@ -1,22 +1,32 @@
+import _testcapi
+import collections
+import datetime
+import functools
+import importlib
+import inspect
+import io
+import linecache
+import os
+from os.path import normcase
+import _pickle
 import re
+import shutil
 import sys
 import types
+import unicodedata
 import unittest
-import inspect
-import linecache
-import datetime
-import collections
-import os
-import shutil
-from os.path import normcase
+
+try:
+    from concurrent.futures import ThreadPoolExecutor
+except ImportError:
+    ThreadPoolExecutor = None
 
 from test.support import run_unittest, TESTFN, DirsOnSysPath
-
+from test.support import MISSING_C_DOCSTRINGS
+from test.script_helper import assert_python_ok, assert_python_failure
 from test import inspect_fodder as mod
 from test import inspect_fodder2 as mod2
 
-# C module for test_findsource_binary
-import unicodedata
 
 # Functions tested in this suite:
 # ismodule, isclass, ismethod, isfunction, istraceback, isframe, iscode,
@@ -120,7 +130,6 @@ class TestPredicates(IsTestBase):
     def test_get_slot_members(self):
         class C(object):
             __slots__ = ("a", "b")
-
         x = C()
         x.a = 42
         members = dict(inspect.getmembers(x))
@@ -418,14 +427,14 @@ class TestBuggyCases(GetSourceBase):
             unicodedata.__file__[-4:] in (".pyc", ".pyo"),
         "unicodedata is not an external binary module")
     def test_findsource_binary(self):
-        self.assertRaises(IOError, inspect.getsource, unicodedata)
-        self.assertRaises(IOError, inspect.findsource, unicodedata)
+        self.assertRaises(OSError, inspect.getsource, unicodedata)
+        self.assertRaises(OSError, inspect.findsource, unicodedata)
 
     def test_findsource_code_in_linecache(self):
         lines = ["x=1"]
         co = compile(lines[0], "_dynamically_created_file", "exec")
-        self.assertRaises(IOError, inspect.findsource, co)
-        self.assertRaises(IOError, inspect.getsource, co)
+        self.assertRaises(OSError, inspect.findsource, co)
+        self.assertRaises(OSError, inspect.getsource, co)
         linecache.cache[co.co_filename] = (1, None, lines, co.co_filename)
         try:
             self.assertEqual(inspect.findsource(co), (lines,0))
@@ -463,13 +472,13 @@ class _BrokenDataDescriptor(object):
     A broken data descriptor. See bug #1785.
     """
     def __get__(*args):
-        raise AssertionError("should not __get__ data descriptors")
+        raise AttributeError("broken data descriptor")
 
     def __set__(*args):
         raise RuntimeError
 
     def __getattr__(*args):
-        raise AssertionError("should not __getattr__ data descriptors")
+        raise AttributeError("broken data descriptor")
 
 
 class _BrokenMethodDescriptor(object):
@@ -477,10 +486,10 @@ class _BrokenMethodDescriptor(object):
     A broken method descriptor. See bug #1785.
     """
     def __get__(*args):
-        raise AssertionError("should not __get__ method descriptors")
+        raise AttributeError("broken method descriptor")
 
     def __getattr__(*args):
-        raise AssertionError("should not __getattr__ method descriptors")
+        raise AttributeError("broken method descriptor")
 
 
 # Helper for testing classify_class_attrs.
@@ -650,6 +659,88 @@ class TestClassesAndFunctions(unittest.TestCase):
             if isinstance(builtin, type):
                 inspect.classify_class_attrs(builtin)
 
+    def test_classify_DynamicClassAttribute(self):
+        class Meta(type):
+            def __getattr__(self, name):
+                if name == 'ham':
+                    return 'spam'
+                return super().__getattr__(name)
+        class VA(metaclass=Meta):
+            @types.DynamicClassAttribute
+            def ham(self):
+                return 'eggs'
+        should_find_dca = inspect.Attribute('ham', 'data', VA, VA.__dict__['ham'])
+        self.assertIn(should_find_dca, inspect.classify_class_attrs(VA))
+        should_find_ga = inspect.Attribute('ham', 'data', Meta, 'spam')
+        self.assertIn(should_find_ga, inspect.classify_class_attrs(VA))
+
+    def test_classify_metaclass_class_attribute(self):
+        class Meta(type):
+            fish = 'slap'
+            def __dir__(self):
+                return ['__class__', '__modules__', '__name__', 'fish']
+        class Class(metaclass=Meta):
+            pass
+        should_find = inspect.Attribute('fish', 'data', Meta, 'slap')
+        self.assertIn(should_find, inspect.classify_class_attrs(Class))
+
+    def test_classify_VirtualAttribute(self):
+        class Meta(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'BOOM']
+            def __getattr__(self, name):
+                if name =='BOOM':
+                    return 42
+                return super().__getattr(name)
+        class Class(metaclass=Meta):
+            pass
+        should_find = inspect.Attribute('BOOM', 'data', Meta, 42)
+        self.assertIn(should_find, inspect.classify_class_attrs(Class))
+
+    def test_classify_VirtualAttribute_multi_classes(self):
+        class Meta1(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'one']
+            def __getattr__(self, name):
+                if name =='one':
+                    return 1
+                return super().__getattr__(name)
+        class Meta2(type):
+            def __dir__(cls):
+                return ['__class__', '__module__', '__name__', 'two']
+            def __getattr__(self, name):
+                if name =='two':
+                    return 2
+                return super().__getattr__(name)
+        class Meta3(Meta1, Meta2):
+            def __dir__(cls):
+                return list(sorted(set(['__class__', '__module__', '__name__', 'three'] +
+                    Meta1.__dir__(cls) + Meta2.__dir__(cls))))
+            def __getattr__(self, name):
+                if name =='three':
+                    return 3
+                return super().__getattr__(name)
+        class Class1(metaclass=Meta1):
+            pass
+        class Class2(Class1, metaclass=Meta3):
+            pass
+
+        should_find1 = inspect.Attribute('one', 'data', Meta1, 1)
+        should_find2 = inspect.Attribute('two', 'data', Meta2, 2)
+        should_find3 = inspect.Attribute('three', 'data', Meta3, 3)
+        cca = inspect.classify_class_attrs(Class2)
+        for sf in (should_find1, should_find2, should_find3):
+            self.assertIn(sf, cca)
+
+    def test_classify_class_attrs_with_buggy_dir(self):
+        class M(type):
+            def __dir__(cls):
+                return ['__class__', '__name__', 'missing']
+        class C(metaclass=M):
+            pass
+        attrs = [a[0] for a in inspect.classify_class_attrs(C)]
+        self.assertNotIn('missing', attrs)
+
     def test_getmembers_descriptors(self):
         class A(object):
             dd = _BrokenDataDescriptor()
@@ -692,6 +783,28 @@ class TestClassesAndFunctions(unittest.TestCase):
         b = B()
         self.assertIn(('f', b.f), inspect.getmembers(b))
         self.assertIn(('f', b.f), inspect.getmembers(b, inspect.ismethod))
+
+    def test_getmembers_VirtualAttribute(self):
+        class M(type):
+            def __getattr__(cls, name):
+                if name == 'eggs':
+                    return 'scrambled'
+                return super().__getattr__(name)
+        class A(metaclass=M):
+            @types.DynamicClassAttribute
+            def eggs(self):
+                return 'spam'
+        self.assertIn(('eggs', 'scrambled'), inspect.getmembers(A))
+        self.assertIn(('eggs', 'spam'), inspect.getmembers(A()))
+
+    def test_getmembers_with_buggy_dir(self):
+        class M(type):
+            def __dir__(cls):
+                return ['__class__', '__name__', 'missing']
+        class C(metaclass=M):
+            pass
+        attrs = [a[0] for a in inspect.getmembers(C)]
+        self.assertNotIn('missing', attrs)
 
 
 _global_ref = object()
@@ -1080,6 +1193,15 @@ class TestGetattrStatic(unittest.TestCase):
 
         self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.x)
 
+    def test_classVirtualAttribute(self):
+        class Thing(object):
+            @types.DynamicClassAttribute
+            def x(self):
+                return self._x
+            _x = object()
+
+        self.assertEqual(inspect.getattr_static(Thing, 'x'), Thing.__dict__['x'])
+
     def test_inherited_classattribute(self):
         class Thing(object):
             x = object()
@@ -1461,19 +1583,77 @@ class TestSignatureObject(unittest.TestCase):
                            ('kwargs', ..., int, "var_keyword")),
                           ...))
 
-    def test_signature_on_builtin_function(self):
-        with self.assertRaisesRegex(ValueError, 'not supported by signature'):
-            inspect.signature(type)
-        with self.assertRaisesRegex(ValueError, 'not supported by signature'):
-            # support for 'wrapper_descriptor'
-            inspect.signature(type.__call__)
-        with self.assertRaisesRegex(ValueError, 'not supported by signature'):
-            # support for 'method-wrapper'
-            inspect.signature(min.__call__)
-        with self.assertRaisesRegex(ValueError,
-                                     'no signature found for builtin function'):
-            # support for 'method-wrapper'
+    def test_signature_on_unsupported_builtins(self):
+        with self.assertRaisesRegex(ValueError, 'no signature found'):
+            # min simply doesn't have a signature (yet)
             inspect.signature(min)
+
+    @unittest.skipIf(MISSING_C_DOCSTRINGS,
+                     "Signature information for builtins requires docstrings")
+    def test_signature_on_builtins(self):
+
+        def test_unbound_method(o):
+            """Use this to test unbound methods (things that should have a self)"""
+            signature = inspect.signature(o)
+            self.assertTrue(isinstance(signature, inspect.Signature))
+            self.assertEqual(list(signature.parameters.values())[0].name, 'self')
+            return signature
+
+        def test_callable(o):
+            """Use this to test bound methods or normal callables (things that don't expect self)"""
+            signature = inspect.signature(o)
+            self.assertTrue(isinstance(signature, inspect.Signature))
+            if signature.parameters:
+                self.assertNotEqual(list(signature.parameters.values())[0].name, 'self')
+            return signature
+
+        signature = test_callable(_testcapi.docstring_with_signature_with_defaults)
+        def p(name): return signature.parameters[name].default
+        self.assertEqual(p('s'), 'avocado')
+        self.assertEqual(p('b'), b'bytes')
+        self.assertEqual(p('d'), 3.14)
+        self.assertEqual(p('i'), 35)
+        self.assertEqual(p('n'), None)
+        self.assertEqual(p('t'), True)
+        self.assertEqual(p('f'), False)
+        self.assertEqual(p('local'), 3)
+        self.assertEqual(p('sys'), sys.maxsize)
+        self.assertEqual(p('exp'), sys.maxsize - 1)
+
+        test_callable(type)
+        test_callable(object)
+
+        # normal method
+        # (PyMethodDescr_Type, "method_descriptor")
+        test_unbound_method(_pickle.Pickler.dump)
+        d = _pickle.Pickler(io.StringIO())
+        test_callable(d.dump)
+
+        # static method
+        test_callable(str.maketrans)
+        test_callable('abc'.maketrans)
+
+        # class method
+        test_callable(dict.fromkeys)
+        test_callable({}.fromkeys)
+
+        # wrapper around slot (PyWrapperDescr_Type, "wrapper_descriptor")
+        test_unbound_method(type.__call__)
+        test_unbound_method(int.__add__)
+        test_callable((3).__add__)
+
+        # _PyMethodWrapper_Type
+        # support for 'method-wrapper'
+        test_callable(min.__call__)
+
+        class ThisWorksNow:
+            __call__ = type
+        test_callable(ThisWorksNow())
+
+
+    def test_signature_on_builtins_no_signature(self):
+        with self.assertRaisesRegex(ValueError, 'no signature found for builtin'):
+            inspect.signature(_testcapi.docstring_no_signature)
 
     def test_signature_on_non_function(self):
         with self.assertRaisesRegex(TypeError, 'is not a callable object'):
@@ -1736,6 +1916,17 @@ class TestSignatureObject(unittest.TestCase):
                          ((('b', ..., ..., "positional_or_keyword"),),
                           ...))
 
+        # Test we handle __signature__ partway down the wrapper stack
+        def wrapped_foo_call():
+            pass
+        wrapped_foo_call.__wrapped__ = Foo.__call__
+
+        self.assertEqual(self.signature(wrapped_foo_call),
+                         ((('a', ..., ..., "positional_or_keyword"),
+                           ('b', ..., ..., "positional_or_keyword")),
+                          ...))
+
+
     def test_signature_on_class(self):
         class C:
             def __init__(self, a):
@@ -1838,18 +2029,16 @@ class TestSignatureObject(unittest.TestCase):
                          ((('a', ..., ..., "positional_or_keyword"),),
                           ...))
 
-        class ToFail:
-            __call__ = type
-        with self.assertRaisesRegex(ValueError, "not supported by signature"):
-            inspect.signature(ToFail())
-
-
         class Wrapped:
             pass
         Wrapped.__wrapped__ = lambda a: None
         self.assertEqual(self.signature(Wrapped),
                          ((('a', ..., ..., "positional_or_keyword"),),
                           ...))
+        # wrapper loop:
+        Wrapped.__wrapped__ = Wrapped
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            self.signature(Wrapped)
 
     def test_signature_on_lambdas(self):
         self.assertEqual(self.signature((lambda a=10: a)),
@@ -2301,6 +2490,104 @@ class TestBoundArguments(unittest.TestCase):
         self.assertNotEqual(ba, ba4)
 
 
+class TestUnwrap(unittest.TestCase):
+
+    def test_unwrap_one(self):
+        def func(a, b):
+            return a + b
+        wrapper = functools.lru_cache(maxsize=20)(func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_unwrap_several(self):
+        def func(a, b):
+            return a + b
+        wrapper = func
+        for __ in range(10):
+            @functools.wraps(wrapper)
+            def wrapper():
+                pass
+        self.assertIsNot(wrapper.__wrapped__, func)
+        self.assertIs(inspect.unwrap(wrapper), func)
+
+    def test_stop(self):
+        def func1(a, b):
+            return a + b
+        @functools.wraps(func1)
+        def func2():
+            pass
+        @functools.wraps(func2)
+        def wrapper():
+            pass
+        func2.stop_here = 1
+        unwrapped = inspect.unwrap(wrapper,
+                                   stop=(lambda f: hasattr(f, "stop_here")))
+        self.assertIs(unwrapped, func2)
+
+    def test_cycle(self):
+        def func1(): pass
+        func1.__wrapped__ = func1
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+
+        def func2(): pass
+        func2.__wrapped__ = func1
+        func1.__wrapped__ = func2
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func1)
+        with self.assertRaisesRegex(ValueError, 'wrapper loop'):
+            inspect.unwrap(func2)
+
+    def test_unhashable(self):
+        def func(): pass
+        func.__wrapped__ = None
+        class C:
+            __hash__ = None
+            __wrapped__ = func
+        self.assertIsNone(inspect.unwrap(C()))
+
+class TestMain(unittest.TestCase):
+    def test_only_source(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1], inspect.getsource(module).splitlines())
+        self.assertEqual(err, b'')
+
+    @unittest.skipIf(ThreadPoolExecutor is None,
+            'threads required to test __qualname__ for source files')
+    def test_qualname_source(self):
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                     'concurrent.futures:ThreadPoolExecutor')
+        lines = out.decode().splitlines()
+        # ignore the final newline
+        self.assertEqual(lines[:-1],
+                         inspect.getsource(ThreadPoolExecutor).splitlines())
+        self.assertEqual(err, b'')
+
+    def test_builtins(self):
+        module = importlib.import_module('unittest')
+        _, out, err = assert_python_failure('-m', 'inspect',
+                                            'sys')
+        lines = err.decode().splitlines()
+        self.assertEqual(lines, ["Can't get info for builtin modules."])
+
+    def test_details(self):
+        module = importlib.import_module('unittest')
+        rc, out, err = assert_python_ok('-m', 'inspect',
+                                        'unittest', '--details')
+        output = out.decode()
+        # Just a quick sanity check on the output
+        self.assertIn(module.__name__, output)
+        self.assertIn(module.__file__, output)
+        if not sys.flags.optimize:
+            self.assertIn(module.__cached__, output)
+        self.assertEqual(err, b'')
+
+
+
+
 def test_main():
     run_unittest(
         TestDecorators, TestRetrievingSourceCode, TestOneliners, TestBuggyCases,
@@ -2308,7 +2595,7 @@ def test_main():
         TestGetcallargsFunctions, TestGetcallargsMethods,
         TestGetcallargsUnboundMethods, TestGetattrStatic, TestGetGeneratorState,
         TestNoEOL, TestSignatureObject, TestSignatureBind, TestParameterObject,
-        TestBoundArguments, TestGetClosureVars
+        TestBoundArguments, TestGetClosureVars, TestUnwrap, TestMain
     )
 
 if __name__ == "__main__":
