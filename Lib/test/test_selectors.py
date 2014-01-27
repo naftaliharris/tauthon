@@ -5,7 +5,7 @@ import selectors
 import signal
 import socket
 from test import support
-from time import sleep, perf_counter
+from time import sleep
 import unittest
 import unittest.mock
 try:
@@ -363,21 +363,10 @@ class BaseSelectorTestCase(unittest.TestCase):
         self.assertFalse(s.select(2))
         self.assertLess(time() - t, 2.5)
 
-    def test_timeout_rounding(self):
-        # Issue #20311: Timeout must be rounded away from zero to wait *at
-        # least* timeout seconds. For example, epoll_wait() has a resolution of
-        # 1 ms (10^-3), epoll.select(0.0001) must wait 1 ms, not 0 ms.
+    def test_resolution(self):
         s = self.SELECTOR()
-        self.addCleanup(s.close)
-
-        rd, wr = self.make_socketpair()
-        s.register(rd, selectors.EVENT_READ)
-
-        for timeout in (1e-2, 1e-3, 1e-4):
-            t0 = perf_counter()
-            s.select(timeout)
-            dt = perf_counter() - t0
-            self.assertGreaterEqual(dt, timeout)
+        self.assertIsInstance(s.resolution, (int, float))
+        self.assertGreater(s.resolution, 0.0)
 
 
 class ScalableSelectorMixIn:

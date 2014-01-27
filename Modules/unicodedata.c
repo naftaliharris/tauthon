@@ -19,7 +19,7 @@
 
 /*[clinic input]
 module unicodedata
-class unicodedata.UCD
+class unicodedata.UCD 'PreviousDBVersion *' '&UCD_Type'
 [clinic start generated code]*/
 /*[clinic end generated code: checksum=da39a3ee5e6b4b0d3255bfef95601890afd80709]*/
 
@@ -129,7 +129,7 @@ not given, ValueError is raised.
 [clinic start generated code]*/
 
 PyDoc_STRVAR(unicodedata_UCD_decimal__doc__,
-"decimal(unichr, default=None)\n"
+"decimal(self, unichr, default=None)\n"
 "Converts a Unicode character into its equivalent decimal value.\n"
 "\n"
 "Returns the decimal value assigned to the Unicode character unichr\n"
@@ -140,10 +140,10 @@ PyDoc_STRVAR(unicodedata_UCD_decimal__doc__,
     {"decimal", (PyCFunction)unicodedata_UCD_decimal, METH_VARARGS, unicodedata_UCD_decimal__doc__},
 
 static PyObject *
-unicodedata_UCD_decimal_impl(PyObject *self, PyUnicodeObject *unichr, PyObject *default_value);
+unicodedata_UCD_decimal_impl(PreviousDBVersion *self, PyUnicodeObject *unichr, PyObject *default_value);
 
 static PyObject *
-unicodedata_UCD_decimal(PyObject *self, PyObject *args)
+unicodedata_UCD_decimal(PreviousDBVersion *self, PyObject *args)
 {
     PyObject *return_value = NULL;
     PyUnicodeObject *unichr;
@@ -160,15 +160,14 @@ exit:
 }
 
 static PyObject *
-unicodedata_UCD_decimal_impl(PyObject *self, PyUnicodeObject *unichr, PyObject *default_value)
-/*[clinic end generated code: checksum=73edde0e9cd5913ea174c4fa81504369761b7426]*/
+unicodedata_UCD_decimal_impl(PreviousDBVersion *self, PyUnicodeObject *unichr, PyObject *default_value)
+/*[clinic end generated code: checksum=e1371a1a016e19fdd3cd2c1af1d1832df095f50b]*/
 {
-    PyUnicodeObject *v = (PyUnicodeObject *)unichr;
     int have_old = 0;
     long rc;
     Py_UCS4 c;
 
-    c = getuchar(v);
+    c = getuchar(unichr);
     if (c == (Py_UCS4)-1)
         return NULL;
 

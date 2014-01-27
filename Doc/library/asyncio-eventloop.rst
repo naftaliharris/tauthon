@@ -213,6 +213,11 @@ Creating connections
      to bind the socket to locally.  The *local_host* and *local_port*
      are looked up using getaddrinfo(), similarly to *host* and *port*.
 
+   .. seealso::
+
+      The :func:`open_connection` function can be used to get a pair of
+      (:class:`StreamReader`, :class:`StreamWriter`) instead of a protocol.
+
 
 Creating listening connections
 ------------------------------
@@ -250,6 +255,11 @@ Creating listening connections
    UNIX.
 
    This method returns a :ref:`coroutine object <coroutine>`.
+
+   .. seealso::
+
+      The function :func:`start_server` creates a (:class:`StreamReader`,
+      :class:`StreamWriter`) pair and calls back a function with this pair.
 
 .. method:: BaseEventLoop.create_datagram_endpoint(protocol_factory, local_addr=None, remote_addr=None, \*, family=0, proto=0, flags=0)
 
@@ -332,6 +342,22 @@ pool of processes). By default, an event loop uses a thread pool executor
 .. method:: BaseEventLoop.set_default_executor(executor)
 
    Set the default executor used by :meth:`run_in_executor`.
+
+
+Server
+------
+
+.. class:: AbstractServer
+
+   Abstract server returned by :func:`BaseEventLoop.create_server`.
+
+   .. method:: close()
+
+      Stop serving.  This leaves existing connections open.
+
+   .. method:: wait_closed()
+
+      Coroutine to wait until service is closed.
 
 
 .. _asyncio-hello-world-callback:

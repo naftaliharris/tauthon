@@ -7,6 +7,9 @@ Synchronization primitives
 Locks
 -----
 
+Lock
+^^^^
+
 .. class:: Lock(\*, loop=None)
 
    Primitive lock objects.
@@ -85,6 +88,9 @@ Locks
       There is no return value.
 
 
+Event
+^^^^^
+
 .. class:: Event(\*, loop=None)
 
    An Event implementation, asynchronous equivalent to :class:`threading.Event`.
@@ -120,6 +126,9 @@ Locks
 
       This method returns a :ref:`coroutine object <coroutine>`.
 
+
+Condition
+^^^^^^^^^
 
 .. class:: Condition(\*, loop=None)
 
@@ -181,6 +190,9 @@ Locks
 Semaphores
 ----------
 
+Semaphore
+^^^^^^^^^
+
 .. class:: Semaphore(value=1, \*, loop=None)
 
    A Semaphore implementation.
@@ -218,6 +230,9 @@ Semaphores
       larger than zero again, wake up that coroutine.
 
 
+BoundedSemaphore
+^^^^^^^^^^^^^^^^
+
 .. class:: BoundedSemaphore(value=1, \*, loop=None)
 
     A bounded semaphore implementation. Inherit from :class:`Semaphore`.
@@ -228,6 +243,9 @@ Semaphores
 
 Queues
 ------
+
+Queue
+^^^^^
 
 .. class:: Queue(maxsize=0, \*, loop=None)
 
@@ -268,7 +286,7 @@ Queues
       Remove and return an item from the queue.
 
       Return an item if one is immediately available, else raise
-      :exc:`~queue.Empty`.
+      :exc:`QueueEmpty`.
 
    .. method:: put(item)
 
@@ -283,7 +301,7 @@ Queues
 
       Put an item into the queue without blocking.
 
-      If no free slot is immediately available, raise :exc:`~queue.Full`.
+      If no free slot is immediately available, raise :exc:`QueueFull`.
 
    .. method:: qsize()
 
@@ -294,6 +312,9 @@ Queues
       Number of items allowed in the queue.
 
 
+PriorityQueue
+^^^^^^^^^^^^^
+
 .. class:: PriorityQueue
 
    A subclass of :class:`Queue`; retrieves entries in priority order (lowest
@@ -302,11 +323,17 @@ Queues
    Entries are typically tuples of the form: (priority number, data).
 
 
+LifoQueue
+^^^^^^^^^
+
 .. class:: LifoQueue
 
     A subclass of :class:`Queue` that retrieves most recently added entries
     first.
 
+
+JoinableQueue
+^^^^^^^^^^^^^
 
 .. class:: JoinableQueue
 
@@ -340,3 +367,19 @@ Queues
       Raises :exc:`ValueError` if called more times than there were items
       placed in the queue.
 
+
+Exceptions
+^^^^^^^^^^
+
+.. exception:: QueueEmpty
+
+   Exception raised when non-blocking :meth:`~Queue.get` (or
+   :meth:`~Queue.get_nowait`) is called
+   on a :class:`Queue` object which is empty.
+
+
+.. exception:: QueueFull
+
+   Exception raised when non-blocking :meth:`~Queue.put` (or
+   :meth:`~Queue.put_nowait`) is called
+   on a :class:`Queue` object which is full.

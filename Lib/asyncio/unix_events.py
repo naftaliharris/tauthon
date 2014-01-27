@@ -169,9 +169,6 @@ class _UnixSelectorEventLoop(selector_events.BaseSelectorEventLoop):
     def _child_watcher_callback(self, pid, returncode, transp):
         self.call_soon_threadsafe(transp._process_exited, returncode)
 
-    def _subprocess_closed(self, transp):
-        pass
-
 
 def _set_nonblocking(fd):
     flags = fcntl.fcntl(fd, fcntl.F_GETFL)
@@ -259,9 +256,11 @@ class _UnixWritePipeTransport(transports.WriteTransport):
         self._fileno = pipe.fileno()
         mode = os.fstat(self._fileno).st_mode
         is_socket = stat.S_ISSOCK(mode)
-        is_pipe = stat.S_ISFIFO(mode)
-        if not (is_socket or is_pipe):
-            raise ValueError("Pipe transport is for pipes/sockets only.")
+        if not (is_socket or
+                stat.S_ISFIFO(mode) or
+                stat.S_ISCHR(mode)):
+            raise ValueError("Pipe transport is only for "
+                             "pipes, sockets and character devices")
         _set_nonblocking(self._fileno)
         self._protocol = protocol
         self._buffer = []
@@ -639,22 +638,16 @@ class FastChildWatcher(BaseChildWatcher):
 
     def add_child_handler(self, pid, callback, *args):
         assert self._forks, "Must use the context manager"
+        with self._lock:
+            try:
+                returncode = self._zombies.pop(pid)
+            except KeyError:
+                # The child is running.
+                self._callbacks[pid] = callback, args
+                return
 
-        self._callbacks[pid] = callback, args
-
-        try:
-            # Ensure that the child is not already terminated.
-            # (raise KeyError if still alive)
-            returncode = self._zombies.pop(pid)
-
-            # Child is dead, therefore we can fire the callback immediately.
-            # First we remove it from the dict.
-            # (raise KeyError if .remove_child_handler() was called in-between)
-            del self._callbacks[pid]
-        except KeyError:
-            pass
-        else:
-            callback(pid, returncode, *args)
+        # The child is dead already. We can fire the callback.
+        callback(pid, returncode, *args)
 
     def remove_child_handler(self, pid):
         try:
@@ -679,16 +672,18 @@ class FastChildWatcher(BaseChildWatcher):
 
                 returncode = self._compute_returncode(status)
 
-            try:
-                callback, args = self._callbacks.pop(pid)
-            except KeyError:
-                # unknown child
-                with self._lock:
+            with self._lock:
+                try:
+                    callback, args = self._callbacks.pop(pid)
+                except KeyError:
+                    # unknown child
                     if self._forks:
                         # It may not be registered yet.
                         self._zombies[pid] = returncode
                         continue
+                    callback = None
 
+            if callback is None:
                 logger.warning(
                     "Caught subprocess termination from unknown pid: "
                     "%d -> %d", pid, returncode)

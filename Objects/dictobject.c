@@ -70,7 +70,7 @@ to the combined-table form.
 #include "stringlib/eq.h"
 
 /*[clinic input]
-class dict
+class dict "PyDictObject *" "&PyDict_Type"
 [clinic start generated code]*/
 /*[clinic end generated code: checksum=da39a3ee5e6b4b0d3255bfef95601890afd80709]*/
 
@@ -1691,37 +1691,70 @@ dict_items(PyDictObject *mp)
     return v;
 }
 
+/*[clinic input]
+@classmethod
+dict.fromkeys
+    iterable: object
+    value: object=None
+    /
+
+Returns a new dict with keys from iterable and values equal to value.
+[clinic start generated code]*/
+
+PyDoc_STRVAR(dict_fromkeys__doc__,
+"fromkeys(type, iterable, value=None)\n"
+"Returns a new dict with keys from iterable and values equal to value.");
+
+#define DICT_FROMKEYS_METHODDEF    \
+    {"fromkeys", (PyCFunction)dict_fromkeys, METH_VARARGS|METH_CLASS, dict_fromkeys__doc__},
+
 static PyObject *
-dict_fromkeys(PyObject *cls, PyObject *args)
+dict_fromkeys_impl(PyTypeObject *type, PyObject *iterable, PyObject *value);
+
+static PyObject *
+dict_fromkeys(PyTypeObject *type, PyObject *args)
 {
-    PyObject *seq;
+    PyObject *return_value = NULL;
+    PyObject *iterable;
     PyObject *value = Py_None;
+
+    if (!PyArg_UnpackTuple(args, "fromkeys",
+        1, 2,
+        &iterable, &value))
+        goto exit;
+    return_value = dict_fromkeys_impl(type, iterable, value);
+
+exit:
+    return return_value;
+}
+
+static PyObject *
+dict_fromkeys_impl(PyTypeObject *type, PyObject *iterable, PyObject *value)
+/*[clinic end generated code: checksum=008269e1774a379b356841548c04061fd78a9542]*/
+{
     PyObject *it;       /* iter(seq) */
     PyObject *key;
     PyObject *d;
     int status;
 
-    if (!PyArg_UnpackTuple(args, "fromkeys", 1, 2, &seq, &value))
-        return NULL;
-
-    d = PyObject_CallObject(cls, NULL);
+    d = PyObject_CallObject((PyObject *)type, NULL);
     if (d == NULL)
         return NULL;
 
     if (PyDict_CheckExact(d) && ((PyDictObject *)d)->ma_used == 0) {
-        if (PyDict_CheckExact(seq)) {
+        if (PyDict_CheckExact(iterable)) {
             PyDictObject *mp = (PyDictObject *)d;
             PyObject *oldvalue;
             Py_ssize_t pos = 0;
             PyObject *key;
             Py_hash_t hash;
 
-            if (dictresize(mp, Py_SIZE(seq))) {
+            if (dictresize(mp, Py_SIZE(iterable))) {
                 Py_DECREF(d);
                 return NULL;
             }
 
-            while (_PyDict_Next(seq, &pos, &key, &oldvalue, &hash)) {
+            while (_PyDict_Next(iterable, &pos, &key, &oldvalue, &hash)) {
                 if (insertdict(mp, key, hash, value)) {
                     Py_DECREF(d);
                     return NULL;
@@ -1729,18 +1762,18 @@ dict_fromkeys(PyObject *cls, PyObject *args)
             }
             return d;
         }
-        if (PyAnySet_CheckExact(seq)) {
+        if (PyAnySet_CheckExact(iterable)) {
             PyDictObject *mp = (PyDictObject *)d;
             Py_ssize_t pos = 0;
             PyObject *key;
             Py_hash_t hash;
 
-            if (dictresize(mp, PySet_GET_SIZE(seq))) {
+            if (dictresize(mp, PySet_GET_SIZE(iterable))) {
                 Py_DECREF(d);
                 return NULL;
             }
 
-            while (_PySet_NextEntry(seq, &pos, &key, &hash)) {
+            while (_PySet_NextEntry(iterable, &pos, &key, &hash)) {
                 if (insertdict(mp, key, hash, value)) {
                     Py_DECREF(d);
                     return NULL;
@@ -1750,7 +1783,7 @@ dict_fromkeys(PyObject *cls, PyObject *args)
         }
     }
 
-    it = PyObject_GetIter(seq);
+    it = PyObject_GetIter(iterable);
     if (it == NULL){
         Py_DECREF(d);
         return NULL;
@@ -2176,17 +2209,17 @@ True if D has a key k, else False.
 [clinic start generated code]*/
 
 PyDoc_STRVAR(dict___contains____doc__,
-"__contains__(key)\n"
+"__contains__(self, key)\n"
 "True if D has a key k, else False.");
 
 #define DICT___CONTAINS___METHODDEF    \
     {"__contains__", (PyCFunction)dict___contains__, METH_O|METH_COEXIST, dict___contains____doc__},
 
 static PyObject *
-dict___contains__(PyObject *self, PyObject *key)
-/*[clinic end generated code: checksum=402ddb624ba1e4db764bfdfbbee6c1c59d1a11fa]*/
+dict___contains__(PyDictObject *self, PyObject *key)
+/*[clinic end generated code: checksum=744ca54369dda9815a596304087f1b37fafa5960]*/
 {
-    register PyDictObject *mp = (PyDictObject *)self;
+    register PyDictObject *mp = self;
     Py_hash_t hash;
     PyDictKeyEntry *ep;
     PyObject **value_addr;
@@ -2496,10 +2529,6 @@ If E is present and has a .keys() method, then does:  for k in E: D[k] = E[k]\n\
 If E is present and lacks a .keys() method, then does:  for k, v in E: D[k] = v\n\
 In either case, this is followed by: for k in F:  D[k] = F[k]");
 
-PyDoc_STRVAR(fromkeys__doc__,
-"dict.fromkeys(S[,v]) -> New dict with keys from S and values equal to v.\n\
-v defaults to None.");
-
 PyDoc_STRVAR(clear__doc__,
 "D.clear() -> None.  Remove all items from D.");
 
@@ -2540,8 +2569,7 @@ static PyMethodDef mapp_methods[] = {
     values__doc__},
     {"update",          (PyCFunction)dict_update,       METH_VARARGS | METH_KEYWORDS,
      update__doc__},
-    {"fromkeys",        (PyCFunction)dict_fromkeys,     METH_VARARGS | METH_CLASS,
-     fromkeys__doc__},
+    DICT_FROMKEYS_METHODDEF
     {"clear",           (PyCFunction)dict_clear,        METH_NOARGS,
      clear__doc__},
     {"copy",            (PyCFunction)dict_copy,         METH_NOARGS,

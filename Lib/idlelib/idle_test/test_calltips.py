@@ -66,7 +66,6 @@ class Get_signatureTest(unittest.TestCase):
         gtest(SB(), default_tip)
 
     def test_signature_wrap(self):
-        #print(signature(textwrap.TextWrapper))
         self.assertEqual(signature(textwrap.TextWrapper), '''\
 (width=70, initial_indent='', subsequent_indent='', expand_tabs=True,
     replace_whitespace=True, fix_sentence_endings=False, break_long_words=True,
