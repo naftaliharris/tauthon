@@ -181,8 +181,8 @@ at http://docs.python.org/.  PDF, plain text, and downloadable HTML versions are
 also available at http://docs.python.org/download.html.
 
 The documentation is written in reStructuredText and processed by `the Sphinx
-documentation tool <http://sphinx.pocoo.org/>`__.  The reStructuredText source
-for the documentation is part of the Python source distribution.
+documentation tool <http://sphinx-doc.org/>`__.  The reStructuredText source for
+the documentation is part of the Python source distribution.
 
 
 I've never programmed before. Is there a Python tutorial?
@@ -268,9 +268,13 @@ Python references; or perhaps search for "Python" and "language".
 Where in the world is www.python.org located?
 ---------------------------------------------
 
-It's currently in Amsterdam, graciously hosted by `XS4ALL
-<http://www.xs4all.nl>`_.  Thanks to Thomas Wouters for his work in arranging
-python.org's hosting.
+The Python project's infrastructure is located all over the world.
+`www.python.org <http://www.python.org>`_ is currently in Amsterdam, graciously
+hosted by `XS4ALL <http://www.xs4all.nl>`_.  `Upfront Systems
+<http://www.upfrontsystems.co.za>`_ hosts `bugs.python.org
+<http://bugs.python.org>`_.  Most other Python services like `PyPI
+<https://pypi.python.org>`_ and hg.python.org are hosted by `Oregon State
+University Open Source Lab <https://osuosl.org>`_.
 
 
 Why is it called Python?

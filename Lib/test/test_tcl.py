@@ -204,6 +204,46 @@ class TclTest(unittest.TestCase):
         self.assertEqual(passValue((1, '2', (3.4,))),
                          (1, '2', (3.4,)) if self.wantobjects else '1 2 3.4')
 
+    def test_user_command(self):
+        result = []
+        def testfunc(arg):
+            result.append(arg)
+            return arg
+        self.interp.createcommand('testfunc', testfunc)
+        def check(value, expected, eq=self.assertEqual):
+            del result[:]
+            r = self.interp.call('testfunc', value)
+            self.assertEqual(len(result), 1)
+            self.assertIsInstance(result[0], str)
+            eq(result[0], expected)
+            self.assertIsInstance(r, str)
+            eq(r, expected)
+        def float_eq(actual, expected):
+            expected = float(expected)
+            self.assertAlmostEqual(float(actual), expected,
+                                   delta=abs(expected) * 1e-10)
+        def nan_eq(actual, expected):
+            actual = float(actual)
+            self.assertNotEqual(actual, actual)
+
+        check(True, '1')
+        check(False, '0')
+        check('string', 'string')
+        check('string\xbd', 'string\xbd')
+        check('string\u20ac', 'string\u20ac')
+        for i in (0, 1, -1, 2**31-1, -2**31):
+            check(i, str(i))
+        for f in (0.0, 1.0, -1.0):
+            check(f, repr(f))
+        for f in (1/3.0, sys.float_info.min, sys.float_info.max,
+                  -sys.float_info.min, -sys.float_info.max):
+            check(f, f, eq=float_eq)
+        check(float('inf'), 'Inf', eq=float_eq)
+        check(-float('inf'), '-Inf', eq=float_eq)
+        check(float('nan'), 'NaN', eq=nan_eq)
+        check((), '')
+        check((1, (2,), (3, 4), '5 6', ()), '1 2 {3 4} {5 6} {}')
+
     def test_splitlist(self):
         splitlist = self.interp.tk.splitlist
         call = self.interp.tk.call

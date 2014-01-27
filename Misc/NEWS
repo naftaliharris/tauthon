@@ -38,6 +38,12 @@ Core and Builtins
 Library
 -------
 
+- Issue #8260: The read(), readline() and readlines() methods of
+  codecs.StreamReader returned incomplete data when were called after
+  readline() or read(size).  Based on patch by Amaury Forgeot d'Arc.
+
+- Issue #20374: Fix build with GNU readline >= 6.3.
+
 - Issue #14548: Make multiprocessing finalizers check pid before
   running to cope with possibility of gc running just after fork.
   (Backport from 3.x.)
@@ -196,6 +202,9 @@ IDLE
 
 Tests
 -----
+
+- Issue #19990: Added tests for the imghdr module.  Based on patch by
+  Claudiu Popa.
 
 - Issue #19804: The test_find_mac test in test_uuid is now skipped if the
   ifconfig executable is not available.
