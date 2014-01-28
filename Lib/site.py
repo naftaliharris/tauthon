@@ -476,7 +476,7 @@ def enablerlcompleter():
             readline.parse_and_bind('tab: complete')
         readline.read_init_file()
 
-        if readline.get_history_item(1) is None:
+        if readline.get_current_history_length() == 0:
             # If no history was loaded, default to .python_history.
             # The guard is necessary to avoid doubling history size at
             # each interpreter exit when readline was already configured
