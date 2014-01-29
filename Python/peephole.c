@@ -275,6 +275,7 @@ fold_unaryops_on_constants(unsigned char *codestr, PyObject *consts, PyObject *v
     len_consts = PyList_GET_SIZE(consts);
     if (PyList_Append(consts, newconst)) {
         Py_DECREF(newconst);
+        PyErr_Clear();
         return 0;
     }
     Py_DECREF(newconst);
@@ -327,37 +328,6 @@ markblocks(unsigned char *code, Py_ssize_t len)
     return blocks;
 }
 
-/* Helper to replace LOAD_NAME None/True/False with LOAD_CONST
-   Returns: 0 if no change, 1 if change, -1 if error */
-static int
-load_global(unsigned char *codestr, Py_ssize_t i, char *name, PyObject *consts)
-{
-    Py_ssize_t j;
-    PyObject *obj;
-    if (name == NULL)
-        return 0;
-    if (strcmp(name, "None") == 0)
-        obj = Py_None;
-    else if (strcmp(name, "True") == 0)
-        obj = Py_True;
-    else if (strcmp(name, "False") == 0)
-        obj = Py_False;
-    else
-        return 0;
-    for (j = 0; j < PyList_GET_SIZE(consts); j++) {
-        if (PyList_GET_ITEM(consts, j) == obj)
-            break;
-    }
-    if (j == PyList_GET_SIZE(consts)) {
-        if (PyList_Append(consts, obj) < 0)
-            return -1;
-    }
-    assert(PyList_GET_ITEM(consts, j) == obj);
-    codestr[i] = LOAD_CONST;
-    SETARG(codestr, i, j);
-    return 1;
-}
-
 /* Perform basic peephole optimizations to components of a code object.
    The consts object should still be in list form to allow new constants
    to be appended.
@@ -392,7 +362,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
     Py_ssize_t const_stack_size = 0;
     int in_consts = 0;  /* whether we are in a LOAD_CONST sequence */
     unsigned int *blocks = NULL;
-    char *name;
 
     /* Bail out if an exception is set */
     if (PyErr_Occurred())
@@ -413,8 +382,10 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 
     /* Make a modifiable copy of the code string */
     codestr = (unsigned char *)PyMem_Malloc(codelen);
-    if (codestr == NULL)
+    if (codestr == NULL) {
+        PyErr_NoMemory();
         goto exitError;
+    }
     codestr = (unsigned char *)memcpy(codestr,
                                       PyBytes_AS_STRING(code), codelen);
 
@@ -428,8 +399,10 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
 
     /* Mapping to new jump targets after NOPs are removed */
     addrmap = (int *)PyMem_Malloc(codelen * sizeof(int));
-    if (addrmap == NULL)
+    if (addrmap == NULL) {
+        PyErr_NoMemory();
         goto exitError;
+    }
 
     blocks = markblocks(codestr, codelen);
     if (blocks == NULL)
@@ -473,20 +446,6 @@ PyCode_Optimize(PyObject *code, PyObject* consts, PyObject *names,
                     continue;
                 SETARG(codestr, i, (j^1));
                 codestr[i+3] = NOP;
-                break;
-
-                /* Replace LOAD_GLOBAL/LOAD_NAME None/True/False
-                   with LOAD_CONST None/True/False */
-            case LOAD_NAME:
-            case LOAD_GLOBAL:
-                j = GETARG(codestr, i);
-                name = _PyUnicode_AsString(PyTuple_GET_ITEM(names, j));
-                h = load_global(codestr, i, name, consts);
-                if (h < 0)
-                    goto exitError;
-                else if (h == 0)
-                    continue;
-                CONST_STACK_PUSH_OP(i);
                 break;
 
                 /* Skip over LOAD_CONST trueconst
